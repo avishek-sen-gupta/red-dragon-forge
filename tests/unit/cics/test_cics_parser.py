@@ -1,7 +1,7 @@
 """Unit tests for CICS verb/options text parser."""
 
 from tests.covers import covers, NotLanguageFeature
-from cics.cics_parser import parse_exec_cics_text, CicsOperand
+from interpreter.cobol.cics_parser import parse_exec_cics_text, CicsOperand
 from interpreter.cobol.ref_mod import RefModLiteral, RefModReference
 from interpreter.cobol.cobol_expression import FieldRefNode
 
