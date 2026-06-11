@@ -88,9 +88,7 @@ def test_send_map_drives_a_custom_non_queue_channel(monkeypatch):
     region = bytearray(b"\x40" * 8)
     region[0:8] = "USER0001".encode("cp037")
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     ch = _ListScreenChannel()
     builtin = make_send_map_builtin(ch)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
@@ -142,9 +140,7 @@ def test_receive_map_consumes_from_a_custom_non_queue_channel(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     ch = _ListInputChannel()
     ch.put(InputEvent(eibaid="\x33", fields={"USERID": "USER0001"}))

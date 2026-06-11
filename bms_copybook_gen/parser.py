@@ -45,9 +45,7 @@ def parse_mapsets(invocations: list[dict]) -> list[BmsMapSet]:
         elif name == "DFHMDI" and current_mapset is not None:
             # Extended attributes are enabled by the mapset (DFHMSD EXTATT=YES) or
             # per-map on the DFHMDI via DSATTS/MAPATTS=(COLOR,HILIGHT,PS,VALIDN).
-            extatt = (
-                current_mapset.extatt or "DSATTS" in args or "MAPATTS" in args
-            )
+            extatt = current_mapset.extatt or "DSATTS" in args or "MAPATTS" in args
             current_map = BmsMap(label=label, extatt=extatt)
             current_mapset.maps.append(current_map)
 
