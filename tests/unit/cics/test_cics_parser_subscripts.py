@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cics.cics_parser import parse_exec_cics_text
+from interpreter.cobol.cics_parser import parse_exec_cics_text
 from interpreter.cobol.cobol_expression import FieldRefNode, LiteralNode
 from tests.covers import covers, NotLanguageFeature
 

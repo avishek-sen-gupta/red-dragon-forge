@@ -7,7 +7,7 @@ a literal operand emits a Const (with COBOL quotes stripped).
 from __future__ import annotations
 
 from cics.strategy import emit_operand_value
-from cics.cics_parser import CicsOperand
+from interpreter.cobol.cics_parser import CicsOperand
 from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
 from interpreter.cobol.field_resolution import ResolvedFieldRef

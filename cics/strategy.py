@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from interpreter.cobol.cobol_statements import ExecCicsStatement
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
     from cics.types import CicsContext
-    from cics.cics_parser import CicsOperand
+    from interpreter.cobol.cics_parser import CicsOperand
     from interpreter.register import Register
 
 logger = logging.getLogger(__name__)
