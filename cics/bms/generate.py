@@ -1,10 +1,9 @@
-"""Stage-0 BMS generation: .bms sources -> symbolic COBOL copybooks via bms-tools.
+"""Stage-0 BMS generation: .bms sources -> symbolic COBOL copybooks.
 
-Runs the external pipeline `hlasm_export <map>.bms --syslib <macros> | bms-copybook-gen`
-once per .bms file, writing <out_dir>/<stem>.cpy. The pipeline is an external,
-locally built toolchain (see tests/integration/cics/bms_tools_helpers.py);
-callers gate on its availability. No fallback parser — a failure is surfaced
-loudly.
+Runs the pipeline `hlasm_export <map>.bms --syslib <macros> | python -m bms_copybook_gen`
+once per .bms file, writing <out_dir>/<stem>.cpy.  hlasm_export is built from
+third-party/che-che4z-lsp-for-hlasm-fork; bms_copybook_gen is a first-class
+package in this repo.  Callers gate on BMS_TOOLS_AVAILABLE from bms_tools_helpers.
 
 `hlasm_export` only recognises the BMS macros (DFHMSD/DFHMDI/DFHMDF) when their
 HLASM definitions are on the assembler SYSLIB. We author minimal prototype
@@ -15,8 +14,8 @@ ship them in ``macros/`` beside this module; that dir is the default syslib.
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -30,15 +29,12 @@ def generate_symbolic_copybooks(
     bms_dir: Path,
     out_dir: Path,
     hlasm_export_bin: str,
-    bms_copybook_gen_src: str,
     syslib_dirs: list[Path] | None = None,
 ) -> list[Path]:
     """Generate one symbolic copybook per .bms file in bms_dir into out_dir.
 
-    Returns the list of written .cpy paths. ``syslib_dirs`` are passed to
-    ``hlasm_export`` as ``--syslib`` so the BMS macros resolve; defaults to the
-    bundled ``macros/`` dir. Raises on any tool failure, and on an empty
-    generated copybook (which would otherwise silently shadow a real one).
+    Returns the list of written .cpy paths.  Raises on any tool failure, and on
+    an empty generated copybook (which would otherwise silently shadow a real one).
     """
     syslib = syslib_dirs if syslib_dirs is not None else [DEFAULT_MACRO_DIR]
     syslib_args: list[str] = []
@@ -47,10 +43,6 @@ def generate_symbolic_copybooks(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
-    env = dict(os.environ)
-    env["PYTHONPATH"] = bms_copybook_gen_src + (
-        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
-    )
     for bms_file in sorted(bms_dir.glob("*.bms")):
         export = subprocess.run(
             [hlasm_export_bin, str(bms_file), *syslib_args],
@@ -58,11 +50,10 @@ def generate_symbolic_copybooks(
             check=True,
         )
         gen = subprocess.run(
-            ["python", "-m", "bms_copybook_gen"],
+            [sys.executable, "-m", "bms_copybook_gen"],
             input=export.stdout,
             capture_output=True,
             check=True,
-            env=env,
         )
         if not gen.stdout.strip():
             raise RuntimeError(

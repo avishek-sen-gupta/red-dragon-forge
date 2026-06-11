@@ -1,9 +1,8 @@
 """Gating + path constants for the bms-tools pipeline.
 
-Resolution order for BMS_TOOLS_HOME:
-  1. BMS_TOOLS_HOME env var (explicit override)
-  2. third-party/bms-tools submodule (relative to repo root)
-  3. ~/code/bms-tools (legacy local convention)
+hlasm_export is built from the HLASM fork submodule at
+third-party/che-che4z-lsp-for-hlasm-fork.  bms_copybook_gen is a first-class
+package in this repo — no PYTHONPATH manipulation needed.
 """
 
 from __future__ import annotations
@@ -12,39 +11,9 @@ import os
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).parents[3]
-_SUBMODULE = _REPO_ROOT / "third-party" / "bms-tools"
+_HLASM_FORK = _REPO_ROOT / "third-party" / "che-che4z-lsp-for-hlasm-fork"
 
-
-def _resolve_bms_tools_home() -> str | None:
-    if env := os.environ.get("BMS_TOOLS_HOME"):
-        return env
-    if _SUBMODULE.is_dir():
-        return str(_SUBMODULE)
-    legacy = Path(os.path.expanduser("~/code/bms-tools"))
-    if legacy.is_dir():
-        return str(legacy)
-    return None
-
-
-BMS_TOOLS_HOME: str | None = _resolve_bms_tools_home()
-
-HLASM_EXPORT_BIN: str | None = (
-    str(
-        Path(BMS_TOOLS_HOME)
-        / "che-che4z-lsp-for-hlasm-fork"
-        / "build"
-        / "bin"
-        / "hlasm_export"
-    )
-    if BMS_TOOLS_HOME
-    else None
-)
-
-BMS_COPYBOOK_GEN_SRC: str | None = (
-    str(Path(BMS_TOOLS_HOME) / "python" / "bms_copybook_gen" / "src")
-    if BMS_TOOLS_HOME
-    else None
-)
+HLASM_EXPORT_BIN: str | None = str(_HLASM_FORK / "build" / "bin" / "hlasm_export")
 
 BMS_TOOLS_AVAILABLE: bool = bool(
     HLASM_EXPORT_BIN is not None and os.path.isfile(HLASM_EXPORT_BIN)

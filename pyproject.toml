@@ -18,7 +18,7 @@ dependencies = [
 red-dragon = { path = "vendor/red-dragon", editable = true }
 
 [tool.hatch.build.targets.wheel]
-packages = ["cics"]
+packages = ["cics", "bms_copybook_gen"]
 
 [build-system]
 requires = ["hatchling"]
