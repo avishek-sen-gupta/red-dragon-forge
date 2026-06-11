@@ -4,5 +4,7 @@ fileignoreconfig:
   - filecontent
 - filename: vendor/red-dragon
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+- filename: third-party/che-che4z-lsp-for-hlasm-fork
+  checksum: 31a9377951ee3655d464e1c9bb9f504e6c9dbd41d08cd62c63c94ed3321b6941
 threshold: high
 version: "1.0"

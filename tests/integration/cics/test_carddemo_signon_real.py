@@ -53,10 +53,7 @@ from cics.bms.generate import generate_symbolic_copybooks
 from interpreter.cobol.features import CobolFeature
 from tests.integration.cics.channel_drain import drain
 from tests.covers import covers
-from tests.integration.cics.bms_tools_helpers import (
-    BMS_COPYBOOK_GEN_SRC,
-    HLASM_EXPORT_BIN,
-)
+from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cobol_helpers import JAR_PATH
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
@@ -65,7 +62,7 @@ _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 # (see tests/integration/cics/conftest.py).
 pytestmark = pytest.mark.carddemo_e2e
 
-_CICS_COPYBOOKS = Path(__file__).parents[3] / "interpreter" / "cics" / "copybooks"
+_CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 
 
 def _ebcdic(s: str, n: int) -> bytes:
@@ -235,7 +232,6 @@ def _drive_through_turn4(tmp_path):
         bms_dir=app / "bms",
         out_dir=sym_dir,
         hlasm_export_bin=HLASM_EXPORT_BIN,
-        bms_copybook_gen_src=BMS_COPYBOOK_GEN_SRC,
     )
 
     # PRECEDENCE: ProLeapCobolParser passes each dir as a separate -copybook-dir
@@ -495,7 +491,6 @@ def _compile_update_programs(tmp_path, backend=None):
         bms_dir=app / "bms",
         out_dir=sym_dir,
         hlasm_export_bin=HLASM_EXPORT_BIN,
-        bms_copybook_gen_src=BMS_COPYBOOK_GEN_SRC,
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
@@ -914,7 +909,6 @@ def _drive_to_cotrn02c(tmp_path, backend=None):
         bms_dir=app / "bms",
         out_dir=sym_dir,
         hlasm_export_bin=HLASM_EXPORT_BIN,
-        bms_copybook_gen_src=BMS_COPYBOOK_GEN_SRC,
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),

@@ -11,7 +11,6 @@ from tests.covers import covers, NotLanguageFeature
 from tests.integration.cics.bms_tools_helpers import (
     BMS_TOOLS_AVAILABLE,
     HLASM_EXPORT_BIN,
-    BMS_COPYBOOK_GEN_SRC,
 )
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
@@ -28,11 +27,11 @@ def test_generate_symbolic_copybooks_from_bms_dir(tmp_path: Path) -> None:
 
     bms_dir = Path(_CARDDEMO_HOME) / "bms"
     out_dir = tmp_path / "sym"
+    assert HLASM_EXPORT_BIN is not None
     written = generate_symbolic_copybooks(
         bms_dir=bms_dir,
         out_dir=out_dir,
         hlasm_export_bin=HLASM_EXPORT_BIN,
-        bms_copybook_gen_src=BMS_COPYBOOK_GEN_SRC,
     )
     assert out_dir in {p.parent for p in written}
     cosgn = out_dir / "COSGN00.cpy"
