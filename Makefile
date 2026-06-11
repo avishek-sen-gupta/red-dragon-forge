@@ -15,8 +15,9 @@ HLASM_EXPORT       ?= $(CURDIR)/third-party/che-che4z-lsp-for-hlasm-fork/build/b
 CARDDEMO_HOME      ?= $(CURDIR)/third-party/carddemo/app
 
 E2E_ENV = PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) CARDDEMO_HOME=$(CARDDEMO_HOME)
-PYTEST      = uv run python -m pytest
-PYTEST_ARGS ?=
+PYTEST       = uv run python -m pytest
+PYTEST_PATHS ?= tests/
+PYTEST_ARGS  ?=
 
 .PHONY: help setup build python jar jar-force hlasm hlasm-force test test-unit fmt lint
 
@@ -30,6 +31,7 @@ help:
 	@echo "make python      - uv sync (install / refresh Python deps)"
 	@echo "make test        - full suite with CardDemo e2e toolchain wired up"
 	@echo "make test-unit   - unit tests only (no JAR or hlasm_export required)"
+	@echo "make test-one    - run a single test with live stdout (no xdist)"
 	@echo "make fmt         - black-format the codebase"
 	@echo "make lint        - import-linter architectural contracts"
 	@echo ""
@@ -70,10 +72,13 @@ build: jar hlasm python
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 test: jar hlasm
-	$(E2E_ENV) $(PYTEST) tests/ $(PYTEST_ARGS)
+	$(E2E_ENV) $(PYTEST) $(PYTEST_PATHS) $(PYTEST_ARGS)
 
 test-unit:
 	$(PYTEST) tests/unit/ $(PYTEST_ARGS)
+
+test-one:
+	$(E2E_ENV) $(PYTEST) --override-ini="addopts=" -p no:xdist $(PYTEST_PATHS) $(PYTEST_ARGS)
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 

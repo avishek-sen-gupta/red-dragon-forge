@@ -37,3 +37,6 @@ dev-dependencies = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-n auto --dist=worksteal"
+markers = [
+    "carddemo_e2e: CardDemo e2e CICS tests; mandatory locally when toolchain present, skipped in CI (see tests/integration/cics/conftest.py)",
+]
