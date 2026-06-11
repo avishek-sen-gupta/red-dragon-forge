@@ -30,3 +30,7 @@ dev-dependencies = [
     "pytest-xdist>=3.0",
     "black>=24.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-n auto --dist=worksteal"
