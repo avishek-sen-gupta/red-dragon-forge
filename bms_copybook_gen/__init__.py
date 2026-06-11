@@ -11,8 +11,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate COBOL symbolic copybooks from hlasm_export JSON"
     )
-    parser.add_argument("--input", "-i", default="-", help="JSON file produced by hlasm_export (default: stdin)")
-    parser.add_argument("--output", "-o", default="-", help="Output copybook file (default: stdout)")
+    parser.add_argument(
+        "--input",
+        "-i",
+        default="-",
+        help="JSON file produced by hlasm_export (default: stdin)",
+    )
+    parser.add_argument(
+        "--output", "-o", default="-", help="Output copybook file (default: stdout)"
+    )
     args = parser.parse_args()
 
     if args.input == "-":

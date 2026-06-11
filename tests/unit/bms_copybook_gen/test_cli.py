@@ -21,7 +21,12 @@ SAMPLE_JSON = {
         {
             "name": "DFHMDF",
             "label": "ORDNO",
-            "args": {"LENGTH": "8", "POS": "(4,12)", "ATTRB": "(UNPROT,IC)", "PICOUT": "'99999999'"},
+            "args": {
+                "LENGTH": "8",
+                "POS": "(4,12)",
+                "ATTRB": "(UNPROT,IC)",
+                "PICOUT": "'99999999'",
+            },
             "range": {},
         },
         {

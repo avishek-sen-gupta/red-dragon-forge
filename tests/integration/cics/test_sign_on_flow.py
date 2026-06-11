@@ -58,9 +58,7 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
     input_q: queue.Queue = queue.Queue()
 
     # The screen builtins locate the WS region via _get_ws_region_addr; pin it.
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
 
     send_map = make_send_map_builtin(screen_q)
     # short timeout so a missing input fails fast rather than hanging the suite

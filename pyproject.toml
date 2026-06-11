@@ -29,6 +29,9 @@ dev-dependencies = [
     "pytest>=8.0",
     "pytest-xdist>=3.0",
     "black>=24.0",
+    "pyright>=1.1.408",
+    "import-linter>=2.0",
+    "grimp>=3.0",
 ]
 
 [tool.pytest.ini_options]

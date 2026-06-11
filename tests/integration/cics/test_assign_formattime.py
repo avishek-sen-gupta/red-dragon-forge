@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(
     not JAR_AVAILABLE, reason="ProLeap bridge JAR not available"
 )
 
-_CICS_COPYBOOKS = Path(__file__).parents[3] / "interpreter" / "cics" / "copybooks"
+_CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 
 
 @pytest.fixture(autouse=True)

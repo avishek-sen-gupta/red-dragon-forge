@@ -1,0 +1,10 @@
+{
+    "include": ["cics", "bms_copybook_gen", "tests"],
+    "exclude": ["vendor/**", "**/__pycache__/**"],
+    "typeCheckingMode": "basic",
+    "pythonVersion": "3.10",
+    "reportMissingImports": true,
+    "reportMissingTypeStubs": false,
+    "reportUnusedImport": false,
+    "reportUnusedVariable": false
+}

@@ -11,7 +11,9 @@ def _map(label, fields):
     return BmsMap(label=label, fields=fields)
 
 
-def _field(label, length, picout=None, picin=None, attrb=None, grpname=None, occurs=None):
+def _field(
+    label, length, picout=None, picin=None, attrb=None, grpname=None, occurs=None
+):
     return BmsField(
         label=label,
         length=length,
@@ -24,6 +26,7 @@ def _field(label, length, picout=None, picin=None, attrb=None, grpname=None, occ
 
 
 # ── output map (O suffix) ────────────────────────────────────────────────────
+
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_output_map_01_level():
@@ -71,7 +74,8 @@ def test_field_output_pic_x_default():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_field_output_picout_overrides():
     lines = generate_copybook(
-        _mapset([_map("M", [_field("ORDNO", 8, picout="99999999")])]))
+        _mapset([_map("M", [_field("ORDNO", 8, picout="99999999")])])
+    )
     assert "           02  ORDNOO                          PIC 99999999." in lines
 
 
@@ -86,6 +90,7 @@ def test_two_fields_in_sequence():
 
 # ── input map (I suffix) ─────────────────────────────────────────────────────
 
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_input_map_redefines_output():
     lines = generate_copybook(_mapset([_map("ORDERMAP", [])]))
@@ -99,8 +104,7 @@ def test_input_map_field_uses_filler_for_length_and_attr():
     # In input map, length and attr are FILLER
     input_start = next(i for i, l in enumerate(lines) if "MI REDEFINES" in l)
     input_section = lines[input_start:]
-    fillers = [
-        l for l in input_section if "FILLER" in l and "PIC S9(4) COMP" in l]
+    fillers = [l for l in input_section if "FILLER" in l and "PIC S9(4) COMP" in l]
     assert len(fillers) >= 1
 
 
@@ -113,7 +117,8 @@ def test_input_field_pic_x_default():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_input_field_picin_overrides():
     lines = generate_copybook(
-        _mapset([_map("M", [_field("ORDNO", 8, picin="99999999")])]))
+        _mapset([_map("M", [_field("ORDNO", 8, picin="99999999")])])
+    )
     assert "           02  ORDNOI                          PIC 99999999." in lines
 
 
@@ -125,12 +130,12 @@ def test_mode_out_omits_input_map():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_mode_in_omits_output_data_field():
-    lines = generate_copybook(
-        _mapset([_map("M", [_field("ORDNO", 8)])], mode="IN"))
+    lines = generate_copybook(_mapset([_map("M", [_field("ORDNO", 8)])], mode="IN"))
     assert not any("ORDNOO" in l for l in lines)
 
 
 # ── OCCURS / GRPNAME ─────────────────────────────────────────────────────────
+
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_occurs_group_wraps_fields():
@@ -143,13 +148,13 @@ def test_occurs_group_wraps_fields():
 def test_occurs_field_indented_under_group():
     f = _field("ITEMCD", 10, grpname="LINEITEM", occurs=10)
     lines = generate_copybook(_mapset([_map("M", [f])]))
-    grp_idx = next(i for i, l in enumerate(lines)
-                   if "LINEITEM" in l and "OCCURS" in l)
+    grp_idx = next(i for i, l in enumerate(lines) if "LINEITEM" in l and "OCCURS" in l)
     data_idx = next(i for i, l in enumerate(lines) if "ITEMCDO" in l)
     assert data_idx > grp_idx
 
 
 # ── multiple maps ────────────────────────────────────────────────────────────
+
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_multiple_maps_each_get_own_01():
@@ -161,6 +166,7 @@ def test_multiple_maps_each_get_own_01():
 
 # ── input map no longer emits invalid "FILLER REDEFINES FILLER" ───────────────
 
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_input_map_has_no_filler_redefines_filler():
     # REDEFINES requires a data-name, not FILLER — the input map must not emit it.
@@ -169,6 +175,7 @@ def test_input_map_has_no_filler_redefines_filler():
 
 
 # ── extended attributes (per-map: DFHMSD EXTATT=YES or DFHMDI DSATTS/MAPATTS) ──
+
 
 def _map_extatt(label, fields):
     return BmsMap(label=label, extatt=True, fields=fields)
@@ -182,7 +189,9 @@ def _mapset_extatt(maps, mode="INOUT", tioapfx=True):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_extatt_output_emits_color_ps_highlight_validation_subfields():
-    lines = generate_copybook(_mapset_extatt([_map_extatt("MYMAP", [_field("FLD", 8)])]))
+    lines = generate_copybook(
+        _mapset_extatt([_map_extatt("MYMAP", [_field("FLD", 8)])])
+    )
     for suffix in ("C", "P", "H", "V"):
         assert any(f"02  FLD{suffix} " in l for l in lines), suffix
     # data field still present and after the attribute bytes
@@ -191,7 +200,9 @@ def test_extatt_output_emits_color_ps_highlight_validation_subfields():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_extatt_input_adds_four_filler_bytes_for_attributes():
-    lines = generate_copybook(_mapset_extatt([_map_extatt("MYMAP", [_field("FLD", 8)])]))
+    lines = generate_copybook(
+        _mapset_extatt([_map_extatt("MYMAP", [_field("FLD", 8)])])
+    )
     input_start = next(i for i, l in enumerate(lines) if "REDEFINES MYMAPO" in l)
     input_section = lines[input_start:]
     # the 4 extended-attribute bytes appear as a single FILLER X(4) in the input map

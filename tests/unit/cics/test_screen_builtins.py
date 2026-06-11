@@ -37,9 +37,7 @@ def test_send_map_reads_named_output_fields_from_ws(monkeypatch):
     region = bytearray(b"\x40" * 86)
     region[0:8] = "USER0001".encode("cp037")
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     sq: queue.Queue = queue.Queue()
     builtin = make_send_map_builtin(sq)
     builtin([_tv("COSGN0A"), _tv(["USERID", "ERRMSG"])], vm)
@@ -57,9 +55,7 @@ def test_receive_map_writes_eibaid_from_input_event(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(InputEvent(eibaid="\x33", fields={"USERID": "ALICE"}))
@@ -79,9 +75,7 @@ def test_receive_map_backcompat_dict_leaves_eibaid_default(monkeypatch):
     # Pre-seed EIBAID with a sentinel so the default write is observable.
     region[200] = 0x00
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     # Plain dict on the queue (legacy producers) — duck-typed as field values
@@ -112,9 +106,7 @@ def test_receive_map_writes_named_input_fields_to_ws(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr(
-        "cics.builtins.system._get_ws_region_addr", lambda _vm: 1
-    )
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"USERID": "USER0001"}))

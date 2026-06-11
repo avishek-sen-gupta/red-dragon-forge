@@ -1,7 +1,7 @@
 from .models import BmsField, BmsMap, BmsMapSet
 
 # Column widths for COBOL alignment
-_NAME_COL = 47   # column at which PIC clause starts
+_NAME_COL = 47  # column at which PIC clause starts
 _PIC_LABEL = "PIC "
 
 

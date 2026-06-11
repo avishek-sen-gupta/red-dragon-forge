@@ -1,7 +1,6 @@
 from bms_copybook_gen.parser import parse_mapsets
 from tests.covers import covers, NotLanguageFeature
 
-
 SIMPLE_INVOCATIONS = [
     {
         "name": "DFHMSD",
@@ -18,7 +17,12 @@ SIMPLE_INVOCATIONS = [
     {
         "name": "DFHMDF",
         "label": "ORDNO",
-        "args": {"LENGTH": "8", "POS": "(4,12)", "ATTRB": "(UNPROT,IC)", "PICOUT": "'99999999'"},
+        "args": {
+            "LENGTH": "8",
+            "POS": "(4,12)",
+            "ATTRB": "(UNPROT,IC)",
+            "PICOUT": "'99999999'",
+        },
         "range": {"start": {"line": 2, "column": 0}, "end": {"line": 2, "column": 10}},
     },
     {
@@ -82,10 +86,24 @@ def test_field_attrb_single_value():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dfhmdf_without_label_is_skipped():
     invocations = [
-        {"name": "DFHMSD", "label": "SET1", "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "INOUT", "TIOAPFX": "NO"}, "range": {}},
+        {
+            "name": "DFHMSD",
+            "label": "SET1",
+            "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "INOUT", "TIOAPFX": "NO"},
+            "range": {},
+        },
         {"name": "DFHMDI", "label": "MAP1", "args": {"SIZE": "(24,80)"}, "range": {}},
-        {"name": "DFHMDF", "args": {"LENGTH": "1", "POS": "(1,1)", "ATTRB": "ASKIP"}, "range": {}},
-        {"name": "DFHMDF", "label": "MYFIELD", "args": {"LENGTH": "5", "POS": "(2,1)", "ATTRB": "UNPROT"}, "range": {}},
+        {
+            "name": "DFHMDF",
+            "args": {"LENGTH": "1", "POS": "(1,1)", "ATTRB": "ASKIP"},
+            "range": {},
+        },
+        {
+            "name": "DFHMDF",
+            "label": "MYFIELD",
+            "args": {"LENGTH": "5", "POS": "(2,1)", "ATTRB": "UNPROT"},
+            "range": {},
+        },
         {"name": "DFHMSD", "args": {"TYPE": "FINAL"}, "range": {}},
     ]
     fields = parse_mapsets(invocations)[0].maps[0].fields
@@ -96,7 +114,12 @@ def test_dfhmdf_without_label_is_skipped():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_tioapfx_no():
     invocations = [
-        {"name": "DFHMSD", "label": "SET1", "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "OUT", "TIOAPFX": "NO"}, "range": {}},
+        {
+            "name": "DFHMSD",
+            "label": "SET1",
+            "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "OUT", "TIOAPFX": "NO"},
+            "range": {},
+        },
         {"name": "DFHMDI", "label": "MAP1", "args": {"SIZE": "(24,80)"}, "range": {}},
         {"name": "DFHMSD", "args": {"TYPE": "FINAL"}, "range": {}},
     ]
@@ -106,12 +129,23 @@ def test_tioapfx_no():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_occurs_and_grpname():
     invocations = [
-        {"name": "DFHMSD", "label": "SET1", "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "INOUT", "TIOAPFX": "YES"}, "range": {}},
+        {
+            "name": "DFHMSD",
+            "label": "SET1",
+            "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "INOUT", "TIOAPFX": "YES"},
+            "range": {},
+        },
         {"name": "DFHMDI", "label": "MAP1", "args": {"SIZE": "(24,80)"}, "range": {}},
         {
             "name": "DFHMDF",
             "label": "ITEMCD",
-            "args": {"LENGTH": "10", "POS": "(8,2)", "ATTRB": "UNPROT", "GRPNAME": "LINEITEM", "OCCURS": "10"},
+            "args": {
+                "LENGTH": "10",
+                "POS": "(8,2)",
+                "ATTRB": "UNPROT",
+                "GRPNAME": "LINEITEM",
+                "OCCURS": "10",
+            },
             "range": {},
         },
         {"name": "DFHMSD", "args": {"TYPE": "FINAL"}, "range": {}},
@@ -124,11 +158,26 @@ def test_occurs_and_grpname():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_multiple_maps_in_mapset():
     invocations = [
-        {"name": "DFHMSD", "label": "SET1", "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "INOUT", "TIOAPFX": "YES"}, "range": {}},
+        {
+            "name": "DFHMSD",
+            "label": "SET1",
+            "args": {"TYPE": "MAP", "LANG": "COBOL", "MODE": "INOUT", "TIOAPFX": "YES"},
+            "range": {},
+        },
         {"name": "DFHMDI", "label": "MAP1", "args": {"SIZE": "(24,80)"}, "range": {}},
-        {"name": "DFHMDF", "label": "F1", "args": {"LENGTH": "5", "POS": "(1,1)", "ATTRB": "UNPROT"}, "range": {}},
+        {
+            "name": "DFHMDF",
+            "label": "F1",
+            "args": {"LENGTH": "5", "POS": "(1,1)", "ATTRB": "UNPROT"},
+            "range": {},
+        },
         {"name": "DFHMDI", "label": "MAP2", "args": {"SIZE": "(24,80)"}, "range": {}},
-        {"name": "DFHMDF", "label": "F2", "args": {"LENGTH": "10", "POS": "(1,1)", "ATTRB": "PROT"}, "range": {}},
+        {
+            "name": "DFHMDF",
+            "label": "F2",
+            "args": {"LENGTH": "10", "POS": "(1,1)", "ATTRB": "PROT"},
+            "range": {},
+        },
         {"name": "DFHMSD", "args": {"TYPE": "FINAL"}, "range": {}},
     ]
     maps = parse_mapsets(invocations)[0].maps
