@@ -1,0 +1,4 @@
+[submodule "vendor/red-dragon"]
+	path = vendor/red-dragon
+	url = git@github.com:avishek-sen-gupta/red-dragon.git
+	branch = main

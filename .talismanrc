@@ -1,0 +1,8 @@
+fileignoreconfig:
+- filename: uv.lock
+  ignore_detectors:
+  - filecontent
+- filename: vendor/red-dragon
+  checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+threshold: high
+version: "1.0"
