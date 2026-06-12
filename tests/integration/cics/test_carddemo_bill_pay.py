@@ -34,6 +34,7 @@ from cics.vsam.fct import FctConfig
 from cics.vsam.format import write_flat_file
 from cics.vsam.seed import load_vsam_seed
 from interpreter.cobol.features import CobolFeature
+from interpreter.cobol.zoned_decimal import decode_zoned
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
@@ -59,6 +60,7 @@ _ACCT_ID = "00000000001"
 # Whole-dollar balance avoids the field->field fractional-MOVE loss (red-dragon-d3ww).
 _BALANCE_SCALED = "000000100000"  # ACCT-CURR-BAL S9(10)V99 -> 1000.00
 _BALANCE_EDITED = "+0000001000.00"  # WS-CURR-BAL PIC +9999999999.99
+_BALANCE_PAID_EDITED = "+0000000000.00"  # the same, after the balance is paid off
 
 # Pay path: the account's card (via CXACAIX xref) and the last seeded transaction
 # id (the payment mints last+1).
@@ -311,15 +313,22 @@ def test_real_carddemo_bill_pay_shows_balance(tmp_path):
     assert (r5.transid or "").strip() == "CB00"
 
 
-def _acct_balance_scaled(engine, acct_id: str) -> int:
-    """Read ACCTDAT and return ACCT-CURR-BAL's integer-scaled magnitude
-    (S9(10)V99 @ offset 12, 12 zoned bytes). The digit is the low nibble of each
-    byte; the last byte carries a sign overpunch (0xC_ positive / 0xD_ negative /
-    0xF_ unsigned), which low-nibble extraction ignores."""
+def _curbal_on_screen(region, screen_q, acct_id: str) -> str:
+    """Drive a display turn for acct_id and return what the user sees in the
+    CURBAL field — i.e. ACCT-CURR-BAL viewed through WS-CURR-BAL's edit picture
+    (PIC +9999999999.99), the way a real 3270 terminal would render it."""
+    region.step(input_event=InputEvent(eibaid=_DFHENTER, fields={"ACTIDIN": acct_id}))
+    screens = drain(screen_q)
+    fields = [s for s in screens if s.get("map") == "COBIL0A"][-1]["fields"]
+    return (fields.get("CURBAL") or "").strip()
+
+
+def _acct_balance(engine, acct_id: str) -> float:
+    """Internal cross-check: decode ACCT-CURR-BAL straight from the stored VSAM
+    record via the canonical zoned-decimal decoder (the same one the VM uses)."""
     rec, _ = engine.read("ACCTDAT", acct_id.encode("cp037"), 11)
     assert rec is not None, "account vanished"
-    digits = [b & 0x0F for b in rec[12:24]]
-    return sum(d * 10 ** (11 - i) for i, d in enumerate(digits))
+    return decode_zoned(rec[12:24], decimal_digits=2)
 
 
 @covers(CobolFeature.EXEC_CICS)
@@ -328,22 +337,18 @@ def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path):
     STARTBR/READPREV TRANSACT to mint the next id, WRITE the payment transaction,
     then COMPUTE the balance to zero and REWRITE ACCTDAT.
 
-    Verifies the multi-file mutation against the engine: ACCTDAT balance is now
-    zero, and a new TRANSACT record exists carrying the account's card number."""
+    The user-facing assertions are the edited balance the screen renders (before
+    and after the payment) and the success message; the stored record is read
+    only as an internal consistency cross-check."""
     region, screen_q, engine = _drive_to_bill_pay(tmp_path)
-
-    # Pre-conditions: balance is 1000.00; the new transaction id is absent.
-    assert _acct_balance_scaled(engine, _ACCT_ID) == 100000
-    assert engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)[0] is None
 
     # Turn 4: first display.
     drain(screen_q)
     region.step()
     drain(screen_q)
 
-    # Turn 5: enter the account id (display the balance + confirm prompt).
-    region.step(input_event=InputEvent(eibaid=_DFHENTER, fields={"ACTIDIN": _ACCT_ID}))
-    drain(screen_q)
+    # Turn 5: what the user sees before paying — the edited balance + prompt.
+    assert _curbal_on_screen(region, screen_q, _ACCT_ID) == _BALANCE_EDITED
 
     # Turn 6: confirm the payment (CONFIRM='Y') -> full pay path.
     r6 = region.step(
@@ -355,22 +360,25 @@ def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path):
     assert r6.kind == DispatchKind.RETURN_TRANSID
     assert (r6.transid or "").strip() == "CB00"
 
-    # ACCTDAT balance was paid down to zero (COMPUTE + REWRITE).
-    assert _acct_balance_scaled(engine, _ACCT_ID) == 0
-
-    # A new TRANSACT payment record was WRITTEN with the next id, carrying the
-    # account's card number (read from CXACAIX) at TRAN-CARD-NUM (X(16) @262).
-    tran, _ = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
-    assert tran is not None, "payment transaction was not written"
-    assert bytes(tran[0:16]).decode("cp037") == _NEW_TRAN_ID
-    assert bytes(tran[262:278]).decode("cp037") == _CARD_NUM
-
-    # And the success message is shown.
+    # What the user sees after paying: the success message naming the new id.
     msgs = [
         (s.get("fields", {}).get("ERRMSG") or "")
         for s in screens
         if s.get("map") == "COBIL0A"
     ]
     assert any(
-        "payment successful" in m.lower() for m in msgs
-    ), f"payment-success message not shown; ERRMSG values={msgs!r}"
+        "payment successful" in m.lower() and _NEW_TRAN_ID in m for m in msgs
+    ), f"payment-success message (id {_NEW_TRAN_ID}) not shown; ERRMSG={msgs!r}"
+
+    # Turn 7: re-display the account — the user now sees the balance paid to zero,
+    # again through the edit picture.
+    assert _curbal_on_screen(region, screen_q, _ACCT_ID) == _BALANCE_PAID_EDITED
+
+    # Internal cross-checks of the multi-file mutation: the stored balance is zero
+    # and the payment transaction was WRITTEN with the account's card number
+    # (TRAN-CARD-NUM X(16) @262, read from CXACAIX).
+    assert _acct_balance(engine, _ACCT_ID) == 0.0
+    tran, _ = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
+    assert tran is not None, "payment transaction was not written"
+    assert bytes(tran[0:16]).decode("cp037") == _NEW_TRAN_ID
+    assert bytes(tran[262:278]).decode("cp037") == _CARD_NUM
