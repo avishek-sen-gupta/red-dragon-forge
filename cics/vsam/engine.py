@@ -59,6 +59,10 @@ class VsamEngine:
         # READNEXT→READPREV reversal skips back over the just-read record.
         self._cursors: dict[_CursorKey, int] = {}
         self._cursor_dir: dict[_CursorKey, str] = {}
+        # Last record key READ per file. EXEC CICS DELETE / REWRITE without a
+        # RIDFLD operate on the record most recently read for update; a keyless
+        # DELETE falls back to this held key.
+        self._held_key: dict[str, bytes] = {}
 
     def load_all(self) -> None:
         """Load all configured datasets via the backend (seed or persisted state)."""
@@ -115,6 +119,9 @@ class VsamEngine:
         search = key[:klen]
         for record in ds.store.keys():
             if self._record_key(ds, record, key_length) == search:
+                # Hold this key so a subsequent RIDFLD-less DELETE (read-for-
+                # update then delete) targets exactly this record.
+                self._held_key[file_name.upper()] = search
                 return bytes(record), RESP_NORMAL
         return None, RESP_NOTFND
 
@@ -158,10 +165,15 @@ class VsamEngine:
         if ds is None:
             return RESP_DISABLED
         klen = ds.key_length or key_length
-        key_prefix = key[:klen]
+        # EXEC CICS DELETE has no RIDFLD when it follows a READ ... UPDATE: the
+        # target is the record most recently read for this file (held key).
+        key_prefix = key[:klen] if key else self._held_key.get(file_name.upper(), b"")
+        if not key_prefix:
+            return RESP_NOTFND
         for existing in list(ds.store.keys()):
             if self._record_key(ds, existing, key_length) == key_prefix:
                 del ds.store[existing]
+                self._held_key.pop(file_name.upper(), None)
                 self._persist(file_name)
                 return RESP_NORMAL
         return RESP_NOTFND
