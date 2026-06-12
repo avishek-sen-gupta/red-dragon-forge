@@ -51,6 +51,18 @@ class _FakeCtx:
         self.emit_inst(Const(result_reg=reg, value=value))
         return reg
 
+    def parse_literal(self, text):  # type: ignore[no-untyped-def]
+        """Mirror EmitContext.parse_literal: int, then float, else the string."""
+        try:
+            return int(text)
+        except ValueError:
+            pass
+        try:
+            return float(text)
+        except ValueError:
+            pass
+        return text
+
 
 _MAT = object()  # materialised layout sentinel — not inspected by these tests
 
@@ -136,3 +148,13 @@ def test_unresolvable_ref_emits_sentinel_not_field_name_literal():
     assert consts == [
         "UNRESOLVABLE__MISSING_FIELD"
     ], f"expected sentinel constant, got {consts}"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_numeric_literal_tagged_as_ref_is_parsed_not_sentinelled():
+    """The bridge sometimes tags a numeric literal as a ref (e.g. an abbreviated
+    condition operand '1'). It must be parsed as the literal, NOT sentinelled."""
+    ctx = _FakeCtx(fields=set())
+    _lower_expr_dict(ctx, {"kind": "ref", "name": "1"}, _MAT)
+    consts = [i.value for i in ctx.emitted if isinstance(i, Const)]
+    assert consts == [1], f"expected literal int 1, got {consts}"

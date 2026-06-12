@@ -58,6 +58,10 @@ _NUM_TRAN_RECORDS = 12
 # WS-TRAN-DATE: TRAN-ORIG-TS "2024-01-01-..." → MM/DD/YY via CSDAT01Y offsets.
 _TRAN_DATE = "01/01/24"
 
+# WS-TRAN-AMT is PIC +99999999.99 (numeric-edited). TRAN-AMT is seeded to zero,
+# so the edited display value is a fixed '+' sign, eight zero digits, '.00'.
+_TRAN_AMT = "+00000000.00"
+
 
 def _ebcdic(s: str, n: int) -> bytes:
     return s.ljust(n)[:n].encode("cp037")
@@ -266,6 +270,7 @@ def test_real_carddemo_transaction_list_first_page(tmp_path):
         trnid_key = f"TRNID{slot:02d}"
         tdate_key = f"TDATE{slot:02d}"
         tdesc_key = f"TDESC{slot:02d}"
+        tamt_key = f"TAMT{slot:03d}"
 
         assert (fields.get(trnid_key) or "").strip() == _tran_id(
             n
@@ -279,6 +284,11 @@ def test_real_carddemo_transaction_list_first_page(tmp_path):
             fields.get(tdesc_key) or ""
         ).strip() == f"TRAN{n:04d}", (
             f"{tdesc_key}: expected 'TRAN{n:04d}', got {fields.get(tdesc_key)!r}"
+        )
+        assert (
+            fields.get(tamt_key) or ""
+        ).strip() == _TRAN_AMT, (
+            f"{tamt_key}: expected {_TRAN_AMT!r}, got {fields.get(tamt_key)!r}"
         )
     assert r4.kind == DispatchKind.RETURN_TRANSID
     assert (r4.transid or "").strip() == "CT00"
@@ -318,6 +328,7 @@ def test_real_carddemo_transaction_list_page_forward(tmp_path):
         trnid_key = f"TRNID{slot:02d}"
         tdate_key = f"TDATE{slot:02d}"
         tdesc_key = f"TDESC{slot:02d}"
+        tamt_key = f"TAMT{slot:03d}"
 
         assert (fields.get(trnid_key) or "").strip() == _tran_id(
             n
@@ -329,6 +340,11 @@ def test_real_carddemo_transaction_list_page_forward(tmp_path):
             fields.get(tdesc_key) or ""
         ).strip() == f"TRAN{n:04d}", (
             f"{tdesc_key} page 2: expected 'TRAN{n:04d}', got {fields.get(tdesc_key)!r}"
+        )
+        assert (
+            fields.get(tamt_key) or ""
+        ).strip() == _TRAN_AMT, (
+            f"{tamt_key} page 2: expected {_TRAN_AMT!r}, got {fields.get(tamt_key)!r}"
         )
 
     assert r5.kind == DispatchKind.RETURN_TRANSID
