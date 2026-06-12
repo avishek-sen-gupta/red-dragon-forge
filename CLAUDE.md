@@ -33,6 +33,20 @@ uv run python -m pytest tests/integration/ -x -q # integration tests (needs ProL
 `cfg.py`). Every CICS behaviour reaches the VM only through `CallFunction` IR to registered
 builtins — the same mechanism any language frontend uses.
 
+## RedDragon changes live in `~/code/red-dragon`, not the submodule
+
+`vendor/red-dragon` is a **read-through checkout** for building and running Cicada — do **not**
+make RedDragon changes there. The canonical RedDragon working copy (and its own Beads DB) is
+the separate clone at `~/code/red-dragon`.
+
+- **RedDragon code fixes**: edit, test, and commit/push in `~/code/red-dragon`. Then bump
+  Cicada's submodule pointer (`cd vendor/red-dragon && git fetch && git checkout <sha>`, then
+  `git add vendor/red-dragon` in the Cicada repo) to pick up the new commit.
+- **RedDragon issues**: file/update in RedDragon's Beads DB, not Cicada's
+  (`bd -C ~/code/red-dragon create …`, or `cd ~/code/red-dragon` first). Anything in
+  `interpreter/**`, `proleap-bridge/**`, the PIC parser, edit pictures, lowering, or the VM is
+  a RedDragon issue. Only CICS-runtime concerns (the `cics/` package) belong in Cicada's Beads DB.
+
 ## Workflow
 
 - Write failing test first (TDD).
