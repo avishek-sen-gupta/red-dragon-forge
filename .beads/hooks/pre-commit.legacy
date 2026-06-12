@@ -1,0 +1,2 @@
+#!/bin/sh
+~/.talisman/bin/talisman_darwin_arm64 --githook pre-commit

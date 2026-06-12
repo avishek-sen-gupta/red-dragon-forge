@@ -42,3 +42,9 @@ third-party/che-che4z-lsp-for-hlasm-fork/build/
 
 # session / tooling state
 .remember/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
