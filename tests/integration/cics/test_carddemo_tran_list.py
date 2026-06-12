@@ -289,14 +289,10 @@ def test_real_carddemo_transaction_list_page_forward(tmp_path):
     """Turn 5: PF8 (page-forward) → COTRN00C dispatches PROCESS-PF8-KEY, sets
     TRAN-ID = CDEMO-CT00-TRNID-LAST ('...0010'), and re-browses via STARTBR.
 
-    VM note: the skip-one-READNEXT guard in PROCESS-PAGE-FORWARD is:
-      IF EIBAID NOT = DFHENTER AND DFHPF7 AND DFHPF3
-    condition_lowering cannot resolve DFHPF7/DFHPF3 as comparison values in a
-    compound IF and treats them as always-false conditions, so the guard
-    evaluates to FALSE for all EIBAID values and the skip never fires. As a
-    result, page 2 starts AT the last key of page 1 (overlap by one record):
-    slots 1-3 contain records 10, 11, 12 instead of the canonical 11, 12.
-    This test pins the actual VM behaviour as a regression baseline.
+    PROCESS-PAGE-FORWARD guard: IF EIBAID NOT = DFHENTER AND DFHPF7 AND DFHPF3
+    skips the first READNEXT for PF8 (non-ENTER, non-PF7, non-PF3), so the
+    browse advances past record 10 and page 2 shows records 11, 12 in slots
+    1 and 2.
     """
     region, screen_q = _drive_to_tran_list(tmp_path)
 
@@ -316,9 +312,9 @@ def test_real_carddemo_transaction_list_page_forward(tmp_path):
     ), f"PF8 did not render COTRN0A; maps={[s.get('map') for s in screens]}"
     fields = next(s for s in screens if s.get("map") == "COTRN0A")["fields"]
 
-    # Due to the skip-READNEXT not firing (see docstring), slots 1-3 carry
-    # records 10, 11, 12 (overlap on record 10, then the two remaining).
-    for slot, n in enumerate([10, 11, 12], start=1):
+    # PF8 skips the first READNEXT, so page 2 starts after record 10.
+    # With 12 total records, slots 1-2 show records 11, 12.
+    for slot, n in enumerate([11, 12], start=1):
         trnid_key = f"TRNID{slot:02d}"
         tdate_key = f"TDATE{slot:02d}"
         tdesc_key = f"TDESC{slot:02d}"
