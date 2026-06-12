@@ -1,4 +1,9 @@
-"""Unit tests for the abbreviated-condition repair in condition_lowering.
+"""Unit tests for condition_lowering helpers.
+
+Covers:
+- _extract_implied_relation: abbreviated-condition subject extraction
+- _lower_expr_dict: unresolvable ref sentinel behaviour
+
 
 COBOL abbreviated conditions like "EIBAID NOT = DFHENTER AND DFHPF7 AND DFHPF3"
 expand to "EIBAID NOT = DFHENTER AND EIBAID NOT = DFHPF7 AND EIBAID NOT = DFHPF3".
@@ -12,8 +17,42 @@ comparison subject) in isolation, since it is a pure dict transformation.
 
 from __future__ import annotations
 
-from interpreter.cobol.condition_lowering import _extract_implied_relation
+from interpreter.cobol.condition_lowering import (
+    _extract_implied_relation,
+    _lower_expr_dict,
+)
+from interpreter.instructions import Const
+from interpreter.register import Register
 from tests.covers import covers, NotLanguageFeature
+
+
+class _FakeCtx:
+    """Minimal EmitContext stub sufficient for testing _lower_expr_dict."""
+
+    def __init__(self, fields: set[str]) -> None:
+        self._fields = fields
+        self.emitted: list = []
+        self._counter = 0
+
+    def fresh_reg(self) -> Register:
+        reg = Register(f"%{self._counter}")
+        self._counter += 1
+        return reg
+
+    def emit_inst(self, inst):  # type: ignore[no-untyped-def]
+        self.emitted.append(inst)
+        return inst
+
+    def has_field(self, name, materialised) -> bool:  # type: ignore[no-untyped-def]
+        return name in self._fields
+
+    def const_to_reg(self, value):  # type: ignore[no-untyped-def]
+        reg = self.fresh_reg()
+        self.emit_inst(Const(result_reg=reg, value=value))
+        return reg
+
+
+_MAT = object()  # materialised layout sentinel — not inspected by these tests
 
 _EIBAID = {"kind": "ref", "name": "EIBAID"}
 _DFHENTER = {"kind": "ref", "name": "DFHENTER"}
@@ -81,3 +120,19 @@ def test_extract_implied_from_nested_and_prefers_rightmost_full_relation():
     node = {"op": "AND", "left": left_rel, "right": right_rel}
     _, _, left_expr = _extract_implied_relation(node)
     assert left_expr == _DFHPF7
+
+
+# ── _lower_expr_dict: unresolvable ref ────────────────────────────────────────
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_unresolvable_ref_emits_sentinel_not_field_name_literal():
+    """A ref node whose name isn't in materialised must emit an obviously-wrong
+    sentinel constant ('UNRESOLVABLE__X'), not silently coerce the name to a
+    literal via parse_literal."""
+    ctx = _FakeCtx(fields=set())
+    _lower_expr_dict(ctx, {"kind": "ref", "name": "MISSING_FIELD"}, _MAT)
+    consts = [i.value for i in ctx.emitted if isinstance(i, Const)]
+    assert consts == [
+        "UNRESOLVABLE__MISSING_FIELD"
+    ], f"expected sentinel constant, got {consts}"
