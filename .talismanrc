@@ -8,5 +8,7 @@ fileignoreconfig:
   checksum: 31a9377951ee3655d464e1c9bb9f504e6c9dbd41d08cd62c63c94ed3321b6941
 - filename: third-party/carddemo
   checksum: e794a9668c012f847080c6651f00d1eff2d2156ade653e655fef46a1eda580fb
+- filename: docs/cicada-architecture.html
+  checksum: dff4a8eb5dcc8fef6916b68b2e668f6f29bee0801a408ff629c09ca21abe1f8b
 threshold: high
 version: "1.0"
