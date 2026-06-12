@@ -123,6 +123,28 @@ def test_delete_removes_record():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_keyless_delete_uses_last_read_record():
+    """EXEC CICS DELETE without RIDFLD deletes the record most recently READ
+    (read-for-update semantics). An empty key falls back to the held key."""
+    engine = _engine_with_records([_rec("AA01", "AAAA"), _rec("BB02", "BBBB")])
+    # Read BB02 for update, then a keyless DELETE removes exactly that record.
+    rec, resp = engine.read("TESTDS", b"BB02", KEY_LEN)
+    assert resp == RESP_NORMAL and rec is not None
+    assert engine.delete("TESTDS", b"", KEY_LEN) == RESP_NORMAL
+    _, gone = engine.read("TESTDS", b"BB02", KEY_LEN)
+    assert gone == RESP_NOTFND
+    # The other record is untouched.
+    _, other = engine.read("TESTDS", b"AA01", KEY_LEN)
+    assert other == RESP_NORMAL
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_keyless_delete_without_prior_read_is_notfnd():
+    engine = _engine_with_records([_rec("AA01", "AAAA")])
+    assert engine.delete("TESTDS", b"", KEY_LEN) == RESP_NOTFND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_browse_forward():
     engine = _engine_with_records([_rec("AA01"), _rec("BB02"), _rec("CC03")])
     cursor = ("task0", "TESTDS", "cur0")
