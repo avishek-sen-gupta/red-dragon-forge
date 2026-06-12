@@ -47,6 +47,8 @@ _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 
 _USRSEC_RECLN = 80
 _ACCT_RECLN = 300
+_XREF_RECLN = 50
+_TRAN_RECLN = 350
 
 _DFHENTER = "\x7d"
 
@@ -57,6 +59,12 @@ _ACCT_ID = "00000000001"
 # Whole-dollar balance avoids the field->field fractional-MOVE loss (red-dragon-d3ww).
 _BALANCE_SCALED = "000000100000"  # ACCT-CURR-BAL S9(10)V99 -> 1000.00
 _BALANCE_EDITED = "+0000001000.00"  # WS-CURR-BAL PIC +9999999999.99
+
+# Pay path: the account's card (via CXACAIX xref) and the last seeded transaction
+# id (the payment mints last+1).
+_CARD_NUM = "4111111111111111"
+_LAST_TRAN_ID = "0000000000000010"
+_NEW_TRAN_ID = "0000000000000011"
 
 
 def _ebcdic(s: str, n: int) -> bytes:
@@ -100,6 +108,25 @@ def _acct_record(acct_id: str, balance_scaled: str) -> bytes:
     return rec.ljust(_ACCT_RECLN, b"\x40")[:_ACCT_RECLN]
 
 
+def _xref_record(card_num: str, acct_id: str) -> bytes:
+    """CVACT03Y card-xref (50 bytes): CARD-NUM X(16)@0, CUST-ID 9(9)@16,
+    ACCT-ID 9(11)@25 (the CXACAIX alternate-index key), FILLER X(14)@36."""
+    rec = (
+        _ebcdic(card_num, 16)  # XREF-CARD-NUM
+        + _num("000000001", 9)  # XREF-CUST-ID
+        + _num(acct_id, 11)  # XREF-ACCT-ID — key @ offset 25
+        + _ebcdic("", 14)  # FILLER
+    )
+    return rec.ljust(_XREF_RECLN, b"\x40")[:_XREF_RECLN]
+
+
+def _tran_record(tran_id: str) -> bytes:
+    """Minimal CVTRA05Y TRAN-RECORD (350 bytes): just the TRAN-ID key set, so
+    STARTBR/READPREV can find the highest existing id."""
+    rec = _ebcdic(tran_id, 16) + _ebcdic("", _TRAN_RECLN - 16)
+    return rec.ljust(_TRAN_RECLN, b"\x40")[:_TRAN_RECLN]
+
+
 def _write_seed_files(data_dir: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     write_flat_file(
@@ -111,6 +138,16 @@ def _write_seed_files(data_dir: Path) -> None:
         data_dir / "ACCTDAT.dat",
         [_acct_record(_ACCT_ID, _BALANCE_SCALED)],
         _ACCT_RECLN,
+    )
+    write_flat_file(
+        data_dir / "CXACAIX.dat",
+        [_xref_record(_CARD_NUM, _ACCT_ID)],
+        _XREF_RECLN,
+    )
+    write_flat_file(
+        data_dir / "TRANSACT.dat",
+        [_tran_record(_LAST_TRAN_ID)],
+        _TRAN_RECLN,
     )
 
 
@@ -124,6 +161,15 @@ datasets:
     record_length: 300
     file: ACCTDAT.dat
     key_length: 11
+  CXACAIX:
+    record_length: 50
+    file: CXACAIX.dat
+    key_length: 11
+    key_offset: 25
+  TRANSACT:
+    record_length: 350
+    file: TRANSACT.dat
+    key_length: 16
 """
 
 
@@ -263,3 +309,68 @@ def test_real_carddemo_bill_pay_shows_balance(tmp_path):
 
     assert r5.kind == DispatchKind.RETURN_TRANSID
     assert (r5.transid or "").strip() == "CB00"
+
+
+def _acct_balance_scaled(engine, acct_id: str) -> int:
+    """Read ACCTDAT and return ACCT-CURR-BAL's integer-scaled magnitude
+    (S9(10)V99 @ offset 12, 12 zoned bytes). The digit is the low nibble of each
+    byte; the last byte carries a sign overpunch (0xC_ positive / 0xD_ negative /
+    0xF_ unsigned), which low-nibble extraction ignores."""
+    rec, _ = engine.read("ACCTDAT", acct_id.encode("cp037"), 11)
+    assert rec is not None, "account vanished"
+    digits = [b & 0x0F for b in rec[12:24]]
+    return sum(d * 10 ** (11 - i) for i, d in enumerate(digits))
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path):
+    """Turn 6 (CONFIRM='Y') pays the balance in full: READ CXACAIX for the card,
+    STARTBR/READPREV TRANSACT to mint the next id, WRITE the payment transaction,
+    then COMPUTE the balance to zero and REWRITE ACCTDAT.
+
+    Verifies the multi-file mutation against the engine: ACCTDAT balance is now
+    zero, and a new TRANSACT record exists carrying the account's card number."""
+    region, screen_q, engine = _drive_to_bill_pay(tmp_path)
+
+    # Pre-conditions: balance is 1000.00; the new transaction id is absent.
+    assert _acct_balance_scaled(engine, _ACCT_ID) == 100000
+    assert engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)[0] is None
+
+    # Turn 4: first display.
+    drain(screen_q)
+    region.step()
+    drain(screen_q)
+
+    # Turn 5: enter the account id (display the balance + confirm prompt).
+    region.step(input_event=InputEvent(eibaid=_DFHENTER, fields={"ACTIDIN": _ACCT_ID}))
+    drain(screen_q)
+
+    # Turn 6: confirm the payment (CONFIRM='Y') -> full pay path.
+    r6 = region.step(
+        input_event=InputEvent(
+            eibaid=_DFHENTER, fields={"ACTIDIN": _ACCT_ID, "CONFIRM": "Y"}
+        )
+    )
+    screens = drain(screen_q)
+    assert r6.kind == DispatchKind.RETURN_TRANSID
+    assert (r6.transid or "").strip() == "CB00"
+
+    # ACCTDAT balance was paid down to zero (COMPUTE + REWRITE).
+    assert _acct_balance_scaled(engine, _ACCT_ID) == 0
+
+    # A new TRANSACT payment record was WRITTEN with the next id, carrying the
+    # account's card number (read from CXACAIX) at TRAN-CARD-NUM (X(16) @262).
+    tran, _ = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
+    assert tran is not None, "payment transaction was not written"
+    assert bytes(tran[0:16]).decode("cp037") == _NEW_TRAN_ID
+    assert bytes(tran[262:278]).decode("cp037") == _CARD_NUM
+
+    # And the success message is shown.
+    msgs = [
+        (s.get("fields", {}).get("ERRMSG") or "")
+        for s in screens
+        if s.get("map") == "COBIL0A"
+    ]
+    assert any(
+        "payment successful" in m.lower() for m in msgs
+    ), f"payment-success message not shown; ERRMSG values={msgs!r}"
