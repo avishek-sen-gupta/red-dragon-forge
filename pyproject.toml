@@ -24,9 +24,10 @@ packages = ["cics", "bms_copybook_gen"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
     "pytest-xdist>=3.0",
     "black>=24.0",
     "pyright>=1.1.408",
