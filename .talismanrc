@@ -10,5 +10,8 @@ fileignoreconfig:
   checksum: e794a9668c012f847080c6651f00d1eff2d2156ade653e655fef46a1eda580fb
 - filename: docs/cicada-architecture.html
   checksum: dff4a8eb5dcc8fef6916b68b2e668f6f29bee0801a408ff629c09ca21abe1f8b
+- filename: .beads/interactions.jsonl
+  checksum: 8be0aa527b9399ab37d6be3a6ff37732a471d982fcaa81e0dec3e04e5d1bdd62
+version: "1.0"
 threshold: high
 version: "1.0"

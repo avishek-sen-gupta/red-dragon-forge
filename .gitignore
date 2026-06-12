@@ -48,3 +48,5 @@ third-party/che-che4z-lsp-for-hlasm-fork/build/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+.beads/
+.superpowers/
