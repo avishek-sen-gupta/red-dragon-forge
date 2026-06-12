@@ -204,7 +204,7 @@
   <p style="font-size:.78rem;color:#888;margin-bottom:.6rem">Row A runs once at setup. Row B runs per program execution.</p>
 
   <div style="background:#111;border-radius:8px;padding:1rem 1.2rem;margin-bottom:.8rem">
-    <div style="font-size:.72rem;color:var(--c-bms);font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW A — BMS TOOLCHAIN</div>
+    <div style="font-size:.72rem;color:var(--c-bms);font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW A — BMS TOOLCHAIN (once at setup)</div>
     <div class="pipe-row">
       <div class="pipe-box pb-neutral">.bms source files</div>
       <span class="pipe-arrow">→</span>
@@ -216,8 +216,21 @@
     </div>
   </div>
 
+  <div style="background:#111;border-radius:8px;padding:1rem 1.2rem;margin-bottom:.8rem">
+    <div style="font-size:.72rem;color:var(--c-dispatch);font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW B — REGION STARTUP (once per region)</div>
+    <div class="pipe-row">
+      <div class="pipe-box pb-neutral">CSD file</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">parse_csd()</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-neutral">transid → program map</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">_advance_routing</div>
+    </div>
+  </div>
+
   <div style="background:#111;border-radius:8px;padding:1rem 1.2rem">
-    <div style="font-size:.72rem;color:#aaa;font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW B — PER-PROGRAM EXECUTION</div>
+    <div style="font-size:.72rem;color:#aaa;font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW C — PER-PROGRAM EXECUTION</div>
     <div class="pipe-row">
       <div class="pipe-box pb-neutral">Raw COBOL</div>
       <span class="pipe-arrow">+</span>
@@ -238,11 +251,12 @@
   </div>
 
   <div style="display:flex;gap:.6rem;margin-top:.7rem;flex-wrap:wrap">
-    <span class="pill pill-bms">BMS toolchain</span>
-    <span class="pill pill-pre">Preprocessor</span>
-    <span class="pill pill-parse" style="color:#111">Parser</span>
-    <span class="pill pill-lower">IR lowering</span>
-    <span class="pill pill-dispatch">Dispatcher</span>
+    <span class="pill pill-bms">A: BMS toolchain</span>
+    <span class="pill pill-dispatch">B: CSD / region startup</span>
+    <span class="pill pill-pre">C: Preprocessor</span>
+    <span class="pill pill-parse" style="color:#111">C: Parser</span>
+    <span class="pill pill-lower">C: IR lowering</span>
+    <span class="pill pill-dispatch">C: Dispatcher</span>
   </div>
 </section>
 
