@@ -9,7 +9,7 @@ symbolic-copybook pipeline, render the login screen, and confirm the bare RETURN
 terminates the task (driven synchronously with a single pre-staged input).
 
 SLICE 2: drive the full conversational SEND/RECEIVE loop across screens via the
-greenlet-based ConversationalRegion — login -> deposit -> quit, with
+suspend/resume ConversationalRegion — login -> deposit -> quit, with
 working-storage persisting across each terminal wait inside one run_cics.
 """
 
@@ -22,7 +22,7 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
-from cics.conversational import ConversationalRegion, GreenletInputChannel
+from cics.conversational import ConversationalRegion
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
@@ -136,8 +136,9 @@ def _build_region(tmp_path: Path, *, receive_timeout: float = 30.0):
 
 
 def _build_conversational(tmp_path: Path):
-    """Wire zBANK behind a greenlet ConversationalRegion (RECEIVE cooperatively
-    suspends instead of blocking)."""
+    """Wire zBANK behind the suspend/resume ConversationalRegion: the strategy is
+    built with conversational=True (RECEIVE MAP -> SUSPEND), and the region drives
+    via run_linked_resumable/resume_linked."""
     from interpreter.cobol.cobol_parser import ProLeapCobolParser
     from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 
@@ -150,7 +151,10 @@ def _build_conversational(tmp_path: Path):
     )
     engine = _make_engine(tmp_path)
     screen_q: queue.Queue = queue.Queue()
-    input_channel = GreenletInputChannel()
+    # input_queue is unused in conversational mode (RECEIVE suspends rather than
+    # reading it), but the strategy only registers the screen builtins when an
+    # input_queue is present, so pass a dummy one.
+    input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
@@ -158,7 +162,8 @@ def _build_conversational(tmp_path: Path):
         result_holder=result_holder,
         vsam_engine=engine,
         screen_queue=screen_q,
-        input_queue=input_channel,
+        input_queue=input_q,
+        conversational=True,
     )
     prog = compile_cics_program(
         apply_cics_prepass((_FIXTURES / "ZBANK.cbl").read_text()).encode(),
@@ -169,7 +174,6 @@ def _build_conversational(tmp_path: Path):
         prog,
         "ZBNK",
         screen_queue=screen_q,
-        input_channel=input_channel,
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=2_000_000,
@@ -197,7 +201,7 @@ def _balance(engine) -> str:
 @covers(CobolFeature.EXEC_CICS)
 def test_zbank_conversational_login_deposit_withdraw_quit(tmp_path):
     """SLICE 2 + 4: drive the full conversational SEND/RECEIVE loop across screens
-    via the greenlet ConversationalRegion. Working-storage persists across each
+    via the suspend/resume ConversationalRegion. Working-storage persists across each
     terminal wait within ONE run_cics, so the balance READ at login is still in WS
     when deposit/withdraw REWRITE it. Ends at the single bare EXEC CICS RETURN.
 
@@ -299,7 +303,7 @@ def test_zbank_conversational_extended_session(tmp_path):
     """SLICE 2 (stress): one long conversation with many turns — multiple
     deposits/withdrawals, the no-op transfer, a register-screen detour, and a
     RE-LOGIN that proves the balance persisted in VSAM across logins. Everything
-    runs inside ONE run_cics (one greenlet), so this exercises the driver and
+    runs inside ONE task (suspend/resume), so this exercises the driver and
     working-storage persistence over ~16 terminal exchanges before the bare
     RETURN.
     """

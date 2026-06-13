@@ -118,53 +118,78 @@ def _write_eibaid(vm: VMState, aid: str) -> None:
         logger.warning("RECEIVE MAP: EIBAID not in data layout — EIBAID not updated")
 
 
+def _apply_input(vm: VMState, item: Any, base_names: set) -> None:
+    """Write a terminal input event (``.fields`` + ``.eibaid``, or a plain dict)
+    into the WS region: EIBAID, then each named input field. Numeric input fields
+    (BMS PICIN '9(n)' -> PIC 9 DISPLAY, category ZONED_DECIMAL) are de-edited like
+    z/OS BMS — right-justified, zero-filled; default X(n) fields land
+    left-justified, space-padded. Shared by the blocking RECEIVE builtin
+    (pseudo-conversational) and the suspend-driven apply-input builtin."""
+    field_values: dict[str, bytes | str] = getattr(item, "fields", item) or {}
+    aid: str = getattr(item, "eibaid", _DFHENTER)
+    _write_eibaid(vm, aid)
+
+    addr, ws = _ws_region(vm)
+    if ws is None:
+        return
+    cp037_space = " ".encode("cp037")  # 0x40
+    cp037_zero = "0".encode("cp037")  # 0xF0
+    for base, v in field_values.items():
+        if base not in base_names:
+            continue
+        raw = v if isinstance(v, bytes) else v.encode("cp037", errors="replace")
+        name = base + "I"
+        category = (vm.data_layout.get(name) or {}).get("category")
+        if category == _NUMERIC_DISPLAY:
+            wrote = _write_ws_field(
+                vm, ws, name, raw, pad=cp037_zero, right_justify=True
+            )
+        else:
+            wrote = _write_ws_field(vm, ws, name, raw, pad=cp037_space)
+        if wrote:
+            _write_ws_field(vm, ws, base + "L", struct.pack(">h", len(raw)))
+    assert addr is not None  # ws non-None implies addr non-None
+    vm.region_set(addr, ws)
+
+
+def _base_names(args: list[TypedValue], idx: int) -> set:
+    return (
+        set(args[idx].value)
+        if len(args) > idx and isinstance(args[idx].value, list)
+        else set()
+    )
+
+
 def make_receive_map_builtin(
     input_queue: InputChannel, timeout: float = 30.0
 ) -> object:
+    """Pseudo-conversational RECEIVE MAP: block on the input queue for one event,
+    then apply it. (Conversational mode lowers RECEIVE to SUSPEND + apply-input.)"""
+
     def __cics_receive_map(args: list[TypedValue], vm: VMState) -> BuiltinResult:
-        base_names = (
-            set(args[1].value)
-            if len(args) > 1 and isinstance(args[1].value, list)
-            else set()
-        )
+        base_names = _base_names(args, 1)
         try:
             item: Any = input_queue.get(timeout=timeout)
         except queue.Empty:
             logger.warning("RECEIVE MAP: timeout waiting for input")
             return BuiltinResult(value=None)
-        # Duck-type the queue item: an InputEvent carries .fields and .eibaid;
-        # a plain dict (legacy producers) is the field map with a default aid.
-        field_values: dict[str, bytes | str] = getattr(item, "fields", item)
-        aid: str = getattr(item, "eibaid", _DFHENTER)
-        _write_eibaid(vm, aid)
-
-        addr, ws = _ws_region(vm)
-        if ws is not None:
-            cp037_space = " ".encode("cp037")  # 0x40
-            cp037_zero = "0".encode("cp037")  # 0xF0
-            for base, v in field_values.items():
-                if base not in base_names:
-                    continue
-                raw = v if isinstance(v, bytes) else v.encode("cp037", errors="replace")
-                name = base + "I"
-                # Numeric input fields (a BMS PICIN like '9(n)' -> PIC 9 DISPLAY,
-                # category ZONED_DECIMAL) are de-edited by z/OS BMS:
-                # right-justified and zero-filled. Default X(n) fields land
-                # left-justified, space-padded.
-                category = (vm.data_layout.get(name) or {}).get("category")
-                if category == _NUMERIC_DISPLAY:
-                    wrote = _write_ws_field(
-                        vm, ws, name, raw, pad=cp037_zero, right_justify=True
-                    )
-                else:
-                    wrote = _write_ws_field(vm, ws, name, raw, pad=cp037_space)
-                if wrote:
-                    _write_ws_field(vm, ws, base + "L", struct.pack(">h", len(raw)))
-            assert addr is not None  # ws non-None implies addr non-None
-            vm.region_set(addr, ws)
+        _apply_input(vm, item, base_names)
         return BuiltinResult(value=None)
 
     return __cics_receive_map
+
+
+def make_apply_input_builtin() -> object:
+    """Conversational RECEIVE MAP tail: apply the InputEvent the driver injected at
+    the SUSPEND (args[0]) to the WS region. args[1] is the field base-name list."""
+
+    def __cics_apply_input(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        item = args[0].value if args else None
+        if item is not None:
+            _apply_input(vm, item, _base_names(args, 1))
+        return BuiltinResult(value=None)
+
+    return __cics_apply_input
 
 
 def make_send_text_builtin(screen_queue: ScreenChannel) -> object:
