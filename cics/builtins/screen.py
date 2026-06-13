@@ -13,6 +13,11 @@ from interpreter.vm.vm_types import BuiltinResult, VMState
 
 logger = logging.getLogger(__name__)
 
+# data_layout category (CobolDataCategory.ZONED_DECIMAL.value) for a PIC 9
+# DISPLAY field — what a BMS PICIN='9(n)' input field generates. Such fields are
+# de-edited on RECEIVE (right-justified, zero-filled), as z/OS BMS does.
+_NUMERIC_DISPLAY = "ZONED_DECIMAL"
+
 
 def _map_name(args: list[TypedValue], idx: int = 0) -> str:
     return str(args[idx].value).strip("'\" ") if len(args) > idx else ""
@@ -47,19 +52,27 @@ def _read_ws_field(vm: VMState, region, name: str) -> bytes | None:
 
 
 def _write_ws_field(
-    vm: VMState, region, name: str, data: bytes, pad: bytes = b"\x00"
+    vm: VMState,
+    region,
+    name: str,
+    data: bytes,
+    pad: bytes = b"\x00",
+    right_justify: bool = False,
 ) -> bool:
     """Write data into a named field in the WS region via vm.data_layout.
 
     Truncates/pads to the field length (pad byte defaults to NUL; pass the
-    cp037 space for alphanumeric fields). Returns True if the field was present
-    in the layout and written.
+    cp037 space for alphanumeric fields). ``right_justify`` right-aligns the data
+    and fills on the left (used to de-edit numeric input fields). Returns True if
+    the field was present in the layout and written.
     """
     f = vm.data_layout.get(name)
     if f is None:
         return False
     off, length = f["offset"], f["length"]
-    region[off : off + length] = data[:length].ljust(length, pad)[:length]
+    clipped = data[:length]
+    placed = clipped.rjust(length, pad) if right_justify else clipped.ljust(length, pad)
+    region[off : off + length] = placed[:length]
     return True
 
 
@@ -128,11 +141,24 @@ def make_receive_map_builtin(
         addr, ws = _ws_region(vm)
         if ws is not None:
             cp037_space = " ".encode("cp037")  # 0x40
+            cp037_zero = "0".encode("cp037")  # 0xF0
             for base, v in field_values.items():
                 if base not in base_names:
                     continue
                 raw = v if isinstance(v, bytes) else v.encode("cp037", errors="replace")
-                if _write_ws_field(vm, ws, base + "I", raw, pad=cp037_space):
+                name = base + "I"
+                # Numeric input fields (a BMS PICIN like '9(n)' -> PIC 9 DISPLAY,
+                # category ZONED_DECIMAL) are de-edited by z/OS BMS:
+                # right-justified and zero-filled. Default X(n) fields land
+                # left-justified, space-padded.
+                category = (vm.data_layout.get(name) or {}).get("category")
+                if category == _NUMERIC_DISPLAY:
+                    wrote = _write_ws_field(
+                        vm, ws, name, raw, pad=cp037_zero, right_justify=True
+                    )
+                else:
+                    wrote = _write_ws_field(vm, ws, name, raw, pad=cp037_space)
+                if wrote:
                     _write_ws_field(vm, ws, base + "L", struct.pack(">h", len(raw)))
             assert addr is not None  # ws non-None implies addr non-None
             vm.region_set(addr, ws)
