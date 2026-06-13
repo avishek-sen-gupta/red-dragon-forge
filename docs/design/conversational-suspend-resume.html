@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversational CICS — Cooperative Suspend / Resume</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --dim:#9aa7b4;
+    --accent:#58d4ff; --accent2:#ffcb6b; --good:#7ee787; --warn:#ff7b72;
+    --line:#30363d; --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .deck{height:100%;display:flex;align-items:center;justify-content:center;}
+  .slide{display:none;width:min(1100px,94vw);max-height:94vh;overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:42px 54px;box-shadow:0 18px 60px rgba(0,0,0,.45);}
+  .slide.active{display:block;animation:f .25s ease}
+  @keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  h1{font-size:32px;margin:0 0 6px;letter-spacing:.2px}
+  h2{font-size:24px;margin:0 0 18px;color:var(--accent)}
+  .kicker{color:var(--accent2);font:600 13px/1 var(--mono);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px}
+  p,li{font-size:17px;line-height:1.5;color:var(--ink)}
+  li{margin:7px 0}
+  .dim{color:var(--dim)}
+  .good{color:var(--good)} .warn{color:var(--warn)} .acc{color:var(--accent)} .acc2{color:var(--accent2)}
+  b{color:#fff}
+  pre{font-family:var(--mono);font-size:13.5px;line-height:1.45;background:#0b0f14;
+    border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow:auto;color:#cdd9e5}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .card{background:#0b0f14;border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card h3{margin:0 0 8px;font-size:15px;color:var(--accent2);font-family:var(--mono)}
+  .tag{display:inline-block;font:600 12px/1 var(--mono);padding:4px 9px;border-radius:6px;border:1px solid var(--line);margin:2px 6px 2px 0}
+  .tag.free{color:var(--good);border-color:#2ea04326}
+  .tag.none{color:var(--dim)}
+  .tag.work{color:var(--warn);border-color:#ff7b7226}
+  .nav{position:fixed;bottom:16px;right:22px;font:600 13px/1 var(--mono);color:var(--dim)}
+  .hint{position:fixed;bottom:16px;left:22px;font:500 12px/1 var(--mono);color:#5b6671}
+  .bar{position:fixed;top:0;left:0;height:3px;background:var(--accent);transition:width .2s}
+  table{border-collapse:collapse;width:100%;margin-top:6px}
+  td,th{border:1px solid var(--line);padding:8px 11px;font-size:14.5px;text-align:left}
+  th{color:var(--accent);font-family:var(--mono);font-weight:600;font-size:13px}
+  .small{font-size:14.5px}
+  .center{text-align:center}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="deck" id="deck">
+
+  <!-- 1 -->
+  <section class="slide active">
+    <div class="kicker">cicada · RedDragon — design exploration</div>
+    <h1>Conversational CICS</h1>
+    <h2>Cooperative Suspend / Resume as a core VM primitive</h2>
+    <p class="dim">Running <b>unmodified</b> conversational COBOL/CICS (one task that loops
+      SEND → RECEIVE) on RedDragon's VM — by promoting one scalar into the resumable state,
+      not by rewriting the interpreter.</p>
+    <pre>   pseudo-conversational (today)        conversational (goal)
+   ──────────────────────────────       ─────────────────────────────────
+   SEND MAP                             PERFORM UNTIL done
+   RETURN TRANSID  ── task ends         ┌  SEND MAP
+   (state in COMMAREA, rebuilt)         │  RECEIVE MAP   ◄── BLOCKS, task stays alive
+                                        │  ...process... (working-storage persists)
+   one run_cics() = one turn            └  END-PERFORM
+                                        RETURN          ── one run_cics() = whole convo</pre>
+    <p class="small dim">Benchmark: <span class="acc">Nantero1/zBANK</span> — 140 lines, one
+      <code>PERFORM UNTIL</code> over 3 screens, single terminal <code>RETURN</code>.</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="kicker">the execution model today</div>
+    <h2>A flat PC-driven dispatch loop</h2>
+    <pre>run_cics() ──► execute_cfg(vm, entry)
+                 │
+                 ▼
+   ┌────────────────────────────────────────────────────┐
+   │  for step in range(max_steps):     ◄── SAFETY BUDGET│   (not graph traversal)
+   │      block = cfg.blocks[current_label]   ← dict lookup by label
+   │      inst  = block.instructions[ip]                 │
+   │      update = handler(inst, vm, ctx)   ← PURE: returns a StateUpdate
+   │      apply_update(vm, update)                        │
+   │      ── advance the program counter ──              │
+   │         ip += 1                      (sequential)    │
+   │         current_label = successors[0] (fall-through) │
+   │         current_label = update.next_label (branch)   │
+   └────────────────────────────────────────────────────┘
+        cursor = (current_label, ip)   ◄── LOOP-LOCAL scalars
+        vm     = VMState               ◄── everything else, as DATA</pre>
+    <p class="small">Not a linked-list walk, not recursion. A classic fetch–decode–execute loop;
+      the <code>for</code> only bounds total instructions.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="kicker">store vs. control</div>
+    <h2>Almost everything is already data</h2>
+    <div class="cols">
+      <div class="card">
+        <h3>VMState — serializable store ✓</h3>
+        <pre>registers
+heap
+regions          ← working-storage
+continuation table  ← PERFORM returns
+call_stack          ← COBOL CALL frames
+                       (StackFramePush:
+                        return_label + locals)</pre>
+        <p class="small good">Already deep-copyable — <code>execute_cfg_traced</code>
+          snapshots it every step.</p>
+      </div>
+      <div class="card">
+        <h3>Loop-local — control cursor ✗</h3>
+        <pre>current_label
+ip</pre>
+        <p class="small">The <b>only</b> control state not promoted to data. It stayed in the
+          loop because run-to-completion only ever moves it <i>forward</i> and discards it at exit.</p>
+        <p class="small dim">Continuation <i>targets</i> are data (<code>next_label</code>,
+          continuation table). The <i>position</i> never had to be — until now.</p>
+      </div>
+    </div>
+    <p class="center acc2" style="margin-top:18px">Conversational suspend is the first feature that needs the cursor to be data too.</p>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="kicker">the primitive</div>
+    <h2>Reify the cursor → <code>ExecutionState</code></h2>
+    <pre>   ExecutionState = ( VMState , current_label , ip )      ← a complete, serializable task
+
+   1.  New result kind         Suspend(payload)        ← handlers stay PURE; the LOOP interprets it
+                                                          (just like next_label / continuation_writes)
+
+   2.  Loop, on Suspend:       stop; return (ExecutionState, payload)   ── instead of running to RETURN
+
+   3.  Public entry:           resume(execution_state, injected_value)
+                                  └─ re-enter the SAME loop seeded with saved (current_label, ip)
+                                     deliver injected_value into a register at the suspend site</pre>
+    <div class="cols">
+      <div class="card"><h3>Generic / frontend-agnostic</h3>
+        <p class="small">A cooperative "yield a value / resume with a value" primitive.
+          Reusable by a REPL, a single-stepping debugger, a lazy generator in any language.
+          <b>CICS-unaware.</b></p></div>
+      <div class="card"><h3>CICS RECEIVE is just one user</h3>
+        <p class="small"><code>RECEIVE</code> lowers to <span class="acc">SEND payload</span> +
+          <span class="acc">SUSPEND</span>; the dispatcher's <code>resume</code> injects the
+          terminal input. Honors "one mechanism for all frontends."</p></div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="kicker">the round-trip</div>
+    <h2>Suspend / resume, one logical level</h2>
+    <pre>   DRIVER (dispatcher / test / live terminal)        VM  (execute_cfg + resume)
+   ──────────────────────────────────────────       ──────────────────────────────
+        screen ◄───────────────────────────────  SEND MAP → Suspend(screen)
+        │                                              (ExecutionState frozen: vm + PC)
+   inspect / render
+        │
+   next input ─────────────────────────────────► resume(ExecState, input)
+                                                       RECEIVE returns input
+                                                       ...process; working-storage intact...
+        screen ◄───────────────────────────────  SEND MAP → Suspend(screen)
+        │                                              ⟳ loop iteration N+1
+        ⋮                                              ⋮
+   (user quits)
+        done   ◄───────────────────────────────  RETURN  → DispatchResult(RETURN)</pre>
+    <p class="small dim">Deterministic: switches are explicit and ordered — no threads, no
+      <code>timeout=</code>, no races. Working-storage persists because it's one
+      <code>ExecutionState</code> across the whole conversation.</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="kicker">state restoration · the crux</div>
+    <h2>Two stacking mechanisms — capture both</h2>
+    <pre>   ┌───────────────────────── TASK (the suspendable / serializable unit) ─────────────────────────┐
+   │                                                                                              │
+   │   CICS logical-level stack          dispatcher-owned          (only for EXEC CICS LINK)      │
+   │   ───────────────────────                                                                    │
+   │     ┌───────────────────────────────────────────────┐                                        │
+   │     │ level 0: PROG A   ExecutionState  @ LINK B  ───┼─ frozen at its call site               │
+   │     ├───────────────────────────────────────────────┤                                        │
+   │     │ level 1: PROG B   ExecutionState  @ RECEIVE ◄──┼─ SUSPEND here (leaf)                   │
+   │     │            └ VMState.call_stack:  [perform, CALL'X' ...]  ← COBOL nesting, IN VMState   │
+   │     └───────────────────────────────────────────────┘                                        │
+   │                                                                                              │
+   └──────────────────────────────────────────────────────────────────────────────────────────────┘
+     resume leaf ─► B RETURNs ─► pop to A, hand back COMMAREA ─► resume A after LINK ─► ... ─► done</pre>
+    <p class="small"><b>Two tiers, both plain data:</b> the <span class="acc">dispatcher</span>
+      holds the CICS logical-level stack of <code>ExecutionState</code>s;
+      each <code>VMState</code> holds its own COBOL <code>call_stack</code>.
+      Inject <span class="acc2">terminal input</span> at the leaf, a
+      <span class="acc2">callee COMMAREA</span> at an interior level on its <code>RETURN</code>.</p>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="kicker">"called by another program" — three cases</div>
+    <h2>Each restores differently</h2>
+    <table>
+      <tr><th>mechanism</th><th>where the stack lives</th><th>restoration</th></tr>
+      <tr><td>COBOL <code>CALL</code> / <code>PERFORM</code></td>
+          <td><code>vm.call_stack</code> (inside VMState)</td>
+          <td><span class="tag free">FREE</span> one snapshot captures the whole tower; proven by CardDemo's CALL/RETURN</td></tr>
+      <tr><td>CICS <code>XCTL</code> (transfer, no return)</td>
+          <td>— (parent discarded)</td>
+          <td><span class="tag none">NOTHING</span> task <i>is</i> the target; no parent to restore</td></tr>
+      <tr><td>CICS <code>LINK</code> (call w/ return)</td>
+          <td>dispatcher logical-level stack</td>
+          <td><span class="tag work">THE WORK</span> stack of ExecutionStates; <b>not modeled yet</b> (no <code>DispatchKind.LINK</code>)</td></tr>
+    </table>
+    <p class="small acc2" style="margin-top:16px">Key reassurance: you don't invent restoration —
+      <code>call_stack</code> already does correct save/restore on every <code>RETURN</code>.
+      Suspension just freezes that same structure mid-flight.</p>
+    <p class="small dim">If <code>CALL</code>/<code>RETURN</code> is correct, suspend/resume across calls is correct by the same mechanism.</p>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <div class="kicker">two gotchas the snapshot doesn't cover</div>
+    <h2>Aliasing &amp; held resources</h2>
+    <div class="cols">
+      <div class="card">
+        <h3>① COMMAREA / region aliasing</h3>
+        <p class="small">A callee's linkage COMMAREA may <b>alias</b> the caller's working-storage
+          region. Merge levels into one VMState and a naïve deep-copy splits the alias into two
+          buffers → writes stop propagating.</p>
+        <p class="small good">Fix: keep one <code>VMState</code> per LINK level; marshal COMMAREA
+          (copy-in / copy-out) at the boundary — which <i>is</i> CICS semantics. Sidesteps aliasing entirely.</p>
+      </div>
+      <div class="card">
+        <h3>② Resources held across the wait</h3>
+        <p class="small">zBANK does <code>READ … UPDATE</code> (a record lock) and holds it across
+          <code>RECEIVE</code>. Locks live in the <b>VsamEngine — outside every VMState.</b></p>
+        <p class="small good">Fix: key lock ownership to the <b>Task</b>, not to an
+          <code>execute_cfg</code> invocation. Survives suspend/resume; releases on the task's
+          final <code>RETURN</code>/abend. (Same for the <code>max_steps</code> budget.)</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <div class="kicker">rollout</div>
+    <h2>Tactical spike → strategic primitive</h2>
+    <pre>   NOW  ── de-risk the whole stack, zero core risk ───────────────────────────────
+        greenlet-based ConversationalRegion in cics/  (no RedDragon change)
+        proves: screen sequencing · VSAM-lock-across-RECEIVE · UNLOCK · termination
+        ▸ the suspension mechanism is the ONE piece trivially swapped later
+
+   LATER ── if conversational graduates to first-class ───────────────────────────
+        promote SUSPEND/resume into RedDragon core (per the workflow rule:
+        edit + test in ~/code/red-dragon, then bump the submodule)
+        ▸ generic, CICS-unaware, ADDITIVE (execute_cfg unchanged for existing callers)
+        ▸ PAYOFF greenlet/threads can't match:  ExecutionState is plain data
+                  → DURABLE conversations: persist a half-finished task, resume in another process</pre>
+    <div class="center" style="margin-top:14px">
+      <span class="tag free">deterministic</span>
+      <span class="tag free">no thread races</span>
+      <span class="tag free">no new dep (core path)</span>
+      <span class="tag free">serializable / durable</span>
+      <span class="tag free">honors the "one mechanism" thesis</span>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <div class="kicker">in one breath</div>
+    <h2>The whole idea</h2>
+    <p>RedDragon is <b>already 90% resumable</b>: the call stack, continuations, registers,
+      heap and working-storage are all plain, deep-copyable data in <code>VMState</code>.</p>
+    <p>The <b>only</b> thing not promoted to data is the loop's cursor
+      <code>(current_label, ip)</code>. Promote it into an <code>ExecutionState</code>,
+      add a <b>generic</b> <code>Suspend</code> result + a <code>resume()</code> entry, and the VM
+      gains cooperative suspend/resume — <b>without</b> threads, coroutines, or rewriting the loop.</p>
+    <p><b>Restoration</b> then layers cleanly: COBOL nesting rides inside one <code>VMState</code>
+      (free); CICS <code>LINK</code> nesting becomes a <span class="acc">dispatcher stack of
+      ExecutionStates</span>; <code>XCTL</code> needs nothing. Resources &amp; budget are
+      <b>task-scoped</b>, not invocation-scoped.</p>
+    <p class="center acc2" style="margin-top:18px">Conversational RECEIVE = SEND + SUSPEND.
+      Same primitive a REPL, a debugger, or a generator would use.</p>
+  </section>
+
+</div>
+
+<div class="bar" id="bar"></div>
+<div class="hint">← → / space · F fullscreen</div>
+<div class="nav" id="nav">1 / 10</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')], nav=document.getElementById('nav'), bar=document.getElementById('bar');
+  let i=0;
+  function show(n){ i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    nav.textContent=(i+1)+' / '+slides.length;
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    document.getElementById('deck').scrollTop=0;
+  }
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){show(i+1);e.preventDefault();}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){show(i-1);}
+    else if(e.key==='Home'){show(0);} else if(e.key==='End'){show(slides.length-1);}
+    else if(e.key.toLowerCase()==='f'){ if(!document.fullscreenElement)document.documentElement.requestFullscreen(); else document.exitFullscreen(); }
+  });
+  document.getElementById('deck').addEventListener('click',e=>{ show(i + (e.clientX > innerWidth/2 ? 1 : -1)); });
+  show(0);
+</script>
+</body>
+</html>
