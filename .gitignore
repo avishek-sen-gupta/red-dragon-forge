@@ -72,3 +72,5 @@ Thumbs.db
 # Java / Maven build artifacts (RedDragon bridge, when built locally)
 target/
 *.class
+.claude/
+.pre-commit-config.yaml
