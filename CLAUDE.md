@@ -66,7 +66,7 @@ Beads DB) is the separate clone at `~/code/red-dragon`.
   Squall's submodule pointer (`cd vendor/red-dragon && git fetch && git checkout <sha>`,
   then `git add vendor/red-dragon` in the Squall repo) to pick up the new commit.
 - **RedDragon issues**: file/update in RedDragon's Beads DB, not Squall's. The SQL seam
-  in RedDragon (the generic `ExecStrategy` protocol + strategy registry, the
+  in RedDragon (the generic `RedDragonExtensionLoweringStrategy` protocol + strategy registry, the
   `ExecSqlStatement` node, the bridge `serializeExecSql`) is **RedDragon** work. Only the
   SQL-runtime concerns (the `squall/` package — binding engine, builtins, backends) belong
   in Squall's Beads DB.
@@ -87,7 +87,7 @@ Beads DB) is the separate clone at `~/code/red-dragon`.
 
 ```
 squall/
-  strategy.py        # SqlLoweringStrategy — the SQL ExecStrategy injected into CobolFrontend
+  strategy.py        # SqlLoweringStrategy — the SQL RedDragonExtensionLoweringStrategy injected into CobolFrontend
   parser.py          # EXEC SQL text analysis: host-var (:VAR) extraction, INTO stripping
   binding.py         # generic host-variable binding engine (field <-> param, INTO mapping,
                      #   SQLCODE/SQLCA) — dialect/backend-agnostic, reads/writes via data_layout
@@ -99,7 +99,7 @@ squall/
 
 RedDragon contributes (the SQL seam — to be built):
 - bridge `serializeExecSql` — serialize the (already-parsed) `ExecSqlStatement` opaque text
-- a generic `ExecStrategy` protocol + a strategy **registry** keyed by EXEC kind
+- a generic `RedDragonExtensionLoweringStrategy` protocol + a strategy **registry** keyed by EXEC kind
   (CICS / SQL / SQLIMS), replacing the single hardwired `exec_cics_strategy` hook
 - an `ExecSqlStatement` node + frontend dispatch
 
