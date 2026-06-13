@@ -195,17 +195,18 @@ def _balance(engine) -> str:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_zbank_conversational_login_deposit_quit(tmp_path):
-    """SLICE 2: drive the conversational SEND/RECEIVE loop across screens via the
-    greenlet ConversationalRegion. Working-storage persists across each terminal
-    wait within ONE run_cics, so the balance read at login is still in WS when the
-    deposit REWRITEs it. Ends at the single bare EXEC CICS RETURN.
+def test_zbank_conversational_login_deposit_withdraw_quit(tmp_path):
+    """SLICE 2 + 4: drive the full conversational SEND/RECEIVE loop across screens
+    via the greenlet ConversationalRegion. Working-storage persists across each
+    terminal wait within ONE run_cics, so the balance READ at login is still in WS
+    when deposit/withdraw REWRITE it. Ends at the single bare EXEC CICS RETURN.
 
-      start            -> SEND login, pause at RECEIVE
-      send(valid login)-> READ ok + PIN match -> SCREEN-STATE home, SEND home
-      send(deposit 100)-> ADD + REWRITE -> balance 5000 -> 5100
-      send(quit home)  -> back to login
-      send(quit login) -> EXIT-CONDITION -> bare RETURN
+      start              -> SEND login, pause at RECEIVE
+      send(valid login)  -> READ ok + PIN match -> SCREEN-STATE home, SEND home
+      send(deposit 100)  -> ADD + REWRITE -> balance 5000 -> 5100
+      send(withdraw 50)  -> SUBTRACT + REWRITE -> balance 5100 -> 5050
+      send(quit home)    -> back to login
+      send(quit login)   -> EXIT-CONDITION -> bare RETURN
     """
     region, engine = _build_conversational(tmp_path)
     assert _balance(engine) == "0000005000"  # pre-condition
@@ -223,9 +224,10 @@ def test_zbank_conversational_login_deposit_quit(tmp_path):
     assert "ZHOME" in _maps(s), f"expected ZHOME after login; got {_maps(s)}"
     assert (_field(s, "ZHOME", "BALANCE") or "").strip() in ("0000005000", "5000")
 
-    # Turn 3: deposit 100 -> REWRITE persists 5100. A 3270 NUM field transmits
-    # right-justified, zero-filled, so the wire form of "100" in AMOUNT(10) is
-    # "0000000100" (sending it left-justified would read as 1_000_000_000).
+    # Turn 3: deposit 100 -> REWRITE persists 5100. zBANK's AMOUNT is ATTRB=NUM
+    # but has no PICIN, so AMOUNTI is X(10) and MOVEd straight to a 9(10) field;
+    # the wire form must be the full-width "0000000100" (the operator entering all
+    # ten digits) — exactly as on real z/OS without a numeric PICIN.
     s = region.send(
         InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "D", "AMOUNT": "0000000100"})
     )
@@ -233,11 +235,19 @@ def test_zbank_conversational_login_deposit_quit(tmp_path):
         _balance(engine) == "0000005100"
     ), f"deposit not persisted: {_balance(engine)!r}"
 
-    # Turn 4: quit home -> back to login.
+    # Turn 4: withdraw 50 -> SUBTRACT + REWRITE persists 5050.
+    s = region.send(
+        InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "W", "AMOUNT": "0000000050"})
+    )
+    assert (
+        _balance(engine) == "0000005050"
+    ), f"withdrawal not persisted: {_balance(engine)!r}"
+
+    # Turn 5: quit home -> back to login.
     s = region.send(InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "Q"}))
     assert "ZLOGIN" in _maps(s), f"expected return to ZLOGIN; got {_maps(s)}"
 
-    # Turn 5: quit from login (valid account, wrong PIN so it does not re-advance)
+    # Turn 6: quit from login (valid account, wrong PIN so it does not re-advance)
     # -> EXIT-CONDITION -> the single bare RETURN ends the task.
     s = region.send(
         InputEvent(
