@@ -4,12 +4,13 @@ zBANK is a genuinely CONVERSATIONAL program: one task loops SEND/RECEIVE across
 three screens (ZLOGIN/ZHOME/ZRGSTR), keeps its state in WORKING-STORAGE (no
 COMMAREA), and issues a single bare EXEC CICS RETURN only when the user quits.
 
-SPIKE SLICE 1 (this file): vendor the program + map, prove it compiles through
-the ProLeap + symbolic-copybook pipeline, render the login screen, and confirm
-the bare RETURN terminates the task. The conversational SEND→RECEIVE loop is
-driven here with a single pre-staged 'quit' input (so one RECEIVE is consumed
-and the pass runs synchronously); true multi-screen driving needs the
-greenlet-based ConversationalRegion (slice 2).
+SLICE 1: vendor the program + map, prove it compiles through the ProLeap +
+symbolic-copybook pipeline, render the login screen, and confirm the bare RETURN
+terminates the task (driven synchronously with a single pre-staged input).
+
+SLICE 2: drive the full conversational SEND/RECEIVE loop across screens via the
+greenlet-based ConversationalRegion — login -> deposit -> quit, with
+working-storage persisting across each terminal wait inside one run_cics.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
+from cics.conversational import ConversationalRegion, GreenletInputChannel
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
@@ -131,6 +133,119 @@ def _build_region(tmp_path: Path, *, receive_timeout: float = 30.0):
         max_steps=2_000_000,
     )
     return region, screen_q, engine
+
+
+def _build_conversational(tmp_path: Path):
+    """Wire zBANK behind a greenlet ConversationalRegion (RECEIVE cooperatively
+    suspends instead of blocking)."""
+    from interpreter.cobol.cobol_parser import ProLeapCobolParser
+    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+
+    sym_dir = tmp_path / "sym"
+    generate_symbolic_copybooks(
+        bms_dir=_FIXTURES, out_dir=sym_dir, hlasm_export_bin=HLASM_EXPORT_BIN
+    )
+    parser = ProLeapCobolParser(
+        RealSubprocessRunner(), JAR_PATH, copybook_dirs=[sym_dir, _CICS_COPYBOOKS]
+    )
+    engine = _make_engine(tmp_path)
+    screen_q: queue.Queue = queue.Queue()
+    input_channel = GreenletInputChannel()
+    context_holder = [None]
+    result_holder: list = [None]
+    strategy = CicsLoweringStrategy(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        vsam_engine=engine,
+        screen_queue=screen_q,
+        input_queue=input_channel,
+    )
+    prog = compile_cics_program(
+        apply_cics_prepass((_FIXTURES / "ZBANK.cbl").read_text()).encode(),
+        parser,
+        strategy,
+    )
+    region = ConversationalRegion(
+        prog,
+        "ZBNK",
+        screen_queue=screen_q,
+        input_channel=input_channel,
+        context_holder=context_holder,
+        result_holder=result_holder,
+        max_steps=2_000_000,
+    )
+    return region, engine
+
+
+def _maps(screens):
+    return [s.get("map") for s in screens]
+
+
+def _field(screens, mapname, field):
+    for s in reversed(screens):
+        if s.get("map") == mapname:
+            return s["fields"].get(field)
+    return None
+
+
+def _balance(engine) -> str:
+    rec, _ = engine.read("VSAMZBNK", _ACCT.encode("cp037"), 10)
+    assert rec is not None, "account vanished"
+    return bytes(rec[20:30]).decode("cp037")  # WS-BALANCE 9(10) @20
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_zbank_conversational_login_deposit_quit(tmp_path):
+    """SLICE 2: drive the conversational SEND/RECEIVE loop across screens via the
+    greenlet ConversationalRegion. Working-storage persists across each terminal
+    wait within ONE run_cics, so the balance read at login is still in WS when the
+    deposit REWRITEs it. Ends at the single bare EXEC CICS RETURN.
+
+      start            -> SEND login, pause at RECEIVE
+      send(valid login)-> READ ok + PIN match -> SCREEN-STATE home, SEND home
+      send(deposit 100)-> ADD + REWRITE -> balance 5000 -> 5100
+      send(quit home)  -> back to login
+      send(quit login) -> EXIT-CONDITION -> bare RETURN
+    """
+    region, engine = _build_conversational(tmp_path)
+    assert _balance(engine) == "0000005000"  # pre-condition
+
+    # Turn 1: first display.
+    s = region.start(commarea=b"\x00" * 100)
+    assert "ZLOGIN" in _maps(s)
+    assert "PLEASE LOG IN!" in (_field(s, "ZLOGIN", "LOGINFO") or "")
+
+    # Turn 2: valid login (correct PIN) -> advances to the home screen, which
+    # shows the balance READ at login (proves working-storage persisted).
+    s = region.send(
+        InputEvent(eibaid=_DFHENTER, fields={"LOGACC": _ACCT, "LOGPIN": "1234"})
+    )
+    assert "ZHOME" in _maps(s), f"expected ZHOME after login; got {_maps(s)}"
+    assert (_field(s, "ZHOME", "BALANCE") or "").strip() in ("0000005000", "5000")
+
+    # Turn 3: deposit 100 -> REWRITE persists 5100. A 3270 NUM field transmits
+    # right-justified, zero-filled, so the wire form of "100" in AMOUNT(10) is
+    # "0000000100" (sending it left-justified would read as 1_000_000_000).
+    s = region.send(
+        InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "D", "AMOUNT": "0000000100"})
+    )
+    assert (
+        _balance(engine) == "0000005100"
+    ), f"deposit not persisted: {_balance(engine)!r}"
+
+    # Turn 4: quit home -> back to login.
+    s = region.send(InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "Q"}))
+    assert "ZLOGIN" in _maps(s), f"expected return to ZLOGIN; got {_maps(s)}"
+
+    # Turn 5: quit from login (valid account, wrong PIN so it does not re-advance)
+    # -> EXIT-CONDITION -> the single bare RETURN ends the task.
+    s = region.send(
+        InputEvent(
+            eibaid=_DFHENTER, fields={"LOGACC": _ACCT, "LOGPIN": "9999", "LOGACT": "Q"}
+        )
+    )
+    assert region.done, "task did not end after quit-from-login"
+    assert region.result is not None and region.result.kind == DispatchKind.RETURN
 
 
 @covers(CobolFeature.EXEC_CICS)
