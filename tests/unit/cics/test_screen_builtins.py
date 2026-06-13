@@ -117,6 +117,36 @@ def test_receive_map_writes_named_input_fields_to_ws(monkeypatch):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_receive_map_numeric_field_is_de_edited(monkeypatch):
+    """A numeric input field (PIC 9 DISPLAY, e.g. from a BMS PICIN='9(n)';
+    category ZONED_DECIMAL) is de-edited like z/OS BMS: right-justified and
+    zero-filled. An alphanumeric field stays left-justified, space-padded."""
+    import struct
+
+    layout = {
+        "AMOUNTI": {"offset": 0, "length": 10, "category": "ZONED_DECIMAL"},
+        "AMOUNTL": {"offset": 20, "length": 2},
+        "NAMEI": {"offset": 30, "length": 10, "category": "ALPHANUMERIC"},
+        "EIBAID": {"offset": 200, "length": 1},
+    }
+    region = bytearray(b"\x40" * 210)
+    vm = _FakeVM(region, layout)
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
+    iq: queue.Queue = queue.Queue()
+    iq.put(_InputEvent({"AMOUNT": "100", "NAME": "BOB"}))
+    builtin = make_receive_map_builtin(iq, timeout=1.0)
+    builtin([_tv("M"), _tv(["AMOUNT", "NAME"])], vm)
+
+    # Numeric: "100" -> right-justified, zero-filled.
+    assert bytes(region[0:10]) == "0000000100".encode("cp037")
+    # The numeric field's length halfword still records the entered length.
+    assert struct.unpack(">h", bytes(region[20:22]))[0] == 3
+    # Alphanumeric: "BOB" -> left-justified, space-padded.
+    assert bytes(region[30:40]) == "BOB".ljust(10).encode("cp037")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_text_enqueues_text():
     screen_q: queue.Queue = queue.Queue()
     builtin = make_send_text_builtin(screen_q)
