@@ -131,12 +131,21 @@ The frontend's current EXEC hook is **CICS-shaped** — a single injected
    (peer of `serializeExecCics`). *(JAR rebuild; Java.)*
 2. an **`ExecSqlStatement`** node in the Python frontend's `cobol_statements`
    (peer of `ExecCicsStatement`).
-3. a generic **`RedDragonExtensionLoweringStrategy`** protocol (collapse the
-   identically-shaped `ExecCicsStrategy` into it: `preprocess_program_dict` /
-   `on_procedure_entry` / `lower(stmt)`), and a strategy **registry** keyed by EXEC kind
-   (`Mapping[ExecKind, RedDragonExtensionLoweringStrategy]`) replacing the single hook.
-4. **frontend dispatch**: on an opaque EXEC placeholder of kind *K*, dispatch to the
-   strategy registered for *K* (catch-all warns if none).
+3. a generic **`RedDragonExtensionLoweringStrategy`** protocol — the identically-shaped
+   `ExecCicsStrategy` collapses into it — with four methods:
+   `handles(stmt) -> bool` (does this strategy own this statement?),
+   `preprocess_program_dict(data) -> dict`, `on_procedure_entry(ctx, materialised)`,
+   `lower(ctx, stmt, materialised)`.
+4. an **array** of these strategies on the frontend —
+   `CobolFrontend(parser, *, extension_strategies: Sequence[RedDragonExtensionLoweringStrategy] = ())`
+   — replacing the single `exec_cics_strategy` hook entirely (no per-kind param). **An empty
+   array means no extension processing.** `preprocess_program_dict` and `on_procedure_entry`
+   run for **every** strategy in order; `lower(stmt)` is routed to the **first** strategy whose
+   `handles(stmt)` returns true (else the existing "unhandled statement" warning). The dispatch
+   no longer hardcodes any EXEC type — **CICS and SQL both route through the array**, which is
+   what lets a CICS + Db2 program inject `[cics_strategy, sql_strategy]` together. CICS migrates
+   onto the array in lockstep (`CicsLoweringStrategy` gains `handles()`; cicada's bootstrap passes
+   `extension_strategies=[…]`).
 
 All of this is **tier-2 frontend plumbing** — no `vm/**`, `ir.py`, `run.py`, etc. — so it
 stays inside the "no RedDragon core edits" invariant. The strategy *implementations* carry
@@ -201,7 +210,7 @@ hand-written SQLCA, single strategy.
 | Layer | Work |
 |---|---|
 | RedDragon bridge | `serializeExecSql` (serialize `ExecSqlStatement` opaque text) |
-| RedDragon frontend | generic `RedDragonExtensionLoweringStrategy` protocol; registry (single entry); `ExecSqlStatement` node; dispatch |
+| RedDragon frontend | generic `RedDragonExtensionLoweringStrategy` protocol (with `handles()`); `extension_strategies` array replacing `exec_cics_strategy`; `ExecSqlStatement` node; array-routed dispatch; **CICS migrated onto the array** (incl. cicada `handles()` + bootstrap) |
 | squall | `parser.py` (host-var extract / INTO strip); `binding.py` (generic engine); `backend.py` (protocol); `backends/sqlite.py`; `builtins/` (`__exec_sql`); `strategy.py` (lower SELECT INTO) |
 | tests | unit: binding engine vs fake backend; integration: real VM + SQLite, one tiny COBOL program + seeded table |
 
