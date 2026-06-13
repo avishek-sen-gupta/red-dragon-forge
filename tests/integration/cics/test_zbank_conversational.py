@@ -292,3 +292,71 @@ def test_zbank_compiles_renders_login_and_returns(tmp_path):
 
     # The bare EXEC CICS RETURN (no TRANSID) is reachable — the task terminates.
     assert r.kind == DispatchKind.RETURN, f"expected task-end RETURN, got {r.kind}"
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_zbank_conversational_extended_session(tmp_path):
+    """SLICE 2 (stress): one long conversation with many turns — multiple
+    deposits/withdrawals, the no-op transfer, a register-screen detour, and a
+    RE-LOGIN that proves the balance persisted in VSAM across logins. Everything
+    runs inside ONE run_cics (one greenlet), so this exercises the driver and
+    working-storage persistence over ~16 terminal exchanges before the bare
+    RETURN.
+    """
+    region, engine = _build_conversational(tmp_path)
+    assert _balance(engine) == "0000005000"
+
+    region.start(commarea=b"\x00" * 100)  # login screen
+    s = region.send(  # valid login -> home
+        InputEvent(eibaid=_DFHENTER, fields={"LOGACC": _ACCT, "LOGPIN": "1234"})
+    )
+    assert "ZHOME" in _maps(s)
+
+    # A run of deposits/withdrawals; balance accumulates in WS and is REWRITTEN
+    # each time (AMOUNT sent full-width, as zBANK has no PICIN on it).
+    for act, amount, expected in [
+        ("D", "0000000100", "0000005100"),
+        ("D", "0000000200", "0000005300"),
+        ("W", "0000000050", "0000005250"),
+        ("D", "0000001000", "0000006250"),
+        ("W", "0000000250", "0000006000"),
+    ]:
+        region.send(
+            InputEvent(eibaid=_DFHENTER, fields={"HOMACT": act, "AMOUNT": amount})
+        )
+        assert _balance(engine) == expected, f"{act} {amount}: {_balance(engine)!r}"
+
+    # Transfer is a no-op in zBANK: stays on home, balance unchanged.
+    s = region.send(InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "T"}))
+    assert "ZHOME" in _maps(s)
+    assert _balance(engine) == "0000006000"
+
+    # Quit home -> login, then take the REGISTER detour and come back.
+    s = region.send(InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "Q"}))
+    assert "ZLOGIN" in _maps(s)
+    s = region.send(
+        InputEvent(
+            eibaid=_DFHENTER, fields={"LOGACC": _ACCT, "LOGPIN": "1234", "LOGACT": "R"}
+        )
+    )
+    assert "ZRGSTR" in _maps(s), f"expected register screen; got {_maps(s)}"
+    s = region.send(InputEvent(eibaid=_DFHENTER, fields={"REGACT": "Q"}))
+    assert "ZLOGIN" in _maps(s)
+
+    # Re-login: the balance changed earlier in this session must still be in VSAM.
+    s = region.send(
+        InputEvent(eibaid=_DFHENTER, fields={"LOGACC": _ACCT, "LOGPIN": "1234"})
+    )
+    assert "ZHOME" in _maps(s)
+    assert (_field(s, "ZHOME", "BALANCE") or "").strip() == "0000006000"
+
+    # Quit all the way out -> bare RETURN.
+    region.send(InputEvent(eibaid=_DFHENTER, fields={"HOMACT": "Q"}))
+    region.send(
+        InputEvent(
+            eibaid=_DFHENTER, fields={"LOGACC": _ACCT, "LOGPIN": "9999", "LOGACT": "Q"}
+        )
+    )
+    assert region.done
+    assert region.result is not None and region.result.kind == DispatchKind.RETURN
+    assert _balance(engine) == "0000006000"
