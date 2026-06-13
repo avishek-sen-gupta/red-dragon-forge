@@ -354,6 +354,7 @@ class CicsLoweringStrategy:
         screen_queue: "ScreenChannel | None" = None,
         input_queue: "InputChannel | None" = None,
         vsam_engine: object = None,
+        receive_timeout: float = 30.0,
     ) -> None:
         self._context_holder = context_holder
         # Deferred imports to avoid violating project-no-vm-internals import contract.
@@ -419,7 +420,7 @@ class CicsLoweringStrategy:
             _register(
                 Builtins.TABLE,
                 "__cics_receive_map",
-                make_receive_map_builtin(input_queue),
+                make_receive_map_builtin(input_queue, timeout=receive_timeout),
             )
             _register(
                 Builtins.TABLE,
