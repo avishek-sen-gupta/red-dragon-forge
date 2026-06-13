@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# uv
+.uv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+*.swp
+
+# SQLite scratch DBs from tests
+*.sqlite
+*.sqlite3
+*.db
