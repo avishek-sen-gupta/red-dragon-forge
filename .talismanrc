@@ -1,8 +1,8 @@
 fileignoreconfig:
 - filename: docs/design/2026-06-13-exec-sql-support-design.md
-  checksum: 5faedc4bee74443c89a97b291d77794be7406d58fd660fc4975f18c788cb33f8
+  checksum: da87511f8939b4b4d3af0c301f14685d2779c2e6111b128d907bbc519c0859a8
 - filename: docs/plans/2026-06-13-reddragon-exec-sql-seam.md
-  checksum: 8a88c92965f3c73be033f68101e45f871a577d93553ba29e3fc79be453bd2934
+  checksum: bca4b2ed8ee8c6afeea3bd3a17ea28d22391a49537415b5abf260bcbb6ddb41d
 - filename: README.md
   checksum: bf9e1afc14382d91e580b852357f6a5c15107a9cb8bc900a0de975deabac3e01
 - filename: CLAUDE.md
