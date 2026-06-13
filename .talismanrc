@@ -1,0 +1,8 @@
+fileignoreconfig:
+- filename: docs/design/2026-06-13-exec-sql-support-design.md
+  checksum: 5b278ae599d4f9bb1bbb7c2baa6eac809a51f0e13a010efc830bd0cc118490ae
+- filename: README.md
+  checksum: bf9e1afc14382d91e580b852357f6a5c15107a9cb8bc900a0de975deabac3e01
+- filename: CLAUDE.md
+  checksum: c550050e17fe7b939418f2e0b6d4bb08828e94a7c6e03298ecfc077e8d3026d5
+version: "1.0"
