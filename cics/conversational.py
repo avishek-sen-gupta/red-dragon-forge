@@ -1,4 +1,4 @@
-"""Conversational CICS driver.
+"""Conversational CICS driver — built on the VM's suspend/resume primitive.
 
 CardDemo is *pseudo-conversational*: each program processes one input, SENDs a
 screen, and RETURNs — the task ends every turn and state lives in the COMMAREA.
@@ -7,18 +7,17 @@ within a single task: it stays resident across the terminal wait, its
 working-storage persists naturally, and it issues a single bare ``EXEC CICS
 RETURN`` only when done.
 
-To run such a program we need the VM to PAUSE at each ``EXEC CICS RECEIVE`` and
-resume with the supplied input — all within one ``run_cics`` execution so
-working-storage survives. We do this with a **greenlet** (a stackful coroutine):
-``run_cics`` runs inside a child greenlet, and the RECEIVE builtin's
-``input_queue.get`` yields control back to the driver greenlet (cooperative
-suspend) rather than blocking a thread. This keeps the whole thing single
-threaded and deterministic — no OS-thread races, no timeouts — and needs no
-change to the VM (the suspend happens below the Python-function level, on the
-greenlet's stack).
+To run such a program the VM must PAUSE at each ``EXEC CICS RECEIVE`` and resume
+with the supplied input — all within one execution so working-storage survives.
+We do that with the core **suspend/resume primitive**: conversational RECEIVE MAP
+lowers to a ``SUSPEND`` (see ``CicsLoweringStrategy(conversational=True)``), and
+this region drives the task with ``run_linked_resumable`` / ``resume_linked``.
+Each ``send()`` injects the terminal ``InputEvent`` as the resumed value, which
+the ``__cics_apply_input`` builtin writes into the symbolic map's input fields.
 
-This is the Phase-0 spike mechanism; it deliberately uses greenlets rather than a
-core VM suspend/resume primitive (see docs/design/conversational-suspend-resume).
+This replaces the Phase-0 greenlet spike driver: it is deterministic and
+single-threaded like greenlet, but the continuation is the serializable,
+multi-shot ``ExecutionState`` rather than a parked stack.
 """
 
 from __future__ import annotations
@@ -26,43 +25,69 @@ from __future__ import annotations
 import queue
 from typing import Any
 
-from greenlet import getcurrent, greenlet
+from interpreter.run import Suspended, resume_linked, run_linked_resumable
 
-from cics.dispatcher import run_cics
-from cics.types import CicsContext, DispatchResult
+from cics.types import CicsContext, DispatchKind, DispatchResult
 
 _DFHENTER = "\x7d"
 
 
-class GreenletInputChannel:
-    """InputChannel whose ``get`` cooperatively suspends the VM at RECEIVE.
+def _build_initial_vm(context: CicsContext):
+    """The same initial VM run_cics() sets up: COMMAREA bound to an addressable
+    region and a main frame carrying the transid / EIBCALEN / EIBAID / params."""
+    from interpreter.address import Address
+    from interpreter.func_name import FuncName
+    from interpreter.types.type_expr import UNKNOWN
+    from interpreter.types.typed_value import typed
+    from interpreter.var_name import VarName
+    from interpreter.vm.vm_types import StackFrame, VMState
 
-    Conforms structurally to the InputChannel protocol the RECEIVE MAP builtin
-    uses (``get(block=?, timeout=?)``). Instead of blocking, it switches to the
-    parent (driver) greenlet; the driver resumes the VM greenlet with the next
-    ``InputEvent`` via ``switch(event)``, which becomes this call's return value.
-    """
-
-    def get(self, block: bool = True, timeout: float | None = None) -> Any:
-        # Running inside the VM greenlet: hand control to the driver and receive
-        # the InputEvent it switches back in.
-        return getcurrent().parent.switch()
-
-    def put(self, item: Any) -> None:  # pragma: no cover - not used in this mode
-        raise RuntimeError(
-            "conversational input is supplied via ConversationalRegion.send(), "
-            "not input_queue.put()"
+    vm = VMState()
+    commarea_addr = Address("rgn_commarea")
+    vm.region_set(commarea_addr, bytearray(context.commarea))
+    vm.call_stack.append(
+        StackFrame(
+            function_name=FuncName("main"),
+            local_vars={
+                VarName("__cics_transid"): typed(context.transid, UNKNOWN),
+                VarName("__cics_eibcalen"): typed(len(context.commarea), UNKNOWN),
+                VarName("__cics_eibaid"): typed(context.eibaid, UNKNOWN),
+                VarName("__params_region"): typed(commarea_addr, UNKNOWN),
+            },
         )
+    )
+    return vm
+
+
+def _entry_point(program: Any):
+    """Mirror run_cics()'s entry resolution: the program's own func label if the
+    bootstrap recorded one, else the sole bare ``func_*`` (not ``func_init_params_``).
+    """
+    from interpreter.run import EntryPoint
+
+    entry_label = getattr(program, "entry_func_label", None)
+    if entry_label is not None:
+        entry_label_str = str(entry_label)
+        return EntryPoint.function(
+            lambda ref, _lbl=entry_label_str: str(ref.label) == _lbl
+        )
+    return EntryPoint.function(
+        lambda ref: str(ref.label).startswith("func_")
+        and not str(ref.label).startswith("func_init_params_")
+    )
 
 
 class ConversationalRegion:
-    """Drive a conversational CICS task one terminal exchange at a time.
+    """Drive a conversational CICS task one terminal exchange at a time, on the
+    VM suspend/resume primitive.
 
-    The whole conversation is a single ``run_cics`` call living in a greenlet, so
-    working-storage persists across screens. ``start()`` runs the program to its
-    first RECEIVE (or to RETURN) and returns the screens SENT so far; each
-    ``send(event)`` answers the pending RECEIVE and runs to the next one (or to
-    RETURN). The task ends at the bare ``EXEC CICS RETURN``.
+    ``start()`` runs the task to its first ``RECEIVE`` (a SUSPEND) or to RETURN and
+    returns the screens SENT so far; each ``send(event)`` injects the input at the
+    pending RECEIVE and runs to the next one (or to RETURN). The task ends at the
+    bare ``EXEC CICS RETURN``; ``done``/``result`` then report the DispatchResult.
+
+    Requires the program to have been compiled with
+    ``CicsLoweringStrategy(conversational=True)`` so RECEIVE MAP lowers to SUSPEND.
     """
 
     def __init__(
@@ -71,7 +96,6 @@ class ConversationalRegion:
         transid: str,
         *,
         screen_queue: "queue.Queue[Any]",
-        input_channel: GreenletInputChannel,
         context_holder: list,
         result_holder: list,
         max_steps: int = 2_000_000,
@@ -79,59 +103,48 @@ class ConversationalRegion:
         self._program = program
         self._transid = transid
         self._screen_queue = screen_queue
-        self._input_channel = input_channel
         self._context_holder = context_holder
         self._result_holder = result_holder
         self._max_steps = max_steps
-        self._g: greenlet | None = None
+        self._state: Any = None
+        self._done = False
         self._result: DispatchResult | None = None
 
     def start(self, *, commarea: bytes = b"", eibaid: str = _DFHENTER) -> list[dict]:
-        """Begin the task; run to the first RECEIVE (or RETURN). Returns screens."""
         ctx = CicsContext(transid=self._transid, commarea=commarea, eibaid=eibaid)
-
-        def _run() -> DispatchResult:
-            return run_cics(
-                self._program,
-                ctx,
-                self._screen_queue,
-                self._input_channel,
-                context_holder=self._context_holder,
-                result_holder=self._result_holder,
-                max_steps=self._max_steps,
-            )
-
-        self._g = greenlet(_run)
-        out = self._g.switch()
-        return self._drain(out)
+        self._context_holder[0] = ctx
+        self._result_holder[0] = None
+        vm = _build_initial_vm(ctx)
+        outcome = run_linked_resumable(
+            self._program,
+            _entry_point(self._program),
+            max_steps=self._max_steps,
+            initial_vm=vm,
+        )
+        return self._absorb(outcome)
 
     def send(self, input_event: Any) -> list[dict]:
-        """Answer the pending RECEIVE; run to the next RECEIVE (or RETURN)."""
-        if self._g is None:
-            raise RuntimeError("send() before start()")
-        if self._g.dead:
-            raise RuntimeError("conversation has already ended")
-        out = self._g.switch(input_event)
-        return self._drain(out)
+        if self._state is None:
+            raise RuntimeError("send() before start(), or conversation already ended")
+        outcome = resume_linked(
+            self._program, self._state, input_event, max_steps=self._max_steps
+        )
+        return self._absorb(outcome)
 
-    def close(self) -> None:
-        """Abort a still-running conversation (terminal disconnect)."""
-        if self._g is not None and not self._g.dead:
-            self._g.throw()
+    def _absorb(self, outcome: Any) -> list[dict]:
+        if isinstance(outcome, Suspended):
+            self._state = outcome.state
+        else:  # Completed — the task reached its bare EXEC CICS RETURN
+            self._done = True
+            self._state = None
+            self._result = (
+                self._result_holder[0]
+                if self._result_holder[0] is not None
+                else DispatchResult(kind=DispatchKind.RETURN)
+            )
+        return self._drain()
 
-    @property
-    def done(self) -> bool:
-        return self._g is not None and self._g.dead
-
-    @property
-    def result(self) -> DispatchResult | None:
-        """The DispatchResult from the task's RETURN, once done."""
-        return self._result
-
-    def _drain(self, out: Any) -> list[dict]:
-        # If the greenlet finished, run_cics' return value came back through switch.
-        if self._g is not None and self._g.dead and isinstance(out, DispatchResult):
-            self._result = out
+    def _drain(self) -> list[dict]:
         screens: list[dict] = []
         while True:
             try:
@@ -139,3 +152,11 @@ class ConversationalRegion:
             except queue.Empty:
                 break
         return screens
+
+    @property
+    def done(self) -> bool:
+        return self._done
+
+    @property
+    def result(self) -> DispatchResult | None:
+        return self._result

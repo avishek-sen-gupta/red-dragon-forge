@@ -28,7 +28,14 @@ from cics.builtins.system import (
 from interpreter.cobol.cobol_constants import BuiltinName
 from interpreter.cobol.ref_mod import RefModLiteral
 from interpreter.func_name import FuncName
-from interpreter.instructions import Binop, CallFunction, Const, LoadRegion, Return_
+from interpreter.instructions import (
+    Binop,
+    CallFunction,
+    Const,
+    LoadRegion,
+    Return_,
+    Suspend,
+)
 
 if TYPE_CHECKING:
     from cics.terminal import InputChannel, ScreenChannel
@@ -355,8 +362,12 @@ class CicsLoweringStrategy:
         input_queue: "InputChannel | None" = None,
         vsam_engine: object = None,
         receive_timeout: float = 30.0,
+        conversational: bool = False,
     ) -> None:
         self._context_holder = context_holder
+        # Conversational mode lowers EXEC CICS RECEIVE MAP to a SUSPEND (yielding
+        # to a run_resumable/resume driver) instead of a blocking input-queue read.
+        self._conversational = conversational
         # Deferred imports to avoid violating project-no-vm-internals import contract.
         from interpreter.vm.builtins import Builtins  # noqa: PLC0415
         from cics.builtins.flow import (  # noqa: PLC0415
@@ -409,6 +420,7 @@ class CicsLoweringStrategy:
             from cics.builtins.screen import (  # noqa: PLC0415
                 make_send_map_builtin,
                 make_receive_map_builtin,
+                make_apply_input_builtin,
                 make_send_text_builtin,
             )
 
@@ -421,6 +433,13 @@ class CicsLoweringStrategy:
                 Builtins.TABLE,
                 "__cics_receive_map",
                 make_receive_map_builtin(input_queue, timeout=receive_timeout),
+            )
+            # Conversational mode lowers RECEIVE MAP to SUSPEND + this builtin,
+            # which applies the InputEvent the driver injects on resume.
+            _register(
+                Builtins.TABLE,
+                "__cics_apply_input",
+                make_apply_input_builtin(),
             )
             _register(
                 Builtins.TABLE,
@@ -616,6 +635,22 @@ class CicsLoweringStrategy:
             base_names = [n[: -len(suffix)] for n in leaves if n.endswith(suffix)]
             r_names = ctx.fresh_reg()
             ctx.emit_inst(Const(result_reg=r_names, value=base_names))
+
+            if verb == "RECEIVE MAP" and self._conversational:
+                # Conversational: SUSPEND (yield the map name to the resume driver),
+                # then apply the InputEvent the driver injects into the WS fields.
+                r_evt = ctx.fresh_reg()
+                ctx.emit_inst(Suspend(result_reg=r_evt, operand_reg=r_map))
+                r_res = ctx.fresh_reg()
+                ctx.emit_inst(
+                    CallFunction(
+                        result_reg=r_res,
+                        func_name=FuncName("__cics_apply_input"),
+                        args=(r_evt, r_names),
+                    )
+                )
+                return
+
             r_res = ctx.fresh_reg()
             ctx.emit_inst(
                 CallFunction(
