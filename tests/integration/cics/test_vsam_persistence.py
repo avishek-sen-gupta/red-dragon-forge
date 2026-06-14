@@ -59,7 +59,7 @@ from tests.integration.cics.test_carddemo_signon_real import (
     _drive_transaction_add,
     _usrsec_engine,
 )
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 # Mandatory locally, skipped in CI — via the shared carddemo_e2e marker
 # (see tests/integration/cics/conftest.py).
@@ -74,7 +74,7 @@ _ACCT_STATUS_OFFSET = 11
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_account_update_rewrite_persists_to_flat_file(tmp_path):
+def test_account_update_rewrite_persists_to_flat_file(tmp_path, bridge_jar):
     """Real CardDemo account-update REWRITE (status 'Y'->'N') write-throughs to
     the ACCTDAT backing flat file on disk.
 
@@ -86,7 +86,7 @@ def test_account_update_rewrite_persists_to_flat_file(tmp_path):
     durable on disk, not just in the in-memory engine.
     """
     store = tmp_path / "store"
-    _drive_rewrite(tmp_path, backend=FileBackend(store))
+    _drive_rewrite(tmp_path, bridge_jar, backend=FileBackend(store))
 
     records = read_flat_file(store / "ACCTDAT.dat", _ACCTDAT_RECLN)
     assert records, "ACCTDAT.dat backing file is empty or missing after REWRITE"
@@ -112,7 +112,7 @@ def test_account_update_rewrite_persists_to_flat_file(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_transaction_add_write_persists_to_flat_file(tmp_path):
+def test_transaction_add_write_persists_to_flat_file(tmp_path, bridge_jar):
     """Real CardDemo transaction-ADD WRITE (a brand-new TRANSACT record) write-
     throughs to the TRANSACT backing flat file on disk.
 
@@ -124,7 +124,9 @@ def test_transaction_add_write_persists_to_flat_file(tmp_path):
     on disk — proving the created record is durable, not just in memory.
     """
     store = tmp_path / "store"
-    rB, viewB, _ = _drive_transaction_add(tmp_path, backend=FileBackend(store))
+    rB, viewB, _ = _drive_transaction_add(
+        tmp_path, bridge_jar, backend=FileBackend(store)
+    )
 
     records = read_flat_file(store / "TRANSACT.dat", _TRAN_RECLN)
     assert records, (
@@ -150,7 +152,7 @@ def test_transaction_add_write_persists_to_flat_file(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_account_update_dump_before_after(tmp_path):
+def test_account_update_dump_before_after(tmp_path, bridge_jar):
     """Dump ACCTDAT before and after the account-update REWRITE.
 
     Reads the seeded ACCOUNT-RECORD, prints a human-readable block dump, drives
@@ -164,7 +166,7 @@ def test_account_update_dump_before_after(tmp_path):
     layout = load_record_layout(
         app / "cpy" / "CVACT01Y.cpy",
         "ACCOUNT-RECORD",
-        JAR_PATH,
+        bridge_jar,
         [app / "cpy"],
     )
 
@@ -179,6 +181,7 @@ def test_account_update_dump_before_after(tmp_path):
 
     engine_after = _drive_rewrite(
         tmp_path,
+        bridge_jar,
         # Account group
         AADDGRP=_NEW_GROUP_ID,
         # Numeric fields (display format accepted by NUMVAL-C)

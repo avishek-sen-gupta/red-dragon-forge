@@ -32,7 +32,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -186,7 +186,7 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_account_view(tmp_path: Path):
+def _drive_to_account_view(tmp_path: Path, bridge_jar):
     from interpreter.cobol.cobol_parser import ProLeapCobolParser
     from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 
@@ -204,7 +204,7 @@ def _drive_to_account_view(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -273,11 +273,11 @@ _LIM_EDITED = "+      5,000.00"
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_account_view_detail(tmp_path):
+def test_real_carddemo_account_view_detail(tmp_path, bridge_jar):
     """Turn 5: entering an account id joins CXACAIX -> ACCTDAT -> CUSTDAT and
     renders CACTVWA with the account (status / edited balance / edited limit)
     and the customer (id / first+middle+last name / DOB)."""
-    region, screen_q, _ = _drive_to_account_view(tmp_path)
+    region, screen_q, _ = _drive_to_account_view(tmp_path, bridge_jar)
 
     # Turn 4: first display (prompt).
     drain(screen_q)

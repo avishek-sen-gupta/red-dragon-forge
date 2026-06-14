@@ -38,7 +38,7 @@ from interpreter.cobol.zoned_decimal import decode_zoned
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -188,7 +188,7 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_bill_pay(tmp_path: Path):
+def _drive_to_bill_pay(tmp_path: Path, bridge_jar):
     """Compile COSGN00C + COMEN01C + COBIL00C and drive turns 1-3.
 
     Returns (region, screen_q, engine) positioned just after the menu XCTL into
@@ -211,7 +211,7 @@ def _drive_to_bill_pay(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -277,10 +277,10 @@ def _drive_to_bill_pay(tmp_path: Path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_bill_pay_shows_balance(tmp_path):
+def test_real_carddemo_bill_pay_shows_balance(tmp_path, bridge_jar):
     """Turn 5: entering the account id reads ACCTDAT and renders the edited
     current balance plus the confirm prompt."""
-    region, screen_q, _ = _drive_to_bill_pay(tmp_path)
+    region, screen_q, _ = _drive_to_bill_pay(tmp_path, bridge_jar)
 
     # Turn 4: first display (empty prompt)
     drain(screen_q)
@@ -332,7 +332,7 @@ def _acct_balance(engine, acct_id: str) -> float:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path):
+def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path, bridge_jar):
     """Turn 6 (CONFIRM='Y') pays the balance in full: READ CXACAIX for the card,
     STARTBR/READPREV TRANSACT to mint the next id, WRITE the payment transaction,
     then COMPUTE the balance to zero and REWRITE ACCTDAT.
@@ -340,7 +340,7 @@ def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path):
     The user-facing assertions are the edited balance the screen renders (before
     and after the payment) and the success message; the stored record is read
     only as an internal consistency cross-check."""
-    region, screen_q, engine = _drive_to_bill_pay(tmp_path)
+    region, screen_q, engine = _drive_to_bill_pay(tmp_path, bridge_jar)
 
     # Turn 4: first display.
     drain(screen_q)

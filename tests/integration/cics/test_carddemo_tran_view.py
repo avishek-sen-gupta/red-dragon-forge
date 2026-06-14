@@ -38,7 +38,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -142,7 +142,7 @@ def _tran_view_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_tran_view(tmp_path: Path):
+def _drive_to_tran_view(tmp_path: Path, bridge_jar):
     """Compile COSGN00C + COMEN01C + COTRN01C and drive turns 1-3.
 
     Returns (region, screen_q) positioned just after the menu XCTL into
@@ -165,7 +165,7 @@ def _drive_to_tran_view(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -235,10 +235,10 @@ def _drive_to_tran_view(tmp_path: Path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_transaction_view_detail(tmp_path):
+def test_real_carddemo_transaction_view_detail(tmp_path, bridge_jar):
     """Turn 4 prompts; turn 5 reads the seeded transaction by ID and renders
     COTRN1A with the detail fields populated (incl. the edited amount)."""
-    region, screen_q = _drive_to_tran_view(tmp_path)
+    region, screen_q = _drive_to_tran_view(tmp_path, bridge_jar)
 
     # Turn 4: COTRN01C first display (XCTL'd in -> empty prompt screen)
     drain(screen_q)

@@ -36,7 +36,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -114,7 +114,7 @@ def _user_list_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_user_list(tmp_path: Path):
+def _drive_to_user_list(tmp_path: Path, bridge_jar):
     """Compile COSGN00C + COADM01C + COUSR00C and drive turns 1-3 (admin path).
 
     Returns (region, screen_q) positioned just after the admin-menu XCTL into
@@ -137,7 +137,7 @@ def _drive_to_user_list(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -218,10 +218,10 @@ def _drive_to_user_list(tmp_path: Path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_user_list_first_page(tmp_path):
+def test_real_carddemo_user_list_first_page(tmp_path, bridge_jar):
     """Turn 4: COUSR00C browses USRSEC and renders COUSR0A with one row per
     seeded user (ID / first name / last name / type) in ascending key order."""
-    region, screen_q = _drive_to_user_list(tmp_path)
+    region, screen_q = _drive_to_user_list(tmp_path, bridge_jar)
 
     # Turn 4: COUSR00C first display (XCTL'd in -> no fresh input)
     drain(screen_q)

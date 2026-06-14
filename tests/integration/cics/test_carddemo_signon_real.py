@@ -54,7 +54,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.integration.cics.channel_drain import drain
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -190,7 +190,7 @@ def _usrsec_engine(backend=None) -> VsamEngine:
     return engine
 
 
-def _drive_through_turn4(tmp_path):
+def _drive_through_turn4(tmp_path, bridge_jar):
     """Compile the three CardDemo programs and drive turns 1-4, asserting each.
 
     Turn 1 (COSGN00C): valid credentials -> RECEIVE MAP -> UPPER-CASE ->
@@ -243,7 +243,7 @@ def _drive_through_turn4(tmp_path):
     # empirically confirmed here.)
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -374,14 +374,14 @@ def _drive_through_turn4(tmp_path):
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_signon_menu_and_option_select(tmp_path):
+def test_real_carddemo_signon_menu_and_option_select(tmp_path, bridge_jar):
     """Four-turn flow through unmodified CardDemo source (sign-on -> menu ->
     option select -> COACTVWC first display). See ``_drive_through_turn4``."""
-    _drive_through_turn4(tmp_path)
+    _drive_through_turn4(tmp_path, bridge_jar)
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_account_view_three_reads(tmp_path):
+def test_real_carddemo_account_view_three_reads(tmp_path, bridge_jar):
     """Turn 5: account-id entry into COACTVWC -> 9000-READ-ACCT's three chained
     VSAM reads -> account-view render.
 
@@ -397,7 +397,7 @@ def test_real_carddemo_account_view_three_reads(tmp_path):
     customer first/last names render from the chained reads.
     """
     acct, region, r4, screen_q, input_q, context_holder, result_holder = (
-        _drive_through_turn4(tmp_path)
+        _drive_through_turn4(tmp_path, bridge_jar)
     )
 
     # --- Turn 5: account-id entry -> 9000-READ-ACCT (3 chained VSAM reads) ---
@@ -469,7 +469,7 @@ _DFHENTER = "\x7d"
 _DFHPF5 = "\xf5"  # PF05 = confirm-and-save
 
 
-def _compile_update_programs(tmp_path, backend=None):
+def _compile_update_programs(tmp_path, bridge_jar, backend=None):
     """Compile COSGN00C + COMEN01C + COACTUPC sharing one strategy/engine.
 
     Returns ``(signon, menu, acctupd, screen_q, input_q, context_holder,
@@ -494,7 +494,7 @@ def _compile_update_programs(tmp_path, backend=None):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -532,7 +532,7 @@ def _compile_update_programs(tmp_path, backend=None):
     )
 
 
-def _drive_to_coactupc(tmp_path, backend=None):
+def _drive_to_coactupc(tmp_path, bridge_jar, backend=None):
     """Sign-on -> menu -> option '02' -> XCTL COACTUPC -> first display (CACTUPA).
 
     Returns ``(acctupd, r_first, screen_q, input_q, context_holder,
@@ -548,7 +548,7 @@ def _drive_to_coactupc(tmp_path, backend=None):
         context_holder,
         result_holder,
         engine,
-    ) = _compile_update_programs(tmp_path, backend=backend)
+    ) = _compile_update_programs(tmp_path, bridge_jar, backend=backend)
 
     # Region config: this run routes the menu's option '02' to COACTUPC.
     program_cache = {
@@ -611,12 +611,12 @@ def _drive_to_coactupc(tmp_path, backend=None):
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_account_update_first_display(tmp_path):
+def test_real_carddemo_account_update_first_display(tmp_path, bridge_jar):
     """Account-update Turn A: menu option '02' -> XCTL COACTUPC -> CACTUPA."""
-    _drive_to_coactupc(tmp_path)
+    _drive_to_coactupc(tmp_path, bridge_jar)
 
 
-def _drive_update_to_details(tmp_path, backend=None):
+def _drive_update_to_details(tmp_path, bridge_jar, backend=None):
     """Continue past Turn A: enter the seeded acct id (Turn B) -> 9000-READ-ACCT
     (3 chained VSAM reads) -> details rendered for edit.
 
@@ -625,7 +625,7 @@ def _drive_update_to_details(tmp_path, backend=None):
     ``backend`` to make the shared VsamEngine write through to durable storage.
     """
     acctupd, region, r4, screen_q, input_q, context_holder, result_holder, engine = (
-        _drive_to_coactupc(tmp_path, backend=backend)
+        _drive_to_coactupc(tmp_path, bridge_jar, backend=backend)
     )
 
     # Turn B: enter acct id -> ACUP-DETAILS-NOT-FETCHED path reads + shows detail.
@@ -653,7 +653,7 @@ def _drive_update_to_details(tmp_path, backend=None):
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_account_update_reads_and_shows_details(tmp_path):
+def test_real_carddemo_account_update_reads_and_shows_details(tmp_path, bridge_jar):
     """Account-update Turn B: enter acct id -> 9000-READ-ACCT (CXACAIX@25 ->
     ACCTDAT@0 -> CUSTDAT@0) -> details render for edit (status + names echo)."""
     (
@@ -666,7 +666,7 @@ def test_real_carddemo_account_update_reads_and_shows_details(tmp_path):
         context_holder,
         result_holder,
         engine,
-    ) = _drive_update_to_details(tmp_path)
+    ) = _drive_update_to_details(tmp_path, bridge_jar)
     # The entered account id echoes back.
     assert (
         view.get("ACCTSID") == _ACCT_ID
@@ -727,7 +727,7 @@ def _resubmit_fields(view: dict, *, status: str, **overrides: str) -> dict[str, 
     return fields
 
 
-def _drive_rewrite(tmp_path, backend=None, **field_overrides: str):
+def _drive_rewrite(tmp_path, bridge_jar, backend=None, **field_overrides: str):
     """Drive the full account-update REWRITE flow (sign-on .. Turn D) and return
     the shared ``engine`` after the REWRITE has run.
 
@@ -752,7 +752,7 @@ def _drive_rewrite(tmp_path, backend=None, **field_overrides: str):
         context_holder,
         result_holder,
         engine,
-    ) = _drive_update_to_details(tmp_path, backend=backend)
+    ) = _drive_update_to_details(tmp_path, bridge_jar, backend=backend)
 
     # --- Turn C: submit the change (status Y->N) + ENTER ---
     drain(screen_q)
@@ -781,13 +781,13 @@ def _drive_rewrite(tmp_path, backend=None, **field_overrides: str):
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_account_update_rewrite(tmp_path):
+def test_real_carddemo_account_update_rewrite(tmp_path, bridge_jar):
     """Account-update Turns C + D: edit a field, confirm with PF05, and verify
     the REWRITE persisted to the VsamEngine. See ``_drive_rewrite``.
 
     Assert the engine's stored ACCTDAT record now has status 'N'.
     """
-    engine = _drive_rewrite(tmp_path)
+    engine = _drive_rewrite(tmp_path, bridge_jar)
 
     # Verify the REWRITE persisted: read ACCTDAT back from the engine and check
     # the active-status byte (offset 11, X(1)) is now 'N'.
@@ -888,7 +888,7 @@ def _add_engine(backend=None) -> VsamEngine:
     return engine
 
 
-def _drive_to_cotrn02c(tmp_path, backend=None):
+def _drive_to_cotrn02c(tmp_path, bridge_jar, backend=None):
     """Sign-on -> menu -> option '08' -> XCTL COTRN02C -> first display (COTRN2A).
 
     Returns ``(region, screen_q, input_q, engine)`` parked pseudo-conversationally
@@ -912,7 +912,7 @@ def _drive_to_cotrn02c(tmp_path, backend=None):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -1007,12 +1007,12 @@ def _drive_to_cotrn02c(tmp_path, backend=None):
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_transaction_add_first_display(tmp_path):
+def test_real_carddemo_transaction_add_first_display(tmp_path, bridge_jar):
     """Transaction-add Turn A: menu option '08' -> XCTL COTRN02C -> COTRN2A."""
-    _drive_to_cotrn02c(tmp_path)
+    _drive_to_cotrn02c(tmp_path, bridge_jar)
 
 
-def _drive_transaction_add(tmp_path, backend=None):
+def _drive_transaction_add(tmp_path, bridge_jar, backend=None):
     """Drive the full transaction-ADD flow (sign-on .. Turn B) and return
     ``(rB, viewB, engine)`` after the EXEC CICS WRITE has run.
 
@@ -1021,7 +1021,9 @@ def _drive_transaction_add(tmp_path, backend=None):
     Pass ``backend`` to make the shared VsamEngine write the new record through
     to durable storage (so the persistence demo can read it off disk).
     """
-    region, screen_q, input_q, engine = _drive_to_cotrn02c(tmp_path, backend=backend)
+    region, screen_q, input_q, engine = _drive_to_cotrn02c(
+        tmp_path, bridge_jar, backend=backend
+    )
 
     # --- Turn B: submit the new transaction with CONFIRM='Y' + ENTER ---
     # Following Turn A's RETURN TRANSID CT02 -> a fresh terminal input.
@@ -1052,7 +1054,7 @@ def _drive_transaction_add(tmp_path, backend=None):
 
 
 @covers(CobolFeature.EXEC_CICS, CobolFeature.INTRINSIC_FUNCTION)
-def test_real_carddemo_transaction_add_write(tmp_path):
+def test_real_carddemo_transaction_add_write(tmp_path, bridge_jar):
     """Transaction-add Turn B: enter a full new transaction + CONFIRM='Y' ->
     ADD-TRANSACTION (STARTBR/READPREV/ENDBR id-generation + EXEC CICS WRITE) ->
     verify the new TRANSACT record persisted to the VsamEngine.
@@ -1070,7 +1072,7 @@ def test_real_carddemo_transaction_add_write(tmp_path):
     end-of-file, finds the highest seeded id, and the EXEC CICS WRITE persists
     the next id.
     """
-    rB, viewB, engine = _drive_transaction_add(tmp_path)
+    rB, viewB, engine = _drive_transaction_add(tmp_path, bridge_jar)
 
     # The created record must exist in TRANSACT under the generated key.
     record, resp = engine.read(

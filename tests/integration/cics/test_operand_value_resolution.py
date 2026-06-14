@@ -24,20 +24,21 @@ from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
 from tests.covers import covers
-from tests.integration.cobol_helpers import JAR_PATH, bridge_jar_env
+from tests.integration.cobol_helpers import bridge_jar
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 
 
 @pytest.fixture(autouse=True)
-def _bridge_jar_env(bridge_jar_env):
-    yield
+def _require_bridge_jar(bridge_jar):
+    """Enforce the required PROLEAP_BRIDGE_JAR for run()/compile_directory-based
+    tests (fails loudly via bridge_jar if it's unset)."""
 
 
 @pytest.fixture
-def cobol_parser():
+def cobol_parser(bridge_jar):
     runner = RealSubprocessRunner()
-    return ProLeapCobolParser(runner, JAR_PATH, copybook_dirs=[_CICS_COPYBOOKS])
+    return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
 
 
 COBOL_RETURN_TRANSID_FIELD = """\

@@ -37,7 +37,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -149,7 +149,7 @@ def _tran_list_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_tran_list(tmp_path: Path):
+def _drive_to_tran_list(tmp_path: Path, bridge_jar):
     """Compile COSGN00C + COMEN01C + COTRN00C and drive turns 1-3.
 
     Turn 1: sign-on → XCTL COMEN01C.
@@ -176,7 +176,7 @@ def _drive_to_tran_list(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -246,14 +246,14 @@ def _drive_to_tran_list(tmp_path: Path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_transaction_list_first_page(tmp_path):
+def test_real_carddemo_transaction_list_first_page(tmp_path, bridge_jar):
     """Turn 4: XCTL'd into COTRN00C → first display renders COTRN0A with 10
     transaction rows via STARTBR/READNEXT browse from LOW-VALUES.
 
     Verifies TRNID01–TRNID10 are populated with the seeded IDs in order and
     the region parks pseudo-conversationally on CT00.
     """
-    region, screen_q = _drive_to_tran_list(tmp_path)
+    region, screen_q = _drive_to_tran_list(tmp_path, bridge_jar)
 
     # Turn 4: COTRN00C first display (XCTL'd in → no fresh input)
     drain(screen_q)
@@ -295,7 +295,7 @@ def test_real_carddemo_transaction_list_first_page(tmp_path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_transaction_list_page_forward(tmp_path):
+def test_real_carddemo_transaction_list_page_forward(tmp_path, bridge_jar):
     """Turn 5: PF8 (page-forward) → COTRN00C dispatches PROCESS-PF8-KEY, sets
     TRAN-ID = CDEMO-CT00-TRNID-LAST ('...0010'), and re-browses via STARTBR.
 
@@ -304,7 +304,7 @@ def test_real_carddemo_transaction_list_page_forward(tmp_path):
     browse advances past record 10 and page 2 shows records 11, 12 in slots
     1 and 2.
     """
-    region, screen_q = _drive_to_tran_list(tmp_path)
+    region, screen_q = _drive_to_tran_list(tmp_path, bridge_jar)
 
     # Turn 4: first page (XCTL'd in → no fresh input) — consume to set
     # CDEMO-CT00-TRNID-LAST in the commarea before the PF8 turn.
