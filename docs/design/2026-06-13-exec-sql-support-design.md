@@ -252,15 +252,31 @@ cicada submodules squall and injects `[cics, sql]`. Both repos pin **one** RedDr
 The **parser** (full ~30-directive Lark grammar + che4z oracle) underpins everything → built first
 (slice 0). Then:
 
-| # | Scope | Proves |
-|---|---|---|
-| **0** | Full directive Lark grammar + lexer; test matrix (per-directive + CBSA samples) vs che4z oracle | the parser, complete on the directive surface |
-| **1** | `SELECT … INTO` against one seeded SQLite table; host-var bind; `SQLCODE` 0/+100 (hand-declared SQLCODE) | lower → bind (zoned/int) → execute → bind-back → SQLCODE, end-to-end |
-| **2** | `EXEC SQL INCLUDE → COPY`; **SQLCA + DCLGEN** typed host-var records (`COMP-3` etc.) | squall's source-layer preprocessing; the real typed codec |
-| **3** | `INSERT`/`UPDATE`/`DELETE`; rowcount | input-only marshaling, DML, driver param binding |
-| **4** | Cursors: `DECLARE`/`OPEN`/`FETCH`/`CLOSE`; program-driven loop | backend cursor surface, multi-row, role across statements |
-| **5** | `COMMIT`/`ROLLBACK` | transaction state via backend |
-| **6** | A real CBSA Db2 program **standalone** (squall only) | the whole vertical on real code |
+| # | Scope | Proves | Status |
+|---|---|---|---|
+| **0** | Full directive Lark grammar + lexer; test matrix (per-directive + CBSA samples) vs che4z oracle | the parser, complete on the directive surface | ✅ done |
+| **1** | `SELECT … INTO` against one seeded SQLite table; host-var bind; `SQLCODE` 0/+100 (hand-declared SQLCODE) | lower → bind (zoned/int) → execute → bind-back → SQLCODE, end-to-end | ✅ done |
+| **2** | `EXEC SQL INCLUDE → COPY`; **SQLCA + DCLGEN** typed host-var records (`COMP-3` etc.) | squall's source-layer preprocessing; the real typed codec | ✅ done (VARCHAR + indicators deferred — see below) |
+| **3** | `INSERT`/`UPDATE`/`DELETE`; rowcount | input-only marshaling, DML, driver param binding | |
+| **4** | Cursors: `DECLARE`/`OPEN`/`FETCH`/`CLOSE`; program-driven loop | backend cursor surface, multi-row, role across statements | |
+| **5** | `COMMIT`/`ROLLBACK` | transaction state via backend | |
+| **6** | A real CBSA Db2 program **standalone** (squall only) | the whole vertical on real code | |
+
+**Slice-2 delivered:** `apply_sql_prepass` (`INCLUDE → COPY`, fixed-delimiter scan + `parse_exec_sql`
+classification — same text→text shape as cicada's `apply_cics_prepass`, so a future composite pipeline
+can chain them); bundled `SQLCA.cpy` (real **binary-COMP `SQLCODE`**) + `ACCTREC.cpy` DCLGEN record;
+typed codec **COMP-3 ↔ `Decimal`** (scaled) and **binary COMP ↔ `int`** (`write_sqlcode` now encodes by
+the field's `data_layout` category). e2e proves RedDragon's own COMP-3 decoder reads the packed bytes
+squall wrote (`IF ACCT-BAL = 1234.56` → `'Y'`). Also fixed a latent slice-1 grammar bug: multi-column
+`SELECT … INTO` (Earley split the INTO list) — `select_into` now anchors the trailing `FROM`.
+
+**Slice-2 deferrals (need a fork resolved, not hacks):**
+- **VARCHAR 49-group** — the flat `data_layout` exposes no level/children, so a VARCHAR receiver
+  (`49 LEN COMP / 49 TEXT X(n)`) is indistinguishable from a plain `PIC X` group. Needs a proper
+  structural 49-level signal (e.g. via the symbol table) before binding can write the length prefix.
+- **NULL indicators** (`:VAR:IND`) — needs the `HostVar` (with its `indicator`) threaded through
+  `read_params`/`write_outputs` and the `__exec_sql` builtin (currently only field names are passed),
+  plus NULL-without-indicator → `SQLCODE -305`.
 
 **Follow-up (after standalone proof):** the declarative CICS+squall preprocessor pipeline (§10) + run a
 CBSA CICS+Db2 program under cicada+squall.
