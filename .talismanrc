@@ -49,4 +49,6 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: squall/preprocess.py
   ignore_detectors: [filecontent]
+- filename: tests/integration/test_crud_e2e.py
+  ignore_detectors: [filecontent]
 version: "1.0"
