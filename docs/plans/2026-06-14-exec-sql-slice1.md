@@ -1,16 +1,18 @@
-# Squall EXEC SQL — Slice 1 Implementation Plan (SELECT … INTO)
+# Squall — Directive Grammar + SELECT INTO Vertical (slices 0–1)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use `- [ ]` checkboxes.
 
-**Goal:** Run a real COBOL program containing `EXEC SQL SELECT … INTO :host-vars FROM tbl WHERE col = :host-var END-EXEC` end-to-end through RedDragon + Squall against a seeded SQLite table, binding host variables and setting `SQLCODE`.
+**Goal:** A working `squall` package that (a) parses the **full EXEC SQL directive surface** with a lean Lark grammar (validated against che4z as an oracle), and (b) executes `SELECT … INTO` **end-to-end** through RedDragon + SQLite, binding host variables and setting `SQLCODE`.
 
-**Architecture:** The RedDragon seam already exists (`ExecSqlStatement` opaque node, `extension_strategies` array, bridge `serializeExecSql` — RedDragon `main` `ab598905`). Squall adds: a Lark **parser** that strips the `EXEC SQL`/`END-EXEC` envelope and extracts host-vars (NO regex — grammar terminals); a dialect/DB-agnostic **binding engine** (field ↔ param via `data_layout`, `SQLCODE`); a **`SqlBackend`** protocol + **`SqliteBackend`**; a **`__exec_sql` builtin**; and a **`SqlLoweringStrategy`** implementing `RedDragonExtensionLoweringStrategy`. The strategy lowers each `EXEC SQL` to `Const` args + `CallFunction(__exec_sql, …)`; the builtin reads input host-var fields, runs the query via the backend, writes the `INTO` fields and `SQLCODE`.
+**Architecture (settled — see `../design/2026-06-13-exec-sql-support-design.md`):** The RedDragon seam is **shipped** (`main ab598905`): opaque `ExecSqlStatement`, bridge `serializeExecSql`, `extension_strategies` array. Squall is passive: **parser** (lexer surfaces host vars string-safely; lean directive grammar with opaque host-var-surfacing bodies; role by capturing clause) → **binding engine** (DCLGEN-typed codec via `data_layout`/`__ws_region`) → **`SqlBackend`** (`execute` + cursor surface) / **`SqliteBackend`** → **`__exec_sql` builtin** → **`SqlLoweringStrategy`** on the seam. No runtime driver, no `SUSPEND`.
 
-**Tech stack:** Python 3 (uv), Lark (parser), stdlib `sqlite3` (backend), pytest. Depends on RedDragon (`interpreter.*`) via `vendor/red-dragon` submodule. Integration test needs the ProLeap JAR (reuse the existing `~/code/red-dragon` build via `PROLEAP_BRIDGE_JAR`).
+**Tech stack:** Python 3 (uv), **Lark** (directive grammar), `antlr4-python3-runtime` (che4z oracle, tests only), stdlib `sqlite3`, pytest. Depends on RedDragon (`interpreter.*`) via `vendor/red-dragon` submodule. Integration needs the ProLeap JAR via `PROLEAP_BRIDGE_JAR`.
 
-**Repo:** `~/code/squall` (currently docs-only). Work on a branch; the design lives in `docs/design/2026-06-13-exec-sql-support-design.md`.
+**Repo:** `~/code/squall` (docs-only today). Work on a branch.
 
-**Key invariants** (CLAUDE.md): no `squall → cicada` import; no edits to RedDragon `vm/**`/`ir.py`/`run.py`; binding engine is dialect/backend-agnostic; **no regex/string-surgery for SQL** — parsing is the Lark grammar; tests follow the `bridge_jar` fixture pattern (single `os.environ["PROLEAP_BRIDGE_JAR"]`, no skip/default).
+**Invariants:** no `squall → cicada` import; no RedDragon `vm/**`/`ir.py` edits; **no regex/string-surgery for SQL** — lexer + grammar only; tests use the `bridge_jar` fixture (required env, no skip/default).
+
+**Scope note:** this plan covers **slice 0** (the full directive parser) + **slice 1** (the SELECT INTO vertical). The grammar **parses all ~30 directives**; only `SELECT … INTO` is *lowered* here — other directives parse fine and raise a clear "not lowered yet" at lowering. Slices 2+ (INCLUDE/SQLCA/DCLGEN, DML, cursors, txns, real CBSA) are follow-up plans.
 
 ---
 
@@ -19,341 +21,167 @@
 ```
 squall/
   __init__.py
-  parser.py            # Lark grammar + parse_exec_sql(text) -> ParsedSql
-  backend.py           # SqlBackend protocol + SqlResult dataclass
+  parser/
+    __init__.py
+    grammar.lark        # lexer terminals + ~30 directive rules + opaque body
+    parse.py            # parse_exec_sql(text) -> ParsedSql (kind, in_vars, out_vars, cursor, query)
+  binding.py            # read_params / write_outputs / write_sqlcode (data_layout + __ws_region)
+  backend.py            # SqlBackend protocol (execute + open_cursor/fetch/close) + SqlResult
   backends/
     __init__.py
-    sqlite.py          # SqliteBackend
-  binding.py           # host-var field <-> param marshaling + SQLCODE (uses vm.data_layout)
+    sqlite.py           # SqliteBackend
   builtins/
     __init__.py
-    exec_sql.py        # make_exec_sql_builtin(backend) -> __exec_sql
-  strategy.py          # SqlLoweringStrategy (RedDragonExtensionLoweringStrategy)
+    exec_sql.py         # make_exec_sql_builtin(backend) -> __exec_sql
+  strategy.py           # SqlLoweringStrategy (RedDragonExtensionLoweringStrategy)
 tests/
-  unit/   conftest.py + test_parser.py, test_sqlite_backend.py, test_binding.py,
-          test_exec_sql_builtin.py, test_strategy.py
+  unit/   test_lexer.py, test_grammar_matrix.py, test_che4z_oracle.py, test_parse.py,
+          test_sqlite_backend.py, test_binding.py, test_exec_sql_builtin.py, test_strategy.py
   integration/  conftest.py (bridge_jar) + test_select_into_e2e.py
+  oracle/   (vendored adapted che4z Db2SqlExec*.g4 + generated Python parser; EPL — see LICENSE note)
 pyproject.toml
-vendor/red-dragon  (submodule @ ab598905)
+vendor/red-dragon   (submodule @ ab598905)
 ```
 
-**Test commands:** unit `uv run python -m pytest tests/unit -q` (no JAR); integration `PROLEAP_BRIDGE_JAR=$HOME/code/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar uv run python -m pytest tests/integration -q`.
+**Tests:** unit `uv run python -m pytest tests/unit -q`; integration `PROLEAP_BRIDGE_JAR=$HOME/code/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar uv run python -m pytest tests/integration -q`.
 
 ---
 
-## Task 0: Scaffold the repo
+## Task 0: Scaffold
 
-**Files:** `pyproject.toml`, `squall/__init__.py`, `vendor/red-dragon` (submodule), `tests/unit/__init__.py`, `tests/integration/__init__.py`.
-
-- [ ] **Step 1: Add the RedDragon submodule pinned at the seam commit.**
-```bash
-cd ~/code/squall
-git submodule add git@github.com:avishek-sen-gupta/red-dragon.git vendor/red-dragon
-git -C vendor/red-dragon checkout ab598905
-git add .gitmodules vendor/red-dragon
-```
-- [ ] **Step 2: Write `pyproject.toml`** (uv; editable RedDragon path dep; lark; pytest):
-```toml
-[project]
-name = "squall"
-version = "0.1.0"
-description = "EXEC SQL coprocessor runtime for RedDragon COBOL"
-requires-python = ">=3.11"
-dependencies = ["lark>=1.1"]
-
-[tool.uv]
-dev-dependencies = ["pytest>=8", "black>=24"]
-
-[tool.uv.sources]
-red-dragon = { path = "vendor/red-dragon", editable = true }
-
-[project.optional-dependencies]
-reddragon = ["red-dragon"]
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
-```
-> Note: confirm RedDragon's distribution name (`grep -m1 '^name' vendor/red-dragon/pyproject.toml`). If it isn't `red-dragon`, match it here and in the `[tool.uv.sources]` key. If RedDragon has no installable package metadata, fall back to `pythonpath = [".", "vendor/red-dragon"]` in `[tool.pytest.ini_options]` and drop the source dep.
-- [ ] **Step 3:** create `squall/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py` (empty); run `uv sync`; verify `uv run python -c "import interpreter.cobol.cobol_statements as m; print(m.ExecSqlStatement)"` prints the class (proves RedDragon import works).
-- [ ] **Step 4: Commit** `chore: scaffold squall package + vendor/red-dragon submodule`.
+- [ ] **Submodule:** `git submodule add git@github.com:avishek-sen-gupta/red-dragon.git vendor/red-dragon && git -C vendor/red-dragon checkout ab598905`.
+- [ ] **`pyproject.toml`** (uv): deps `lark>=1.1`; dev-deps `pytest>=8`, `black`, `antlr4-python3-runtime==4.13.2`; RedDragon as editable path dep (confirm its dist name via `grep '^name' vendor/red-dragon/pyproject.toml`; if not installable, use `pythonpath=[".","vendor/red-dragon"]`). `[tool.pytest.ini_options] pythonpath=["."]`.
+- [ ] **Skeleton:** create the `squall/` packages above (empty `__init__.py`), `tests/{unit,integration,oracle}/`.
+- [ ] **Verify RedDragon import:** `uv run python -c "from interpreter.cobol.cobol_statements import ExecSqlStatement; print(ExecSqlStatement)"`.
+- [ ] **Commit** `chore: scaffold squall (lark + vendor/red-dragon submodule)`.
 
 ---
 
-## Task 1: `SqlBackend` protocol + `SqlResult`
+## Task 1: The lexer (string/comment/identifier-aware terminals)
 
-**Files:** create `squall/backend.py`; test `tests/unit/test_sqlite_backend.py` (shared).
+The lexer is the safety layer — host vars surface as `COLON NAME` adjacencies; colons inside strings/comments must NOT.
 
-- [ ] **Step 1: Write the failing test** (in `tests/unit/test_sqlite_backend.py`):
-```python
-from squall.backend import SqlResult, SqlBackend
+**Files:** `squall/parser/grammar.lark` (terminals section); `tests/unit/test_lexer.py`.
 
-
-def test_sqlresult_fields():
-    r = SqlResult(rows=[(42,)], rowcount=1, sqlcode=0)
-    assert r.rows == [(42,)] and r.rowcount == 1 and r.sqlcode == 0
-
-
-def test_protocol_is_runtime_checkable():
-    class _Fake:
-        def execute(self, sql, params): return SqlResult([], 0, 0)
-    assert isinstance(_Fake(), SqlBackend)
-```
-- [ ] **Step 2:** run `uv run python -m pytest tests/unit/test_sqlite_backend.py -q` → FAIL (ImportError).
-- [ ] **Step 3: Implement `squall/backend.py`:**
-```python
-"""SqlBackend protocol — the pluggable DB boundary. The binding engine hands a
-parametrized query + params here; the backend owns dialect, placeholder style,
-transactions. Dialect/DB knowledge lives ONLY behind this seam."""
-from __future__ import annotations
-from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
-
-
-@dataclass(frozen=True)
-class SqlResult:
-    rows: list[tuple]   # result rows (SELECT); empty for DML
-    rowcount: int       # affected rows (DML); len(rows) for SELECT
-    sqlcode: int        # 0 ok, +100 not found, negative on error
-
-
-@runtime_checkable
-class SqlBackend(Protocol):
-    def execute(self, sql: str, params: list[Any]) -> SqlResult: ...
-```
-- [ ] **Step 4:** run the test → PASS. **Step 5: Commit** `feat(squall): SqlBackend protocol + SqlResult`.
+- [ ] **Step 1 — failing test.** `tests/unit/test_lexer.py`: load the grammar (start rule `generic` for now), assert that for `WHERE x = 'has :colon' AND y = :HV-ID` the only surfaced host var is `HV-ID`; that `-- :cmt` and `/* :c */` surface none; that `:HV-ACCOUNT-ID` is one host var (hyphens); that `:V:IND` surfaces value+indicator. (Use a helper that runs the Lark parser and collects `host_var` nodes.)
+- [ ] **Step 2 — run, FAIL.**
+- [ ] **Step 3 — implement** the terminals + `host_var`/`generic`/`body` rules from the **proven probe** (Earley + dynamic lexer):
+  - `STRING: /'([^']|'')*'/`, line/block comments `%ignore`d, `COLON`, `COMMA`/`LP`/`RP`/`DOT`, `NAME: /[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*/`, `NUM`, `OTHER: /[=<>!+\-*\/%|&^~@?]/`.
+  - `host_var: COLON NAME (COLON NAME)?` ; `body: _atom*` ; `_atom: host_var | _word | STRING | COMMA | LP | RP | DOT | OTHER | <clause keywords>` ; `_word: NAME | NUM | <statement keywords>` (so keywords are consumable inside opaque bodies).
+- [ ] **Step 4 — run, PASS. Step 5 — commit** `feat(parser): string/comment/host-var-aware lexer`.
 
 ---
 
-## Task 2: `SqliteBackend`
+## Task 2: The directive grammar (all ~30, opaque bodies)
 
-**Files:** create `squall/backends/__init__.py`, `squall/backends/sqlite.py`; test `tests/unit/test_sqlite_backend.py` (append).
+Extend to the full directive surface. **Parse all; the grammar must not choke** on any directive even though we only lower `SELECT INTO`.
 
-- [ ] **Step 1: Append the failing tests:**
-```python
-import sqlite3
-from squall.backends.sqlite import SqliteBackend
+**Files:** `squall/parser/grammar.lark`; `tests/unit/test_grammar_matrix.py`.
 
-
-def _seeded_conn():
-    conn = sqlite3.connect(":memory:")
-    conn.execute("CREATE TABLE ACCOUNT (ACCT_ID INTEGER, ACCT_BAL INTEGER)")
-    conn.execute("INSERT INTO ACCOUNT VALUES (11, 500)")
-    conn.commit()
-    return conn
-
-
-def test_select_returns_row_and_sqlcode_0():
-    be = SqliteBackend(_seeded_conn())
-    r = be.execute("SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?", [11])
-    assert r.rows == [(500,)] and r.sqlcode == 0 and r.rowcount == 1
-
-
-def test_select_no_row_is_sqlcode_100():
-    be = SqliteBackend(_seeded_conn())
-    r = be.execute("SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?", [999])
-    assert r.rows == [] and r.sqlcode == 100
-
-
-def test_error_is_negative_sqlcode():
-    be = SqliteBackend(_seeded_conn())
-    r = be.execute("SELECT nope FROM nope", [])
-    assert r.sqlcode < 0
-```
-- [ ] **Step 2:** run → FAIL. **Step 3: Implement `squall/backends/sqlite.py`:**
-```python
-"""SqliteBackend — first concrete SqlBackend. Owns the ? placeholder + SQLite
-dialect; maps outcomes to SQLCODE (0 / +100 not-found / negative error)."""
-from __future__ import annotations
-import sqlite3
-from typing import Any
-from squall.backend import SqlResult
-
-
-class SqliteBackend:
-    def __init__(self, conn: sqlite3.Connection) -> None:
-        self._conn = conn
-
-    def execute(self, sql: str, params: list[Any]) -> SqlResult:
-        try:
-            cur = self._conn.execute(sql, params)
-        except sqlite3.Error:
-            return SqlResult(rows=[], rowcount=0, sqlcode=-1)
-        if cur.description is not None:  # a SELECT (cursor yields rows)
-            rows = cur.fetchall()
-            return SqlResult(rows=rows, rowcount=len(rows), sqlcode=0 if rows else 100)
-        self._conn.commit()
-        return SqlResult(rows=[], rowcount=cur.rowcount, sqlcode=0)
-```
-- [ ] **Step 4:** run → PASS. **Step 5: Commit** `feat(squall): SqliteBackend`.
+- [ ] **Step 1 — failing test matrix.** `tests/unit/test_grammar_matrix.py`: a table of **one statement per directive** (synthetic, DB2 syntax, drawn from che4z's rule reference) **plus the real CBSA samples**, asserting each parses without error and dispatches to the expected `kind`. Cover: `select_into`, `insert`, `update[ cur_of]`, `delete[ cur_of]`, `merge`, `values_into`, `declare_cursor`, `open[ using]`, `fetch into`, `close`, `commit`, `rollback`, `savepoint`, `release`, `connect`, `prepare`, `execute[ using|into]`, `execute_immediate`, `describe into`, `whenever`, `get_diagnostics`, `signal`, `include`, `declare_table`, `declare_statement`, `declare_variable`, `begin/end declare section`, `free`/`hold`/`associate` locators, `call`, `set`, `lock`, and a `generic` DDL fallback (`CREATE TABLE …`). Include the three proven hard cases (INTO-overload, string colon, `CURRENT OF` vs `CURRENT DATE`).
+- [ ] **Step 2 — run, FAIL.**
+- [ ] **Step 3 — implement** the ~30 rules, each `KEYWORD … (clauses) … body?`, reusing the opaque-body mechanism. Pure directives (no SQL body) are explicit small rules; DML carries `body`/`cur_of`/`into`; DDL/admin fall to `generic`. The proven probe is the seed — extend rule by rule until the matrix is green. **This is iterative**; the matrix is the contract.
+- [ ] **Step 4 — run, PASS (all matrix rows). Step 5 — commit** `feat(parser): full EXEC SQL directive grammar`.
 
 ---
 
-## Task 3: Lark parser — envelope strip + host-var extraction
+## Task 3: che4z oracle cross-check
 
-**Files:** create `squall/parser.py`; test `tests/unit/test_parser.py`. NO regex; the `EXEC SQL`/`END-EXEC` envelope and the `INTO` clause are grammar constructs.
+Vendor che4z's adapted grammar + generated Python parser and cross-validate our extraction against its full parse.
 
-`parse_exec_sql(text)` returns a frozen `ParsedSql(out_vars, in_vars, query)` where:
-- `out_vars`: the `INTO :a, :b` host-var names (uppercased, no leading `:`), in order — the SELECT result targets.
-- `in_vars`: host-var names appearing in the executable query (e.g. the WHERE clause), in left-to-right order — the bind params.
-- `query`: the executable SQL with the `INTO` clause removed and every `:host-var` replaced by the backend placeholder `?`. (Slice 1 hardwires `?` for SQLite; later the backend can supply its placeholder style.)
+**Files:** `tests/oracle/` (the spike's adapted `gen_Db2SqlExec*.g4` + ANTLR-generated `*.py`, with an `EPL-LICENSE` note); `tests/unit/test_che4z_oracle.py`.
 
-- [ ] **Step 1: Write the failing test:**
-```python
-from squall.parser import parse_exec_sql, ParsedSql
-
-
-def test_select_into_extracts_vars_and_query():
-    p = parse_exec_sql(
-        "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC"
-    )
-    assert p.out_vars == ["WS-BAL"]
-    assert p.in_vars == ["WS-ID"]
-    assert p.query == "SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?"
-
-
-def test_multi_into_targets():
-    p = parse_exec_sql(
-        "EXEC SQL SELECT A, B INTO :V1, :V2 FROM T WHERE K = :K END-EXEC"
-    )
-    assert p.out_vars == ["V1", "V2"]
-    assert p.in_vars == ["K"]
-    assert p.query == "SELECT A, B FROM T WHERE K = ?"
-
-
-def test_case_insensitive_envelope_and_keywords():
-    p = parse_exec_sql("exec sql select a into :x from t end-exec")
-    assert p.out_vars == ["X"] and p.in_vars == [] and p.query == "select a from t"
-```
-- [ ] **Step 2:** run → FAIL. **Step 3: Implement `squall/parser.py`** with a Lark grammar. Starting point (iterate under TDD until the tests pass):
-```python
-"""EXEC SQL parser (slice 1: SELECT … INTO). A Lark grammar strips the
-EXEC SQL / END-EXEC envelope and the embedded INTO clause as grammar constructs —
-no regex/string surgery. Host vars (:NAME) are grammar tokens; the executable
-query is reconstructed with them replaced by ? placeholders."""
-from __future__ import annotations
-from dataclasses import dataclass
-from lark import Lark, Token
-
-_GRAMMAR = r"""
-start: "EXEC"i "SQL"i select "END-EXEC"i
-select: SELECT_KW select_list INTO_KW into_list rest
-SELECT_KW: "SELECT"i
-INTO_KW: "INTO"i
-select_list: /[^:]+?(?=\bINTO\b)/i   // text up to INTO (no host vars in slice-1 select list)
-into_list: host_var ("," host_var)*
-host_var: ":" CNAME
-rest: item*
-item: host_var | WORD | PUNCT
-WORD: /[A-Za-z0-9_.]+/
-PUNCT: /[(),=<>*\/+\-]/
-CNAME: /[A-Za-z][A-Za-z0-9_-]*/
-%import common.WS
-%ignore WS
-"""
-# NOTE: the select_list lookahead is the one fragile spot; if Lark rejects it,
-# model select_list as `item*` too and split on the INTO_KW token instead — keep
-# all of this INSIDE the grammar/tree walk, never a regex over the raw input.
-
-@dataclass(frozen=True)
-class ParsedSql:
-    out_vars: list[str]
-    in_vars: list[str]
-    query: str
-
-_parser = Lark(_GRAMMAR, start="start", parser="earley", lexer="dynamic")
-
-def parse_exec_sql(text: str) -> ParsedSql:
-    tree = _parser.parse(text)
-    # Walk the tree: collect into_list host vars (out_vars); rebuild the executable
-    # query from select_list + "FROM…" rest, replacing host_var nodes with "?" and
-    # recording their names in order (in_vars). Return ParsedSql(...).
-    ...  # implement the tree walk to satisfy the tests
-```
-> The grammar/walk WILL need iteration — that's expected; the three tests are the contract. Keep envelope/keyword handling in the grammar (the `"…"i` terminals), never a regex over the input. If Earley + dynamic lexer is awkward, a hand-written **tokenizer** (a `lark` `Lark(... lexer="standard")` token stream you iterate) is acceptable — but NOT `re.sub` surgery on the raw text.
-- [ ] **Step 4:** run → PASS (all 3). **Step 5: Commit** `feat(squall): EXEC SQL parser (SELECT INTO, host-var extraction)`.
+- [ ] **Step 1 — bring the oracle in.** Copy the spike's adapted grammars + generated Python parser (from `/tmp/che4z_sql/gen` during the spike, regenerated reproducibly) into `tests/oracle/`, with the ANTLR generate command recorded in a README and the EPL-2.0 header preserved.
+- [ ] **Step 2 — write the cross-check.** `tests/unit/test_che4z_oracle.py`: for every statement in the Task-2 matrix that che4z covers, parse it with che4z, extract its host-var tokens + INTO targets from che4z's tree, and assert our `parse_exec_sql` (Task 4) yields the **same** host-var sets and INTO targets. (Marks divergences as failures — the oracle catches grammar gaps.)
+- [ ] **Step 3 — green; commit** `test(parser): che4z oracle cross-check (EPL grammar, test-only)`.
 
 ---
 
-## Task 4: Binding engine (field ↔ param, SQLCODE)
+## Task 4: `parse_exec_sql` — the extraction API
 
-**Files:** create `squall/binding.py`; test `tests/unit/test_binding.py`. Uses `vm.data_layout` + the WS region (mirror cicada's `cics/builtins/screen.py` `_read_ws_field`/`_write_ws_field`/`_ws_region`).
+**Files:** `squall/parser/parse.py`; `tests/unit/test_parse.py`.
 
-`squall/binding.py` exposes:
-- `read_params(vm, in_names) -> list` — for each input host-var field name, read its bytes from the WS region and decode to a Python value (slice 1: numeric DISPLAY → int; alphanumeric → str). Mirror cics field decode via `vm.data_layout.get(name)` (offset/length/category).
-- `write_outputs(vm, out_names, row) -> None` — for each `(name, value)` in `zip(out_names, row)`, encode + write into the WS field (mirror `_write_ws_field`).
-- `write_sqlcode(vm, code) -> None` — write `code` into the `SQLCODE` field (the program's `01 SQLCODE PIC S9(9) …`, present via the data layout).
+`parse_exec_sql(text) -> ParsedSql(kind, in_vars, out_vars, cursor, query)`:
+- strip the `EXEC SQL`/`END-EXEC` envelope (fixed delimiters);
+- walk the tree: `out_vars` = `host_var` nodes under `into`; `in_vars` = host_var nodes elsewhere, in order; `cursor` = the cursor name for cursor statements; `query` = the body with host-var spans → `?` and the `into` clause removed (span-keyed rewrite).
 
-- [ ] **Step 1: Write the failing test** — build a minimal `VMState` with a WS region + `data_layout` for `WS-ID`, `WS-BAL`, `SQLCODE` (follow the construction in cicada `tests/unit/cics/test_screen_builtins.py`, which seeds `vm.data_layout` + a region; read that file in vendor or replicate its helper). Assert `read_params(vm, ["WS-ID"]) == [11]`; after `write_outputs(vm, ["WS-BAL"], (500,))` the `WS-BAL` field decodes to 500; after `write_sqlcode(vm, 100)` the `SQLCODE` field reads 100.
-- [ ] **Step 2:** run → FAIL. **Step 3: Implement** `squall/binding.py`, reusing the cics field-access pattern (locate the WS region via the `__ws_region` local var → `vm.region_get`; `vm.data_layout.get(name)` → offset/length/category; decode/encode per category). Keep it dialect/DB-agnostic — it only touches COBOL fields and the SQL `INTO`/param positions, never SQL text.
-- [ ] **Step 4:** run → PASS. **Step 5: Commit** `feat(squall): host-variable binding engine`.
-
-> If exact WS-region/field-encode reuse from RedDragon is unclear, READ `vendor/red-dragon/.../cics?` — NO; cics lives in cicada, which squall must not import. Instead replicate the small read/write-field helpers locally in `binding.py` using `vm.data_layout` + `vm.region_get`/`region_set` (RedDragon VM API). Confirm the field dict keys (`offset`/`length`/`category`) against `vendor/red-dragon/interpreter/cobol/data_layout.py`.
+- [ ] **Step 1 — failing tests** (real shapes): `SELECT acct_bal INTO :WS-BAL FROM account WHERE acct_id = :WS-ID` → `kind=SELECT_INTO, out_vars=["WS-BAL"], in_vars=["WS-ID"], query="SELECT acct_bal FROM account WHERE acct_id = ?"`; `UPDATE … SET x=:V WHERE k=:N` → `in_vars=["V","N"]` (source order), `query` with two `?`; `FETCH FROM C INTO :A,:B` → `kind=FETCH, cursor="C", out_vars=["A","B"], query=None`; the string-colon case yields no spurious host var.
+- [ ] **Step 2–4 — FAIL → implement (tree walk + span rewrite) → PASS. Step 5 — commit** `feat(parser): parse_exec_sql extraction (host vars, role, clean query)`.
 
 ---
 
-## Task 5: `__exec_sql` builtin
+## Task 5: `SqlBackend` protocol + `SqlResult`
 
-**Files:** create `squall/builtins/__init__.py`, `squall/builtins/exec_sql.py`; test `tests/unit/test_exec_sql_builtin.py`.
+**Files:** `squall/backend.py`; `tests/unit/test_sqlite_backend.py` (shared).
 
-`make_exec_sql_builtin(backend)` returns `__exec_sql(args, vm) -> BuiltinResult` where `args` carry (as `Const` values from lowering): `args[0]` = the executable query string; `args[1]` = the input host-var name list; `args[2]` = the `INTO` host-var name list. Behavior: `params = read_params(vm, args[1])`; `result = backend.execute(args[0], params)`; if rows, `write_outputs(vm, args[2], result.rows[0])`; `write_sqlcode(vm, result.sqlcode)`; return `BuiltinResult(value=None)`.
-
-- [ ] **Step 1: Write the failing test** with a fake backend (returns a fixed `SqlResult`) + the minimal VM from Task 4; assert the `INTO` field gets the value and `SQLCODE` is set. **Step 2:** FAIL. **Step 3:** implement (`BuiltinResult`/`VMState`/`TypedValue` from `interpreter.vm.vm_types`; read `args[i].value`). **Step 4:** PASS. **Step 5: Commit** `feat(squall): __exec_sql builtin`.
-
----
-
-## Task 6: `SqlLoweringStrategy`
-
-**Files:** create `squall/strategy.py`; test `tests/unit/test_strategy.py`. Implements `RedDragonExtensionLoweringStrategy` (from `interpreter.cobol.red_dragon_extension_strategy`).
-
-- `__init__(self, backend)`: store; register the builtin — `from interpreter.vm.builtins import Builtins; Builtins.TABLE.register("__exec_sql", make_exec_sql_builtin(backend))` (mirror cicada `cics/strategy.py`'s `_register(Builtins.TABLE, "__cics_…", …)` — confirm the exact register call).
-- `handles(self, stmt)`: `isinstance(stmt, ExecSqlStatement)`.
-- `preprocess_program_dict(self, data)`: return `data` (no-op, slice 1).
-- `on_procedure_entry(self, ctx, materialised)`: no-op.
-- `lower(self, ctx, stmt, materialised)`: `p = parse_exec_sql(stmt.text)`; emit `Const` regs for `p.query`, `p.in_vars`, `p.out_vars`; emit `CallFunction(result_reg=ctx.fresh_reg(), func_name=FuncName("__exec_sql"), args=(r_query, r_in, r_out))` (mirror the `ctx.emit_inst(CallFunction(...))` / `ctx.const_to_reg(...)` pattern in cicada `cics/strategy.py`).
-
-- [ ] **Step 1: Write the failing test:** a fake `ctx` capturing `emit_inst`/`const_to_reg`/`fresh_reg` (or a real `EmitContext`); call `lower(ctx, ExecSqlStatement(text="EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC"), None)`; assert a `CallFunction` to `__exec_sql` is emitted with Const args `("SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?", ["WS-ID"], ["WS-BAL"])`. Also assert `handles()` true for `ExecSqlStatement`, false for a non-SQL stmt. **Step 2:** FAIL. **Step 3:** implement. **Step 4:** PASS. **Step 5: Commit** `feat(squall): SqlLoweringStrategy on the extension seam`.
+- [ ] **Step 1 — failing test:** `SqlResult(rows, rowcount, sqlcode)` fields; a fake with `execute` + `open_cursor`/`fetch`/`close` satisfies `SqlBackend` (`@runtime_checkable`).
+- [ ] **Step 2–4 —** implement `backend.py` (the §7 protocol + frozen `SqlResult`). PASS. **Commit** `feat(squall): SqlBackend protocol + cursor surface`.
 
 ---
 
-## Task 7: Integration — real COBOL SELECT INTO end-to-end
+## Task 6: `SqliteBackend`
 
-**Files:** `tests/integration/conftest.py` (the `bridge_jar` fixture, single `os.environ["PROLEAP_BRIDGE_JAR"]` — copy the established pattern, no skip/default); `tests/integration/test_select_into_e2e.py`.
+**Files:** `squall/backends/sqlite.py`; `tests/unit/test_sqlite_backend.py` (append).
 
-- [ ] **Step 1: Write the failing test.** Build the JAR-backed parser (`ProLeapCobolParser(RealSubprocessRunner(), bridge_jar)`); a seeded in-memory SQLite (`ACCOUNT(ACCT_ID, ACCT_BAL)` with `(11, 500)`); `frontend = CobolFrontend(parser, extension_strategies=[SqlLoweringStrategy(SqliteBackend(conn))])`. COBOL program:
-```
-IDENTIFICATION DIVISION.
-PROGRAM-ID. SQLSEL.
-DATA DIVISION.
-WORKING-STORAGE SECTION.
-01 WS-ID   PIC 9(4) VALUE 11.
-01 WS-BAL  PIC 9(9) VALUE 0.
-01 SQLCODE PIC S9(9) VALUE 0.
-PROCEDURE DIVISION.
-    EXEC SQL
-        SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID
-    END-EXEC.
-    STOP RUN.
-```
-Lower → run (via `interpreter.run.run_linked`/`run` with the Builtins registry); assert the `WS-BAL` field decodes to `500` and `SQLCODE` is `0`. (Mirror cicada `tests/integration/cics/*` for the run+region-read pattern; thread `bridge_jar`.)
-- [ ] **Step 2:** FAIL (initially the binding/lowering not wired). **Step 3:** make it pass — this is the slice's integration glue; fix whatever the real run surfaces (entry-point resolution, the WS-region local-var name, the SQLCODE field presence). Do NOT add fallbacks; if `SQLCODE` isn't auto-declared, declare it in the program (as above).
-- [ ] **Step 4:** PASS. **Step 5: Commit** `test(squall): SELECT INTO end-to-end on SQLite`.
+- [ ] **Step 1 — failing tests** over a seeded `:memory:` db: `execute("SELECT bal FROM acct WHERE id=?",[11])` → rows + `sqlcode 0`; no-row → `sqlcode 100`; bad SQL → `sqlcode < 0`; cursor: `open_cursor("c","SELECT id FROM acct ORDER BY id",[])` then `fetch("c")` twice yields successive rows then `sqlcode 100`; `close("c")`.
+- [ ] **Step 2–4 —** implement (`cur.description is not None` ⇒ SELECT; commit on DML; cursors held in a dict keyed by name). PASS. **Commit** `feat(squall): SqliteBackend (execute + cursors)`.
 
 ---
 
-## Task 8: Branch wrap-up
+## Task 7: Binding engine
 
-- [ ] Full unit suite green (`uv run python -m pytest tests/unit -q`); integration green with `PROLEAP_BRIDGE_JAR` exported.
-- [ ] `uv run python -m black .`
-- [ ] Commit/push the branch; open for review. Note follow-ups for slice 2+ (DML, cursors, COMMIT/ROLLBACK, INCLUDE) per the design doc.
+**Files:** `squall/binding.py`; `tests/unit/test_binding.py`. Slice-1 codec = `ZONED_DECIMAL`/numeric + alphanumeric (COMP-3/VARCHAR land in slice 2 with DCLGEN).
+
+- [ ] **Step 1 — failing test:** build a minimal `VMState` with a WS region + `data_layout` for `WS-ID`,`WS-BAL`,`SQLCODE` + the `__ws_region` local var (mirror cicada `tests/unit/cics/test_screen_builtins.py`'s construction — read it in `vendor/red-dragon`? no — it's in cicada; **replicate** the helper locally). Assert `read_params(vm,["WS-ID"])==[11]`; after `write_outputs(vm,["WS-BAL"],(500,))` WS-BAL decodes to 500; after `write_sqlcode(vm,100)` SQLCODE reads 100.
+- [ ] **Step 2–4 —** implement: locate WS region via `__ws_region` (call-stack walk → `vm.region_get`); `vm.data_layout.get(name)` → offset/length/category; zoned/int decode+encode (no IR — runtime byte ops). PASS. **Commit** `feat(squall): binding engine (field<->param, SQLCODE)`.
+
+---
+
+## Task 8: `__exec_sql` builtin
+
+**Files:** `squall/builtins/exec_sql.py`; `tests/unit/test_exec_sql_builtin.py`.
+
+`make_exec_sql_builtin(backend)` → `__exec_sql(args, vm)`: `args` = (query, in_var_names, out_var_names) as `Const` values; `params=read_params(vm,in)`; `r=backend.execute(query,params)`; if rows `write_outputs(vm,out,r.rows[0])`; `write_sqlcode(vm,r.sqlcode)`; `BuiltinResult(None)`.
+
+- [ ] **Step 1 — failing test** with a fake backend + the minimal VM (Task 7): assert INTO field set + SQLCODE written. **Step 2–4 — FAIL → implement → PASS. Commit** `feat(squall): __exec_sql builtin`.
+
+---
+
+## Task 9: `SqlLoweringStrategy`
+
+**Files:** `squall/strategy.py`; `tests/unit/test_strategy.py`. Implements `interpreter.cobol.red_dragon_extension_strategy.RedDragonExtensionLoweringStrategy`.
+
+- `__init__(backend)`: register `__exec_sql` into `Builtins.TABLE` (mirror cicada `cics/strategy.py`).
+- `handles(stmt)`: `isinstance(stmt, ExecSqlStatement)`. `preprocess_program_dict`: identity. `on_procedure_entry`: no-op.
+- `lower(ctx, stmt, materialised)`: `p = parse_exec_sql(stmt.text)`; **if `p.kind != SELECT_INTO`: raise `NotImplementedError(f"EXEC SQL {p.kind} not lowered yet")`** (parse-all/lower-subset); else emit `Const`s for `p.query`, `p.in_vars`, `p.out_vars` + `CallFunction(FuncName("__exec_sql"), …)`.
+
+- [ ] **Step 1 — failing test:** fake ctx (capture `emit_inst`) or real `EmitContext`; `lower(ExecSqlStatement(text="EXEC SQL SELECT acct_bal INTO :WS-BAL FROM account WHERE acct_id = :WS-ID END-EXEC"), …)` emits a `CallFunction` to `__exec_sql` with Const args `("SELECT acct_bal FROM account WHERE acct_id = ?", ["WS-ID"], ["WS-BAL"])`; `handles()` true for ExecSqlStatement / false otherwise; a non-SELECT statement raises `NotImplementedError`.
+- [ ] **Step 2–4 — FAIL → implement → PASS. Commit** `feat(squall): SqlLoweringStrategy on the extension seam`.
+
+---
+
+## Task 10: Integration — SELECT INTO end-to-end
+
+**Files:** `tests/integration/conftest.py` (the `bridge_jar` fixture — required `PROLEAP_BRIDGE_JAR`, no skip/default); `tests/integration/test_select_into_e2e.py`.
+
+- [ ] **Step 1 — failing test.** Real JAR parser (`ProLeapCobolParser(RealSubprocessRunner(), bridge_jar)`); seeded `:memory:` SQLite (`ACCOUNT(ACCT_ID, ACCT_BAL)` = `(11, 500)`); `frontend = CobolFrontend(parser, extension_strategies=[SqlLoweringStrategy(SqliteBackend(conn))])`. COBOL program: `01 WS-ID PIC 9(4) VALUE 11.`, `01 WS-BAL PIC 9(9) VALUE 0.`, `01 SQLCODE PIC S9(9) VALUE 0.`, body `EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC. STOP RUN.` Lower → run → assert `WS-BAL` decodes to `500`, `SQLCODE` is `0`. (Mirror cicada integration for the run + region-read; thread `bridge_jar`.)
+- [ ] **Step 2 — FAIL.** **Step 3 — wire** whatever the real run surfaces (entry point, WS-region var, SQLCODE field). No fallbacks — declare `SQLCODE` in the program. **Step 4 — PASS. Step 5 — commit** `test(squall): SELECT INTO end-to-end on SQLite`.
+
+---
+
+## Task 11: Wrap-up
+
+- [ ] Full unit suite green; integration green with `PROLEAP_BRIDGE_JAR` exported. `uv run python -m black .`.
+- [ ] Commit/push the branch. Note follow-up plans: **slice 2** (INCLUDE→COPY + SQLCA + DCLGEN typed codec — COMP-3/VARCHAR), then DML, cursors, txns, real CBSA standalone; and the **declarative CICS+squall preprocessor pipeline** after standalone proof.
 
 ---
 
 ## Self-review
 
-**Spec coverage** (design §8 slice-1 row): bridge `serializeExecSql` ✓ (already in RedDragon); lowering ✓ (Task 6); binding ✓ (Task 4); execute ✓ (Tasks 2/5); bind-back + SQLCODE ✓ (Tasks 4/5); end-to-end ✓ (Task 7). Generic-layer-in-isolation: parser/binding/backend each unit-tested against fakes (Tasks 1–6) before the JAR integration (Task 7) ✓.
+**Coverage vs design:** parser (lexer + full directive grammar + oracle) → Tasks 1–4; binding/types (slice-1 codec) → Task 7; backend incl. cursors → Tasks 5–6; builtin/strategy on the shipped seam → Tasks 8–9; INCLUDE/DCLGEN/COMP-3 → slice 2 (deferred, noted); end-to-end → Task 10. Seam = already shipped (no RedDragon tasks).
 
-**No-regex check:** the only parsing is the Lark grammar (Task 3); envelope/keywords are grammar terminals. The plan explicitly forbids `re.sub` surgery and flags the one fragile grammar spot with a grammar-level fallback.
+**No-regex check:** all host-var surfacing is lexer/grammar (Task 1 tests the string/comment seal); Task 9 forbids string surgery; `parse_exec_sql` rewrites by parse-tree spans.
 
-**Risk / iterate spots:** (1) the Lark grammar (Task 3) — TDD against the 3 concrete parse tests; (2) the WS-region/field encode-decode reuse (Task 4) — replicate RedDragon's `data_layout` access locally, do NOT import cicada; (3) `Builtins.TABLE` register call + `SQLCODE` auto-declaration (Tasks 5–7) — confirm against `vendor/red-dragon` and cicada's pattern during execution.
+**Parse-all / lower-subset:** Task 2 parses all ~30; Task 9 lowers only `SELECT_INTO` and raises `NotImplementedError` otherwise — so unimplemented directives fail at lowering, never at parsing (per the directive-coverage decision).
 
-**Out of scope (slice 2+):** INSERT/UPDATE/DELETE, cursors, COMMIT/ROLLBACK, `EXEC SQL INCLUDE`, SQLCA, multi-row, dialect translation beyond SQLite.
+**Risks:** (1) the full directive grammar (Task 2) is iterative — the test matrix + che4z oracle are the contract; (2) WS-region/field codec reuse (Task 7) is replicated locally from RedDragon's `data_layout`, never imported from cicada; (3) `Builtins.TABLE` register + `SQLCODE` field presence (Tasks 9–10) confirmed against `vendor/red-dragon` + cicada's pattern during execution.
