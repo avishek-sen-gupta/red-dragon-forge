@@ -13,13 +13,11 @@ import pytest
 
 from interpreter.run import run
 
-JAR_PATH = os.environ.get(
-    "PROLEAP_BRIDGE_JAR",
-    os.path.expanduser(
-        "~/code/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
-    ),
-)
-JAR_AVAILABLE = os.path.isfile(JAR_PATH)
+# PROLEAP_BRIDGE_JAR is a required test-environment config: the integration tests
+# expect it set to the built ProLeap bridge JAR. No default, no fallback — if it's
+# unset, importing this module fails loudly (KeyError) rather than silently
+# skipping or guessing a path.
+JAR_PATH = os.environ["PROLEAP_BRIDGE_JAR"]
 
 
 _AREA_A = "       "  # 7 spaces: cols 1-6 (seq) + col 7 (indicator = space)

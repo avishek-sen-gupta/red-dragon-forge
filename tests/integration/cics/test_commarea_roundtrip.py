@@ -30,11 +30,7 @@ from interpreter.instructions import Const, LoadRegion
 from interpreter.ir import Opcode
 from interpreter.func_name import FuncName
 from tests.covers import covers, NotLanguageFeature
-from tests.integration.cobol_helpers import JAR_AVAILABLE, JAR_PATH, bridge_jar_env
-
-pytestmark = pytest.mark.skipif(
-    not JAR_AVAILABLE, reason="ProLeap bridge JAR not available"
-)
+from tests.integration.cobol_helpers import JAR_PATH, bridge_jar_env
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 

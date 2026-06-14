@@ -18,15 +18,10 @@ from interpreter.cobol.features import CobolFeature
 from cics.preprocessor import apply_cics_prepass
 from tests.covers import covers
 from tests.integration.cobol_helpers import (
-    JAR_AVAILABLE,
     JAR_PATH,
     all_field_names as _all_field_names,
     bridge_jar_env,
     to_fixed,
-)
-
-pytestmark = pytest.mark.skipif(
-    not JAR_AVAILABLE, reason="ProLeap bridge JAR not available"
 )
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"

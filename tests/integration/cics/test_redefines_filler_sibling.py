@@ -10,22 +10,14 @@ so the crash blocked parsing every BMS symbolic-map copybook.
 
 from __future__ import annotations
 
-import pytest
-
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cobol_helpers import (
-    JAR_AVAILABLE,
     JAR_PATH,
     to_fixed,
 )
-
-pytestmark = pytest.mark.skipif(
-    not JAR_AVAILABLE, reason="ProLeap bridge JAR not available"
-)
-
 
 # A REDEFINES whose sibling list (within the enclosing group OUTER) contains an
 # anonymous FILLER group that is visited BEFORE the redefines target. The bridge

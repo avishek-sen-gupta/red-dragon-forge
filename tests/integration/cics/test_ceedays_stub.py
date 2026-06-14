@@ -13,8 +13,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from interpreter.constants import Language
 from interpreter.cobol.features import CobolFeature
 from cics.le_stubs import CEEDAYS_STUB_SOURCE
@@ -24,11 +22,6 @@ from interpreter.var_name import VarName
 from interpreter.field_name import FieldName
 from interpreter.address import Address
 from tests.covers import covers
-from tests.integration.cobol_helpers import JAR_AVAILABLE
-
-pytestmark = pytest.mark.skipif(
-    not JAR_AVAILABLE, reason="ProLeap bridge JAR not available"
-)
 
 
 # Caller mirrors CSUTLDTC's CALL: a Vstring date (S9(4) BINARY length + 10-char
