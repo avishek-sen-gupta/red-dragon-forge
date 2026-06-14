@@ -18,13 +18,33 @@ from squall.backends.sqlite import SqliteBackend
 from squall.binding import _zoned_decode, _zoned_encode
 from squall.builtins.exec_sql import make_exec_sql_builtin
 
-
 # ── Layout ────────────────────────────────────────────────────────────────────
 
 _LAYOUT = {
-    "WS-ID": {"offset": 0, "length": 4, "category": "ZONED_DECIMAL", "total_digits": 4, "decimal_digits": 0, "signed": False},
-    "WS-BAL": {"offset": 4, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": False},
-    "SQLCODE": {"offset": 13, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": True},
+    "WS-ID": {
+        "offset": 0,
+        "length": 4,
+        "category": "ZONED_DECIMAL",
+        "total_digits": 4,
+        "decimal_digits": 0,
+        "signed": False,
+    },
+    "WS-BAL": {
+        "offset": 4,
+        "length": 9,
+        "category": "ZONED_DECIMAL",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": False,
+    },
+    "SQLCODE": {
+        "offset": 13,
+        "length": 9,
+        "category": "ZONED_DECIMAL",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": True,
+    },
 }
 _REGION_SIZE = 22
 
@@ -54,7 +74,9 @@ class _FakeVM:
         self.call_stack = [_FakeFrame(addr)]
 
     def region_get(self, addr):
-        assert isinstance(addr, Address), f"region_get expects Address, got {type(addr)}"
+        assert isinstance(
+            addr, Address
+        ), f"region_get expects Address, got {type(addr)}"
         return self._region if addr == self._addr else None
 
 
@@ -152,24 +174,28 @@ def test_insert_dml(backend):
     assert sqlcode == 0
 
     # Verify the row actually landed
-    cur = backend._conn.execute(
-        "SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = 2"
-    )
+    cur = backend._conn.execute("SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = 2")
     row = cur.fetchone()
     assert row is not None
     assert row[0] == 999
 
 
-def test_fetch_raises_not_implemented(backend):
-    """FETCH cursor kind raises NotImplementedError (slice-1 not supported)."""
-    vm, _ = _make_vm()
+def test_fetch_on_unopened_cursor_reports_end(backend):
+    """FETCH on a cursor that was never DECLAREd/OPENed reports end-of-cursor.
 
-    with pytest.raises(NotImplementedError, match="squall slice 1: fetch not yet supported"):
-        _call_builtin(
-            backend,
-            vm,
-            "EXEC SQL FETCH C1 INTO :WS-BAL END-EXEC",
-        )
+    Cursors are implemented (see tests/unit/test_cursor.py for the full
+    DECLARE/OPEN/FETCH/CLOSE flow); a FETCH against an unknown cursor is not an
+    error — both backends return no row with SQLCODE 100.
+    """
+    vm, region = _make_vm()
+
+    _call_builtin(
+        backend,
+        vm,
+        "EXEC SQL FETCH C1 INTO :WS-BAL END-EXEC",
+    )
+
+    assert _zoned_decode(bytes(region[13:22])) == 100
 
 
 def test_select_into_type_mismatch_fails_strict(backend):

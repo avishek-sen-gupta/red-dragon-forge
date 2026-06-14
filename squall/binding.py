@@ -59,7 +59,9 @@ def _zoned_encode(n: int, length: int) -> bytes:
     """
     abs_digits = list(str(abs(n)).zfill(length)[-length:])  # right-justify, truncate
     result = bytearray(length)
-    unsigned_zone = (ByteConstants.SIGN_NIBBLE_UNSIGNED & ByteConstants.NIBBLE_MASK) << 4  # 0xF0
+    unsigned_zone = (
+        ByteConstants.SIGN_NIBBLE_UNSIGNED & ByteConstants.NIBBLE_MASK
+    ) << 4  # 0xF0
     for i, ch in enumerate(abs_digits):
         digit = int(ch)
         if i < length - 1:
@@ -67,7 +69,9 @@ def _zoned_encode(n: int, length: int) -> bytes:
         else:
             # Last byte: sign zone
             if n < 0:
-                sign_zone = (ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK) << 4  # 0xD0
+                sign_zone = (
+                    ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK
+                ) << 4  # 0xD0
             else:
                 sign_zone = unsigned_zone  # 0xF0
             result[i] = sign_zone | digit
@@ -132,7 +136,7 @@ def _comp3_decode(data: bytes, decimal_digits: int) -> Decimal:
 
     if decimal_digits > 0:
         # Build Decimal directly from integer and scale
-        result = Decimal(int_value) / Decimal(10 ** decimal_digits)
+        result = Decimal(int_value) / Decimal(10**decimal_digits)
         # Quantize to the correct scale to avoid floating-point noise
         quant = Decimal(10) ** -decimal_digits
         result = result.quantize(quant)
@@ -188,11 +192,11 @@ def _comp3_encode(
 
     # Determine sign nibble
     if negative:
-        sign_nibble = ByteConstants.SIGN_NIBBLE_NEGATIVE   # 0x0D
+        sign_nibble = ByteConstants.SIGN_NIBBLE_NEGATIVE  # 0x0D
     elif signed:
-        sign_nibble = ByteConstants.SIGN_NIBBLE_POSITIVE   # 0x0C
+        sign_nibble = ByteConstants.SIGN_NIBBLE_POSITIVE  # 0x0C
     else:
-        sign_nibble = ByteConstants.SIGN_NIBBLE_UNSIGNED   # 0x0F
+        sign_nibble = ByteConstants.SIGN_NIBBLE_UNSIGNED  # 0x0F
 
     # Build a nibble sequence: all digit nibbles followed by the sign nibble.
     # Total nibble count = total_digits + 1.
@@ -280,20 +284,20 @@ def _get_ws_region(vm):
 
 def _read_field_bytes(vm, region, name: str) -> bytes | None:
     """Read raw bytes for a named field from the WS region."""
-    f = vm.data_layout.get(name)
+    f = _lookup_field(vm.data_layout, name)
     if f is None:
         return None
     off, length = f["offset"], f["length"]
-    return bytes(region[off: off + length])
+    return bytes(region[off : off + length])
 
 
 def _write_field_bytes(vm, region, name: str, data: bytes) -> bool:
     """Write bytes into a named field in the WS region."""
-    f = vm.data_layout.get(name)
+    f = _lookup_field(vm.data_layout, name)
     if f is None:
         return False
     off, length = f["offset"], f["length"]
-    region[off: off + length] = data[:length]
+    region[off : off + length] = data[:length]
     return True
 
 
@@ -354,9 +358,13 @@ def _encode_field(value, f: dict, length: int) -> bytes:
 # genuine-failure SQLCODE immediately and writes nothing. The tolerant
 # convert-and-warn path is the branch this fills in later — tracked as squall-ud0.
 
-SQLCODE_INCOMPATIBLE_TYPE: Final = -301   # cross-family (e.g. text → numeric host var)
-SQLCODE_VALUE_OUT_OF_RANGE: Final = -304  # numeric overflow / precision loss / truncation
-SQLCODE_NULL_NO_INDICATOR: Final = -305   # NULL fetched into a host var with no indicator
+SQLCODE_INCOMPATIBLE_TYPE: Final = -301  # cross-family (e.g. text → numeric host var)
+SQLCODE_VALUE_OUT_OF_RANGE: Final = (
+    -304
+)  # numeric overflow / precision loss / truncation
+SQLCODE_NULL_NO_INDICATOR: Final = (
+    -305
+)  # NULL fetched into a host var with no indicator
 
 _NUMERIC_CATEGORIES: Final = frozenset({"ZONED_DECIMAL", "COMP3", "BINARY"})
 
@@ -398,19 +406,37 @@ def _assignability(value, f: dict) -> int:
         decimal_digits = f.get("decimal_digits", 0)
         total_digits = f.get("total_digits", 0)
         if frac_digits > decimal_digits:
-            return SQLCODE_VALUE_OUT_OF_RANGE        # would truncate fractional digits
+            return SQLCODE_VALUE_OUT_OF_RANGE  # would truncate fractional digits
         if int_digits > total_digits - decimal_digits:
-            return SQLCODE_VALUE_OUT_OF_RANGE        # integer part overflows the field
+            return SQLCODE_VALUE_OUT_OF_RANGE  # integer part overflows the field
         return 0
 
     # ALPHANUMERIC (character) field.
     if isinstance(value, str):
         if len(value) > f.get("length", len(value)):
-            return SQLCODE_VALUE_OUT_OF_RANGE        # would truncate the string
+            return SQLCODE_VALUE_OUT_OF_RANGE  # would truncate the string
         return 0
     # A numeric (or other) value into a character host var is not an allowed
     # assignment without an explicit cast.
     return SQLCODE_INCOMPATIBLE_TYPE
+
+
+def _lookup_field(data_layout, name: str):
+    """Look up a field by host-var name, CASE-INSENSITIVELY.
+
+    COBOL identifiers are case-insensitive, but ProLeap preserves the source
+    (declaration) case in ``data_layout`` — so a program that declares ``pname``
+    yet writes ``FETCH … INTO :PNAME`` must still resolve. Try the exact name
+    first (fast path), then fall back to an upper-cased scan.
+    """
+    f = data_layout.get(name)
+    if f is not None:
+        return f
+    upper = name.upper()
+    for key, entry in data_layout.items():
+        if key.upper() == upper:
+            return entry
+    return None
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -427,12 +453,12 @@ def read_params(vm, in_names: tuple[str, ...]) -> list:
 
     result = []
     for name in in_names:
-        f = vm.data_layout.get(name)
+        f = _lookup_field(vm.data_layout, name)
         if f is None:
             result.append(None)
             continue
         off, length = f["offset"], f["length"]
-        raw = bytes(region[off: off + length])
+        raw = bytes(region[off : off + length])
         result.append(_decode_field(raw, f))
     return result
 
@@ -452,7 +478,7 @@ def write_outputs(vm, out_names: tuple[str, ...], row: tuple) -> int:
     # Pass 1 — strict assignability check. Fail before touching the region.
     targets: list[tuple[dict, object]] = []
     for name, value in zip(out_names, row):
-        f = vm.data_layout.get(name)
+        f = _lookup_field(vm.data_layout, name)
         if f is None:
             continue
         code = _assignability(value, f)
@@ -465,7 +491,7 @@ def write_outputs(vm, out_names: tuple[str, ...], row: tuple) -> int:
         length = f["length"]
         encoded = _encode_field(value, f, length)
         off = f["offset"]
-        region[off: off + length] = encoded[:length]
+        region[off : off + length] = encoded[:length]
     return 0
 
 
@@ -481,10 +507,10 @@ def write_sqlcode(vm, code: int) -> None:
     if region is None:
         return
 
-    f = vm.data_layout.get("SQLCODE")
+    f = _lookup_field(vm.data_layout, "SQLCODE")
     if f is None:
         return
     length = f["length"]
     encoded = _encode_field(code, f, length)
     off = f["offset"]
-    region[off: off + length] = encoded[:length]
+    region[off : off + length] = encoded[:length]

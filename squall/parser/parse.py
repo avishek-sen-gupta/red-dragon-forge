@@ -26,18 +26,18 @@ from lark import Lark, Token, Tree
 
 @dataclass(frozen=True)
 class HostVar:
-    name: str               # e.g. "WS-BAL" (no leading colon)
-    indicator: str | None   # e.g. "WS-IND" for :WS-BAL:WS-IND, else None
+    name: str  # e.g. "WS-BAL" (no leading colon)
+    indicator: str | None  # e.g. "WS-IND" for :WS-BAL:WS-IND, else None
 
 
 @dataclass(frozen=True)
 class ParsedSql:
-    kind: str                       # the grammar kind, e.g. "select_into"
-    in_vars: tuple[HostVar, ...]    # input (bind) host vars, in source order
-    out_vars: tuple[HostVar, ...]   # output (INTO) host vars, in order
-    cursor: str | None              # cursor name for cursor statements, else None
-    query: str                      # cleaned SQL for the DB
-    include_name: str | None = None # INCLUDE target name, e.g. "SQLCA", else None
+    kind: str  # the grammar kind, e.g. "select_into"
+    in_vars: tuple[HostVar, ...]  # input (bind) host vars, in source order
+    out_vars: tuple[HostVar, ...]  # output (INTO) host vars, in order
+    cursor: str | None  # cursor name for cursor statements, else None
+    query: str  # cleaned SQL for the DB
+    include_name: str | None = None  # INCLUDE target name, e.g. "SQLCA", else None
 
 
 # ── Parser with position tracking ─────────────────────────────────────────────
@@ -58,12 +58,8 @@ _PARSER: Final[Lark] = Lark(
 
 # Fixed-keyword strip: match EXEC SQL at start, END-EXEC at end.
 # Case-insensitive; allows arbitrary whitespace between the keywords.
-_EXEC_SQL_RE: Final[re.Pattern[str]] = re.compile(
-    r"^\s*EXEC\s+SQL\s+", re.IGNORECASE
-)
-_END_EXEC_RE: Final[re.Pattern[str]] = re.compile(
-    r"\s*END-EXEC\s*$", re.IGNORECASE
-)
+_EXEC_SQL_RE: Final[re.Pattern[str]] = re.compile(r"^\s*EXEC\s+SQL\s+", re.IGNORECASE)
+_END_EXEC_RE: Final[re.Pattern[str]] = re.compile(r"\s*END-EXEC\s*$", re.IGNORECASE)
 
 # ── Cursor statement kinds ────────────────────────────────────────────────────
 
@@ -72,14 +68,10 @@ _CURSOR_KINDS: Final[frozenset[str]] = frozenset(
 )
 
 # Kinds where query == "" (no SQL sent to the DB engine)
-_NO_QUERY_KINDS: Final[frozenset[str]] = frozenset(
-    {"fetch", "open_", "close"}
-)
+_NO_QUERY_KINDS: Final[frozenset[str]] = frozenset({"fetch", "open_", "close"})
 
 # Kinds with an INTO clause to strip from the query
-_HAS_INTO_CLAUSE: Final[frozenset[str]] = frozenset(
-    {"select_into", "values_into"}
-)
+_HAS_INTO_CLAUSE: Final[frozenset[str]] = frozenset({"select_into", "values_into"})
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -196,6 +188,16 @@ def _build_query(inner: str, stmt: Tree, kind: str) -> str:
     if kind in _NO_QUERY_KINDS:
         return ""
 
+    # For DECLARE <name> CURSOR FOR <select>, the executable query is just the
+    # SELECT (the FOR clause) — OPEN runs that. Locate the FOR token from the
+    # parse tree (structure, not a string split) and start the query after it.
+    # No host vars precede FOR, so slicing the rewritten result is safe.
+    query_start = 0
+    if kind == "declare_cursor":
+        for_tok = _find_for_token(stmt)
+        if for_tok is not None:
+            query_start = for_tok.end_pos
+
     # --- gather replacements: list of (start, end, replacement) ---------------
     replacements: list[tuple[int, int, str]] = []
 
@@ -216,14 +218,26 @@ def _build_query(inner: str, stmt: Tree, kind: str) -> str:
             replacements.append((start, into_list_node.meta.end_pos, ""))
 
     if not replacements:
-        return inner
+        return inner[query_start:].strip()
 
     # Apply right-to-left (descending start) so offsets don't drift.
     replacements.sort(key=lambda r: r[0], reverse=True)
     result = inner
     for start, end, sub in replacements:
         result = result[:start] + sub + result[end:]
-    return result.strip()
+    return result[query_start:].strip()
+
+
+def _find_for_token(stmt: Tree) -> Token | None:
+    """Return the first FOR keyword token (DECLARE … CURSOR **FOR** …), or None.
+
+    The first FOR is the cursor declaration's; any later FOR (e.g. a trailing
+    ``FOR READ ONLY`` inside the SELECT) belongs to the query and is left alone.
+    """
+    for child in stmt.children:
+        if isinstance(child, Token) and child.type == "FOR":
+            return child
+    return None
 
 
 def _collect_input_hv_tokens(stmt: Tree) -> list[Token]:
