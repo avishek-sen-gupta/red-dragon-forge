@@ -82,3 +82,6 @@ target/
 
 # Beads local Dolt DB / tracker state
 .beads/
+.agents/
+.codex/
+AGENTS.md
