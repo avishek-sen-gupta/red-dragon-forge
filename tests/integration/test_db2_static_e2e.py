@@ -27,16 +27,18 @@ _helpers = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_helpers)
 run_cobol = _helpers.run_cobol
 read_ws_field = _helpers.read_ws_field
-provision_db2_includes = _helpers.provision_db2_includes
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.sqlite import SqliteBackend
 from squall.strategy import SqlLoweringStrategy
 
 _STATIC_SQB = _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "static.sqb"
+# Db2 include copybooks the sample COPYs: sqlca.cbl is an ALIAS that delegates to
+# squall's one canonical SQLCA.cpy (no duplication); sql.cbl is an unused stub.
+_DB2_INCLUDES = _HERE / "db2_includes"
 
 
-def test_static_sqb_runs_standalone(bridge_jar, tmp_path):
+def test_static_sqb_runs_standalone(bridge_jar):
     # SAMPLE EMPLOYEE (just the columns static.sqb touches + the JOHNSON row).
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE EMPLOYEE (FIRSTNME VARCHAR(12), LASTNAME VARCHAR(15))")
@@ -45,17 +47,13 @@ def test_static_sqb_runs_standalone(bridge_jar, tmp_path):
         [("SYBIL", "JOHNSON"), ("CHRISTINE", "HAAS"), ("MICHAEL", "THOMPSON")],
     )
 
-    # The Db2 include copybooks (sqlca.cbl from squall's canonical SQLCA + a
-    # sql.cbl stub) are provisioned, not hand-maintained — one source of truth.
-    includes = provision_db2_includes(tmp_path / "db2_includes")
-
     source = _STATIC_SQB.read_text(encoding="utf-8")
     backend = SqliteBackend(conn)
     vm = run_cobol(
         source,
         bridge_jar,
         extension_strategies=[SqlLoweringStrategy(backend)],
-        copybook_dirs=[includes],
+        copybook_dirs=[_DB2_INCLUDES],
         max_steps=8000,
     )
 
