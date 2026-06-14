@@ -23,4 +23,8 @@ fileignoreconfig:
   checksum: 92f21d1100168cb174b8480492e0050fc7bd095cd50252f0e06e8e4ce07a2636
 - filename: tests/unit/test_sqlite_backend.py
   ignore_detectors: [filecontent]
+- filename: squall/binding.py
+  ignore_detectors: [filecontent]
+- filename: tests/unit/test_binding.py
+  ignore_detectors: [filecontent]
 version: "1.0"
