@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from decimal import Decimal
+
 from squall.binding import (
     read_params,
     write_outputs,
@@ -18,6 +20,10 @@ from squall.binding import (
     _zoned_encode,
     _alpha_decode,
     _alpha_encode,
+    _comp3_decode,
+    _comp3_encode,
+    _binary_decode,
+    _binary_encode,
 )
 
 # ── Layout constants ──────────────────────────────────────────────────────────
@@ -188,3 +194,144 @@ def test_read_params_missing_field():
     vm, _ = _make_vm()
     result = read_params(vm, ("NO-SUCH-FIELD",))
     assert result == [None]
+
+
+# ── Test 9: COMP-3 (packed decimal) field decodes to Decimal ─────────────────
+#
+# Layout uses the REAL data_layout entry shape (as confirmed empirically):
+#   ACCT-BAL PIC S9(7)V9(2) COMP-3:
+#   {"offset": 0, "length": 5, "category": "COMP3",
+#    "total_digits": 9, "decimal_digits": 2, "signed": True}
+
+_COMP3_LAYOUT = {
+    "ACCT-BAL": {
+        "offset": 0,
+        "length": 5,
+        "category": "COMP3",
+        "total_digits": 9,
+        "decimal_digits": 2,
+        "signed": True,
+    },
+}
+
+_COMP3_REGION_SIZE = 8
+
+
+def _make_comp3_vm(value: Decimal) -> tuple[_FakeVM, bytearray]:
+    """Return (vm, region) with ACCT-BAL pre-encoded."""
+    region = bytearray(_COMP3_REGION_SIZE)
+    encoded = _comp3_encode(value, 9, 2, signed=True)
+    region[0:5] = encoded
+    return _FakeVM(region, _COMP3_LAYOUT), region
+
+
+def test_read_params_comp3_field():
+    """read_params returns Decimal for a COMP3 field."""
+    vm, _ = _make_comp3_vm(Decimal("1234.56"))
+    result = read_params(vm, ("ACCT-BAL",))
+    assert result == [Decimal("1234.56")]
+
+
+def test_write_outputs_comp3_field():
+    """write_outputs stores a Decimal correctly in a COMP3 field."""
+    region = bytearray(_COMP3_REGION_SIZE)
+    vm = _FakeVM(region, _COMP3_LAYOUT)
+    write_outputs(vm, ("ACCT-BAL",), (Decimal("9876.54"),))
+    raw = bytes(region[0:5])
+    assert _comp3_decode(raw, decimal_digits=2) == Decimal("9876.54")
+
+
+def test_read_write_comp3_roundtrip():
+    """Round-trip: write Decimal to COMP3 field, read it back via read_params."""
+    region = bytearray(_COMP3_REGION_SIZE)
+    vm = _FakeVM(region, _COMP3_LAYOUT)
+    write_outputs(vm, ("ACCT-BAL",), (Decimal("-0.01"),))
+    result = read_params(vm, ("ACCT-BAL",))
+    assert result == [Decimal("-0.01")]
+
+
+# ── Test 10: BINARY field and write_sqlcode with BINARY SQLCODE ──────────────
+#
+# SQLCODE PIC S9(9) COMP (real SQLCA shape):
+#   {"offset": 0, "length": 4, "category": "BINARY",
+#    "total_digits": 9, "decimal_digits": 0, "signed": True}
+# ACCT-ID PIC S9(9) COMP:
+#   {"offset": 4, "length": 4, "category": "BINARY",
+#    "total_digits": 9, "decimal_digits": 0, "signed": True}
+
+_BINARY_LAYOUT = {
+    "SQLCODE": {
+        "offset": 0,
+        "length": 4,
+        "category": "BINARY",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": True,
+    },
+    "ACCT-ID": {
+        "offset": 4,
+        "length": 4,
+        "category": "BINARY",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": True,
+    },
+}
+
+_BINARY_REGION_SIZE = 8
+
+
+def _make_binary_vm() -> tuple[_FakeVM, bytearray]:
+    region = bytearray(_BINARY_REGION_SIZE)
+    return _FakeVM(region, _BINARY_LAYOUT), region
+
+
+def test_read_params_binary_field():
+    """read_params returns int for a BINARY field."""
+    region = bytearray(_BINARY_REGION_SIZE)
+    # Encode ACCT-ID = 42 at offset 4
+    region[4:8] = _binary_encode(42, 4, signed=True)
+    vm = _FakeVM(region, _BINARY_LAYOUT)
+    result = read_params(vm, ("ACCT-ID",))
+    assert result == [42]
+
+
+def test_write_outputs_binary_field():
+    """write_outputs stores an int correctly in a BINARY field."""
+    vm, region = _make_binary_vm()
+    write_outputs(vm, ("ACCT-ID",), (1234567,))
+    raw = bytes(region[4:8])
+    assert _binary_decode(raw, signed=True) == 1234567
+
+
+def test_write_sqlcode_binary_zero():
+    """write_sqlcode(0) with a BINARY SQLCODE field encodes as zero."""
+    vm, region = _make_binary_vm()
+    write_sqlcode(vm, 0)
+    raw = bytes(region[0:4])
+    assert _binary_decode(raw, signed=True) == 0
+
+
+def test_write_sqlcode_binary_negative():
+    """write_sqlcode(-1) with a BINARY SQLCODE field encodes as -1."""
+    vm, region = _make_binary_vm()
+    write_sqlcode(vm, -1)
+    raw = bytes(region[0:4])
+    assert _binary_decode(raw, signed=True) == -1
+
+
+def test_write_sqlcode_binary_positive():
+    """write_sqlcode(100) with a BINARY SQLCODE field encodes as 100."""
+    vm, region = _make_binary_vm()
+    write_sqlcode(vm, 100)
+    raw = bytes(region[0:4])
+    assert _binary_decode(raw, signed=True) == 100
+
+
+def test_write_sqlcode_still_works_for_zoned():
+    """write_sqlcode with ZONED_DECIMAL SQLCODE (old shape) still works."""
+    # The original SQLCODE in test_binding.py uses ZONED_DECIMAL
+    vm, region = _make_vm()
+    write_sqlcode(vm, -1)
+    raw = bytes(region[13:22])
+    assert _zoned_decode(raw) == -1
