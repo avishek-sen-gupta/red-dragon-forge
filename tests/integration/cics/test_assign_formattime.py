@@ -109,7 +109,7 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
         sysid="SYS1",
     )
     source = apply_cics_prepass(COBOL_ASSIGN).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, exec_cics_strategy=strategy)
+    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy])
     program = _link_single_cobol(source, frontend)
 
     result = run_cics(

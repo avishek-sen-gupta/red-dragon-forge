@@ -37,10 +37,11 @@ from interpreter.instructions import (
     Suspend,
 )
 
+from interpreter.cobol.cobol_statements import ExecCicsStatement
+
 if TYPE_CHECKING:
     from cics.terminal import InputChannel, ScreenChannel
     from interpreter.cobol.emit_context import EmitContext
-    from interpreter.cobol.cobol_statements import ExecCicsStatement
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
     from cics.types import CicsContext
     from interpreter.cobol.cics_parser import CicsOperand
@@ -493,6 +494,9 @@ class CicsLoweringStrategy:
                 "__cics_endbr",
                 make_vsam_endbr_builtin(vsam_engine),
             )
+
+    def handles(self, stmt: object) -> bool:
+        return isinstance(stmt, ExecCicsStatement)
 
     def preprocess_program_dict(self, data: dict) -> dict:
         from cics.dfhresp_prepass import (
