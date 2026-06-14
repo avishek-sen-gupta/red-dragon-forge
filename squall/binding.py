@@ -18,6 +18,7 @@ from __future__ import annotations
 import sys
 import os
 from decimal import Decimal
+from typing import Final
 
 # Resolve vendor path so ByteConstants can be imported without installing red-dragon
 # as an editable package in every environment.
@@ -340,6 +341,78 @@ def _encode_field(value, f: dict, length: int) -> bytes:
     return _alpha_encode(str(value), length)
 
 
+# ── Coercion layer (strict) ───────────────────────────────────────────────────
+#
+# When a SQL value is assigned into a host variable whose COBOL type does not
+# match, production DB2 applies SQL assignment rules: convert silently where
+# lossless, convert-with-SQLWARN where lossy (string/fraction truncation, with
+# the indicator carrying the original length), and fail with a negative SQLCODE
+# only when the value cannot fit or the types are incompatible.
+#
+# This layer is the SEAM for that behaviour but is deliberately STRICT for now:
+# any assignment that would require coercion (cross-family or lossy) returns a
+# genuine-failure SQLCODE immediately and writes nothing. The tolerant
+# convert-and-warn path is the branch this fills in later — tracked as squall-ud0.
+
+SQLCODE_INCOMPATIBLE_TYPE: Final = -301   # cross-family (e.g. text → numeric host var)
+SQLCODE_VALUE_OUT_OF_RANGE: Final = -304  # numeric overflow / precision loss / truncation
+SQLCODE_NULL_NO_INDICATOR: Final = -305   # NULL fetched into a host var with no indicator
+
+_NUMERIC_CATEGORIES: Final = frozenset({"ZONED_DECIMAL", "COMP3", "BINARY"})
+
+
+def _decimal_digit_counts(dec: Decimal) -> tuple[int, int]:
+    """Return (integer_digit_count, fractional_digit_count) for *dec*."""
+    _, digits, exponent = dec.as_tuple()
+    if not isinstance(exponent, int):  # NaN / Infinity carry a string exponent
+        return 0, 0
+    if exponent >= 0:
+        return len(digits) + exponent, 0
+    frac = -exponent
+    int_digits = len(digits) - frac
+    return (int_digits if int_digits > 0 else 0), frac
+
+
+def _assignability(value, f: dict) -> int:
+    """Return 0 if *value* can be assigned into field *f* with no coercion or
+    loss, else a genuine-failure SQLCODE.
+
+    Strict policy (tolerant convert/warn deferred — squall-ud0): any cross-family
+    assignment fails with -301, any value that overflows the field or would lose
+    precision/be truncated fails with -304, and a NULL into a field with no
+    indicator fails with -305.
+    """
+    if value is None:
+        return SQLCODE_NULL_NO_INDICATOR
+
+    category = f.get("category", "ALPHANUMERIC")
+
+    if category in _NUMERIC_CATEGORIES:
+        # bool is an int subclass but is never a valid numeric SQL value here.
+        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+            return SQLCODE_INCOMPATIBLE_TYPE
+        dec = Decimal(str(value))
+        if not dec.is_finite():  # NaN / Infinity can't be represented
+            return SQLCODE_VALUE_OUT_OF_RANGE
+        int_digits, frac_digits = _decimal_digit_counts(dec)
+        decimal_digits = f.get("decimal_digits", 0)
+        total_digits = f.get("total_digits", 0)
+        if frac_digits > decimal_digits:
+            return SQLCODE_VALUE_OUT_OF_RANGE        # would truncate fractional digits
+        if int_digits > total_digits - decimal_digits:
+            return SQLCODE_VALUE_OUT_OF_RANGE        # integer part overflows the field
+        return 0
+
+    # ALPHANUMERIC (character) field.
+    if isinstance(value, str):
+        if len(value) > f.get("length", len(value)):
+            return SQLCODE_VALUE_OUT_OF_RANGE        # would truncate the string
+        return 0
+    # A numeric (or other) value into a character host var is not an allowed
+    # assignment without an explicit cast.
+    return SQLCODE_INCOMPATIBLE_TYPE
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -364,23 +437,36 @@ def read_params(vm, in_names: tuple[str, ...]) -> list:
     return result
 
 
-def write_outputs(vm, out_names: tuple[str, ...], row: tuple) -> None:
-    """Write a result row's values into WS host-variable fields.
+def write_outputs(vm, out_names: tuple[str, ...], row: tuple) -> int:
+    """Assign a result row's values into WS host-variable fields.
 
-    Each value is encoded per the field's category and written into the region.
+    Returns 0 on success, or a genuine-failure SQLCODE if any value cannot be
+    assigned to its host var (strict coercion — see ``_assignability``). The
+    assignment is ATOMIC: every value is checked first, and if any fails NOTHING
+    is written (matching DB2, which fails the whole statement, not half a row).
     """
     _, region = _get_ws_region(vm)
     if region is None:
-        return
+        return 0
 
+    # Pass 1 — strict assignability check. Fail before touching the region.
+    targets: list[tuple[dict, object]] = []
     for name, value in zip(out_names, row):
         f = vm.data_layout.get(name)
         if f is None:
             continue
+        code = _assignability(value, f)
+        if code != 0:
+            return code
+        targets.append((f, value))
+
+    # Pass 2 — all assignable, write them.
+    for f, value in targets:
         length = f["length"]
         encoded = _encode_field(value, f, length)
         off = f["offset"]
         region[off: off + length] = encoded[:length]
+    return 0
 
 
 def write_sqlcode(vm, code: int) -> None:
