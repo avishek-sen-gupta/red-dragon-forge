@@ -210,3 +210,27 @@ def read_ws_field(vm, field_name: str):
     off, length = f["offset"], f["length"]
     raw = bytes(region[off: off + length])
     return _decode_field(raw, f)
+
+
+def provision_db2_includes(dest):
+    """Materialize the Db2 include copybooks a db2-samples program COPYs.
+
+    Pipeline responsibility, not a per-test hack: the SQLCA is sourced from
+    squall's single canonical copybook (``squall.copybooks/SQLCA.cpy``) and
+    surfaced under the lowercase Db2 LUW filename ``sqlca.cbl`` — one source of
+    truth, no committed duplicate, no drift. ``sql.cbl`` is precompiler
+    scaffolding squall doesn't need (no program references its symbols, since
+    squall replaces the Db2 precompiler), so it is an explicit one-line stub.
+
+    Returns the provisioned directory (use it as a copybook dir).
+    """
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    sqlca = (
+        importlib.resources.files("squall.copybooks")
+        .joinpath("SQLCA.cpy")
+        .read_text(encoding="utf-8")
+    )
+    (dest / "sqlca.cbl").write_text(sqlca, encoding="utf-8")
+    (dest / "sql.cbl").write_text("       01 SQL-FILLER PIC X.\n", encoding="utf-8")
+    return dest
