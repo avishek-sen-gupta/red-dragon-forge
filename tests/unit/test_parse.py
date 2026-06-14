@@ -149,3 +149,13 @@ def test_values_into() -> None:
     assert p.out_vars == (HostVar("HV-OUT", None),)
     assert p.in_vars == (HostVar("HV-IN", None),)
     assert p.query == "VALUES (?)"
+
+
+def test_string_literal_whitespace_preserved() -> None:
+    """The clean-query rewrite is span-keyed, not a body-wide regex: a string
+    literal with internal double spaces survives verbatim, while INTO removal
+    still yields single-spaced SQL."""
+    p = parse_exec_sql(
+        "EXEC SQL SELECT n INTO :OUT FROM t WHERE x = 'a  b  c' AND y = :IN END-EXEC"
+    )
+    assert p.query == "SELECT n FROM t WHERE x = 'a  b  c' AND y = ?"
