@@ -52,7 +52,14 @@ class SqlLoweringStrategy:
         from interpreter.vm.builtins import Builtins  # noqa: PLC0415
 
         self._backend = backend
-        _register(Builtins.TABLE, _BUILTIN_NAME, make_exec_sql_builtin(backend))
+        # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
+        # lowered to a Const carrying its index here; the builtin closes over the
+        # same list and looks the plan up at run time. Plans never travel through
+        # the IR as objects (the VM's Const handling only round-trips primitives).
+        self._plans: list = []
+        _register(
+            Builtins.TABLE, _BUILTIN_NAME, make_exec_sql_builtin(backend, self._plans)
+        )
 
     # ── Protocol methods ──────────────────────────────────────────────────────
 
@@ -82,16 +89,27 @@ class SqlLoweringStrategy:
         from interpreter.func_name import FuncName  # noqa: PLC0415
         from interpreter.instructions import CallFunction, Const  # noqa: PLC0415
 
-        # Load the verbatim EXEC SQL … END-EXEC text into a fresh register.
-        text_reg = ctx.fresh_reg()
-        ctx.emit_inst(Const(result_reg=text_reg, value=stmt.text))
+        from squall.parser.parse import parse_exec_sql  # noqa: PLC0415
 
-        # Emit the call; the builtin reads the text and drives execution.
+        # Parse the directive ONCE, here at lowering time. The statement is
+        # static, so the Lark parse must not run at execution time (it would
+        # re-parse on every pass through a PERFORM loop). The runtime builtin
+        # receives the already-parsed ParsedSql plan and only binds + executes.
+        plan = parse_exec_sql(stmt.text)
+        plan_index = len(self._plans)
+        self._plans.append(plan)
+
+        # Carry only the plan's pool index through the IR (a primitive the VM's
+        # Const handling round-trips cleanly); the builtin resolves it to the plan.
+        index_reg = ctx.fresh_reg()
+        ctx.emit_inst(Const(result_reg=index_reg, value=plan_index))
+
+        # Emit the call; the builtin looks up the parsed plan and drives execution.
         result_reg = ctx.fresh_reg()
         ctx.emit_inst(
             CallFunction(
                 result_reg=result_reg,
                 func_name=FuncName(_BUILTIN_NAME),
-                args=(text_reg,),
+                args=(index_reg,),
             )
         )

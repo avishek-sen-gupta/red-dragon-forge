@@ -88,9 +88,17 @@ def _make_vm(ws_id: int = 1) -> tuple[_FakeVM, bytearray]:
     return _FakeVM(region, _LAYOUT), region
 
 
-def _call_builtin(builtin, vm, sql_text: str) -> None:
-    """Call *builtin* with a single _TypedValue arg wrapping *sql_text*."""
-    builtin([_TypedValue(sql_text)], vm)
+def _call_builtin(backend, vm, sql_text: str):
+    """Build the builtin over a fresh plan pool, register the parsed plan, and
+    invoke it by the plan's constant-pool index — mirroring how lower() parses
+    once and passes only the index. The builtin never parses at run time.
+    """
+    from squall.parser.parse import parse_exec_sql
+
+    plans: list = []
+    builtin = make_exec_sql_builtin(backend, plans)
+    plans.append(parse_exec_sql(sql_text))
+    return builtin([_TypedValue(0)], vm)
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -99,10 +107,8 @@ def _call_builtin(builtin, vm, sql_text: str) -> None:
 def test_select_into_hit(backend):
     """SELECT INTO with a matching row writes WS-BAL and SQLCODE=0."""
     vm, region = _make_vm(ws_id=1)
-    builtin = make_exec_sql_builtin(backend)
-
     _call_builtin(
-        builtin,
+        backend,
         vm,
         "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC",
     )
@@ -116,10 +122,8 @@ def test_select_into_hit(backend):
 def test_select_into_no_row(backend):
     """SELECT INTO with no matching row → SQLCODE=100, WS-BAL unchanged."""
     vm, region = _make_vm(ws_id=999)
-    builtin = make_exec_sql_builtin(backend)
-
     _call_builtin(
-        builtin,
+        backend,
         vm,
         "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC",
     )
@@ -134,13 +138,12 @@ def test_select_into_no_row(backend):
 def test_insert_dml(backend):
     """INSERT statement executes, row becomes visible, SQLCODE=0."""
     vm, region = _make_vm(ws_id=2)
-    builtin = make_exec_sql_builtin(backend)
 
     # Write WS-BAL = 999 as the value to insert
     region[4:13] = _zoned_encode(999, 9)
 
     _call_builtin(
-        builtin,
+        backend,
         vm,
         "EXEC SQL INSERT INTO ACCOUNT (ACCT_ID, ACCT_BAL) VALUES (:WS-ID, :WS-BAL) END-EXEC",
     )
@@ -160,11 +163,10 @@ def test_insert_dml(backend):
 def test_fetch_raises_not_implemented(backend):
     """FETCH cursor kind raises NotImplementedError (slice-1 not supported)."""
     vm, _ = _make_vm()
-    builtin = make_exec_sql_builtin(backend)
 
     with pytest.raises(NotImplementedError, match="squall slice 1: fetch not yet supported"):
         _call_builtin(
-            builtin,
+            backend,
             vm,
             "EXEC SQL FETCH C1 INTO :WS-BAL END-EXEC",
         )
@@ -173,15 +175,13 @@ def test_fetch_raises_not_implemented(backend):
 def test_returns_builtin_result(backend):
     """make_exec_sql_builtin returns a BuiltinResult with value=None on success."""
     vm, _ = _make_vm(ws_id=1)
-    builtin = make_exec_sql_builtin(backend)
 
     from interpreter.vm.vm_types import BuiltinResult
 
-    result = builtin(
-        [_TypedValue(
-            "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC"
-        )],
+    result = _call_builtin(
+        backend,
         vm,
+        "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC",
     )
     assert isinstance(result, BuiltinResult)
     assert result.value is None
