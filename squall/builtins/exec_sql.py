@@ -69,7 +69,13 @@ def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type
 
         if parsed.kind == "select_into" and result.rows:
             out_names = tuple(hv.name for hv in parsed.out_vars)
-            write_outputs(vm, out_names, result.rows[0])  # type: ignore[arg-type]
+            # Strict coercion: if any value can't be assigned to its host var,
+            # nothing is written and the statement fails with that SQLCODE
+            # (overriding the otherwise-successful 0).
+            status = write_outputs(vm, out_names, result.rows[0])  # type: ignore[arg-type]
+            if status != 0:
+                write_sqlcode(vm, status)  # type: ignore[arg-type]
+                return BuiltinResult(value=None)
 
         write_sqlcode(vm, result.sqlcode)  # type: ignore[arg-type]
 

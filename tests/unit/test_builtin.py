@@ -22,9 +22,9 @@ from squall.builtins.exec_sql import make_exec_sql_builtin
 # ── Layout ────────────────────────────────────────────────────────────────────
 
 _LAYOUT = {
-    "WS-ID": {"offset": 0, "length": 4, "category": "ZONED_DECIMAL"},
-    "WS-BAL": {"offset": 4, "length": 9, "category": "ZONED_DECIMAL"},
-    "SQLCODE": {"offset": 13, "length": 9, "category": "ZONED_DECIMAL"},
+    "WS-ID": {"offset": 0, "length": 4, "category": "ZONED_DECIMAL", "total_digits": 4, "decimal_digits": 0, "signed": False},
+    "WS-BAL": {"offset": 4, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": False},
+    "SQLCODE": {"offset": 13, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": True},
 }
 _REGION_SIZE = 22
 
@@ -170,6 +170,23 @@ def test_fetch_raises_not_implemented(backend):
             vm,
             "EXEC SQL FETCH C1 INTO :WS-BAL END-EXEC",
         )
+
+
+def test_select_into_type_mismatch_fails_strict(backend):
+    """A SQL text value selected into a numeric host var triggers the strict
+    coercion layer: SQLCODE -301 and the host var is left untouched (atomic)."""
+    vm, region = _make_vm(ws_id=1)
+    before = bytes(region[4:13])  # WS-BAL bytes before the call
+
+    _call_builtin(
+        backend,
+        vm,
+        "EXEC SQL SELECT 'HELLO' INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC",
+    )
+
+    sqlcode = _zoned_decode(bytes(region[13:22]))
+    assert sqlcode == -301
+    assert bytes(region[4:13]) == before  # nothing written on a coercion failure
 
 
 def test_returns_builtin_result(backend):

@@ -33,11 +33,13 @@ from squall.binding import (
 #  SQLCODE  S9(9) ZONED @offset=13 len=9   category=ZONED_DECIMAL
 #  WS-NAME  X(10) ALPHA @offset=22 len=10  category=ALPHANUMERIC
 
+# Full data_layout contract: real entries always carry total_digits/decimal_digits
+# (the coercion layer needs them); the fakes must match or the gate sees capacity 0.
 _LAYOUT = {
-    "WS-ID": {"offset": 0, "length": 4, "category": "ZONED_DECIMAL"},
-    "WS-BAL": {"offset": 4, "length": 9, "category": "ZONED_DECIMAL"},
-    "SQLCODE": {"offset": 13, "length": 9, "category": "ZONED_DECIMAL"},
-    "WS-NAME": {"offset": 22, "length": 10, "category": "ALPHANUMERIC"},
+    "WS-ID": {"offset": 0, "length": 4, "category": "ZONED_DECIMAL", "total_digits": 4, "decimal_digits": 0, "signed": False},
+    "WS-BAL": {"offset": 4, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": False},
+    "SQLCODE": {"offset": 13, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": True},
+    "WS-NAME": {"offset": 22, "length": 10, "category": "ALPHANUMERIC", "total_digits": 10, "decimal_digits": 0, "signed": False},
 }
 
 _REGION_SIZE = 32
