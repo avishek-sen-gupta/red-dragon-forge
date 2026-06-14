@@ -15,7 +15,6 @@ from interpreter.cobol.cobol_frontend import CobolFrontend
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
-from cics.strategy import CatchAllLoweringStrategy
 from cics.preprocessor import apply_cics_prepass
 from tests.covers import covers
 from tests.integration.cobol_helpers import (
@@ -58,13 +57,12 @@ COBOL_WITH_EXEC_CICS = """\
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_catchall_strategy_does_not_raise(cobol_parser):
-    """COBOL with EXEC CICS compiles without error using CatchAllLoweringStrategy."""
+def test_no_extension_strategy_does_not_raise(cobol_parser):
+    """COBOL with EXEC CICS compiles without error when no extension strategy is
+    injected (empty array): the EXEC CICS statement is left unhandled (logged) and
+    the rest of the program still lowers to instructions."""
     source = apply_cics_prepass(COBOL_WITH_EXEC_CICS).encode()
-    frontend = CobolFrontend(
-        cobol_parser=cobol_parser,
-        exec_cics_strategy=CatchAllLoweringStrategy(),
-    )
+    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[])
     instructions = frontend.lower(source)
     assert len(instructions) > 0
 
@@ -99,7 +97,7 @@ def test_return_lowers_to_call_and_return(bridge_jar_env, cobol_parser):
     )
 
     source = apply_cics_prepass(COBOL_RETURN.decode()).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, exec_cics_strategy=strategy)
+    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy])
     instructions = frontend.lower(source)
 
     opcodes = [i.opcode for i in instructions]
