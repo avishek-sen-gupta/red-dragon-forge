@@ -59,8 +59,7 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path):
         len(matches) == 1
     ), f"expected 1 CVACT01Y.cpy under CARDDEMO_HOME, found {len(matches)}: {matches}"
     copybook = matches[0]
-    # The ProLeap bridge JAR (the gate's JAR_AVAILABLE keys off this same path,
-    # defaulting to the in-tree build when PROLEAP_BRIDGE_JAR is unset).
+    # The ProLeap bridge JAR (JAR_PATH, from the required PROLEAP_BRIDGE_JAR env).
     layout = load_record_layout(copybook, None, JAR_PATH, [])
     records = read_flat_file(backing / "ACCTDAT.dat", layout.total_bytes)
     assert records, "ACCTDAT.dat backing file is empty or missing after REWRITE"

@@ -21,7 +21,6 @@ from pathlib import Path
 import pytest
 
 from tests.integration.cics.bms_tools_helpers import BMS_TOOLS_AVAILABLE
-from tests.integration.cobol_helpers import JAR_AVAILABLE
 
 _REPO_ROOT = Path(__file__).parents[3]
 _SUBMODULE_CARDDEMO = _REPO_ROOT / "third-party" / "carddemo" / "app"
@@ -40,7 +39,7 @@ _CARDDEMO_HOME = _resolve_carddemo_home()
 if _CARDDEMO_HOME:
     os.environ.setdefault("CARDDEMO_HOME", _CARDDEMO_HOME)
 
-_TOOLCHAIN_OK = bool(_CARDDEMO_HOME) and JAR_AVAILABLE and BMS_TOOLS_AVAILABLE
+_TOOLCHAIN_OK = bool(_CARDDEMO_HOME) and BMS_TOOLS_AVAILABLE
 
 _SETUP_MSG = (
     "CardDemo e2e toolchain not available. Ensure:\n"

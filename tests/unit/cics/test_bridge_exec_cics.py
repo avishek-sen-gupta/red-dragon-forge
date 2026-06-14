@@ -5,13 +5,12 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from tests.covers import covers, NotLanguageFeature
 
 REPO_ROOT = Path(__file__).parents[3]
-BRIDGE_JAR = "proleap-bridge.jar"
-JAR_AVAILABLE = os.path.isfile(REPO_ROOT / BRIDGE_JAR)
+# PROLEAP_BRIDGE_JAR is the required test-env config (single source of truth) —
+# no default/skip fallback; unset means a loud failure, not a silent skip.
+BRIDGE_JAR = os.environ["PROLEAP_BRIDGE_JAR"]
 
 COBOL_WITH_EXEC_CICS = """\
        IDENTIFICATION DIVISION.
@@ -26,7 +25,6 @@ COBOL_WITH_EXEC_CICS = """\
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-@pytest.mark.skipif(not JAR_AVAILABLE, reason="bridge JAR not available")
 def test_bridge_emits_exec_cics_text():
     result = subprocess.run(
         ["java", "-jar", BRIDGE_JAR],

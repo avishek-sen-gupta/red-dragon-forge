@@ -10,19 +10,12 @@ figurative operands that the flat-string path could not represent.
 
 from __future__ import annotations
 
-import pytest
-
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.cobol_statements import EvaluateStatement, WhenStatement
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
-from tests.integration.cobol_helpers import JAR_AVAILABLE, JAR_PATH, to_fixed
-
-pytestmark = pytest.mark.skipif(
-    not JAR_AVAILABLE, reason="ProLeap bridge JAR not available"
-)
-
+from tests.integration.cobol_helpers import JAR_PATH, to_fixed
 
 EVALUATE_SOURCE = to_fixed(
     [
