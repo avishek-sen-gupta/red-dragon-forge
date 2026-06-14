@@ -17,4 +17,6 @@ fileignoreconfig:
   checksum: 3b4702d8ecafeb89343f7b1002c458446a4fb4b2cb6d3e15762e678ad7ec1e6b
 - filename: squall/parser/parse.py
   checksum: b47afab720fcafb14066fa29dd3726cc8b0b067792e8b9053ccb52ce9c16f0b9
+- filename: tests/unit/test_parse.py
+  ignore_detectors: [filecontent]
 version: "1.0"

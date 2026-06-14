@@ -100,17 +100,6 @@ def _parse_host_var_tok(tok_value: str) -> HostVar:
     return HostVar(name=name, indicator=indicator)
 
 
-def _collect_into_list_hvs(stmt: Tree) -> tuple[HostVar, ...]:
-    """Return HostVar tuples from all host_var nodes inside into_list, in order."""
-    return tuple(
-        _parse_host_var_tok(tok.value)
-        for into_node in stmt.find_data("into_list")
-        for hv_node in into_node.find_data("host_var")
-        for tok in hv_node.children
-        if hasattr(tok, "type") and tok.type == "HOST_VAR_TOK"
-    )
-
-
 def _collect_all_hvs_in_order(stmt: Tree) -> list[tuple[HostVar, bool]]:
     """Walk *stmt* in tree order; return (HostVar, is_in_into_list) pairs.
 
@@ -200,37 +189,30 @@ def _build_query(inner: str, stmt: Tree, kind: str) -> str:
     replacements: list[tuple[int, int, str]] = []
 
     # input host_var tokens -> "?"
-    hv_pairs = _collect_all_hvs_in_order(stmt)
-    # We need the actual Token objects with positions, not just HostVar values.
-    # Walk again collecting Token objects directly.
-    input_hv_tokens = _collect_input_hv_tokens(stmt)
-    for tok in input_hv_tokens:
+    for tok in _collect_input_hv_tokens(stmt):
         replacements.append((tok.start_pos, tok.end_pos, "?"))
 
-    # INTO clause removal for select_into / values_into
+    # INTO clause removal for select_into / values_into. Consume one leading
+    # space so removing "col INTO :a FROM" yields "col FROM" (single space)
+    # WITHOUT a body-wide whitespace regex (which would mangle string literals).
     if kind in _HAS_INTO_CLAUSE:
         into_tok = _find_into_keyword_token(stmt)
         into_list_node = _find_into_list_node(stmt)
         if into_tok is not None and into_list_node is not None:
-            # Remove from start of INTO token to end of into_list
             start = into_tok.start_pos
-            end = into_list_node.meta.end_pos
-            replacements.append((start, end, ""))
+            if start > 0 and inner[start - 1] == " ":
+                start -= 1
+            replacements.append((start, into_list_node.meta.end_pos, ""))
 
     if not replacements:
         return inner
 
-    # Sort by start descending so we can apply right-to-left without offset drift
+    # Apply right-to-left (descending start) so offsets don't drift.
     replacements.sort(key=lambda r: r[0], reverse=True)
-
     result = inner
     for start, end, sub in replacements:
         result = result[:start] + sub + result[end:]
-
-    # Collapse extra whitespace introduced by removal, but preserve string literals.
-    # A simple multi-space collapse is safe here: SQL normalises whitespace.
-    result = re.sub(r"  +", " ", result).strip()
-    return result
+    return result.strip()
 
 
 def _collect_input_hv_tokens(stmt: Tree) -> list[Token]:
