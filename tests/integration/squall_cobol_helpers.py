@@ -1,0 +1,179 @@
+"""Shared helpers for squall COBOL integration tests.
+
+Centralises the ProLeap bridge JAR discovery and the compile+run pipeline
+so that individual tests only specify COBOL source, strategy, and assertions.
+
+Pattern (mirrors cicada's tests/integration/cobol_helpers.py):
+  1. ``bridge_jar`` fixture — reads PROLEAP_BRIDGE_JAR env, fails loudly if absent.
+  2. ``compile_cobol`` — builds a real CobolFrontend with extension_strategies,
+     lowers source to IR, and assembles a LinkedProgram.
+  3. ``run_linked`` (re-exported from interpreter.run) — executes the LinkedProgram
+     on the real VMState and returns it.
+  4. ``read_field`` — decodes a named field from the post-run VMState's WS region.
+"""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+
+from interpreter.cfg import build_cfg
+from interpreter.constants import Language
+from interpreter.cobol.cobol_frontend import CobolFrontend
+from interpreter.cobol.cobol_parser import ProLeapCobolParser
+from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from interpreter.project.types import LinkedProgram
+from interpreter.project.entry_point import EntryPoint
+from interpreter.run import run_linked
+from interpreter.address import Address
+from interpreter.registry import build_registry
+from interpreter.vm.vm import VMState
+
+
+@pytest.fixture
+def bridge_jar() -> str:
+    """Return the ProLeap bridge JAR path from the required PROLEAP_BRIDGE_JAR env.
+
+    No default, no skip: missing env is a hard failure so tests cannot silently
+    succeed without the JAR present.
+    """
+    return os.environ["PROLEAP_BRIDGE_JAR"]
+
+
+def make_cobol_parser(bridge_jar_path: str) -> ProLeapCobolParser:
+    """Build a ProLeapCobolParser for the given JAR path."""
+    return ProLeapCobolParser(RealSubprocessRunner(), bridge_jar_path)
+
+
+def compile_cobol(
+    source: str,
+    bridge_jar_path: str,
+    extension_strategies: list | None = None,
+) -> tuple[CobolFrontend, LinkedProgram]:
+    """Compile a COBOL source string to a LinkedProgram.
+
+    Returns (frontend, linked) so that callers can access frontend.data_layout
+    for assertions and pass the LinkedProgram to run_linked.
+    """
+    parser = make_cobol_parser(bridge_jar_path)
+    frontend = CobolFrontend(
+        cobol_parser=parser,
+        extension_strategies=list(extension_strategies or []),
+    )
+    instructions = frontend.lower(source.encode("utf-8"))
+    cfg = build_cfg(instructions)
+    registry = build_registry(
+        instructions,
+        cfg,
+        func_symbol_table=frontend.func_symbol_table,
+        class_symbol_table=frontend.class_symbol_table,
+    )
+    linked = LinkedProgram(
+        modules={},
+        merged_ir=list(instructions),
+        merged_cfg=cfg,
+        merged_registry=registry,
+        language=Language.COBOL,
+        import_graph={},
+        type_env_builder=frontend.type_env_builder,
+        symbol_table=frontend.symbol_table,
+        data_layout=frontend.data_layout,
+        func_symbol_table=frontend.func_symbol_table,
+        class_symbol_table=frontend.class_symbol_table,
+    )
+    return frontend, linked
+
+
+def run_cobol(
+    source: str,
+    bridge_jar_path: str,
+    extension_strategies: list | None = None,
+    max_steps: int = 1000,
+):
+    """Compile and run a COBOL program; return the final VMState.
+
+    Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
+    Phase 1 runs the init block (top-level), phase 2 dispatches into the
+    program's procedure division function (func_<pid>_0).  This is required
+    so that __ws_region is visible in the frame when the builtins execute.
+    """
+    frontend, linked = compile_cobol(source, bridge_jar_path, extension_strategies)
+
+    # For COBOL, use function-entry mode so run_linked runs the WS init block
+    # (phase 1) then dispatches into func_<pid>_0 (phase 2).
+    # Without this, only the init block runs and __ws_region is never in scope.
+    entry_point = EntryPoint.top_level()
+    if linked.func_symbol_table:
+        proc_label = next(
+            (
+                label
+                for label in linked.func_symbol_table
+                if not str(label).startswith("func_init_params_")
+            ),
+            None,
+        )
+        if proc_label is not None:
+            _label = proc_label
+            entry_point = EntryPoint.function(lambda ref: ref.label == _label)
+
+    # Pre-populate data_layout on initial_vm so builtins that run DURING
+    # execution (e.g. __exec_sql writing to WS fields) can find the layout.
+    # Without this, vm.data_layout is empty until run_linked() sets it AFTER
+    # execution ends — too late for any builtin that reads/writes WS fields.
+    # We also push the main frame; execute_cfg only pushes it when vm is None.
+    from interpreter.func_name import FuncName
+    from interpreter.vm.vm import StackFrame
+    from interpreter import constants as _constants
+
+    initial_vm = VMState()
+    initial_vm.data_layout = linked.data_layout
+    initial_vm.call_stack.append(
+        StackFrame(function_name=FuncName(_constants.MAIN_FRAME_NAME))
+    )
+
+    vm = run_linked(
+        linked,
+        entry_point=entry_point,
+        max_steps=max_steps,
+        initial_vm=initial_vm,
+    )
+    return vm
+
+
+def read_ws_field(vm, field_name: str) -> int | str | None:
+    """Decode a named WS field from the post-run VMState.
+
+    Locates the __ws_region address in the top-most call frame, then reads
+    and decodes the field using vm.data_layout (populated by run_linked).
+
+    Returns an int for ZONED_DECIMAL fields, a str for ALPHANUMERIC, None
+    if the field is not found.
+    """
+    from interpreter.var_name import VarName
+    from squall.binding import _zoned_decode, _alpha_decode
+
+    ws_var = VarName("__ws_region")
+    region = None
+    for frame in reversed(vm.call_stack):
+        local_vars = getattr(frame, "local_vars", {})
+        if ws_var in local_vars:
+            tv = local_vars[ws_var]
+            addr = Address(str(tv.value))
+            region = vm.region_get(addr)
+            break
+
+    if region is None:
+        return None
+
+    layout = vm.data_layout
+    f = layout.get(field_name)
+    if f is None:
+        return None
+
+    off, length = f["offset"], f["length"]
+    raw = bytes(region[off: off + length])
+    category = f.get("category", "ALPHANUMERIC")
+    if category == "ZONED_DECIMAL":
+        return _zoned_decode(raw)
+    return _alpha_decode(raw)
