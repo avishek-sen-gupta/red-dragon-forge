@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import sys
 import os
+from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Final
 
 # Resolve vendor path so ByteConstants can be imported without installing red-dragon
@@ -254,51 +257,24 @@ def _binary_encode(value: int, length: int, signed: bool) -> bytes:
 # ── WS region access ─────────────────────────────────────────────────────────
 
 
-def _get_ws_region(vm):
-    """Return (addr, region bytearray) for the WS region, or (None, None).
+def _get_ws_region(vm) -> tuple[Address, bytearray]:
+    """Return (addr, region) for the WS region, failing loudly if it is absent.
 
-    Mirrors the pattern from cicada's cics.builtins.system._get_ws_region_addr:
-    walk vm.call_stack reversed and look for a local var named '__ws_region'.
+    The real VM keys frame.local_vars by VarName and its region map by Address
+    (Address.__eq__ rejects a bare str), so the region must be reached through the
+    real value types — mirroring cics.builtins.system._get_ws_region_addr. A
+    running SQL program always has a WS region; its absence is an invariant
+    violation, so we raise rather than return a sentinel for callers to absorb.
     """
-    try:
-        call_stack = vm.call_stack
-    except AttributeError:
-        return None, None
-
-    # Mirror cics.builtins.system._get_ws_region_addr EXACTLY: the real VM keys
-    # frame.local_vars by VarName and keys its region map by Address. Matching on
-    # a duck-typed str/.name or passing a raw-str addr silently misses both the
-    # VarName equality and the Address-keyed region_get (Address.__eq__ rejects
-    # bare str), so the WS region must be reached through the real value types.
     ws_var = VarName("__ws_region")
-    for frame in reversed(call_stack):
+    for frame in reversed(vm.call_stack):
         local_vars = getattr(frame, "local_vars", {})
         if ws_var in local_vars:
-            tv = local_vars[ws_var]
-            addr = Address(str(tv.value))
+            addr = Address(str(local_vars[ws_var].value))
             region = vm.region_get(addr)
             if region is not None:
                 return addr, region
-    return None, None
-
-
-def _read_field_bytes(vm, region, name: str) -> bytes | None:
-    """Read raw bytes for a named field from the WS region."""
-    f = _lookup_field(vm.data_layout, name)
-    if f is None:
-        return None
-    off, length = f["offset"], f["length"]
-    return bytes(region[off : off + length])
-
-
-def _write_field_bytes(vm, region, name: str, data: bytes) -> bool:
-    """Write bytes into a named field in the WS region."""
-    f = _lookup_field(vm.data_layout, name)
-    if f is None:
-        return False
-    off, length = f["offset"], f["length"]
-    region[off : off + length] = data[:length]
-    return True
+    raise LookupError("no __ws_region present in the VM call stack")
 
 
 def _decode_field(data: bytes, f: dict):
@@ -343,6 +319,68 @@ def _encode_field(value, f: dict, length: int) -> bytes:
     if category == "BINARY":
         return _binary_encode(int(value), length, f.get("signed", True))
     return _alpha_encode(str(value), length)
+
+
+# ── VARCHAR (49-group) codec ──────────────────────────────────────────────────
+#
+# A VARCHAR host var is an IBM DCLGEN group spanning two 49-level children: a
+# binary length prefix (<HV>-LEN) and the text (<HV>-TEXT). The flat data_layout
+# records all three entries but cannot mark the group as VARCHAR — the dclgen
+# ``field_meta`` map supplies that and names the children. The codec reads/writes
+# the LEN child as binary and the first LEN characters of the TEXT child.
+
+
+# The identity value for "no dclgen metadata": an immutable empty mapping, so
+# callers never juggle a None sentinel and the default can't be mutated.
+_NO_META: Final[Mapping[str, dict]] = MappingProxyType({})
+
+
+def _meta_for(field_meta: Mapping[str, dict], name: str) -> dict:
+    """Case-insensitive lookup of a host var's dclgen metadata; ``{}`` if absent.
+
+    Mirrors ``_lookup_field``: COBOL identifiers are case-insensitive but the
+    generated metadata preserves the host-var case. Returns an empty mapping
+    rather than None so callers can ``.get("category")`` unconditionally.
+    """
+    exact = field_meta.get(name)
+    if exact is not None:
+        return exact
+    upper = name.upper()
+    return next(
+        (entry for key, entry in field_meta.items() if key.upper() == upper),
+        {},
+    )
+
+
+def _varchar_decode(data_layout: dict, region: bytearray, meta: dict) -> str:
+    """Pure: decode a VARCHAR host var to its first-LEN characters.
+
+    Reads the binary LEN child and returns exactly that many decoded characters
+    (no trailing-pad ambiguity). A well-formed VARCHAR has LEN within its TEXT
+    capacity by contract; we do not defend against a corrupt LEN.
+    """
+    len_f = _require_field(data_layout, meta["len_var"])
+    text_f = _require_field(data_layout, meta["text_var"])
+    lo, ll = len_f["offset"], len_f["length"]
+    n = _binary_decode(bytes(region[lo : lo + ll]), len_f.get("signed", True))
+    to = text_f["offset"]
+    return _alpha_decode(bytes(region[to : to + n]))
+
+
+def _varchar_writes(
+    value: str, data_layout: dict, meta: dict
+) -> tuple[tuple[int, bytes], ...]:
+    """Pure: the ``(offset, bytes)`` writes that store *value* into a VARCHAR group.
+
+    Returns the LEN-child and TEXT-child writes; the caller applies them so the
+    region mutation stays at the single boundary in ``write_outputs`` — mirroring
+    how ``_encode_field`` returns bytes rather than touching the region itself.
+    """
+    len_f = _require_field(data_layout, meta["len_var"])
+    text_f = _require_field(data_layout, meta["text_var"])
+    len_bytes = _binary_encode(len(value), len_f["length"], len_f.get("signed", True))
+    text_bytes = _alpha_encode(value, text_f["length"])
+    return (len_f["offset"], len_bytes), (text_f["offset"], text_bytes)
 
 
 # ── Coercion layer (strict) ───────────────────────────────────────────────────
@@ -421,6 +459,22 @@ def _assignability(value, f: dict) -> int:
     return SQLCODE_INCOMPATIBLE_TYPE
 
 
+def _varchar_assignability(value, text_f: dict) -> int:
+    """Strict assignability for a VARCHAR host var (its TEXT child capacity).
+
+    A character value is required; a value longer than the declared capacity
+    would truncate (-304); a non-string is cross-family (-301); NULL with no
+    indicator is -305.
+    """
+    if value is None:
+        return SQLCODE_NULL_NO_INDICATOR
+    if not isinstance(value, str):
+        return SQLCODE_INCOMPATIBLE_TYPE
+    if len(value) > text_f["length"]:
+        return SQLCODE_VALUE_OUT_OF_RANGE
+    return 0
+
+
 def _lookup_field(data_layout, name: str):
     """Look up a field by host-var name, CASE-INSENSITIVELY.
 
@@ -433,65 +487,116 @@ def _lookup_field(data_layout, name: str):
     if f is not None:
         return f
     upper = name.upper()
-    for key, entry in data_layout.items():
-        if key.upper() == upper:
-            return entry
-    return None
+    return next(
+        (entry for key, entry in data_layout.items() if key.upper() == upper),
+        None,
+    )
+
+
+def _require_field(data_layout, name: str) -> dict:
+    """Resolve a field that must exist; raise loudly if it does not.
+
+    Used where the field's presence is an invariant — e.g. the LEN/TEXT children
+    of a dclgen-generated VARCHAR group. A miss is a generation/layout bug, not a
+    runtime condition to absorb, so it fails rather than returning a sentinel.
+    """
+    f = _lookup_field(data_layout, name)
+    if f is None:
+        raise KeyError(f"host-var field {name!r} not found in data_layout")
+    return f
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def read_params(vm, in_names: tuple[str, ...]) -> list:
+def read_params(
+    vm, in_names: tuple[str, ...], field_meta: Mapping[str, dict] = _NO_META
+) -> list:
     """Read host-variable fields from the WS region and return as a Python list.
 
-    ZONED_DECIMAL fields are decoded to int; ALPHANUMERIC fields to str.
+    ZONED_DECIMAL fields are decoded to int; ALPHANUMERIC fields to str; COMP-3 to
+    Decimal; BINARY to int. A host var carrying VARCHAR dclgen *field_meta* is
+    decoded through its 49-group LEN/TEXT children instead of as a flat group.
     """
     _, region = _get_ws_region(vm)
-    if region is None:
-        return [None] * len(in_names)
-
-    result = []
-    for name in in_names:
-        f = _lookup_field(vm.data_layout, name)
-        if f is None:
-            result.append(None)
-            continue
-        off, length = f["offset"], f["length"]
-        raw = bytes(region[off : off + length])
-        result.append(_decode_field(raw, f))
-    return result
+    return [_read_one(vm.data_layout, region, field_meta, name) for name in in_names]
 
 
-def write_outputs(vm, out_names: tuple[str, ...], row: tuple) -> int:
+def _read_one(
+    data_layout: dict, region: bytearray, field_meta: Mapping[str, dict], name: str
+):
+    """Pure: decode one host var — VARCHAR via its 49-group, else its flat field."""
+    meta = _meta_for(field_meta, name)
+    if meta.get("category") == "VARCHAR":
+        return _varchar_decode(data_layout, region, meta)
+    f = _require_field(data_layout, name)
+    off, length = f["offset"], f["length"]
+    return _decode_field(bytes(region[off : off + length]), f)
+
+
+@dataclass(frozen=True)
+class _Plan:
+    """A planned host-var assignment: a result SQLCODE and the writes to apply.
+
+    ``code == 0`` means assignable, with *writes* the ``(offset, bytes)`` pairs to
+    apply; a non-zero *code* is a coercion failure carrying no writes.
+    """
+
+    code: int
+    writes: tuple[tuple[int, bytes], ...]
+
+
+def _plan_assignment(
+    data_layout: dict, field_meta: Mapping[str, dict], name: str, value
+) -> _Plan:
+    """Pure: plan one host-var assignment. VARCHAR host vars (carrying dclgen
+    metadata) plan through their 49-group LEN/TEXT children; all others through
+    their flat field.
+    """
+    meta = _meta_for(field_meta, name)
+    if meta.get("category") == "VARCHAR":
+        text_f = _require_field(data_layout, meta["text_var"])
+        varchar_code = _varchar_assignability(value, text_f)
+        if varchar_code != 0:
+            return _Plan(varchar_code, ())
+        return _Plan(0, _varchar_writes(value, data_layout, meta))
+
+    f = _require_field(data_layout, name)
+    scalar_code = _assignability(value, f)
+    if scalar_code != 0:
+        return _Plan(scalar_code, ())
+    return _Plan(
+        0, ((f["offset"], _encode_field(value, f, f["length"])[: f["length"]]),)
+    )
+
+
+def write_outputs(
+    vm,
+    out_names: tuple[str, ...],
+    row: tuple,
+    field_meta: Mapping[str, dict] = _NO_META,
+) -> int:
     """Assign a result row's values into WS host-variable fields.
 
     Returns 0 on success, or a genuine-failure SQLCODE if any value cannot be
     assigned to its host var (strict coercion — see ``_assignability``). The
-    assignment is ATOMIC: every value is checked first, and if any fails NOTHING
-    is written (matching DB2, which fails the whole statement, not half a row).
+    assignment is ATOMIC: every value is planned and validated first, and if any
+    fails NOTHING is written (matching DB2, which fails the whole statement).
+
+    Planning is pure (``_plan_assignment``); the only mutation is the final apply
+    loop — the single sanctioned boundary at the VM memory region.
     """
-    _, region = _get_ws_region(vm)
-    if region is None:
-        return 0
+    region = _get_ws_region(vm)[1]
+    plans = [
+        _plan_assignment(vm.data_layout, field_meta, name, value)
+        for name, value in zip(out_names, row)
+    ]
+    failure = next((p.code for p in plans if p.code != 0), 0)
+    if failure != 0:
+        return failure
 
-    # Pass 1 — strict assignability check. Fail before touching the region.
-    targets: list[tuple[dict, object]] = []
-    for name, value in zip(out_names, row):
-        f = _lookup_field(vm.data_layout, name)
-        if f is None:
-            continue
-        code = _assignability(value, f)
-        if code != 0:
-            return code
-        targets.append((f, value))
-
-    # Pass 2 — all assignable, write them.
-    for f, value in targets:
-        length = f["length"]
-        encoded = _encode_field(value, f, length)
-        off = f["offset"]
-        region[off : off + length] = encoded[:length]
+    for offset, data in [write for p in plans for write in p.writes]:
+        region[offset : offset + len(data)] = data
     return 0
 
 
@@ -504,13 +609,7 @@ def write_sqlcode(vm, code: int) -> None:
     ``_encode_field`` so this function stays category-agnostic.
     """
     _, region = _get_ws_region(vm)
-    if region is None:
-        return
-
-    f = _lookup_field(vm.data_layout, "SQLCODE")
-    if f is None:
-        return
+    f = _require_field(vm.data_layout, "SQLCODE")
     length = f["length"]
-    encoded = _encode_field(code, f, length)
     off = f["offset"]
-    region[off : off + length] = encoded[:length]
+    region[off : off + length] = _encode_field(code, f, length)[:length]

@@ -192,10 +192,12 @@ def test_read_params_multiple_fields():
 # ── Test 8: missing field returns None ───────────────────────────────────────
 
 
-def test_read_params_missing_field():
+def test_read_params_missing_field_fails_loudly():
+    """A host var absent from data_layout is an invariant violation, not a
+    silently-tolerated None — read_params raises rather than fabricating a value."""
     vm, _ = _make_vm()
-    result = read_params(vm, ("NO-SUCH-FIELD",))
-    assert result == [None]
+    with pytest.raises(KeyError):
+        read_params(vm, ("NO-SUCH-FIELD",))
 
 
 # ── Test 9: COMP-3 (packed decimal) field decodes to Decimal ─────────────────
