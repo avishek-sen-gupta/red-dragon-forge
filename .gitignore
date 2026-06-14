@@ -79,3 +79,6 @@ target/
 .dolt/
 .beads-credential-key
 .beads/proxieddb/
+
+# Beads local Dolt DB / tracker state
+.beads/
