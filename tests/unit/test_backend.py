@@ -1,8 +1,10 @@
 """
-tests/unit/test_sqlite_backend.py
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-TDD tests for Task 5 (SqlResult / SqlBackend protocol) and
-Task 6 (SqliteBackend over an in-memory SQLite database).
+tests/unit/test_backend.py
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+SqlResult / SqlBackend protocol tests, plus the backend CONTRACT tests run
+against every backend implementation: SqliteBackend (:memory:) and the real
+Db2Backend (ibm_db → live Db2 via SQUALL_DB2_DSN). The same assertions pass on
+both — that's the point of the SqlBackend seam.
 """
 
 from __future__ import annotations
@@ -96,25 +98,53 @@ def test_sql_backend_protocol_missing_method_not_isinstance():
     assert not isinstance(Incomplete(), SqlBackend)
 
 
-# ── Fixture: seeded in-memory SQLite database ─────────────────────────────────
+# ── Backend fixture: the SAME contract tests run on BOTH backends ─────────────
+#
+# The SqlBackend contract is backend-agnostic, so the seeded-ACCOUNT contract
+# tests below run against SqliteBackend (:memory:) AND a real Db2Backend. The
+# Db2 parameter requires a live Db2 reachable via SQUALL_DB2_DSN — no skip, fail
+# loud if it is unset/unreachable (an env config we expect to be present).
+
+_DDL = "CREATE TABLE ACCOUNT(ACCT_ID INTEGER, ACCT_BAL INTEGER)"
+_SEED = ["INSERT INTO ACCOUNT VALUES (11, 500)", "INSERT INTO ACCOUNT VALUES (22, 750)"]
 
 
-@pytest.fixture
-def conn():
-    c = sqlite3.connect(":memory:")
-    c.execute("CREATE TABLE ACCOUNT(ACCT_ID INTEGER, ACCT_BAL INTEGER)")
-    c.execute("INSERT INTO ACCOUNT VALUES (11, 500)")
-    c.execute("INSERT INTO ACCOUNT VALUES (22, 750)")
-    c.commit()
-    yield c
-    c.close()
+@pytest.fixture(params=["sqlite", "db2"])
+def backend(request):
+    if request.param == "sqlite":
+        from squall.backends.sqlite import SqliteBackend
 
+        c = sqlite3.connect(":memory:")
+        c.execute(_DDL)
+        for ins in _SEED:
+            c.execute(ins)
+        c.commit()
+        yield SqliteBackend(c)
+        c.close()
+        return
 
-@pytest.fixture
-def backend(conn):
-    from squall.backends.sqlite import SqliteBackend
+    # db2
+    import os
+    import ibm_db
+    from squall.backends.db2 import Db2Backend
 
-    return SqliteBackend(conn)
+    conn = ibm_db.connect(os.environ["SQUALL_DB2_DSN"], "", "")
+
+    def _silent(sql):
+        try:
+            ibm_db.exec_immediate(conn, sql)
+        except Exception:
+            pass
+
+    _silent("DROP TABLE ACCOUNT")  # fresh table per test
+    ibm_db.exec_immediate(conn, _DDL)
+    for ins in _SEED:
+        ibm_db.exec_immediate(conn, ins)
+    ibm_db.commit(conn)
+    yield Db2Backend(conn)
+    _silent("DROP TABLE ACCOUNT")
+    ibm_db.commit(conn)
+    ibm_db.close(conn)
 
 
 # ── Task 6: SqliteBackend — SELECT ────────────────────────────────────────────
