@@ -15,4 +15,6 @@ fileignoreconfig:
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
 - filename: uv.lock
   checksum: 3b4702d8ecafeb89343f7b1002c458446a4fb4b2cb6d3e15762e678ad7ec1e6b
+- filename: squall/parser/parse.py
+  checksum: b47afab720fcafb14066fa29dd3726cc8b0b067792e8b9053ccb52ce9c16f0b9
 version: "1.0"
