@@ -34,7 +34,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -188,7 +188,7 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_account_update(tmp_path: Path):
+def _drive_to_account_update(tmp_path: Path, bridge_jar):
     from interpreter.cobol.cobol_parser import ProLeapCobolParser
     from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 
@@ -206,7 +206,7 @@ def _drive_to_account_update(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -284,11 +284,11 @@ def _cust_first_name(engine) -> str:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_account_update_rewrites(tmp_path):
+def test_real_carddemo_account_update_rewrites(tmp_path, bridge_jar):
     """find an account -> edit the customer first name -> validate (confirm
     prompt) -> PF5 commit. COACTUPC reads ACCTDAT + CUSTDAT, validates every
     field, then REWRITEs; the new name is verified on screen and in the engine."""
-    region, screen_q, engine = _drive_to_account_update(tmp_path)
+    region, screen_q, engine = _drive_to_account_update(tmp_path, bridge_jar)
     assert _cust_first_name(engine) == _FNAME  # pre-condition
 
     # Turn 4: first display.

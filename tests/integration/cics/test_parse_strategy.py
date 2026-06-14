@@ -18,9 +18,8 @@ from interpreter.cobol.features import CobolFeature
 from cics.preprocessor import apply_cics_prepass
 from tests.covers import covers
 from tests.integration.cobol_helpers import (
-    JAR_PATH,
     all_field_names as _all_field_names,
-    bridge_jar_env,
+    bridge_jar,
     to_fixed,
 )
 
@@ -28,15 +27,15 @@ _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 
 
 @pytest.fixture(autouse=True)
-def _bridge_jar_env(bridge_jar_env):
-    """Auto-apply the shared PROLEAP_BRIDGE_JAR env fixture to every test here."""
-    yield
+def _require_bridge_jar(bridge_jar):
+    """Enforce the required PROLEAP_BRIDGE_JAR for run()/compile_directory-based
+    tests (fails loudly via bridge_jar if it's unset)."""
 
 
 @pytest.fixture
-def cobol_parser():
+def cobol_parser(bridge_jar):
     runner = RealSubprocessRunner()
-    return ProLeapCobolParser(runner, JAR_PATH, copybook_dirs=[_CICS_COPYBOOKS])
+    return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
 
 
 COBOL_WITH_EXEC_CICS = """\
@@ -75,7 +74,7 @@ COBOL_RETURN = b"""\
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_return_lowers_to_call_and_return(bridge_jar_env, cobol_parser):
+def test_return_lowers_to_call_and_return(cobol_parser):
     """EXEC CICS RETURN lowers to __cics_set_return_context call + Return_."""
     from cics.preprocessor import apply_cics_prepass
     from interpreter.cobol.cobol_frontend import CobolFrontend
@@ -109,7 +108,7 @@ def test_return_lowers_to_call_and_return(bridge_jar_env, cobol_parser):
 
 @covers(CobolFeature.MULTI_FILE_IMPORTS)
 @covers(CobolFeature.EXEC_CICS)
-def test_dfhaid_copy_resolves_and_exposes_aid_key_constants():
+def test_dfhaid_copy_resolves_and_exposes_aid_key_constants(bridge_jar):
     """COPY DFHAID resolves to the canonical copybook and exposes DFHENTER and DFHPF3."""
     source = to_fixed(
         [
@@ -125,7 +124,7 @@ def test_dfhaid_copy_resolves_and_exposes_aid_key_constants():
     runner = RealSubprocessRunner()
     parser = ProLeapCobolParser(
         runner,
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[_CICS_COPYBOOKS],
     )
     asg = parser.parse(source.encode("utf-8"))

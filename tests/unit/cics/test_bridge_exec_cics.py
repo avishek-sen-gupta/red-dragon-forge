@@ -1,16 +1,13 @@
 """Verify the ProLeap bridge emits exec_cics_text for EXEC CICS statements."""
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
 from tests.covers import covers, NotLanguageFeature
+from tests.integration.cobol_helpers import bridge_jar
 
 REPO_ROOT = Path(__file__).parents[3]
-# PROLEAP_BRIDGE_JAR is the required test-env config (single source of truth) —
-# no default/skip fallback; unset means a loud failure, not a silent skip.
-BRIDGE_JAR = os.environ["PROLEAP_BRIDGE_JAR"]
 
 COBOL_WITH_EXEC_CICS = """\
        IDENTIFICATION DIVISION.
@@ -25,9 +22,9 @@ COBOL_WITH_EXEC_CICS = """\
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_bridge_emits_exec_cics_text():
+def test_bridge_emits_exec_cics_text(bridge_jar):
     result = subprocess.run(
-        ["java", "-jar", BRIDGE_JAR],
+        ["java", "-jar", bridge_jar],
         input=COBOL_WITH_EXEC_CICS,
         capture_output=True,
         text=True,

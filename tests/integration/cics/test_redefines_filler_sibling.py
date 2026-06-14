@@ -15,7 +15,7 @@ from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cobol_helpers import (
-    JAR_PATH,
+    bridge_jar,
     to_fixed,
 )
 
@@ -55,10 +55,10 @@ def _find(fields, name):
 
 @covers(CobolFeature.REDEFINES_CLAUSE)
 @covers(CobolFeature.FILLER_FIELD)
-def test_redefines_with_filler_sibling_parses_and_resolves():
+def test_redefines_with_filler_sibling_parses_and_resolves(bridge_jar):
     """A REDEFINES group with an anonymous FILLER sibling parses; redefines resolves."""
     runner = RealSubprocessRunner()
-    parser = ProLeapCobolParser(runner, JAR_PATH)
+    parser = ProLeapCobolParser(runner, bridge_jar)
 
     asg = parser.parse(REDEF_FILLER.encode("utf-8"))
 

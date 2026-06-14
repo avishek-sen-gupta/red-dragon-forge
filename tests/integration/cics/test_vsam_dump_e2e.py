@@ -29,7 +29,7 @@ from tests.integration.cics.test_carddemo_signon_real import (
     _NEW_ACCT_STATUS,
     _drive_rewrite,
 )
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 from cics.vsam.backend import FileBackend
 from cics.vsam.dump import decode_record, load_record_layout
 from cics.vsam.format import read_flat_file
@@ -41,7 +41,7 @@ pytestmark = pytest.mark.carddemo_e2e
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_dump_decodes_rewritten_acctdat_status_n(tmp_path):
+def test_dump_decodes_rewritten_acctdat_status_n(tmp_path, bridge_jar):
     """Decode the REWRITE off disk via the copybook-driven dump module.
 
     ACCT-ID is ``PIC 9(11)`` so the dump decodes it to the integer 11; match by
@@ -50,7 +50,7 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path):
     "N" — the value the REWRITE flow set (Y -> N).
     """
     backing = tmp_path / "store"
-    _drive_rewrite(tmp_path, backend=FileBackend(backing))
+    _drive_rewrite(tmp_path, bridge_jar, backend=FileBackend(backing))
 
     # Locate the real CardDemo ACCOUNT copybook (the one ACCTDAT records use).
     carddemo = Path(os.environ["CARDDEMO_HOME"])
@@ -59,8 +59,7 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path):
         len(matches) == 1
     ), f"expected 1 CVACT01Y.cpy under CARDDEMO_HOME, found {len(matches)}: {matches}"
     copybook = matches[0]
-    # The ProLeap bridge JAR (JAR_PATH, from the required PROLEAP_BRIDGE_JAR env).
-    layout = load_record_layout(copybook, None, JAR_PATH, [])
+    layout = load_record_layout(copybook, None, bridge_jar, [])
     records = read_flat_file(backing / "ACCTDAT.dat", layout.total_bytes)
     assert records, "ACCTDAT.dat backing file is empty or missing after REWRITE"
 

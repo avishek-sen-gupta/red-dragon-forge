@@ -36,7 +36,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 pytestmark = pytest.mark.carddemo_e2e
 
@@ -87,7 +87,7 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _build_region(tmp_path: Path, *, receive_timeout: float = 30.0):
+def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     from interpreter.cobol.cobol_parser import ProLeapCobolParser
     from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 
@@ -102,7 +102,7 @@ def _build_region(tmp_path: Path, *, receive_timeout: float = 30.0):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, _CICS_COPYBOOKS],
     )
 
@@ -135,7 +135,7 @@ def _build_region(tmp_path: Path, *, receive_timeout: float = 30.0):
     return region, screen_q, engine
 
 
-def _build_conversational(tmp_path: Path):
+def _build_conversational(tmp_path: Path, bridge_jar):
     """Wire zBANK behind the suspend/resume ConversationalRegion: the strategy is
     built with conversational=True (RECEIVE MAP -> SUSPEND), and the region drives
     via run_linked_resumable/resume_linked."""
@@ -147,7 +147,7 @@ def _build_conversational(tmp_path: Path):
         bms_dir=_FIXTURES, out_dir=sym_dir, hlasm_export_bin=HLASM_EXPORT_BIN
     )
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), JAR_PATH, copybook_dirs=[sym_dir, _CICS_COPYBOOKS]
+        RealSubprocessRunner(), bridge_jar, copybook_dirs=[sym_dir, _CICS_COPYBOOKS]
     )
     engine = _make_engine(tmp_path)
     screen_q: queue.Queue = queue.Queue()
@@ -199,7 +199,7 @@ def _balance(engine) -> str:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_zbank_conversational_login_deposit_withdraw_quit(tmp_path):
+def test_zbank_conversational_login_deposit_withdraw_quit(tmp_path, bridge_jar):
     """SLICE 2 + 4: drive the full conversational SEND/RECEIVE loop across screens
     via the suspend/resume ConversationalRegion. Working-storage persists across each
     terminal wait within ONE run_cics, so the balance READ at login is still in WS
@@ -212,7 +212,7 @@ def test_zbank_conversational_login_deposit_withdraw_quit(tmp_path):
       send(quit home)    -> back to login
       send(quit login)   -> EXIT-CONDITION -> bare RETURN
     """
-    region, engine = _build_conversational(tmp_path)
+    region, engine = _build_conversational(tmp_path, bridge_jar)
     assert _balance(engine) == "0000005000"  # pre-condition
 
     # Turn 1: first display.
@@ -263,7 +263,7 @@ def test_zbank_conversational_login_deposit_withdraw_quit(tmp_path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_zbank_compiles_renders_login_and_returns(tmp_path):
+def test_zbank_compiles_renders_login_and_returns(tmp_path, bridge_jar):
     """SLICE 1 (retires R2 + R4): the conversational program compiles through the
     ProLeap + symbolic-copybook pipeline, runs, renders its login map, and reaches
     the single bare EXEC CICS RETURN (task end).
@@ -278,7 +278,7 @@ def test_zbank_compiles_renders_login_and_returns(tmp_path):
         loop cannot be driven/terminated by input. This is the SLICE 2 lead.
       * EXEC CICS UNLOCK is unimplemented (logs 'unimplemented verb'); SLICE 3.
     """
-    region, screen_q, _ = _build_region(tmp_path, receive_timeout=0.05)
+    region, screen_q, _ = _build_region(tmp_path, bridge_jar, receive_timeout=0.05)
 
     r = region.start(
         "ZBNK",
@@ -299,7 +299,7 @@ def test_zbank_compiles_renders_login_and_returns(tmp_path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_zbank_conversational_extended_session(tmp_path):
+def test_zbank_conversational_extended_session(tmp_path, bridge_jar):
     """SLICE 2 (stress): one long conversation with many turns — multiple
     deposits/withdrawals, the no-op transfer, a register-screen detour, and a
     RE-LOGIN that proves the balance persisted in VSAM across logins. Everything
@@ -307,7 +307,7 @@ def test_zbank_conversational_extended_session(tmp_path):
     working-storage persistence over ~16 terminal exchanges before the bare
     RETURN.
     """
-    region, engine = _build_conversational(tmp_path)
+    region, engine = _build_conversational(tmp_path, bridge_jar)
     assert _balance(engine) == "0000005000"
 
     region.start(commarea=b"\x00" * 100)  # login screen

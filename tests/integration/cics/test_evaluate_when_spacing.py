@@ -15,7 +15,7 @@ from interpreter.cobol.cobol_statements import EvaluateStatement, WhenStatement
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
-from tests.integration.cobol_helpers import JAR_PATH, to_fixed
+from tests.integration.cobol_helpers import bridge_jar, to_fixed
 
 EVALUATE_SOURCE = to_fixed(
     [
@@ -57,9 +57,9 @@ def _find_when_condition(asg):
 
 
 @covers(CobolFeature.EVALUATE)
-def test_evaluate_when_condition_is_structured():
+def test_evaluate_when_condition_is_structured(bridge_jar):
     """EVALUATE WHEN condition is a structured dict matching the IF path."""
-    parser = ProLeapCobolParser(RealSubprocessRunner(), JAR_PATH)
+    parser = ProLeapCobolParser(RealSubprocessRunner(), bridge_jar)
     asg = parser.parse(EVALUATE_SOURCE.encode("utf-8"))
 
     condition = _find_when_condition(asg)

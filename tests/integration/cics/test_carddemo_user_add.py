@@ -37,7 +37,7 @@ from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
-from tests.integration.cobol_helpers import JAR_PATH
+from tests.integration.cobol_helpers import bridge_jar
 
 _CARDDEMO_HOME = os.environ.get("CARDDEMO_HOME")
 
@@ -108,7 +108,7 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
     return engine
 
 
-def _drive_to_user_add(tmp_path: Path):
+def _drive_to_user_add(tmp_path: Path, bridge_jar):
     """Compile COSGN00C + COADM01C + COUSR01C and drive turns 1-3 (admin path).
 
     Returns (region, screen_q, engine); the engine is returned so the test can
@@ -131,7 +131,7 @@ def _drive_to_user_add(tmp_path: Path):
     )
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
-        JAR_PATH,
+        bridge_jar,
         copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
     )
 
@@ -206,10 +206,10 @@ def _drive_to_user_add(tmp_path: Path):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_real_carddemo_user_add_writes_record(tmp_path):
+def test_real_carddemo_user_add_writes_record(tmp_path, bridge_jar):
     """Turn 5 adds a new user via EXEC CICS WRITE; verify the record lands in
     USRSEC and the success message is shown."""
-    region, screen_q, engine = _drive_to_user_add(tmp_path)
+    region, screen_q, engine = _drive_to_user_add(tmp_path, bridge_jar)
 
     # Pre-condition: the new key does not yet exist.
     rec, _ = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)

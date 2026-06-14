@@ -28,14 +28,15 @@ from cics.preprocessor import apply_cics_prepass
 from cics.types import DispatchKind
 from tests.integration.cics.channel_drain import drain
 from tests.covers import covers
-from tests.integration.cobol_helpers import JAR_PATH, bridge_jar_env
+from tests.integration.cobol_helpers import bridge_jar
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
 
 
 @pytest.fixture(autouse=True)
-def _bridge_jar_env(bridge_jar_env):
-    yield
+def _require_bridge_jar(bridge_jar):
+    """Enforce the required PROLEAP_BRIDGE_JAR for run()/compile_directory-based
+    tests (fails loudly via bridge_jar if it's unset)."""
 
 
 # Main: CALL 'SETVAL' USING BY REFERENCE WS-OUT (initially spaces); then SEND
@@ -70,7 +71,7 @@ SETVAL_SRC = """\
 
 
 @covers(CobolFeature.CALL, CobolFeature.CALL_USING)
-def test_region_program_links_called_subprogram(tmp_path):
+def test_region_program_links_called_subprogram(tmp_path, bridge_jar):
     """A CICS-compiled main that CALLs a sibling actually invokes it (region link).
 
     RED before red-dragon-1bp2: SETVAL is not linked, the CALL goes symbolic, and
@@ -83,7 +84,7 @@ def test_region_program_links_called_subprogram(tmp_path):
     (cbl_dir / "SETVAL.cbl").write_text(SETVAL_SRC)
 
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), JAR_PATH, copybook_dirs=[_CICS_COPYBOOKS]
+        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
     )
 
     screen_q: queue.Queue = queue.Queue()
