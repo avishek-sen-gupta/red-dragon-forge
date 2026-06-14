@@ -74,3 +74,8 @@ target/
 *.class
 .claude/
 .pre-commit-config.yaml
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/

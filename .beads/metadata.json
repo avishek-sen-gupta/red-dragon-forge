@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "squall",
+  "project_id": "b03af9d0-175b-4d31-8b8a-07e0fe3eeb33"
+}
