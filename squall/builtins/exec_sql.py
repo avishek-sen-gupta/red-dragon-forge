@@ -33,6 +33,14 @@ if TYPE_CHECKING:
 # Cursor kinds whose query string is empty — not implemented in slice 1.
 _NO_QUERY_CURSOR_KINDS = frozenset({"fetch", "open_", "close"})
 
+# Directives that are precompiler/runtime bookkeeping with no effect on an
+# injected backend: connection management and the host-var declare-section
+# bookends. They no-op with SQLCODE 0 — the backend connection is pre-established
+# (squall is handed a SqlBackend), and DECLARE SECTION is purely declarative.
+_NO_OP_KINDS = frozenset(
+    {"connect", "disconnect", "set_connection", "begin_declare", "end_declare"}
+)
+
 
 def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type: ignore[type-arg]
     """Return a ``__exec_sql`` builtin closing over *backend* and the plan pool.
@@ -55,6 +63,11 @@ def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type
         raw_arg = args[0]
         index = raw_arg.value if hasattr(raw_arg, "value") else raw_arg
         parsed = plans[int(index)]
+
+        # Connection / declare-section directives have no DB effect — no-op.
+        if parsed.kind in _NO_OP_KINDS:
+            write_sqlcode(vm, 0)  # type: ignore[arg-type]
+            return BuiltinResult(value=None)
 
         # Raise early for no-query cursor kinds (slice-1 not-yet-supported).
         if parsed.kind in _NO_QUERY_CURSOR_KINDS:
