@@ -41,6 +41,8 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: tests/integration/squall_cobol_helpers.py
   ignore_detectors: [filecontent]
+- filename: tests/integration/test_include_dclgen_e2e.py
+  ignore_detectors: [filecontent]
 - filename: tests/unit/test_preprocess.py
   ignore_detectors: [filecontent]
 - filename: squall/preprocess.py

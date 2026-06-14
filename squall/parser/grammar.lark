@@ -39,7 +39,7 @@ start: stmt
      | generic
 
 // ── Core DML ────────────────────────────────────────────────────────────────
-select_into:    SELECT _run_i INTO into_list _run
+select_into:    SELECT _run_i INTO into_list FROM _run
 insert:         INSERT _run
 update:         UPDATE _run cur_of?
 delete:         DELETE _run cur_of?

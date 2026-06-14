@@ -14,7 +14,9 @@ Pattern (mirrors cicada's tests/integration/cobol_helpers.py):
 
 from __future__ import annotations
 
+import importlib.resources
 import os
+from pathlib import Path
 
 import pytest
 
@@ -30,6 +32,15 @@ from interpreter.address import Address
 from interpreter.registry import build_registry
 from interpreter.vm.vm import VMState
 
+from squall.preprocess import apply_sql_prepass
+
+
+def _squall_copybooks_dir() -> Path:
+    """Return the filesystem path to the squall.copybooks package directory."""
+    ref = importlib.resources.files("squall.copybooks")
+    # files() returns a Traversable; resolve to a real Path via __fspath__ or str.
+    return Path(str(ref))
+
 
 @pytest.fixture
 def bridge_jar() -> str:
@@ -41,27 +52,44 @@ def bridge_jar() -> str:
     return os.environ["PROLEAP_BRIDGE_JAR"]
 
 
-def make_cobol_parser(bridge_jar_path: str) -> ProLeapCobolParser:
-    """Build a ProLeapCobolParser for the given JAR path."""
-    return ProLeapCobolParser(RealSubprocessRunner(), bridge_jar_path)
+def make_cobol_parser(
+    bridge_jar_path: str,
+    copybook_dirs: list[Path] | None = None,
+) -> ProLeapCobolParser:
+    """Build a ProLeapCobolParser for the given JAR path.
+
+    Always includes the squall.copybooks directory so that COPY statements
+    produced by apply_sql_prepass (from EXEC SQL INCLUDE) can be resolved.
+    Additional directories may be passed via *copybook_dirs*.
+    """
+    dirs: list[Path] = [_squall_copybooks_dir()]
+    if copybook_dirs:
+        dirs.extend(copybook_dirs)
+    return ProLeapCobolParser(RealSubprocessRunner(), bridge_jar_path, copybook_dirs=dirs)
 
 
 def compile_cobol(
     source: str,
     bridge_jar_path: str,
     extension_strategies: list | None = None,
+    copybook_dirs: list[Path] | None = None,
 ) -> tuple[CobolFrontend, LinkedProgram]:
     """Compile a COBOL source string to a LinkedProgram.
+
+    Applies apply_sql_prepass before lowering so that EXEC SQL INCLUDE blocks
+    are rewritten to COPY statements, which the ProLeap parser then inlines
+    from the squall copybooks directory (plus any extra *copybook_dirs*).
 
     Returns (frontend, linked) so that callers can access frontend.data_layout
     for assertions and pass the LinkedProgram to run_linked.
     """
-    parser = make_cobol_parser(bridge_jar_path)
+    preprocessed = apply_sql_prepass(source)
+    parser = make_cobol_parser(bridge_jar_path, copybook_dirs=copybook_dirs)
     frontend = CobolFrontend(
         cobol_parser=parser,
         extension_strategies=list(extension_strategies or []),
     )
-    instructions = frontend.lower(source.encode("utf-8"))
+    instructions = frontend.lower(preprocessed.encode("utf-8"))
     cfg = build_cfg(instructions)
     registry = build_registry(
         instructions,
@@ -90,6 +118,7 @@ def run_cobol(
     bridge_jar_path: str,
     extension_strategies: list | None = None,
     max_steps: int = 1000,
+    copybook_dirs: list[Path] | None = None,
 ):
     """Compile and run a COBOL program; return the final VMState.
 
@@ -98,7 +127,9 @@ def run_cobol(
     program's procedure division function (func_<pid>_0).  This is required
     so that __ws_region is visible in the frame when the builtins execute.
     """
-    frontend, linked = compile_cobol(source, bridge_jar_path, extension_strategies)
+    frontend, linked = compile_cobol(
+        source, bridge_jar_path, extension_strategies, copybook_dirs=copybook_dirs
+    )
 
     # For COBOL, use function-entry mode so run_linked runs the WS init block
     # (phase 1) then dispatches into func_<pid>_0 (phase 2).
@@ -141,17 +172,22 @@ def run_cobol(
     return vm
 
 
-def read_ws_field(vm, field_name: str) -> int | str | None:
+def read_ws_field(vm, field_name: str):
     """Decode a named WS field from the post-run VMState.
 
     Locates the __ws_region address in the top-most call frame, then reads
     and decodes the field using vm.data_layout (populated by run_linked).
 
-    Returns an int for ZONED_DECIMAL fields, a str for ALPHANUMERIC, None
-    if the field is not found.
+    Decoding delegates to squall.binding._decode_field, which handles:
+      ZONED_DECIMAL  → int
+      ALPHANUMERIC   → str
+      COMP3          → Decimal
+      BINARY         → int
+
+    Returns None if the field or WS region is not found.
     """
     from interpreter.var_name import VarName
-    from squall.binding import _zoned_decode, _alpha_decode
+    from squall.binding import _decode_field
 
     ws_var = VarName("__ws_region")
     region = None
@@ -173,7 +209,4 @@ def read_ws_field(vm, field_name: str) -> int | str | None:
 
     off, length = f["offset"], f["length"]
     raw = bytes(region[off: off + length])
-    category = f.get("category", "ALPHANUMERIC")
-    if category == "ZONED_DECIMAL":
-        return _zoned_decode(raw)
-    return _alpha_decode(raw)
+    return _decode_field(raw, f)
