@@ -31,4 +31,8 @@ fileignoreconfig:
   checksum: 5a50ad3a413792fb115d0f9383cc6fdea2af452b34953ca29b2ae4bae0a73fec
 - filename: tests/unit/test_builtin.py
   ignore_detectors: [filecontent]
+- filename: squall/strategy.py
+  ignore_detectors: [filecontent]
+- filename: tests/unit/test_strategy.py
+  ignore_detectors: [filecontent]
 version: "1.0"
