@@ -9,4 +9,8 @@ fileignoreconfig:
   checksum: bf9e1afc14382d91e580b852357f6a5c15107a9cb8bc900a0de975deabac3e01
 - filename: CLAUDE.md
   checksum: c550050e17fe7b939418f2e0b6d4bb08828e94a7c6e03298ecfc077e8d3026d5
+- filename: vendor/red-dragon
+  checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+- filename: uv.lock
+  checksum: 3b4702d8ecafeb89343f7b1002c458446a4fb4b2cb6d3e15762e678ad7ec1e6b
 version: "1.0"
