@@ -12,6 +12,8 @@
 
 **Invariants:** no `squall → cicada` import; no RedDragon `vm/**`/`ir.py` edits; **no regex/string-surgery for SQL** — lexer + grammar only; tests use the `bridge_jar` fixture (required env, no skip/default).
 
+**Core tenets (every task):** **TDD** — failing test first, watch it fail, minimal pass. **FP** — pure functions over data (parser, extraction, codec, rewrite take values in → values out, no side effects); effects only at the edges (VM region via `binding.py`; DB via `SqlBackend`); enforced by `python_fp_lint`. **Immutability** — frozen dataclasses for all value types (`ParsedSql`, `SqlResult`, …), tuples over lists, never mutate inputs/shared state.
+
 **Scope note:** this plan covers **slice 0** (the full directive parser) + **slice 1** (the SELECT INTO vertical). The grammar **parses all ~30 directives**; only `SELECT … INTO` is *lowered* here — other directives parse fine and raise a clear "not lowered yet" at lowering. Slices 2+ (INCLUDE/SQLCA/DCLGEN, DML, cursors, txns, real CBSA) are follow-up plans.
 
 ---
@@ -50,7 +52,8 @@ vendor/red-dragon   (submodule @ ab598905)
 ## Task 0: Scaffold
 
 - [ ] **Submodule:** `git submodule add git@github.com:avishek-sen-gupta/red-dragon.git vendor/red-dragon && git -C vendor/red-dragon checkout ab598905`.
-- [ ] **`pyproject.toml`** (uv): deps `lark>=1.1`; dev-deps `pytest>=8`, `black`, `antlr4-python3-runtime==4.13.2`; RedDragon as editable path dep (confirm its dist name via `grep '^name' vendor/red-dragon/pyproject.toml`; if not installable, use `pythonpath=[".","vendor/red-dragon"]`). `[tool.pytest.ini_options] pythonpath=["."]`.
+- [ ] **`pyproject.toml`** (uv): deps `lark>=1.1`; dev-deps `pytest>=8`, `black`, `pyright`, `python-fp-lint` (available transitively via the editable RedDragon dep; pin if needed), `antlr4-python3-runtime==4.13.2`; RedDragon as editable path dep (confirm its dist name via `grep '^name' vendor/red-dragon/pyproject.toml`; if not installable, use `pythonpath=[".","vendor/red-dragon"]`). `[tool.pytest.ini_options] pythonpath=["."]`.
+- [ ] **Pre-commit** (`.pre-commit-config.yaml`, mirroring RedDragon/cicada): `black` (auto-fix), **`python_fp_lint check squall/`** (the FP tenet), `pyright` (warnings), and the unit test suite. This enforces the FP + immutability tenets mechanically.
 - [ ] **Skeleton:** create the `squall/` packages above (empty `__init__.py`), `tests/{unit,integration,oracle}/`.
 - [ ] **Verify RedDragon import:** `uv run python -c "from interpreter.cobol.cobol_statements import ExecSqlStatement; print(ExecSqlStatement)"`.
 - [ ] **Commit** `chore: scaffold squall (lark + vendor/red-dragon submodule)`.

@@ -282,6 +282,12 @@ CBSA CICS+Db2 program under cicada+squall.
 4. **No regex / string-surgery for SQL parsing** — a string/comment-aware **lexer** + the directive
    **grammar** only. Host vars surface as `COLON NAME` token adjacencies, never via text search.
 5. Tests follow the `bridge_jar` fixture pattern (required `PROLEAP_BRIDGE_JAR`, no skip/default).
+6. **Core engineering tenets** (non-negotiable): **TDD** (failing test first, always); **FP style**
+   — the core (parser, extraction, codec, query rewrite) is **pure functions over data**, side
+   effects pushed to the edges (VM region via the binding engine; DB via `SqlBackend`), enforced by
+   `python_fp_lint`; **immutability** — all value types are frozen dataclasses, tuples over lists, no
+   mutation of inputs/shared state; the VM region and DB connection are the only mutable state, owned
+   by their boundary modules.
 
 ---
 
