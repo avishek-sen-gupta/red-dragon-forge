@@ -202,3 +202,34 @@ def test_returns_builtin_result(backend):
     )
     assert isinstance(result, BuiltinResult)
     assert result.value is None
+
+
+# ── No-op directives (CONNECT / DECLARE SECTION) ──────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "EXEC SQL CONNECT TO sample END-EXEC",
+        "EXEC SQL CONNECT RESET END-EXEC",
+        "EXEC SQL BEGIN DECLARE SECTION END-EXEC",
+        "EXEC SQL END DECLARE SECTION END-EXEC",
+    ],
+)
+def test_directive_is_noop_sqlcode_zero(backend, sql):
+    """Connection + declare-section directives no-op with SQLCODE 0, untouched DB."""
+    vm, region = _make_vm(ws_id=1)
+    _call_builtin(backend, vm, sql)
+    assert _zoned_decode(bytes(region[13:22])) == 0
+
+
+def test_connect_with_host_vars_does_not_bind(backend):
+    """CONNECT ... USER ... USING ... no-ops without reading/binding its host vars
+    (so a VARCHAR password host var never has to be marshalled)."""
+    vm, region = _make_vm(ws_id=1)
+    _call_builtin(
+        backend,
+        vm,
+        "EXEC SQL CONNECT TO sample USER :WS-ID USING :WS-BAL END-EXEC",
+    )
+    assert _zoned_decode(bytes(region[13:22])) == 0
