@@ -14,10 +14,12 @@ Design
   statement in a PERFORM loop is parsed once, not on every pass.
 * The function is pure given a fixed backend; the backend carries the one
   mutable boundary (the DB connection).
-* Slice-1 scope:
+* Dispatch:
     - ``select_into``: bind inputs, execute, write outputs, write SQLCODE.
     - DML kinds with a non-empty query (insert/update/delete/…): execute + write SQLCODE.
-    - No-query cursor kinds (fetch/open_/close): raise ``NotImplementedError``.
+    - Cursor kinds (declare_cursor/open_/fetch/close): driven through the
+      backend's cursor surface via a per-run cursor registry.
+    - Connection / declare-section directives: no-op with SQLCODE 0.
 """
 
 from __future__ import annotations
@@ -29,9 +31,6 @@ from squall.binding import read_params, write_outputs, write_sqlcode
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
-
-# Cursor kinds whose query string is empty — not implemented in slice 1.
-_NO_QUERY_CURSOR_KINDS = frozenset({"fetch", "open_", "close"})
 
 # Directives that are precompiler/runtime bookkeeping with no effect on an
 # injected backend: connection management and the host-var declare-section
@@ -54,6 +53,10 @@ def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type
     ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
     """
 
+    # Runtime cursor registry: cursor name -> the declared ParsedSql (its SELECT
+    # + input host vars). DECLARE records it; OPEN reads it. One run, one builtin.
+    cursors: dict = {}
+
     def __exec_sql(args: list, vm: object) -> "BuiltinResult":  # type: ignore[type-arg]
         from interpreter.vm.vm_types import BuiltinResult  # noqa: PLC0415
 
@@ -69,11 +72,41 @@ def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type
             write_sqlcode(vm, 0)  # type: ignore[arg-type]
             return BuiltinResult(value=None)
 
-        # Raise early for no-query cursor kinds (slice-1 not-yet-supported).
-        if parsed.kind in _NO_QUERY_CURSOR_KINDS:
-            raise NotImplementedError(
-                f"squall slice 1: {parsed.kind} not yet supported"
-            )
+        # ── Cursors ───────────────────────────────────────────────────────────
+        if parsed.kind == "declare_cursor":
+            # Declaration only — remember the SELECT + its host vars for OPEN.
+            cursors[parsed.cursor] = parsed
+            write_sqlcode(vm, 0)  # type: ignore[arg-type]
+            return BuiltinResult(value=None)
+
+        if parsed.kind == "open_":
+            decl = cursors.get(parsed.cursor)
+            if decl is None:
+                write_sqlcode(vm, -1)  # type: ignore[arg-type]  # cursor not declared
+                return BuiltinResult(value=None)
+            # Host vars are captured at OPEN: OPEN ... USING overrides, else the
+            # cursor SELECT's own host vars.
+            src = parsed.in_vars or decl.in_vars
+            params = read_params(vm, tuple(hv.name for hv in src))  # type: ignore[arg-type]
+            backend.open_cursor(parsed.cursor, decl.query, params)
+            write_sqlcode(vm, 0)  # type: ignore[arg-type]
+            return BuiltinResult(value=None)
+
+        if parsed.kind == "fetch":
+            result = backend.fetch(parsed.cursor)
+            if result.rows:
+                out_names = tuple(hv.name for hv in parsed.out_vars)
+                status = write_outputs(vm, out_names, result.rows[0])  # type: ignore[arg-type]
+                if status != 0:
+                    write_sqlcode(vm, status)  # type: ignore[arg-type]
+                    return BuiltinResult(value=None)
+            write_sqlcode(vm, result.sqlcode)  # type: ignore[arg-type]  # 0 row / 100 end
+            return BuiltinResult(value=None)
+
+        if parsed.kind == "close":
+            backend.close(parsed.cursor)
+            write_sqlcode(vm, 0)  # type: ignore[arg-type]
+            return BuiltinResult(value=None)
 
         # All remaining kinds have a non-empty query string.
         in_names = tuple(hv.name for hv in parsed.in_vars)
