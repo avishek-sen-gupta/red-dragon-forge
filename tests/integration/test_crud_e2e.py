@@ -36,10 +36,10 @@ from squall.dclgen import generate, write
 
 
 # The program: CRUD round-trip driven entirely off the GENERATED ACCTREC record.
-# NOTE: each EXEC SQL ... END-EXEC is period-terminated. ProLeap currently merges
-# adjacent EXEC SQL blocks that lack a period (it handles this for EXEC CICS but
-# not EXEC SQL) — tracked as red-dragon-g64e. Period termination is also the
-# idiomatic mainframe form, so this is a correct program regardless.
+# NOTE: the procedure-division EXEC SQL blocks are deliberately NOT period-
+# terminated, so adjacent statements (INSERT immediately followed by SELECT, etc.)
+# exercise the ProLeap adjacency fix (red-dragon-g64e). Before that fix the
+# adjacent blocks merged into one statement and the SQL was malformed.
 _PROGRAM = """       IDENTIFICATION DIVISION.
        PROGRAM-ID. CRUDTEST.
        DATA DIVISION.
@@ -57,28 +57,28 @@ _PROGRAM = """       IDENTIFICATION DIVISION.
            EXEC SQL
                INSERT INTO ACCOUNT (ACCT_ID, ACCT_BAL, ACCT_NAME)
                VALUES (:ACCT-ID, :ACCT-BAL, :ACCT-NAME)
-           END-EXEC.
+           END-EXEC
            EXEC SQL
                SELECT ACCT_BAL INTO :WS-BAL
                FROM ACCOUNT WHERE ACCT_ID = :ACCT-ID
-           END-EXEC.
+           END-EXEC
            MOVE SQLCODE TO WS-CODE-INS.
            MOVE 2000.00 TO ACCT-BAL.
            EXEC SQL
                UPDATE ACCOUNT SET ACCT_BAL = :ACCT-BAL
                WHERE ACCT_ID = :ACCT-ID
-           END-EXEC.
+           END-EXEC
            EXEC SQL
                SELECT ACCT_BAL INTO :WS-BAL2
                FROM ACCOUNT WHERE ACCT_ID = :ACCT-ID
-           END-EXEC.
+           END-EXEC
            EXEC SQL
                DELETE FROM ACCOUNT WHERE ACCT_ID = :ACCT-ID
-           END-EXEC.
+           END-EXEC
            EXEC SQL
                SELECT ACCT_BAL INTO :WS-BAL
                FROM ACCOUNT WHERE ACCT_ID = :ACCT-ID
-           END-EXEC.
+           END-EXEC
            MOVE SQLCODE TO WS-CODE-DEL.
            STOP RUN.
 """
