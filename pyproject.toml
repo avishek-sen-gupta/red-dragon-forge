@@ -10,7 +10,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# nothing yet
+# The Db2 backend (squall.backends.db2) needs the IBM driver; SQLite needs nothing.
+db2 = ["ibm-db>=3.2.0"]
 
 [dependency-groups]
 dev = [
@@ -18,6 +19,7 @@ dev = [
     "black>=26.0.0",
     "pyright>=1.1.408",
     "antlr4-python3-runtime==4.13.2",  # che4z oracle (tests only)
+    "ibm-db>=3.2.0",                    # Db2 backend contract tests
     # python-fp-lint comes transitively via the red-dragon dependency
 ]
 
