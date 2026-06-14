@@ -28,7 +28,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-
 # ── Name mapping ──────────────────────────────────────────────────────────────
 
 
@@ -102,9 +101,24 @@ def _parse_sql_type(decl: str) -> dict:
             "pic": f"X({n})",
         }
 
+    if base in ("VARCHAR", "VARYING", "CHARACTER VARYING"):
+        n = args[0] if args else 1
+        # A VARCHAR is the IBM DCLGEN 49-group: a group item with two 49-level
+        # children — a binary length prefix and the text. It is NOT an elementary
+        # item, so it carries no single PIC (pic=None); _render_copybook emits the
+        # group and the children, and binding drives the LEN/TEXT codec.
+        return {
+            "sql_type": f"VARCHAR({n})",
+            "category": "VARCHAR",
+            "total_digits": 0,
+            "decimal_digits": 0,
+            "length": n,
+            "pic": None,
+        }
+
     raise NotImplementedError(
         f"dclgen v1 does not support SQL type {decl!r} "
-        f"(VARCHAR / floating point / lengthless TEXT / BLOB are not yet mapped)"
+        f"(floating point / lengthless TEXT / BLOB are not yet mapped)"
     )
 
 
@@ -131,9 +145,10 @@ class GeneratedRecord:
 
 def _field_meta(column: str, decl: str, notnull: int, prefix: str) -> dict:
     t = _parse_sql_type(decl)
-    return {
+    host_var = prefix + _cobolify(column)
+    meta = {
         "column": column,
-        "host_var": prefix + _cobolify(column),
+        "host_var": host_var,
         "sql_type": t["sql_type"],
         "nullable": not bool(notnull),
         "category": t["category"],
@@ -142,14 +157,28 @@ def _field_meta(column: str, decl: str, notnull: int, prefix: str) -> dict:
         "length": t["length"],
         "pic": t["pic"],
     }
+    if t["category"] == "VARCHAR":
+        # Record the 49-group children so binding can resolve LEN/TEXT from the
+        # flat data_layout (which records them as <host>-LEN / <host>-TEXT but
+        # cannot mark the group itself as VARCHAR).
+        meta["len_var"] = f"{host_var}-LEN"
+        meta["text_var"] = f"{host_var}-TEXT"
+    return meta
 
 
 def _render_copybook(record_name: str, fields: list[dict]) -> str:
-    # 01 in Area A (column 8), 05 elementary items in Area B (column 12).
+    # 01 in Area A (column 8), 05 elementary items in Area B (column 12),
+    # 49-level VARCHAR children nested one step deeper (column 16).
     width = max((len(f["host_var"]) for f in fields), default=0)
     lines = [f"       01  {record_name}."]
     for f in fields:
-        lines.append(f"           05  {f['host_var']:<{width}}  PIC {f['pic']}.")
+        if f["category"] == "VARCHAR":
+            n = f["length"]
+            lines.append(f"           05  {f['host_var']}.")
+            lines.append(f"               49  {f['len_var']:<{width}}  PIC S9(4) COMP.")
+            lines.append(f"               49  {f['text_var']:<{width}}  PIC X({n}).")
+        else:
+            lines.append(f"           05  {f['host_var']:<{width}}  PIC {f['pic']}.")
     return "\n".join(lines) + "\n"
 
 
@@ -166,7 +195,10 @@ def generate(
         raise ValueError(f"table {table!r} has no columns (does it exist?)")
 
     # PRAGMA table_info row: (cid, name, type, notnull, dflt_value, pk)
-    fields = [_field_meta(name, decl, notnull, prefix) for _, name, decl, notnull, _, _ in rows]
+    fields = [
+        _field_meta(name, decl, notnull, prefix)
+        for _, name, decl, notnull, _, _ in rows
+    ]
 
     metadata = {"record": record_name, "table": table, "fields": fields}
     return GeneratedRecord(

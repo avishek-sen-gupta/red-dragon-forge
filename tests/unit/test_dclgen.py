@@ -18,7 +18,6 @@ from squall.dclgen import (
     generate,
 )
 
-
 # ── Name mapping ──────────────────────────────────────────────────────────────
 
 
@@ -65,10 +64,20 @@ def test_char_maps_to_alphanumeric() -> None:
     assert t["sql_type"] == "CHAR(20)"
 
 
-@pytest.mark.parametrize("decl", ["VARCHAR(20)", "TEXT", "REAL", "DOUBLE", "BLOB"])
+@pytest.mark.parametrize("decl", ["TEXT", "REAL", "DOUBLE", "BLOB"])
 def test_unsupported_types_raise(decl: str) -> None:
     with pytest.raises(NotImplementedError):
         _parse_sql_type(decl)
+
+
+def test_varchar_maps_to_49_group() -> None:
+    t = _parse_sql_type("VARCHAR(9)")
+    assert t["category"] == "VARCHAR"
+    assert t["length"] == 9
+    assert t["sql_type"] == "VARCHAR(9)"
+    # A VARCHAR is a GROUP (49-level LEN + TEXT children), not an elementary
+    # item — it has no single PIC of its own.
+    assert t["pic"] is None
 
 
 # ── Full generation ───────────────────────────────────────────────────────────
@@ -121,3 +130,42 @@ def test_prefix_applied_to_host_vars() -> None:
     rec = generate(_seed(), "ACCOUNT", record_name="ACCT-REC", prefix="WS-")
     hv = {f["column"]: f["host_var"] for f in rec.metadata["fields"]}
     assert hv["ACCT_ID"] == "WS-ACCT-ID"
+
+
+# ── VARCHAR 49-group ──────────────────────────────────────────────────────────
+
+
+def _seed_varchar() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE EMP (EMP_ID SMALLINT NOT NULL, EMP_NAME VARCHAR(9))")
+    return conn
+
+
+def test_generate_varchar_group_copybook() -> None:
+    rec = generate(_seed_varchar(), "EMP", record_name="EMP-REC")
+    cpy = rec.copybook
+    # The VARCHAR column renders as a 05 group with two 49-level children.
+    assert "05  EMP-NAME." in cpy
+    assert "49  EMP-NAME-LEN" in cpy and "PIC S9(4) COMP." in cpy
+    assert "49  EMP-NAME-TEXT" in cpy and "PIC X(9)." in cpy
+    # The 49 children are indented deeper than the 05 group (Area B + nesting).
+    group_col = next(ln.index("05") for ln in cpy.splitlines() if "05  EMP-NAME." in ln)
+    child_col = next(
+        ln.index("49") for ln in cpy.splitlines() if "49  EMP-NAME-LEN" in ln
+    )
+    assert child_col > group_col
+
+
+def test_generate_varchar_metadata() -> None:
+    rec = generate(_seed_varchar(), "EMP", record_name="EMP-REC")
+    by_col = {f["column"]: f for f in rec.metadata["fields"]}
+    nm = by_col["EMP_NAME"]
+    assert nm["category"] == "VARCHAR"
+    assert nm["sql_type"] == "VARCHAR(9)"
+    assert nm["length"] == 9
+    assert nm["host_var"] == "EMP-NAME"
+    # The 49-group children, named so binding can resolve LEN/TEXT from the
+    # flat data_layout (which cannot express the group structure).
+    assert nm["len_var"] == "EMP-NAME-LEN"
+    assert nm["text_var"] == "EMP-NAME-TEXT"
+    assert nm["nullable"] is True
