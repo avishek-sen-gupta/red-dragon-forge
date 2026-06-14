@@ -40,20 +40,18 @@ _REGION_SIZE = 32
 # ── Fake VM ───────────────────────────────────────────────────────────────────
 
 
+# The fake VM must honour the REAL VM contract: local_vars keyed by VarName,
+# the region map keyed by Address. A looser duck-type would pass here yet fail
+# against the real VMState (this is exactly the divergence the e2e would hit).
+from interpreter.var_name import VarName
+from interpreter.address import Address
+
+
 class _FakeFrame:
-    """Mimics a VM call-stack frame with a single local var."""
+    """Mimics a VM call-stack frame with the __ws_region local var (VarName-keyed)."""
 
     def __init__(self, addr: str):
-        # key must support .name or str() => "__ws_region"
-        self.local_vars = {_VarKey("__ws_region"): _AddrValue(addr)}
-
-
-class _VarKey:
-    def __init__(self, name: str):
-        self.name = name
-
-    def __str__(self):
-        return self.name
+        self.local_vars = {VarName("__ws_region"): _AddrValue(addr)}
 
 
 class _AddrValue:
@@ -62,15 +60,18 @@ class _AddrValue:
 
 
 class _FakeVM:
-    """Minimal duck-typed VM for binding tests."""
+    """Minimal VM honouring the real VarName/Address-keyed contract."""
 
     def __init__(self, region: bytearray, layout: dict, addr: str = "1"):
         self._region = region
         self.data_layout = layout
-        self._addr = addr
+        self._addr = Address(addr)
         self.call_stack = [_FakeFrame(addr)]
 
     def region_get(self, addr):
+        # Real region_get takes an Address; reject anything else so a regression
+        # to a raw-str lookup fails loudly here instead of silently in the e2e.
+        assert isinstance(addr, Address), f"region_get expects Address, got {type(addr)}"
         return self._region if addr == self._addr else None
 
 

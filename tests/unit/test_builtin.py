@@ -29,15 +29,11 @@ _LAYOUT = {
 _REGION_SIZE = 22
 
 
-# ── Fake VM (mirrors test_binding.py) ────────────────────────────────────────
-
-
-class _VarKey:
-    def __init__(self, name: str):
-        self.name = name
-
-    def __str__(self) -> str:
-        return self.name
+# ── Fake VM ──────────────────────────────────────────────────────────────────
+# Honour the REAL VM contract: local_vars keyed by VarName, regions by Address.
+# A looser duck-type passes the unit test yet fails against the real VMState.
+from interpreter.var_name import VarName
+from interpreter.address import Address
 
 
 class _AddrValue:
@@ -47,17 +43,18 @@ class _AddrValue:
 
 class _FakeFrame:
     def __init__(self, addr: str):
-        self.local_vars = {_VarKey("__ws_region"): _AddrValue(addr)}
+        self.local_vars = {VarName("__ws_region"): _AddrValue(addr)}
 
 
 class _FakeVM:
     def __init__(self, region: bytearray, layout: dict, addr: str = "1"):
         self._region = region
         self.data_layout = layout
-        self._addr = addr
+        self._addr = Address(addr)
         self.call_stack = [_FakeFrame(addr)]
 
-    def region_get(self, addr: str):
+    def region_get(self, addr):
+        assert isinstance(addr, Address), f"region_get expects Address, got {type(addr)}"
         return self._region if addr == self._addr else None
 
 

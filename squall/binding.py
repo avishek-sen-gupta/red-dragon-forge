@@ -23,6 +23,8 @@ if _VENDOR not in sys.path:
     sys.path.insert(0, _VENDOR)
 
 from interpreter.cobol.cobol_constants import ByteConstants  # noqa: E402
+from interpreter.var_name import VarName  # noqa: E402
+from interpreter.address import Address  # noqa: E402
 
 # ── Low-level codec helpers ───────────────────────────────────────────────────
 
@@ -96,16 +98,20 @@ def _get_ws_region(vm):
     except AttributeError:
         return None, None
 
+    # Mirror cics.builtins.system._get_ws_region_addr EXACTLY: the real VM keys
+    # frame.local_vars by VarName and keys its region map by Address. Matching on
+    # a duck-typed str/.name or passing a raw-str addr silently misses both the
+    # VarName equality and the Address-keyed region_get (Address.__eq__ rejects
+    # bare str), so the WS region must be reached through the real value types.
+    ws_var = VarName("__ws_region")
     for frame in reversed(call_stack):
         local_vars = getattr(frame, "local_vars", {})
-        for key in local_vars:
-            key_name = key.name if hasattr(key, "name") else str(key)
-            if key_name == "__ws_region":
-                tv = local_vars[key]
-                addr_val = str(tv.value) if hasattr(tv, "value") else str(tv)
-                region = vm.region_get(addr_val)
-                if region is not None:
-                    return addr_val, region
+        if ws_var in local_vars:
+            tv = local_vars[ws_var]
+            addr = Address(str(tv.value))
+            region = vm.region_get(addr)
+            if region is not None:
+                return addr, region
     return None, None
 
 
