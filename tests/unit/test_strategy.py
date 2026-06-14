@@ -110,19 +110,30 @@ def test_lower_emits_call_function(strategy):
     assert len(call.args) == 1, f"Expected 1 arg, got {len(call.args)}"
 
 
-def test_lower_const_carries_verbatim_text(strategy):
-    """The Const instruction preceding the CallFunction holds the raw text."""
+def test_lower_parses_once_into_pool(strategy):
+    """The directive is parsed at lower() time into the strategy's plan pool;
+    the Const carries only the integer pool index (a primitive), so the builtin
+    never re-parses at run time and no object travels through the IR."""
+    from squall.parser.parse import ParsedSql, HostVar
+
     text = "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT END-EXEC"
     stmt = ExecSqlStatement(text=text)
     ctx = _FakeEmitContext()
 
     strategy.lower(ctx, stmt, materialised=None)
 
+    # The Const carries the pool index (int 0 for the first lowered statement).
     const_insts = [i for i in ctx.emitted if isinstance(i, Const)]
     assert len(const_insts) == 1
-    assert const_insts[0].value == text, (
-        f"Const value mismatch: expected {text!r}, got {const_insts[0].value!r}"
-    )
+    assert const_insts[0].value == 0
+
+    # The parsed plan lives in the strategy's constant pool, parsed exactly once.
+    assert len(strategy._plans) == 1
+    plan = strategy._plans[0]
+    assert isinstance(plan, ParsedSql)
+    assert plan.kind == "select_into"
+    assert plan.query == "SELECT ACCT_BAL FROM ACCOUNT"
+    assert plan.out_vars == (HostVar("WS-BAL", None),)
 
 
 def test_strategy_registers_exec_sql_builtin(backend):

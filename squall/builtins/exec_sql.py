@@ -8,10 +8,14 @@ Design
 ------
 * ``make_exec_sql_builtin`` closes over a ``SqlBackend`` and returns a
   callable with the RedDragon builtin signature ``(args, vm) -> BuiltinResult``.
+* The single argument is the ``ParsedSql`` plan produced ONCE at lowering time
+  (``squall.strategy.SqlLoweringStrategy.lower``). The builtin does **no
+  parsing** at run time — it only binds host vars and executes the plan, so a
+  statement in a PERFORM loop is parsed once, not on every pass.
 * The function is pure given a fixed backend; the backend carries the one
   mutable boundary (the DB connection).
 * Slice-1 scope:
-    - ``select_into``: parse, bind inputs, execute, write outputs, write SQLCODE.
+    - ``select_into``: bind inputs, execute, write outputs, write SQLCODE.
     - DML kinds with a non-empty query (insert/update/delete/…): execute + write SQLCODE.
     - No-query cursor kinds (fetch/open_/close): raise ``NotImplementedError``.
 """
@@ -22,7 +26,6 @@ from typing import TYPE_CHECKING, Callable
 
 from squall.backend import SqlBackend
 from squall.binding import read_params, write_outputs, write_sqlcode
-from squall.parser.parse import parse_exec_sql
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
@@ -31,8 +34,13 @@ if TYPE_CHECKING:
 _NO_QUERY_CURSOR_KINDS = frozenset({"fetch", "open_", "close"})
 
 
-def make_exec_sql_builtin(backend: SqlBackend) -> Callable:  # type: ignore[type-arg]
-    """Return a ``__exec_sql`` builtin closing over *backend*.
+def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type: ignore[type-arg]
+    """Return a ``__exec_sql`` builtin closing over *backend* and the plan pool.
+
+    *plans* is the lowering-time constant pool of ``ParsedSql`` objects
+    (``SqlLoweringStrategy._plans``). Each call site passes its plan's pool index
+    as the single argument; the builtin resolves it and executes — it never
+    parses at run time.
 
     The returned callable has the standard RedDragon builtin signature:
     ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
@@ -41,11 +49,12 @@ def make_exec_sql_builtin(backend: SqlBackend) -> Callable:  # type: ignore[type
     def __exec_sql(args: list, vm: object) -> "BuiltinResult":  # type: ignore[type-arg]
         from interpreter.vm.vm_types import BuiltinResult  # noqa: PLC0415
 
-        # args[0] is a TypedValue wrapping the raw EXEC SQL … END-EXEC text.
+        # args[0] wraps the constant-pool INDEX of the plan parsed ONCE at
+        # lowering time (squall.strategy.SqlLoweringStrategy.lower). No parsing
+        # happens here — the builtin only binds host vars and executes.
         raw_arg = args[0]
-        text: str = raw_arg.value if hasattr(raw_arg, "value") else raw_arg
-
-        parsed = parse_exec_sql(text)
+        index = raw_arg.value if hasattr(raw_arg, "value") else raw_arg
+        parsed = plans[int(index)]
 
         # Raise early for no-query cursor kinds (slice-1 not-yet-supported).
         if parsed.kind in _NO_QUERY_CURSOR_KINDS:
