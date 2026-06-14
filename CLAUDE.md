@@ -26,6 +26,27 @@ during whatever execution context is already running and returns synchronously.
 RedDragon lives at `vendor/red-dragon` as an editable submodule (`pip install -e`).
 The top-level package is `squall/`.
 
+## Core engineering tenets
+
+These are non-negotiable, alongside the invariants below.
+
+1. **TDD.** Write the failing test first, watch it fail, then implement the minimal code to
+   pass. No production code without a test that drove it. The parser has a per-directive test
+   matrix + a che4z cross-check oracle; the binding engine is tested against a fake backend
+   before any DB.
+2. **Functional-programming style.** The core is **pure functions over data**: parsing/host-var
+   extraction, the clean-query rewrite, and the byte codec take values in and return values out,
+   with **no side effects** and no hidden global mutable state. Side effects are pushed to the
+   edges and isolated — the only effectful boundaries are the VM memory region (writes go through
+   the binding engine) and the DB connection (behind `SqlBackend`). Prefer expressions,
+   comprehensions, and composition over imperative mutation. Enforced by `python_fp_lint` (the
+   same FP linter RedDragon/cicada use) in the pre-commit hook.
+3. **Immutability.** All value types are **frozen dataclasses** (`ParsedSql`, `SqlResult`, the
+   parse-tree-derived structures, config). Prefer tuples over lists for fixed sequences. Never
+   mutate inputs or shared state; produce new values. The mutable VM region and DB connection are
+   the *only* mutable state, owned by their boundary modules (binding engine / backend) and never
+   leaked.
+
 ## Setup
 
 ```bash
@@ -42,6 +63,9 @@ cd vendor/red-dragon/proleap-bridge && ./build.sh && cd -
 uv run python -m pytest tests/unit/ -x -q        # unit tests (binding engine vs a fake backend; no JAR)
 uv run python -m pytest tests/integration/ -x -q # integration tests (real VM + SQLite; needs ProLeap JAR)
 ```
+
+Quality gates (pre-commit, mirroring RedDragon/cicada): `black` (format), **`python_fp_lint`**
+(enforces the FP tenet), `pyright` (types), and the test suite.
 
 ## Key invariants
 
