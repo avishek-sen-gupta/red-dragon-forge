@@ -17,8 +17,14 @@ Design:
 from __future__ import annotations
 
 import sqlite3
+from decimal import Decimal
 
 from squall.backend import SqlResult
+
+# Register a SQLite adapter so that Decimal values (produced by COMP-3 host-var
+# decoding) can be passed as query parameters without a TypeError.
+# The adapter converts Decimal → str; SQLite then coerces to NUMERIC as needed.
+sqlite3.register_adapter(Decimal, str)
 
 
 class SqliteBackend:
