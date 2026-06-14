@@ -37,6 +37,7 @@ class ParsedSql:
     out_vars: tuple[HostVar, ...]   # output (INTO) host vars, in order
     cursor: str | None              # cursor name for cursor statements, else None
     query: str                      # cleaned SQL for the DB
+    include_name: str | None = None # INCLUDE target name, e.g. "SQLCA", else None
 
 
 # ── Parser with position tracking ─────────────────────────────────────────────
@@ -127,6 +128,16 @@ def _walk_for_hvs(
     )
     for child in node.children:
         _walk_for_hvs(child, now_in_into_list, results)
+
+
+def _include_name(stmt: Tree, kind: str) -> str | None:
+    """Return the NAME token for an ``include`` statement, else None."""
+    if kind != "include":
+        return None
+    for child in stmt.children:
+        if isinstance(child, Token) and child.type == "NAME":
+            return str(child)
+    return None
 
 
 def _cursor_name(stmt: Tree, kind: str) -> str | None:
@@ -264,6 +275,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
 
     cursor = _cursor_name(stmt, kind)
     query = _build_query(inner, stmt, kind)
+    inc_name = _include_name(stmt, kind)
 
     return ParsedSql(
         kind=kind,
@@ -271,4 +283,5 @@ def parse_exec_sql(text: str) -> ParsedSql:
         out_vars=out_vars,
         cursor=cursor,
         query=query,
+        include_name=inc_name,
     )
