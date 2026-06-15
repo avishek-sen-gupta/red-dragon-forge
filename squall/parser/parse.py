@@ -15,7 +15,6 @@ Design
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from functools import reduce
 from importlib.resources import files
 from itertools import pairwise
@@ -23,31 +22,7 @@ from typing import Final
 
 from lark import Lark, Token, Tree
 
-# ── Frozen types ──────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class HostVar:
-    name: str  # e.g. "WS-BAL" (no leading colon)
-    indicator: str | None  # e.g. "WS-IND" for :WS-BAL:WS-IND, else None
-
-
-@dataclass(frozen=True)
-class ParsedSql:
-    kind: str  # the grammar kind, e.g. "select_into"
-    in_vars: tuple[HostVar, ...]  # input (bind) host vars, in source order
-    out_vars: tuple[HostVar, ...]  # output (INTO) host vars, in order
-    cursor: str | None  # cursor name for cursor statements, else None
-    query: str  # cleaned SQL for the DB
-    include_name: str | None = None  # INCLUDE target name, e.g. "SQLCA", else None
-    # Connection management (kinds connect / set_connection / disconnect).
-    connect_variant: str | None = None  # "TO" / "RESET" (connect only); None otherwise
-    connect_db: str | HostVar | None = None  # target db: literal (upper) or HostVar
-    # WHENEVER directive (kind == "whenever"); None for every other kind.
-    whenever_condition: str | None = None  # "SQLERROR" / "NOT FOUND" / "SQLWARNING"
-    whenever_action: str | None = None  # "CONTINUE" / "GOTO"
-    whenever_target: str | None = None  # GO TO label, else None
-
+from squall.parser.sql_model import HostVar, ParsedSql
 
 # ── Parser with position tracking ─────────────────────────────────────────────
 
