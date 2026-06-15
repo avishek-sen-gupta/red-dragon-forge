@@ -68,10 +68,11 @@ class SqlLoweringStrategy:
         # reference. The builtin (and the binding engine it calls) consult it to
         # drive VARCHAR 49-group codecs and typed validation.
         self._field_meta = field_meta
-        # WHENEVER directive state: condition -> (action, target). Updated in
-        # textual order as `lower` sees each WHENEVER statement (precompiler
-        # scoping); absent condition == CONTINUE (no automatic branch).
-        self._whenever: dict[str, tuple[str, str | None]] = {}
+        # WHENEVER directive state: condition -> GO TO target. Updated in textual
+        # order as `lower` sees each WHENEVER statement (precompiler scoping); an
+        # absent condition means CONTINUE (no automatic branch). Only GO TO
+        # directives are stored, so the target is always a real label.
+        self._whenever: dict[str, str] = {}
         # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
         # lowered to a Const carrying its index here; the builtin closes over the
         # same list and looks the plan up at run time. Plans never travel through
@@ -127,13 +128,15 @@ class SqlLoweringStrategy:
 
         if plan.kind == "whenever":
             # Precompiler directive: update lexically-scoped state, emit no IR.
-            if plan.whenever_action == "CONTINUE":
-                self._whenever.pop(plan.whenever_condition, None)
-            else:  # GOTO
-                self._whenever[plan.whenever_condition] = (
-                    plan.whenever_action,
-                    plan.whenever_target,
-                )
+            condition, action = plan.whenever_condition, plan.whenever_action
+            assert condition and action  # grammar-guaranteed for a WHENEVER directive
+            if action == "CONTINUE":
+                if condition in self._whenever:
+                    del self._whenever[condition]
+            else:  # GO TO
+                target = plan.whenever_target
+                assert target  # a GO TO directive always names a target
+                self._whenever[condition] = target
             return
 
         plan_index = len(self._plans)
@@ -170,11 +173,10 @@ class SqlLoweringStrategy:
         """
         from interpreter.cobol.cobol_statements import parse_statement
 
-        for condition, (_action, target) in self._whenever.items():
-            relation = _WHENEVER_RELATION.get(condition)
-            if relation is None:
+        for condition, target in self._whenever.items():
+            if condition not in _WHENEVER_RELATION:
                 continue  # SQLWARNING (and custom conditions) deferred — slice 3
-            op, value = relation
+            op, value = _WHENEVER_RELATION[condition]
             if_stmt = parse_statement(
                 {
                     "type": "IF",
