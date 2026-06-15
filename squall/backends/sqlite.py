@@ -16,10 +16,13 @@ Design:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from decimal import Decimal
 
 from squall.backend import SqlResult
+
+logger = logging.getLogger(__name__)
 
 # Register a SQLite adapter so that Decimal values (produced by COMP-3 host-var
 # decoding) can be passed as query parameters without a TypeError.
@@ -39,7 +42,10 @@ class SqliteBackend:
     def execute(self, sql: str, params: list) -> SqlResult:
         try:
             cur = self._conn.execute(sql, params)
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
+            # SQLite has no DB2 SQLCODEs — report a generic failure (-1), but
+            # never swallow the driver error silently.
+            logger.warning("SQLite execute failed (sqlcode -1): %s | sql=%s", exc, sql)
             return SqlResult(rows=(), rowcount=0, sqlcode=-1)
 
         if cur.description is not None:

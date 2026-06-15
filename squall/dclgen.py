@@ -44,14 +44,9 @@ def _split_decl(decl: str) -> tuple[str, list[int]]:
 
     Fixed-punctuation split — not a regex over a sublanguage.
     """
-    base, _, rest = decl.strip().partition("(")
-    base = base.strip().upper()
-    args: list[int] = []
-    if rest:
-        for part in rest.rstrip(")").split(","):
-            part = part.strip()
-            if part:
-                args.append(int(part))
+    raw_base, _, rest = decl.strip().partition("(")
+    base = raw_base.strip().upper()
+    args = [int(p.strip()) for p in rest.rstrip(")").split(",") if p.strip()]
     return base, args
 
 
@@ -89,30 +84,30 @@ def _parse_sql_type(decl: str) -> dict:
         }
 
     if base in ("CHAR", "CHARACTER"):
-        n = args[0] if args else 1
+        char_len = args[0] if args else 1
         return {
-            "sql_type": f"CHAR({n})",
+            "sql_type": f"CHAR({char_len})",
             "category": "ALPHANUMERIC",
             # ProLeap reports total_digits = character count for PIC X(n); match it
             # so the metadata agrees with the data_layout it will be validated against.
-            "total_digits": n,
+            "total_digits": char_len,
             "decimal_digits": 0,
-            "length": n,
-            "pic": f"X({n})",
+            "length": char_len,
+            "pic": f"X({char_len})",
         }
 
     if base in ("VARCHAR", "VARYING", "CHARACTER VARYING"):
-        n = args[0] if args else 1
+        varchar_len = args[0] if args else 1
         # A VARCHAR is the IBM DCLGEN 49-group: a group item with two 49-level
         # children — a binary length prefix and the text. It is NOT an elementary
         # item, so it carries no single PIC (pic=None); _render_copybook emits the
         # group and the children, and binding drives the LEN/TEXT codec.
         return {
-            "sql_type": f"VARCHAR({n})",
+            "sql_type": f"VARCHAR({varchar_len})",
             "category": "VARCHAR",
             "total_digits": 0,
             "decimal_digits": 0,
-            "length": n,
+            "length": varchar_len,
             "pic": None,
         }
 
@@ -189,7 +184,7 @@ def generate(
 
     *conn* is any DB-API connection exposing ``PRAGMA table_info`` (SQLite).
     """
-    record_name = record_name or _cobolify(table)
+    resolved_name = record_name or _cobolify(table)
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     if not rows:
         raise ValueError(f"table {table!r} has no columns (does it exist?)")
@@ -197,13 +192,13 @@ def generate(
     # PRAGMA table_info row: (cid, name, type, notnull, dflt_value, pk)
     fields = [
         _field_meta(name, decl, notnull, prefix)
-        for _, name, decl, notnull, _, _ in rows
+        for _cid, name, decl, notnull, _dflt, _pk in rows
     ]
 
-    metadata = {"record": record_name, "table": table, "fields": fields}
+    metadata = {"record": resolved_name, "table": table, "fields": fields}
     return GeneratedRecord(
-        record_name=record_name,
-        copybook=_render_copybook(record_name, fields),
+        record_name=resolved_name,
+        copybook=_render_copybook(resolved_name, fields),
         metadata=metadata,
     )
 

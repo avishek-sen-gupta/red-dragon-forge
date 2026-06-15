@@ -15,8 +15,8 @@ Supported codec categories (slice 1 + 2):
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
@@ -153,7 +153,7 @@ def _comp3_decode(data: bytes, decimal_digits: int) -> Decimal:
 
 
 def _comp3_encode(
-    value: "Decimal | int | float",
+    value: Decimal | int | float,
     total_digits: int,
     decimal_digits: int,
     signed: bool,
@@ -589,7 +589,7 @@ def write_outputs(
     region = _get_ws_region(vm)[1]
     plans = [
         _plan_assignment(vm.data_layout, field_meta, name, value)
-        for name, value in zip(out_names, row)
+        for name, value in zip(out_names, row, strict=True)
     ]
     failure = next((p.code for p in plans if p.code != 0), 0)
     if failure != 0:

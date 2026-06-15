@@ -79,9 +79,7 @@ _HAS_INTO_CLAUSE: Final[frozenset[str]] = frozenset({"select_into", "values_into
 
 def _strip_envelope(text: str) -> str:
     """Strip 'EXEC SQL' prefix and 'END-EXEC' suffix from *text*."""
-    inner = _EXEC_SQL_RE.sub("", text)
-    inner = _END_EXEC_RE.sub("", inner)
-    return inner.strip()
+    return _END_EXEC_RE.sub("", _EXEC_SQL_RE.sub("", text)).strip()
 
 
 def _parse_host_var_tok(tok_value: str) -> HostVar:
@@ -163,16 +161,18 @@ def _find_into_list_node(stmt: Tree) -> Tree | None:
 
 def _find_into_keyword_token(stmt: Tree) -> Token | None:
     """Return the INTO Token that directly precedes an into_list, or None."""
-    prev: Token | None = None
-    for child in stmt.children:
-        if isinstance(child, Tree) and child.data == "into_list":
-            if prev is not None and isinstance(prev, Token) and prev.type == "INTO":
-                return prev
-        if isinstance(child, Token):
-            prev = child
-        else:
-            prev = None
-    return None
+    children = stmt.children
+    return next(
+        (
+            prev
+            for prev, cur in zip(children, children[1:], strict=False)
+            if isinstance(cur, Tree)
+            and cur.data == "into_list"
+            and isinstance(prev, Token)
+            and prev.type == "INTO"
+        ),
+        None,
+    )
 
 
 def _build_query(inner: str, stmt: Tree, kind: str) -> str:

@@ -21,8 +21,8 @@ from typing import Protocol, runtime_checkable
 @dataclass(frozen=True)
 class SqlResult:
     rows: tuple[tuple, ...]  # result rows (SELECT/FETCH); () for DML
-    rowcount: int            # affected rows (DML); len(rows) for SELECT
-    sqlcode: int             # 0 ok, +100 not found / end-of-cursor, negative on error
+    rowcount: int  # affected rows (DML); len(rows) for SELECT
+    sqlcode: int  # 0 ok, +100 not found / end-of-cursor, negative on error
 
 
 @runtime_checkable
