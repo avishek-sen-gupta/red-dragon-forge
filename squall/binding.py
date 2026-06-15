@@ -492,6 +492,44 @@ def _require_field(data_layout, name: str) -> dict:
     return f
 
 
+class FieldMetaMismatch(Exception):
+    """A dclgen sidecar's category disagrees with ProLeap's parsed data_layout —
+    copybook/schema drift. Raised loud (not an SQLCODE): a generation/layout bug,
+    not a runtime SQL condition."""
+
+    def __init__(self, name: str, expected, actual) -> None:
+        super().__init__(
+            f"dclgen/copybook drift for {name!r}: dclgen category {expected!r} "
+            f"but data_layout category {actual!r}"
+        )
+
+
+def _require_category(data_layout, name: str, expected: str) -> None:
+    """Assert ``data_layout[name].category == expected``; raise loud otherwise.
+
+    A missing field raises KeyError via _require_field — itself a drift signal.
+    """
+    actual = _require_field(data_layout, name).get("category")
+    if actual != expected:
+        raise FieldMetaMismatch(name, expected, actual)
+
+
+def validate_field_meta(data_layout, field_meta: Mapping[str, FieldMeta]) -> None:
+    """Fail loud if any dclgen field_meta category disagrees with data_layout.
+
+    Scalars: data_layout[name].category must equal the dclgen category. VARCHAR:
+    the data_layout cannot mark the 49-group, so the children are checked instead
+    (len_var is BINARY, text_var is ALPHANUMERIC). Empty field_meta is a no-op.
+    """
+    for name, meta in field_meta.items():
+        category = meta.get("category")
+        if category == "VARCHAR":
+            _require_category(data_layout, meta["len_var"], "BINARY")
+            _require_category(data_layout, meta["text_var"], "ALPHANUMERIC")
+        else:
+            _require_category(data_layout, name, category)
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
