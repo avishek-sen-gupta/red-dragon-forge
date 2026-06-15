@@ -36,10 +36,38 @@ from squall.binding import (
 # Full data_layout contract: real entries always carry total_digits/decimal_digits
 # (the coercion layer needs them); the fakes must match or the gate sees capacity 0.
 _LAYOUT = {
-    "WS-ID": {"offset": 0, "length": 4, "category": "ZONED_DECIMAL", "total_digits": 4, "decimal_digits": 0, "signed": False},
-    "WS-BAL": {"offset": 4, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": False},
-    "SQLCODE": {"offset": 13, "length": 9, "category": "ZONED_DECIMAL", "total_digits": 9, "decimal_digits": 0, "signed": True},
-    "WS-NAME": {"offset": 22, "length": 10, "category": "ALPHANUMERIC", "total_digits": 10, "decimal_digits": 0, "signed": False},
+    "WS-ID": {
+        "offset": 0,
+        "length": 4,
+        "category": "ZONED_DECIMAL",
+        "total_digits": 4,
+        "decimal_digits": 0,
+        "signed": False,
+    },
+    "WS-BAL": {
+        "offset": 4,
+        "length": 9,
+        "category": "ZONED_DECIMAL",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": False,
+    },
+    "SQLCODE": {
+        "offset": 13,
+        "length": 9,
+        "category": "ZONED_DECIMAL",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": True,
+    },
+    "WS-NAME": {
+        "offset": 22,
+        "length": 10,
+        "category": "ALPHANUMERIC",
+        "total_digits": 10,
+        "decimal_digits": 0,
+        "signed": False,
+    },
 }
 
 _REGION_SIZE = 32
@@ -79,7 +107,9 @@ class _FakeVM:
     def region_get(self, addr):
         # Real region_get takes an Address; reject anything else so a regression
         # to a raw-str lookup fails loudly here instead of silently in the e2e.
-        assert isinstance(addr, Address), f"region_get expects Address, got {type(addr)}"
+        assert isinstance(
+            addr, Address
+        ), f"region_get expects Address, got {type(addr)}"
         return self._region if addr == self._addr else None
 
 
@@ -149,29 +179,35 @@ def test_write_read_alpha_field():
 # ── Test 6: codec helper round-trips ─────────────────────────────────────────
 
 
-@pytest.mark.parametrize("n,length", [
-    (0, 4),
-    (1, 4),
-    (11, 4),
-    (9999, 4),
-    (500, 9),
-    (123456789, 9),
-    (-1, 9),
-    (-500, 9),
-    (-123456789, 9),
-])
+@pytest.mark.parametrize(
+    "n,length",
+    [
+        (0, 4),
+        (1, 4),
+        (11, 4),
+        (9999, 4),
+        (500, 9),
+        (123456789, 9),
+        (-1, 9),
+        (-500, 9),
+        (-123456789, 9),
+    ],
+)
 def test_zoned_encode_decode_roundtrip(n, length):
     encoded = _zoned_encode(n, length)
     assert len(encoded) == length
     assert _zoned_decode(encoded) == n
 
 
-@pytest.mark.parametrize("s,length", [
-    ("ALICE", 10),
-    ("", 10),
-    ("HELLO WORLD", 11),
-    ("X", 1),
-])
+@pytest.mark.parametrize(
+    "s,length",
+    [
+        ("ALICE", 10),
+        ("", 10),
+        ("HELLO WORLD", 11),
+        ("X", 1),
+    ],
+)
 def test_alpha_encode_decode_roundtrip(s, length):
     encoded = _alpha_encode(s, length)
     assert len(encoded) == length

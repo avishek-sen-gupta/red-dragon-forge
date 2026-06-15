@@ -24,9 +24,9 @@ def test_sqlca_present_with_binary_sqlcode() -> None:
 def test_acctrec_dclgen_record_present() -> None:
     text = _read("ACCTREC.cpy")
     assert "01  ACCT-REC." in text
-    assert "ACCT-ID    PIC S9(9) COMP." in text               # binary COMP
-    assert "ACCT-BAL   PIC S9(7)V9(2) COMP-3." in text        # scaled packed decimal
-    assert "ACCT-NAME  PIC X(20)." in text                    # CHAR (VARCHAR deferred)
+    assert "ACCT-ID    PIC S9(9) COMP." in text  # binary COMP
+    assert "ACCT-BAL   PIC S9(7)V9(2) COMP-3." in text  # scaled packed decimal
+    assert "ACCT-NAME  PIC X(20)." in text  # CHAR (VARCHAR deferred)
 
 
 def test_copybook_dir_is_a_real_filesystem_path() -> None:

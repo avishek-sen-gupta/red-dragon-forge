@@ -45,7 +45,6 @@ read_ws_field = _helpers.read_ws_field
 from squall.backends.sqlite import SqliteBackend
 from squall.strategy import SqlLoweringStrategy
 
-
 # ---------------------------------------------------------------------------
 # COBOL program under test
 # ---------------------------------------------------------------------------
@@ -131,13 +130,13 @@ def test_include_dclgen_hit(bridge_jar):
 
     # Key assertion: the COBOL IF branch set WS-FLAG='Y', which means RedDragon's
     # own COMP-3 decoder accepted the bytes squall wrote for 1234.56.
-    assert ws_flag == "Y", (
-        f"Expected WS-FLAG='Y' (RedDragon decoded COMP-3 1234.56 correctly), got {ws_flag!r}"
-    )
+    assert (
+        ws_flag == "Y"
+    ), f"Expected WS-FLAG='Y' (RedDragon decoded COMP-3 1234.56 correctly), got {ws_flag!r}"
     assert sqlcode == 0, f"Expected SQLCODE=0, got {sqlcode!r}"
-    assert acct_name is not None and acct_name.rstrip() == "ALICE", (
-        f"Expected ACCT-NAME='ALICE', got {acct_name!r}"
-    )
+    assert (
+        acct_name is not None and acct_name.rstrip() == "ALICE"
+    ), f"Expected ACCT-NAME='ALICE', got {acct_name!r}"
 
 
 def test_include_dclgen_miss(bridge_jar):
@@ -164,4 +163,6 @@ def test_include_dclgen_miss(bridge_jar):
     sqlcode = read_ws_field(vm, "SQLCODE")
 
     assert sqlcode == 100, f"Expected SQLCODE=100 (NOT FOUND), got {sqlcode!r}"
-    assert ws_flag == "N", f"Expected WS-FLAG='N' (no row → IF not taken), got {ws_flag!r}"
+    assert (
+        ws_flag == "N"
+    ), f"Expected WS-FLAG='N' (no row → IF not taken), got {ws_flag!r}"

@@ -56,11 +56,13 @@ def _comp3_size(total_digits: int) -> int:
 def test_comp3_roundtrip(value, total_digits, decimal_digits, signed):
     encoded = _comp3_encode(value, total_digits, decimal_digits, signed)
     # Length must be (total_digits // 2) + 1
-    assert len(encoded) == _comp3_size(total_digits), (
-        f"Expected length {_comp3_size(total_digits)}, got {len(encoded)}"
-    )
+    assert len(encoded) == _comp3_size(
+        total_digits
+    ), f"Expected length {_comp3_size(total_digits)}, got {len(encoded)}"
     decoded = _comp3_decode(encoded, decimal_digits)
-    assert decoded == value, f"Round-trip failed: {value!r} -> {encoded.hex()} -> {decoded!r}"
+    assert (
+        decoded == value
+    ), f"Round-trip failed: {value!r} -> {encoded.hex()} -> {decoded!r}"
 
 
 @pytest.mark.parametrize(
@@ -78,17 +80,17 @@ def test_comp3_sign_nibble(value, total_digits, decimal_digits, signed):
     last_byte = encoded[-1]
     sign_nibble = last_byte & ByteConstants.NIBBLE_MASK
     if value < 0:
-        assert sign_nibble == ByteConstants.SIGN_NIBBLE_NEGATIVE, (
-            f"Expected negative sign nibble 0x0D for {value!r}, got 0x{sign_nibble:02X}"
-        )
+        assert (
+            sign_nibble == ByteConstants.SIGN_NIBBLE_NEGATIVE
+        ), f"Expected negative sign nibble 0x0D for {value!r}, got 0x{sign_nibble:02X}"
     elif signed:
-        assert sign_nibble == ByteConstants.SIGN_NIBBLE_POSITIVE, (
-            f"Expected positive sign nibble 0x0C for {value!r}, got 0x{sign_nibble:02X}"
-        )
+        assert (
+            sign_nibble == ByteConstants.SIGN_NIBBLE_POSITIVE
+        ), f"Expected positive sign nibble 0x0C for {value!r}, got 0x{sign_nibble:02X}"
     else:
-        assert sign_nibble == ByteConstants.SIGN_NIBBLE_UNSIGNED, (
-            f"Expected unsigned sign nibble 0x0F for {value!r}, got 0x{sign_nibble:02X}"
-        )
+        assert (
+            sign_nibble == ByteConstants.SIGN_NIBBLE_UNSIGNED
+        ), f"Expected unsigned sign nibble 0x0F for {value!r}, got 0x{sign_nibble:02X}"
 
 
 def test_comp3_decode_known_bytes_acct_bal():
@@ -179,7 +181,9 @@ def test_binary_roundtrip(value, total_digits, signed):
     encoded = _binary_encode(value, expected_len, signed)
     assert len(encoded) == expected_len
     decoded = _binary_decode(encoded, signed)
-    assert decoded == value, f"Round-trip failed: {value!r} -> {encoded.hex()} -> {decoded!r}"
+    assert (
+        decoded == value
+    ), f"Round-trip failed: {value!r} -> {encoded.hex()} -> {decoded!r}"
 
 
 def test_binary_decode_real_acct_id():

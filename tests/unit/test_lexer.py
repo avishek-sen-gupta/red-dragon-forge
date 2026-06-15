@@ -83,6 +83,10 @@ def test_indicator_var() -> None:
     tree = parse("INSERT INTO t VALUES (:V:IND)")
     hv_nodes = list(tree.find_data("host_var"))
     assert len(hv_nodes) == 1
-    tok = next(t for t in hv_nodes[0].children if hasattr(t, "type") and t.type == "HOST_VAR_TOK")
+    tok = next(
+        t
+        for t in hv_nodes[0].children
+        if hasattr(t, "type") and t.type == "HOST_VAR_TOK"
+    )
     names = _parse_host_var_tok(tok.value)
     assert names == ["V", "IND"]

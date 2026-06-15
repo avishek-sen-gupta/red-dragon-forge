@@ -24,11 +24,11 @@ Design
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
-from squall.binding import read_params, write_outputs, write_sqlcode
+from squall.binding import _NO_META, read_params, write_outputs, write_sqlcode
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
@@ -42,13 +42,34 @@ _NO_OP_KINDS = frozenset(
 )
 
 
-def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type: ignore[type-arg]
-    """Return a ``__exec_sql`` builtin closing over *backend* and the plan pool.
+def _host_names(host_vars) -> tuple[str, ...]:
+    """The host-var names, in order — the form read_params/write_outputs expect."""
+    return tuple(hv.name for hv in host_vars)
+
+
+def _bind_row(vm, out_vars, result, field_meta: Mapping[str, dict]) -> int:
+    """Bind *result*'s first row into *out_vars*; return the resulting SQLCODE.
+
+    A no-row result leaves the host vars untouched and reports ``result.sqlcode``
+    (0 / 100). On a strict-coercion failure ``write_outputs`` writes nothing and
+    returns the failure code, which overrides the otherwise-successful SQLCODE.
+    """
+    if not result.rows:
+        return result.sqlcode
+    status = write_outputs(vm, _host_names(out_vars), result.rows[0], field_meta)
+    return status if status != 0 else result.sqlcode
+
+
+def make_exec_sql_builtin(
+    backend: SqlBackend, plans: list, field_meta: Mapping[str, dict] = _NO_META
+) -> Callable:
+    """Return a ``__exec_sql`` builtin closing over *backend*, the plan pool, and
+    the dclgen *field_meta* map (loaded once by the prepass, shared by reference).
 
     *plans* is the lowering-time constant pool of ``ParsedSql`` objects
     (``SqlLoweringStrategy._plans``). Each call site passes its plan's pool index
-    as the single argument; the builtin resolves it and executes — it never
-    parses at run time.
+    as the single argument; the builtin resolves it and dispatches by kind — it
+    never parses at run time.
 
     The returned callable has the standard RedDragon builtin signature:
     ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
@@ -58,74 +79,63 @@ def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type
     # + input host vars). DECLARE records it; OPEN reads it. One run, one builtin.
     cursors: dict = {}
 
-    def __exec_sql(args: list, vm: object) -> BuiltinResult:  # type: ignore[type-arg]
+    def _no_op(_parsed, vm) -> None:
+        # Connection / declare-section directives have no DB effect.
+        write_sqlcode(vm, 0)
+
+    def _declare_cursor(parsed, vm) -> None:
+        # Declaration only — remember the SELECT + its host vars for OPEN.
+        cursors[parsed.cursor] = parsed
+        write_sqlcode(vm, 0)
+
+    def _open(parsed, vm) -> None:
+        decl = cursors.get(parsed.cursor)
+        if decl is None:
+            write_sqlcode(vm, -1)  # cursor not declared
+            return
+        # Host vars are captured at OPEN: OPEN ... USING overrides, else the
+        # cursor SELECT's own host vars.
+        params = read_params(
+            vm, _host_names(parsed.in_vars or decl.in_vars), field_meta
+        )
+        backend.open_cursor(parsed.cursor, decl.query, params)
+        write_sqlcode(vm, 0)
+
+    def _fetch(parsed, vm) -> None:
+        result = backend.fetch(parsed.cursor)
+        write_sqlcode(vm, _bind_row(vm, parsed.out_vars, result, field_meta))
+
+    def _close(parsed, vm) -> None:
+        backend.close(parsed.cursor)
+        write_sqlcode(vm, 0)
+
+    def _query(parsed, vm) -> None:
+        # All remaining kinds carry a non-empty query string.
+        params = read_params(vm, _host_names(parsed.in_vars), field_meta)
+        result = backend.execute(parsed.query, params)
+        code = (
+            _bind_row(vm, parsed.out_vars, result, field_meta)
+            if parsed.kind == "select_into"
+            else result.sqlcode
+        )
+        write_sqlcode(vm, code)
+
+    handlers: dict = {
+        "declare_cursor": _declare_cursor,
+        "open_": _open,
+        "fetch": _fetch,
+        "close": _close,
+        **{kind: _no_op for kind in _NO_OP_KINDS},
+    }
+
+    def __exec_sql(args: list, vm: object) -> BuiltinResult:
         from interpreter.vm.vm_types import BuiltinResult
 
-        # args[0] wraps the constant-pool INDEX of the plan parsed ONCE at
-        # lowering time (squall.strategy.SqlLoweringStrategy.lower). No parsing
-        # happens here — the builtin only binds host vars and executes.
-        raw_arg = args[0]
-        index = raw_arg.value if hasattr(raw_arg, "value") else raw_arg
-        parsed = plans[int(index)]
-
-        # Connection / declare-section directives have no DB effect — no-op.
-        if parsed.kind in _NO_OP_KINDS:
-            write_sqlcode(vm, 0)  # type: ignore[arg-type]
-            return BuiltinResult(value=None)
-
-        # ── Cursors ───────────────────────────────────────────────────────────
-        if parsed.kind == "declare_cursor":
-            # Declaration only — remember the SELECT + its host vars for OPEN.
-            cursors[parsed.cursor] = parsed
-            write_sqlcode(vm, 0)  # type: ignore[arg-type]
-            return BuiltinResult(value=None)
-
-        if parsed.kind == "open_":
-            decl = cursors.get(parsed.cursor)
-            if decl is None:
-                write_sqlcode(vm, -1)  # type: ignore[arg-type]  # cursor not declared
-                return BuiltinResult(value=None)
-            # Host vars are captured at OPEN: OPEN ... USING overrides, else the
-            # cursor SELECT's own host vars.
-            src = parsed.in_vars or decl.in_vars
-            params = read_params(vm, tuple(hv.name for hv in src))  # type: ignore[arg-type]
-            backend.open_cursor(parsed.cursor, decl.query, params)
-            write_sqlcode(vm, 0)  # type: ignore[arg-type]
-            return BuiltinResult(value=None)
-
-        if parsed.kind == "fetch":
-            result = backend.fetch(parsed.cursor)
-            if result.rows:
-                out_names = tuple(hv.name for hv in parsed.out_vars)
-                status = write_outputs(vm, out_names, result.rows[0])  # type: ignore[arg-type]
-                if status != 0:
-                    write_sqlcode(vm, status)  # type: ignore[arg-type]
-                    return BuiltinResult(value=None)
-            write_sqlcode(vm, result.sqlcode)  # type: ignore[arg-type]  # 0 row / 100 end
-            return BuiltinResult(value=None)
-
-        if parsed.kind == "close":
-            backend.close(parsed.cursor)
-            write_sqlcode(vm, 0)  # type: ignore[arg-type]
-            return BuiltinResult(value=None)
-
-        # All remaining kinds have a non-empty query string.
-        in_names = tuple(hv.name for hv in parsed.in_vars)
-        params = read_params(vm, in_names)  # type: ignore[arg-type]
-        result = backend.execute(parsed.query, params)
-
-        if parsed.kind == "select_into" and result.rows:
-            out_names = tuple(hv.name for hv in parsed.out_vars)
-            # Strict coercion: if any value can't be assigned to its host var,
-            # nothing is written and the statement fails with that SQLCODE
-            # (overriding the otherwise-successful 0).
-            status = write_outputs(vm, out_names, result.rows[0])  # type: ignore[arg-type]
-            if status != 0:
-                write_sqlcode(vm, status)  # type: ignore[arg-type]
-                return BuiltinResult(value=None)
-
-        write_sqlcode(vm, result.sqlcode)  # type: ignore[arg-type]
-
+        # args[0] wraps the constant-pool INDEX of the plan parsed ONCE at lowering
+        # time. No parsing here — resolve the plan and dispatch by kind; kinds with
+        # a non-empty query (select_into / insert / update / …) fall to _query.
+        parsed = plans[int(args[0].value)]
+        handlers.get(parsed.kind, _query)(parsed, vm)
         return BuiltinResult(value=None)
 
     return __exec_sql
