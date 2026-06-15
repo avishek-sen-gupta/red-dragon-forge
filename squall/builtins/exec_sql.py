@@ -288,17 +288,15 @@ def make_exec_sql_builtin(
         cursors={},
         field_meta=field_meta,
     )
-    validated = False
 
     def __exec_sql(args: list, vm) -> BuiltinResult:
-        nonlocal validated
         from interpreter.vm.vm_types import BuiltinResult
 
-        if not validated:
-            # First call: data_layout is now populated. Fail loud on any
-            # dclgen/copybook category drift before binding anything.
-            validate_field_meta(vm.data_layout, field_meta)
-            validated = True
+        # Fail loud on any dclgen/copybook category drift before binding anything.
+        # Stateless: validate_field_meta is a pure check over the (fixed) layout
+        # and field_meta — cheap dict lookups, re-run per call rather than cached
+        # behind a mutable "already validated" flag.
+        validate_field_meta(vm.data_layout, field_meta)
 
         parsed = plans[int(args[0].value)]
         _HANDLERS.get(parsed.kind, _h_query)(ctx, parsed, vm)
