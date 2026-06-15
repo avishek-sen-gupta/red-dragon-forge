@@ -54,9 +54,17 @@ class SqliteBackend:
             sqlcode = 0 if rows else 100
             return SqlResult(rows=rows, rowcount=len(rows), sqlcode=sqlcode)
         else:
-            # DML — commit and report affected rows
-            self._conn.commit()
+            # DML — report affected rows. The transaction stays OPEN until an
+            # explicit EXEC SQL COMMIT / ROLLBACK; DML is not auto-committed.
             return SqlResult(rows=(), rowcount=cur.rowcount, sqlcode=0)
+
+    # ── Transaction control ──────────────────────────────────────────────────
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        self._conn.rollback()
 
     # ── Cursor API ────────────────────────────────────────────────────────────
 

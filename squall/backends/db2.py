@@ -62,6 +62,10 @@ class Db2Backend:
     def __init__(self, conn) -> None:
         self._conn = conn
         self._cursors: dict = {}
+        # Faithful embedded-SQL transaction control: the program owns COMMIT /
+        # ROLLBACK, so disable the driver's per-statement autocommit. Without this
+        # a ROLLBACK would be a no-op (each statement already committed).
+        ibm_db.autocommit(conn, ibm_db.SQL_AUTOCOMMIT_OFF)
 
     # ── Core execute ──────────────────────────────────────────────────────────
 
@@ -111,3 +115,11 @@ class Db2Backend:
         stmt = self._cursors.pop(name, None)
         if stmt is not None:
             ibm_db.free_result(stmt)
+
+    # ── Transaction control ──────────────────────────────────────────────────
+
+    def commit(self) -> None:
+        ibm_db.commit(self._conn)
+
+    def rollback(self) -> None:
+        ibm_db.rollback(self._conn)

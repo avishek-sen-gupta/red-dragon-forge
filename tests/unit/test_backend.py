@@ -66,7 +66,7 @@ def test_sqlcode_error_negative():
 
 
 def test_sql_backend_protocol_isinstance():
-    """A class that has the four required methods satisfies SqlBackend."""
+    """A class implementing the required methods satisfies SqlBackend."""
     from squall.backend import SqlBackend, SqlResult
 
     class FakeBackend:
@@ -80,6 +80,12 @@ def test_sql_backend_protocol_isinstance():
             return SqlResult(rows=(), rowcount=0, sqlcode=100)
 
         def close(self, name: str) -> None:
+            pass
+
+        def commit(self) -> None:
+            pass
+
+        def rollback(self) -> None:
             pass
 
     assert isinstance(FakeBackend(), SqlBackend)
