@@ -152,7 +152,7 @@ def _includes(
             yield start, end, indent, parsed.include_name
 
 
-def apply_sql_prepass(source: str, copybook_dirs: Sequence = ()) -> PrepassResult:
+def apply_sql_prepass(source: str, copybook_dirs: Sequence) -> PrepassResult:
     """Rewrite ``EXEC SQL INCLUDE <name> END-EXEC`` → ``COPY <name>.`` and load the
     dclgen JSON sidecars of the INCLUDE'd records in the same pass.
 

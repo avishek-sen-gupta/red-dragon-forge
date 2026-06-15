@@ -30,7 +30,6 @@ read_ws_field = _helpers.read_ws_field
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.sqlite import SqliteBackend
-from squall.strategy import SqlLoweringStrategy
 
 _STATIC_SQB = (
     _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "static.sqb"
@@ -54,7 +53,7 @@ def test_static_sqb_runs_standalone(bridge_jar):
     vm = run_cobol(
         source,
         bridge_jar,
-        extension_strategies=[SqlLoweringStrategy(backend)],
+        backend=backend,
         copybook_dirs=[_DB2_INCLUDES],
         max_steps=8000,
     )

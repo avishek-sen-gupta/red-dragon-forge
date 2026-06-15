@@ -31,9 +31,7 @@ read_ws_field = _helpers.read_ws_field
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.sqlite import SqliteBackend
-from squall.strategy import SqlLoweringStrategy
 from squall.dclgen import generate, write
-from squall.preprocess import apply_sql_prepass
 
 # The program: CRUD round-trip driven entirely off the GENERATED ACCTREC record.
 # NOTE: the procedure-division EXEC SQL blocks are deliberately NOT period-
@@ -102,11 +100,10 @@ def test_crud_round_trip_on_generated_copybook(bridge_jar, tmp_path):
 
     # 3. Drive the whole pipeline on the GENERATED copybook.
     backend = SqliteBackend(conn)
-    strategy = SqlLoweringStrategy(backend)
     vm = run_cobol(
         _PROGRAM,
         bridge_jar,
-        extension_strategies=[strategy],
+        backend=backend,
         copybook_dirs=[tmp_path],
         max_steps=4000,
     )
@@ -160,17 +157,13 @@ def test_varchar_round_trip_on_generated_copybook(bridge_jar, tmp_path):
     rec = generate(conn, "EMP", record_name="EMPREC")
     write(rec, tmp_path)
 
-    # The prepass loads EMPREC.json during its INCLUDE scan; that field_meta is
-    # handed to the strategy and on to the binding engine's VARCHAR codec.
+    # run_cobol's prepass loads EMPREC.json during its INCLUDE scan; that
+    # field_meta flows to the strategy and on to the binding VARCHAR codec.
     backend = SqliteBackend(conn)
-    prepass = apply_sql_prepass(_VARCHAR_PROGRAM, copybook_dirs=[tmp_path])
-    assert "EMP-NAME" in prepass.field_meta  # the sidecar was actually loaded
-    strategy = SqlLoweringStrategy(backend, field_meta=prepass.field_meta)
-
     vm = run_cobol(
-        prepass.source,
+        _VARCHAR_PROGRAM,
         bridge_jar,
-        extension_strategies=[strategy],
+        backend=backend,
         copybook_dirs=[tmp_path],
         max_steps=4000,
     )

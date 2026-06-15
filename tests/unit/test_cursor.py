@@ -93,7 +93,7 @@ def test_cursor_declare_open_fetch_close():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin = make_exec_sql_builtin(backend, plans)
+    builtin = make_exec_sql_builtin(backend, plans, {})
 
     def run(sql):
         plans.append(parse_exec_sql(sql))
@@ -140,7 +140,7 @@ def test_fetch_on_unopened_cursor_is_end():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin = make_exec_sql_builtin(backend, plans)
+    builtin = make_exec_sql_builtin(backend, plans, {})
     plans.append(parse_exec_sql("EXEC SQL FETCH nope INTO :PNAME, :DEPT END-EXEC"))
     builtin([_TV(0)], vm)
     assert _zoned_decode(bytes(region[13:22])) == 100

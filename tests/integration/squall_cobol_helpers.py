@@ -33,6 +33,7 @@ from interpreter.registry import build_registry
 from interpreter.vm.vm import VMState
 
 from squall.preprocess import apply_sql_prepass
+from squall.strategy import SqlLoweringStrategy
 
 
 def _squall_copybooks_dir() -> Path:
@@ -73,25 +74,31 @@ def make_cobol_parser(
 def compile_cobol(
     source: str,
     bridge_jar_path: str,
-    extension_strategies: list | None = None,
+    backend,
     copybook_dirs: list[Path] | None = None,
 ) -> tuple[CobolFrontend, LinkedProgram]:
     """Compile a COBOL source string to a LinkedProgram.
 
-    Applies apply_sql_prepass before lowering so that EXEC SQL INCLUDE blocks
-    are rewritten to COPY statements, which the ProLeap parser then inlines
-    from the squall copybooks directory (plus any extra *copybook_dirs*).
+    The prepass is ALWAYS run with *copybook_dirs* (possibly empty): it rewrites
+    EXEC SQL INCLUDE → COPY (which ProLeap inlines from the squall copybooks dir
+    plus *copybook_dirs*) AND loads the INCLUDE'd records' dclgen JSON sidecars.
+    The resulting field_meta is ALWAYS passed into the SQL strategy — empty when
+    there are no sidecars; there is no implicit default. The strategy is wrapped
+    in the frontend's ``extension_strategies`` array (SQL alone here; the frontend
+    contract still supports composing more, e.g. CICS + SQL).
 
     Returns (frontend, linked) so that callers can access frontend.data_layout
     for assertions and pass the LinkedProgram to run_linked.
     """
-    preprocessed = apply_sql_prepass(source).source
-    parser = make_cobol_parser(bridge_jar_path, copybook_dirs=copybook_dirs)
+    dirs = copybook_dirs or []
+    prepass = apply_sql_prepass(source, dirs)
+    strategy = SqlLoweringStrategy(backend, prepass.field_meta)
+    parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
     frontend = CobolFrontend(
         cobol_parser=parser,
-        extension_strategies=list(extension_strategies or []),
+        extension_strategies=[strategy],
     )
-    instructions = frontend.lower(preprocessed.encode("utf-8"))
+    instructions = frontend.lower(prepass.source.encode("utf-8"))
     cfg = build_cfg(instructions)
     registry = build_registry(
         instructions,
@@ -118,11 +125,15 @@ def compile_cobol(
 def run_cobol(
     source: str,
     bridge_jar_path: str,
-    extension_strategies: list | None = None,
+    backend,
     max_steps: int = 1000,
     copybook_dirs: list[Path] | None = None,
 ):
-    """Compile and run a COBOL program; return the final VMState.
+    """Compile and run a COBOL program against *backend*; return the final VMState.
+
+    Builds the SQL strategy from *backend* + the prepass field_meta (the single
+    prepass — always run with copybook_dirs — owns the JSON loading) and wraps it
+    in the frontend's extension_strategies array.
 
     Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
     Phase 1 runs the init block (top-level), phase 2 dispatches into the
@@ -130,7 +141,7 @@ def run_cobol(
     so that __ws_region is visible in the frame when the builtins execute.
     """
     frontend, linked = compile_cobol(
-        source, bridge_jar_path, extension_strategies, copybook_dirs=copybook_dirs
+        source, bridge_jar_path, backend, copybook_dirs=copybook_dirs
     )
 
     # For COBOL, use function-entry mode so run_linked runs the WS init block

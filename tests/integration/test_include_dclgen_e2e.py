@@ -43,7 +43,6 @@ run_cobol = _helpers.run_cobol
 read_ws_field = _helpers.read_ws_field
 
 from squall.backends.sqlite import SqliteBackend
-from squall.strategy import SqlLoweringStrategy
 
 # ---------------------------------------------------------------------------
 # COBOL program under test
@@ -115,12 +114,11 @@ def test_include_dclgen_hit(bridge_jar):
     - ACCT-NAME == 'ALICE'
     """
     backend = _make_backend_hit()
-    strategy = SqlLoweringStrategy(backend)
 
     vm = run_cobol(
         _COBOL_INCLUDE_DCLGEN,
         bridge_jar_path=bridge_jar,
-        extension_strategies=[strategy],
+        backend=backend,
         max_steps=2000,
     )
 
@@ -145,7 +143,6 @@ def test_include_dclgen_miss(bridge_jar):
     - WS-FLAG stays 'N' (the ACCT-BAL = 1234.56 branch is not taken)
     """
     backend = _make_backend_miss()
-    strategy = SqlLoweringStrategy(backend)
 
     # Override WS-ID inline: use a COBOL program with WS-ID VALUE 99.
     cobol_miss = _COBOL_INCLUDE_DCLGEN.replace(
@@ -155,7 +152,7 @@ def test_include_dclgen_miss(bridge_jar):
     vm = run_cobol(
         cobol_miss,
         bridge_jar_path=bridge_jar,
-        extension_strategies=[strategy],
+        backend=backend,
         max_steps=2000,
     )
 

@@ -23,7 +23,6 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from squall.backend import SqlBackend
-from squall.binding import _NO_META
 from squall.builtins.exec_sql import make_exec_sql_builtin
 
 if TYPE_CHECKING:
@@ -48,9 +47,7 @@ def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-
 class SqlLoweringStrategy:
     """Full SQL lowering strategy.  Inject at ``CobolFrontend`` construction."""
 
-    def __init__(
-        self, backend: SqlBackend, field_meta: Mapping[str, dict] = _NO_META
-    ) -> None:
+    def __init__(self, backend: SqlBackend, field_meta: Mapping[str, dict]) -> None:
         from interpreter.vm.builtins import Builtins
 
         self._backend = backend

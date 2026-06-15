@@ -20,7 +20,6 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from types import MappingProxyType
 from typing import Final
 
 # Resolve vendor path so ByteConstants can be imported without installing red-dragon
@@ -330,11 +329,6 @@ def _encode_field(value, f: dict, length: int) -> bytes:
 # the LEN child as binary and the first LEN characters of the TEXT child.
 
 
-# The identity value for "no dclgen metadata": an immutable empty mapping, so
-# callers never juggle a None sentinel and the default can't be mutated.
-_NO_META: Final[Mapping[str, dict]] = MappingProxyType({})
-
-
 def _meta_for(field_meta: Mapping[str, dict], name: str) -> dict:
     """Case-insensitive lookup of a host var's dclgen metadata; ``{}`` if absent.
 
@@ -509,9 +503,7 @@ def _require_field(data_layout, name: str) -> dict:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def read_params(
-    vm, in_names: tuple[str, ...], field_meta: Mapping[str, dict] = _NO_META
-) -> list:
+def read_params(vm, in_names: tuple[str, ...], field_meta: Mapping[str, dict]) -> list:
     """Read host-variable fields from the WS region and return as a Python list.
 
     ZONED_DECIMAL fields are decoded to int; ALPHANUMERIC fields to str; COMP-3 to
@@ -574,7 +566,7 @@ def write_outputs(
     vm,
     out_names: tuple[str, ...],
     row: tuple,
-    field_meta: Mapping[str, dict] = _NO_META,
+    field_meta: Mapping[str, dict],
 ) -> int:
     """Assign a result row's values into WS host-variable fields.
 

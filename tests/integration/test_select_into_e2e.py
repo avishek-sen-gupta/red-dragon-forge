@@ -44,7 +44,6 @@ run_cobol = _helpers.run_cobol
 read_ws_field = _helpers.read_ws_field
 
 from squall.backends.sqlite import SqliteBackend
-from squall.strategy import SqlLoweringStrategy
 
 # ---------------------------------------------------------------------------
 # COBOL program under test
@@ -102,12 +101,11 @@ def _make_backend_empty() -> SqliteBackend:
 def test_select_into_hit(bridge_jar):
     """SELECT INTO with a matching row writes WS-BAL=500 and SQLCODE=0."""
     backend = _make_backend(acct_id=11, acct_bal=500)
-    strategy = SqlLoweringStrategy(backend)
 
     vm = run_cobol(
         _COBOL_SELECT_INTO,
         bridge_jar_path=bridge_jar,
-        extension_strategies=[strategy],
+        backend=backend,
         max_steps=2000,
     )
 
@@ -121,12 +119,11 @@ def test_select_into_hit(bridge_jar):
 def test_select_into_no_row(bridge_jar):
     """SELECT INTO with no matching row sets SQLCODE=100; WS-BAL is unchanged (0)."""
     backend = _make_backend_empty()
-    strategy = SqlLoweringStrategy(backend)
 
     vm = run_cobol(
         _COBOL_SELECT_INTO,
         bridge_jar_path=bridge_jar,
-        extension_strategies=[strategy],
+        backend=backend,
         max_steps=2000,
     )
 

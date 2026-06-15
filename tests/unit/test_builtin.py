@@ -118,7 +118,7 @@ def _call_builtin(backend, vm, sql_text: str):
     from squall.parser.parse import parse_exec_sql
 
     plans: list = []
-    builtin = make_exec_sql_builtin(backend, plans)
+    builtin = make_exec_sql_builtin(backend, plans, {})
     plans.append(parse_exec_sql(sql_text))
     return builtin([_TypedValue(0)], vm)
 

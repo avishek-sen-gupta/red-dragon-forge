@@ -25,7 +25,6 @@ run_cobol = _helpers.run_cobol
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.db2 import Db2Backend
-from squall.strategy import SqlLoweringStrategy
 
 _UPDAT = _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "updat.sqb"
 _DB2_INCLUDES = _HERE / "db2_includes"
@@ -72,7 +71,7 @@ def test_updat_sqb_rolls_back_every_change(bridge_jar):
         run_cobol(
             _UPDAT.read_text(encoding="utf-8"),
             bridge_jar,
-            extension_strategies=[SqlLoweringStrategy(backend)],
+            backend=backend,
             copybook_dirs=[_DB2_INCLUDES],
             max_steps=20000,
         )
