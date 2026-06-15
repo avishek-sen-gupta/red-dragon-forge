@@ -32,7 +32,9 @@ bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 from squall.backends.sqlite import SqliteBackend
 from squall.strategy import SqlLoweringStrategy
 
-_STATIC_SQB = _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "static.sqb"
+_STATIC_SQB = (
+    _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "static.sqb"
+)
 # Db2 include copybooks the sample COPYs: sqlca.cbl is an ALIAS that delegates to
 # squall's one canonical SQLCA.cpy (no duplication); sql.cbl is an unused stub.
 _DB2_INCLUDES = _HERE / "db2_includes"

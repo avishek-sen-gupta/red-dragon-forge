@@ -19,9 +19,11 @@ Slice-1 scope:
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from squall.backend import SqlBackend
+from squall.binding import _NO_META
 from squall.builtins.exec_sql import make_exec_sql_builtin
 
 if TYPE_CHECKING:
@@ -46,17 +48,25 @@ def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-
 class SqlLoweringStrategy:
     """Full SQL lowering strategy.  Inject at ``CobolFrontend`` construction."""
 
-    def __init__(self, backend: SqlBackend) -> None:
+    def __init__(
+        self, backend: SqlBackend, field_meta: Mapping[str, dict] = _NO_META
+    ) -> None:
         from interpreter.vm.builtins import Builtins
 
         self._backend = backend
+        # dclgen host-var metadata, loaded once by the prepass and passed in by
+        # reference. The builtin (and the binding engine it calls) consult it to
+        # drive VARCHAR 49-group codecs and typed validation.
+        self._field_meta = field_meta
         # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
         # lowered to a Const carrying its index here; the builtin closes over the
         # same list and looks the plan up at run time. Plans never travel through
         # the IR as objects (the VM's Const handling only round-trips primitives).
         self._plans: list = []
         _register(
-            Builtins.TABLE, _BUILTIN_NAME, make_exec_sql_builtin(backend, self._plans)
+            Builtins.TABLE,
+            _BUILTIN_NAME,
+            make_exec_sql_builtin(backend, self._plans, field_meta),
         )
 
     # ── Protocol methods ──────────────────────────────────────────────────────

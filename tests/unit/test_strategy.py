@@ -28,7 +28,6 @@ from interpreter.func_name import FuncName
 from interpreter.instructions import CallFunction, Const
 from interpreter.vm.builtins import Builtins
 
-
 # ── Minimal fake EmitContext ──────────────────────────────────────────────────
 
 
@@ -93,7 +92,9 @@ def test_handles_returns_false_for_other_stmt(strategy):
 
 def test_lower_emits_call_function(strategy):
     """lower() must emit exactly one CallFunction targeting '__exec_sql'."""
-    text = "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = 1 END-EXEC"
+    text = (
+        "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = 1 END-EXEC"
+    )
     stmt = ExecSqlStatement(text=text)
     ctx = _FakeEmitContext()
 
@@ -104,9 +105,9 @@ def test_lower_emits_call_function(strategy):
     assert len(call_insts) == 1, f"Expected 1 CallFunction, got {len(call_insts)}"
 
     call = call_insts[0]
-    assert call.func_name == FuncName("__exec_sql"), (
-        f"func_name should be __exec_sql, got {call.func_name!r}"
-    )
+    assert call.func_name == FuncName(
+        "__exec_sql"
+    ), f"func_name should be __exec_sql, got {call.func_name!r}"
     assert len(call.args) == 1, f"Expected 1 arg, got {len(call.args)}"
 
 
@@ -144,7 +145,9 @@ def test_strategy_registers_exec_sql_builtin(backend):
 
     SqlLoweringStrategy(backend)
 
-    assert key in Builtins.TABLE, "__exec_sql must be in Builtins.TABLE after construction"
+    assert (
+        key in Builtins.TABLE
+    ), "__exec_sql must be in Builtins.TABLE after construction"
     assert callable(Builtins.TABLE[key]), "registered value must be callable"
 
 

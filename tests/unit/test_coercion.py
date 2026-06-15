@@ -114,7 +114,9 @@ def test_str_too_long_truncation() -> None:
 
 
 def test_null_into_numeric() -> None:
-    assert _assignability(None, _numeric("ZONED_DECIMAL", 9)) == SQLCODE_NULL_NO_INDICATOR
+    assert (
+        _assignability(None, _numeric("ZONED_DECIMAL", 9)) == SQLCODE_NULL_NO_INDICATOR
+    )
 
 
 def test_null_into_alpha() -> None:

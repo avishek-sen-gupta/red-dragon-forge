@@ -30,49 +30,49 @@ def _kind(text: str) -> str:
 SYNTHETIC: list[tuple[str, str]] = [
     # (directive_kind, sql_body)
     ("select_into", "SELECT A, B INTO :X, :Y FROM T WHERE ID = :Z"),
-    ("insert",      "INSERT INTO T (A, B) VALUES (1, 2)"),
-    ("update",      "UPDATE T SET A = 1 WHERE B = 2"),
-    ("delete",      "DELETE FROM T WHERE ID = :X"),
-    ("merge",       "MERGE INTO TARGET T USING SOURCE S ON T.ID = S.ID"),
+    ("insert", "INSERT INTO T (A, B) VALUES (1, 2)"),
+    ("update", "UPDATE T SET A = 1 WHERE B = 2"),
+    ("delete", "DELETE FROM T WHERE ID = :X"),
+    ("merge", "MERGE INTO TARGET T USING SOURCE S ON T.ID = S.ID"),
     ("values_into", "VALUES (:A, :B) INTO :X, :Y"),
     # Cursor DDL / control
-    ("declare_cursor",   "DECLARE MyCursor CURSOR FOR SELECT A FROM T"),
-    ("declare_table",    "DECLARE MY_TABLE TABLE (ID INT NOT NULL)"),
-    ("declare_statement","DECLARE STMT1 STATEMENT"),
+    ("declare_cursor", "DECLARE MyCursor CURSOR FOR SELECT A FROM T"),
+    ("declare_table", "DECLARE MY_TABLE TABLE (ID INT NOT NULL)"),
+    ("declare_statement", "DECLARE STMT1 STATEMENT"),
     ("declare_variable", "DECLARE :HV-VAR VARIABLE CHAR(10)"),
-    ("allocate_cursor",  "ALLOCATE MY-CUR CURSOR FOR RESULT SET :RS-HV"),
-    ("open_",            "OPEN MyCursor"),
-    ("close",            "CLOSE MyCursor"),
-    ("fetch",            "FETCH FROM MyCursor INTO :A, :B"),
+    ("allocate_cursor", "ALLOCATE MY-CUR CURSOR FOR RESULT SET :RS-HV"),
+    ("open_", "OPEN MyCursor"),
+    ("close", "CLOSE MyCursor"),
+    ("fetch", "FETCH FROM MyCursor INTO :A, :B"),
     # Dynamic SQL
-    ("prepare",   "PREPARE STMT1 FROM :SQL-TEXT"),
-    ("execute_",  "EXECUTE STMT1 USING :A, :B"),
-    ("describe",  "DESCRIBE STMT1 INTO :SQLDA-HV"),
+    ("prepare", "PREPARE STMT1 FROM :SQL-TEXT"),
+    ("execute_", "EXECUTE STMT1 USING :A, :B"),
+    ("describe", "DESCRIBE STMT1 INTO :SQLDA-HV"),
     # Transactions
-    ("commit",    "COMMIT WORK"),
-    ("rollback",  "ROLLBACK WORK"),
+    ("commit", "COMMIT WORK"),
+    ("rollback", "ROLLBACK WORK"),
     ("savepoint", "SAVEPOINT MySavepoint"),
-    ("release",   "RELEASE MySavepoint"),
+    ("release", "RELEASE MySavepoint"),
     # Connections
-    ("connect",        "CONNECT TO :DB-NAME"),
+    ("connect", "CONNECT TO :DB-NAME"),
     ("set_connection", "SET CONNECTION :CONN-NAME"),
-    ("disconnect",     "DISCONNECT :CONN-NAME"),
+    ("disconnect", "DISCONNECT :CONN-NAME"),
     # Error / flow
-    ("whenever",         "WHENEVER NOT FOUND CONTINUE"),
-    ("get_diagnostics",  "GET DIAGNOSTICS :COUNT = ROW_COUNT"),
-    ("signal",           "SIGNAL SQLSTATE '02000'"),
+    ("whenever", "WHENEVER NOT FOUND CONTINUE"),
+    ("get_diagnostics", "GET DIAGNOSTICS :COUNT = ROW_COUNT"),
+    ("signal", "SIGNAL SQLSTATE '02000'"),
     # Declare-section bookends
     ("begin_declare", "BEGIN DECLARE SECTION"),
-    ("end_declare",   "END DECLARE SECTION"),
+    ("end_declare", "END DECLARE SECTION"),
     # Locators
     ("free_locator", "FREE LOCATOR :LOC1, :LOC2"),
     ("hold_locator", "HOLD LOCATOR :LOC1"),
-    ("associate",    "ASSOCIATE LOCATORS (:LOC) WITH PROCEDURE MY_PROC"),
+    ("associate", "ASSOCIATE LOCATORS (:LOC) WITH PROCEDURE MY_PROC"),
     # Misc
     ("include", "INCLUDE SQLCA"),
-    ("call",    "CALL MY_PROC(:A, :B)"),
-    ("set",     "SET :X = CURRENT DATE"),
-    ("lock",    "LOCK TABLE T IN SHARE MODE"),
+    ("call", "CALL MY_PROC(:A, :B)"),
+    ("set", "SET :X = CURRENT DATE"),
+    ("lock", "LOCK TABLE T IN SHARE MODE"),
     # Fallback
     ("generic", "GRANT SELECT ON T TO PUBLIC"),
 ]
@@ -88,20 +88,20 @@ def test_synthetic(expected_kind: str, sql: str) -> None:
 _CBSA_PATH = pathlib.Path("/tmp/che4z_sql/cbsa_samples.json")
 
 _CBSA_KIND_MAP: dict[str, str] = {
-    "INCLUDE_ACCDB2":  "include",
-    "INCLUDE_SQLCA":   "include",
+    "INCLUDE_ACCDB2": "include",
+    "INCLUDE_SQLCA": "include",
     "INCLUDE_CONTDB2": "include",
     "INCLUDE_PROCDB2": "include",
-    "INCLUDE_SQLDA":   "include",
-    "COMMIT":          "commit",
-    "INSERT":          "insert",
-    "DELETE":          "delete",
-    "SELECT":          "select_into",
-    "UPDATE":          "update",
-    "DECLARE_CURSOR":  "declare_cursor",
-    "OPEN":            "open_",
-    "CLOSE":           "close",
-    "FETCH":           "fetch",
+    "INCLUDE_SQLDA": "include",
+    "COMMIT": "commit",
+    "INSERT": "insert",
+    "DELETE": "delete",
+    "SELECT": "select_into",
+    "UPDATE": "update",
+    "DECLARE_CURSOR": "declare_cursor",
+    "OPEN": "open_",
+    "CLOSE": "close",
+    "FETCH": "fetch",
 }
 
 
@@ -111,9 +111,7 @@ def _load_cbsa_cases() -> list[tuple[str, str, str]]:
         return []
     raw: dict[str, list[str]] = json.loads(_CBSA_PATH.read_text())
     return [
-        (key, raw[key][1], _CBSA_KIND_MAP[key])
-        for key in _CBSA_KIND_MAP
-        if key in raw
+        (key, raw[key][1], _CBSA_KIND_MAP[key]) for key in _CBSA_KIND_MAP if key in raw
     ]
 
 
@@ -121,7 +119,9 @@ _CBSA_CASES = _load_cbsa_cases()
 
 
 @pytest.mark.skipif(not _CBSA_PATH.exists(), reason="CBSA samples file not available")
-@pytest.mark.parametrize("key,sql,expected_kind", _CBSA_CASES, ids=[c[0] for c in _CBSA_CASES])
+@pytest.mark.parametrize(
+    "key,sql,expected_kind", _CBSA_CASES, ids=[c[0] for c in _CBSA_CASES]
+)
 def test_cbsa(key: str, sql: str, expected_kind: str) -> None:
     assert _kind(sql) == expected_kind
 

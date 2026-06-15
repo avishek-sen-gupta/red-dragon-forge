@@ -65,7 +65,9 @@ def make_cobol_parser(
     dirs: list[Path] = [_squall_copybooks_dir()]
     if copybook_dirs:
         dirs.extend(copybook_dirs)
-    return ProLeapCobolParser(RealSubprocessRunner(), bridge_jar_path, copybook_dirs=dirs)
+    return ProLeapCobolParser(
+        RealSubprocessRunner(), bridge_jar_path, copybook_dirs=dirs
+    )
 
 
 def compile_cobol(
@@ -83,7 +85,7 @@ def compile_cobol(
     Returns (frontend, linked) so that callers can access frontend.data_layout
     for assertions and pass the LinkedProgram to run_linked.
     """
-    preprocessed = apply_sql_prepass(source)
+    preprocessed = apply_sql_prepass(source).source
     parser = make_cobol_parser(bridge_jar_path, copybook_dirs=copybook_dirs)
     frontend = CobolFrontend(
         cobol_parser=parser,
@@ -208,5 +210,5 @@ def read_ws_field(vm, field_name: str):
         return None
 
     off, length = f["offset"], f["length"]
-    raw = bytes(region[off: off + length])
+    raw = bytes(region[off : off + length])
     return _decode_field(raw, f)

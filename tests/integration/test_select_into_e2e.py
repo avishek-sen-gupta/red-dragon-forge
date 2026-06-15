@@ -46,7 +46,6 @@ read_ws_field = _helpers.read_ws_field
 from squall.backends.sqlite import SqliteBackend
 from squall.strategy import SqlLoweringStrategy
 
-
 # ---------------------------------------------------------------------------
 # COBOL program under test
 # ---------------------------------------------------------------------------

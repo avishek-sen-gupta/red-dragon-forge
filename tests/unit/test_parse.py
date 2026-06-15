@@ -10,7 +10,6 @@ import pytest
 
 from squall.parser.parse import HostVar, ParsedSql, parse_exec_sql
 
-
 # ── Required tests from spec ──────────────────────────────────────────────────
 
 
@@ -25,9 +24,7 @@ def test_select_into() -> None:
 
 
 def test_update_input_order() -> None:
-    p = parse_exec_sql(
-        "EXEC SQL UPDATE CONTROL SET V = :HV-V WHERE N = :HV-N END-EXEC"
-    )
+    p = parse_exec_sql("EXEC SQL UPDATE CONTROL SET V = :HV-V WHERE N = :HV-N END-EXEC")
     assert p.in_vars == (HostVar("HV-V", None), HostVar("HV-N", None))
     assert p.out_vars == ()
     assert p.query == "UPDATE CONTROL SET V = ? WHERE N = ?"
