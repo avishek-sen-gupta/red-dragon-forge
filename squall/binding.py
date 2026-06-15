@@ -28,9 +28,9 @@ _VENDOR = os.path.join(os.path.dirname(__file__), "..", "vendor", "red-dragon")
 if _VENDOR not in sys.path:
     sys.path.insert(0, _VENDOR)
 
+from interpreter.address import Address  # noqa: E402
 from interpreter.cobol.cobol_constants import ByteConstants  # noqa: E402
 from interpreter.var_name import VarName  # noqa: E402
-from interpreter.address import Address  # noqa: E402
 
 # ── Low-level codec helpers ───────────────────────────────────────────────────
 
@@ -46,10 +46,11 @@ def _zoned_decode(data: bytes) -> int:
         return 0
     digits = [b & ByteConstants.NIBBLE_MASK for b in data]
     sign_zone = (data[-1] & ByteConstants.HIGH_NIBBLE_MASK) >> 4
-    value = int("".join(str(d) for d in digits))
-    if sign_zone == (ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK):
-        value = -value
-    return value
+    magnitude = int("".join(str(d) for d in digits))
+    negative = sign_zone == (
+        ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK
+    )
+    return -magnitude if negative else magnitude
 
 
 def _zoned_encode(n: int, length: int) -> bytes:
@@ -64,19 +65,19 @@ def _zoned_encode(n: int, length: int) -> bytes:
     unsigned_zone = (
         ByteConstants.SIGN_NIBBLE_UNSIGNED & ByteConstants.NIBBLE_MASK
     ) << 4  # 0xF0
+    negative_zone = (
+        ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK
+    ) << 4
     for i, ch in enumerate(abs_digits):
         digit = int(ch)
-        if i < length - 1:
-            result[i] = unsigned_zone | digit
-        else:
-            # Last byte: sign zone
-            if n < 0:
-                sign_zone = (
-                    ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK
-                ) << 4  # 0xD0
-            else:
-                sign_zone = unsigned_zone  # 0xF0
-            result[i] = sign_zone | digit
+        # Every byte uses the unsigned zone except the last, which carries the
+        # sign zone (0xD0 negative / 0xF0 non-negative).
+        zone = (
+            unsigned_zone
+            if i < length - 1
+            else (negative_zone if n < 0 else unsigned_zone)
+        )
+        result[i] = zone | digit
     return bytes(result)
 
 
@@ -136,19 +137,15 @@ def _comp3_decode(data: bytes, decimal_digits: int) -> Decimal:
     digit_str = "".join(str(d) for d in digits)
     int_value = int(digit_str) if digit_str else 0
 
-    if decimal_digits > 0:
-        # Build Decimal directly from integer and scale
-        result = Decimal(int_value) / Decimal(10**decimal_digits)
-        # Quantize to the correct scale to avoid floating-point noise
-        quant = Decimal(10) ** -decimal_digits
-        result = result.quantize(quant)
-    else:
-        result = Decimal(int_value)
-
-    if negative and int_value != 0:
-        result = -result
-
-    return result
+    # Scale by the implied decimal point, quantizing to avoid float noise.
+    magnitude = (
+        (Decimal(int_value) / Decimal(10**decimal_digits)).quantize(
+            Decimal(10) ** -decimal_digits
+        )
+        if decimal_digits > 0
+        else Decimal(int_value)
+    )
+    return -magnitude if (negative and int_value != 0) else magnitude
 
 
 def _comp3_encode(
@@ -168,37 +165,30 @@ def _comp3_encode(
     Returns:
         Packed BCD bytes of length (total_digits // 2) + 1.
     """
-    dec_value = Decimal(str(value))
-    negative = dec_value < 0
+    raw_value = Decimal(str(value))
+    negative = raw_value < 0  # sign taken from the value, before scale rounding
+    dec_value = (
+        raw_value.quantize(Decimal(10) ** -decimal_digits)
+        if decimal_digits > 0
+        else raw_value
+    )
 
-    # Quantize to the declared scale
-    if decimal_digits > 0:
-        quant = Decimal(10) ** -decimal_digits
-        dec_value = dec_value.quantize(quant)
+    # Digit string, sign and decimal point removed. partition handles the no-"."
+    # case (frac == ""); the fraction is padded/truncated to the field scale and
+    # the whole is left-zero-padded (or truncated) to total_digits.
+    int_part, _, frac = str(abs(dec_value)).partition(".")
+    digits = int_part + (frac + "0" * decimal_digits)[:decimal_digits]
+    raw_digits = digits.zfill(total_digits)[-total_digits:]
 
-    # Strip sign and decimal point; produce raw digit string
-    abs_str = str(abs(dec_value))
-    # Remove the decimal point if present
-    if "." in abs_str:
-        integer_part, frac_part = abs_str.split(".")
-        # Pad fractional part to declared decimal_digits, truncate if longer
-        frac_part = (frac_part + "0" * decimal_digits)[:decimal_digits]
-        raw_digits = integer_part + frac_part
-    else:
-        raw_digits = abs_str
-        if decimal_digits > 0:
-            raw_digits = raw_digits + "0" * decimal_digits
-
-    # Left-zero-pad to total_digits, truncate if too long
-    raw_digits = raw_digits.zfill(total_digits)[-total_digits:]
-
-    # Determine sign nibble
-    if negative:
-        sign_nibble = ByteConstants.SIGN_NIBBLE_NEGATIVE  # 0x0D
-    elif signed:
-        sign_nibble = ByteConstants.SIGN_NIBBLE_POSITIVE  # 0x0C
-    else:
-        sign_nibble = ByteConstants.SIGN_NIBBLE_UNSIGNED  # 0x0F
+    sign_nibble = (
+        ByteConstants.SIGN_NIBBLE_NEGATIVE  # 0x0D
+        if negative
+        else (
+            ByteConstants.SIGN_NIBBLE_POSITIVE  # 0x0C (signed)
+            if signed
+            else ByteConstants.SIGN_NIBBLE_UNSIGNED
+        )  # 0x0F
+    )
 
     # Build a nibble sequence: all digit nibbles followed by the sign nibble.
     # Total nibble count = total_digits + 1.
