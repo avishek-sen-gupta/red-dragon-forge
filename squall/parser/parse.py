@@ -43,6 +43,10 @@ class ParsedSql:
     # Connection management (kinds connect / set_connection / disconnect).
     connect_variant: str | None = None  # "TO" / "RESET" (connect only); None otherwise
     connect_db: str | HostVar | None = None  # target db: literal (upper) or HostVar
+    # WHENEVER directive (kind == "whenever"); None for every other kind.
+    whenever_condition: str | None = None  # "SQLERROR" / "NOT FOUND" / "SQLWARNING"
+    whenever_action: str | None = None  # "CONTINUE" / "GOTO"
+    whenever_target: str | None = None  # GO TO label, else None
 
 
 # ── Parser with position tracking ─────────────────────────────────────────────
@@ -178,6 +182,47 @@ def _connection_fields(
         )
         return None, (name.upper() if name is not None else None)
     return None, None
+
+
+def _whenever_fields(
+    stmt: Tree, kind: str
+) -> tuple[str | None, str | None, str | None]:
+    """Return (condition, action, target) for a WHENEVER directive, else Nones."""
+    if kind != "whenever":
+        return None, None, None
+    cond_node = next(
+        (c for c in stmt.children if isinstance(c, Tree) and c.data == "whenever_cond"),
+        None,
+    )
+    action_node = next(
+        (
+            c
+            for c in stmt.children
+            if isinstance(c, Tree) and c.data == "whenever_action"
+        ),
+        None,
+    )
+    condition = _whenever_condition(cond_node) if cond_node is not None else None
+    action, target = (
+        _whenever_action(action_node) if action_node is not None else (None, None)
+    )
+    return condition, action, target
+
+
+def _whenever_condition(node: Tree) -> str:
+    """Normalise the condition tokens to 'SQLERROR' / 'NOT FOUND' / 'SQLWARNING'."""
+    tokens = [str(c) for c in node.children if isinstance(c, Token)]
+    return " ".join(tokens).upper()
+
+
+def _whenever_action(node: Tree) -> tuple[str, str | None]:
+    """Return ('CONTINUE', None) or ('GOTO', <target>) for the action subtree."""
+    tokens = [c for c in node.children if isinstance(c, Token)]
+    if tokens and str(tokens[0]).upper() == "CONTINUE":
+        return "CONTINUE", None
+    # GOTO <name> or GO TO <name>: the target is the trailing NAME token.
+    target = str(tokens[-1]) if tokens else None
+    return "GOTO", target
 
 
 def _cursor_name(stmt: Tree, kind: str) -> str | None:
@@ -338,6 +383,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     query = _build_query(inner, stmt, kind)
     inc_name = _include_name(stmt, kind)
     conn_variant, conn_db = _connection_fields(stmt, kind)
+    wh_cond, wh_action, wh_target = _whenever_fields(stmt, kind)
 
     return ParsedSql(
         kind=kind,
@@ -348,4 +394,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
         include_name=inc_name,
         connect_variant=conn_variant,
         connect_db=conn_db,
+        whenever_condition=wh_cond,
+        whenever_action=wh_action,
+        whenever_target=wh_target,
     )
