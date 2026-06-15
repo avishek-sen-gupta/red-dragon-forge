@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from squall.backends.sqlite import SqliteBackend
+from squall.parser.sql_model import Kind
 from squall.strategy import SqlLoweringStrategy
 
 # ── Imports from vendored red-dragon ─────────────────────────────────────────
@@ -132,7 +133,7 @@ def test_lower_parses_once_into_pool(strategy):
     assert len(strategy._plans) == 1
     plan = strategy._plans[0]
     assert isinstance(plan, ParsedSql)
-    assert plan.kind == "select_into"
+    assert plan.kind is Kind.SELECT_INTO
     assert plan.query == "SELECT ACCT_BAL FROM ACCOUNT"
     assert plan.out_vars == (HostVar("WS-BAL", None),)
 

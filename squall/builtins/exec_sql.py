@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
 from squall.binding import read_params, write_outputs, write_sqlcode
+from squall.parser.sql_model import Kind
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
@@ -46,7 +47,7 @@ SQLCODE_DB_NOT_FOUND = -1013  # CONNECT TO an unknown database name
 SQLCODE_NOT_ESTABLISHED = -1338  # SET CONNECTION to a connection not established
 
 # The host-var declare-section bookends are purely declarative — no DB effect.
-_NO_OP_KINDS = frozenset({"begin_declare", "end_declare"})
+_NO_OP_KINDS = frozenset({Kind.BEGIN_DECLARE, Kind.END_DECLARE})
 
 
 def _host_names(host_vars) -> tuple[str, ...]:
@@ -210,7 +211,7 @@ def _h_query(ctx: _Ctx, parsed, vm) -> None:
     result = backend.execute(parsed.query, params)
     code = (
         _bind_row(vm, parsed.out_vars, result, ctx.field_meta)
-        if parsed.kind == "select_into"
+        if parsed.kind is Kind.SELECT_INTO
         else result.sqlcode
     )
     write_sqlcode(vm, code)
@@ -219,15 +220,15 @@ def _h_query(ctx: _Ctx, parsed, vm) -> None:
 # Dispatch table: EXEC SQL kind -> handler. Kinds with a non-empty query
 # (select_into / insert / update / delete / …) fall to _h_query (the default).
 _HANDLERS = {
-    "connect": _h_connect,
-    "set_connection": _h_set_connection,
-    "disconnect": _h_disconnect,
-    "declare_cursor": _h_declare_cursor,
-    "open_": _h_open,
-    "fetch": _h_fetch,
-    "close": _h_close,
-    "commit": _h_commit,
-    "rollback": _h_rollback,
+    Kind.CONNECT: _h_connect,
+    Kind.SET_CONNECTION: _h_set_connection,
+    Kind.DISCONNECT: _h_disconnect,
+    Kind.DECLARE_CURSOR: _h_declare_cursor,
+    Kind.OPEN: _h_open,
+    Kind.FETCH: _h_fetch,
+    Kind.CLOSE: _h_close,
+    Kind.COMMIT: _h_commit,
+    Kind.ROLLBACK: _h_rollback,
     **{kind: _h_noop for kind in _NO_OP_KINDS},
 }
 

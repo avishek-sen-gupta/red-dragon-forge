@@ -15,11 +15,12 @@ from squall.backends.sqlite import SqliteBackend
 from squall.binding import _zoned_decode, _zoned_encode
 from squall.builtins.exec_sql import make_exec_sql_builtin
 from squall.parser.parse import HostVar, parse_exec_sql
+from squall.parser.sql_model import Kind
 
 
 def test_parse_connect_to_literal():
     p = parse_exec_sql("EXEC SQL CONNECT TO sample END-EXEC")
-    assert p.kind == "connect"
+    assert p.kind is Kind.CONNECT
     assert p.connect_variant == "TO"
     assert p.connect_db == "SAMPLE"  # DB2 upper-cases database names
 
@@ -46,13 +47,13 @@ def test_parse_connect_reset():
 
 def test_parse_set_connection():
     p = parse_exec_sql("EXEC SQL SET CONNECTION db2 END-EXEC")
-    assert p.kind == "set_connection"
+    assert p.kind is Kind.SET_CONNECTION
     assert p.connect_db == "DB2"
 
 
 def test_parse_disconnect():
     p = parse_exec_sql("EXEC SQL DISCONNECT db2 END-EXEC")
-    assert p.kind == "disconnect"
+    assert p.kind is Kind.DISCONNECT
     assert p.connect_db == "DB2"
 
 
