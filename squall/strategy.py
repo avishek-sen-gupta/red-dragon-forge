@@ -33,6 +33,13 @@ logger = logging.getLogger(__name__)
 
 _BUILTIN_NAME = "__exec_sql"
 
+# WHENEVER condition -> (COBOL comparison op, literal) for the synthetic check.
+# SQLWARNING is omitted: it needs SQLCA SQLWARN populated (squall-ud0).
+_WHENEVER_RELATION = {
+    "SQLERROR": ("<", "0"),
+    "NOT FOUND": ("=", "100"),
+}
+
 
 def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-arg]
     """Insert *fn* into *table* under ``FuncName(name)``."""
@@ -61,6 +68,10 @@ class SqlLoweringStrategy:
         # reference. The builtin (and the binding engine it calls) consult it to
         # drive VARCHAR 49-group codecs and typed validation.
         self._field_meta = field_meta
+        # WHENEVER directive state: condition -> (action, target). Updated in
+        # textual order as `lower` sees each WHENEVER statement (precompiler
+        # scoping); absent condition == CONTINUE (no automatic branch).
+        self._whenever: dict[str, tuple[str, str | None]] = {}
         # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
         # lowered to a Const carrying its index here; the builtin closes over the
         # same list and looks the plan up at run time. Plans never travel through
@@ -96,7 +107,13 @@ class SqlLoweringStrategy:
         stmt: Any,
         materialised: MaterialisedSectionedLayout,
     ) -> None:
-        """Lower one ``ExecSqlStatement`` to a ``CallFunction(__exec_sql, …)``."""
+        """Lower one ``ExecSqlStatement``.
+
+        WHENEVER is a compile-time directive: it updates per-condition state and
+        emits no runtime IR. Every other kind lowers to a ``__exec_sql`` call,
+        followed by the synthetic ``IF SQLCODE <cmp> <val> GO TO <target>`` for
+        each active (non-CONTINUE) condition.
+        """
         from interpreter.func_name import FuncName
         from interpreter.instructions import CallFunction, Const
 
@@ -107,6 +124,18 @@ class SqlLoweringStrategy:
         # re-parse on every pass through a PERFORM loop). The runtime builtin
         # receives the already-parsed ParsedSql plan and only binds + executes.
         plan = parse_exec_sql(stmt.text)
+
+        if plan.kind == "whenever":
+            # Precompiler directive: update lexically-scoped state, emit no IR.
+            if plan.whenever_action == "CONTINUE":
+                self._whenever.pop(plan.whenever_condition, None)
+            else:  # GOTO
+                self._whenever[plan.whenever_condition] = (
+                    plan.whenever_action,
+                    plan.whenever_target,
+                )
+            return
+
         plan_index = len(self._plans)
         self._plans.append(plan)
 
@@ -124,3 +153,40 @@ class SqlLoweringStrategy:
                 args=(index_reg,),
             )
         )
+
+        # Automatic SQLCODE branching for each active WHENEVER condition.
+        self._emit_whenever_checks(ctx, materialised)
+
+    def _emit_whenever_checks(
+        self,
+        ctx: EmitContext,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        """Emit ``IF SQLCODE <cmp> <val> GO TO target`` for each active condition.
+
+        Built as a synthetic COBOL IF and lowered through ``ctx.lower_statement``
+        so RedDragon's native IF + GO TO lowering (condition + label resolution)
+        is reused — no raw-IR branch emission, no coupling to label naming.
+        """
+        from interpreter.cobol.cobol_statements import parse_statement
+
+        for condition, (_action, target) in self._whenever.items():
+            relation = _WHENEVER_RELATION.get(condition)
+            if relation is None:
+                continue  # SQLWARNING (and custom conditions) deferred — slice 3
+            op, value = relation
+            if_stmt = parse_statement(
+                {
+                    "type": "IF",
+                    "condition": {
+                        "not": False,
+                        "relation": {
+                            "left": {"kind": "ref", "name": "SQLCODE"},
+                            "op": op,
+                            "right": {"kind": "lit", "value": value},
+                        },
+                    },
+                    "children": [{"type": "GOTO", "operands": [target]}],
+                }
+            )
+            ctx.lower_statement(if_stmt, materialised)

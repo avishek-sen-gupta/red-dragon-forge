@@ -38,3 +38,72 @@ def test_parse_non_whenever_has_no_whenever_fields():
     assert p.whenever_condition is None
     assert p.whenever_action is None
     assert p.whenever_target is None
+
+
+# ── Strategy: WHENEVER lowers to a synthetic conditional branch ────────────────
+
+import importlib.util
+import os
+from pathlib import Path
+
+from interpreter.instructions import BranchIf
+
+_HELPERS = Path(__file__).parent.parent / "integration" / "squall_cobol_helpers.py"
+_spec = importlib.util.spec_from_file_location("squall_cobol_helpers", _HELPERS)
+_helpers = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_helpers)
+compile_cobol = _helpers.compile_cobol
+
+
+class _NullBackend:
+    """A backend whose execute always fails (SQLCODE -1) — enough to compile."""
+
+    def execute(self, sql, params):
+        from squall.backend import SqlResult
+
+        return SqlResult(rows=(), rowcount=0, sqlcode=-1)
+
+    def open_cursor(self, name, sql, params):  # pragma: no cover - unused here
+        pass
+
+    def fetch(self, name):  # pragma: no cover - unused here
+        from squall.backend import SqlResult
+
+        return SqlResult(rows=(), rowcount=0, sqlcode=100)
+
+    def close(self, name):  # pragma: no cover - unused here
+        pass
+
+    def commit(self):  # pragma: no cover - unused here
+        pass
+
+    def rollback(self):  # pragma: no cover - unused here
+        pass
+
+
+_PROGRAM_GOTO = """       IDENTIFICATION DIVISION.
+       PROGRAM-ID. WHENT.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+           EXEC SQL INCLUDE SQLCA END-EXEC.
+       01 WS-ID PIC 9(4) VALUE 1.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC SQL WHENEVER SQLERROR GO TO ERR-PARA END-EXEC
+           EXEC SQL SELECT 1 INTO :WS-ID FROM SYSIBM.SYSDUMMY1 END-EXEC
+           STOP RUN.
+       ERR-PARA.
+           STOP RUN.
+"""
+
+
+def test_whenever_goto_emits_conditional_branch(bridge_jar=None):
+    """A SELECT under an active WHENEVER SQLERROR GO TO lowers a BranchIf
+    (the synthetic IF SQLCODE < 0 GO TO ERR-PARA) into the IR."""
+    jar = os.environ["PROLEAP_BRIDGE_JAR"]
+    _frontend, linked = compile_cobol(
+        _PROGRAM_GOTO, jar, {"SAMPLE": _NullBackend()}, copybook_dirs=[]
+    )
+    assert any(
+        isinstance(i, BranchIf) for i in linked.merged_ir
+    ), "expected a conditional branch from the synthetic WHENEVER IF/GO TO"
