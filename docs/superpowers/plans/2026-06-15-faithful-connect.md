@@ -37,7 +37,17 @@
 
 ## Task 1: `ParsedSql` carries the connection directive
 
-**Files:** Modify `squall/parser/parse.py`; Test `tests/unit/test_connection.py`.
+> **Revised after grammar verification (2026-06-15).** The original design walked the
+> catch-all `connect: CONNECT _run` and matched `t.type == "RESET"` / `_token_after(toks, "TO")`.
+> A live-parser probe proved that inside `_run` every keyword (`TO`, `USER`, `USING`,
+> `RESET`) lexes as an untyped `NAME` and host vars surface as `host_var` **Tree** nodes —
+> so none of that matching can work. Per the "no string-surgery for SQL sublanguages"
+> rule, we add **real grammar productions** for CONNECT instead of value-matching the
+> catch-all. `SET CONNECTION` / `DISCONNECT` keep the catch-all + first-`NAME` extraction
+> (their leading keywords `SET`/`CONNECTION`/`DISCONNECT` are genuine terminals, so no
+> value-matching is involved).
+
+**Files:** Modify `squall/parser/grammar.lark`, `squall/parser/parse.py`; Test `tests/unit/test_connection.py`.
 
 - [ ] **Step 1: Failing test** — create `tests/unit/test_connection.py`:
 
@@ -85,7 +95,37 @@ def test_parse_disconnect():
 
 - [ ] **Step 2: Run → fail** (`AttributeError: connect_variant`). `uv run python -m pytest tests/unit/test_connection.py -q`
 
-- [ ] **Step 3: Add `ParsedSql` fields** (after the whenever fields, or after `include_name` if WHENEVER not yet merged):
+- [ ] **Step 3: Add CONNECT grammar productions** in `squall/parser/grammar.lark`. Replace `connect: CONNECT _run` with structured rules (leave `set_connection` / `disconnect` as catch-alls):
+
+```lark
+connect:        CONNECT TO conn_target conn_creds?
+              | CONNECT RESET
+conn_target:    NAME | host_var
+conn_creds:     USER host_var (USING host_var)?
+set_connection: SET CONNECTION _run
+disconnect:     DISCONNECT _run
+```
+
+Add the two new terminals (next to `CONNECT`/`DISCONNECT`):
+
+```lark
+USER:        "USER"i
+RESET:       "RESET"i
+```
+
+And keep them usable as plain words everywhere else by appending to `_word`:
+
+```lark
+_word: NAME | NUM | SELECT | INSERT | UPDATE | DELETE | DECLARE | OPEN | FETCH
+     | CLOSE | COMMIT | INCLUDE | WHENEVER | ROLLBACK | CONNECT | USER | RESET
+```
+
+Verified trees (live probe): `CONNECT TO sample` → `connect[CONNECT, TO, conn_target[NAME]]`;
+`CONNECT TO :db USER :u USING :p` → `connect[CONNECT, TO, conn_target[host_var], conn_creds[USER, host_var, USING, host_var]]`;
+`CONNECT RESET` → `connect[CONNECT, RESET]`. The existing host-var DFS still collects all
+host vars into `in_vars`; `conn_creds` host vars are intentionally never consumed by the handler (Task 2).
+
+- [ ] **Step 4: Add `ParsedSql` fields** (after `include_name`, or after the whenever fields if WHENEVER is merged):
 
 ```python
     # Connection management (kinds connect / set_connection / disconnect).
@@ -93,44 +133,41 @@ def test_parse_disconnect():
     connect_db: "str | HostVar | None" = None  # target db: literal (upper-cased) or HostVar
 ```
 
-- [ ] **Step 4: Extract in `parse_exec_sql`** — add a helper:
+- [ ] **Step 5: Extract in `parse_exec_sql`** — add helpers that read the structured tree:
 
 ```python
+def _conn_target(stmt: Tree) -> "str | HostVar | None":
+    """The conn_target db: NAME literal (upper-cased) or HostVar; None if absent."""
+    node = next(
+        (c for c in stmt.children if isinstance(c, Tree) and c.data == "conn_target"),
+        None,
+    )
+    if node is None:
+        return None
+    inner = node.children[0]
+    if isinstance(inner, Token) and inner.type == "NAME":
+        return str(inner).upper()
+    # host_var Tree -> its HOST_VAR_TOK
+    return _parse_host_var_tok(inner.children[0].value)
+
+
 def _connection_fields(
     stmt: Tree, kind: str
 ) -> tuple[str | None, "str | HostVar | None"]:
-    """Return (variant, target) for connect/set_connection/disconnect, else Nones.
-
-    - connect: variant is "RESET" or "TO". For TO, the target is the NAME after
-      TO (literal, upper-cased) or the first input host var (e.g. CONNECT TO :db).
-    - set_connection / disconnect: variant None; target is the NAME (upper-cased).
-    """
-    if kind not in ("connect", "set_connection", "disconnect"):
-        return None, None
-    toks = [c for c in stmt.children if isinstance(c, Token)]
+    """Return (variant, target). connect uses the structured productions;
+    set_connection / disconnect take their first NAME token (real leading
+    terminals, so this is a structural read, not keyword value-matching)."""
     if kind == "connect":
-        if any(t.type == "RESET" for t in toks):
+        if any(isinstance(c, Token) and c.type == "RESET" for c in stmt.children):
             return "RESET", None
-        # CONNECT TO <target>: NAME after TO, else the first host var.
-        after_to = _token_after(toks, "TO")
-        if after_to is not None and after_to.type == "NAME":
-            return "TO", str(after_to).upper()
-        first_hv = stmt and _collect_input_hv_tokens(stmt)
-        target = (
-            _parse_host_var_tok(first_hv[0].value) if first_hv else None
+        return "TO", _conn_target(stmt)
+    if kind in ("set_connection", "disconnect"):
+        name = next(
+            (str(c) for c in stmt.children if isinstance(c, Token) and c.type == "NAME"),
+            None,
         )
-        return "TO", target
-    # set_connection / disconnect: first NAME token is the target.
-    name = next((str(t) for t in toks if t.type == "NAME"), None)
-    return None, (name.upper() if name else None)
-
-
-def _token_after(tokens: list, kind: str):
-    """Return the Token immediately following the first token of type *kind*."""
-    for i, t in enumerate(tokens[:-1]):
-        if t.type == kind:
-            return tokens[i + 1]
-    return None
+        return None, (name.upper() if name is not None else None)
+    return None, None
 ```
 
 Then in `parse_exec_sql`:
@@ -144,11 +181,11 @@ Then in `parse_exec_sql`:
     )
 ```
 
-- [ ] **Step 5: Run → pass** (5 passed). **Step 6: Commit**
+- [ ] **Step 6: Run → pass** (5 passed). Also run `tests/unit/test_parse.py tests/unit/test_cursor.py tests/unit/test_builtin.py` to confirm the new `USER`/`RESET` keywords don't regress query parsing. **Step 7: Commit**
 
 ```bash
-git add squall/parser/parse.py tests/unit/test_connection.py
-git commit -m "feat(sql): surface CONNECT/SET CONNECTION/DISCONNECT target on ParsedSql"
+git add squall/parser/grammar.lark squall/parser/parse.py tests/unit/test_connection.py
+git commit -m "feat(sql): structured CONNECT grammar + connect_variant/connect_db on ParsedSql"
 ```
 
 ---

@@ -68,7 +68,10 @@ savepoint: SAVEPOINT _run
 release:  RELEASE _run
 
 // ── Connections ──────────────────────────────────────────────────────────────
-connect:        CONNECT _run
+connect:        CONNECT TO conn_target conn_creds?
+              | CONNECT RESET
+conn_target:    NAME | host_var
+conn_creds:     USER host_var (USING host_var)?
 set_connection: SET CONNECTION _run
 disconnect:     DISCONNECT _run
 
@@ -128,7 +131,7 @@ _atom_i: host_var | _word | STRING | COMMA | LP | RP | DOT | OTHER
 
 // keywords still usable as plain words inside bodies:
 _word: NAME | NUM | SELECT | INSERT | UPDATE | DELETE | DECLARE | OPEN | FETCH
-     | CLOSE | COMMIT | INCLUDE | WHENEVER | ROLLBACK | CONNECT
+     | CLOSE | COMMIT | INCLUDE | WHENEVER | ROLLBACK | CONNECT | USER | RESET
 
 // ── Keywords ─────────────────────────────────────────────────────────────────
 SELECT:      "SELECT"i
@@ -166,6 +169,8 @@ RELEASE:     "RELEASE"i
 CONNECT:     "CONNECT"i
 CONNECTION:  "CONNECTION"i
 DISCONNECT:  "DISCONNECT"i
+USER:        "USER"i
+RESET:       "RESET"i
 IMMEDIATE:   "IMMEDIATE"i
 PREPARE:     "PREPARE"i
 EXECUTE:     "EXECUTE"i
