@@ -15,46 +15,48 @@ from squall.backends.sqlite import SqliteBackend
 from squall.binding import _zoned_decode, _zoned_encode
 from squall.builtins.exec_sql import make_exec_sql_builtin
 from squall.parser.parse import HostVar, parse_exec_sql
-from squall.parser.sql_model import Kind
+from squall.parser.sql_model import (
+    ConnectReset,
+    ConnectTo,
+    HostVarDb,
+    Kind,
+    LiteralDb,
+)
 
 
 def test_parse_connect_to_literal():
     p = parse_exec_sql("EXEC SQL CONNECT TO sample END-EXEC")
     assert p.kind is Kind.CONNECT
-    assert p.connect_variant == "TO"
-    assert p.connect_db == "SAMPLE"  # DB2 upper-cases database names
+    assert p.connect == ConnectTo(LiteralDb("SAMPLE"))  # DB2 upper-cases db names
 
 
 def test_parse_connect_to_hostvar():
     p = parse_exec_sql("EXEC SQL CONNECT TO :dbname USER :u USING :p END-EXEC")
-    assert p.connect_variant == "TO"
-    assert p.connect_db == HostVar(name="dbname", indicator=None)
+    assert p.connect == ConnectTo(HostVarDb(HostVar("dbname", None)))
 
 
 def test_parse_connect_to_literal_with_creds_ignores_creds():
     # The testbed double-CONNECT idiom: literal db + USER/USING creds. The creds
     # surface in in_vars but the target is the literal, and creds are unread.
     p = parse_exec_sql("EXEC SQL CONNECT TO sample USER :userid USING :passwd END-EXEC")
-    assert p.connect_variant == "TO"
-    assert p.connect_db == "SAMPLE"
+    assert p.connect == ConnectTo(LiteralDb("SAMPLE"))
 
 
 def test_parse_connect_reset():
     p = parse_exec_sql("EXEC SQL CONNECT RESET END-EXEC")
-    assert p.connect_variant == "RESET"
-    assert p.connect_db is None
+    assert p.connect == ConnectReset()
 
 
 def test_parse_set_connection():
     p = parse_exec_sql("EXEC SQL SET CONNECTION db2 END-EXEC")
     assert p.kind is Kind.SET_CONNECTION
-    assert p.connect_db == "DB2"
+    assert p.connect == ConnectTo(LiteralDb("DB2"))
 
 
 def test_parse_disconnect():
     p = parse_exec_sql("EXEC SQL DISCONNECT db2 END-EXEC")
     assert p.kind is Kind.DISCONNECT
-    assert p.connect_db == "DB2"
+    assert p.connect == ConnectTo(LiteralDb("DB2"))
 
 
 # ── Runtime lifecycle ─────────────────────────────────────────────────────────

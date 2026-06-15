@@ -175,9 +175,8 @@ class ParsedSql:
     cursor: CursorRef  # NamedCursor(name) for cursor statements, else NoCursor()
     query: str  # cleaned SQL for the DB
     include: IncludeRef = NoInclude()  # IncludeName(name) for INCLUDE, else NoInclude()
-    # Connection management  (→ connect: ConnectSpec, Task 5)
-    connect_variant: str | None = None
-    connect_db: str | HostVar | None = None
+    # Connection management: ConnectTo(db) / ConnectReset / NoConnect.
+    connect: ConnectSpec = NoConnect()
     # WHENEVER directive  (→ WheneverCondition / WheneverAction, Task 6)
     whenever_condition: str | None = None
     whenever_action: str | None = None
