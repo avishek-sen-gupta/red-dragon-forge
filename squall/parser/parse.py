@@ -25,9 +25,12 @@ from lark import Lark, Token, Tree
 from squall.parser.sql_model import (
     CursorRef,
     HostVar,
+    IncludeName,
+    IncludeRef,
     Kind,
     NamedCursor,
     NoCursor,
+    NoInclude,
     ParsedSql,
 )
 
@@ -113,14 +116,14 @@ def _walk_for_hvs(
         _walk_for_hvs(child, now_in_into_list, results)
 
 
-def _include_name(stmt: Tree, kind: Kind) -> str | None:
-    """Return the NAME token for an ``include`` statement, else None."""
+def _include_ref(stmt: Tree, kind: Kind) -> IncludeRef:
+    """The INCLUDE target as ``IncludeName(name)``, else NoInclude()."""
     if kind is not Kind.INCLUDE:
-        return None
+        return NoInclude()
     for child in stmt.children:
         if isinstance(child, Token) and child.type == "NAME":
-            return str(child)
-    return None
+            return IncludeName(str(child))
+    return NoInclude()
 
 
 def _conn_target(stmt: Tree) -> str | HostVar | None:
@@ -361,7 +364,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
 
     cursor = _cursor_ref(stmt, kind)
     query = _build_query(inner, stmt, kind)
-    inc_name = _include_name(stmt, kind)
+    include = _include_ref(stmt, kind)
     conn_variant, conn_db = _connection_fields(stmt, kind)
     wh_cond, wh_action, wh_target = _whenever_fields(stmt, kind)
 
@@ -371,7 +374,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
         out_vars=out_vars,
         cursor=cursor,
         query=query,
-        include_name=inc_name,
+        include=include,
         connect_variant=conn_variant,
         connect_db=conn_db,
         whenever_condition=wh_cond,
