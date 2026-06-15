@@ -15,6 +15,8 @@ Supported codec categories (slice 1 + 2):
 
 from __future__ import annotations
 
+from squall.parser.sql_model import FieldMeta
+
 import os
 import sys
 from collections.abc import Mapping
@@ -319,7 +321,7 @@ def _encode_field(value, f: dict, length: int) -> bytes:
 # the LEN child as binary and the first LEN characters of the TEXT child.
 
 
-def _meta_for(field_meta: Mapping[str, dict], name: str) -> dict:
+def _meta_for(field_meta: Mapping[str, FieldMeta], name: str) -> FieldMeta:
     """Case-insensitive lookup of a host var's dclgen metadata; ``{}`` if absent.
 
     Mirrors ``_lookup_field``: COBOL identifiers are case-insensitive but the
@@ -493,7 +495,9 @@ def _require_field(data_layout, name: str) -> dict:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def read_params(vm, in_names: tuple[str, ...], field_meta: Mapping[str, dict]) -> list:
+def read_params(
+    vm, in_names: tuple[str, ...], field_meta: Mapping[str, FieldMeta]
+) -> list:
     """Read host-variable fields from the WS region and return as a Python list.
 
     ZONED_DECIMAL fields are decoded to int; ALPHANUMERIC fields to str; COMP-3 to
@@ -505,7 +509,7 @@ def read_params(vm, in_names: tuple[str, ...], field_meta: Mapping[str, dict]) -
 
 
 def _read_one(
-    data_layout: dict, region: bytearray, field_meta: Mapping[str, dict], name: str
+    data_layout: dict, region: bytearray, field_meta: Mapping[str, FieldMeta], name: str
 ):
     """Pure: decode one host var — VARCHAR via its 49-group, else its flat field."""
     meta = _meta_for(field_meta, name)
@@ -529,7 +533,7 @@ class _Plan:
 
 
 def _plan_assignment(
-    data_layout: dict, field_meta: Mapping[str, dict], name: str, value
+    data_layout: dict, field_meta: Mapping[str, FieldMeta], name: str, value
 ) -> _Plan:
     """Pure: plan one host-var assignment. VARCHAR host vars (carrying dclgen
     metadata) plan through their 49-group LEN/TEXT children; all others through
@@ -556,7 +560,7 @@ def write_outputs(
     vm,
     out_names: tuple[str, ...],
     row: tuple,
-    field_meta: Mapping[str, dict],
+    field_meta: Mapping[str, FieldMeta],
 ) -> int:
     """Assign a result row's values into WS host-variable fields.
 

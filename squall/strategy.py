@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 from squall.backend import SqlBackend
 from squall.builtins.exec_sql import make_exec_sql_builtin
 from squall.parser.sql_model import (
+    FieldMeta,
     GoTo,
     Kind,
     ParsedSql,
@@ -64,7 +65,7 @@ class SqlLoweringStrategy:
     def __init__(
         self,
         connections: Mapping[str, SqlBackend],
-        field_meta: Mapping[str, dict],
+        field_meta: Mapping[str, FieldMeta],
     ) -> None:
         from interpreter.vm.builtins import Builtins
 

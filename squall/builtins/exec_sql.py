@@ -39,10 +39,12 @@ from squall.binding import read_params, write_outputs, write_sqlcode
 from squall.parser.sql_model import (
     ConnectReset,
     ConnectTo,
+    FieldMeta,
     HostVarDb,
     Kind,
     LiteralDb,
     NamedCursor,
+    ParsedSql,
 )
 
 if TYPE_CHECKING:
@@ -62,7 +64,7 @@ def _host_names(host_vars) -> tuple[str, ...]:
     return tuple(hv.name for hv in host_vars)
 
 
-def _bind_row(vm, out_vars, result, field_meta: Mapping[str, dict]) -> int:
+def _bind_row(vm, out_vars, result, field_meta: Mapping[str, FieldMeta]) -> int:
     """Bind *result*'s first row into *out_vars*; return the resulting SQLCODE.
 
     A no-row result leaves the host vars untouched and reports ``result.sqlcode``
@@ -91,8 +93,8 @@ class _Ctx:
 
     connections: Mapping[str, SqlBackend]
     conn: _ConnState
-    cursors: dict
-    field_meta: Mapping[str, dict]
+    cursors: dict[str, ParsedSql]
+    field_meta: Mapping[str, FieldMeta]
 
 
 def _current(ctx: _Ctx, vm) -> SqlBackend | None:
@@ -255,7 +257,7 @@ _HANDLERS = {
 def make_exec_sql_builtin(
     connections: Mapping[str, SqlBackend],
     plans: list,
-    field_meta: Mapping[str, dict],
+    field_meta: Mapping[str, FieldMeta],
 ) -> Callable:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
     (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
