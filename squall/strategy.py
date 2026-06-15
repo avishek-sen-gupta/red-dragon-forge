@@ -24,6 +24,13 @@ from typing import TYPE_CHECKING, Any
 
 from squall.backend import SqlBackend
 from squall.builtins.exec_sql import make_exec_sql_builtin
+from squall.parser.sql_model import (
+    GoTo,
+    Kind,
+    ParsedSql,
+    WheneverAction,
+    WheneverCondition,
+)
 
 if TYPE_CHECKING:
     from interpreter.cobol.emit_context import EmitContext
@@ -35,9 +42,9 @@ _BUILTIN_NAME = "__exec_sql"
 
 # WHENEVER condition -> (COBOL comparison op, literal) for the synthetic check.
 # SQLWARNING is omitted: it needs SQLCA SQLWARN populated (squall-ud0).
-_WHENEVER_RELATION = {
-    "SQLERROR": ("<", "0"),
-    "NOT FOUND": ("=", "100"),
+_WHENEVER_RELATION: dict[WheneverCondition, tuple[str, str]] = {
+    WheneverCondition.SQLERROR: ("<", "0"),
+    WheneverCondition.NOT_FOUND: ("=", "100"),
 }
 
 
@@ -68,16 +75,16 @@ class SqlLoweringStrategy:
         # reference. The builtin (and the binding engine it calls) consult it to
         # drive VARCHAR 49-group codecs and typed validation.
         self._field_meta = field_meta
-        # WHENEVER directive state: condition -> GO TO target. Updated in textual
-        # order as `lower` sees each WHENEVER statement (precompiler scoping); an
-        # absent condition means CONTINUE (no automatic branch). Only GO TO
-        # directives are stored, so the target is always a real label.
-        self._whenever: dict[str, str] = {}
+        # WHENEVER directive state: condition -> action. Updated in textual order
+        # as `lower` sees each WHENEVER statement (precompiler scoping). A stored
+        # Continue/NoOpAction disables a previously-active branch (the emit loop
+        # no-ops on them).
+        self._whenever: dict[WheneverCondition, WheneverAction] = {}
         # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
         # lowered to a Const carrying its index here; the builtin closes over the
         # same list and looks the plan up at run time. Plans never travel through
         # the IR as objects (the VM's Const handling only round-trips primitives).
-        self._plans: list = []
+        self._plans: list[ParsedSql] = []
         _register(
             Builtins.TABLE,
             _BUILTIN_NAME,
@@ -119,7 +126,6 @@ class SqlLoweringStrategy:
         from interpreter.instructions import CallFunction, Const
 
         from squall.parser.parse import parse_exec_sql
-        from squall.parser.sql_model import Kind
 
         # Parse the directive ONCE, here at lowering time. The statement is
         # static, so the Lark parse must not run at execution time (it would
@@ -128,16 +134,10 @@ class SqlLoweringStrategy:
         plan = parse_exec_sql(stmt.text)
 
         if plan.kind is Kind.WHENEVER:
-            # Precompiler directive: update lexically-scoped state, emit no IR.
-            condition, action = plan.whenever_condition, plan.whenever_action
-            assert condition and action  # grammar-guaranteed for a WHENEVER directive
-            if action == "CONTINUE":
-                if condition in self._whenever:
-                    del self._whenever[condition]
-            else:  # GO TO
-                target = plan.whenever_target
-                assert target  # a GO TO directive always names a target
-                self._whenever[condition] = target
+            # Precompiler directive: record the (condition -> action) and emit no
+            # IR. A Continue/NoOpAction simply overrides any active GoTo so the
+            # emit loop stops branching for that condition.
+            self._whenever[plan.whenever_condition] = plan.whenever_action
             return
 
         plan_index = len(self._plans)
@@ -174,22 +174,26 @@ class SqlLoweringStrategy:
         """
         from interpreter.cobol.cobol_statements import parse_statement
 
-        for condition, target in self._whenever.items():
-            if condition not in _WHENEVER_RELATION:
-                continue  # SQLWARNING (and custom conditions) deferred — slice 3
-            op, value = _WHENEVER_RELATION[condition]
-            if_stmt = parse_statement(
-                {
-                    "type": "IF",
-                    "condition": {
-                        "not": False,
-                        "relation": {
-                            "left": {"kind": "ref", "name": "SQLCODE"},
-                            "op": op,
-                            "right": {"kind": "lit", "value": value},
-                        },
-                    },
-                    "children": [{"type": "GOTO", "operands": [target]}],
-                }
-            )
-            ctx.lower_statement(if_stmt, materialised)
+        for condition, action in self._whenever.items():
+            match action:
+                case GoTo(target):
+                    if condition not in _WHENEVER_RELATION:
+                        continue  # SQLWARNING / custom conditions deferred — slice 3
+                    op, value = _WHENEVER_RELATION[condition]
+                    if_stmt = parse_statement(
+                        {
+                            "type": "IF",
+                            "condition": {
+                                "not": False,
+                                "relation": {
+                                    "left": {"kind": "ref", "name": "SQLCODE"},
+                                    "op": op,
+                                    "right": {"kind": "lit", "value": value},
+                                },
+                            },
+                            "children": [{"type": "GOTO", "operands": [target]}],
+                        }
+                    )
+                    ctx.lower_statement(if_stmt, materialised)
+                case _:  # Continue, NoOpAction
+                    pass
