@@ -31,7 +31,7 @@ from types import MappingProxyType
 from typing import Final
 
 from squall.parser.parse import parse_exec_sql
-from squall.parser.sql_model import IncludeName, Kind
+from squall.parser.sql_model import FieldMeta, IncludeName, Kind
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ class PrepassResult:
     """
 
     source: str
-    field_meta: Mapping[str, dict]
+    field_meta: Mapping[str, FieldMeta]
 
 
 # ── Fixed-delimiter scanner ───────────────────────────────────────────────────
@@ -127,7 +127,9 @@ def _rewrite_block(indent: str, include_name: str) -> str:
     return f"{indent}COPY {include_name}."
 
 
-def _load_field_meta(include_name: str, copybook_dirs: Sequence) -> dict:
+def _load_field_meta(
+    include_name: str, copybook_dirs: Sequence
+) -> dict[str, FieldMeta]:
     """Return ``{host_var: descriptor}`` from ``<include_name>.json``, or ``{}``.
 
     The dclgen sidecar lives beside the copybook ProLeap inlines. Not every
