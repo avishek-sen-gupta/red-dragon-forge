@@ -53,7 +53,7 @@ def test_static_sqb_runs_standalone(bridge_jar):
     vm = run_cobol(
         source,
         bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         copybook_dirs=[_DB2_INCLUDES],
         max_steps=8000,
     )

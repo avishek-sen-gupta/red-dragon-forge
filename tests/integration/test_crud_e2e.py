@@ -49,6 +49,7 @@ _PROGRAM = """       IDENTIFICATION DIVISION.
        01  WS-CODE-INS   PIC S9(9) COMP.
        01  WS-CODE-DEL   PIC S9(9) COMP.
        PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
            MOVE 11 TO ACCT-ID.
            MOVE 1234.56 TO ACCT-BAL.
            MOVE 'ALICE' TO ACCT-NAME.
@@ -103,7 +104,7 @@ def test_crud_round_trip_on_generated_copybook(bridge_jar, tmp_path):
     vm = run_cobol(
         _PROGRAM,
         bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         copybook_dirs=[tmp_path],
         max_steps=4000,
     )
@@ -133,6 +134,7 @@ _VARCHAR_PROGRAM = """       IDENTIFICATION DIVISION.
            EXEC SQL INCLUDE SQLCA END-EXEC.
            EXEC SQL INCLUDE EMPREC END-EXEC.
        PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
            MOVE 10 TO EMP-ID.
            MOVE 7 TO EMP-NAME-LEN.
            MOVE 'SANDERS' TO EMP-NAME-TEXT.
@@ -163,7 +165,7 @@ def test_varchar_round_trip_on_generated_copybook(bridge_jar, tmp_path):
     vm = run_cobol(
         _VARCHAR_PROGRAM,
         bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         copybook_dirs=[tmp_path],
         max_steps=4000,
     )
