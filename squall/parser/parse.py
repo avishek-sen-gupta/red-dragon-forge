@@ -40,6 +40,9 @@ class ParsedSql:
     cursor: str | None  # cursor name for cursor statements, else None
     query: str  # cleaned SQL for the DB
     include_name: str | None = None  # INCLUDE target name, e.g. "SQLCA", else None
+    # Connection management (kinds connect / set_connection / disconnect).
+    connect_variant: str | None = None  # "TO" / "RESET" (connect only); None otherwise
+    connect_db: str | HostVar | None = None  # target db: literal (upper) or HostVar
 
 
 # ── Parser with position tracking ─────────────────────────────────────────────
@@ -130,6 +133,51 @@ def _include_name(stmt: Tree, kind: str) -> str | None:
         if isinstance(child, Token) and child.type == "NAME":
             return str(child)
     return None
+
+
+def _conn_target(stmt: Tree) -> str | HostVar | None:
+    """The connect target db: a NAME literal (upper-cased) or a HostVar, else None.
+
+    Reads the structured ``conn_target`` production (``NAME | host_var``).
+    """
+    node = next(
+        (c for c in stmt.children if isinstance(c, Tree) and c.data == "conn_target"),
+        None,
+    )
+    if node is None:
+        return None
+    inner = node.children[0]
+    if isinstance(inner, Token) and inner.type == "NAME":
+        return str(inner).upper()
+    # host_var Tree -> its single HOST_VAR_TOK child.
+    return _parse_host_var_tok(inner.children[0].value)
+
+
+def _connection_fields(
+    stmt: Tree, kind: str
+) -> tuple[str | None, str | HostVar | None]:
+    """Return (variant, target) for connection statements, else (None, None).
+
+    ``connect`` reads the structured grammar (RESET terminal vs conn_target).
+    ``set_connection`` / ``disconnect`` take their first NAME token; their
+    leading keywords are genuine terminals, so this is a structural read, not
+    keyword value-matching.
+    """
+    if kind == "connect":
+        if any(isinstance(c, Token) and c.type == "RESET" for c in stmt.children):
+            return "RESET", None
+        return "TO", _conn_target(stmt)
+    if kind in ("set_connection", "disconnect"):
+        name = next(
+            (
+                str(c)
+                for c in stmt.children
+                if isinstance(c, Token) and c.type == "NAME"
+            ),
+            None,
+        )
+        return None, (name.upper() if name is not None else None)
+    return None, None
 
 
 def _cursor_name(stmt: Tree, kind: str) -> str | None:
@@ -289,6 +337,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     cursor = _cursor_name(stmt, kind)
     query = _build_query(inner, stmt, kind)
     inc_name = _include_name(stmt, kind)
+    conn_variant, conn_db = _connection_fields(stmt, kind)
 
     return ParsedSql(
         kind=kind,
@@ -297,4 +346,6 @@ def parse_exec_sql(text: str) -> ParsedSql:
         cursor=cursor,
         query=query,
         include_name=inc_name,
+        connect_variant=conn_variant,
+        connect_db=conn_db,
     )
