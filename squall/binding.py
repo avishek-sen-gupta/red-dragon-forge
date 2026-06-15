@@ -15,14 +15,14 @@ Supported codec categories (slice 1 + 2):
 
 from __future__ import annotations
 
-from squall.parser.sql_model import FieldMeta
-
 import os
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Final
+
+from squall.parser.sql_model import FieldMeta
 
 # Resolve vendor path so ByteConstants can be imported without installing red-dragon
 # as an editable package in every environment.
