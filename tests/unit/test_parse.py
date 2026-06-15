@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from squall.parser.parse import HostVar, ParsedSql, parse_exec_sql
-from squall.parser.sql_model import Kind
+from squall.parser.sql_model import Kind, NamedCursor, NoCursor
 
 # ── Required tests from spec ──────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ def test_update_input_order() -> None:
 
 def test_fetch_outputs_no_query() -> None:
     p = parse_exec_sql("EXEC SQL FETCH FROM ACC-CURSOR INTO :A, :B END-EXEC")
-    assert p.kind is Kind.FETCH and p.cursor == "ACC-CURSOR"
+    assert p.kind is Kind.FETCH and p.cursor == NamedCursor("ACC-CURSOR")
     assert p.out_vars == (HostVar("A", None), HostVar("B", None))
     assert p.query == ""
 
@@ -66,7 +66,7 @@ def test_insert_values() -> None:
     assert p.out_vars == ()
     assert p.in_vars == (HostVar("HV-ID", None), HostVar("HV-BAL", None))
     assert p.query == "INSERT INTO account (acct_id, acct_bal) VALUES (?, ?)"
-    assert p.cursor is None
+    assert p.cursor == NoCursor()
 
 
 def test_declare_cursor() -> None:
@@ -75,7 +75,7 @@ def test_declare_cursor() -> None:
         "EXEC SQL DECLARE ACC-CURSOR CURSOR FOR SELECT * FROM account WHERE id = :WS-ID END-EXEC"
     )
     assert p.kind is Kind.DECLARE_CURSOR
-    assert p.cursor == "ACC-CURSOR"
+    assert p.cursor == NamedCursor("ACC-CURSOR")
     assert p.in_vars == (HostVar("WS-ID", None),)
     assert p.out_vars == ()
 
@@ -86,14 +86,14 @@ def test_declare_cursor() -> None:
 def test_cursor_is_none_for_non_cursor_stmt() -> None:
     """Non-cursor statements have cursor == None."""
     p = parse_exec_sql("EXEC SQL SELECT a INTO :X FROM t END-EXEC")
-    assert p.cursor is None
+    assert p.cursor == NoCursor()
 
 
 def test_open_cursor_no_query() -> None:
     """OPEN cursor -> query == ''."""
     p = parse_exec_sql("EXEC SQL OPEN MyCursor END-EXEC")
     assert p.kind is Kind.OPEN
-    assert p.cursor == "MyCursor"
+    assert p.cursor == NamedCursor("MyCursor")
     assert p.query == ""
 
 
@@ -101,7 +101,7 @@ def test_close_cursor_no_query() -> None:
     """CLOSE cursor -> query == ''."""
     p = parse_exec_sql("EXEC SQL CLOSE MyCursor END-EXEC")
     assert p.kind is Kind.CLOSE
-    assert p.cursor == "MyCursor"
+    assert p.cursor == NamedCursor("MyCursor")
     assert p.query == ""
 
 
@@ -120,7 +120,7 @@ def test_commit_no_host_vars() -> None:
     assert p.kind is Kind.COMMIT
     assert p.in_vars == ()
     assert p.out_vars == ()
-    assert p.cursor is None
+    assert p.cursor == NoCursor()
 
 
 def test_envelope_strip_case_insensitive() -> None:

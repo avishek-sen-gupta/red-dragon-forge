@@ -22,7 +22,14 @@ from typing import Final
 
 from lark import Lark, Token, Tree
 
-from squall.parser.sql_model import HostVar, Kind, ParsedSql
+from squall.parser.sql_model import (
+    CursorRef,
+    HostVar,
+    Kind,
+    NamedCursor,
+    NoCursor,
+    ParsedSql,
+)
 
 # ── Parser with position tracking ─────────────────────────────────────────────
 
@@ -202,25 +209,21 @@ def _whenever_action(node: Tree) -> tuple[str, str | None]:
     return "GOTO", target
 
 
-def _cursor_name(stmt: Tree, kind: Kind) -> str | None:
-    """Return the cursor NAME for cursor-related statements, else None."""
+def _cursor_ref(stmt: Tree, kind: Kind) -> CursorRef:
+    """The cursor as ``NamedCursor(name)`` for cursor statements, else NoCursor().
+
+    The cursor name is the first NAME token after the leading keyword
+    (DECLARE/OPEN/CLOSE/FETCH are their own terminals, so the cursor name
+    surfaces as a plain NAME):
+      declare_cursor: DECLARE <name> CURSOR …   open_: OPEN <name> …
+      close:          CLOSE <name>              fetch: FETCH (FROM)? <name> INTO …
+    """
     if kind not in _CURSOR_KINDS:
-        return None
-    # The cursor name is always the NAME token immediately after the
-    # leading keyword:
-    #   declare_cursor: DECLARE <name> CURSOR …
-    #   open_:          OPEN <name> …
-    #   close:          CLOSE <name>
-    #   fetch:          FETCH (FROM)? <name> INTO …
-    #
-    # We walk stmt.children looking for the first NAME token that is NOT
-    # a keyword-as-NAME (FETCH / FROM / DECLARE / OPEN / CLOSE are
-    # recognised as their own terminal types, so the cursor NAME appears
-    # as a plain NAME token).
+        return NoCursor()
     for child in stmt.children:
         if isinstance(child, Token) and child.type == "NAME":
-            return str(child)
-    return None
+            return NamedCursor(str(child))
+    return NoCursor()
 
 
 def _find_into_list_node(stmt: Tree) -> Tree | None:
@@ -356,7 +359,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     out_vars = tuple(hv for hv, is_out in hv_pairs if is_out)
     in_vars = tuple(hv for hv, is_out in hv_pairs if not is_out)
 
-    cursor = _cursor_name(stmt, kind)
+    cursor = _cursor_ref(stmt, kind)
     query = _build_query(inner, stmt, kind)
     inc_name = _include_name(stmt, kind)
     conn_variant, conn_db = _connection_fields(stmt, kind)
