@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import reduce
 from importlib.resources import files
+from itertools import pairwise
 from typing import Final
 
 from lark import Lark, Token, Tree
@@ -161,11 +163,10 @@ def _find_into_list_node(stmt: Tree) -> Tree | None:
 
 def _find_into_keyword_token(stmt: Tree) -> Token | None:
     """Return the INTO Token that directly precedes an into_list, or None."""
-    children = stmt.children
     return next(
         (
             prev
-            for prev, cur in zip(children, children[1:], strict=False)
+            for prev, cur in pairwise(stmt.children)
             if isinstance(cur, Tree)
             and cur.data == "into_list"
             and isinstance(prev, Token)
@@ -192,11 +193,8 @@ def _build_query(inner: str, stmt: Tree, kind: str) -> str:
     # SELECT (the FOR clause) — OPEN runs that. Locate the FOR token from the
     # parse tree (structure, not a string split) and start the query after it.
     # No host vars precede FOR, so slicing the rewritten result is safe.
-    query_start = 0
-    if kind == "declare_cursor":
-        for_tok = _find_for_token(stmt)
-        if for_tok is not None:
-            query_start = for_tok.end_pos
+    for_tok = _find_for_token(stmt) if kind == "declare_cursor" else None
+    query_start = for_tok.end_pos if for_tok is not None else 0
 
     # --- gather replacements: list of (start, end, replacement) ---------------
     replacements: list[tuple[int, int, str]] = []
@@ -212,19 +210,20 @@ def _build_query(inner: str, stmt: Tree, kind: str) -> str:
         into_tok = _find_into_keyword_token(stmt)
         into_list_node = _find_into_list_node(stmt)
         if into_tok is not None and into_list_node is not None:
-            start = into_tok.start_pos
-            if start > 0 and inner[start - 1] == " ":
-                start -= 1
+            raw = into_tok.start_pos
+            # Consume one leading space if present (safe at pos 0: the slice is "").
+            start = raw - (1 if inner[raw - 1 : raw] == " " else 0)
             replacements.append((start, into_list_node.meta.end_pos, ""))
 
     if not replacements:
         return inner[query_start:].strip()
 
-    # Apply right-to-left (descending start) so offsets don't drift.
-    replacements.sort(key=lambda r: r[0], reverse=True)
-    result = inner
-    for start, end, sub in replacements:
-        result = result[:start] + sub + result[end:]
+    # Apply right-to-left (descending start) so offsets don't drift; reduce folds
+    # the edits over *inner* without a reassigned accumulator.
+    ordered = sorted(replacements, key=lambda r: r[0], reverse=True)
+    result = reduce(
+        lambda acc, repl: acc[: repl[0]] + repl[2] + acc[repl[1] :], ordered, inner
+    )
     return result[query_start:].strip()
 
 
