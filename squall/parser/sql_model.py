@@ -177,7 +177,6 @@ class ParsedSql:
     include: IncludeRef = NoInclude()  # IncludeName(name) for INCLUDE, else NoInclude()
     # Connection management: ConnectTo(db) / ConnectReset / NoConnect.
     connect: ConnectSpec = NoConnect()
-    # WHENEVER directive  (→ WheneverCondition / WheneverAction, Task 6)
-    whenever_condition: str | None = None
-    whenever_action: str | None = None
-    whenever_target: str | None = None
+    # WHENEVER directive: condition + action (target absorbed into GoTo).
+    whenever_condition: WheneverCondition = WheneverCondition.NONE
+    whenever_action: WheneverAction = NoOpAction()

@@ -26,8 +26,10 @@ from squall.parser.sql_model import (
     ConnectReset,
     ConnectSpec,
     ConnectTo,
+    Continue,
     CursorRef,
     DbName,
+    GoTo,
     HostVar,
     HostVarDb,
     IncludeName,
@@ -38,7 +40,10 @@ from squall.parser.sql_model import (
     NoConnect,
     NoCursor,
     NoInclude,
+    NoOpAction,
     ParsedSql,
+    WheneverAction,
+    WheneverCondition,
 )
 
 # ── Parser with position tracking ─────────────────────────────────────────────
@@ -178,10 +183,10 @@ def _connect_spec(stmt: Tree, kind: Kind) -> ConnectSpec:
 
 def _whenever_fields(
     stmt: Tree, kind: Kind
-) -> tuple[str | None, str | None, str | None]:
-    """Return (condition, action, target) for a WHENEVER directive, else Nones."""
+) -> tuple[WheneverCondition, WheneverAction]:
+    """Return (condition, action) for a WHENEVER directive, else (NONE, NoOpAction)."""
     if kind is not Kind.WHENEVER:
-        return None, None, None
+        return WheneverCondition.NONE, NoOpAction()
     cond_node = next(
         (c for c in stmt.children if isinstance(c, Tree) and c.data == "whenever_cond"),
         None,
@@ -194,27 +199,28 @@ def _whenever_fields(
         ),
         None,
     )
-    condition = _whenever_condition(cond_node) if cond_node is not None else None
-    action, target = (
-        _whenever_action(action_node) if action_node is not None else (None, None)
+    condition = (
+        _whenever_condition(cond_node)
+        if cond_node is not None
+        else WheneverCondition.NONE
     )
-    return condition, action, target
+    action = _whenever_action(action_node) if action_node is not None else NoOpAction()
+    return condition, action
 
 
-def _whenever_condition(node: Tree) -> str:
-    """Normalise the condition tokens to 'SQLERROR' / 'NOT FOUND' / 'SQLWARNING'."""
+def _whenever_condition(node: Tree) -> WheneverCondition:
+    """Normalise the condition tokens to the matching WheneverCondition member."""
     tokens = [str(c) for c in node.children if isinstance(c, Token)]
-    return " ".join(tokens).upper()
+    return WheneverCondition(" ".join(tokens).upper())
 
 
-def _whenever_action(node: Tree) -> tuple[str, str | None]:
-    """Return ('CONTINUE', None) or ('GOTO', <target>) for the action subtree."""
+def _whenever_action(node: Tree) -> WheneverAction:
+    """Return Continue() or GoTo(target) for the action subtree."""
     tokens = [c for c in node.children if isinstance(c, Token)]
     if tokens and str(tokens[0]).upper() == "CONTINUE":
-        return "CONTINUE", None
+        return Continue()
     # GOTO <name> or GO TO <name>: the target is the trailing NAME token.
-    target = str(tokens[-1]) if tokens else None
-    return "GOTO", target
+    return GoTo(str(tokens[-1]))
 
 
 def _cursor_ref(stmt: Tree, kind: Kind) -> CursorRef:
@@ -371,7 +377,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     query = _build_query(inner, stmt, kind)
     include = _include_ref(stmt, kind)
     connect = _connect_spec(stmt, kind)
-    wh_cond, wh_action, wh_target = _whenever_fields(stmt, kind)
+    wh_cond, wh_action = _whenever_fields(stmt, kind)
 
     return ParsedSql(
         kind=kind,
@@ -383,5 +389,4 @@ def parse_exec_sql(text: str) -> ParsedSql:
         connect=connect,
         whenever_condition=wh_cond,
         whenever_action=wh_action,
-        whenever_target=wh_target,
     )
