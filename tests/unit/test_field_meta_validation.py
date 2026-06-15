@@ -76,3 +76,53 @@ def test_field_absent_from_layout_raises_keyerror():
 
 def test_empty_field_meta_is_noop():
     validate_field_meta(_scalar_layout(), {})  # no raise
+
+
+# ── One-shot validation through the __exec_sql builtin ────────────────────────
+
+from interpreter.address import Address
+from interpreter.var_name import VarName
+
+from squall.builtins.exec_sql import make_exec_sql_builtin
+from squall.parser.parse import parse_exec_sql
+
+
+class _Addr:
+    def __init__(self, value: str):
+        self.value = value
+
+
+class _Frame:
+    def __init__(self, addr: str):
+        self.local_vars = {VarName("__ws_region"): _Addr(addr)}
+
+
+class _VM:
+    def __init__(self, layout: dict, addr: str = "1"):
+        self._region = bytearray(64)
+        self.data_layout = layout
+        self._addr = Address(addr)
+        self.call_stack = [_Frame(addr)]
+
+    def region_get(self, addr):
+        assert isinstance(addr, Address)
+        return self._region if addr == self._addr else None
+
+
+class _TV:
+    def __init__(self, value: object):
+        self.value = value
+
+
+def _commit_builtin(field_meta):
+    """A builtin over an empty registry; the plan is a COMMIT (no backend needed
+    to reach the one-shot validation, which runs before dispatch)."""
+    plans = [parse_exec_sql("EXEC SQL COMMIT END-EXEC")]
+    return make_exec_sql_builtin({}, plans, field_meta), plans
+
+
+def test_builtin_validates_field_meta_on_first_call():
+    vm = _VM({"ACCT-BAL": {"offset": 0, "length": 4, "category": "COMP3"}})
+    builtin, _ = _commit_builtin({"ACCT-BAL": {"category": "BINARY"}})  # mismatch
+    with pytest.raises(FieldMetaMismatch):
+        builtin([_TV(0)], vm)
