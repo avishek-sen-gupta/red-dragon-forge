@@ -270,6 +270,37 @@ def _h_disconnect(ctx: _Ctx, _parsed, vm) -> None:
     write_sqlcode(vm, 0)
 ```
 
+> **Requirement — idempotent re-connect + credentials ignored (do not "optimize" away).**
+> `_h_connect` must (a) succeed and return SQLCODE 0 when the program CONNECTs to a
+> name that is already current — it simply re-assigns `current` to the same backend —
+> and (b) **never read or validate** the `USER`/`USING` host vars (they exist in the
+> statement's `in_vars` but `_h_connect` only resolves `connect_db`). This is not
+> cosmetic: **28 of the 30 GitHub testbed `.sqb` programs** use this idiom (verified in
+> `cursor.sqb`, `updat.sqb`, `static.sqb`, …):
+>
+> ```cobol
+>        if userid = spaces
+>          EXEC SQL CONNECT TO sample END-EXEC      *> conditional connect
+>        else
+>          ...
+>          accept passwd-name.                       *> period ENDS the IF here
+>        EXEC SQL CONNECT TO sample USER :userid USING :passwd END-EXEC.  *> runs UNCONDITIONALLY
+> ```
+>
+> Because the period terminates the `IF`, the second `CONNECT TO sample USER/USING`
+> fires on *every* path — so when `userid` is spaces (the batch default with no input
+> channel), the program connects to `SAMPLE`, then immediately connects to `SAMPLE`
+> again with empty credentials. Both must yield SQLCODE 0 against the `{"SAMPLE": ...}`
+> registry, leaving `current` pointing at the same backend. If `_h_connect` rejected a
+> re-connect, or tried to authenticate the empty `USER`/`USING`, every one of these 28
+> unmodified testbed programs would fail. The two non-connecting programs
+> (`inpsrv.sqb`, `outsrv.sqb`) are stored procedures that run inside the engine and
+> correctly never CONNECT — they are out of scope here.
+>
+> Add a unit test in `tests/unit/test_connection.py` asserting the idiom (re-CONNECT to
+> the current db, and a `CONNECT TO :db USER :u USING :p` whose creds are unread, both
+> return 0 and leave `current` set).
+
 - [ ] **Step 4: Gate execute/cursor handlers on the current connection** — route them through `ctx.conn.current` instead of a fixed backend, returning `-1024` when disconnected. For `_h_query`:
 
 ```python
@@ -501,5 +532,5 @@ bd close squall-yml --reason "Faithful CONNECT: name->backend registry, per-run 
 - **Why a registry, not a single backend:** `CONNECT TO <name>` *routes*; the synthetic e2e proves a row lands only in the named database. The single-backend convenience wrapper (`{"SAMPLE": backend}`) is for tests, not the contract.
 - **Always-disconnected is deliberate** — do not add a "start connected" shortcut. SQL before CONNECT must be `-1024`; that is what makes the lifecycle real and is exercised by `test_sql_before_connect_is_minus_1024` and the post-`RESET` insert in the e2e.
 - **Per-run scope:** the session lives in the builtin closure (per compiled program / per run for batch). Do **not** try to persist it across runs/turns — under cicada that is closed at the pseudo-conversational `RETURN` by `cicada-6hv`/`squall-ipq`, and conversational runs preserve it naturally.
-- **Credentials are read, not validated** — backends are pre-authenticated; `USER`/`USING` host vars exist in `in_vars` but are intentionally ignored. Note it; don't pretend to authenticate.
+- **Credentials are surfaced but never consumed** — the parser leaves `USER`/`USING` host vars in `in_vars`, but `_h_connect` resolves only `connect_db` and never reads or authenticates them (backends are pre-authenticated). See the Task 2 idempotent-re-connect requirement — this is what lets the testbed's unconditional double-CONNECT idiom pass unmodified. Don't pretend to authenticate.
 - **Do not** put any of this in the VM byte-region: the registry holds live, non-serializable backends, and squall must not edit `interpreter/vm/**`.
