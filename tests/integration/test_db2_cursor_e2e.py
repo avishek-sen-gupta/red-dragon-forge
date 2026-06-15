@@ -66,7 +66,7 @@ def test_cursor_sqb_runs_against_db2(bridge_jar, capsys):
         run_cobol(
             _CURSOR_SQB.read_text(encoding="utf-8"),
             bridge_jar,
-            backend=backend,
+            connections={"SAMPLE": backend},
             copybook_dirs=[_DB2_INCLUDES],
             max_steps=8000,
         )

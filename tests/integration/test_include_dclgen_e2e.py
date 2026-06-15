@@ -62,6 +62,7 @@ _COBOL_INCLUDE_DCLGEN = """\
        EXEC SQL INCLUDE SQLCA END-EXEC.
        EXEC SQL INCLUDE ACCTREC END-EXEC.
        PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
            EXEC SQL
                SELECT ACCT_ID, ACCT_BAL, ACCT_NAME
                INTO :ACCT-ID, :ACCT-BAL, :ACCT-NAME
@@ -118,7 +119,7 @@ def test_include_dclgen_hit(bridge_jar):
     vm = run_cobol(
         _COBOL_INCLUDE_DCLGEN,
         bridge_jar_path=bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         max_steps=2000,
     )
 
@@ -152,7 +153,7 @@ def test_include_dclgen_miss(bridge_jar):
     vm = run_cobol(
         cobol_miss,
         bridge_jar_path=bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         max_steps=2000,
     )
 

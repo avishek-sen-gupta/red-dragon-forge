@@ -110,17 +110,31 @@ def _make_vm(ws_id: int = 1) -> tuple[_FakeVM, bytearray]:
     return _FakeVM(region, _LAYOUT), region
 
 
-def _call_builtin(backend, vm, sql_text: str):
-    """Build the builtin over a fresh plan pool, register the parsed plan, and
-    invoke it by the plan's constant-pool index — mirroring how lower() parses
-    once and passes only the index. The builtin never parses at run time.
+def _session(backend, vm):
+    """A per-run session: one builtin over a ``{'SAMPLE': backend}`` registry and
+    a shared plan pool, bound to *vm*. Returns ``issue(sql)`` running one EXEC SQL
+    by constant-pool index — connection + cursor state persist across calls,
+    mirroring how lower() parses once and passes only the index.
     """
     from squall.parser.parse import parse_exec_sql
 
     plans: list = []
-    builtin = make_exec_sql_builtin(backend, plans, {})
-    plans.append(parse_exec_sql(sql_text))
-    return builtin([_TypedValue(0)], vm)
+    builtin = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+
+    def issue(sql_text: str):
+        plans.append(parse_exec_sql(sql_text))
+        return builtin([_TypedValue(len(plans) - 1)], vm)
+
+    return issue
+
+
+def _call_builtin(backend, vm, sql_text: str):
+    """Connect to SAMPLE, then run a single statement (the common case). A run
+    starts disconnected, so the explicit CONNECT is required before any data
+    statement reaches the backend."""
+    issue = _session(backend, vm)
+    issue("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    return issue(sql_text)
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -230,32 +244,20 @@ def test_returns_builtin_result(backend):
     assert result.value is None
 
 
-# ── No-op directives (CONNECT / DECLARE SECTION) ──────────────────────────────
+# ── No-op directives (DECLARE SECTION bookends) ───────────────────────────────
+# Connection-lifecycle behaviour (CONNECT / SET CONNECTION / DISCONNECT, the
+# -1024 disconnected guard, registry routing) lives in tests/unit/test_connection.py.
 
 
 @pytest.mark.parametrize(
     "sql",
     [
-        "EXEC SQL CONNECT TO sample END-EXEC",
-        "EXEC SQL CONNECT RESET END-EXEC",
         "EXEC SQL BEGIN DECLARE SECTION END-EXEC",
         "EXEC SQL END DECLARE SECTION END-EXEC",
     ],
 )
-def test_directive_is_noop_sqlcode_zero(backend, sql):
-    """Connection + declare-section directives no-op with SQLCODE 0, untouched DB."""
+def test_declare_section_is_noop_sqlcode_zero(backend, sql):
+    """Declare-section bookends no-op with SQLCODE 0, untouched DB."""
     vm, region = _make_vm(ws_id=1)
     _call_builtin(backend, vm, sql)
-    assert _zoned_decode(bytes(region[13:22])) == 0
-
-
-def test_connect_with_host_vars_does_not_bind(backend):
-    """CONNECT ... USER ... USING ... no-ops without reading/binding its host vars
-    (so a VARCHAR password host var never has to be marshalled)."""
-    vm, region = _make_vm(ws_id=1)
-    _call_builtin(
-        backend,
-        vm,
-        "EXEC SQL CONNECT TO sample USER :WS-ID USING :WS-BAL END-EXEC",
-    )
     assert _zoned_decode(bytes(region[13:22])) == 0

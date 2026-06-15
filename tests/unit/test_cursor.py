@@ -93,7 +93,7 @@ def test_cursor_declare_open_fetch_close():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin = make_exec_sql_builtin(backend, plans, {})
+    builtin = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def run(sql):
         plans.append(parse_exec_sql(sql))
@@ -107,6 +107,10 @@ def test_cursor_declare_open_fetch_close():
 
     def dept():
         return _zoned_decode(bytes(region[9:13]))
+
+    # CONNECT — a run starts disconnected; establish the session first.
+    run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    assert sqlcode() == 0
 
     # DECLARE — register the cursor's SELECT; no DB work yet.
     run(
@@ -140,7 +144,12 @@ def test_fetch_on_unopened_cursor_is_end():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin = make_exec_sql_builtin(backend, plans, {})
-    plans.append(parse_exec_sql("EXEC SQL FETCH nope INTO :PNAME, :DEPT END-EXEC"))
-    builtin([_TV(0)], vm)
+    builtin = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+
+    def run(sql):
+        plans.append(parse_exec_sql(sql))
+        builtin([_TV(len(plans) - 1)], vm)
+
+    run("EXEC SQL CONNECT TO SAMPLE END-EXEC")  # a run starts disconnected
+    run("EXEC SQL FETCH nope INTO :PNAME, :DEPT END-EXEC")
     assert _zoned_decode(bytes(region[13:22])) == 100

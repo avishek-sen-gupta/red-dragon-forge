@@ -6,20 +6,26 @@ EXEC SQL … END-EXEC statements in slice 1.
 
 Design
 ------
-* ``make_exec_sql_builtin`` closes over a ``SqlBackend`` and returns a
-  callable with the RedDragon builtin signature ``(args, vm) -> BuiltinResult``.
+* ``make_exec_sql_builtin`` closes over a **connection registry** (name →
+  ``SqlBackend``) and returns a callable with the RedDragon builtin signature
+  ``(args, vm) -> BuiltinResult``.
 * The single argument is the ``ParsedSql`` plan produced ONCE at lowering time
   (``squall.strategy.SqlLoweringStrategy.lower``). The builtin does **no
   parsing** at run time — it only binds host vars and executes the plan, so a
   statement in a PERFORM loop is parsed once, not on every pass.
-* The function is pure given a fixed backend; the backend carries the one
-  mutable boundary (the DB connection).
+* Connection lifecycle is **faithful**: a run starts *disconnected*. ``CONNECT
+  TO <db>`` sets the current connection from the registry; ``SET CONNECTION``
+  switches it; ``CONNECT RESET`` / ``DISCONNECT`` clears it. Data statements
+  route through the current connection and report ``-1024`` when there is none.
+  The current connection is the one piece of per-run mutable session state (a
+  ``_ConnState`` holder), alongside the cursor registry.
 * Dispatch:
+    - ``connect`` / ``set_connection`` / ``disconnect``: manage the session.
     - ``select_into``: bind inputs, execute, write outputs, write SQLCODE.
     - DML kinds with a non-empty query (insert/update/delete/…): execute + write SQLCODE.
     - Cursor kinds (declare_cursor/open_/fetch/close): driven through the
-      backend's cursor surface via a per-run cursor registry.
-    - Connection / declare-section directives: no-op with SQLCODE 0.
+      current connection's cursor surface via a per-run cursor registry.
+    - Declare-section bookends: no-op with SQLCODE 0.
 """
 
 from __future__ import annotations
@@ -34,13 +40,13 @@ from squall.binding import read_params, write_outputs, write_sqlcode
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
 
-# Directives that are precompiler/runtime bookkeeping with no effect on an
-# injected backend: connection management and the host-var declare-section
-# bookends. They no-op with SQLCODE 0 — the backend connection is pre-established
-# (squall is handed a SqlBackend), and DECLARE SECTION is purely declarative.
-_NO_OP_KINDS = frozenset(
-    {"connect", "disconnect", "set_connection", "begin_declare", "end_declare"}
-)
+# SQLCODEs for connection lifecycle (DB2-faithful values).
+SQLCODE_NO_CONNECTION = -1024  # a data statement issued while disconnected
+SQLCODE_DB_NOT_FOUND = -1013  # CONNECT TO an unknown database name
+SQLCODE_NOT_ESTABLISHED = -1338  # SET CONNECTION to a connection not established
+
+# The host-var declare-section bookends are purely declarative — no DB effect.
+_NO_OP_KINDS = frozenset({"begin_declare", "end_declare"})
 
 
 def _host_names(host_vars) -> tuple[str, ...]:
@@ -61,18 +67,82 @@ def _bind_row(vm, out_vars, result, field_meta: Mapping[str, dict]) -> int:
     return status if status != 0 else result.sqlcode
 
 
+@dataclass
+class _ConnState:
+    """The mutable current-connection holder. ``current is None`` means the run
+    is disconnected (the initial state, and after CONNECT RESET / DISCONNECT)."""
+
+    current: SqlBackend | None = None
+
+
 @dataclass(frozen=True)
 class _Ctx:
-    """The per-run handler context: the backend, the cursor registry (mutated in
-    place across DECLARE→OPEN→FETCH→CLOSE), and the dclgen field metadata."""
+    """The per-run handler context: the connection registry (name → backend),
+    the mutable current-connection holder, the cursor registry (mutated in place
+    across DECLARE→OPEN→FETCH→CLOSE), and the dclgen field metadata."""
 
-    backend: SqlBackend
+    connections: Mapping[str, SqlBackend]
+    conn: _ConnState
     cursors: dict
     field_meta: Mapping[str, dict]
 
 
+def _current(ctx: _Ctx, vm) -> SqlBackend | None:
+    """The current connection, or None after writing SQLCODE -1024 (disconnected).
+
+    Mirrors the ``cursors.get(...) is None`` guard pattern: a None return means
+    the caller must stop — the no-connection SQLCODE has already been written.
+    """
+    if ctx.conn.current is None:
+        write_sqlcode(vm, SQLCODE_NO_CONNECTION)
+        return None
+    return ctx.conn.current
+
+
+def _resolve_db_name(ctx: _Ctx, parsed, vm) -> str:
+    """The target database name: a parse-time literal, or the runtime value of a
+    host var (DB2 database names are upper-cased)."""
+    target = parsed.connect_db
+    if isinstance(target, str):
+        return target
+    value = read_params(vm, (target.name,), ctx.field_meta)[0]
+    return str(value).strip().upper()
+
+
 def _h_noop(_ctx: _Ctx, _parsed, vm) -> None:
-    # Connection / declare-section directives have no DB effect.
+    # Declare-section bookends have no DB effect.
+    write_sqlcode(vm, 0)
+
+
+def _h_connect(ctx: _Ctx, parsed, vm) -> None:
+    # CONNECT RESET disconnects; CONNECT TO <db> establishes the current
+    # connection from the registry. Credentials (USER/USING) are intentionally
+    # never read — backends are pre-authenticated — so the testbed's unconditional
+    # double-CONNECT idiom (re-connect to the same db) succeeds idempotently.
+    if parsed.connect_variant == "RESET":
+        ctx.conn.current = None
+        write_sqlcode(vm, 0)
+        return
+    backend = ctx.connections.get(_resolve_db_name(ctx, parsed, vm))
+    if backend is None:
+        write_sqlcode(vm, SQLCODE_DB_NOT_FOUND)
+        return
+    ctx.conn.current = backend
+    write_sqlcode(vm, 0)
+
+
+def _h_set_connection(ctx: _Ctx, parsed, vm) -> None:
+    # Switch the current connection to an already-registered database.
+    backend = ctx.connections.get(_resolve_db_name(ctx, parsed, vm))
+    if backend is None:
+        write_sqlcode(vm, SQLCODE_NOT_ESTABLISHED)
+        return
+    ctx.conn.current = backend
+    write_sqlcode(vm, 0)
+
+
+def _h_disconnect(ctx: _Ctx, _parsed, vm) -> None:
+    ctx.conn.current = None
     write_sqlcode(vm, 0)
 
 
@@ -83,6 +153,9 @@ def _h_declare_cursor(ctx: _Ctx, parsed, vm) -> None:
 
 
 def _h_open(ctx: _Ctx, parsed, vm) -> None:
+    backend = _current(ctx, vm)
+    if backend is None:
+        return
     decl = ctx.cursors.get(parsed.cursor)
     if decl is None:
         write_sqlcode(vm, -1)  # cursor not declared
@@ -92,34 +165,49 @@ def _h_open(ctx: _Ctx, parsed, vm) -> None:
     params = read_params(
         vm, _host_names(parsed.in_vars or decl.in_vars), ctx.field_meta
     )
-    ctx.backend.open_cursor(parsed.cursor, decl.query, params)
+    backend.open_cursor(parsed.cursor, decl.query, params)
     write_sqlcode(vm, 0)
 
 
 def _h_fetch(ctx: _Ctx, parsed, vm) -> None:
-    result = ctx.backend.fetch(parsed.cursor)
+    backend = _current(ctx, vm)
+    if backend is None:
+        return
+    result = backend.fetch(parsed.cursor)
     write_sqlcode(vm, _bind_row(vm, parsed.out_vars, result, ctx.field_meta))
 
 
 def _h_close(ctx: _Ctx, parsed, vm) -> None:
-    ctx.backend.close(parsed.cursor)
+    backend = _current(ctx, vm)
+    if backend is None:
+        return
+    backend.close(parsed.cursor)
     write_sqlcode(vm, 0)
 
 
 def _h_commit(ctx: _Ctx, _parsed, vm) -> None:
-    ctx.backend.commit()
+    backend = _current(ctx, vm)
+    if backend is None:
+        return
+    backend.commit()
     write_sqlcode(vm, 0)
 
 
 def _h_rollback(ctx: _Ctx, _parsed, vm) -> None:
-    ctx.backend.rollback()
+    backend = _current(ctx, vm)
+    if backend is None:
+        return
+    backend.rollback()
     write_sqlcode(vm, 0)
 
 
 def _h_query(ctx: _Ctx, parsed, vm) -> None:
     # All remaining kinds carry a non-empty query string.
+    backend = _current(ctx, vm)
+    if backend is None:
+        return
     params = read_params(vm, _host_names(parsed.in_vars), ctx.field_meta)
-    result = ctx.backend.execute(parsed.query, params)
+    result = backend.execute(parsed.query, params)
     code = (
         _bind_row(vm, parsed.out_vars, result, ctx.field_meta)
         if parsed.kind == "select_into"
@@ -131,6 +219,9 @@ def _h_query(ctx: _Ctx, parsed, vm) -> None:
 # Dispatch table: EXEC SQL kind -> handler. Kinds with a non-empty query
 # (select_into / insert / update / delete / …) fall to _h_query (the default).
 _HANDLERS = {
+    "connect": _h_connect,
+    "set_connection": _h_set_connection,
+    "disconnect": _h_disconnect,
     "declare_cursor": _h_declare_cursor,
     "open_": _h_open,
     "fetch": _h_fetch,
@@ -142,10 +233,17 @@ _HANDLERS = {
 
 
 def make_exec_sql_builtin(
-    backend: SqlBackend, plans: list, field_meta: Mapping[str, dict]
+    connections: Mapping[str, SqlBackend],
+    plans: list,
+    field_meta: Mapping[str, dict],
 ) -> Callable:
-    """Return a ``__exec_sql`` builtin over *backend*, the plan pool, and the dclgen
-    *field_meta* map (loaded once by the prepass, shared by reference).
+    """Return a ``__exec_sql`` builtin over the connection registry *connections*
+    (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
+    by the prepass, shared by reference).
+
+    The run starts *disconnected*: a data statement before a successful CONNECT
+    reports SQLCODE -1024. ``CONNECT TO``/``SET CONNECTION`` select the current
+    connection from *connections*; ``CONNECT RESET``/``DISCONNECT`` clear it.
 
     *plans* is the lowering-time constant pool of ``ParsedSql`` objects
     (``SqlLoweringStrategy._plans``). Each call site passes its plan's pool index
@@ -155,8 +253,14 @@ def make_exec_sql_builtin(
     The returned callable has the standard RedDragon builtin signature:
     ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
     """
-    # One cursor registry per run (DECLARE records, OPEN reads).
-    ctx = _Ctx(backend=backend, cursors={}, field_meta=field_meta)
+    # Per-run session: the current connection (starts disconnected) + the cursor
+    # registry (DECLARE records, OPEN reads).
+    ctx = _Ctx(
+        connections=connections,
+        conn=_ConnState(current=None),
+        cursors={},
+        field_meta=field_meta,
+    )
 
     def __exec_sql(args: list, vm: object) -> BuiltinResult:
         from interpreter.vm.vm_types import BuiltinResult

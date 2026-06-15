@@ -74,10 +74,13 @@ def make_cobol_parser(
 def compile_cobol(
     source: str,
     bridge_jar_path: str,
-    backend,
+    connections,
     copybook_dirs: list[Path] | None = None,
 ) -> tuple[CobolFrontend, LinkedProgram]:
     """Compile a COBOL source string to a LinkedProgram.
+
+    *connections* is the connection registry (name → backend) the program's
+    EXEC SQL CONNECT selects from at run time; a run starts disconnected.
 
     The prepass is ALWAYS run with *copybook_dirs* (possibly empty): it rewrites
     EXEC SQL INCLUDE → COPY (which ProLeap inlines from the squall copybooks dir
@@ -92,7 +95,7 @@ def compile_cobol(
     """
     dirs = copybook_dirs or []
     prepass = apply_sql_prepass(source, dirs)
-    strategy = SqlLoweringStrategy(backend, prepass.field_meta)
+    strategy = SqlLoweringStrategy(connections, prepass.field_meta)
     parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
     frontend = CobolFrontend(
         cobol_parser=parser,
@@ -125,15 +128,17 @@ def compile_cobol(
 def run_cobol(
     source: str,
     bridge_jar_path: str,
-    backend,
+    connections,
     max_steps: int = 1000,
     copybook_dirs: list[Path] | None = None,
 ):
-    """Compile and run a COBOL program against *backend*; return the final VMState.
+    """Compile and run a COBOL program against the *connections* registry; return
+    the final VMState.
 
-    Builds the SQL strategy from *backend* + the prepass field_meta (the single
-    prepass — always run with copybook_dirs — owns the JSON loading) and wraps it
-    in the frontend's extension_strategies array.
+    Builds the SQL strategy from *connections* (name → backend) + the prepass
+    field_meta (the single prepass — always run with copybook_dirs — owns the JSON
+    loading) and wraps it in the frontend's extension_strategies array. The run
+    starts disconnected; the program's EXEC SQL CONNECT selects its database.
 
     Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
     Phase 1 runs the init block (top-level), phase 2 dispatches into the
@@ -141,7 +146,7 @@ def run_cobol(
     so that __ws_region is visible in the frame when the builtins execute.
     """
     frontend, linked = compile_cobol(
-        source, bridge_jar_path, backend, copybook_dirs=copybook_dirs
+        source, bridge_jar_path, connections, copybook_dirs=copybook_dirs
     )
 
     # For COBOL, use function-entry mode so run_linked runs the WS init block

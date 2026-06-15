@@ -71,7 +71,7 @@ def test_updat_sqb_rolls_back_every_change(bridge_jar):
         run_cobol(
             _UPDAT.read_text(encoding="utf-8"),
             bridge_jar,
-            backend=backend,
+            connections={"SAMPLE": backend},
             copybook_dirs=[_DB2_INCLUDES],
             max_steps=20000,
         )
