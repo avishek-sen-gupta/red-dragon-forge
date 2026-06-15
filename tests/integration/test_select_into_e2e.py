@@ -61,6 +61,7 @@ _COBOL_SELECT_INTO = """\
        01 WS-BAL PIC 9(9).
        01 SQLCODE PIC S9(9).
        PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
            EXEC SQL
                SELECT ACCT_BAL
                INTO :WS-BAL
@@ -105,7 +106,7 @@ def test_select_into_hit(bridge_jar):
     vm = run_cobol(
         _COBOL_SELECT_INTO,
         bridge_jar_path=bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         max_steps=2000,
     )
 
@@ -123,7 +124,7 @@ def test_select_into_no_row(bridge_jar):
     vm = run_cobol(
         _COBOL_SELECT_INTO,
         bridge_jar_path=bridge_jar,
-        backend=backend,
+        connections={"SAMPLE": backend},
         max_steps=2000,
     )
 

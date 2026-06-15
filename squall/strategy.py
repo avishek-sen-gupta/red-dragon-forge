@@ -47,10 +47,16 @@ def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-
 class SqlLoweringStrategy:
     """Full SQL lowering strategy.  Inject at ``CobolFrontend`` construction."""
 
-    def __init__(self, backend: SqlBackend, field_meta: Mapping[str, dict]) -> None:
+    def __init__(
+        self,
+        connections: Mapping[str, SqlBackend],
+        field_meta: Mapping[str, dict],
+    ) -> None:
         from interpreter.vm.builtins import Builtins
 
-        self._backend = backend
+        # The connection registry (name → backend). A run starts disconnected;
+        # the program's EXEC SQL CONNECT selects from this registry at run time.
+        self._connections = connections
         # dclgen host-var metadata, loaded once by the prepass and passed in by
         # reference. The builtin (and the binding engine it calls) consult it to
         # drive VARCHAR 49-group codecs and typed validation.
@@ -63,7 +69,7 @@ class SqlLoweringStrategy:
         _register(
             Builtins.TABLE,
             _BUILTIN_NAME,
-            make_exec_sql_builtin(backend, self._plans, field_meta),
+            make_exec_sql_builtin(connections, self._plans, field_meta),
         )
 
     # ── Protocol methods ──────────────────────────────────────────────────────
