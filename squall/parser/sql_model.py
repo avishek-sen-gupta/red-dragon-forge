@@ -172,7 +172,7 @@ class ParsedSql:
     kind: Kind  # the statement kind
     in_vars: tuple[HostVar, ...]  # input (bind) host vars, in source order
     out_vars: tuple[HostVar, ...]  # output (INTO) host vars, in order
-    cursor: str | None  # cursor name for cursor statements  (→ CursorRef, Task 3)
+    cursor: CursorRef  # NamedCursor(name) for cursor statements, else NoCursor()
     query: str  # cleaned SQL for the DB
     include_name: str | None = None  # INCLUDE target  (→ include: IncludeRef, Task 4)
     # Connection management  (→ connect: ConnectSpec, Task 5)

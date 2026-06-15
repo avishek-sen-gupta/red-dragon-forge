@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
 from squall.binding import read_params, write_outputs, write_sqlcode
-from squall.parser.sql_model import Kind
+from squall.parser.sql_model import Kind, NamedCursor
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
@@ -147,9 +147,18 @@ def _h_disconnect(ctx: _Ctx, _parsed, vm) -> None:
     write_sqlcode(vm, 0)
 
 
+def _cursor_name(ref) -> str:
+    """The cursor name; cursor handlers only ever run for NamedCursor refs."""
+    match ref:
+        case NamedCursor(name):
+            return name
+        case _:
+            raise AssertionError(f"cursor handler reached with {ref!r}")
+
+
 def _h_declare_cursor(ctx: _Ctx, parsed, vm) -> None:
     # Declaration only — remember the SELECT + its host vars for OPEN.
-    ctx.cursors[parsed.cursor] = parsed
+    ctx.cursors[_cursor_name(parsed.cursor)] = parsed
     write_sqlcode(vm, 0)
 
 
@@ -157,7 +166,7 @@ def _h_open(ctx: _Ctx, parsed, vm) -> None:
     backend = _current(ctx, vm)
     if backend is None:
         return
-    decl = ctx.cursors.get(parsed.cursor)
+    decl = ctx.cursors.get(_cursor_name(parsed.cursor))
     if decl is None:
         write_sqlcode(vm, -1)  # cursor not declared
         return
@@ -166,7 +175,7 @@ def _h_open(ctx: _Ctx, parsed, vm) -> None:
     params = read_params(
         vm, _host_names(parsed.in_vars or decl.in_vars), ctx.field_meta
     )
-    backend.open_cursor(parsed.cursor, decl.query, params)
+    backend.open_cursor(_cursor_name(parsed.cursor), decl.query, params)
     write_sqlcode(vm, 0)
 
 
@@ -174,7 +183,7 @@ def _h_fetch(ctx: _Ctx, parsed, vm) -> None:
     backend = _current(ctx, vm)
     if backend is None:
         return
-    result = backend.fetch(parsed.cursor)
+    result = backend.fetch(_cursor_name(parsed.cursor))
     write_sqlcode(vm, _bind_row(vm, parsed.out_vars, result, ctx.field_meta))
 
 
@@ -182,7 +191,7 @@ def _h_close(ctx: _Ctx, parsed, vm) -> None:
     backend = _current(ctx, vm)
     if backend is None:
         return
-    backend.close(parsed.cursor)
+    backend.close(_cursor_name(parsed.cursor))
     write_sqlcode(vm, 0)
 
 
