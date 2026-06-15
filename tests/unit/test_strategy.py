@@ -70,7 +70,7 @@ def backend():
 
 @pytest.fixture()
 def strategy(backend):
-    return SqlLoweringStrategy(backend)
+    return SqlLoweringStrategy(backend, {})
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ def test_strategy_registers_exec_sql_builtin(backend):
     # Remove any prior registration to test fresh insertion
     Builtins.TABLE.pop(key, None)
 
-    SqlLoweringStrategy(backend)
+    SqlLoweringStrategy(backend, {})
 
     assert (
         key in Builtins.TABLE

@@ -129,7 +129,7 @@ def _make_vm() -> tuple[_FakeVM, bytearray]:
 
 def test_read_params_zoned_field():
     vm, _ = _make_vm()
-    result = read_params(vm, ("WS-ID",))
+    result = read_params(vm, ("WS-ID",), {})
     assert result == [11]
 
 
@@ -138,7 +138,7 @@ def test_read_params_zoned_field():
 
 def test_write_outputs_zoned_field():
     vm, region = _make_vm()
-    write_outputs(vm, ("WS-BAL",), (500,))
+    write_outputs(vm, ("WS-BAL",), (500,), {})
     # Verify by decoding the bytes directly
     raw = bytes(region[4:13])
     assert _zoned_decode(raw) == 500
@@ -170,9 +170,9 @@ def test_write_sqlcode_negative():
 def test_write_read_alpha_field():
     vm, region = _make_vm()
     # Write a string into WS-NAME via write_outputs
-    write_outputs(vm, ("WS-NAME",), ("ALICE",))
+    write_outputs(vm, ("WS-NAME",), ("ALICE",), {})
     # Read it back via read_params
-    result = read_params(vm, ("WS-NAME",))
+    result = read_params(vm, ("WS-NAME",), {})
     assert result == ["ALICE"]
 
 
@@ -220,8 +220,8 @@ def test_alpha_encode_decode_roundtrip(s, length):
 
 def test_read_params_multiple_fields():
     vm, region = _make_vm()
-    write_outputs(vm, ("WS-BAL",), (42,))
-    result = read_params(vm, ("WS-ID", "WS-BAL"))
+    write_outputs(vm, ("WS-BAL",), (42,), {})
+    result = read_params(vm, ("WS-ID", "WS-BAL"), {})
     assert result == [11, 42]
 
 
@@ -233,7 +233,7 @@ def test_read_params_missing_field_fails_loudly():
     silently-tolerated None — read_params raises rather than fabricating a value."""
     vm, _ = _make_vm()
     with pytest.raises(KeyError):
-        read_params(vm, ("NO-SUCH-FIELD",))
+        read_params(vm, ("NO-SUCH-FIELD",), {})
 
 
 # ── Test 9: COMP-3 (packed decimal) field decodes to Decimal ─────────────────
@@ -268,7 +268,7 @@ def _make_comp3_vm(value: Decimal) -> tuple[_FakeVM, bytearray]:
 def test_read_params_comp3_field():
     """read_params returns Decimal for a COMP3 field."""
     vm, _ = _make_comp3_vm(Decimal("1234.56"))
-    result = read_params(vm, ("ACCT-BAL",))
+    result = read_params(vm, ("ACCT-BAL",), {})
     assert result == [Decimal("1234.56")]
 
 
@@ -276,7 +276,7 @@ def test_write_outputs_comp3_field():
     """write_outputs stores a Decimal correctly in a COMP3 field."""
     region = bytearray(_COMP3_REGION_SIZE)
     vm = _FakeVM(region, _COMP3_LAYOUT)
-    write_outputs(vm, ("ACCT-BAL",), (Decimal("9876.54"),))
+    write_outputs(vm, ("ACCT-BAL",), (Decimal("9876.54"),), {})
     raw = bytes(region[0:5])
     assert _comp3_decode(raw, decimal_digits=2) == Decimal("9876.54")
 
@@ -285,8 +285,8 @@ def test_read_write_comp3_roundtrip():
     """Round-trip: write Decimal to COMP3 field, read it back via read_params."""
     region = bytearray(_COMP3_REGION_SIZE)
     vm = _FakeVM(region, _COMP3_LAYOUT)
-    write_outputs(vm, ("ACCT-BAL",), (Decimal("-0.01"),))
-    result = read_params(vm, ("ACCT-BAL",))
+    write_outputs(vm, ("ACCT-BAL",), (Decimal("-0.01"),), {})
+    result = read_params(vm, ("ACCT-BAL",), {})
     assert result == [Decimal("-0.01")]
 
 
@@ -332,14 +332,14 @@ def test_read_params_binary_field():
     # Encode ACCT-ID = 42 at offset 4
     region[4:8] = _binary_encode(42, 4, signed=True)
     vm = _FakeVM(region, _BINARY_LAYOUT)
-    result = read_params(vm, ("ACCT-ID",))
+    result = read_params(vm, ("ACCT-ID",), {})
     assert result == [42]
 
 
 def test_write_outputs_binary_field():
     """write_outputs stores an int correctly in a BINARY field."""
     vm, region = _make_binary_vm()
-    write_outputs(vm, ("ACCT-ID",), (1234567,))
+    write_outputs(vm, ("ACCT-ID",), (1234567,), {})
     raw = bytes(region[4:8])
     assert _binary_decode(raw, signed=True) == 1234567
 

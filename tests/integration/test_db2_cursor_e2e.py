@@ -26,7 +26,6 @@ run_cobol = _helpers.run_cobol
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.db2 import Db2Backend
-from squall.strategy import SqlLoweringStrategy
 
 _CURSOR_SQB = (
     _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "cursor.sqb"
@@ -64,11 +63,10 @@ def test_cursor_sqb_runs_against_db2(bridge_jar, capsys):
         ibm_db.commit(conn)
 
         backend = Db2Backend(conn)
-        source = _CURSOR_SQB.read_text(encoding="utf-8")
         run_cobol(
-            source,
+            _CURSOR_SQB.read_text(encoding="utf-8"),
             bridge_jar,
-            extension_strategies=[SqlLoweringStrategy(backend)],
+            backend=backend,
             copybook_dirs=[_DB2_INCLUDES],
             max_steps=8000,
         )

@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
-from squall.binding import _NO_META, read_params, write_outputs, write_sqlcode
+from squall.binding import read_params, write_outputs, write_sqlcode
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
@@ -142,7 +142,7 @@ _HANDLERS = {
 
 
 def make_exec_sql_builtin(
-    backend: SqlBackend, plans: list, field_meta: Mapping[str, dict] = _NO_META
+    backend: SqlBackend, plans: list, field_meta: Mapping[str, dict]
 ) -> Callable:
     """Return a ``__exec_sql`` builtin over *backend*, the plan pool, and the dclgen
     *field_meta* map (loaded once by the prepass, shared by reference).
