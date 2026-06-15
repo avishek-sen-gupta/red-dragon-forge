@@ -11,19 +11,20 @@ import json
 import pytest
 
 from squall.parser.parse import parse_exec_sql
+from squall.parser.sql_model import IncludeName, NoInclude
 from squall.preprocess import apply_sql_prepass
 
-# ── include_name field on ParsedSql ──────────────────────────────────────────
+# ── include field on ParsedSql ────────────────────────────────────────────────
 
 
-def test_include_name_populated_for_include() -> None:
+def test_include_populated_for_include() -> None:
     p = parse_exec_sql("EXEC SQL INCLUDE SQLCA END-EXEC")
-    assert p.include_name == "SQLCA"
+    assert p.include == IncludeName("SQLCA")
 
 
-def test_include_name_none_for_select() -> None:
+def test_include_noinclude_for_select() -> None:
     p = parse_exec_sql("EXEC SQL SELECT a INTO :x FROM t END-EXEC")
-    assert p.include_name is None
+    assert p.include == NoInclude()
 
 
 # ── apply_sql_prepass ─────────────────────────────────────────────────────────

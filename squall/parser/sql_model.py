@@ -174,7 +174,7 @@ class ParsedSql:
     out_vars: tuple[HostVar, ...]  # output (INTO) host vars, in order
     cursor: CursorRef  # NamedCursor(name) for cursor statements, else NoCursor()
     query: str  # cleaned SQL for the DB
-    include_name: str | None = None  # INCLUDE target  (→ include: IncludeRef, Task 4)
+    include: IncludeRef = NoInclude()  # IncludeName(name) for INCLUDE, else NoInclude()
     # Connection management  (→ connect: ConnectSpec, Task 5)
     connect_variant: str | None = None
     connect_db: str | HostVar | None = None

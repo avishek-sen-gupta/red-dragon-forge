@@ -31,7 +31,7 @@ from types import MappingProxyType
 from typing import Final
 
 from squall.parser.parse import parse_exec_sql
-from squall.parser.sql_model import Kind
+from squall.parser.sql_model import IncludeName, Kind
 
 # ── Result type ───────────────────────────────────────────────────────────────
 
@@ -149,8 +149,8 @@ def _includes(
     """Yield ``(start, end, indent, include_name)`` for each INCLUDE span."""
     for start, end, parse_text, indent in spans:
         parsed = parse_exec_sql(parse_text)
-        if parsed.kind is Kind.INCLUDE and parsed.include_name is not None:
-            yield start, end, indent, parsed.include_name
+        if parsed.kind is Kind.INCLUDE and isinstance(parsed.include, IncludeName):
+            yield start, end, indent, parsed.include.name
 
 
 def apply_sql_prepass(source: str, copybook_dirs: Sequence) -> PrepassResult:
