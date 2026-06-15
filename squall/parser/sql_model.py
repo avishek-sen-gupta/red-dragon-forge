@@ -169,7 +169,7 @@ class FieldMeta(TypedDict, total=False):
 # ── The parsed statement ──────────────────────────────────────────────────────
 @dataclass(frozen=True)
 class ParsedSql:
-    kind: str  # the grammar kind, e.g. "select_into"  (→ Kind in Task 2)
+    kind: Kind  # the statement kind
     in_vars: tuple[HostVar, ...]  # input (bind) host vars, in source order
     out_vars: tuple[HostVar, ...]  # output (INTO) host vars, in order
     cursor: str | None  # cursor name for cursor statements  (→ CursorRef, Task 3)

@@ -22,7 +22,7 @@ from typing import Final
 
 from lark import Lark, Token, Tree
 
-from squall.parser.sql_model import HostVar, ParsedSql
+from squall.parser.sql_model import HostVar, Kind, ParsedSql
 
 # ── Parser with position tracking ─────────────────────────────────────────────
 
@@ -47,15 +47,17 @@ _END_EXEC_RE: Final[re.Pattern[str]] = re.compile(r"\s*END-EXEC\s*$", re.IGNOREC
 
 # ── Cursor statement kinds ────────────────────────────────────────────────────
 
-_CURSOR_KINDS: Final[frozenset[str]] = frozenset(
-    {"declare_cursor", "open_", "close", "fetch"}
+_CURSOR_KINDS: Final[frozenset[Kind]] = frozenset(
+    {Kind.DECLARE_CURSOR, Kind.OPEN, Kind.CLOSE, Kind.FETCH}
 )
 
 # Kinds where query == "" (no SQL sent to the DB engine)
-_NO_QUERY_KINDS: Final[frozenset[str]] = frozenset({"fetch", "open_", "close"})
+_NO_QUERY_KINDS: Final[frozenset[Kind]] = frozenset({Kind.FETCH, Kind.OPEN, Kind.CLOSE})
 
 # Kinds with an INTO clause to strip from the query
-_HAS_INTO_CLAUSE: Final[frozenset[str]] = frozenset({"select_into", "values_into"})
+_HAS_INTO_CLAUSE: Final[frozenset[Kind]] = frozenset(
+    {Kind.SELECT_INTO, Kind.VALUES_INTO}
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -104,9 +106,9 @@ def _walk_for_hvs(
         _walk_for_hvs(child, now_in_into_list, results)
 
 
-def _include_name(stmt: Tree, kind: str) -> str | None:
+def _include_name(stmt: Tree, kind: Kind) -> str | None:
     """Return the NAME token for an ``include`` statement, else None."""
-    if kind != "include":
+    if kind is not Kind.INCLUDE:
         return None
     for child in stmt.children:
         if isinstance(child, Token) and child.type == "NAME":
@@ -133,7 +135,7 @@ def _conn_target(stmt: Tree) -> str | HostVar | None:
 
 
 def _connection_fields(
-    stmt: Tree, kind: str
+    stmt: Tree, kind: Kind
 ) -> tuple[str | None, str | HostVar | None]:
     """Return (variant, target) for connection statements, else (None, None).
 
@@ -142,11 +144,11 @@ def _connection_fields(
     leading keywords are genuine terminals, so this is a structural read, not
     keyword value-matching.
     """
-    if kind == "connect":
+    if kind is Kind.CONNECT:
         if any(isinstance(c, Token) and c.type == "RESET" for c in stmt.children):
             return "RESET", None
         return "TO", _conn_target(stmt)
-    if kind in ("set_connection", "disconnect"):
+    if kind in (Kind.SET_CONNECTION, Kind.DISCONNECT):
         name = next(
             (
                 str(c)
@@ -160,10 +162,10 @@ def _connection_fields(
 
 
 def _whenever_fields(
-    stmt: Tree, kind: str
+    stmt: Tree, kind: Kind
 ) -> tuple[str | None, str | None, str | None]:
     """Return (condition, action, target) for a WHENEVER directive, else Nones."""
-    if kind != "whenever":
+    if kind is not Kind.WHENEVER:
         return None, None, None
     cond_node = next(
         (c for c in stmt.children if isinstance(c, Tree) and c.data == "whenever_cond"),
@@ -200,7 +202,7 @@ def _whenever_action(node: Tree) -> tuple[str, str | None]:
     return "GOTO", target
 
 
-def _cursor_name(stmt: Tree, kind: str) -> str | None:
+def _cursor_name(stmt: Tree, kind: Kind) -> str | None:
     """Return the cursor NAME for cursor-related statements, else None."""
     if kind not in _CURSOR_KINDS:
         return None
@@ -244,7 +246,7 @@ def _find_into_keyword_token(stmt: Tree) -> Token | None:
     )
 
 
-def _build_query(inner: str, stmt: Tree, kind: str) -> str:
+def _build_query(inner: str, stmt: Tree, kind: Kind) -> str:
     """Build the cleaned SQL string via span-keyed rewrite of *inner*.
 
     Strategy:
@@ -261,7 +263,7 @@ def _build_query(inner: str, stmt: Tree, kind: str) -> str:
     # SELECT (the FOR clause) — OPEN runs that. Locate the FOR token from the
     # parse tree (structure, not a string split) and start the query after it.
     # No host vars precede FOR, so slicing the rewritten result is safe.
-    for_tok = _find_for_token(stmt) if kind == "declare_cursor" else None
+    for_tok = _find_for_token(stmt) if kind is Kind.DECLARE_CURSOR else None
     query_start = for_tok.end_pos if for_tok is not None else 0
 
     # --- gather replacements: list of (start, end, replacement) ---------------
@@ -348,7 +350,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     inner = _strip_envelope(text)
     tree = _PARSER.parse(inner)
     stmt: Tree = tree.children[0]
-    kind: str = stmt.data
+    kind: Kind = Kind(stmt.data)
 
     hv_pairs = _collect_all_hvs_in_order(stmt)
     out_vars = tuple(hv for hv, is_out in hv_pairs if is_out)

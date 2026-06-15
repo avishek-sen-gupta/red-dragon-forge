@@ -9,11 +9,12 @@ SQLCODE branching. Slice 1: SQLERROR / NOT FOUND with CONTINUE / GO TO.
 from __future__ import annotations
 
 from squall.parser.parse import parse_exec_sql
+from squall.parser.sql_model import Kind
 
 
 def test_parse_whenever_sqlerror_goto():
     p = parse_exec_sql("EXEC SQL WHENEVER SQLERROR GOTO ERR-EXIT END-EXEC")
-    assert p.kind == "whenever"
+    assert p.kind is Kind.WHENEVER
     assert p.whenever_condition == "SQLERROR"
     assert p.whenever_action == "GOTO"
     assert p.whenever_target == "ERR-EXIT"
@@ -27,7 +28,7 @@ def test_parse_whenever_go_to_two_words():
 
 def test_parse_whenever_not_found_continue():
     p = parse_exec_sql("EXEC SQL WHENEVER NOT FOUND CONTINUE END-EXEC")
-    assert p.kind == "whenever"
+    assert p.kind is Kind.WHENEVER
     assert p.whenever_condition == "NOT FOUND"
     assert p.whenever_action == "CONTINUE"
     assert p.whenever_target is None

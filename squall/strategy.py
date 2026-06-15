@@ -119,6 +119,7 @@ class SqlLoweringStrategy:
         from interpreter.instructions import CallFunction, Const
 
         from squall.parser.parse import parse_exec_sql
+        from squall.parser.sql_model import Kind
 
         # Parse the directive ONCE, here at lowering time. The statement is
         # static, so the Lark parse must not run at execution time (it would
@@ -126,7 +127,7 @@ class SqlLoweringStrategy:
         # receives the already-parsed ParsedSql plan and only binds + executes.
         plan = parse_exec_sql(stmt.text)
 
-        if plan.kind == "whenever":
+        if plan.kind is Kind.WHENEVER:
             # Precompiler directive: update lexically-scoped state, emit no IR.
             condition, action = plan.whenever_condition, plan.whenever_action
             assert condition and action  # grammar-guaranteed for a WHENEVER directive
