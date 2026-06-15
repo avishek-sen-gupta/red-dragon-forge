@@ -24,7 +24,8 @@ Design
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
 from squall.binding import read_params, write_outputs, write_sqlcode
@@ -57,8 +58,8 @@ def make_exec_sql_builtin(backend: SqlBackend, plans: list) -> Callable:  # type
     # + input host vars). DECLARE records it; OPEN reads it. One run, one builtin.
     cursors: dict = {}
 
-    def __exec_sql(args: list, vm: object) -> "BuiltinResult":  # type: ignore[type-arg]
-        from interpreter.vm.vm_types import BuiltinResult  # noqa: PLC0415
+    def __exec_sql(args: list, vm: object) -> BuiltinResult:  # type: ignore[type-arg]
+        from interpreter.vm.vm_types import BuiltinResult
 
         # args[0] wraps the constant-pool INDEX of the plan parsed ONCE at
         # lowering time (squall.strategy.SqlLoweringStrategy.lower). No parsing

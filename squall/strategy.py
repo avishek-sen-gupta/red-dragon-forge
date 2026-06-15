@@ -35,13 +35,11 @@ _BUILTIN_NAME = "__exec_sql"
 
 def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-arg]
     """Insert *fn* into *table* under ``FuncName(name)``."""
-    from interpreter.func_name import FuncName  # noqa: PLC0415
+    from interpreter.func_name import FuncName
 
     key = FuncName(name)
     if key in table:
-        logger.warning(
-            "Builtins.TABLE already contains %s — overwriting.", key
-        )
+        logger.warning("Builtins.TABLE already contains %s — overwriting.", key)
     table[key] = fn
 
 
@@ -49,7 +47,7 @@ class SqlLoweringStrategy:
     """Full SQL lowering strategy.  Inject at ``CobolFrontend`` construction."""
 
     def __init__(self, backend: SqlBackend) -> None:
-        from interpreter.vm.builtins import Builtins  # noqa: PLC0415
+        from interpreter.vm.builtins import Builtins
 
         self._backend = backend
         # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
@@ -64,7 +62,7 @@ class SqlLoweringStrategy:
     # ── Protocol methods ──────────────────────────────────────────────────────
 
     def handles(self, stmt: Any) -> bool:
-        from interpreter.cobol.cobol_statements import ExecSqlStatement  # noqa: PLC0415
+        from interpreter.cobol.cobol_statements import ExecSqlStatement
 
         return isinstance(stmt, ExecSqlStatement)
 
@@ -74,22 +72,22 @@ class SqlLoweringStrategy:
 
     def on_procedure_entry(
         self,
-        ctx: "EmitContext",
-        materialised: "MaterialisedSectionedLayout",
+        ctx: EmitContext,
+        materialised: MaterialisedSectionedLayout,
     ) -> None:
         """No-op for slice 1 — SQL needs no per-procedure prologue."""
 
     def lower(
         self,
-        ctx: "EmitContext",
+        ctx: EmitContext,
         stmt: Any,
-        materialised: "MaterialisedSectionedLayout",
+        materialised: MaterialisedSectionedLayout,
     ) -> None:
         """Lower one ``ExecSqlStatement`` to a ``CallFunction(__exec_sql, …)``."""
-        from interpreter.func_name import FuncName  # noqa: PLC0415
-        from interpreter.instructions import CallFunction, Const  # noqa: PLC0415
+        from interpreter.func_name import FuncName
+        from interpreter.instructions import CallFunction, Const
 
-        from squall.parser.parse import parse_exec_sql  # noqa: PLC0415
+        from squall.parser.parse import parse_exec_sql
 
         # Parse the directive ONCE, here at lowering time. The statement is
         # static, so the Lark parse must not run at execution time (it would
