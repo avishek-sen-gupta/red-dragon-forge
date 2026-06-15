@@ -23,12 +23,19 @@ from typing import Final
 from lark import Lark, Token, Tree
 
 from squall.parser.sql_model import (
+    ConnectReset,
+    ConnectSpec,
+    ConnectTo,
     CursorRef,
+    DbName,
     HostVar,
+    HostVarDb,
     IncludeName,
     IncludeRef,
     Kind,
+    LiteralDb,
     NamedCursor,
+    NoConnect,
     NoCursor,
     NoInclude,
     ParsedSql,
@@ -126,8 +133,8 @@ def _include_ref(stmt: Tree, kind: Kind) -> IncludeRef:
     return NoInclude()
 
 
-def _conn_target(stmt: Tree) -> str | HostVar | None:
-    """The connect target db: a NAME literal (upper-cased) or a HostVar, else None.
+def _connect_db(stmt: Tree) -> DbName:
+    """The CONNECT TO target db: a NAME literal (upper-cased) or a host var.
 
     Reads the structured ``conn_target`` production (``NAME | host_var``).
     """
@@ -136,28 +143,26 @@ def _conn_target(stmt: Tree) -> str | HostVar | None:
         None,
     )
     if node is None:
-        return None
+        raise AssertionError("CONNECT TO without a conn_target")
     inner = node.children[0]
     if isinstance(inner, Token) and inner.type == "NAME":
-        return str(inner).upper()
+        return LiteralDb(str(inner).upper())
     # host_var Tree -> its single HOST_VAR_TOK child.
-    return _parse_host_var_tok(inner.children[0].value)
+    return HostVarDb(_parse_host_var_tok(inner.children[0].value))
 
 
-def _connection_fields(
-    stmt: Tree, kind: Kind
-) -> tuple[str | None, str | HostVar | None]:
-    """Return (variant, target) for connection statements, else (None, None).
+def _connect_spec(stmt: Tree, kind: Kind) -> ConnectSpec:
+    """The connection target. CONNECT RESET -> ConnectReset; CONNECT TO / SET
+    CONNECTION / DISCONNECT <name> -> ConnectTo(db); else NoConnect.
 
     ``connect`` reads the structured grammar (RESET terminal vs conn_target).
-    ``set_connection`` / ``disconnect`` take their first NAME token; their
-    leading keywords are genuine terminals, so this is a structural read, not
-    keyword value-matching.
+    ``set_connection`` / ``disconnect`` take their first NAME token (literal);
+    their leading keywords are genuine terminals — a structural read.
     """
     if kind is Kind.CONNECT:
         if any(isinstance(c, Token) and c.type == "RESET" for c in stmt.children):
-            return "RESET", None
-        return "TO", _conn_target(stmt)
+            return ConnectReset()
+        return ConnectTo(_connect_db(stmt))
     if kind in (Kind.SET_CONNECTION, Kind.DISCONNECT):
         name = next(
             (
@@ -165,10 +170,10 @@ def _connection_fields(
                 for c in stmt.children
                 if isinstance(c, Token) and c.type == "NAME"
             ),
-            None,
+            "",
         )
-        return None, (name.upper() if name is not None else None)
-    return None, None
+        return ConnectTo(LiteralDb(name.upper()))
+    return NoConnect()
 
 
 def _whenever_fields(
@@ -365,7 +370,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     cursor = _cursor_ref(stmt, kind)
     query = _build_query(inner, stmt, kind)
     include = _include_ref(stmt, kind)
-    conn_variant, conn_db = _connection_fields(stmt, kind)
+    connect = _connect_spec(stmt, kind)
     wh_cond, wh_action, wh_target = _whenever_fields(stmt, kind)
 
     return ParsedSql(
@@ -375,8 +380,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
         cursor=cursor,
         query=query,
         include=include,
-        connect_variant=conn_variant,
-        connect_db=conn_db,
+        connect=connect,
         whenever_condition=wh_cond,
         whenever_action=wh_action,
         whenever_target=wh_target,

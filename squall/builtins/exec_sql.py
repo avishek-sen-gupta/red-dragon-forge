@@ -36,7 +36,14 @@ from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
 from squall.binding import read_params, write_outputs, write_sqlcode
-from squall.parser.sql_model import Kind, NamedCursor
+from squall.parser.sql_model import (
+    ConnectReset,
+    ConnectTo,
+    HostVarDb,
+    Kind,
+    LiteralDb,
+    NamedCursor,
+)
 
 if TYPE_CHECKING:
     from interpreter.vm.vm_types import BuiltinResult
@@ -100,14 +107,17 @@ def _current(ctx: _Ctx, vm) -> SqlBackend | None:
     return ctx.conn.current
 
 
-def _resolve_db_name(ctx: _Ctx, parsed, vm) -> str:
-    """The target database name: a parse-time literal, or the runtime value of a
-    host var (DB2 database names are upper-cased)."""
-    target = parsed.connect_db
-    if isinstance(target, str):
-        return target
-    value = read_params(vm, (target.name,), ctx.field_meta)[0]
-    return str(value).strip().upper()
+def _resolve_db(spec, ctx: _Ctx, vm) -> str:
+    """The target database name from a ConnectTo spec: a parse-time literal, or
+    the runtime value of a host var (DB2 database names are upper-cased)."""
+    match spec:
+        case ConnectTo(LiteralDb(name)):
+            return name
+        case ConnectTo(HostVarDb(var)):
+            value = read_params(vm, (var.name,), ctx.field_meta)[0]
+            return str(value).strip().upper()
+        case _:
+            raise AssertionError(f"_resolve_db reached with {spec!r}")
 
 
 def _h_noop(_ctx: _Ctx, _parsed, vm) -> None:
@@ -120,11 +130,11 @@ def _h_connect(ctx: _Ctx, parsed, vm) -> None:
     # connection from the registry. Credentials (USER/USING) are intentionally
     # never read — backends are pre-authenticated — so the testbed's unconditional
     # double-CONNECT idiom (re-connect to the same db) succeeds idempotently.
-    if parsed.connect_variant == "RESET":
+    if isinstance(parsed.connect, ConnectReset):
         ctx.conn.current = None
         write_sqlcode(vm, 0)
         return
-    backend = ctx.connections.get(_resolve_db_name(ctx, parsed, vm))
+    backend = ctx.connections.get(_resolve_db(parsed.connect, ctx, vm))
     if backend is None:
         write_sqlcode(vm, SQLCODE_DB_NOT_FOUND)
         return
@@ -134,7 +144,7 @@ def _h_connect(ctx: _Ctx, parsed, vm) -> None:
 
 def _h_set_connection(ctx: _Ctx, parsed, vm) -> None:
     # Switch the current connection to an already-registered database.
-    backend = ctx.connections.get(_resolve_db_name(ctx, parsed, vm))
+    backend = ctx.connections.get(_resolve_db(parsed.connect, ctx, vm))
     if backend is None:
         write_sqlcode(vm, SQLCODE_NOT_ESTABLISHED)
         return
