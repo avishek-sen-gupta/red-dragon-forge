@@ -31,6 +31,9 @@ proxied_server_client_info.json
 # Must not be committed as paths would be wrong in other clones
 redirect
 
+# Interaction log (local-only, per-machine churn — not shared across clones)
+interactions.jsonl
+
 # Sync state (local-only, per-machine)
 # These files are machine-specific and should not be shared across clones
 .sync.lock
