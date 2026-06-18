@@ -36,6 +36,7 @@ from interpreter.instructions import (
     Return_,
     Suspend,
 )
+from interpreter.types.type_expr import UNKNOWN
 
 from interpreter.cobol.cobol_statements import ExecCicsStatement
 
@@ -232,7 +233,7 @@ def emit_operand_value(
     """
     if operand is None:
         r = ctx.fresh_reg()
-        ctx.emit_inst(Const(result_reg=r, value=""))
+        ctx.emit_inst(Const.string(r, ""))
         return r
     if not operand.is_literal and ctx.has_field(operand.text, materialised):
         ref, region_reg = ctx.resolve_field_ref(
@@ -247,7 +248,7 @@ def emit_operand_value(
             return _emit_ref_mod_slice(ctx, operand, value_reg, materialised)
         return value_reg
     r = ctx.fresh_reg()
-    ctx.emit_inst(Const(result_reg=r, value=operand.text))
+    ctx.emit_inst(Const.string(r, operand.text))
     return r
 
 
@@ -537,7 +538,7 @@ class CicsLoweringStrategy:
                 r_ca = emit_copy_in(ctx, opts.get("COMMAREA"), materialised)
                 if r_ca is None:
                     r_ca = ctx.fresh_reg()
-                    ctx.emit_inst(Const(result_reg=r_ca, value=b""))
+                    ctx.emit_inst(Const(result_reg=r_ca, value=b"", type_expr=UNKNOWN))
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
@@ -563,7 +564,7 @@ class CicsLoweringStrategy:
             r_ca = emit_copy_in(ctx, opts.get("COMMAREA"), materialised)
             if r_ca is None:
                 r_ca = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_ca, value=b""))
+                ctx.emit_inst(Const(result_reg=r_ca, value=b"", type_expr=UNKNOWN))
             r_res = ctx.fresh_reg()
             ctx.emit_inst(
                 CallFunction(
@@ -579,10 +580,7 @@ class CicsLoweringStrategy:
             abcode = opts.get("ABCODE")
             r_code = ctx.fresh_reg()
             ctx.emit_inst(
-                Const(
-                    result_reg=r_code,
-                    value=abcode.text if abcode is not None else "UNKN",
-                )
+                Const.string(r_code, abcode.text if abcode is not None else "UNKN")
             )
             r_res = ctx.fresh_reg()
             ctx.emit_inst(
@@ -602,10 +600,7 @@ class CicsLoweringStrategy:
                 text_op = opts.get("TEXT")
                 r_text = ctx.fresh_reg()
                 ctx.emit_inst(
-                    Const(
-                        result_reg=r_text,
-                        value=text_op.text if text_op is not None else "",
-                    )
+                    Const.string(r_text, text_op.text if text_op is not None else "")
                 )
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
@@ -638,7 +633,9 @@ class CicsLoweringStrategy:
             )
             base_names = [n[: -len(suffix)] for n in leaves if n.endswith(suffix)]
             r_names = ctx.fresh_reg()
-            ctx.emit_inst(Const(result_reg=r_names, value=base_names))
+            ctx.emit_inst(
+                Const(result_reg=r_names, value=base_names, type_expr=UNKNOWN)
+            )
 
             if verb == "RECEIVE MAP" and self._conversational:
                 # Conversational: SUSPEND (yield the map name to the resume driver),
@@ -672,7 +669,7 @@ class CicsLoweringStrategy:
                 if field_name is None:
                     continue
                 r_key = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_key, value=subopt))
+                ctx.emit_inst(Const.string(r_key, subopt))
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
@@ -693,7 +690,7 @@ class CicsLoweringStrategy:
                 if field_name is None:
                     continue
                 r_key = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_key, value=subopt))
+                ctx.emit_inst(Const.string(r_key, subopt))
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
@@ -716,17 +713,17 @@ class CicsLoweringStrategy:
             r_key = emit_copy_in(ctx, opts.get("RIDFLD"), materialised)
             if r_key is None:
                 r_key = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_key, value=b""))
+                ctx.emit_inst(Const(result_reg=r_key, value=b"", type_expr=UNKNOWN))
             klen = _resolve_keylen(ctx, opts, materialised)
             r_klen = ctx.fresh_reg()
-            ctx.emit_inst(Const(result_reg=r_klen, value=klen))
+            ctx.emit_inst(Const.int_(r_klen, klen))
 
             if verb == "READ":
                 into_off, into_len = _resolve_into(ctx, opts.get("INTO"), materialised)
                 r_off = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_off, value=into_off))
+                ctx.emit_inst(Const.int_(r_off, into_off))
                 r_len = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_len, value=into_len))
+                ctx.emit_inst(Const.int_(r_len, into_len))
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
@@ -739,7 +736,7 @@ class CicsLoweringStrategy:
                 r_rec = emit_copy_in(ctx, opts.get("FROM"), materialised)
                 if r_rec is None:
                     r_rec = ctx.fresh_reg()
-                    ctx.emit_inst(Const(result_reg=r_rec, value=b""))
+                    ctx.emit_inst(Const(result_reg=r_rec, value=b"", type_expr=UNKNOWN))
                 name = "__cics_write" if verb == "WRITE" else "__cics_rewrite"
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
@@ -772,10 +769,10 @@ class CicsLoweringStrategy:
                 r_key = emit_copy_in(ctx, opts.get("RIDFLD"), materialised)
                 if r_key is None:
                     r_key = ctx.fresh_reg()
-                    ctx.emit_inst(Const(result_reg=r_key, value=b""))
+                    ctx.emit_inst(Const(result_reg=r_key, value=b"", type_expr=UNKNOWN))
                 klen = _resolve_keylen(ctx, opts, materialised)
                 r_klen = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_klen, value=klen))
+                ctx.emit_inst(Const.int_(r_klen, klen))
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
@@ -787,9 +784,9 @@ class CicsLoweringStrategy:
             elif verb in ("READNEXT", "READPREV"):
                 into_off, into_len = _resolve_into(ctx, opts.get("INTO"), materialised)
                 r_off = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_off, value=into_off))
+                ctx.emit_inst(Const.int_(r_off, into_off))
                 r_len = ctx.fresh_reg()
-                ctx.emit_inst(Const(result_reg=r_len, value=into_len))
+                ctx.emit_inst(Const.int_(r_len, into_len))
                 name = "__cics_readnext" if verb == "READNEXT" else "__cics_readprev"
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
