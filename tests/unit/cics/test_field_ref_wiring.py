@@ -69,10 +69,22 @@ class FakeCtx:
 
     def const_to_reg(self, value):  # type: ignore[no-untyped-def]
         from interpreter.instructions import Const
+        from interpreter.types.type_expr import UNKNOWN
 
         reg = self.fresh_reg()
-        self.emit_inst(Const(result_reg=reg, value=value))
+        self.emit_inst(Const(result_reg=reg, value=value, type_expr=UNKNOWN))
         return reg
+
+    def parse_literal(self, text):  # type: ignore[no-untyped-def]
+        try:
+            return int(text)
+        except ValueError:
+            pass
+        try:
+            return float(text)
+        except ValueError:
+            pass
+        return text
 
 
 def Region_for(name: str) -> Register:

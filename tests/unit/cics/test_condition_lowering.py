@@ -47,8 +47,10 @@ class _FakeCtx:
         return name in self._fields
 
     def const_to_reg(self, value):  # type: ignore[no-untyped-def]
+        from interpreter.types.type_expr import UNKNOWN
+
         reg = self.fresh_reg()
-        self.emit_inst(Const(result_reg=reg, value=value))
+        self.emit_inst(Const(result_reg=reg, value=value, type_expr=UNKNOWN))
         return reg
 
     def parse_literal(self, text):  # type: ignore[no-untyped-def]
