@@ -1,12 +1,19 @@
 start: _statement+
 
-_statement: job_card | exec_card | dd_card | comment
+_statement: job_card | exec_card | dd_instream | dd_sysout | dd_card | comment
 
 job_card:  "//" NAME "JOB" REST NEWLINE
 exec_card: "//" NAME "EXEC" "PGM" "=" NAME REST? NEWLINE
 dd_card:   "//" NAME "DD" dd_params NEWLINE
+dd_instream: "//" NAME "DD" "*" NEWLINE _instream_line* INSTREAM_END
+dd_sysout:   "//" NAME "DD" "SYSOUT" "=" "*" NEWLINE
 
 comment:   COMMENT NEWLINE
+
+// In-stream data lines (arbitrary text until /*) and the closing delimiter
+_instream_line: INSTREAM_LINE NEWLINE
+INSTREAM_END:   "/*" /[^\n]*\n/
+INSTREAM_LINE:  /[^\n]+/
 
 dd_params: _dd_param (_comma _cont? _dd_param)*
 _dd_param:  dsn_param | disp_param

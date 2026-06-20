@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from lark import Lark, Transformer
+from lark import Lark, Token, Transformer
 
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 
@@ -46,6 +46,19 @@ class _Build(Transformer):
             "dd",
             DD(ddname=name, dsn=params["dsn"], disp=params.get("disp", _DEFAULT_DISP)),
         )
+
+    def dd_instream(self, c):
+        name = c[0]
+        lines = tuple(
+            str(tok)
+            for tok in c
+            if isinstance(tok, Token) and tok.type == "INSTREAM_LINE"
+        )
+        return ("dd", DD(ddname=name, dsn="", disp=_DEFAULT_DISP, in_stream=lines))
+
+    def dd_sysout(self, c):
+        name = c[0]
+        return ("dd", DD(ddname=name, dsn="", disp=_DEFAULT_DISP, sysout=True))
 
     def exec_card(self, c):
         return ("exec", c[0], c[1])
