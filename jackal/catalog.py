@@ -40,3 +40,7 @@ class DatasetCatalog:
         if dd.disp.normal is DispNormal.DELETE:
             self._datasets[dd.dsn].path.unlink()
             del self._datasets[dd.dsn]
+
+    @property
+    def workdir(self) -> Path:
+        return self._workdir
