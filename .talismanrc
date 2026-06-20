@@ -1,0 +1,12 @@
+fileignoreconfig:
+- filename: .claude/core/tools-search.md
+  checksum: fb84bd80e321d897ceb100c0c9ec9e053440d7e884d88625a9628af5254c3579
+- filename: .claude/core/implementation.md
+  checksum: a930a0d820dd1d96b08f2b1c22e67336050ee25bb4aab4dedd5054c21cabc548
+- filename: .claude/conditional/design-principles.md
+  checksum: 585eb401d22b9373b8f7a96224d167275ede9f2b9edc8ffc37de9619c7bbf945
+- filename: .claude/core/workflow.md
+  checksum: b4d8e3938058251d7b684444e70e9f16ab23d23740e6015725f8e132098402f7
+- filename: docs/superpowers/specs/2026-06-20-jackal-jcl-runner-design.md
+  checksum: 57d4fefc5dfe7ea1e0f4ee52a7e8587494be70f780d2b9d8cf83466526f58194
+version: "1.0"
