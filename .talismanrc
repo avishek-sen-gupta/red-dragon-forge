@@ -23,4 +23,6 @@ fileignoreconfig:
   checksum: da31d332b98fe431b0d91a41f0c9d4789268543aeefdac239457a25cd744bcde
 - filename: tests/integration/test_pipeline.py
   checksum: dfe16cc2fc75abc709454a41d87e51a20f8c7ea069e467a7ae620a1743b1007e
+- filename: docs/superpowers/specs/2026-06-21-jackal-v2-idcams-design.md
+  checksum: 933bba02fd79bc439e923c3c5af833725f7f516acd85307d1a9da8efdbbe4175
 version: "1.0"
