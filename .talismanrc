@@ -14,7 +14,11 @@ fileignoreconfig:
 - filename: vendor/red-dragon
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
 - filename: uv.lock
-  checksum: 078234f96834c1e1ac81196b0e3ab5554368aeab0ab92c6c4caaa3af321955ac
+  # Generated lockfile of package hashes — content changes on every dependency
+  # update, so a checksum entry is self-defeating. Ignore content detection
+  # outright rather than churn this file. (Deviates from talismanrc append-only
+  # for this generated-file case.)
+  ignore_detectors: [filecontent]
 - filename: jackal/jcl/grammar.lark
   checksum: da31d332b98fe431b0d91a41f0c9d4789268543aeefdac239457a25cd744bcde
 - filename: tests/integration/test_pipeline.py
