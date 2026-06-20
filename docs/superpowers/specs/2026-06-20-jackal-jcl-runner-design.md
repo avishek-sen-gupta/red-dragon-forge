@@ -169,3 +169,29 @@ jackal can map purely by DDname.
 3. **v3:** point jackal at the real external batch corpus (env-var path) once the
    red-dragon engine gaps (COMP-3 write, CLOSE status, figurative-const
    arithmetic, DISPLAY fidelity) are fixed.
+
+## Addendum (2026-06-20): RC / abend correction and v1 scope
+
+The Error-handling section above is **corrected** here (original text preserved per
+the immutable-spec convention):
+
+- The original phrasing implied a non-zero step return code stops the job. That is
+  **not** standard z/OS behavior. Correct model:
+  - Each step reports its real `RETURN-CODE` (COND CODE).
+  - A merely high RC does **not** stop the job — subsequent steps still run. Stopping
+    on RC is governed by `COND=` / `IF`, which is **v2-deferred**.
+  - An **ABEND** (abnormal end) flushes all remaining steps (they do not run) unless
+    `COND=EVEN/ONLY`. "Stop-on-first-abend" was the right instinct, but applies to
+    ABENDs, not to high RCs.
+  - Net correct v1 model: **report each step's real RETURN-CODE; run all steps;
+    flush remaining steps only on an ABEND.**
+
+- **v1 scope cut (feasibility-driven):** red-dragon cannot currently surface either
+  signal — `RETURN-CODE` register writes are dropped (`lower_arithmetic.py`
+  `_SPECIAL_REGISTER_NAMES`), and an abend (`CEE3ABD`) goes symbolic with no VM
+  abend signal. So v1 ships with `StepResult.return_code` hardcoded to 0 and the
+  runner running all steps (which is already correct for the non-abend case). Real
+  RC capture and abend-flush are deferred to red-dragon enhancements (filed) and a
+  jackal v2 increment that consumes them. jackal's orchestration mechanics (parse →
+  sequence → DD catalog → inter-step PASS→SHR data handoff) are complete and tested
+  in v1.
