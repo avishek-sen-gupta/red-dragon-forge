@@ -25,4 +25,6 @@ fileignoreconfig:
   checksum: dfe16cc2fc75abc709454a41d87e51a20f8c7ea069e467a7ae620a1743b1007e
 - filename: docs/superpowers/specs/2026-06-21-jackal-v2-idcams-design.md
   checksum: 933bba02fd79bc439e923c3c5af833725f7f516acd85307d1a9da8efdbbe4175
+- filename: docs/superpowers/plans/2026-06-21-jackal-v2-idcams.md
+  checksum: 5e7a0cbe33df9058b3b226275a1a887e8a7ef54de38ab46bd623e31f77b3af33
 version: "1.0"
