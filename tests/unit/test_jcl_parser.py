@@ -41,3 +41,27 @@ def test_dd_continuation_line():
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,\n//   DISP=(NEW,CATLG,DELETE)\n"
     dd = parse_jcl(jcl).steps[0].dds[0]
     assert dd.dsn == "A.B" and dd.disp.status is DispStatus.NEW
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_star_instream_captured():
+    jcl = (
+        "//J JOB 1\n//S EXEC PGM=IDCAMS\n//SYSIN DD *\n"
+        "   DELETE A.B CLUSTER\n   DEFINE CLUSTER (NAME(A.B))\n/*\n"
+    )
+    dd = parse_jcl(jcl).steps[0].dds[0]
+    assert dd.ddname == "SYSIN"
+    assert dd.in_stream == ("   DELETE A.B CLUSTER", "   DEFINE CLUSTER (NAME(A.B))")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_sysout():
+    jcl = "//J JOB 1\n//S EXEC PGM=IDCAMS\n//SYSPRINT DD SYSOUT=*\n"
+    dd = parse_jcl(jcl).steps[0].dds[0]
+    assert dd.sysout is True
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dsn_disp_still_parses():  # regression: v1 forms unaffected
+    jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,DISP=SHR\n"
+    assert parse_jcl(jcl).steps[0].dds[0].dsn == "A.B"
