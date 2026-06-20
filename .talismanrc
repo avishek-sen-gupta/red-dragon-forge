@@ -9,4 +9,6 @@ fileignoreconfig:
   checksum: b4d8e3938058251d7b684444e70e9f16ab23d23740e6015725f8e132098402f7
 - filename: docs/superpowers/specs/2026-06-20-jackal-jcl-runner-design.md
   checksum: 57d4fefc5dfe7ea1e0f4ee52a7e8587494be70f780d2b9d8cf83466526f58194
+- filename: docs/superpowers/plans/2026-06-20-jackal-jcl-runner.md
+  checksum: 7e0eb13509817594a95cfe3878f6298dc215b7324197ea6ae040f9294b4d1fe2
 version: "1.0"
