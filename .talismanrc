@@ -22,5 +22,5 @@ fileignoreconfig:
 - filename: jackal/jcl/grammar.lark
   checksum: da31d332b98fe431b0d91a41f0c9d4789268543aeefdac239457a25cd744bcde
 - filename: tests/integration/test_pipeline.py
-  checksum: 3082ebbf4f9649081d5572f2c6235631c35abe26fecde24cc068fa050e6385a7
+  checksum: dfe16cc2fc75abc709454a41d87e51a20f8c7ea069e467a7ae620a1743b1007e
 version: "1.0"
