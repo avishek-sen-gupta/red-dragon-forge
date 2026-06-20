@@ -1,0 +1,24 @@
+[project]
+name = "jackal"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["lark>=1.1", "red-dragon"]
+
+[tool.uv.sources]
+red-dragon = { path = "vendor/red-dragon", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "pytest>=9.1.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["jackal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
