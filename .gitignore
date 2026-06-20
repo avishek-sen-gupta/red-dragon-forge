@@ -1,8 +1,52 @@
+# --- Python ---
 __pycache__/
-*.pyc
-.venv/
-.pytest_cache/
-dist/
-build/
+*.py[cod]
+*$py.class
 *.egg-info/
+.eggs/
+*.egg
+build/
+dist/
+.Python
+*.so
+
+# --- Virtual environments / uv ---
+.venv/
+venv/
+env/
 .uv/
+# NB: uv.lock IS committed (do not ignore it).
+
+# --- Test / type / lint caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# --- ProLeap bridge build product (gitignored; rebuilt by build.sh) ---
+# The JAR lives inside the vendor/red-dragon submodule (which has its own
+# .gitignore), but ignore any stray copies/symlinks at the jackal level too.
+*.jar
+**/target/
+
+# --- Editors / IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Local runtime scratch ---
+jackal_*/
+*.log
