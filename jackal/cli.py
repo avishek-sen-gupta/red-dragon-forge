@@ -16,7 +16,7 @@ def _parse_dataset(spec: str) -> tuple[str, Path]:
     return dsn, Path(path)
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="jackal")
     sub = ap.add_subparsers(dest="cmd", required=True)
     runp = sub.add_parser("run")
