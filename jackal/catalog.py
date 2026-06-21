@@ -64,6 +64,17 @@ class DatasetCatalog:
         self._datasets[dsn] = ds
         return ds
 
+    def delete_dsn(self, dsn: str) -> bool:
+        """Remove a dataset from the catalog and delete its backing file.
+
+        Returns True if the dataset existed and was deleted, False if not found.
+        """
+        if dsn not in self._datasets:
+            return False
+        ds = self._datasets.pop(dsn)
+        ds.path.unlink(missing_ok=True)
+        return True
+
     def dispose(self, dd: DD) -> None:
         if dd.disp.normal is DispNormal.DELETE:
             self._datasets[dd.dsn].path.unlink()
