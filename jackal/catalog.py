@@ -2,23 +2,28 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from jackal.model import DD, DispNormal, DispStatus
+from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 
 
 @dataclass(frozen=True)
 class Dataset:
     dsn: str
     path: Path
+    org: DatasetOrg = DatasetOrg.PS
+    key_offset: int = 0
+    key_length: int = 0
+    record_size: int = 0
 
 
 class DatasetCatalog:
     """Imperative shell: owns the job workdir and the DSN->file mapping."""
 
-    def __init__(self, workdir: Path):
+    def __init__(self, workdir: Path, data_dir: Path):
         self._workdir = workdir
+        self._data_dir = data_dir
         self._datasets: dict[str, Dataset] = {}
 
     def seed(self, dsn: str, path: Path) -> None:
@@ -29,11 +34,34 @@ class DatasetCatalog:
 
     def allocate(self, dd: DD) -> Dataset:
         if dd.disp.status in (DispStatus.OLD, DispStatus.SHR, DispStatus.MOD):
-            return self._datasets[dd.dsn]
+            if dd.dsn in self._datasets:
+                return self._datasets[dd.dsn]
+            candidate = self._data_dir / dd.dsn
+            if candidate.exists():
+                ds = Dataset(dsn=dd.dsn, path=candidate)
+                self._datasets[dd.dsn] = ds
+                return ds
+            raise KeyError(dd.dsn)
         path = self._workdir / dd.dsn.replace(".", "_")
         path.write_bytes(b"")
         ds = Dataset(dsn=dd.dsn, path=path)
         self._datasets[dd.dsn] = ds
+        return ds
+
+    def allocate_ksds(
+        self, dsn: str, key_offset: int, key_length: int, record_size: int
+    ) -> Dataset:
+        path = self._workdir / dsn.replace(".", "_")
+        path.write_bytes(b"")
+        ds = Dataset(
+            dsn=dsn,
+            path=path,
+            org=DatasetOrg.KSDS,
+            key_offset=key_offset,
+            key_length=key_length,
+            record_size=record_size,
+        )
+        self._datasets[dsn] = ds
         return ds
 
     def dispose(self, dd: DD) -> None:
