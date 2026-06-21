@@ -41,4 +41,6 @@ fileignoreconfig:
   checksum: ac6cf9f4ed5dbf3c10a43d9399ff5e227c263f7edfa6d0c9621ab06b8e425a5d
 - filename: tests/unit/test_idcams_executor.py
   checksum: 7fc905ad65fcd9127f3723f38ba5ae216179886e11fd6c686e0bc24d97b84116
+- filename: docs/superpowers/plans/2026-06-21-jcl-antlr-bridge.md
+  checksum: 970f38312dd6b662775f5739458329cf5c8724c7e3c022c8c62447d7c92ace1d
 version: "1.0"
