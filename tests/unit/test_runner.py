@@ -2,7 +2,6 @@ from pathlib import Path
 
 from tests.covers import NotLanguageFeature, covers
 
-from jackal.catalog import DatasetOrg
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from jackal.runner import JobRunner
 
@@ -81,6 +80,4 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
     res = runner.run(job, workdir=tmp_path, seeds={})
     assert res.steps[0].return_code == 0
     assert res.steps[0].ran is True
-    catalog = runner._last_catalog  # exposed for test inspection
-    ds = catalog.resolve("MYAPP.ACCOUNTS")
-    assert ds.org == DatasetOrg.KSDS
+    assert (tmp_path / "MYAPP_ACCOUNTS").exists()

@@ -29,6 +29,7 @@ def _resolve_dir(
     if carddemo_home:
         return Path(carddemo_home) / env_subpath
     parser.error(f"{flag_name} is required: supply the flag or set $CARDDEMO_HOME")
+    raise SystemExit(2)
 
 
 def main(argv: list[str] | None = None) -> int:
