@@ -17,7 +17,7 @@ class JobRunner:
         self._bridge_jar = bridge_jar
 
     def run(self, job: Job, workdir: Path, seeds: dict[str, Path]) -> JobResult:
-        catalog = DatasetCatalog(workdir=workdir)
+        catalog = DatasetCatalog(workdir=workdir, data_dir=workdir)
         for dsn, path in seeds.items():
             catalog.seed(dsn, path)
         return JobResult(steps=tuple(self._run_step(s, catalog) for s in job.steps))
