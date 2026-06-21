@@ -43,4 +43,12 @@ fileignoreconfig:
   checksum: 7fc905ad65fcd9127f3723f38ba5ae216179886e11fd6c686e0bc24d97b84116
 - filename: docs/superpowers/plans/2026-06-21-jcl-antlr-bridge.md
   checksum: 970f38312dd6b662775f5739458329cf5c8724c7e3c022c8c62447d7c92ace1d
+- filename: jcl-bridge/PROVENANCE.md
+  checksum: 35ab90ef4c989b8d174dccfe48732b8f9ed37b5fbee35dac1e9fe6c8d7a4edbb
+- filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
+  checksum: 85064026d09bffa199e853ef000ccf0ec79f76b00c260373dbaf2c39a0046ab2
+- filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
+  checksum: 3a7b7c0cd0dbcc1b4ac3e382c75e46f2c91083fec5b27bcdcc1a129ec9dbd034
+- filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
+  checksum: 12f9097ab708452fdd082b061d100b0b01dae2706e9139b4bd4c74fa9a08c934
 version: "1.0"
