@@ -35,6 +35,7 @@ htmlcov/
 # .gitignore), but ignore any stray copies/symlinks at the jackal level too.
 *.jar
 **/target/
+dependency-reduced-pom.xml
 
 # --- Editors / IDEs ---
 .idea/
