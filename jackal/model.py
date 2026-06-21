@@ -20,6 +20,11 @@ class DispNormal(Enum):
     DELETE = "DELETE"
 
 
+class DatasetOrg(Enum):
+    PS = "PS"
+    KSDS = "KSDS"
+
+
 @dataclass(frozen=True)
 class Disp:
     status: DispStatus
@@ -32,6 +37,8 @@ class DD:
     ddname: str
     dsn: str
     disp: Disp
+    in_stream: tuple[str, ...] = ()
+    sysout: bool = False
 
 
 @dataclass(frozen=True)

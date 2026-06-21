@@ -25,7 +25,12 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
     seed = tmp_path / "in.dat"
     seed.write_bytes(_ebcdic(b"applemango"))
     job = parse_jcl((FIX / "pipeline.jcl").read_text())
-    runner = JobRunner(source_dir=FIX / "cbl", bridge_jar=bridge_jar)
+    runner = JobRunner(
+        source_dir=FIX / "cbl",
+        bridge_jar=bridge_jar,
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+    )
     result = runner.run(job, workdir=tmp_path, seeds={"J.IN": seed})
 
     assert [s.name for s in result.steps] == ["STEP1", "STEP2"]

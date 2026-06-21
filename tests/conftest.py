@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -9,3 +10,12 @@ def bridge_jar() -> str:
     jar = os.environ["PROLEAP_BRIDGE_JAR"]
     assert jar, "PROLEAP_BRIDGE_JAR must point at the built bridge JAR"
     return jar
+
+
+@pytest.fixture
+def carddemo_home() -> Path:
+    """Root of the CardDemo checkout; skip if CARDDEMO_HOME is unset."""
+    home = os.environ.get("CARDDEMO_HOME")
+    if not home:
+        pytest.skip("CARDDEMO_HOME not set")
+    return Path(home)

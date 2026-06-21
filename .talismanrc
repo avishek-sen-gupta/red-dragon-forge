@@ -20,11 +20,25 @@ fileignoreconfig:
   # for this generated-file case.)
   ignore_detectors: [filecontent]
 - filename: jackal/jcl/grammar.lark
-  checksum: da31d332b98fe431b0d91a41f0c9d4789268543aeefdac239457a25cd744bcde
+  checksum: 6ea06a646bb40d9ad69cf177a69c98820eb8129dc1871fd9b18ea8e6e22ff9b3
 - filename: tests/integration/test_pipeline.py
   checksum: dfe16cc2fc75abc709454a41d87e51a20f8c7ea069e467a7ae620a1743b1007e
 - filename: docs/superpowers/specs/2026-06-21-jackal-v2-idcams-design.md
   checksum: 933bba02fd79bc439e923c3c5af833725f7f516acd85307d1a9da8efdbbe4175
 - filename: docs/superpowers/plans/2026-06-21-jackal-v2-idcams.md
   checksum: 5e7a0cbe33df9058b3b226275a1a887e8a7ef54de38ab46bd623e31f77b3af33
+- filename: tests/unit/test_catalog.py
+  checksum: 325fad217dcf027136848a2c80409a3db1ecffbca41bf8d37fdc0a33b460aeff
+- filename: jackal/catalog.py
+  checksum: 87dd1a4f2db4a06306ac5b415b7769c1c2ed353c9b0771bc9ab55616eaa75594
+- filename: tests/unit/test_idcams_parser.py
+  checksum: a8762987e12835a1e85e2a187bb50d57affa15e0010e5ee9d88e15700f0db4b2
+- filename: jackal/idcams/grammar.lark
+  checksum: 10d0ddcea43ddf2066826da26f3ea0b5242cc2e1e653b247b68feec67e122c4a
+- filename: jackal/idcams/parser.py
+  checksum: 844d6729b4cf3414d695b1213295745cab45d84ef42b0c4e8f157159180630f7
+- filename: jackal/idcams/executor.py
+  checksum: ac6cf9f4ed5dbf3c10a43d9399ff5e227c263f7edfa6d0c9621ab06b8e425a5d
+- filename: tests/unit/test_idcams_executor.py
+  checksum: 7fc905ad65fcd9127f3723f38ba5ae216179886e11fd6c686e0bc24d97b84116
 version: "1.0"

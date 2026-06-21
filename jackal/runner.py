@@ -12,18 +12,40 @@ from jackal.utilities import UTILITIES
 
 
 class JobRunner:
-    def __init__(self, source_dir: Path, bridge_jar: str):
+    def __init__(
+        self,
+        source_dir: Path,
+        bridge_jar: str,
+        data_dir: Path,
+        copybook_dir: Path,
+    ):
         self._source_dir = source_dir
         self._bridge_jar = bridge_jar
+        self._data_dir = data_dir
+        self._copybook_dir = copybook_dir
 
     def run(self, job: Job, workdir: Path, seeds: dict[str, Path]) -> JobResult:
-        catalog = DatasetCatalog(workdir=workdir)
+        catalog = DatasetCatalog(workdir=workdir, data_dir=self._data_dir)
         for dsn, path in seeds.items():
             catalog.seed(dsn, path)
+        return self.run_job(job, catalog)
+
+    def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
+        """Run a job against a pre-built catalog.
+
+        Use this when multiple jobs must share a single catalog (e.g. the KSDS
+        built by ACCTFILE.jcl must remain visible to READACCT.jcl).
+        """
         return JobResult(steps=tuple(self._run_step(s, catalog) for s in job.steps))
 
     def _run_step(self, step: Step, catalog: DatasetCatalog) -> StepResult:
         if step.pgm in UTILITIES:
             return UTILITIES[step.pgm](step, catalog)
         source = (self._source_dir / f"{step.pgm}.cbl").read_text()
-        return run_cobol_step(step, source, catalog, self._bridge_jar)
+        return run_cobol_step(
+            step,
+            source,
+            catalog,
+            self._bridge_jar,
+            [self._copybook_dir],
+        )

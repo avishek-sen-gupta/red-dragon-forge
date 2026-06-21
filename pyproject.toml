@@ -27,6 +27,9 @@ packages = ["jackal"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "carddemo_e2e: real CardDemo end-to-end; skipped without CARDDEMO_HOME",
+]
 
 [tool.black]
 target-version = ["py313"]

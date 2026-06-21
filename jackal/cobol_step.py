@@ -14,26 +14,53 @@ from jackal.catalog import DatasetCatalog
 from jackal.model import Step
 from jackal.results import StepResult
 
+# DDs whose absence is expected in the emulated environment and should be skipped
+# silently rather than raising an error.
+#   STEPLIB / JOBLIB — load-library DDs: real mainframe load libraries are never
+#   present in the local file tree; the emulator finds programs via source_dir instead.
+OPTIONAL_DDS: frozenset[str] = frozenset({"STEPLIB", "JOBLIB"})
 
-def _file_control(source: str, bridge_jar: str) -> list:
-    parser = ProLeapCobolParser(runner=RealSubprocessRunner(), bridge_jar=bridge_jar)
+
+def _file_control(source: str, bridge_jar: str, copybook_dirs: list[Path]) -> list:
+    parser = ProLeapCobolParser(
+        runner=RealSubprocessRunner(),
+        bridge_jar=bridge_jar,
+        copybook_dirs=copybook_dirs,
+    )
     return parser.parse(source.encode("utf-8")).file_control
 
 
 def _overrides(step: Step, catalog: DatasetCatalog) -> dict[str, Path]:
-    return {dd.ddname: catalog.allocate(dd).path for dd in step.dds}
+    overrides: dict[str, Path] = {}
+    for dd in step.dds:
+        if dd.sysout:
+            continue
+        if dd.ddname in OPTIONAL_DDS:
+            continue
+        overrides[dd.ddname] = catalog.allocate(dd).path
+    return overrides
 
 
 def run_cobol_step(
-    step: Step, source: str, catalog: DatasetCatalog, bridge_jar: str
+    step: Step,
+    source: str,
+    catalog: DatasetCatalog,
+    bridge_jar: str,
+    copybook_dirs: list[Path],
 ) -> StepResult:
     overrides = _overrides(step, catalog)
     provider = RealFileIOProvider(
         base_dir=catalog.workdir,
-        file_control=_file_control(source, bridge_jar),
+        file_control=_file_control(source, bridge_jar, copybook_dirs),
         path_overrides=overrides,
     )
-    run(source, language=Language.COBOL, io_provider=provider, max_steps=500_000)
+    run(
+        source,
+        language=Language.COBOL,
+        io_provider=provider,
+        max_steps=500_000,
+        copybook_dirs=copybook_dirs,
+    )
     for dd in step.dds:
         catalog.dispose(dd)
     return StepResult(name=step.name, return_code=0, ran=True)
