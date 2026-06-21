@@ -10,15 +10,22 @@ dd_sysout:   "//" NAME "DD" "SYSOUT" "=" "*" NEWLINE
 
 comment:   COMMENT NEWLINE
 
-// In-stream data lines (arbitrary text until /*) and the closing delimiter
+// In-stream data lines (arbitrary text until /*) and the closing delimiter.
+// INSTREAM_LINE must NOT match a line starting with /* (that is INSTREAM_END).
 _instream_line: INSTREAM_LINE NEWLINE
-INSTREAM_END:   "/*" /[^\n]*\n/
-INSTREAM_LINE:  /[^\n]+/
+INSTREAM_END:   /\/\*[^\n]*\n/
+INSTREAM_LINE:  /(?!\/\*)[^\n]+/
 
 dd_params: _dd_param (_comma _cont? _dd_param)*
-_dd_param:  dsn_param | disp_param
+_dd_param:  dsn_param | disp_param | unknown_param
 dsn_param:  "DSN" "=" DSNAME
 disp_param: "DISP" "=" ( DISPWORD | "(" DISPWORD ("," DISPWORD)* ")" )
+// Unknown/unsupported DD parameters: KEY=VALUE or KEY=(anything nested).
+// Consumed and discarded.
+unknown_param: NAME "=" ( _uparen_value | UPRIMITIVE )
+_uparen_value: "(" _uparen_content* ")"
+_uparen_content: /[^()]+/ | _uparen_value
+UPRIMITIVE: /[^\s,()\/][^\s,()\/]*/
 
 // comma between params (separate rule so we can intercept continuation)
 _comma: ","

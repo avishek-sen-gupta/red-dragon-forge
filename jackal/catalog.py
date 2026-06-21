@@ -33,7 +33,7 @@ class DatasetCatalog:
         return self._datasets[dsn]
 
     def allocate(self, dd: DD) -> Dataset:
-        if dd.disp.status in (DispStatus.OLD, DispStatus.SHR, DispStatus.MOD):
+        if dd.disp.status in (DispStatus.OLD, DispStatus.SHR):
             if dd.dsn in self._datasets:
                 return self._datasets[dd.dsn]
             candidate = self._data_dir / dd.dsn
@@ -42,6 +42,20 @@ class DatasetCatalog:
                 self._datasets[dd.dsn] = ds
                 return ds
             raise KeyError(dd.dsn)
+        if dd.disp.status is DispStatus.MOD:
+            # MOD: extend if exists, create if not
+            if dd.dsn in self._datasets:
+                return self._datasets[dd.dsn]
+            candidate = self._data_dir / dd.dsn
+            if candidate.exists():
+                ds = Dataset(dsn=dd.dsn, path=candidate)
+                self._datasets[dd.dsn] = ds
+                return ds
+            path = self._workdir / dd.dsn.replace(".", "_")
+            path.write_bytes(b"")
+            ds = Dataset(dsn=dd.dsn, path=path)
+            self._datasets[dd.dsn] = ds
+            return ds
         path = self._workdir / dd.dsn.replace(".", "_")
         path.write_bytes(b"")
         ds = Dataset(dsn=dd.dsn, path=path)

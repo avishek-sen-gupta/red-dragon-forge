@@ -15,13 +15,27 @@ from jackal.model import Step
 from jackal.results import StepResult
 
 
-def _file_control(source: str, bridge_jar: str) -> list:
-    parser = ProLeapCobolParser(runner=RealSubprocessRunner(), bridge_jar=bridge_jar)
+def _file_control(source: str, bridge_jar: str, copybook_dirs: list[Path]) -> list:
+    parser = ProLeapCobolParser(
+        runner=RealSubprocessRunner(),
+        bridge_jar=bridge_jar,
+        copybook_dirs=copybook_dirs,
+    )
     return parser.parse(source.encode("utf-8")).file_control
 
 
 def _overrides(step: Step, catalog: DatasetCatalog) -> dict[str, Path]:
-    return {dd.ddname: catalog.allocate(dd).path for dd in step.dds}
+    overrides: dict[str, Path] = {}
+    for dd in step.dds:
+        if dd.sysout:
+            continue
+        try:
+            overrides[dd.ddname] = catalog.allocate(dd).path
+        except KeyError:
+            # Dataset not in catalog and not on disk: skip (e.g. STEPLIB load lib
+            # that does not exist in the emulated environment).
+            pass
+    return overrides
 
 
 def run_cobol_step(
@@ -34,7 +48,7 @@ def run_cobol_step(
     overrides = _overrides(step, catalog)
     provider = RealFileIOProvider(
         base_dir=catalog.workdir,
-        file_control=_file_control(source, bridge_jar),
+        file_control=_file_control(source, bridge_jar, copybook_dirs),
         path_overrides=overrides,
     )
     run(

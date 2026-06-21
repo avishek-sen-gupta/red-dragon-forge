@@ -28,6 +28,14 @@ class JobRunner:
         catalog = DatasetCatalog(workdir=workdir, data_dir=self._data_dir)
         for dsn, path in seeds.items():
             catalog.seed(dsn, path)
+        return self.run_job(job, catalog)
+
+    def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
+        """Run a job against a pre-built catalog.
+
+        Use this when multiple jobs must share a single catalog (e.g. the KSDS
+        built by ACCTFILE.jcl must remain visible to READACCT.jcl).
+        """
         return JobResult(steps=tuple(self._run_step(s, catalog) for s in job.steps))
 
     def _run_step(self, step: Step, catalog: DatasetCatalog) -> StepResult:
