@@ -37,4 +37,8 @@ fileignoreconfig:
   checksum: 10d0ddcea43ddf2066826da26f3ea0b5242cc2e1e653b247b68feec67e122c4a
 - filename: jackal/idcams/parser.py
   checksum: 844d6729b4cf3414d695b1213295745cab45d84ef42b0c4e8f157159180630f7
+- filename: jackal/idcams/executor.py
+  checksum: ac6cf9f4ed5dbf3c10a43d9399ff5e227c263f7edfa6d0c9621ab06b8e425a5d
+- filename: tests/unit/test_idcams_executor.py
+  checksum: 7fc905ad65fcd9127f3723f38ba5ae216179886e11fd6c686e0bc24d97b84116
 version: "1.0"
