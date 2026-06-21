@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from importlib.resources import files
 
 from lark import Lark, Token, Transformer
@@ -14,31 +12,6 @@ _GRAMMAR = (files("jackal.jcl") / "grammar.lark").read_text()
 _PARSER = Lark(_GRAMMAR, start="start", parser="earley")
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
-
-# JOB statement may span multiple continuation lines (// prefix on next line).
-# The grammar only needs the job name from the JOB card, so we normalise
-# the JOB statement to a single line with just the account string before parsing.
-# A JCL continuation line starts with "//" followed immediately by a space/tab
-# (not a name char or "*"), distinguishing it from EXEC/DD/comment cards.
-_JOB_CONTINUATION = re.compile(
-    r"(//[A-Z#@$][A-Z0-9#@$]*\s+JOB\s+)([^\n]+(?:\n//[ \t][^\n]*)*)",
-    re.MULTILINE,
-)
-
-
-def _strip_job_continuations(text: str) -> str:
-    """Collapse JOB card continuation lines, strip parameters, and remove blank lines."""
-
-    def _normalise_job(m: re.Match[str]) -> str:
-        prefix = m.group(1)
-        body = m.group(2)
-        # The first token is the account string (quoted or unquoted); keep only that.
-        account = body.split(",")[0].strip()
-        return prefix + account + "\n"
-
-    normalised = _JOB_CONTINUATION.sub(_normalise_job, text)
-    # Remove blank lines that the grammar cannot handle
-    return "\n".join(line for line in normalised.splitlines() if line.strip()) + "\n"
 
 
 def _disp_from_words(words: tuple[str, ...]) -> Disp:
@@ -103,7 +76,6 @@ class _Build(Transformer):
 
 
 def parse_jcl(text: str) -> Job:
-    text = _strip_job_continuations(text)
     tree = _PARSER.parse(text if text.endswith("\n") else text + "\n")
     rows = _Build().transform(tree).children
     return _assemble(tuple(r for r in rows if r[0] != "comment"))
