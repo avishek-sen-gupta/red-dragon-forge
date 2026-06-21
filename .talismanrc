@@ -20,7 +20,7 @@ fileignoreconfig:
   # for this generated-file case.)
   ignore_detectors: [filecontent]
 - filename: jackal/jcl/grammar.lark
-  checksum: 9022380c881abd208ec558bae740ee6b1dd8783474b1cf7e56b92addf2e06686
+  checksum: 6ea06a646bb40d9ad69cf177a69c98820eb8129dc1871fd9b18ea8e6e22ff9b3
 - filename: tests/integration/test_pipeline.py
   checksum: dfe16cc2fc75abc709454a41d87e51a20f8c7ea069e467a7ae620a1743b1007e
 - filename: docs/superpowers/specs/2026-06-21-jackal-v2-idcams-design.md

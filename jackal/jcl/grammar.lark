@@ -2,7 +2,8 @@ start: _statement+
 
 _statement: job_card | exec_card | dd_instream | dd_sysout | dd_card | comment
 
-job_card:  "//" NAME "JOB" REST NEWLINE
+job_card:  "//" NAME "JOB" _job_tail? NEWLINE
+_job_tail: JOB_LINE_TAIL (_cont JOB_LINE_TAIL)*
 exec_card: "//" NAME "EXEC" "PGM" "=" NAME REST? NEWLINE
 dd_card:   "//" NAME "DD" dd_params NEWLINE
 dd_instream: "//" NAME "DD" "*" NEWLINE _instream_line* INSTREAM_END
@@ -38,6 +39,10 @@ DISPWORD: "NEW" | "OLD" | "SHR" | "MOD" | "PASS" | "CATLG" | "KEEP" | "DELETE"
 NAME:    /[A-Z#@$][A-Z0-9#@$]*/
 DSNAME:  /[A-Z0-9#@$.]+/
 REST:    /[^\n,]+/
+// JOB card body: captures everything on one physical line (up to newline),
+// including commas, quoted strings, keyword params, and sequence numbers.
+// Multi-line JOB cards are handled via the _cont rule between JOB_LINE_TAIL tokens.
+JOB_LINE_TAIL: /[^\n]+/
 COMMENT: /\/\/\*[^\n]*/
 NEWLINE: /\r?\n/
 
