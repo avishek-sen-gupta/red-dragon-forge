@@ -23,11 +23,17 @@ echo "==> Building the ProLeap bridge JAR (proleap-cobol-parser + bridge)..."
 
 test -f "$JAR" || { echo "ERROR: bridge JAR not produced at $JAR" >&2; exit 1; }
 
+echo "==> Building the JCL bridge JAR (mapa ANTLR grammar + serializer)..."
+( cd "$ROOT/jcl-bridge" && mvn -DskipTests package -q )
+JCL_JAR="$ROOT/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
+test -f "$JCL_JAR" || { echo "ERROR: JCL bridge JAR not produced at $JCL_JAR" >&2; exit 1; }
+
 echo "==> Syncing the Python environment (uv)..."
 ( cd "$ROOT" && uv sync )
 
 echo
 echo "==> Done."
-echo "    Bridge JAR: $JAR"
+echo "    ProLeap bridge JAR: $JAR"
+echo "    JCL bridge JAR:     $JCL_JAR"
 echo "    Run the suite with:"
 echo "      PROLEAP_BRIDGE_JAR=\"$JAR\" uv run pytest -q"

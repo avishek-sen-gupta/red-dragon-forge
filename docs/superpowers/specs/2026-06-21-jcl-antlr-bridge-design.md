@@ -121,7 +121,7 @@ keyed by stable names. Minimal v1 shape:
         {
           "ddname": "SYSIN",
           "dsn": "",
-          "disp": {"status": "SHR", "normal": "KEEP", "abnormal": "KEEP"},
+          "disp_words": ["SHR"],
           "in_stream": ["  DELETE ...", "  DEFINE ..."],
           "sysout": false
         }
