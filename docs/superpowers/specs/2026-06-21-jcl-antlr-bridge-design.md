@@ -33,6 +33,14 @@ is the higher-leverage path.
   (built to a shaded JAR, a gitignored build product like proleap). Not extending
   red-dragon's vendored bridge (wrong ownership — JCL is jackal's concern, not the COBOL
   transpiler's). Not a standalone repo (single-consumer; needless release overhead).
+- **Grammar intake — vendor, NOT a submodule.** Copy the two `.g4` files into the
+  `jcl-bridge` module; do **not** add mapa as a git submodule. Rationale: we need exactly 2
+  files out of a large multi-language repo (COBOL/CICS/DB2/IMS/JCL + Java); MIT permits
+  copying with attribution; the grammar is stable and we may tweak it locally (awkward inside
+  a submodule); and submodules have already caused friction here (the proleap gitlink tripped
+  Talisman and let the v2 e2e silently pass on an un-bumped pointer). Contrast with proleap,
+  which *is* a submodule because red-dragon builds that entire evolving parser from source —
+  the opposite of lifting one stable grammar. Provenance is pinned in-tree (see Attribution).
 - **Raw-parse-first:** run the main JCL grammar on raw source. mapa's separate **JCLPP**
   preprocessor (symbolic/INCLUDE expansion) is **out of scope here** — deferred to the PROC/
   symbolics sub-project (`jackal-1o2.2`) and INCLUDE/JCLLIB (`jackal-1o2.15`), where it earns
@@ -79,8 +87,11 @@ ANTLR) is new to jackal.
 1. **`jcl-bridge/` (Maven module, Java).**
    - `pom.xml`: ANTLR4 plugin (generate lexer/parser from the vendored `.g4`), shade plugin
      (fat JAR with the ANTLR runtime).
-   - `src/main/antlr4/.../JCLLexer.g4`, `JCLParser.g4`: vendored from mapa, **unmodified
-     where possible**, with upstream `LICENSE`/provenance retained.
+   - `src/main/antlr4/.../JCLLexer.g4`, `JCLParser.g4`: **copied (vendored), not a
+     submodule** — the two files lifted from mapa, **unmodified where possible**. Alongside
+     them: mapa's `LICENSE` and a `PROVENANCE` file recording the upstream repo URL and the
+     exact commit SHA pulled from. Any local edit to a `.g4` is noted in `PROVENANCE` so the
+     divergence from upstream is auditable.
    - `JclSerializer.java`: `main` reads JCL from stdin (or a file arg), runs lexer+parser
      from `startRule`, walks the tree with a visitor that emits the **projected JSON**
      (below), prints to stdout. Parse errors → non-zero exit + diagnostic to stderr
@@ -160,8 +171,12 @@ Rules:
   suite + the gated e2e green) before the Lark grammar is deleted/merged.
 
 ## Attribution / licensing
-Vendoring mapa's `.g4` (MIT) requires retaining its `LICENSE` and a provenance note in
-`jcl-bridge/`. Record the upstream repo + commit SHA pinned. MIT permits this with attribution.
+The two `.g4` files are **vendored (copied), not pulled via a git submodule** (see Decisions).
+Vendoring mapa's `.g4` (MIT) requires retaining its `LICENSE` and a `PROVENANCE` note in
+`jcl-bridge/` recording the upstream repo URL + the exact pinned commit SHA (and any local
+edits). MIT permits this with attribution. Re-syncing with upstream is a deliberate manual
+re-copy (diff the two files, re-pin the SHA), not an automatic submodule update — appropriate
+for a stable grammar we consume two files from.
 
 ## Risks & mitigations
 - **JAR-build complexity / CI.** Mitigate: the JAR is a build product (like proleap);
