@@ -16,7 +16,18 @@ def test_cli_runs_utility_job(tmp_path, capsys):
     jcl.write_text(
         "//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=J.X,DISP=(NEW,DELETE,DELETE)\n"
     )
-    rc = main(["run", str(jcl), "--source-dir", str(tmp_path)])
+    rc = main(
+        [
+            "run",
+            str(jcl),
+            "--source-dir",
+            str(tmp_path),
+            "--data-dir",
+            str(tmp_path),
+            "--copybook-dir",
+            str(tmp_path),
+        ]
+    )
     assert rc == 0
     assert "A" in capsys.readouterr().out
 
@@ -28,7 +39,19 @@ def test_cli_console_script_entry(tmp_path, capsys, monkeypatch):
         "//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=J.X,DISP=(NEW,DELETE,DELETE)\n"
     )
     monkeypatch.setattr(
-        sys, "argv", ["jackal", "run", str(jcl), "--source-dir", str(tmp_path)]
+        sys,
+        "argv",
+        [
+            "jackal",
+            "run",
+            str(jcl),
+            "--source-dir",
+            str(tmp_path),
+            "--data-dir",
+            str(tmp_path),
+            "--copybook-dir",
+            str(tmp_path),
+        ],
     )
     rc = main()
     assert rc == 0
