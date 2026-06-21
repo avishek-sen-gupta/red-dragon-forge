@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+import lark.exceptions
 
 from jackal.idcams.parser import parse_idcams
 from jackal.idcams.commands import Delete, DefineCluster, Repro, IfMaxcc
@@ -41,3 +42,10 @@ def test_parse_repro():
     assert parse_idcams("   REPRO INFILE(ACCTDATA) OUTFILE(ACCTVSAM)\n")[0] == Repro(
         infile_dd="ACCTDATA", outfile_dd="ACCTVSAM"
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_unsupported_verb_raises():
+    """Unsupported IDCAMS verbs must fail loud, not silently return empty."""
+    with pytest.raises(lark.exceptions.LarkError):
+        parse_idcams("   LISTCAT ENTRIES(A.B.C)\n")
