@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "jackal",
+  "project_id": "a6006b3e-2d2e-40f0-934c-04c67408344d"
+}
