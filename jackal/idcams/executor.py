@@ -69,7 +69,8 @@ def _handle_repro(
         result = in_drv.read_seq()
         if result.status == "10":
             break
-        assert result.data is not None
+        if result.data is None:
+            raise ValueError("SequentialDriver returned non-EOF status with no data")
         out_drv.write(result.data.encode("latin-1"))
 
     in_drv.close()
@@ -100,5 +101,7 @@ def run_idcams(
             maxcc = max(maxcc, _handle_repro(cmd, dds_by_ddname, catalog))
         elif isinstance(cmd, IfMaxcc):
             maxcc = _handle_if_maxcc(cmd, maxcc)
+        else:
+            raise TypeError(f"Unhandled IDCAMS command: {type(cmd).__name__}")
 
     return maxcc
