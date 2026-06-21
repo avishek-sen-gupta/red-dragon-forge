@@ -35,6 +35,7 @@ htmlcov/
 # .gitignore), but ignore any stray copies/symlinks at the jackal level too.
 *.jar
 **/target/
+dependency-reduced-pom.xml
 
 # --- Editors / IDEs ---
 .idea/
@@ -59,3 +60,6 @@ jackal_*/
 
 # Beads issue tracker DB (kept out of git, per project convention)
 .beads/
+
+# SDD subagent handoff files (briefs/reports/ledger/diffs) — local, not committed
+.sdd/

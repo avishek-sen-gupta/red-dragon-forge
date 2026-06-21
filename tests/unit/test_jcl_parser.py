@@ -1,8 +1,16 @@
-"""Tests for the grammar-based JCL parser."""
+"""Parity tests for the bridge-backed JCL parser."""
+
+import pytest
 
 from tests.covers import NotLanguageFeature, covers
 from jackal.jcl.parser import parse_jcl
 from jackal.model import DispNormal, DispStatus
+
+
+@pytest.fixture(autouse=True)
+def _require_jcl_bridge(jcl_bridge_jar):
+    """parse_jcl now shells to the bridge; ensure JCL_BRIDGE_JAR is set."""
+
 
 JCL = """//PIPE JOB 'demo'
 //STEP1 EXEC PGM=UPCASE
