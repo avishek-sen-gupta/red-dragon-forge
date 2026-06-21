@@ -14,6 +14,12 @@ from jackal.catalog import DatasetCatalog
 from jackal.model import Step
 from jackal.results import StepResult
 
+# DDs whose absence is expected in the emulated environment and should be skipped
+# silently rather than raising an error.
+#   STEPLIB / JOBLIB — load-library DDs: real mainframe load libraries are never
+#   present in the local file tree; the emulator finds programs via source_dir instead.
+OPTIONAL_DDS: frozenset[str] = frozenset({"STEPLIB", "JOBLIB"})
+
 
 def _file_control(source: str, bridge_jar: str, copybook_dirs: list[Path]) -> list:
     parser = ProLeapCobolParser(
@@ -29,12 +35,9 @@ def _overrides(step: Step, catalog: DatasetCatalog) -> dict[str, Path]:
     for dd in step.dds:
         if dd.sysout:
             continue
-        try:
-            overrides[dd.ddname] = catalog.allocate(dd).path
-        except KeyError:
-            # Dataset not in catalog and not on disk: skip (e.g. STEPLIB load lib
-            # that does not exist in the emulated environment).
-            pass
+        if dd.ddname in OPTIONAL_DDS:
+            continue
+        overrides[dd.ddname] = catalog.allocate(dd).path
     return overrides
 
 

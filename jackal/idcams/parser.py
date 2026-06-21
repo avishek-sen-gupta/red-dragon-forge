@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from lark import Lark, Token, Transformer, Tree
+from lark import Lark, Token, Transformer
 
 from jackal.idcams.commands import Command, DefineCluster, Delete, IfMaxcc, Repro
 
@@ -32,10 +32,10 @@ class _Build(Transformer):
         return ("name", c[0])
 
     def keys_param(self, c: list) -> tuple:
-        return ("keys", int(c[0]), int(c[1]))
+        return ("keys", c[0], c[1])
 
     def recordsize_param(self, c: list) -> tuple:
-        return ("recordsize", int(c[0]))
+        return ("recordsize", c[0])
 
     def define_cmd(self, c: list) -> DefineCluster:
         name = next(v for k, *v in c if k == "name")[0]
@@ -52,7 +52,7 @@ class _Build(Transformer):
         return Repro(infile_dd=c[0], outfile_dd=c[1])
 
     def if_cmd(self, c: list) -> IfMaxcc:
-        op, value, set_value = c[0], int(c[1]), int(c[2])
+        op, value, set_value = c[0], c[1], c[2]
         return IfMaxcc(op=op, value=value, set_value=set_value)
 
     def command(self, c: list) -> Command:
