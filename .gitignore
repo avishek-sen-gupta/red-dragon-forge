@@ -56,3 +56,6 @@ jackal_*/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Beads issue tracker DB (kept out of git, per project convention)
+.beads/
