@@ -6,7 +6,7 @@ from tests.covers import covers, NotLanguageFeature
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_iefbr14_allocates_then_deletes(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path)
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = DD(
         ddname="D",
         dsn="J.TMP",

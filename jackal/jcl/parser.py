@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from lark import Lark, Transformer
+from lark import Lark, Token, Transformer
 
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 
@@ -37,8 +37,13 @@ class _Build(Transformer):
     def disp_param(self, c):
         return ("disp", _disp_from_words(tuple(c)))
 
+    def unknown_param(self, c: list) -> tuple:
+        return ("unknown",)
+
     def dd_params(self, c):
-        return dict(item for item in c if isinstance(item, tuple))
+        return dict(
+            item for item in c if isinstance(item, tuple) and item[0] != "unknown"
+        )
 
     def dd_card(self, c):
         name, params = c[0], c[1]
@@ -46,6 +51,19 @@ class _Build(Transformer):
             "dd",
             DD(ddname=name, dsn=params["dsn"], disp=params.get("disp", _DEFAULT_DISP)),
         )
+
+    def dd_instream(self, c):
+        name = c[0]
+        lines = tuple(
+            str(tok)
+            for tok in c
+            if isinstance(tok, Token) and tok.type == "INSTREAM_LINE"
+        )
+        return ("dd", DD(ddname=name, dsn="", disp=_DEFAULT_DISP, in_stream=lines))
+
+    def dd_sysout(self, c):
+        name = c[0]
+        return ("dd", DD(ddname=name, dsn="", disp=_DEFAULT_DISP, sysout=True))
 
     def exec_card(self, c):
         return ("exec", c[0], c[1])
