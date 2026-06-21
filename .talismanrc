@@ -51,4 +51,6 @@ fileignoreconfig:
   checksum: 3a7b7c0cd0dbcc1b4ac3e382c75e46f2c91083fec5b27bcdcc1a129ec9dbd034
 - filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
   checksum: 12f9097ab708452fdd082b061d100b0b01dae2706e9139b4bd4c74fa9a08c934
+- filename: tests/unit/test_jcl_bridge_deserialize.py
+  checksum: 45915f94444bde7b2a3b8bb5660d5a129157018af1546e0cee43a3f4ea0e61d9
 version: "1.0"
