@@ -25,7 +25,11 @@ def _overrides(step: Step, catalog: DatasetCatalog) -> dict[str, Path]:
 
 
 def run_cobol_step(
-    step: Step, source: str, catalog: DatasetCatalog, bridge_jar: str
+    step: Step,
+    source: str,
+    catalog: DatasetCatalog,
+    bridge_jar: str,
+    copybook_dirs: list[Path],
 ) -> StepResult:
     overrides = _overrides(step, catalog)
     provider = RealFileIOProvider(
@@ -33,7 +37,13 @@ def run_cobol_step(
         file_control=_file_control(source, bridge_jar),
         path_overrides=overrides,
     )
-    run(source, language=Language.COBOL, io_provider=provider, max_steps=500_000)
+    run(
+        source,
+        language=Language.COBOL,
+        io_provider=provider,
+        max_steps=500_000,
+        copybook_dirs=copybook_dirs,
+    )
     for dd in step.dds:
         catalog.dispose(dd)
     return StepResult(name=step.name, return_code=0, ran=True)

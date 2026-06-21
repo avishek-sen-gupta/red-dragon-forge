@@ -12,12 +12,22 @@ from jackal.utilities import UTILITIES
 
 
 class JobRunner:
-    def __init__(self, source_dir: Path, bridge_jar: str):
+    def __init__(
+        self,
+        source_dir: Path,
+        bridge_jar: str,
+        data_dir: Path,
+        copybook_dir: Path,
+    ):
         self._source_dir = source_dir
         self._bridge_jar = bridge_jar
+        self._data_dir = data_dir
+        self._copybook_dir = copybook_dir
+        self._last_catalog: DatasetCatalog | None = None
 
     def run(self, job: Job, workdir: Path, seeds: dict[str, Path]) -> JobResult:
-        catalog = DatasetCatalog(workdir=workdir, data_dir=workdir)
+        catalog = DatasetCatalog(workdir=workdir, data_dir=self._data_dir)
+        self._last_catalog = catalog
         for dsn, path in seeds.items():
             catalog.seed(dsn, path)
         return JobResult(steps=tuple(self._run_step(s, catalog) for s in job.steps))
@@ -26,4 +36,10 @@ class JobRunner:
         if step.pgm in UTILITIES:
             return UTILITIES[step.pgm](step, catalog)
         source = (self._source_dir / f"{step.pgm}.cbl").read_text()
-        return run_cobol_step(step, source, catalog, self._bridge_jar)
+        return run_cobol_step(
+            step,
+            source,
+            catalog,
+            self._bridge_jar,
+            [self._copybook_dir],
+        )

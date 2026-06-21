@@ -39,6 +39,8 @@ def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
             _dd("OUTDD", "J.OUT", DispStatus.NEW, DispNormal.PASS),
         ),
     )
-    result = run_cobol_step(step, (CBL / "COPYUP.cbl").read_text(), cat, bridge_jar)
+    result = run_cobol_step(
+        step, (CBL / "COPYUP.cbl").read_text(), cat, bridge_jar, copybook_dirs=[]
+    )
     assert result.ran and result.return_code == 0
     assert cat.resolve("J.OUT").path.read_bytes() == _ebcdic(b"APPLEMANGO")
