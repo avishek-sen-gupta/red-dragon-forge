@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
@@ -36,3 +39,34 @@ def _job_from_json(data: dict) -> Job:
     return Job(
         name=data["name"], steps=tuple(_step_from_json(s) for s in data["steps"])
     )
+
+
+class JclParseError(Exception):
+    """Raised when the jcl-bridge fails to parse JCL."""
+
+
+class JclSubprocessRunner:
+    """Production runner: invoke the bridge JAR, fail loud on non-zero exit."""
+
+    def run(self, command: list[str], input_data: str) -> str:
+        result = subprocess.run(
+            command, input=input_data, capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0:
+            raise JclParseError(
+                f"jcl-bridge failed (exit {result.returncode}): {result.stderr}"
+            )
+        return result.stdout
+
+
+class JclBridgeParser:
+    """Parse JCL by delegating to the jcl-bridge JAR via subprocess."""
+
+    def __init__(self, runner: JclSubprocessRunner, bridge_jar: str):
+        self._runner = runner
+        self._bridge_jar = bridge_jar
+
+    def parse(self, text: str) -> Job:
+        command = ["java", "-jar", self._bridge_jar]
+        out = self._runner.run(command, text)
+        return _job_from_json(json.loads(out))
