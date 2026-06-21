@@ -69,4 +69,10 @@ class JclBridgeParser:
     def parse(self, text: str) -> Job:
         command = ["java", "-jar", self._bridge_jar]
         out = self._runner.run(command, text)
-        return _job_from_json(json.loads(out))
+        try:
+            return _job_from_json(json.loads(out))
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            snippet = out[:120].replace("\n", " ")
+            raise JclParseError(
+                f"bridge returned malformed/incomplete JSON: {e} — output: {snippet!r}"
+            ) from e

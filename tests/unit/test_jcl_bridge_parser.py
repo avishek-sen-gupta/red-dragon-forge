@@ -49,3 +49,19 @@ def test_parse_propagates_bridge_failure():
     runner = _FakeRunner(exc=JclParseError("boom"))
     with pytest.raises(JclParseError):
         JclBridgeParser(runner, "jcl.jar").parse("garbage")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_raises_on_malformed_json():
+    runner = _FakeRunner(out="not json{")
+    with pytest.raises(JclParseError):
+        JclBridgeParser(runner, "jcl.jar").parse("//J JOB\n")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_raises_on_missing_required_key():
+    # step is missing "name" — KeyError in _step_from_json
+    out = json.dumps({"name": "J", "steps": [{"pgm": "P", "dds": []}]})
+    runner = _FakeRunner(out=out)
+    with pytest.raises(JclParseError):
+        JclBridgeParser(runner, "jcl.jar").parse("//J JOB\n")

@@ -53,4 +53,6 @@ fileignoreconfig:
   checksum: 12f9097ab708452fdd082b061d100b0b01dae2706e9139b4bd4c74fa9a08c934
 - filename: tests/unit/test_jcl_bridge_deserialize.py
   checksum: 45915f94444bde7b2a3b8bb5660d5a129157018af1546e0cee43a3f4ea0e61d9
+- filename: jackal/jcl/bridge_parser.py
+  checksum: ea85b50d8bf7f1e68417f6f8652d1872d83b252d59e2766fde9e62f96c4e7d1d
 version: "1.0"
