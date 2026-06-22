@@ -104,3 +104,17 @@ def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
     )
     rc = run_idcams(cmds, (), cat)
     assert rc == 8
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_if_maxcc_all_operators():
+    from jackal.idcams.executor import _handle_if_maxcc
+
+    # predicate true -> set_value
+    assert _handle_if_maxcc(IfMaxcc(op="GE", value=8, set_value=0), 8) == 0
+    assert _handle_if_maxcc(IfMaxcc(op="GT", value=4, set_value=0), 8) == 0
+    assert _handle_if_maxcc(IfMaxcc(op="EQ", value=8, set_value=0), 8) == 0
+    assert _handle_if_maxcc(IfMaxcc(op="NE", value=0, set_value=0), 8) == 0
+    # predicate false -> maxcc unchanged
+    assert _handle_if_maxcc(IfMaxcc(op="GT", value=8, set_value=0), 8) == 8
+    assert _handle_if_maxcc(IfMaxcc(op="EQ", value=4, set_value=0), 8) == 8

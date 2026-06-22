@@ -90,9 +90,11 @@ class DatasetCatalog:
         return True
 
     def dispose(self, dd: DD) -> None:
+        # DELETE disposition removes the dataset; delegate to delete_dsn so a DD
+        # that was never allocated (sysout, optional, or a step that failed before
+        # allocation) is a safe no-op instead of a KeyError.
         if dd.disp.normal is DispNormal.DELETE:
-            self._datasets[dd.dsn].path.unlink()
-            del self._datasets[dd.dsn]
+            self.delete_dsn(dd.dsn)
 
     @property
     def workdir(self) -> Path:

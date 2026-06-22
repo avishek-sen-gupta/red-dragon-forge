@@ -48,6 +48,10 @@ def run_cobol_step(
     bridge_jar: str,
     copybook_dirs: list[Path],
 ) -> StepResult:
+    if not bridge_jar:
+        raise ValueError(
+            f"PROLEAP_BRIDGE_JAR not set; required to run COBOL step {step.name!r}"
+        )
     overrides = _overrides(step, catalog)
     provider = RealFileIOProvider(
         base_dir=catalog.workdir,

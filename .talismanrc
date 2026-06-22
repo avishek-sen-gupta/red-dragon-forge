@@ -55,4 +55,6 @@ fileignoreconfig:
   checksum: 45915f94444bde7b2a3b8bb5660d5a129157018af1546e0cee43a3f4ea0e61d9
 - filename: jackal/jcl/bridge_parser.py
   checksum: ea85b50d8bf7f1e68417f6f8652d1872d83b252d59e2766fde9e62f96c4e7d1d
+- filename: tests/unit/test_cli.py
+  checksum: e4e940c7334a4d40589b62e780ba5035efa4017f3c38971b55df04485085b731
 version: "1.0"
