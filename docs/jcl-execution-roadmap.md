@@ -156,6 +156,6 @@ right layer, file it under `jackal-1o2`, and link it here. The source of truth f
 Beads; this doc is the human-readable map over it.
 
 The Beads graph itself (issues + all dependency edges) is version-controlled at
-`beads/issues.jsonl` — regenerate it with `scripts/export-issues.sh` before committing issue
+`beads/issues.jsonl` — regenerate it with `bd export -o beads/issues.jsonl` before committing issue
 changes (see `beads/README.md`). On a fresh clone, `bd import beads/issues.jsonl` rebuilds the
 local DB; then `bd list --parent jackal-1o2` / `bd dep tree` give the live view.
