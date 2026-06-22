@@ -48,8 +48,13 @@ def _compile_cics_module(source: bytes, parser: Any, strategy: Any, path: Path) 
     from interpreter.project.compiler import build_export_table
     from interpreter.project.imports import extract_imports
     from interpreter.project.types import ModuleUnit
+    from cics.cics_visitor import parse_exec_cics_text
 
-    frontend = CobolFrontend(cobol_parser=parser, extension_strategies=[strategy])
+    frontend = CobolFrontend(
+        cobol_parser=parser,
+        extension_strategies=[strategy],
+        cics_text_parser=parse_exec_cics_text,
+    )
     instructions = frontend.lower(source)
     exports = build_export_table(
         instructions,
