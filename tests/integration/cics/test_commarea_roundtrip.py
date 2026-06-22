@@ -117,7 +117,11 @@ def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
         context_holder=context_holder, result_holder=result_holder
     )
     source = apply_cics_prepass(COBOL_COMMAREA).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy], cics_text_parser=parse_exec_cics_text)
+    frontend = CobolFrontend(
+        cobol_parser=cobol_parser,
+        extension_strategies=[strategy],
+        cics_text_parser=parse_exec_cics_text,
+    )
     instructions = frontend.lower(source)
 
     # A LoadRegion must be emitted (the COMMAREA field copy-in).
@@ -149,7 +153,11 @@ def test_return_commarea_literal_falls_back_to_const(cobol_parser):
         context_holder=context_holder, result_holder=result_holder
     )
     source = apply_cics_prepass(COBOL_RETURN_LIT).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy], cics_text_parser=parse_exec_cics_text)
+    frontend = CobolFrontend(
+        cobol_parser=cobol_parser,
+        extension_strategies=[strategy],
+        cics_text_parser=parse_exec_cics_text,
+    )
     instructions = frontend.lower(source)
 
     call = next(

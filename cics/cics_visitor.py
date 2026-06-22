@@ -328,7 +328,9 @@ _CONTEXT_TO_VERB: dict[str, str] = {
 
 def _get_verb(cmd_ctx) -> str:
     class_name = type(cmd_ctx).__name__
-    rule_name = class_name[:-len("Context")] if class_name.endswith("Context") else class_name
+    rule_name = (
+        class_name[: -len("Context")] if class_name.endswith("Context") else class_name
+    )
     if rule_name in _CONTEXT_TO_VERB:
         return _CONTEXT_TO_VERB[rule_name]
     # SPI Inquire* family: resource name goes into opts, not into the verb
@@ -385,7 +387,9 @@ def _parts_to_operand(parts: list) -> CicsOperand:
         return CicsOperand("", False)
 
     # Single quoted string literal
-    if len(significant) == 1 and isinstance(significant[0], CICSzParser.ArgStringContext):
+    if len(significant) == 1 and isinstance(
+        significant[0], CICSzParser.ArgStringContext
+    ):
         raw = significant[0].ARG_STRING().getText()
         return CicsOperand(text=raw[1:-1], is_literal=True)
 
@@ -399,7 +403,9 @@ def _parts_to_operand(parts: list) -> CicsOperand:
         refmod = significant[1]
         start = _build_refmod_side(refmod.argRefmodSide(0))
         length = _build_refmod_side(refmod.argRefmodSide(1))
-        return CicsOperand(text=base, is_literal=False, ref_mod_start=start, ref_mod_length=length)
+        return CicsOperand(
+            text=base, is_literal=False, ref_mod_start=start, ref_mod_length=length
+        )
 
     # Subscripted: ARG_CHARS base followed by one or more ArgNested subscripts
     if (

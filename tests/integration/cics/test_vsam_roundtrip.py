@@ -120,7 +120,11 @@ def test_vsam_write_then_read_round_trips(cobol_parser):
         vsam_engine=_engine(),
     )
     source = apply_cics_prepass(COBOL_VSAM).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy], cics_text_parser=parse_exec_cics_text)
+    frontend = CobolFrontend(
+        cobol_parser=cobol_parser,
+        extension_strategies=[strategy],
+        cics_text_parser=parse_exec_cics_text,
+    )
     program = _link_single_cobol(source, frontend)
 
     result = run_cics(
@@ -182,7 +186,11 @@ def test_vsam_dataset_keyword_and_dataname_resolution(cobol_parser):
         vsam_engine=_engine(),
     )
     source = apply_cics_prepass(COBOL_VSAM_DATASET).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy], cics_text_parser=parse_exec_cics_text)
+    frontend = CobolFrontend(
+        cobol_parser=cobol_parser,
+        extension_strategies=[strategy],
+        cics_text_parser=parse_exec_cics_text,
+    )
     program = _link_single_cobol(source, frontend)
 
     result = run_cics(
