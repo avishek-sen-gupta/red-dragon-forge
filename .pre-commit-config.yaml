@@ -34,6 +34,13 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: import-linter
+        name: import-linter architectural contracts
+        entry: bash -c 'uv run --no-sync lint-imports'
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: tests
         name: Full test suite (jackal + COBOL e2e via red-dragon)
         entry: bash -c 'PROLEAP_BRIDGE_JAR="$(git rev-parse --show-toplevel)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar" JCL_BRIDGE_JAR="$(git rev-parse --show-toplevel)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar" uv run --no-sync pytest -x -q'

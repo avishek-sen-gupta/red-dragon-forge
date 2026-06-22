@@ -1,0 +1,35 @@
+[importlinter]
+root_packages =
+    jackal
+
+[importlinter:contract:layered-architecture]
+name = Layers: orchestration -> execution -> catalog -> model
+type = layers
+layers =
+    jackal.cli
+    jackal.runner
+    jackal.cobol_step : jackal.utilities
+    jackal.catalog
+    jackal.model
+
+[importlinter:contract:jcl-idcams-independence]
+name = JCL parser and IDCAMS subsystems must not import each other
+type = independence
+modules =
+    jackal.jcl
+    jackal.idcams
+
+[importlinter:contract:model-results-are-leaves]
+name = model and results are leaf vocabulary — must not import other jackal modules
+type = forbidden
+source_modules =
+    jackal.model
+    jackal.results
+forbidden_modules =
+    jackal.catalog
+    jackal.runner
+    jackal.cli
+    jackal.cobol_step
+    jackal.utilities
+    jackal.idcams
+    jackal.jcl
