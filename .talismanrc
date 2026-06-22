@@ -19,6 +19,11 @@ fileignoreconfig:
   # outright rather than churn this file. (Deviates from talismanrc append-only
   # for this generated-file case.)
   ignore_detectors: [filecontent]
+- filename: beads/issues.jsonl
+  # Generated snapshot of the Beads issue graph (scripts/export-issues.sh).
+  # Regenerated on every issue change, so a checksum is self-defeating; ignore
+  # content detection like uv.lock.
+  ignore_detectors: [filecontent]
 - filename: jackal/jcl/grammar.lark
   checksum: 6ea06a646bb40d9ad69cf177a69c98820eb8129dc1871fd9b18ea8e6e22ff9b3
 - filename: tests/integration/test_pipeline.py
@@ -57,4 +62,8 @@ fileignoreconfig:
   checksum: ea85b50d8bf7f1e68417f6f8652d1872d83b252d59e2766fde9e62f96c4e7d1d
 - filename: tests/unit/test_cli.py
   checksum: e4e940c7334a4d40589b62e780ba5035efa4017f3c38971b55df04485085b731
+- filename: beads/README.md
+  checksum: b0852b2711990fe8276d50cc7956860af7416debc7323e68b438d5200c6878b1
+- filename: scripts/export-issues.sh
+  checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
 version: "1.0"
