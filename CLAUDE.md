@@ -70,7 +70,7 @@ already use `--no-sync`. **Caveat:** after changing dependencies or on a fresh c
 git source of truth. **Whenever a change touches issues, regenerate and stage the snapshot
 BEFORE committing** — a deliberate manual step, NOT a git hook:
 ```bash
-scripts/export-issues.sh && git add beads/issues.jsonl
+bd export -o beads/issues.jsonl && git add beads/issues.jsonl
 ```
 `core.hooksPath` is the default `.git/hooks` (the pre-commit framework + the globally-seeded
 Talisman `pre-commit.legacy` run there). On a fresh clone, `bd import beads/issues.jsonl`
