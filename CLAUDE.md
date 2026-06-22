@@ -90,4 +90,13 @@ export PROLEAP_BRIDGE_JAR="$(pwd)/vendor/red-dragon/proleap-bridge/target/prolea
 export JCL_BRIDGE_JAR="$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
 export CARDDEMO_HOME="$HOME/code/aws-mainframe-carddemo/app"
 ```
+
+**Always invoke tools with `uv run --no-sync`** (e.g. `uv run --no-sync python -m black jackal tests scripts`,
+`uv run --no-sync pytest`). `red-dragon` is an **editable path dependency** (`vendor/red-dragon`);
+a plain `uv run` re-checks the lockfile and **rebuilds the large red-dragon editable wheel**
+whenever that submodule changed — a multi-second-to-minute stall borne by the first `uv run`
+(historically the Black hook). `--no-sync` skips that; red-dragon's Python is still picked up
+live via its editable `.pth`. The pre-commit hooks already use `--no-sync`. **Caveat:** after
+changing dependencies (pyproject/uv.lock) or on a fresh clone, run `uv sync` (or `./build.sh`)
+once to refresh the env — the hooks no longer do it for you.
 Talisman runs in the hook: for generated/churning files use `.talismanrc` `ignore_detectors: [filecontent]` (like `uv.lock`, `beads/issues.jsonl`); for stable files append a by-checksum entry **before** the `version:` line (append-only — never modify existing entries).
