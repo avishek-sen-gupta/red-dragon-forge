@@ -153,4 +153,9 @@ DD concatenation (1o2.5) supports STEPLIB chains once PDS (1o2.16) lands
 This is a living roadmap. When an issue closes, flip its 🔶 to ✅ and note the merge.
 When a new gap is discovered (typically while trying to run a new real job), add it to the
 right layer, file it under `jackal-1o2`, and link it here. The source of truth for status is
-Beads (`bd list --parent jackal-1o2`); this doc is the human-readable map over it.
+Beads; this doc is the human-readable map over it.
+
+The Beads graph itself (issues + all dependency edges) is version-controlled at
+`beads/issues.jsonl` — regenerate it with `scripts/export-issues.sh` before committing issue
+changes (see `beads/README.md`). On a fresh clone, `bd import beads/issues.jsonl` rebuilds the
+local DB; then `bd list --parent jackal-1o2` / `bd dep tree` give the live view.
