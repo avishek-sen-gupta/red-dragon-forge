@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from interpreter.cobol.cobol_frontend import CobolFrontend
+from cics.cics_visitor import parse_exec_cics_text
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
@@ -119,7 +120,7 @@ def test_vsam_write_then_read_round_trips(cobol_parser):
         vsam_engine=_engine(),
     )
     source = apply_cics_prepass(COBOL_VSAM).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy])
+    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy], cics_text_parser=parse_exec_cics_text)
     program = _link_single_cobol(source, frontend)
 
     result = run_cics(
@@ -181,7 +182,7 @@ def test_vsam_dataset_keyword_and_dataname_resolution(cobol_parser):
         vsam_engine=_engine(),
     )
     source = apply_cics_prepass(COBOL_VSAM_DATASET).encode()
-    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy])
+    frontend = CobolFrontend(cobol_parser=cobol_parser, extension_strategies=[strategy], cics_text_parser=parse_exec_cics_text)
     program = _link_single_cobol(source, frontend)
 
     result = run_cics(

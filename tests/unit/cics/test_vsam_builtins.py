@@ -23,7 +23,7 @@ from cics.builtins.vsam import (
 )
 from interpreter.vm.vm_types import VMState, StackFrame, BuiltinResult
 from interpreter.func_name import FuncName
-from interpreter.cobol.cics_parser import CicsOperand
+from interpreter.cobol.cobol_statements import CicsOperand
 from interpreter.var_name import VarName
 from interpreter.address import Address
 from interpreter.types.typed_value import typed

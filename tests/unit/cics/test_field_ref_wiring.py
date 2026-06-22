@@ -7,7 +7,7 @@ from cics.strategy import (
     emit_copy_back_str,
     emit_resp_writeback,
 )
-from interpreter.cobol.cics_parser import CicsOperand
+from interpreter.cobol.cobol_statements import CicsOperand
 from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
 from interpreter.cobol.field_resolution import ResolvedFieldRef

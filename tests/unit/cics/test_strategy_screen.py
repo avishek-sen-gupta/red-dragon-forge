@@ -34,7 +34,7 @@ def test_strategy_without_bms_still_constructs():
 def test_send_map_lowers_to_call_function():
     from interpreter.instructions import CallFunction
     from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cics_parser import CicsOperand
+    from interpreter.cobol.cobol_statements import CicsOperand
     from interpreter.register import Register
 
     class _Ctx:
@@ -72,7 +72,7 @@ def test_send_map_lowering_passes_base_field_names():
     and passes the base names as a Const list arg (args[1])."""
     from interpreter.instructions import CallFunction, Const
     from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cics_parser import CicsOperand
+    from interpreter.cobol.cobol_statements import CicsOperand
     from interpreter.cobol.data_layout import DataLayout, FieldLayout
     from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
@@ -148,7 +148,7 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
     """RECEIVE MAP('COSGN0A') with no INTO -> group COSGN0AI (map name + 'I')."""
     from interpreter.instructions import Const, CallFunction
     from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cics_parser import CicsOperand
+    from interpreter.cobol.cobol_statements import CicsOperand
     from interpreter.cobol.data_layout import DataLayout, FieldLayout
     from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout

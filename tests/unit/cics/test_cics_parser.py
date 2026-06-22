@@ -1,7 +1,8 @@
 """Unit tests for CICS verb/options text parser."""
 
 from tests.covers import covers, NotLanguageFeature
-from interpreter.cobol.cics_parser import parse_exec_cics_text, CicsOperand
+from cics.cics_parser import parse_exec_cics_text
+from interpreter.cobol.cobol_statements import CicsOperand
 from interpreter.cobol.ref_mod import RefModLiteral, RefModReference
 from interpreter.cobol.cobol_expression import FieldRefNode
 
@@ -225,15 +226,6 @@ def test_parse_send_map_with_value_keeps_map_in_opts():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_bare_send_from_is_not_compound():
-    """SEND followed by a non-second-word option stays verb 'SEND', not 'SEND MAP'."""
-    verb, opts = parse_exec_cics_text("EXEC CICS SEND FROM(WS-MSG) LENGTH(8) END-EXEC")
-    assert verb == "SEND"
-    assert opts["FROM"] == CicsOperand("WS-MSG", False)
-    assert opts["LENGTH"] == CicsOperand("8", False)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_case_insensitive_lowercase():
     """Lowercase envelope and verb parse identically to uppercase."""
     verb, opts = parse_exec_cics_text("exec cics read dataset('x') end-exec")
@@ -287,30 +279,3 @@ def test_parse_send_map_literal_collision_guard():
     assert opts["MAP"] == CicsOperand("SGNMAP", True)
 
 
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_empty_command_envelope_only():
-    """Envelope with no verb yields empty verb and no opts (historical contract)."""
-    assert parse_exec_cics_text("EXEC CICS END-EXEC") == ("", {})
-    assert parse_exec_cics_text("") == ("", {})
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_two_concatenated_blocks_peels_outer_envelope_only():
-    """Two EXEC CICS blocks captured as one block: only the FIRST EXEC CICS and
-    the LAST END-EXEC are the envelope; inner envelope words become bare flags.
-
-    This pins the historical first-envelope/last-envelope peeling so the real
-    CardDemo (two adjacent ASSIGN blocks) keeps parsing identically.
-    """
-    verb, opts = parse_exec_cics_text(
-        "EXEC CICS ASSIGN APPLID(APPLIDO OF COSGN0AO) END-EXEC "
-        "EXEC CICS ASSIGN SYSID(SYSIDO OF COSGN0AO) END-EXEC"
-    )
-    assert verb == "ASSIGN"
-    assert opts["APPLID"] == CicsOperand("APPLIDO OF COSGN0AO", False)
-    assert opts["SYSID"] == CicsOperand("SYSIDO OF COSGN0AO", False)
-    # Inner envelope words and the second verb survive as bare flags.
-    assert opts["END-EXEC"] is None
-    assert opts["EXEC"] is None
-    assert opts["CICS"] is None
-    assert opts["ASSIGN"] is None

@@ -13,15 +13,6 @@ that the JCL deck was streamed to the TD queue.
   Turn 4: first display (empty form).
   Turn 5: select Custom + dates, CONFIRM blank -> 'Please confirm to print...'.
   Turn 6: resend + CONFIRM='Y' -> WRITEQ TD loop -> 'Custom report submitted...'.
-
-KNOWN LIMITATION: cicada does not yet dispatch EXEC CICS WRITEQ TD. The Lark
-grammar surfaces the verb as ``WRITEQ`` (with ``TD`` as an option), but the
-strategy only registers the composite key ``"WRITEQ TD"`` — so every WRITEQ falls
-through to "unimplemented verb, no IR emitted". The JCL-submission loop therefore
-runs but writes nothing, and ``td_queue`` stays empty. This test asserts the
-user-visible flow (the confirm prompt and the success message) and pins the
-no-op as the current behaviour; making WRITEQ TD actually enqueue is tracked
-separately.
 """
 
 from __future__ import annotations
@@ -220,8 +211,8 @@ def _last(screens, mapname):
 def test_real_carddemo_custom_report_submitted(tmp_path, bridge_jar):
     """Custom report, fixed date range: select -> confirm prompt -> CONFIRM='Y'
     -> 'Custom report submitted for printing'. The date range is validated via
-    CSUTLDTC; the report-submission loop runs to completion. ``td_queue`` stays
-    empty because WRITEQ TD is not yet dispatched (see module docstring)."""
+    CSUTLDTC; the report-submission loop runs to completion and enqueues JCL
+    lines to ``td_queue`` via WRITEQ TD."""
     region, screen_q, td_queue = _drive_to_reports(tmp_path, bridge_jar)
 
     # Turn 4: first display (empty form).
@@ -251,5 +242,5 @@ def test_real_carddemo_custom_report_submitted(tmp_path, bridge_jar):
     assert r6.kind == DispatchKind.RETURN_TRANSID
     assert (r6.transid or "").strip() == "CR00"
 
-    # Current behaviour: WRITEQ TD is undispatched, so nothing is enqueued.
-    assert td_queue == []
+    # WRITEQ TD is now dispatched; JCL lines are streamed to the TD queue.
+    assert len(td_queue) > 0, f"expected JCL lines in td_queue, got: {td_queue}"
