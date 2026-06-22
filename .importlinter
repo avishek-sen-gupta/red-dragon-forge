@@ -1,0 +1,25 @@
+[importlinter]
+root_packages =
+    squall
+
+[importlinter:contract:parser-backends-independence]
+name = SQL parser and DB backends must not import each other
+type = independence
+modules =
+    squall.parser
+    squall.backends
+
+[importlinter:contract:vocabulary-leaves]
+name = backend and parser.sql_model are leaf vocabulary — must not import other squall modules
+type = forbidden
+source_modules =
+    squall.backend
+    squall.parser.sql_model
+forbidden_modules =
+    squall.binding
+    squall.builtins
+    squall.backends
+    squall.parser.parse
+    squall.preprocess
+    squall.strategy
+    squall.dclgen
