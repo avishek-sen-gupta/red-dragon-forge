@@ -15,7 +15,7 @@ repos:
 
       - id: black
         name: Black (auto-fix)
-        entry: bash -c 'uv run --no-sync python -m black jackal tests scripts && git add -u'
+        entry: bash -c 'uv run --no-sync python -m black jackal tests && git add -u'
         language: system
         pass_filenames: false
         always_run: true
