@@ -19,7 +19,7 @@ deliberate pre-commit *step*, NOT a git hook (a hook regenerating the file mid-c
 leave the staged snapshot stale / fight pre-commit's stash-restore):
 
 ```bash
-scripts/export-issues.sh && git add beads/issues.jsonl
+bd export -o beads/issues.jsonl && git add beads/issues.jsonl
 ```
 
 The export is sorted by issue id with sorted keys, so diffs show only real changes.
