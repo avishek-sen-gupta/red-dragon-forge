@@ -61,3 +61,33 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
+
+## Build & Commit Process (this repo's conventions)
+
+These override the managed Beads block's defaults where they differ.
+
+### Issue graph is version-controlled — export before committing issue changes
+This repo does **not** use Dolt remote sync or `.beads/issues.jsonl`. Instead:
+- `.beads/` (Dolt working DB) is **gitignored**.
+- `beads/issues.jsonl` (note: no leading dot) is the **tracked** snapshot — the git source of truth for the issue graph (issues + all dependency edges).
+
+**Whenever a change touches issues (create/update/close/dep edits), regenerate and stage the snapshot BEFORE committing** — this is a deliberate manual step, NOT a git hook:
+```bash
+scripts/export-issues.sh && git add beads/issues.jsonl
+```
+On a fresh clone, `bd import beads/issues.jsonl` rebuilds the local DB. See `beads/README.md`
+and the roadmap `docs/jcl-execution-roadmap.md`.
+
+### Building the bridge JARs
+`./build.sh` builds the vendored red-dragon ProLeap COBOL bridge **and** the `jcl-bridge`
+(ANTLR JCL) JAR — both are gitignored build products. Rebuild after bumping red-dragon or
+changing Java/grammar sources.
+
+### Running tests / committing (the pre-commit hook runs the full suite)
+Export these so the suite + gated e2e pass (the pre-commit hook needs them too):
+```bash
+export PROLEAP_BRIDGE_JAR="$(pwd)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
+export JCL_BRIDGE_JAR="$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
+export CARDDEMO_HOME="$HOME/code/aws-mainframe-carddemo/app"
+```
+Talisman runs in the hook: for generated/churning files use `.talismanrc` `ignore_detectors: [filecontent]` (like `uv.lock`, `beads/issues.jsonl`); for stable files append a by-checksum entry **before** the `version:` line (append-only — never modify existing entries).
