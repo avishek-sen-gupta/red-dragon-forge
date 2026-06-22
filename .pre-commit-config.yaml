@@ -15,28 +15,28 @@ repos:
 
       - id: black
         name: Black (auto-fix)
-        entry: bash -c 'uv run python -m black . && git add -u'
+        entry: bash -c 'uv run --no-sync python -m black cics tests && git add -u'
         language: system
         pass_filenames: false
         always_run: true
 
       - id: python-fp-lint
         name: Python FP lint (warnings only)
-        entry: bash -c 'uv run python -m python_fp_lint check cics/ || true'
+        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cics/ || true'
         language: system
         pass_filenames: false
         always_run: true
 
       - id: pyright
         name: Pyright type check (warnings only)
-        entry: bash -c 'uv run pyright || true'
+        entry: bash -c 'uv run --no-sync pyright || true'
         language: system
         pass_filenames: false
         always_run: true
 
       - id: import-linter
         name: import-linter architectural contracts
-        entry: uv run lint-imports
+        entry: bash -c 'uv run --no-sync lint-imports'
         language: system
         pass_filenames: false
         always_run: true

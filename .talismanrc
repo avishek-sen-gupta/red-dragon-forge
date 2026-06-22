@@ -12,6 +12,14 @@ fileignoreconfig:
   checksum: dff4a8eb5dcc8fef6916b68b2e668f6f29bee0801a408ff629c09ca21abe1f8b
 - filename: .beads/interactions.jsonl
   checksum: 8be0aa527b9399ab37d6be3a6ff37732a471d982fcaa81e0dec3e04e5d1bdd62
+- filename: beads/issues.jsonl
+  # Generated snapshot of the Beads issue graph (scripts/export-issues.sh) — churns on
+  # every issue change, so a checksum is self-defeating; ignore content like uv.lock.
+  ignore_detectors: [filecontent]
+- filename: beads/README.md
+  checksum: f1bdf68626eff5a61bdecf77167d00a537ac77e3c5df4a396439de187ee8fe97
+- filename: scripts/export-issues.sh
+  checksum: ead0f337231ac082c2ba2f6ea113f80dbba9635a345e1ca91abd5731ffe37fdc
 version: "1.0"
 threshold: high
 version: "1.0"

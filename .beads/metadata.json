@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "cicada",
-  "project_id": "ade33aac-33bd-483e-aef9-9ec3f16d13a7"
-}

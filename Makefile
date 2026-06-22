@@ -15,7 +15,7 @@ HLASM_EXPORT       ?= $(CURDIR)/third-party/che-che4z-lsp-for-hlasm-fork/build/b
 CARDDEMO_HOME      ?= $(CURDIR)/third-party/carddemo/app
 
 E2E_ENV = PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) CARDDEMO_HOME=$(CARDDEMO_HOME)
-PYTEST       = uv run python -m pytest
+PYTEST       = uv run --no-sync python -m pytest
 PYTEST_PATHS ?= tests/
 PYTEST_ARGS  ?=
 
@@ -83,7 +83,7 @@ test-one:
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 fmt:
-	uv run python -m black .
+	uv run --no-sync python -m black cics tests
 
 lint:
-	uv run lint-imports
+	uv run --no-sync lint-imports
