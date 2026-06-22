@@ -63,3 +63,6 @@ jackal_*/
 
 # SDD subagent handoff files (briefs/reports/ledger/diffs) — local, not committed
 .sdd/
+
+# Claude Code local settings (machine-specific hooks drift in here)
+.claude/settings.json
