@@ -14,9 +14,11 @@ from jackal.results import StepResult
 def iefbr14(step: Step, catalog: DatasetCatalog) -> StepResult:
     """No-op program: its only effect is the DD allocate/dispose lifecycle."""
     for dd in step.dds:
-        catalog.allocate(dd)
+        if not dd.sysout:
+            catalog.allocate(dd)
     for dd in step.dds:
-        catalog.dispose(dd)
+        if not dd.sysout:
+            catalog.dispose(dd)
     return StepResult(name=step.name, return_code=0, ran=True)
 
 
