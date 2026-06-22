@@ -277,5 +277,3 @@ def test_parse_send_map_literal_collision_guard():
     """g5gx guard: a quoted MAP literal stays is_literal=True."""
     _, opts = parse_exec_cics_text("EXEC CICS SEND MAP('SGNMAP') END-EXEC")
     assert opts["MAP"] == CicsOperand("SGNMAP", True)
-
-
