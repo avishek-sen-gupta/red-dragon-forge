@@ -55,8 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         data_dir=data_dir,
         copybook_dir=copybook_dir,
     )
-    workdir = Path(tempfile.mkdtemp(prefix="jackal_"))
-    result = runner.run(job, workdir=workdir, seeds=seeds)
-    for s in result.steps:
-        print(f"{s.name}: RC={s.return_code} ran={s.ran}")
-    return 0 if all(s.return_code == 0 for s in result.steps) else 1
+    with tempfile.TemporaryDirectory(prefix="jackal_") as wd:
+        result = runner.run(job, workdir=Path(wd), seeds=seeds)
+        for s in result.steps:
+            print(f"{s.name}: RC={s.return_code} ran={s.ran}")
+        return 0 if all(s.return_code == 0 for s in result.steps) else 1

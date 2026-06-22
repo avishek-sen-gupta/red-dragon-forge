@@ -65,3 +65,18 @@ def test_allocate_ksds(tmp_path):
     assert ds.org is DatasetOrg.KSDS and ds.key_length == 11 and ds.record_size == 300
     assert ds.path.exists()
     assert cat.resolve("A.B.KSDS").org is DatasetOrg.KSDS
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dispose_delete_of_missing_dsn_is_noop(tmp_path):
+    # DISP=(...,DELETE) on a DSN that was never allocated must not raise.
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat.dispose(_dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_mod_creates_when_absent(tmp_path):
+    # MOD on a DSN absent from catalog + data_dir creates an empty backing file.
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    ds = cat.allocate(_dd("J.MOD", DispStatus.MOD))
+    assert ds.path.exists() and ds.path.read_bytes() == b""
