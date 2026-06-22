@@ -73,7 +73,6 @@ Thumbs.db
 target/
 *.class
 .claude/
-.pre-commit-config.yaml
 
 # Beads / Dolt files (added by bd init)
 .dolt/

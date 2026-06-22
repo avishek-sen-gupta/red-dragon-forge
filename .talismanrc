@@ -16,7 +16,9 @@ fileignoreconfig:
 - filename: vendor/red-dragon
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
 - filename: uv.lock
-  checksum: 3b4702d8ecafeb89343f7b1002c458446a4fb4b2cb6d3e15762e678ad7ec1e6b
+  # Generated lockfile — content changes on every dependency update, so a checksum
+  # entry is self-defeating; ignore content detection (parity with jackal/cicada).
+  ignore_detectors: [filecontent]
 - filename: squall/parser/parse.py
   checksum: b47afab720fcafb14066fa29dd3726cc8b0b067792e8b9053ccb52ce9c16f0b9
 - filename: tests/unit/test_parse.py
@@ -53,4 +55,12 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: tests/integration/test_db2_static_e2e.py
   ignore_detectors: [filecontent]
+- filename: beads/issues.jsonl
+  # Generated snapshot of the Beads issue graph (scripts/export-issues.sh) — churns on
+  # every issue change, so a checksum is self-defeating; ignore content like uv.lock.
+  ignore_detectors: [filecontent]
+- filename: beads/README.md
+  checksum: c607cb797a6144af6d977bd82ccebbfd4551da70fc240eb9b216b54b71ef9a7f
+- filename: scripts/export-issues.sh
+  checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
 version: "1.0"

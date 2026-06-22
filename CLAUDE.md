@@ -60,12 +60,13 @@ cd vendor/red-dragon/proleap-bridge && ./build.sh && cd -
 ## Tests
 
 ```bash
-uv run python -m pytest tests/unit/ -x -q        # unit tests (binding engine vs a fake backend; no JAR)
-uv run python -m pytest tests/integration/ -x -q # integration tests (real VM + SQLite; needs ProLeap JAR)
+uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests (binding engine vs a fake backend; no JAR)
+uv run --no-sync python -m pytest tests/integration/ -x -q # integration tests (real VM + SQLite; needs ProLeap JAR)
 ```
 
-Quality gates (pre-commit, mirroring RedDragon/cicada): `black` (format), **`python_fp_lint`**
-(enforces the FP tenet), `pyright` (types), and the test suite.
+Quality gates (pre-commit, mirroring RedDragon/cicada/jackal): `black` (format), **`python_fp_lint`**
+(enforces the FP tenet), `pyright` (types), **`import-linter`** (architectural contracts, see
+`.importlinter`), and the test suite.
 
 ## Key invariants
 
@@ -104,8 +105,29 @@ Beads DB) is the separate clone at `~/code/red-dragon`.
 - Unit tests go in `tests/unit/`, integration tests in `tests/integration/`.
 - Unit-test the binding engine against a **fake backend** (proves the generic layer in
   isolation); integration tests exercise real VM execution against the SQLite backend.
-- Run the full test suite before committing: `uv run python -m pytest tests/ -x -q`.
-- Format: `uv run python -m black .`
+- Run the full test suite before committing: `uv run --no-sync python -m pytest tests/ -x -q`.
+- Format: `uv run --no-sync python -m black squall tests`
+
+## Build & Commit Process (this repo's conventions)
+
+**Always invoke tools with `uv run --no-sync`** (pytest, black, lint-imports). `red-dragon` is
+an **editable path dependency** (`vendor/red-dragon`); a plain `uv run` re-checks the lockfile
+and **rebuilds the large red-dragon editable wheel** whenever that submodule changed — a stall
+borne by the first `uv run` (historically the Black pre-commit hook). `--no-sync` skips that;
+red-dragon's Python is still picked up live via its editable `.pth`. The pre-commit hooks
+already use `--no-sync`. **Caveat:** after changing dependencies or on a fresh clone, run
+`uv sync` once — the hooks no longer do it for you.
+
+**Issue graph is version-controlled (manual-export model, not beads' Dolt sync).** `.beads/`
+(Dolt working DB) is **gitignored**; `beads/issues.jsonl` (no leading dot) is the **tracked**
+git source of truth. **Whenever a change touches issues, regenerate and stage the snapshot
+BEFORE committing** — a deliberate manual step, NOT a git hook:
+```bash
+scripts/export-issues.sh && git add beads/issues.jsonl
+```
+`core.hooksPath` is the default `.git/hooks` (the pre-commit framework + the globally-seeded
+Talisman `pre-commit.legacy` run there). On a fresh clone, `bd import beads/issues.jsonl`
+rebuilds the local DB. See `beads/README.md`.
 
 ## Package layout (intended)
 
