@@ -23,7 +23,7 @@ PYTEST_ARGS  ?=
 
 help:
 	@echo "make setup       - init submodules + compile all artefacts (run once after clone)"
-	@echo "make build       - compile JAR + hlasm_export + install Python deps"
+	@echo "make build       - ./build.sh: force-rebuild bridge JAR + hlasm_export (if missing) + uv sync"
 	@echo "make jar         - build ProLeap bridge JAR (skipped if already built)"
 	@echo "make jar-force   - force-rebuild ProLeap bridge JAR"
 	@echo "make hlasm       - build hlasm_export binary (skipped if already built)"
@@ -67,7 +67,11 @@ hlasm: $(HLASM_EXPORT)
 hlasm-force:
 	cd third-party/che-che4z-lsp-for-hlasm-fork && ./build.sh
 
-build: jar hlasm python
+# Force-rebuilds the bridge JAR from the current submodule source (clean mvn
+# package) so a red-dragon bump can't leave a stale JAR behind — unlike the
+# mtime-gated `jar`/`hlasm` targets below, which are kept for incremental use.
+build:
+	./build.sh
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
