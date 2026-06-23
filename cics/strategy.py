@@ -298,6 +298,32 @@ def emit_resp_writeback(
     emit_copy_back_str(ctx, opts.get("RESP"), str_reg, materialised)
 
 
+def _resolve_cics_length_option(
+    opt: "CicsOperand | None",
+    fallback: int,
+    ctx: "EmitContext",
+    materialised: "MaterialisedSectionedLayout",
+) -> int:
+    """Resolve a CICS LENGTH(…) option to an integer byte count.
+
+    Handles:
+      - digit literal: ``LENGTH(160)`` → 160
+      - ``LENGTH OF fieldname``: compile-time field size
+      - absent or unresolvable: return ``fallback``
+    """
+    if opt is None:
+        return fallback
+    text = opt.text.strip()
+    if text.isdigit():
+        return int(text)
+    if text.upper().startswith("LENGTH OF "):
+        fname = text[len("LENGTH OF ") :].strip()
+        if ctx.has_field(fname, materialised):
+            ref, _ = ctx.resolve_field_ref(fname, materialised)
+            return ref.fl.byte_length
+    return fallback
+
+
 def _resolve_keylen(
     ctx: "EmitContext",
     opts: dict[str, "CicsOperand | None"],
@@ -375,6 +401,7 @@ class CicsLoweringStrategy:
         from cics.builtins.flow import (  # noqa: PLC0415
             make_set_return_context_builtin,
             make_set_xctl_context_builtin,
+            make_link_builtin,
         )
 
         if _BUILTIN_INIT_EIB in Builtins.TABLE:
@@ -388,7 +415,7 @@ class CicsLoweringStrategy:
 
         _holder: list = result_holder if result_holder is not None else [None]
         td = td_queue if td_queue is not None else []
-        prog_cache = program_cache or {}
+        prog_cache = {} if program_cache is None else program_cache
 
         _register(Builtins.TABLE, "__cics_assign", make_assign_builtin(applid, sysid))
         _register(Builtins.TABLE, "__cics_asktime", make_asktime_builtin())
@@ -416,6 +443,12 @@ class CicsLoweringStrategy:
             Builtins.TABLE,
             "__cics_set_xctl_context",
             make_set_xctl_context_builtin(_holder),
+        )
+
+        _register(
+            Builtins.TABLE,
+            "__cics_link",
+            make_link_builtin(prog_cache, _holder, context_holder, 2_000_000),
         )
 
         if screen_queue is not None and input_queue is not None:
@@ -821,6 +854,38 @@ class CicsLoweringStrategy:
             )
             if verb in _RESP_PRODUCING_VERBS:
                 emit_resp_writeback(ctx, r_res, opts, materialised)
+            return
+
+        # ── LINK ─────────────────────────────────────────────────────────────
+        if verb == "LINK":
+            r_prog = emit_operand_value(ctx, opts.get("PROGRAM"), materialised)
+            ca_op = opts.get("COMMAREA")
+            if ca_op is not None and ctx.has_field(ca_op.text, materialised):
+                r_ca = emit_copy_in(ctx, ca_op, materialised)
+                if r_ca is None:
+                    r_ca = ctx.fresh_reg()
+                    ctx.emit_inst(Const(result_reg=r_ca, value=b"", type_expr=UNKNOWN))
+                ca_offset, ca_len = _resolve_into(ctx, ca_op, materialised)
+            else:
+                r_ca = ctx.fresh_reg()
+                ctx.emit_inst(Const(result_reg=r_ca, value=b"", type_expr=UNKNOWN))
+                ca_offset, ca_len = 0, 0
+            ca_len = _resolve_cics_length_option(
+                opts.get("LENGTH"), ca_len, ctx, materialised
+            )
+            r_off = ctx.fresh_reg()
+            ctx.emit_inst(Const.int_(r_off, ca_offset))
+            r_len = ctx.fresh_reg()
+            ctx.emit_inst(Const.int_(r_len, ca_len))
+            r_res = ctx.fresh_reg()
+            ctx.emit_inst(
+                CallFunction(
+                    result_reg=r_res,
+                    func_name=FuncName("__cics_link"),
+                    args=(r_prog, r_ca, r_off, r_len),
+                )
+            )
+            emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 
         logger.warning(

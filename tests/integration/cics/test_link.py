@@ -1,0 +1,127 @@
+"""Integration: EXEC CICS LINK passes COMMAREA to target program and writes back.
+
+Two programs are compiled:
+  MUTATOR — modifies DFHCOMMAREA in-place (MOVE 'DONE' TO DFHCOMMAREA) then
+            EXEC CICS RETURN.
+  WRAPPER — declares WS-CA PIC X(4) VALUE 'INIT', LINKs to MUTATOR with
+            COMMAREA(WS-CA), then EXEC CICS RETURN TRANSID('CC01').
+
+The test verifies that after region.step() the WRAPPER's commarea carries 'DONE',
+proving that the modified COMMAREA flowed back from MUTATOR into WS-CA.
+"""
+
+from __future__ import annotations
+
+import queue
+from pathlib import Path
+
+import pytest
+
+from cics.bootstrap import compile_cics_program
+from cics.dispatcher import CicsRegion, InputEvent
+from cics.preprocessor import apply_cics_prepass
+from cics.strategy import CicsLoweringStrategy
+from cics.types import CicsContext, DispatchKind
+from interpreter.cobol.features import CobolFeature
+from tests.covers import covers
+from tests.integration.cobol_helpers import bridge_jar
+
+_CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
+
+_DFHENTER = "\x7d"
+
+
+@pytest.fixture(autouse=True)
+def _require_bridge_jar(bridge_jar):
+    """Fail loudly if PROLEAP_BRIDGE_JAR is not set."""
+
+
+@pytest.fixture
+def cobol_parser(bridge_jar):
+    from interpreter.cobol.cobol_parser import ProLeapCobolParser
+    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+
+    return ProLeapCobolParser(
+        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
+    )
+
+
+_MUTATOR_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. MUTATOR.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01 DFHCOMMAREA PIC X(4).
+       PROCEDURE DIVISION.
+           MOVE 'DONE' TO DFHCOMMAREA.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+
+_WRAPPER_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. WRAPPER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-CA PIC X(4) VALUE 'INIT'.
+       01 WS-RESP PIC S9(8) COMP VALUE 0.
+       PROCEDURE DIVISION.
+           EXEC CICS LINK PROGRAM('MUTATOR')
+               COMMAREA(WS-CA) LENGTH(LENGTH OF WS-CA)
+               RESP(WS-RESP)
+           END-EXEC.
+           EXEC CICS RETURN TRANSID('CC01') COMMAREA(WS-CA) END-EXEC.
+           STOP RUN.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_link_commarea_written_back(cobol_parser):
+    """MUTATOR writes 'DONE' into DFHCOMMAREA; WRAPPER sees it in WS-CA."""
+    screen_q: queue.Queue = queue.Queue()
+    input_q: queue.Queue = queue.Queue()
+    context_holder = [None]
+    result_holder: list = [None]
+
+    # program_cache is built first so the strategy can close over it.
+    program_cache: dict = {}
+
+    strategy = CicsLoweringStrategy(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        screen_queue=screen_q,
+        input_queue=input_q,
+        program_cache=program_cache,
+    )
+
+    mutator = compile_cics_program(
+        apply_cics_prepass(_MUTATOR_SRC).encode(), cobol_parser, strategy
+    )
+    wrapper = compile_cics_program(
+        apply_cics_prepass(_WRAPPER_SRC).encode(), cobol_parser, strategy
+    )
+
+    program_cache["MUTATOR"] = mutator
+    program_cache["WRAPPER"] = wrapper
+
+    region = CicsRegion(
+        program_cache,
+        {"WR00": "WRAPPER"},
+        screen_q,
+        input_q,
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    result = region.start(
+        "WR00",
+        commarea=b"\x00" * 4,
+        input_event=InputEvent(eibaid=_DFHENTER),
+    )
+
+    assert result.kind == DispatchKind.RETURN_TRANSID
+    assert (result.transid or "").strip() == "CC01"
+    ca = result.commarea or b""
+    assert (
+        ca[:4].decode("cp037", errors="replace").strip() == "DONE"
+    ), f"expected 'DONE' in commarea, got {ca[:4]!r}"
