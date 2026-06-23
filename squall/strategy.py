@@ -147,7 +147,9 @@ class SqlLoweringStrategy:
         # Carry only the plan's pool index through the IR (a primitive the VM's
         # Const handling round-trips cleanly); the builtin resolves it to the plan.
         index_reg = ctx.fresh_reg()
-        ctx.emit_inst(Const(result_reg=index_reg, value=plan_index))
+        from interpreter.types.type_expr import UNKNOWN  # noqa: PLC0415
+
+        ctx.emit_inst(Const(result_reg=index_reg, value=plan_index, type_expr=UNKNOWN))
 
         # Emit the call; the builtin looks up the parsed plan and drives execution.
         result_reg = ctx.fresh_reg()
