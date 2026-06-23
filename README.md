@@ -60,10 +60,16 @@ cics/
   bms/                 # BMS symbolic map generation (bms-tools pipeline)
 ```
 
-RedDragon contributes two thin seams that live in its COBOL layer:
+RedDragon contributes one thin seam that lives in its COBOL layer:
 
-- `interpreter/cobol/cics_parser.py` — Lark PEG/LALR grammar for EXEC CICS text → `(verb, options)`
 - `interpreter/cobol/exec_cics_strategy.py` — `ExecCicsStrategy` protocol + `CatchAllLoweringStrategy` null object
+
+The EXEC CICS parser lives in cicada (not in RedDragon):
+
+- `cics/cics_grammar/` — ANTLR4 grammar (`CICSzParser.g4`, `CICSzLexer.g4`)
+- `cics/cics_visitor.py` — ANTLR visitor: grammar parse tree → `(verb, {OPTION: CicsOperand | None})`
+
+`CobolFrontend` accepts an injectable `CicsTextParser` seam; cicada supplies the ANTLR implementation at construction time.
 
 ---
 
@@ -109,14 +115,14 @@ from the block's raw text. `ExecCicsStatement.from_dict` calls
 **`parse_exec_cics_text(text) -> (verb, {OPTION: CicsOperand | None})`** from RedDragon's
 `interpreter.cobol.cics_parser`.
 
-The grammar (Lark PEG/LALR):
+The grammar (ANTLR4):
 
 - Verb is a grammar construct — single word or a small set of compound verbs (`SEND MAP`,
-  `RECEIVE MAP`, `HANDLE ABEND/CONDITION/AID`) — not Python string-joining.
-- Each option value is a `CicsOperand(text, is_literal)`. `is_literal` comes structurally from
-  whether the grammar matched a quoted `STRING` terminal or a bare `CHARS` operand.
-- Nested/balanced parentheses (`PROGRAM(PGM(WS-OPT))`, `FROM(WS-MSG(1:8))`) are handled by
-  recursive `value`/`value_part` rules, not regex paren-balancing.
+  `RECEIVE MAP`, `WRITEQ TD`, `HANDLE ABEND/CONDITION/AID`) — not Python string-joining.
+- Each option value is a `CicsOperand(text, is_literal, subscripts, ref_mod_start, ref_mod_length)`.
+  `is_literal` is set structurally when the grammar matched a quoted `ARG_STRING` terminal.
+- Multi-word values such as `LENGTH OF WS-CA` arrive as a single operand with the full text
+  preserved — `cics/strategy.py` inspects the `text` where needed (e.g., `_resolve_cics_length_option`).
 
 **Comment lines inside EXEC CICS blocks** are filtered in the ProLeap fork's
 `TagUtils.getExecCicsText` — any token whose untagged text starts with `*>` is skipped before
@@ -154,6 +160,7 @@ Translation pattern: **each CICS verb lowers to a `CallFunction` to a registered
 | Verb family | Verbs | Lowers to |
 |---|---|---|
 | Flow control | `RETURN [TRANSID][COMMAREA]`, `XCTL PROGRAM COMMAREA`, `ABEND` | `__cics_set_return_context` / `__cics_set_xctl_context` / `__cics_abend`, then `Return_` |
+| Program link | `LINK PROGRAM COMMAREA [LENGTH] [RESP]` | `__cics_link` (synchronous sub-call; see §2.3) |
 | BMS screen | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT` | `__cics_send_map` / `__cics_receive_map` / `__cics_send_text` |
 | System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD`, `HANDLE ABEND` | matching `__cics_*` builtin |
 | File control (VSAM) | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | matching `__cics_*` builtin |
@@ -197,10 +204,36 @@ class DispatchResult:
 max_steps)` executes a single program for one turn:
 
 - Seeds the context holder so `__cics_init_eib` can initialise `EIBTRNID`/`EIBCALEN`/`EIBAID`.
-- Places COMMAREA bytes in a `rgn_commarea` VM region bound to the LINKAGE `DFHCOMMAREA`.
+- Delegates VM setup to `_make_cics_initial_vm(context, ca_bytes)` — builds a fresh `VMState`
+  with a `rgn_commarea` region and a `StackFrame` carrying `__cics_transid`, `__cics_eibcalen`,
+  `__cics_eibaid`, and `__params_region` (stored as the region name string `"rgn_commarea"`,
+  not an `Address` object, so region writes from LINKAGE section items resolve cleanly).
+- Delegates entry-point selection to `_make_entry_point(program)` — uses `entry_func_label`
+  when present (multi-module link), otherwise the `func_*` prefix predicate.
 - Runs via `run_linked`; returns the `DispatchResult` left in `result_holder`.
 
-### 2.3 Routing rule — `_advance_routing`
+Both helpers are module-level so `EXEC CICS LINK` can reuse them for linked sub-programs.
+
+### 2.3 Synchronous program link — `EXEC CICS LINK`
+
+`EXEC CICS LINK PROGRAM(name) COMMAREA(field) [LENGTH(n)] [RESP(var)]` calls a program
+synchronously within the same transaction:
+
+1. The lowering copies `COMMAREA` bytes into a register (honouring `LENGTH` when present via
+   `_resolve_cics_length_option` — digit literal or `LENGTH OF fieldname`).
+2. `__cics_link` builtin in `cics/builtins/flow.py`:
+   - Looks up the target in `program_cache` (must be pre-compiled; no lazy compilation).
+   - Saves and then restores `result_holder` around the inner execution so the linked program's
+     `EXEC CICS RETURN` never affects the outer transaction's routing.
+   - Builds a fresh `VMState` via `_make_cics_initial_vm` and runs the target with `run_linked`.
+   - Writes the modified `rgn_commarea` back into the caller's WS at the original field's offset.
+3. After the `CallFunction`, `emit_resp_writeback` writes `0` (DFHRESP NORMAL) to `EIBRESP` and
+   to the optional `RESP(var)` field.
+
+LINK targets must appear in `program_cache` before the region starts; they are compiled with the
+same shared `CicsLoweringStrategy`. Unknown targets log a warning and are no-ops (EIBRESP = 0).
+
+### 2.4 Routing rule — `_advance_routing`
 
 - **`RETURN_TRANSID`** → resolve next program via `transid_to_program[next_transid]`. Unknown transid → `ABEND TRNI`.
 - **`XCTL`** → switch to `program_cache[program]`; transid carries. Unknown program → `ABEND PGMI`.
@@ -209,7 +242,7 @@ max_steps)` executes a single program for one turn:
 Both the autonomous loop and the turn-by-turn API funnel through `_advance_routing` — routing
 semantics are defined exactly once.
 
-### 2.4 Two ways to drive the region
+### 2.5 Two ways to drive the region
 
 **Autonomous loop — `_run_dispatcher_with_runner`.** Blocking `while True`; runs programs,
 applies routing, blocks on `input_queue.get()` for the next terminal event on
@@ -234,13 +267,13 @@ region.step(input_event=InputEvent(eibaid=DFHENTER, map_data={"USERID": "user"})
             └───────────────────────────────────────────────────┘
 ```
 
-### 2.5 Terminal channels — `cics/terminal.py`
+### 2.6 Terminal channels — `cics/terminal.py`
 
 Program ↔ driver I/O goes through explicit protocols: `ScreenChannel` (outbound: `SEND MAP`/
 `SEND TEXT`) and `InputChannel` (inbound: `RECEIVE MAP`) are `put(item)` + `get(block, timeout)`
 protocols. `queue.Queue` conforms; `queue.Empty` signals "no item."
 
-### 2.6 CSD and bootstrap
+### 2.7 CSD and bootstrap
 
 `parse_csd(path)` reads a CICS CSD (`DEFINE TRANSACTION(x) PROGRAM(y)`) into a
 `{transid: program}` mapping. `run_carddemo_region` ties everything together: parse the CSD,
@@ -347,10 +380,10 @@ record) and `block` (human-readable `@offset name value 0xRAW` lines).
 |---|---|
 | Pre-pass | `cics/preprocessor.py` |
 | DFHRESP structural lowering | `cics/dfhresp_prepass.py`; `_DFHRESP_TABLE` in `preprocessor.py`; grammar fix in ProLeap fork |
-| EXEC CICS grammar | `interpreter/cobol/cics_parser.py` (in red-dragon); `ExecCicsStatement` in `interpreter/cobol/cobol_statements.py` |
+| EXEC CICS grammar | `cics/cics_grammar/` (ANTLR4); `cics/cics_visitor.py`; `ExecCicsStatement` in `interpreter/cobol/cobol_statements.py` (red-dragon) |
 | Lowering strategy | `cics/strategy.py`; protocol in `interpreter/cobol/exec_cics_strategy.py` (red-dragon) |
-| Service builtins | `cics/builtins/{flow,screen,system,vsam}.py` |
-| Dispatcher / region | `cics/dispatcher.py`, `cics/bootstrap.py`, `cics/types.py` |
+| Service builtins | `cics/builtins/{flow,screen,system,vsam}.py` (`flow.py` includes `__cics_link`) |
+| Dispatcher / region | `cics/dispatcher.py` (`run_cics`, `_make_cics_initial_vm`, `_make_entry_point`, `CicsRegion`), `cics/bootstrap.py`, `cics/types.py` |
 | Terminal I/O | `cics/terminal.py` |
 | LE service stubs | `cics/le_stubs.py` |
 | VSAM | `cics/vsam/{fct,engine,backend,format,dump,seed}.py` |

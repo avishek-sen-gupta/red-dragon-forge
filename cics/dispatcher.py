@@ -11,10 +11,7 @@ from lark import Lark, Transformer
 
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import CicsContext, DispatchKind, DispatchResult
-from interpreter.func_name import FuncName
-from interpreter.types.typed_value import typed
-from interpreter.types.type_expr import UNKNOWN
-from interpreter.var_name import VarName
+from cics.vm_init import make_cics_initial_vm, make_entry_point
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +37,7 @@ def run_cics(
     max_steps: int = 50_000,
 ) -> DispatchResult:
     """Execute one CICS program with the given context. Returns DispatchResult."""
-    from interpreter.run import run_linked, EntryPoint
-    from interpreter.vm.vm_types import VMState, StackFrame
-    from interpreter.address import Address
+    from interpreter.run import run_linked  # noqa: PLC0415
 
     _prog_label = getattr(program, "entry_func_label", None)
     logger.info(
@@ -55,44 +50,11 @@ def run_cics(
     context_holder[0] = context
     result_holder[0] = None
 
-    initial_vm = VMState()
-    # The COMMAREA is bound to the LINKAGE SECTION (DFHCOMMAREA) via
-    # __params_region. Field reads in the program resolve through this register
-    # as a region handle, so the bytes must live in an addressable VM region
-    # (not a raw-bytes local). Allocate one and point __params_region at it.
-    commarea_addr = Address("rgn_commarea")
-    initial_vm.region_set(commarea_addr, bytearray(context.commarea))
-    initial_vm.call_stack.append(
-        StackFrame(
-            function_name=FuncName("main"),
-            local_vars={
-                VarName("__cics_transid"): typed(context.transid, UNKNOWN),
-                VarName("__cics_eibcalen"): typed(len(context.commarea), UNKNOWN),
-                VarName("__cics_eibaid"): typed(context.eibaid, UNKNOWN),
-                VarName("__params_region"): typed(commarea_addr, UNKNOWN),
-            },
-        )
-    )
-
-    # When the program links subprograms (CALL targets), several namespaced
-    # func_* labels exist; the bootstrap records the main program's entry label
-    # so dispatch is unambiguous. A standalone program leaves it None and falls
-    # back to the bare func_* predicate (exactly one match).
-    entry_label = getattr(program, "entry_func_label", None)
-    if entry_label is not None:
-        entry_label_str = str(entry_label)
-        entry_point = EntryPoint.function(
-            lambda ref, _lbl=entry_label_str: str(ref.label) == _lbl
-        )
-    else:
-        entry_point = EntryPoint.function(
-            lambda ref: str(ref.label).startswith("func_")
-            and not str(ref.label).startswith("func_init_params_")
-        )
+    initial_vm = make_cics_initial_vm(context, context.commarea)
 
     run_linked(
         program,
-        entry_point,
+        make_entry_point(program),
         max_steps=max_steps,
         initial_vm=initial_vm,
     )
