@@ -7,12 +7,13 @@ from pathlib import Path
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.real_file_provider import RealFileIOProvider
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.constants import Language
 from interpreter.run import run
 
 from jackal.catalog import DatasetCatalog
 from jackal.model import Step
-from jackal.results import StepResult
+from jackal.results import StepDisposition, StepResult
 
 # DDs whose absence is expected in the emulated environment and should be skipped
 # silently rather than raising an error.
@@ -58,7 +59,7 @@ def run_cobol_step(
         file_control=_file_control(source, bridge_jar, copybook_dirs),
         path_overrides=overrides,
     )
-    run(
+    vm = run(
         source,
         language=Language.COBOL,
         io_provider=provider,
@@ -67,4 +68,9 @@ def run_cobol_step(
     )
     for dd in step.dds:
         catalog.dispose(dd)
-    return StepResult(name=step.name, return_code=0, ran=True)
+    return StepResult(
+        name=step.name,
+        return_code=read_return_code(vm),
+        ran=True,
+        disposition=StepDisposition.EXECUTED,
+    )
