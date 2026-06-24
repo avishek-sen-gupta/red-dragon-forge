@@ -66,4 +66,6 @@ fileignoreconfig:
   checksum: b0852b2711990fe8276d50cc7956860af7416debc7323e68b438d5200c6878b1
 - filename: scripts/export-issues.sh
   checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
+- filename: jackal/results.py
+  checksum: 5f3dd230202365ca5bfddd1ec45af2c53712816895c9548561b44ec82f1d3fdc
 version: "1.0"
