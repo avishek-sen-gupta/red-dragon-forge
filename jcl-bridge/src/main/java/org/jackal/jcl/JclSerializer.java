@@ -24,13 +24,29 @@ package org.jackal.jcl;
  *     ddParmASTERISK: ASTERISK  (marks DD * — in-stream data follows)
  *   ddParmASTERISK_DATA: DD_ASTERISK_DATA+ (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)?
  *
+ * COND rules (discovered 2024-06 from JCLParser.g4 + generated JCLParser.java):
+ *   execParmCOND : EXEC_COND EQUAL (
+ *       keywordOrSymbolic |                   <- EVEN / ONLY
+ *       (LPAREN? (COMMA? LPAREN? keywordOrSymbolic (COMMA keywordOrSymbolic)* RPAREN?)+ RPAREN?)
+ *     ) ;
+ *   jobParmCOND  : COND EQUAL ((LPAREN parenList RPAREN) | parenList) ;
+ *   parenList    : LPAREN COMMA* keywordOrSymbolic (COMMA+ keywordOrSymbolic)* RPAREN ;
+ *
+ *   ExecParmCONDContext.keywordOrSymbolic() returns ALL keyword children in order.
+ *   Grouping algorithm for exec COND: walk children in sequence; an inner LPAREN starts
+ *   a new condition group, RPAREN closes it. At depth 1 (outer paren), keywords are
+ *   grouped per inner-paren group. Keyword order within a group: 0=code, 1=op, 2=step.
+ *   For EVEN/ONLY (no parens at all), emit {"code":0,"op":"EVEN"|"ONLY","step":""}.
+ *
  * JSON contract emitted (field order irrelevant, Gson serialises alphabetically):
  *   {
  *     "name": "<jobname>",
+ *     "cond": [{"code":int,"op":str,"step":str}],   // job-level COND (may be absent)
  *     "steps": [
  *       {
  *         "name": "<stepname>",
  *         "pgm": "<pgm-or-proc>",
+ *         "cond": [{"code":int,"op":str,"step":str}], // step-level COND (may be absent)
  *         "dds": [
  *           {
  *             "ddname":     "<ddname>",
@@ -136,6 +152,15 @@ public final class JclSerializer {
             }
             job.addProperty("name", jobName);
 
+            // Job-level COND= on the JOB card
+            if (jobCard != null) {
+                JCLParser.JobParmCONDContext jobCondCtx =
+                        findChild(jobCard, JCLParser.JobParmCONDContext.class);
+                if (jobCondCtx != null) {
+                    job.add("cond", buildJobCond(jobCondCtx));
+                }
+            }
+
             // Steps — each jclStep child of execJCL
             JsonArray steps = new JsonArray();
             for (int i = 0; i < execJCL.getChildCount(); i++) {
@@ -182,6 +207,17 @@ public final class JclSerializer {
             step.addProperty("name", stepName);
             step.addProperty("pgm", pgm);
 
+            // COND= on the EXEC statement — find execParmCOND via execParameter children
+            JsonArray condArray = new JsonArray();
+            if (execStmt != null) {
+                JCLParser.ExecParmCONDContext condCtx =
+                        findChild(execStmt, JCLParser.ExecParmCONDContext.class);
+                if (condCtx != null) {
+                    condArray = buildExecCond(condCtx);
+                }
+            }
+            step.add("cond", condArray);
+
             // DD statements — ddStatementAmalgamation children of jclStep
             JsonArray dds = new JsonArray();
             for (int i = 0; i < ctx.getChildCount(); i++) {
@@ -192,6 +228,149 @@ public final class JclSerializer {
             }
             step.add("dds", dds);
             return step;
+        }
+
+        /**
+         * Build the JSON "cond" array from an execParmCOND context.
+         *
+         * The grammar rule is flat (no sub-rule per condition tuple); we walk
+         * children in order, using LPAREN/RPAREN terminals to track depth and
+         * group keywords into individual (code, op[, step]) tuples.
+         *
+         * Depth accounting:
+         *   - Outer paren (depth 0→1): outer wrapper, not a condition group.
+         *   - Inner paren (depth 1→2) or no-inner-paren (depth 1, single condition):
+         *     each inner group is one condition.
+         *
+         * For COND=EVEN / COND=ONLY (no parens, single keywordOrSymbolic):
+         *   emit {"code":0,"op":"EVEN"|"ONLY","step":""}.
+         */
+        private JsonArray buildExecCond(JCLParser.ExecParmCONDContext ctx) {
+            JsonArray arr = new JsonArray();
+
+            // Walk children in order, noting LPAREN/RPAREN
+            // Strategy: collect (token-type, text) for each direct/indirect terminal child,
+            // but only direct children of ctx (not recursive — the rule is flat).
+            // ExecParmCONDContext has: EXEC_COND, EQUAL, then the COND value children.
+
+            // We need the children AFTER EXEC_COND and EQUAL.
+            // Walk direct children of ctx in order; classify each terminal.
+            int depth = 0;
+            List<String> currentGroup = new ArrayList<>();
+            boolean hasOuterParen = false;
+
+            for (int i = 0; i < ctx.getChildCount(); i++) {
+                ParseTree child = ctx.getChild(i);
+                if (child instanceof TerminalNode) {
+                    TerminalNode tn = (TerminalNode) child;
+                    int type = tn.getSymbol().getType();
+                    if (type == JCLParser.EXEC_COND || type == JCLParser.EQUAL) continue;
+                    if (type == JCLParser.LPAREN) {
+                        depth++;
+                        if (depth == 1) { hasOuterParen = true; }
+                        // depth > 1: start of an inner group
+                    } else if (type == JCLParser.RPAREN) {
+                        if (depth == 2) {
+                            // closing inner group — flush current group as a condition
+                            if (!currentGroup.isEmpty()) {
+                                arr.add(condFromWords(currentGroup));
+                                currentGroup.clear();
+                            }
+                        }
+                        depth--;
+                    } else if (type == JCLParser.COMMA) {
+                        // commas separate values within a group; handled by keyword collection
+                    }
+                } else if (child instanceof JCLParser.KeywordOrSymbolicContext) {
+                    String text = child.getText().trim().toUpperCase();
+                    currentGroup.add(text);
+                }
+            }
+
+            // If there are leftover words in currentGroup (single-condition with outer paren,
+            // or no-paren EVEN/ONLY case):
+            if (!currentGroup.isEmpty()) {
+                if (!hasOuterParen) {
+                    // EVEN / ONLY: single keyword, no parens — keyword goes in op slot, code=0
+                    JsonObject obj = new JsonObject();
+                    obj.addProperty("code", 0);
+                    obj.addProperty("op", currentGroup.get(0).toUpperCase());
+                    obj.addProperty("step", "");
+                    arr.add(obj);
+                } else if (arr.isEmpty()) {
+                    // Single condition like (0,NE) or (0,NE,A)
+                    arr.add(condFromWords(currentGroup));
+                }
+            }
+
+            return arr;
+        }
+
+        /**
+         * Build the JSON "cond" array from a jobParmCOND context.
+         * Grammar: COND EQUAL ((LPAREN parenList RPAREN) | parenList)
+         * parenList: LPAREN COMMA* keywordOrSymbolic (COMMA+ keywordOrSymbolic)* RPAREN
+         * The keywords in a parenList are (code, op[, step]).
+         * Multiple conditions are encoded as ((code,op),(code,op,...)) — two nested parenLists.
+         */
+        private JsonArray buildJobCond(JCLParser.JobParmCONDContext ctx) {
+            JsonArray arr = new JsonArray();
+            // Collect all parenList children
+            List<JCLParser.ParenListContext> parenLists = new ArrayList<>();
+            collectAll(ctx, JCLParser.ParenListContext.class, parenLists);
+
+            if (parenLists.isEmpty()) return arr;
+
+            // If there's exactly one parenList, it's a single condition: (code,op[,step])
+            // If there are multiple parenLists, each is one condition tuple.
+            // Heuristic: check depth. If the first parenList contains nested parenLists → multi.
+            // Since collectAll recurses, parenLists may contain both outer + inner.
+            // We only want the innermost (non-nested) ones.
+            List<JCLParser.ParenListContext> leaves = new ArrayList<>();
+            for (JCLParser.ParenListContext pl : parenLists) {
+                List<JCLParser.ParenListContext> nested = new ArrayList<>();
+                collectAll(pl, JCLParser.ParenListContext.class, nested);
+                if (nested.isEmpty()) {
+                    leaves.add(pl);
+                }
+            }
+
+            if (leaves.isEmpty()) {
+                // Fallback: use all
+                leaves = parenLists;
+            }
+
+            for (JCLParser.ParenListContext pl : leaves) {
+                List<JCLParser.KeywordOrSymbolicContext> kws = new ArrayList<>();
+                collectAll(pl, JCLParser.KeywordOrSymbolicContext.class, kws);
+                List<String> wordTexts = new ArrayList<>();
+                for (JCLParser.KeywordOrSymbolicContext kw : kws) {
+                    wordTexts.add(kw.getText().trim().toUpperCase());
+                }
+                if (!wordTexts.isEmpty()) {
+                    arr.add(condFromWords(wordTexts));
+                }
+            }
+
+            return arr;
+        }
+
+        /** Build a single COND JSON object from ordered word list [code, op] or [code, op, step]. */
+        private JsonObject condFromWords(List<String> words) {
+            JsonObject obj = new JsonObject();
+            // code: first word (integer string)
+            int code = 0;
+            if (!words.isEmpty()) {
+                try { code = Integer.parseInt(words.get(0)); } catch (NumberFormatException e) { /* 0 */ }
+            }
+            obj.addProperty("code", code);
+            // op: second word (GT/GE/EQ/NE/LT/LE or EVEN/ONLY)
+            String op = words.size() > 1 ? words.get(1).toUpperCase() : "";
+            obj.addProperty("op", op);
+            // step: third word if present, else ""
+            String step = words.size() > 2 ? words.get(2) : "";
+            obj.addProperty("step", step);
+            return obj;
         }
 
         private JsonObject buildDd(JCLParser.DdStatementAmalgamationContext ctx) {
