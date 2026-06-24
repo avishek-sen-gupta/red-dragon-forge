@@ -53,7 +53,7 @@ fileignoreconfig:
 - filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
   checksum: 85064026d09bffa199e853ef000ccf0ec79f76b00c260373dbaf2c39a0046ab2
 - filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
-  checksum: 5308aff0653a05597b7c5312adc94d996e32a81b7ea013c01b482644e24f6d46
+  checksum: 916c994491359608b618290fdb8cd53cc63bbfda5c0c89fd1dc6c1ac16326ee9
 - filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
   checksum: 12f9097ab708452fdd082b061d100b0b01dae2706e9139b4bd4c74fa9a08c934
 - filename: tests/unit/test_jcl_bridge_deserialize.py
