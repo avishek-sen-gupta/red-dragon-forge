@@ -25,6 +25,22 @@ class DatasetOrg(Enum):
     KSDS = "KSDS"
 
 
+class CondOp(Enum):
+    GT = "GT"
+    GE = "GE"
+    EQ = "EQ"
+    NE = "NE"
+    LT = "LT"
+    LE = "LE"
+
+
+@dataclass(frozen=True)
+class Cond:
+    code: int
+    op: CondOp
+    step: str = ""  # "" = test all prior executed steps
+
+
 @dataclass(frozen=True)
 class Disp:
     status: DispStatus
@@ -46,9 +62,11 @@ class Step:
     name: str
     pgm: str
     dds: tuple[DD, ...]
+    conds: tuple[Cond, ...] = ()
 
 
 @dataclass(frozen=True)
 class Job:
     name: str
     steps: tuple[Step, ...]
+    cond: tuple[Cond, ...] = ()
