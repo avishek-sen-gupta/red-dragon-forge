@@ -248,9 +248,7 @@ public final class JclSerializer {
         private JsonArray buildExecCond(JCLParser.ExecParmCONDContext ctx) {
             JsonArray arr = new JsonArray();
 
-            // Collect keywords in order, with their positions
-            List<String> words = new ArrayList<>();
-            // Also need positional info: walk children in order, noting LPAREN/RPAREN
+            // Walk children in order, noting LPAREN/RPAREN
             // Strategy: collect (token-type, text) for each direct/indirect terminal child,
             // but only direct children of ctx (not recursive — the rule is flat).
             // ExecParmCONDContext has: EXEC_COND, EQUAL, then the COND value children.
@@ -260,7 +258,6 @@ public final class JclSerializer {
             int depth = 0;
             List<String> currentGroup = new ArrayList<>();
             boolean hasOuterParen = false;
-            boolean seenValue = false;
 
             for (int i = 0; i < ctx.getChildCount(); i++) {
                 ParseTree child = ctx.getChild(i);
@@ -285,7 +282,6 @@ public final class JclSerializer {
                         // commas separate values within a group; handled by keyword collection
                     }
                 } else if (child instanceof JCLParser.KeywordOrSymbolicContext) {
-                    seenValue = true;
                     String text = child.getText().trim().toUpperCase();
                     currentGroup.add(text);
                 }
@@ -295,8 +291,12 @@ public final class JclSerializer {
             // or no-paren EVEN/ONLY case):
             if (!currentGroup.isEmpty()) {
                 if (!hasOuterParen) {
-                    // EVEN / ONLY: single keyword, no parens
-                    arr.add(condFromWords(currentGroup));
+                    // EVEN / ONLY: single keyword, no parens — keyword goes in op slot, code=0
+                    JsonObject obj = new JsonObject();
+                    obj.addProperty("code", 0);
+                    obj.addProperty("op", currentGroup.get(0).toUpperCase());
+                    obj.addProperty("step", "");
+                    arr.add(obj);
                 } else if (arr.isEmpty()) {
                     // Single condition like (0,NE) or (0,NE,A)
                     arr.add(condFromWords(currentGroup));
