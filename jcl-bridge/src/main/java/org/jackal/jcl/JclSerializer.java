@@ -358,12 +358,11 @@ public final class JclSerializer {
         /** Build a single COND JSON object from ordered word list [code, op] or [code, op, step]. */
         private JsonObject condFromWords(List<String> words) {
             JsonObject obj = new JsonObject();
-            // code: first word (integer string)
-            int code = 0;
-            if (!words.isEmpty()) {
-                try { code = Integer.parseInt(words.get(0)); } catch (NumberFormatException e) { /* 0 */ }
-            }
-            obj.addProperty("code", code);
+            // code: first word — a numeric return code. The mapa grammar guarantees
+            // this slot is a number for a real condition, and COND=EVEN/ONLY is handled
+            // separately (never reaches here), so parse directly: a non-numeric code
+            // throws and fails the bridge loudly rather than silently defaulting to 0.
+            obj.addProperty("code", Integer.parseInt(words.get(0)));
             // op: second word (GT/GE/EQ/NE/LT/LE or EVEN/ONLY)
             String op = words.size() > 1 ? words.get(1).toUpperCase() : "";
             obj.addProperty("op", op);
