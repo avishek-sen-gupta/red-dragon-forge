@@ -68,4 +68,8 @@ fileignoreconfig:
   checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
 - filename: jackal/results.py
   checksum: 5f3dd230202365ca5bfddd1ec45af2c53712816895c9548561b44ec82f1d3fdc
+- filename: jackal/cond.py
+  checksum: cdf9772cc1a49aabb7e5d095d8e3bd5e94299267c40f98fd36d417a5cf745ae6
+- filename: tests/unit/test_cond.py
+  checksum: d25c3d04de46e7530d6e2f0df7464060728c0a67d3e829868d64e22177579024
 version: "1.0"
