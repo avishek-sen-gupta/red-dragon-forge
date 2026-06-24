@@ -6,8 +6,9 @@ from pathlib import Path
 
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
+from jackal.cond import should_bypass
 from jackal.model import Job, Step
-from jackal.results import JobResult, StepResult
+from jackal.results import JobResult, StepDisposition, StepResult
 from jackal.utilities import UTILITIES
 
 
@@ -31,12 +32,30 @@ class JobRunner:
         return self.run_job(job, catalog)
 
     def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
-        """Run a job against a pre-built catalog.
+        """Run a job against a pre-built catalog, honoring COND= step bypass.
 
-        Use this when multiple jobs must share a single catalog (e.g. the KSDS
-        built by ACCTFILE.jcl must remain visible to READACCT.jcl).
+        Threads the results of steps that actually executed; before each step,
+        bypass it if job-level or step-level COND= is satisfied (IBM semantics:
+        bypass if any condition is true against any prior executed step).
         """
-        return JobResult(steps=tuple(self._run_step(s, catalog) for s in job.steps))
+        executed: list[StepResult] = []
+        results: list[StepResult] = []
+        for step in job.steps:
+            conds = job.cond + step.conds
+            if should_bypass(conds, tuple(executed)):
+                results.append(
+                    StepResult(
+                        name=step.name,
+                        return_code=0,
+                        ran=False,
+                        disposition=StepDisposition.BYPASSED,
+                    )
+                )
+                continue
+            result = self._run_step(step, catalog)
+            executed.append(result)
+            results.append(result)
+        return JobResult(steps=tuple(results))
 
     def _run_step(self, step: Step, catalog: DatasetCatalog) -> StepResult:
         if step.pgm in UTILITIES:
