@@ -28,3 +28,18 @@ def test_dd_instream_and_sysout_and_org():
     )
     assert dd.in_stream == ("  DELETE X CLUSTER",)
     assert DatasetOrg.KSDS.value == "KSDS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cond_model_and_defaults():
+    from jackal.model import CondOp, Cond
+
+    c = Cond(code=0, op=CondOp.NE)
+    assert c.step == "" and c.op is CondOp.NE and c.code == 0
+    step = Step(name="S", pgm="P", dds=(), conds=(c,))
+    assert step.conds == (c,)
+    job = Job(name="J", steps=(step,), cond=(Cond(code=4, op=CondOp.LT, step="S1"),))
+    assert job.cond[0].step == "S1"
+    # Step.conds and Job.cond default to empty
+    assert Step(name="X", pgm="P", dds=()).conds == ()
+    assert Job(name="J2", steps=()).cond == ()
