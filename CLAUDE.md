@@ -16,8 +16,8 @@ The top-level package is `cics/`.
 git clone --recurse-submodules <repo>
 cd cicada
 uv sync
-# COBOL bridge (JDK 17+ and Maven required):
-cd vendor/red-dragon/proleap-bridge && ./build.sh && cd -
+# All Java artefacts — ProLeap parser + bridge (JDK 17+ and Maven required):
+make jar      # or `make jar-force` after a red-dragon bump
 ```
 
 ## Tests
