@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 
-from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.model import Cond, CondOp, DD, Disp, DispNormal, DispStatus, Job, Step
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
 
@@ -29,15 +29,24 @@ def _dd_from_json(d: dict) -> DD:
     )
 
 
+def _cond_from_json(c: dict) -> Cond:
+    return Cond(code=c["code"], op=CondOp(c["op"]), step=c.get("step", ""))
+
+
 def _step_from_json(s: dict) -> Step:
     return Step(
-        name=s["name"], pgm=s["pgm"], dds=tuple(_dd_from_json(d) for d in s["dds"])
+        name=s["name"],
+        pgm=s["pgm"],
+        dds=tuple(_dd_from_json(d) for d in s["dds"]),
+        conds=tuple(_cond_from_json(c) for c in s.get("cond", ())),
     )
 
 
 def _job_from_json(data: dict) -> Job:
     return Job(
-        name=data["name"], steps=tuple(_step_from_json(s) for s in data["steps"])
+        name=data["name"],
+        steps=tuple(_step_from_json(s) for s in data["steps"]),
+        cond=tuple(_cond_from_json(c) for c in data.get("cond", ())),
     )
 
 
