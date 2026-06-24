@@ -79,9 +79,11 @@ On a fresh clone, `bd import beads/issues.jsonl` rebuilds the local DB. See `bea
 and the roadmap `docs/jcl-execution-roadmap.md`.
 
 ### Building the bridge JARs
-`./build.sh` builds the vendored red-dragon ProLeap COBOL bridge **and** the `jcl-bridge`
-(ANTLR JCL) JAR — both are gitignored build products. Rebuild after bumping red-dragon or
-changing Java/grammar sources.
+**`make jar`** builds all Java artefacts — the vendored red-dragon ProLeap COBOL bridge
+(parser + bridge) **and** the `jcl-bridge` (ANTLR JCL) JAR — both gitignored build products.
+It's mtime-gated (skips if built); use **`make jar-force`** after a red-dragon bump or grammar
+change. `make build` (= `./build.sh`) force-rebuilds both + runs `uv sync`. (`make jar` is the
+uniform entry point across cicada/jackal/squall.)
 
 ### Running tests / committing (the pre-commit hook runs the full suite)
 Export these so the suite + gated e2e pass (the pre-commit hook needs them too):
