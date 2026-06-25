@@ -76,11 +76,21 @@ Neutral `AccessCondition` → EIBRESP, for the conditions the storage layer prod
 - `DUPLICATE_KEY` → `RESP_DUPREC` (14)
 
 The remaining neutral conditions (`FILE_NOT_FOUND`, `NOT_OPEN`, `WRITE_NOT_PERMITTED`) are
-**file-state** concerns the adapter already owns via FCT/enable-disable — in normal CICS flow
-they arise from the adapter's own state checks (`RESP_DISABLED`, etc.), not from a storage op on
-an open, enabled file. The mapping must be exhaustive (every neutral condition handled, fail loud
-on an unmapped one), but these file-state conditions route to the adapter's existing FCT logic
-rather than a storage-driven EIBRESP.
+**file-state** concerns the adapter owns via FCT/enable-disable — **decision A** (chosen over a
+blind driver→EIBRESP translation): in CICS the program never opens/closes files, so file-state is
+an FCT/adapter concept, not a storage one. Concretely:
+- The adapter **gates on FCT state BEFORE calling the driver** — a disabled/undefined/read-only
+  file returns the CICS resp (`RESP_DISABLED`, etc.) from the adapter's own FCT check, without a
+  storage op.
+- By the time the adapter calls a driver, the file is known-good (defined, enabled, opened in the
+  right mode by the adapter itself). So `FILE_NOT_FOUND`/`NOT_OPEN`/`WRITE_NOT_PERMITTED` from a
+  driver indicate an **internal invariant violation** (e.g. backing file missing despite an enabled
+  FCT entry), NOT a normal CICS condition — map them to `RESP_IOERR` (17) / fail loud, never to a
+  plausible-but-wrong program-visible resp (`NOTOPEN`/`INVREQ`).
+The mapping must be **exhaustive** (every neutral condition handled; fail loud on an unmapped one).
+Rationale: mapping a driver's internal-lifecycle state to a real CICS condition would mislabel an
+adapter bug as a condition the program would mishandle; keeping file-state in the FCT matches how
+CICS actually works.
 
 ## Seeding (replaces in-memory load)
 `load_all` currently loads records into the in-memory store via the backend. After the change,
