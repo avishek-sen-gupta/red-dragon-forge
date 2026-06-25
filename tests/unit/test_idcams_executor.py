@@ -37,7 +37,7 @@ def test_repro_loads_ps_into_ksds(tmp_path):
 
     drv = IndexedDriver()
     drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)
-    assert drv.read_key(b"BBB").data[:3] == "BBB"
+    assert drv.read_key(b"BBB").data[:3] == b"BBB"
     drv.close()
 
 

@@ -78,4 +78,6 @@ fileignoreconfig:
   checksum: e77f980074a35187996719f84cedbe4be41fadf5683ff27d41e8752196564cc4
 - filename: tests/unit/test_runner.py
   checksum: f48de76d6d43e86da663c9b1de4d5e6e6e8069b3914d1fb56773f867b0b28267
+- filename: tests/unit/test_idcams_executor.py
+  checksum: d8203073dad6025c29281e7ddf97eea5cfac28fe710db8ad3e60b3b03e69c894
 version: "1.0"

@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from interpreter.cobol.file_drivers import IndexedDriver, SequentialDriver
-from interpreter.cobol.file_enums import OpenMode
+from interpreter.cobol.access_result import AccessCondition
+from interpreter.cobol.file_drivers import open_driver
+from interpreter.cobol.file_enums import FileOrganization, OpenMode
 
 from jackal.catalog import DatasetCatalog
 from jackal.idcams.commands import Command, DefineCluster, Delete, IfMaxcc, Repro
@@ -53,11 +54,12 @@ def _handle_repro(
 
     record_size = out_ds.record_size
 
-    in_drv = SequentialDriver()
-    in_drv.open(in_ds.path, OpenMode.INPUT, record_size, 0, 0)
+    in_drv = open_driver(
+        FileOrganization.SEQUENTIAL, in_ds.path, OpenMode.INPUT, record_size, 0, 0
+    )
 
-    out_drv = IndexedDriver()
-    out_drv.open(
+    out_drv = open_driver(
+        FileOrganization.INDEXED,
         out_ds.path,
         OpenMode.OUTPUT,
         record_size,
@@ -67,11 +69,11 @@ def _handle_repro(
 
     while True:
         result = in_drv.read_seq()
-        if result.status == "10":
+        if result.condition is AccessCondition.END_OF_FILE:
             break
         if result.data is None:
-            raise ValueError("SequentialDriver returned non-EOF status with no data")
-        out_drv.write(result.data.encode("latin-1"))
+            raise ValueError("driver returned non-EOF with no data")
+        out_drv.write(result.data)
 
     in_drv.close()
     out_drv.close()
