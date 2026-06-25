@@ -31,6 +31,31 @@ single-place concern.
 - **Migrate or discard the in-memory backend's tests as needed** (see Testing).
 - **RECFM: fixed-length only** (inherited from the engine; out of scope to change).
 
+## RESOLUTION ADDENDUM (2026-06-26 — both engine prerequisites now on red-dragon main)
+Both prerequisites are merged to red-dragon `main` (target submodule bump: **1932735a**):
+- `open_alternate_key_driver` (`bb8ef5ed`, epic `red-dragon-0wzv`) — read a flat dataset by a
+  key it isn't sorted by, via linear scan (read-only).
+- `read_prev()` on `FileOrganizationDriver` (`1932735a`) — backward browse for `READPREV`.
+
+Consequences that update the design below:
+1. **The in-memory discard now holds FULLY** — the earlier blocker (alternate-index reads,
+   CXACAIX) is gone, so NO in-memory fallback is kept. Discard the `SortedDict` store entirely.
+2. **Driver selection by `key_offset` (the consumer's alternate-key knowledge):**
+   - `key_offset == 0` → `open_driver(FileOrganization.INDEXED, …)` — base KSDS, binary search.
+   - `key_offset > 0` → `open_alternate_key_driver(…)` — alternate key, linear scan (read-only).
+   In cicada's CardDemo FCT this cleanly separates base clusters (ACCTDAT/CUSTDAT, key@0) from
+   the alternate index (CXACAIX, key@25). Linear scan is always correct regardless of sort, so
+   this routing is safe; binary search is reserved for the key@0 base clusters that ARE sorted.
+3. **Browse reversal is now driver-handled** — `read_prev`'s cursor convention makes the first
+   `READPREV` after a `READNEXT` re-read that record (CICS semantics) automatically. So the
+   adapter **drops cicada's `_cursor_dir` direction bookkeeping** — STARTBR opens+positions a
+   driver instance, READNEXT→`read_seq`, READPREV→`read_prev`, ENDBR→`close`. Simpler than today.
+4. **Seed ordering caveat (NEW risk):** the file-resident `IndexedDriver` binary search requires
+   the backing `.dat` **physically sorted by key@0**. The discarded `SortedDict` masked this (it
+   re-sorted on load). So `seed_vsam` must write **base-KSDS** records **key-sorted** (sort by
+   `record[0:key_length]` before `write_flat_file`). Alternate-key datasets need no sort (linear
+   scan). The CardDemo flows are the guard that base `.dat` ordering is correct.
+
 ## The split: VsamEngine becomes a CICS adapter
 
 | Concern (current `VsamEngine`) | Disposition |
