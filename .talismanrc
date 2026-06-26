@@ -63,4 +63,10 @@ fileignoreconfig:
   checksum: c607cb797a6144af6d977bd82ccebbfd4551da70fc240eb9b216b54b71ef9a7f
 - filename: scripts/export-issues.sh
   checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
+- filename: .env.example
+  checksum: 11f8689d097a1e94165e385cd6e5c7c6b9920d568eaf9a78e857e47940c89cb2
+- filename: db2/dsn-env.sh
+  checksum: 306c15312a8870b8ab7230699212452e14eb2012d72b280f63ca67056369bd7f
+- filename: docker-compose.yml
+  checksum: 6a1d1e9670af5c280c9171d14d1e557e48c1546d55be32ef7090afd9b3a18821
 version: "1.0"
