@@ -17,8 +17,11 @@ services:
       - ./db2/custom-init:/var/custom:ro
       - squall_db2_data:/database
     healthcheck:
-      # Ready only when MOJO2 (created last by the init hook) is connectable.
-      test: ["CMD-SHELL", "su - db2inst1 -c 'db2 connect to MOJO2' >/dev/null 2>&1"]
+      # Healthy only when MOJO2 is connectable AND the TCP listener on 50000 is
+      # actually accepting — a local-only db2 connect can succeed while the TCP
+      # listener (what the host/tests connect through) is down, yielding a false
+      # "healthy" and SQL30081N in tests. Verify both.
+      test: ["CMD", "bash", "-c", "su - db2inst1 -c 'db2 connect to MOJO2' >/dev/null 2>&1 && exec 3<>/dev/tcp/localhost/50000"]
       interval: 15s
       timeout: 10s
       retries: 40

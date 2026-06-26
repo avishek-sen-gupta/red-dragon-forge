@@ -68,7 +68,9 @@ fileignoreconfig:
 - filename: db2/dsn-env.sh
   checksum: 306c15312a8870b8ab7230699212452e14eb2012d72b280f63ca67056369bd7f
 - filename: docker-compose.yml
-  checksum: 6a1d1e9670af5c280c9171d14d1e557e48c1546d55be32ef7090afd9b3a18821
+  # Contains ${DB2_PASSWORD} var-ref by nature and is edited over time — ignore
+  # content rather than pin a churning checksum.
+  ignore_detectors: [filecontent]
 - filename: docs/superpowers/specs/2026-06-27-db2-ci-setup-design.md
   # Design doc with example DSN strings / DB2_PASSWORD references (no real secret);
   # ignore content like other flagged-by-nature files.
