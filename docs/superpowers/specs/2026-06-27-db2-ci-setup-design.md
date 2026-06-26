@@ -88,6 +88,18 @@ A short "Running the tests" section: `cp .env.example .env` (set a password) →
 → `make test`. Plus the operational note: the IBM image's first init takes minutes; the named
 volume makes subsequent `db2-up`s fast.
 
+## Sequencing — local proven before CI committed (hard gate)
+Implementation is two phases with a **validation gate** between them:
+- **Phase 1 — local infra, validated, then committed.** Build components 1–4 + 6
+  (docker-compose, `/var/custom` init, `.env.example`, `db2/dsn-env.sh`, Makefile targets,
+  README). Then **actually stand it up**: real `icr.io` pull, real DB2 first-init, MOJO/MOJO2
+  created by the init hook, and the **full squall suite green via the NEW compose stack** (not
+  the pre-existing manually-started `db2server` container). Only commit Phase 1 once that is
+  demonstrably green.
+- **Phase 2 — CI workflow (component 5), separate, gated on Phase 1.** The `.github/workflows/
+  ci.yml` is authored and committed **only after** Phase 1 is proven working locally. Per the
+  user: do not commit the pipeline changes to GitHub until local is validated.
+
 ## Out of scope (deferred)
 - **Pre-baking** a fast-start image (DBs pre-created) — purely a CI-speed optimization now that
   the dependency/privacy concerns are gone (official image). Ship the official-image compose +
