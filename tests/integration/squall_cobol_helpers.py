@@ -20,16 +20,14 @@ from pathlib import Path
 
 import pytest
 
-from interpreter.cfg import build_cfg
-from interpreter.constants import Language
 from interpreter.cobol.cobol_frontend import CobolFrontend
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from interpreter.project.cobol_compile import compile_cobol as _rd_compile_cobol
 from interpreter.project.types import LinkedProgram
 from interpreter.project.entry_point import EntryPoint
 from interpreter.run import run_linked
 from interpreter.address import Address
-from interpreter.registry import build_registry
 from interpreter.vm.vm import VMState
 
 from squall.preprocess import apply_sql_prepass
@@ -97,32 +95,14 @@ def compile_cobol(
     prepass = apply_sql_prepass(source, dirs)
     strategy = SqlLoweringStrategy(connections, prepass.field_meta)
     parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
-    frontend = CobolFrontend(
-        cobol_parser=parser,
+    # The shared red-dragon Compile API builds the frontend (with the injected SQL
+    # strategy) + lowers + assembles the LinkedProgram. squall source is
+    # single-module (no CALLs) → no program_source_dir / source_transform needed.
+    return _rd_compile_cobol(
+        prepass.source.encode("utf-8"),
+        parser=parser,
         extension_strategies=[strategy],
     )
-    instructions = frontend.lower(prepass.source.encode("utf-8"))
-    cfg = build_cfg(instructions)
-    registry = build_registry(
-        instructions,
-        cfg,
-        func_symbol_table=frontend.func_symbol_table,
-        class_symbol_table=frontend.class_symbol_table,
-    )
-    linked = LinkedProgram(
-        modules={},
-        merged_ir=list(instructions),
-        merged_cfg=cfg,
-        merged_registry=registry,
-        language=Language.COBOL,
-        import_graph={},
-        type_env_builder=frontend.type_env_builder,
-        symbol_table=frontend.symbol_table,
-        data_layout=frontend.data_layout,
-        func_symbol_table=frontend.func_symbol_table,
-        class_symbol_table=frontend.class_symbol_table,
-    )
-    return frontend, linked
 
 
 def run_cobol(
