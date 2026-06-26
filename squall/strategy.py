@@ -194,7 +194,13 @@ class SqlLoweringStrategy:
                                     "right": {"kind": "lit", "value": value},
                                 },
                             },
-                            "children": [{"type": "GOTO", "operands": [target]}],
+                            "children": [
+                                {
+                                    "type": "GOTO",
+                                    "form": "simple",
+                                    "target": {"paragraph": target, "section": ""},
+                                }
+                            ],
                         }
                     )
                     ctx.lower_statement(if_stmt, materialised)
