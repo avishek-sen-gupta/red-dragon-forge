@@ -15,7 +15,7 @@ PYTEST       = uv run --no-sync python -m pytest
 PYTEST_PATHS ?= tests/
 PYTEST_ARGS  ?=
 
-.PHONY: help setup build python jar jar-force test test-unit fmt lint
+.PHONY: help setup build python jar jar-force test test-unit fmt lint db2-up db2-stop db2-clean
 
 help:
 	@echo "make setup       - init submodules + build all Java + uv sync (run once after clone)"
@@ -50,7 +50,34 @@ build:
 	./build.sh
 
 test: jar
-	$(PYTEST) $(PYTEST_PATHS) $(PYTEST_ARGS)
+	. db2/dsn-env.sh && $(PYTEST) $(PYTEST_PATHS) $(PYTEST_ARGS)
+
+# DB2 test database via docker-compose (official icr.io image).
+#
+# IMPORTANT: keep the container RUNNING between test runs. The full first init
+# is slow (minutes; much slower under amd64 emulation on Apple Silicon), so you
+# pay it ONCE. `db2-up` is idempotent: it returns immediately if the container is
+# already healthy. Do NOT `compose down` between runs — that removes the
+# container (and the db2inst1 user in its filesystem), forcing a full re-init on
+# the next up even though the named volume persists the data. Use `db2-stop`
+# only when you actually want it off; `db2-clean` for a full reset.
+db2-up:
+	docker compose up -d db2
+	@echo "Waiting for DB2 healthy (first init can take several minutes; fast if already up)..."
+	@until [ "$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null)" = "healthy" ]; do \
+	  sleep 5; \
+	  [ "$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null)" = "unhealthy" ] && { echo "DB2 unhealthy — see 'docker logs squall-db2'"; exit 1; }; \
+	done
+	@echo "DB2 healthy."
+
+# Stop but KEEP the container + volume (re-up still re-runs DB2's configure phase,
+# so prefer leaving it up). Removes nothing.
+db2-stop:
+	docker compose stop db2
+
+# Full reset: remove the container AND the named volume (next up re-inits).
+db2-clean:
+	docker compose down -v
 
 test-unit:
 	$(PYTEST) tests/unit $(PYTEST_ARGS)
