@@ -22,7 +22,6 @@ from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
-from cics.vsam.backend import InMemoryBackend
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig, DatasetConfig
 from tests.covers import covers
@@ -84,8 +83,10 @@ COBOL_BROWSE = """\
 
 
 def _engine() -> VsamEngine:
+    import tempfile
+
     config = FctConfig(datasets={"TESTDS": DatasetConfig(record_length=10)})
-    engine = VsamEngine(config, backend=InMemoryBackend())
+    engine = VsamEngine(config, Path(tempfile.mkdtemp()) / "vsam")
     engine.load_all()
     return engine
 

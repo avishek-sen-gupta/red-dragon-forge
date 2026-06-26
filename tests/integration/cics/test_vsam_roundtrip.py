@@ -70,10 +70,10 @@ COBOL_VSAM = """\
 
 
 def _engine() -> VsamEngine:
-    from cics.vsam.backend import InMemoryBackend
+    import tempfile
 
     config = FctConfig(datasets={"TESTDS": DatasetConfig(record_length=10)})
-    engine = VsamEngine(config, backend=InMemoryBackend())
+    engine = VsamEngine(config, Path(tempfile.mkdtemp()) / "vsam")
     engine.load_all()
     return engine
 

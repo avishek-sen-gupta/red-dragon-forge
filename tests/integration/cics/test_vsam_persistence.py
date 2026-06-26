@@ -1,16 +1,16 @@
 """GATED demo: a real CardDemo REWRITE / WRITE persists to the VSAM flat file.
 
 This is the final task of VSAM file persistence. The persistence machinery is
-built (``VsamEngine(config, backend=FileBackend(backing_dir))`` write-throughs
+built (``VsamEngine(config, vsam_dir)`` writes go straight to the backing
 every mutation to ``<backing_dir>/<NAME>.dat`` as a raw fixed-length flat image).
 These two tests prove it end to end by driving the SAME real CardDemo flows the
 durable harness already exercises (``test_carddemo_signon_real.py``) — only with
-a ``FileBackend`` — then reading the backing flat file off disk with
+a ``vsam_dir`` — then reading the backing flat file off disk with
 ``read_flat_file`` and asserting the mutation landed there.
 
 The driving is NOT re-derived here: the shared region/engine setup and the
 turn-by-turn drivers (``_drive_rewrite`` / ``_drive_transaction_add``) are reused
-from ``test_carddemo_signon_real.py`` (each now takes an optional ``backend``).
+from ``test_carddemo_signon_real.py`` (each now takes an optional ``vsam_dir``).
 
 Gated exactly like the durable test (skipped unless CARDDEMO_HOME + bms-tools +
 the ProLeap JAR are present). Run explicitly:
@@ -27,7 +27,6 @@ from pathlib import Path
 
 import pytest
 
-from cics.vsam.backend import FileBackend
 from cics.vsam.format import read_flat_file
 from tests.covers import covers, NotLanguageFeature
 from tests.integration.cics.test_carddemo_signon_real import (
@@ -79,14 +78,14 @@ def test_account_update_rewrite_persists_to_flat_file(tmp_path, bridge_jar):
     the ACCTDAT backing flat file on disk.
 
     Drives the SAME flow as ``test_real_carddemo_account_update_rewrite`` but
-    builds the shared VsamEngine with ``FileBackend(tmp_path/'store')``. After the
+    builds the shared VsamEngine with ``vsam_dir=tmp_path/'store'``. After the
     REWRITE, reads ``store/ACCTDAT.dat`` as fixed-length records, finds the record
     whose ACCT-ID (offset 0, 11 bytes) == '00000000011', and asserts its
     ACCT-ACTIVE-STATUS byte (offset 11) is now 'N' — proving the mutation is
     durable on disk, not just in the in-memory engine.
     """
     store = tmp_path / "store"
-    _drive_rewrite(tmp_path, bridge_jar, backend=FileBackend(store))
+    _drive_rewrite(tmp_path, bridge_jar, vsam_dir=store)
 
     records = read_flat_file(store / "ACCTDAT.dat", _ACCTDAT_RECLN)
     assert records, "ACCTDAT.dat backing file is empty or missing after REWRITE"
@@ -117,16 +116,14 @@ def test_transaction_add_write_persists_to_flat_file(tmp_path, bridge_jar):
     throughs to the TRANSACT backing flat file on disk.
 
     Drives the SAME flow as ``test_real_carddemo_transaction_add_write`` but
-    builds the shared VsamEngine with ``FileBackend(tmp_path/'store')``. After the
+    builds the shared VsamEngine with ``vsam_dir=tmp_path/'store'``. After the
     EXEC CICS WRITE, reads ``store/TRANSACT.dat`` as fixed-length records, finds
     the record whose TRAN-ID (offset 0, 16 bytes) == the generated next id, and
     asserts the seeded fields (type/cat/source/desc) the add flow set are present
     on disk — proving the created record is durable, not just in memory.
     """
     store = tmp_path / "store"
-    rB, viewB, _ = _drive_transaction_add(
-        tmp_path, bridge_jar, backend=FileBackend(store)
-    )
+    rB, viewB, _ = _drive_transaction_add(tmp_path, bridge_jar, vsam_dir=store)
 
     records = read_flat_file(store / "TRANSACT.dat", _TRAN_RECLN)
     assert records, (
@@ -157,7 +154,7 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
 
     Reads the seeded ACCOUNT-RECORD, prints a human-readable block dump, drives
     the update flow (status 'Y'->'N'), then prints the block dump of the same
-    record read back from the FileBackend-persisted flat file.
+    record read back from the backing flat file in vsam_dir.
     """
     from cics.vsam.dump import load_record_layout, render_block
 
@@ -172,7 +169,7 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
 
     acct_key = _ACCT_ID.encode("cp037")
 
-    engine_before = _usrsec_engine()
+    engine_before = _usrsec_engine(tmp_path / "vsam")
     record_before, _ = engine_before.read("ACCTDAT", acct_key, 11)
     assert record_before is not None, "seeded ACCTDAT record not found before update"
 
