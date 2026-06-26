@@ -15,7 +15,7 @@ PYTEST       = uv run --no-sync python -m pytest
 PYTEST_PATHS ?= tests/
 PYTEST_ARGS  ?=
 
-.PHONY: help setup build python jar jar-force test test-unit fmt lint db2-up db2-stop db2-clean
+.PHONY: help setup build python jar jar-force test test-unit fmt lint db2-up db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup       - init submodules + build all Java + uv sync (run once after clone)"
@@ -69,6 +69,14 @@ db2-up:
 	  [ "$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null)" = "unhealthy" ] && { echo "DB2 unhealthy — see 'docker logs squall-db2'"; exit 1; }; \
 	done
 	@echo "DB2 healthy."
+
+# Rebind DB2's TCP listener without re-initialising. Under emulation the listener
+# can occasionally drop (port 50000 stops accepting inside the container) while a
+# local connect still works — tests then fail with SQL30081N. This rebinds it.
+db2-restart:
+	docker exec squall-db2 bash -lc "su - db2inst1 -c 'db2 force applications all >/dev/null 2>&1; db2stop force; db2start'"
+	@echo "DB2 restarted; verifying TCP listener..."
+	@docker exec squall-db2 bash -c '(exec 3<>/dev/tcp/localhost/50000)' && echo "TCP listener up." || { echo "TCP still down"; exit 1; }
 
 # Stop but KEEP the container + volume (re-up still re-runs DB2's configure phase,
 # so prefer leaving it up). Removes nothing.
