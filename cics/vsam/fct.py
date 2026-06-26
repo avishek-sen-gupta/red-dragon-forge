@@ -9,7 +9,7 @@ from pathlib import Path
 @dataclass
 class DatasetConfig:
     record_length: int
-    # Filename within the data directory (for seed_vsam / load_vsam_seed).
+    # Filename within the data directory (for seed_vsam).
     file: str = ""
     # Offset (bytes) of the key within each record. 0 for a primary KSDS whose
     # key is at the record start; non-zero for alternate-index paths where the

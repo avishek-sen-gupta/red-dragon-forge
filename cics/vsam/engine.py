@@ -1,110 +1,137 @@
-"""In-memory VSAM KSDS engine backed by SortedDict."""
+"""CICS file-control adapter over the shared red-dragon access-method engine.
+
+``VsamEngine`` is a thin CICS adapter: the backing ``.dat`` file IS the store.
+Point ops (read/write/rewrite/delete) open a driver per call; browse ops keep
+one open driver instance per cursor. Driver selection is by ``key_offset``:
+``0`` -> ``open_driver(INDEXED)`` (binary search over a key-sorted file); ``>0``
+-> ``open_alternate_key_driver`` (linear scan, read-only). The adapter maps the
+neutral ``AccessCondition`` to CICS EIBRESP and owns the genuinely-CICS state
+(FCT enable/disable, last-read-for-update held key, task-scoped browse cursors).
+"""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-from sortedcontainers import SortedDict
+from interpreter.cobol.access_result import AccessCondition
+from interpreter.cobol.file_drivers import (
+    FileOrganizationDriver,
+    open_alternate_key_driver,
+    open_driver,
+)
+from interpreter.cobol.file_enums import FileOrganization, OpenMode
 
-from cics.vsam.backend import InMemoryBackend, VsamBackend
+from cics.vsam.eibresp import (
+    RESP_DISABLED,
+    RESP_ENDFILE,
+    RESP_NORMAL,
+    RESP_NOTFND,
+    to_eibresp,
+)
+
+# Re-export the EIBRESP codes from their home in eibresp.py for back-compat:
+# callers (builtins, tests) import RESP_* from cics.vsam.engine.
+from cics.vsam.eibresp import RESP_DUPREC, RESP_IOERR  # noqa: F401
 from cics.vsam.fct import FctConfig
 
 logger = logging.getLogger(__name__)
 
-# Browse cursor key: (task_id, file_name, cursor_id) → int index into sorted keys
+# Browse cursor key: (task_id, file_name, cursor_id).
 _CursorKey = tuple[str, str, str]
 
-# CICS EIBRESP codes used by file control
-RESP_NORMAL = 0
-RESP_NOTFND = 13
-RESP_ENDFILE = 20
-RESP_DUPREC = 14
-RESP_DISABLED = 84
-RESP_IOERR = 17
 
+@dataclass(frozen=True)
+class _DatasetGeom:
+    """The record geometry + backing-file path for one configured dataset."""
 
-@dataclass
-class VsamDataset:
     record_length: int
-    # Offset/length of the key within each record (from DatasetConfig). A
-    # key_offset of 0 + key_length of 0 reproduces the legacy offset-0 match.
-    key_offset: int = 0
-    key_length: int = 0
-    store: SortedDict = field(default_factory=SortedDict)  # key_bytes → record_bytes
+    key_offset: int
+    key_length: int
+    path: Path
 
 
 class VsamEngine:
-    """In-memory VSAM engine. One SortedDict per dataset.
+    """CICS file-control adapter over the file-resident access-method drivers.
 
-    Records are stored keyed by their full record bytes. Key matching uses the
-    record slice ``record[key_offset : key_offset + klen]`` where ``key_offset``
-    comes from the dataset config (default 0) and ``klen`` is the operation's
-    key length (or the config's ``key_length`` when pinned). With the defaults
-    this is the historical offset-0 prefix match; a non-zero ``key_offset``
-    supports alternate-index paths whose key lives inside the record (e.g. the
-    CARD-XREF ACCT-ID at offset 25).
+    One backing ``.dat`` file per dataset under ``vsam_dir`` is the store. The
+    base KSDS clusters (``key_offset == 0``) are key-sorted on disk so the
+    ``IndexedDriver`` binary search applies; alternate-key datasets
+    (``key_offset > 0``) are read by linear scan.
     """
 
-    def __init__(self, config: FctConfig, backend: VsamBackend | None = None) -> None:
+    def __init__(self, config: FctConfig, vsam_dir: Path) -> None:
         self._config = config
-        self._backend: VsamBackend = (
-            backend if backend is not None else InMemoryBackend()
-        )
-        self._datasets: dict[str, VsamDataset] = {}
-        # Browse position cursor: a "between-records" index ``p`` in [0, len].
-        # READNEXT returns keys[p] then advances; READPREV returns keys[p-1]
-        # then retreats. ``_cursor_dir`` records the last browse direction so a
-        # READNEXT→READPREV reversal skips back over the just-read record.
-        self._cursors: dict[_CursorKey, int] = {}
-        self._cursor_dir: dict[_CursorKey, str] = {}
+        self._vsam_dir = Path(vsam_dir)
+        self._datasets: dict[str, _DatasetGeom] = {}
         # Last record key READ per file. EXEC CICS DELETE / REWRITE without a
         # RIDFLD operate on the record most recently read for update; a keyless
-        # DELETE falls back to this held key.
+        # DELETE / REWRITE falls back to this held key.
         self._held_key: dict[str, bytes] = {}
+        # One open driver instance per browse cursor.
+        self._browse: dict[_CursorKey, FileOrganizationDriver] = {}
 
     def load_all(self) -> None:
-        """Load all configured datasets via the backend (seed or persisted state)."""
+        """Materialize each configured dataset's backing-file path (the seeded
+        ``.dat``). No record loading — the file is the store."""
         for name, cfg in self._config.datasets.items():
-            ds = VsamDataset(
+            canonical = name.upper()
+            geom = _DatasetGeom(
                 record_length=cfg.record_length,
                 key_offset=cfg.key_offset,
                 key_length=cfg.key_length,
+                path=self._vsam_dir / f"{canonical}.dat",
             )
-            for record in self._backend.load(name, cfg):
-                if len(record) == cfg.record_length:
-                    ds.store[record] = record
-            self._datasets[name.upper()] = ds
-            logger.info("VSAM: loaded %s (%d records)", name, len(ds.store))
+            # An unseeded enabled dataset still needs a backing file so reads
+            # return NOT_FOUND (empty file) rather than crashing on open.
+            self._ensure_backing(geom)
+            self._datasets[canonical] = geom
+            logger.info("VSAM: registered %s -> %s", canonical, geom.path)
 
     def dataset_count(self) -> int:
         return len(self._datasets)
 
-    def _get_ds(self, file_name: str) -> VsamDataset | None:
+    def _geom(self, file_name: str) -> _DatasetGeom | None:
         return self._datasets.get(file_name.upper().strip("'\""))
 
-    def _persist(self, file_name: str) -> None:
-        """Write-through the dataset's current records via the backend."""
-        canonical = file_name.upper().strip("'\"")
-        cfg = self._config.datasets.get(canonical)
-        ds = self._datasets.get(canonical)
-        if cfg is None or ds is None:
-            return
-        self._backend.persist(canonical, cfg, list(ds.store.keys()))
+    def _open(
+        self, file_name: str, mode: OpenMode, key_length: int
+    ) -> FileOrganizationDriver | None:
+        """Open a driver for an FCT-enabled dataset, routed by ``key_offset``.
+
+        Returns None when the file is not an enabled FCT entry (the caller maps
+        that to ``RESP_DISABLED``). ``key_offset > 0`` -> alternate-key linear
+        scan (read-only); ``key_offset == 0`` -> INDEXED binary search. The
+        driver is opened with the EFFECTIVE key length (the FCT's pinned width,
+        or the operation's ``key_length`` when the FCT leaves it unpinned) so the
+        driver's own key extraction (write/rewrite derive the key from the
+        record) slices the right bytes.
+        """
+        geom = self._geom(file_name)
+        if geom is None:
+            return None
+        klen = self._klen(geom, key_length)
+        if geom.key_offset > 0:
+            return open_alternate_key_driver(
+                geom.path,
+                mode,
+                geom.record_length,
+                geom.key_offset,
+                klen,
+            )
+        return open_driver(
+            FileOrganization.INDEXED,
+            geom.path,
+            mode,
+            geom.record_length,
+            geom.key_offset,
+            klen,
+        )
 
     @staticmethod
-    def _record_key(ds: VsamDataset, record: bytes, key_length: int) -> bytes:
-        """The portion of ``record`` that participates in key matching.
-
-        Slices ``record[key_offset : key_offset + klen]`` where ``klen`` is the
-        dataset's pinned ``key_length`` if set, else the operation's
-        ``key_length``. With key_offset=0 and an unpinned width this is the
-        legacy ``record[:key_length]`` prefix.
-        """
-        klen = ds.key_length or key_length
-        start = ds.key_offset
-        return record[start : start + klen]
+    def _klen(geom: _DatasetGeom, key_length: int) -> int:
+        return geom.key_length or key_length
 
     # ── Point operations ──────────────────────────────────────────────
 
@@ -112,159 +139,123 @@ class VsamEngine:
         self, file_name: str, key: bytes, key_length: int
     ) -> tuple[bytes | None, int]:
         """READ FILE. Returns (record_bytes, eibresp)."""
-        ds = self._get_ds(file_name)
-        if ds is None:
+        geom = self._geom(file_name)
+        if geom is None:
             return None, RESP_DISABLED
-        klen = ds.key_length or key_length
+        klen = self._klen(geom, key_length)
         search = key[:klen]
-        for record in ds.store.keys():
-            if self._record_key(ds, record, key_length) == search:
-                # Hold this key so a subsequent RIDFLD-less DELETE (read-for-
-                # update then delete) targets exactly this record.
-                self._held_key[file_name.upper()] = search
-                return bytes(record), RESP_NORMAL
-        return None, RESP_NOTFND
+        drv = self._open(file_name, OpenMode.INPUT, key_length)
+        assert drv is not None
+        result = drv.read_key(search)
+        drv.close()
+        if result.condition is AccessCondition.OK:
+            # Hold this key so a subsequent RIDFLD-less DELETE / REWRITE targets
+            # exactly this record.
+            self._held_key[file_name.upper()] = search
+            return result.data, RESP_NORMAL
+        return None, to_eibresp(result.condition)
 
     def write(self, file_name: str, key: bytes, key_length: int, record: bytes) -> int:
         """WRITE FILE. Returns eibresp."""
-        ds = self._get_ds(file_name)
-        if ds is None:
+        geom = self._geom(file_name)
+        if geom is None:
             return RESP_DISABLED
-        key_prefix = self._record_key(ds, record, key_length)
-        for existing in list(ds.store.keys()):
-            if self._record_key(ds, existing, key_length) == key_prefix:
-                return RESP_DUPREC
-        ds.store[bytes(record)] = bytes(record)
-        self._persist(file_name)
-        return RESP_NORMAL
+        drv = self._open(file_name, OpenMode.IO, key_length)
+        assert drv is not None
+        result = drv.write(record)
+        drv.close()
+        return to_eibresp(result.condition)
 
     def rewrite(
         self, file_name: str, key: bytes, key_length: int, record: bytes
     ) -> int:
-        """REWRITE FILE. Returns eibresp."""
-        ds = self._get_ds(file_name)
-        if ds is None:
+        """REWRITE FILE. Returns eibresp.
+
+        EXEC CICS REWRITE has no RIDFLD: the key comes from the FROM record's
+        own key field. The IndexedDriver derives the key from the record when
+        passed an empty key, so a keyless REWRITE works directly.
+        """
+        geom = self._geom(file_name)
+        if geom is None:
             return RESP_DISABLED
-        # EXEC CICS REWRITE has no RIDFLD: the record key comes from the FROM
-        # record's own key field. When the caller passes an empty key (the
-        # REWRITE lowering, which has no RIDFLD to copy in), derive the match
-        # key from the record itself — mirroring write()'s self-keyed behaviour.
-        klen = ds.key_length or key_length
-        key_prefix = key[:klen] if key else self._record_key(ds, record, key_length)
-        for existing in list(ds.store.keys()):
-            if self._record_key(ds, existing, key_length) == key_prefix:
-                del ds.store[existing]
-                ds.store[bytes(record)] = bytes(record)
-                self._persist(file_name)
-                return RESP_NORMAL
-        return RESP_NOTFND
+        klen = self._klen(geom, key_length)
+        match_key = key[:klen] if key else b""
+        drv = self._open(file_name, OpenMode.IO, key_length)
+        assert drv is not None
+        result = drv.rewrite(record, match_key)
+        drv.close()
+        return to_eibresp(result.condition)
 
     def delete(self, file_name: str, key: bytes, key_length: int) -> int:
         """DELETE FILE. Returns eibresp."""
-        ds = self._get_ds(file_name)
-        if ds is None:
+        geom = self._geom(file_name)
+        if geom is None:
             return RESP_DISABLED
-        klen = ds.key_length or key_length
+        klen = self._klen(geom, key_length)
         # EXEC CICS DELETE has no RIDFLD when it follows a READ ... UPDATE: the
         # target is the record most recently read for this file (held key).
-        key_prefix = key[:klen] if key else self._held_key.get(file_name.upper(), b"")
-        if not key_prefix:
+        match_key = key[:klen] if key else self._held_key.get(file_name.upper(), b"")
+        if not match_key:
             return RESP_NOTFND
-        for existing in list(ds.store.keys()):
-            if self._record_key(ds, existing, key_length) == key_prefix:
-                del ds.store[existing]
-                self._held_key.pop(file_name.upper(), None)
-                self._persist(file_name)
-                return RESP_NORMAL
-        return RESP_NOTFND
+        drv = self._open(file_name, OpenMode.IO, key_length)
+        assert drv is not None
+        result = drv.delete(match_key)
+        drv.close()
+        if result.condition is AccessCondition.OK:
+            self._held_key.pop(file_name.upper(), None)
+        return to_eibresp(result.condition)
 
     # ── Browse operations ─────────────────────────────────────────────
 
     def startbr(
         self, file_name: str, key: bytes, key_length: int, cursor_key: _CursorKey
     ) -> int:
-        """STARTBR FILE. Positions cursor at or after key. Returns eibresp."""
-        ds = self._get_ds(file_name)
-        if ds is None:
+        """STARTBR FILE. Positions a per-cursor driver at or after key."""
+        geom = self._geom(file_name)
+        if geom is None:
             return RESP_DISABLED
-        keys = list(ds.store.keys())
-        klen = ds.key_length or key_length
-        prefix = key[:klen]
-        # Position at the first key >= prefix (GTEQ). When no key qualifies
-        # (e.g. RIDFLD = HIGH-VALUES, the CardDemo "seek last record" idiom),
-        # position PAST end-of-file so the first READPREV walks back to the
-        # final record. The previous code left idx=0 here, breaking that path.
-        idx = len(keys)
-        for i, k in enumerate(keys):
-            if self._record_key(ds, k, key_length) >= prefix:
-                idx = i
-                break
-        self._cursors[cursor_key] = idx
-        self._cursor_dir.pop(cursor_key, None)
+        klen = self._klen(geom, key_length)
+        drv = self._open(file_name, OpenMode.INPUT, key_length)
+        assert drv is not None
+        # GTEQ position. A past-end GTEQ (NOT_FOUND) still positions the cursor
+        # at EOF (the seek-last idiom: STARTBR HIGH-VALUES then READPREV), so a
+        # NOT_FOUND here is a valid browse start — STARTBR returns RESP_NORMAL.
+        drv.start(key[:klen], ">=")
+        self._browse[cursor_key] = drv
         return RESP_NORMAL
 
     def readnext(
         self, file_name: str, cursor_key: _CursorKey
     ) -> tuple[bytes | None, int]:
         """READNEXT FILE. Returns (record, eibresp)."""
-        ds = self._get_ds(file_name)
-        if ds is None:
-            return None, RESP_DISABLED
-        idx = self._cursors.get(cursor_key, 0)
-        keys = list(ds.store.keys())
-        if idx >= len(keys):
-            return None, RESP_ENDFILE
-        record = keys[idx]
-        self._cursors[cursor_key] = idx + 1
-        self._cursor_dir[cursor_key] = "next"
-        return bytes(record), RESP_NORMAL
+        result = self._browse[cursor_key].read_seq()
+        if result.condition is AccessCondition.OK:
+            return result.data, RESP_NORMAL
+        return None, to_eibresp(result.condition)
 
     def readprev(
         self, file_name: str, cursor_key: _CursorKey
     ) -> tuple[bytes | None, int]:
         """READPREV FILE. Returns (record, eibresp).
 
-        The cursor ``p`` is a "between-records" position: READPREV returns
-        keys[p-1] then retreats to p-1. On a READNEXT→READPREV reversal the
-        cursor sits one past the just-read record, so we first skip back over
-        it (matching the IBM direction-switch behaviour) before returning the
-        prior record. A STARTBR→READPREV (no intervening READNEXT) walks
-        straight back from the positioned point — the CardDemo "seek last
-        record" idiom (STARTBR with HIGH-VALUES then READPREV).
+        The driver's cursor handles the READNEXT->READPREV reversal directly
+        (the first READPREV after a READNEXT re-reads that record).
         """
-        ds = self._get_ds(file_name)
-        if ds is None:
-            return None, RESP_DISABLED
-        keys = list(ds.store.keys())
-        p = self._cursors.get(cursor_key, 0)
-        if self._cursor_dir.get(cursor_key) == "next":
-            # Reverse direction: step back over the record READNEXT just read.
-            p -= 1
-        idx = p - 1
-        if idx < 0:
-            return None, RESP_ENDFILE
-        record = keys[idx]
-        self._cursors[cursor_key] = idx
-        self._cursor_dir[cursor_key] = "prev"
-        return bytes(record), RESP_NORMAL
+        result = self._browse[cursor_key].read_prev()
+        if result.condition is AccessCondition.OK:
+            return result.data, RESP_NORMAL
+        return None, to_eibresp(result.condition)
 
     def endbr(self, file_name: str, cursor_key: _CursorKey) -> int:
-        """ENDBR FILE. Releases cursor. Returns eibresp."""
-        self._cursors.pop(cursor_key, None)
-        self._cursor_dir.pop(cursor_key, None)
+        """ENDBR FILE. Closes and drops the cursor's driver."""
+        self._browse.pop(cursor_key).close()
         return RESP_NORMAL
 
-    def flush_to(self, directory: Path) -> None:
-        """Snapshot every dataset's current records to <directory>/<NAME>.dat
-        via the raw codec, regardless of the configured backend."""
-        from cics.vsam.format import write_flat_file
-
-        for name, ds in self._datasets.items():
-            cfg = self._config.datasets.get(name)
-            if cfg is None:
-                continue
-            write_flat_file(
-                Path(directory) / f"{name}.dat",
-                list(ds.store.keys()),
-                cfg.record_length,
-            )
+    @staticmethod
+    def _ensure_backing(geom: _DatasetGeom) -> None:
+        """A WRITE/REWRITE/DELETE opens the backing file in place (r+b). Create
+        an empty backing file for a dataset that has never been seeded so the
+        first WRITE has a file to insert into."""
+        if not geom.path.exists():
+            geom.path.parent.mkdir(parents=True, exist_ok=True)
+            geom.path.write_bytes(b"")

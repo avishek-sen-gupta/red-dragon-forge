@@ -2,7 +2,7 @@
 
 Proves the whole copybook-driven dump pipeline end to end. Drives the SAME real
 CardDemo account-update REWRITE the durable harness exercises
-(``test_carddemo_signon_real._drive_rewrite``) but through a ``FileBackend`` that
+(``test_carddemo_signon_real._drive_rewrite``) but through a ``vsam_dir`` that
 write-throughs every mutation to ``<store>/ACCTDAT.dat`` as a fixed-length flat
 image. Then loads the real ACCOUNT copybook (``CVACT01Y.cpy``) into a DataLayout,
 reads the backing flat file, decodes each record via the dump module, finds the
@@ -30,7 +30,6 @@ from tests.integration.cics.test_carddemo_signon_real import (
     _drive_rewrite,
 )
 from tests.integration.cobol_helpers import bridge_jar
-from cics.vsam.backend import FileBackend
 from cics.vsam.dump import decode_record, load_record_layout
 from cics.vsam.format import read_flat_file
 from tests.covers import covers, NotLanguageFeature
@@ -50,7 +49,7 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path, bridge_jar):
     "N" — the value the REWRITE flow set (Y -> N).
     """
     backing = tmp_path / "store"
-    _drive_rewrite(tmp_path, bridge_jar, backend=FileBackend(backing))
+    _drive_rewrite(tmp_path, bridge_jar, vsam_dir=backing)
 
     # Locate the real CardDemo ACCOUNT copybook (the one ACCTDAT records use).
     carddemo = Path(os.environ["CARDDEMO_HOME"])

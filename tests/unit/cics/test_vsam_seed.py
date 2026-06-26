@@ -1,14 +1,14 @@
-"""Tests for seed_vsam and load_vsam_seed."""
+"""Tests for seed_vsam (backing-file writer) + base-KSDS key sort."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
+from cics.vsam.fct import DatasetConfig, FctConfig
 from cics.vsam.format import read_flat_file
-from cics.vsam.seed import load_vsam_seed, seed_vsam
+from cics.vsam.seed import seed_records, seed_vsam
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -18,41 +18,6 @@ def _write_fct(path: Path, datasets: dict) -> None:
 
 def _write_flat(path: Path, records: list[bytes]) -> None:
     path.write_bytes(b"".join(records))
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_load_vsam_seed_returns_records(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    _write_flat(data_dir / "acct.dat", [b"AAAA", b"BBBB"])
-    _write_fct(
-        tmp_path / "fct.yaml",
-        {"ACCTFILE": {"file": "acct.dat", "record_length": 4}},
-    )
-
-    seed = load_vsam_seed(tmp_path / "fct.yaml", data_dir)
-
-    assert seed == {"ACCTFILE": [b"AAAA", b"BBBB"]}
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_load_vsam_seed_multiple_datasets(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    _write_flat(data_dir / "acct.dat", [b"AAAA"])
-    _write_flat(data_dir / "card.dat", [b"CCCCCCCC", b"DDDDDDDD"])
-    _write_fct(
-        tmp_path / "fct.yaml",
-        {
-            "ACCTFILE": {"file": "acct.dat", "record_length": 4},
-            "CARDFILE": {"file": "card.dat", "record_length": 8},
-        },
-    )
-
-    seed = load_vsam_seed(tmp_path / "fct.yaml", data_dir)
-
-    assert seed["ACCTFILE"] == [b"AAAA"]
-    assert seed["CARDFILE"] == [b"CCCCCCCC", b"DDDDDDDD"]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -104,3 +69,57 @@ def test_seed_vsam_source_files_untouched(tmp_path: Path) -> None:
     seed_vsam(tmp_path / "fct.yaml", data_dir, vsam_dir)
 
     assert (data_dir / "acct.dat").read_bytes() == original
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_seed_records_base_ksds_is_key_sorted(tmp_path: Path) -> None:
+    """A base KSDS (key_offset=0) backing file must be physically key-sorted so
+    the file-resident IndexedDriver binary search applies — even when the source
+    records arrive out of key order."""
+    vsam_dir = tmp_path / "vsam"
+    fct = FctConfig(
+        datasets={"DS": DatasetConfig(record_length=8, key_offset=0, key_length=3)}
+    )
+    unsorted = [b"CCC00003", b"AAA00001", b"BBB00002"]
+
+    seed_records(vsam_dir, fct, {"DS": unsorted})
+
+    assert read_flat_file(vsam_dir / "DS.dat", 8) == [
+        b"AAA00001",
+        b"BBB00002",
+        b"CCC00003",
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_seed_records_alternate_key_keeps_source_order(tmp_path: Path) -> None:
+    """An alternate-key dataset (key_offset>0) is read by linear scan, so its
+    backing file is written in source order — NOT sorted by the alt key."""
+    vsam_dir = tmp_path / "vsam"
+    fct = FctConfig(
+        datasets={"AIX": DatasetConfig(record_length=8, key_offset=4, key_length=4)}
+    )
+    # Sorted by primary (offset 0), unsorted by the alt key at offset 4.
+    source = [b"0001ZZZZ", b"0002AAAA", b"0003MMMM"]
+
+    seed_records(vsam_dir, fct, {"AIX": source})
+
+    assert read_flat_file(vsam_dir / "AIX.dat", 8) == source
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_seed_vsam_sorts_base_ksds_from_ebcdic_source(tmp_path: Path) -> None:
+    """End to end: seed_vsam reads an out-of-order source and writes a key-sorted
+    base-KSDS .dat."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    vsam_dir = tmp_path / "vsam"
+    _write_flat(data_dir / "ds.dat", [b"CCC", b"AAA", b"BBB"])
+    _write_fct(
+        tmp_path / "fct.yaml",
+        {"DS": {"file": "ds.dat", "record_length": 3, "key_length": 3}},
+    )
+
+    seed_vsam(tmp_path / "fct.yaml", data_dir, vsam_dir)
+
+    assert read_flat_file(vsam_dir / "DS.dat", 3) == [b"AAA", b"BBB", b"CCC"]

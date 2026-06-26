@@ -1,6 +1,6 @@
 # CardDemo VSAM File Control Table — schema metadata only.
 # Parameters sourced from JCL DEFINE CLUSTER statements in app/jcl/.
-# Use seed_vsam(fct_path, ebcdic_dir, vsam_dir) or load_vsam_seed(fct_path, ebcdic_dir)
+# Use seed_vsam(fct_path, ebcdic_dir, vsam_dir) to write the backing .dat files,
 # with ebcdic_dir = <CARDDEMO_HOME>/data/EBCDIC.
 datasets:
   ACCTFILE:

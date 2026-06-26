@@ -10,7 +10,7 @@ the point-read flows in test_carddemo_signon_real.py:
       STARTBR from CDEMO-CT00-TRNID-LAST → skip-one READNEXT → read next
       page → SEND MAP COTRN0A → RETURN TRANSID CT00.
 
-VSAM engine seeded via FctConfig.from_yaml + load_vsam_seed from EBCDIC flat
+VSAM engine seeded via FctConfig.from_yaml + seed_vsam from EBCDIC flat
 files written to tmp_path — exercising the full seed pipeline.
 """
 
@@ -28,11 +28,10 @@ from cics.dispatcher import CicsRegion, InputEvent
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
-from cics.vsam.backend import InMemoryBackend
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
 from cics.vsam.format import write_flat_file
-from cics.vsam.seed import load_vsam_seed
+from cics.vsam.seed import seed_vsam
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
@@ -132,19 +131,20 @@ datasets:
 
 
 def _tran_list_engine(tmp_path: Path) -> VsamEngine:
-    """Build VsamEngine seeded via FctConfig.from_yaml + load_vsam_seed.
+    """Build VsamEngine seeded via FctConfig.from_yaml + seed_vsam.
 
-    Exercises the full seed pipeline: write_flat_file → load_vsam_seed
-    (which calls FctConfig.from_yaml + read_flat_file) → InMemoryBackend.
+    Exercises the full seed pipeline: write_flat_file → seed_vsam
+    (which calls FctConfig.from_yaml + read_flat_file) → key-sorted .dat files.
     """
     data_dir = tmp_path / "data"
     fct_path = tmp_path / "fct.yaml"
     _write_seed_files(data_dir)
     fct_path.write_text(_FCT_YAML)
 
-    seed = load_vsam_seed(fct_path, data_dir)
     fct = FctConfig.from_yaml(fct_path)
-    engine = VsamEngine(fct, backend=InMemoryBackend(seed=seed))
+    vsam_dir = tmp_path / "vsam"
+    seed_vsam(fct_path, data_dir, vsam_dir)
+    engine = VsamEngine(fct, vsam_dir)
     engine.load_all()
     return engine
 

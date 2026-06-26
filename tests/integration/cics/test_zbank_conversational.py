@@ -27,11 +27,10 @@ from cics.dispatcher import CicsRegion, InputEvent
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
-from cics.vsam.backend import InMemoryBackend
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
 from cics.vsam.format import write_flat_file
-from cics.vsam.seed import load_vsam_seed
+from cics.vsam.seed import seed_vsam
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
@@ -80,9 +79,10 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
     )
     fct_path = tmp_path / "fct.yaml"
     fct_path.write_text(_FCT_YAML)
-    seed = load_vsam_seed(fct_path, data_dir)
     fct = FctConfig.from_yaml(fct_path)
-    engine = VsamEngine(fct, backend=InMemoryBackend(seed=seed))
+    vsam_dir = tmp_path / "vsam"
+    seed_vsam(fct_path, data_dir, vsam_dir)
+    engine = VsamEngine(fct, vsam_dir)
     engine.load_all()
     return engine
 
