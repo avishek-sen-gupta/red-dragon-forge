@@ -10,7 +10,7 @@ admin menu COADM01C (not the regular COMEN01C), then lists users from USRSEC.
   Turn 4 (COUSR00C, first display): STARTBR USRSEC from LOW-VALUES ->
       READNEXT x N -> SEND MAP COUSR0A -> RETURN TRANSID CU00.
 
-VSAM engine seeded via FctConfig.from_yaml + load_vsam_seed (USRSEC only).
+VSAM engine seeded via FctConfig.from_yaml + seed_vsam (USRSEC only).
 """
 
 from __future__ import annotations
@@ -27,11 +27,10 @@ from cics.dispatcher import CicsRegion, InputEvent
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
-from cics.vsam.backend import InMemoryBackend
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
 from cics.vsam.format import write_flat_file
-from cics.vsam.seed import load_vsam_seed
+from cics.vsam.seed import seed_vsam
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
@@ -107,9 +106,10 @@ def _user_list_engine(tmp_path: Path) -> VsamEngine:
     _write_seed_files(data_dir)
     fct_path.write_text(_FCT_YAML)
 
-    seed = load_vsam_seed(fct_path, data_dir)
     fct = FctConfig.from_yaml(fct_path)
-    engine = VsamEngine(fct, backend=InMemoryBackend(seed=seed))
+    vsam_dir = tmp_path / "vsam"
+    seed_vsam(fct_path, data_dir, vsam_dir)
+    engine = VsamEngine(fct, vsam_dir)
     engine.load_all()
     return engine
 

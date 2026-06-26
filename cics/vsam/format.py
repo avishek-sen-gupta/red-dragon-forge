@@ -4,7 +4,7 @@ The on-disk format is a concatenation of fixed-length records (an
 IDCAMS-REPRO-style sequential image) — the same format VsamEngine seeds are in,
 so a written file round-trips through read_flat_file and can itself be a seed.
 This is the single source of the persisted format (used by the backends and by
-VsamEngine.flush_to).
+the file-resident drivers).
 """
 
 from __future__ import annotations

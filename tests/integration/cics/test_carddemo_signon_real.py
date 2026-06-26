@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import os
 import queue
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -45,10 +44,9 @@ from cics.types import DispatchKind
 from cics.dispatcher import InputEvent, CicsRegion
 from cics.bootstrap import compile_cics_program
 from cics.le_stubs import le_service_stub_sources
-from cics.vsam.backend import FileBackend, InMemoryBackend
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig, DatasetConfig
-from cics.vsam.format import write_flat_file
+from cics.vsam.seed import seed_records
 from cics.bms.generate import generate_symbolic_copybooks
 from interpreter.cobol.features import CobolFeature
 from tests.integration.cics.channel_drain import drain
@@ -142,8 +140,8 @@ def _cust_record() -> bytes:
     return rec.ljust(500, b"\x00")[:500]
 
 
-def _usrsec_engine(backend=None) -> VsamEngine:
-    """In-memory engine seeded with FOUR datasets used across all five turns:
+def _usrsec_engine(vsam_dir: Path) -> VsamEngine:
+    """File-resident engine seeded with FOUR datasets used across all five turns:
 
       * USRSEC  — sign-on user (turn 1), key@0, 80-byte CSUSR01Y record.
       * CXACAIX — CARD-XREF alternate-index path (turn 5, 9200-GETCARDXREF):
@@ -177,15 +175,8 @@ def _usrsec_engine(backend=None) -> VsamEngine:
             "CUSTDAT": DatasetConfig(record_length=500, key_length=9),
         }
     )
-    if isinstance(backend, FileBackend):
-        for name, (reclen, records) in seed.items():
-            backend.persist(name, DatasetConfig(record_length=reclen), records)
-        engine = VsamEngine(fct, backend=backend)
-    else:
-        engine = VsamEngine(
-            fct,
-            backend=InMemoryBackend(seed={n: r for n, (_, r) in seed.items()}),
-        )
+    seed_records(vsam_dir, fct, {n: r for n, (_, r) in seed.items()})
+    engine = VsamEngine(fct, vsam_dir)
     engine.load_all()
     return engine
 
@@ -254,7 +245,7 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     strategy = CicsLoweringStrategy(
         context_holder=context_holder,
         result_holder=result_holder,
-        vsam_engine=_usrsec_engine(),
+        vsam_engine=_usrsec_engine(tmp_path / "vsam"),
         screen_queue=screen_q,
         input_queue=input_q,
     )
@@ -469,13 +460,13 @@ _DFHENTER = "\x7d"
 _DFHPF5 = "\xf5"  # PF05 = confirm-and-save
 
 
-def _compile_update_programs(tmp_path, bridge_jar, backend=None):
+def _compile_update_programs(tmp_path, bridge_jar, vsam_dir=None):
     """Compile COSGN00C + COMEN01C + COACTUPC sharing one strategy/engine.
 
     Returns ``(signon, menu, acctupd, screen_q, input_q, context_holder,
     result_holder, engine)``. The engine is returned so the test can read the
-    stored ACCTDAT/CUSTDAT records back after the REWRITE. Pass ``backend`` to
-    construct the shared VsamEngine with a durable persistence backend.
+    stored ACCTDAT/CUSTDAT records back after the REWRITE. Pass ``vsam_dir`` to
+    point the shared VsamEngine's backing files at a durable directory.
     """
     from interpreter.cobol.cobol_parser import ProLeapCobolParser
     from interpreter.cobol.subprocess_runner import RealSubprocessRunner
@@ -502,7 +493,7 @@ def _compile_update_programs(tmp_path, bridge_jar, backend=None):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    engine = _usrsec_engine(backend=backend)
+    engine = _usrsec_engine(vsam_dir or (tmp_path / "vsam"))
     strategy = CicsLoweringStrategy(
         context_holder=context_holder,
         result_holder=result_holder,
@@ -532,12 +523,12 @@ def _compile_update_programs(tmp_path, bridge_jar, backend=None):
     )
 
 
-def _drive_to_coactupc(tmp_path, bridge_jar, backend=None):
+def _drive_to_coactupc(tmp_path, bridge_jar, vsam_dir=None):
     """Sign-on -> menu -> option '02' -> XCTL COACTUPC -> first display (CACTUPA).
 
     Returns ``(acctupd, r_first, screen_q, input_q, context_holder,
     result_holder, engine)`` parked pseudo-conversationally on CAUP. Pass
-    ``backend`` to make the shared VsamEngine write through to durable storage.
+    ``vsam_dir`` to point the shared VsamEngine's backing files at a directory.
     """
     (
         signon,
@@ -548,7 +539,7 @@ def _drive_to_coactupc(tmp_path, bridge_jar, backend=None):
         context_holder,
         result_holder,
         engine,
-    ) = _compile_update_programs(tmp_path, bridge_jar, backend=backend)
+    ) = _compile_update_programs(tmp_path, bridge_jar, vsam_dir=vsam_dir)
 
     # Region config: this run routes the menu's option '02' to COACTUPC.
     program_cache = {
@@ -616,16 +607,16 @@ def test_real_carddemo_account_update_first_display(tmp_path, bridge_jar):
     _drive_to_coactupc(tmp_path, bridge_jar)
 
 
-def _drive_update_to_details(tmp_path, bridge_jar, backend=None):
+def _drive_update_to_details(tmp_path, bridge_jar, vsam_dir=None):
     """Continue past Turn A: enter the seeded acct id (Turn B) -> 9000-READ-ACCT
     (3 chained VSAM reads) -> details rendered for edit.
 
     Returns ``(acctupd, r_details, screen_q, input_q, context_holder,
     result_holder, engine)`` parked on CAUP showing the fetched account. Pass
-    ``backend`` to make the shared VsamEngine write through to durable storage.
+    ``vsam_dir`` to point the shared VsamEngine's backing files at a directory.
     """
     acctupd, region, r4, screen_q, input_q, context_holder, result_holder, engine = (
-        _drive_to_coactupc(tmp_path, bridge_jar, backend=backend)
+        _drive_to_coactupc(tmp_path, bridge_jar, vsam_dir=vsam_dir)
     )
 
     # Turn B: enter acct id -> ACUP-DETAILS-NOT-FETCHED path reads + shows detail.
@@ -727,7 +718,7 @@ def _resubmit_fields(view: dict, *, status: str, **overrides: str) -> dict[str, 
     return fields
 
 
-def _drive_rewrite(tmp_path, bridge_jar, backend=None, **field_overrides: str):
+def _drive_rewrite(tmp_path, bridge_jar, vsam_dir=None, **field_overrides: str):
     """Drive the full account-update REWRITE flow (sign-on .. Turn D) and return
     the shared ``engine`` after the REWRITE has run.
 
@@ -738,7 +729,7 @@ def _drive_rewrite(tmp_path, bridge_jar, backend=None, **field_overrides: str):
         9600-WRITE-PROCESSING -> READ ... UPDATE (lock) + REWRITE on ACCTDAT and
         CUSTDAT.
 
-    Pass ``backend`` to make the shared VsamEngine write the REWRITE through to
+    Pass ``vsam_dir`` to point the shared VsamEngine's backing files at a directory to land the REWRITE in
     durable storage. Pass ``**field_overrides`` to override individual BMS map
     fields in the submitted screen (e.g. ``AADDGRP="GRP9"``).
     """
@@ -752,7 +743,7 @@ def _drive_rewrite(tmp_path, bridge_jar, backend=None, **field_overrides: str):
         context_holder,
         result_holder,
         engine,
-    ) = _drive_update_to_details(tmp_path, bridge_jar, backend=backend)
+    ) = _drive_update_to_details(tmp_path, bridge_jar, vsam_dir=vsam_dir)
 
     # --- Turn C: submit the change (status Y->N) + ENTER ---
     drain(screen_q)
@@ -849,7 +840,7 @@ def _transact_seed_record() -> bytes:
     return rec.ljust(_TRAN_RECLN, b"\x00")[:_TRAN_RECLN]
 
 
-def _add_engine(backend=None) -> VsamEngine:
+def _add_engine(vsam_dir: Path) -> VsamEngine:
     """Engine seeded with USRSEC (sign-on), CXACAIX (acct->card xref the add
     flow validates the account against) and TRANSACT (browse for last id +
     target of the WRITE). Reuses the USRSEC + xref records from the view flow."""
@@ -875,24 +866,17 @@ def _add_engine(backend=None) -> VsamEngine:
             ),
         }
     )
-    if isinstance(backend, FileBackend):
-        for name, (reclen, records) in seed.items():
-            backend.persist(name, DatasetConfig(record_length=reclen), records)
-        engine = VsamEngine(fct, backend=backend)
-    else:
-        engine = VsamEngine(
-            fct,
-            backend=InMemoryBackend(seed={n: r for n, (_, r) in seed.items()}),
-        )
+    seed_records(vsam_dir, fct, {n: r for n, (_, r) in seed.items()})
+    engine = VsamEngine(fct, vsam_dir)
     engine.load_all()
     return engine
 
 
-def _drive_to_cotrn02c(tmp_path, bridge_jar, backend=None):
+def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
     """Sign-on -> menu -> option '08' -> XCTL COTRN02C -> first display (COTRN2A).
 
     Returns ``(region, screen_q, input_q, engine)`` parked pseudo-conversationally
-    on CT02 showing the empty transaction-add screen. Pass ``backend`` to make the
+    on CT02 showing the empty transaction-add screen. Pass ``vsam_dir`` to make the
     shared VsamEngine write the WRITE through to durable storage.
     """
     from interpreter.cobol.cobol_parser import ProLeapCobolParser
@@ -920,7 +904,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, backend=None):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    engine = _add_engine(backend=backend)
+    engine = _add_engine(vsam_dir or (tmp_path / "vsam"))
     strategy = CicsLoweringStrategy(
         context_holder=context_holder,
         result_holder=result_holder,
@@ -1012,17 +996,17 @@ def test_real_carddemo_transaction_add_first_display(tmp_path, bridge_jar):
     _drive_to_cotrn02c(tmp_path, bridge_jar)
 
 
-def _drive_transaction_add(tmp_path, bridge_jar, backend=None):
+def _drive_transaction_add(tmp_path, bridge_jar, vsam_dir=None):
     """Drive the full transaction-ADD flow (sign-on .. Turn B) and return
     ``(rB, viewB, engine)`` after the EXEC CICS WRITE has run.
 
     Turn B: enter a full new transaction + CONFIRM='Y' + ENTER ->
     ADD-TRANSACTION (STARTBR/READPREV/ENDBR id-generation + EXEC CICS WRITE).
-    Pass ``backend`` to make the shared VsamEngine write the new record through
+    Pass ``vsam_dir`` to make the shared VsamEngine write the new record through
     to durable storage (so the persistence demo can read it off disk).
     """
     region, screen_q, input_q, engine = _drive_to_cotrn02c(
-        tmp_path, bridge_jar, backend=backend
+        tmp_path, bridge_jar, vsam_dir=vsam_dir
     )
 
     # --- Turn B: submit the new transaction with CONFIRM='Y' + ENTER ---
