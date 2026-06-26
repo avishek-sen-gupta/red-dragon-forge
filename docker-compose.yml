@@ -24,8 +24,10 @@ services:
       test: ["CMD", "bash", "-c", "su - db2inst1 -c 'db2 connect to MOJO2' >/dev/null 2>&1 && exec 3<>/dev/tcp/localhost/50000"]
       interval: 15s
       timeout: 10s
-      retries: 40
-      start_period: 60s
+      # Generous: a fresh first init is ~3-5min native amd64 but ~20min under
+      # Apple-Silicon emulation; 80*15s + 120s start ≈ 22min before "unhealthy".
+      retries: 80
+      start_period: 120s
 
 volumes:
   squall_db2_data:
