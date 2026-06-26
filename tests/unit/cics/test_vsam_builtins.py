@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from tests.covers import covers, NotLanguageFeature
-from cics.vsam.backend import InMemoryBackend
+from cics.vsam.seed import seed_records
 from cics.vsam.engine import (
     VsamEngine,
     RESP_NORMAL,
@@ -39,8 +42,12 @@ def _rec(key: str, rest: str = "") -> bytes:
 
 
 def _engine_with_records(records: list[bytes]) -> VsamEngine:
-    config = FctConfig(datasets={"TESTDS": DatasetConfig(record_length=REC_LEN)})
-    engine = VsamEngine(config, backend=InMemoryBackend(seed={"TESTDS": records}))
+    config = FctConfig(
+        datasets={"TESTDS": DatasetConfig(record_length=REC_LEN, key_length=KEY_LEN)}
+    )
+    vsam_dir = Path(tempfile.mkdtemp()) / "vsam"
+    seed_records(vsam_dir, config, {"TESTDS": records})
+    engine = VsamEngine(config, vsam_dir)
     engine.load_all()
     return engine
 
@@ -180,6 +187,8 @@ def test_readnext_past_end_returns_endfile():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_readprev_after_stepping_forward_returns_prior_record():
+    """READNEXT A, READNEXT B, then READPREV: the direction switch re-reads B
+    (CICS semantics); a further READPREV returns the prior record A."""
     rec_a = _rec("AA01", "ALPHA")
     rec_b = _rec("BB02", "BRAVO")
     engine = _engine_with_records([rec_a, rec_b])
@@ -190,10 +199,15 @@ def test_readprev_after_stepping_forward_returns_prior_record():
     vm, addr = _make_vm_with_ws_region(bytearray(32))
     readnext(_args("TESTDS", 4, REC_LEN), vm)  # rec_a
     readnext(_args("TESTDS", 4, REC_LEN), vm)  # rec_b
+    # Reversal re-reads rec_b.
     pres = readprev(_args("TESTDS", 4, REC_LEN), vm)
     assert pres.value == RESP_NORMAL
     region = vm.region_get(addr)
     assert region is not None
+    assert bytes(region[4 : 4 + REC_LEN]) == rec_b
+    # Continue backward to the prior record rec_a.
+    pres2 = readprev(_args("TESTDS", 4, REC_LEN), vm)
+    assert pres2.value == RESP_NORMAL
     assert bytes(region[4 : 4 + REC_LEN]) == rec_a
 
 
