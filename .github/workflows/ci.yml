@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # native amd64 — DB2 community runs natively (no emulation)
+    env:
+      # DB2 password from a repo secret (never committed). DB2_HOST/DB2_PORT
+      # default to localhost:50000 in db2/dsn-env.sh and docker-compose.yml.
+      DB2_PASSWORD: ${{ secrets.DB2_PASSWORD }}
+      PROLEAP_BRIDGE_JAR: ${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive  # vendor/red-dragon has nested submodules (ProLeap)
+
+      - name: Set up JDK 17 (ProLeap bridge build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python deps (incl. the db2/ibm_db extra)
+        run: uv sync --extra db2
+
+      - name: Build the ProLeap bridge JAR
+        run: make jar
+
+      - name: Start DB2 (docker compose; privileged works in a workflow step)
+        run: make db2-up
+
+      - name: Run the full test suite
+        run: make test

@@ -77,4 +77,7 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: docs/superpowers/plans/2026-06-27-db2-ci-setup.md
   ignore_detectors: [filecontent]
+- filename: .github/workflows/ci.yml
+  # References ${{ secrets.DB2_PASSWORD }} (a GitHub secret reference, not a value).
+  ignore_detectors: [filecontent]
 version: "1.0"
