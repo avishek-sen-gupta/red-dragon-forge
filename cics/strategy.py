@@ -39,6 +39,7 @@ from interpreter.instructions import (
 from interpreter.types.type_expr import UNKNOWN
 
 from interpreter.cobol.cobol_statements import ExecCicsStatement
+from cics.flow_observer import CicsFlowObserver, CicsVerb, NullCicsFlowObserver
 
 if TYPE_CHECKING:
     from cics.terminal import InputChannel, ScreenChannel
@@ -375,6 +376,10 @@ def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-
     table[key] = fn
 
 
+def _operand_text(opt: "CicsOperand | None") -> str | None:
+    return opt.text if opt is not None else None
+
+
 class CicsLoweringStrategy:
     """Full CICS lowering strategy. Inject at CobolFrontend construction for CICS mode."""
 
@@ -391,8 +396,12 @@ class CicsLoweringStrategy:
         vsam_engine: object = None,
         receive_timeout: float = 30.0,
         conversational: bool = False,
+        observer: "CicsFlowObserver | None" = None,
     ) -> None:
         self._context_holder = context_holder
+        self._observer: CicsFlowObserver = (
+            observer if observer is not None else NullCicsFlowObserver()
+        )
         # Conversational mode lowers EXEC CICS RECEIVE MAP to a SUSPEND (yielding
         # to a run_resumable/resume driver) instead of a blocking input-queue read.
         self._conversational = conversational
@@ -580,6 +589,16 @@ class CicsLoweringStrategy:
                         args=(r_transid, r_ca),
                     )
                 )
+                self._observer.on_verb(
+                    CicsVerb(
+                        verb="RETURN_TRANSID",
+                        program="",
+                        map_name=None,
+                        mapset_name=None,
+                        xctl_target=None,
+                        transid=_operand_text(opts.get("TRANSID")),
+                    )
+                )
             else:
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
@@ -604,6 +623,16 @@ class CicsLoweringStrategy:
                     result_reg=r_res,
                     func_name=FuncName("__cics_set_xctl_context"),
                     args=(r_prog, r_ca),
+                )
+            )
+            self._observer.on_verb(
+                CicsVerb(
+                    verb="XCTL",
+                    program="",
+                    map_name=None,
+                    mapset_name=None,
+                    xctl_target=_operand_text(opts.get("PROGRAM")),
+                    transid=None,
                 )
             )
             ctx.emit_inst(Return_())
@@ -651,6 +680,31 @@ class CicsLoweringStrategy:
             # When omitted, BMS uses the map's own DSECT, named <mapname><suffix>
             # (e.g. RECEIVE MAP('COSGN0A') with no INTO -> COSGN0AI); derivable
             # only for a literal map name (a dynamic map always supplies FROM/INTO).
+            map_op_text = _operand_text(opts.get("MAP", opts.get("MAPNAME")))
+            mapset_op_text = _operand_text(opts.get("MAPSET"))
+            if verb == "SEND MAP":
+                self._observer.on_verb(
+                    CicsVerb(
+                        verb="SEND_MAP",
+                        program="",
+                        map_name=map_op_text,
+                        mapset_name=mapset_op_text,
+                        xctl_target=None,
+                        transid=None,
+                    )
+                )
+            elif verb == "RECEIVE MAP":
+                self._observer.on_verb(
+                    CicsVerb(
+                        verb="RECEIVE_MAP",
+                        program="",
+                        map_name=map_op_text,
+                        mapset_name=mapset_op_text,
+                        xctl_target=None,
+                        transid=None,
+                    )
+                )
+
             if verb == "RECEIVE MAP":
                 group_op, suffix = opts.get("INTO"), "I"
             else:  # SEND MAP
@@ -883,6 +937,16 @@ class CicsLoweringStrategy:
                     result_reg=r_res,
                     func_name=FuncName("__cics_link"),
                     args=(r_prog, r_ca, r_off, r_len),
+                )
+            )
+            self._observer.on_verb(
+                CicsVerb(
+                    verb="LINK",
+                    program="",
+                    map_name=None,
+                    mapset_name=None,
+                    xctl_target=_operand_text(opts.get("PROGRAM")),
+                    transid=None,
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
