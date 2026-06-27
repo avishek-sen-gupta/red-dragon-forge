@@ -79,22 +79,6 @@ class DatasetCatalog:
         self._datasets[dd.dsn] = ds
         return ds
 
-    def allocate_ksds(
-        self, dsn: str, key_offset: int, key_length: int, record_size: int
-    ) -> Dataset:
-        path = self._workdir / dsn.replace(".", "_")
-        path.write_bytes(b"")
-        ds = Dataset(
-            dsn=dsn,
-            path=path,
-            org=DatasetOrg.KSDS,
-            key_offset=key_offset,
-            key_length=key_length,
-            record_size=record_size,
-        )
-        self._datasets[dsn] = ds
-        return ds
-
     def allocate_new(self, spec: DatasetSpec) -> Dataset:
         if spec.dsn in self._datasets:
             raise ValueError(f"DSN already allocated: {spec.dsn}")
