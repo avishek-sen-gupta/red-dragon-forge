@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from jackal.catalog import DatasetCatalog, DatasetSpec
-from jackal.dsn import DirectDSN
+from jackal.dsn import DirectDSN, TempRef
 from jackal.model import DD, Disp, DispNormal, DispStatus, DatasetOrg
 from tests.covers import covers, NotLanguageFeature
 
@@ -145,6 +145,80 @@ def test_open_dataset_ps_empty_returns_eof(tmp_path):
     result = drv.read_seq()
     drv.close()
     assert result.condition is AccessCondition.END_OF_FILE
+
+
+def _temp_dd(
+    alias: str, status: DispStatus, normal: DispNormal = DispNormal.PASS
+) -> DD:
+    return DD(
+        ddname="W", dsn=TempRef(alias), disp=Disp(status, normal, DispNormal.DELETE)
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_temp_new_allocates_backing_file(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    ds = cat.allocate(_temp_dd("&&WORKIN", DispStatus.NEW))
+    assert ds.path.exists()
+    assert ds.path.name == "WORKIN"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_temp_old_resolves_same_dataset(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    ds1 = cat.allocate(_temp_dd("&&WORKIN", DispStatus.NEW))
+    ds2 = cat.allocate(_temp_dd("&&WORKIN", DispStatus.OLD))
+    assert ds1.path == ds2.path
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_temp_old_unregistered_raises(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    with pytest.raises(KeyError):
+        cat.allocate(_temp_dd("&&GHOST", DispStatus.OLD))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_temp_dispose_delete_removes_file(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    dd = _temp_dd("&&TEMP", DispStatus.NEW, DispNormal.DELETE)
+    ds = cat.allocate(dd)
+    cat.dispose(dd)
+    assert not ds.path.exists()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_temp_dispose_pass_retains_file(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    dd = _temp_dd("&&TEMP", DispStatus.NEW, DispNormal.PASS)
+    ds = cat.allocate(dd)
+    cat.dispose(dd)
+    assert ds.path.exists()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cleanup_temps_deletes_surviving_file(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    ds = cat.allocate(_temp_dd("&&TEMP", DispStatus.NEW, DispNormal.PASS))
+    cat.cleanup_temps()
+    assert not ds.path.exists()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cleanup_temps_noop_when_all_deleted(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    dd = _temp_dd("&&TEMP", DispStatus.NEW, DispNormal.DELETE)
+    cat.allocate(dd)
+    cat.dispose(dd)
+    cat.cleanup_temps()  # must not raise
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_temp_new_duplicate_alias_raises(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat.allocate(_temp_dd("&&TEMP", DispStatus.NEW))
+    with pytest.raises(ValueError, match="&&TEMP"):
+        cat.allocate(_temp_dd("&&TEMP", DispStatus.NEW))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
