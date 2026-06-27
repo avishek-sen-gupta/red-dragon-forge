@@ -2,6 +2,7 @@ from pathlib import Path
 
 from tests.covers import NotLanguageFeature, covers
 
+from jackal.dsn import DirectDSN
 from jackal.model import DD, Cond, CondOp, Disp, DispNormal, DispStatus, Job, Step
 from jackal.results import StepDisposition
 from jackal.runner import JobRunner
@@ -20,7 +21,7 @@ def test_runner_runs_all_steps(tmp_path: Path) -> None:
                 dds=(
                     DD(
                         "D",
-                        "J.X",
+                        DirectDSN("J.X"),
                         Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE),
                     ),
                 ),
@@ -59,13 +60,13 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
         dds=(
             DD(
                 ddname="SYSIN",
-                dsn="",
+                dsn=DirectDSN(""),
                 disp=_DUMMY_DISP,
                 in_stream=sysin_lines,
             ),
             DD(
                 ddname="SYSPRINT",
-                dsn="",
+                dsn=DirectDSN(""),
                 disp=_DUMMY_DISP,
                 sysout=True,
             ),
@@ -92,7 +93,7 @@ def _idcams_delete_missing(name: str, conds: tuple[Cond, ...] = ()) -> Step:
         dds=(
             DD(
                 ddname="SYSIN",
-                dsn="",
+                dsn=DirectDSN(""),
                 disp=_DUMMY_DISP,
                 in_stream=("DELETE NOPE.NOPE CLUSTER",),
             ),

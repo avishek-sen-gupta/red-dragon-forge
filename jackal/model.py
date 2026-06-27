@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from jackal.dsn import DSN
+
 
 class DispStatus(Enum):
     NEW = "NEW"
@@ -51,7 +53,7 @@ class Disp:
 @dataclass(frozen=True)
 class DD:
     ddname: str
-    dsn: str
+    dsn: DSN
     disp: Disp
     in_stream: tuple[str, ...] = ()
     sysout: bool = False

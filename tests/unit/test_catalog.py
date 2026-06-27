@@ -3,12 +3,15 @@ from pathlib import Path
 import pytest
 
 from jackal.catalog import DatasetCatalog, DatasetSpec
+from jackal.dsn import DirectDSN
 from jackal.model import DD, Disp, DispNormal, DispStatus, DatasetOrg
 from tests.covers import covers, NotLanguageFeature
 
 
-def _dd(dsn, status, normal=DispNormal.KEEP):
-    return DD(ddname="D", dsn=dsn, disp=Disp(status, normal, DispNormal.DELETE))
+def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> DD:
+    return DD(
+        ddname="D", dsn=DirectDSN(dsn), disp=Disp(status, normal, DispNormal.DELETE)
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -54,7 +57,9 @@ def test_shr_resolves_from_data_dir(tmp_path):
     wd = tmp_path / "wd"
     wd.mkdir()
     cat = DatasetCatalog(workdir=wd, data_dir=data)
-    dd = DD("D", "A.B.PS", Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP))
+    dd = DD(
+        "D", DirectDSN("A.B.PS"), Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
+    )
     assert cat.allocate(dd).path == data / "A.B.PS"
 
 
@@ -130,7 +135,11 @@ def test_open_dataset_ps_empty_returns_eof(tmp_path):
     from interpreter.cobol.file_enums import OpenMode
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    dd = DD("D", "J.FLAT", Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE))
+    dd = DD(
+        "D",
+        DirectDSN("J.FLAT"),
+        Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE),
+    )
     cat.allocate(dd)
     drv = cat.open_dataset("J.FLAT", OpenMode.INPUT, record_size=80)
     result = drv.read_seq()

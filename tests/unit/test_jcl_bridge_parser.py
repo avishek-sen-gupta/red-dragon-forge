@@ -1,6 +1,7 @@
 import json
 import pytest
 from tests.covers import NotLanguageFeature, covers
+from jackal.dsn import DirectDSN
 from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
 
 
@@ -40,7 +41,7 @@ def test_parse_builds_model_from_bridge_json():
     )
     runner = _FakeRunner(out=out)
     job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
-    assert job.steps[0].dds[0].dsn == "A.B"
+    assert job.steps[0].dds[0].dsn == DirectDSN("A.B")
     assert runner.command == ["java", "-jar", "jcl.jar"]
 
 

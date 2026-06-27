@@ -1,4 +1,5 @@
 from tests.covers import NotLanguageFeature, covers
+from jackal.dsn import DirectDSN
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 
 
@@ -8,7 +9,7 @@ def test_real_jar_parses_simple_job(jcl_bridge_jar):
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     assert job.name == "PIPE"
     assert job.steps[0].pgm == "UPCASE"
-    assert job.steps[0].dds[0].dsn == "J.IN"
+    assert job.steps[0].dds[0].dsn == DirectDSN("J.IN")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
