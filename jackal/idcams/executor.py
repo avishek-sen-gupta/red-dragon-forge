@@ -31,15 +31,18 @@ def _handle_delete(cmd: Delete, catalog: DatasetCatalog) -> int:
 
 
 def _handle_define_cluster(cmd: DefineCluster, catalog: DatasetCatalog) -> int:
-    catalog.allocate_new(
-        DatasetSpec(
-            dsn=cmd.name,
-            org=DatasetOrg.KSDS,
-            key_offset=cmd.key_offset,
-            key_length=cmd.key_length,
-            record_size=cmd.record_size,
+    try:
+        catalog.allocate_new(
+            DatasetSpec(
+                dsn=cmd.name,
+                org=DatasetOrg.KSDS,
+                key_offset=cmd.key_offset,
+                key_length=cmd.key_length,
+                record_size=cmd.record_size,
+            )
         )
-    )
+    except ValueError:
+        return 12
     return 0
 
 

@@ -118,3 +118,16 @@ def test_if_maxcc_all_operators():
     # predicate false -> maxcc unchanged
     assert _handle_if_maxcc(IfMaxcc(op="GT", value=8, set_value=0), 8) == 8
     assert _handle_if_maxcc(IfMaxcc(op="EQ", value=4, set_value=0), 8) == 8
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_duplicate_dsn_returns_12(tmp_path):
+    from jackal.idcams.executor import run_idcams
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cmds = (
+        DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),
+        DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),
+    )
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 12
