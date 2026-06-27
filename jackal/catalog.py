@@ -7,7 +7,7 @@ from pathlib import Path
 
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from interpreter.cobol.file_enums import FileOrganization, OpenMode
-from jackal.dsn import DSN, DirectDSN, dsn_key
+from jackal.dsn import DirectDSN, TempRef, dsn_key
 from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 
 
@@ -43,6 +43,7 @@ class DatasetCatalog:
         self._workdir = workdir
         self._data_dir = data_dir
         self._datasets: dict[str, Dataset] = {}
+        self._temp_registry: dict[str, DirectDSN] = {}
 
     def seed(self, dsn: str, path: Path) -> None:
         self._datasets[dsn] = Dataset(dsn=dsn, path=path)
@@ -51,7 +52,30 @@ class DatasetCatalog:
         return self._datasets[dsn]
 
     def allocate(self, dd: DD) -> Dataset:
-        name = dsn_key(dd.dsn)
+        match dd.dsn:
+            case TempRef(alias=alias):
+                return self._allocate_temp(alias, dd.disp.status)
+            case DirectDSN(name=name):
+                return self._allocate_direct(name, dd)
+
+    def _allocate_temp(self, alias: str, status: DispStatus) -> Dataset:
+        if status is DispStatus.NEW:
+            if alias in self._temp_registry:
+                raise ValueError(f"TempRef already allocated: {alias}")
+            name = alias[2:]  # strip exactly the two leading &&
+            path = self._workdir / name
+            path.write_bytes(b"")
+            self._temp_registry[alias] = DirectDSN(name)
+            ds = Dataset(dsn=name, path=path)
+            self._datasets[name] = ds
+            return ds
+        if status in (DispStatus.OLD, DispStatus.SHR, DispStatus.MOD):
+            if alias not in self._temp_registry:
+                raise KeyError(alias)
+            return self._datasets[self._temp_registry[alias].name]
+        raise ValueError(f"Unexpected DispStatus for TempRef: {status}")
+
+    def _allocate_direct(self, name: str, dd: DD) -> Dataset:
         if dd.disp.status in (DispStatus.OLD, DispStatus.SHR):
             if name in self._datasets:
                 return self._datasets[name]
@@ -75,6 +99,7 @@ class DatasetCatalog:
             ds = Dataset(dsn=name, path=path)
             self._datasets[name] = ds
             return ds
+        # NEW
         path = self._workdir / name.replace(".", "_")
         path.write_bytes(b"")
         ds = Dataset(dsn=name, path=path)
@@ -127,11 +152,21 @@ class DatasetCatalog:
         return True
 
     def dispose(self, dd: DD) -> None:
-        # DELETE disposition removes the dataset; delegate to delete_dsn so a DD
-        # that was never allocated (sysout, optional, or a step that failed before
-        # allocation) is a safe no-op instead of a KeyError.
-        if dd.disp.normal is DispNormal.DELETE:
-            self.delete_dsn(dsn_key(dd.dsn))
+        if dd.disp.normal is not DispNormal.DELETE:
+            return
+        match dd.dsn:
+            case TempRef(alias=alias):
+                if alias in self._temp_registry:
+                    direct = self._temp_registry.pop(alias)
+                    self.delete_dsn(direct.name)
+            case DirectDSN(name=name):
+                self.delete_dsn(name)
+
+    def cleanup_temps(self) -> None:
+        """Delete all surviving temp datasets and clear the registry. Called at job end."""
+        for direct in list(self._temp_registry.values()):
+            self.delete_dsn(direct.name)
+        self._temp_registry.clear()
 
     @property
     def workdir(self) -> Path:
