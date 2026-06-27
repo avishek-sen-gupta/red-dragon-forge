@@ -9,12 +9,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from interpreter.cobol.access_result import AccessCondition
-from interpreter.cobol.file_drivers import open_driver
-from interpreter.cobol.file_enums import FileOrganization, OpenMode
+from interpreter.cobol.file_enums import OpenMode
 
-from jackal.catalog import DatasetCatalog
+from jackal.catalog import DatasetCatalog, DatasetSpec
 from jackal.idcams.commands import Command, DefineCluster, Delete, IfMaxcc, Repro
-from jackal.model import DD
+from jackal.model import DD, DatasetOrg
 
 _OPS = {
     "LE": lambda maxcc, value: maxcc <= value,
@@ -32,11 +31,14 @@ def _handle_delete(cmd: Delete, catalog: DatasetCatalog) -> int:
 
 
 def _handle_define_cluster(cmd: DefineCluster, catalog: DatasetCatalog) -> int:
-    catalog.allocate_ksds(
-        dsn=cmd.name,
-        key_offset=cmd.key_offset,
-        key_length=cmd.key_length,
-        record_size=cmd.record_size,
+    catalog.allocate_new(
+        DatasetSpec(
+            dsn=cmd.name,
+            org=DatasetOrg.KSDS,
+            key_offset=cmd.key_offset,
+            key_length=cmd.key_length,
+            record_size=cmd.record_size,
+        )
     )
     return 0
 
@@ -52,20 +54,12 @@ def _handle_repro(
     in_ds = catalog.allocate(infile_dd)
     out_ds = catalog.resolve(outfile_dd.dsn)
 
-    record_size = out_ds.record_size
-
-    in_drv = open_driver(
-        FileOrganization.SEQUENTIAL, in_ds.path, OpenMode.INPUT, record_size, 0, 0
+    # jackal-ifq workaround: PS input has record_size=0 (no DCB info at allocation time);
+    # pass the output KSDS record_size as override. Remove when jackal-ifq is fixed.
+    in_drv = catalog.open_dataset(
+        in_ds.dsn, OpenMode.INPUT, record_size=out_ds.record_size
     )
-
-    out_drv = open_driver(
-        FileOrganization.INDEXED,
-        out_ds.path,
-        OpenMode.OUTPUT,
-        record_size,
-        out_ds.key_offset,
-        out_ds.key_length,
-    )
+    out_drv = catalog.open_dataset(out_ds.dsn, OpenMode.OUTPUT)
 
     while True:
         result = in_drv.read_seq()
