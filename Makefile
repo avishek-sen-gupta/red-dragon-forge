@@ -64,11 +64,13 @@ test: jar
 db2-up:
 	docker compose up -d db2
 	@echo "Waiting for DB2 healthy (first init can take several minutes; fast if already up)..."
-	@until [ "$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null)" = "healthy" ]; do \
-	  sleep 5; \
-	  [ "$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null)" = "unhealthy" ] && { echo "DB2 unhealthy — see 'docker logs squall-db2'"; exit 1; }; \
-	done
-	@echo "DB2 healthy."
+	@for i in $$(seq 1 160); do \
+	  status=$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null); \
+	  if [ "$$status" = "healthy" ]; then echo "DB2 healthy."; exit 0; fi; \
+	  if [ "$$status" = "unhealthy" ]; then echo "DB2 unhealthy:"; docker logs --tail 80 squall-db2; exit 1; fi; \
+	  sleep 10; \
+	done; \
+	echo "DB2 did not become healthy in time:"; docker logs --tail 80 squall-db2; exit 1
 
 # Rebind DB2's TCP listener without re-initialising. Under emulation the listener
 # can occasionally drop (port 50000 stops accepting inside the container) while a
