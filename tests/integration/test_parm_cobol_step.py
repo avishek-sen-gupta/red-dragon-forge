@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
 from jackal.model import Step
