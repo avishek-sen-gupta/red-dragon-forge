@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 
+from jackal.dsn import DirectDSN
 from jackal.model import Cond, CondOp, DD, Disp, DispNormal, DispStatus, Job, Step
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
@@ -22,7 +23,7 @@ def _dd_from_json(d: dict) -> DD:
     disp = _disp_from_words(words) if words else _DEFAULT_DISP
     return DD(
         ddname=d["ddname"],
-        dsn=d.get("dsn", ""),
+        dsn=DirectDSN(d.get("dsn", "")),
         disp=disp,
         in_stream=tuple(d.get("in_stream", ())),
         sysout=d.get("sysout", False),

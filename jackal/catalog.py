@@ -7,6 +7,7 @@ from pathlib import Path
 
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from interpreter.cobol.file_enums import FileOrganization, OpenMode
+from jackal.dsn import DSN, DirectDSN, dsn_key
 from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 
 
@@ -50,33 +51,34 @@ class DatasetCatalog:
         return self._datasets[dsn]
 
     def allocate(self, dd: DD) -> Dataset:
+        name = dsn_key(dd.dsn)
         if dd.disp.status in (DispStatus.OLD, DispStatus.SHR):
-            if dd.dsn in self._datasets:
-                return self._datasets[dd.dsn]
-            candidate = self._data_dir / dd.dsn
+            if name in self._datasets:
+                return self._datasets[name]
+            candidate = self._data_dir / name
             if candidate.exists():
-                ds = Dataset(dsn=dd.dsn, path=candidate)
-                self._datasets[dd.dsn] = ds
+                ds = Dataset(dsn=name, path=candidate)
+                self._datasets[name] = ds
                 return ds
-            raise KeyError(dd.dsn)
+            raise KeyError(name)
         if dd.disp.status is DispStatus.MOD:
             # MOD: extend if exists, create if not
-            if dd.dsn in self._datasets:
-                return self._datasets[dd.dsn]
-            candidate = self._data_dir / dd.dsn
+            if name in self._datasets:
+                return self._datasets[name]
+            candidate = self._data_dir / name
             if candidate.exists():
-                ds = Dataset(dsn=dd.dsn, path=candidate)
-                self._datasets[dd.dsn] = ds
+                ds = Dataset(dsn=name, path=candidate)
+                self._datasets[name] = ds
                 return ds
-            path = self._workdir / dd.dsn.replace(".", "_")
+            path = self._workdir / name.replace(".", "_")
             path.write_bytes(b"")
-            ds = Dataset(dsn=dd.dsn, path=path)
-            self._datasets[dd.dsn] = ds
+            ds = Dataset(dsn=name, path=path)
+            self._datasets[name] = ds
             return ds
-        path = self._workdir / dd.dsn.replace(".", "_")
+        path = self._workdir / name.replace(".", "_")
         path.write_bytes(b"")
-        ds = Dataset(dsn=dd.dsn, path=path)
-        self._datasets[dd.dsn] = ds
+        ds = Dataset(dsn=name, path=path)
+        self._datasets[name] = ds
         return ds
 
     def allocate_new(self, spec: DatasetSpec) -> Dataset:
@@ -129,7 +131,7 @@ class DatasetCatalog:
         # that was never allocated (sysout, optional, or a step that failed before
         # allocation) is a safe no-op instead of a KeyError.
         if dd.disp.normal is DispNormal.DELETE:
-            self.delete_dsn(dd.dsn)
+            self.delete_dsn(dsn_key(dd.dsn))
 
     @property
     def workdir(self) -> Path:

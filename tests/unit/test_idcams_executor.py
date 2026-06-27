@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from jackal.catalog import DatasetCatalog
+from jackal.dsn import DirectDSN
 from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro
 from jackal.model import DD, Disp, DispNormal, DispStatus
 from tests.covers import NotLanguageFeature, covers
@@ -22,8 +23,16 @@ def test_repro_loads_ps_into_ksds(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path / "wd", data_dir=data)
     (tmp_path / "wd").mkdir()
     dds = (
-        DD("INF", "IN.PS", Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)),
-        DD("OUT", "OUT.KSDS", Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP)),
+        DD(
+            "INF",
+            DirectDSN("IN.PS"),
+            Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
+        ),
+        DD(
+            "OUT",
+            DirectDSN("OUT.KSDS"),
+            Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP),
+        ),
     )
     cmds = (
         DefineCluster(name="OUT.KSDS", key_length=3, key_offset=0, record_size=9),

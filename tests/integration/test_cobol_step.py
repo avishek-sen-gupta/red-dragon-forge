@@ -5,6 +5,7 @@ import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
+from jackal.dsn import DirectDSN
 from jackal.model import DD, Disp, DispNormal, DispStatus, Step
 from tests.covers import NotLanguageFeature, covers
 
@@ -21,8 +22,10 @@ def _require_bridge(bridge_jar):
     """Enforce PROLEAP_BRIDGE_JAR."""
 
 
-def _dd(ddname, dsn, status, normal=DispNormal.KEEP):
-    return DD(ddname=ddname, dsn=dsn, disp=Disp(status, normal, DispNormal.DELETE))
+def _dd(ddname, dsn: str, status, normal=DispNormal.KEEP):
+    return DD(
+        ddname=ddname, dsn=DirectDSN(dsn), disp=Disp(status, normal, DispNormal.DELETE)
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

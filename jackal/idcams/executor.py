@@ -12,6 +12,7 @@ from interpreter.cobol.access_result import AccessCondition
 from interpreter.cobol.file_enums import OpenMode
 
 from jackal.catalog import DatasetCatalog, DatasetSpec
+from jackal.dsn import dsn_key
 from jackal.idcams.commands import Command, DefineCluster, Delete, IfMaxcc, Repro
 from jackal.model import DD, DatasetOrg
 
@@ -55,7 +56,7 @@ def _handle_repro(
     outfile_dd = dds_by_ddname[cmd.outfile_dd]
 
     in_ds = catalog.allocate(infile_dd)
-    out_ds = catalog.resolve(outfile_dd.dsn)
+    out_ds = catalog.resolve(dsn_key(outfile_dd.dsn))
 
     # jackal-ifq workaround: PS input has record_size=0 (no DCB info at allocation time);
     # pass the output KSDS record_size as override. Remove when jackal-ifq is fixed.
