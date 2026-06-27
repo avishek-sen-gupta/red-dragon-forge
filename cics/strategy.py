@@ -380,6 +380,27 @@ def _operand_text(opt: "CicsOperand | None") -> str | None:
     return opt.text if opt is not None else None
 
 
+def _field_value(name: str, fields: "list") -> str | None:
+    """Walk CobolField tree to find a field by name and return its static VALUE, or None."""
+    name_upper = name.upper()
+    direct = next((f for f in fields if f.name.upper() == name_upper), None)
+    if direct is not None:
+        return direct.value if direct.value and not direct.value_is_figurative else None
+    return next(
+        (v for v in (_field_value(name, f.children) for f in fields) if v is not None),
+        None,
+    )
+
+
+def _resolve_operand(opt: "CicsOperand | None", ctx: "EmitContext") -> str | None:
+    if opt is None:
+        return None
+    if opt.is_literal:
+        return opt.text
+    resolved = _field_value(opt.text, ctx._asg.data_fields)
+    return resolved if resolved is not None else opt.text
+
+
 class CicsLoweringStrategy:
     """Full CICS lowering strategy. Inject at CobolFrontend construction for CICS mode."""
 
@@ -596,7 +617,7 @@ class CicsLoweringStrategy:
                         map_name=None,
                         mapset_name=None,
                         xctl_target=None,
-                        transid=_operand_text(opts.get("TRANSID")),
+                        transid=_resolve_operand(opts.get("TRANSID"), ctx),
                     )
                 )
             else:
@@ -631,7 +652,7 @@ class CicsLoweringStrategy:
                     program="",
                     map_name=None,
                     mapset_name=None,
-                    xctl_target=_operand_text(opts.get("PROGRAM")),
+                    xctl_target=_resolve_operand(opts.get("PROGRAM"), ctx),
                     transid=None,
                 )
             )
@@ -680,8 +701,8 @@ class CicsLoweringStrategy:
             # When omitted, BMS uses the map's own DSECT, named <mapname><suffix>
             # (e.g. RECEIVE MAP('COSGN0A') with no INTO -> COSGN0AI); derivable
             # only for a literal map name (a dynamic map always supplies FROM/INTO).
-            map_op_text = _operand_text(opts.get("MAP", opts.get("MAPNAME")))
-            mapset_op_text = _operand_text(opts.get("MAPSET"))
+            map_op_text = _resolve_operand(opts.get("MAP", opts.get("MAPNAME")), ctx)
+            mapset_op_text = _resolve_operand(opts.get("MAPSET"), ctx)
             if verb == "SEND MAP":
                 self._observer.on_verb(
                     CicsVerb(
@@ -945,7 +966,7 @@ class CicsLoweringStrategy:
                     program="",
                     map_name=None,
                     mapset_name=None,
-                    xctl_target=_operand_text(opts.get("PROGRAM")),
+                    xctl_target=_resolve_operand(opts.get("PROGRAM"), ctx),
                     transid=None,
                 )
             )
