@@ -40,22 +40,24 @@ class JobRunner:
         """
         executed: list[StepResult] = []
         results: list[StepResult] = []
-        for step in job.steps:
-            conds = job.cond + step.conds
-            if should_bypass(conds, tuple(executed)):
-                results.append(
-                    StepResult(
-                        name=step.name,
-                        return_code=0,
-                        ran=False,
-                        disposition=StepDisposition.BYPASSED,
+        try:
+            for step in job.steps:
+                conds = job.cond + step.conds
+                if should_bypass(conds, tuple(executed)):
+                    results.append(
+                        StepResult(
+                            name=step.name,
+                            return_code=0,
+                            ran=False,
+                            disposition=StepDisposition.BYPASSED,
+                        )
                     )
-                )
-                continue
-            result = self._run_step(step, catalog)
-            executed.append(result)
-            results.append(result)
-        catalog.cleanup_temps()
+                    continue
+                result = self._run_step(step, catalog)
+                executed.append(result)
+                results.append(result)
+        finally:
+            catalog.cleanup_temps()
         return JobResult(steps=tuple(results))
 
     def _run_step(self, step: Step, catalog: DatasetCatalog) -> StepResult:
