@@ -446,7 +446,7 @@
      ═══════════════════════════════════════════════════════════════ -->
 <section>
   <h2>VSAM — FCT &amp; VsamEngine</h2>
-  <h3>File Control Table + in-memory KSDS store</h3>
+  <h3>File Control Table + CICS adapter over the shared access-method drivers</h3>
 
   <div class="row" style="gap:1.2rem;margin-top:.6rem">
     <div class="col">
@@ -464,14 +464,14 @@
       </div>
     </div>
     <div class="col">
-      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">VsamEngine</div>
-      <p style="font-size:.8rem">One <code>SortedDict</code> per dataset — records stored keyed by their own bytes, ordered by key prefix. Loaded from the FCT at startup via <code>load_all()</code>.</p>
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">VsamEngine (thin CICS adapter)</div>
+      <p style="font-size:.8rem">Owns no storage. Each dataset's backing <code>.dat</code> file <strong>is</strong> the store, served by RedDragon's shared file-resident access-method drivers — the same ones COBOL batch &amp; IDCAMS use. The adapter just gates FCT state, picks the driver, and maps the result to EIBRESP.</p>
       <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.78rem;border:1px solid #2a2a2a;margin-top:.3rem">
-        <div style="color:var(--c-vsam);margin-bottom:.4rem">Key matching</div>
+        <div style="color:var(--c-vsam);margin-bottom:.4rem">Driver routing (<code>_open</code>, by <code>key_offset</code>)</div>
         <div style="color:#ccc">
-          Slice <code>record[key_offset : key_offset + klen]</code><br>
-          <span style="color:#666">klen = pinned key_length ?? operation's key_length</span><br><br>
-          Alternate-index paths (e.g. CARD-XREF with ACCT-ID at offset 25) work by setting a non-zero <code>key_offset</code> in the FCT entry.
+          <code>0</code> → <code>open_driver(INDEXED)</code> — binary search over a key-sorted file<br>
+          <code>&gt;0</code> → <code>open_alternate_key_driver</code> — linear scan, read-only<br><br>
+          Alternate-index paths (e.g. CARD-XREF with ACCT-ID at offset 25) set a non-zero <code>key_offset</code> in the FCT entry.
         </div>
       </div>
       <div class="callout teal" style="margin-top:.6rem">
@@ -482,10 +482,10 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════
-     SLIDE 9 — VSAM: operations + backends
+     SLIDE 9 — VSAM: operations + shared storage
      ═══════════════════════════════════════════════════════════════ -->
 <section>
-  <h2>VSAM — operations &amp; persistence backends</h2>
+  <h2>VSAM — operations &amp; the shared storage layer</h2>
 
   <div class="row" style="gap:1.2rem;margin-top:.6rem">
     <div class="col">
@@ -502,21 +502,21 @@
         <tr><td>ENDBR</td><td>—</td></tr>
       </table>
       <div style="font-size:.75rem;color:#888;margin-top:.4rem">
-        Browse cursor: a "between-records" index. READNEXT→READPREV reversal skips back over the last-read record — matching IBM behaviour.
+        Browse keeps one open driver instance per <code>(task, file, cursor_id)</code>. READNEXT→READPREV reversal is handled by the driver's own cursor (<code>read_seq</code>/<code>read_prev</code>) — no separate direction bookkeeping in the adapter.
       </div>
     </div>
     <div class="col">
-      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">Persistence backends</div>
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">The store: a backing flat file</div>
       <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.8rem;border:1px solid #2a2a2a;margin-bottom:.5rem">
-        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">InMemoryBackend <span style="color:#888;font-weight:400;font-size:.75rem">(default)</span></div>
-        Starts from an optional pre-seeded dict. Mutations are not persisted — suitable for stateless test runs.
+        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">No in-memory copy, no backends</div>
+        Each dataset's <code>&lt;vsam_dir&gt;/&lt;NAME&gt;.dat</code> file <strong>is</strong> the store. RedDragon's file-resident drivers read/write it directly — so cicada, COBOL batch, and IDCAMS share one storage implementation.
       </div>
       <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.8rem;border:1px solid #2a2a2a">
-        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">FileBackend</div>
-        Write-through to <code>&lt;dir&gt;/&lt;NAME&gt;.dat</code> on every mutation. Fixed-length EBCDIC flat files — the same format as IDCAMS REPRO output. Use <code>seed_vsam()</code> to pre-populate before first run.
+        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">Seeding — <code>seed_vsam()</code></div>
+        Writes the <code>.dat</code> files from the EBCDIC fixtures (same format as IDCAMS REPRO output). Base-KSDS records are written <strong>key-sorted</strong> (the binary-search driver requires it); alt-key datasets in source order.
       </div>
       <div class="callout teal" style="margin-top:.6rem">
-        The backend is selected at <code>VsamEngine</code> instantiation — swapping InMemory→File is a one-line change, no engine logic changes.
+        EIBRESP comes from mapping the drivers' neutral <code>AccessCondition</code> (<code>cics/vsam/eibresp.py</code>) — file state stays an FCT concern.
       </div>
     </div>
   </div>
@@ -823,8 +823,8 @@
     <div class="inv" style="margin-top:.9rem">
       <div class="inv-num">4</div>
       <div class="inv-text">
-        <strong>VsamEngine backend is a protocol, not a class.</strong><br>
-        <span style="color:#999">Swapping <code>InMemoryBackend</code> for <code>FileBackend</code> (durable write-through) is a one-line change at engine construction time. No engine logic changes. The same COBOL flow exercises both paths.</span>
+        <strong>VsamEngine is a thin adapter over the shared storage engine.</strong><br>
+        <span style="color:#999">Record I/O delegates to RedDragon's file-resident access-method drivers (the same ones COBOL batch &amp; IDCAMS use); the backing <code>.dat</code> file is the store. The adapter holds only CICS state — FCT enable/disable, held key, task cursors — and the neutral-condition→EIBRESP mapping.</span>
       </div>
     </div>
   </div>

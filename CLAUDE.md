@@ -89,7 +89,7 @@ cics/
   terminal.py          # ScreenChannel / InputChannel protocols
   le_stubs.py          # IBM LE service stubs (CEEDAYS, etc.)
   builtins/            # CICS service builtins: flow, screen, system, vsam
-  vsam/                # VsamEngine, backends, flat-file codec, dump CLI
+  vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, codec, dump CLI
   bms/                 # BMS symbolic map generation (bms-tools pipeline)
 ```
 

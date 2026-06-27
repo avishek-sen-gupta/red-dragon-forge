@@ -56,7 +56,7 @@ cics/
   terminal.py          # ScreenChannel / InputChannel protocols
   le_stubs.py          # IBM LE service stubs (CEEDAYS, etc.)
   builtins/            # CICS service builtins: flow, screen, system, vsam
-  vsam/                # VsamEngine, backends, flat-file codec, dump CLI
+  vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, codec, dump CLI
   bms/                 # BMS symbolic map generation (bms-tools pipeline)
 ```
 
@@ -168,10 +168,13 @@ Translation pattern: **each CICS verb lowers to a `CallFunction` to a registered
 ### 1.6 Compiling a region program — `cics/bootstrap.py`
 
 `compile_cics_program(source, parser, strategy, …)` produces a `LinkedProgram` ready for
-`run_cics`. It compiles the main program with the shared `CicsLoweringStrategy` injected, then
-transitively resolves and links `CALL` targets via RedDragon's project linker. Callees that
-fail to compile are skipped with a warning. IBM LE services (`CEEDAYS`, etc.) are supplied as
-stubs from `cics/le_stubs.py`.
+`run_cics`. It is now a thin wrapper over RedDragon's public **Compile API**
+(`interpreter.project.cobol_compile.compile_cobol`): it passes the `CicsLoweringStrategy` as an
+`extension_strategy`, the EXEC-CICS text parser, and `apply_cics_prepass` as the per-callee
+`source_transform`; the generic single/multi-module compile + transitive `CALL` resolution +
+linking live in RedDragon (cicada's old `_compile_cics_module`/`_resolve_call_sources` were
+deleted). Callees that fail to compile are skipped with a warning. IBM LE services (`CEEDAYS`,
+etc.) are supplied as stubs from `cics/le_stubs.py`.
 
 ---
 
@@ -289,53 +292,49 @@ construct a shared `CicsLoweringStrategy`, eagerly compile every distinct progra
 `DatasetConfig(file, record_length, key_offset=0, key_length=0)` describes one dataset.
 `FctConfig` maps upper-cased names to configs (`from_dict` / `from_yaml`).
 
-### 3.2 Engine — `cics/vsam/engine.py`
+### 3.2 Engine (CICS file-control adapter) — `cics/vsam/engine.py`
 
-`VsamEngine(config, backend=None)` holds one `SortedDict` per dataset keyed by the full record
-bytes, giving ordered iteration for browse. Key matching slices
-`record[key_offset : key_offset + klen]`.
+`VsamEngine(config, vsam_dir)` is a thin **CICS adapter** over red-dragon's shared
+access-method drivers — it owns no storage of its own. Each dataset's backing `.dat` file under
+`vsam_dir` **is** the store (file-resident, byte-faithful) — the same drivers COBOL batch
+execution and jackal's IDCAMS use, so the whole mainframe stack shares one storage
+implementation. (The former in-memory `SortedDict` store + pluggable persistence backends are
+gone.)
 
-Operations return CICS EIBRESP codes (`RESP_NORMAL=0`, `RESP_NOTFND=13`, `RESP_DUPREC=14`,
-`RESP_ENDFILE=20`, `RESP_DISABLED=84`).
+`_open(file_name, mode)` gates on FCT enable/define first (returns `RESP_DISABLED` before
+touching a driver) then routes by `key_offset`: `0` → `open_driver(INDEXED, …)` (binary search
+over a key-sorted file); `>0` → `open_alternate_key_driver(…)` (linear scan, read-only — e.g.
+the CARD-XREF ACCT-ID at offset 25).
 
-Point ops: `read`, `write` (DUPREC if key exists), `rewrite` (key from FROM record's own key
-field), `delete`.
+The drivers return a language-agnostic `AccessCondition`; `cics/vsam/eibresp.py::to_eibresp`
+maps it to CICS EIBRESP (`OK→0`, `END_OF_FILE→20`, `NOT_FOUND→13`, `DUPLICATE_KEY→14`;
+file-state conditions on an enabled file → `RESP_IOERR` per decision A — the FCT, not the
+driver, owns file state).
 
-Browse ops (implicit per-`(task, file, cursor_id)` cursor): `startbr` positions at the first
-key ≥ search prefix and past end-of-file when no key qualifies (enabling the
-`STARTBR HIGH-VALUES` → `READPREV` idiom). `readnext`/`readprev` use a between-records cursor
-with a recorded direction so reversal correctly steps back. `endbr` releases the cursor.
+Point ops (`read`/`write`/`rewrite`/`delete`) open a driver per call. `read` holds the matched
+key so a keyless `rewrite`/`delete` (read-for-update) targets the right record. Browse ops keep
+one open driver instance per `(task, file, cursor_id)` in `_browse`: `startbr` positions via
+`start(key, ">=")` (incl. the past-end `STARTBR HIGH-VALUES` → `READPREV` seek-last idiom),
+`readnext`→`read_seq`, `readprev`→`read_prev` (the driver's cursor handles the
+READNEXT→READPREV reversal directly), `endbr`→`close`. CICS-only state (FCT enable/disable,
+held key, task cursors) stays in the adapter; record I/O is the shared drivers. VSAM service
+builtins in `cics/builtins/vsam.py` adapt it to IR calling convention and EIBRESP write-back.
 
-The engine is a **pure bytes/int API** — no CICS or VM coupling. VSAM service builtins in
-`cics/builtins/vsam.py` adapt it to IR calling convention and EIBRESP write-back.
+### 3.3 Seeding — `cics/vsam/seed.py`
 
-### 3.3 Persistence backends — `cics/vsam/backend.py`
+The backing file IS the store, so there are no persistence backends — seeding just writes the
+`.dat` files the drivers open:
 
 ```python
-class VsamBackend(Protocol):
-    def load(self, name, cfg) -> list[bytes]: ...
-    def persist(self, name, cfg, records) -> None: ...
-```
-
-- **`InMemoryBackend`** (default) — loads from seeded data; `persist` is a no-op.
-- **`FileBackend(backing_dir)`** — loads from `<backing_dir>/<NAME>.dat` if present, else from
-  seeds; `persist` write-throughs the backing file. Seeds are never overwritten.
-
-Seeding APIs:
-
-```python
-# InMemoryBackend: pre-populate from IDCAMS flat files
-from cics.vsam.seed import load_vsam_seed
-backend = load_vsam_seed(fct_path="region.fct.yaml", data_dir="fixtures/vsam/")
-engine = VsamEngine(fct_config, backend=backend)
-
-# FileBackend: seed from flat files, persist mutations
 from cics.vsam.seed import seed_vsam
 seed_vsam(fct_path="region.fct.yaml", data_dir="fixtures/vsam/", vsam_dir="/tmp/vsam/")
-engine = VsamEngine(fct_config, backend=FileBackend("/tmp/vsam/"))
+engine = VsamEngine(fct_config, vsam_dir="/tmp/vsam/")
 ```
 
-`flush_to(directory)` snapshots every dataset regardless of backend.
+`seed_vsam` reads the EBCDIC flat files named in the FCT and writes `<vsam_dir>/<NAME>.dat`.
+Base-KSDS records (key_offset 0) are written **key-sorted** — the file-resident binary-search
+driver requires the file sorted by its key; alternate-key datasets are written in source order.
+(`seed_records` is the in-process helper it builds on.)
 
 ### 3.4 Raw codec — `cics/vsam/format.py`
 
@@ -367,10 +366,11 @@ record) and `block` (human-readable `@offset name value 0xRAW` lines).
   regex). DFHRESP lowering is structural. CICS verb parsing is a grammar. Comment filtering is
   in the ProLeap fork's `TagUtils` because ProLeap treats the EXEC CICS envelope as opaque.
 - **One routing rule.** `_advance_routing` is the sole definition of inter-program routing.
-- **Pure VSAM engine.** Bytes/int store; never interprets record internals; persistence is a
-  pluggable backend.
-- **Default behaviour unchanged.** A non-CICS COBOL compile uses `CatchAllLoweringStrategy`; a
-  default `VsamEngine` writes no files. CICS and persistence are strictly opt-in.
+- **VSAM file control is a thin adapter.** Record I/O delegates to RedDragon's shared
+  access-method drivers; the backing `.dat` file is the store (no in-memory copy, no pluggable
+  backend). The adapter never interprets record internals — only FCT state + EIBRESP mapping.
+- **Default behaviour unchanged.** A non-CICS COBOL compile uses `CatchAllLoweringStrategy`;
+  CICS lowering + file control are opt-in (only an EXEC CICS program reaches the adapter).
 
 ---
 
