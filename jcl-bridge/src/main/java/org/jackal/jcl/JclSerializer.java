@@ -218,6 +218,26 @@ public final class JclSerializer {
             }
             step.add("cond", condArray);
 
+            // PARM= on the EXEC statement
+            String parm = "";
+            if (execStmt != null) {
+                JCLParser.ExecParmPARMContext parmCtx =
+                        findChild(execStmt, JCLParser.ExecParmPARMContext.class);
+                if (parmCtx != null) {
+                    JCLParser.KeywordOrSymbolicContext kwCtx =
+                            findChild(parmCtx, JCLParser.KeywordOrSymbolicContext.class);
+                    if (kwCtx != null) {
+                        String raw = kwCtx.getText();
+                        // Strip surrounding apostrophes from JCL quoted string convention
+                        if (raw.startsWith("'") && raw.endsWith("'") && raw.length() >= 2) {
+                            raw = raw.substring(1, raw.length() - 1);
+                        }
+                        parm = raw;
+                    }
+                }
+            }
+            step.addProperty("parm", parm);
+
             // DD statements — ddStatementAmalgamation children of jclStep
             JsonArray dds = new JsonArray();
             for (int i = 0; i < ctx.getChildCount(); i++) {
