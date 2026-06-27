@@ -43,9 +43,9 @@ fileignoreconfig:
 - filename: jackal/idcams/parser.py
   checksum: 844d6729b4cf3414d695b1213295745cab45d84ef42b0c4e8f157159180630f7
 - filename: jackal/idcams/executor.py
-  checksum: ac6cf9f4ed5dbf3c10a43d9399ff5e227c263f7edfa6d0c9621ab06b8e425a5d
+  checksum: a37428ebf724487f2911cce7249eb735daa7480242024897c36c7e3a5653b19f
 - filename: tests/unit/test_idcams_executor.py
-  checksum: 7fc905ad65fcd9127f3723f38ba5ae216179886e11fd6c686e0bc24d97b84116
+  checksum: 87b130ab18ee067b17d6303b1c9a1664625478a432658e98cd7037ba1481edcf
 - filename: docs/superpowers/plans/2026-06-21-jcl-antlr-bridge.md
   checksum: 970f38312dd6b662775f5739458329cf5c8724c7e3c022c8c62447d7c92ace1d
 - filename: jcl-bridge/PROVENANCE.md
@@ -78,8 +78,6 @@ fileignoreconfig:
   checksum: e77f980074a35187996719f84cedbe4be41fadf5683ff27d41e8752196564cc4
 - filename: tests/unit/test_runner.py
   checksum: f48de76d6d43e86da663c9b1de4d5e6e6e8069b3914d1fb56773f867b0b28267
-- filename: tests/unit/test_idcams_executor.py
-  checksum: d8203073dad6025c29281e7ddf97eea5cfac28fe710db8ad3e60b3b03e69c894
 - filename: third-party/carddemo
   ignore_detectors: [filecontent]
 version: "1.0"
