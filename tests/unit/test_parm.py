@@ -19,18 +19,22 @@ def test_build_parm_region_empty():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_build_parm_region_text():
+    from interpreter.cobol.ebcdic_table import EbcdicTable
+
     from jackal.parm import build_parm_region
 
     result = build_parm_region("2022071800")
-    assert result == b"\x00\x0a" + b"2022071800"
+    assert result == b"\x00\x0a" + EbcdicTable.ascii_to_ebcdic(b"2022071800")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_build_parm_region_single_char():
+    from interpreter.cobol.ebcdic_table import EbcdicTable
+
     from jackal.parm import build_parm_region
 
     result = build_parm_region("X")
-    assert result == b"\x00\x01X"
+    assert result == b"\x00\x01" + EbcdicTable.ascii_to_ebcdic(b"X")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
