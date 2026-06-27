@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import struct
-
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
