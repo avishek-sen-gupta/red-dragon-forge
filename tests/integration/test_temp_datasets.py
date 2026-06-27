@@ -86,6 +86,8 @@ def test_missing_temp_raises(tmp_path):
     )
     with pytest.raises(KeyError):
         _runner(tmp_path).run(job, workdir=tmp_path, seeds={})
+    # Temp files must be cleaned up even when the job raises
+    assert not (tmp_path / "GHOST").exists()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
