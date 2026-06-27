@@ -2,6 +2,7 @@ import pytest
 from tests.covers import NotLanguageFeature, covers
 from jackal.jcl.bridge_parser import _job_from_json
 from jackal.model import CondOp, DispNormal, DispStatus
+from jackal.dsn import DirectDSN, TempRef
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -141,3 +142,86 @@ def test_deserialize_even_op_fails_loud():
     }
     with pytest.raises(ValueError):
         _job_from_json(data)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_from_json_temp_ref_dsn():
+    from jackal.jcl.bridge_parser import _job_from_json
+
+    data = {
+        "name": "J",
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "P",
+                "dds": [
+                    {
+                        "ddname": "WRK",
+                        "dsn": "&&WORKIN",
+                        "disp_words": ["NEW", "PASS"],
+                        "in_stream": [],
+                        "sysout": False,
+                    }
+                ],
+            }
+        ],
+    }
+    job = _job_from_json(data)
+    dd = job.steps[0].dds[0]
+    assert isinstance(dd.dsn, TempRef)
+    assert dd.dsn.alias == "&&WORKIN"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_from_json_direct_dsn_unchanged():
+    from jackal.jcl.bridge_parser import _job_from_json
+
+    data = {
+        "name": "J",
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "P",
+                "dds": [
+                    {
+                        "ddname": "IN",
+                        "dsn": "MY.DATA",
+                        "disp_words": ["SHR"],
+                        "in_stream": [],
+                        "sysout": False,
+                    }
+                ],
+            }
+        ],
+    }
+    job = _job_from_json(data)
+    dd = job.steps[0].dds[0]
+    assert isinstance(dd.dsn, DirectDSN)
+    assert dd.dsn.name == "MY.DATA"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_from_json_absent_dsn_is_direct_empty():
+    from jackal.jcl.bridge_parser import _job_from_json
+
+    data = {
+        "name": "J",
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "P",
+                "dds": [
+                    {
+                        "ddname": "SYSOUT",
+                        "disp_words": [],
+                        "in_stream": [],
+                        "sysout": True,
+                    }
+                ],
+            }
+        ],
+    }
+    job = _job_from_json(data)
+    dd = job.steps[0].dds[0]
+    assert isinstance(dd.dsn, DirectDSN)
+    assert dd.dsn.name == ""
