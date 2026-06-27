@@ -55,6 +55,7 @@ class JobRunner:
             result = self._run_step(step, catalog)
             executed.append(result)
             results.append(result)
+        catalog.cleanup_temps()
         return JobResult(steps=tuple(results))
 
     def _run_step(self, step: Step, catalog: DatasetCatalog) -> StepResult:
