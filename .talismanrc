@@ -80,4 +80,6 @@ fileignoreconfig:
   checksum: f48de76d6d43e86da663c9b1de4d5e6e6e8069b3914d1fb56773f867b0b28267
 - filename: tests/unit/test_idcams_executor.py
   checksum: d8203073dad6025c29281e7ddf97eea5cfac28fe710db8ad3e60b3b03e69c894
+- filename: vendor/carddemo
+  checksum: 62f2350c44cb53b8ce8fe411a912c500d12fa80d0f5414a2abe1955c484ce958
 version: "1.0"
