@@ -63,6 +63,7 @@ class Step:
     pgm: str
     dds: tuple[DD, ...]
     conds: tuple[Cond, ...] = ()
+    parm: str = ""
 
 
 @dataclass(frozen=True)
