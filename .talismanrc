@@ -73,7 +73,7 @@ fileignoreconfig:
 - filename: tests/unit/test_cond.py
   checksum: d25c3d04de46e7530d6e2f0df7464060728c0a67d3e829868d64e22177579024
 - filename: jackal/runner.py
-  checksum: a4690c8ecae3942fd7c34c3dc21af3b19795a14236a5e075d347a2b647a141ac
+  checksum: 28ce68f69f9b4ec6b6011e84a45ca231deca334d00cb3ed312b0f3da4c6354e0
 - filename: tests/integration/test_cond_e2e.py
   checksum: e77f980074a35187996719f84cedbe4be41fadf5683ff27d41e8752196564cc4
 - filename: tests/unit/test_runner.py
@@ -90,4 +90,6 @@ fileignoreconfig:
   checksum: 598413d91b8ddca231488fb29181125213307007ff6b35eb10af76529c668e48
 - filename: tests/unit/test_dsn.py
   checksum: b7904e8a23a45f915c22bcbf80e694b5ab790b58c5bde8600ad0c6150ae294e0
+- filename: tests/integration/test_temp_datasets.py
+  checksum: f4c4a3fba3f5d408afed31e90094da1db3516ccd97d9f3487a05b626d8426f4d
 version: "1.0"
