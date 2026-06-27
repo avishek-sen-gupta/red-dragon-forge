@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from jackal.catalog import DatasetCatalog
+from jackal.catalog import DatasetCatalog, DatasetSpec
 from jackal.model import DD, Disp, DispNormal, DispStatus, DatasetOrg
 from tests.covers import covers, NotLanguageFeature
 
@@ -59,12 +59,54 @@ def test_shr_resolves_from_data_dir(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_allocate_ksds(tmp_path):
+def test_allocate_new_ksds(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    ds = cat.allocate_ksds("A.B.KSDS", key_offset=0, key_length=11, record_size=300)
+    spec = DatasetSpec(
+        dsn="A.B.KSDS",
+        org=DatasetOrg.KSDS,
+        key_offset=0,
+        key_length=11,
+        record_size=300,
+    )
+    ds = cat.allocate_new(spec)
     assert ds.org is DatasetOrg.KSDS and ds.key_length == 11 and ds.record_size == 300
     assert ds.path.exists()
     assert cat.resolve("A.B.KSDS").org is DatasetOrg.KSDS
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_allocate_new_duplicate_dsn_raises(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    spec = DatasetSpec(
+        dsn="A.B.KSDS",
+        org=DatasetOrg.KSDS,
+        key_offset=0,
+        key_length=11,
+        record_size=300,
+    )
+    cat.allocate_new(spec)
+    with pytest.raises(ValueError, match="A.B.KSDS"):
+        cat.allocate_new(spec)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_allocate_new_ksds_zero_record_size_raises(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    spec = DatasetSpec(
+        dsn="A.B.KSDS", org=DatasetOrg.KSDS, key_offset=0, key_length=11, record_size=0
+    )
+    with pytest.raises(ValueError, match="record_size"):
+        cat.allocate_new(spec)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_allocate_new_ksds_zero_key_length_raises(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    spec = DatasetSpec(
+        dsn="A.B.KSDS", org=DatasetOrg.KSDS, key_offset=0, key_length=0, record_size=300
+    )
+    with pytest.raises(ValueError, match="key_length"):
+        cat.allocate_new(spec)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

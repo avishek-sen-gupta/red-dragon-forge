@@ -9,6 +9,15 @@ from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 
 
 @dataclass(frozen=True)
+class DatasetSpec:
+    dsn: str
+    org: DatasetOrg
+    key_offset: int = 0
+    key_length: int = 0
+    record_size: int = 0
+
+
+@dataclass(frozen=True)
 class Dataset:
     dsn: str
     path: Path
@@ -76,6 +85,27 @@ class DatasetCatalog:
             record_size=record_size,
         )
         self._datasets[dsn] = ds
+        return ds
+
+    def allocate_new(self, spec: DatasetSpec) -> Dataset:
+        if spec.dsn in self._datasets:
+            raise ValueError(f"DSN already allocated: {spec.dsn}")
+        if spec.org is DatasetOrg.KSDS:
+            if spec.record_size == 0:
+                raise ValueError(f"KSDS record_size must be > 0: {spec.dsn}")
+            if spec.key_length == 0:
+                raise ValueError(f"KSDS key_length must be > 0: {spec.dsn}")
+        path = self._workdir / spec.dsn.replace(".", "_")
+        path.write_bytes(b"")
+        ds = Dataset(
+            dsn=spec.dsn,
+            path=path,
+            org=spec.org,
+            key_offset=spec.key_offset,
+            key_length=spec.key_length,
+            record_size=spec.record_size,
+        )
+        self._datasets[spec.dsn] = ds
         return ds
 
     def delete_dsn(self, dsn: str) -> bool:
