@@ -80,4 +80,6 @@ fileignoreconfig:
   checksum: f48de76d6d43e86da663c9b1de4d5e6e6e8069b3914d1fb56773f867b0b28267
 - filename: third-party/carddemo
   ignore_detectors: [filecontent]
+- filename: docs/superpowers/specs/2026-06-27-temp-datasets-design.md
+  checksum: b8e528f916000c7e0a2f7388aeeaf769ef9272c877599fcd7f433e690a6191b7
 version: "1.0"
