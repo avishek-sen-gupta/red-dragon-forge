@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jackal.dsn import DirectDSN, TempRef
+from jackal.dsn import TempRef
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from jackal.runner import JobRunner
 from tests.covers import NotLanguageFeature, covers
