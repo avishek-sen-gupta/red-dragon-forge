@@ -7,7 +7,7 @@ from pathlib import Path
 
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from interpreter.cobol.file_enums import FileOrganization, OpenMode
-from jackal.dsn import DirectDSN, TempRef, dsn_key
+from jackal.dsn import DirectDSN, TempRef
 from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 
 
@@ -57,6 +57,8 @@ class DatasetCatalog:
                 return self._allocate_temp(alias, dd.disp.status)
             case DirectDSN(name=name):
                 return self._allocate_direct(name, dd)
+            case _:
+                raise TypeError(f"Unhandled DSN type: {dd.dsn!r}")
 
     def _allocate_temp(self, alias: str, status: DispStatus) -> Dataset:
         if status is DispStatus.NEW:
