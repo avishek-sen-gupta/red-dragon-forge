@@ -39,6 +39,7 @@ def _step_from_json(s: dict) -> Step:
         pgm=s["pgm"],
         dds=tuple(_dd_from_json(d) for d in s["dds"]),
         conds=tuple(_cond_from_json(c) for c in s.get("cond", ())),
+        parm=s.get("parm", ""),
     )
 
 
