@@ -122,3 +122,38 @@ def test_mod_creates_when_absent(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     ds = cat.allocate(_dd("J.MOD", DispStatus.MOD))
     assert ds.path.exists() and ds.path.read_bytes() == b""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_open_dataset_ps_empty_returns_eof(tmp_path):
+    from interpreter.cobol.access_result import AccessCondition
+    from interpreter.cobol.file_enums import OpenMode
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    dd = DD("D", "J.FLAT", Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE))
+    cat.allocate(dd)
+    drv = cat.open_dataset("J.FLAT", OpenMode.INPUT, record_size=80)
+    result = drv.read_seq()
+    drv.close()
+    assert result.condition is AccessCondition.END_OF_FILE
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_open_dataset_ksds_write_then_read(tmp_path):
+    from interpreter.cobol.access_result import AccessCondition
+    from interpreter.cobol.file_enums import OpenMode
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    spec = DatasetSpec(
+        dsn="MY.KSDS", org=DatasetOrg.KSDS, key_offset=0, key_length=4, record_size=10
+    )
+    cat.allocate_new(spec)
+    record = b"KEY DATA  "  # 10 bytes; key = first 4
+    drv = cat.open_dataset("MY.KSDS", OpenMode.OUTPUT)
+    drv.write(record)
+    drv.close()
+    drv2 = cat.open_dataset("MY.KSDS", OpenMode.INPUT)
+    result = drv2.read_key(b"KEY ")
+    drv2.close()
+    assert result.condition is AccessCondition.OK
+    assert result.data == record

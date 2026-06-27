@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
+from interpreter.cobol.file_enums import FileOrganization, OpenMode
 from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 
 
@@ -25,6 +27,12 @@ class Dataset:
     key_offset: int = 0
     key_length: int = 0
     record_size: int = 0
+
+
+_ORG_MAP: dict[DatasetOrg, FileOrganization] = {
+    DatasetOrg.PS: FileOrganization.SEQUENTIAL,
+    DatasetOrg.KSDS: FileOrganization.INDEXED,
+}
 
 
 class DatasetCatalog:
@@ -107,6 +115,19 @@ class DatasetCatalog:
         )
         self._datasets[spec.dsn] = ds
         return ds
+
+    def open_dataset(
+        self, dsn: str, mode: OpenMode, record_size: int | None = None
+    ) -> FileOrganizationDriver:
+        # record_size override exists solely as a jackal-ifq workaround: PS inputs
+        # allocated via allocate(dd) carry record_size=0; callers that know the true
+        # record size (e.g. REPRO borrowing the output KSDS value) pass it here.
+        # Remove this parameter and all call sites that supply it when jackal-ifq is fixed.
+        ds = self._datasets[dsn]
+        rl = record_size if record_size is not None else ds.record_size
+        return open_driver(
+            _ORG_MAP[ds.org], ds.path, mode, rl, ds.key_offset, ds.key_length
+        )
 
     def delete_dsn(self, dsn: str) -> bool:
         """Remove a dataset from the catalog and delete its backing file.
