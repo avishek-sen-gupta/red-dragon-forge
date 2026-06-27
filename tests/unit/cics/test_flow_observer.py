@@ -44,4 +44,4 @@ def test_null_observer_on_verb_is_noop():
         xctl_target=None,
         transid=None,
     )
-    observer.on_verb(v)  # must not raise
+    assert observer.on_verb(v) is None
