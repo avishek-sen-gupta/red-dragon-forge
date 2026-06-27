@@ -1,7 +1,8 @@
 from dataclasses import FrozenInstanceError
 import pytest
 from tests.covers import covers, NotLanguageFeature
-from cics.flow_observer import CicsVerb, NullCicsFlowObserver
+from cics.flow_observer import CicsVerb, NullCicsFlowObserver, field_direction
+from bms_copybook_gen.models import BmsField
 
 
 class _CapturingObserver:
@@ -169,3 +170,27 @@ def test_null_observer_is_default():
         options={"PROGRAM": CicsOperand("COSGN00C", True)},
     )
     strategy.lower(_minimal_ctx(), stmt, materialised=None)  # must not raise
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_unprot_field_is_input():
+    f = BmsField(label="ACCTSID", length=11, attrb=["UNPROT"])
+    assert field_direction(f) == "input"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_prot_field_is_output():
+    f = BmsField(label="ACCTNAME", length=50, attrb=["PROT", "BRT"])
+    assert field_direction(f) == "output"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_askip_field_is_output():
+    f = BmsField(label="HDNG", length=40, attrb=["ASKIP"])
+    assert field_direction(f) == "output"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_no_attrb_defaults_to_input():
+    f = BmsField(label="INPUTFLD", length=10, attrb=[])
+    assert field_direction(f) == "input"
