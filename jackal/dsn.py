@@ -29,3 +29,5 @@ def dsn_key(dsn: DSN) -> str:
             return n
         case TempRef(alias=a):
             raise TypeError(f"TempRef '{a}' must be resolved via the catalog")
+        case _:
+            raise TypeError(f"Unhandled DSN type: {dsn!r}")

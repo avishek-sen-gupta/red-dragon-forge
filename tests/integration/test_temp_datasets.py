@@ -86,8 +86,25 @@ def test_missing_temp_raises(tmp_path):
     )
     with pytest.raises(KeyError):
         _runner(tmp_path).run(job, workdir=tmp_path, seeds={})
-    # Temp files must be cleaned up even when the job raises
-    assert not (tmp_path / "GHOST").exists()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cleanup_runs_after_step_exception(tmp_path):
+    """Temp allocated in step 1 is cleaned up even when step 2 raises KeyError."""
+    import pytest
+
+    job = Job(
+        name="J",
+        steps=(
+            Step(name="S1", pgm="IEFBR14", dds=(_pass_dd("&&KEPT"),)),
+            Step(name="S2", pgm="IEFBR14", dds=(_old_delete_dd("&&GHOST"),)),
+        ),
+    )
+    with pytest.raises(KeyError):
+        _runner(tmp_path).run(job, workdir=tmp_path, seeds={})
+    # &&KEPT was allocated by step 1 but never deleted — cleanup_temps() must
+    # have run (via try/finally in runner) to remove it
+    assert not (tmp_path / "KEPT").exists()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
