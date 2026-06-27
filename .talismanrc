@@ -33,9 +33,9 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-06-21-jackal-v2-idcams.md
   checksum: 5e7a0cbe33df9058b3b226275a1a887e8a7ef54de38ab46bd623e31f77b3af33
 - filename: tests/unit/test_catalog.py
-  checksum: 325fad217dcf027136848a2c80409a3db1ecffbca41bf8d37fdc0a33b460aeff
+  checksum: 56430f2b52ab48f208ea2dc41470fce8f0685fadf06be5ccc88d7407039b8791
 - filename: jackal/catalog.py
-  checksum: 87dd1a4f2db4a06306ac5b415b7769c1c2ed353c9b0771bc9ab55616eaa75594
+  checksum: c6f28a870a3ff294a73d11114642a5f1ac82e57be7657dd91a9c84407a3b607c
 - filename: tests/unit/test_idcams_parser.py
   checksum: a8762987e12835a1e85e2a187bb50d57affa15e0010e5ee9d88e15700f0db4b2
 - filename: jackal/idcams/grammar.lark
