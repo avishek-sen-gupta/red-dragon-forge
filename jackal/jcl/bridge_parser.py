@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 
-from jackal.dsn import DSN, DirectDSN, TempRef
+from jackal.dsn import DSN, DirectDSN, TempRef, BackwardRef
 from jackal.model import Cond, CondOp, DD, Disp, DispNormal, DispStatus, Job, Step
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
@@ -22,7 +22,18 @@ def _dd_from_json(d: dict) -> DD:
     words = tuple(d.get("disp_words", ()))
     disp = _disp_from_words(words) if words else _DEFAULT_DISP
     raw_dsn = d.get("dsn", "")
-    dsn: DSN = TempRef(raw_dsn) if raw_dsn.startswith("&&") else DirectDSN(raw_dsn)
+    if "backref" in d:
+        br = d["backref"]
+        dsn: DSN = BackwardRef(step=br["step"], ddname=br["ddname"])
+    elif raw_dsn.startswith("*."):
+        raise ValueError(
+            f"Three-segment backward reference '{raw_dsn}' is not yet supported "
+            "(see jackal-lz8 — requires PROC support from jackal-1o2.2)"
+        )
+    elif raw_dsn.startswith("&&"):
+        dsn = TempRef(raw_dsn)
+    else:
+        dsn = DirectDSN(raw_dsn)
     return DD(
         ddname=d["ddname"],
         dsn=dsn,

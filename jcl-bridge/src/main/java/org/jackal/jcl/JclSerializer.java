@@ -428,7 +428,23 @@ public final class JclSerializer {
                         JCLParser.DatasetNameContext datasetName =
                                 findChild(dsnCtx, JCLParser.DatasetNameContext.class);
                         if (datasetName != null) {
-                            dsn = datasetName.getText();
+                            String raw = datasetName.getText();
+                            if (raw.startsWith("*.")) {
+                                // backward reference: *.STEPNAME.DDNAME (two-segment) or longer
+                                String[] parts = raw.substring(2).split("\\.");
+                                if (parts.length == 2) {
+                                    JsonObject backref = new JsonObject();
+                                    backref.addProperty("step", parts[0]);
+                                    backref.addProperty("ddname", parts[1]);
+                                    dd.add("backref", backref);
+                                    // leave dsn="" — Python parser dispatches on "backref" key first
+                                } else {
+                                    // three-segment or malformed — pass raw string; Python raises ValueError
+                                    dsn = raw;
+                                }
+                            } else {
+                                dsn = raw;
+                            }
                         }
                     } else if (inner instanceof JCLParser.DdParmDISPContext) {
                         JCLParser.DdParmDISPContext dispCtx = (JCLParser.DdParmDISPContext) inner;
