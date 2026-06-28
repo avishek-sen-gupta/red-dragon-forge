@@ -50,3 +50,28 @@ def test_dsn_key_raises_for_temp_ref():
 
     with pytest.raises(TypeError, match="TempRef"):
         dsn_key(TempRef("&&WORKIN"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_backward_ref_fields():
+    from jackal.dsn import BackwardRef
+
+    br = BackwardRef(step="STEP1", ddname="WRK")
+    assert br.step == "STEP1"
+    assert br.ddname == "WRK"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_backward_ref_equality():
+    from jackal.dsn import BackwardRef
+
+    assert BackwardRef("STEP1", "WRK") == BackwardRef("STEP1", "WRK")
+    assert BackwardRef("STEP1", "WRK") != BackwardRef("STEP2", "WRK")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dsn_key_raises_for_backward_ref():
+    from jackal.dsn import BackwardRef, dsn_key
+
+    with pytest.raises(TypeError, match="BackwardRef"):
+        dsn_key(BackwardRef("STEP1", "WRK"))

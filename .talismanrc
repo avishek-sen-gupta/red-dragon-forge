@@ -87,9 +87,10 @@ fileignoreconfig:
 - filename: .beads/interactions.jsonl
   checksum: 41ca44e2e03a3a87b5b29d3584985b734917db8c2e3250cdef32951c68a116a4
 - filename: jackal/dsn.py
-  checksum: 598413d91b8ddca231488fb29181125213307007ff6b35eb10af76529c668e48
+  checksum: 2a6d3759943e30ea437856ccaa47aa482949d075b85def39f6456ecbbbf8a680
 - filename: tests/unit/test_dsn.py
-  checksum: b7904e8a23a45f915c22bcbf80e694b5ab790b58c5bde8600ad0c6150ae294e0
+  # Test data matching secret patterns — safe to ignore content detection
+  ignore_detectors: [filecontent]
 - filename: tests/integration/test_temp_datasets.py
   checksum: 8905f1e6d7ecc5d2a37fabbb1c2e9b102ddc278c4b59679c2dfa18be36e0d7b3
 - filename: docs/superpowers/specs/2026-06-29-backward-refs-design.md
