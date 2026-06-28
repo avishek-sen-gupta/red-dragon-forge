@@ -170,3 +170,113 @@ def test_job_level_cond_applies_to_all_steps(tmp_path: Path) -> None:
     )
     res = runner.run(job, workdir=tmp_path, seeds={})
     assert res.steps[1].disposition is StepDisposition.BYPASSED
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_resolve_step_substitutes_backref(tmp_path: Path) -> None:
+    from jackal.dsn import BackwardRef, DirectDSN
+    from jackal.model import DD, Disp, DispNormal, DispStatus, Step
+
+    runner = JobRunner(
+        source_dir=tmp_path,
+        bridge_jar="unused",
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+    )
+    resolved_dds = {"STEP1": {"WRK": DirectDSN("MY.FILE")}}
+    step = Step(
+        name="STEP2",
+        pgm="IEFBR14",
+        dds=(
+            DD(
+                "INPUT",
+                BackwardRef("STEP1", "WRK"),
+                Disp(DispStatus.OLD, DispNormal.DELETE, DispNormal.DELETE),
+            ),
+        ),
+    )
+    result = runner._resolve_step(step, resolved_dds)
+    assert result is not None
+    assert result.dds[0].dsn == DirectDSN("MY.FILE")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_resolve_step_returns_none_when_referenced_step_absent(tmp_path: Path) -> None:
+    from jackal.dsn import BackwardRef
+    from jackal.model import DD, Disp, DispNormal, DispStatus, Step
+
+    runner = JobRunner(
+        source_dir=tmp_path,
+        bridge_jar="unused",
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+    )
+    step = Step(
+        name="STEP2",
+        pgm="IEFBR14",
+        dds=(
+            DD(
+                "INPUT",
+                BackwardRef("MISSING", "WRK"),
+                Disp(DispStatus.OLD, DispNormal.DELETE, DispNormal.DELETE),
+            ),
+        ),
+    )
+    assert runner._resolve_step(step, resolved_dds={}) is None
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_record_dds_stores_temp_ref_as_direct_dsn(tmp_path: Path) -> None:
+    from jackal.dsn import DirectDSN, TempRef
+    from jackal.model import DD, Disp, DispNormal, DispStatus
+
+    runner = JobRunner(
+        source_dir=tmp_path,
+        bridge_jar="unused",
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+    )
+    dds = (
+        DD(
+            "WRK",
+            TempRef("&&TEMP"),
+            Disp(DispStatus.NEW, DispNormal.PASS, DispNormal.DELETE),
+        ),
+        DD(
+            "OUT",
+            DirectDSN("MY.FILE"),
+            Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE),
+        ),
+    )
+    registry: dict = {}
+    runner._record_dds("STEP1", dds, registry)
+    assert registry["STEP1"]["WRK"] == DirectDSN("TEMP")  # alias[2:]
+    assert registry["STEP1"]["OUT"] == DirectDSN("MY.FILE")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_resolve_step_raises_for_unknown_ddname(tmp_path: Path) -> None:
+    from jackal.dsn import BackwardRef, DirectDSN
+    from jackal.model import DD, Disp, DispNormal, DispStatus, Step
+    import pytest
+
+    runner = JobRunner(
+        source_dir=tmp_path,
+        bridge_jar="unused",
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+    )
+    resolved_dds = {"STEP1": {"WRK": DirectDSN("MY.FILE")}}
+    step = Step(
+        name="STEP2",
+        pgm="IEFBR14",
+        dds=(
+            DD(
+                "INPUT",
+                BackwardRef("STEP1", "BADDD"),
+                Disp(DispStatus.OLD, DispNormal.DELETE, DispNormal.DELETE),
+            ),
+        ),
+    )
+    with pytest.raises(KeyError, match="BADDD"):
+        runner._resolve_step(step, resolved_dds)
