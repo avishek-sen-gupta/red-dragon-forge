@@ -225,3 +225,60 @@ def test_dd_from_json_absent_dsn_is_direct_empty():
     dd = job.steps[0].dds[0]
     assert isinstance(dd.dsn, DirectDSN)
     assert dd.dsn.name == ""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_from_json_backref_dsn():
+    from jackal.dsn import BackwardRef
+    from jackal.jcl.bridge_parser import _job_from_json
+
+    data = {
+        "name": "J",
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "P",
+                "dds": [
+                    {
+                        "ddname": "INPUT",
+                        "dsn": "",
+                        "backref": {"step": "STEP1", "ddname": "WRK"},
+                        "disp_words": ["OLD", "DELETE"],
+                        "in_stream": [],
+                        "sysout": False,
+                    }
+                ],
+            }
+        ],
+    }
+    job = _job_from_json(data)
+    dd = job.steps[0].dds[0]
+    assert isinstance(dd.dsn, BackwardRef)
+    assert dd.dsn.step == "STEP1"
+    assert dd.dsn.ddname == "WRK"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_from_json_three_segment_backref_raises():
+    from jackal.jcl.bridge_parser import _job_from_json
+
+    data = {
+        "name": "J",
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "P",
+                "dds": [
+                    {
+                        "ddname": "INPUT",
+                        "dsn": "*.STEP1.PSTEP.WRK",
+                        "disp_words": ["OLD", "DELETE"],
+                        "in_stream": [],
+                        "sysout": False,
+                    }
+                ],
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="jackal-lz8"):
+        _job_from_json(data)

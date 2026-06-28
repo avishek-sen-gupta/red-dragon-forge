@@ -31,3 +31,21 @@ def test_real_jar_absent_parm_is_empty_string(jcl_bridge_jar):
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=MYPGM\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     assert job.steps[0].parm == ""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_backward_ref(jcl_bridge_jar):
+    jcl = (
+        "//J JOB 1\n"
+        "//STEP1 EXEC PGM=IEFBR14\n"
+        "//WRK DD DSN=MY.FILE,DISP=(NEW,PASS)\n"
+        "//STEP2 EXEC PGM=IEFBR14\n"
+        "//INPUT DD DSN=*.STEP1.WRK,DISP=(OLD,DELETE)\n"
+    )
+    from jackal.dsn import BackwardRef
+
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    dd = job.steps[1].dds[0]
+    assert isinstance(dd.dsn, BackwardRef)
+    assert dd.dsn.step == "STEP1"
+    assert dd.dsn.ddname == "WRK"
