@@ -92,4 +92,6 @@ fileignoreconfig:
   checksum: b7904e8a23a45f915c22bcbf80e694b5ab790b58c5bde8600ad0c6150ae294e0
 - filename: tests/integration/test_temp_datasets.py
   checksum: 8905f1e6d7ecc5d2a37fabbb1c2e9b102ddc278c4b59679c2dfa18be36e0d7b3
+- filename: docs/superpowers/specs/2026-06-29-backward-refs-design.md
+  checksum: e39fc20e27de320a5095ab18e7934eb680d44a30e892980c083597c0fb25713d
 version: "1.0"
