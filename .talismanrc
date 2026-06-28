@@ -94,4 +94,6 @@ fileignoreconfig:
   checksum: 8905f1e6d7ecc5d2a37fabbb1c2e9b102ddc278c4b59679c2dfa18be36e0d7b3
 - filename: docs/superpowers/specs/2026-06-29-backward-refs-design.md
   checksum: e39fc20e27de320a5095ab18e7934eb680d44a30e892980c083597c0fb25713d
+- filename: docs/superpowers/plans/2026-06-29-backward-refs.md
+  checksum: 9a8d39a04653403704aab7adefac59f4aea9ff8f91db1fac3848a7160b87c103
 version: "1.0"
