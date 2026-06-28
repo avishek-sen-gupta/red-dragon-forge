@@ -31,12 +31,7 @@ from jackal.results import StepDisposition, StepResult
 OPTIONAL_DDS: frozenset[str] = frozenset({"STEPLIB", "JOBLIB"})
 
 
-def _file_control(source: str, bridge_jar: str, copybook_dirs: list[Path]) -> list:
-    parser = ProLeapCobolParser(
-        runner=RealSubprocessRunner(),
-        bridge_jar=bridge_jar,
-        copybook_dirs=copybook_dirs,
-    )
+def _file_control(source: str, parser: ProLeapCobolParser) -> list:
     return parser.parse(source.encode("utf-8")).file_control
 
 
@@ -62,14 +57,23 @@ def run_cobol_step(
         raise ValueError(
             f"PROLEAP_BRIDGE_JAR not set; required to run COBOL step {step.name!r}"
         )
+    parser = ProLeapCobolParser(
+        runner=RealSubprocessRunner(),
+        bridge_jar=bridge_jar,
+        copybook_dirs=copybook_dirs,
+    )
     overrides = _overrides(step, catalog)
     provider = RealFileIOProvider(
         base_dir=catalog.workdir,
-        file_control=_file_control(source, bridge_jar, copybook_dirs),
+        file_control=_file_control(source, parser),
         path_overrides=overrides,
     )
     if step.parm:
-        _, linked = compile_cobol(source.encode("utf-8"), copybook_dirs=copybook_dirs)
+        _, linked = compile_cobol(
+            source.encode("utf-8"),
+            parser=parser,
+            copybook_dirs=copybook_dirs,
+        )
         parm_addr = Address("rgn_parm")
         parm_vm = VMState()
         parm_vm.region_set(parm_addr, bytearray(build_parm_region(step.parm)))
