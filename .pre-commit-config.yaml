@@ -43,7 +43,7 @@ repos:
 
       - id: tests
         name: Unit test suite
-        entry: uv run --no-sync python -m pytest tests/unit -x -q
-        language: system
+        entry: precommit-scripts/run-tests
+        language: script
         pass_filenames: false
         always_run: true
