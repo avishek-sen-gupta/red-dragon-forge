@@ -47,10 +47,12 @@ $(PROLEAP_BRIDGE_JAR):
 	cd vendor/red-dragon/proleap-bridge && ./build.sh
 
 # JCL bridge = jackal's own mapa ANTLR grammar + serializer.
-$(JCL_BRIDGE_JAR):
+# Always run mvn — it is incremental and skips recompilation when sources are unchanged.
+.PHONY: _jcl_bridge
+_jcl_bridge:
 	cd jcl-bridge && mvn -DskipTests package -q
 
-jar: $(PROLEAP_BRIDGE_JAR) $(JCL_BRIDGE_JAR)
+jar: $(PROLEAP_BRIDGE_JAR) _jcl_bridge
 
 jar-force:
 	cd vendor/red-dragon/proleap-bridge && ./build.sh
