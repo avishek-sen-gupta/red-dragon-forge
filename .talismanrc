@@ -85,7 +85,7 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-06-27-temp-datasets.md
   checksum: a527f3be443e5b244233732567008201f83d1ae09c33b05266567c3f56378378
 - filename: .beads/interactions.jsonl
-  checksum: 41ca44e2e03a3a87b5b29d3584985b734917db8c2e3250cdef32951c68a116a4
+  checksum: ea2fdeb171859b60e18b94b68640502e70027464c4d33b01e71cfd4baa50db29
 - filename: jackal/dsn.py
   checksum: 2a6d3759943e30ea437856ccaa47aa482949d075b85def39f6456ecbbbf8a680
 - filename: tests/unit/test_dsn.py
