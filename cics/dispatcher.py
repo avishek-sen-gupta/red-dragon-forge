@@ -111,6 +111,19 @@ def _advance_routing(
     return result
 
 
+def _peek_input_event(input_queue: InputChannel) -> Any:
+    """Read the next InputEvent without consuming it — a later RECEIVE MAP still
+    does the one real consume. Implemented as get-then-put-back rather than a
+    protocol-level peek() because InputChannel (cics/terminal.py) is deliberately
+    limited to put/get so it stays swappable with an out-of-process transport
+    (socket, multiprocessing.Queue); those can't peek. Relies on the channel's
+    synchronous, single-pending-item usage in this dispatcher (the driver never
+    queues a second input before draining the screen produced by the first)."""
+    event = input_queue.get()
+    input_queue.put(event)
+    return event
+
+
 def _run_dispatcher_with_runner(
     run_fn: RunCicsFn,
     program_cache: dict[str, Any],
@@ -127,12 +140,13 @@ def _run_dispatcher_with_runner(
         result = run_fn(program, context, screen_queue, input_queue)
 
         # On a pseudo-conversational RETURN TRANSID, the next turn's terminal
-        # input arrives here (blocks). Its attention key seeds the next EIBAID.
-        # (This input_queue.get() is the loop's own quirk; CicsRegion does not
-        # replicate it — see CicsRegion.dispatch.)
+        # input arrives here (blocks). Its attention key seeds the next EIBAID;
+        # the event itself is left on the queue for the resumed turn's own
+        # RECEIVE MAP to consume (see _peek_input_event). CicsRegion doesn't need
+        # this — see CicsRegion.dispatch.
         eibaid = context.eibaid
         if result.kind == DispatchKind.RETURN_TRANSID:
-            event = input_queue.get()  # blocks
+            event = _peek_input_event(input_queue)  # blocks
             eibaid = event.eibaid
 
         routing = _advance_routing(

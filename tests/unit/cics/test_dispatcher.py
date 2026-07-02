@@ -118,6 +118,38 @@ def test_dispatcher_resume_propagates_event_eibaid_to_context():
     assert seen_eibaids[1] == "\xf3"  # resumed turn: event's aid propagated
 
 
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dispatcher_resume_leaves_event_on_queue_for_receive_map(monkeypatch):
+    """On RETURN TRANSID resume, the loop reads the next event's eibaid but must
+    NOT consume it — the resumed turn's own RECEIVE MAP (a second, separate
+    input_queue.get()) still needs that same event's field values. (v2om)"""
+    seen_eibaids: list[str] = []
+    drained_by_receive_map: list[InputEvent] = []
+
+    def mock_run(program, ctx, sq, iq):
+        seen_eibaids.append(ctx.eibaid)
+        if len(seen_eibaids) == 1:
+            return DispatchResult(
+                kind=DispatchKind.RETURN_TRANSID, transid="CC01", commarea=b""
+            )
+        # Mimic RECEIVE MAP's own consume on the resumed turn.
+        drained_by_receive_map.append(iq.get(block=False))
+        return DispatchResult(kind=DispatchKind.RETURN)
+
+    program_cache = {"PROG1": MagicMock(), "PROG2": MagicMock()}
+    transid_to_program = {"CC00": "PROG1", "CC01": "PROG2"}
+    ctx = CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")
+    sq, iq = queue.Queue(), queue.Queue()
+    event = InputEvent(eibaid="\xf3", fields={"USERID": "U"})
+    iq.put(event)
+
+    _run_dispatcher_with_runner(
+        mock_run, program_cache, transid_to_program, ctx, sq, iq
+    )
+    assert seen_eibaids[1] == "\xf3"  # loop still learns the eibaid
+    assert drained_by_receive_map == [event]  # AND RECEIVE MAP still gets the event
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # _advance_routing — the single copy of the "which program/transid next" rule.
 # ─────────────────────────────────────────────────────────────────────────────
