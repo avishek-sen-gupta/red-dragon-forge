@@ -43,6 +43,13 @@ channel; the driver does the reverse. ``queue.Queue`` structurally conforms to
 the whole surface, which is how the region runs **in-process today** with zero
 call-site or test changes.
 
+There is no ``peek()`` on this protocol either, for the same reason: a socket
+or ``multiprocessing.Queue``-backed channel can't peek without consuming. The
+one caller that needs to inspect the next input event without removing it
+(``cics.dispatcher._peek_input_event``, reading EIBAID ahead of a resumed
+turn's own RECEIVE MAP) does a get-then-put-back instead — safe only because
+this channel is used synchronously with at most one pending item at a time.
+
 Note: the input item is kept ``Any`` rather than importing ``InputEvent`` from
 ``cics.dispatcher`` — dispatcher imports these protocols, so naming
 ``InputEvent`` here would create an import cycle. In practice the item is an
