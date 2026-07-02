@@ -242,5 +242,12 @@ def test_real_carddemo_custom_report_submitted(tmp_path, bridge_jar):
     assert r6.kind == DispatchKind.RETURN_TRANSID
     assert (r6.transid or "").strip() == "CR00"
 
-    # WRITEQ TD is now dispatched; JCL lines are streamed to the TD queue.
+    # WRITEQ TD is now dispatched with real operands; JCL lines are streamed
+    # to the 'JOBS' TD queue with real content (cicada-vcq).
     assert len(td_queue) > 0, f"expected JCL lines in td_queue, got: {td_queue}"
+    assert all(
+        line.startswith("[JOBS] ") for line in td_queue
+    ), f"expected every line under the 'JOBS' queue, got: {td_queue}"
+    assert any(
+        "//TRNRPT00 JOB" in line for line in td_queue
+    ), f"expected the JCL job card in td_queue, got: {td_queue}"
