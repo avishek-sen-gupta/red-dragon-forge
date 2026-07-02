@@ -215,3 +215,50 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
     names_reg = recv[0].args[1]
     consts = {i.result_reg: i.value for i in ctx.emitted if isinstance(i, Const)}
     assert consts[names_reg] == ["USERID", "PASSWD"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_writeq_td_lowers_with_real_args():
+    """WRITEQ TD QUEUE('JOBS') FROM('SOME-DATA') passes both operands as real
+    args to __cics_writeq_td — not args=() (cicada-vcq)."""
+    from interpreter.instructions import CallFunction, Const
+    from interpreter.cobol.cobol_statements import ExecCicsStatement
+    from interpreter.cobol.cobol_statements import CicsOperand
+    from interpreter.register import Register
+
+    class _Ctx:
+        def __init__(self):
+            self.emitted = []
+            self._n = 0
+
+        def fresh_reg(self):
+            self._n += 1
+            return Register(f"%r{self._n}")
+
+        def emit_inst(self, inst):
+            self.emitted.append(inst)
+            return inst
+
+    ctx = _Ctx()
+    stmt = ExecCicsStatement(
+        verb="WRITEQ TD",
+        options={
+            "QUEUE": CicsOperand("JOBS", True),
+            "FROM": CicsOperand("SOME-DATA", True),
+        },
+    )
+    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy.lower(ctx, stmt, materialised=None)
+
+    calls = [
+        i
+        for i in ctx.emitted
+        if isinstance(i, CallFunction) and i.func_name == FuncName("__cics_writeq_td")
+    ]
+    assert len(calls) == 1
+    call = calls[0]
+    assert len(call.args) == 2, f"expected 2 real args, got {call.args!r}"
+    consts = {i.result_reg: i.value for i in ctx.emitted if isinstance(i, Const)}
+    # args[0] = FROM data, args[1] = QUEUE name (make_writeq_td_builtin's order).
+    assert consts[call.args[0]] == "SOME-DATA"
+    assert consts[call.args[1]] == "JOBS"

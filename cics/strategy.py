@@ -58,7 +58,6 @@ _SYS_VERBS: dict[str, str] = {
     "ASKTIME": "__cics_asktime",
     "FORMATTIME": "__cics_formattime",
     "INQUIRE": "__cics_inquire",
-    "WRITEQ TD": "__cics_writeq_td",
     "HANDLE ABEND": "__cics_handle_abend",
     # HANDLE CONDITION / HANDLE AID are explicit no-ops for now — the real
     # runtime-dispatch machinery is a deferred follow-up
@@ -914,6 +913,20 @@ class CicsLoweringStrategy:
                     )
                 )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            return
+
+        # ── WRITEQ TD ────────────────────────────────────────────────────
+        if verb == "WRITEQ TD":
+            r_from = emit_operand_value(ctx, opts.get("FROM"), materialised)
+            r_queue = emit_operand_value(ctx, opts.get("QUEUE"), materialised)
+            r_res = ctx.fresh_reg()
+            ctx.emit_inst(
+                CallFunction(
+                    result_reg=r_res,
+                    func_name=FuncName("__cics_writeq_td"),
+                    args=(r_from, r_queue),
+                )
+            )
             return
 
         # ── System verbs ──────────────────────────────────────────────────
