@@ -5,4 +5,8 @@ fileignoreconfig:
   checksum: 8884f5fcaac85e09c8fcc59fc132154690b4bee5f700a33e43d404ba6a73a73f
 - filename: vendor/red-dragon
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+- filename: vendor/squall
+  checksum: ab625405815a214393d1c55627a5407edc5246db54646924d6b90ff75941b4c7
+- filename: vendor/cicada
+  checksum: 0cdf1afc442791710e0de1d0d187582ae3c719ef8635073d3413e088b35cba7e
 version: "1.0"

@@ -1,3 +1,9 @@
 [submodule "vendor/red-dragon"]
 	path = vendor/red-dragon
 	url = git@github.com:avishek-sen-gupta/red-dragon.git
+[submodule "vendor/cicada"]
+	path = vendor/cicada
+	url = git@github.com:avishek-sen-gupta/cicada.git
+[submodule "vendor/squall"]
+	path = vendor/squall
+	url = git@github.com:avishek-sen-gupta/squall.git
