@@ -28,6 +28,8 @@ jar-force:
 
 python:
 	uv sync
+	uv pip install -e vendor/cicada --no-deps
+	uv pip install -e vendor/squall --no-deps
 
 test: jar
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(PYTEST) tests/ $(PYTEST_ARGS)
