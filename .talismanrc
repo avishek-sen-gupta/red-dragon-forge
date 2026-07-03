@@ -5,6 +5,10 @@ fileignoreconfig:
   checksum: 8884f5fcaac85e09c8fcc59fc132154690b4bee5f700a33e43d404ba6a73a73f
 - filename: red_dragon_forge/coprocessor.py
   checksum: 25f4d437264805b4e274af959a44c1309d2e64dd9ceabbeb950ca23b4cd3da2c
+- filename: red_dragon_forge/compile.py
+  checksum: bc43672cba8bdaa83b33fe7b0b34322899fbf826cb70feab1f8332dd6d920116
+- filename: tests/integration/test_compile_program.py
+  checksum: 985cb3ba9cda6a8aee937a86aafab5b0385d18d91379624f0a814395c3419388
 - filename: vendor/red-dragon
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
 - filename: vendor/squall
