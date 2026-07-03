@@ -17,4 +17,6 @@ fileignoreconfig:
   checksum: 0cdf1afc442791710e0de1d0d187582ae3c719ef8635073d3413e088b35cba7e
 - filename: .superpowers/sdd/progress.md
   checksum: 12726c2e3db64b1a7267643bcd8da2f1b8eee34ae7bb3475133def1fd01a43c0
+- filename: red_dragon_forge/adapters/cics.py
+  checksum: a1c2bd799f240e06e8cfd8fbdf54c469546cac77375926c7d5cf23438495a796
 version: "1.0"
