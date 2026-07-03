@@ -1,4 +1,6 @@
 fileignoreconfig:
 - filename: docs/design/2026-07-04-cics-sql-composition-design.md
   checksum: fd2ef30c65a9f7a715ac6b902e292b84ac9db716ed24745e40aef5b5c0846ff2
+- filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
+  checksum: 8884f5fcaac85e09c8fcc59fc132154690b4bee5f700a33e43d404ba6a73a73f
 version: "1.0"
