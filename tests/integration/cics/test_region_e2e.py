@@ -249,3 +249,59 @@ def test_return_transid_then_receive_map_both_see_the_same_event(cobol_parser):
     assert resume_fields.get("AIDFLG") == "PF3SEEN!"
     # ...AND RECEIVE MAP still got the field value from that same event.
     assert resume_fields.get("UNAME") == "ALICE"
+
+
+# WRITEQ TD RESP writeback proof (cicada-y6l): WS-RESP-CD starts "poisoned" at
+# a sentinel that is NOT a real CICS response code (999). Only a genuine
+# RESP writeback can bring it back to 0 — a naive "assert it's 0" test can't
+# distinguish "fixed" from "field was already 0 and nothing touched it",
+# since 0 is also DFHRESP(NORMAL). The MOVE to a DISPLAY field before SEND
+# MAP is required because WS-RESP-CD is COMP (binary) — not printable via a
+# symbolic map directly; real COBOL programs always de-edit COMP fields to
+# DISPLAY before showing them on screen, same as this test does.
+TDRESPGM_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TDRESPGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 TDRMAP.
+          05 RESPO PIC 9(9).
+       01 WS-DATA PIC X(8) VALUE 'HELLOTD!'.
+       01 WS-RESP-CD PIC S9(09) COMP VALUE 999.
+       PROCEDURE DIVISION.
+           EXEC CICS WRITEQ TD QUEUE('TESTQ') FROM(WS-DATA)
+                     RESP(WS-RESP-CD) END-EXEC.
+           MOVE WS-RESP-CD TO RESPO.
+           EXEC CICS SEND MAP('TDRMAP') FROM(TDRMAP) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_writeq_td_writes_back_resp(cobol_parser):
+    """WRITEQ TD's RESP(WS-RESP-CD) is genuinely written, not silently
+    dropped: a poisoned sentinel (999) becomes 0 (DFHRESP(NORMAL)) after the
+    call — proving the writeback executed rather than the field already
+    being 0 (cicada-y6l)."""
+    screen_q: queue.Queue = queue.Queue()
+    input_q: queue.Queue = queue.Queue()
+
+    result = run_carddemo_region(
+        transid_to_program={"CC00": "TDRESPGM"},
+        program_sources={"TDRESPGM": apply_cics_prepass(TDRESPGM_SRC).encode()},
+        parser=cobol_parser,
+        entry_transid="CC00",
+        screen_queue=screen_q,
+        input_queue=input_q,
+    )
+
+    assert result.kind == DispatchKind.RETURN
+
+    screens = drain(screen_q)
+    assert len(screens) == 1
+    assert screens[0]["map"] == "TDRMAP"
+    assert screens[0]["fields"].get("RESP") == "000000000", (
+        f"expected WS-RESP-CD written back to 0 (DFHRESP(NORMAL)), "
+        f"got screen fields: {screens[0]['fields']!r}"
+    )

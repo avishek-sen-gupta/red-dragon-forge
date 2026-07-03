@@ -239,6 +239,20 @@ def test_writeq_td_lowers_with_real_args():
             self.emitted.append(inst)
             return inst
 
+        def has_field(self, name, materialised):
+            return False
+
+        def emit_to_string(self, value_reg):
+            result = self.fresh_reg()
+            self.emit_inst(
+                CallFunction(
+                    result_reg=result,
+                    func_name=FuncName("str"),
+                    args=(value_reg,),
+                ),
+            )
+            return result
+
     ctx = _Ctx()
     stmt = ExecCicsStatement(
         verb="WRITEQ TD",
@@ -262,3 +276,85 @@ def test_writeq_td_lowers_with_real_args():
     # args[0] = FROM data, args[1] = QUEUE name (make_writeq_td_builtin's order).
     assert consts[call.args[0]] == "SOME-DATA"
     assert consts[call.args[1]] == "JOBS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_writeq_td_lowers_with_resp_writeback():
+    """WRITEQ TD QUEUE('JOBS') FROM('SOME-DATA') RESP(WS-RC) writes both
+    EIBRESP and the RESP(name) field — not silently dropped (cicada-y6l)."""
+    from interpreter.instructions import CallFunction
+    from interpreter.cobol.cobol_statements import ExecCicsStatement
+    from interpreter.cobol.cobol_statements import CicsOperand
+    from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+    from interpreter.cobol.data_layout import FieldLayout
+    from interpreter.cobol.field_resolution import ResolvedFieldRef
+    from interpreter.register import Register
+
+    class _RespCtx:
+        """Faithful fake EmitContext supporting the emit_resp_writeback path —
+        mirrors tests/unit/cics/test_field_ref_wiring.py's FakeCtx."""
+
+        def __init__(self, fields):
+            self._fields = fields
+            self.emitted = []
+            self.encode_writes = []
+            self._n = 0
+
+        def fresh_reg(self):
+            self._n += 1
+            return Register(f"%r{self._n}")
+
+        def emit_inst(self, inst):
+            self.emitted.append(inst)
+            return inst
+
+        def has_field(self, name, materialised):
+            return name in self._fields
+
+        def resolve_field_ref(self, name, materialised, qualifiers=(), subscripts=()):
+            offset, byte_length = self._fields[name]
+            fl = FieldLayout(
+                name=name,
+                type_descriptor=CobolTypeDescriptor(
+                    category=CobolDataCategory.ALPHANUMERIC,
+                    total_digits=byte_length,
+                ),
+                offset=offset,
+                byte_length=byte_length,
+            )
+            offset_reg = self.fresh_reg()
+            self.emit_inst(("const_offset", offset_reg, offset))
+            return ResolvedFieldRef(fl=fl, offset_reg=offset_reg), Register("%region")
+
+        def emit_encode_and_write(self, region_reg, fl, value_str_reg, offset_reg=None):
+            self.encode_writes.append((region_reg, fl, value_str_reg, offset_reg))
+
+        def emit_to_string(self, value_reg):
+            out = self.fresh_reg()
+            self.emit_inst(("to_string", out, value_reg))
+            return out
+
+    ctx = _RespCtx({"EIBRESP": (0, 4), "WS-RC": (16, 4)})
+    stmt = ExecCicsStatement(
+        verb="WRITEQ TD",
+        options={
+            "QUEUE": CicsOperand("JOBS", True),
+            "FROM": CicsOperand("SOME-DATA", True),
+            "RESP": CicsOperand("WS-RC", False),
+        },
+    )
+    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy.lower(ctx, stmt, materialised=None)
+
+    calls = [
+        i
+        for i in ctx.emitted
+        if isinstance(i, CallFunction) and i.func_name == FuncName("__cics_writeq_td")
+    ]
+    assert len(calls) == 1, "expected exactly one __cics_writeq_td call"
+
+    assert (
+        len(ctx.encode_writes) == 2
+    ), f"expected EIBRESP + RESP(WS-RC) writes, got {ctx.encode_writes!r}"
+    written_names = {fl.name for (_, fl, _, _) in ctx.encode_writes}
+    assert written_names == {"EIBRESP", "WS-RC"}
