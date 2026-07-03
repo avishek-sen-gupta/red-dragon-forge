@@ -2,7 +2,7 @@ fileignoreconfig:
 - filename: docs/design/2026-07-04-cics-sql-composition-design.md
   checksum: fd2ef30c65a9f7a715ac6b902e292b84ac9db716ed24745e40aef5b5c0846ff2
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
-  checksum: 8884f5fcaac85e09c8fcc59fc132154690b4bee5f700a33e43d404ba6a73a73f
+  checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
 - filename: red_dragon_forge/coprocessor.py
   checksum: 25f4d437264805b4e274af959a44c1309d2e64dd9ceabbeb950ca23b4cd3da2c
 - filename: red_dragon_forge/compile.py
@@ -15,4 +15,6 @@ fileignoreconfig:
   checksum: ab625405815a214393d1c55627a5407edc5246db54646924d6b90ff75941b4c7
 - filename: vendor/cicada
   checksum: 0cdf1afc442791710e0de1d0d187582ae3c719ef8635073d3413e088b35cba7e
+- filename: .superpowers/sdd/progress.md
+  checksum: 12726c2e3db64b1a7267643bcd8da2f1b8eee34ae7bb3475133def1fd01a43c0
 version: "1.0"

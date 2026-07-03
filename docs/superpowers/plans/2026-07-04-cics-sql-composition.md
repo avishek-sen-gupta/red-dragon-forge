@@ -238,13 +238,11 @@ git commit -m "Scaffold red-dragon-forge; vendor RedDragon at squall's newer pin
 
 - [ ] **Step 1: Add Cicada as a submodule**
 
-Cicada currently has no GitHub remote (`git remote -v` in `~/code/cicada` is empty),
-so this submodule points at the local absolute path for now. **This is a placeholder to swap for a
-real URL once Cicada is pushed to GitHub** — a local-path submodule is not portable to another
-clone.
+Cicada now has a real GitHub remote (confirmed during Task 2 execution — the plan's original "no
+remote, use a local path" premise is stale):
 
 ```bash
-git submodule add ~/code/cicada vendor/cicada
+git submodule add git@github.com:avishek-sen-gupta/cicada.git vendor/cicada
 ```
 
 - [ ] **Step 2: Add Squall as a submodule**
@@ -253,7 +251,26 @@ git submodule add ~/code/cicada vendor/cicada
 git submodule add git@github.com:avishek-sen-gupta/squall.git vendor/squall
 ```
 
-- [ ] **Step 3: Update `pyproject.toml`**
+- [ ] **Step 3: Update `pyproject.toml` — do NOT declare cicada/squall as uv path dependencies**
+
+**This step supersedes the plan's original approach**, which declared `cicada`/`squall` as
+`[project.dependencies]` with `[tool.uv.sources]` path overrides, matching Task 1's pattern for
+`red-dragon`. That fails: `uv sync` errors with
+`Requirements contain conflicting URLs for package red-dragon` — Cicada's own `pyproject.toml`
+declares `red-dragon = {path="vendor/red-dragon"}` relative to *its own* root, and Squall's
+declares the same relative to *its* root; these are two different physical directories (pinned at
+different commits at the time this was discovered), and uv's resolver treats them as a genuine
+same-package/conflicting-source conflict — this is NOT fixed by pinning both to the same commit
+(the paths are still different directories). A `[tool.uv.workspace] exclude=[...]` on this
+project's own `pyproject.toml` was tried and does **not** avoid the conflict either — uv still
+reads Cicada's/Squall's own `[tool.uv.sources]` when resolving them as path dependencies at all,
+workspace membership notwithstanding.
+
+**The fix, confirmed working:** don't ask uv's resolver to reconcile Cicada's/Squall's own declared
+dependencies at all. Declare their actual (small) transitive dependency lists directly in this
+project instead, and install Cicada/Squall themselves as editable with `--no-deps`, outside the
+normal `uv sync` resolution — a standard, well-known workaround for "two sibling projects each
+vendor an unpublished shared dependency, consumed together by a third."
 
 ```toml
 [project]
@@ -264,8 +281,10 @@ readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "red-dragon",
-    "cicada",
-    "squall",
+    "pyyaml>=6.0",
+    "sortedcontainers>=2.4.0",
+    "lark>=1.3.1",
+    "antlr4-python3-runtime>=4.13,<4.14",
 ]
 
 [project.optional-dependencies]
@@ -273,8 +292,6 @@ db2 = ["ibm-db>=3.2.0"]
 
 [tool.uv.sources]
 red-dragon = { path = "vendor/red-dragon", editable = true }
-cicada = { path = "vendor/cicada", editable = true }
-squall = { path = "vendor/squall", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["red_dragon_forge"]
@@ -299,24 +316,33 @@ line-length = 88
 target-version = ["py311"]
 ```
 
-- [ ] **Step 2b: Sync and verify no duplicate RedDragon source**
+`pyyaml`/`sortedcontainers`/`antlr4-python3-runtime` mirror Cicada's own `[project.dependencies]`
+(`lark` and `red-dragon` are already covered — `lark` is also Squall's only non-red-dragon runtime
+dependency, so no separate addition needed for Squall). If Cicada's or Squall's own dependency list
+changes in the future, this list needs a matching manual update — a small, explicit duplication
+cost, not a hidden one.
+
+- [ ] **Step 3b: Sync, then install Cicada and Squall editable with `--no-deps`**
 
 ```bash
-uv sync -v 2>&1 | tee /tmp/uv-sync.log
-grep -i "red-dragon" /tmp/uv-sync.log
+uv sync
+uv pip install -e vendor/cicada --no-deps
+uv pip install -e vendor/squall --no-deps
 ```
 
-Expected: `uv sync` succeeds. This repo's own `[tool.uv.sources]` entry for `red-dragon` is the
-only one that governs resolution — Cicada's and Squall's own `pyproject.toml` `[tool.uv.sources]`
-overrides apply only when *they* are resolved standalone, not when consumed as path dependencies by
-this project. **If `uv sync` instead errors with a source conflict for `red-dragon`** (it
-shouldn't, per uv's per-manifest override semantics, but this is exactly the kind of cross-repo
-interaction that's only provable by actually running it): the fix is to confirm Cicada's and
-Squall's own `vendor/red-dragon` submodules are at commits compatible with the one pinned in Task 1
-— they don't need to be identical (only this repo's checkout is ever actually imported), but if uv
-refuses to resolve at all, pin all three to the exact same commit as a fallback.
+Expected: `uv sync` succeeds cleanly (no conflict — it never has to resolve Cicada's/Squall's own
+`red-dragon` source at all now), and both `--no-deps` installs succeed. Add these two `uv pip
+install` lines to the `Makefile`'s `python` target (Task 1's Makefile) now, so `make python`/
+`make setup` performs the full sequence in one command going forward:
 
-- [ ] **Step 3: Verify both packages import**
+```makefile
+python:
+	uv sync
+	uv pip install -e vendor/cicada --no-deps
+	uv pip install -e vendor/squall --no-deps
+```
+
+- [ ] **Step 3c: Verify both packages import**
 
 ```bash
 uv run --no-sync python -c "from cics.strategy import CicsLoweringStrategy; print('cics ok')"

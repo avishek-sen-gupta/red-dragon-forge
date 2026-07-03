@@ -8,3 +8,5 @@ Task 1: complete (commits f18bec0..3e19558, review clean — Minor: plan Step 1 
 Task 2: complete (commits b25dbdf7..cc1c251f, review clean — retried once after a real uv path-conflict was discovered and fixed [cicada/squall installed --no-deps instead of as uv path-deps]; cicada+squall RedDragon pins bumped to cbed0e62, local commits not pushed; doctor script confirms alignment)
 
 Task 3: complete (commit b411b57d, review clean — CoprocessorSpec, 3/3 tests pass; commit message misleading but content correct)
+
+Task 4: complete (commit 22df4a62, review clean — compile_program, 2/2 new tests pass, ordering + assertion invariants independently verified by reviewer)
