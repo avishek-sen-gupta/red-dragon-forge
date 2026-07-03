@@ -3,6 +3,8 @@ fileignoreconfig:
   checksum: fd2ef30c65a9f7a715ac6b902e292b84ac9db716ed24745e40aef5b5c0846ff2
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
   checksum: 8884f5fcaac85e09c8fcc59fc132154690b4bee5f700a33e43d404ba6a73a73f
+- filename: red_dragon_forge/coprocessor.py
+  checksum: 25f4d437264805b4e274af959a44c1309d2e64dd9ceabbeb950ca23b4cd3da2c
 - filename: vendor/red-dragon
   checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
 - filename: vendor/squall
