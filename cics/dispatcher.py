@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -111,15 +112,19 @@ def _advance_routing(
     return result
 
 
-def _peek_input_event(input_queue: InputChannel) -> Any:
+def _peek_input_event(input_queue: InputChannel, timeout: float = 30.0) -> Any:
     """Read the next InputEvent without consuming it — a later RECEIVE MAP still
     does the one real consume. Implemented as get-then-put-back rather than a
     protocol-level peek() because InputChannel (cics/terminal.py) is deliberately
     limited to put/get so it stays swappable with an out-of-process transport
     (socket, multiprocessing.Queue); those can't peek. Relies on the channel's
     synchronous, single-pending-item usage in this dispatcher (the driver never
-    queues a second input before draining the screen produced by the first)."""
-    event = input_queue.get()
+    queues a second input before draining the screen produced by the first).
+
+    Raises ``queue.Empty`` if no input arrives within ``timeout`` seconds — the
+    caller (``_run_dispatcher_with_runner``) translates that into a clean ABEND
+    instead of hanging forever (red-dragon-pz9g.14)."""
+    event = input_queue.get(timeout=timeout)
     input_queue.put(event)
     return event
 
@@ -140,13 +145,19 @@ def _run_dispatcher_with_runner(
         result = run_fn(program, context, screen_queue, input_queue)
 
         # On a pseudo-conversational RETURN TRANSID, the next turn's terminal
-        # input arrives here (blocks). Its attention key seeds the next EIBAID;
-        # the event itself is left on the queue for the resumed turn's own
-        # RECEIVE MAP to consume (see _peek_input_event). CicsRegion doesn't need
-        # this — see CicsRegion.dispatch.
+        # input arrives here (blocks, up to a timeout). Its attention key seeds
+        # the next EIBAID; the event itself is left on the queue for the
+        # resumed turn's own RECEIVE MAP to consume (see _peek_input_event).
+        # CicsRegion doesn't need this — see CicsRegion.dispatch.
         eibaid = context.eibaid
         if result.kind == DispatchKind.RETURN_TRANSID:
-            event = _peek_input_event(input_queue)  # blocks
+            try:
+                event = _peek_input_event(input_queue)
+            except queue.Empty:
+                # No further terminal input ever arrived — matches real CICS's
+                # AZCT abend (terminal read-time-out condition) rather than
+                # hanging the region forever (red-dragon-pz9g.14).
+                return DispatchResult(kind=DispatchKind.ABEND, abcode="AZCT")
             eibaid = event.eibaid
 
         routing = _advance_routing(

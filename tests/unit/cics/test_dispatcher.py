@@ -4,6 +4,8 @@ import inspect
 import queue
 from unittest.mock import MagicMock
 
+import pytest
+
 from tests.covers import covers, NotLanguageFeature
 from interpreter.run import run_linked
 from cics.types import CicsContext, DispatchKind, DispatchResult
@@ -148,6 +150,44 @@ def test_dispatcher_resume_leaves_event_on_queue_for_receive_map(monkeypatch):
     )
     assert seen_eibaids[1] == "\xf3"  # loop still learns the eibaid
     assert drained_by_receive_map == [event]  # AND RECEIVE MAP still gets the event
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_peek_input_event_raises_empty_on_timeout():
+    """_peek_input_event on an empty queue raises queue.Empty after its timeout,
+    rather than blocking forever (red-dragon-pz9g.14)."""
+    from cics.dispatcher import _peek_input_event
+
+    empty_queue: queue.Queue = queue.Queue()
+    with pytest.raises(queue.Empty):
+        _peek_input_event(empty_queue, timeout=0.05)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dispatcher_return_transid_timeout_abends_azct(monkeypatch):
+    """If no further terminal input ever arrives after RETURN TRANSID, the loop
+    returns ABEND/AZCT instead of hanging forever (red-dragon-pz9g.14)."""
+
+    def mock_run(program, ctx, sq, iq):
+        return DispatchResult(
+            kind=DispatchKind.RETURN_TRANSID, transid="CC01", commarea=b""
+        )
+
+    def fake_peek(input_queue, timeout=30.0):
+        raise queue.Empty
+
+    monkeypatch.setattr(dispatcher_mod, "_peek_input_event", fake_peek)
+
+    program_cache = {"PROG1": MagicMock(), "PROG2": MagicMock()}
+    transid_to_program = {"CC00": "PROG1", "CC01": "PROG2"}
+    ctx = CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")
+    sq, iq = queue.Queue(), queue.Queue()
+
+    result = _run_dispatcher_with_runner(
+        mock_run, program_cache, transid_to_program, ctx, sq, iq
+    )
+    assert result.kind == DispatchKind.ABEND
+    assert result.abcode == "AZCT"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
