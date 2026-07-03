@@ -1,0 +1,4 @@
+fileignoreconfig:
+- filename: docs/design/2026-07-04-cics-sql-composition-design.md
+  checksum: fd2ef30c65a9f7a715ac6b902e292b84ac9db716ed24745e40aef5b5c0846ff2
+version: "1.0"
