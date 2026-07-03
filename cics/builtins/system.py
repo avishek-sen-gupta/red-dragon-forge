@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_RESP_NORMAL = 0  # DFHRESP(NORMAL) — nothing went wrong
+_RESP_PGMIDERR = 27  # DFHRESP(PGMIDERR) — INQUIRE's "program not found"
+
 
 def _ascii_to_ebcdic_bytes(s: str, length: int) -> list[int]:
     from interpreter.cobol.ebcdic_table import EbcdicTable
@@ -131,7 +134,7 @@ def make_writeq_td_builtin(queue: list[str]) -> object:
         data = str(args[0].value) if args else ""
         name = str(args[1].value) if len(args) > 1 else "CSMT"
         queue.append(f"[{name}] {data}")
-        return BuiltinResult(value=None)
+        return BuiltinResult(value=_RESP_NORMAL)
 
     return __cics_writeq_td
 
@@ -172,7 +175,7 @@ def make_abend_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
 def make_inquire_builtin(program_cache: dict) -> object:  # type: ignore[type-arg]
     def __cics_inquire(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         name = str(args[0].value).strip() if args else ""
-        resp = 0 if name in program_cache else 27  # 27 = PGMIDERR
+        resp = _RESP_NORMAL if name in program_cache else _RESP_PGMIDERR
         return BuiltinResult(value=resp)
 
     return __cics_inquire

@@ -927,6 +927,7 @@ class CicsLoweringStrategy:
                     args=(r_from, r_queue),
                 )
             )
+            emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 
         # ── System verbs ──────────────────────────────────────────────────
