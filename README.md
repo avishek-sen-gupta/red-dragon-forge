@@ -32,9 +32,15 @@ cd vendor/red-dragon/proleap-bridge && ./build.sh && cd -
 ## Tests
 
 ```bash
-uv run python -m pytest tests/unit/ -x -q        # unit tests (no JAR required)
-uv run python -m pytest tests/integration/ -x -q # integration tests (needs ProLeap JAR)
+uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests (no JAR required)
+uv run --no-sync python -m pytest tests/integration/ -x -q # integration tests (needs ProLeap JAR)
 ```
+
+Always invoke `uv run` with `--no-sync`: red-dragon is an editable path dependency
+(`vendor/red-dragon`), and a plain `uv run` re-checks the lockfile and rebuilds the large
+red-dragon editable wheel whenever that submodule changed. `--no-sync` skips that; red-dragon's
+Python is still picked up live via its editable `.pth`. Run a bare `uv sync` once after cloning
+or after changing dependencies.
 
 ---
 
@@ -243,13 +249,19 @@ same shared `CicsLoweringStrategy`. Unknown targets log a warning and are no-ops
 - **`RETURN` / `ABEND`** → terminal; stop.
 
 Both the autonomous loop and the turn-by-turn API funnel through `_advance_routing` — routing
-semantics are defined exactly once.
+semantics are defined exactly once. (`ABEND AZCT` — a terminal-input-wait timeout — is a
+distinct, earlier codepath in the autonomous loop itself, before routing is even consulted; see
+§2.5.)
 
 ### 2.5 Two ways to drive the region
 
 **Autonomous loop — `_run_dispatcher_with_runner`.** Blocking `while True`; runs programs,
-applies routing, blocks on `input_queue.get()` for the next terminal event on
-pseudo-conversational `RETURN TRANSID`. Used by `run_carddemo_region`.
+applies routing, and on pseudo-conversational `RETURN TRANSID` reads the next terminal event's
+attention key via `_peek_input_event` — a get-then-put-back (not a real `queue.Queue.get()`
+consume), so the event is left on the channel for the resumed turn's own `RECEIVE MAP` to
+consume. `_peek_input_event` carries a hardcoded 30s timeout; if no further input ever arrives,
+the loop returns `DispatchResult(kind=ABEND, abcode="AZCT")` — the real CICS abend code for a
+terminal read-time-out — instead of hanging forever. Used by `run_carddemo_region`.
 
 **Turn-by-turn — `CicsRegion`.** Explicit state machine for callers (tests, tools) that drive
 one turn at a time without a blocking loop:
