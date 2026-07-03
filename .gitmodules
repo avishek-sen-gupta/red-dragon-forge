@@ -7,3 +7,6 @@
 [submodule "vendor/squall"]
 	path = vendor/squall
 	url = git@github.com:avishek-sen-gupta/squall.git
+[submodule "vendor/bank-of-z"]
+	path = vendor/bank-of-z
+	url = https://github.com/IBM/Bank-of-Z.git
