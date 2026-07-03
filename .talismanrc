@@ -15,6 +15,10 @@ fileignoreconfig:
   checksum: ab625405815a214393d1c55627a5407edc5246db54646924d6b90ff75941b4c7
 - filename: vendor/cicada
   checksum: 0cdf1afc442791710e0de1d0d187582ae3c719ef8635073d3413e088b35cba7e
+- filename: vendor/bank-of-z
+  checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
+- filename: tests/integration/db2_env.sh
+  checksum: 3205b9d23b98c4d83f8099f4bc08a0e4e76a7a5e91cba3eb5c9671bb11e0b874
 - filename: .superpowers/sdd/progress.md
   checksum: 12726c2e3db64b1a7267643bcd8da2f1b8eee34ae7bb3475133def1fd01a43c0
 - filename: .superpowers/sdd/progress.md
