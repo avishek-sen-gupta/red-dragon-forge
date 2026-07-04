@@ -19,6 +19,7 @@ from red_dragon_forge.coprocessor import CoprocessorSpec
 def build_sql_spec(
     connections: Mapping[str, SqlBackend],
     copybook_dirs: Sequence[Path] = (),
+    initial_connection: str | None = None,
 ) -> CoprocessorSpec:
     """Build the EXEC SQL CoprocessorSpec.
 
@@ -28,6 +29,13 @@ def build_sql_spec(
     spec's prepass before any spec's make_strategy, so the holder is populated
     in time (see CoprocessorSpec's docstring for why this ordering is required
     for SQL specifically, unlike CICS).
+
+    ``initial_connection``, when given, names a ``connections`` entry that is
+    already current when the program starts — models the CICS Db2 attachment
+    facility, which hands a plan-bound program a live thread before its first
+    SQL statement runs (the program itself never issues ``EXEC SQL CONNECT``,
+    e.g. Bank-of-Z's ``INQCUST``). ``None`` (the default) preserves squall's
+    faithful disconnected-start behaviour for programs that CONNECT themselves.
     """
     field_meta_holder: list[Mapping[str, FieldMeta]] = [{}]
 
@@ -37,7 +45,9 @@ def build_sql_spec(
         return result.source
 
     def _make_strategy() -> SqlLoweringStrategy:
-        return SqlLoweringStrategy(connections, field_meta_holder[0])
+        return SqlLoweringStrategy(
+            connections, field_meta_holder[0], initial_connection=initial_connection
+        )
 
     return CoprocessorSpec(
         name="sql",
