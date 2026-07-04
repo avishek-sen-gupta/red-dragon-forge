@@ -63,13 +63,25 @@ def compile_cics_program(
     from cics.cics_visitor import parse_exec_cics_text
     from cics.preprocessor import apply_cics_prepass
 
+    # compile_cobol's program_source_dir/extra_subprogram_sources are no longer
+    # Optional (red-dragon cb40bd34, "no None default params" cleanup) — their
+    # non-None defaults (Path(".") / {}) are also the "no override" sentinels
+    # compile_cobol itself checks for, so translate this function's None
+    # ("caller didn't opt in") to those sentinels before forwarding.
+    _program_source_dir = (
+        program_source_dir if program_source_dir is not None else Path(".")
+    )
+    _extra_subprogram_sources = (
+        extra_subprogram_sources if extra_subprogram_sources is not None else {}
+    )
+
     _frontend, linked = compile_cobol(
         source,  # already CICS-prepassed by the caller
         parser=parser,
         extension_strategies=[strategy],
         cics_text_parser=parse_exec_cics_text,
-        program_source_dir=program_source_dir,
-        extra_subprogram_sources=extra_subprogram_sources,
+        program_source_dir=_program_source_dir,
+        extra_subprogram_sources=_extra_subprogram_sources,
         source_transform=apply_cics_prepass,
     )
     return linked
