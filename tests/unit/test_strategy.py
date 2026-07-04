@@ -24,7 +24,7 @@ from squall.strategy import SqlLoweringStrategy
 
 # ── Imports from vendored red-dragon ─────────────────────────────────────────
 
-from interpreter.cobol.cobol_statements import ExecSqlStatement
+from squall.statements import ExecSqlStatement
 from interpreter.func_name import FuncName
 from interpreter.instructions import CallFunction, Const
 from interpreter.vm.builtins import Builtins

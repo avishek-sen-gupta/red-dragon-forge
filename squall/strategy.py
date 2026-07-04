@@ -105,7 +105,7 @@ class SqlLoweringStrategy:
     # ── Protocol methods ──────────────────────────────────────────────────────
 
     def handles(self, stmt: Any) -> bool:
-        from interpreter.cobol.cobol_statements import ExecSqlStatement
+        from squall.statements import ExecSqlStatement
 
         return isinstance(stmt, ExecSqlStatement)
 
