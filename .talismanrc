@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: docs/design/2026-07-04-cics-sql-composition-design.md
-  checksum: fd2ef30c65a9f7a715ac6b902e292b84ac9db716ed24745e40aef5b5c0846ff2
+  checksum: 65635c68516ce860ce0ddf8838ab582e03311cb9820d81627e7f1fe66d877da3
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
   checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
 - filename: red_dragon_forge/coprocessor.py
