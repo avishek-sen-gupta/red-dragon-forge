@@ -12,6 +12,7 @@ from squall.backend import SqlBackend
 from squall.connector import DbConnector, NullDbConnector
 from squall.parser.sql_model import FieldMeta
 from squall.preprocess import apply_sql_prepass
+from squall.statements import SqlDialectParser
 from squall.strategy import SqlLoweringStrategy
 
 from red_dragon_forge.coprocessor import CoprocessorSpec
@@ -56,4 +57,5 @@ def build_sql_spec(
         make_strategy=_make_strategy,
         source_prepass=_prepass,
         owns_execution=False,
+        dialect_parser=SqlDialectParser(),
     )
