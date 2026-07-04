@@ -10,11 +10,11 @@ fileignoreconfig:
 - filename: tests/integration/test_compile_program.py
   checksum: 985cb3ba9cda6a8aee937a86aafab5b0385d18d91379624f0a814395c3419388
 - filename: vendor/red-dragon
-  checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+  ignore_detectors: [filecontent]
 - filename: vendor/squall
   ignore_detectors: [filecontent]
 - filename: vendor/cicada
-  checksum: 0cdf1afc442791710e0de1d0d187582ae3c719ef8635073d3413e088b35cba7e
+  ignore_detectors: [filecontent]
 - filename: vendor/bank-of-z
   checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
 - filename: tests/integration/db2_env.sh
@@ -26,5 +26,5 @@ fileignoreconfig:
 - filename: red_dragon_forge/adapters/cics.py
   checksum: a1c2bd799f240e06e8cfd8fbdf54c469546cac77375926c7d5cf23438495a796
 - filename: red_dragon_forge/adapters/sql.py
-  checksum: e33c701bb94794bb461042d065fc162ce12692b0129cabd0ab9a56aa27e2c9da
+  checksum: 7e8fe4012c78eaea7adb3a6fa45016529fab5f0ddfa83e33663fe52b7309111a
 version: "1.0"

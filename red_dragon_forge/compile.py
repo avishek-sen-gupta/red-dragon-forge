@@ -29,27 +29,19 @@ def compile_program(
     ``make_strategy`` is called — a spec whose strategy construction depends on
     state its own prepass populates (e.g. Squall's dclgen field metadata)
     relies on this ordering (see CoprocessorSpec's docstring).
-
-    At most one spec may supply a ``cics_text_parser`` — RedDragon's
-    ``compile_cobol`` accepts only one.
     """
     text = source.decode("utf-8")
     for spec in specs:
         text = spec.source_prepass(text)
 
     strategies = [spec.make_strategy() for spec in specs]
-
-    cics_text_parsers = [s.cics_text_parser for s in specs if s.cics_text_parser is not None]
-    assert len(cics_text_parsers) <= 1, (
-        f"at most one CoprocessorSpec may supply a cics_text_parser, got "
-        f"{len(cics_text_parsers)}"
-    )
+    dialect_parsers = [spec.dialect_parser for spec in specs]
 
     return compile_cobol(
         text.encode("utf-8"),
         parser=parser,
         extension_strategies=strategies,
-        cics_text_parser=cics_text_parsers[0] if cics_text_parsers else None,
+        dialect_parsers=dialect_parsers,
         program_source_dir=program_source_dir if program_source_dir is not None else Path("."),
         extra_subprogram_sources=extra_subprogram_sources
         if extra_subprogram_sources is not None
