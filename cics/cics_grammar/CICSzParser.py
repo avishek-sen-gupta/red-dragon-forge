@@ -389539,12 +389539,18 @@ class CICSzParser(Parser):
 
         localctx = CICSzParser.DatesepOptionContext(self, self._ctx, self.state)
         self.enterRule(localctx, 3076, self.RULE_datesepOption)
+        self._la = 0  # Token type
         try:
             self.enterOuterAlt(localctx, 1)
             self.state = 20371
             self.match(CICSzParser.DATESEP)
             self.state = 20372
-            self.arg()
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            if _la == 12:
+                self.state = 20372
+                self.arg()
+
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)

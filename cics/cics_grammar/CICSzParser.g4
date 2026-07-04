@@ -15718,7 +15718,7 @@ dateformOption
 
 datesepOption
 	: (
-	DATESEP arg
+	DATESEP arg?
 	)
 	;
 
