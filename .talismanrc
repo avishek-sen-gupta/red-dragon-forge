@@ -34,7 +34,7 @@ fileignoreconfig:
 - filename: tests/unit/test_binding.py
   ignore_detectors: [filecontent]
 - filename: squall/builtins/exec_sql.py
-  checksum: 76978b336079162bccaa73416344a7d36b8c1da1063cc476d5cd8394bd7f7398
+  checksum: 4f070bbc9ab8455dc5af87f674b3227ba7016409932dd9808726e0221202d5d0
 - filename: tests/unit/test_builtin.py
   ignore_detectors: [filecontent]
 - filename: squall/strategy.py

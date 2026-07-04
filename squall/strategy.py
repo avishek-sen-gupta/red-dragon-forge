@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from squall.backend import SqlBackend
 from squall.builtins.exec_sql import make_exec_sql_builtin
+from squall.connector import DbConnector, NullDbConnector
 from squall.parser.sql_model import (
     FieldMeta,
     GoTo,
@@ -66,13 +67,13 @@ class SqlLoweringStrategy:
         self,
         connections: Mapping[str, SqlBackend],
         field_meta: Mapping[str, FieldMeta],
-        initial_connection: str | None = None,
+        initial_connector: DbConnector = NullDbConnector(),
     ) -> None:
         from interpreter.vm.builtins import Builtins
 
         # The connection registry (name → backend). A run starts disconnected;
         # the program's EXEC SQL CONNECT selects from this registry at run time.
-        # Unless initial_connection names an entry that is already current —
+        # Unless initial_connector resolves an entry that is already current —
         # modelling a CICS Db2-attached program, which is handed a live thread
         # by the attachment facility and never issues EXEC SQL CONNECT itself.
         self._connections = connections
@@ -97,7 +98,7 @@ class SqlLoweringStrategy:
                 connections,
                 self._plans,
                 field_meta,
-                initial_connection=initial_connection,
+                initial_connector=initial_connector,
             ),
         )
 

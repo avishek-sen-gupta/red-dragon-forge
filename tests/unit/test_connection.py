@@ -14,6 +14,7 @@ from interpreter.var_name import VarName
 from squall.backends.sqlite import SqliteBackend
 from squall.binding import _zoned_decode, _zoned_encode
 from squall.builtins.exec_sql import make_exec_sql_builtin
+from squall.connector import NamedDbConnector, NullDbConnector
 from squall.parser.parse import HostVar, parse_exec_sql
 from squall.parser.sql_model import (
     ConnectReset,
@@ -126,12 +127,12 @@ def _make_vm(ws_id: int = 0) -> tuple[_VM, bytearray]:
     return _VM(region), region
 
 
-def _session(connections, vm, initial_connection=None):
+def _session(connections, vm, initial_connector=NullDbConnector()):
     """One builtin over *connections* + a shared plan pool, bound to *vm*.
     Returns issue(sql); connection/cursor state persists across calls."""
     plans: list = []
     builtin = make_exec_sql_builtin(
-        connections, plans, {}, initial_connection=initial_connection
+        connections, plans, {}, initial_connector=initial_connector
     )
 
     def issue(sql: str):
@@ -249,10 +250,10 @@ def test_set_connection_to_unregistered_is_minus_1338():
     assert _sqlcode(region) == -1338
 
 
-# ── initial_connection (CICS-DB2-attachment-style implicit CONNECT) ──────────
+# ── initial_connector (CICS-DB2-attachment-style implicit CONNECT) ───────────
 # Real CICS programs bound to a Db2 plan never issue EXEC SQL CONNECT
 # themselves — the CICS Db2 attachment facility establishes the thread before
-# the program's first SQL statement runs. `initial_connection` models that: the
+# the program's first SQL statement runs. A NamedDbConnector models that: the
 # run starts already connected to a named, pre-registered backend instead of
 # disconnected, with no COBOL-visible CONNECT statement required.
 
@@ -260,7 +261,9 @@ def test_set_connection_to_unregistered_is_minus_1338():
 def test_initial_connection_starts_already_connected():
     backend = _account_backend()
     vm, region = _make_vm(ws_id=7)
-    issue = _session({"SAMPLE": backend}, vm, initial_connection="SAMPLE")
+    issue = _session(
+        {"SAMPLE": backend}, vm, initial_connector=NamedDbConnector("SAMPLE")
+    )
     # No EXEC SQL CONNECT at all — the very first statement is a data statement.
     issue("EXEC SQL INSERT INTO ACCOUNT VALUES (:WS-ID) END-EXEC")
     assert _sqlcode(region) == 0
@@ -280,7 +283,9 @@ def test_no_initial_connection_still_starts_disconnected():
 def test_initial_connection_can_still_be_reset_and_switched():
     dba, dbb = _account_backend(), _account_backend()
     vm, region = _make_vm(ws_id=0)
-    issue = _session({"DBA": dba, "DBB": dbb}, vm, initial_connection="DBA")
+    issue = _session(
+        {"DBA": dba, "DBB": dbb}, vm, initial_connector=NamedDbConnector("DBA")
+    )
 
     region[0:4] = _zoned_encode(111, 4)
     issue("EXEC SQL INSERT INTO ACCOUNT VALUES (:WS-ID) END-EXEC")
