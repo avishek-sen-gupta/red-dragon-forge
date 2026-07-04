@@ -17,7 +17,7 @@ from interpreter.constants import Language
 from interpreter.cobol.features import CobolFeature
 from cics.le_stubs import CEEDAYS_STUB_SOURCE
 from interpreter.project.compiler import compile_directory
-from interpreter.run import run_linked, EntryPoint
+from interpreter.run import run_linked, EntryPoint, initial_vm_state
 from interpreter.var_name import VarName
 from interpreter.field_name import FieldName
 from interpreter.address import Address
@@ -69,6 +69,7 @@ def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
             and "init_params" not in str(r.label)
         ),
         max_steps=200_000,
+        initial_vm=initial_vm_state(),
     )
 
     # Read WS-SEV (offset 0, 4 zoned-decimal bytes) from DRIVER's WS region.
