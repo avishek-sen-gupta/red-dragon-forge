@@ -47,7 +47,8 @@ investigation (not workarounds in this file):
 - squall's EXEC SQL CONNECT model required an explicit CONNECT before any SQL
   data statement; a real CICS-Db2-attached program like INQCUST never issues
   one itself (the CICS Db2 attachment facility hands it an already-connected
-  thread). squall now accepts an ``initial_connection`` to model that.
+  thread). squall now accepts an ``initial_connector`` (a ``DbConnector``) to
+  model that.
 """
 
 from __future__ import annotations
@@ -63,6 +64,7 @@ from cics.dispatcher import run_cics
 from cics.types import CicsContext, DispatchKind
 
 from squall.backends.db2 import Db2Backend
+from squall.connector import NamedDbConnector
 
 from red_dragon_forge.adapters.cics import build_cics_spec
 from red_dragon_forge.adapters.sql import build_sql_spec
@@ -199,7 +201,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
 
         # Compile INQCUST (CICS + SQL) and register it in the shared
         # program_cache so WRAPPER's EXEC CICS LINK can find it by name at run
-        # time. initial_connection="SAMPLE" models the CICS Db2 attachment
+        # time. NamedDbConnector("SAMPLE") models the CICS Db2 attachment
         # facility: INQCUST never issues EXEC SQL CONNECT itself.
         inqcust_cics_spec = build_cics_spec(
             context_holder=context_holder,
@@ -209,7 +211,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
         inqcust_sql_spec = build_sql_spec(
             connections={"SAMPLE": backend},
             copybook_dirs=[_BANK_OF_Z_COPY],
-            initial_connection="SAMPLE",
+            initial_connector=NamedDbConnector("SAMPLE"),
         )
         inqcust_source = (_BANK_OF_Z_COBOL / "INQCUST.cbl").read_bytes()
         _inqcust_frontend, inqcust_linked = compile_program(
