@@ -50,6 +50,8 @@ def compile_program(
         parser=parser,
         extension_strategies=strategies,
         cics_text_parser=cics_text_parsers[0] if cics_text_parsers else None,
-        program_source_dir=program_source_dir,
-        extra_subprogram_sources=extra_subprogram_sources,
+        program_source_dir=program_source_dir if program_source_dir is not None else Path("."),
+        extra_subprogram_sources=extra_subprogram_sources
+        if extra_subprogram_sources is not None
+        else {},
     )
