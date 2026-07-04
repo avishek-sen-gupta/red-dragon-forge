@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from squall.backend import SqlBackend
+from squall.connector import DbConnector, NullDbConnector
 from squall.parser.sql_model import FieldMeta
 from squall.preprocess import apply_sql_prepass
 from squall.strategy import SqlLoweringStrategy
@@ -19,7 +20,7 @@ from red_dragon_forge.coprocessor import CoprocessorSpec
 def build_sql_spec(
     connections: Mapping[str, SqlBackend],
     copybook_dirs: Sequence[Path] = (),
-    initial_connection: str | None = None,
+    initial_connector: DbConnector = NullDbConnector(),
 ) -> CoprocessorSpec:
     """Build the EXEC SQL CoprocessorSpec.
 
@@ -30,12 +31,13 @@ def build_sql_spec(
     in time (see CoprocessorSpec's docstring for why this ordering is required
     for SQL specifically, unlike CICS).
 
-    ``initial_connection``, when given, names a ``connections`` entry that is
-    already current when the program starts — models the CICS Db2 attachment
-    facility, which hands a plan-bound program a live thread before its first
-    SQL statement runs (the program itself never issues ``EXEC SQL CONNECT``,
-    e.g. Bank-of-Z's ``INQCUST``). ``None`` (the default) preserves squall's
-    faithful disconnected-start behaviour for programs that CONNECT themselves.
+    ``initial_connector``, when it resolves a backend, is already current when
+    the program starts — models the CICS Db2 attachment facility, which hands
+    a plan-bound program a live thread before its first SQL statement runs
+    (the program itself never issues ``EXEC SQL CONNECT``, e.g. Bank-of-Z's
+    ``INQCUST``). The default ``NullDbConnector()`` preserves squall's faithful
+    disconnected-start behaviour for programs that CONNECT themselves; pass a
+    ``squall.connector.NamedDbConnector(name)`` to model the attachment facility.
     """
     field_meta_holder: list[Mapping[str, FieldMeta]] = [{}]
 
@@ -46,7 +48,7 @@ def build_sql_spec(
 
     def _make_strategy() -> SqlLoweringStrategy:
         return SqlLoweringStrategy(
-            connections, field_meta_holder[0], initial_connection=initial_connection
+            connections, field_meta_holder[0], initial_connector=initial_connector
         )
 
     return CoprocessorSpec(
