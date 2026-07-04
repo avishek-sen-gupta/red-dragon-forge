@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
+from squall.connector import DbConnector, NamedDbConnector, NullDbConnector
 from squall.binding import (
     read_params,
     validate_field_meta,
@@ -134,14 +135,18 @@ def _h_noop(_ctx: _Ctx, _parsed, vm) -> None:
 
 def _h_connect(ctx: _Ctx, parsed, vm) -> None:
     # CONNECT RESET disconnects; CONNECT TO <db> establishes the current
-    # connection from the registry. Credentials (USER/USING) are intentionally
-    # never read — backends are pre-authenticated — so the testbed's unconditional
-    # double-CONNECT idiom (re-connect to the same db) succeeds idempotently.
+    # connection from the registry, resolved through the same DbConnector
+    # abstraction the pre-run initial_connector uses (one resolution path, not
+    # two). Credentials (USER/USING) are intentionally never read — backends
+    # are pre-authenticated — so the testbed's unconditional double-CONNECT
+    # idiom (re-connect to the same db) succeeds idempotently.
     if isinstance(parsed.connect, ConnectReset):
         ctx.conn.current = None
         write_sqlcode(vm, 0)
         return
-    backend = ctx.connections.get(_resolve_db(parsed.connect, ctx, vm))
+    backend = NamedDbConnector(_resolve_db(parsed.connect, ctx, vm)).connect(
+        ctx.connections
+    )
     if backend is None:
         write_sqlcode(vm, SQLCODE_DB_NOT_FOUND)
         return
@@ -150,8 +155,11 @@ def _h_connect(ctx: _Ctx, parsed, vm) -> None:
 
 
 def _h_set_connection(ctx: _Ctx, parsed, vm) -> None:
-    # Switch the current connection to an already-registered database.
-    backend = ctx.connections.get(_resolve_db(parsed.connect, ctx, vm))
+    # Switch the current connection to an already-registered database, resolved
+    # through the same DbConnector abstraction as CONNECT TO.
+    backend = NamedDbConnector(_resolve_db(parsed.connect, ctx, vm)).connect(
+        ctx.connections
+    )
     if backend is None:
         write_sqlcode(vm, SQLCODE_NOT_ESTABLISHED)
         return
@@ -263,7 +271,7 @@ def make_exec_sql_builtin(
     connections: Mapping[str, SqlBackend],
     plans: list,
     field_meta: Mapping[str, FieldMeta],
-    initial_connection: str | None = None,
+    initial_connector: DbConnector = NullDbConnector(),
 ) -> Callable:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
     (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
@@ -271,14 +279,16 @@ def make_exec_sql_builtin(
 
     The run starts *disconnected*: a data statement before a successful CONNECT
     reports SQLCODE -1024. ``CONNECT TO``/``SET CONNECTION`` select the current
-    connection from *connections*; ``CONNECT RESET``/``DISCONNECT`` clear it.
+    connection from *connections*, through the same ``DbConnector`` abstraction
+    ``initial_connector`` uses; ``CONNECT RESET``/``DISCONNECT`` clear it.
 
-    *initial_connection*, when given, names a *connections* entry that is
-    already current when the run starts — modelling the CICS Db2 attachment
-    facility, which establishes the thread before a plan-bound program's first
-    SQL statement runs (the program itself never issues ``EXEC SQL CONNECT``).
-    ``None`` (the default) preserves the faithful disconnected-start behaviour
-    for programs that do their own ``CONNECT``.
+    *initial_connector*, when it resolves a backend, is already current when
+    the run starts — modelling the CICS Db2 attachment facility, which
+    establishes the thread before a plan-bound program's first SQL statement
+    runs (the program itself never issues ``EXEC SQL CONNECT``). The default
+    ``NullDbConnector()`` preserves the faithful disconnected-start behaviour
+    for programs that do their own ``CONNECT``; pass a ``NamedDbConnector(name)``
+    to model the attachment facility instead.
 
     *plans* is the lowering-time constant pool of ``ParsedSql`` objects
     (``SqlLoweringStrategy._plans``). Each call site passes its plan's pool index
@@ -288,15 +298,12 @@ def make_exec_sql_builtin(
     The returned callable has the standard RedDragon builtin signature:
     ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
     """
-    # Per-run session: the current connection (disconnected, unless
-    # initial_connection pre-establishes one) + the cursor registry (DECLARE
-    # records, OPEN reads).
-    initial_current = (
-        connections.get(initial_connection) if initial_connection is not None else None
-    )
+    # Per-run session: the current connection (resolved once, up front, via
+    # initial_connector — disconnected unless it names a real entry) + the
+    # cursor registry (DECLARE records, OPEN reads).
     ctx = _Ctx(
         connections=connections,
-        conn=_ConnState(current=initial_current),
+        conn=_ConnState(current=initial_connector.connect(connections)),
         cursors={},
         field_meta=field_meta,
     )
