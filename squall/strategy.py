@@ -66,11 +66,15 @@ class SqlLoweringStrategy:
         self,
         connections: Mapping[str, SqlBackend],
         field_meta: Mapping[str, FieldMeta],
+        initial_connection: str | None = None,
     ) -> None:
         from interpreter.vm.builtins import Builtins
 
         # The connection registry (name → backend). A run starts disconnected;
         # the program's EXEC SQL CONNECT selects from this registry at run time.
+        # Unless initial_connection names an entry that is already current —
+        # modelling a CICS Db2-attached program, which is handed a live thread
+        # by the attachment facility and never issues EXEC SQL CONNECT itself.
         self._connections = connections
         # dclgen host-var metadata, loaded once by the prepass and passed in by
         # reference. The builtin (and the binding engine it calls) consult it to
@@ -89,7 +93,12 @@ class SqlLoweringStrategy:
         _register(
             Builtins.TABLE,
             _BUILTIN_NAME,
-            make_exec_sql_builtin(connections, self._plans, field_meta),
+            make_exec_sql_builtin(
+                connections,
+                self._plans,
+                field_meta,
+                initial_connection=initial_connection,
+            ),
         )
 
     # ── Protocol methods ──────────────────────────────────────────────────────

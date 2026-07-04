@@ -126,11 +126,13 @@ def _make_vm(ws_id: int = 0) -> tuple[_VM, bytearray]:
     return _VM(region), region
 
 
-def _session(connections, vm):
+def _session(connections, vm, initial_connection=None):
     """One builtin over *connections* + a shared plan pool, bound to *vm*.
     Returns issue(sql); connection/cursor state persists across calls."""
     plans: list = []
-    builtin = make_exec_sql_builtin(connections, plans, {})
+    builtin = make_exec_sql_builtin(
+        connections, plans, {}, initial_connection=initial_connection
+    )
 
     def issue(sql: str):
         plans.append(parse_exec_sql(sql))
@@ -245,3 +247,47 @@ def test_set_connection_to_unregistered_is_minus_1338():
     issue("EXEC SQL CONNECT TO SAMPLE END-EXEC")
     issue("EXEC SQL SET CONNECTION OTHER END-EXEC")
     assert _sqlcode(region) == -1338
+
+
+# ── initial_connection (CICS-DB2-attachment-style implicit CONNECT) ──────────
+# Real CICS programs bound to a Db2 plan never issue EXEC SQL CONNECT
+# themselves — the CICS Db2 attachment facility establishes the thread before
+# the program's first SQL statement runs. `initial_connection` models that: the
+# run starts already connected to a named, pre-registered backend instead of
+# disconnected, with no COBOL-visible CONNECT statement required.
+
+
+def test_initial_connection_starts_already_connected():
+    backend = _account_backend()
+    vm, region = _make_vm(ws_id=7)
+    issue = _session({"SAMPLE": backend}, vm, initial_connection="SAMPLE")
+    # No EXEC SQL CONNECT at all — the very first statement is a data statement.
+    issue("EXEC SQL INSERT INTO ACCOUNT VALUES (:WS-ID) END-EXEC")
+    assert _sqlcode(region) == 0
+    assert _count(backend, 7) == 1
+
+
+def test_no_initial_connection_still_starts_disconnected():
+    """Omitting initial_connection preserves the existing faithful default."""
+    backend = _account_backend()
+    vm, region = _make_vm(ws_id=7)
+    issue = _session({"SAMPLE": backend}, vm)
+    issue("EXEC SQL INSERT INTO ACCOUNT VALUES (:WS-ID) END-EXEC")
+    assert _sqlcode(region) == -1024
+    assert _count(backend, 7) == 0
+
+
+def test_initial_connection_can_still_be_reset_and_switched():
+    dba, dbb = _account_backend(), _account_backend()
+    vm, region = _make_vm(ws_id=0)
+    issue = _session({"DBA": dba, "DBB": dbb}, vm, initial_connection="DBA")
+
+    region[0:4] = _zoned_encode(111, 4)
+    issue("EXEC SQL INSERT INTO ACCOUNT VALUES (:WS-ID) END-EXEC")
+    assert _count(dba, 111) == 1
+
+    issue("EXEC SQL CONNECT RESET END-EXEC")
+    region[0:4] = _zoned_encode(222, 4)
+    issue("EXEC SQL INSERT INTO ACCOUNT VALUES (:WS-ID) END-EXEC")
+    assert _sqlcode(region) == -1024
+    assert _count(dba, 222) == 0 and _count(dbb, 222) == 0
