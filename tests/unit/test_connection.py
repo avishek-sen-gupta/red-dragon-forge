@@ -258,7 +258,7 @@ def test_set_connection_to_unregistered_is_minus_1338():
 # disconnected, with no COBOL-visible CONNECT statement required.
 
 
-def test_initial_connection_starts_already_connected():
+def test_named_db_connector_starts_already_connected():
     backend = _account_backend()
     vm, region = _make_vm(ws_id=7)
     issue = _session(
@@ -270,8 +270,9 @@ def test_initial_connection_starts_already_connected():
     assert _count(backend, 7) == 1
 
 
-def test_no_initial_connection_still_starts_disconnected():
-    """Omitting initial_connection preserves the existing faithful default."""
+def test_null_db_connector_still_starts_disconnected():
+    """Omitting initial_connector (the NullDbConnector default) preserves the
+    existing faithful default."""
     backend = _account_backend()
     vm, region = _make_vm(ws_id=7)
     issue = _session({"SAMPLE": backend}, vm)
@@ -280,7 +281,7 @@ def test_no_initial_connection_still_starts_disconnected():
     assert _count(backend, 7) == 0
 
 
-def test_initial_connection_can_still_be_reset_and_switched():
+def test_named_db_connector_can_still_be_reset_and_switched():
     dba, dbb = _account_backend(), _account_backend()
     vm, region = _make_vm(ws_id=0)
     issue = _session(
