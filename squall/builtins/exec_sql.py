@@ -263,6 +263,7 @@ def make_exec_sql_builtin(
     connections: Mapping[str, SqlBackend],
     plans: list,
     field_meta: Mapping[str, FieldMeta],
+    initial_connection: str | None = None,
 ) -> Callable:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
     (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
@@ -272,6 +273,13 @@ def make_exec_sql_builtin(
     reports SQLCODE -1024. ``CONNECT TO``/``SET CONNECTION`` select the current
     connection from *connections*; ``CONNECT RESET``/``DISCONNECT`` clear it.
 
+    *initial_connection*, when given, names a *connections* entry that is
+    already current when the run starts — modelling the CICS Db2 attachment
+    facility, which establishes the thread before a plan-bound program's first
+    SQL statement runs (the program itself never issues ``EXEC SQL CONNECT``).
+    ``None`` (the default) preserves the faithful disconnected-start behaviour
+    for programs that do their own ``CONNECT``.
+
     *plans* is the lowering-time constant pool of ``ParsedSql`` objects
     (``SqlLoweringStrategy._plans``). Each call site passes its plan's pool index
     as the single argument; the builtin resolves it and dispatches by kind via
@@ -280,11 +288,15 @@ def make_exec_sql_builtin(
     The returned callable has the standard RedDragon builtin signature:
     ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
     """
-    # Per-run session: the current connection (starts disconnected) + the cursor
-    # registry (DECLARE records, OPEN reads).
+    # Per-run session: the current connection (disconnected, unless
+    # initial_connection pre-establishes one) + the cursor registry (DECLARE
+    # records, OPEN reads).
+    initial_current = (
+        connections.get(initial_connection) if initial_connection is not None else None
+    )
     ctx = _Ctx(
         connections=connections,
-        conn=_ConnState(current=None),
+        conn=_ConnState(current=initial_current),
         cursors={},
         field_meta=field_meta,
     )
