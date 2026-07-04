@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from interpreter.cobol.cobol_frontend import CobolFrontend
-from cics.cics_visitor import parse_exec_cics_text
+from cics.statements import CicsDialectParser
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
@@ -60,7 +60,7 @@ def test_no_extension_strategy_does_not_raise(cobol_parser):
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,
         extension_strategies=[],
-        cics_text_parser=parse_exec_cics_text,
+        dialect_parsers=[CicsDialectParser()],
     )
     instructions = frontend.lower(source)
     assert len(instructions) > 0
@@ -83,7 +83,7 @@ def test_return_lowers_to_call_and_return(cobol_parser):
     """EXEC CICS RETURN lowers to __cics_set_return_context call + Return_."""
     from cics.preprocessor import apply_cics_prepass
     from interpreter.cobol.cobol_frontend import CobolFrontend
-    from cics.cics_visitor import parse_exec_cics_text
+    from cics.statements import CicsDialectParser
     from cics.strategy import CicsLoweringStrategy
     from cics.types import CicsContext
     from interpreter.ir import Opcode
@@ -100,7 +100,7 @@ def test_return_lowers_to_call_and_return(cobol_parser):
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,
         extension_strategies=[strategy],
-        cics_text_parser=parse_exec_cics_text,
+        dialect_parsers=[CicsDialectParser()],
     )
     instructions = frontend.lower(source)
 

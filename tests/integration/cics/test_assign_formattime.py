@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from interpreter.cobol.cobol_frontend import CobolFrontend
-from cics.cics_visitor import parse_exec_cics_text
+from cics.statements import CicsDialectParser
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
@@ -110,7 +110,7 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,
         extension_strategies=[strategy],
-        cics_text_parser=parse_exec_cics_text,
+        dialect_parsers=[CicsDialectParser()],
     )
     program = _link_single_cobol(source, frontend)
 
