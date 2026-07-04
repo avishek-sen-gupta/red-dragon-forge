@@ -33,8 +33,8 @@ def test_strategy_without_bms_still_constructs():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_map_lowers_to_call_function():
     from interpreter.instructions import CallFunction
-    from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cobol_statements import CicsOperand
+    from cics.statements import ExecCicsStatement
+    from cics.statements import CicsOperand
     from interpreter.register import Register
 
     class _Ctx:
@@ -71,8 +71,8 @@ def test_send_map_lowering_passes_base_field_names():
     """SEND MAP resolves the FROM group's leaf fields, strips the O suffix,
     and passes the base names as a Const list arg (args[1])."""
     from interpreter.instructions import CallFunction, Const
-    from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cobol_statements import CicsOperand
+    from cics.statements import ExecCicsStatement
+    from cics.statements import CicsOperand
     from interpreter.cobol.data_layout import DataLayout, FieldLayout
     from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
@@ -147,8 +147,8 @@ def test_send_map_lowering_passes_base_field_names():
 def test_receive_map_without_into_derives_group_from_literal_map_name():
     """RECEIVE MAP('COSGN0A') with no INTO -> group COSGN0AI (map name + 'I')."""
     from interpreter.instructions import Const, CallFunction
-    from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cobol_statements import CicsOperand
+    from cics.statements import ExecCicsStatement
+    from cics.statements import CicsOperand
     from interpreter.cobol.data_layout import DataLayout, FieldLayout
     from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
@@ -222,8 +222,8 @@ def test_writeq_td_lowers_with_real_args():
     """WRITEQ TD QUEUE('JOBS') FROM('SOME-DATA') passes both operands as real
     args to __cics_writeq_td — not args=() (cicada-vcq)."""
     from interpreter.instructions import CallFunction, Const
-    from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cobol_statements import CicsOperand
+    from cics.statements import ExecCicsStatement
+    from cics.statements import CicsOperand
     from interpreter.register import Register
 
     class _Ctx:
@@ -283,8 +283,8 @@ def test_writeq_td_lowers_with_resp_writeback():
     """WRITEQ TD QUEUE('JOBS') FROM('SOME-DATA') RESP(WS-RC) writes both
     EIBRESP and the RESP(name) field — not silently dropped (cicada-y6l)."""
     from interpreter.instructions import CallFunction
-    from interpreter.cobol.cobol_statements import ExecCicsStatement
-    from interpreter.cobol.cobol_statements import CicsOperand
+    from cics.statements import ExecCicsStatement
+    from cics.statements import CicsOperand
     from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.data_layout import FieldLayout
     from interpreter.cobol.field_resolution import ResolvedFieldRef

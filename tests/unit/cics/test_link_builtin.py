@@ -8,7 +8,7 @@ from tests.covers import covers, NotLanguageFeature
 from cics.builtins.flow import make_link_builtin
 from cics.strategy import _resolve_cics_length_option
 from cics.types import CicsContext, DispatchKind, DispatchResult
-from interpreter.cobol.cobol_statements import CicsOperand
+from cics.statements import CicsOperand
 from interpreter.vm.vm_types import VMState, StackFrame, BuiltinResult
 from interpreter.func_name import FuncName
 from interpreter.var_name import VarName

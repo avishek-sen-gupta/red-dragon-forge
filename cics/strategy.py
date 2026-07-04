@@ -1,18 +1,10 @@
-"""ExecCicsStrategy protocol and null-object implementation.
-
-The protocol and no-op now live in interpreter.cobol.exec_cics_strategy;
-re-exported here for backward compatibility.
-"""
+"""CicsLoweringStrategy — implements RedDragonExtensionLoweringStrategy
+directly (interpreter.cobol.red_dragon_extension_strategy)."""
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-
-from interpreter.cobol.exec_cics_strategy import (  # noqa: F401
-    CatchAllLoweringStrategy,
-    ExecCicsStrategy,
-)
 
 from cics.builtins.system import (
     make_init_eib_builtin,
@@ -38,7 +30,7 @@ from interpreter.instructions import (
 )
 from interpreter.types.type_expr import UNKNOWN
 
-from interpreter.cobol.cobol_statements import ExecCicsStatement
+from cics.statements import ExecCicsStatement
 from cics.flow_observer import CicsFlowObserver, CicsVerb, NullCicsFlowObserver
 
 if TYPE_CHECKING:
@@ -46,7 +38,7 @@ if TYPE_CHECKING:
     from interpreter.cobol.emit_context import EmitContext
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
     from cics.types import CicsContext
-    from interpreter.cobol.cobol_statements import CicsOperand
+    from cics.statements import CicsOperand
     from interpreter.register import Register
 
 logger = logging.getLogger(__name__)
