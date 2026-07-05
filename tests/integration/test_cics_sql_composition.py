@@ -7,7 +7,7 @@ from cics.types import CicsContext, DispatchKind
 
 from red_dragon_forge.adapters.cics import build_cics_spec
 from red_dragon_forge.adapters.sql import build_sql_spec
-from red_dragon_forge.compile import compile_program
+from interpreter.project.coprocessor_compile import compile_program
 from red_dragon_forge.run import run_program
 from squall.backends.sqlite import SqliteBackend
 from tests.integration.forge_cobol_helpers import make_parser

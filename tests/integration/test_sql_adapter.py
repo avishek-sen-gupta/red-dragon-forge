@@ -14,7 +14,7 @@ from squall.backends.sqlite import SqliteBackend
 from squall.binding import _decode_field
 
 from red_dragon_forge.adapters.sql import build_sql_spec
-from red_dragon_forge.compile import compile_program
+from interpreter.project.coprocessor_compile import compile_program
 from tests.integration.forge_cobol_helpers import make_parser
 
 _SQL_ONLY_PROGRAM = """\

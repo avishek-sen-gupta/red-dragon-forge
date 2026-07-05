@@ -13,7 +13,7 @@ from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
 from cics.strategy import CicsLoweringStrategy
 
-from red_dragon_forge.coprocessor import CoprocessorSpec
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 
 
 def build_cics_spec(

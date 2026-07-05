@@ -12,7 +12,7 @@ from typing import Any, Sequence
 
 from cics.dispatcher import run_cics
 
-from red_dragon_forge.coprocessor import CoprocessorSpec
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 
 
 def run_program(

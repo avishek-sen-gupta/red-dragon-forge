@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from red_dragon_forge.coprocessor import CoprocessorSpec
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 from red_dragon_forge.run import run_program
 
 
