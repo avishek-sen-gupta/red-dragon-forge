@@ -1,0 +1,87 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+sdist/
+wheels/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# uv
+.uv/
+uv.lock.bak
+
+# Testing / coverage
+.pytest_cache/
+.tox/
+.nox/
+.cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checkers / linters
+.mypy_cache/
+.pyright/
+.pytype/
+.ruff_cache/
+.dmypy.json
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# SQLite scratch DBs from tests
+*.sqlite
+*.sqlite3
+*.db
+
+# Java / Maven build artifacts (RedDragon bridge, when built locally)
+target/
+*.class
+.claude/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
+
+# Beads local Dolt DB / tracker state
+.beads/
+.agents/
+.codex/
+AGENTS.md
+.superpowers/

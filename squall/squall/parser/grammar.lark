@@ -1,0 +1,214 @@
+start: stmt
+
+?stmt: select_into
+     | insert
+     | update
+     | delete
+     | declare_cursor
+     | declare_table
+     | declare_statement
+     | declare_variable
+     | fetch
+     | open_
+     | close
+     | commit
+     | rollback
+     | savepoint
+     | release
+     | connect
+     | set_connection
+     | disconnect
+     | include
+     | whenever
+     | allocate_cursor
+     | merge
+     | values_into
+     | prepare
+     | execute_
+     | describe
+     | get_diagnostics
+     | signal
+     | begin_declare
+     | end_declare
+     | free_locator
+     | hold_locator
+     | associate
+     | call
+     | set
+     | lock
+     | generic
+
+// ── Core DML ────────────────────────────────────────────────────────────────
+select_into:    SELECT _run_i INTO into_list FROM _run
+insert:         INSERT _run
+update:         UPDATE _run cur_of?
+delete:         DELETE _run cur_of?
+merge:          MERGE _run
+values_into:    VALUES _run INTO into_list
+
+// ── Cursor DDL / control ────────────────────────────────────────────────────
+declare_cursor:   DECLARE NAME CURSOR (WITH NAME)? FOR _run
+declare_table:    DECLARE NAME TABLE _run
+declare_statement: DECLARE NAME STATEMENT
+declare_variable: DECLARE host_var VARIABLE _run
+allocate_cursor:  ALLOCATE NAME CURSOR FOR RESULT SET host_var
+open_:           OPEN NAME (USING using_list)?
+close:           CLOSE NAME
+fetch:           FETCH (FROM)? NAME INTO into_list
+
+// ── Dynamic SQL ─────────────────────────────────────────────────────────────
+prepare:  PREPARE NAME (INTO host_var)? FROM (host_var | _run)
+execute_: EXECUTE (IMMEDIATE (host_var | _run) | NAME (USING using_list)? (INTO into_list)?)
+describe: DESCRIBE _run INTO host_var
+
+// ── Transactions ─────────────────────────────────────────────────────────────
+commit:   COMMIT (NAME)?
+rollback: ROLLBACK (WORK)? (TO SAVEPOINT NAME)?
+savepoint: SAVEPOINT _run
+release:  RELEASE _run
+
+// ── Connections ──────────────────────────────────────────────────────────────
+connect:        CONNECT TO conn_target conn_creds?
+              | CONNECT RESET
+conn_target:    NAME | host_var
+conn_creds:     USER host_var (USING host_var)?
+set_connection: SET CONNECTION _run
+disconnect:     DISCONNECT _run
+
+// ── Error handling ───────────────────────────────────────────────────────────
+whenever:        WHENEVER whenever_cond whenever_action
+whenever_cond:   NOT FOUND | SQLERROR | SQLWARNING | NAME
+whenever_action: CONTINUE | GOTO NAME | GO TO NAME | _run
+get_diagnostics: GET DIAGNOSTICS _run
+signal:          SIGNAL _run
+
+// ── Declare-section bookends ─────────────────────────────────────────────────
+begin_declare: BEGIN DECLARE SECTION
+end_declare:   END DECLARE SECTION
+
+// ── Locators ─────────────────────────────────────────────────────────────────
+free_locator: FREE LOCATOR into_list
+hold_locator: HOLD LOCATOR into_list
+associate:    ASSOCIATE _run
+
+// ── Misc ─────────────────────────────────────────────────────────────────────
+include: INCLUDE NAME
+call:    CALL _run
+set:     SET _run
+lock:    LOCK _run
+
+// ── Fallback ─────────────────────────────────────────────────────────────────
+generic: _run
+
+// ── Shared pieces ────────────────────────────────────────────────────────────
+cur_of:     WHERE CURRENT OF NAME
+
+into_list:  host_var (COMMA host_var)*
+using_list: host_var (COMMA host_var)*
+// host_var is a single terminal so indicator `:V:IND` is consumed atomically.
+// The rule wraps the terminal so callers can use find_data("host_var").
+host_var: HOST_VAR_TOK
+
+// opaque runs: anything, surfacing host_var; _run_i stops before INTO
+_run:   _atom*
+_run_i: _atom_i*
+
+_atom:  host_var | _word | STRING | COMMA | LP | RP | DOT | OTHER
+      | INTO | WHERE | CURRENT | OF | FROM | USING | FOR | CURSOR | WITH
+      | NOT | FOUND | RESULT | SET | WORK | TO | SAVEPOINT | CONNECTION
+      | IMMEDIATE | SECTION | TABLE | VARIABLE | LOCATOR | DIAGNOSTICS
+      | SQLERROR | SQLWARNING | CONTINUE | GOTO | GO | STATEMENT
+      | ALLOCATE | DISCONNECT | DESCRIBE | PREPARE | EXECUTE | MERGE
+      | ASSOCIATE | SIGNAL | FREE | HOLD | LOCK | CALL | BEGIN | END | RELEASE
+
+_atom_i: host_var | _word | STRING | COMMA | LP | RP | DOT | OTHER
+       | WHERE | CURRENT | OF | FROM | USING | FOR | CURSOR | WITH
+       | NOT | FOUND | RESULT | SET | WORK | TO | SAVEPOINT | CONNECTION
+       | IMMEDIATE | SECTION | TABLE | VARIABLE | LOCATOR | DIAGNOSTICS
+       | SQLERROR | SQLWARNING | CONTINUE | GOTO | GO | STATEMENT
+       | ALLOCATE | DISCONNECT | DESCRIBE | PREPARE | EXECUTE | MERGE
+       | ASSOCIATE | SIGNAL | FREE | HOLD | LOCK | CALL | BEGIN | END | RELEASE
+
+// keywords still usable as plain words inside bodies:
+_word: NAME | NUM | SELECT | INSERT | UPDATE | DELETE | DECLARE | OPEN | FETCH
+     | CLOSE | COMMIT | INCLUDE | WHENEVER | ROLLBACK | CONNECT | USER | RESET
+
+// ── Keywords ─────────────────────────────────────────────────────────────────
+SELECT:      "SELECT"i
+INSERT:      "INSERT"i
+UPDATE:      "UPDATE"i
+DELETE:      "DELETE"i
+DECLARE:     "DECLARE"i
+CURSOR:      "CURSOR"i
+OPEN:        "OPEN"i
+FETCH:       "FETCH"i
+CLOSE:       "CLOSE"i
+COMMIT:      "COMMIT"i
+INCLUDE:     "INCLUDE"i
+WHENEVER:    "WHENEVER"i
+INTO:        "INTO"i
+WHERE:       "WHERE"i
+CURRENT:     "CURRENT"i
+OF:          "OF"i
+FROM:        "FROM"i
+USING:       "USING"i
+FOR:         "FOR"i
+WITH:        "WITH"i
+NOT:         "NOT"i
+FOUND:       "FOUND"i
+SQLERROR:    "SQLERROR"i
+SQLWARNING:  "SQLWARNING"i
+CONTINUE:    "CONTINUE"i
+GOTO:        "GOTO"i
+GO:          "GO"i
+TO:          "TO"i
+WORK:        "WORK"i
+ROLLBACK:    "ROLLBACK"i
+SAVEPOINT:   "SAVEPOINT"i
+RELEASE:     "RELEASE"i
+CONNECT:     "CONNECT"i
+CONNECTION:  "CONNECTION"i
+DISCONNECT:  "DISCONNECT"i
+USER:        "USER"i
+RESET:       "RESET"i
+IMMEDIATE:   "IMMEDIATE"i
+PREPARE:     "PREPARE"i
+EXECUTE:     "EXECUTE"i
+DESCRIBE:    "DESCRIBE"i
+MERGE:       "MERGE"i
+VALUES:      "VALUES"i
+ALLOCATE:    "ALLOCATE"i
+RESULT:      "RESULT"i
+SET:         "SET"i
+TABLE:       "TABLE"i
+VARIABLE:    "VARIABLE"i
+STATEMENT:   "STATEMENT"i
+BEGIN:       "BEGIN"i
+END:         "END"i
+SECTION:     "SECTION"i
+GET:         "GET"i
+DIAGNOSTICS: "DIAGNOSTICS"i
+SIGNAL:      "SIGNAL"i
+FREE:        "FREE"i
+HOLD:        "HOLD"i
+LOCATOR:     "LOCATOR"i
+ASSOCIATE:   "ASSOCIATE"i
+CALL:        "CALL"i
+LOCK:        "LOCK"i
+
+// ── Tokens ───────────────────────────────────────────────────────────────────
+// HOST_VAR_TOK greedily captures :NAME or :NAME:IND (indicator variable) as
+// a single atomic token, preventing the Earley parser from splitting them.
+HOST_VAR_TOK: /:[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*(:[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*)?/
+COMMA:  ","
+LP:     "("
+RP:     ")"
+DOT:    "."
+NAME:   /[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*/
+NUM:    /\d+(\.\d+)?/
+STRING: /'([^']|'')*'/
+OTHER:  /[=<>!+\-*\/%|&^~@?]/
+
+%ignore /\s+/
+%ignore /--[^\n]*/
+%ignore /\/\*[\s\S]*?\*\//

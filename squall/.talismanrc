@@ -1,0 +1,85 @@
+fileignoreconfig:
+- filename: tests/unit/test_grammar_matrix.py
+  checksum: 65c7c1bf6e44cb02993f15299fae723b33a45533d1964e1b6ca94e3be6467848
+- filename: docs/design/2026-06-13-exec-sql-support-design.md
+  ignore_detectors: [filecontent]
+- filename: docs/plans/2026-06-13-reddragon-exec-sql-seam.md
+  checksum: bca4b2ed8ee8c6afeea3bd3a17ea28d22391a49537415b5abf260bcbb6ddb41d
+- filename: docs/plans/2026-06-14-exec-sql-slice1.md
+  checksum: 6b4fffa5eb09440c9df331640eb1ad498220619400320ce2c3d27c92b53ce317
+- filename: docs/plans/2026-06-14-exec-sql-slice2.md
+  ignore_detectors: [filecontent]
+- filename: README.md
+  checksum: bf9e1afc14382d91e580b852357f6a5c15107a9cb8bc900a0de975deabac3e01
+- filename: CLAUDE.md
+  checksum: c550050e17fe7b939418f2e0b6d4bb08828e94a7c6e03298ecfc077e8d3026d5
+- filename: vendor/red-dragon
+  checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+- filename: uv.lock
+  # Generated lockfile — content changes on every dependency update, so a checksum
+  # entry is self-defeating; ignore content detection (parity with jackal/cicada).
+  ignore_detectors: [filecontent]
+- filename: squall/parser/parse.py
+  checksum: b47afab720fcafb14066fa29dd3726cc8b0b067792e8b9053ccb52ce9c16f0b9
+- filename: tests/unit/test_parse.py
+  ignore_detectors: [filecontent]
+- filename: squall/backends/sqlite.py
+  checksum: af5cbaeab301ee062a0c6224f0c997bfeba63532e6927001e87fee11881509bb
+- filename: tests/unit/test_codec_typed.py
+  ignore_detectors: [filecontent]
+- filename: tests/unit/test_backend.py
+  ignore_detectors: [filecontent]
+- filename: squall/binding.py
+  ignore_detectors: [filecontent]
+- filename: tests/unit/test_binding.py
+  ignore_detectors: [filecontent]
+- filename: squall/builtins/exec_sql.py
+  checksum: 4f070bbc9ab8455dc5af87f674b3227ba7016409932dd9808726e0221202d5d0
+- filename: tests/unit/test_builtin.py
+  ignore_detectors: [filecontent]
+- filename: squall/strategy.py
+  ignore_detectors: [filecontent]
+- filename: tests/unit/test_strategy.py
+  ignore_detectors: [filecontent]
+- filename: tests/integration/test_select_into_e2e.py
+  ignore_detectors: [filecontent]
+- filename: tests/integration/squall_cobol_helpers.py
+  ignore_detectors: [filecontent]
+- filename: tests/integration/test_include_dclgen_e2e.py
+  ignore_detectors: [filecontent]
+- filename: tests/unit/test_preprocess.py
+  ignore_detectors: [filecontent]
+- filename: squall/preprocess.py
+  ignore_detectors: [filecontent]
+- filename: squall/coprocessor.py
+  ignore_detectors: [filecontent]
+- filename: tests/integration/test_crud_e2e.py
+  ignore_detectors: [filecontent]
+- filename: tests/integration/test_db2_static_e2e.py
+  ignore_detectors: [filecontent]
+- filename: beads/issues.jsonl
+  # Generated snapshot of the Beads issue graph (scripts/export-issues.sh) — churns on
+  # every issue change, so a checksum is self-defeating; ignore content like uv.lock.
+  ignore_detectors: [filecontent]
+- filename: beads/README.md
+  checksum: c607cb797a6144af6d977bd82ccebbfd4551da70fc240eb9b216b54b71ef9a7f
+- filename: scripts/export-issues.sh
+  checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
+- filename: .env.example
+  checksum: 11f8689d097a1e94165e385cd6e5c7c6b9920d568eaf9a78e857e47940c89cb2
+- filename: db2/dsn-env.sh
+  checksum: 306c15312a8870b8ab7230699212452e14eb2012d72b280f63ca67056369bd7f
+- filename: docker-compose.yml
+  # Contains ${DB2_PASSWORD} var-ref by nature and is edited over time — ignore
+  # content rather than pin a churning checksum.
+  ignore_detectors: [filecontent]
+- filename: docs/superpowers/specs/2026-06-27-db2-ci-setup-design.md
+  # Design doc with example DSN strings / DB2_PASSWORD references (no real secret);
+  # ignore content like other flagged-by-nature files.
+  ignore_detectors: [filecontent]
+- filename: docs/superpowers/plans/2026-06-27-db2-ci-setup.md
+  ignore_detectors: [filecontent]
+- filename: .github/workflows/ci.yml
+  # References ${{ secrets.DB2_PASSWORD }} (a GitHub secret reference, not a value).
+  ignore_detectors: [filecontent]
+version: "1.0"
