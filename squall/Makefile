@@ -9,7 +9,7 @@
 #                    SQUALL_DB2_DSN for the Db2 contract tests).
 #
 # Override any path via the environment.
-PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+PROLEAP_BRIDGE_JAR ?= $(CURDIR)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 
 PYTEST       = uv run --no-sync python -m pytest
 PYTEST_PATHS ?= tests/
@@ -39,12 +39,12 @@ python:
 
 # ProLeap bridge = the red-dragon submodule's parser + the bridge (build.sh does both).
 $(PROLEAP_BRIDGE_JAR):
-	cd vendor/red-dragon/proleap-bridge && ./build.sh
+	cd ../vendor/red-dragon/proleap-bridge && ./build.sh
 
 jar: $(PROLEAP_BRIDGE_JAR)
 
 jar-force:
-	cd vendor/red-dragon/proleap-bridge && ./build.sh
+	cd ../vendor/red-dragon/proleap-bridge && ./build.sh
 
 build:
 	./build.sh

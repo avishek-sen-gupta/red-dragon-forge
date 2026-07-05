@@ -26,7 +26,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-red-dragon = { path = "vendor/red-dragon", editable = true }
+red-dragon = { path = "../vendor/red-dragon", editable = true }
 
 [build-system]
 requires = ["hatchling"]
