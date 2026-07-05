@@ -71,8 +71,24 @@ from squall.coprocessor import build_sql_spec
 from interpreter.project.coprocessor_compile import compile_program
 from tests.integration.forge_cobol_helpers import make_parser
 
-_BANK_OF_Z_COPY = Path(__file__).parents[2] / "vendor" / "bank-of-z" / "src" / "base" / "cics" / "copy"
-_BANK_OF_Z_COBOL = Path(__file__).parents[2] / "vendor" / "bank-of-z" / "src" / "base" / "cics" / "cobol"
+_BANK_OF_Z_COPY = (
+    Path(__file__).parents[2]
+    / "vendor"
+    / "bank-of-z"
+    / "src"
+    / "base"
+    / "cics"
+    / "copy"
+)
+_BANK_OF_Z_COBOL = (
+    Path(__file__).parents[2]
+    / "vendor"
+    / "bank-of-z"
+    / "src"
+    / "base"
+    / "cics"
+    / "cobol"
+)
 
 # INQCUSTZ.cpy field widths (see this module's docstring / INQCUSTZ.cpy).
 _EYE_LEN = 4
@@ -261,9 +277,9 @@ def test_inqcust_found_and_not_found(bridge_jar):
         )
         assert found_result.kind == DispatchKind.RETURN_TRANSID
         assert found_result.commarea is not None
-        assert found_commarea[off : off + length].decode("cp037") != "Y", (
-            "sanity: seeded commarea must NOT already contain 'Y' before the run"
-        )
+        assert (
+            found_commarea[off : off + length].decode("cp037") != "Y"
+        ), "sanity: seeded commarea must NOT already contain 'Y' before the run"
         assert found_result.commarea[off : off + length].decode("cp037") == "Y", (
             f"expected INQCUST-INQ-SUCCESS='Y' for a known customer, got "
             f"{found_result.commarea[off:off+length]!r}"
