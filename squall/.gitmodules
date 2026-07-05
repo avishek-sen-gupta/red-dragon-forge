@@ -1,0 +1,6 @@
+[submodule "vendor/red-dragon"]
+	path = vendor/red-dragon
+	url = git@github.com:avishek-sen-gupta/red-dragon.git
+[submodule "testbed/db2-samples"]
+	path = testbed/db2-samples
+	url = https://github.com/IBM/db2-samples.git

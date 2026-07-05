@@ -1,0 +1,3 @@
+#!/bin/bash
+[ -f .env ] && source .env
+uv run --no-sync python -m pytest tests/unit -x -q
