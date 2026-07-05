@@ -5,8 +5,8 @@ import sqlite3
 
 from cics.types import CicsContext, DispatchKind
 
-from red_dragon_forge.adapters.cics import build_cics_spec
-from red_dragon_forge.adapters.sql import build_sql_spec
+from cics.coprocessor import build_cics_spec
+from squall.coprocessor import build_sql_spec
 from interpreter.project.coprocessor_compile import compile_program
 from red_dragon_forge.run import run_program
 from squall.backends.sqlite import SqliteBackend
