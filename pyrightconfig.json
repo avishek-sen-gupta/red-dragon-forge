@@ -1,0 +1,4 @@
+{
+  "include": ["cicada/cics", "cicada/bms_copybook_gen", "squall/squall", "jackal/jackal", "red_dragon_forge"],
+  "exclude": ["**/vendor", "**/__pycache__", "**/third-party", "**/testbed"]
+}
