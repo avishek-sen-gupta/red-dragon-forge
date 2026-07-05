@@ -263,15 +263,18 @@ the two are complementary, not in tension.
 
 ### Beads issue tracker
 
-red-dragon-forge gets its own Beads DB for the first time (`bd init` — it
-has none today), backed by its new remote
-`git@github.com:avishek-sen-gupta/red-dragon-forge.git` (created and
-pushed this session). Issue IDs across the four source repos are already
-namespace-prefixed (`red-dragon-*`, `cicada-*`, `squall-*`, `jackal-*` —
-verified directly against each repo's `beads/issues.jsonl`), so importing
-all three of `cicada/beads/issues.jsonl`, `squall/beads/issues.jsonl`,
-`jackal/beads/issues.jsonl` into forge's new DB via `bd import` is
-collision-free at the ID level. `bd` operates per-repo, and once
+red-dragon-forge already has its own Beads DB (`bd init`, run this session,
+prefix `forge-`), backed by its remote
+`git@github.com:avishek-sen-gupta/red-dragon-forge.git`, and already tracks
+its first issue (`forge-don`, the deferred test-directory-nesting
+follow-up from the Architectural contracts section above). Issue IDs
+across the three merging source repos are already namespace-prefixed
+(`cicada-*`, `squall-*`, `jackal-*` — verified directly against each
+repo's `beads/issues.jsonl`) and collision-free against `forge-*`, so
+importing all three of `cicada/beads/issues.jsonl`,
+`squall/beads/issues.jsonl`, `jackal/beads/issues.jsonl` into forge's
+already-existing DB via `bd import` adds to it without touching
+`forge-don` or any other pre-existing forge issue. `bd` operates per-repo, and once
 `cicada/`, `squall/`, `jackal/` are plain subdirectories of one repo, there
 is exactly one `.beads/` going forward — the root's. Each merged package's
 own `.beads/` directory (including its `config.yaml` with its now-defunct
