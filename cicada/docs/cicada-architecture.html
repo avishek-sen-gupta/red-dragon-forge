@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cicada — CICS Emulation for the RedDragon VM</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css"
+        integrity="sha384-AJKv9Ui5SfA0VsFksFI9GuA1ztX9Ca3CLP6HGfX4YY/tYSVodC+PUszaQZFIlkuy"
+        crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css"
+        integrity="sha384-YgvgKeZJykuztG+iQPoZHNZENTFZvOcOJ/uRzmJTje6GHYN9zAw+y5rx/L8MQKA/"
+        crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css"
+        integrity="sha384-rGf1FAL+Buyw4LpDboONln7P/UqlyCftbnLG8bC6nNAaW3LcuHtUg5t5KYY3U+L8"
+        crossorigin="anonymous">
+  <style>
+    :root {
+      --c-bms:      #2ecc71;
+      --c-pre:      #e67e22;
+      --c-parse:    #95a5a6;
+      --c-lower:    #3498db;
+      --c-vsam:     #1abc9c;
+      --c-dispatch: #9b59b6;
+      --c-term:     #e74c3c;
+      --c-neutral:  #ecf0f1;
+    }
+
+    .reveal { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .reveal h1 { font-size: 2rem; }
+    .reveal h2 { font-size: 1.6rem; color: #ecf0f1; border-bottom: 2px solid #444; padding-bottom: .3em; margin-bottom: .6em; }
+    .reveal h3 { font-size: 1.1rem; color: #aaa; font-weight: 400; margin-top: 0; }
+    .reveal section { text-align: left; }
+    .reveal ul { margin-left: 1.2em; }
+    .reveal li { margin-bottom: .35em; font-size: .88rem; }
+    .reveal p  { font-size: .88rem; }
+    .reveal code { background: #2d2d2d; padding: .1em .35em; border-radius: 3px; font-size: .85em; color: #f8f8f2; }
+
+    /* ── utility ───────────────────────────────────────── */
+    .row    { display: flex; gap: 1rem; align-items: flex-start; }
+    .col    { flex: 1; }
+    .center { text-align: center; }
+
+    /* ── pill / badge ─────────────────────────────────── */
+    .pill {
+      display: inline-block; padding: .2em .7em; border-radius: 999px;
+      font-size: .78rem; font-weight: 600; color: #111; margin: .15em;
+    }
+    .pill-bms      { background: var(--c-bms); }
+    .pill-pre      { background: var(--c-pre); }
+    .pill-parse    { background: var(--c-parse); }
+    .pill-lower    { background: var(--c-lower); color: #fff; }
+    .pill-vsam     { background: var(--c-vsam); }
+    .pill-dispatch { background: var(--c-dispatch); color: #fff; }
+    .pill-term     { background: var(--c-term); color: #fff; }
+
+    /* ── pipeline boxes ────────────────────────────────── */
+    .pipe-row { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin: .5rem 0; }
+    .pipe-box {
+      padding: .35em .75em; border-radius: 6px; font-size: .78rem;
+      font-weight: 600; white-space: nowrap; color: #111;
+    }
+    .pipe-arrow { color: #888; font-size: 1rem; }
+    .pb-bms      { background: var(--c-bms); }
+    .pb-pre      { background: var(--c-pre); }
+    .pb-parse    { background: var(--c-parse); }
+    .pb-lower    { background: var(--c-lower); color: #fff; }
+    .pb-vsam     { background: var(--c-vsam); }
+    .pb-dispatch { background: var(--c-dispatch); color: #fff; }
+    .pb-neutral  { background: #555; color: #eee; }
+
+    /* ── table ─────────────────────────────────────────── */
+    .deck-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .deck-table th { background: #1e1e1e; color: #aaa; font-weight: 600;
+                     padding: .4em .6em; text-align: left; border-bottom: 2px solid #333; }
+    .deck-table td { padding: .4em .6em; border-bottom: 1px solid #2a2a2a; vertical-align: top; }
+    .deck-table tr:last-child td { border-bottom: none; }
+
+    /* ── callout box ───────────────────────────────────── */
+    .callout {
+      border-left: 4px solid #9b59b6; background: rgba(155,89,182,.12);
+      padding: .5em .8em; border-radius: 0 6px 6px 0; font-size: .8rem;
+      margin-top: .6rem;
+    }
+    .callout.green  { border-color: var(--c-bms);   background: rgba(46,204,113,.1); }
+    .callout.blue   { border-color: var(--c-lower); background: rgba(52,152,219,.1); }
+    .callout.teal   { border-color: var(--c-vsam);  background: rgba(26,188,156,.1); }
+    .callout.orange { border-color: var(--c-pre);   background: rgba(230,126,34,.1); }
+    .callout.red    { border-color: var(--c-term);  background: rgba(231,76,60,.1); }
+
+    /* ── state machine ─────────────────────────────────── */
+    .sm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-top: .5rem; }
+    .sm-state {
+      border: 2px solid #555; border-radius: 8px; padding: .5em .7em;
+      font-size: .8rem; text-align: center;
+    }
+    .sm-state.active  { border-color: var(--c-dispatch); background: rgba(155,89,182,.15); }
+    .sm-state.wait    { border-color: var(--c-pre);      background: rgba(230,126,34,.15); }
+    .sm-state.done    { border-color: var(--c-term);     background: rgba(231,76,60,.15); }
+    .sm-state.idle    { border-color: #555;              background: rgba(100,100,100,.15); }
+    .sm-label { font-weight: 700; font-size: .9rem; display: block; margin-bottom: .2em; }
+    .sm-edge  { font-size: .72rem; color: #888; text-align: center; padding: .2em 0; }
+
+    /* ── turn timeline ─────────────────────────────────── */
+    .turn { display: flex; gap: .6rem; align-items: flex-start; margin: .35rem 0; }
+    .turn-badge {
+      min-width: 4.5rem; text-align: center; padding: .25em .5em;
+      border-radius: 5px; font-size: .72rem; font-weight: 700; color: #111;
+      flex-shrink: 0;
+    }
+    .turn-body { font-size: .8rem; color: #ccc; padding-top: .15em; }
+    .turn-sep  { font-size: .75rem; color: #666; margin: .15rem 0 .15rem 5rem; }
+
+    /* ── invariants ────────────────────────────────────── */
+    .inv { display: flex; gap: .8rem; align-items: flex-start; margin: .5rem 0; }
+    .inv-num {
+      min-width: 2rem; height: 2rem; border-radius: 50%;
+      background: var(--c-dispatch); color: #fff;
+      font-weight: 700; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: .1em;
+    }
+    .inv-text { font-size: .88rem; color: #ddd; }
+
+    /* ── routing flowchart ─────────────────────────────── */
+    .route-branch { border-left: 3px solid #444; padding: .4em .8em; margin: .35em 0; border-radius: 0 6px 6px 0; font-size: .8rem; }
+    .route-branch.rt  { border-color: var(--c-lower); }
+    .route-branch.xctl{ border-color: var(--c-vsam); }
+    .route-branch.end { border-color: var(--c-term); }
+    .route-label { font-weight: 700; font-size: .82rem; }
+    .route-found    { color: #2ecc71; }
+    .route-notfound { color: #e74c3c; }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 1 — TITLE
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <div style="padding-top:1.5rem">
+    <h1 style="font-size:2.2rem;margin-bottom:.3em">Cicada</h1>
+    <h3 style="font-size:1.2rem;color:#9b59b6;margin-bottom:1.5rem">CICS Emulation for the RedDragon VM</h3>
+    <div class="pipe-row" style="justify-content:center;margin-bottom:1.5rem">
+      <span class="pill pill-pre">Pseudo-conversational dispatch</span>
+      <span class="pill pill-vsam">VSAM KSDS file control</span>
+      <span class="pill pill-bms">BMS screen handling</span>
+    </div>
+    <p style="color:#777;font-size:.8rem;text-align:center">Real, unmodified COBOL programs · No changes to the RedDragon VM core</p>
+    <p style="color:#555;font-size:.75rem;text-align:center;margin-top:1rem">github.com/avishek-sen-gupta/cicada</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 2 — WHAT IS CICADA?
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>What is Cicada?</h2>
+
+  <div class="row" style="gap:1.5rem;margin-bottom:1rem">
+    <div class="col">
+      <div style="border:2px solid #555;border-radius:8px;padding:.8em 1em;text-align:center;font-size:.85rem;color:#ccc">
+        Real, unmodified COBOL
+      </div>
+      <div style="text-align:center;font-size:1.4rem;color:#555;margin:.3rem 0">↓</div>
+      <div style="border:2px solid var(--c-dispatch);border-radius:8px;padding:.8em 1em;text-align:center;font-weight:700;color:#ddd;background:rgba(155,89,182,.1)">
+        Cicada layer<br>
+        <span style="font-size:.72rem;font-weight:400;color:#999">preprocess · lower · dispatch · VSAM · BMS</span>
+      </div>
+      <div style="text-align:center;font-size:1.4rem;color:#555;margin:.3rem 0">↓</div>
+      <div style="border:2px solid #555;border-radius:8px;padding:.8em 1em;text-align:center;font-size:.85rem;color:#ccc">
+        RedDragon VM
+      </div>
+    </div>
+    <div class="col" style="padding-top:.5rem">
+      <ul style="list-style:none;padding:0">
+        <li style="margin-bottom:.8rem">
+          <span class="pill pill-dispatch" style="border-radius:4px;color:#fff">Dispatch</span>
+          <span style="font-size:.83rem;color:#ccc;margin-left:.4rem">Pseudo-conversational transaction routing — programs run one turn at a time, suspending between terminal interactions</span>
+        </li>
+        <li style="margin-bottom:.8rem">
+          <span class="pill pill-vsam" style="border-radius:4px">VSAM</span>
+          <span style="font-size:.83rem;color:#ccc;margin-left:.4rem">In-memory KSDS engine — READ, WRITE, REWRITE, DELETE, browse (STARTBR/READNEXT/READPREV)</span>
+        </li>
+        <li>
+          <span class="pill pill-bms" style="border-radius:4px">BMS</span>
+          <span style="font-size:.83rem;color:#ccc;margin-left:.4rem">Symbolic map generation and screen field dispatch via SEND MAP / RECEIVE MAP</span>
+        </li>
+      </ul>
+      <div class="callout" style="margin-top:1rem">
+        Every CICS behaviour reaches the VM via <code>CallFunction</code> IR to registered builtins — the same extension point any language frontend uses.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 3 — PIPELINE OVERVIEW
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Pipeline overview</h2>
+
+  <p style="font-size:.78rem;color:#888;margin-bottom:.6rem">Row A runs once at setup. Row B runs per program execution.</p>
+
+  <div style="background:#111;border-radius:8px;padding:1rem 1.2rem;margin-bottom:.8rem">
+    <div style="font-size:.72rem;color:var(--c-bms);font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW A — BMS TOOLCHAIN (once at setup)</div>
+    <div class="pipe-row">
+      <div class="pipe-box pb-neutral">.bms source files</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-bms">hlasm_export</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-bms">bms_copybook_gen</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-neutral">symbolic copybooks (.cpy)</div>
+    </div>
+  </div>
+
+  <div style="background:#111;border-radius:8px;padding:1rem 1.2rem;margin-bottom:.8rem">
+    <div style="font-size:.72rem;color:var(--c-dispatch);font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW B — REGION STARTUP (once per region)</div>
+    <div class="pipe-row">
+      <div class="pipe-box pb-neutral">CSD file</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">parse_csd()</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-neutral">transid → program map</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">_advance_routing</div>
+    </div>
+  </div>
+
+  <div style="background:#111;border-radius:8px;padding:1rem 1.2rem">
+    <div style="font-size:.72rem;color:#aaa;font-weight:700;margin-bottom:.4rem;letter-spacing:.05em">ROW C — PER-PROGRAM EXECUTION</div>
+    <div class="pipe-row">
+      <div class="pipe-box pb-neutral">Raw COBOL</div>
+      <span class="pipe-arrow">+</span>
+      <div class="pipe-box pb-bms">copybooks</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-pre">inject_dfheiblk</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-parse">ProLeap parser</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-pre">DFHRESP pre-pass</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-lower">CicsLoweringStrategy</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">run_cics</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">_advance_routing</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:.6rem;margin-top:.7rem;flex-wrap:wrap">
+    <span class="pill pill-bms">A: BMS toolchain</span>
+    <span class="pill pill-dispatch">B: CSD / region startup</span>
+    <span class="pill pill-pre">C: Preprocessor</span>
+    <span class="pill pill-parse" style="color:#111">C: Parser</span>
+    <span class="pill pill-lower">C: IR lowering</span>
+    <span class="pill pill-dispatch">C: Dispatcher</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 4 — PREPROCESSOR: inject_dfheiblk
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Preprocessor — <code>inject_dfheiblk</code></h2>
+  <h3>Making EIB fields visible before the parser runs</h3>
+
+  <div class="row" style="gap:1.2rem;margin-top:.8rem">
+    <div class="col">
+      <div style="font-size:.75rem;color:#888;margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.05em">Before</div>
+      <div style="background:#1a1a1a;border-radius:6px;padding:.7em 1em;font-size:.8rem;color:#ccc;line-height:1.6;border:1px solid #333">
+        WORKING-STORAGE SECTION.<br>
+        <span style="color:#666">  01 WS-MY-FIELD PIC X(10).</span><br>
+        <span style="color:#666">  …</span>
+      </div>
+    </div>
+    <div class="col center" style="padding-top:2rem;font-size:1.5rem;color:var(--c-pre)">→</div>
+    <div class="col">
+      <div style="font-size:.75rem;color:#888;margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.05em">After</div>
+      <div style="background:#1a1a1a;border-radius:6px;padding:.7em 1em;font-size:.8rem;color:#ccc;line-height:1.6;border:1px solid #333">
+        WORKING-STORAGE SECTION.<br>
+        <span style="color:var(--c-pre);font-weight:700">  COPY DFHEIBLK.</span>
+        <span style="color:#555;font-size:.7rem"> ← injected</span><br>
+        <span style="color:#666">  01 WS-MY-FIELD PIC X(10).</span><br>
+        <span style="color:#666">  …</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:1rem">
+    <div class="callout orange">
+      <strong>Why:</strong> Every CICS program reads EIB fields — EIBAID (attention key), EIBCALEN (commarea length), EIBTRNID (current transid). Without <code>COPY DFHEIBLK</code> these names are undefined; the parser would reject them. Cicada injects the COPY before parsing begins rather than requiring it in every source file.
+    </div>
+  </div>
+
+  <div style="margin-top:.6rem;font-size:.78rem;color:#888">
+    Implementation: <code>cics/preprocessor.py · apply_cics_prepass()</code>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 5 — PREPROCESSOR: DFHRESP pre-pass
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Preprocessor — DFHRESP pre-pass</h2>
+  <h3>Resolving condition names before the IR is built</h3>
+
+  <div class="row" style="gap:1.2rem;margin-top:.6rem">
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-pre);font-weight:700;margin-bottom:.4rem">Stage 1 — Text pass</div>
+      <p style="font-size:.8rem">Scans the source text for <code>DFHRESP(condition)</code> patterns and replaces each condition name with its numeric EIBRESP code.</p>
+      <table class="deck-table" style="margin-top:.5rem">
+        <tr><th>Condition</th><th>Code</th></tr>
+        <tr><td>NORMAL</td><td>0</td></tr>
+        <tr><td>ERROR</td><td>1</td></tr>
+        <tr><td>NOTFND</td><td>13</td></tr>
+        <tr><td>DUPREC</td><td>14</td></tr>
+        <tr><td>ENDFILE</td><td>20</td></tr>
+        <tr><td>DISABLED</td><td>84</td></tr>
+        <tr><td><em>unknown</em></td><td>9999</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-pre);font-weight:700;margin-bottom:.4rem">Stage 2 — AST pass</div>
+      <p style="font-size:.8rem">Walks the parsed expression tree and replaces every <code>{kind:dfhresp}</code> node with the resolved numeric literal — so the IR sees a plain integer, not a symbolic name.</p>
+      <div class="callout orange" style="margin-top:.6rem">
+        <strong>Why two stages?</strong> The main parser would reject bare condition names in IF expressions. The text pass normalises them first; the AST pass catches any stragglers the grammar already absorbed.
+      </div>
+      <div style="margin-top:.6rem;font-size:.78rem;color:#888">
+        Implementation: <code>cics/dfhresp_prepass.py · resolve_dfhresp_nodes()</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 6 — LOWERING: CicsLoweringStrategy
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Lowering — <code>CicsLoweringStrategy</code></h2>
+  <h3>EXEC CICS verbs → CallFunction IR</h3>
+
+  <div class="row" style="gap:1.2rem;margin-top:.6rem">
+    <div class="col" style="flex:1.2">
+      <table class="deck-table">
+        <tr>
+          <th>Family</th>
+          <th>Verbs</th>
+          <th>Builtin module</th>
+        </tr>
+        <tr>
+          <td><span class="pill pill-dispatch" style="font-size:.7rem;color:#fff">Flow</span></td>
+          <td>RETURN · RETURN TRANSID · XCTL · ABEND</td>
+          <td><code>builtins/flow</code></td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-bms" style="font-size:.7rem">BMS / Screen</span></td>
+          <td>SEND MAP · RECEIVE MAP</td>
+          <td><code>builtins/screen</code></td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-vsam" style="font-size:.7rem">VSAM point</span></td>
+          <td>READ · WRITE · REWRITE · DELETE</td>
+          <td><code>builtins/vsam</code></td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-vsam" style="font-size:.7rem">VSAM browse</span></td>
+          <td>STARTBR · READNEXT · READPREV · ENDBR</td>
+          <td><code>builtins/vsam</code></td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-parse" style="font-size:.7rem;color:#111">System</span></td>
+          <td>ASSIGN · FORMATTIME · ASKTIME</td>
+          <td><code>builtins/system</code></td>
+        </tr>
+      </table>
+    </div>
+    <div class="col">
+      <div style="font-size:.8rem;color:#ccc;margin-bottom:.6rem">
+        <code>CicsLoweringStrategy</code> is <strong>injected</strong> into <code>CobolFrontend</code> — the same extension point any language frontend uses. It is not a subclass.
+      </div>
+      <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.78rem;color:#aaa;border:1px solid #2a2a2a">
+        EXEC CICS READ<br>
+        &nbsp;&nbsp;FILE('ACCTDAT') KEY(…) INTO(…)<br>
+        &nbsp;&nbsp;RESP(WS-RESP)<br>
+        <span style="color:#555">↓ lowered to ↓</span><br>
+        <span style="color:var(--c-lower)">CallFunction</span> <code>__cics_read</code>(file, key, into)<br>
+        <span style="color:#555">+ RESP writeback side-channel</span>
+      </div>
+      <div class="callout blue" style="margin-top:.6rem">
+        No CICS logic lives inside the RedDragon VM — only generic <code>CallFunction</code> dispatch.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 7 — LOWERING: operand resolution
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Lowering — operand resolution</h2>
+  <h3>Getting values into builtin calls</h3>
+
+  <div class="row" style="gap:1.4rem;margin-top:.8rem">
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-lower);font-weight:700;margin-bottom:.5rem">emit_operand_value</div>
+
+      <div style="background:#111;border-radius:8px;padding:.8em 1em;font-size:.8rem;border:1px solid #2a2a2a">
+        <div style="color:#888;margin-bottom:.5rem">EXEC CICS operand</div>
+        <div style="display:flex;gap:1rem">
+          <div style="flex:1;text-align:center">
+            <div style="border:1px solid #444;border-radius:5px;padding:.3em .5em;font-size:.75rem">data-name</div>
+            <div style="color:#555;font-size:1rem;margin:.2rem 0">↓</div>
+            <div style="border:1px solid var(--c-lower);border-radius:5px;padding:.3em .5em;font-size:.75rem;color:var(--c-lower)">LoadRegion IR</div>
+          </div>
+          <div style="flex:1;text-align:center">
+            <div style="border:1px solid #444;border-radius:5px;padding:.3em .5em;font-size:.75rem">literal</div>
+            <div style="color:#555;font-size:1rem;margin:.2rem 0">↓</div>
+            <div style="border:1px solid var(--c-lower);border-radius:5px;padding:.3em .5em;font-size:.75rem;color:var(--c-lower)">Const IR</div>
+          </div>
+        </div>
+        <div style="text-align:center;color:#555;font-size:1rem;margin:.4rem 0">↓</div>
+        <div style="text-align:center;border:2px solid var(--c-lower);border-radius:5px;padding:.4em;font-size:.8rem;color:#ddd">
+          <code>CallFunction</code> builtin
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-lower);font-weight:700;margin-bottom:.5rem">RESP writeback</div>
+      <p style="font-size:.8rem">When an EXEC CICS verb includes a <code>RESP(data-name)</code> clause, a second IR instruction writes the builtin's return value back to that data item — a side-channel separate from the normal return path.</p>
+      <div style="font-size:.78rem;color:var(--c-lower);font-weight:700;margin:.8rem 0 .4rem">NOHANDLE / RESP2</div>
+      <p style="font-size:.8rem">If <code>RESP</code> is present (or <code>NOHANDLE</code> is set), condition handling is suppressed — the program inspects <code>EIBRESP</code> itself rather than relying on the default error handler.</p>
+
+      <div class="callout blue" style="margin-top:.6rem">
+        Implementation: <code>cics/strategy.py · CicsLoweringStrategy</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 8 — VSAM: FCT + VsamEngine
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>VSAM — FCT &amp; VsamEngine</h2>
+  <h3>File Control Table + CICS adapter over the shared access-method drivers</h3>
+
+  <div class="row" style="gap:1.2rem;margin-top:.6rem">
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">FCT (File Control Table)</div>
+      <p style="font-size:.8rem">A YAML file declaring every dataset Cicada knows about. Cicada's equivalent of the real CICS FCT — maps a name to the metadata the engine needs.</p>
+      <table class="deck-table" style="margin-top:.4rem">
+        <tr><th>Field</th><th>Meaning</th></tr>
+        <tr><td><code>record_length</code></td><td>Fixed record size in bytes</td></tr>
+        <tr><td><code>key_offset</code></td><td>Byte offset of the key within a record</td></tr>
+        <tr><td><code>key_length</code></td><td>Key width (0 = use operation's length)</td></tr>
+        <tr><td><code>file</code></td><td>Seed filename in the data directory</td></tr>
+      </table>
+      <div style="font-size:.75rem;color:#888;margin-top:.5rem">
+        Implementation: <code>cics/vsam/fct.py · FctConfig</code>
+      </div>
+    </div>
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">VsamEngine (thin CICS adapter)</div>
+      <p style="font-size:.8rem">Owns no storage. Each dataset's backing <code>.dat</code> file <strong>is</strong> the store, served by RedDragon's shared file-resident access-method drivers — the same ones COBOL batch &amp; IDCAMS use. The adapter just gates FCT state, picks the driver, and maps the result to EIBRESP.</p>
+      <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.78rem;border:1px solid #2a2a2a;margin-top:.3rem">
+        <div style="color:var(--c-vsam);margin-bottom:.4rem">Driver routing (<code>_open</code>, by <code>key_offset</code>)</div>
+        <div style="color:#ccc">
+          <code>0</code> → <code>open_driver(INDEXED)</code> — binary search over a key-sorted file<br>
+          <code>&gt;0</code> → <code>open_alternate_key_driver</code> — linear scan, read-only<br><br>
+          Alternate-index paths (e.g. CARD-XREF with ACCT-ID at offset 25) set a non-zero <code>key_offset</code> in the FCT entry.
+        </div>
+      </div>
+      <div class="callout teal" style="margin-top:.6rem">
+        <strong>CardDemo datasets:</strong> ACCTDAT (300 B), TRANSACT (350 B), USRSEC (80 B), CARDDAT, CARDXREF — all declared in <code>fct.yaml</code>.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 9 — VSAM: operations + shared storage
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>VSAM — operations &amp; the shared storage layer</h2>
+
+  <div class="row" style="gap:1.2rem;margin-top:.6rem">
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">Operations</div>
+      <table class="deck-table">
+        <tr><th>Category</th><th>Operation</th><th>EIBRESP on failure</th></tr>
+        <tr><td rowspan="4" style="color:var(--c-vsam)">Point</td><td>READ</td><td>NOTFND (13)</td></tr>
+        <tr><td>WRITE</td><td>DUPREC (14)</td></tr>
+        <tr><td>REWRITE</td><td>NOTFND (13)</td></tr>
+        <tr><td>DELETE</td><td>NOTFND (13)</td></tr>
+        <tr><td rowspan="4" style="color:#1abc9c">Browse</td><td>STARTBR</td><td>DISABLED (84)</td></tr>
+        <tr><td>READNEXT</td><td>ENDFILE (20)</td></tr>
+        <tr><td>READPREV</td><td>ENDFILE (20)</td></tr>
+        <tr><td>ENDBR</td><td>—</td></tr>
+      </table>
+      <div style="font-size:.75rem;color:#888;margin-top:.4rem">
+        Browse keeps one open driver instance per <code>(task, file, cursor_id)</code>. READNEXT→READPREV reversal is handled by the driver's own cursor (<code>read_seq</code>/<code>read_prev</code>) — no separate direction bookkeeping in the adapter.
+      </div>
+    </div>
+    <div class="col">
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">The store: a backing flat file</div>
+      <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.8rem;border:1px solid #2a2a2a;margin-bottom:.5rem">
+        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">No in-memory copy, no backends</div>
+        Each dataset's <code>&lt;vsam_dir&gt;/&lt;NAME&gt;.dat</code> file <strong>is</strong> the store. RedDragon's file-resident drivers read/write it directly — so cicada, COBOL batch, and IDCAMS share one storage implementation.
+      </div>
+      <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.8rem;border:1px solid #2a2a2a">
+        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">Seeding — <code>seed_vsam()</code></div>
+        Writes the <code>.dat</code> files from the EBCDIC fixtures (same format as IDCAMS REPRO output). Base-KSDS records are written <strong>key-sorted</strong> (the binary-search driver requires it); alt-key datasets in source order.
+      </div>
+      <div class="callout teal" style="margin-top:.6rem">
+        EIBRESP comes from mapping the drivers' neutral <code>AccessCondition</code> (<code>cics/vsam/eibresp.py</code>) — file state stays an FCT concern.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 10 — CicsContext
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Dispatcher — <code>CicsContext</code></h2>
+  <h3>What enters each program execution</h3>
+
+  <div style="margin-top:.8rem">
+    <table class="deck-table">
+      <tr>
+        <th style="width:22%">Field</th>
+        <th style="width:18%">Type</th>
+        <th>Meaning</th>
+      </tr>
+      <tr>
+        <td><code>transid</code></td>
+        <td>4-char string</td>
+        <td>Transaction ID — looked up in the CSD map to select which program runs</td>
+      </tr>
+      <tr>
+        <td><code>commarea</code></td>
+        <td>bytes</td>
+        <td>Session state carried between turns. Bound to <code>DFHCOMMAREA</code> in the LINKAGE SECTION. Empty commarea is zero-padded to <code>EIBCALEN</code>.</td>
+      </tr>
+      <tr>
+        <td><code>eibaid</code></td>
+        <td>1-char string</td>
+        <td>Attention identifier from the terminal — <code>\x7d</code> (DFHENTER), PF keys, CLEAR, etc. Governs which branch the program takes after RECEIVE MAP.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="margin-top:1rem;background:#111;border-radius:8px;padding:.8em 1.2em;font-size:.8rem;border:1px solid #2a2a2a">
+    <div class="pipe-row" style="align-items:center">
+      <div class="pipe-box pb-neutral">Terminal</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-pre">AID key + screen fields</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-parse">InputEvent</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">CicsContext assembled</div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-box pb-dispatch">run_cics()</div>
+    </div>
+  </div>
+
+  <div style="font-size:.75rem;color:#888;margin-top:.6rem">
+    Implementation: <code>cics/types.py · CicsContext</code> &nbsp;·&nbsp; <code>cics/dispatcher.py · run_cics()</code>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 11 — DispatchResult
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Dispatcher — <code>DispatchResult</code></h2>
+  <h3>What exits each program execution</h3>
+
+  <div style="margin-top:.6rem">
+    <table class="deck-table">
+      <tr>
+        <th style="width:24%">Kind</th>
+        <th style="width:38%">Meaning</th>
+        <th>Carries</th>
+      </tr>
+      <tr>
+        <td><span style="color:#aaa;font-weight:700">RETURN</span></td>
+        <td>Task ends normally. No successor.</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><span style="color:var(--c-lower);font-weight:700">RETURN_TRANSID</span></td>
+        <td>Pseudo-conversational suspend. A new terminal interaction starts the next turn on a (possibly different) transid.</td>
+        <td><code>transid</code>, <code>commarea</code></td>
+      </tr>
+      <tr>
+        <td><span style="color:var(--c-vsam);font-weight:700">XCTL</span></td>
+        <td>Transfer control to a named program. Same transid, same task — no terminal round-trip.</td>
+        <td><code>program</code>, <code>commarea</code></td>
+      </tr>
+      <tr>
+        <td><span style="color:var(--c-term);font-weight:700">ABEND</span></td>
+        <td>Abnormal termination. Task ends.</td>
+        <td><code>abcode</code> (TRNI, PGMI, …)</td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="margin-top:.8rem;font-size:.78rem;color:#888">
+    Implementation: <code>cics/types.py · DispatchKind</code>, <code>DispatchResult</code>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 12 — _advance_routing
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Dispatcher — <code>_advance_routing</code></h2>
+  <h3>Single source of truth for "what runs next"</h3>
+
+  <div style="margin-top:.7rem">
+
+    <div class="route-branch rt">
+      <div class="route-label" style="color:var(--c-lower)">RETURN_TRANSID</div>
+      <div style="font-size:.8rem;color:#ccc;margin-top:.2rem">
+        Look up <code>result.transid</code> in the CSD-derived <code>transid_to_program</code> map.<br>
+        <span class="route-found">✔ found</span> → continue: new transid + new program + commarea<br>
+        <span class="route-notfound">✘ unknown transid</span> → ABEND <code>TRNI</code>
+      </div>
+    </div>
+
+    <div class="route-branch xctl" style="margin-top:.4rem">
+      <div class="route-label" style="color:var(--c-vsam)">XCTL</div>
+      <div style="font-size:.8rem;color:#ccc;margin-top:.2rem">
+        Look up <code>result.program</code> in the compiled <code>program_cache</code>.<br>
+        <span class="route-found">✔ found</span> → continue: same transid + new program + commarea<br>
+        <span class="route-notfound">✘ unknown program</span> → ABEND <code>PGMI</code>
+      </div>
+    </div>
+
+    <div class="route-branch end" style="margin-top:.4rem">
+      <div class="route-label" style="color:var(--c-term)">RETURN &nbsp;/&nbsp; ABEND</div>
+      <div style="font-size:.8rem;color:#ccc;margin-top:.2rem">
+        Pass through unchanged → terminal state. Caller receives the original <code>DispatchResult</code>.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout" style="margin-top:.8rem">
+    <strong>Key design:</strong> both <code>CicsRegion</code> and the blocking dispatcher loop call <code>_advance_routing</code>. There is one routing rule, not two. Tests can exercise it independently.
+  </div>
+
+  <div style="font-size:.75rem;color:#888;margin-top:.5rem">
+    Implementation: <code>cics/dispatcher.py · _advance_routing()</code>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 13 — CicsRegion state machine
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Dispatcher — <code>CicsRegion</code> state machine</h2>
+  <h3>Turn-by-turn API over the routing rule</h3>
+
+  <div class="row" style="gap:1.2rem;margin-top:.7rem">
+    <div class="col" style="flex:1.3">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto;gap:.5rem .8rem;align-items:center">
+        <div class="sm-state idle"><span class="sm-label">IDLE</span>region created</div>
+        <div></div>
+
+        <div class="sm-state active"><span class="sm-label">RUNNING</span>program executing</div>
+        <div class="sm-state wait"><span class="sm-label">WAITING</span>for terminal input</div>
+
+        <div></div>
+        <div class="sm-state done"><span class="sm-label">TERMINAL</span>RETURN or ABEND</div>
+      </div>
+
+    </div>
+    <div class="col">
+      <table class="deck-table" style="font-size:.78rem">
+        <tr><th>From → To</th><th>Trigger</th></tr>
+        <tr><td>IDLE → RUNNING</td><td><code>start(entry_transid, input_event)</code></td></tr>
+        <tr><td>RUNNING → WAITING</td><td><code>RETURN_TRANSID</code> emitted</td></tr>
+        <tr><td>WAITING → RUNNING</td><td><code>step(input_event)</code></td></tr>
+        <tr><td>RUNNING → RUNNING</td><td><code>XCTL</code> (no terminal round-trip)</td></tr>
+        <tr><td>RUNNING → TERMINAL</td><td><code>RETURN</code> or <code>ABEND</code></td></tr>
+      </table>
+
+      <div class="callout" style="margin-top:.7rem">
+        <strong>Invariant:</strong> calling <code>step()</code> on a terminal region raises <code>RuntimeError</code>. Callers must check <code>result.kind</code> after each turn.
+      </div>
+
+      <div style="margin-top:.5rem;font-size:.75rem;color:#888">
+        Implementation: <code>cics/dispatcher.py · CicsRegion</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 14 — Pseudo-conversational turn sequence
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Pseudo-conversational turns</h2>
+  <h3>CardDemo sign-on flow — one task, many programs</h3>
+
+  <div style="margin-top:.6rem">
+
+    <div class="turn">
+      <div class="turn-badge" style="background:var(--c-dispatch);color:#fff">Turn 1<br>CC00</div>
+      <div class="turn-body">
+        transid <strong>CC00</strong> → program <strong>COSGN00C</strong><br>
+        SEND MAP (login screen displayed) → <span style="color:var(--c-lower)">RETURN TRANSID CC00</span><br>
+        <span style="color:#666;font-size:.75rem">commarea: empty (first turn)</span>
+      </div>
+    </div>
+
+    <div class="turn-sep">↓ &nbsp; user types credentials + presses ENTER &nbsp; ↓</div>
+
+    <div class="turn">
+      <div class="turn-badge" style="background:var(--c-dispatch);color:#fff">Turn 2<br>CC00</div>
+      <div class="turn-body">
+        transid <strong>CC00</strong> → program <strong>COSGN00C</strong><br>
+        RECEIVE MAP → validate credentials → <span style="color:var(--c-vsam)">XCTL COMEN01C</span>
+        <span style="color:#666;font-size:.75rem;margin-left:.4rem">(no terminal round-trip)</span>
+      </div>
+    </div>
+
+    <div class="turn-sep">↓ &nbsp; immediate — XCTL switches program within same task &nbsp; ↓</div>
+
+    <div class="turn">
+      <div class="turn-badge" style="background:var(--c-dispatch);color:#fff">Turn 2′<br>CC00</div>
+      <div class="turn-body">
+        transid <strong>CC00</strong> (carried) → program <strong>COMEN01C</strong><br>
+        SEND MAP (main menu) → <span style="color:var(--c-lower)">RETURN TRANSID CC00</span><br>
+        <span style="color:#666;font-size:.75rem">commarea: session state (user ID, etc.)</span>
+      </div>
+    </div>
+
+    <div class="turn-sep">↓ &nbsp; user selects option &nbsp; ↓ &nbsp; …</div>
+
+  </div>
+
+  <div class="callout" style="margin-top:.6rem;font-size:.78rem">
+    <strong>The pattern:</strong> commarea is the task's working memory; transid is its "return address". Programs are stateless between turns — the region holds all mutable state.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 15 — CardDemo walkthrough
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>CardDemo — CSD walkthrough</h2>
+  <h3>How transid → program mappings are built</h3>
+
+  <div class="row" style="gap:1.2rem;margin-top:.6rem">
+    <div class="col">
+      <p style="font-size:.8rem"><code>parse_csd()</code> reads the CSD file and produces the <code>transid_to_program</code> dict that <code>_advance_routing</code> consults on every <code>RETURN_TRANSID</code>.</p>
+
+      <table class="deck-table" style="margin-top:.5rem">
+        <tr><th>Transid</th><th>Program</th><th>Flow</th></tr>
+        <tr><td><code>CC00</code></td><td><code>COSGN00C</code></td><td>Sign-on</td></tr>
+        <tr><td><code>CA00</code></td><td><code>COMEN01C</code></td><td>Main menu</td></tr>
+        <tr><td><code>ACNT</code></td><td><code>COACTUPC</code></td><td>Account update</td></tr>
+        <tr><td><code>TRAN</code></td><td><code>COTRN00C</code></td><td>Transaction list</td></tr>
+        <tr><td><code>BLLP</code></td><td><code>COBIL00C</code></td><td>Bill payment</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div style="font-size:.78rem;color:#888;margin-bottom:.4rem">CSD grammar (structural, not regex)</div>
+      <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.78rem;color:#ccc;border:1px solid #2a2a2a;line-height:1.7">
+        DEFINE <span style="color:var(--c-lower)">TRANSACTION</span>(<span style="color:var(--c-bms)">CC00</span>)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--c-vsam)">PROGRAM</span>(<span style="color:var(--c-bms)">COSGN00C</span>)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;GROUP(CARDDEMO)<br><br>
+        DEFINE <span style="color:var(--c-lower)">TRANSACTION</span>(<span style="color:var(--c-bms)">ACNT</span>)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--c-vsam)">PROGRAM</span>(<span style="color:var(--c-bms)">COACTUPC</span>)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;GROUP(CARDDEMO)
+      </div>
+      <div class="callout" style="margin-top:.6rem">
+        Attributes are order-independent. <code>parse_csd()</code> uses a Lark grammar — not fragile regex — so DEFINE blocks can span continuation lines.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SLIDE 16 — Key invariants
+     ═══════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>Key invariants</h2>
+
+  <div style="margin-top:1rem">
+    <div class="inv">
+      <div class="inv-num">1</div>
+      <div class="inv-text">
+        <strong>No edits to the RedDragon VM core.</strong><br>
+        <span style="color:#999">Every CICS behaviour reaches the VM via <code>CallFunction</code> IR to registered builtins — the same extension point any language frontend uses. The files <code>vm/**</code>, <code>ir.py</code>, <code>run.py</code>, <code>executor.py</code>, <code>cfg.py</code> are untouched.</span>
+      </div>
+    </div>
+
+    <div class="inv" style="margin-top:.9rem">
+      <div class="inv-num">2</div>
+      <div class="inv-text">
+        <strong><code>CicsLoweringStrategy</code> is injection, not inheritance.</strong><br>
+        <span style="color:#999">It is passed into <code>CobolFrontend</code> at construction — the standard extension point. Swapping it for a different strategy (e.g. a mock or a no-op) requires no subclassing and leaves the frontend unchanged.</span>
+      </div>
+    </div>
+
+    <div class="inv" style="margin-top:.9rem">
+      <div class="inv-num">3</div>
+      <div class="inv-text">
+        <strong><code>_advance_routing</code> is the single source of truth for routing.</strong><br>
+        <span style="color:#999">Both <code>CicsRegion</code> and the blocking dispatcher loop call it. There is one routing rule — not two implementations that could diverge. It can be tested in isolation without a running VM.</span>
+      </div>
+    </div>
+
+    <div class="inv" style="margin-top:.9rem">
+      <div class="inv-num">4</div>
+      <div class="inv-text">
+        <strong>VsamEngine is a thin adapter over the shared storage engine.</strong><br>
+        <span style="color:#999">Record I/O delegates to RedDragon's file-resident access-method drivers (the same ones COBOL batch &amp; IDCAMS use); the backing <code>.dat</code> file is the store. The adapter holds only CICS state — FCT enable/disable, held key, task cursors — and the neutral-condition→EIBRESP mapping.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- .slides -->
+</div><!-- .reveal -->
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"
+        integrity="sha384-M/JtqCVlLcK9lwVnBnMXP0V577CBULkjodKsR/PITOe4MSKNbbwqCemEyluOw0+5"
+        crossorigin="anonymous"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    transitionSpeed: 'fast',
+    controls: true,
+    progress: true,
+    center: false,
+    width: 1100,
+    height: 700,
+    margin: 0.06,
+  });
+</script>
+</body>
+</html>

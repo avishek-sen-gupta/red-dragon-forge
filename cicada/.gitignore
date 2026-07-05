@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+.env
+
+# uv
+uv.lock
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# type checkers
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# C++ build artefacts (HLASM fork)
+third-party/che-che4z-lsp-for-hlasm-fork/build/
+
+# session / tooling state
+.remember/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+.beads/
+.superpowers/
+
+# Claude Code local settings (machine-specific hooks drift in here)
+.claude/settings.json

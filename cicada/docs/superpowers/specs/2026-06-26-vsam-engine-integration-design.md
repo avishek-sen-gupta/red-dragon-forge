@@ -1,0 +1,190 @@
+# cicada VsamEngine → Shared Access-Method Engine Integration — Design
+
+**Status:** Designed (2026-06-26). Brainstormed. Awaiting user review.
+
+**Repos:** red-dragon (small engine prerequisite) + cicada (the bulk). cicada vendors
+red-dragon; it bumps the submodule to pick up the prerequisite.
+
+## What this builds (plain terms)
+cicada's CICS file control currently runs on its own bespoke `VsamEngine` — an in-memory
+`SortedDict` store with a pluggable persistence backend — which **duplicates** the KSDS logic
+of red-dragon's shared `IndexedDriver`. This integration makes CICS file control use the
+**shared access-method engine** instead, so the whole mainframe stack (jackal batch, cicada
+CICS) runs on **one** storage implementation. `VsamEngine` becomes a thin **CICS adapter**:
+its storage core delegates to the shared engine; its genuinely-CICS concerns (EIBRESP codes,
+FCT enable/disable, last-read-for-update, task-scoped browse) stay on top.
+
+## Driver (why now)
+The shared engine just shipped (red-dragon `red-dragon-mc6u`), with jackal batch already on it.
+cicada is the second consumer. Today the duplication is real: `VsamEngine` re-implements keyed
+CRUD + browse that `IndexedDriver` already does, and the two only agree by sharing the on-disk
+flat fixed-length-record format. Consolidating removes the duplicate and makes faithfulness a
+single-place concern.
+
+## Decisions locked in brainstorming
+- **Canonical access model: file-resident** (the shared engine's drivers). cicada **adopts** it;
+  its in-memory `SortedDict` model is **discarded**, not preserved behind the contract.
+- **Discard the persistence backends** (`InMemoryBackend` + `FileBackend` write-through). The
+  file-resident driver's **backing file IS the store** — there is no separate in-memory copy to
+  persist. Seeding writes backing files the driver opens (cicada's `seed_vsam` already does this,
+  in the same flat fixed-length format the drivers read).
+- **Migrate or discard the in-memory backend's tests as needed** (see Testing).
+- **RECFM: fixed-length only** (inherited from the engine; out of scope to change).
+
+## RESOLUTION ADDENDUM (2026-06-26 — both engine prerequisites now on red-dragon main)
+Both prerequisites are merged to red-dragon `main` (target submodule bump: **1932735a**):
+- `open_alternate_key_driver` (`bb8ef5ed`, epic `red-dragon-0wzv`) — read a flat dataset by a
+  key it isn't sorted by, via linear scan (read-only).
+- `read_prev()` on `FileOrganizationDriver` (`1932735a`) — backward browse for `READPREV`.
+
+Consequences that update the design below:
+1. **The in-memory discard now holds FULLY** — the earlier blocker (alternate-index reads,
+   CXACAIX) is gone, so NO in-memory fallback is kept. Discard the `SortedDict` store entirely.
+2. **Driver selection by `key_offset` (the consumer's alternate-key knowledge):**
+   - `key_offset == 0` → `open_driver(FileOrganization.INDEXED, …)` — base KSDS, binary search.
+   - `key_offset > 0` → `open_alternate_key_driver(…)` — alternate key, linear scan (read-only).
+   In cicada's CardDemo FCT this cleanly separates base clusters (ACCTDAT/CUSTDAT, key@0) from
+   the alternate index (CXACAIX, key@25). Linear scan is always correct regardless of sort, so
+   this routing is safe; binary search is reserved for the key@0 base clusters that ARE sorted.
+3. **Browse reversal is now driver-handled** — `read_prev`'s cursor convention makes the first
+   `READPREV` after a `READNEXT` re-read that record (CICS semantics) automatically. So the
+   adapter **drops cicada's `_cursor_dir` direction bookkeeping** — STARTBR opens+positions a
+   driver instance, READNEXT→`read_seq`, READPREV→`read_prev`, ENDBR→`close`. Simpler than today.
+4. **Seed ordering caveat (NEW risk):** the file-resident `IndexedDriver` binary search requires
+   the backing `.dat` **physically sorted by key@0**. The discarded `SortedDict` masked this (it
+   re-sorted on load). So `seed_vsam` must write **base-KSDS** records **key-sorted** (sort by
+   `record[0:key_length]` before `write_flat_file`). Alternate-key datasets need no sort (linear
+   scan). The CardDemo flows are the guard that base `.dat` ordering is correct.
+
+## The split: VsamEngine becomes a CICS adapter
+
+| Concern (current `VsamEngine`) | Disposition |
+|---|---|
+| Record CRUD: `read`/`write`/`rewrite`/`delete` | → delegate to shared engine drivers (`read_key`/`write`/`rewrite`/`delete`) |
+| Browse: `startbr`/`readnext`/`readprev`/`endbr` | → driver-instance-per-cursor (see below) |
+| In-memory `SortedDict` store (`ds.store`) + `_persist`/`flush_to` | → **deleted** (backing file is the store) |
+| `InMemoryBackend` / `FileBackend` (`backend.py`) | → **deleted** |
+| EIBRESP codes (`RESP_NORMAL` … `RESP_IOERR`) | → adapter: map neutral `AccessCondition` → EIBRESP |
+| FCT / enable-disable state, `_held_key` (keyless REWRITE/DELETE), task-scoped cursors | → **stay** in the adapter (never storage) |
+
+The adapter's **public method signatures are unchanged** (`read`/`write`/`rewrite`/`delete`/
+`startbr`/`readnext`/`readprev`/`endbr`/`load_all`/`dataset_count`, all returning EIBRESP ints) —
+the EXEC CICS builtins that call them are untouched. Only the internals change.
+
+## The browse model (the clean part)
+Each CICS browse cursor `(task_id, file_name, cursor_id)` becomes **its own open driver
+instance**, positioned by `start(key, ">=")` at STARTBR:
+- `STARTBR(key)` → `open_driver(...)`, `start(key, ">=")` → maps neutral condition → EIBRESP.
+- `READNEXT` → `read_seq()` (forward).
+- `READPREV` → `read_prev()` (backward — the engine prerequisite below).
+- `ENDBR` → `close()` and drop the instance.
+
+The driver's internal cursor *is* the browse position; task-scoping falls out for free (one
+instance per cursor). This replaces cicada's external between-records index + direction-reversal
+bookkeeping — the file-resident cursor + `read_prev` provide the equivalent semantics directly.
+
+## Prerequisite (red-dragon, small, behavior-additive)
+The file-resident drivers have **no backward read** today — `IndexedDriver` has forward
+`read_seq` (cursor `+= record_length`) and `start` positioning only. CICS `READPREV` needs
+backward iteration. So, **first**, add `read_prev()` to the `FileOrganizationDriver` Protocol and
+the drivers:
+- Mirror of `read_seq`: move the cursor **back** one record (`cursor -= record_length`),
+  bounds-checked; return the record at the new position, or `END_OF_FILE` at beginning-of-file.
+- Forward I/O is **untouched** → behavior-additive; red-dragon's full suite stays green. Merged
+  to red-dragon main and bumped into cicada before the cicada work.
+
+## EIBRESP mapping (cicada adapter owns this table)
+Neutral `AccessCondition` → EIBRESP, for the conditions the storage layer produces:
+- `OK` → `RESP_NORMAL` (0)
+- `END_OF_FILE` → `RESP_ENDFILE` (20)
+- `NOT_FOUND` → `RESP_NOTFND` (13)
+- `DUPLICATE_KEY` → `RESP_DUPREC` (14)
+
+The remaining neutral conditions (`FILE_NOT_FOUND`, `NOT_OPEN`, `WRITE_NOT_PERMITTED`) are
+**file-state** concerns the adapter owns via FCT/enable-disable — **decision A** (chosen over a
+blind driver→EIBRESP translation): in CICS the program never opens/closes files, so file-state is
+an FCT/adapter concept, not a storage one. Concretely:
+- The adapter **gates on FCT state BEFORE calling the driver** — a disabled/undefined/read-only
+  file returns the CICS resp (`RESP_DISABLED`, etc.) from the adapter's own FCT check, without a
+  storage op.
+- By the time the adapter calls a driver, the file is known-good (defined, enabled, opened in the
+  right mode by the adapter itself). So `FILE_NOT_FOUND`/`NOT_OPEN`/`WRITE_NOT_PERMITTED` from a
+  driver indicate an **internal invariant violation** (e.g. backing file missing despite an enabled
+  FCT entry), NOT a normal CICS condition — map them to `RESP_IOERR` (17) / fail loud, never to a
+  plausible-but-wrong program-visible resp (`NOTOPEN`/`INVREQ`).
+The mapping must be **exhaustive** (every neutral condition handled; fail loud on an unmapped one).
+Rationale: mapping a driver's internal-lifecycle state to a real CICS condition would mislabel an
+adapter bug as a condition the program would mishandle; keeping file-state in the FCT matches how
+CICS actually works.
+
+## Seeding (replaces in-memory load)
+`load_all` currently loads records into the in-memory store via the backend. After the change,
+seeding = ensuring each configured dataset has a **backing file** the driver opens:
+- cicada's existing `seed_vsam(fct, data_dir, vsam_dir)` already writes flat fixed-length `.dat`
+  files from the EBCDIC seed — that format is exactly what the file-resident driver reads.
+- `load_all` becomes "materialize backing files for configured datasets" (or a no-op if the
+  region is wired to seed up front); `dataset_count` reflects configured/seeded datasets.
+- `flush_to` is **removed** — there is no in-memory state to flush; the backing file is current.
+
+## Components
+1. **red-dragon `interpreter/cobol/file_drivers.py`** — add `read_prev()` to the Protocol + the
+   drivers (KSDS at minimum; the others mirror it for contract completeness).
+2. **cicada `cics/vsam/engine.py`** — rewrite `VsamEngine` as the CICS adapter over `open_driver`:
+   per-call drivers for CRUD, per-cursor driver instances for browse, EIBRESP mapping, `_held_key`
+   + FCT preserved; delete `ds.store`/`_persist`/`flush_to`.
+3. **cicada `cics/vsam/backend.py`** — **deleted** (`InMemoryBackend`/`FileBackend`/`VsamBackend`).
+4. **cicada `cics/vsam/seed.py`** — keep `seed_vsam` (backing-file writer); drop `load_vsam_seed`
+   (the InMemoryBackend dict path) and its `_read_seed` half if unused.
+5. **cicada construction site(s)** — wherever `VsamEngine(config, backend=…)` is built, drop the
+   backend arg; wire the workdir/vsam_dir the drivers open from.
+
+## Error handling
+- Fail loud on an unmapped neutral condition (the EIBRESP table is exhaustive and explicit).
+- No `None` defaults; frozen where applicable; FP core / imperative shell; no regex.
+- A genuinely missing/corrupt backing file surfaces as a real condition (the adapter maps to the
+  appropriate CICS resp), not a silent empty read.
+
+## Testing (TDD; behavior-preservation is the gate)
+- **The guard:** cicada's durable CardDemo CICS integration flows must stay green — `test_carddemo_
+  signon_real`, `test_carddemo_account_update`, `test_carddemo_bill_pay`, `test_carddemo_card_list`,
+  `test_carddemo_tran_view`, `test_carddemo_user_add`, `test_zbank_conversational`. These exercise
+  real READ/REWRITE/WRITE/browse through the CICS surface — they are the proof the storage swap
+  changed no CICS-visible behavior.
+- **`tests/unit/cics/test_vsam_engine.py`** — **migrate** to assert the adapter's CICS behavior
+  (read/write/rewrite/delete/browse + EIBRESP) over the file-resident store, not the in-memory
+  internals. Keep the behavioral assertions (correct records, correct EIBRESP, browse order incl.
+  READPREV + READNEXT→READPREV reversal); drop assertions on `ds.store`/`SortedDict`/backend internals.
+- **`tests/unit/cics/test_vsam_backend.py`** — **discard** (the backends it tests are deleted).
+  Migrate any still-meaningful assertion (e.g. seed round-trip through `seed_vsam`) into a seed test
+  if not already covered elsewhere.
+- **`tests/unit/cics/test_vsam_builtins.py`** — EXEC CICS verb level; expected to stay green
+  unchanged (public adapter contract preserved). Run as a guard; do not rewrite.
+- **red-dragon:** unit test `read_prev` (backward scan returns records in reverse; `END_OF_FILE` at
+  BOF; forward `read_seq` unaffected); full red-dragon suite green (behavior-additive).
+
+## Constraints
+- **Behavior-preserving at the CICS surface:** EIBRESP codes and record results returned to EXEC
+  CICS callers are unchanged; cicada's CICS suite is the gate.
+- FP / frozen where applicable; no `None` defaults; no defensive guards (fail loud); no regex.
+- red-dragon stays language-agnostic (the engine knows records + conditions, never "EIBRESP"/"FCT").
+- Cross-repo order: red-dragon `read_prev` merged + bumped first, then cicada.
+
+## Risks
+- **Deleting the in-memory store is a real behavioral swap.** In-transaction visibility is
+  preserved (file-resident writes are immediately visible, same as the old write-through), but only
+  cicada's CICS suite can vouch for the full semantics — run it as the gate, and treat any CardDemo
+  flow regression as a storage-swap bug (systematic-debugging), not a test to weaken.
+- **Browse reversal semantics.** The READNEXT→READPREV reversal cicada handles via an external
+  direction flag must be reproduced by the `read_prev` cursor semantics. The `read_prev` spec + a
+  focused reversal test pin this; the CardDemo browse flows (card list, tran view) are the e2e witness.
+- **Multiple concurrent browse cursors** on one file now mean multiple open driver instances on the
+  same backing file (read-only positioning). Confirm the driver permits concurrent read opens (it
+  opens `rb`/`r+b`); no cross-cursor interference since each instance owns its cursor.
+- **Per-call driver opens** for CRUD (open→op→close per read/write) is more file-open churn than the
+  in-memory store. Acceptable for fidelity/correctness; note it, optimize only if a flow is measurably slow.
+
+## Bookkeeping
+- This is the **cicada `VsamEngine` merge** follow-on under red-dragon epic `red-dragon-mc6u`
+  ("cicada VsamEngine merge + CICS adapter"). The `read_prev` prerequisite is a red-dragon change.
+- Deferred (unchanged): jackal catalog (`jackal-vxb`); ESDS/AIX/PDS drivers; observability/tracing;
+  fidelity hardening (DCB/LRECL, `jackal-1o2.12`/`jackal-ifq`).

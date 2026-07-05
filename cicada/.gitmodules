@@ -1,0 +1,12 @@
+[submodule "vendor/red-dragon"]
+	path = vendor/red-dragon
+	url = git@github.com:avishek-sen-gupta/red-dragon.git
+	branch = main
+[submodule "third-party/che-che4z-lsp-for-hlasm-fork"]
+	path = third-party/che-che4z-lsp-for-hlasm-fork
+	url = git@github.com:avishek-sen-gupta/che-che4z-lsp-for-hlasm.git
+	branch = krakatoa-1.22.1
+[submodule "third-party/carddemo"]
+	path = third-party/carddemo
+	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
+	branch = main
