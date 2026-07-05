@@ -23,7 +23,6 @@ import pytest
 from interpreter.cobol.cobol_frontend import CobolFrontend
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
-from interpreter.project.cobol_compile import compile_cobol as _rd_compile_cobol
 from interpreter.project.types import LinkedProgram
 from interpreter.project.entry_point import EntryPoint
 from interpreter.run import run_linked
@@ -80,36 +79,35 @@ def compile_cobol(
     *connections* is the connection registry (name → backend) the program's
     EXEC SQL CONNECT selects from at run time; a run starts disconnected.
 
-    The prepass is ALWAYS run with *copybook_dirs* (possibly empty): it rewrites
-    EXEC SQL INCLUDE → COPY (which ProLeap inlines from the squall copybooks dir
-    plus *copybook_dirs*) AND loads the INCLUDE'd records' dclgen JSON sidecars.
-    The resulting field_meta is ALWAYS passed into the SQL strategy — empty when
-    there are no sidecars; there is no implicit default. The strategy is wrapped
-    in the frontend's ``extension_strategies`` array (SQL alone here; the frontend
-    contract still supports composing more, e.g. CICS + SQL).
+    Builds one CoprocessorSpec around a private one-element holder that
+    threads the prepass's dclgen field_meta into the SQL strategy —
+    compile_program guarantees the prepass runs before make_strategy is
+    called — and delegates to RedDragon's shared compile_program
+    (interpreter.project.coprocessor_compile), the same composition
+    mechanism Cicada and red-dragon-forge use.
 
     Returns (frontend, linked) so that callers can access frontend.data_layout
     for assertions and pass the LinkedProgram to run_linked.
     """
-    dirs = copybook_dirs or []
-    prepass = apply_sql_prepass(source, dirs)
-    strategy = SqlLoweringStrategy(connections, prepass.field_meta)
-    parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
-    # The shared red-dragon Compile API builds the frontend (with the injected SQL
-    # strategy) + lowers + assembles the LinkedProgram. squall source is
-    # single-module (no CALLs) → no program_source_dir / source_transform needed.
-    #
-    # dialect_parsers=[SqlDialectParser()] is required now that RedDragon's
-    # _DISPATCH_TABLE no longer hardcodes "EXEC_SQL" -> ExecSqlStatement --
-    # every compile needs an explicit dialect parser to construct that node.
     from squall.statements import SqlDialectParser
+    from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
 
-    return _rd_compile_cobol(
-        prepass.source.encode("utf-8"),
-        parser=parser,
-        extension_strategies=[strategy],
-        dialect_parsers=[SqlDialectParser()],
+    dirs = copybook_dirs or []
+    parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
+    field_meta_holder: list = [{}]
+
+    def _prepass(src: str) -> str:
+        result = apply_sql_prepass(src, dirs)
+        field_meta_holder[0] = result.field_meta
+        return result.source
+
+    spec = CoprocessorSpec(
+        name="sql",
+        make_strategy=lambda: SqlLoweringStrategy(connections, field_meta_holder[0]),
+        source_prepass=_prepass,
+        dialect_parser=SqlDialectParser(),
     )
+    return compile_program(source.encode("utf-8"), parser, [spec])
 
 
 def run_cobol(
