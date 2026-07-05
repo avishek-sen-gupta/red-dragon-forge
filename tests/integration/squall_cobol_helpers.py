@@ -98,10 +98,17 @@ def compile_cobol(
     # The shared red-dragon Compile API builds the frontend (with the injected SQL
     # strategy) + lowers + assembles the LinkedProgram. squall source is
     # single-module (no CALLs) → no program_source_dir / source_transform needed.
+    #
+    # dialect_parsers=[SqlDialectParser()] is required now that RedDragon's
+    # _DISPATCH_TABLE no longer hardcodes "EXEC_SQL" -> ExecSqlStatement --
+    # every compile needs an explicit dialect parser to construct that node.
+    from squall.statements import SqlDialectParser
+
     return _rd_compile_cobol(
         prepass.source.encode("utf-8"),
         parser=parser,
         extension_strategies=[strategy],
+        dialect_parsers=[SqlDialectParser()],
     )
 
 
