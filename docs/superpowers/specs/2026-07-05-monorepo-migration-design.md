@@ -208,15 +208,44 @@ packages' equivalents.
 
 ### Architectural contracts
 
-A root-level `.importlinter` adds an `independence`-type contract over
-`{cics, squall, jackal}` — the same contract *type* RedDragon's own
-`.importlinter` already uses for `interpreter.frontends.*` mutual
-independence. This converts today's implicit, docstring-level convention
-("only `adapters/` may import `cics.*`/`squall.*`", the "no cross-sharing
-except through injection at the forge level" invariant this session relied
-on repeatedly) into something CI actively checks on every change, rather
-than something enforced only by the packages having been physically
-separate repos.
+A root-level `.importlinter` adds **one shared** `independence`-type
+contract over `{cics, squall, jackal}` — the same contract *type*
+RedDragon's own `.importlinter` already uses for `interpreter.frontends.*`
+mutual independence, and (deliberately) the same scope: source packages
+only, not their `tests/` directories. This converts today's implicit,
+docstring-level convention ("only `adapters/` may import
+`cics.*`/`squall.*`", the "no cross-sharing except through injection at the
+forge level" invariant this session relied on repeatedly) into something CI
+actively checks on every change, rather than something enforced only by the
+packages having been physically separate repos.
+
+```
+[importlinter]
+root_packages =
+    cics
+    squall
+    jackal
+
+[importlinter:contract:cicada-squall-jackal-independence]
+name = Cicada, Squall, and Jackal must not import each other
+type = independence
+modules =
+    cics
+    squall
+    jackal
+```
+
+**Test-directory coverage deferred, not dropped.** `cicada/tests/`,
+`squall/tests/`, `jackal/tests/` sit as *siblings* of their package's
+source directory today, not nested inside it — so `squall.tests.*` isn't a
+real dotted import path the way `squall.*` is, and can't join the same
+contract as-is without either per-package contracts (rejected — one shared
+contract is a hard requirement here) or physically relocating each `tests/`
+dir one level deeper into its own package (e.g. `squall/tests/` →
+`squall/squall/tests/`) so it becomes a true subpackage. That relocation is
+a real, if mechanical, one-time move (touches CI paths, coverage config,
+anything hardcoding `tests/`) and is out of scope for this migration.
+Tracked as a follow-up: `forge-don`.
 
 ### CI
 

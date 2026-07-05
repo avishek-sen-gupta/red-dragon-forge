@@ -28,5 +28,5 @@ fileignoreconfig:
 - filename: red_dragon_forge/compile.py
   checksum: 69c75a57da53919640c9d1cc1c3b654dd0790a2e3cc73b2f26529a08f4ef1e34
 - filename: docs/superpowers/specs/2026-07-05-monorepo-migration-design.md
-  checksum: 9a0bbb44feba1d4d4df0e451ca5a704bcfcd2df63a04df8eab21ac3a5bd0dd0b
+  checksum: b1f3a2abcb3182e4f28946142fd353d638aa4b52f0a7431b3d3c2dadc81b0cb3
 version: "1.0"
