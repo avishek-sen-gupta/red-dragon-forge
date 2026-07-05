@@ -1,0 +1,9 @@
+#!/bin/bash
+# NOTE: squall/.env's own vars are plain KEY=VALUE (no `export`), so a bare
+# `source` would only set shell-local variables invisible to the pytest
+# subprocess below (which reads PROLEAP_BRIDGE_JAR / DB2_* via os.environ).
+# `set -a` marks every variable sourced afterwards for export.
+set -a
+[ -f squall/.env ] && source squall/.env
+set +a
+cd squall && uv run --no-sync python -m pytest tests/unit -x -q

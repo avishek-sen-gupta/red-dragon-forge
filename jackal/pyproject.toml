@@ -37,8 +37,3 @@ markers = [
 target-version = ["py313"]
 # Never format the vendored red-dragon submodule — it owns its own formatting.
 extend-exclude = "/vendor/"
-
-[tool.pyright]
-# Type-check only jackal's own code, not the vendored submodule.
-include = ["jackal", "tests"]
-exclude = ["vendor", "**/__pycache__"]
