@@ -27,7 +27,6 @@ from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import run_carddemo_region
 from cics.dispatcher import InputEvent
-from cics.preprocessor import apply_cics_prepass
 from cics.types import DispatchKind
 from tests.integration.cics.channel_drain import drain
 from tests.covers import covers
@@ -97,8 +96,8 @@ def test_two_turn_region_real_execution(cobol_parser):
     input_q.put(InputEvent(eibaid="\x7d", fields={}))
 
     program_sources = {
-        "SGNPGM": apply_cics_prepass(SGNPGM_SRC).encode(),
-        "MENUPGM": apply_cics_prepass(MENUPGM_SRC).encode(),
+        "SGNPGM": SGNPGM_SRC.encode(),
+        "MENUPGM": MENUPGM_SRC.encode(),
     }
 
     result = run_carddemo_region(
@@ -154,7 +153,7 @@ def test_send_map_data_name_resolves_runtime_value(cobol_parser):
 
     result = run_carddemo_region(
         transid_to_program={"CC00": "DNPGM"},
-        program_sources={"DNPGM": apply_cics_prepass(DATANAME_PGM_SRC).encode()},
+        program_sources={"DNPGM": DATANAME_PGM_SRC.encode()},
         parser=cobol_parser,
         entry_transid="CC00",
         screen_queue=screen_q,
@@ -226,8 +225,8 @@ def test_return_transid_then_receive_map_both_see_the_same_event(cobol_parser):
     input_q.put(InputEvent(eibaid="\xf3", fields={"UNAME": "ALICE"}))
 
     program_sources = {
-        "ASKPGM": apply_cics_prepass(ASKPGM_SRC).encode(),
-        "RESUMEPGM": apply_cics_prepass(RESUMEPGM_SRC).encode(),
+        "ASKPGM": ASKPGM_SRC.encode(),
+        "RESUMEPGM": RESUMEPGM_SRC.encode(),
     }
 
     result = run_carddemo_region(
@@ -289,7 +288,7 @@ def test_writeq_td_writes_back_resp(cobol_parser):
 
     result = run_carddemo_region(
         transid_to_program={"CC00": "TDRESPGM"},
-        program_sources={"TDRESPGM": apply_cics_prepass(TDRESPGM_SRC).encode()},
+        program_sources={"TDRESPGM": TDRESPGM_SRC.encode()},
         parser=cobol_parser,
         entry_transid="CC00",
         screen_queue=screen_q,

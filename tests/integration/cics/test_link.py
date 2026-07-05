@@ -18,9 +18,8 @@ from pathlib import Path
 import pytest
 
 from cics.bootstrap import compile_cics_program
+from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent
-from cics.preprocessor import apply_cics_prepass
-from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
@@ -86,7 +85,7 @@ def test_link_commarea_written_back(cobol_parser):
     # program_cache is built first so the strategy can close over it.
     program_cache: dict = {}
 
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         screen_queue=screen_q,
@@ -94,12 +93,8 @@ def test_link_commarea_written_back(cobol_parser):
         program_cache=program_cache,
     )
 
-    mutator = compile_cics_program(
-        apply_cics_prepass(_MUTATOR_SRC).encode(), cobol_parser, strategy
-    )
-    wrapper = compile_cics_program(
-        apply_cics_prepass(_WRAPPER_SRC).encode(), cobol_parser, strategy
-    )
+    mutator = compile_cics_program(_MUTATOR_SRC.encode(), cobol_parser, spec)
+    wrapper = compile_cics_program(_WRAPPER_SRC.encode(), cobol_parser, spec)
 
     program_cache["MUTATOR"] = mutator
     program_cache["WRAPPER"] = wrapper

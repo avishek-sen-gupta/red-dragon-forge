@@ -19,8 +19,7 @@ from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import compile_cics_program
-from cics.preprocessor import apply_cics_prepass
-from cics.strategy import CicsLoweringStrategy
+from cics.coprocessor import build_cics_spec
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
 from tests.covers import covers
@@ -80,12 +79,8 @@ def _run(source: str, parser) -> "object":
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
-        context_holder=context_holder, result_holder=result_holder
-    )
-    program = compile_cics_program(
-        apply_cics_prepass(source).encode(), parser, strategy
-    )
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(source.encode(), parser, spec)
     return run_cics(
         program,
         context_holder[0],

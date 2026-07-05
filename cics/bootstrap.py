@@ -10,11 +10,10 @@ COBOL program sources:
      ``program_cache`` keyed by program name (fail-fast on a missing source),
   4. run the dispatcher loop at the entry transid.
 
-Source contract: ``program_sources`` values are **pre-passed** COBOL bytes — the
-caller is responsible for running :func:`apply_cics_prepass` (and ``.encode()``)
-before handing sources here. ``compile_cics_program`` likewise assumes its
-``source`` argument is already pre-passed. This keeps a single, explicit prepass
-step at the boundary and avoids double-prepassing.
+Source contract: ``program_sources`` values are **raw (NOT pre-passed)** COBOL
+bytes — ``compile_cics_program`` prepasses via the spec's own
+``source_prepass=apply_cics_prepass`` now. Do NOT pre-pass sources by hand
+before handing them here, or they will be prepassed twice.
 
 Heavy frontend/CFG/project imports are kept lazy inside the functions so this
 module stays cheap to import and side-steps any import-linter coupling concerns.
@@ -25,10 +24,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
+from cics.coprocessor import build_cics_spec
 from cics.dispatcher import _run_dispatcher_with_runner, parse_csd, run_cics
 from cics.le_stubs import LE_STUBS_DIR
-from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchResult
+
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 
 if TYPE_CHECKING:
     from cics.terminal import InputChannel, ScreenChannel
@@ -37,37 +38,22 @@ if TYPE_CHECKING:
 def compile_cics_program(
     source: bytes,
     parser: Any,
-    strategy: Any,
+    spec: CoprocessorSpec,
     *,
     program_source_dirs: Sequence[Path] = (),
 ) -> Any:
-    """Pre-passed CICS COBOL ``source`` -> ``LinkedProgram`` with ``strategy`` injected.
+    """Raw (NOT pre-passed) CICS COBOL ``source`` -> ``LinkedProgram`` with
+    ``spec`` composed.
 
-    ``source`` must already have been run through ``apply_cics_prepass`` (and
-    encoded to bytes). Returns a :class:`LinkedProgram` ready for ``run_cics``.
-
-    Builds one CoprocessorSpec around ``strategy`` and delegates to RedDragon's
-    shared compile_program (interpreter.project.coprocessor_compile) — the
-    same composition mechanism red-dragon-forge and Squall use. IBM Language
-    Environment callable services (e.g. CEEDAYS, which have no CardDemo
-    application source) resolve because LE_STUBS_DIR is always appended to
-    the search path via the spec's extra_program_source_dirs, so callers
-    never need to know these stubs exist.
+    ``spec`` (typically built by ``cics.coprocessor.build_cics_spec``) owns
+    prepassing via its own ``source_prepass=apply_cics_prepass`` -- do NOT
+    pre-pass ``source`` by hand before calling this function, or it will be
+    prepassed twice.
     """
-    from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
-    from cics.statements import CicsDialectParser
+    from interpreter.project.coprocessor_compile import compile_program
 
-    spec = CoprocessorSpec(
-        name="cics",
-        make_strategy=lambda: strategy,
-        dialect_parser=CicsDialectParser(),
-        extra_program_source_dirs=lambda: (LE_STUBS_DIR,),
-    )
     _frontend, linked = compile_program(
-        source,  # already CICS-prepassed by the caller
-        parser,
-        [spec],
-        program_source_dirs=program_source_dirs,
+        source, parser, [spec], program_source_dirs=program_source_dirs
     )
     return linked
 
@@ -92,8 +78,9 @@ def run_carddemo_region(
     Exactly one of ``transid_to_program`` or ``csd_path`` must be supplied:
     ``csd_path`` is parsed via :func:`parse_csd` into the transid→program mapping.
 
-    ``program_sources`` maps each program name to its **pre-passed** COBOL source
-    bytes. Every distinct program named in the mapping is compiled eagerly with a
+    ``program_sources`` maps each program name to its **raw (NOT pre-passed)**
+    COBOL source bytes -- ``compile_cics_program`` prepasses via the spec now.
+    Every distinct program named in the mapping is compiled eagerly with a
     single shared :class:`CicsLoweringStrategy`; a missing source raises a clear
     error before the dispatcher loop starts (fail-fast).
 
@@ -113,7 +100,7 @@ def run_carddemo_region(
     context_holder: list[CicsContext] = [None]  # type: ignore[list-item]
     result_holder: list = [None]
 
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=vsam_engine,
@@ -136,7 +123,7 @@ def run_carddemo_region(
         program_cache[prog_name] = compile_cics_program(
             source,
             parser,
-            strategy,
+            spec,
             program_source_dirs=program_source_dirs,
         )
 

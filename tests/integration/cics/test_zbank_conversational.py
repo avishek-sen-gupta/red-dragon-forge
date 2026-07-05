@@ -23,9 +23,8 @@ import pytest
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.conversational import ConversationalRegion
+from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent
-from cics.preprocessor import apply_cics_prepass
-from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
@@ -111,7 +110,7 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -120,9 +119,7 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
         receive_timeout=receive_timeout,
     )
 
-    prog = compile_cics_program(
-        apply_cics_prepass(prog_path.read_text()).encode(), parser, strategy
-    )
+    prog = compile_cics_program(prog_path.read_bytes(), parser, spec)
     region = CicsRegion(
         {"ZBANK": prog},
         {"ZBNK": "ZBANK"},
@@ -157,7 +154,7 @@ def _build_conversational(tmp_path: Path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -166,9 +163,9 @@ def _build_conversational(tmp_path: Path, bridge_jar):
         conversational=True,
     )
     prog = compile_cics_program(
-        apply_cics_prepass((_FIXTURES / "ZBANK.cbl").read_text()).encode(),
+        (_FIXTURES / "ZBANK.cbl").read_bytes(),
         parser,
-        strategy,
+        spec,
     )
     region = ConversationalRegion(
         prog,
