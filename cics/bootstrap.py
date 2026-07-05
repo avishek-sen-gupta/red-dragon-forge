@@ -4,7 +4,8 @@ Assembles a running CICS region from a CSD transid→program mapping and a set o
 COBOL program sources:
 
   1. (optionally) parse a CSD file into ``transid_to_program``,
-  2. construct ONE shared :class:`CicsLoweringStrategy` over the region's runtime
+  2. construct ONE shared CICS :class:`~interpreter.project.coprocessor_compile.CoprocessorSpec`
+     (via :func:`cics.coprocessor.build_cics_spec`) over the region's runtime
      state (VSAM engine, BMS loader, screen/input queues, context/result holders),
   3. eagerly compile every distinct program named in the CSD into a
      ``program_cache`` keyed by program name (fail-fast on a missing source),
