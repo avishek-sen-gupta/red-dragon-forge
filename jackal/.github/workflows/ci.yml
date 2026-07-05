@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      PROLEAP_BRIDGE_JAR: ${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+      JCL_BRIDGE_JAR: ${{ github.workspace }}/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
+      # CardDemo is the vendor/carddemo submodule (recursive checkout pulls it);
+      # the Makefile defaults CARDDEMO_HOME there, so the gated e2e tests run.
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive  # vendor/red-dragon (+ nested) and vendor/carddemo
+
+      - name: Set up JDK 17 (ProLeap + JCL bridge builds)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Python deps
+        run: uv sync
+
+      - name: Build the bridge JARs (ProLeap + JCL)
+        run: make jar
+
+      - name: Run the full test suite (incl. CardDemo e2e via the submodule)
+        run: make test

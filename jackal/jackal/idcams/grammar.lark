@@ -1,0 +1,62 @@
+// IDCAMS control-language grammar
+// Continuation: a trailing "-" before newline joins lines (stripped via %ignore)
+
+start: command+
+
+command: delete_cmd
+       | define_cmd
+       | repro_cmd
+       | if_cmd
+
+// DELETE dsname -\n CLUSTER
+delete_cmd: "DELETE" DSNAME "CLUSTER"
+
+// DEFINE CLUSTER ( params ) trailers
+define_cmd: "DEFINE" "CLUSTER" "(" _param+ ")" _trailer*
+
+_param: name_param
+      | keys_param
+      | recordsize_param
+      | _ignored_param
+
+name_param:       "NAME" "(" DSNAME ")"
+keys_param:       "KEYS" "(" INT INT ")"
+recordsize_param: "RECORDSIZE" "(" INT INT ")"
+
+// Consume unmodelled keywords with optional parenthesised argument
+// INNER_TEXT is one-or-more non-paren chars; used when arg has no nested parens
+_ignored_param: IDCAMS_WORD ("(" INNER_TEXT ")")?
+
+// REPRO INFILE(dd) OUTFILE(dd)
+repro_cmd: "REPRO" "INFILE" "(" NAME ")" "OUTFILE" "(" NAME ")"
+
+// IF MAXCC op value THEN SET MAXCC = set_value
+if_cmd: "IF" "MAXCC" OP INT "THEN" "SET" "MAXCC" "=" INT
+
+// Trailers: DATA (NAME(dsn)) and INDEX (NAME(dsn))
+// Expanded explicitly: outer paren wraps keyword(dsn) call
+_trailer: _data_trailer | _index_trailer
+_data_trailer:  "DATA"  "(" "NAME" "(" DSNAME ")" ")"
+_index_trailer: "INDEX" "(" "NAME" "(" DSNAME ")" ")"
+
+// One-or-more non-paren characters (content inside simple parentheses)
+INNER_TEXT: /[^)]+/
+
+OP:        "LE" | "LT" | "GE" | "GT" | "EQ" | "NE"
+
+// A dataset-qualified name: one or more NAME segments separated by dots
+DSNAME:    /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
+
+// Simple (unqualified) name: used for DD names
+NAME:      /[A-Z#@$][A-Z0-9#@$]*/
+
+// Positive integer
+INT:       /[0-9]+/
+
+// Keywords that appear as unmodelled DEFINE parameters (INDEXED, CYLINDERS, etc.)
+// Must not match reserved words handled by literal rules above.
+IDCAMS_WORD: /[A-Z][A-Z0-9]*/
+
+// Strip whitespace, newlines, and continuation dashes
+%ignore /[ \t\r\n]+/
+%ignore /-[ \t]*(?=\r?\n)/
