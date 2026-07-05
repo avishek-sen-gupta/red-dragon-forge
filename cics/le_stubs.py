@@ -170,9 +170,8 @@ CEEDAYS_STUB_SOURCE = """\
 def le_service_stub_sources() -> dict[str, bytes]:
     """Pre-passed LE-service stub sources, keyed by program name.
 
-    Suitable to pass as ``extra_subprogram_sources`` to
-    :func:`cics.bootstrap.compile_cics_program` /
-    :func:`run_carddemo_region` so CALLs to these LE services resolve.
+    Always contributed by :func:`cics.bootstrap.compile_cics_program` as
+    extra subprogram sources so CALLs to these LE services resolve.
     """
     from cics.preprocessor import apply_cics_prepass
 

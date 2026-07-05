@@ -157,14 +157,14 @@ def _drive_to_reports(tmp_path: Path, bridge_jar):
         apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
     )
     # CORPT00C CALLs 'CSUTLDTC' to validate the start/end dates; CSUTLDTC in turn
-    # CALLs the LE service "CEEDAYS" (no COBOL source). Resolve CSUTLDTC from the
-    # app's cbl dir and supply the CEEDAYS stub.
+    # CALLs the LE service "CEEDAYS" (no COBOL source, but compile_cics_program
+    # always contributes the LE-service stubs). Resolve CSUTLDTC from the app's
+    # cbl dir.
     reports = compile_cics_program(
         apply_cics_prepass(reports_path.read_text()).encode(),
         parser,
         strategy,
         program_source_dir=app / "cbl",
-        extra_subprogram_sources=le_service_stub_sources(),
     )
 
     program_cache = {"COSGN00C": signon, "COMEN01C": menu, "CORPT00C": reports}

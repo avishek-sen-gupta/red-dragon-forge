@@ -38,8 +38,7 @@ def compile_cics_program(
     parser: Any,
     strategy: Any,
     *,
-    program_source_dir: Path | None = None,
-    extra_subprogram_sources: dict[str, bytes] | None = None,
+    program_source_dir: Path = Path("."),
 ) -> Any:
     """Pre-passed CICS COBOL ``source`` -> ``LinkedProgram`` with ``strategy`` injected.
 
@@ -53,35 +52,23 @@ def compile_cics_program(
     (:func:`interpreter.project.linker.link_modules`) so the CALL resolves at
     runtime through ``CallWithMemory``'s singleton dispatch.
 
-    ``extra_subprogram_sources`` maps a *program name* to pre-passed source bytes
-    for callees that are not present on disk (e.g. a CEEDAYS stub standing in for
-    an IBM Language Environment callable service). They are linked like any other
-    subprogram. When there are no CALLs (and no extras), this reduces to the
-    original single-module compile.
+    IBM Language Environment callable services (e.g. CEEDAYS) are never on disk
+    as CardDemo application source — :func:`cics.le_stubs.le_service_stub_sources`
+    always contributes their stub sources here as subprogram links, so callers
+    never need to know these stubs exist.
     """
     from interpreter.project.cobol_compile import compile_cobol
     from cics.statements import CicsDialectParser
     from cics.preprocessor import apply_cics_prepass
-
-    # compile_cobol's program_source_dir/extra_subprogram_sources are no longer
-    # Optional (red-dragon cb40bd34, "no None default params" cleanup) — their
-    # non-None defaults (Path(".") / {}) are also the "no override" sentinels
-    # compile_cobol itself checks for, so translate this function's None
-    # ("caller didn't opt in") to those sentinels before forwarding.
-    _program_source_dir = (
-        program_source_dir if program_source_dir is not None else Path(".")
-    )
-    _extra_subprogram_sources = (
-        extra_subprogram_sources if extra_subprogram_sources is not None else {}
-    )
+    from cics.le_stubs import le_service_stub_sources
 
     _frontend, linked = compile_cobol(
         source,  # already CICS-prepassed by the caller
         parser=parser,
         extension_strategies=[strategy],
         dialect_parsers=[CicsDialectParser()],
-        program_source_dir=_program_source_dir,
-        extra_subprogram_sources=_extra_subprogram_sources,
+        program_source_dir=program_source_dir,
+        extra_subprogram_sources=le_service_stub_sources(),
         source_transform=apply_cics_prepass,
     )
     return linked
@@ -100,8 +87,7 @@ def run_carddemo_region(
     applid: str = "CARDDEMO",
     sysid: str = "SYS1",
     max_steps: int = 50_000,
-    program_source_dir: Path | None = None,
-    extra_subprogram_sources: dict[str, bytes] | None = None,
+    program_source_dir: Path = Path("."),
 ) -> DispatchResult:
     """Assemble and run a CICS region; return the terminal :class:`DispatchResult`.
 
@@ -113,9 +99,9 @@ def run_carddemo_region(
     single shared :class:`CicsLoweringStrategy`; a missing source raises a clear
     error before the dispatcher loop starts (fail-fast).
 
-    ``program_source_dir`` (the CardDemo ``cbl/`` dir) and
-    ``extra_subprogram_sources`` are threaded into :func:`compile_cics_program` so
-    each region program links the subprograms it ``CALL``s.
+    ``program_source_dir`` (the CardDemo ``cbl/`` dir) is threaded into
+    :func:`compile_cics_program` so each region program links the subprograms
+    it ``CALL``s.
     """
     if (transid_to_program is None) == (csd_path is None):
         raise ValueError(
@@ -154,7 +140,6 @@ def run_carddemo_region(
             parser,
             strategy,
             program_source_dir=program_source_dir,
-            extra_subprogram_sources=extra_subprogram_sources,
         )
 
     def run_fn(

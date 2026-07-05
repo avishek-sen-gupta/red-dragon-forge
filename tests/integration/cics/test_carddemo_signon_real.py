@@ -920,15 +920,15 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
         apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
     )
     # COTRN02C CALLs 'CSUTLDTC' to validate the Orig/Proc dates; CSUTLDTC in turn
-    # CALLs the LE service "CEEDAYS" (no COBOL source). Link CSUTLDTC (resolved
-    # from the CardDemo cbl/ dir) plus the CEEDAYS LE-service stub so the date
-    # validation completes and the ADD-TRANSACTION WRITE path runs.
+    # CALLs the LE service "CEEDAYS" (no COBOL source, but compile_cics_program
+    # always contributes the LE-service stubs). Resolve CSUTLDTC from the
+    # CardDemo cbl/ dir so the date validation completes and the
+    # ADD-TRANSACTION WRITE path runs.
     tranadd = compile_cics_program(
         apply_cics_prepass(tranadd_path.read_text()).encode(),
         parser,
         strategy,
         program_source_dir=app / "cbl",
-        extra_subprogram_sources=le_service_stub_sources(),
     )
 
     program_cache = {
