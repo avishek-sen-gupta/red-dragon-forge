@@ -35,4 +35,6 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: CLAUDE.md
   checksum: a2f21ef67ecfc14b9850c7de2d11c6ac487d78e41859c1d9b66666312e45dc9a
+- filename: squall/db2/dsn-env.sh
+  checksum: 2d7483163dcb8f46d67b45409dc4c5a082b08492e31e871020aa9bfff0df72fe
 version: "1.0"
