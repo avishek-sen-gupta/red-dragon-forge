@@ -21,8 +21,7 @@ def compile_program(
     parser: Any,
     specs: Sequence[CoprocessorSpec],
     *,
-    program_source_dir: Path = Path("."),
-    extra_subprogram_sources: dict[str, bytes] = {},
+    program_source_dirs: Sequence[Path] = (),
 ) -> tuple[Any, LinkedProgram]:
     """Compile ``source`` with every spec's prepass and strategy composed.
 
@@ -37,12 +36,16 @@ def compile_program(
 
     strategies = [spec.make_strategy() for spec in specs]
     dialect_parsers = [spec.dialect_parser for spec in specs]
+    all_program_source_dirs: tuple[Path, ...] = functools.reduce(
+        lambda dirs, spec: (*dirs, *spec.extra_program_source_dirs()),
+        specs,
+        tuple(program_source_dirs),
+    )
 
     return compile_cobol(
         text.encode("utf-8"),
         parser=parser,
         extension_strategies=strategies,
         dialect_parsers=dialect_parsers,
-        program_source_dir=program_source_dir,
-        extra_subprogram_sources=extra_subprogram_sources,
+        program_source_dirs=all_program_source_dirs,
     )
