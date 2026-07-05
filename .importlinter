@@ -1,0 +1,82 @@
+[importlinter]
+root_packages =
+    cics
+    squall
+    jackal
+
+[importlinter:contract:cicada-squall-jackal-independence]
+name = Cicada, Squall, and Jackal must not import each other
+type = independence
+modules =
+    cics
+    squall
+    jackal
+
+[importlinter:contract:vsam-bms-independence]
+name = VSAM and BMS subsystems must not import each other
+type = independence
+modules =
+    cics.vsam
+    cics.bms
+
+[importlinter:contract:builtins-no-dispatcher]
+name = Builtins must not import the dispatcher (avoid circular dependency)
+type = forbidden
+source_modules =
+    cics.builtins
+forbidden_modules =
+    cics.dispatcher
+
+[importlinter:contract:parser-backends-independence]
+name = SQL parser and DB backends must not import each other
+type = independence
+modules =
+    squall.parser
+    squall.backends
+
+[importlinter:contract:vocabulary-leaves]
+name = backend and parser.sql_model are leaf vocabulary — must not import other squall modules
+type = forbidden
+source_modules =
+    squall.backend
+    squall.parser.sql_model
+forbidden_modules =
+    squall.binding
+    squall.builtins
+    squall.backends
+    squall.parser.parse
+    squall.preprocess
+    squall.strategy
+    squall.dclgen
+
+[importlinter:contract:layered-architecture]
+name = Layers: orchestration -> execution -> catalog -> model
+type = layers
+layers =
+    jackal.cli
+    jackal.runner
+    jackal.cobol_step : jackal.utilities
+    jackal.catalog
+    jackal.model
+
+[importlinter:contract:jcl-idcams-independence]
+name = JCL parser and IDCAMS subsystems must not import each other
+type = independence
+modules =
+    jackal.jcl
+    jackal.idcams
+
+[importlinter:contract:model-results-are-leaves]
+name = model and results are leaf vocabulary — must not import other jackal modules
+type = forbidden
+source_modules =
+    jackal.model
+    jackal.results
+forbidden_modules =
+    jackal.catalog
+    jackal.runner
+    jackal.cli
+    jackal.cobol_step
+    jackal.utilities
+    jackal.idcams
+    jackal.jcl
