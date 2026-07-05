@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from cics.le_stubs import LE_STUBS_DIR
 from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
 from cics.strategy import CicsLoweringStrategy
@@ -49,4 +50,5 @@ def build_cics_spec(
         source_prepass=apply_cics_prepass,
         owns_execution=True,
         dialect_parser=CicsDialectParser(),
+        extra_program_source_dirs=lambda: (LE_STUBS_DIR,),
     )

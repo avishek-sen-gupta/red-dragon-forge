@@ -8,7 +8,8 @@ adapters/ package is allowed to know which coprocessors exist by name.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Sequence
 
 from interpreter.frontend_extension import (
     DialectParser,
@@ -19,6 +20,10 @@ from interpreter.frontend_extension import (
 
 def _identity(source: str) -> str:
     return source
+
+
+def _no_extra_program_source_dirs() -> Sequence[Path]:
+    return ()
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,15 @@ class CoprocessorSpec:
     array through without this module knowing what any dialect parser does —
     every adapter sets one (a real one, or the NullDialectParser default);
     compile_program collects them all unconditionally.
+
+    ``extra_program_source_dirs`` threads RedDragon's
+    ``compile_cobol(program_source_dirs=[...])`` search path through the same
+    way — a coprocessor whose CALLed subprograms are never on disk under the
+    caller's own directory (e.g. Cicada's IBM Language Environment stubs such
+    as CEEDAYS, which live in cics.le_stubs.LE_STUBS_DIR) sets this to
+    contribute that directory, without this module knowing what's in it or
+    what any of it is for. compile_program appends every spec's contribution,
+    in order, after the caller's own program_source_dirs.
     """
 
     name: str
@@ -54,3 +68,6 @@ class CoprocessorSpec:
     source_prepass: Callable[[str], str] = _identity
     owns_execution: bool = False
     dialect_parser: DialectParser = NullDialectParser()
+    extra_program_source_dirs: Callable[[], Sequence[Path]] = (
+        _no_extra_program_source_dirs
+    )
