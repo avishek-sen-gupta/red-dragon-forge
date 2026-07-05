@@ -1,0 +1,44 @@
+[project]
+name = "jackal"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["lark>=1.1", "red-dragon"]
+
+[tool.uv.sources]
+red-dragon = { path = "vendor/red-dragon", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "pre-commit>=4.6.0",
+    "pyright>=1.1.410",
+    "pytest>=9.1.1",
+    "import-linter>=2.0",
+    "grimp>=3.0",
+]
+
+[project.scripts]
+jackal = "jackal.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jackal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "carddemo_e2e: real CardDemo end-to-end; skipped without CARDDEMO_HOME",
+]
+
+[tool.black]
+target-version = ["py313"]
+# Never format the vendored red-dragon submodule — it owns its own formatting.
+extend-exclude = "/vendor/"
+
+[tool.pyright]
+# Type-check only jackal's own code, not the vendored submodule.
+include = ["jackal", "tests"]
+exclude = ["vendor", "**/__pycache__"]

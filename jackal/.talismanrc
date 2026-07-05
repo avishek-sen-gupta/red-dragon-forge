@@ -1,0 +1,114 @@
+fileignoreconfig:
+- filename: .claude/core/tools-search.md
+  checksum: fb84bd80e321d897ceb100c0c9ec9e053440d7e884d88625a9628af5254c3579
+- filename: .claude/core/implementation.md
+  checksum: a930a0d820dd1d96b08f2b1c22e67336050ee25bb4aab4dedd5054c21cabc548
+- filename: .claude/conditional/design-principles.md
+  checksum: 585eb401d22b9373b8f7a96224d167275ede9f2b9edc8ffc37de9619c7bbf945
+- filename: .claude/core/workflow.md
+  checksum: b4d8e3938058251d7b684444e70e9f16ab23d23740e6015725f8e132098402f7
+- filename: docs/superpowers/specs/2026-06-20-jackal-jcl-runner-design.md
+  checksum: 57d4fefc5dfe7ea1e0f4ee52a7e8587494be70f780d2b9d8cf83466526f58194
+- filename: docs/superpowers/plans/2026-06-20-jackal-jcl-runner.md
+  checksum: 7e0eb13509817594a95cfe3878f6298dc215b7324197ea6ae040f9294b4d1fe2
+- filename: vendor/red-dragon
+  checksum: b80923f12eedd10f702a3e0e22d1dc86bf9e7c42423065509a96e3c1df5b1703
+- filename: uv.lock
+  # Generated lockfile of package hashes — content changes on every dependency
+  # update, so a checksum entry is self-defeating. Ignore content detection
+  # outright rather than churn this file. (Deviates from talismanrc append-only
+  # for this generated-file case.)
+  ignore_detectors: [filecontent]
+- filename: beads/issues.jsonl
+  # Generated snapshot of the Beads issue graph (scripts/export-issues.sh).
+  # Regenerated on every issue change, so a checksum is self-defeating; ignore
+  # content detection like uv.lock.
+  ignore_detectors: [filecontent]
+- filename: jackal/jcl/grammar.lark
+  checksum: 6ea06a646bb40d9ad69cf177a69c98820eb8129dc1871fd9b18ea8e6e22ff9b3
+- filename: tests/integration/test_pipeline.py
+  checksum: dfe16cc2fc75abc709454a41d87e51a20f8c7ea069e467a7ae620a1743b1007e
+- filename: docs/superpowers/specs/2026-06-21-jackal-v2-idcams-design.md
+  checksum: 933bba02fd79bc439e923c3c5af833725f7f516acd85307d1a9da8efdbbe4175
+- filename: docs/superpowers/plans/2026-06-21-jackal-v2-idcams.md
+  checksum: 5e7a0cbe33df9058b3b226275a1a887e8a7ef54de38ab46bd623e31f77b3af33
+- filename: tests/unit/test_catalog.py
+  checksum: c9b6b11907b50f1d8d7f57a82b0235861f324b15783cf71c9bec02fe4a293408
+- filename: jackal/catalog.py
+  checksum: 60422de20bedfa2f4e73a2c6e02acf55903ee62bcc597b7d7b74635a425c5e13
+- filename: tests/unit/test_idcams_parser.py
+  checksum: a8762987e12835a1e85e2a187bb50d57affa15e0010e5ee9d88e15700f0db4b2
+- filename: jackal/idcams/grammar.lark
+  checksum: 10d0ddcea43ddf2066826da26f3ea0b5242cc2e1e653b247b68feec67e122c4a
+- filename: jackal/idcams/parser.py
+  checksum: 844d6729b4cf3414d695b1213295745cab45d84ef42b0c4e8f157159180630f7
+- filename: jackal/idcams/executor.py
+  checksum: a37428ebf724487f2911cce7249eb735daa7480242024897c36c7e3a5653b19f
+- filename: tests/unit/test_idcams_executor.py
+  checksum: 87b130ab18ee067b17d6303b1c9a1664625478a432658e98cd7037ba1481edcf
+- filename: docs/superpowers/plans/2026-06-21-jcl-antlr-bridge.md
+  checksum: 970f38312dd6b662775f5739458329cf5c8724c7e3c022c8c62447d7c92ace1d
+- filename: jcl-bridge/PROVENANCE.md
+  checksum: 35ab90ef4c989b8d174dccfe48732b8f9ed37b5fbee35dac1e9fe6c8d7a4edbb
+- filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
+  checksum: 85064026d09bffa199e853ef000ccf0ec79f76b00c260373dbaf2c39a0046ab2
+- filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
+  checksum: 916c994491359608b618290fdb8cd53cc63bbfda5c0c89fd1dc6c1ac16326ee9
+- filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
+  checksum: 12f9097ab708452fdd082b061d100b0b01dae2706e9139b4bd4c74fa9a08c934
+- filename: tests/unit/test_jcl_bridge_deserialize.py
+  checksum: 45915f94444bde7b2a3b8bb5660d5a129157018af1546e0cee43a3f4ea0e61d9
+- filename: jackal/jcl/bridge_parser.py
+  checksum: ea85b50d8bf7f1e68417f6f8652d1872d83b252d59e2766fde9e62f96c4e7d1d
+- filename: tests/unit/test_cli.py
+  checksum: e4e940c7334a4d40589b62e780ba5035efa4017f3c38971b55df04485085b731
+- filename: beads/README.md
+  checksum: b0852b2711990fe8276d50cc7956860af7416debc7323e68b438d5200c6878b1
+- filename: scripts/export-issues.sh
+  checksum: 65abf73c86ee34205e9b3fd695d0fbc6d250f0ccc84d924be53f3ba59b04ab2f
+- filename: jackal/results.py
+  checksum: 5f3dd230202365ca5bfddd1ec45af2c53712816895c9548561b44ec82f1d3fdc
+- filename: jackal/cond.py
+  checksum: cdf9772cc1a49aabb7e5d095d8e3bd5e94299267c40f98fd36d417a5cf745ae6
+- filename: tests/unit/test_cond.py
+  checksum: d25c3d04de46e7530d6e2f0df7464060728c0a67d3e829868d64e22177579024
+- filename: jackal/runner.py
+  checksum: 97228c837cbf006242b38e6cbd10f2bace0d742bd59bbb5c5ebc604257fbd83a
+- filename: tests/integration/test_cond_e2e.py
+  checksum: e77f980074a35187996719f84cedbe4be41fadf5683ff27d41e8752196564cc4
+- filename: tests/unit/test_runner.py
+  checksum: f9673671ddcc44bc354623594423435b716ce7a36370b5d8e6a33e061e3f9e74
+- filename: third-party/carddemo
+  ignore_detectors: [filecontent]
+- filename: docs/superpowers/specs/2026-06-27-temp-datasets-design.md
+  checksum: b8e528f916000c7e0a2f7388aeeaf769ef9272c877599fcd7f433e690a6191b7
+- filename: docs/superpowers/plans/2026-06-27-temp-datasets.md
+  checksum: a527f3be443e5b244233732567008201f83d1ae09c33b05266567c3f56378378
+- filename: .beads/interactions.jsonl
+  checksum: ea2fdeb171859b60e18b94b68640502e70027464c4d33b01e71cfd4baa50db29
+- filename: jackal/dsn.py
+  checksum: 2a6d3759943e30ea437856ccaa47aa482949d075b85def39f6456ecbbbf8a680
+- filename: tests/unit/test_dsn.py
+  # Test data matching secret patterns — safe to ignore content detection
+  ignore_detectors: [filecontent]
+- filename: tests/integration/test_temp_datasets.py
+  checksum: 8905f1e6d7ecc5d2a37fabbb1c2e9b102ddc278c4b59679c2dfa18be36e0d7b3
+- filename: docs/superpowers/specs/2026-06-29-backward-refs-design.md
+  checksum: e39fc20e27de320a5095ab18e7934eb680d44a30e892980c083597c0fb25713d
+- filename: docs/superpowers/plans/2026-06-29-backward-refs.md
+  checksum: 9a8d39a04653403704aab7adefac59f4aea9ff8f91db1fac3848a7160b87c103
+- filename: tests/integration/test_backward_refs.py
+  checksum: 4bf9154608a9171a2aea080eae4c50dde2bc8cce5b446d185ec9414fe259c93e
+- filename: tests/unit/test_runner.py
+  # Test data matching secret patterns — safe to ignore content detection
+  ignore_detectors: [filecontent]
+- filename: tests/integration/test_jcl_execute_e2e.py
+  # JCL/DSN strings match secret patterns — safe to ignore content detection
+  ignore_detectors: [filecontent]
+- filename: docs/superpowers/specs/2026-06-27-jackal-vxb-dataset-catalog-design.md
+  checksum: eed594b19a1cde0c83ce51b6f31e3ec8550d6dfaea3ea1d6dfdd0fb56a833705
+- filename: docs/superpowers/plans/2026-06-27-jackal-vxb-dataset-catalog.md
+  checksum: a993fb7cb8fc3c4d7454fe4c03c4da2fce3eaea4bd5c9363a26f92f11122b062
+- filename: docs/superpowers/plans/2026-06-27-parm-linkage.md
+  checksum: 8c4dc7b688e40845c6c63002136fb83bcbb8944c348d3289bc7d92466e23ce78
+version: "1.0"
