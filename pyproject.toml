@@ -18,6 +18,9 @@ db2 = ["ibm-db>=3.2.0"]
 [tool.uv.sources]
 red-dragon = { path = "vendor/red-dragon", editable = true }
 
+[tool.uv.workspace]
+members = ["cicada", "squall", "jackal"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["red_dragon_forge"]
 

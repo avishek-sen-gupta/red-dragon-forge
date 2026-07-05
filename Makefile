@@ -9,7 +9,7 @@ help:
 	@echo "make setup     - init submodules + build bridge JAR + uv sync"
 	@echo "make jar       - build ProLeap bridge JAR (skipped if already built)"
 	@echo "make jar-force - force-rebuild ProLeap bridge JAR"
-	@echo "make python    - uv sync"
+	@echo "make python    - uv sync (all workspace members)"
 	@echo "make test      - full test suite (needs jar)"
 	@echo "make fmt       - black-format the codebase"
 
@@ -27,9 +27,7 @@ jar-force:
 	cd vendor/red-dragon/proleap-bridge && ./build.sh
 
 python:
-	uv sync
-	uv pip install -e vendor/cicada --no-deps
-	uv pip install -e vendor/squall --no-deps
+	uv sync --all-packages
 
 test: jar
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(PYTEST) tests/ $(PYTEST_ARGS)
