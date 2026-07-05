@@ -26,7 +26,6 @@ import pytest
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.dispatcher import CicsRegion, InputEvent
-from cics.le_stubs import le_service_stub_sources
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
@@ -164,7 +163,7 @@ def _drive_to_reports(tmp_path: Path, bridge_jar):
         apply_cics_prepass(reports_path.read_text()).encode(),
         parser,
         strategy,
-        program_source_dir=app / "cbl",
+        program_source_dirs=[app / "cbl"],
     )
 
     program_cache = {"COSGN00C": signon, "COMEN01C": menu, "CORPT00C": reports}

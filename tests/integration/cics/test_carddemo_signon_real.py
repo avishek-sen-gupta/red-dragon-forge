@@ -43,7 +43,6 @@ from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
 from cics.dispatcher import InputEvent, CicsRegion
 from cics.bootstrap import compile_cics_program
-from cics.le_stubs import le_service_stub_sources
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig, DatasetConfig
 from cics.vsam.seed import seed_records
@@ -928,7 +927,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
         apply_cics_prepass(tranadd_path.read_text()).encode(),
         parser,
         strategy,
-        program_source_dir=app / "cbl",
+        program_source_dirs=[app / "cbl"],
     )
 
     program_cache = {
