@@ -2,7 +2,12 @@
 # The password comes from .env (gitignored) or the environment (CI secret) — it is
 # NEVER committed; only the DSN shape lives here. POSIX-sh safe (sourced by Make's
 # /bin/sh and by CI); intentionally does not `set -e`/`-u` (would affect the caller).
+# .env's own vars are plain KEY=VALUE (no `export`), so a bare `.`/source would only
+# set shell-local variables invisible to any subprocess (e.g. pytest) launched later
+# in the same recipe — `set -a` marks every variable sourced afterwards for export.
+set -a
 [ -f .env ] && . ./.env
+set +a
 
 : "${DB2_PASSWORD:?DB2_PASSWORD not set (copy .env.example to .env, or set it in CI)}"
 : "${PROLEAP_BRIDGE_JAR:?PROLEAP_BRIDGE_JAR not set (the ProLeap bridge JAR path)}"
