@@ -619,7 +619,9 @@ git rm -f cicada/.importlinter squall/.importlinter jackal/.importlinter
 ```bash
 cd ~/code/red-dragon-forge && uv run --no-sync lint-imports
 ```
-Expected: all 9 contracts (1 new cross-package + 8 pre-existing) pass with no violations. If the new `cicada-squall-jackal-independence` contract fails, it means one of the three packages already imports another directly (a real coupling this migration is meant to surface, not paper over) — stop and report it rather than weakening the contract.
+Expected: all 8 contracts (1 new cross-package + 7 pre-existing: Cicada 2, Squall 2, Jackal 3) pass with no violations. If the new `cicada-squall-jackal-independence` contract fails, it means one of the three packages already imports another directly (a real coupling this migration is meant to surface, not paper over) — stop and report it rather than weakening the contract.
+
+**Note:** each package's own standalone `make lint` must also be repointed at the shared root config, since `import-linter`'s config discovery only checks the current working directory (never ancestor directories, unlike `pyproject.toml`/`pyrightconfig.json` lookup) — add `--config ../.importlinter` to each of `cicada/Makefile`, `squall/Makefile`, `jackal/Makefile`'s `lint:` target as part of this step.
 
 - [ ] **Step 4: Verify each package's own `make lint` (which calls the same `lint-imports`) still works standalone**
 
