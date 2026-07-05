@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Any
 
 from cics.preprocessor import apply_cics_prepass
+from cics.statements import CicsDialectParser
 from cics.strategy import CicsLoweringStrategy
-from cics.cics_visitor import parse_exec_cics_text
 
 from red_dragon_forge.coprocessor import CoprocessorSpec
 
@@ -48,5 +48,5 @@ def build_cics_spec(
         make_strategy=_make_strategy,
         source_prepass=apply_cics_prepass,
         owns_execution=True,
-        cics_text_parser=parse_exec_cics_text,
+        dialect_parser=CicsDialectParser(),
     )

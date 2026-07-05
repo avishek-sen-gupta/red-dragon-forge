@@ -81,12 +81,13 @@ never changes.
 ```python
 def compile_program(source: bytes, parser, specs: Sequence[CoprocessorSpec], **compile_kwargs):
     strategies = [s.make_strategy() for s in specs]
+    dialect_parsers = [s.dialect_parser for s in specs]
     prepass = functools.reduce(
         lambda f, g: lambda src: g(f(src)), (s.source_prepass for s in specs), lambda src: src
     )
     return compile_cobol(
         source, parser=parser, extension_strategies=strategies, source_transform=prepass,
-        cics_text_parser=parse_exec_cics_text, **compile_kwargs,
+        dialect_parsers=dialect_parsers, **compile_kwargs,
     )
 ```
 

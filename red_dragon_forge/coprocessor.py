@@ -8,8 +8,9 @@ adapters/ package is allowed to know which coprocessors exist by name.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Callable
 
+from interpreter.cobol.dialect_parser import DialectParser, NullDialectParser
 from interpreter.cobol.red_dragon_extension_strategy import (
     RedDragonExtensionLoweringStrategy,
 )
@@ -41,13 +42,14 @@ class CoprocessorSpec:
     execution semantics on the compiled program (CICS's dispatcher/SUSPEND) —
     see ``run_program`` in ``run.py``.
 
-    ``cics_text_parser`` threads RedDragon's ``compile_cobol(cics_text_parser=...)``
-    argument through without this module knowing what a "CICS text parser" is;
-    only the CICS adapter ever sets it.
+    ``dialect_parser`` threads RedDragon's ``compile_cobol(dialect_parsers=[...])``
+    array through without this module knowing what any dialect parser does —
+    every adapter sets one (a real one, or the NullDialectParser default);
+    compile_program collects them all unconditionally.
     """
 
     name: str
     make_strategy: Callable[[], RedDragonExtensionLoweringStrategy]
     source_prepass: Callable[[str], str] = _identity
     owns_execution: bool = False
-    cics_text_parser: Any | None = None
+    dialect_parser: DialectParser = NullDialectParser()

@@ -63,24 +63,6 @@ def test_every_specs_prepass_runs_before_any_make_strategy(bridge_jar):
     ]
 
 
-def test_at_most_one_cics_text_parser_allowed(bridge_jar):
-    def sentinel_parser(text: str):
-        return text
-
-    specs = [
-        CoprocessorSpec(
-            name="a", make_strategy=_FakeStrategy, cics_text_parser=sentinel_parser
-        ),
-        CoprocessorSpec(
-            name="b", make_strategy=_FakeStrategy, cics_text_parser=sentinel_parser
-        ),
-    ]
-    parser = ProLeapCobolParser(RealSubprocessRunner(), bridge_jar)
-
-    with pytest.raises(AssertionError):
-        compile_program(_TRIVIAL_PROGRAM, parser, specs)
-
-
 class _FakeStrategy:
     """A minimal RedDragonExtensionLoweringStrategy that handles nothing —
     proves compile_program's plumbing without needing real CICS/SQL lowering."""
