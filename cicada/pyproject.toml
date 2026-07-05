@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-red-dragon = { path = "vendor/red-dragon", editable = true }
+red-dragon = { path = "../vendor/red-dragon", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["cics", "bms_copybook_gen"]

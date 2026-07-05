@@ -10,7 +10,7 @@
 #
 # Override any path via the environment, e.g.:
 #   CARDDEMO_HOME=/path/to/carddemo/app make test
-PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+PROLEAP_BRIDGE_JAR ?= $(CURDIR)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 HLASM_EXPORT       ?= $(CURDIR)/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export
 CARDDEMO_HOME      ?= $(CURDIR)/third-party/carddemo/app
 
@@ -52,12 +52,12 @@ python:
 	uv sync
 
 $(PROLEAP_BRIDGE_JAR):
-	cd vendor/red-dragon/proleap-bridge && ./build.sh
+	cd ../vendor/red-dragon/proleap-bridge && ./build.sh
 
 jar: $(PROLEAP_BRIDGE_JAR)
 
 jar-force:
-	cd vendor/red-dragon/proleap-bridge && ./build.sh
+	cd ../vendor/red-dragon/proleap-bridge && ./build.sh
 
 $(HLASM_EXPORT):
 	cd third-party/che-che4z-lsp-for-hlasm-fork && ./build.sh

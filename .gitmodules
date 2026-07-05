@@ -10,3 +10,11 @@
 [submodule "vendor/bank-of-z"]
 	path = vendor/bank-of-z
 	url = https://github.com/IBM/Bank-of-Z.git
+[submodule "cicada/third-party/che-che4z-lsp-for-hlasm-fork"]
+	path = cicada/third-party/che-che4z-lsp-for-hlasm-fork
+	url = git@github.com:avishek-sen-gupta/che-che4z-lsp-for-hlasm.git
+	branch = krakatoa-1.22.1
+[submodule "cicada/third-party/carddemo"]
+	path = cicada/third-party/carddemo
+	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
+	branch = main

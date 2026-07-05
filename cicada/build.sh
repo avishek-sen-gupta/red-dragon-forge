@@ -18,7 +18,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-RD="$ROOT/vendor/red-dragon"
+RD="$ROOT/../vendor/red-dragon"
 JAR="$RD/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
 HLASM="$ROOT/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
 
