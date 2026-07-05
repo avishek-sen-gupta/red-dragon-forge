@@ -2,7 +2,7 @@
 
 from tests.covers import covers, NotLanguageFeature
 from cics.cics_parser import parse_exec_cics_text
-from interpreter.cobol.cobol_statements import CicsOperand
+from cics.statements import CicsOperand
 from interpreter.cobol.ref_mod import RefModLiteral, RefModReference
 from interpreter.cobol.cobol_expression import FieldRefNode
 
