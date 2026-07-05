@@ -56,12 +56,10 @@ def compile_cics_program(
     """
     from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
     from cics.statements import CicsDialectParser
-    from cics.preprocessor import apply_cics_prepass
 
     spec = CoprocessorSpec(
         name="cics",
         make_strategy=lambda: strategy,
-        source_prepass=apply_cics_prepass,
         dialect_parser=CicsDialectParser(),
         extra_program_source_dirs=lambda: (LE_STUBS_DIR,),
     )
