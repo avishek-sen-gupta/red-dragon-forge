@@ -25,9 +25,8 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
+from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent
-from cics.preprocessor import apply_cics_prepass
-from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
@@ -140,7 +139,7 @@ def _drive_to_reports(tmp_path: Path, bridge_jar):
     td_queue: list[str] = []
     context_holder = [None]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -149,20 +148,16 @@ def _drive_to_reports(tmp_path: Path, bridge_jar):
         td_queue=td_queue,
     )
 
-    signon = compile_cics_program(
-        apply_cics_prepass(signon_path.read_text()).encode(), parser, strategy
-    )
-    menu = compile_cics_program(
-        apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
-    )
+    signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
+    menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
     # CORPT00C CALLs 'CSUTLDTC' to validate the start/end dates; CSUTLDTC in turn
     # CALLs the LE service "CEEDAYS" (no COBOL source, but compile_cics_program
     # always contributes the LE-service stubs). Resolve CSUTLDTC from the app's
     # cbl dir.
     reports = compile_cics_program(
-        apply_cics_prepass(reports_path.read_text()).encode(),
+        reports_path.read_bytes(),
         parser,
-        strategy,
+        spec,
         program_source_dirs=[app / "cbl"],
     )
 

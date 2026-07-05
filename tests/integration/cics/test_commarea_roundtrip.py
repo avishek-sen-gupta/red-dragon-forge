@@ -23,6 +23,7 @@ from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import compile_cics_program
+from cics.coprocessor import build_cics_spec
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
@@ -80,11 +81,8 @@ def test_commarea_carries_bytes(cobol_parser):
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
-        context_holder=context_holder, result_holder=result_holder
-    )
-    source = apply_cics_prepass(COBOL_COMMAREA).encode()
-    program = compile_cics_program(source, cobol_parser, strategy)
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(COBOL_COMMAREA.encode(), cobol_parser, spec)
 
     result = run_cics(
         program,

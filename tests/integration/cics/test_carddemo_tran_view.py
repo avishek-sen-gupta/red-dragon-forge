@@ -25,9 +25,8 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
+from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent
-from cics.preprocessor import apply_cics_prepass
-from cics.strategy import CicsLoweringStrategy
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
@@ -173,7 +172,7 @@ def _drive_to_tran_view(tmp_path: Path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_tran_view_engine(tmp_path),
@@ -181,15 +180,9 @@ def _drive_to_tran_view(tmp_path: Path, bridge_jar):
         input_queue=input_q,
     )
 
-    signon = compile_cics_program(
-        apply_cics_prepass(signon_path.read_text()).encode(), parser, strategy
-    )
-    menu = compile_cics_program(
-        apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
-    )
-    tranview = compile_cics_program(
-        apply_cics_prepass(tranview_path.read_text()).encode(), parser, strategy
-    )
+    signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
+    menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
+    tranview = compile_cics_program(tranview_path.read_bytes(), parser, spec)
 
     program_cache = {"COSGN00C": signon, "COMEN01C": menu, "COTRN01C": tranview}
     transid_to_program = {"CC00": "COSGN00C", "CM00": "COMEN01C", "CT01": "COTRN01C"}

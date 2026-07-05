@@ -79,8 +79,7 @@ def extract_transaction_flow_map(
     """
     from cics.dispatcher import parse_csd  # noqa: PLC0415
     from cics.bootstrap import compile_cics_program  # noqa: PLC0415
-    from cics.strategy import CicsLoweringStrategy  # noqa: PLC0415
-    from cics.preprocessor import apply_cics_prepass  # noqa: PLC0415
+    from cics.coprocessor import build_cics_spec  # noqa: PLC0415
 
     # parse_csd expects a Path; write CSD text to a temp file
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csd", delete=False) as f:
@@ -98,16 +97,14 @@ def extract_transaction_flow_map(
         if raw is None:
             compiled_verbs[prog_name] = []
             continue
-        # compile_cics_program expects pre-passed bytes; apply the prepass here
-        prepassed = apply_cics_prepass(raw.decode("utf-8", errors="replace")).encode()
         observer = _CollectingObserver(prog_name)
-        strategy = CicsLoweringStrategy(
+        spec = build_cics_spec(
             context_holder=[None],
             result_holder=[None],
             observer=observer,
         )
-        # Positional args: source, parser, strategy
-        compile_cics_program(prepassed, parser, strategy)
+        # Positional args: source, parser, spec
+        compile_cics_program(raw, parser, spec)
         compiled_verbs[prog_name] = observer.verbs
 
     results: list[dict] = []  # type: ignore[type-arg]

@@ -38,8 +38,7 @@ from pathlib import Path
 
 import pytest
 
-from cics.preprocessor import apply_cics_prepass
-from cics.strategy import CicsLoweringStrategy
+from cics.coprocessor import build_cics_spec
 from cics.types import DispatchKind
 from cics.dispatcher import InputEvent, CicsRegion
 from cics.bootstrap import compile_cics_program
@@ -241,7 +240,7 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_usrsec_engine(tmp_path / "vsam"),
@@ -249,15 +248,9 @@ def _drive_through_turn4(tmp_path, bridge_jar):
         input_queue=input_q,
     )
 
-    signon = compile_cics_program(
-        apply_cics_prepass(signon_path.read_text()).encode(), parser, strategy
-    )
-    menu = compile_cics_program(
-        apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
-    )
-    acct = compile_cics_program(
-        apply_cics_prepass(acct_path.read_text()).encode(), parser, strategy
-    )
+    signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
+    menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
+    acct = compile_cics_program(acct_path.read_bytes(), parser, spec)
 
     # The CSD/region configuration: which program backs each transid. This is the
     # static config the system is set up with (NOT per-turn hardcoding). The
@@ -493,7 +486,7 @@ def _compile_update_programs(tmp_path, bridge_jar, vsam_dir=None):
     context_holder = [None]
     result_holder: list = [None]
     engine = _usrsec_engine(vsam_dir or (tmp_path / "vsam"))
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -501,15 +494,9 @@ def _compile_update_programs(tmp_path, bridge_jar, vsam_dir=None):
         input_queue=input_q,
     )
 
-    signon = compile_cics_program(
-        apply_cics_prepass(signon_path.read_text()).encode(), parser, strategy
-    )
-    menu = compile_cics_program(
-        apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
-    )
-    acctupd = compile_cics_program(
-        apply_cics_prepass(acctupd_path.read_text()).encode(), parser, strategy
-    )
+    signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
+    menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
+    acctupd = compile_cics_program(acctupd_path.read_bytes(), parser, spec)
     return (
         signon,
         menu,
@@ -904,7 +891,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
     context_holder = [None]
     result_holder: list = [None]
     engine = _add_engine(vsam_dir or (tmp_path / "vsam"))
-    strategy = CicsLoweringStrategy(
+    spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -912,21 +899,17 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
         input_queue=input_q,
     )
 
-    signon = compile_cics_program(
-        apply_cics_prepass(signon_path.read_text()).encode(), parser, strategy
-    )
-    menu = compile_cics_program(
-        apply_cics_prepass(menu_path.read_text()).encode(), parser, strategy
-    )
+    signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
+    menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
     # COTRN02C CALLs 'CSUTLDTC' to validate the Orig/Proc dates; CSUTLDTC in turn
     # CALLs the LE service "CEEDAYS" (no COBOL source, but compile_cics_program
     # always contributes the LE-service stubs). Resolve CSUTLDTC from the
     # CardDemo cbl/ dir so the date validation completes and the
     # ADD-TRANSACTION WRITE path runs.
     tranadd = compile_cics_program(
-        apply_cics_prepass(tranadd_path.read_text()).encode(),
+        tranadd_path.read_bytes(),
         parser,
-        strategy,
+        spec,
         program_source_dirs=[app / "cbl"],
     )
 

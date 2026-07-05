@@ -24,7 +24,6 @@ from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import run_carddemo_region
 from cics.dispatcher import InputEvent
-from cics.preprocessor import apply_cics_prepass
 from cics.types import DispatchKind
 from tests.integration.cics.channel_drain import drain
 from tests.covers import covers
@@ -92,7 +91,7 @@ def test_region_program_links_called_subprogram(tmp_path, bridge_jar):
 
     result = run_carddemo_region(
         transid_to_program={"CC00": "MAINLNK"},
-        program_sources={"MAINLNK": apply_cics_prepass(MAINLNK_SRC).encode()},
+        program_sources={"MAINLNK": MAINLNK_SRC.encode()},
         parser=parser,
         entry_transid="CC00",
         screen_queue=screen_q,
