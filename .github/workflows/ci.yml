@@ -19,7 +19,7 @@ jobs:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@v6
       - name: Install dependencies
-        run: uv sync --all-packages --only-group dev
+        run: uv sync --all-packages
       - name: Check formatting with Black
         run: uv run black --check cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge tests
       - name: Check architectural contracts
