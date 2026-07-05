@@ -7,7 +7,11 @@ from red_dragon_forge.run import run_program
 
 
 def test_raises_when_no_spec_owns_execution():
-    specs = [CoprocessorSpec(name="sql", make_strategy=lambda: object(), owns_execution=False)]
+    specs = [
+        CoprocessorSpec(
+            name="sql", make_strategy=lambda: object(), owns_execution=False
+        )
+    ]
     with pytest.raises(NotImplementedError):
         run_program(linked=object(), specs=specs)
 

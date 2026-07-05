@@ -33,9 +33,9 @@ def run_program(
     deferred section).
     """
     owners = [s for s in specs if s.owns_execution]
-    assert len(owners) <= 1, (
-        f"at most one CoprocessorSpec may own execution, got {len(owners)}"
-    )
+    assert (
+        len(owners) <= 1
+    ), f"at most one CoprocessorSpec may own execution, got {len(owners)}"
     if not owners:
         raise NotImplementedError(
             "no execution-owning CoprocessorSpec present — a SQL-only "

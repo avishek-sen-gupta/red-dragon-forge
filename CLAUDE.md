@@ -57,6 +57,17 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 
+**Issue graph is version-controlled (manual-export model, not beads' Dolt sync).** `.beads/`
+(Dolt working DB) is **fully gitignored** (not just partially, unlike some sibling packages'
+older convention — `config.yaml`/hooks/etc. are all local, per-machine state here);
+`issues/issues.jsonl` is the **tracked** git source of truth. **Whenever a change touches
+issues, regenerate and stage the snapshot BEFORE committing** — a deliberate manual step, NOT
+a git hook:
+```bash
+bd export -o issues/issues.jsonl && git add issues/issues.jsonl
+```
+On a fresh clone, `bd import issues/issues.jsonl` rebuilds the local DB.
+
 
 ## Build & Test
 

@@ -64,7 +64,9 @@ def test_sql_only_spec_selects_into(bridge_jar):
     spec = build_sql_spec(connections={"SAMPLE": backend})
     parser = make_parser(bridge_jar)
 
-    _frontend, linked = compile_program(_SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec])
+    _frontend, linked = compile_program(
+        _SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec]
+    )
 
     entry_point = EntryPoint.top_level()
     if linked.func_symbol_table:
@@ -77,13 +79,19 @@ def test_sql_only_spec_selects_into(bridge_jar):
             None,
         )
         if proc_label is not None:
-            entry_point = EntryPoint.function(lambda ref, _l=proc_label: ref.label == _l)
+            entry_point = EntryPoint.function(
+                lambda ref, _l=proc_label: ref.label == _l
+            )
 
     initial_vm = VMState()
     initial_vm.data_layout = linked.data_layout
-    initial_vm.call_stack.append(StackFrame(function_name=FuncName(rd_constants.MAIN_FRAME_NAME)))
+    initial_vm.call_stack.append(
+        StackFrame(function_name=FuncName(rd_constants.MAIN_FRAME_NAME))
+    )
 
-    vm = run_linked(linked, entry_point=entry_point, max_steps=2000, initial_vm=initial_vm)
+    vm = run_linked(
+        linked, entry_point=entry_point, max_steps=2000, initial_vm=initial_vm
+    )
 
     assert _read_ws_field(vm, "WS-BAL") == 500
     assert _read_ws_field(vm, "SQLCODE") == 0
