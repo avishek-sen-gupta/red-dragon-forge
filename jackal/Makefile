@@ -9,7 +9,7 @@
 # `make test`      — full suite (needs the JARs + CARDDEMO_HOME for the gated e2e).
 #
 # Override any path via the environment.
-PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+PROLEAP_BRIDGE_JAR ?= $(CURDIR)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 JCL_BRIDGE_JAR     ?= $(CURDIR)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
 CARDDEMO_HOME      ?= $(CURDIR)/third-party/carddemo/app
 
@@ -44,7 +44,7 @@ python:
 
 # ProLeap bridge = the red-dragon submodule's parser + the bridge (build.sh does both).
 $(PROLEAP_BRIDGE_JAR):
-	cd vendor/red-dragon/proleap-bridge && ./build.sh
+	cd ../vendor/red-dragon/proleap-bridge && ./build.sh
 
 # JCL bridge = jackal's own mapa ANTLR grammar + serializer.
 # Always run mvn — it is incremental and skips recompilation when sources are unchanged.
@@ -55,7 +55,7 @@ _jcl_bridge:
 jar: $(PROLEAP_BRIDGE_JAR) _jcl_bridge
 
 jar-force:
-	cd vendor/red-dragon/proleap-bridge && ./build.sh
+	cd ../vendor/red-dragon/proleap-bridge && ./build.sh
 	cd jcl-bridge && mvn -DskipTests package -q
 
 build:

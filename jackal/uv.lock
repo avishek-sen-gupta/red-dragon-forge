@@ -757,7 +757,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "lark", specifier = ">=1.1" },
-    { name = "red-dragon", editable = "vendor/red-dragon" },
+    { name = "red-dragon", editable = "../vendor/red-dragon" },
 ]
 
 [package.metadata.requires-dev]
@@ -1511,7 +1511,7 @@ wheels = [
 [[package]]
 name = "red-dragon"
 version = "0.1.0"
-source = { editable = "vendor/red-dragon" }
+source = { editable = "../vendor/red-dragon" }
 dependencies = [
     { name = "lark" },
     { name = "litellm" },
