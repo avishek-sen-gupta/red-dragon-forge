@@ -23,9 +23,10 @@ module stays cheap to import and side-steps any import-linter coupling concerns.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from cics.dispatcher import _run_dispatcher_with_runner, parse_csd, run_cics
+from cics.le_stubs import LE_STUBS_DIR
 from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchResult
 
@@ -38,37 +39,34 @@ def compile_cics_program(
     parser: Any,
     strategy: Any,
     *,
-    program_source_dir: Path = Path("."),
+    program_source_dirs: Sequence[Path] = (),
 ) -> Any:
     """Pre-passed CICS COBOL ``source`` -> ``LinkedProgram`` with ``strategy`` injected.
 
     ``source`` must already have been run through ``apply_cics_prepass`` (and
     encoded to bytes). Returns a :class:`LinkedProgram` ready for ``run_cics``.
 
-    When ``program_source_dir`` is given, the main program's ``CALL 'X'`` targets
-    are resolved (transitively) against that directory using the existing COBOL
-    import resolver, each CALLed program is compiled with the SAME
-    ``CicsLoweringStrategy``, and all modules are merged via the project linker
-    (:func:`interpreter.project.linker.link_modules`) so the CALL resolves at
-    runtime through ``CallWithMemory``'s singleton dispatch.
-
-    IBM Language Environment callable services (e.g. CEEDAYS) are never on disk
-    as CardDemo application source — :func:`cics.le_stubs.le_service_stub_sources`
-    always contributes their stub sources here as subprogram links, so callers
-    never need to know these stubs exist.
+    ``program_source_dirs`` are searched, in order, for the main program's
+    ``CALL 'X'`` targets (transitively) using the existing COBOL import
+    resolver; ``cics.le_stubs.LE_STUBS_DIR`` is always appended after them, so
+    IBM Language Environment callable services (e.g. CEEDAYS, which are never
+    on disk as CardDemo application source) resolve as a normal .cbl file
+    without callers needing to know these stubs exist. Each CALLed program is
+    compiled with the SAME ``CicsLoweringStrategy``, and all modules are
+    merged via the project linker (:func:`interpreter.project.linker.link_modules`)
+    so the CALL resolves at runtime through ``CallWithMemory``'s singleton
+    dispatch.
     """
     from interpreter.project.cobol_compile import compile_cobol
     from cics.statements import CicsDialectParser
     from cics.preprocessor import apply_cics_prepass
-    from cics.le_stubs import le_service_stub_sources
 
     _frontend, linked = compile_cobol(
         source,  # already CICS-prepassed by the caller
         parser=parser,
         extension_strategies=[strategy],
         dialect_parsers=[CicsDialectParser()],
-        program_source_dir=program_source_dir,
-        extra_subprogram_sources=le_service_stub_sources(),
+        program_source_dirs=(*program_source_dirs, LE_STUBS_DIR),
         source_transform=apply_cics_prepass,
     )
     return linked
@@ -87,7 +85,7 @@ def run_carddemo_region(
     applid: str = "CARDDEMO",
     sysid: str = "SYS1",
     max_steps: int = 50_000,
-    program_source_dir: Path = Path("."),
+    program_source_dirs: Sequence[Path] = (),
 ) -> DispatchResult:
     """Assemble and run a CICS region; return the terminal :class:`DispatchResult`.
 
@@ -99,7 +97,7 @@ def run_carddemo_region(
     single shared :class:`CicsLoweringStrategy`; a missing source raises a clear
     error before the dispatcher loop starts (fail-fast).
 
-    ``program_source_dir`` (the CardDemo ``cbl/`` dir) is threaded into
+    ``program_source_dirs`` (e.g. the CardDemo ``cbl/`` dir) are threaded into
     :func:`compile_cics_program` so each region program links the subprograms
     it ``CALL``s.
     """
@@ -139,7 +137,7 @@ def run_carddemo_region(
             source,
             parser,
             strategy,
-            program_source_dir=program_source_dir,
+            program_source_dirs=program_source_dirs,
         )
 
     def run_fn(

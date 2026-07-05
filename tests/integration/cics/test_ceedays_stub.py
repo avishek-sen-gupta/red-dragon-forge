@@ -2,7 +2,7 @@
 
 CSUTLDTC.cbl CALLs the IBM Language Environment service CEEDAYS to validate a
 date; there is no COBOL source for CEEDAYS, so we supply a stub
-(``cics.le_stubs.CEEDAYS_STUB_SOURCE``). These tests drive a tiny
+(``cics/stubs/CEEDAYS.cbl``). These tests drive a tiny
 COBOL caller that mirrors CSUTLDTC's CALL shape (a Vstring date + a feedback
 token) and assert the feedback severity: 0 for a valid Gregorian date, nonzero
 for an invalid one. The stub is linked like any other CALLed subprogram via the
@@ -15,7 +15,7 @@ from pathlib import Path
 
 from interpreter.constants import Language
 from interpreter.cobol.features import CobolFeature
-from cics.le_stubs import CEEDAYS_STUB_SOURCE
+from cics.le_stubs import LE_STUBS_DIR
 from interpreter.project.compiler import compile_directory
 from interpreter.run import run_linked, EntryPoint, initial_vm_state
 from interpreter.var_name import VarName
@@ -59,7 +59,7 @@ def _caller_src(date_text: str) -> str:
 def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
     """Compile DRIVER + the CEEDAYS stub, run, and return WS-SEV (the severity)."""
     (tmp_path / "DRIVER.cbl").write_text(_caller_src(date_text))
-    (tmp_path / "CEEDAYS.cbl").write_text(CEEDAYS_STUB_SOURCE)
+    (tmp_path / "CEEDAYS.cbl").write_text((LE_STUBS_DIR / "CEEDAYS.cbl").read_text())
 
     linked = compile_directory(tmp_path, Language.COBOL)
     vm = run_linked(
