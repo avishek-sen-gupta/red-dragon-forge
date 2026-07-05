@@ -7,6 +7,24 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    name: Formatting and architectural contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --all-packages --only-group dev
+      - name: Check formatting with Black
+        run: uv run black --check cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge tests
+      - name: Check architectural contracts
+        run: uv run lint-imports
+
   cicada:
     runs-on: ubuntu-latest
     defaults:
