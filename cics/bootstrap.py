@@ -46,28 +46,30 @@ def compile_cics_program(
     ``source`` must already have been run through ``apply_cics_prepass`` (and
     encoded to bytes). Returns a :class:`LinkedProgram` ready for ``run_cics``.
 
-    ``program_source_dirs`` are searched, in order, for the main program's
-    ``CALL 'X'`` targets (transitively) using the existing COBOL import
-    resolver; ``cics.le_stubs.LE_STUBS_DIR`` is always appended after them, so
-    IBM Language Environment callable services (e.g. CEEDAYS, which are never
-    on disk as CardDemo application source) resolve as a normal .cbl file
-    without callers needing to know these stubs exist. Each CALLed program is
-    compiled with the SAME ``CicsLoweringStrategy``, and all modules are
-    merged via the project linker (:func:`interpreter.project.linker.link_modules`)
-    so the CALL resolves at runtime through ``CallWithMemory``'s singleton
-    dispatch.
+    Builds one CoprocessorSpec around ``strategy`` and delegates to RedDragon's
+    shared compile_program (interpreter.project.coprocessor_compile) — the
+    same composition mechanism red-dragon-forge and Squall use. IBM Language
+    Environment callable services (e.g. CEEDAYS, which have no CardDemo
+    application source) resolve because LE_STUBS_DIR is always appended to
+    the search path via the spec's extra_program_source_dirs, so callers
+    never need to know these stubs exist.
     """
-    from interpreter.project.cobol_compile import compile_cobol
+    from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
     from cics.statements import CicsDialectParser
     from cics.preprocessor import apply_cics_prepass
 
-    _frontend, linked = compile_cobol(
+    spec = CoprocessorSpec(
+        name="cics",
+        make_strategy=lambda: strategy,
+        source_prepass=apply_cics_prepass,
+        dialect_parser=CicsDialectParser(),
+        extra_program_source_dirs=lambda: (LE_STUBS_DIR,),
+    )
+    _frontend, linked = compile_program(
         source,  # already CICS-prepassed by the caller
-        parser=parser,
-        extension_strategies=[strategy],
-        dialect_parsers=[CicsDialectParser()],
-        program_source_dirs=(*program_source_dirs, LE_STUBS_DIR),
-        source_transform=apply_cics_prepass,
+        parser,
+        [spec],
+        program_source_dirs=program_source_dirs,
     )
     return linked
 
