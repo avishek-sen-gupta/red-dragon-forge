@@ -5,8 +5,6 @@ fileignoreconfig:
   checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
 - filename: red_dragon_forge/coprocessor.py
   checksum: 25f4d437264805b4e274af959a44c1309d2e64dd9ceabbeb950ca23b4cd3da2c
-- filename: red_dragon_forge/compile.py
-  checksum: bc43672cba8bdaa83b33fe7b0b34322899fbf826cb70feab1f8332dd6d920116
 - filename: tests/integration/test_compile_program.py
   checksum: 985cb3ba9cda6a8aee937a86aafab5b0385d18d91379624f0a814395c3419388
 - filename: vendor/red-dragon
@@ -27,4 +25,6 @@ fileignoreconfig:
   checksum: a1c2bd799f240e06e8cfd8fbdf54c469546cac77375926c7d5cf23438495a796
 - filename: red_dragon_forge/adapters/sql.py
   checksum: 7e8fe4012c78eaea7adb3a6fa45016529fab5f0ddfa83e33663fe52b7309111a
+- filename: red_dragon_forge/compile.py
+  checksum: 69c75a57da53919640c9d1cc1c3b654dd0790a2e3cc73b2f26529a08f4ef1e34
 version: "1.0"
