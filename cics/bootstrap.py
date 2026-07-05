@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import _run_dispatcher_with_runner, parse_csd, run_cics
-from cics.le_stubs import LE_STUBS_DIR
 from cics.types import CicsContext, DispatchResult
 
 from interpreter.project.coprocessor_compile import CoprocessorSpec
