@@ -90,4 +90,4 @@ fmt:
 	uv run --no-sync python -m black cics tests
 
 lint:
-	uv run --no-sync lint-imports
+	uv run --no-sync lint-imports --config ../.importlinter

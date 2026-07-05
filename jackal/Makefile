@@ -71,4 +71,4 @@ fmt:
 	uv run --no-sync python -m black jackal tests
 
 lint:
-	uv run --no-sync lint-imports
+	uv run --no-sync lint-imports --config ../.importlinter

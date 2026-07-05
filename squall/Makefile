@@ -96,4 +96,4 @@ fmt:
 	uv run --no-sync python -m black squall tests
 
 lint:
-	uv run --no-sync lint-imports
+	uv run --no-sync lint-imports --config ../.importlinter
