@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-RD="$ROOT/vendor/red-dragon"
+RD="$ROOT/../vendor/red-dragon"
 JAR="$RD/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
 
 echo "==> Initialising the red-dragon submodule (recursive)..."

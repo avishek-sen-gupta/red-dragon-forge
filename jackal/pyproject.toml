@@ -5,7 +5,7 @@ requires-python = ">=3.13"
 dependencies = ["lark>=1.1", "red-dragon"]
 
 [tool.uv.sources]
-red-dragon = { path = "vendor/red-dragon", editable = true }
+red-dragon = { path = "../vendor/red-dragon", editable = true }
 
 [build-system]
 requires = ["hatchling"]

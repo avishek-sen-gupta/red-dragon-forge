@@ -21,3 +21,7 @@
 [submodule "squall/testbed/db2-samples"]
 	path = squall/testbed/db2-samples
 	url = https://github.com/IBM/db2-samples.git
+[submodule "jackal/third-party/carddemo"]
+	path = jackal/third-party/carddemo
+	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
+	branch = main
