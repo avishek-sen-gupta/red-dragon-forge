@@ -125,6 +125,87 @@ to check the same shared absolute path — no custom coordination or locking
 is introduced. Jackal's own `jcl-bridge` JAR (jackal-specific, never
 shared across packages) is unaffected by any of this.
 
+### Pre-commit hooks
+
+Cicada, Squall, and Jackal each have their own `.pre-commit-config.yaml` +
+`precommit-scripts/`, installed on top of a globally-installed Talisman
+hook (`.git/hooks/pre-commit.legacy`, seeded per-machine, not per-repo).
+Forge has neither today — only the global Talisman hook applies to it.
+
+The hook *list* is templated/shared across the three
+(`terminology-guard`, `terminology-commit-msg`, `black`,
+`python-fp-lint`, `pyright`, `import-linter`, `tests`) —
+`precommit-scripts/check-terminology`/`check-commit-msg` are byte-identical
+across Cicada and Jackal (verified via `diff`). Per-package differences are
+confined to which directory Black/FP-lint target, and the test invocation:
+Cicada and Jackal run their **full** suite (including gated e2e) on every
+local commit; Squall deliberately runs only a fast unit-test subset locally
+(`precommit-scripts/run-tests` → `pytest tests/unit -x -q`), presumably
+because its integration suite needs a live Db2 container — a real,
+deliberate policy difference to preserve, not homogenize.
+
+Since git hooks are repo-root-scoped (no native per-subdirectory hook
+support), all four packages' hooks must live in **one** root
+`.pre-commit-config.yaml` post-merge. Two different scoping strategies
+apply, split by hook cost:
+
+- **Static/lint/format checks stay global**, exactly like today
+  (`always_run: true`, no `files:` filter) — Terminology Guard (×2),
+  Black, Python FP lint, Pyright, and the new cross-package
+  `import-linter` contract. These are fast; running them across all four
+  packages' source on every commit costs little. Since they run globally
+  now anyway, Black and Python FP lint collapse from "one hook per
+  package" into **one combined invocation** listing all four packages'
+  paths (less code, matching the earlier per-package build-tooling
+  reasoning in spirit) — `python-fp-lint` takes an explicit directory
+  argument per repo today, so its combined form lists all four; `pyright`
+  takes no path argument at all (it discovers its config from
+  `pyproject.toml`/`pyrightconfig.json`), so unifying it requires **one
+  root-level `[tool.pyright]` config** (`include = ["cicada", "squall",
+  "jackal", "red_dragon_forge"]`) replacing today's four separate
+  per-repo configs — a design detail for the implementation plan to spell
+  out precisely.
+- **Test-suite hooks stay per-package and gain `files:` scoping** — these
+  are slow (full suites, JVM bridge calls, live Db2), so a change to
+  `squall/` should not also force Cicada's and Jackal's full suites to run
+  locally. Each keeps its own hook ID, its own existing test-invocation
+  policy (full vs. unit-only), and a `files:` regex gating whether it runs
+  at all: `^(cicada|vendor/red-dragon)/` for Cicada, `^(squall|vendor/red-dragon)/`
+  for Squall, `^(jackal|vendor/red-dragon)/` for Jackal. Every test hook
+  additionally matches `vendor/red-dragon` itself, since a shared RedDragon
+  pin bump can affect any package — this is a `files:` regex gate, not
+  `always_run`, so it's still skipped for a commit that touches neither
+  that package nor the shared submodule.
+
+**Critical mechanism note:** `always_run: true` and `files:` are mutually
+exclusive in effect — `always_run: true` bypasses file-matching entirely.
+Today's per-repo configs set `always_run: true` on every hook (correct in
+a single-package repo, where "unconditional" and "this package changed"
+are the same thing). Migrating a hook to per-package `files:` scoping
+means **removing** `always_run: true` from it, not just adding `files:`
+alongside it — otherwise the flag silently wins and the hook keeps running
+on every commit regardless of the filter. `pass_filenames: false` is
+unaffected either way; it only controls whether matched paths are passed
+as CLI arguments to the entry command, not whether the hook runs at all.
+
+Forge gains its own `tests-forge` hook for the first time (it has none
+today), with a **broader** `files:` pattern than the others —
+`^(red_dragon_forge|cicada|squall|vendor/)/` — since forge's own suite
+exercises Cicada's and Squall's adapters directly (`build_cics_spec`/
+`build_sql_spec`); a change to either should re-trigger forge's suite too,
+not just a change to `red_dragon_forge/` itself.
+
+Once the root `.pre-commit-config.yaml` and shared
+`precommit-scripts/check-terminology`/`check-commit-msg` exist, Cicada's,
+Squall's, and Jackal's own now-superseded `.pre-commit-config.yaml` files
+are **deleted** (not left behind) as part of the same `git subtree` merge
+commit — same "no dead config" principle already applied to their
+`.beads/` directories. Package-specific scripts that aren't shared
+boilerplate (Squall's own `precommit-scripts/run-tests`) move with their
+package rather than being deleted, renamed to make their scope explicit
+(`run-tests-squall`) since they now live alongside the root config's other
+packages' equivalents.
+
 ### Architectural contracts
 
 A root-level `.importlinter` adds an `independence`-type contract over
@@ -140,10 +221,16 @@ separate repos.
 ### CI
 
 Each package keeps its own test job (invoking its own `make test`), run in
-parallel — normal per-package wall-clock is unaffected. The behavior
-change: a RedDragon vendor pin bump can no longer merge without all three
-coprocessor packages' suites passing in the *same* CI pipeline run, closing
-the exact silent-drift gap that let jackal's pin go stale for so long.
+parallel — normal per-package wall-clock is unaffected. Unlike the local
+pre-commit hooks (deliberately `files:`-scoped to skip unaffected
+packages, for fast local iteration), CI runs **all four jobs
+unconditionally on every push/PR regardless of what changed** — that's the
+whole point of moving to CI as the backstop: a RedDragon vendor pin bump
+can no longer merge without all three coprocessor packages' suites passing
+in the *same* pipeline run, closing the exact silent-drift gap that let
+jackal's pin go stale for so long. Local scoping optimizes for fast
+iteration; CI optimizes for never merging a silent cross-package break —
+the two are complementary, not in tension.
 
 ### Beads issue tracker
 
