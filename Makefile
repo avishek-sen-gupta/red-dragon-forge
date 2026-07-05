@@ -3,7 +3,7 @@ PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-
 
 PYTEST = uv run --no-sync python -m pytest
 
-.PHONY: help setup jar jar-force python test fmt
+.PHONY: help setup jar jar-force python test test-all fmt
 
 help:
 	@echo "make setup     - init submodules + build bridge JAR + uv sync"
@@ -11,6 +11,7 @@ help:
 	@echo "make jar-force - force-rebuild ProLeap bridge JAR"
 	@echo "make python    - uv sync (all workspace members)"
 	@echo "make test      - full test suite (needs jar)"
+	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, forge)"
 	@echo "make fmt       - black-format the codebase"
 
 setup:
@@ -31,6 +32,12 @@ python:
 
 test: jar
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(PYTEST) tests/ $(PYTEST_ARGS)
+
+test-all: jar
+	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C cicada test
+	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C squall test
+	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C jackal test
+	$(MAKE) test
 
 fmt:
 	uv run --no-sync python -m black red_dragon_forge tests
