@@ -1,0 +1,18 @@
+[importlinter]
+root_packages =
+    cics
+
+[importlinter:contract:vsam-bms-independence]
+name = VSAM and BMS subsystems must not import each other
+type = independence
+modules =
+    cics.vsam
+    cics.bms
+
+[importlinter:contract:builtins-no-dispatcher]
+name = Builtins must not import the dispatcher (avoid circular dependency)
+type = forbidden
+source_modules =
+    cics.builtins
+forbidden_modules =
+    cics.dispatcher
