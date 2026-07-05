@@ -9,7 +9,7 @@ from cics.dispatcher import run_cics
 from cics.types import CicsContext, DispatchKind
 
 from red_dragon_forge.adapters.cics import build_cics_spec
-from red_dragon_forge.compile import compile_program
+from interpreter.project.coprocessor_compile import compile_program
 
 # The prepass injects `COPY DFHEIBLK.` into WORKING-STORAGE; ProLeap resolves
 # that copybook against this directory, same as every Cicada CICS integration

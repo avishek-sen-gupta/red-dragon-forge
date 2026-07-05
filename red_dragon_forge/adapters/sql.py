@@ -15,7 +15,7 @@ from squall.preprocess import apply_sql_prepass
 from squall.statements import SqlDialectParser
 from squall.strategy import SqlLoweringStrategy
 
-from red_dragon_forge.coprocessor import CoprocessorSpec
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 
 
 def build_sql_spec(

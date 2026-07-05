@@ -24,7 +24,7 @@ fileignoreconfig:
 - filename: red_dragon_forge/adapters/cics.py
   checksum: a1c2bd799f240e06e8cfd8fbdf54c469546cac77375926c7d5cf23438495a796
 - filename: red_dragon_forge/adapters/sql.py
-  checksum: 7e8fe4012c78eaea7adb3a6fa45016529fab5f0ddfa83e33663fe52b7309111a
+  checksum: 2fadacb595691f3dba326bd462bfe349bea62ab6572334a6e0ba608f8ddfea4e
 - filename: red_dragon_forge/compile.py
   checksum: 69c75a57da53919640c9d1cc1c3b654dd0790a2e3cc73b2f26529a08f4ef1e34
 version: "1.0"

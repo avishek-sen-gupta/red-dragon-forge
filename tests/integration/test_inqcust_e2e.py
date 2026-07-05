@@ -68,7 +68,7 @@ from squall.connector import NamedDbConnector
 
 from red_dragon_forge.adapters.cics import build_cics_spec
 from red_dragon_forge.adapters.sql import build_sql_spec
-from red_dragon_forge.compile import compile_program
+from interpreter.project.coprocessor_compile import compile_program
 from tests.integration.forge_cobol_helpers import make_parser
 
 _BANK_OF_Z_COPY = Path(__file__).parents[2] / "vendor" / "bank-of-z" / "src" / "base" / "cics" / "copy"
