@@ -8,7 +8,7 @@ import cics
 from cics.dispatcher import run_cics
 from cics.types import CicsContext, DispatchKind
 
-from red_dragon_forge.adapters.cics import build_cics_spec
+from cics.coprocessor import build_cics_spec
 from interpreter.project.coprocessor_compile import compile_program
 
 # The prepass injects `COPY DFHEIBLK.` into WORKING-STORAGE; ProLeap resolves

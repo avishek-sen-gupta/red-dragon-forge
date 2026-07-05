@@ -66,8 +66,8 @@ from cics.types import CicsContext, DispatchKind
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 
-from red_dragon_forge.adapters.cics import build_cics_spec
-from red_dragon_forge.adapters.sql import build_sql_spec
+from cics.coprocessor import build_cics_spec
+from squall.coprocessor import build_sql_spec
 from interpreter.project.coprocessor_compile import compile_program
 from tests.integration.forge_cobol_helpers import make_parser
 

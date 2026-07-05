@@ -13,7 +13,7 @@ from interpreter import constants as rd_constants
 from squall.backends.sqlite import SqliteBackend
 from squall.binding import _decode_field
 
-from red_dragon_forge.adapters.sql import build_sql_spec
+from squall.coprocessor import build_sql_spec
 from interpreter.project.coprocessor_compile import compile_program
 from tests.integration.forge_cobol_helpers import make_parser
 
