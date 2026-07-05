@@ -29,9 +29,6 @@ from interpreter.run import run_linked
 from interpreter.address import Address
 from interpreter.vm.vm import VMState
 
-from squall.preprocess import apply_sql_prepass
-from squall.strategy import SqlLoweringStrategy
-
 
 def _squall_copybooks_dir() -> Path:
     """Return the filesystem path to the squall.copybooks package directory."""
@@ -76,37 +73,24 @@ def compile_cobol(
 ) -> tuple[CobolFrontend, LinkedProgram]:
     """Compile a COBOL source string to a LinkedProgram.
 
-    *connections* is the connection registry (name → backend) the program's
+    *connections* is the connection registry (name -> backend) the program's
     EXEC SQL CONNECT selects from at run time; a run starts disconnected.
 
-    Builds one CoprocessorSpec around a private one-element holder that
-    threads the prepass's dclgen field_meta into the SQL strategy —
-    compile_program guarantees the prepass runs before make_strategy is
-    called — and delegates to RedDragon's shared compile_program
-    (interpreter.project.coprocessor_compile), the same composition
+    Builds one CoprocessorSpec (squall.coprocessor.build_sql_spec) around a
+    private holder that threads the prepass's dclgen field_meta into the SQL
+    strategy, and delegates to RedDragon's shared compile_program
+    (interpreter.project.coprocessor_compile) -- the same composition
     mechanism Cicada and red-dragon-forge use.
 
     Returns (frontend, linked) so that callers can access frontend.data_layout
     for assertions and pass the LinkedProgram to run_linked.
     """
-    from squall.statements import SqlDialectParser
-    from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
+    from squall.coprocessor import build_sql_spec
+    from interpreter.project.coprocessor_compile import compile_program
 
     dirs = copybook_dirs or []
     parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
-    field_meta_holder: list = [{}]
-
-    def _prepass(src: str) -> str:
-        result = apply_sql_prepass(src, dirs)
-        field_meta_holder[0] = result.field_meta
-        return result.source
-
-    spec = CoprocessorSpec(
-        name="sql",
-        make_strategy=lambda: SqlLoweringStrategy(connections, field_meta_holder[0]),
-        source_prepass=_prepass,
-        dialect_parser=SqlDialectParser(),
-    )
+    spec = build_sql_spec(connections, copybook_dirs=dirs)
     return compile_program(source.encode("utf-8"), parser, [spec])
 
 
