@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from interpreter.cobol.cobol_frontend import CobolFrontend
-from cics.cics_visitor import parse_exec_cics_text
+from cics.statements import CicsDialectParser
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
@@ -120,7 +120,7 @@ def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,
         extension_strategies=[strategy],
-        cics_text_parser=parse_exec_cics_text,
+        dialect_parsers=[CicsDialectParser()],
     )
     instructions = frontend.lower(source)
 
@@ -156,7 +156,7 @@ def test_return_commarea_literal_falls_back_to_const(cobol_parser):
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,
         extension_strategies=[strategy],
-        cics_text_parser=parse_exec_cics_text,
+        dialect_parsers=[CicsDialectParser()],
     )
     instructions = frontend.lower(source)
 

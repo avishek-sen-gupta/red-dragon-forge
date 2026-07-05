@@ -83,7 +83,7 @@ def test_null_observer_on_verb_is_noop():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_map_notifies_observer():
     import queue
-    from interpreter.cobol.cobol_statements import ExecCicsStatement, CicsOperand
+    from cics.statements import ExecCicsStatement, CicsOperand
     from cics.strategy import CicsLoweringStrategy
 
     observer = _CapturingObserver()
@@ -112,7 +112,7 @@ def test_send_map_notifies_observer():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_xctl_notifies_observer():
-    from interpreter.cobol.cobol_statements import ExecCicsStatement, CicsOperand
+    from cics.statements import ExecCicsStatement, CicsOperand
     from cics.strategy import CicsLoweringStrategy
 
     observer = _CapturingObserver()
@@ -135,7 +135,7 @@ def test_xctl_notifies_observer():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_return_transid_notifies_observer():
-    from interpreter.cobol.cobol_statements import ExecCicsStatement, CicsOperand
+    from cics.statements import ExecCicsStatement, CicsOperand
     from cics.strategy import CicsLoweringStrategy
 
     observer = _CapturingObserver()
@@ -158,7 +158,7 @@ def test_return_transid_notifies_observer():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_null_observer_is_default():
-    from interpreter.cobol.cobol_statements import ExecCicsStatement, CicsOperand
+    from cics.statements import ExecCicsStatement, CicsOperand
     from cics.strategy import CicsLoweringStrategy
 
     strategy = CicsLoweringStrategy(

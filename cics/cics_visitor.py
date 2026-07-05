@@ -11,11 +11,37 @@ import re
 from antlr4 import CommonTokenStream, InputStream, TerminalNode
 from antlr4.error.ErrorListener import ErrorListener
 
+from dataclasses import dataclass
+
 from cics.cics_grammar.CICSzLexer import CICSzLexer
 from cics.cics_grammar.CICSzParser import CICSzParser
 from interpreter.cobol.cobol_expression import ExprNode, FieldRefNode, LiteralNode
-from interpreter.cobol.cobol_statements import CicsOperand
 from interpreter.cobol.ref_mod import RefModExpr, RefModLiteral, RefModReference
+
+
+@dataclass(frozen=True)
+class CicsOperand:
+    """A parsed EXEC CICS option value.
+
+    is_literal=True  -> a quoted string literal (text is the inner content, no quotes).
+    is_literal=False -> a bare operand: data-name, subscripted/reference-modified ref,
+                        or numeric literal (text preserved verbatim).
+
+    ``subscripts`` carries each index as a structured ExprNode: a bare data-name
+    becomes a FieldRefNode, an unsigned integer becomes a LiteralNode.
+    Arithmetic CICS subscripts raise ValueError at parse time.
+
+    Relocated from RedDragon (red-dragon commit b54471dc's DialectParser
+    migration) — lives here, not cics/statements.py, to avoid a circular
+    import (statements.py already needs parse_exec_cics_text from this
+    module; this module needs CicsOperand for its own operand construction).
+    """
+
+    text: str
+    is_literal: bool
+    subscripts: tuple[ExprNode, ...] = ()
+    ref_mod_start: ExprNode | None = None
+    ref_mod_length: ExprNode | None = None
 
 
 class _FailFastErrorListener(ErrorListener):
