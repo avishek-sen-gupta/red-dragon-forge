@@ -30,5 +30,5 @@ fileignoreconfig:
 - filename: docs/superpowers/specs/2026-07-05-monorepo-migration-design.md
   checksum: eae5f17de46d9792e64cac6012e668b445524e596da53ead0803a5619d1d5b40
 - filename: docs/superpowers/plans/2026-07-05-monorepo-migration.md
-  checksum: d59f32c6b83b628508f61f890de828ff2133774983f025f14f69d20b15b849d9
+  checksum: a9fe4dffca9bce93088ac5cae058a1a8127aaa9e1a9e84372614c221f851aac9
 version: "1.0"
