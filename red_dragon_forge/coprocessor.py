@@ -10,8 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from interpreter.cobol.dialect_parser import DialectParser, NullDialectParser
-from interpreter.cobol.red_dragon_extension_strategy import (
+from interpreter.frontend_extension import (
+    DialectParser,
+    NullDialectParser,
     RedDragonExtensionLoweringStrategy,
 )
 

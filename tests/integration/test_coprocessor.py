@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from interpreter.cobol.dialect_parser import NullDialectParser
+from interpreter.frontend_extension import NullDialectParser
 
 from red_dragon_forge.coprocessor import CoprocessorSpec
 
