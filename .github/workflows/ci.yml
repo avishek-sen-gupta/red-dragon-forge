@@ -43,10 +43,28 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
+      - name: Build ProLeap bridge JAR
+        working-directory: vendor/red-dragon/proleap-bridge
+        run: ./build.sh
       - name: Install build dependencies for hlasm_export
         run: sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev
-      - name: Build all artefacts and run full suite
-        run: make setup && make test
+      - name: Build hlasm_export
+        working-directory: cicada/third-party/che-che4z-lsp-for-hlasm-fork
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$(pwd)/build/bin" \
+            -DHLASM_DEV_GUESS_BIN_SUBDIR=ON \
+            -DBUILD_VSIX=OFF \
+            -DDISCOVER_TESTS=OFF
+          cmake --build build --target hlasm_export
+      - name: Install Python dependencies
+        run: uv sync
+      - name: Run tests
+        run: make test
 
   squall:
     runs-on: ubuntu-latest
@@ -69,6 +87,8 @@ jobs:
           java-version: "17"
       - name: Build the ProLeap bridge JAR
         run: make jar
+      - name: Install Python dependencies
+        run: make python
       - name: Start DB2
         run: make db2-up
       - name: Run the full test suite
@@ -93,11 +113,15 @@ jobs:
           java-version: "17"
       - name: Build the bridge JARs (ProLeap + JCL)
         run: make jar
+      - name: Install Python dependencies
+        run: make python
       - name: Run the full test suite
         run: make test
 
   forge:
     runs-on: ubuntu-latest
+    env:
+      DB2_PASSWORD: ${{ secrets.DB2_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -114,5 +138,11 @@ jobs:
         run: make jar
       - name: Install Python dependencies
         run: make python
+      - name: Start DB2 (reuses Squall's own compose stack)
+        working-directory: squall
+        run: make db2-up
       - name: Run the full test suite
-        run: make test
+        run: |
+          export PROLEAP_BRIDGE_JAR="${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
+          . tests/integration/db2_env.sh
+          make test
