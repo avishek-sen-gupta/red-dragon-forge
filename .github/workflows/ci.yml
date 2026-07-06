@@ -73,6 +73,7 @@ jobs:
         working-directory: squall
     env:
       DB2_PASSWORD: ${{ secrets.DB2_PASSWORD }}
+      PROLEAP_BRIDGE_JAR: ${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
     steps:
       - uses: actions/checkout@v5
         with:
