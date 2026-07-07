@@ -65,7 +65,10 @@ def _job_to_graph(job: Job) -> tuple[list[GraphNode], list[GraphEdge]]:
                         target=instream_id,
                         target_kind=NodeKind.INSTREAM_DATA,
                         kind=EdgeKind.READS,
-                        attrs={"ddname": dd.ddname},
+                        attrs={
+                            "ddname": dd.ddname,
+                            "text": "\n".join(dd.in_stream),
+                        },
                     )
                 )
                 continue
@@ -97,7 +100,10 @@ def extract_jcl_graph(jcl_source: str) -> tuple[list[GraphNode], list[GraphEdge]
     A DD fed by literal inline content (DD *) has no dataset identity to
     read/write — it gets its own INSTREAM_DATA node (id scoped by
     JOB.STEP.DDNAME, so distinct occurrences never collide) and a READS edge
-    from its step, instead of being folded into DATASET.
+    from its step, instead of being folded into DATASET. That edge's
+    attrs["text"] carries the raw in-stream lines verbatim (e.g. IDCAMS
+    control statements) as an opaque string — this module does no semantic
+    parsing of the content, just passes it through.
 
     TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
     DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not
