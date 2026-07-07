@@ -1,4 +1,4 @@
-"""build_carddemo_graph.py — run all three knowledge-graph extractors over
+"""build_carddemo_graph.py — run all four knowledge-graph extractors over
 the FULL CardDemo corpus (all JCL jobs, all COBOL programs, the real CSD),
 merge, and render one HTML visualization.
 
@@ -39,6 +39,7 @@ from cics.coprocessor import build_cics_spec
 from cics.dispatcher import parse_csd
 from cics.flow_map import extract_transaction_flow_graph
 
+from jackal.cobol_file_graph import extract_cobol_file_graph
 from jackal.jcl_graph import extract_jcl_graph
 
 from knowledge_graph.merge import merge_graph
@@ -160,6 +161,39 @@ def _build_call_copy_graph(
     return all_nodes, all_edges
 
 
+def _build_batch_file_graph(
+    copybook_dirs: list[Path], cics_program_names: set[str], failures: list[str]
+) -> tuple[list, list]:
+    """PROGRAM -> COBOL_FILE graph (READS/WRITES/UPDATES, from OPEN mode) for
+    every CardDemo batch COBOL program's FILE-CONTROL SELECT/OPEN statements.
+
+    CICS programs are skipped, not attempted-and-failed: they access files
+    via EXEC CICS READ/WRITE FILE(...) (already traced as CICS_FILE edges by
+    _build_cics_flow_graph), not plain OPEN/READ/WRITE — and the bare
+    parser.parse() this pass uses (no CICS extension_strategies/
+    dialect_parsers, unlike _build_call_copy_graph) can't even parse EXEC
+    CICS statement nodes, since that needs red-dragon's CICS IR lowering.
+    """
+    all_nodes, all_edges = [], []
+    cbl_dir = _CARDDEMO_HOME / "cbl"
+    parser = _make_parser(copybook_dirs)
+    cbl_files = [
+        p for p in sorted(cbl_dir.glob("*.cbl")) if p.stem.upper() not in cics_program_names
+    ]
+    for path in cbl_files:
+        try:
+            nodes, edges = extract_cobol_file_graph(path.read_bytes(), parser)
+        except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
+            failures.append(f"FILE-CONTROL {path.name}: {exc}")
+            continue
+        all_nodes.extend(nodes)
+        all_edges.extend(edges)
+    print(
+        f"FILE-CONTROL: {len(cbl_files)} batch programs, {len(all_nodes)} nodes, {len(all_edges)} edges"
+    )
+    return all_nodes, all_edges
+
+
 def _build_cics_flow_graph(
     copybook_dirs: list[Path], transid_to_program: dict[str, str], failures: list[str]
 ) -> tuple[list, list]:
@@ -227,9 +261,12 @@ def main() -> int:
     cics_nodes, cics_edges = _build_cics_flow_graph(
         copybook_dirs, transid_to_program, failures
     )
+    file_nodes, file_edges = _build_batch_file_graph(
+        copybook_dirs, cics_program_names, failures
+    )
 
-    all_nodes = jcl_nodes + call_nodes + cics_nodes
-    all_edges = _dedupe_edges(jcl_edges + call_edges + cics_edges)
+    all_nodes = jcl_nodes + call_nodes + cics_nodes + file_nodes
+    all_edges = _dedupe_edges(jcl_edges + call_edges + cics_edges + file_edges)
     graph = merge_graph(all_nodes, all_edges)
 
     print(

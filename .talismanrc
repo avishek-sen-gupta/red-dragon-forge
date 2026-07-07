@@ -65,4 +65,6 @@ fileignoreconfig:
   checksum: d4d07008070fb6cb0c62b5cb302b57aee02a3b42931a3758656d307b18ee0a35
 - filename: tests/integration/test_knowledge_graph_carddemo.py
   checksum: 0f1a0a792b8b195100c5a30b59f8cd19ed7f2d91bd4796a987e70b7614c922bf
+- filename: jackal/tests/unit/test_cobol_file_graph.py
+  checksum: a41fa58ef6cc88ae92539090462dfe332d5d91afe7fe045da489e01bde30347b
 version: "1.0"
