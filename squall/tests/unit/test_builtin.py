@@ -119,7 +119,7 @@ def _session(backend, vm):
     from squall.parser.parse import parse_exec_sql
 
     plans: list = []
-    builtin = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, _reset = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def issue(sql_text: str):
         plans.append(parse_exec_sql(sql_text))

@@ -152,6 +152,29 @@ def test_strategy_registers_exec_sql_builtin(backend):
     assert callable(Builtins.TABLE[key]), "registered value must be callable"
 
 
+def test_strategy_registers_task_end_hook(backend):
+    """Constructing SqlLoweringStrategy claims the generic, cicada-owned
+    __cics_task_end_hook extension point — squall's session reset (commit +
+    close every cursor) runs whenever a composed CICS runtime signals task
+    end, with neither package importing the other."""
+    key = FuncName("__cics_task_end_hook")
+    previous = Builtins.TABLE.get(key)
+    try:
+        Builtins.TABLE.pop(key, None)
+
+        SqlLoweringStrategy(backend, {})
+
+        assert key in Builtins.TABLE
+        assert callable(Builtins.TABLE[key])
+        result = Builtins.TABLE[key]([], vm=None)
+        assert result.value is None
+    finally:
+        if previous is None:
+            Builtins.TABLE.pop(key, None)
+        else:
+            Builtins.TABLE[key] = previous
+
+
 def test_preprocess_program_dict_is_noop(strategy):
     data = {"key": "value"}
     result = strategy.preprocess_program_dict(data)

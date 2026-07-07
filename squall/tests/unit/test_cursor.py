@@ -93,7 +93,7 @@ def test_cursor_declare_open_fetch_close():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, _reset = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def run(sql):
         plans.append(parse_exec_sql(sql))
@@ -144,7 +144,7 @@ def test_fetch_on_unopened_cursor_is_end():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, _reset = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def run(sql):
         plans.append(parse_exec_sql(sql))

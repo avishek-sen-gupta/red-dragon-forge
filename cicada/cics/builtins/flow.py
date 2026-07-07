@@ -15,6 +15,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def make_noop_task_end_hook_builtin() -> object:
+    """Return the default __cics_task_end_hook builtin: does nothing.
+
+    Cicada always emits a call to this name at task end (EXEC CICS RETURN,
+    with or without TRANSID) — it has no idea what, if anything, is
+    registered under it. Another coprocessor composed alongside cicada may
+    register its own real implementation over this default (see
+    CicsLoweringStrategy.__init__'s _register_default).
+    """
+
+    def __cics_task_end_hook(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        return BuiltinResult(value=None)
+
+    return __cics_task_end_hook
+
+
 def make_set_return_context_builtin(result_holder: list) -> object:
     """Return __cics_set_return_context builtin.
 

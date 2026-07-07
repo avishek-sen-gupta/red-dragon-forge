@@ -236,6 +236,22 @@ def _h_rollback(ctx: _Ctx, _parsed, vm) -> None:
     write_sqlcode(vm, 0)
 
 
+def _reset_session(ctx: _Ctx) -> None:
+    """Implicit SYNCPOINT: commit the current connection (if any) and close
+    every declared cursor — models the unit-of-work commit + cursor release a
+    real CICS-attached Db2 session gets at task end. ``backend.close`` is a
+    no-op for a name that was never actually opened, so it's safe to close
+    every DECLAREd cursor unconditionally rather than tracking which ones are
+    currently open.
+    """
+    backend = ctx.conn.current
+    if backend is None:
+        return
+    backend.commit()
+    for name in ctx.cursors:
+        backend.close(name)
+
+
 def _h_query(ctx: _Ctx, parsed, vm) -> None:
     # All remaining kinds carry a non-empty query string.
     backend = _current(ctx, vm)
@@ -272,7 +288,7 @@ def make_exec_sql_builtin(
     plans: list,
     field_meta: Mapping[str, FieldMeta],
     initial_connector: DbConnector = NullDbConnector(),
-) -> Callable:
+) -> tuple[Callable, Callable]:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
     (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
     by the prepass, shared by reference).
@@ -295,8 +311,9 @@ def make_exec_sql_builtin(
     as the single argument; the builtin resolves it and dispatches by kind via
     ``_HANDLERS`` — it never parses at run time.
 
-    The returned callable has the standard RedDragon builtin signature:
-    ``(args: list[TypedValue], vm: VMState) -> BuiltinResult``.
+    Both ``exec_sql_builtin`` and ``reset_session_builtin`` have the standard
+    RedDragon builtin signature: ``(args: list[TypedValue], vm: VMState) ->
+    BuiltinResult`` — both close over the same per-run session state.
     """
     # Per-run session: the current connection (resolved once, up front, via
     # initial_connector — disconnected unless it names a real entry) + the
@@ -321,4 +338,10 @@ def make_exec_sql_builtin(
         _HANDLERS.get(parsed.kind, _h_query)(ctx, parsed, vm)
         return BuiltinResult(value=None)
 
-    return __exec_sql
+    def __reset_session(args: list, vm) -> BuiltinResult:
+        from interpreter.vm.vm_types import BuiltinResult
+
+        _reset_session(ctx)
+        return BuiltinResult(value=None)
+
+    return __exec_sql, __reset_session

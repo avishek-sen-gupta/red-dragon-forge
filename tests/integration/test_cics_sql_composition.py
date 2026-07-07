@@ -69,3 +69,67 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
     )
 
     assert result.kind == DispatchKind.RETURN
+
+
+_CURSOR_PROGRAM = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CURSORPGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-NAME     PIC X(9).
+       01 WS-DEPT     PIC 9(4).
+       01 SQLCODE     PIC S9(9).
+       PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
+           EXEC SQL DECLARE C1 CURSOR FOR
+               SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr'
+           END-EXEC
+           EXEC SQL OPEN C1 END-EXEC
+           EXEC SQL FETCH C1 INTO :WS-NAME, :WS-DEPT END-EXEC
+           EXEC CICS RETURN
+           END-EXEC.
+"""
+
+
+def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
+    """The task-end hook cicada's RETURN lowering calls and squall's strategy
+    registers under (__cics_task_end_hook) are never referenced directly by
+    either package — this is the only test that actually runs a compiled
+    program through both strategies and checks the wire-up did its job: a
+    cursor left open by an EXEC CICS RETURN is closed, not leaked into the
+    next task."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE STAFF (NAME VARCHAR(9), DEPT INTEGER, JOB VARCHAR(5))")
+    conn.execute("INSERT INTO STAFF VALUES ('SANDERS', 20, 'Mgr')")
+    conn.commit()
+    backend = SqliteBackend(conn)
+
+    context_holder = [None]
+    result_holder = [None]
+    cics_spec = build_cics_spec(
+        context_holder=context_holder, result_holder=result_holder, applid="FORGEAPP"
+    )
+    sql_spec = build_sql_spec(connections={"SAMPLE": backend})
+    parser = make_parser(bridge_jar)
+
+    _frontend, linked = compile_program(
+        _CURSOR_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
+    )
+
+    screen_q: queue.Queue = queue.Queue()
+    input_q: queue.Queue = queue.Queue()
+    result = run_program(
+        linked,
+        [cics_spec, sql_spec],
+        CicsContext(transid="CURS", commarea=b"", eibaid="\x7d"),
+        screen_q,
+        input_q,
+        context_holder=context_holder,
+        result_holder=result_holder,
+        max_steps=10_000,
+    )
+
+    assert result.kind == DispatchKind.RETURN
+    # The FETCH above proves the cursor really was open; if RETURN's task-end
+    # hook never reached squall, it would still be registered here.
+    assert backend._cursors == {}

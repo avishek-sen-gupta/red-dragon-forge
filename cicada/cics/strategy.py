@@ -367,6 +367,19 @@ def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-
     table[key] = fn
 
 
+def _register_default(table: dict, name: str, fn: object) -> None:  # type: ignore[type-arg]
+    """Register fn under name only if nothing is registered there yet — for a
+    generic extension point another coprocessor may independently claim by
+    registering its own real implementation over this default (see
+    __cics_task_end_hook). Order-independent: if the other coprocessor
+    constructs first, its real registration is already present and this
+    call leaves it alone; if it constructs later, its own (overwriting)
+    registration replaces this default.
+    """
+    key = FuncName(name)
+    table.setdefault(key, fn)
+
+
 def _operand_text(opt: "CicsOperand | None") -> str | None:
     return opt.text if opt is not None else None
 
@@ -423,6 +436,7 @@ class CicsLoweringStrategy:
             make_set_return_context_builtin,
             make_set_xctl_context_builtin,
             make_link_builtin,
+            make_noop_task_end_hook_builtin,
         )
 
         if _BUILTIN_INIT_EIB in Builtins.TABLE:
@@ -444,6 +458,13 @@ class CicsLoweringStrategy:
         _register(Builtins.TABLE, "__cics_inquire", make_inquire_builtin(prog_cache))
         _register(Builtins.TABLE, "__cics_writeq_td", make_writeq_td_builtin(td))
         _register(Builtins.TABLE, "__cics_handle_abend", make_handle_abend_builtin())
+        # Default for a generic task-end extension point another composed
+        # coprocessor (e.g. squall) may independently claim — cicada always
+        # calls this at task end (see the RETURN lowering below) with no idea
+        # what, if anything, is registered under it.
+        _register_default(
+            Builtins.TABLE, "__cics_task_end_hook", make_noop_task_end_hook_builtin()
+        )
         _register(
             Builtins.TABLE,
             "__cics_handle_condition",
@@ -620,6 +641,17 @@ class CicsLoweringStrategy:
                         args=(),
                     )
                 )
+            # Task end (both RETURN and RETURN TRANSID — but not XCTL, which
+            # continues the same task/unit of work below). Always emitted,
+            # regardless of what (if anything) another composed coprocessor
+            # has registered under this name.
+            ctx.emit_inst(
+                CallFunction(
+                    result_reg=ctx.fresh_reg(),
+                    func_name=FuncName("__cics_task_end_hook"),
+                    args=(),
+                )
+            )
             ctx.emit_inst(Return_())
             return
 
