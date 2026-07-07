@@ -134,6 +134,198 @@ def test_xctl_edge_between_programs(cics_parser):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_read_edge_to_cics_file(cics_parser):
+    csd = "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-KEY PIC X(10).
+       01 WS-REC PIC X(80).
+       PROCEDURE DIVISION.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC)
+               RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+    nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": src},
+        parser=cics_parser,
+    )
+    reads = [e for e in edges if e.kind == EdgeKind.READS and e.source == "ACCTPROG"]
+    assert len(reads) == 1
+    assert reads[0].target == "ACCTFILE"
+    assert reads[0].target_kind == NodeKind.CICS_FILE
+    assert any(n.kind == NodeKind.CICS_FILE and n.id == "ACCTFILE" for n in nodes)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_write_edge_to_cics_file(cics_parser):
+    csd = "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-KEY PIC X(10).
+       01 WS-REC PIC X(80).
+       PROCEDURE DIVISION.
+           EXEC CICS WRITE FILE('CUSTDAT') FROM(WS-REC)
+               RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+    nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": src},
+        parser=cics_parser,
+    )
+    writes = [e for e in edges if e.kind == EdgeKind.WRITES]
+    assert len(writes) == 1
+    assert writes[0].source == "ACCTPROG"
+    assert writes[0].target == "CUSTDAT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_rewrite_edge_is_updates(cics_parser):
+    csd = "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-REC PIC X(80).
+       PROCEDURE DIVISION.
+           EXEC CICS REWRITE FILE('CUSTDAT') FROM(WS-REC) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+    _nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": src},
+        parser=cics_parser,
+    )
+    updates = [e for e in edges if e.kind == EdgeKind.UPDATES]
+    assert len(updates) == 1
+    assert updates[0].target == "CUSTDAT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_delete_edge_is_deletes(cics_parser):
+    csd = "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-KEY PIC X(10).
+       PROCEDURE DIVISION.
+           EXEC CICS DELETE FILE('CARDDAT') RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+    _nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": src},
+        parser=cics_parser,
+    )
+    deletes = [e for e in edges if e.kind == EdgeKind.DELETES]
+    assert len(deletes) == 1
+    assert deletes[0].target == "CARDDAT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_browse_verbs_are_reads_and_endbr_is_ends_browse(cics_parser):
+    csd = "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-KEY PIC X(10).
+       01 WS-REC PIC X(80).
+       PROCEDURE DIVISION.
+           EXEC CICS STARTBR FILE('CARDAIX')
+               RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS READNEXT FILE('CARDAIX') INTO(WS-REC)
+               RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS READPREV FILE('CARDAIX') INTO(WS-REC)
+               RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS ENDBR FILE('CARDAIX') END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+    _nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": src},
+        parser=cics_parser,
+    )
+    reads = [e for e in edges if e.kind == EdgeKind.READS and e.target == "CARDAIX"]
+    ends = [e for e in edges if e.kind == EdgeKind.ENDS_BROWSE]
+    assert len(reads) == 3  # STARTBR + READNEXT + READPREV
+    assert len(ends) == 1
+    assert ends[0].target == "CARDAIX"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_defines_dataset_edge_from_csd_file_dsname(cics_parser):
+    csd = (
+        "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+        "DEFINE FILE(ACCTFILE) GROUP(DEMO)\n"
+        "       DSNAME(AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS)\n"
+    )
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-KEY PIC X(10).
+       01 WS-REC PIC X(80).
+       PROCEDURE DIVISION.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC)
+               RIDFLD(WS-KEY) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+    nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": src},
+        parser=cics_parser,
+    )
+    defines_dataset = [e for e in edges if e.kind == EdgeKind.DEFINES_DATASET]
+    assert len(defines_dataset) == 1
+    assert defines_dataset[0].source == "ACCTFILE"
+    assert defines_dataset[0].source_kind == NodeKind.CICS_FILE
+    assert defines_dataset[0].target == "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
+    assert defines_dataset[0].target_kind == NodeKind.DATASET
+    assert any(
+        n.kind == NodeKind.DATASET and n.id == "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
+        for n in nodes
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_no_defines_dataset_edge_when_csd_has_no_file_definitions(cics_parser):
+    """The synthetic-CSD tests above (no DEFINE FILE at all) must not error
+    or produce a spurious edge — DEFINES_DATASET is additive, opt-in per CSD."""
+    _nodes, edges = extract_transaction_flow_graph(
+        csd_source=_CSD,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": _ACCTPROG},
+        parser=cics_parser,
+    )
+    assert [e for e in edges if e.kind == EdgeKind.DEFINES_DATASET] == []
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_node_ids_are_uppercased(cics_parser):
     csd = "DEFINE TRANSACTION(acct) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
     nodes, _edges = extract_transaction_flow_graph(

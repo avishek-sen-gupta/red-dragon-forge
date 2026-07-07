@@ -15,6 +15,7 @@ from cics.dispatcher import (
     CicsRegion,
     InputEvent,
     parse_csd,
+    parse_csd_files,
 )
 import cics.dispatcher as dispatcher_mod
 
@@ -438,3 +439,33 @@ def test_parse_csd_ignores_unrelated_defines(tmp_path):
     )
     mapping = parse_csd(csd)
     assert mapping == {"CM00": "COMEN01C"}  # CAVW (no PROGRAM), FILE, PROGRAM skipped
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_csd_files(tmp_path):
+    csd = tmp_path / "region.csd"
+    csd.write_text(
+        " DEFINE FILE(ACCTDAT) GROUP(CARDDEMO)\n"
+        "        DSNAME(AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS) STATUS(ENABLED)\n"
+        " DEFINE FILE(CUSTDAT) GROUP(CARDDEMO)\n"
+        "        DSNAME(AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS) STATUS(ENABLED)\n"
+    )
+    mapping = parse_csd_files(csd)
+    assert mapping["ACCTDAT"] == "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
+    assert mapping["CUSTDAT"] == "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_csd_files_ignores_defines_without_dsname(tmp_path):
+    # A DEFINE FILE without DSNAME (rare, but the grammar allows an
+    # attribute with no value) and DEFINE TRANSACTION/PROGRAM entries are
+    # both skipped — only FILE-with-DSNAME contributes a mapping.
+    csd = tmp_path / "region.csd"
+    csd.write_text(
+        " DEFINE FILE(NODSN) GROUP(CARDDEMO)\n"
+        " DEFINE FILE(ACCTDAT) GROUP(CARDDEMO)\n"
+        "        DSNAME(AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS)\n"
+        " DEFINE TRANSACTION(CM00) PROGRAM(COMEN01C) GROUP(CARDDEMO)\n"
+    )
+    mapping = parse_csd_files(csd)
+    assert mapping == {"ACCTDAT": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"}
