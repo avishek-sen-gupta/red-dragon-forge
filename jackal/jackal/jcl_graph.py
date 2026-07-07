@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
-from jackal.dsn import DirectDSN
+from jackal.dsn import DirectDSN, InStreamDSN
 from jackal.jcl.parser import parse_jcl
 from jackal.model import DispStatus, Job
 
@@ -53,6 +53,22 @@ def _job_to_graph(job: Job) -> tuple[list[GraphNode], list[GraphEdge]]:
         )
 
         for dd in step.dds:
+            if isinstance(dd.dsn, InStreamDSN):
+                instream_id = _add_node(
+                    NodeKind.INSTREAM_DATA,
+                    f"{job.name.upper()}.{step.name.upper()}.{dd.ddname.upper()}",
+                )
+                edges.append(
+                    GraphEdge(
+                        source=step_id,
+                        source_kind=NodeKind.STEP,
+                        target=instream_id,
+                        target_kind=NodeKind.INSTREAM_DATA,
+                        kind=EdgeKind.READS,
+                        attrs={"ddname": dd.ddname},
+                    )
+                )
+                continue
             if dd.sysout or not isinstance(dd.dsn, DirectDSN):
                 continue
             dataset_id = _add_node(NodeKind.DATASET, dd.dsn.name.upper())
@@ -72,14 +88,20 @@ def _job_to_graph(job: Job) -> tuple[list[GraphNode], list[GraphEdge]]:
 
 def extract_jcl_graph(jcl_source: str) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Parse JCL text and return its step-sequencing portion of the shared
-    knowledge graph: JOB/STEP/PROGRAM/DATASET nodes; JCL_STEP_RUNS edges
-    (job->step, in step order, and step->program) and READS/WRITES/UPDATES
-    edges (step->dataset, derived from DD disposition — NEW/MOD->WRITES,
-    OLD->UPDATES, SHR->READS; the raw DispStatus is kept in attrs["disp"]).
+    knowledge graph: JOB/STEP/PROGRAM/DATASET/INSTREAM_DATA nodes;
+    JCL_STEP_RUNS edges (job->step, in step order, and step->program) and
+    READS/WRITES/UPDATES edges (step->dataset, derived from DD disposition —
+    NEW/MOD->WRITES, OLD->UPDATES, SHR->READS; the raw DispStatus is kept in
+    attrs["disp"]).
 
-    TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, and SYSOUT DDs,
-    are not stable cross-job identities and are not represented as DATASET
-    nodes.
+    A DD fed by literal inline content (DD *) has no dataset identity to
+    read/write — it gets its own INSTREAM_DATA node (id scoped by
+    JOB.STEP.DDNAME, so distinct occurrences never collide) and a READS edge
+    from its step, instead of being folded into DATASET.
+
+    TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
+    DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not
+    represented as nodes at all.
     """
     job = parse_jcl(jcl_source)
     return _job_to_graph(job)

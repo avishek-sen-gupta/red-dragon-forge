@@ -53,7 +53,8 @@ package org.jackal.jcl;
  *             "dsn":        "<dataset-name or ''>",
  *             "disp_words": ["<word>", ...],
  *             "in_stream":  ["<line>", ...],
- *             "sysout":     true|false
+ *             "sysout":     true|false,
+ *             "dummy":      true|false
  *           }
  *         ]
  *       }
@@ -68,6 +69,7 @@ import org.antlr.v4.runtime.tree.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.IntStream;
 
 public final class JclSerializer {
 
@@ -402,6 +404,7 @@ public final class JclSerializer {
                 empty.add("disp_words", new JsonArray());
                 empty.add("in_stream", new JsonArray());
                 empty.addProperty("sysout", false);
+                empty.addProperty("dummy", false);
                 return empty;
             }
 
@@ -411,54 +414,22 @@ public final class JclSerializer {
             JCLParser.DdNameContext ddNameCtx = findChild(ddStmt, JCLParser.DdNameContext.class);
             dd.addProperty("ddname", ddNameCtx != null ? ddNameCtx.getText() : "");
 
-            // ddParameter list
-            String dsn = "";
-            JsonArray dispWords = new JsonArray();
-            boolean sysout = false;
-            boolean isAsterisk = false;
+            // ddParameter list — fold each parameter into a new, immutable DdParamFields
+            // rather than reassigning a bundle of local flags across the loop.
+            DdParamFields fields = IntStream.range(0, ddStmt.getChildCount())
+                    .mapToObj(ddStmt::getChild)
+                    .filter(JCLParser.DdParameterContext.class::isInstance)
+                    .map(JCLParser.DdParameterContext.class::cast)
+                    .map(param -> param.getChild(0))
+                    .reduce(DdParamFields.empty(), this::foldDdParameter, (a, b) -> b);
 
-            for (int i = 0; i < ddStmt.getChildCount(); i++) {
-                ParseTree child = ddStmt.getChild(i);
-                if (child instanceof JCLParser.DdParameterContext) {
-                    JCLParser.DdParameterContext param = (JCLParser.DdParameterContext) child;
-                    ParseTree inner = param.getChild(0);
-
-                    if (inner instanceof JCLParser.DdParmDSNAMEContext) {
-                        JCLParser.DdParmDSNAMEContext dsnCtx = (JCLParser.DdParmDSNAMEContext) inner;
-                        JCLParser.DatasetNameContext datasetName =
-                                findChild(dsnCtx, JCLParser.DatasetNameContext.class);
-                        if (datasetName != null) {
-                            String raw = datasetName.getText();
-                            if (raw.startsWith("*.")) {
-                                // backward reference: *.STEPNAME.DDNAME (two-segment) or longer
-                                String[] parts = raw.substring(2).split("\\.");
-                                if (parts.length == 2) {
-                                    JsonObject backref = new JsonObject();
-                                    backref.addProperty("step", parts[0]);
-                                    backref.addProperty("ddname", parts[1]);
-                                    dd.add("backref", backref);
-                                    // leave dsn="" — Python parser dispatches on "backref" key first
-                                } else {
-                                    // three-segment or malformed — pass raw string; Python raises ValueError
-                                    dsn = raw;
-                                }
-                            } else {
-                                dsn = raw;
-                            }
-                        }
-                    } else if (inner instanceof JCLParser.DdParmDISPContext) {
-                        JCLParser.DdParmDISPContext dispCtx = (JCLParser.DdParmDISPContext) inner;
-                        JCLParser.SingleOrMultipleValueContext val =
-                                findChild(dispCtx, JCLParser.SingleOrMultipleValueContext.class);
-                        if (val != null) {
-                            dispWords = extractWords(val);
-                        }
-                    } else if (inner instanceof JCLParser.DdParmSYSOUTContext) {
-                        sysout = true;
-                    } else if (inner instanceof JCLParser.DdParmASTERISKContext) {
-                        isAsterisk = true;
-                    }
-                }
+            String dsn = fields.dsn();
+            JsonArray dispWords = fields.dispWords();
+            boolean sysout = fields.sysout();
+            boolean dummy = fields.dummy();
+            boolean isAsterisk = fields.isAsterisk();
+            if (fields.backref() != null) {
+                dd.add("backref", fields.backref());
             }
 
             // in-stream data — ddParmASTERISK_DATA children
@@ -507,7 +478,72 @@ public final class JclSerializer {
             dd.add("disp_words", dispWords);
             dd.add("in_stream", inStream);
             dd.addProperty("sysout", sysout);
+            dd.addProperty("dummy", dummy);
             return dd;
+        }
+
+        /** Immutable accumulator for one ddStatement's ddParameter children. */
+        private record DdParamFields(
+                String dsn,
+                JsonArray dispWords,
+                boolean sysout,
+                boolean dummy,
+                boolean isAsterisk,
+                JsonObject backref) {
+
+            static DdParamFields empty() {
+                return new DdParamFields("", new JsonArray(), false, false, false, null);
+            }
+        }
+
+        /** Fold one ddParameter's inner context into a new DdParamFields. */
+        private DdParamFields foldDdParameter(DdParamFields acc, ParseTree inner) {
+            return switch (inner) {
+                case JCLParser.DdParmDSNAMEContext dsnCtx -> foldDsname(acc, dsnCtx);
+                case JCLParser.DdParmDISPContext dispCtx -> {
+                    JCLParser.SingleOrMultipleValueContext val =
+                            findChild(dispCtx, JCLParser.SingleOrMultipleValueContext.class);
+                    yield val == null
+                            ? acc
+                            : new DdParamFields(
+                                    acc.dsn(), extractWords(val), acc.sysout(), acc.dummy(),
+                                    acc.isAsterisk(), acc.backref());
+                }
+                case JCLParser.DdParmSYSOUTContext c -> new DdParamFields(
+                        acc.dsn(), acc.dispWords(), true, acc.dummy(), acc.isAsterisk(), acc.backref());
+                case JCLParser.DdParmDUMMYContext c -> new DdParamFields(
+                        acc.dsn(), acc.dispWords(), acc.sysout(), true, acc.isAsterisk(), acc.backref());
+                case JCLParser.DdParmASTERISKContext c -> new DdParamFields(
+                        acc.dsn(), acc.dispWords(), acc.sysout(), acc.dummy(), true, acc.backref());
+                default -> acc;
+            };
+        }
+
+        /** Fold a DSNAME parameter: a direct dataset name, or a two/three-segment backward reference. */
+        private DdParamFields foldDsname(DdParamFields acc, JCLParser.DdParmDSNAMEContext dsnCtx) {
+            JCLParser.DatasetNameContext datasetName =
+                    findChild(dsnCtx, JCLParser.DatasetNameContext.class);
+            if (datasetName == null) {
+                return acc;
+            }
+            String raw = datasetName.getText();
+            if (!raw.startsWith("*.")) {
+                return new DdParamFields(
+                        raw, acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), acc.backref());
+            }
+            // backward reference: *.STEPNAME.DDNAME (two-segment) or longer
+            String[] parts = raw.substring(2).split("\\.");
+            if (parts.length != 2) {
+                // three-segment or malformed — pass raw string; Python raises ValueError
+                return new DdParamFields(
+                        raw, acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), acc.backref());
+            }
+            JsonObject backref = new JsonObject();
+            backref.addProperty("step", parts[0]);
+            backref.addProperty("ddname", parts[1]);
+            // leave dsn="" — Python parser dispatches on "backref" key first
+            return new DdParamFields(
+                    acc.dsn(), acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), backref);
         }
 
         /**

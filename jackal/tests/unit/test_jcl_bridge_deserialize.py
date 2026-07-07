@@ -2,7 +2,7 @@ import pytest
 from tests.covers import NotLanguageFeature, covers
 from jackal.jcl.bridge_parser import _job_from_json
 from jackal.model import CondOp, DispNormal, DispStatus
-from jackal.dsn import DirectDSN, TempRef
+from jackal.dsn import DirectDSN, DummyDSN, InStreamDSN, NoDSN, TempRef
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -102,7 +102,9 @@ def test_deserialize_instream_and_sysout():
     }
     dds = _job_from_json(data).steps[0].dds
     assert dds[0].in_stream == ("   DELETE A.B CLUSTER",)
+    assert dds[0].dsn == InStreamDSN()
     assert dds[1].sysout is True
+    assert dds[1].dsn == NoDSN()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -201,7 +203,7 @@ def test_dd_from_json_direct_dsn_unchanged():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_dd_from_json_absent_dsn_is_direct_empty():
+def test_dd_from_json_absent_dsn_and_sysout_is_no_dsn():
     from jackal.jcl.bridge_parser import _job_from_json
 
     data = {
@@ -223,8 +225,34 @@ def test_dd_from_json_absent_dsn_is_direct_empty():
     }
     job = _job_from_json(data)
     dd = job.steps[0].dds[0]
-    assert isinstance(dd.dsn, DirectDSN)
-    assert dd.dsn.name == ""
+    assert dd.dsn == NoDSN()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_from_json_dummy_is_dummy_dsn():
+    from jackal.jcl.bridge_parser import _job_from_json
+
+    data = {
+        "name": "J",
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "IEBGENER",
+                "dds": [
+                    {
+                        "ddname": "SYSIN",
+                        "disp_words": [],
+                        "in_stream": [],
+                        "sysout": False,
+                        "dummy": True,
+                    }
+                ],
+            }
+        ],
+    }
+    job = _job_from_json(data)
+    dd = job.steps[0].dds[0]
+    assert dd.dsn == DummyDSN()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
