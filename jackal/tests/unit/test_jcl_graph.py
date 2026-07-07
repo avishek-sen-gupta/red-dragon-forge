@@ -106,3 +106,54 @@ def test_temp_dataset_is_not_a_dataset_node():
     assert not any(
         e.kind in (EdgeKind.READS, EdgeKind.WRITES, EdgeKind.UPDATES) for e in edges
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_instream_dd_becomes_instream_data_node_not_dataset():
+    jcl = """//DELJ JOB 'demo'
+//STEP1 EXEC PGM=IDCAMS
+//SYSIN DD *
+   DELETE A.B CLUSTER
+/*
+"""
+    nodes, edges = extract_jcl_graph(jcl)
+    assert not any(n.kind == NodeKind.DATASET for n in nodes)
+    instream_nodes = [n for n in nodes if n.kind == NodeKind.INSTREAM_DATA]
+    assert len(instream_nodes) == 1
+    assert instream_nodes[0].id == "DELJ.STEP1.SYSIN"
+
+    reads = [e for e in edges if e.kind == EdgeKind.READS and e.source == "DELJ.STEP1"]
+    assert len(reads) == 1
+    assert reads[0].target == "DELJ.STEP1.SYSIN"
+    assert reads[0].target_kind == NodeKind.INSTREAM_DATA
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_two_instream_dds_in_different_steps_get_distinct_nodes():
+    jcl = """//DELJ JOB 'demo'
+//STEP1 EXEC PGM=IDCAMS
+//SYSIN DD *
+   DELETE A.B CLUSTER
+/*
+//STEP2 EXEC PGM=IDCAMS
+//SYSIN DD *
+   DEFINE CLUSTER (NAME(A.B))
+/*
+"""
+    nodes, _edges = extract_jcl_graph(jcl)
+    instream_ids = sorted(n.id for n in nodes if n.kind == NodeKind.INSTREAM_DATA)
+    assert instream_ids == ["DELJ.STEP1.SYSIN", "DELJ.STEP2.SYSIN"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dummy_dd_is_not_a_dataset_or_instream_node():
+    jcl = """//DUMJ JOB 'demo'
+//STEP1 EXEC PGM=IEBGENER
+//SYSIN DD DUMMY
+"""
+    nodes, edges = extract_jcl_graph(jcl)
+    assert not any(n.kind == NodeKind.DATASET for n in nodes)
+    assert not any(n.kind == NodeKind.INSTREAM_DATA for n in nodes)
+    assert not any(
+        e.kind in (EdgeKind.READS, EdgeKind.WRITES, EdgeKind.UPDATES) for e in edges
+    )

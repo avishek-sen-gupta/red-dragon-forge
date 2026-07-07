@@ -5,7 +5,15 @@ from __future__ import annotations
 import json
 import subprocess
 
-from jackal.dsn import DSN, DirectDSN, TempRef, BackwardRef
+from jackal.dsn import (
+    DSN,
+    DirectDSN,
+    DummyDSN,
+    InStreamDSN,
+    NoDSN,
+    TempRef,
+    BackwardRef,
+)
 from jackal.model import Cond, CondOp, DD, Disp, DispNormal, DispStatus, Job, Step
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
@@ -32,6 +40,12 @@ def _dd_from_json(d: dict) -> DD:
         )
     elif raw_dsn.startswith("&&"):
         dsn = TempRef(raw_dsn)
+    elif raw_dsn == "" and d.get("dummy", False):
+        dsn = DummyDSN()
+    elif raw_dsn == "" and d.get("in_stream"):
+        dsn = InStreamDSN()
+    elif raw_dsn == "":
+        dsn = NoDSN()
     else:
         dsn = DirectDSN(raw_dsn)
     return DD(
