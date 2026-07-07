@@ -128,10 +128,18 @@ class GraphNode:
 @dataclass(frozen=True)
 class GraphEdge:
     source: str
+    source_kind: NodeKind
     target: str
+    target_kind: NodeKind
     kind: EdgeKind
     attrs: dict[str, Any] = field(default_factory=dict)
 ```
+
+An edge's endpoints are identified by `(kind, id)`, matching node identity —
+`source_kind`/`target_kind` are required fields, not derivable from `kind`
+alone: `JCL_STEP_RUNS` connects JOB→STEP *and* STEP→PROGRAM depending on
+context, so `EdgeKind` by itself doesn't determine either endpoint's
+`NodeKind`.
 
 `attrs` carries kind-specific detail that doesn't need to be a first-class
 field: a JCL edge's raw `DISP` value, a `SENDS_MAP` edge's BMS field
