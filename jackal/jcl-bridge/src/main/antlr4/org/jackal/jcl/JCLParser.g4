@@ -879,11 +879,15 @@ PARM=(VAL,A=B)
 PARM=(VAL,,A=B)
 PARM=(,,,A=B)
 PARM=(,VAL,,A=B)
+PARM=('')
 
 */
 singleOrMultipleValue : (
     keywordOrSymbolic |
     parenList |
+    // PARM=('') — the quotes are hidden-channel tokens (see QS_SQUOTE), so an
+    // empty quoted-string literal reaches the parser as a bare LPAREN RPAREN.
+    (LPAREN RPAREN) |
     (LPAREN
       keywordOrSymbolic?
       COMMA
