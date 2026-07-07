@@ -1,4 +1,6 @@
 fileignoreconfig:
+- filename: docs/superpowers/specs/2026-07-07-cobol-knowledge-graph-design.md
+  checksum: 6c4d59f40d43531d82afd4f18b52eb58d35eb3da05f509718500cb72dea0c74c
 - filename: squall/squall/builtins/exec_sql.py
   checksum: aea12e9fef0be89b18187052e1b4ed88c2952fa607c94ad314825bdd95be5794
 - filename: squall/tests/unit/test_strategy.py
