@@ -14,6 +14,10 @@ class CicsVerb:
     mapset_name: str | None
     xctl_target: str | None
     transid: str | None
+    # The logical CICS file name from FILE(...)/DATASET(...) on a file
+    # control verb (READ/WRITE/REWRITE/DELETE/STARTBR/READNEXT/READPREV/
+    # ENDBR). None for every other verb.
+    file_name: str | None = None
 
 
 class CicsFlowObserver(Protocol):
