@@ -36,6 +36,7 @@ class _CollectingObserver:
                 mapset_name=verb.mapset_name,
                 xctl_target=verb.xctl_target,
                 transid=verb.transid,
+                file_name=verb.file_name,
             )
         )
 
@@ -145,10 +146,30 @@ def extract_transaction_flow_map(
     return results
 
 
+_VSAM_FILE_EDGE_KIND: dict[str, EdgeKind] = {
+    "READ": EdgeKind.READS,
+    "WRITE": EdgeKind.WRITES,
+    "REWRITE": EdgeKind.UPDATES,
+    "DELETE": EdgeKind.DELETES,
+    "STARTBR": EdgeKind.READS,
+    "READNEXT": EdgeKind.READS,
+    "READPREV": EdgeKind.READS,
+    "ENDBR": EdgeKind.ENDS_BROWSE,
+}
+
+
 def _verb_edge(verb: CicsVerb, bms_mapsets: dict[str, BmsMapSet]) -> GraphEdge | None:
     """Convert one CicsVerb event into a GraphEdge, or None for verbs with no
     graph-relevant target (e.g. a plain RETURN with no TRANSID)."""
     program_id = verb.program.upper()
+    if verb.verb in _VSAM_FILE_EDGE_KIND and verb.file_name:
+        return GraphEdge(
+            source=program_id,
+            source_kind=NodeKind.PROGRAM,
+            target=verb.file_name.upper(),
+            target_kind=NodeKind.CICS_FILE,
+            kind=_VSAM_FILE_EDGE_KIND[verb.verb],
+        )
     if verb.verb == "XCTL" and verb.xctl_target:
         return GraphEdge(
             source=program_id,
@@ -202,10 +223,23 @@ def extract_transaction_flow_graph(
     Same inputs and compilation as extract_transaction_flow_map — see
     _compile_all_programs — a different output shape, not new extraction.
     Every node id is uppercased (the standard CICS/COBOL convention).
+
+    Also includes CICS_FILE -> DATASET edges from the CSD's own
+    DEFINE FILE(name) ... DSNAME(dataset) entries (see
+    cics.dispatcher.parse_csd_files) — a CSD with no such entries
+    contributes none, additively.
     """
+    from cics.dispatcher import parse_csd_files  # noqa: PLC0415
+
     transid_to_program, compiled_verbs = _compile_all_programs(
         csd_source, cobol_sources, parser
     )
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csd", delete=False) as f:
+        f.write(csd_source)
+        csd_path = Path(f.name)
+    file_to_dataset = parse_csd_files(csd_path)
+    csd_path.unlink(missing_ok=True)
 
     nodes: dict[tuple[NodeKind, str], GraphNode] = {}
     edges: list[GraphEdge] = []
@@ -234,5 +268,18 @@ def extract_transaction_flow_graph(
             _add_node(edge.source_kind, edge.source)
             _add_node(edge.target_kind, edge.target)
             edges.append(edge)
+
+    for file_name, dataset_name in file_to_dataset.items():
+        file_id = _add_node(NodeKind.CICS_FILE, file_name)
+        dataset_id = _add_node(NodeKind.DATASET, dataset_name)
+        edges.append(
+            GraphEdge(
+                source=file_id,
+                source_kind=NodeKind.CICS_FILE,
+                target=dataset_id,
+                target_kind=NodeKind.DATASET,
+                kind=EdgeKind.DEFINES_DATASET,
+            )
+        )
 
     return list(nodes.values()), edges

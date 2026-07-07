@@ -369,3 +369,21 @@ def parse_csd(csd_path: Path) -> dict[str, str]:
             result[attrs["TRANSACTION"].upper()] = attrs["PROGRAM"].upper()
     logger.info("CSD parsed: %d transid→program mappings", len(result))
     return result
+
+
+def parse_csd_files(csd_path: Path) -> dict[str, str]:
+    """Parse a CSD file to produce a {logical file name: physical DSNAME}
+    mapping, for the knowledge graph's CICS_FILE -> DATASET edges.
+
+    Each ``DEFINE FILE(name) ... DSNAME(dataset)`` (attributes in any
+    order) contributes ``{name: dataset}``. A DEFINE FILE without a
+    DSNAME attribute is skipped (no physical dataset to resolve to).
+    """
+    content = csd_path.read_text(encoding="utf-8", errors="replace")
+    defines = _CsdTransformer().transform(_csd_parser.parse(content))
+    result = {}
+    for attrs in defines:
+        if "FILE" in attrs and "DSNAME" in attrs:
+            result[attrs["FILE"].upper()] = attrs["DSNAME"].upper()
+    logger.info("CSD parsed: %d file→dataset mappings", len(result))
+    return result
