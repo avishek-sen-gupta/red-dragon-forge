@@ -53,4 +53,10 @@ fileignoreconfig:
   checksum: b04b6e4b2192d5ff42a1d86ec5aeb91c38c7f543cfa46b7707d432ed57aa9658
 - filename: knowledge_graph/export.py
   checksum: cf3b0e1ccbe505fbee4df4a343aea048bef84c86078389e6e7f10d5a3d3d6e35
+- filename: knowledge_graph/vendor/vis-network.min.js
+  ignore_detectors: [filecontent]
+- filename: knowledge_graph/render.py
+  checksum: 2bf6b94500ca5f78e3691844d4c4c2d1e4c505084afefe9a52efa2230be06fa9
+- filename: tests/unit/knowledge_graph/test_render.py
+  checksum: d4d07008070fb6cb0c62b5cb302b57aee02a3b42931a3758656d307b18ee0a35
 version: "1.0"
