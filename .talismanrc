@@ -51,4 +51,6 @@ fileignoreconfig:
   checksum: ecbb672e5cf054e0a547e9af6362735f7e2c1a79ff4cd273a401edae75097dae
 - filename: knowledge_graph/merge.py
   checksum: b04b6e4b2192d5ff42a1d86ec5aeb91c38c7f543cfa46b7707d432ed57aa9658
+- filename: knowledge_graph/export.py
+  checksum: cf3b0e1ccbe505fbee4df4a343aea048bef84c86078389e6e7f10d5a3d3d6e35
 version: "1.0"
