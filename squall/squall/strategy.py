@@ -91,16 +91,21 @@ class SqlLoweringStrategy:
         # same list and looks the plan up at run time. Plans never travel through
         # the IR as objects (the VM's Const handling only round-trips primitives).
         self._plans: list[ParsedSql] = []
-        _register(
-            Builtins.TABLE,
-            _BUILTIN_NAME,
-            make_exec_sql_builtin(
-                connections,
-                self._plans,
-                field_meta,
-                initial_connector=initial_connector,
-            ),
+        exec_sql_fn, reset_session_fn = make_exec_sql_builtin(
+            connections,
+            self._plans,
+            field_meta,
+            initial_connector=initial_connector,
         )
+        _register(Builtins.TABLE, _BUILTIN_NAME, exec_sql_fn)
+        # A generic, CICS-owned extension point (see cicada's
+        # CicsLoweringStrategy): cicada calls this at every task end (EXEC
+        # CICS RETURN, with or without TRANSID) with no idea what, if
+        # anything, is registered under it. Squall composed alongside cicada
+        # claims it to reset this session's connection/cursor state once per
+        # task, the same way __exec_sql itself is a name-convention-only
+        # composition — no cics<->squall import either way.
+        _register(Builtins.TABLE, "__cics_task_end_hook", reset_session_fn)
 
     # ── Protocol methods ──────────────────────────────────────────────────────
 

@@ -118,7 +118,8 @@ def _commit_builtin(field_meta):
     """A builtin over an empty registry; the plan is a COMMIT (no backend needed
     to reach the one-shot validation, which runs before dispatch)."""
     plans = [parse_exec_sql("EXEC SQL COMMIT END-EXEC")]
-    return make_exec_sql_builtin({}, plans, field_meta), plans
+    builtin, _reset = make_exec_sql_builtin({}, plans, field_meta)
+    return builtin, plans
 
 
 def test_builtin_validates_field_meta_on_first_call():
