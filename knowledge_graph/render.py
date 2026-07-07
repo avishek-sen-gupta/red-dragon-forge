@@ -54,6 +54,9 @@ _HTML_TEMPLATE = """<!doctype html>
 <div id="controls">
   <fieldset id="node-filters"><legend>Node kinds</legend></fieldset>
   <fieldset id="edge-filters"><legend>Edge kinds</legend></fieldset>
+  <fieldset id="search-box"><legend>Search</legend>
+    <input type="text" id="search-input" placeholder="node name contains...">
+  </fieldset>
 </div>
 <div id="graph"></div>
 <script>{vis_js}</script>
@@ -129,6 +132,28 @@ network.on("deselectNode", () => {{
   allNodes.forEach(node => {{
     allNodes.update({{ id: node.id, opacity: 1.0 }});
   }});
+}});
+
+// Case-insensitive substring match against each node's label: dim
+// non-matches, native-highlight matches via selectNodes (same halo style
+// clicking a node already gives you) — clearing the box restores everyone.
+const searchInput = document.getElementById("search-input");
+searchInput.addEventListener("input", () => {{
+  const query = searchInput.value.trim().toLowerCase();
+  if (!query) {{
+    network.unselectAll();
+    allNodes.forEach(node => {{
+      allNodes.update({{ id: node.id, opacity: 1.0 }});
+    }});
+    return;
+  }}
+  const matchIds = [];
+  allNodes.forEach(node => {{
+    const match = node.label.toLowerCase().includes(query);
+    if (match) matchIds.push(node.id);
+    allNodes.update({{ id: node.id, opacity: match ? 1.0 : 0.15 }});
+  }});
+  network.selectNodes(matchIds);
 }});
 </script>
 </body>
