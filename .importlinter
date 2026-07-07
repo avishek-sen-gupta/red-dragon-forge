@@ -3,6 +3,7 @@ root_packages =
     cics
     squall
     jackal
+    knowledge_graph
 
 [importlinter:contract:cicada-squall-jackal-independence]
 name = Cicada, Squall, and Jackal must not import each other
@@ -80,3 +81,13 @@ forbidden_modules =
     jackal.utilities
     jackal.idcams
     jackal.jcl
+
+[importlinter:contract:knowledge-graph-composition-only]
+name = Cicada, Squall, and Jackal must not import knowledge_graph
+type = forbidden
+source_modules =
+    cics
+    squall
+    jackal
+forbidden_modules =
+    knowledge_graph
