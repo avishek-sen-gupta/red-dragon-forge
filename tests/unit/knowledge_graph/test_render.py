@@ -59,6 +59,34 @@ def test_render_html_embeds_node_and_edge_data(tmp_path: Path):
     assert '"CALL"' in content
 
 
+def test_render_html_edge_title_includes_attrs(tmp_path: Path):
+    output = tmp_path / "graph.html"
+    graph = nx.MultiDiGraph()
+    graph.add_node(
+        (NodeKind.STEP, "DELJ.STEP1"),
+        kind=NodeKind.STEP,
+        id="DELJ.STEP1",
+        file_path=None,
+        attrs={},
+    )
+    graph.add_node(
+        (NodeKind.INSTREAM_DATA, "DELJ.STEP1.SYSIN"),
+        kind=NodeKind.INSTREAM_DATA,
+        id="DELJ.STEP1.SYSIN",
+        file_path=None,
+        attrs={},
+    )
+    graph.add_edge(
+        (NodeKind.STEP, "DELJ.STEP1"),
+        (NodeKind.INSTREAM_DATA, "DELJ.STEP1.SYSIN"),
+        kind=EdgeKind.READS,
+        attrs={"ddname": "SYSIN", "text": "   DELETE A.B CLUSTER"},
+    )
+    render_html(graph, output)
+    content = output.read_text()
+    assert "DELETE A.B CLUSTER" in content
+
+
 def test_render_html_raises_if_vis_network_not_vendored(tmp_path: Path, monkeypatch):
     import knowledge_graph.render as render_module
 
