@@ -64,6 +64,25 @@ def test_dd_star_instream_captured():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_star_instream_data_containing_slash_slash_mid_line():
+    # Regression: a "//" (or "/*") appearing anywhere in in-stream data, not
+    # just at the start of a physical line, must not be mistaken for a JCL
+    # statement/comment delimiter — CardDemo's TRANREPT.jcl has a SYMNAMES DD
+    # whose data lines end in a stray "//Date" annotation, which used to
+    # desync the lexer and silently drop every step after it (including the
+    # one that runs CBTRN03C) with no error at all.
+    jcl = (
+        "//J JOB 1\n//S EXEC PGM=IDCAMS\n//SYSIN DD *\n"
+        "HELLO //WORLD\nMORE DATA /* not a real terminator\n/*\n"
+        "//S2 EXEC PGM=BAR\n"
+    )
+    job = parse_jcl(jcl)
+    assert [s.name for s in job.steps] == ["S", "S2"]
+    dd = job.steps[0].dds[0]
+    assert dd.in_stream == ("HELLO //WORLD", "MORE DATA /* not a real terminator")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dd_sysout():
     jcl = "//J JOB 1\n//S EXEC PGM=IDCAMS\n//SYSPRINT DD SYSOUT=*\n"
     dd = parse_jcl(jcl).steps[0].dds[0]

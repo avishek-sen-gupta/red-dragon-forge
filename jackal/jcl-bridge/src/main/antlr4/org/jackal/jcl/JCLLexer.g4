@@ -3700,8 +3700,18 @@ DATA_MODE_TERMINATOR3
 	}
 	->mode(DEFAULT_MODE)
 	;
+/*
+Generic fallback terminator for a custom DLM= delimiter (arbitrary text, not
+just the default "//"/"/*" DATA_MODE_TERMINATOR1/2/3 already special-case).
+Unlike those three, this used to have no line-position check at all, so a
+delimiter substring appearing anywhere inside in-stream data — e.g. a stray
+"//Date" annotation mid-line in a data record — would falsely terminate the
+capture and reset _modeStack mid-file, silently dropping everything parsed
+after it. getCharPositionInLine() == getText().length() requires the match
+to start at column 0 of its line, the same anchoring TERMINATOR1/2/3 use.
+*/
 DATA_MODE_TERMINATORX
-	: ANYCHAR+ {dlmVals.contains(getText())}?
+	: ANYCHAR+ {dlmVals.contains(getText()) && getCharPositionInLine() == getText().length()}?
 	{
 		dlmVals = new java.util.ArrayList();
 		_modeStack.clear();
