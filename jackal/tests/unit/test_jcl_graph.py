@@ -129,6 +129,23 @@ def test_instream_dd_becomes_instream_data_node_not_dataset():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_instream_dd_reads_edge_carries_raw_text():
+    jcl = """//DELJ JOB 'demo'
+//STEP1 EXEC PGM=IDCAMS
+//SYSIN DD *
+   DELETE A.B CLUSTER
+   IF MAXCC LE 08 THEN SET MAXCC = 0
+/*
+"""
+    _nodes, edges = extract_jcl_graph(jcl)
+    reads = [e for e in edges if e.kind == EdgeKind.READS and e.source == "DELJ.STEP1"]
+    assert len(reads) == 1
+    assert reads[0].attrs["text"] == (
+        "   DELETE A.B CLUSTER\n   IF MAXCC LE 08 THEN SET MAXCC = 0"
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_two_instream_dds_in_different_steps_get_distinct_nodes():
     jcl = """//DELJ JOB 'demo'
 //STEP1 EXEC PGM=IDCAMS
