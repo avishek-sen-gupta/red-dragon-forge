@@ -886,6 +886,19 @@ class CicsLoweringStrategy:
                         args=(r_file, r_key, r_klen),
                     )
                 )
+            self._observer.on_verb(
+                CicsVerb(
+                    verb=verb,
+                    program="",
+                    map_name=None,
+                    mapset_name=None,
+                    xctl_target=None,
+                    transid=None,
+                    file_name=_resolve_operand(
+                        opts.get("FILE") or opts.get("DATASET"), ctx
+                    ),
+                )
+            )
             emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 
@@ -936,6 +949,19 @@ class CicsLoweringStrategy:
                         args=(r_file,),
                     )
                 )
+            self._observer.on_verb(
+                CicsVerb(
+                    verb=verb,
+                    program="",
+                    map_name=None,
+                    mapset_name=None,
+                    xctl_target=None,
+                    transid=None,
+                    file_name=_resolve_operand(
+                        opts.get("FILE") or opts.get("DATASET"), ctx
+                    ),
+                )
+            )
             emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 

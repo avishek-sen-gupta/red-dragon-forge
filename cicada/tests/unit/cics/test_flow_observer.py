@@ -14,6 +14,8 @@ class _CapturingObserver:
 
 
 def _minimal_ctx():
+    from interpreter.func_name import FuncName
+    from interpreter.instructions import CallFunction
     from interpreter.register import Register
 
     class _Ctx:
@@ -33,6 +35,19 @@ def _minimal_ctx():
 
         def has_field(self, name, materialised):
             return False
+
+        def emit_to_string(self, value_reg):
+            # Mirrors the real EmitContext.emit_to_string exactly (see
+            # interpreter/cobol/emit_context.py) — VSAM verbs' RESP writeback
+            # (emit_resp_writeback) calls this before checking has_field, so
+            # the fake needs a real implementation, not just a stub.
+            result = self.fresh_reg()
+            self.emit_inst(
+                CallFunction(
+                    result_reg=result, func_name=FuncName("str"), args=(value_reg,)
+                )
+            )
+            return result
 
     return _Ctx()
 
@@ -64,6 +79,21 @@ def test_cics_verb_optional_fields_default_none():
     assert v.map_name is None
     assert v.transid is None
     assert v.xctl_target == "PROG2"
+    assert v.file_name is None
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cics_verb_stores_file_name():
+    v = CicsVerb(
+        verb="READ",
+        program="PROG1",
+        map_name=None,
+        mapset_name=None,
+        xctl_target=None,
+        transid=None,
+        file_name="ACCTFILE",
+    )
+    assert v.file_name == "ACCTFILE"
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -154,6 +184,203 @@ def test_return_transid_notifies_observer():
     v = observer.captured[0]
     assert v.verb == "RETURN_TRANSID"
     assert v.transid == "CA00"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_read_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="READ",
+        options={"FILE": CicsOperand("ACCTFILE", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    assert len(observer.captured) == 1
+    v = observer.captured[0]
+    assert v.verb == "READ"
+    assert v.file_name == "ACCTFILE"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_read_accepts_dataset_synonym_for_file():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="READ",
+        options={"DATASET": CicsOperand("ACCTFILE", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    assert observer.captured[0].file_name == "ACCTFILE"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_write_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="WRITE",
+        options={"FILE": CicsOperand("CUSTDAT", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "WRITE"
+    assert v.file_name == "CUSTDAT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_rewrite_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="REWRITE",
+        options={"FILE": CicsOperand("CUSTDAT", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "REWRITE"
+    assert v.file_name == "CUSTDAT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_delete_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="DELETE",
+        options={"FILE": CicsOperand("CARDDAT", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "DELETE"
+    assert v.file_name == "CARDDAT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_startbr_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="STARTBR",
+        options={"FILE": CicsOperand("CARDAIX", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "STARTBR"
+    assert v.file_name == "CARDAIX"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_readnext_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="READNEXT",
+        options={"FILE": CicsOperand("CARDAIX", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "READNEXT"
+    assert v.file_name == "CARDAIX"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_readprev_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="READPREV",
+        options={"FILE": CicsOperand("CARDAIX", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "READPREV"
+    assert v.file_name == "CARDAIX"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_endbr_notifies_observer_with_file_name():
+    from cics.statements import ExecCicsStatement, CicsOperand
+    from cics.strategy import CicsLoweringStrategy
+
+    observer = _CapturingObserver()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    stmt = ExecCicsStatement(
+        verb="ENDBR",
+        options={"FILE": CicsOperand("CARDAIX", True)},
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+    v = observer.captured[0]
+    assert v.verb == "ENDBR"
+    assert v.file_name == "CARDAIX"
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
