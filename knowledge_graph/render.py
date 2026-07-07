@@ -69,6 +69,13 @@ const options = {{
 }};
 const network = new vis.Network(container, data, options);
 
+// Override vendored .vis-tooltip's white-space:nowrap (added after vis.js
+// runs, so it wins the cascade tie) — multi-line attrs (e.g. IDCAMS SYSIN
+// text) need to wrap/break instead of running onto one unreadable line.
+const tooltipStyle = document.createElement("style");
+tooltipStyle.textContent = ".vis-tooltip {{ white-space: pre-wrap !important; max-width: 640px; font-family: monospace !important; }}";
+document.head.appendChild(tooltipStyle);
+
 function uniqueValues(dataset, field) {{
   return [...new Set(dataset.get().map(item => item[field]))].sort();
 }}
@@ -129,6 +136,14 @@ network.on("deselectNode", () => {{
 """
 
 
+def _attrs_suffix(attrs: dict) -> str:
+    """Format attrs as extra tooltip lines, e.g. IDCAMS SYSIN text — empty
+    string (no suffix) when there's nothing to show."""
+    if not attrs:
+        return ""
+    return "\n" + "\n".join(f"{k}: {v}" for k, v in attrs.items())
+
+
 def _node_id_str(key: tuple) -> str:
     kind, node_id = key
     return f"{kind.value}:{node_id}"
@@ -159,7 +174,8 @@ def render_html(
                 "label": data["id"],
                 "kind": data["kind"].value,
                 "color": _NODE_COLORS.get(data["kind"].value, "#999999"),
-                "title": f"{data['kind'].value}: {data['id']}",
+                "title": f"{data['kind'].value}: {data['id']}"
+                + _attrs_suffix(data["attrs"]),
             }
         )
 
@@ -173,6 +189,7 @@ def render_html(
                 "kind": data["kind"].value,
                 "label": data["kind"].value,
                 "color": _EDGE_COLORS.get(data["kind"].value, "#999999"),
+                "title": data["kind"].value + _attrs_suffix(data["attrs"]),
             }
         )
 
