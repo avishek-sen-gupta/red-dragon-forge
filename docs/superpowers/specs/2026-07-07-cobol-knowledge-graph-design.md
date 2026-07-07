@@ -40,6 +40,9 @@ the codebase and support reverse-engineering/modernization work — where:
 - JCL step sequencing (which job runs which steps in what order, which
   program each step runs, which datasets each step reads/writes) is
   represented as edges.
+- One interactive HTML visualization of the merged CardDemo graph, as
+  proof the graph is actually usable for reverse engineering, not just
+  structurally correct.
 
 Validation target: CardDemo, since it already has COBOL, a CICS CSD, BMS
 maps, and JCL — the one fixture that exercises all three sources.
@@ -205,6 +208,31 @@ to feed a real graph database (or the `code-review-graph` MCP tool
 available in this environment) later without touching the schema or
 extraction layer at all.
 
+### Visualization
+
+`knowledge_graph/render.py`: `render_html(graph: nx.MultiDiGraph,
+output_path: Path) -> None`, producing one self-contained HTML file — no
+server, no CDN, no external network access at view time, matching the
+"no new infrastructure" spirit of the backend decision.
+
+- **Rendering engine:** vis-network (MIT-licensed, single-file), vendored
+  into the repo (e.g. `knowledge_graph/vendor/vis-network.min.js`) and
+  inlined directly into the generated HTML's `<script>` tag at render
+  time — proven pan/zoom/click interactivity without hand-rolling a
+  force-directed layout.
+- **Node styling:** color-coded by `NodeKind` (7 kinds), with a legend.
+- **Edge styling:** color/label by `EdgeKind`.
+- **Filtering:** checkboxes to show/hide by `NodeKind` and `EdgeKind` —
+  essential once JCL/CICS/CALL edges are all in the same view, since an
+  unfiltered CardDemo graph (29+ programs, transactions, jobs, datasets)
+  is otherwise too dense to read.
+- **Neighbor highlighting:** clicking a node highlights its direct
+  neighbors and dims the rest — vis-network's selection API covers this
+  with a small amount of glue JS, not a custom implementation.
+- Generation is a CLI-invokable function (e.g. `knowledge_graph render
+  <ndjson-dir> <output.html>`), not wired into any test-running path — a
+  human opens the resulting file in a browser to explore it.
+
 ### Import-linter contract
 
 `red-dragon-forge`'s `.importlinter` already enforces cics/squall/jackal
@@ -232,6 +260,11 @@ composition layer" direction already established for
   cross-source linking works end to end, not just that each extractor
   works in isolation (the same discipline used to validate the
   `__cics_task_end_hook` composition work).
+- One test generating `render_html` for the full CardDemo graph and
+  verifying the output is well-formed (valid HTML, contains the expected
+  node/edge counts embedded as data, vis-network's script is actually
+  inlined rather than CDN-referenced) — not a browser-rendering test, just
+  confirming the generator produces a complete, self-contained artifact.
 
 ## Open risks
 
