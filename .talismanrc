@@ -47,4 +47,8 @@ fileignoreconfig:
   checksum: a2f21ef67ecfc14b9850c7de2d11c6ac487d78e41859c1d9b66666312e45dc9a
 - filename: squall/db2/dsn-env.sh
   checksum: 2d7483163dcb8f46d67b45409dc4c5a082b08492e31e871020aa9bfff0df72fe
+- filename: uv.lock
+  checksum: ecbb672e5cf054e0a547e9af6362735f7e2c1a79ff4cd273a401edae75097dae
+- filename: knowledge_graph/merge.py
+  checksum: b04b6e4b2192d5ff42a1d86ec5aeb91c38c7f543cfa46b7707d432ed57aa9658
 version: "1.0"
