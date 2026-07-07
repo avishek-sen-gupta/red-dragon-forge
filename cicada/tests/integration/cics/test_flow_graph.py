@@ -1,0 +1,145 @@
+"""Integration tests for extract_transaction_flow_graph().
+
+Same synthetic COBOL + synthetic BmsMapSet fixtures as test_flow_map.py — the
+two functions share compilation (_compile_all_programs), so this only
+re-verifies the graph *shape* is right, not the CICS behaviour
+test_flow_map.py already covers.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from bms_copybook_gen.models import BmsField, BmsMap, BmsMapSet
+from cics.flow_map import extract_transaction_flow_graph
+from interpreter.cobol.cobol_parser import ProLeapCobolParser
+from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from interpreter.project.graph_types import EdgeKind, NodeKind
+from tests.covers import NotLanguageFeature, covers
+from tests.integration.cobol_helpers import bridge_jar  # noqa: F401 — pytest fixture
+
+_CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
+
+
+@pytest.fixture
+def cics_parser(bridge_jar):
+    return ProLeapCobolParser(
+        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
+    )
+
+
+def _make_mapset(name: str, map_name: str, fields: list[BmsField]) -> BmsMapSet:
+    bms_map = BmsMap(label=map_name, fields=fields)
+    return BmsMapSet(
+        label=name, lang="COBOL", mode="INOUT", tioapfx=False, maps=[bms_map]
+    )
+
+
+_CSD = "DEFINE TRANSACTION(ACCT) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+
+_ACCTPROG = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. ACCTPROG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 DFHCOMMAREA PIC X(100).
+       PROCEDURE DIVISION.
+           EXEC CICS RECEIVE MAP('ACCMAP') MAPSET('ACCSET') END-EXEC.
+           EXEC CICS SEND MAP('ACCMAP') MAPSET('ACCSET') END-EXEC.
+           EXEC CICS RETURN TRANSID('ACCT') END-EXEC.
+           STOP RUN.
+"""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_starts_edge_from_transaction_to_program(cics_parser):
+    nodes, edges = extract_transaction_flow_graph(
+        csd_source=_CSD,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": _ACCTPROG},
+        parser=cics_parser,
+    )
+    starts = [e for e in edges if e.kind == EdgeKind.STARTS]
+    assert len(starts) == 1
+    assert starts[0].source == "ACCT"
+    assert starts[0].target == "ACCTPROG"
+    assert any(n.kind == NodeKind.TRANSACTION and n.id == "ACCT" for n in nodes)
+    assert any(n.kind == NodeKind.PROGRAM and n.id == "ACCTPROG" for n in nodes)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_return_transid_edge_back_to_transaction(cics_parser):
+    _nodes, edges = extract_transaction_flow_graph(
+        csd_source=_CSD,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": _ACCTPROG},
+        parser=cics_parser,
+    )
+    ret = [e for e in edges if e.kind == EdgeKind.RETURN_TRANSID]
+    assert len(ret) == 1
+    assert ret[0].source == "ACCTPROG"
+    assert ret[0].target == "ACCT"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_send_and_receive_map_edges_with_bms_map_node(cics_parser):
+    mapset = _make_mapset(
+        "ACCSET",
+        "ACCMAP",
+        [
+            BmsField(label="ACCTID", length=11, attrb=["UNPROT"]),
+            BmsField(label="ACCTNAME", length=50, attrb=["PROT"]),
+        ],
+    )
+    nodes, edges = extract_transaction_flow_graph(
+        csd_source=_CSD,
+        bms_mapsets={"ACCSET": mapset},
+        cobol_sources={"ACCTPROG": _ACCTPROG},
+        parser=cics_parser,
+    )
+    sends = [e for e in edges if e.kind == EdgeKind.SENDS_MAP]
+    receives = [e for e in edges if e.kind == EdgeKind.RECEIVES_MAP]
+    assert len(sends) == 1 and len(receives) == 1
+    assert sends[0].source == "ACCTPROG"
+    assert sends[0].target == "ACCSET.ACCMAP"
+    assert any(n.kind == NodeKind.BMS_MAP and n.id == "ACCSET.ACCMAP" for n in nodes)
+    fields = {f["name"]: f["direction"] for f in sends[0].attrs["fields"]}
+    assert fields["ACCTID"] == "input"
+    assert fields["ACCTNAME"] == "output"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_xctl_edge_between_programs(cics_parser):
+    csd = "DEFINE TRANSACTION(MENU) GROUP(DEMO) PROGRAM(MENUPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. MENUPROG.
+       PROCEDURE DIVISION.
+           EXEC CICS XCTL PROGRAM('NEXTPROG') END-EXEC.
+           STOP RUN.
+"""
+    nodes, edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"MENUPROG": src},
+        parser=cics_parser,
+    )
+    xctl = [e for e in edges if e.kind == EdgeKind.XCTL]
+    assert len(xctl) == 1
+    assert xctl[0].source == "MENUPROG"
+    assert xctl[0].target == "NEXTPROG"
+    assert any(n.kind == NodeKind.PROGRAM and n.id == "NEXTPROG" for n in nodes)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_node_ids_are_uppercased(cics_parser):
+    csd = "DEFINE TRANSACTION(acct) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
+    nodes, _edges = extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"ACCTPROG": _ACCTPROG},
+        parser=cics_parser,
+    )
+    assert any(n.kind == NodeKind.TRANSACTION and n.id == "ACCT" for n in nodes)
