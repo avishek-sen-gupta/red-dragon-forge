@@ -71,6 +71,27 @@ def _make_parser(copybook_dirs: list[Path]) -> ProLeapCobolParser:
     )
 
 
+def _dedupe_edges(edges: list) -> list:
+    """Drop exact-duplicate edges (same source/target/kind), keeping the
+    first occurrence's attrs.
+
+    extract_cobol_connections's program_source_dirs makes each top-level
+    file's compile transitively pull in whatever it CALLs — so when
+    _build_call_copy_graph loops over every .cbl file in the directory, a
+    subprogram's own COPY/CALL edges get emitted once via each caller that
+    (directly or transitively) reaches it, PLUS again when that subprogram
+    is itself processed as its own top-level entry in the same loop. This
+    is a property of running the extractor once per file across an entire
+    corpus (not a defect in extract_cobol_connections itself, which only
+    ever sees one compile at a time) — collapse the duplicates here.
+    """
+    seen: dict[tuple, object] = {}
+    for edge in edges:
+        key = (edge.source, edge.source_kind, edge.target, edge.target_kind, edge.kind)
+        seen.setdefault(key, edge)
+    return list(seen.values())
+
+
 def _build_jcl_graph(failures: list[str]) -> tuple[list, list]:
     all_nodes, all_edges = [], []
     jcl_dir = _CARDDEMO_HOME / "jcl"
@@ -208,7 +229,7 @@ def main() -> int:
     )
 
     all_nodes = jcl_nodes + call_nodes + cics_nodes
-    all_edges = jcl_edges + call_edges + cics_edges
+    all_edges = _dedupe_edges(jcl_edges + call_edges + cics_edges)
     graph = merge_graph(all_nodes, all_edges)
 
     print(

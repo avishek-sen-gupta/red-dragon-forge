@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: knowledge_graph/build_carddemo_graph.py
-  checksum: fc8b59a8569274c339ac1d2e2e5d61a67fe425ce034c513c687d2e728d54fa4a
+  checksum: ec19c72c85de66a87a337c6b431b84aadecdb106d2e6066c4079a5cc711fcf72
 - filename: docs/superpowers/plans/2026-07-07-cobol-knowledge-graph.md
   checksum: d2cd33c177e8444bac414fe7003ac104e73c238349328189d10d7971d13c25ee
 - filename: docs/superpowers/specs/2026-07-07-cobol-knowledge-graph-design.md
