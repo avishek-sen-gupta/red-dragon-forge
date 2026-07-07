@@ -135,7 +135,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Build the shared ProLeap bridge JAR
+      - name: Build the shared ProLeap + JCL bridge JARs
         run: make jar
       - name: Install Python dependencies
         run: make python
@@ -145,5 +145,6 @@ jobs:
       - name: Run the full test suite
         run: |
           export PROLEAP_BRIDGE_JAR="${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
+          export JCL_BRIDGE_JAR="${{ github.workspace }}/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
           . tests/integration/db2_env.sh
           make test
