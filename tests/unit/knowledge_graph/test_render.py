@@ -59,6 +59,15 @@ def test_render_html_embeds_node_and_edge_data(tmp_path: Path):
     assert '"CALL"' in content
 
 
+def test_render_html_includes_search_box(tmp_path: Path):
+    output = tmp_path / "graph.html"
+    render_html(_tiny_graph(), output)
+    content = output.read_text()
+    assert 'id="search-input"' in content
+    assert "searchInput.addEventListener" in content
+    assert "network.selectNodes(matchIds)" in content
+
+
 def test_render_html_edge_title_includes_attrs(tmp_path: Path):
     output = tmp_path / "graph.html"
     graph = nx.MultiDiGraph()
