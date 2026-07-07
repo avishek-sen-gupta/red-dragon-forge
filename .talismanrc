@@ -59,4 +59,6 @@ fileignoreconfig:
   checksum: 2bf6b94500ca5f78e3691844d4c4c2d1e4c505084afefe9a52efa2230be06fa9
 - filename: tests/unit/knowledge_graph/test_render.py
   checksum: d4d07008070fb6cb0c62b5cb302b57aee02a3b42931a3758656d307b18ee0a35
+- filename: tests/integration/test_knowledge_graph_carddemo.py
+  checksum: 0f1a0a792b8b195100c5a30b59f8cd19ed7f2d91bd4796a987e70b7614c922bf
 version: "1.0"
