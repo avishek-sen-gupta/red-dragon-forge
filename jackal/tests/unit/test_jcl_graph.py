@@ -198,6 +198,36 @@ def test_proc_call_expands_with_qualified_id_and_proc_attr(tmp_path: Path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_proc_call_provenance_not_confused_by_duplicate_step_name(tmp_path: Path):
+    # Mirrors the real CardDemo TRANREPT.jcl bug (forge-c53): two steps in
+    # the same job share the literal name STEP05R -- the first calls a PROC,
+    # the second is an unrelated plain EXEC PGM= step. The expanded PROC
+    # step's proc attribution must resolve to the first (REPROC), not be
+    # overwritten by the second, unrelated step of the same name.
+    (tmp_path / "REPROC.prc").write_text(
+        "//REPROC PROC\n//PRC001 EXEC PGM=IDCAMS\n//SYSIN DD DISP=SHR,DSN=NULLFILE\n// PEND\n"
+    )
+    jcl = (
+        "//TRANREPT JOB 'demo'\n"
+        "//STEP05R EXEC PROC=REPROC\n"
+        "//STEP05R EXEC PGM=SORT\n"
+    )
+    nodes, edges = extract_jcl_graph(jcl, proclib_dirs=[tmp_path])
+
+    step_nodes = [n for n in nodes if n.kind == NodeKind.STEP]
+    assert any(n.id == "TRANREPT.STEP05R.PRC001" for n in step_nodes)
+    assert any(n.id == "TRANREPT.STEP05R" for n in step_nodes)
+
+    job_to_step = {
+        e.target: e
+        for e in edges
+        if e.kind == EdgeKind.JCL_STEP_RUNS and e.source == "TRANREPT"
+    }
+    assert job_to_step["TRANREPT.STEP05R.PRC001"].attrs == {"proc": "REPROC"}
+    assert job_to_step["TRANREPT.STEP05R"].attrs == {}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_extract_jcl_graph_without_proclib_dirs_is_unchanged():
     # Default proclib_dirs=() must produce byte-identical behavior to every
     # existing call site that predates this feature.
