@@ -7,7 +7,7 @@ start: command+
 
 command: modal_command | set_command | define_cluster | define_alternateindex
        | define_gdg | define_nonvsam | define_path | delete | alter | repro
-       | print | listcat  // set_command is
+       | print | listcat | export | import_cmd  // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -973,6 +973,101 @@ listcat_detail_param: LISTCAT_DETAIL_VALUE
 LISTCAT_DETAIL_VALUE.-1: "ALLOCATION" | "HISTORY" | "VOLUME" | "NAME" | "ALL"
 
 library_param: "LIBRARY" "(" NAME ")"
+
+// ---------------------------------------------------------------------
+// EXPORT (Task 9)
+//
+// EXPORT entryname export_param*
+//
+// entryname is the one required positional parameter (a single Name, same
+// shape as ALTER's). Three genuine "pick one" choice groups, all flat-
+// grammar/transformer-enforced per the plan's ratified pattern (see
+// ComprehensiveIdcamsTransformer.export()): OUTFILE/OUTDATASET (required,
+// exactly one), CIMODE/RECORDMODE (optional, at most one -- which
+// processing mode), and TEMPORARY/PERMANENT (optional, at most one --
+// which export kind). ERASE/NOERASE, INHIBITSOURCE/NOINHIBITSOURCE,
+// INHIBITTARGET/NOINHIBITTARGET, and PURGE/NOPURGE are ordinary simple
+// ON/OFF toggle pairs, per the plan's ratified scope for simple booleans.
+export: "EXPORT" NAME export_param*
+
+export_param: outfile_param
+            | outdataset_param
+            | export_mode_param
+            | erase_param
+            | infile_param
+            | inhibitsource_param
+            | inhibittarget_param
+            | purge_param
+            | export_kind_param
+            | rlssource_param
+
+export_mode_param: "CIMODE" -> export_cimode_flag
+                  | "RECORDMODE" -> export_recordmode_flag
+
+inhibitsource_param: "INHIBITSOURCE" -> inhibitsource_flag
+                    | "NOINHIBITSOURCE" -> noinhibitsource_flag
+inhibittarget_param: "INHIBITTARGET" -> inhibittarget_flag
+                    | "NOINHIBITTARGET" -> noinhibittarget_flag
+
+export_kind_param: "TEMPORARY" -> export_temporary_flag
+                  | "PERMANENT" -> export_permanent_flag
+
+// ---------------------------------------------------------------------
+// IMPORT (Task 9)
+//
+// IMPORT import_param*
+//
+// Two genuine required "pick one" choice groups, both flat-grammar/
+// transformer-enforced (ComprehensiveIdcamsTransformer.import_cmd()):
+// INFILE/INDATASET and OUTFILE/OUTDATASET. ALIAS/NOALIAS, ERASE/NOERASE,
+// LOCK/UNLOCK, PURGE/NOPURGE, and SAVRAC/NOSAVRAC are ordinary simple
+// ON/OFF toggle pairs. LOCK/UNLOCK deliberately reuses ALTER's
+// catalog_state_choice aliases (lock_flag/unlock_flag) verbatim -- same
+// ("lock", bool) shape IMPORT's own `lock` field needs, so no new
+// transformer callback is required for it.
+//
+// OBJECTS(...) is a REPEATABLE list of nested groups (import_object),
+// not a mutual-exclusivity choice -- each group has a required positional
+// entryname followed by independently-optional FILE/MANAGEMENTCLASS/
+// NEWNAME/STORAGECLASS/VOLUMES sub-params, reusing file_param/
+// managementclass_param/newname_param/storageclass_param/volumes_param
+// verbatim from earlier tasks.
+//
+// Grammar rule (and its transformer callback) is named `import_cmd`, not
+// `import` -- a Transformer method literally named `import` would be a
+// Python syntax error (the dataclass `Import` itself is safe to name,
+// only the statement keyword is reserved).
+import_cmd: "IMPORT" import_param*
+
+import_param: infile_param
+            | indataset_param
+            | outfile_param
+            | outdataset_param
+            | alias_param
+            | erase_param
+            | intoempty_param
+            | import_lock_param
+            | objects_param
+            | purge_param
+            | savrac_param
+            | catalog_param
+            | rlstarget_param
+
+alias_param: "ALIAS" -> alias_flag
+           | "NOALIAS" -> noalias_flag
+intoempty_param: "INTOEMPTY" -> intoempty_flag
+import_lock_param: "LOCK" -> lock_flag
+                  | "UNLOCK" -> unlock_flag
+savrac_param: "SAVRAC" -> savrac_flag
+            | "NOSAVRAC" -> nosavrac_flag
+
+objects_param: "OBJECTS" "(" import_object+ ")"
+import_object: "(" NAME import_object_param* ")"
+import_object_param: file_param
+                    | managementclass_param
+                    | newname_param
+                    | storageclass_param
+                    | volumes_param
 
 // ---------------------------------------------------------------------
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
