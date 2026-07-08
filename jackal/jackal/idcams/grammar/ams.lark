@@ -6,7 +6,7 @@
 start: command+
 
 command: modal_command | set_command | define_cluster | define_alternateindex
-       | define_gdg | define_nonvsam | define_path | delete  // set_command is
+       | define_gdg | define_nonvsam | define_path | delete | alter  // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -548,6 +548,148 @@ DELETE_ENTRY: /[A-Z0-9#@$%*]+(\.[A-Z0-9#@$%*]+)*/
 ENTRY_TYPE_VALUE: "ALIAS" | "ALTERNATEINDEX" | "CLUSTER" | "GENERATIONDATAGROUP"
                  | "LIBRARYENTRY" | "NONVSAM" | "NVR" | "PAGESPACE" | "PATH"
                  | "TRUENAME" | "USERCATALOG" | "VOLUMEENTRY" | "VVR"
+
+// ---------------------------------------------------------------------
+// ALTER (Task 6)
+//
+// ALTER entryname alter_param*
+//
+// entryname is the one required positional parameter -- a single Name,
+// no list/masking form (unlike DELETE's entries list).
+//
+// The manual documents exactly one genuine "pick one" choice in ALTER:
+// LOCK/UNLOCK vs SUSPEND/RESUME, both of which operate on the same
+// underlying "catalog access state" -- a single ALTER can't simultaneously
+// lock/unlock AND suspend/resume the same catalog. Modeled as a single
+// 4-way choice (catalog_state_choice), pulled out of the freely-repeatable
+// param list into a two-state sequence (alter_seq_0/alter_seq_1) exactly
+// like DELETE's entry_type_param/delete_seq_0/delete_seq_1 -- one
+// choice-of-4, single slot, not the two-independently-coupled-dimensions
+// DFA that DEFINE CLUSTER/ALTERNATEINDEX needed. Every other documented
+// ON/OFF pair in ALTER (ERASE/NOERASE, EMPTY/NOEMPTY, INHIBIT/UNINHIBIT,
+// PURGE/NOPURGE, RECLAIMCA/NORECLAIMCA, REUSE/NOREUSE,
+// RLSQUIESCE/RLSENABLE, SCRATCH/NOSCRATCH, UNIQUEKEY/NONUNIQUEKEY,
+// UPDATE/NOUPDATE, UPGRADE/NOUPGRADE, WRITECHECK/NOWRITECHECK, FIFO/LIFO,
+// ECSHARING/NOECSHARING) is an ordinary freely-repeatable param -- last-
+// wins-in-a-repeatable-list semantics is accepted for simple binary
+// toggles per the plan's ratified scoping decision.
+//
+// No STAGE parameter: the design spec explicitly defers it (definition
+// not recoverable from the manual excerpt read when the spec was
+// written); not added here either.
+alter: "ALTER" NAME alter_seq_0
+
+// state: catalog_state_choice not yet consumed
+alter_seq_0: alter_param alter_seq_0
+           | catalog_state_choice alter_seq_1
+           |
+// state: catalog_state_choice consumed -- only freely-repeatable params remain
+alter_seq_1: alter_param alter_seq_1
+           |
+
+catalog_state_choice: "LOCK" -> lock_flag
+                     | "UNLOCK" -> unlock_flag
+                     | "SUSPEND" -> suspend_flag
+                     | "RESUME" -> resume_flag
+
+alter_param: newname_param
+           | addvolumes_param
+           | removevolumes_param
+           | account_param
+           | bufferspace_param
+           | bufnd_param
+           | bufni_param
+           | bwo_param
+           | catalog_param
+           | ccsid_param
+           | ecsharing_param
+           | empty_param
+           | erase_param
+           | exceptionexit_param
+           | extendedaddressable_param
+           | gdgorder_param
+           | file_param
+           | filedata_param
+           | freespace_param
+           | alter_frlog_param
+           | inhibit_param
+           | keys_param
+           | limit_param
+           | alter_log_param
+           | logreplicate_param
+           | logstreamid_param
+           | managementclass_param
+           | nullify_clause
+           | owner_param
+           | purge_param
+           | reclaimca_param
+           | recordsize_param
+           | reuse_param
+           | rls_param
+           | rollin_param
+           | scratch_param
+           | shareoptions_param
+           | storageclass_param
+           | strno_param
+           | retention_param
+           | typelinear_param
+           | uniquekey_param
+           | update_param
+           | upgrade_param
+           | writecheck_param
+
+newname_param:        "NEWNAME" "(" NAME ")"
+addvolumes_param:     "ADDVOLUMES" "(" NAME+ ")"
+removevolumes_param:  "REMOVEVOLUMES" "(" NAME+ ")"
+bufnd_param:          "BUFND" "(" INT ")"
+bufni_param:          "BUFNI" "(" INT ")"
+ccsid_param:          "CCSID" "(" INT ")"
+ecsharing_param:      "ECSHARING" -> ecsharing_flag
+                     | "NOECSHARING" -> noecsharing_flag
+extendedaddressable_param: "EXTENDEDADDRESSABLE" -> extendedaddressable_flag
+filedata_param:       "FILEDATA" "(" FILEDATA_VALUE ")"
+alter_frlog_param:    "FRLOG" "(" ALTER_FRLOG_VALUE ")"
+inhibit_param:        "INHIBIT" -> inhibit_flag
+                     | "UNINHIBIT" -> uninhibit_flag
+alter_log_param:      "LOG" "(" ALTER_LOG_VALUE ")"
+reclaimca_param:      "RECLAIMCA" -> reclaimca_flag
+                     | "NORECLAIMCA" -> noreclaimca_flag
+rollin_param:         "ROLLIN" -> rollin_flag
+strno_param:          "STRNO" "(" INT ")"
+typelinear_param:     "TYPE" "(" "LINEAR" ")" -> typelinear_flag
+
+FILEDATA_VALUE:     "TEXT" | "BINARY"
+ALTER_FRLOG_VALUE:  "NONE" | "REDO"
+ALTER_LOG_VALUE:    "NONE" | "UNDO" | "ALL" | "REDO"
+
+// NULLIFY(...) sub-block: a nested parenthesized group, not a top-level
+// command-wide mutual-exclusivity concern. All 9 sub-options are
+// independently settable -- a single NULLIFY can plausibly nullify
+// several attributes at once, so (unlike catalog_state_choice above) this
+// is NOT a "pick one" choice.
+nullify_clause: "NULLIFY" "(" nullify_param* ")"
+
+nullify_param: nullify_authorization_param
+             | nullify_bwo_param
+             | nullify_code_param
+             | nullify_exceptionexit_param
+             | nullify_log_param
+             | nullify_logstreamid_param
+             | nullify_managementclass_param
+             | nullify_owner_param
+             | nullify_retention_param
+
+nullify_authorization_param:   "AUTHORIZATION" "(" NULLIFY_AUTH_VALUE ")"
+nullify_bwo_param:             "BWO"
+nullify_code_param:            "CODE"
+nullify_exceptionexit_param:   "EXCEPTIONEXIT"
+nullify_log_param:             "LOG"
+nullify_logstreamid_param:     "LOGSTREAMID"
+nullify_managementclass_param: "MANAGEMENTCLASS"
+nullify_owner_param:           "OWNER"
+nullify_retention_param:       "RETENTION"
+
+NULLIFY_AUTH_VALUE: "MODULE" | "STRING"
 
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
 GENERIC_NAME:  /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*\.\*(\.[A-Z#@$][A-Z0-9#@$]*)?/

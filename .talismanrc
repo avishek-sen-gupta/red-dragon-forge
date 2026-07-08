@@ -99,4 +99,6 @@ fileignoreconfig:
   checksum: e05d49fb791eb31a68dfb5ba3365c7ded47c5c95ddfe853167429c98e9ef77a5
 - filename: jackal/tests/unit/test_idcams_delete_comprehensive.py
   checksum: 4cd73b8812e3b7ecd44f3be7232703833457e2c7aa63b068d79aa05c5765ee20
+- filename: jackal/jackal/idcams/ast_alter.py
+  checksum: 8938c687b7f2d7ee071b063ed15afcdc5c591eed5d7fcea833f4c1e5bfdb3a4a
 version: "1.0"
