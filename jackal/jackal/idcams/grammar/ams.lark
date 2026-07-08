@@ -5,8 +5,9 @@
 
 start: command+
 
-command: modal_command | set_command  // set_command is placeholder scaffolding
-                                       // (like modal_command) so start.lark is
+command: modal_command | set_command | define_cluster  // set_command is
+                                       // placeholder scaffolding (like
+                                       // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
 
 // Not prefixed with "?": as the top-level `start` rule in standalone
@@ -25,6 +26,181 @@ set_command: "SET" NAME "=" INT  // minimal placeholder covering IDCAMS's
                                   // exercise the semicolon-terminator and
                                   // inline-comment lexical rules standalone
                                   // during Task 1.
+
+// ---------------------------------------------------------------------
+// DEFINE CLUSTER (Task 2)
+//
+// DEFINE CLUSTER ( cluster_param* ) [DATA ( data_param* )] [INDEX ( index_param* )]
+//
+// cluster_param covers the ~50 CLUSTER-level parameters. DATA(...) and
+// INDEX(...) are separate trailer clauses (siblings of the CLUSTER
+// parens, not nested inside them) each with their OWN parameter rule
+// (data_param / index_param) -- deliberately NOT shared, since INDEX(...)
+// rejects SPANNED/NONSPANNED, ERASE/NOERASE, BUFFERSPACE, FREESPACE,
+// KEYS, RECORDSIZE, and SPEED/RECOVERY, which are meaningless for an
+// index component per the IDCAMS manual.
+//
+// CYLINDERS|KILOBYTES|MEGABYTES|RECORDS|TRACKS is one rule (space_param)
+// with five alternatives -- a genuine mutually-exclusive choice, not
+// five independently-optional rules that could all match at once.
+// Likewise INDEXED|LINEAR|NONINDEXED|NUMBERED|ZFS (organization_param).
+define_cluster: "DEFINE" "CLUSTER" "(" cluster_param* ")" component_clause*
+
+component_clause: data_clause | index_clause
+data_clause:  "DATA"  "(" data_param* ")"
+index_clause: "INDEX" "(" index_param* ")"
+
+cluster_param: name_param
+             | space_param
+             | volumes_param
+             | account_param
+             | bufferspace_param
+             | bwo_param
+             | catalog_param
+             | cisz_param
+             | database_format_param
+             | keyname_param
+             | keynameu_param
+             | dataclass_param
+             | eattr_param
+             | erase_param
+             | exceptionexit_param
+             | file_param
+             | freespace_param
+             | frlog_param
+             | organization_param
+             | keylabel_param
+             | keys_param
+             | log_param
+             | logreplicate_param
+             | logstreamid_param
+             | managementclass_param
+             | model_param
+             | owner_param
+             | recatalog_param
+             | recordsize_param
+             | reuse_param
+             | rls_param
+             | shareoptions_param
+             | spanned_param
+             | speed_param
+             | storageclass_param
+             | retention_param
+             | writecheck_param
+             | obsolete_ignored_param
+
+// DataComponent: CLUSTER-level params minus everything that only makes
+// sense at the cluster/catalog level (ACCOUNT, BWO, CATALOG, DATABASE,
+// DATACLASS, EATTR, FRLOG, organization, KEYLABEL, LOG*, MANAGEMENTCLASS,
+// RECATALOG, RLS*, STORAGECLASS, retention).
+data_param: name_param
+          | space_param
+          | volumes_param
+          | bufferspace_param
+          | cisz_param
+          | erase_param
+          | exceptionexit_param
+          | file_param
+          | freespace_param
+          | keys_param
+          | model_param
+          | owner_param
+          | recordsize_param
+          | reuse_param
+          | shareoptions_param
+          | spanned_param
+          | speed_param
+          | writecheck_param
+          | obsolete_ignored_param
+
+// IndexComponent: strict subset of data_param -- no SPANNED/NONSPANNED,
+// ERASE/NOERASE, BUFFERSPACE, FREESPACE, KEYS, RECORDSIZE, SPEED/RECOVERY.
+index_param: name_param
+           | space_param
+           | volumes_param
+           | cisz_param
+           | exceptionexit_param
+           | file_param
+           | model_param
+           | owner_param
+           | reuse_param
+           | shareoptions_param
+           | writecheck_param
+           | obsolete_ignored_param
+
+name_param: "NAME" "(" NAME ")"
+
+cylinders_alloc: "CYLINDERS" "(" INT INT? ")"
+kilobytes_alloc: "KILOBYTES" "(" INT INT? ")"
+megabytes_alloc: "MEGABYTES" "(" INT INT? ")"
+records_alloc:   "RECORDS"   "(" INT INT? ")"
+tracks_alloc:    "TRACKS"    "(" INT INT? ")"
+space_param: cylinders_alloc | kilobytes_alloc | megabytes_alloc | records_alloc | tracks_alloc
+
+volumes_param: "VOLUMES" "(" NAME+ ")"
+
+account_param:       "ACCOUNT" "(" NAME ")"
+bufferspace_param:   "BUFFERSPACE" "(" INT ")"
+bwo_param:           "BWO" "(" BWO_VALUE ")"
+catalog_param:       "CATALOG" "(" NAME ")"
+cisz_param:          "CONTROLINTERVALSIZE" "(" INT ")"
+database_format_param: "DATABASE" "(" DATABASE_FORMAT ")"
+keyname_param:       "KEYNAME" "(" NAME ")"
+keynameu_param:      "KEYNAMEU" "(" NAME ")"
+dataclass_param:     "DATACLASS" "(" NAME ")"
+eattr_param:         "EATTR" "(" EATTR_VALUE ")"
+erase_param:         "ERASE" -> erase_flag
+                    | "NOERASE" -> noerase_flag
+exceptionexit_param: "EXCEPTIONEXIT" "(" NAME ")"
+file_param:          "FILE" "(" NAME ")"
+freespace_param:     "FREESPACE" "(" INT INT ")"
+frlog_param:         "FRLOG" "(" FRLOG_VALUE ")"
+organization_param:  ORG_VALUE
+keylabel_param:      "KEYLABEL" "(" NAME ")"
+keys_param:          "KEYS" "(" INT INT ")"
+log_param:           "LOG" "(" LOG_VALUE ")"
+logreplicate_param:  "LOGREPLICATE" -> logreplicate_flag
+                    | "NOLOGREPLICATE" -> nologreplicate_flag
+logstreamid_param:   "LOGSTREAMID" "(" NAME ")"
+managementclass_param: "MANAGEMENTCLASS" "(" NAME ")"
+model_param:         "MODEL" "(" NAME NAME? ")"
+owner_param:         "OWNER" "(" NAME ")"
+recatalog_param:     "RECATALOG" -> recatalog_flag
+                    | "NORECATALOG" -> norecatalog_flag
+recordsize_param:    "RECORDSIZE" "(" INT INT ")"
+reuse_param:         "REUSE" -> reuse_flag
+                    | "NOREUSE" -> noreuse_flag
+rls_param:           "RLSQUIESCE" -> rlsquiesce_flag
+                    | "RLSENABLE" -> rlsenable_flag
+shareoptions_param:  "SHAREOPTIONS" "(" INT INT? ")"
+spanned_param:       "SPANNED" -> spanned_flag
+                    | "NONSPANNED" -> nonspanned_flag
+speed_param:         "SPEED" -> speed_flag
+                    | "RECOVERY" -> recovery_flag
+storageclass_param:  "STORAGECLASS" "(" NAME ")"
+retention_param:     "TO" "(" INT ")" -> to_retention
+                    | "FOR" "(" INT ")" -> for_retention
+writecheck_param:    "WRITECHECK" -> writecheck_flag
+                    | "NOWRITECHECK" -> nowritecheck_flag
+
+// Obsolete parameters that real (old) JCL may still contain: accepted so
+// parsing does not fail, but carry no semantic value on DefineCluster
+// (unlike DefineAlternateIndex, which has dedicated *_ignored fields).
+obsolete_ignored_param: "IMBED" -> obsolete_ignored
+                       | "NOIMBED" -> obsolete_ignored
+                       | "KEYRANGES" "(" INT+ ")" -> obsolete_ignored
+                       | "KEYRANGE" "(" INT+ ")" -> obsolete_ignored
+                       | "ORDERED" -> obsolete_ignored
+                       | "UNORDERED" -> obsolete_ignored
+                       | "REPLICATE" -> obsolete_ignored
+                       | "NOREPLICATE" -> obsolete_ignored
+
+BWO_VALUE:      "TYPECICS" | "TYPEIMS" | "NO"
+DATABASE_FORMAT: "BSON" | "JSON"
+EATTR_VALUE:    "NO" | "OPT"
+FRLOG_VALUE:    "ALL" | "NONE" | "REDO" | "UNDO"
+LOG_VALUE:      "NONE" | "UNDO" | "ALL"
+ORG_VALUE:      "INDEXED" | "LINEAR" | "NONINDEXED" | "NUMBERED" | "ZFS"
 
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
 GENERIC_NAME:  /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*\.\*(\.[A-Z#@$][A-Z0-9#@$]*)?/
