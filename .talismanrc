@@ -47,6 +47,8 @@ fileignoreconfig:
   checksum: e4d3b88fe4d65ac05e971fdd094e6f500da43490a37fcf2b4c38fe479e7e14a2
 - filename: issues/issues.jsonl
   ignore_detectors: [filecontent]
+- filename: beads/issues.jsonl
+  ignore_detectors: [filecontent]
 - filename: CLAUDE.md
   checksum: a2f21ef67ecfc14b9850c7de2d11c6ac487d78e41859c1d9b66666312e45dc9a
 - filename: squall/db2/dsn-env.sh
