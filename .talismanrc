@@ -99,10 +99,12 @@ fileignoreconfig:
   checksum: 8938c687b7f2d7ee071b063ed15afcdc5c591eed5d7fcea833f4c1e5bfdb3a4a
 - filename: jackal/jackal/idcams/ast_repro.py
   checksum: 1fed49c6742f2138146836e60be4b5f396b228f1776da99919204d26b9429184
-- filename: jackal/jackal/idcams/grammar/ams.lark
-  checksum: 46f90a342d7c780b30daa78d913e73ef66bf6b2e38393eba1547dc5a4902a2e8
-- filename: jackal/jackal/idcams/parser_comprehensive.py
-  checksum: 9c9f92cc0fb6a794bf7a9b3c9cb1575afcc246af58253089ec2340b4b7507b5f
 - filename: jackal/tests/unit/test_idcams_repro_comprehensive.py
   checksum: 3620fa326691d20e58bd3d87ef7535afa0af14633e5f43686aaf02b04f3316a5
+- filename: jackal/jackal/idcams/grammar/ams.lark
+  checksum: 1622cff4ab4bdf6700870b47aff026ebcbb23ffaa41b0e3f64d8d180af27c7dc
+- filename: jackal/jackal/idcams/parser_comprehensive.py
+  checksum: 38946731a1b02a81fbad8b36ea153680dd71c6f95a9f45de6b0d0fdac2f23279
+- filename: jackal/tests/unit/test_idcams_print_listcat.py
+  checksum: c922dafd6243cffbd98e2e43cfcc1e4626fae24977244928e4da6833b0af80ed
 version: "1.0"

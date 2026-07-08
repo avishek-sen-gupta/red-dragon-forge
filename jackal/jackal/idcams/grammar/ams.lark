@@ -6,7 +6,8 @@
 start: command+
 
 command: modal_command | set_command | define_cluster | define_alternateindex
-       | define_gdg | define_nonvsam | define_path | delete | alter | repro  // set_command is
+       | define_gdg | define_nonvsam | define_path | delete | alter | repro
+       | print | listcat  // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -848,6 +849,130 @@ dk_systemkey_choice:    "SYSTEMKEY"
 
 systemdatakey_param: "SYSTEMDATAKEY" "(" (NAME | QUOTED_STRING) ")"
 systemkeyname_param: "SYSTEMKEYNAME" "(" NAME ")"
+
+// ---------------------------------------------------------------------
+// PRINT (Task 8)
+//
+// PRINT { INFILE(ddname) | INDATASET(entryname) } print_param*
+//
+// Same flat-grammar/transformer-validated pattern as REPRO above:
+// INFILE/INDATASET is PRINT's one required "pick one" choice; CHARACTER/
+// DUMP/HEX, RangeStart (FROMKEY/FROMADDRESS/FROMNUMBER/SKIP), RangeEnd
+// (TOKEY/TOADDRESS/TONUMBER/COUNT), INSERTSHIFT/INSERTALL, and
+// SKIPDBCSCHECK/NODBCSCHECK are optional "pick one" groups, all enforced
+// post-parse by ComprehensiveIdcamsTransformer.print_(), not the grammar.
+//
+// PRINT's RangeStart/RangeEnd, INSERTSHIFT/INSERTALL, SKIPDBCSCHECK/
+// NODBCSCHECK, CIMODE/NOCIMODE, DBCS, FILE, and RLSSOURCE are IDENTICAL in
+// shape to REPRO's -- fromkey_param/fromaddress_param/fromnumber_param/
+// skip_param/tokey_param/toaddress_param/tonumber_param/count_param/
+// insertshift_param/insertall_param/skipdbcscheck_param/nodbcscheck_param/
+// repro_cimode_param/repro_dbcs_param/file_param/rlssource_param are
+// ordinary top-level grammar rules (not nested inside REPRO's own rule),
+// so print_param references them directly instead of redefining them --
+// the resulting RangeStart/RangeEnd dataclasses (ast_repro.py) are shared
+// verbatim per the plan's interface contract for this task.
+print: "PRINT" print_param*
+
+print_param: infile_param
+           | indataset_param
+           | outfile_param
+           | print_format_param
+           | repro_cimode_param
+           | repro_dbcs_param
+           | fromkey_param
+           | fromaddress_param
+           | fromnumber_param
+           | skip_param
+           | tokey_param
+           | toaddress_param
+           | tonumber_param
+           | count_param
+           | insertshift_param
+           | insertall_param
+           | skipdbcscheck_param
+           | nodbcscheck_param
+           | rlssource_param
+
+print_format_param: "CHARACTER" -> print_character_flag
+                   | "DUMP"      -> print_dump_flag
+                   | "HEX"       -> print_hex_flag
+
+// ---------------------------------------------------------------------
+// LISTCAT (Task 8)
+//
+// LISTCAT listcat_param*
+//
+// Every LISTCAT parameter is optional (the "no operand" case lists
+// everything in the catalog). ENTRIES/LEVEL is LISTCAT's sole
+// mutual-exclusivity "pick one" group, reusing REPRO's entries_param/
+// level_param rules verbatim, enforced post-parse like PRINT/REPRO above.
+// The five detail-level keywords (NAME/HISTORY/VOLUME/ALLOCATION/ALL) are
+// likewise an optional "pick one" group (listcat_detail_param), also
+// transformer-enforced.
+//
+// entry_types (ALIAS/ALTERNATEINDEX/CLUSTER/DATA/GENERATIONDATAGROUP/
+// INDEX/NONVSAM/PAGESPACE/PATH/USERCATALOG) is explicitly NOT a choice
+// group -- the manual allows combining multiple entry-type filters in one
+// LISTCAT (e.g. "LISTCAT ALIAS CLUSTER"), so listcat_entrytype_param is an
+// ordinary freely-repeatable listcat_param alternative, and every
+// occurrence is collected into the entry_types tuple with no
+// single-occurrence enforcement.
+//
+// CATALOG, VOLUMEENTRIES, FILE, and OUTFILE reuse REPRO's existing
+// catalog_param/volumeentries_param/file_param/outfile_param rules, same
+// rationale as PRINT's reuse above.
+//
+// CDILVL/NOCDILVL: the manual documents CDILVL as meaningful only
+// alongside LEVEL, but that coupling is NOT grammar-enforced here -- it's
+// accepted standalone and deferred to a later semantic/execution layer,
+// consistent with this module's parsing-only scope (see the test file's
+// module docstring for the explicit decision).
+listcat: "LISTCAT" listcat_param*
+
+listcat_param: listcat_entrytype_param
+             | libraryentries_param
+             | volumeentries_param
+             | catalog_param
+             | creation_param
+             | expiration_param
+             | entries_param
+             | level_param
+             | listcat_cdilvl_param
+             | listcat_prefix_param
+             | listcat_detail_param
+             | file_param
+             | library_param
+             | outfile_param
+
+listcat_entrytype_param: LISTCAT_ENTRYTYPE_VALUE
+
+LISTCAT_ENTRYTYPE_VALUE: "ALIAS" | "ALTERNATEINDEX" | "CLUSTER" | "DATA"
+                        | "GENERATIONDATAGROUP" | "INDEX" | "NONVSAM"
+                        | "PAGESPACE" | "PATH" | "USERCATALOG"
+
+libraryentries_param: "LIBRARYENTRIES" "(" NAME ")"
+creation_param:       "CREATION" "(" INT ")"
+expiration_param:     "EXPIRATION" "(" INT ")"
+
+listcat_cdilvl_param: "CDILVL" -> cdilvl_flag
+                     | "NOCDILVL" -> nocdilvl_flag
+listcat_prefix_param: "PREFIX" -> prefix_flag
+                     | "NOPREFIX" -> noprefix_flag
+
+listcat_detail_param: LISTCAT_DETAIL_VALUE
+
+// Explicit low priority (below the default 0): "VOLUME" and "ALL" are
+// prefixes of other LISTCAT keywords assembled from separate tokens
+// (VOLUMEENTRIES = "VOLUME"+"ENTRIES", ALLOCATION contains "ALL" as a
+// prefix too) -- without this, the earley dynamic lexer's ambiguity
+// resolution can pick the split ("VOLUME" detail + "ENTRIES(...)") over
+// the intended single VOLUMEENTRIES(...) keyword-with-argument parse.
+// Longest-alternative-first within the terminal itself (ALLOCATION before
+// ALL) additionally guards against ALLOCATION being misread as ALL.
+LISTCAT_DETAIL_VALUE.-1: "ALLOCATION" | "HISTORY" | "VOLUME" | "NAME" | "ALL"
+
+library_param: "LIBRARY" "(" NAME ")"
 
 // ---------------------------------------------------------------------
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
