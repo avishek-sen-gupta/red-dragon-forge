@@ -281,3 +281,47 @@ def test_resolve_step_raises_for_unknown_ddname(tmp_path: Path) -> None:
     )
     with pytest.raises(KeyError, match="BADDD"):
         runner._resolve_step(step, resolved_dds)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_runner_expands_proc_call_before_running(tmp_path: Path) -> None:
+    (tmp_path / "proc").mkdir()
+    (tmp_path / "proc" / "WRAPIT.prc").write_text(
+        "//WRAPIT PROC\n"
+        "//P1 EXEC PGM=IEFBR14\n"
+        "//D DD DSN=J.X,DISP=(NEW,DELETE,DELETE)\n"
+        "// PEND\n"
+    )
+    job = Job(name="J", steps=(Step(name="STEP1", pgm="WRAPIT", dds=()),))
+    runner = JobRunner(
+        source_dir=tmp_path,
+        bridge_jar="unused",
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+        proclib_dirs=[tmp_path / "proc"],
+    )
+    res = runner.run(job, workdir=tmp_path, seeds={})
+    assert [s.name for s in res.steps] == ["STEP1.P1"]
+    assert res.steps[0].ran and res.steps[0].return_code == 0
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_runner_without_proclib_dirs_is_unchanged(tmp_path: Path) -> None:
+    # Default proclib_dirs=() must produce byte-identical behavior to every
+    # existing call site that predates this feature (this is the exact body
+    # of test_runner_runs_all_steps, re-run with no proclib_dirs argument).
+    job = Job(
+        name="J",
+        steps=(
+            Step(name="A", pgm="IEFBR14", dds=()),
+            Step(name="B", pgm="IEFBR14", dds=()),
+        ),
+    )
+    runner = JobRunner(
+        source_dir=tmp_path,
+        bridge_jar="unused",
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+    )
+    res = runner.run(job, workdir=tmp_path, seeds={})
+    assert [s.name for s in res.steps] == ["A", "B"]
