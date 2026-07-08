@@ -1,5 +1,7 @@
 """Unit tests for extract_jcl_graph()."""
 
+from pathlib import Path
+
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
@@ -174,3 +176,36 @@ def test_dummy_dd_is_not_a_dataset_or_instream_node():
     assert not any(
         e.kind in (EdgeKind.READS, EdgeKind.WRITES, EdgeKind.UPDATES) for e in edges
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_proc_call_expands_with_qualified_id_and_proc_attr(tmp_path: Path):
+    (tmp_path / "REPROC.prc").write_text(
+        "//REPROC PROC\n//PRC001 EXEC PGM=IDCAMS\n//SYSIN DD DISP=SHR,DSN=NULLFILE\n// PEND\n"
+    )
+    jcl = "//TRANREPT JOB 'demo'\n//STEP05R EXEC PROC=REPROC\n"
+    nodes, edges = extract_jcl_graph(jcl, proclib_dirs=[tmp_path])
+
+    step_nodes = [n for n in nodes if n.kind == NodeKind.STEP]
+    assert any(n.id == "TRANREPT.STEP05R.PRC001" for n in step_nodes)
+    assert not any(n.id == "TRANREPT.STEP05R" for n in step_nodes)
+
+    job_to_step = [
+        e for e in edges if e.kind == EdgeKind.JCL_STEP_RUNS and e.source == "TRANREPT"
+    ]
+    assert job_to_step[0].target == "TRANREPT.STEP05R.PRC001"
+    assert job_to_step[0].attrs == {"proc": "REPROC"}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_extract_jcl_graph_without_proclib_dirs_is_unchanged():
+    # Default proclib_dirs=() must produce byte-identical behavior to every
+    # existing call site that predates this feature.
+    nodes, edges = extract_jcl_graph(_JCL)
+    assert [s for s in nodes if s.kind == NodeKind.STEP]
+    step_to_prog = {
+        e.source: e.target
+        for e in edges
+        if e.kind == EdgeKind.JCL_STEP_RUNS and e.source.startswith("PIPE.")
+    }
+    assert step_to_prog["PIPE.STEP1"] == "UPCASE"
