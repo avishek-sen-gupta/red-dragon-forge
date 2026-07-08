@@ -67,4 +67,6 @@ fileignoreconfig:
   checksum: 0f1a0a792b8b195100c5a30b59f8cd19ed7f2d91bd4796a987e70b7614c922bf
 - filename: jackal/tests/unit/test_cobol_file_graph.py
   checksum: a41fa58ef6cc88ae92539090462dfe332d5d91afe7fe045da489e01bde30347b
+- filename: jackal/docs/superpowers/plans/2026-07-08-jcl-symbolic-value-type.md
+  checksum: 8b4766155fb1f041e8bd35ad41a776e5e6f02dcb56c4255b5d1e738b71f99625
 version: "1.0"
