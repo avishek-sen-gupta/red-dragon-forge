@@ -69,3 +69,28 @@ def test_real_jar_parses_backward_ref(jcl_bridge_jar):
     assert isinstance(dd.dsn, BackwardRef)
     assert dd.dsn.step == "STEP1"
     assert dd.dsn.ddname == "WRK"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_proc_document(jcl_bridge_jar):
+    jcl = (
+        "//REPROC PROC\n"
+        "//PRC001 EXEC PGM=IDCAMS\n"
+        "//FILEIN  DD DISP=SHR,DSN=NULLFILE\n"
+        "//SYSIN   DD DISP=SHR,DSN=&CNTLLIB(REPROCT)\n"
+        "// PEND\n"
+    )
+    proc = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse_proc(jcl)
+    assert proc.name == "REPROC"
+    assert proc.defaults == {}
+    assert [s.name for s in proc.steps] == ["PRC001"]
+    assert proc.steps[0].dds[1].dsn == DirectDSN(
+        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_exec_proc_parm_override(jcl_bridge_jar):
+    jcl = "//J JOB 1\n//STEP1 EXEC PROC=REPROC,CNTLLIB=AWS.M2.CARDDEMO.CNTL\n"
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    assert job.steps[0].proc_parms == {"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")}

@@ -14,7 +14,17 @@ from jackal.dsn import (
     TempRef,
     BackwardRef,
 )
-from jackal.model import Cond, CondOp, DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.model import (
+    Cond,
+    CondOp,
+    DD,
+    Disp,
+    DispNormal,
+    DispStatus,
+    Job,
+    ProcDef,
+    Step,
+)
 from jackal.value_parts import Literal, Symbol, Value, resolve
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
@@ -82,6 +92,7 @@ def _step_from_json(s: dict) -> Step:
         dds=tuple(_dd_from_json(d) for d in s["dds"]),
         conds=tuple(_cond_from_json(c) for c in s.get("cond", ())),
         parm=_value_from_json(s.get("parm", [])),
+        proc_parms={k: _value_from_json(v) for k, v in s.get("proc_parms", {}).items()},
     )
 
 
@@ -90,6 +101,14 @@ def _job_from_json(data: dict) -> Job:
         name=data["name"],
         steps=tuple(_step_from_json(s) for s in data["steps"]),
         cond=tuple(_cond_from_json(c) for c in data.get("cond", ())),
+    )
+
+
+def _proc_from_json(data: dict) -> ProcDef:
+    return ProcDef(
+        name=data["name"],
+        defaults={k: _value_from_json(v) for k, v in data.get("defaults", {}).items()},
+        steps=tuple(_step_from_json(s) for s in data["steps"]),
     )
 
 
@@ -123,6 +142,17 @@ class JclBridgeParser:
         out = self._runner.run(command, text)
         try:
             return _job_from_json(json.loads(out))
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            snippet = out[:120].replace("\n", " ")
+            raise JclParseError(
+                f"bridge returned malformed/incomplete JSON: {e} — output: {snippet!r}"
+            ) from e
+
+    def parse_proc(self, text: str) -> ProcDef:
+        command = ["java", "-jar", self._bridge_jar]
+        out = self._runner.run(command, text)
+        try:
+            return _proc_from_json(json.loads(out))
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             snippet = out[:120].replace("\n", " ")
             raise JclParseError(

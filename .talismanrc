@@ -75,4 +75,6 @@ fileignoreconfig:
   checksum: 2dcc83553869e00858dc3ff99d4ae9231210821306b585b5f5446f5d036253a1
 - filename: jackal/docs/superpowers/plans/2026-07-08-jcl-proc-expansion.md
   checksum: 97075a791957f4905a35f10d65d49d1bc30360f2dc8b24da879a47481b819659
+- filename: jackal/jackal/jcl/bridge_parser.py
+  checksum: e0cd1f9516a89c02dd040fc22a64cea479893d918c17a1db2697ea4fb230e7d1
 version: "1.0"
