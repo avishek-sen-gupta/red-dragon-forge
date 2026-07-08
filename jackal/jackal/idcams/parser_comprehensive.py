@@ -38,6 +38,8 @@ from jackal.idcams.ast_delete import Delete
 from jackal.idcams.ast_define_gdg import DefineGenerationDataGroup
 from jackal.idcams.ast_define_nonvsam import DefineNonvsam
 from jackal.idcams.ast_define_path import DefinePath
+from jackal.idcams.ast_listcat import Listcat
+from jackal.idcams.ast_print import Print
 from jackal.idcams.ast_repro import (
     CipherSpec,
     DecipherSpec,
@@ -1062,6 +1064,154 @@ class _Build(Transformer):
         )
 
         return Repro(**fields)
+
+    # -- generic "at most one (and optionally required) of a pair" helper
+    # for PRINT/LISTCAT -- REPRO's own _check_repro_pair_group is left
+    # untouched (its error messages hardcode "REPRO:"); this is the same
+    # pattern parameterized with a command label for reuse by later
+    # commands.
+    @staticmethod
+    def _check_pair_group(
+        fields: dict[str, object],
+        command_name: str,
+        key_a: str,
+        label_a: str,
+        key_b: str,
+        label_b: str,
+        *,
+        required: bool,
+    ) -> None:
+        has_a = key_a in fields
+        has_b = key_b in fields
+        if has_a and has_b:
+            raise ValueError(
+                f"{command_name}: {label_a} and {label_b} are mutually "
+                "exclusive, both were specified"
+            )
+        if required and not has_a and not has_b:
+            raise ValueError(
+                f"{command_name}: exactly one of {label_a} or {label_b} is required"
+            )
+
+    # -- PRINT-specific params -----------------------------------------------
+    def print_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def print_character_flag(self, c: list) -> tuple:
+        return ("format", "CHARACTER")
+
+    def print_dump_flag(self, c: list) -> tuple:
+        return ("format", "DUMP")
+
+    def print_hex_flag(self, c: list) -> tuple:
+        return ("format", "HEX")
+
+    # -- PRINT assembly -------------------------------------------------------
+    def print(self, c: list) -> Print:
+        items = [item for item in c if item is not None]
+
+        formats = [value for key, value in items if key == "format"]
+        if len(formats) > 1:
+            raise ValueError(
+                f"PRINT: {formats[0]} and {formats[1]} are mutually "
+                "exclusive, both were specified"
+            )
+
+        range_start_kinds = [value.kind for key, value in items if key == "range_start"]
+        if len(range_start_kinds) > 1:
+            raise ValueError(
+                f"PRINT: {range_start_kinds[0]} and {range_start_kinds[1]} "
+                "are mutually exclusive, both were specified"
+            )
+        range_end_kinds = [value.kind for key, value in items if key == "range_end"]
+        if len(range_end_kinds) > 1:
+            raise ValueError(
+                f"PRINT: {range_end_kinds[0]} and {range_end_kinds[1]} "
+                "are mutually exclusive, both were specified"
+            )
+
+        fields = self._fields_dict(items)
+
+        self._check_pair_group(
+            fields, "PRINT", "infile", "INFILE", "indataset", "INDATASET", required=True
+        )
+        self._check_pair_group(
+            fields,
+            "PRINT",
+            "insert_shift",
+            "INSERTSHIFT",
+            "insert_all",
+            "INSERTALL",
+            required=False,
+        )
+        self._check_pair_group(
+            fields,
+            "PRINT",
+            "skip_dbcs_check",
+            "SKIPDBCSCHECK",
+            "no_dbcs_check",
+            "NODBCSCHECK",
+            required=False,
+        )
+
+        return Print(**fields)
+
+    # -- LISTCAT-specific params -----------------------------------------------
+    def listcat_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def listcat_entrytype_param(self, c: list) -> tuple:
+        return ("entry_type", str(c[0]))
+
+    def libraryentries_param(self, c: list) -> tuple:
+        return ("library_entries", str(c[0]))
+
+    def creation_param(self, c: list) -> tuple:
+        return ("creation_days", _int(c[0]))
+
+    def expiration_param(self, c: list) -> tuple:
+        return ("expiration_days", _int(c[0]))
+
+    def cdilvl_flag(self, c: list) -> tuple:
+        return ("cdilvl", True)
+
+    def nocdilvl_flag(self, c: list) -> tuple:
+        return ("cdilvl", False)
+
+    def prefix_flag(self, c: list) -> tuple:
+        return ("prefix", True)
+
+    def noprefix_flag(self, c: list) -> tuple:
+        return ("prefix", False)
+
+    def listcat_detail_param(self, c: list) -> tuple:
+        return ("detail", str(c[0]))
+
+    def library_param(self, c: list) -> tuple:
+        return ("library", str(c[0]))
+
+    # -- LISTCAT assembly -------------------------------------------------------
+    def listcat(self, c: list) -> Listcat:
+        items = [item for item in c if item is not None]
+
+        details = [value for key, value in items if key == "detail"]
+        if len(details) > 1:
+            raise ValueError(
+                f"LISTCAT: {details[0]} and {details[1]} are mutually "
+                "exclusive, both were specified"
+            )
+
+        entry_types = tuple(value for key, value in items if key == "entry_type")
+        rest = [item for item in items if item[0] != "entry_type"]
+
+        fields = self._fields_dict(rest)
+        fields["entry_types"] = entry_types
+
+        self._check_pair_group(
+            fields, "LISTCAT", "entries", "ENTRIES", "level", "LEVEL", required=False
+        )
+
+        return Listcat(**fields)
 
     def command(self, c: list) -> object:
         return c[0]
