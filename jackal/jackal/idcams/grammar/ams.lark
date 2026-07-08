@@ -706,91 +706,52 @@ NULLIFY_AUTH_VALUE: "MODULE" | "STRING"
 // (TOKEY/TOADDRESS/TONUMBER/COUNT), ENCIPHER/DECIPHER, INSERTSHIFT/
 // INSERTALL, and SKIPDBCSCHECK/NODBCSCHECK.
 //
-// Unlike DEFINE CLUSTER/ALTERNATEINDEX's cluster_seq_00/10/01/11 (a
-// 2-dimension, 4-state DFA for two COUPLED choices), none of REPRO's eight
-// groups interact with each other semantically -- so per the plan's
-// ratified scoping decision, each gets its OWN small two-state
-// "not-yet-consumed"/"consumed" sequence (mirroring DELETE's
-// entry_type_param/delete_seq_0/delete_seq_1 and ALTER's 4-way
-// catalog_state_choice/alter_seq_0/alter_seq_1), chained one after another
-// in a fixed relative order (source, target, ENTRIES/LEVEL, RangeStart,
-// RangeEnd, ENCIPHER/DECIPHER, INSERTSHIFT/INSERTALL, SKIPDBCSCHECK/
-// NODBCSCHECK) rather than the 2^8-state cross-product that would be
-// needed to accept every possible relative ordering among all eight
-// groups structurally. repro_param (the freely-repeatable parameters) is
-// reachable from every state in the chain, so ordinary parameters may
-// appear anywhere; only the relative order *between two different choice
-// groups* is fixed by this simplification -- a real-world REPRO control
-// statement conventionally states INFILE/OUTFILE first anyway, and the
-// remaining six optional groups rarely all co-occur.
-repro: "REPRO" repro_seq_src
+// All ~15 ordinary params AND the individual members of the eight "pick
+// one" groups above are siblings in ONE flat, freely-repeatable
+// repro_param list -- Lark's "*" doesn't care about relative order, so
+// real-world reorderings (e.g. OUTFILE before INFILE) parse structurally.
+// "At most one member of a mutually-exclusive group" (and "at least one
+// of INFILE/INDATASET, and at least one of OUTFILE/OUTDATASET, is
+// required") is NOT a grammar-level constraint here -- it's enforced
+// post-parse by ComprehensiveIdcamsTransformer.repro(), which raises
+// ValueError on a violation. This mirrors DEFINE CLUSTER's
+// DATABASE(...)/KEYNAME(...) pattern (parser_comprehensive.py's
+// define_cluster): the grammar accepts broadly, the transformer validates
+// semantically. A combinatorial grammar-level DFA across all eight
+// uncoupled groups would need 2^8 states for no semantic benefit.
+repro: "REPRO" repro_param*
 
-// state: source (INFILE|INDATASET) not yet consumed -- required, so no
-// epsilon exit here.
-repro_seq_src: repro_param repro_seq_src
-             | source_choice repro_seq_tgt
-
-// state: target (OUTFILE|OUTDATASET) not yet consumed -- required, so no
-// epsilon exit here either.
-repro_seq_tgt: repro_param repro_seq_tgt
-             | target_choice repro_seq_c0
-
-// state: ENTRIES/LEVEL not yet consumed (optional -- epsilon falls through
-// to the next dimension without ever choosing one).
-repro_seq_c0: repro_param repro_seq_c0
-            | entries_level_choice repro_seq_c1
-            | repro_seq_d0
-repro_seq_c1: repro_param repro_seq_c1
-            | repro_seq_d0
-
-// state: RangeStart (FROMKEY|FROMADDRESS|FROMNUMBER|SKIP) not yet consumed.
-repro_seq_d0: repro_param repro_seq_d0
-            | range_start_choice repro_seq_d1
-            | repro_seq_e0
-repro_seq_d1: repro_param repro_seq_d1
-            | repro_seq_e0
-
-// state: RangeEnd (TOKEY|TOADDRESS|TONUMBER|COUNT) not yet consumed.
-repro_seq_e0: repro_param repro_seq_e0
-            | range_end_choice repro_seq_e1
-            | repro_seq_f0
-repro_seq_e1: repro_param repro_seq_e1
-            | repro_seq_f0
-
-// state: ENCIPHER/DECIPHER not yet consumed.
-repro_seq_f0: repro_param repro_seq_f0
-            | cipher_choice repro_seq_f1
-            | repro_seq_g0
-repro_seq_f1: repro_param repro_seq_f1
-            | repro_seq_g0
-
-// state: INSERTSHIFT/INSERTALL not yet consumed.
-repro_seq_g0: repro_param repro_seq_g0
-            | insert_choice repro_seq_g1
-            | repro_seq_h0
-repro_seq_g1: repro_param repro_seq_g1
-            | repro_seq_h0
-
-// state: SKIPDBCSCHECK/NODBCSCHECK not yet consumed.
-repro_seq_h0: repro_param repro_seq_h0
-            | dbcscheck_choice repro_seq_h1
-            | repro_seq_final
-repro_seq_h1: repro_param repro_seq_h1
-            | repro_seq_final
-
-// state: all eight groups resolved (chosen or, for the six optional ones,
-// skipped) -- only freely-repeatable params remain.
-repro_seq_final: repro_param repro_seq_final
-            |
-
-source_choice: infile_param | indataset_param
-target_choice: outfile_param | outdataset_param
-entries_level_choice: entries_param | level_param
-range_start_choice: fromkey_param | fromaddress_param | fromnumber_param | skip_param
-range_end_choice: tokey_param | toaddress_param | tonumber_param | count_param
-cipher_choice: encipher_clause | decipher_clause
-insert_choice: insertshift_param | insertall_param
-dbcscheck_choice: skipdbcscheck_param | nodbcscheck_param
+repro_param: infile_param
+           | indataset_param
+           | outfile_param
+           | outdataset_param
+           | entries_param
+           | level_param
+           | fromkey_param
+           | fromaddress_param
+           | fromnumber_param
+           | skip_param
+           | tokey_param
+           | toaddress_param
+           | tonumber_param
+           | count_param
+           | encipher_clause
+           | decipher_clause
+           | insertshift_param
+           | insertall_param
+           | skipdbcscheck_param
+           | nodbcscheck_param
+           | repro_cimode_param
+           | repro_dbcs_param
+           | errorlimit_param
+           | file_param
+           | mergecat_param
+           | messagelevel_param
+           | replace_param
+           | reuse_param
+           | volumeentries_param
+           | rlssource_param
+           | rlstarget_param
 
 infile_param:     "INFILE" "(" NAME ")"
 indataset_param:  "INDATASET" "(" NAME ")"
@@ -818,20 +779,6 @@ insertall_param:   "INSERTALL" -> insertall_flag
 skipdbcscheck_param: "SKIPDBCSCHECK" "(" int_pair+ ")"
 nodbcscheck_param:   "NODBCSCHECK" -> nodbcscheck_flag
 
-// repro_param: freely-repeatable REPRO-level parameters, reachable from
-// every state in the chain above.
-repro_param: repro_cimode_param
-           | repro_dbcs_param
-           | errorlimit_param
-           | file_param
-           | mergecat_param
-           | messagelevel_param
-           | replace_param
-           | reuse_param
-           | volumeentries_param
-           | rlssource_param
-           | rlstarget_param
-
 repro_cimode_param: "CIMODE" -> repro_cimode_flag
                    | "NOCIMODE" -> repro_nocimode_flag
 repro_dbcs_param:   "DBCS" -> repro_dbcs_flag
@@ -850,20 +797,13 @@ RLS_STATE_VALUE:    "NO" | "YES" | "QUIESCE"
 
 // ENCIPHER(...) -- CipherSpec. EXTERNALKEYNAME/INTERNALKEYNAME/PRIVATEKEY
 // is CipherSpec's own genuine "pick one key-management mode" choice
-// (required -- exactly one), enforced by the same two-state pattern as the
-// top-level groups above. CIPHERUNIT, DATAKEYFILE, DATAKEYVALUE,
-// SHIPKEYNAMES, STOREDATAKEY/NOSTOREDATAKEY, STOREKEYNAME, and USERDATA
-// are ordinary freely-repeatable cipher_param entries.
-encipher_clause: "ENCIPHER" "(" cipher_seq_0 ")"
-
-cipher_seq_0: cipher_param cipher_seq_0
-            | cipher_key_choice cipher_seq_1
-cipher_seq_1: cipher_param cipher_seq_1
-            |
-
-cipher_key_choice: "EXTERNALKEYNAME" "(" NAME ")" -> externalkeyname_choice
-                  | "INTERNALKEYNAME" "(" NAME ")" -> internalkeyname_choice
-                  | "PRIVATEKEY" -> privatekey_choice
+// (required -- exactly one); like the top-level groups above, this is now
+// a flat freely-repeatable cipher_param list, with the "exactly one key
+// mode" constraint enforced by the transformer's encipher_clause() method,
+// not the grammar. CIPHERUNIT, DATAKEYFILE, DATAKEYVALUE, SHIPKEYNAMES,
+// STOREDATAKEY/NOSTOREDATAKEY, STOREKEYNAME, and USERDATA are ordinary
+// freely-repeatable cipher_param entries.
+encipher_clause: "ENCIPHER" "(" cipher_param* ")"
 
 cipher_param: cipherunit_param
             | cipher_datakeyfile_param
@@ -872,6 +812,13 @@ cipher_param: cipherunit_param
             | storedatakey_param
             | storekeyname_param
             | userdata_param
+            | externalkeyname_choice
+            | internalkeyname_choice
+            | privatekey_choice
+
+externalkeyname_choice: "EXTERNALKEYNAME" "(" NAME ")"
+internalkeyname_choice: "INTERNALKEYNAME" "(" NAME ")"
+privatekey_choice:      "PRIVATEKEY"
 
 cipherunit_param:         "CIPHERUNIT" "(" INT ")"
 cipher_datakeyfile_param:  "DATAKEYFILE" "(" NAME ")" -> cipher_datakeyfile
@@ -884,21 +831,20 @@ userdata_param:           "USERDATA" "(" (NAME | QUOTED_STRING) ")"
 
 // DECIPHER(...) -- DecipherSpec. DATAKEYFILE/DATAKEYVALUE/SYSTEMKEY is
 // DecipherSpec's own genuine "pick one key-management mode" choice
-// (required -- exactly one), same rationale/pattern as CipherSpec's
-// cipher_key_choice above. SYSTEMDATAKEY/SYSTEMKEYNAME are ordinary
-// freely-repeatable decipher_param entries.
-decipher_clause: "DECIPHER" "(" decipher_seq_0 ")"
+// (required -- exactly one), same rationale/pattern as CipherSpec's key
+// choice above -- flat grammar, transformer-enforced. SYSTEMDATAKEY/
+// SYSTEMKEYNAME are ordinary freely-repeatable decipher_param entries.
+decipher_clause: "DECIPHER" "(" decipher_param* ")"
 
-decipher_seq_0: decipher_param decipher_seq_0
-              | decipher_key_choice decipher_seq_1
-decipher_seq_1: decipher_param decipher_seq_1
-              |
+decipher_param: systemdatakey_param
+              | systemkeyname_param
+              | dk_datakeyfile_choice
+              | dk_datakeyvalue_choice
+              | dk_systemkey_choice
 
-decipher_key_choice: "DATAKEYFILE" "(" NAME ")" -> dk_datakeyfile_choice
-                    | "DATAKEYVALUE" "(" (NAME | QUOTED_STRING) ")" -> dk_datakeyvalue_choice
-                    | "SYSTEMKEY" -> dk_systemkey_choice
-
-decipher_param: systemdatakey_param | systemkeyname_param
+dk_datakeyfile_choice:  "DATAKEYFILE" "(" NAME ")"
+dk_datakeyvalue_choice: "DATAKEYVALUE" "(" (NAME | QUOTED_STRING) ")"
+dk_systemkey_choice:    "SYSTEMKEY"
 
 systemdatakey_param: "SYSTEMDATAKEY" "(" (NAME | QUOTED_STRING) ")"
 systemkeyname_param: "SYSTEMKEYNAME" "(" NAME ")"

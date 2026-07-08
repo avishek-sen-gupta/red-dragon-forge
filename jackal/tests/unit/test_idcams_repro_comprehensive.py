@@ -15,18 +15,23 @@ RLSTARGET, and the CipherSpec/DecipherSpec sub-fields CIPHERUNIT,
 DATAKEYFILE/DATAKEYVALUE, SHIPKEYNAMES, STOREDATAKEY/NOSTOREDATAKEY,
 STOREKEYNAME, USERDATA, SYSTEMDATAKEY, SYSTEMKEYNAME).
 
-Per ams.lark's REPRO section comment, the eight top-level "pick one" groups
-are enforced via a fixed-relative-order chain of small two-state sequences
-(not a 2^8-state cross-product DFA) -- tests below place multi-group
-commands in that chain's order: source, target, ENTRIES/LEVEL, RangeStart,
-RangeEnd, ENCIPHER/DECIPHER, INSERTSHIFT/INSERTALL, SKIPDBCSCHECK/
-NODBCSCHECK.
+Per ams.lark's REPRO section comment, all ten of REPRO's "pick one" groups
+(the eight top-level ones plus the two nested inside the cipher sub-blocks)
+are now enforced by ComprehensiveIdcamsTransformer, not the grammar: the
+grammar's repro_param/cipher_param/decipher_param lists are flat and freely
+repeatable, so members of different groups (and ordinary parameters) may
+appear in ANY relative order -- real-world IDCAMS control statements are not
+guaranteed to state INFILE/OUTFILE (or any other pair) in a fixed order.
+"At most one member of a mutually-exclusive group" (and "at least one of
+INFILE/INDATASET or OUTFILE/OUTDATASET is required") is raised as a
+ValueError by the transformer's repro()/encipher_clause()/decipher_clause()
+methods, mirroring DEFINE CLUSTER's DATABASE(...)/KEYNAME(...) pattern
+(parser_comprehensive.py's define_cluster).
 """
 
 from __future__ import annotations
 
 import pytest
-from lark.exceptions import LarkError
 
 from jackal.idcams.ast_repro import (
     CipherSpec,
@@ -61,26 +66,26 @@ def test_repro_indataset_outdataset():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_infile_indataset_together_raises():
     """source is a genuine 'pick one' choice -- INFILE and INDATASET can't
-    both be specified. Must be a structural LarkError."""
-    with pytest.raises(LarkError):
+    both be specified. Enforced by the transformer, so a ValueError."""
+    with pytest.raises(ValueError):
         parse_ams("REPRO INFILE(INDD) INDATASET(MY.IN) OUTFILE(OUTDD)\n")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_outfile_outdataset_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams("REPRO INFILE(INDD) OUTFILE(OUTDD) OUTDATASET(MY.OUT)\n")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_missing_source_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams("REPRO OUTFILE(OUTDD)\n")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_missing_target_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams("REPRO INFILE(INDD)\n")
 
 
@@ -105,7 +110,7 @@ def test_repro_level():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_entries_level_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams("REPRO INFILE(INDD) OUTFILE(OUTDD) ENTRIES(A) LEVEL(PROD)\n")
 
 
@@ -142,7 +147,7 @@ def test_repro_skip():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_fromkey_fromaddress_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams(
             "REPRO INFILE(INDD) OUTFILE(OUTDD) FROMKEY('KEY001') FROMADDRESS(1000)\n"
         )
@@ -181,7 +186,7 @@ def test_repro_count():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_tokey_toaddress_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams("REPRO INFILE(INDD) OUTFILE(OUTDD) TOKEY('KEY999') TOADDRESS(2000)\n")
 
 
@@ -260,8 +265,9 @@ def test_repro_decipher_systemkey():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_encipher_decipher_together_raises():
     """ENCIPHER/DECIPHER is a genuine 'pick one' choice -- a command can't
-    both encipher and decipher. Must be a structural LarkError."""
-    with pytest.raises(LarkError):
+    both encipher and decipher. Enforced by the transformer, so a
+    ValueError."""
+    with pytest.raises(ValueError):
         parse_ams(
             "REPRO INFILE(INDD) OUTFILE(OUTDD) "
             "ENCIPHER(EXTERNALKEYNAME(MYKEY)) DECIPHER(SYSTEMKEY)\n"
@@ -291,7 +297,7 @@ def test_repro_encipher_privatekey():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_encipher_externalkeyname_internalkeyname_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams(
             "REPRO INFILE(INDD) OUTFILE(OUTDD) "
             "ENCIPHER(EXTERNALKEYNAME(A) INTERNALKEYNAME(B))\n"
@@ -356,7 +362,7 @@ def test_repro_decipher_datakeyvalue():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_decipher_datakeyfile_datakeyvalue_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams(
             "REPRO INFILE(INDD) OUTFILE(OUTDD) "
             "DECIPHER(DATAKEYFILE(A) DATAKEYVALUE('B'))\n"
@@ -433,7 +439,7 @@ def test_repro_insertall():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_insertshift_insertall_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams("REPRO INFILE(INDD) OUTFILE(OUTDD) INSERTSHIFT((10 2)) INSERTALL\n")
 
 
@@ -477,7 +483,7 @@ def test_repro_nodbcscheck():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_skipdbcscheck_nodbcscheck_together_raises():
-    with pytest.raises(LarkError):
+    with pytest.raises(ValueError):
         parse_ams(
             "REPRO INFILE(INDD) OUTFILE(OUTDD) SKIPDBCSCHECK((5 1)) NODBCSCHECK\n"
         )
@@ -537,4 +543,68 @@ def test_repro_full():
         ),
         insert_shift=((10, 2),),
         skip_dbcs_check=((5, 1),),
+    )
+
+
+# =========================================================================
+# Order-independence: REPRO's ten "pick one" groups (plus ordinary
+# parameters) may now appear in ANY relative order, since ams.lark's
+# repro_param/cipher_param/decipher_param lists are flat and freely
+# repeatable rather than a fixed-relative-order chain. These reproduce the
+# rejection cases from the task-review finding as NEW passing tests.
+# =========================================================================
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_outfile_before_infile():
+    """Target before source -- real IDCAMS allows this; there is no
+    documented parameter-ordering requirement in the manual."""
+    cmds = parse_ams("REPRO OUTFILE(B) INFILE(A)\n")
+    assert cmds[0] == Repro(infile="A", outfile="B")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_outfile_before_indataset():
+    """Target (OUTFILE) before source (INDATASET) -- different members of
+    the two independent source/target groups, reordered."""
+    cmds = parse_ams("REPRO OUTFILE(B) INDATASET(MY.IN)\n")
+    assert cmds[0] == Repro(indataset=Name.parse("MY.IN"), outfile="B")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_level_between_source_and_target():
+    """LEVEL (from the optional ENTRIES/LEVEL group) placed between source
+    and target -- breaks the old fixed-chain assumption that source/target
+    must be consumed before any optional group is reachable."""
+    cmds = parse_ams("REPRO INFILE(A) LEVEL(PROD) OUTFILE(B)\n")
+    assert cmds[0] == Repro(infile="A", outfile="B", level="PROD")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_encipher_before_fromkey():
+    """ENCIPHER and RangeStart (FROMKEY) are independent, uncoupled groups
+    -- co-occurrence is legitimate (the design spec does not document any
+    exclusivity between them) -- placed in the reverse of the old fixed
+    chain order (RangeStart before ENCIPHER) to test pure reordering."""
+    cmds = parse_ams("REPRO INFILE(A) OUTFILE(B) ENCIPHER(PRIVATEKEY) FROMKEY('K')\n")
+    assert cmds[0] == Repro(
+        infile="A",
+        outfile="B",
+        encipher=CipherSpec(key_source="PRIVATEKEY"),
+        range_start=RangeStart(kind="FROMKEY", value=QuotedString(text="K")),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_tokey_before_fromkey():
+    """RangeStart and RangeEnd are independent groups, not mutually
+    exclusive with each other -- TOKEY (RangeEnd) before FROMKEY
+    (RangeStart) is the reverse of the old fixed chain order and is purely
+    an ordering test."""
+    cmds = parse_ams("REPRO INFILE(A) OUTFILE(B) TOKEY('L') FROMKEY('K')\n")
+    assert cmds[0] == Repro(
+        infile="A",
+        outfile="B",
+        range_start=RangeStart(kind="FROMKEY", value=QuotedString(text="K")),
+        range_end=RangeEnd(kind="TOKEY", value=QuotedString(text="L")),
     )
