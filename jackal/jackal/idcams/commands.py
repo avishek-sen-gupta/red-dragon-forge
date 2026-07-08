@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Union
 
-Command = Union["Delete", "DefineCluster", "Repro", "IfMaxcc"]
+Command = Union["Delete", "DefineCluster", "Repro", "IfMaxcc", "SetMaxcc"]
 
 
 @dataclass(frozen=True)
@@ -32,3 +32,8 @@ class IfMaxcc:
     op: str
     value: int
     set_value: int
+
+
+@dataclass(frozen=True)
+class SetMaxcc:
+    value: int
