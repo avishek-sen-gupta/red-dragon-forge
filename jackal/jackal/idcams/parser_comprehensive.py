@@ -22,6 +22,7 @@ from importlib.resources import files
 from lark import Lark, Token, Transformer
 from lark.exceptions import VisitError
 
+from jackal.idcams.ast_alter import Alter, NullifySpec
 from jackal.idcams.ast_define_alternateindex import (
     AixDataComponent,
     AixIndexComponent,
@@ -352,6 +353,113 @@ class _Build(Transformer):
     def noupdate_flag(self, c: list) -> tuple:
         return ("update", False)
 
+    # -- ALTER-specific params ---------------------------------------------
+    def newname_param(self, c: list) -> tuple:
+        return ("new_name", _name(c[0]))
+
+    def addvolumes_param(self, c: list) -> tuple:
+        return ("add_volumes", tuple(str(t) for t in c))
+
+    def removevolumes_param(self, c: list) -> tuple:
+        return ("remove_volumes", tuple(str(t) for t in c))
+
+    def bufnd_param(self, c: list) -> tuple:
+        return ("bufnd", _int(c[0]))
+
+    def bufni_param(self, c: list) -> tuple:
+        return ("bufni", _int(c[0]))
+
+    def ccsid_param(self, c: list) -> tuple:
+        return ("ccsid", _int(c[0]))
+
+    def ecsharing_flag(self, c: list) -> tuple:
+        return ("ec_sharing", True)
+
+    def noecsharing_flag(self, c: list) -> tuple:
+        return ("ec_sharing", False)
+
+    def extendedaddressable_flag(self, c: list) -> tuple:
+        return ("extended_addressable", True)
+
+    def filedata_param(self, c: list) -> tuple:
+        return ("file_data", str(c[0]))
+
+    def alter_frlog_param(self, c: list) -> tuple:
+        return ("frlog", str(c[0]))
+
+    def inhibit_flag(self, c: list) -> tuple:
+        return ("inhibit", True)
+
+    def uninhibit_flag(self, c: list) -> tuple:
+        return ("inhibit", False)
+
+    def alter_log_param(self, c: list) -> tuple:
+        return ("log", str(c[0]))
+
+    def reclaimca_flag(self, c: list) -> tuple:
+        return ("reclaim_ca", True)
+
+    def noreclaimca_flag(self, c: list) -> tuple:
+        return ("reclaim_ca", False)
+
+    def rollin_flag(self, c: list) -> tuple:
+        return ("roll_in", True)
+
+    def strno_param(self, c: list) -> tuple:
+        return ("strno", _int(c[0]))
+
+    def typelinear_flag(self, c: list) -> tuple:
+        return ("to_linear", True)
+
+    def lock_flag(self, c: list) -> tuple:
+        return ("lock", True)
+
+    def unlock_flag(self, c: list) -> tuple:
+        return ("lock", False)
+
+    def suspend_flag(self, c: list) -> tuple:
+        return ("suspend", True)
+
+    def resume_flag(self, c: list) -> tuple:
+        return ("suspend", False)
+
+    def catalog_state_choice(self, c: list) -> tuple:
+        return c[0]
+
+    # -- NULLIFY(...) sub-block -------------------------------------------
+    def nullify_authorization_param(self, c: list) -> tuple:
+        return ("authorization", str(c[0]))
+
+    def nullify_bwo_param(self, c: list) -> tuple:
+        return ("bwo", True)
+
+    def nullify_code_param(self, c: list) -> tuple:
+        return ("code", True)
+
+    def nullify_exceptionexit_param(self, c: list) -> tuple:
+        return ("exception_exit", True)
+
+    def nullify_log_param(self, c: list) -> tuple:
+        return ("log", True)
+
+    def nullify_logstreamid_param(self, c: list) -> tuple:
+        return ("log_stream_id", True)
+
+    def nullify_managementclass_param(self, c: list) -> tuple:
+        return ("management_class", True)
+
+    def nullify_owner_param(self, c: list) -> tuple:
+        return ("owner", True)
+
+    def nullify_retention_param(self, c: list) -> tuple:
+        return ("retention", True)
+
+    def nullify_param(self, c: list) -> tuple:
+        return c[0]
+
+    def nullify_clause(self, c: list) -> tuple:
+        return ("nullify", NullifySpec(**self._fields_dict(c)))
+
     # -- DELETE-specific params -------------------------------------------
     def delete_entries(self, c: list) -> tuple:
         return tuple(_entry_name(tok) for tok in c)
@@ -409,6 +517,9 @@ class _Build(Transformer):
         return c[0]
 
     def delete_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def alter_param(self, c: list) -> tuple | None:
         return c[0]
 
     # -- mutually-exclusive-choice state machines (see ams.lark's
@@ -476,6 +587,12 @@ class _Build(Transformer):
         return self._flatten_seq(c)
 
     def delete_seq_1(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def alter_seq_0(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def alter_seq_1(self, c: list) -> list:
         return self._flatten_seq(c)
 
     # -- DATA(...) / INDEX(...) trailers --------------------------------
@@ -607,6 +724,13 @@ class _Build(Transformer):
         fields = self._fields_dict(param_list)
         fields["entries"] = entries
         return Delete(**fields)
+
+    # -- ALTER assembly -----------------------------------------------------
+    def alter(self, c: list) -> Alter:
+        entry_tok, param_list = c
+        fields = self._fields_dict(param_list)
+        fields["entry"] = _name(entry_tok)
+        return Alter(**fields)
 
     def command(self, c: list) -> object:
         return c[0]
