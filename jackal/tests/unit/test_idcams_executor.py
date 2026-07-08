@@ -8,7 +8,7 @@ import pytest
 
 from jackal.catalog import DatasetCatalog
 from jackal.dsn import DirectDSN
-from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro
+from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro, SetMaxcc
 from jackal.model import DD, Disp, DispNormal, DispStatus
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
@@ -128,6 +128,22 @@ def test_if_maxcc_all_operators():
     # predicate false -> maxcc unchanged
     assert _handle_if_maxcc(IfMaxcc(op="GT", value=8, set_value=0), 8) == 8
     assert _handle_if_maxcc(IfMaxcc(op="EQ", value=4, set_value=0), 8) == 8
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_set_maxcc_overrides_accumulated_rc(tmp_path):
+    from jackal.idcams.executor import run_idcams
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    # Delete missing -> maxcc=8; a bare SET MAXCC=0 forcibly overrides it,
+    # same idempotency idiom real CardDemo JCL uses so a missing dataset
+    # doesn't fail a step that's about to (re)DEFINE it anyway.
+    cmds = (
+        Delete(dsn="GHOST.DS"),
+        SetMaxcc(value=0),
+    )
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 0
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

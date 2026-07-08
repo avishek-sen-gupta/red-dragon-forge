@@ -6,7 +6,7 @@ import pytest
 import lark.exceptions
 
 from jackal.idcams.parser import parse_idcams
-from jackal.idcams.commands import Delete, DefineCluster, Repro, IfMaxcc
+from jackal.idcams.commands import Delete, DefineCluster, Repro, IfMaxcc, SetMaxcc
 from tests.covers import covers, NotLanguageFeature
 
 
@@ -49,3 +49,38 @@ def test_parse_unsupported_verb_raises():
     """Unsupported IDCAMS verbs must fail loud, not silently return empty."""
     with pytest.raises(lark.exceptions.LarkError):
         parse_idcams("   LISTCAT ENTRIES(A.B.C)\n")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_delete_without_cluster_trailer():
+    """Real IDCAMS treats CLUSTER as optional (the default entry type) --
+    e.g. DUSRSECJ.jcl / ESDSRRDS.jcl in the CardDemo corpus delete VSAM
+    entries with no trailing type keyword at all."""
+    cmds = parse_idcams("   DELETE AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS\n")
+    assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_standalone_set_maxcc():
+    """A bare SET MAXCC = n (not wrapped in IF...THEN) is a common
+    idempotency idiom: DELETE x then unconditionally reset MAXCC so a
+    missing dataset doesn't fail the step."""
+    cmds = parse_idcams("   SET MAXCC = 0\n")
+    assert cmds[0] == SetMaxcc(value=0)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_real_carddemo_delete_set_idiom():
+    """Exact opening of ESDSRRDS.jcl's IDCAMS SYSIN: bare DELETE followed
+    by a standalone SET MAXCC -- two back-to-back top-level statements.
+    (The real file's third statement, DEFINE CLUSTER with comma-separated
+    RECORDSIZE(80,80)/KEYS args, is a separate, already-tracked grammar
+    gap -- comma-separated DEFINE params aren't modeled yet -- and is out
+    of scope for this fix.)"""
+    text = (
+        " DELETE                  AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS\n"
+        " SET       MAXCC = 0\n"
+    )
+    cmds = parse_idcams(text)
+    assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS")
+    assert cmds[1] == SetMaxcc(value=0)

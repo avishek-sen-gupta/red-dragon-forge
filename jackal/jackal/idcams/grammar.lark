@@ -7,9 +7,12 @@ command: delete_cmd
        | define_cmd
        | repro_cmd
        | if_cmd
+       | set_cmd
 
 // DELETE dsname -\n CLUSTER
-delete_cmd: "DELETE" DSNAME "CLUSTER"
+// CLUSTER is the default entry type and may be omitted (real IDCAMS
+// accepts a bare "DELETE dsname" with no trailing type keyword).
+delete_cmd: "DELETE" DSNAME "CLUSTER"?
 
 // DEFINE CLUSTER ( params ) trailers
 define_cmd: "DEFINE" "CLUSTER" "(" _param+ ")" _trailer*
@@ -32,6 +35,11 @@ repro_cmd: "REPRO" "INFILE" "(" NAME ")" "OUTFILE" "(" NAME ")"
 
 // IF MAXCC op value THEN SET MAXCC = set_value
 if_cmd: "IF" "MAXCC" OP INT "THEN" "SET" "MAXCC" "=" INT
+
+// Standalone SET MAXCC = n (not wrapped in IF...THEN) -- a common
+// idempotency idiom: DELETE x then unconditionally reset MAXCC so a
+// missing dataset doesn't fail the step.
+set_cmd: "SET" "MAXCC" "=" INT
 
 // Trailers: DATA (NAME(dsn)) and INDEX (NAME(dsn))
 // Expanded explicitly: outer paren wraps keyword(dsn) call

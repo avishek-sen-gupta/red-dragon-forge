@@ -6,7 +6,14 @@ from importlib.resources import files
 
 from lark import Lark, Token, Transformer
 
-from jackal.idcams.commands import Command, DefineCluster, Delete, IfMaxcc, Repro
+from jackal.idcams.commands import (
+    Command,
+    DefineCluster,
+    Delete,
+    IfMaxcc,
+    Repro,
+    SetMaxcc,
+)
 
 _GRAMMAR = (files("jackal.idcams") / "grammar.lark").read_text()
 _PARSER = Lark(_GRAMMAR, start="start", parser="earley")
@@ -54,6 +61,9 @@ class _Build(Transformer):
     def if_cmd(self, c: list) -> IfMaxcc:
         op, value, set_value = c[0], c[1], c[2]
         return IfMaxcc(op=op, value=value, set_value=set_value)
+
+    def set_cmd(self, c: list) -> SetMaxcc:
+        return SetMaxcc(value=c[0])
 
     def command(self, c: list) -> Command:
         return c[0]

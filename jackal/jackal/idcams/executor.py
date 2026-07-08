@@ -13,7 +13,14 @@ from interpreter.cobol.file_enums import OpenMode
 
 from jackal.catalog import DatasetCatalog, DatasetSpec
 from jackal.dsn import dsn_key
-from jackal.idcams.commands import Command, DefineCluster, Delete, IfMaxcc, Repro
+from jackal.idcams.commands import (
+    Command,
+    DefineCluster,
+    Delete,
+    IfMaxcc,
+    Repro,
+    SetMaxcc,
+)
 from jackal.model import DD, DatasetOrg
 
 _OPS = {
@@ -101,6 +108,8 @@ def run_idcams(
             maxcc = max(maxcc, _handle_repro(cmd, dds_by_ddname, catalog))
         elif isinstance(cmd, IfMaxcc):
             maxcc = _handle_if_maxcc(cmd, maxcc)
+        elif isinstance(cmd, SetMaxcc):
+            maxcc = cmd.value
         else:
             raise TypeError(f"Unhandled IDCAMS command: {type(cmd).__name__}")
 
