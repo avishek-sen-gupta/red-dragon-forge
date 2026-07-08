@@ -5,7 +5,7 @@
 
 start: command+
 
-command: modal_command | set_command | define_cluster  // set_command is
+command: modal_command | set_command | define_cluster | define_alternateindex  // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -234,6 +234,151 @@ obsolete_ignored_param: "IMBED" -> obsolete_ignored
                        | "UNORDERED" -> obsolete_ignored
                        | "REPLICATE" -> obsolete_ignored
                        | "NOREPLICATE" -> obsolete_ignored
+
+// ---------------------------------------------------------------------
+// DEFINE ALTERNATEINDEX (Task 3)
+//
+// DEFINE ALTERNATEINDEX ( aix_param* ) [DATA ( aixdata_param* )] [INDEX ( aixindex_param* )]
+//
+// Two independent mutually-exclusive choices can appear at the AIX
+// (command) level -- the space_choice (CYLINDERS|KILOBYTES|...,
+// shared with DEFINE CLUSTER) and ALTKEYS|ALTKEYSU (RLS VSAMDB
+// alternate-key-name lists, "already UTF-8" vs not). Same rationale as
+// cluster_seq_*/data_seq_*/index_seq_* above: aix_param* alone can't
+// enforce "at most one of these", so aix_seq_* is a small right-
+// recursive state machine tracking both dimensions (space_choice
+// consumed? x altkey_choice consumed?) -- four states, same shape as
+// cluster_seq_00/10/01/11. aixdata_seq_*/aixindex_seq_* only track the
+// space_choice dimension, mirroring data_seq_*/index_seq_*.
+define_alternateindex: "DEFINE" "ALTERNATEINDEX" "(" aix_seq_00 ")" aix_component_clause*
+
+aix_component_clause: aixdata_clause | aixindex_clause
+aixdata_clause:  "DATA"  "(" aixdata_seq_0 ")"
+aixindex_clause: "INDEX" "(" aixindex_seq_0 ")"
+
+altkey_choice: altkeys_param | altkeysu_param
+
+// state: neither space_choice nor altkey_choice consumed yet
+aix_seq_00: aix_param aix_seq_00
+          | space_choice aix_seq_10
+          | altkey_choice aix_seq_01
+          |
+// state: space_choice consumed, altkey_choice not yet
+aix_seq_10: aix_param aix_seq_10
+          | altkey_choice aix_seq_11
+          |
+// state: altkey_choice consumed, space_choice not yet
+aix_seq_01: aix_param aix_seq_01
+          | space_choice aix_seq_11
+          |
+// state: both consumed -- only the freely-repeatable params remain
+aix_seq_11: aix_param aix_seq_11
+          |
+
+aixdata_seq_0: aixdata_param aixdata_seq_0
+             | space_choice aixdata_seq_1
+             |
+aixdata_seq_1: aixdata_param aixdata_seq_1
+             |
+
+aixindex_seq_0: aixindex_param aixindex_seq_0
+              | space_choice aixindex_seq_1
+              |
+aixindex_seq_1: aixindex_param aixindex_seq_1
+              |
+
+aix_param: name_param
+         | relate_param
+         | volumes_param
+         | bufferspace_param
+         | catalog_param
+         | cisz_param
+         | dataclass_param
+         | erase_param
+         | exceptionexit_param
+         | file_param
+         | freespace_param
+         | imbed_param
+         | keyranges_param
+         | keys_param
+         | model_param
+         | order_param
+         | owner_param
+         | recatalog_param
+         | recordsize_param
+         | replicate_param
+         | reuse_param
+         | shareoptions_param
+         | speed_param
+         | retention_param
+         | uniquekey_param
+         | upgrade_param
+         | writecheck_param
+
+// AixDataComponent: same shape as DataComponent minus SPANNED/NONSPANNED
+// (not valid for an AIX component at all per the manual), plus
+// ATTEMPTS/AUTHORIZATION/CODE/UNIQUEKEY (AIX-specific).
+aixdata_param: name_param
+             | volumes_param
+             | attempts_param
+             | authorization_param
+             | bufferspace_param
+             | code_param
+             | cisz_param
+             | erase_param
+             | exceptionexit_param
+             | file_param
+             | freespace_param
+             | keys_param
+             | model_param
+             | owner_param
+             | recordsize_param
+             | reuse_param
+             | shareoptions_param
+             | speed_param
+             | uniquekey_param
+             | writecheck_param
+
+// AixIndexComponent: strict subset of aixdata_param -- no BUFFERSPACE,
+// ERASE/NOERASE, FREESPACE, KEYS, RECORDSIZE, SPEED/RECOVERY, UNIQUEKEY.
+aixindex_param: name_param
+              | volumes_param
+              | attempts_param
+              | authorization_param
+              | code_param
+              | cisz_param
+              | exceptionexit_param
+              | file_param
+              | model_param
+              | owner_param
+              | reuse_param
+              | shareoptions_param
+              | writecheck_param
+
+relate_param: "RELATE" "(" NAME ")"
+
+altkey_entry: NAME ALTKEY_ACTION
+altkeys_param:  "ALTKEYS"  "(" altkey_entry+ ")"
+altkeysu_param: "ALTKEYSU" "(" altkey_entry+ ")"
+
+attempts_param:     "ATTEMPTS" "(" INT ")"
+authorization_param: "AUTHORIZATION" "(" NAME QUOTED_STRING? ")"
+code_param:          "CODE" "(" NAME ")"
+
+imbed_param:      "IMBED" -> imbed_flag
+                 | "NOIMBED" -> noimbed_flag
+keyranges_param:  "KEYRANGES" "(" INT+ ")" -> keyranges_ignored
+                 | "KEYRANGE"  "(" INT+ ")" -> keyranges_ignored
+order_param:      "ORDERED" -> order_ignored_flag
+                 | "UNORDERED" -> order_ignored_flag
+replicate_param:  "REPLICATE" -> replicate_ignored_flag
+                 | "NOREPLICATE" -> replicate_ignored_flag
+uniquekey_param:  "UNIQUEKEY" -> uniquekey_flag
+                 | "NONUNIQUEKEY" -> nonuniquekey_flag
+upgrade_param:    "UPGRADE" -> upgrade_flag
+                 | "NOUPGRADE" -> noupgrade_flag
+
+ALTKEY_ACTION: "A" | "D"
 
 BWO_VALUE:      "TYPECICS" | "TYPEIMS" | "NO"
 DATABASE_FORMAT: "BSON" | "JSON"
