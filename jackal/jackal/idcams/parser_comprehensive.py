@@ -38,7 +38,21 @@ from jackal.idcams.ast_delete import Delete
 from jackal.idcams.ast_define_gdg import DefineGenerationDataGroup
 from jackal.idcams.ast_define_nonvsam import DefineNonvsam
 from jackal.idcams.ast_define_path import DefinePath
-from jackal.idcams.ast_values import Name, Retention, SpaceAllocation
+from jackal.idcams.ast_repro import (
+    CipherSpec,
+    DecipherSpec,
+    RangeEnd,
+    RangeStart,
+    Repro,
+)
+from jackal.idcams.ast_values import (
+    BinLiteral,
+    HexLiteral,
+    Name,
+    QuotedString,
+    Retention,
+    SpaceAllocation,
+)
 from jackal.idcams.preprocess import join_plus_continuations
 
 _GRAMMAR_PATH = str(files("jackal.idcams") / "grammar" / "ams.lark")
@@ -73,7 +87,24 @@ class _Build(Transformer):
     # -- shared value alternation (Task 1 placeholder rule, still used
     # standalone by lexical tests) -----------------------------------
     def value(self, c: list) -> object:
-        return c[0]
+        """Convert the shared value alternation (Task 1 lexical rule) into
+        its typed Value variant. First real consumer: REPRO's RangeStart/
+        RangeEnd (Task 7) -- no prior command used `value` for anything but
+        standalone lexical tests (which parse without a Transformer, so are
+        unaffected by this)."""
+        tok = c[0]
+        if isinstance(tok, Token):
+            if tok.type in ("NAME", "GENERIC_NAME"):
+                return _name(tok)
+            if tok.type == "QUOTED_STRING":
+                return QuotedString(text=_dequote(tok))
+            if tok.type == "HEX_LITERAL":
+                return HexLiteral(raw=str(tok))
+            if tok.type == "BIN_LITERAL":
+                return BinLiteral(raw=str(tok))
+            if tok.type == "INT":
+                return _int(tok)
+        return tok
 
     # -- space allocation (mutually exclusive CYLINDERS|KILOBYTES|... ) -
     def _space(self, unit: str, c: list) -> SpaceAllocation:
@@ -731,6 +762,299 @@ class _Build(Transformer):
         fields = self._fields_dict(param_list)
         fields["entry"] = _name(entry_tok)
         return Alter(**fields)
+
+    # -- REPRO-specific params ----------------------------------------------
+    def infile_param(self, c: list) -> tuple:
+        return ("infile", str(c[0]))
+
+    def indataset_param(self, c: list) -> tuple:
+        return ("indataset", _name(c[0]))
+
+    def outfile_param(self, c: list) -> tuple:
+        return ("outfile", str(c[0]))
+
+    def outdataset_param(self, c: list) -> tuple:
+        return ("outdataset", _name(c[0]))
+
+    def source_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def target_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def entries_param(self, c: list) -> tuple:
+        return ("entries", tuple(_name(tok) for tok in c))
+
+    def level_param(self, c: list) -> tuple:
+        return ("level", str(c[0]))
+
+    def entries_level_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def fromkey_param(self, c: list) -> tuple:
+        return ("range_start", RangeStart(kind="FROMKEY", value=c[0]))
+
+    def fromaddress_param(self, c: list) -> tuple:
+        return ("range_start", RangeStart(kind="FROMADDRESS", value=c[0]))
+
+    def fromnumber_param(self, c: list) -> tuple:
+        return ("range_start", RangeStart(kind="FROMNUMBER", value=c[0]))
+
+    def skip_param(self, c: list) -> tuple:
+        return ("range_start", RangeStart(kind="SKIP", value=c[0]))
+
+    def range_start_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def tokey_param(self, c: list) -> tuple:
+        return ("range_end", RangeEnd(kind="TOKEY", value=c[0]))
+
+    def toaddress_param(self, c: list) -> tuple:
+        return ("range_end", RangeEnd(kind="TOADDRESS", value=c[0]))
+
+    def tonumber_param(self, c: list) -> tuple:
+        return ("range_end", RangeEnd(kind="TONUMBER", value=c[0]))
+
+    def count_param(self, c: list) -> tuple:
+        return ("range_end", RangeEnd(kind="COUNT", value=c[0]))
+
+    def range_end_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def int_pair(self, c: list) -> tuple:
+        return (_int(c[0]), _int(c[1]))
+
+    def insertshift_param(self, c: list) -> tuple:
+        return ("insert_shift", tuple(c))
+
+    def insertall_flag(self, c: list) -> tuple:
+        return ("insert_all", True)
+
+    def skipdbcscheck_param(self, c: list) -> tuple:
+        return ("skip_dbcs_check", tuple(c))
+
+    def nodbcscheck_flag(self, c: list) -> tuple:
+        return ("no_dbcs_check", True)
+
+    def insert_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def dbcscheck_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def repro_param(self, c: list) -> tuple:
+        return c[0]
+
+    def repro_cimode_flag(self, c: list) -> tuple:
+        return ("cimode", True)
+
+    def repro_nocimode_flag(self, c: list) -> tuple:
+        return ("cimode", False)
+
+    def repro_dbcs_flag(self, c: list) -> tuple:
+        return ("dbcs", True)
+
+    def errorlimit_param(self, c: list) -> tuple:
+        return ("error_limit", _int(c[0]))
+
+    def mergecat_flag(self, c: list) -> tuple:
+        return ("merge_cat", True)
+
+    def nomergecat_flag(self, c: list) -> tuple:
+        return ("merge_cat", False)
+
+    def messagelevel_param(self, c: list) -> tuple:
+        return ("message_level", str(c[0]))
+
+    def replace_flag(self, c: list) -> tuple:
+        return ("replace", True)
+
+    def noreplace_flag(self, c: list) -> tuple:
+        return ("replace", False)
+
+    def volumeentries_param(self, c: list) -> tuple:
+        return ("volume_entries", str(c[0]))
+
+    def rlssource_param(self, c: list) -> tuple:
+        return ("rls_source", str(c[0]))
+
+    def rlstarget_param(self, c: list) -> tuple:
+        return ("rls_target", str(c[0]))
+
+    # -- ENCIPHER(...) / DECIPHER(...) sub-blocks ----------------------------
+    def cipher_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def cipher_param(self, c: list) -> tuple:
+        return c[0]
+
+    def externalkeyname_choice(self, c: list) -> tuple:
+        return ("key_source", ("EXTERNALKEYNAME", str(c[0])))
+
+    def internalkeyname_choice(self, c: list) -> tuple:
+        return ("key_source", ("INTERNALKEYNAME", str(c[0])))
+
+    def privatekey_choice(self, c: list) -> tuple:
+        return ("key_source", ("PRIVATEKEY", None))
+
+    def cipherunit_param(self, c: list) -> tuple:
+        return ("cipher_unit", _int(c[0]))
+
+    def cipher_datakeyfile(self, c: list) -> tuple:
+        return ("data_key_file", str(c[0]))
+
+    def cipher_datakeyvalue(self, c: list) -> tuple:
+        tok = c[0]
+        return (
+            "data_key_value",
+            _dequote(tok) if tok.type == "QUOTED_STRING" else str(tok),
+        )
+
+    def shipkeynames_param(self, c: list) -> tuple:
+        return ("ship_key_names", tuple(str(tok) for tok in c))
+
+    def storedatakey_flag(self, c: list) -> tuple:
+        return ("store_data_key", True)
+
+    def nostoredatakey_flag(self, c: list) -> tuple:
+        return ("store_data_key", False)
+
+    def storekeyname_param(self, c: list) -> tuple:
+        return ("store_key_name", str(c[0]))
+
+    def userdata_param(self, c: list) -> tuple:
+        tok = c[0]
+        return ("user_data", _dequote(tok) if tok.type == "QUOTED_STRING" else str(tok))
+
+    def encipher_clause(self, c: list) -> tuple:
+        fields: dict[str, object] = {}
+        for key, value in c[0]:
+            if key == "key_source":
+                kind, name = value
+                fields["key_source"] = kind
+                if name is not None:
+                    fields["key_name"] = name
+            else:
+                fields[key] = value
+        return ("encipher", CipherSpec(**fields))
+
+    def decipher_param(self, c: list) -> tuple:
+        return c[0]
+
+    def dk_datakeyfile_choice(self, c: list) -> tuple:
+        return ("key_source", ("DATAKEYFILE", str(c[0])))
+
+    def dk_datakeyvalue_choice(self, c: list) -> tuple:
+        tok = c[0]
+        value = _dequote(tok) if tok.type == "QUOTED_STRING" else str(tok)
+        return ("key_source", ("DATAKEYVALUE", value))
+
+    def dk_systemkey_choice(self, c: list) -> tuple:
+        return ("key_source", ("SYSTEMKEY", None))
+
+    def systemdatakey_param(self, c: list) -> tuple:
+        tok = c[0]
+        return (
+            "system_data_key",
+            _dequote(tok) if tok.type == "QUOTED_STRING" else str(tok),
+        )
+
+    def systemkeyname_param(self, c: list) -> tuple:
+        return ("system_key_name", str(c[0]))
+
+    def decipher_clause(self, c: list) -> tuple:
+        fields: dict[str, object] = {}
+        for key, value in c[0]:
+            if key == "key_source":
+                kind, name = value
+                fields["key_source"] = kind
+                if kind == "DATAKEYFILE":
+                    fields["data_key_file"] = name
+                elif kind == "DATAKEYVALUE":
+                    fields["data_key_value"] = name
+            else:
+                fields[key] = value
+        return ("decipher", DecipherSpec(**fields))
+
+    # -- REPRO chain-of-independent-single-slots flattening -----------------
+    # Each repro_seq_*/cipher_seq_*/decipher_seq_* rule has either 0
+    # children (a terminal epsilon), 1 child (an epsilon "skip this
+    # dimension, fall through to the next" transition -- already a
+    # flattened list from the downstream call), or 2 children (an item
+    # consumed, then the tail of the sequence) -- see ams.lark's REPRO
+    # section comment. This single helper covers all three shapes, unlike
+    # the 0-or-2-only _flatten_seq used by DELETE/ALTER/DEFINE CLUSTER's
+    # two-state (not chained) sequences.
+    @staticmethod
+    def _flatten_chain(c: list) -> list:
+        if not c:
+            return []
+        if len(c) == 1:
+            return c[0]
+        head, tail = c
+        return [head, *tail]
+
+    def repro_seq_src(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_tgt(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_c0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_c1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_d0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_d1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_e0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_e1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_f0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_f1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_g0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_g1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_h0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_h1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def repro_seq_final(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def cipher_seq_0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def cipher_seq_1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def decipher_seq_0(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    def decipher_seq_1(self, c: list) -> list:
+        return self._flatten_chain(c)
+
+    # -- REPRO assembly -------------------------------------------------------
+    def repro(self, c: list) -> Repro:
+        fields = self._fields_dict(c[0])
+        return Repro(**fields)
 
     def command(self, c: list) -> object:
         return c[0]
