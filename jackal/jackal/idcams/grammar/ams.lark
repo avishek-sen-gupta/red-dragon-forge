@@ -6,7 +6,7 @@
 start: command+
 
 command: modal_command | set_command | define_cluster | define_alternateindex
-       | define_gdg | define_nonvsam | define_path  // set_command is
+       | define_gdg | define_nonvsam | define_path | delete  // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -478,6 +478,76 @@ path_param: name_param
 pathentry_param: "PATHENTRY" "(" NAME ")"
 update_param:    "UPDATE" -> update_flag
                | "NOUPDATE" -> noupdate_flag
+
+// ---------------------------------------------------------------------
+// DELETE (Task 5)
+//
+// DELETE ( entryname [entryname...] ) delete_param*
+//
+// entryname list is the one required positional parameter (list/single
+// elision applies: a single entry drops its enclosing parens, so both
+// `DELETE (A)` and bare `DELETE A` -- the real corpus's common bare-dsname
+// form, no trailing type keyword required -- are valid). Max 100 entries
+// is a semantic check in the transformer, not a grammar-level limit.
+//
+// entry_type (ALIAS|ALTERNATEINDEX|CLUSTER|...|VVR) is the one genuine
+// "pick one kind" choice in this command -- a single entry can't be both
+// CLUSTER and PATH -- so it needs single-occurrence enforcement, same
+// rationale as cluster_seq_*/aix_seq_* above. Unlike those, it has no
+// second, independently-varying choice dimension to combine with here, so
+// a plain two-state sequence (entry_type consumed yet?) suffices -- no
+// four-state DFA needed. The six documented ON/OFF toggle pairs
+// (ERASE/NOERASE, FORCE/NOFORCE, MASK/NOMASK, PURGE/NOPURGE,
+// RECOVERY/NORECOVERY, SCRATCH/NOSCRATCH) are ordinary freely-repeatable
+// params -- last-wins-in-a-repeatable-list semantics is an accepted,
+// low-risk interpretation for simple booleans, per the plan's ratified
+// scoping decision.
+delete: "DELETE" delete_entries delete_seq_0
+
+delete_entries: "(" DELETE_ENTRY+ ")" | DELETE_ENTRY
+
+// state: entry_type not yet consumed
+delete_seq_0: delete_param delete_seq_0
+            | entry_type_param delete_seq_1
+            |
+// state: entry_type consumed -- only freely-repeatable params remain
+delete_seq_1: delete_param delete_seq_1
+            |
+
+delete_param: catalog_param
+            | erase_param
+            | file_param
+            | force_param
+            | mask_param
+            | nodisconnect_param
+            | purge_param
+            | delete_recovery_param
+            | scratch_param
+
+entry_type_param: ENTRY_TYPE_VALUE
+
+force_param: "FORCE" -> force_flag
+           | "NOFORCE" -> noforce_flag
+mask_param:  "MASK" -> mask_flag
+           | "NOMASK" -> nomask_flag
+nodisconnect_param: "NODISCONNECT" -> nodisconnect_flag
+delete_recovery_param: "RECOVERY" -> delete_recovery_flag
+                      | "NORECOVERY" -> delete_norecovery_flag
+
+// Entry names accepted here are broader than the shared NAME/GENERIC_NAME
+// terminals: DELETE's MASK filter-key patterns use "**" (matches zero or
+// more qualifiers) and "%" (matches a single character within a
+// qualifier) in addition to plain names and the single-"*"-qualifier
+// generic form -- neither of which the strict Name.parse regex accepts.
+// The transformer tries Name.parse() first and falls back to a raw
+// Name(text=..., generic=True) for anything Name.parse rejects (i.e. real
+// MASK patterns), rather than loosening ast_values.py's shared, stricter
+// validation used by every other command.
+DELETE_ENTRY: /[A-Z0-9#@$%*]+(\.[A-Z0-9#@$%*]+)*/
+
+ENTRY_TYPE_VALUE: "ALIAS" | "ALTERNATEINDEX" | "CLUSTER" | "GENERATIONDATAGROUP"
+                 | "LIBRARYENTRY" | "NONVSAM" | "NVR" | "PAGESPACE" | "PATH"
+                 | "TRUENAME" | "USERCATALOG" | "VOLUMEENTRY" | "VVR"
 
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
 GENERIC_NAME:  /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*\.\*(\.[A-Z#@$][A-Z0-9#@$]*)?/

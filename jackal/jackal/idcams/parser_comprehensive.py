@@ -33,6 +33,7 @@ from jackal.idcams.ast_define_cluster import (
     DefineCluster,
     IndexComponent,
 )
+from jackal.idcams.ast_delete import Delete
 from jackal.idcams.ast_define_gdg import DefineGenerationDataGroup
 from jackal.idcams.ast_define_nonvsam import DefineNonvsam
 from jackal.idcams.ast_define_path import DefinePath
@@ -48,6 +49,18 @@ def _int(tok: Token) -> int:
 
 def _name(tok: Token) -> Name:
     return Name.parse(str(tok))
+
+
+def _entry_name(tok: Token) -> Name:
+    """Convert a DELETE_ENTRY token to a Name, tolerating real MASK filter-key
+    patterns ("**", "%") that Name.parse's stricter shared regex rejects --
+    see the DELETE_ENTRY terminal's comment in ams.lark for why this can't
+    just reuse Name.parse() unconditionally."""
+    text = str(tok)
+    try:
+        return Name.parse(text)
+    except ValueError:
+        return Name(text=text, generic=True)
 
 
 def _dequote(tok: Token) -> str:
@@ -339,6 +352,34 @@ class _Build(Transformer):
     def noupdate_flag(self, c: list) -> tuple:
         return ("update", False)
 
+    # -- DELETE-specific params -------------------------------------------
+    def delete_entries(self, c: list) -> tuple:
+        return tuple(_entry_name(tok) for tok in c)
+
+    def entry_type_param(self, c: list) -> tuple:
+        return ("entry_type", str(c[0]))
+
+    def force_flag(self, c: list) -> tuple:
+        return ("force", True)
+
+    def noforce_flag(self, c: list) -> tuple:
+        return ("force", False)
+
+    def mask_flag(self, c: list) -> tuple:
+        return ("mask", True)
+
+    def nomask_flag(self, c: list) -> tuple:
+        return ("mask", False)
+
+    def nodisconnect_flag(self, c: list) -> tuple:
+        return ("no_disconnect", True)
+
+    def delete_recovery_flag(self, c: list) -> tuple:
+        return ("recovery", True)
+
+    def delete_norecovery_flag(self, c: list) -> tuple:
+        return ("recovery", False)
+
     # -- param dispatch (single-alternative pass-through wrappers) -----
     def cluster_param(self, c: list) -> tuple | None:
         return c[0]
@@ -365,6 +406,9 @@ class _Build(Transformer):
         return c[0]
 
     def path_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def delete_param(self, c: list) -> tuple | None:
         return c[0]
 
     # -- mutually-exclusive-choice state machines (see ams.lark's
@@ -426,6 +470,12 @@ class _Build(Transformer):
         return self._flatten_seq(c)
 
     def aixindex_seq_1(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def delete_seq_0(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def delete_seq_1(self, c: list) -> list:
         return self._flatten_seq(c)
 
     # -- DATA(...) / INDEX(...) trailers --------------------------------
@@ -548,6 +598,15 @@ class _Build(Transformer):
 
     def define_path(self, c: list) -> DefinePath:
         return DefinePath(**self._fields_dict(c))
+
+    # -- DELETE assembly ---------------------------------------------------
+    def delete(self, c: list) -> Delete:
+        entries, param_list = c
+        if len(entries) > 100:
+            raise ValueError(f"DELETE: at most 100 entries allowed, got {len(entries)}")
+        fields = self._fields_dict(param_list)
+        fields["entries"] = entries
+        return Delete(**fields)
 
     def command(self, c: list) -> object:
         return c[0]
