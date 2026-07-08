@@ -46,7 +46,7 @@ from knowledge_graph.merge import merge_graph
 from knowledge_graph.render import render_html
 
 _REPO_ROOT = Path(__file__).parents[1]
-_CARDDEMO_HOME = _REPO_ROOT / "jackal" / "third-party" / "carddemo" / "app"
+_CARDDEMO_HOME = _REPO_ROOT / "vendor" / "carddemo" / "app"
 _CICS_COPYBOOKS = _REPO_ROOT / "cicada" / "cics" / "copybooks"
 _HLASM_EXPORT_BIN = (
     _REPO_ROOT

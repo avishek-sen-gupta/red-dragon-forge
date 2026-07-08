@@ -11,7 +11,7 @@
 # Override any path via the environment.
 PROLEAP_BRIDGE_JAR ?= $(CURDIR)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 JCL_BRIDGE_JAR     ?= $(CURDIR)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
-CARDDEMO_HOME      ?= $(CURDIR)/third-party/carddemo/app
+CARDDEMO_HOME      ?= $(CURDIR)/../vendor/carddemo/app
 
 E2E_ENV = PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) CARDDEMO_HOME=$(CARDDEMO_HOME)
 PYTEST       = uv run --no-sync python -m pytest
