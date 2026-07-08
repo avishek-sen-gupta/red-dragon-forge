@@ -1,0 +1,44 @@
+// jackal/jackal/idcams/grammar/ams.lark
+// Shared terminals and lexical rules for the comprehensive IDCAMS grammar.
+// Command-specific rules are added here by later tasks (Tasks 2-11), each
+// contributing its own `command:` alternative and rule definitions.
+
+start: command+
+
+command: modal_command | set_command  // set_command is placeholder scaffolding
+                                       // (like modal_command) so start.lark is
+                                       // parseable standalone during Task 1.
+
+// Not prefixed with "?": as the top-level `start` rule in standalone
+// lexical tests, a "?"-inlined single-child rule collapses to a bare
+// Token with no `.children`, which the tests need. Non-standalone uses
+// (nested inside other rules added by later tasks) still see this as an
+// ordinary one-child Tree, which is equally usable.
+value: NAME | GENERIC_NAME | QUOTED_STRING | HEX_LITERAL | BIN_LITERAL | INT
+
+modal_command: "CANCEL"   // minimal placeholder so start.lark is parseable
+                          // standalone during Task 1; replaced/extended by
+                          // Task 11's real modal_command rule.
+
+set_command: "SET" NAME "=" INT  // minimal placeholder covering IDCAMS's
+                                  // SET MAXCC=n idiom, used here only to
+                                  // exercise the semicolon-terminator and
+                                  // inline-comment lexical rules standalone
+                                  // during Task 1.
+
+NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
+GENERIC_NAME:  /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*\.\*(\.[A-Z#@$][A-Z0-9#@$]*)?/
+QUOTED_STRING: /'([^']|'')*'/
+HEX_LITERAL:   /X'[0-9A-Fa-f]+'/
+BIN_LITERAL:   /B'[01]+'/
+INT:           /[0-9]+/
+
+// Whitespace, "-" continuation (whitespace-equivalent), semicolon
+// terminator (rest of physical line becomes a comment), and /* */
+// comments are all ignorable. "+" continuation is handled by
+// preprocess.join_plus_continuations() *before* this grammar ever sees
+// the text, not here.
+%ignore /[ \t\r\n]+/
+%ignore /-[ \t]*(?=\r?\n)/
+%ignore /;[^\r\n]*/
+%ignore /\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\//
