@@ -5,7 +5,8 @@
 
 start: command+
 
-command: modal_command | set_command | define_cluster | define_alternateindex  // set_command is
+command: modal_command | set_command | define_cluster | define_alternateindex
+       | define_gdg | define_nonvsam | define_path  // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -386,6 +387,97 @@ EATTR_VALUE:    "NO" | "OPT"
 FRLOG_VALUE:    "ALL" | "NONE" | "REDO" | "UNDO"
 LOG_VALUE:      "NONE" | "UNDO" | "ALL"
 ORG_VALUE:      "INDEXED" | "LINEAR" | "NONINDEXED" | "NUMBERED" | "ZFS"
+
+// ---------------------------------------------------------------------
+// DEFINE GENERATIONDATAGROUP (Task 4)
+//
+// DEFINE GENERATIONDATAGROUP ( gdg_param* )
+//
+// No DATA(...)/INDEX(...) trailers and no mutually-exclusive-choice
+// groups (no space allocation, no ALTKEYS-style pair) -- every parameter
+// is freely repeatable, so a plain gdg_param* suffices (unlike Tasks 2-3's
+// cluster_seq_*/aix_seq_* DFA state machines).
+define_gdg: "DEFINE" "GENERATIONDATAGROUP" "(" gdg_param* ")"
+
+gdg_param: name_param
+         | limit_param
+         | catalog_param
+         | empty_param
+         | extended_param
+         | gdgorder_param
+         | owner_param
+         | purge_param
+         | scratch_param
+
+limit_param:    "LIMIT" "(" INT ")"
+empty_param:    "EMPTY" -> empty_flag
+              | "NOEMPTY" -> noempty_flag
+extended_param: "EXTENDED" -> extended_flag
+              | "NOEXTENDED" -> noextended_flag
+gdgorder_param: GDG_ORDER_VALUE
+purge_param:    "PURGE" -> purge_flag
+              | "NOPURGE" -> nopurge_flag
+scratch_param:  "SCRATCH" -> scratch_flag
+              | "NOSCRATCH" -> noscratch_flag
+
+GDG_ORDER_VALUE: "FIFO" | "LIFO"
+
+// ---------------------------------------------------------------------
+// DEFINE NONVSAM (Task 4)
+//
+// DEFINE NONVSAM ( nonvsam_param* )
+//
+// No DATA(...)/INDEX(...) trailers and no mutually-exclusive-choice
+// groups. VOLUMES and DEVICETYPES need dedicated rules/terminals (not
+// DEFINE CLUSTER's volumes_param) -- see module docstring in
+// ast_define_nonvsam.py for why.
+define_nonvsam: "DEFINE" "NONVSAM" "(" nonvsam_param* ")"
+
+nonvsam_param: name_param
+             | devicetypes_param
+             | nonvsam_volumes_param
+             | catalog_param
+             | collection_param
+             | filesequencenumbers_param
+             | owner_param
+             | recatalog_param
+             | retention_param
+
+devicetypes_param: "DEVICETYPES" "(" DEVICE_TYPE+ ")"
+
+nonvsam_volumes_param: "VOLUMES" "(" nonvsam_volume_item+ ")"
+nonvsam_volume_item: NAME | INDIRECT_VOLUME_STAR | INDIRECT_VOLUME_SYMBOLIC
+
+collection_param: "COLLECTION" -> collection_flag
+
+filesequencenumbers_param: "FILESEQUENCENUMBERS" "(" INT+ ")"
+
+DEVICE_TYPE: /[A-Z0-9#@$]+/
+INDIRECT_VOLUME_STAR: "******"
+INDIRECT_VOLUME_SYMBOLIC: /&[A-Z0-9#@$]{1,5}/
+
+// ---------------------------------------------------------------------
+// DEFINE PATH (Task 4)
+//
+// DEFINE PATH ( path_param* )
+//
+// No DATA(...)/INDEX(...) trailers and no mutually-exclusive-choice
+// groups -- reuses catalog_param/model_param/owner_param/recatalog_param/
+// retention_param verbatim from Tasks 2-3.
+define_path: "DEFINE" "PATH" "(" path_param* ")"
+
+path_param: name_param
+          | pathentry_param
+          | catalog_param
+          | model_param
+          | owner_param
+          | recatalog_param
+          | retention_param
+          | update_param
+
+pathentry_param: "PATHENTRY" "(" NAME ")"
+update_param:    "UPDATE" -> update_flag
+               | "NOUPDATE" -> noupdate_flag
 
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
 GENERIC_NAME:  /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*\.\*(\.[A-Z#@$][A-Z0-9#@$]*)?/
