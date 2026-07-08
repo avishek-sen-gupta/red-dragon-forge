@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from jackal.dsn import DSN
@@ -67,6 +67,7 @@ class Step:
     dds: tuple[DD, ...]
     conds: tuple[Cond, ...] = ()
     parm: Value = ()
+    proc_parms: dict[str, Value] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -74,3 +75,10 @@ class Job:
     name: str
     steps: tuple[Step, ...]
     cond: tuple[Cond, ...] = ()
+
+
+@dataclass(frozen=True)
+class ProcDef:
+    name: str
+    defaults: dict[str, Value]
+    steps: tuple[Step, ...]
