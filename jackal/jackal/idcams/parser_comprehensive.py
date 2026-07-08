@@ -23,6 +23,7 @@ from lark import Lark, Token, Transformer
 from lark.exceptions import VisitError
 
 from jackal.idcams.ast_alter import Alter, NullifySpec
+from jackal.idcams.ast_bldindex import Bldindex
 from jackal.idcams.ast_define_alternateindex import (
     AixDataComponent,
     AixIndexComponent,
@@ -57,6 +58,7 @@ from jackal.idcams.ast_values import (
     Retention,
     SpaceAllocation,
 )
+from jackal.idcams.ast_verify import Verify
 from jackal.idcams.preprocess import join_plus_continuations
 
 _GRAMMAR_PATH = str(files("jackal.idcams") / "grammar" / "ams.lark")
@@ -1332,6 +1334,104 @@ class _Build(Transformer):
         )
 
         return Import(**fields)
+
+    # -- VERIFY-specific params -------------------------------------------------
+    def verify_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def verify_dataset_param(self, c: list) -> tuple:
+        return ("dataset", _name(c[0]))
+
+    def verify_recover_flag(self, c: list) -> tuple:
+        return ("recover", True)
+
+    # -- VERIFY assembly ---------------------------------------------------------
+    def verify(self, c: list) -> Verify:
+        items = [item for item in c if item is not None]
+        fields = self._fields_dict(items)
+
+        self._check_pair_group(
+            fields, "VERIFY", "file", "FILE", "dataset", "DATASET", required=True
+        )
+
+        return Verify(**fields)
+
+    # -- BLDINDEX-specific params -------------------------------------------------
+    def bldindex_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def bldindex_outfiles_param(self, c: list) -> tuple:
+        return ("outfiles", tuple(str(tok) for tok in c))
+
+    def bldindex_outdatasets_param(self, c: list) -> tuple:
+        return ("outdatasets", tuple(_name(tok) for tok in c))
+
+    def externalsort_flag(self, c: list) -> tuple:
+        return ("sort_kind", "EXTERNALSORT")
+
+    def internalsort_flag(self, c: list) -> tuple:
+        return ("sort_kind", "INTERNALSORT")
+
+    def sortcall_flag(self, c: list) -> tuple:
+        return ("sort_call", True)
+
+    def nosortcall_flag(self, c: list) -> tuple:
+        return ("sort_call", False)
+
+    def sortdevicetype_param(self, c: list) -> tuple:
+        return ("sort_device_type", str(c[0]))
+
+    def sortfilenumber_param(self, c: list) -> tuple:
+        return ("sort_file_number", _int(c[0]))
+
+    def sortmessagedd_param(self, c: list) -> tuple:
+        return ("sort_message_dd", str(c[0]))
+
+    def sortmessagelevel_param(self, c: list) -> tuple:
+        return ("sort_message_level", str(c[0]))
+
+    def workfiles_param(self, c: list) -> tuple:
+        return ("work_files", tuple(str(tok) for tok in c))
+
+    # -- BLDINDEX assembly ---------------------------------------------------------
+    def bldindex(self, c: list) -> Bldindex:
+        items = [item for item in c if item is not None]
+
+        sort_kinds = [value for key, value in items if key == "sort_kind"]
+        if len(sort_kinds) > 1:
+            raise ValueError(
+                f"BLDINDEX: {sort_kinds[0]} and {sort_kinds[1]} are "
+                "mutually exclusive, both were specified"
+            )
+        sort_calls = [value for key, value in items if key == "sort_call"]
+        if len(sort_calls) > 1:
+            raise ValueError(
+                "BLDINDEX: SORTCALL and NOSORTCALL are mutually exclusive, "
+                "both were specified"
+            )
+
+        fields = self._fields_dict(items)
+
+        self._check_pair_group(
+            fields,
+            "BLDINDEX",
+            "infile",
+            "INFILE",
+            "indataset",
+            "INDATASET",
+            required=True,
+        )
+        self._check_pair_group(
+            fields,
+            "BLDINDEX",
+            "outfiles",
+            "OUTFILE",
+            "outdatasets",
+            "OUTDATASET",
+            required=True,
+        )
+
+        return Bldindex(**fields)
 
     def command(self, c: list) -> object:
         return c[0]

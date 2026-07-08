@@ -7,7 +7,8 @@ start: command+
 
 command: modal_command | set_command | define_cluster | define_alternateindex
        | define_gdg | define_nonvsam | define_path | delete | alter | repro
-       | print | listcat | export | import_cmd  // set_command is
+       | print | listcat | export | import_cmd | verify | bldindex
+                                       // set_command is
                                        // placeholder scaffolding (like
                                        // modal_command) so start.lark is
                                        // parseable standalone during Task 1.
@@ -1068,6 +1069,75 @@ import_object_param: file_param
                     | newname_param
                     | storageclass_param
                     | volumes_param
+
+// ---------------------------------------------------------------------
+// VERIFY (Task 10)
+//
+// VERIFY verify_param*
+//
+// The lightest command in the comprehensive-grammar plan. One genuine
+// required "pick one" choice group, flat-grammar/transformer-enforced
+// (ComprehensiveIdcamsTransformer.verify()): FILE/DATASET. RECOVER is an
+// ordinary bare flag.
+verify: "VERIFY" verify_param*
+
+verify_param: file_param
+            | verify_dataset_param
+            | verify_recover_param
+
+verify_dataset_param: "DATASET" "(" NAME ")"
+verify_recover_param: "RECOVER" -> verify_recover_flag
+
+// ---------------------------------------------------------------------
+// BLDINDEX (Task 10)
+//
+// BLDINDEX bldindex_param*
+//
+// Three genuine "pick one" choice groups, all flat-grammar/transformer-
+// enforced (ComprehensiveIdcamsTransformer.bldindex()): INFILE/INDATASET
+// (required, exactly one; reuses infile_param/indataset_param verbatim
+// from REPRO/IMPORT), OUTFILE/OUTDATASET (required, exactly one -- but
+// unlike every other OUTFILE/OUTDATASET in this grammar, BLDINDEX's own
+// versions each accept a LIST of 1+ ddnames/entrynames, e.g. OUTFILE(A B),
+// to build multiple alternate indexes for the same base cluster in one
+// invocation -- hence the dedicated bldindex_outfiles_param/
+// bldindex_outdatasets_param rules below rather than reusing outfile_param/
+// outdataset_param), EXTERNALSORT/INTERNALSORT (optional, at most one --
+// which sort strategy), and SORTCALL/NOSORTCALL (optional, at most one --
+// which sort mechanism). SORTDEVICETYPE, SORTFILENUMBER, SORTMESSAGEDD,
+// SORTMESSAGELEVEL, WORKFILES, and CATALOG are ordinary single-occurrence
+// (or, for WORKFILES, plain list) params -- no mutual-exclusivity machinery.
+bldindex: "BLDINDEX" bldindex_param*
+
+bldindex_param: infile_param
+              | indataset_param
+              | bldindex_outfiles_param
+              | bldindex_outdatasets_param
+              | bldindex_sort_kind_param
+              | bldindex_sortcall_param
+              | sortdevicetype_param
+              | sortfilenumber_param
+              | sortmessagedd_param
+              | sortmessagelevel_param
+              | workfiles_param
+              | catalog_param
+
+bldindex_outfiles_param:    "OUTFILE" "(" NAME+ ")"
+bldindex_outdatasets_param: "OUTDATASET" "(" NAME+ ")"
+
+bldindex_sort_kind_param: "EXTERNALSORT" -> externalsort_flag
+                        | "INTERNALSORT" -> internalsort_flag
+
+bldindex_sortcall_param: "SORTCALL" -> sortcall_flag
+                       | "NOSORTCALL" -> nosortcall_flag
+
+sortdevicetype_param: "SORTDEVICETYPE" "(" DEVICE_TYPE ")"
+sortfilenumber_param: "SORTFILENUMBER" "(" INT ")"
+sortmessagedd_param:  "SORTMESSAGEDD" "(" NAME ")"
+sortmessagelevel_param: "SORTMESSAGELEVEL" "(" SORT_MESSAGE_LEVEL_VALUE ")"
+workfiles_param:      "WORKFILES" "(" NAME NAME ")"
+
+SORT_MESSAGE_LEVEL_VALUE: "ALL" | "CRITICAL" | "NONE"
 
 // ---------------------------------------------------------------------
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
