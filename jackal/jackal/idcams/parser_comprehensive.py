@@ -776,20 +776,11 @@ class _Build(Transformer):
     def outdataset_param(self, c: list) -> tuple:
         return ("outdataset", _name(c[0]))
 
-    def source_choice(self, c: list) -> tuple:
-        return c[0]
-
-    def target_choice(self, c: list) -> tuple:
-        return c[0]
-
     def entries_param(self, c: list) -> tuple:
         return ("entries", tuple(_name(tok) for tok in c))
 
     def level_param(self, c: list) -> tuple:
         return ("level", str(c[0]))
-
-    def entries_level_choice(self, c: list) -> tuple:
-        return c[0]
 
     def fromkey_param(self, c: list) -> tuple:
         return ("range_start", RangeStart(kind="FROMKEY", value=c[0]))
@@ -803,9 +794,6 @@ class _Build(Transformer):
     def skip_param(self, c: list) -> tuple:
         return ("range_start", RangeStart(kind="SKIP", value=c[0]))
 
-    def range_start_choice(self, c: list) -> tuple:
-        return c[0]
-
     def tokey_param(self, c: list) -> tuple:
         return ("range_end", RangeEnd(kind="TOKEY", value=c[0]))
 
@@ -817,9 +805,6 @@ class _Build(Transformer):
 
     def count_param(self, c: list) -> tuple:
         return ("range_end", RangeEnd(kind="COUNT", value=c[0]))
-
-    def range_end_choice(self, c: list) -> tuple:
-        return c[0]
 
     def int_pair(self, c: list) -> tuple:
         return (_int(c[0]), _int(c[1]))
@@ -835,12 +820,6 @@ class _Build(Transformer):
 
     def nodbcscheck_flag(self, c: list) -> tuple:
         return ("no_dbcs_check", True)
-
-    def insert_choice(self, c: list) -> tuple:
-        return c[0]
-
-    def dbcscheck_choice(self, c: list) -> tuple:
-        return c[0]
 
     def repro_param(self, c: list) -> tuple:
         return c[0]
@@ -882,9 +861,6 @@ class _Build(Transformer):
         return ("rls_target", str(c[0]))
 
     # -- ENCIPHER(...) / DECIPHER(...) sub-blocks ----------------------------
-    def cipher_choice(self, c: list) -> tuple:
-        return c[0]
-
     def cipher_param(self, c: list) -> tuple:
         return c[0]
 
@@ -927,8 +903,21 @@ class _Build(Transformer):
         return ("user_data", _dequote(tok) if tok.type == "QUOTED_STRING" else str(tok))
 
     def encipher_clause(self, c: list) -> tuple:
+        items = [item for item in c if item is not None]
+        key_sources = [value for key, value in items if key == "key_source"]
+        if not key_sources:
+            raise ValueError(
+                "REPRO ENCIPHER: exactly one of EXTERNALKEYNAME, "
+                "INTERNALKEYNAME, or PRIVATEKEY is required"
+            )
+        if len(key_sources) > 1:
+            kind_a, kind_b = key_sources[0][0], key_sources[1][0]
+            raise ValueError(
+                f"REPRO ENCIPHER: {kind_a} and {kind_b} are mutually "
+                "exclusive, both were specified"
+            )
         fields: dict[str, object] = {}
-        for key, value in c[0]:
+        for key, value in items:
             if key == "key_source":
                 kind, name = value
                 fields["key_source"] = kind
@@ -963,8 +952,21 @@ class _Build(Transformer):
         return ("system_key_name", str(c[0]))
 
     def decipher_clause(self, c: list) -> tuple:
+        items = [item for item in c if item is not None]
+        key_sources = [value for key, value in items if key == "key_source"]
+        if not key_sources:
+            raise ValueError(
+                "REPRO DECIPHER: exactly one of DATAKEYFILE, DATAKEYVALUE, "
+                "or SYSTEMKEY is required"
+            )
+        if len(key_sources) > 1:
+            kind_a, kind_b = key_sources[0][0], key_sources[1][0]
+            raise ValueError(
+                f"REPRO DECIPHER: {kind_a} and {kind_b} are mutually "
+                "exclusive, both were specified"
+            )
         fields: dict[str, object] = {}
-        for key, value in c[0]:
+        for key, value in items:
             if key == "key_source":
                 kind, name = value
                 fields["key_source"] = kind
@@ -976,84 +978,89 @@ class _Build(Transformer):
                 fields[key] = value
         return ("decipher", DecipherSpec(**fields))
 
-    # -- REPRO chain-of-independent-single-slots flattening -----------------
-    # Each repro_seq_*/cipher_seq_*/decipher_seq_* rule has either 0
-    # children (a terminal epsilon), 1 child (an epsilon "skip this
-    # dimension, fall through to the next" transition -- already a
-    # flattened list from the downstream call), or 2 children (an item
-    # consumed, then the tail of the sequence) -- see ams.lark's REPRO
-    # section comment. This single helper covers all three shapes, unlike
-    # the 0-or-2-only _flatten_seq used by DELETE/ALTER/DEFINE CLUSTER's
-    # two-state (not chained) sequences.
+    # -- REPRO group-exclusivity validation ----------------------------------
+    # REPRO's eight top-level "pick one" groups (plus the two nested cipher
+    # ones handled above in encipher_clause/decipher_clause) are no longer
+    # enforced by the grammar -- ams.lark's repro_param list is flat and
+    # freely-repeatable, so any relative order parses structurally. This
+    # mirrors DEFINE CLUSTER's DATABASE(...)/KEYNAME(...) pattern
+    # (see define_cluster above): the grammar accepts broadly, the
+    # transformer raises ValueError on an invalid combination.
     @staticmethod
-    def _flatten_chain(c: list) -> list:
-        if not c:
-            return []
-        if len(c) == 1:
-            return c[0]
-        head, tail = c
-        return [head, *tail]
-
-    def repro_seq_src(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_tgt(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_c0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_c1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_d0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_d1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_e0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_e1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_f0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_f1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_g0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_g1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_h0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_h1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def repro_seq_final(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def cipher_seq_0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def cipher_seq_1(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def decipher_seq_0(self, c: list) -> list:
-        return self._flatten_chain(c)
-
-    def decipher_seq_1(self, c: list) -> list:
-        return self._flatten_chain(c)
+    def _check_repro_pair_group(
+        fields: dict[str, object],
+        key_a: str,
+        label_a: str,
+        key_b: str,
+        label_b: str,
+        *,
+        required: bool,
+    ) -> None:
+        has_a = key_a in fields
+        has_b = key_b in fields
+        if has_a and has_b:
+            raise ValueError(
+                f"REPRO: {label_a} and {label_b} are mutually exclusive, "
+                "both were specified"
+            )
+        if required and not has_a and not has_b:
+            raise ValueError(
+                f"REPRO: exactly one of {label_a} or {label_b} is required"
+            )
 
     # -- REPRO assembly -------------------------------------------------------
     def repro(self, c: list) -> Repro:
-        fields = self._fields_dict(c[0])
+        items = [item for item in c if item is not None]
+
+        # RangeStart's 4-way FROMKEY/FROMADDRESS/FROMNUMBER/SKIP and
+        # RangeEnd's 4-way TOKEY/TOADDRESS/TONUMBER/COUNT all funnel into
+        # the same "range_start"/"range_end" dict key (see
+        # fromkey_param/.../count_param above) -- a duplicate key here means
+        # two members of the same 4-way group were both specified.
+        range_start_kinds = [value.kind for key, value in items if key == "range_start"]
+        if len(range_start_kinds) > 1:
+            raise ValueError(
+                f"REPRO: {range_start_kinds[0]} and {range_start_kinds[1]} "
+                "are mutually exclusive, both were specified"
+            )
+        range_end_kinds = [value.kind for key, value in items if key == "range_end"]
+        if len(range_end_kinds) > 1:
+            raise ValueError(
+                f"REPRO: {range_end_kinds[0]} and {range_end_kinds[1]} "
+                "are mutually exclusive, both were specified"
+            )
+
+        fields = self._fields_dict(items)
+
+        self._check_repro_pair_group(
+            fields, "infile", "INFILE", "indataset", "INDATASET", required=True
+        )
+        self._check_repro_pair_group(
+            fields, "outfile", "OUTFILE", "outdataset", "OUTDATASET", required=True
+        )
+        self._check_repro_pair_group(
+            fields, "entries", "ENTRIES", "level", "LEVEL", required=False
+        )
+        self._check_repro_pair_group(
+            fields, "encipher", "ENCIPHER", "decipher", "DECIPHER", required=False
+        )
+        self._check_repro_pair_group(
+            fields,
+            "insert_shift",
+            "INSERTSHIFT",
+            "insert_all",
+            "INSERTALL",
+            required=False,
+        )
+        self._check_repro_pair_group(
+            fields,
+            "skip_dbcs_check",
+            "SKIPDBCSCHECK",
+            "no_dbcs_check",
+            "NODBCSCHECK",
+            required=False,
+        )
+
         return Repro(**fields)
 
     def command(self, c: list) -> object:
