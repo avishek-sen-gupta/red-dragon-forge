@@ -8,14 +8,10 @@
 	path = cicada/third-party/che-che4z-lsp-for-hlasm-fork
 	url = git@github.com:avishek-sen-gupta/che-che4z-lsp-for-hlasm.git
 	branch = krakatoa-1.22.1
-[submodule "cicada/third-party/carddemo"]
-	path = cicada/third-party/carddemo
-	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
-	branch = main
 [submodule "squall/testbed/db2-samples"]
 	path = squall/testbed/db2-samples
 	url = https://github.com/IBM/db2-samples.git
-[submodule "jackal/third-party/carddemo"]
-	path = jackal/third-party/carddemo
+[submodule "vendor/carddemo"]
+	path = vendor/carddemo
 	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
 	branch = main

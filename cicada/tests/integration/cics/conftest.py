@@ -10,7 +10,8 @@ a regression.
 
 Resolution order for CARDDEMO_HOME:
   1. CARDDEMO_HOME env var (explicit override, set by CI workflow)
-  2. third-party/carddemo/app submodule (auto-detected from repo root)
+  2. vendor/carddemo/app submodule (auto-detected from the monorepo root,
+     shared with jackal -- see vendor/carddemo)
 """
 
 from __future__ import annotations
@@ -22,8 +23,8 @@ import pytest
 
 from tests.integration.cics.bms_tools_helpers import BMS_TOOLS_AVAILABLE
 
-_REPO_ROOT = Path(__file__).parents[3]
-_SUBMODULE_CARDDEMO = _REPO_ROOT / "third-party" / "carddemo" / "app"
+_MONOREPO_ROOT = Path(__file__).parents[4]
+_SUBMODULE_CARDDEMO = _MONOREPO_ROOT / "vendor" / "carddemo" / "app"
 
 
 def _resolve_carddemo_home() -> str | None:
@@ -43,7 +44,7 @@ _TOOLCHAIN_OK = bool(_CARDDEMO_HOME) and BMS_TOOLS_AVAILABLE
 
 _SETUP_MSG = (
     "CardDemo e2e toolchain not available. Ensure:\n"
-    "  • git submodule update --init third-party/carddemo third-party/bms-tools\n"
+    "  • git submodule update --init vendor/carddemo third-party/bms-tools\n"
     "  • ProLeap JAR built: cd proleap-bridge && mvn -DskipTests package\n"
     "  • hlasm_export built or downloaded into "
     "third-party/bms-tools/che-che4z-lsp-for-hlasm-fork/build/bin/"

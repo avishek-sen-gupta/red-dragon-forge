@@ -12,7 +12,7 @@
 #   CARDDEMO_HOME=/path/to/carddemo/app make test
 PROLEAP_BRIDGE_JAR ?= $(CURDIR)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 HLASM_EXPORT       ?= $(CURDIR)/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export
-CARDDEMO_HOME      ?= $(CURDIR)/third-party/carddemo/app
+CARDDEMO_HOME      ?= $(CURDIR)/../vendor/carddemo/app
 
 E2E_ENV = PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) CARDDEMO_HOME=$(CARDDEMO_HOME)
 PYTEST       = uv run --no-sync python -m pytest

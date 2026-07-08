@@ -22,13 +22,13 @@ def jcl_bridge_jar() -> str:
 
 @pytest.fixture
 def carddemo_home() -> Path:
-    """Root of the CardDemo checkout. Uses jackal's own vendored copy by
-    default (it has cbl/, cpy/, csd/, and jcl/ all present, avoiding any
-    cross-checkout inconsistency); CARDDEMO_HOME overrides."""
+    """Root of the CardDemo checkout. Uses the shared vendor/carddemo
+    submodule by default (it has cbl/, cpy/, csd/, and jcl/ all present);
+    CARDDEMO_HOME overrides."""
     env = os.environ.get("CARDDEMO_HOME")
     if env:
         return Path(env)
-    default = Path(__file__).parents[2] / "jackal" / "third-party" / "carddemo" / "app"
+    default = Path(__file__).parents[2] / "vendor" / "carddemo" / "app"
     if not default.is_dir():
         pytest.skip(f"CardDemo checkout not found at {default}; set CARDDEMO_HOME")
     return default
