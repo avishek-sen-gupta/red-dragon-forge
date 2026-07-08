@@ -3,6 +3,7 @@ import pytest
 from tests.covers import NotLanguageFeature, covers
 from jackal.dsn import DirectDSN
 from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
+from jackal.value_parts import literal
 
 
 class _FakeRunner:
@@ -29,7 +30,7 @@ def test_parse_builds_model_from_bridge_json():
                     "dds": [
                         {
                             "ddname": "D",
-                            "dsn": "A.B",
+                            "dsn": [{"type": "Literal", "name": "A.B"}],
                             "disp_words": ["SHR"],
                             "in_stream": [],
                             "sysout": False,
@@ -41,8 +42,43 @@ def test_parse_builds_model_from_bridge_json():
     )
     runner = _FakeRunner(out=out)
     job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
-    assert job.steps[0].dds[0].dsn == DirectDSN("A.B")
+    assert job.steps[0].dds[0].dsn == DirectDSN(literal("A.B"))
     assert runner.command == ["java", "-jar", "jcl.jar"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_builds_symbol_part_from_bridge_json():
+    out = json.dumps(
+        {
+            "name": "J",
+            "steps": [
+                {
+                    "name": "S",
+                    "pgm": "P",
+                    "dds": [
+                        {
+                            "ddname": "D",
+                            "dsn": [
+                                {"type": "Symbol", "name": "CNTLLIB"},
+                                {"type": "Literal", "name": "(REPROCT)"},
+                            ],
+                            "disp_words": ["SHR"],
+                            "in_stream": [],
+                            "sysout": False,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    runner = _FakeRunner(out=out)
+    job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
+    from jackal.dsn import DirectDSN
+    from jackal.value_parts import Literal, Symbol
+
+    assert job.steps[0].dds[0].dsn == DirectDSN(
+        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

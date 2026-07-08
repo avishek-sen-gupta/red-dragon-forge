@@ -7,8 +7,9 @@ from pathlib import Path
 
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from interpreter.cobol.file_enums import FileOrganization, OpenMode
-from jackal.dsn import DirectDSN, TempRef
+from jackal.dsn import DirectDSN, TempRef, dsn_key
 from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
+from jackal.value_parts import literal
 
 
 @dataclass(frozen=True)
@@ -55,8 +56,8 @@ class DatasetCatalog:
         match dd.dsn:
             case TempRef(alias=alias):
                 return self._allocate_temp(alias, dd.disp.status)
-            case DirectDSN(name=name):
-                return self._allocate_direct(name, dd)
+            case DirectDSN():
+                return self._allocate_direct(dsn_key(dd.dsn), dd)
             case _:
                 raise TypeError(f"Unhandled DSN type: {dd.dsn!r}")
 
@@ -67,14 +68,14 @@ class DatasetCatalog:
             name = alias[2:]  # strip exactly the two leading &&
             path = self._workdir / name
             path.write_bytes(b"")
-            self._temp_registry[alias] = DirectDSN(name)
+            self._temp_registry[alias] = DirectDSN(literal(name))
             ds = Dataset(dsn=name, path=path)
             self._datasets[name] = ds
             return ds
         if status in (DispStatus.OLD, DispStatus.SHR, DispStatus.MOD):
             if alias not in self._temp_registry:
                 raise KeyError(alias)
-            return self._datasets[self._temp_registry[alias].name]
+            return self._datasets[dsn_key(self._temp_registry[alias])]
         raise ValueError(f"Unexpected DispStatus for TempRef: {status}")
 
     def _allocate_direct(self, name: str, dd: DD) -> Dataset:
@@ -160,14 +161,14 @@ class DatasetCatalog:
             case TempRef(alias=alias):
                 if alias in self._temp_registry:
                     direct = self._temp_registry.pop(alias)
-                    self.delete_dsn(direct.name)
-            case DirectDSN(name=name):
-                self.delete_dsn(name)
+                    self.delete_dsn(dsn_key(direct))
+            case DirectDSN():
+                self.delete_dsn(dsn_key(dd.dsn))
 
     def cleanup_temps(self) -> None:
         """Delete all surviving temp datasets and clear the registry. Called at job end."""
         for direct in list(self._temp_registry.values()):
-            self.delete_dsn(direct.name)
+            self.delete_dsn(dsn_key(direct))
         self._temp_registry.clear()
 
     @property

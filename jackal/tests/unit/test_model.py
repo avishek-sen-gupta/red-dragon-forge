@@ -1,13 +1,14 @@
 from tests.covers import covers, NotLanguageFeature
 from jackal.dsn import DirectDSN
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.value_parts import literal
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_job_model_construction():
     dd = DD(
         ddname="INDD",
-        dsn=DirectDSN("J.IN"),
+        dsn=DirectDSN(literal("J.IN")),
         disp=Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
     )
     step = Step(name="STEP1", pgm="UPCASE", dds=(dd,))
@@ -22,7 +23,7 @@ def test_dd_instream_and_sysout_and_org():
 
     dd = DD(
         ddname="SYSIN",
-        dsn=DirectDSN(""),
+        dsn=DirectDSN(()),
         disp=Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
         in_stream=("  DELETE X CLUSTER",),
         sysout=False,

@@ -1,6 +1,7 @@
 from tests.covers import NotLanguageFeature, covers
 from jackal.dsn import DirectDSN
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
+from jackal.value_parts import Literal, Symbol, literal
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -9,7 +10,7 @@ def test_real_jar_parses_simple_job(jcl_bridge_jar):
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     assert job.name == "PIPE"
     assert job.steps[0].pgm == "UPCASE"
-    assert job.steps[0].dds[0].dsn == DirectDSN("J.IN")
+    assert job.steps[0].dds[0].dsn == DirectDSN(literal("J.IN"))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -23,14 +24,23 @@ def test_real_jar_parses_proc_step(jcl_bridge_jar):
 def test_real_jar_parses_parm(jcl_bridge_jar):
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=CBACT04C,PARM='2022071800'\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    assert job.steps[0].parm == "2022071800"
+    assert job.steps[0].parm == literal("2022071800")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_real_jar_absent_parm_is_empty_string(jcl_bridge_jar):
+def test_real_jar_absent_parm_is_empty_value(jcl_bridge_jar):
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=MYPGM\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    assert job.steps[0].parm == ""
+    assert job.steps[0].parm == ()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_symbolic_dsn(jcl_bridge_jar):
+    jcl = "//J JOB 1\n//STEP1 EXEC PGM=IDCAMS\n//D DD DISP=SHR,\n//   DSN=&CNTLLIB(REPROCT)\n"
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    assert job.steps[0].dds[0].dsn == DirectDSN(
+        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

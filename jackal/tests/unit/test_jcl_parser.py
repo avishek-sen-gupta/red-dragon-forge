@@ -6,6 +6,7 @@ from tests.covers import NotLanguageFeature, covers
 from jackal.dsn import DirectDSN
 from jackal.jcl.parser import parse_jcl
 from jackal.model import DispNormal, DispStatus
+from jackal.value_parts import literal
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +50,7 @@ def test_disp_shr_shorthand_defaults_keep():
 def test_dd_continuation_line():
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,\n//   DISP=(NEW,CATLG,DELETE)\n"
     dd = parse_jcl(jcl).steps[0].dds[0]
-    assert dd.dsn == DirectDSN("A.B") and dd.disp.status is DispStatus.NEW
+    assert dd.dsn == DirectDSN(literal("A.B")) and dd.disp.status is DispStatus.NEW
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -92,4 +93,4 @@ def test_dd_sysout():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dsn_disp_still_parses():  # regression: v1 forms unaffected
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,DISP=SHR\n"
-    assert parse_jcl(jcl).steps[0].dds[0].dsn == DirectDSN("A.B")
+    assert parse_jcl(jcl).steps[0].dds[0].dsn == DirectDSN(literal("A.B"))

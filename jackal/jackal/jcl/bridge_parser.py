@@ -15,8 +15,19 @@ from jackal.dsn import (
     BackwardRef,
 )
 from jackal.model import Cond, CondOp, DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.value_parts import Literal, Symbol, Value, resolve
 
 _DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
+
+
+def _value_from_json(parts: list[dict]) -> Value:
+    result: list[Literal | Symbol] = []
+    for part in parts:
+        if part["type"] == "Symbol":
+            result.append(Symbol(part["name"]))
+        else:
+            result.append(Literal(part["name"]))
+    return tuple(result)
 
 
 def _disp_from_words(words: tuple[str, ...]) -> Disp:
@@ -29,7 +40,10 @@ def _disp_from_words(words: tuple[str, ...]) -> Disp:
 def _dd_from_json(d: dict) -> DD:
     words = tuple(d.get("disp_words", ()))
     disp = _disp_from_words(words) if words else _DEFAULT_DISP
-    raw_dsn = d.get("dsn", "")
+    dsn_value = _value_from_json(d.get("dsn", []))
+    raw_dsn = (
+        resolve(dsn_value) if not any(isinstance(p, Symbol) for p in dsn_value) else ""
+    )
     if "backref" in d:
         br = d["backref"]
         dsn: DSN = BackwardRef(step=br["step"], ddname=br["ddname"])
@@ -44,10 +58,10 @@ def _dd_from_json(d: dict) -> DD:
         dsn = DummyDSN()
     elif raw_dsn == "" and d.get("in_stream"):
         dsn = InStreamDSN()
-    elif raw_dsn == "":
+    elif raw_dsn == "" and not dsn_value:
         dsn = NoDSN()
     else:
-        dsn = DirectDSN(raw_dsn)
+        dsn = DirectDSN(dsn_value)
     return DD(
         ddname=d["ddname"],
         dsn=dsn,
@@ -67,7 +81,7 @@ def _step_from_json(s: dict) -> Step:
         pgm=s["pgm"],
         dds=tuple(_dd_from_json(d) for d in s["dds"]),
         conds=tuple(_cond_from_json(c) for c in s.get("cond", ())),
-        parm=s.get("parm", ""),
+        parm=_value_from_json(s.get("parm", [])),
     )
 
 

@@ -221,7 +221,7 @@ public final class JclSerializer {
             step.add("cond", condArray);
 
             // PARM= on the EXEC statement
-            String parm = "";
+            JsonArray parmParts = new JsonArray();
             if (execStmt != null) {
                 JCLParser.ExecParmPARMContext parmCtx =
                         findChild(execStmt, JCLParser.ExecParmPARMContext.class);
@@ -229,16 +229,11 @@ public final class JclSerializer {
                     JCLParser.KeywordOrSymbolicContext kwCtx =
                             findChild(parmCtx, JCLParser.KeywordOrSymbolicContext.class);
                     if (kwCtx != null) {
-                        String raw = kwCtx.getText();
-                        // Strip surrounding apostrophes from JCL quoted string convention
-                        if (raw.startsWith("'") && raw.endsWith("'") && raw.length() >= 2) {
-                            raw = raw.substring(1, raw.length() - 1);
-                        }
-                        parm = raw;
+                        parmParts = buildValueParts(kwCtx);
                     }
                 }
             }
-            step.addProperty("parm", parm);
+            step.add("parm", parmParts);
 
             // DD statements — ddStatementAmalgamation children of jclStep
             JsonArray dds = new JsonArray();
@@ -400,7 +395,7 @@ public final class JclSerializer {
             if (ddStmt == null) {
                 JsonObject empty = new JsonObject();
                 empty.addProperty("ddname", "");
-                empty.addProperty("dsn", "");
+                empty.add("dsn", new JsonArray());
                 empty.add("disp_words", new JsonArray());
                 empty.add("in_stream", new JsonArray());
                 empty.addProperty("sysout", false);
@@ -423,7 +418,7 @@ public final class JclSerializer {
                     .map(param -> param.getChild(0))
                     .reduce(DdParamFields.empty(), this::foldDdParameter, (a, b) -> b);
 
-            String dsn = fields.dsn();
+            JsonArray dsn = fields.dsn();
             JsonArray dispWords = fields.dispWords();
             boolean sysout = fields.sysout();
             boolean dummy = fields.dummy();
@@ -474,7 +469,7 @@ public final class JclSerializer {
                 }
             }
 
-            dd.addProperty("dsn", dsn);
+            dd.add("dsn", dsn);
             dd.add("disp_words", dispWords);
             dd.add("in_stream", inStream);
             dd.addProperty("sysout", sysout);
@@ -484,7 +479,7 @@ public final class JclSerializer {
 
         /** Immutable accumulator for one ddStatement's ddParameter children. */
         private record DdParamFields(
-                String dsn,
+                JsonArray dsn,
                 JsonArray dispWords,
                 boolean sysout,
                 boolean dummy,
@@ -492,7 +487,7 @@ public final class JclSerializer {
                 JsonObject backref) {
 
             static DdParamFields empty() {
-                return new DdParamFields("", new JsonArray(), false, false, false, null);
+                return new DdParamFields(new JsonArray(), new JsonArray(), false, false, false, null);
             }
         }
 
@@ -529,21 +524,23 @@ public final class JclSerializer {
             String raw = datasetName.getText();
             if (!raw.startsWith("*.")) {
                 return new DdParamFields(
-                        raw, acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), acc.backref());
+                        buildValueParts(datasetName), acc.dispWords(), acc.sysout(), acc.dummy(),
+                        acc.isAsterisk(), acc.backref());
             }
             // backward reference: *.STEPNAME.DDNAME (two-segment) or longer
             String[] parts = raw.substring(2).split("\\.");
             if (parts.length != 2) {
-                // three-segment or malformed — pass raw string; Python raises ValueError
+                // three-segment or malformed — pass structured parts; Python raises ValueError
                 return new DdParamFields(
-                        raw, acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), acc.backref());
+                        buildValueParts(datasetName), acc.dispWords(), acc.sysout(), acc.dummy(),
+                        acc.isAsterisk(), acc.backref());
             }
             JsonObject backref = new JsonObject();
             backref.addProperty("step", parts[0]);
             backref.addProperty("ddname", parts[1]);
-            // leave dsn="" — Python parser dispatches on "backref" key first
+            // leave dsn=[] — Python parser dispatches on "backref" key first
             return new DdParamFields(
-                    acc.dsn(), acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), backref);
+                    new JsonArray(), acc.dispWords(), acc.sysout(), acc.dummy(), acc.isAsterisk(), backref);
         }
 
         /**
@@ -563,6 +560,54 @@ public final class JclSerializer {
                 }
             }
             return arr;
+        }
+
+        /**
+         * Build an ordered list of {"type":"Symbol"|"Literal","name":...}
+         * parts from a parse-tree node, classified by each terminal's own
+         * lexer token type (JCLLexer.SYMBOLIC vs everything else) — never
+         * inferred from text content. Hidden-channel tokens (e.g. the
+         * apostrophes around a quoted PARM value) are not tree children and
+         * so are naturally excluded — no separate stripping needed. Adjacent
+         * non-SYMBOLIC terminals are merged into one Literal part.
+         */
+        private JsonArray buildValueParts(ParseTree ctx) {
+            JsonArray parts = new JsonArray();
+            StringBuilder literalRun = new StringBuilder();
+            collectValueParts(ctx, parts, literalRun);
+            flushLiteral(parts, literalRun);
+            return parts;
+        }
+
+        private void collectValueParts(ParseTree node, JsonArray parts, StringBuilder literalRun) {
+            if (node instanceof TerminalNode) {
+                TerminalNode tn = (TerminalNode) node;
+                int type = tn.getSymbol().getType();
+                if (type == JCLLexer.SYMBOLIC) {
+                    flushLiteral(parts, literalRun);
+                    String text = tn.getText(); // e.g. "&CNTLLIB"
+                    JsonObject part = new JsonObject();
+                    part.addProperty("type", "Symbol");
+                    part.addProperty("name", text.substring(1)); // strip leading '&'
+                    parts.add(part);
+                } else {
+                    literalRun.append(tn.getText());
+                }
+                return;
+            }
+            for (int i = 0; i < node.getChildCount(); i++) {
+                collectValueParts(node.getChild(i), parts, literalRun);
+            }
+        }
+
+        private void flushLiteral(JsonArray parts, StringBuilder literalRun) {
+            if (literalRun.length() > 0) {
+                JsonObject part = new JsonObject();
+                part.addProperty("type", "Literal");
+                part.addProperty("name", literalRun.toString());
+                parts.add(part);
+                literalRun.setLength(0);
+            }
         }
 
         // ----------------------------------------------------------------

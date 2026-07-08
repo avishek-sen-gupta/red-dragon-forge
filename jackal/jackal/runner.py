@@ -11,6 +11,7 @@ from jackal.dsn import BackwardRef, DirectDSN, TempRef
 from jackal.model import DD, Job, Step
 from jackal.results import JobResult, StepDisposition, StepResult
 from jackal.utilities import UTILITIES
+from jackal.value_parts import literal
 
 
 class JobRunner:
@@ -116,7 +117,7 @@ class JobRunner:
                 case DirectDSN() as d:
                     entry[dd.ddname] = d
                 case TempRef(alias=a):
-                    entry[dd.ddname] = DirectDSN(a[2:])  # strip leading &&
+                    entry[dd.ddname] = DirectDSN(literal(a[2:]))  # strip leading &&
         resolved_dds[step_name] = entry
 
     def _run_step(self, step: Step, catalog: DatasetCatalog) -> StepResult:

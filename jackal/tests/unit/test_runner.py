@@ -6,6 +6,7 @@ from jackal.dsn import DirectDSN
 from jackal.model import DD, Cond, CondOp, Disp, DispNormal, DispStatus, Job, Step
 from jackal.results import StepDisposition
 from jackal.runner import JobRunner
+from jackal.value_parts import literal
 
 _DUMMY_DISP = Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE)
 
@@ -21,7 +22,7 @@ def test_runner_runs_all_steps(tmp_path: Path) -> None:
                 dds=(
                     DD(
                         "D",
-                        DirectDSN("J.X"),
+                        DirectDSN(literal("J.X")),
                         Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE),
                     ),
                 ),
@@ -60,13 +61,13 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
         dds=(
             DD(
                 ddname="SYSIN",
-                dsn=DirectDSN(""),
+                dsn=DirectDSN(()),
                 disp=_DUMMY_DISP,
                 in_stream=sysin_lines,
             ),
             DD(
                 ddname="SYSPRINT",
-                dsn=DirectDSN(""),
+                dsn=DirectDSN(()),
                 disp=_DUMMY_DISP,
                 sysout=True,
             ),
@@ -93,7 +94,7 @@ def _idcams_delete_missing(name: str, conds: tuple[Cond, ...] = ()) -> Step:
         dds=(
             DD(
                 ddname="SYSIN",
-                dsn=DirectDSN(""),
+                dsn=DirectDSN(()),
                 disp=_DUMMY_DISP,
                 in_stream=("DELETE NOPE.NOPE CLUSTER",),
             ),
@@ -183,7 +184,7 @@ def test_resolve_step_substitutes_backref(tmp_path: Path) -> None:
         data_dir=tmp_path,
         copybook_dir=tmp_path,
     )
-    resolved_dds = {"STEP1": {"WRK": DirectDSN("MY.FILE")}}
+    resolved_dds = {"STEP1": {"WRK": DirectDSN(literal("MY.FILE"))}}
     step = Step(
         name="STEP2",
         pgm="IEFBR14",
@@ -197,7 +198,7 @@ def test_resolve_step_substitutes_backref(tmp_path: Path) -> None:
     )
     result = runner._resolve_step(step, resolved_dds)
     assert result is not None
-    assert result.dds[0].dsn == DirectDSN("MY.FILE")
+    assert result.dds[0].dsn == DirectDSN(literal("MY.FILE"))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -244,14 +245,14 @@ def test_record_dds_stores_temp_ref_as_direct_dsn(tmp_path: Path) -> None:
         ),
         DD(
             "OUT",
-            DirectDSN("MY.FILE"),
+            DirectDSN(literal("MY.FILE")),
             Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE),
         ),
     )
     registry: dict = {}
     runner._record_dds("STEP1", dds, registry)
-    assert registry["STEP1"]["WRK"] == DirectDSN("TEMP")  # alias[2:]
-    assert registry["STEP1"]["OUT"] == DirectDSN("MY.FILE")
+    assert registry["STEP1"]["WRK"] == DirectDSN(literal("TEMP"))  # alias[2:]
+    assert registry["STEP1"]["OUT"] == DirectDSN(literal("MY.FILE"))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -266,7 +267,7 @@ def test_resolve_step_raises_for_unknown_ddname(tmp_path: Path) -> None:
         data_dir=tmp_path,
         copybook_dir=tmp_path,
     )
-    resolved_dds = {"STEP1": {"WRK": DirectDSN("MY.FILE")}}
+    resolved_dds = {"STEP1": {"WRK": DirectDSN(literal("MY.FILE"))}}
     step = Step(
         name="STEP2",
         pgm="IEFBR14",

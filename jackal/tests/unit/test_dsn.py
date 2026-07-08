@@ -5,13 +5,14 @@ from __future__ import annotations
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
+from jackal.value_parts import literal, Symbol
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_direct_dsn_name():
     from jackal.dsn import DirectDSN
 
-    assert DirectDSN("MY.DS").name == "MY.DS"
+    assert DirectDSN(literal("MY.DS")).name == literal("MY.DS")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -25,8 +26,8 @@ def test_temp_ref_alias():
 def test_direct_dsn_equality():
     from jackal.dsn import DirectDSN
 
-    assert DirectDSN("A") == DirectDSN("A")
-    assert DirectDSN("A") != DirectDSN("B")
+    assert DirectDSN(literal("A")) == DirectDSN(literal("A"))
+    assert DirectDSN(literal("A")) != DirectDSN(literal("B"))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -41,7 +42,15 @@ def test_temp_ref_equality():
 def test_dsn_key_extracts_direct_name():
     from jackal.dsn import DirectDSN, dsn_key
 
-    assert dsn_key(DirectDSN("MY.DS")) == "MY.DS"
+    assert dsn_key(DirectDSN(literal("MY.DS"))) == "MY.DS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dsn_key_raises_for_unresolved_symbol():
+    from jackal.dsn import DirectDSN, dsn_key
+
+    with pytest.raises(ValueError, match="CNTLLIB"):
+        dsn_key(DirectDSN((Symbol("CNTLLIB"),)))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
