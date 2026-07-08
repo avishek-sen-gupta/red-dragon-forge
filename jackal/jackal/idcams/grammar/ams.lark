@@ -5,13 +5,10 @@
 
 start: command+
 
-command: modal_command | set_command | define_cluster | define_alternateindex
-       | define_gdg | define_nonvsam | define_path | delete | alter | repro
-       | print | listcat | export | import_cmd | verify | bldindex
-                                       // set_command is
-                                       // placeholder scaffolding (like
-                                       // modal_command) so start.lark is
-                                       // parseable standalone during Task 1.
+command: modal_command | set_command | cancel_command | define_cluster
+       | define_alternateindex | define_gdg | define_nonvsam | define_path
+       | delete | alter | repro | print | listcat | export | import_cmd
+       | verify | bldindex
 
 // Not prefixed with "?": as the top-level `start` rule in standalone
 // lexical tests, a "?"-inlined single-child rule collapses to a bare
@@ -20,15 +17,17 @@ command: modal_command | set_command | define_cluster | define_alternateindex
 // ordinary one-child Tree, which is equally usable.
 value: NAME | GENERIC_NAME | QUOTED_STRING | HEX_LITERAL | BIN_LITERAL | INT
 
-modal_command: "CANCEL"   // minimal placeholder so start.lark is parseable
-                          // standalone during Task 1; replaced/extended by
-                          // Task 11's real modal_command rule.
+modal_command: if_command   // Task 1's placeholder ("CANCEL") is replaced by
+                            // the real IF grammar in Task 11; CANCEL now
+                            // has its own top-level command alternative
+                            // (cancel_command, below) instead.
 
-set_command: "SET" NAME "=" INT  // minimal placeholder covering IDCAMS's
-                                  // SET MAXCC=n idiom, used here only to
-                                  // exercise the semicolon-terminator and
-                                  // inline-comment lexical rules standalone
-                                  // during Task 1.
+set_command: "SET" cc_name "=" INT  // Task 1's placeholder accepted any
+                                     // bare NAME; Task 11 tightens the
+                                     // left-hand side to the real
+                                     // MAXCC/LASTCC choice.
+
+cancel_command: "CANCEL"
 
 // ---------------------------------------------------------------------
 // DEFINE CLUSTER (Task 2)
@@ -1138,6 +1137,65 @@ sortmessagelevel_param: "SORTMESSAGELEVEL" "(" SORT_MESSAGE_LEVEL_VALUE ")"
 workfiles_param:      "WORKFILES" "(" NAME NAME ")"
 
 SORT_MESSAGE_LEVEL_VALUE: "ALL" | "CRITICAL" | "NONE"
+
+// ---------------------------------------------------------------------
+// MODAL COMMANDS (Task 11): IF/THEN/ELSE/DO/END, SET, CANCEL
+//
+// IF {LASTCC|MAXCC} op number THEN [command | DO command+ END]
+//   [ELSE [command | DO command+ END]]
+//
+// `clause` covers all three THEN/ELSE shapes: null (bare THEN/ELSE
+// followed by nothing -- the IBM manual's own worked examples use this),
+// a single functional/modal command, or a DO ... END block of 1+ commands.
+// `clause` reuses the shared `command` alternation (not a private copy) so
+// THEN/ELSE/DO can hold any of the 14 functional commands or another
+// modal command -- this is what makes a nested IF fall out for free,
+// exactly like the manual's own nested-IF examples.
+//
+// Two full if_command alternatives (if_with_else / if_without_else),
+// rather than one rule with an optional "ELSE clause" suffix, deliberately
+// distinguish "no ELSE clause was written at all" from "an ELSE clause was
+// written but it's null" -- see ast_modal.py's IfCommand docstring for why
+// these are two different things per the manual's own null-command
+// semantics; the transformer maps if_without_else's absence of an ELSE
+// child to else_=None and if_with_else's (possibly empty) clause to
+// else_=(), never conflating the two.
+//
+// IF nesting depth (max 10 per the manual) is NOT enforced here -- Earley
+// parses arbitrarily deep recursion without complaint. The cap is
+// enforced by the transformer while building IfCommand instances (a
+// semantic/business-rule check, not a syntax-level one).
+if_command: "IF" cc_name if_op INT "THEN" clause "ELSE" clause -> if_with_else
+          | "IF" cc_name if_op INT "THEN" clause                -> if_without_else
+
+// MAXCC/LASTCC choice, shared by IF's left-hand side and SET's target.
+cc_name: "MAXCC"  -> maxcc_field
+       | "LASTCC" -> lastcc_field
+
+// Six operator spellings collapsing to four comparison directions plus
+// equal/not-equal. Alternatives are anonymous string literals inlined
+// directly in the rule (not one regex terminal) so Lark's automatic
+// longest-match terminal-priority resolves ">=" over ">" and "<=" over
+// "<" without a hand-written priority annotation. "¬=" is the IBM
+// manual's own "not equal" symbol (logical NOT); "NE" is the ASCII-safe
+// spelling most real JCL actually uses -- both accepted here, both
+// normalized to "NE" in the transformer (mirrors "=" normalizing to "EQ").
+if_op: "="  -> op_eq
+     | "EQ" -> op_eq
+     | "¬=" -> op_ne
+     | "NE" -> op_ne
+     | ">=" -> op_ge
+     | "GE" -> op_ge
+     | "<=" -> op_le
+     | "LE" -> op_le
+     | ">"  -> op_gt
+     | "GT" -> op_gt
+     | "<"  -> op_lt
+     | "LT" -> op_lt
+
+clause: command                 -> clause_single
+      | "DO" command+ "END"     -> clause_do
+      |                         -> clause_null
 
 // ---------------------------------------------------------------------
 NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
