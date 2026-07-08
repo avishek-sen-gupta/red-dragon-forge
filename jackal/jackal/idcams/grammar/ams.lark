@@ -40,18 +40,61 @@ set_command: "SET" NAME "=" INT  // minimal placeholder covering IDCAMS's
 // KEYS, RECORDSIZE, and SPEED/RECOVERY, which are meaningless for an
 // index component per the IDCAMS manual.
 //
-// CYLINDERS|KILOBYTES|MEGABYTES|RECORDS|TRACKS is one rule (space_param)
-// with five alternatives -- a genuine mutually-exclusive choice, not
-// five independently-optional rules that could all match at once.
-// Likewise INDEXED|LINEAR|NONINDEXED|NUMBERED|ZFS (organization_param).
-define_cluster: "DEFINE" "CLUSTER" "(" cluster_param* ")" component_clause*
+// CYLINDERS|KILOBYTES|MEGABYTES|RECORDS|TRACKS is one rule (space_choice)
+// with five alternatives -- a genuine mutually-exclusive choice, not five
+// independently-optional rules that could all match at once. Likewise
+// INDEXED|LINEAR|NONINDEXED|NUMBERED|ZFS (organization_param).
+//
+// Real DEFINE CLUSTER/DATA/INDEX syntax lets these mutually-exclusive
+// choices appear in any position relative to the other (freely repeatable)
+// parameters -- so `cluster_param*` alone can't enforce "at most one
+// space_choice" (Lark/Earley repetition has no built-in cardinality limit
+// across alternatives). Instead the sequences below are small right-
+// recursive state machines: `cluster_seq_*` tracks "has a space_choice
+// been consumed yet?" x "has an organization choice been consumed yet?"
+// (four states); `data_seq_*`/`index_seq_*` track only the space_choice
+// dimension (DATA/INDEX have no organization choice). Each state only
+// offers a transition into "that choice consumed" once, so a second
+// CYLINDERS/TRACKS/etc. (or a second INDEXED/LINEAR/etc.) on the same
+// command has no valid parse -- a genuine LarkError, not silent last-wins.
+define_cluster: "DEFINE" "CLUSTER" "(" cluster_seq_00 ")" component_clause*
 
 component_clause: data_clause | index_clause
-data_clause:  "DATA"  "(" data_param* ")"
-index_clause: "INDEX" "(" index_param* ")"
+data_clause:  "DATA"  "(" data_seq_0 ")"
+index_clause: "INDEX" "(" index_seq_0 ")"
+
+// state: neither space_choice nor organization_param consumed yet
+cluster_seq_00: cluster_param cluster_seq_00
+              | space_choice cluster_seq_10
+              | organization_param cluster_seq_01
+              |
+// state: space_choice consumed, organization_param not yet
+cluster_seq_10: cluster_param cluster_seq_10
+              | organization_param cluster_seq_11
+              |
+// state: organization_param consumed, space_choice not yet
+cluster_seq_01: cluster_param cluster_seq_01
+              | space_choice cluster_seq_11
+              |
+// state: both consumed -- only the freely-repeatable params remain
+cluster_seq_11: cluster_param cluster_seq_11
+              |
+
+// DATA(...)/INDEX(...) only track the space_choice dimension (no
+// organization choice at the component level).
+data_seq_0: data_param data_seq_0
+          | space_choice data_seq_1
+          |
+data_seq_1: data_param data_seq_1
+          |
+
+index_seq_0: index_param index_seq_0
+           | space_choice index_seq_1
+           |
+index_seq_1: index_param index_seq_1
+           |
 
 cluster_param: name_param
-             | space_param
              | volumes_param
              | account_param
              | bufferspace_param
@@ -68,7 +111,6 @@ cluster_param: name_param
              | file_param
              | freespace_param
              | frlog_param
-             | organization_param
              | keylabel_param
              | keys_param
              | log_param
@@ -94,7 +136,6 @@ cluster_param: name_param
 // DATACLASS, EATTR, FRLOG, organization, KEYLABEL, LOG*, MANAGEMENTCLASS,
 // RECATALOG, RLS*, STORAGECLASS, retention).
 data_param: name_param
-          | space_param
           | volumes_param
           | bufferspace_param
           | cisz_param
@@ -116,7 +157,6 @@ data_param: name_param
 // IndexComponent: strict subset of data_param -- no SPANNED/NONSPANNED,
 // ERASE/NOERASE, BUFFERSPACE, FREESPACE, KEYS, RECORDSIZE, SPEED/RECOVERY.
 index_param: name_param
-           | space_param
            | volumes_param
            | cisz_param
            | exceptionexit_param
@@ -135,7 +175,7 @@ kilobytes_alloc: "KILOBYTES" "(" INT INT? ")"
 megabytes_alloc: "MEGABYTES" "(" INT INT? ")"
 records_alloc:   "RECORDS"   "(" INT INT? ")"
 tracks_alloc:    "TRACKS"    "(" INT INT? ")"
-space_param: cylinders_alloc | kilobytes_alloc | megabytes_alloc | records_alloc | tracks_alloc
+space_choice: cylinders_alloc | kilobytes_alloc | megabytes_alloc | records_alloc | tracks_alloc
 
 volumes_param: "VOLUMES" "(" NAME+ ")"
 

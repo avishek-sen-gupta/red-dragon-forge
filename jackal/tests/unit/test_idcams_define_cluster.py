@@ -626,3 +626,23 @@ def test_define_cluster_multiple_volumes():
         "DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(VOL001 VOL002 VOL003))\n"
     )
     assert cmds[0].volumes == ("VOL001", "VOL002", "VOL003")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_rejects_two_space_allocation_units():
+    """CYLINDERS|KILOBYTES|MEGABYTES|RECORDS|TRACKS is a mutually-exclusive
+    choice -- giving two of them on the same command must be a parse
+    error, not silently keep whichever one appears last."""
+    with pytest.raises(LarkError):
+        parse_ams("DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) TRACKS(2) VOLUMES(V1))\n")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_database_without_keyname_raises():
+    """DATABASE(...) and KEYNAME/KEYNAMEU are a single unit per the IDCAMS
+    manual -- DATABASE with no KEYNAME must not fabricate a DatabaseSpec
+    with a guessed key_name=''."""
+    with pytest.raises(ValueError):
+        parse_ams(
+            "DEFINE CLUSTER (NAME(A.B) DATABASE(JSON) CYLINDERS(1) VOLUMES(V1))\n"
+        )
