@@ -45,3 +45,22 @@ def test_cond_model_and_defaults():
     # Step.conds and Job.cond default to empty
     assert Step(name="X", pgm="P", dds=()).conds == ()
     assert Job(name="J2", steps=()).cond == ()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_step_proc_parms_defaults_empty():
+    step = Step(name="S", pgm="P", dds=())
+    assert step.proc_parms == {}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_proc_def_construction():
+    from jackal.model import ProcDef
+
+    inner = Step(name="PRC001", pgm="IDCAMS", dds=())
+    proc = ProcDef(
+        name="REPROC", defaults={"CNTLLIB": literal("DEFAULT.LIB")}, steps=(inner,)
+    )
+    assert proc.name == "REPROC"
+    assert proc.defaults == {"CNTLLIB": literal("DEFAULT.LIB")}
+    assert proc.steps == (inner,)
