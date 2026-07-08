@@ -38,6 +38,8 @@ from jackal.idcams.ast_delete import Delete
 from jackal.idcams.ast_define_gdg import DefineGenerationDataGroup
 from jackal.idcams.ast_define_nonvsam import DefineNonvsam
 from jackal.idcams.ast_define_path import DefinePath
+from jackal.idcams.ast_export import Export
+from jackal.idcams.ast_import import Import, ImportObject
 from jackal.idcams.ast_listcat import Listcat
 from jackal.idcams.ast_print import Print
 from jackal.idcams.ast_repro import (
@@ -1212,6 +1214,124 @@ class _Build(Transformer):
         )
 
         return Listcat(**fields)
+
+    # -- EXPORT-specific params -----------------------------------------------
+    def export_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def export_cimode_flag(self, c: list) -> tuple:
+        return ("mode", "CIMODE")
+
+    def export_recordmode_flag(self, c: list) -> tuple:
+        return ("mode", "RECORDMODE")
+
+    def inhibitsource_flag(self, c: list) -> tuple:
+        return ("inhibit_source", True)
+
+    def noinhibitsource_flag(self, c: list) -> tuple:
+        return ("inhibit_source", False)
+
+    def inhibittarget_flag(self, c: list) -> tuple:
+        return ("inhibit_target", True)
+
+    def noinhibittarget_flag(self, c: list) -> tuple:
+        return ("inhibit_target", False)
+
+    def export_temporary_flag(self, c: list) -> tuple:
+        return ("temporary", True)
+
+    def export_permanent_flag(self, c: list) -> tuple:
+        return ("temporary", False)
+
+    # -- EXPORT assembly -------------------------------------------------------
+    def export(self, c: list) -> Export:
+        entry_tok, *rest = c
+        items = [item for item in rest if item is not None]
+
+        modes = [value for key, value in items if key == "mode"]
+        if len(modes) > 1:
+            raise ValueError(
+                f"EXPORT: {modes[0]} and {modes[1]} are mutually "
+                "exclusive, both were specified"
+            )
+        temporary_vals = [value for key, value in items if key == "temporary"]
+        if len(temporary_vals) > 1:
+            raise ValueError(
+                "EXPORT: TEMPORARY and PERMANENT are mutually exclusive, "
+                "both were specified"
+            )
+
+        fields = self._fields_dict(items)
+        fields["entry"] = _name(entry_tok)
+
+        self._check_pair_group(
+            fields,
+            "EXPORT",
+            "outfile",
+            "OUTFILE",
+            "outdataset",
+            "OUTDATASET",
+            required=True,
+        )
+
+        return Export(**fields)
+
+    # -- IMPORT-specific params -------------------------------------------------
+    def import_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def alias_flag(self, c: list) -> tuple:
+        return ("alias", True)
+
+    def noalias_flag(self, c: list) -> tuple:
+        return ("alias", False)
+
+    def intoempty_flag(self, c: list) -> tuple:
+        return ("into_empty", True)
+
+    def savrac_flag(self, c: list) -> tuple:
+        return ("save_racf", True)
+
+    def nosavrac_flag(self, c: list) -> tuple:
+        return ("save_racf", False)
+
+    def import_object_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def import_object(self, c: list) -> ImportObject:
+        entry_tok, *param_list = c
+        fields = self._fields_dict(param_list)
+        fields["entry"] = _name(entry_tok)
+        return ImportObject(**fields)
+
+    def objects_param(self, c: list) -> tuple:
+        return ("objects", tuple(c))
+
+    # -- IMPORT assembly ---------------------------------------------------------
+    def import_cmd(self, c: list) -> Import:
+        items = [item for item in c if item is not None]
+        fields = self._fields_dict(items)
+
+        self._check_pair_group(
+            fields,
+            "IMPORT",
+            "infile",
+            "INFILE",
+            "indataset",
+            "INDATASET",
+            required=True,
+        )
+        self._check_pair_group(
+            fields,
+            "IMPORT",
+            "outfile",
+            "OUTFILE",
+            "outdataset",
+            "OUTDATASET",
+            required=True,
+        )
+
+        return Import(**fields)
 
     def command(self, c: list) -> object:
         return c[0]
