@@ -42,6 +42,7 @@ from jackal.idcams.ast_define_path import DefinePath
 from jackal.idcams.ast_export import Export
 from jackal.idcams.ast_import import Import, ImportObject
 from jackal.idcams.ast_listcat import Listcat
+from jackal.idcams.ast_modal import AmsCommand, CancelCommand, IfCommand, SetCommand
 from jackal.idcams.ast_print import Print
 from jackal.idcams.ast_repro import (
     CipherSpec,
@@ -1436,11 +1437,99 @@ class _Build(Transformer):
     def command(self, c: list) -> object:
         return c[0]
 
+    # -- MODAL COMMANDS (Task 11): IF/THEN/ELSE/DO/END, SET, CANCEL --------
+    def maxcc_field(self, c: list) -> str:
+        return "MAXCC"
+
+    def lastcc_field(self, c: list) -> str:
+        return "LASTCC"
+
+    def op_eq(self, c: list) -> str:
+        return "EQ"
+
+    def op_ne(self, c: list) -> str:
+        return "NE"
+
+    def op_gt(self, c: list) -> str:
+        return "GT"
+
+    def op_lt(self, c: list) -> str:
+        return "LT"
+
+    def op_ge(self, c: list) -> str:
+        return "GE"
+
+    def op_le(self, c: list) -> str:
+        return "LE"
+
+    def clause_single(self, c: list) -> tuple:
+        return (c[0],)
+
+    def clause_do(self, c: list) -> tuple:
+        return tuple(c)
+
+    def clause_null(self, c: list) -> tuple:
+        return ()
+
+    @staticmethod
+    def _if_nesting_depth(cmd: object) -> int:
+        """Depth of the deepest IF nested (directly or transitively) inside
+        `cmd`'s THEN/ELSE clauses, plus one for `cmd` itself if it is an
+        IfCommand -- 0 for any non-modal command. Used to enforce the IBM
+        manual's 10-level nesting cap in the transformer (see if_command's
+        grammar comment in ams.lark for why this can't be a grammar-level
+        check)."""
+        if not isinstance(cmd, IfCommand):
+            return 0
+        children = cmd.then + (cmd.else_ or ())
+        return 1 + max((_Build._if_nesting_depth(ch) for ch in children), default=0)
+
+    def _build_if(
+        self,
+        field: str,
+        op: str,
+        value_tok: Token,
+        then_clause: tuple,
+        else_clause: tuple | None,
+    ) -> IfCommand:
+        cmd = IfCommand(
+            field=field,
+            op=op,
+            value=_int(value_tok),
+            then=then_clause,
+            else_=else_clause,
+        )
+        depth = self._if_nesting_depth(cmd)
+        if depth > 10:
+            raise ValueError(
+                f"IF: nesting exceeds the IDCAMS manual's maximum depth of "
+                f"10 levels (got {depth})"
+            )
+        return cmd
+
+    def if_with_else(self, c: list) -> IfCommand:
+        field, op, value_tok, then_clause, else_clause = c
+        return self._build_if(field, op, value_tok, then_clause, else_clause)
+
+    def if_without_else(self, c: list) -> IfCommand:
+        field, op, value_tok, then_clause = c
+        return self._build_if(field, op, value_tok, then_clause, None)
+
+    def modal_command(self, c: list) -> IfCommand:
+        return c[0]
+
+    def set_command(self, c: list) -> SetCommand:
+        field, value_tok = c
+        return SetCommand(field=field, value=_int(value_tok))
+
+    def cancel_command(self, c: list) -> CancelCommand:
+        return CancelCommand()
+
 
 _PARSER = Lark.open(_GRAMMAR_PATH, start="start", parser="earley")
 
 
-def parse_ams(text: str) -> tuple[object, ...]:
+def parse_ams(text: str) -> tuple[AmsCommand, ...]:
     """Parse comprehensive-grammar IDCAMS control statements.
 
     Applies the "+" mid-token continuation preprocessing pass first (the
