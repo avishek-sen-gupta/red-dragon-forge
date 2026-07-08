@@ -83,4 +83,6 @@ fileignoreconfig:
   checksum: 9cbfd4ea0c9f7342ae550466d60b15a518c7d76fae3cee29b084398432b13210
 - filename: jackal/docs/superpowers/specs/2026-07-08-idcams-comprehensive-grammar-design.md
   checksum: f7e42ba1922031ab4bca18355346e3a3ca89234523d3bc27e4edc0b7903ee276
+- filename: jackal/docs/superpowers/plans/2026-07-08-idcams-comprehensive-grammar.md
+  checksum: 45a01a150cb3de9aca89db81941c17759b8a0eaff1ca8c55b78a5012d082f177
 version: "1.0"
