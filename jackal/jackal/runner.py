@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
 from jackal.cond import should_bypass
 from jackal.dsn import BackwardRef, DirectDSN, TempRef
+from jackal.jcl.proc_expand import expand_procs
 from jackal.model import DD, Job, Step
 from jackal.results import JobResult, StepDisposition, StepResult
 from jackal.utilities import UTILITIES
@@ -21,11 +23,13 @@ class JobRunner:
         bridge_jar: str,
         data_dir: Path,
         copybook_dir: Path,
+        proclib_dirs: Sequence[Path] = (),
     ):
         self._source_dir = source_dir
         self._bridge_jar = bridge_jar
         self._data_dir = data_dir
         self._copybook_dir = copybook_dir
+        self._proclib_dirs = proclib_dirs
 
     def run(self, job: Job, workdir: Path, seeds: dict[str, Path]) -> JobResult:
         catalog = DatasetCatalog(workdir=workdir, data_dir=self._data_dir)
@@ -35,6 +39,8 @@ class JobRunner:
 
     def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
         """Run a job against a pre-built catalog, honoring COND= and backward refs."""
+        if self._proclib_dirs:
+            job = expand_procs(job, self._proclib_dirs)
         executed: list[StepResult] = []
         results: list[StepResult] = []
         resolved_dds: dict[str, dict[str, DirectDSN]] = {}
