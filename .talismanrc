@@ -81,4 +81,6 @@ fileignoreconfig:
   checksum: e0cd1f9516a89c02dd040fc22a64cea479893d918c17a1db2697ea4fb230e7d1
 - filename: jackal/tests/unit/test_idcams_parser.py
   checksum: 9cbfd4ea0c9f7342ae550466d60b15a518c7d76fae3cee29b084398432b13210
+- filename: jackal/docs/superpowers/specs/2026-07-08-idcams-comprehensive-grammar-design.md
+  checksum: f7e42ba1922031ab4bca18355346e3a3ca89234523d3bc27e4edc0b7903ee276
 version: "1.0"
