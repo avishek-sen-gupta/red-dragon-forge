@@ -99,21 +99,25 @@ def _job_to_graph(
 
 def _step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
     """Map each expanded step's uppercased name to the PROC name it came
-    from. A step whose (uppercased) name matches an outer step's own name
-    exactly wasn't expanded (no dot added) — everything else with a dot in
-    its name that isn't in the original job is PROC-sourced, and the PROC
-    name is the part before the first dot's corresponding original step's
-    pgm."""
-    original_by_name = {s.name.upper(): s for s in job.steps}
+    from. expand_procs() replaces each outer step, in place, with either
+    itself unchanged or a contiguous run of qualified "OUTERNAME.INNERNAME"
+    inner steps — so a single left-to-right walk of both step lists in
+    lockstep attributes each expanded step to its true originating outer
+    step, even when two outer steps share the same literal name (as
+    real CardDemo JCL does — see forge-c53). A name-keyed lookup would
+    silently pick whichever same-named outer step happened to be last."""
     provenance: dict[str, str] = {}
-    for step in expanded_job.steps:
-        name = step.name.upper()
-        if name in original_by_name:
-            continue  # unexpanded, ordinary step
-        outer_name = name.split(".", 1)[0]
-        outer_step = original_by_name.get(outer_name)
-        if outer_step is not None:
-            provenance[name] = outer_step.pgm.upper()
+    expanded_iter = iter(expanded_job.steps)
+    pending = next(expanded_iter, None)
+    for outer_step in job.steps:
+        outer_name = outer_step.name.upper()
+        if pending is not None and pending.name.upper() == outer_name:
+            pending = next(expanded_iter, None)  # unexpanded, ordinary step
+            continue
+        prefix = f"{outer_name}."
+        while pending is not None and pending.name.upper().startswith(prefix):
+            provenance[pending.name.upper()] = outer_step.pgm.upper()
+            pending = next(expanded_iter, None)
     return provenance
 
 
