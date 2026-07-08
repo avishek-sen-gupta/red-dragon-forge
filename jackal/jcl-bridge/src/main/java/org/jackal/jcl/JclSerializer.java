@@ -138,6 +138,10 @@ public final class JclSerializer {
             // execJCL can appear multiple times but we handle only the first job
             JCLParser.ExecJCLContext execJCL = findChild(jcl, JCLParser.ExecJCLContext.class);
             if (execJCL == null) {
+                JCLParser.ProcJCLContext procJCL = findChild(jcl, JCLParser.ProcJCLContext.class);
+                if (procJCL != null) {
+                    return buildProcJCL(procJCL);
+                }
                 job.addProperty("name", "");
                 job.add("steps", new JsonArray());
                 return job;
@@ -173,6 +177,62 @@ public final class JclSerializer {
             }
             job.add("steps", steps);
             return job;
+        }
+
+        /**
+         * Build the JSON for a bare PROC document (a .prc file: //NAME PROC
+         * ... // PEND, no JOB card) — the grammar's procJCL alternative,
+         * previously unhandled (build() fell through to the empty-job
+         * fallback for it). Reuses buildStep for its steps, identically to
+         * execJCL's own step handling.
+         */
+        private JsonObject buildProcJCL(JCLParser.ProcJCLContext ctx) {
+            JsonObject proc = new JsonObject();
+
+            JCLParser.ProcStatementContext procStmt =
+                    findChild(ctx, JCLParser.ProcStatementContext.class);
+            String procName = "";
+            JsonObject defaults = new JsonObject();
+            if (procStmt != null) {
+                JCLParser.ProcNameContext nameCtx =
+                        findChild(procStmt, JCLParser.ProcNameContext.class);
+                if (nameCtx != null) {
+                    procName = nameCtx.getText();
+                }
+                List<JCLParser.DefineSymbolicParameterContext> defs = new ArrayList<>();
+                collectAll(procStmt, JCLParser.DefineSymbolicParameterContext.class, defs);
+                for (JCLParser.DefineSymbolicParameterContext d : defs) {
+                    String paramName = null;
+                    JCLParser.KeywordOrSymbolicContext valueCtx = null;
+                    for (int i = 0; i < d.getChildCount(); i++) {
+                        ParseTree child = d.getChild(i);
+                        if (child instanceof TerminalNode
+                                && ((TerminalNode) child).getSymbol().getType()
+                                        == JCLLexer.PROC_PARM_NAME) {
+                            paramName = child.getText();
+                        } else if (child instanceof JCLParser.KeywordOrSymbolicContext) {
+                            valueCtx = (JCLParser.KeywordOrSymbolicContext) child;
+                        }
+                    }
+                    if (paramName != null) {
+                        defaults.add(
+                                paramName,
+                                valueCtx != null ? buildValueParts(valueCtx) : new JsonArray());
+                    }
+                }
+            }
+            proc.addProperty("name", procName);
+            proc.add("defaults", defaults);
+
+            JsonArray steps = new JsonArray();
+            for (int i = 0; i < ctx.getChildCount(); i++) {
+                ParseTree child = ctx.getChild(i);
+                if (child instanceof JCLParser.JclStepContext) {
+                    steps.add(buildStep((JCLParser.JclStepContext) child));
+                }
+            }
+            proc.add("steps", steps);
+            return proc;
         }
 
         private JsonObject buildStep(JCLParser.JclStepContext ctx) {
@@ -234,6 +294,39 @@ public final class JclSerializer {
                 }
             }
             step.add("parm", parmParts);
+
+            // PROC parm overrides (EXEC PROC=NAME,SYM=val,...) — execProcParm
+            // children of execProcStatement, empty object for an ordinary
+            // EXEC PGM= step or a PROC call with no overrides.
+            JsonObject procParms = new JsonObject();
+            if (execStmt != null) {
+                JCLParser.ExecProcStatementContext procStmtCtx =
+                        findChild(execStmt, JCLParser.ExecProcStatementContext.class);
+                if (procStmtCtx != null) {
+                    List<JCLParser.ExecProcParmContext> overrides = new ArrayList<>();
+                    collectAll(procStmtCtx, JCLParser.ExecProcParmContext.class, overrides);
+                    for (JCLParser.ExecProcParmContext o : overrides) {
+                        String paramName = null;
+                        JCLParser.KeywordOrSymbolicContext valueCtx = null;
+                        for (int i = 0; i < o.getChildCount(); i++) {
+                            ParseTree child = o.getChild(i);
+                            if (child instanceof TerminalNode
+                                    && ((TerminalNode) child).getSymbol().getType()
+                                            == JCLLexer.EXEC_PROC_PARM) {
+                                paramName = child.getText();
+                            } else if (child instanceof JCLParser.KeywordOrSymbolicContext) {
+                                valueCtx = (JCLParser.KeywordOrSymbolicContext) child;
+                            }
+                        }
+                        if (paramName != null) {
+                            procParms.add(
+                                    paramName,
+                                    valueCtx != null ? buildValueParts(valueCtx) : new JsonArray());
+                        }
+                    }
+                }
+            }
+            step.add("proc_parms", procParms);
 
             // DD statements — ddStatementAmalgamation children of jclStep
             JsonArray dds = new JsonArray();
