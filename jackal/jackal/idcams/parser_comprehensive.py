@@ -33,6 +33,9 @@ from jackal.idcams.ast_define_cluster import (
     DefineCluster,
     IndexComponent,
 )
+from jackal.idcams.ast_define_gdg import DefineGenerationDataGroup
+from jackal.idcams.ast_define_nonvsam import DefineNonvsam
+from jackal.idcams.ast_define_path import DefinePath
 from jackal.idcams.ast_values import Name, Retention, SpaceAllocation
 from jackal.idcams.preprocess import join_plus_continuations
 
@@ -279,6 +282,63 @@ class _Build(Transformer):
     def noupgrade_flag(self, c: list) -> tuple:
         return ("upgrade", False)
 
+    # -- DEFINE GENERATIONDATAGROUP-specific params ---------------------
+    def limit_param(self, c: list) -> tuple:
+        return ("limit", _int(c[0]))
+
+    def empty_flag(self, c: list) -> tuple:
+        return ("empty", True)
+
+    def noempty_flag(self, c: list) -> tuple:
+        return ("empty", False)
+
+    def extended_flag(self, c: list) -> tuple:
+        return ("extended", True)
+
+    def noextended_flag(self, c: list) -> tuple:
+        return ("extended", False)
+
+    def gdgorder_param(self, c: list) -> tuple:
+        return ("order", str(c[0]))
+
+    def purge_flag(self, c: list) -> tuple:
+        return ("purge", True)
+
+    def nopurge_flag(self, c: list) -> tuple:
+        return ("purge", False)
+
+    def scratch_flag(self, c: list) -> tuple:
+        return ("scratch", True)
+
+    def noscratch_flag(self, c: list) -> tuple:
+        return ("scratch", False)
+
+    # -- DEFINE NONVSAM-specific params ----------------------------------
+    def devicetypes_param(self, c: list) -> tuple:
+        return ("device_types", tuple(str(t) for t in c))
+
+    def nonvsam_volume_item(self, c: list) -> object:
+        return c[0]
+
+    def nonvsam_volumes_param(self, c: list) -> tuple:
+        return ("volumes", tuple(str(t) for t in c))
+
+    def collection_flag(self, c: list) -> tuple:
+        return ("collection", True)
+
+    def filesequencenumbers_param(self, c: list) -> tuple:
+        return ("file_sequence_numbers", tuple(_int(t) for t in c))
+
+    # -- DEFINE PATH-specific params --------------------------------------
+    def pathentry_param(self, c: list) -> tuple:
+        return ("path_entry", _name(c[0]))
+
+    def update_flag(self, c: list) -> tuple:
+        return ("update", True)
+
+    def noupdate_flag(self, c: list) -> tuple:
+        return ("update", False)
+
     # -- param dispatch (single-alternative pass-through wrappers) -----
     def cluster_param(self, c: list) -> tuple | None:
         return c[0]
@@ -296,6 +356,15 @@ class _Build(Transformer):
         return c[0]
 
     def aixindex_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def gdg_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def nonvsam_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def path_param(self, c: list) -> tuple | None:
         return c[0]
 
     # -- mutually-exclusive-choice state machines (see ams.lark's
@@ -459,6 +528,26 @@ class _Build(Transformer):
                 key_name_is_utf8=is_utf8,
             )
         return DefineCluster(**fields)
+
+    # -- DEFINE GENERATIONDATAGROUP / NONVSAM / PATH assembly -------------
+    @staticmethod
+    def _fields_dict(param_list: list) -> dict[str, object]:
+        fields: dict[str, object] = {}
+        for item in param_list:
+            if item is None:
+                continue
+            key, value = item
+            fields[key] = value
+        return fields
+
+    def define_gdg(self, c: list) -> DefineGenerationDataGroup:
+        return DefineGenerationDataGroup(**self._fields_dict(c))
+
+    def define_nonvsam(self, c: list) -> DefineNonvsam:
+        return DefineNonvsam(**self._fields_dict(c))
+
+    def define_path(self, c: list) -> DefinePath:
+        return DefinePath(**self._fields_dict(c))
 
     def command(self, c: list) -> object:
         return c[0]
