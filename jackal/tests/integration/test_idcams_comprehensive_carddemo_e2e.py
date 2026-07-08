@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import lark.exceptions
 import pytest
 
 from jackal.idcams.parser_comprehensive import parse_ams
@@ -63,7 +64,7 @@ def test_real_idcams_sysin_parses_with_comprehensive_grammar(
                     # abbreviations (CISZ for CONTROLINTERVALSIZE) are not
                     # part of this grammar's scope. Confirm it fails for
                     # exactly that reason rather than silently skipping it.
-                    with pytest.raises(Exception):
+                    with pytest.raises(lark.exceptions.UnexpectedCharacters):
                         parse_ams(text)
                     continue
                 parse_ams(text)  # must not raise
