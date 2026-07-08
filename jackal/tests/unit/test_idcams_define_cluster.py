@@ -225,6 +225,14 @@ def test_define_cluster_space_allocation_tracks():
     assert cmds[0].space == SpaceAllocation(unit="TRACKS", primary=5, secondary=None)
 
 
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_space_allocation_tracks_comma_separated():
+    # Real-corpus regression (ESDSRRDS.jcl/DUSRSECJ.jcl use "TRACKS(45,15)"):
+    # the AMS manual allows comma or blank as the subparameter separator.
+    cmds = parse_ams("DEFINE CLUSTER (NAME(A.B) TRACKS(45,15) VOLUMES(V1))\n")
+    assert cmds[0].space == SpaceAllocation(unit="TRACKS", primary=45, secondary=15)
+
+
 # --- Step 6: remaining optional parameters -----------------------------
 
 
@@ -337,6 +345,16 @@ def test_define_cluster_freespace():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_freespace_comma_separated():
+    # Real-corpus regression (DUSRSECJ.jcl/ESDSRRDS.jcl/XREFFILE.jcl use
+    # "FREESPACE(10,15)"): comma is an alternate subparameter separator.
+    cmds = parse_ams(
+        "DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(V1) FREESPACE(10,20))\n"
+    )
+    assert cmds[0].freespace == (10, 20)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_define_cluster_frlog():
     cmds = parse_ams(
         "DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(V1) FRLOG(REDO))\n"
@@ -355,6 +373,15 @@ def test_define_cluster_keylabel():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_define_cluster_keys():
     cmds = parse_ams("DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(V1) KEYS(16 0))\n")
+    assert cmds[0].keys == (16, 0)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_keys_comma_separated():
+    # Regression for forge-2zs: real CardDemo jobs (DUSRSECJ.jcl "KEYS(8,0)",
+    # XREFFILE.jcl "KEYS(11,25)") use a comma between the two KEYS
+    # subparameters instead of a blank; the AMS manual allows either.
+    cmds = parse_ams("DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(V1) KEYS(16,0))\n")
     assert cmds[0].keys == (16, 0)
 
 
@@ -438,6 +465,17 @@ def test_define_cluster_norecatalog():
 def test_define_cluster_recordsize():
     cmds = parse_ams(
         "DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(V1) RECORDSIZE(150 150))\n"
+    )
+    assert cmds[0].record_size == (150, 150)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_cluster_recordsize_comma_separated():
+    # Regression for forge-2zs: real CardDemo jobs (DUSRSECJ.jcl/ESDSRRDS.jcl
+    # "RECORDSIZE(80,80)", CARDFILE.jcl "RECORDSIZE(150,150)") use a comma
+    # between the two RECORDSIZE subparameters instead of a blank.
+    cmds = parse_ams(
+        "DEFINE CLUSTER (NAME(A.B) CYLINDERS(1) VOLUMES(V1) RECORDSIZE(150,150))\n"
     )
     assert cmds[0].record_size == (150, 150)
 
