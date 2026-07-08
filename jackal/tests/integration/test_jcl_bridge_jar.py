@@ -1,5 +1,5 @@
 from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DirectDSN
+from jackal.dsn import DirectDSN, TempRef
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.value_parts import Literal, Symbol, literal
 
@@ -41,6 +41,16 @@ def test_real_jar_parses_symbolic_dsn(jcl_bridge_jar):
     assert job.steps[0].dds[0].dsn == DirectDSN(
         (Symbol("CNTLLIB"), Literal("(REPROCT)"))
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_temp_dsn_as_literal_not_symbol(jcl_bridge_jar):
+    # &&TEMP is a doubled-ampersand temp-dataset marker, not a &SYMBOL
+    # reference — KEYWORD_VALUE's dedicated temp-file-name alternative must
+    # win the lexer tie over SYMBOLIC, or this would misclassify as a Symbol.
+    jcl = "//J JOB 1\n//STEP1 EXEC PGM=IEFBR14\n//W DD DSN=&&TEMP,DISP=(NEW,PASS)\n"
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    assert job.steps[0].dds[0].dsn == TempRef("&&TEMP")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
