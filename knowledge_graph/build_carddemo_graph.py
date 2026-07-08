@@ -96,10 +96,11 @@ def _dedupe_edges(edges: list) -> list:
 def _build_jcl_graph(failures: list[str]) -> tuple[list, list]:
     all_nodes, all_edges = [], []
     jcl_dir = _CARDDEMO_HOME / "jcl"
+    proclib_dirs = [_CARDDEMO_HOME / "proc"]
     jcl_files = sorted(jcl_dir.glob("*.jcl")) + sorted(jcl_dir.glob("*.JCL"))
     for path in jcl_files:
         try:
-            nodes, edges = extract_jcl_graph(path.read_text())
+            nodes, edges = extract_jcl_graph(path.read_text(), proclib_dirs=proclib_dirs)
         except Exception as exc:  # noqa: BLE001 — one bad job must not abort the run
             failures.append(f"JCL {path.name}: {exc}")
             continue
