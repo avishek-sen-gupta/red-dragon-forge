@@ -20,6 +20,7 @@ from __future__ import annotations
 from importlib.resources import files
 
 from lark import Lark, Token, Transformer
+from lark.exceptions import VisitError
 
 from jackal.idcams.ast_define_cluster import (
     DatabaseSpec,
@@ -68,7 +69,7 @@ class _Build(Transformer):
     def tracks_alloc(self, c: list) -> SpaceAllocation:
         return self._space("TRACKS", c)
 
-    def space_param(self, c: list) -> tuple:
+    def space_choice(self, c: list) -> tuple:
         return ("space", c[0])
 
     # -- simple keyword(value) params, one (key, value) tuple each -----
@@ -224,10 +225,47 @@ class _Build(Transformer):
     def index_param(self, c: list) -> tuple | None:
         return c[0]
 
+    # -- mutually-exclusive-choice state machines (see ams.lark's
+    # cluster_seq_*/data_seq_*/index_seq_* comment): each of these
+    # right-recursive rules has either 0 children (the empty/base-case
+    # alternative) or exactly 2 (the consumed item, then the tail of the
+    # sequence) -- flatten them back into the same flat list shape that
+    # cluster_param*/data_param*/index_param* used to produce directly.
+    @staticmethod
+    def _flatten_seq(c: list) -> list:
+        if not c:
+            return []
+        head, tail = c
+        return [head, *tail]
+
+    def cluster_seq_00(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def cluster_seq_10(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def cluster_seq_01(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def cluster_seq_11(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def data_seq_0(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def data_seq_1(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def index_seq_0(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def index_seq_1(self, c: list) -> list:
+        return self._flatten_seq(c)
+
     # -- DATA(...) / INDEX(...) trailers --------------------------------
     def data_clause(self, c: list) -> DataComponent:
         fields: dict[str, object] = {}
-        for item in c:
+        for item in c[0]:
             if item is None:
                 continue
             key, value = item
@@ -236,7 +274,7 @@ class _Build(Transformer):
 
     def index_clause(self, c: list) -> IndexComponent:
         fields: dict[str, object] = {}
-        for item in c:
+        for item in c[0]:
             if item is None:
                 continue
             key, value = item
@@ -248,17 +286,12 @@ class _Build(Transformer):
 
     # -- DEFINE CLUSTER assembly -----------------------------------------
     def define_cluster(self, c: list) -> DefineCluster:
+        param_list, *components = c
         fields: dict[str, object] = {}
         database_format: str | None = None
         database_key: tuple[str, bool] | None = None
-        for item in c:
+        for item in param_list:
             if item is None:
-                continue
-            if isinstance(item, DataComponent):
-                fields["data"] = item
-                continue
-            if isinstance(item, IndexComponent):
-                fields["index"] = item
                 continue
             key, value = item
             if key == "database_format":
@@ -268,10 +301,25 @@ class _Build(Transformer):
                 database_key = value
                 continue
             fields[key] = value
+        for component in components:
+            if isinstance(component, DataComponent):
+                fields["data"] = component
+            elif isinstance(component, IndexComponent):
+                fields["index"] = component
         if database_format is not None or database_key is not None:
-            key_name, is_utf8 = database_key if database_key else ("", False)
+            if database_format is None or database_key is None:
+                # DATABASE(...) and its KEYNAME/KEYNAMEU are a single unit
+                # per the IDCAMS manual -- fabricating a fake key_name=""
+                # or a guessed format="JSON" when only one half is present
+                # would silently hide a malformed control statement.
+                raise ValueError(
+                    "DEFINE CLUSTER: DATABASE(...) requires KEYNAME(...) or "
+                    "KEYNAMEU(...) (and vice versa) -- they must both be "
+                    "specified together"
+                )
+            key_name, is_utf8 = database_key
             fields["database"] = DatabaseSpec(
-                format=database_format or "JSON",
+                format=database_format,
                 key_name=key_name,
                 key_name_is_utf8=is_utf8,
             )
@@ -297,5 +345,13 @@ def parse_ams(text: str) -> tuple[object, ...]:
     if not src.endswith("\n"):
         src += "\n"
     tree = _PARSER.parse(src)
-    result = _Build().transform(tree)
+    try:
+        result = _Build().transform(tree)
+    except VisitError as exc:
+        # Lark wraps any exception raised inside a Transformer callback
+        # (e.g. the ValueError DatabaseSpec construction raises when
+        # DATABASE(...) and KEYNAME/KEYNAMEU don't co-occur) in its own
+        # VisitError. Re-raise the original so callers see the real
+        # exception type instead of a Lark-internal wrapper.
+        raise exc.orig_exc from exc
     return tuple(result.children)
