@@ -9,10 +9,10 @@ Tasks 2-11 of the IDCAMS comprehensive-grammar plan.
 Return type note for future tasks: `AmsCommand` (the full union across all
 14 IDCAMS commands) is not defined until Task 11. Until then, parse_ams
 returns `tuple[object, ...]` -- in practice a tuple of whichever typed
-dataclasses the grammar built so far (today: DefineCluster only). Task 11
-should tighten this to `tuple[AmsCommand, ...]` once the union exists, and
-extend `_Build` with each new command's rule callbacks along the way --
-this module is meant to be extended in place, not recreated.
+dataclasses the grammar built so far (today: DefineCluster, DefineAlternateIndex).
+Task 11 should tighten this to `tuple[AmsCommand, ...]` once the union
+exists, and extend `_Build` with each new command's rule callbacks along
+the way -- this module is meant to be extended in place, not recreated.
 """
 
 from __future__ import annotations
@@ -22,6 +22,11 @@ from importlib.resources import files
 from lark import Lark, Token, Transformer
 from lark.exceptions import VisitError
 
+from jackal.idcams.ast_define_alternateindex import (
+    AixDataComponent,
+    AixIndexComponent,
+    DefineAlternateIndex,
+)
 from jackal.idcams.ast_define_cluster import (
     DatabaseSpec,
     DataComponent,
@@ -40,6 +45,11 @@ def _int(tok: Token) -> int:
 
 def _name(tok: Token) -> Name:
     return Name.parse(str(tok))
+
+
+def _dequote(tok: Token) -> str:
+    """Strip surrounding quotes and de-escape '' -> ' from a QUOTED_STRING token."""
+    return str(tok)[1:-1].replace("''", "'")
 
 
 class _Build(Transformer):
@@ -215,6 +225,60 @@ class _Build(Transformer):
     def obsolete_ignored(self, c: list) -> None:
         return None
 
+    # -- DEFINE ALTERNATEINDEX-specific params --------------------------
+    def relate_param(self, c: list) -> tuple:
+        return ("relate", _name(c[0]))
+
+    def altkey_entry(self, c: list) -> tuple:
+        return (str(c[0]), str(c[1]))
+
+    def altkeys_param(self, c: list) -> tuple:
+        return ("alt_keys", tuple(c))
+
+    def altkeysu_param(self, c: list) -> tuple:
+        return ("alt_keys_utf8", tuple(c))
+
+    def altkey_choice(self, c: list) -> tuple:
+        return c[0]
+
+    def attempts_param(self, c: list) -> tuple:
+        return ("attempts", _int(c[0]))
+
+    def authorization_param(self, c: list) -> tuple:
+        module = str(c[0])
+        parm = _dequote(c[1]) if len(c) > 1 else None
+        return ("authorization", (module, parm))
+
+    def code_param(self, c: list) -> tuple:
+        return ("code", str(c[0]))
+
+    def imbed_flag(self, c: list) -> tuple:
+        return ("imbed", True)
+
+    def noimbed_flag(self, c: list) -> tuple:
+        return ("imbed", False)
+
+    def keyranges_ignored(self, c: list) -> tuple:
+        return ("key_ranges_ignored", True)
+
+    def order_ignored_flag(self, c: list) -> tuple:
+        return ("order_ignored", True)
+
+    def replicate_ignored_flag(self, c: list) -> tuple:
+        return ("replicate_ignored", True)
+
+    def uniquekey_flag(self, c: list) -> tuple:
+        return ("unique_key", True)
+
+    def nonuniquekey_flag(self, c: list) -> tuple:
+        return ("unique_key", False)
+
+    def upgrade_flag(self, c: list) -> tuple:
+        return ("upgrade", True)
+
+    def noupgrade_flag(self, c: list) -> tuple:
+        return ("upgrade", False)
+
     # -- param dispatch (single-alternative pass-through wrappers) -----
     def cluster_param(self, c: list) -> tuple | None:
         return c[0]
@@ -223,6 +287,15 @@ class _Build(Transformer):
         return c[0]
 
     def index_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def aix_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def aixdata_param(self, c: list) -> tuple | None:
+        return c[0]
+
+    def aixindex_param(self, c: list) -> tuple | None:
         return c[0]
 
     # -- mutually-exclusive-choice state machines (see ams.lark's
@@ -262,6 +335,30 @@ class _Build(Transformer):
     def index_seq_1(self, c: list) -> list:
         return self._flatten_seq(c)
 
+    def aix_seq_00(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aix_seq_10(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aix_seq_01(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aix_seq_11(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aixdata_seq_0(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aixdata_seq_1(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aixindex_seq_0(self, c: list) -> list:
+        return self._flatten_seq(c)
+
+    def aixindex_seq_1(self, c: list) -> list:
+        return self._flatten_seq(c)
+
     # -- DATA(...) / INDEX(...) trailers --------------------------------
     def data_clause(self, c: list) -> DataComponent:
         fields: dict[str, object] = {}
@@ -283,6 +380,44 @@ class _Build(Transformer):
 
     def component_clause(self, c: list) -> object:
         return c[0]
+
+    # -- DEFINE ALTERNATEINDEX DATA(...) / INDEX(...) trailers ----------
+    def aixdata_clause(self, c: list) -> AixDataComponent:
+        fields: dict[str, object] = {}
+        for item in c[0]:
+            if item is None:
+                continue
+            key, value = item
+            fields[key] = value
+        return AixDataComponent(**fields)
+
+    def aixindex_clause(self, c: list) -> AixIndexComponent:
+        fields: dict[str, object] = {}
+        for item in c[0]:
+            if item is None:
+                continue
+            key, value = item
+            fields[key] = value
+        return AixIndexComponent(**fields)
+
+    def aix_component_clause(self, c: list) -> object:
+        return c[0]
+
+    # -- DEFINE ALTERNATEINDEX assembly -----------------------------------
+    def define_alternateindex(self, c: list) -> DefineAlternateIndex:
+        param_list, *components = c
+        fields: dict[str, object] = {}
+        for item in param_list:
+            if item is None:
+                continue
+            key, value = item
+            fields[key] = value
+        for component in components:
+            if isinstance(component, AixDataComponent):
+                fields["data"] = component
+            elif isinstance(component, AixIndexComponent):
+                fields["index"] = component
+        return DefineAlternateIndex(**fields)
 
     # -- DEFINE CLUSTER assembly -----------------------------------------
     def define_cluster(self, c: list) -> DefineCluster:

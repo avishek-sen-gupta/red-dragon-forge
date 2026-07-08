@@ -87,10 +87,14 @@ fileignoreconfig:
   checksum: 45a01a150cb3de9aca89db81941c17759b8a0eaff1ca8c55b78a5012d082f177
 - filename: jackal/jackal/idcams/ast_define_cluster.py
   checksum: aeb9c3dacba80bd7a75598e64c5cc738d07bad6fc6dbf54cba86e4baf68d8843
-- filename: jackal/jackal/idcams/grammar/ams.lark
-  checksum: dd217b68482e1cd9b0b375238bf10b07a11293b4b9c854dcd0ef054a421a2ffc
-- filename: jackal/jackal/idcams/parser_comprehensive.py
-  checksum: 8f0f0b89031b1d00c41f9f90b3e1a77583414f84cfbef646f173182da35c6920
 - filename: jackal/tests/unit/test_idcams_define_cluster.py
   checksum: 7b434cf4404aa53a65724867a26c15ece77796a24aecf49ebcb61817f18c6a5c
+- filename: jackal/jackal/idcams/parser_comprehensive.py
+  checksum: 534c0be98f08dd9f69bfda39b2f624f3764d1559700f7a88f549076b8224213b
+- filename: jackal/jackal/idcams/grammar/ams.lark
+  checksum: 26724ae43345110793139d2d4648133adf8897deffd7d4e9be3d2af77215e6b6
+- filename: jackal/jackal/idcams/ast_define_alternateindex.py
+  checksum: 217ec63f392190dd81cb24a806ac2f5b09a3e6f0c8e16c943136b7a714392382
+- filename: jackal/tests/unit/test_idcams_define_alternateindex.py
+  checksum: 44812647e307ac543349972e20580ad203d83f218e92d2feb8ac0a98608b27bd
 version: "1.0"
