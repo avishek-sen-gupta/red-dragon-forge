@@ -172,11 +172,11 @@ index_param: name_param
 
 name_param: "NAME" "(" NAME ")"
 
-cylinders_alloc: "CYLINDERS" "(" INT INT? ")"
-kilobytes_alloc: "KILOBYTES" "(" INT INT? ")"
-megabytes_alloc: "MEGABYTES" "(" INT INT? ")"
-records_alloc:   "RECORDS"   "(" INT INT? ")"
-tracks_alloc:    "TRACKS"    "(" INT INT? ")"
+cylinders_alloc: "CYLINDERS" "(" INT (","? INT)? ")"
+kilobytes_alloc: "KILOBYTES" "(" INT (","? INT)? ")"
+megabytes_alloc: "MEGABYTES" "(" INT (","? INT)? ")"
+records_alloc:   "RECORDS"   "(" INT (","? INT)? ")"
+tracks_alloc:    "TRACKS"    "(" INT (","? INT)? ")"
 space_choice: cylinders_alloc | kilobytes_alloc | megabytes_alloc | records_alloc | tracks_alloc
 
 volumes_param: "VOLUMES" "(" NAME+ ")"
@@ -195,11 +195,11 @@ erase_param:         "ERASE" -> erase_flag
                     | "NOERASE" -> noerase_flag
 exceptionexit_param: "EXCEPTIONEXIT" "(" NAME ")"
 file_param:          "FILE" "(" NAME ")"
-freespace_param:     "FREESPACE" "(" INT INT ")"
+freespace_param:     "FREESPACE" "(" INT ","? INT ")"
 frlog_param:         "FRLOG" "(" FRLOG_VALUE ")"
 organization_param:  ORG_VALUE
 keylabel_param:      "KEYLABEL" "(" NAME ")"
-keys_param:          "KEYS" "(" INT INT ")"
+keys_param:          "KEYS" "(" INT ","? INT ")"
 log_param:           "LOG" "(" LOG_VALUE ")"
 logreplicate_param:  "LOGREPLICATE" -> logreplicate_flag
                     | "NOLOGREPLICATE" -> nologreplicate_flag
@@ -209,7 +209,7 @@ model_param:         "MODEL" "(" NAME NAME? ")"
 owner_param:         "OWNER" "(" NAME ")"
 recatalog_param:     "RECATALOG" -> recatalog_flag
                     | "NORECATALOG" -> norecatalog_flag
-recordsize_param:    "RECORDSIZE" "(" INT INT ")"
+recordsize_param:    "RECORDSIZE" "(" INT ","? INT ")"
 reuse_param:         "REUSE" -> reuse_flag
                     | "NOREUSE" -> noreuse_flag
 rls_param:           "RLSQUIESCE" -> rlsquiesce_flag
