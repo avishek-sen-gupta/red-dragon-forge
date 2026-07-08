@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
+from jackal.value_parts import literal
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -48,15 +49,15 @@ def test_step_parm_field_default():
     from jackal.model import Step
 
     step = Step(name="S", pgm="P", dds=())
-    assert step.parm == ""
+    assert step.parm == ()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_step_parm_field_set():
     from jackal.model import Step
 
-    step = Step(name="S", pgm="P", dds=(), parm="2022071800")
-    assert step.parm == "2022071800"
+    step = Step(name="S", pgm="P", dds=(), parm=literal("2022071800"))
+    assert step.parm == literal("2022071800")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -65,10 +66,17 @@ def test_deserializer_parm_present():
 
     data = {
         "name": "J",
-        "steps": [{"name": "S", "pgm": "P", "parm": "HELLO", "dds": []}],
+        "steps": [
+            {
+                "name": "S",
+                "pgm": "P",
+                "parm": [{"type": "Literal", "name": "HELLO"}],
+                "dds": [],
+            }
+        ],
     }
     job = _job_from_json(data)
-    assert job.steps[0].parm == "HELLO"
+    assert job.steps[0].parm == literal("HELLO")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -77,4 +85,4 @@ def test_deserializer_parm_absent_defaults_empty():
 
     data = {"name": "J", "steps": [{"name": "S", "pgm": "P", "dds": []}]}
     job = _job_from_json(data)
-    assert job.steps[0].parm == ""
+    assert job.steps[0].parm == ()

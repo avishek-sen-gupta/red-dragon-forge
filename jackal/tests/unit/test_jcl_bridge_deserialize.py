@@ -3,6 +3,7 @@ from tests.covers import NotLanguageFeature, covers
 from jackal.jcl.bridge_parser import _job_from_json
 from jackal.model import CondOp, DispNormal, DispStatus
 from jackal.dsn import DirectDSN, DummyDSN, InStreamDSN, NoDSN, TempRef
+from jackal.value_parts import literal
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -16,14 +17,14 @@ def test_deserialize_job_steps_dds():
                 "dds": [
                     {
                         "ddname": "INDD",
-                        "dsn": "J.IN",
+                        "dsn": [{"type": "Literal", "name": "J.IN"}],
                         "disp_words": ["SHR"],
                         "in_stream": [],
                         "sysout": False,
                     },
                     {
                         "ddname": "WORKDD",
-                        "dsn": "J.WORK",
+                        "dsn": [{"type": "Literal", "name": "J.WORK"}],
                         "disp_words": ["NEW", "PASS", "DELETE"],
                         "in_stream": [],
                         "sysout": False,
@@ -56,7 +57,7 @@ def test_deserialize_disp_shr_defaults_keep_keep():
                 "dds": [
                     {
                         "ddname": "D",
-                        "dsn": "A.B",
+                        "dsn": [{"type": "Literal", "name": "A.B"}],
                         "disp_words": ["SHR"],
                         "in_stream": [],
                         "sysout": False,
@@ -84,14 +85,14 @@ def test_deserialize_instream_and_sysout():
                 "dds": [
                     {
                         "ddname": "SYSIN",
-                        "dsn": "",
+                        "dsn": [],
                         "disp_words": [],
                         "in_stream": ["   DELETE A.B CLUSTER"],
                         "sysout": False,
                     },
                     {
                         "ddname": "SYSPRINT",
-                        "dsn": "",
+                        "dsn": [],
                         "disp_words": [],
                         "in_stream": [],
                         "sysout": True,
@@ -159,7 +160,7 @@ def test_dd_from_json_temp_ref_dsn():
                 "dds": [
                     {
                         "ddname": "WRK",
-                        "dsn": "&&WORKIN",
+                        "dsn": [{"type": "Literal", "name": "&&WORKIN"}],
                         "disp_words": ["NEW", "PASS"],
                         "in_stream": [],
                         "sysout": False,
@@ -187,7 +188,7 @@ def test_dd_from_json_direct_dsn_unchanged():
                 "dds": [
                     {
                         "ddname": "IN",
-                        "dsn": "MY.DATA",
+                        "dsn": [{"type": "Literal", "name": "MY.DATA"}],
                         "disp_words": ["SHR"],
                         "in_stream": [],
                         "sysout": False,
@@ -199,7 +200,7 @@ def test_dd_from_json_direct_dsn_unchanged():
     job = _job_from_json(data)
     dd = job.steps[0].dds[0]
     assert isinstance(dd.dsn, DirectDSN)
-    assert dd.dsn.name == "MY.DATA"
+    assert dd.dsn.name == literal("MY.DATA")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -269,7 +270,7 @@ def test_dd_from_json_backref_dsn():
                 "dds": [
                     {
                         "ddname": "INPUT",
-                        "dsn": "",
+                        "dsn": [],
                         "backref": {"step": "STEP1", "ddname": "WRK"},
                         "disp_words": ["OLD", "DELETE"],
                         "in_stream": [],
@@ -299,7 +300,7 @@ def test_dd_from_json_three_segment_backref_raises():
                 "dds": [
                     {
                         "ddname": "INPUT",
-                        "dsn": "*.STEP1.PSTEP.WRK",
+                        "dsn": [{"type": "Literal", "name": "*.STEP1.PSTEP.WRK"}],
                         "disp_words": ["OLD", "DELETE"],
                         "in_stream": [],
                         "sysout": False,

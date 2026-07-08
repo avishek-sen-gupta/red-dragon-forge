@@ -10,6 +10,7 @@ from jackal.catalog import DatasetCatalog
 from jackal.dsn import DirectDSN
 from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro
 from jackal.model import DD, Disp, DispNormal, DispStatus
+from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -25,12 +26,12 @@ def test_repro_loads_ps_into_ksds(tmp_path):
     dds = (
         DD(
             "INF",
-            DirectDSN("IN.PS"),
+            DirectDSN(literal("IN.PS")),
             Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
         ),
         DD(
             "OUT",
-            DirectDSN("OUT.KSDS"),
+            DirectDSN(literal("OUT.KSDS")),
             Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP),
         ),
     )

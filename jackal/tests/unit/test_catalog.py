@@ -5,12 +5,15 @@ import pytest
 from jackal.catalog import DatasetCatalog, DatasetSpec
 from jackal.dsn import DirectDSN, TempRef
 from jackal.model import DD, Disp, DispNormal, DispStatus, DatasetOrg
+from jackal.value_parts import literal
 from tests.covers import covers, NotLanguageFeature
 
 
 def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> DD:
     return DD(
-        ddname="D", dsn=DirectDSN(dsn), disp=Disp(status, normal, DispNormal.DELETE)
+        ddname="D",
+        dsn=DirectDSN(literal(dsn)),
+        disp=Disp(status, normal, DispNormal.DELETE),
     )
 
 
@@ -58,7 +61,9 @@ def test_shr_resolves_from_data_dir(tmp_path):
     wd.mkdir()
     cat = DatasetCatalog(workdir=wd, data_dir=data)
     dd = DD(
-        "D", DirectDSN("A.B.PS"), Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
+        "D",
+        DirectDSN(literal("A.B.PS")),
+        Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
     )
     assert cat.allocate(dd).path == data / "A.B.PS"
 
@@ -137,7 +142,7 @@ def test_open_dataset_ps_empty_returns_eof(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = DD(
         "D",
-        DirectDSN("J.FLAT"),
+        DirectDSN(literal("J.FLAT")),
         Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE),
     )
     cat.allocate(dd)

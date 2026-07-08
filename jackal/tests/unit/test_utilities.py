@@ -3,6 +3,7 @@ from jackal.catalog import DatasetCatalog
 from jackal.dsn import DirectDSN
 from jackal.model import DD, Disp, DispNormal, DispStatus, Step
 from jackal.utilities import UTILITIES
+from jackal.value_parts import literal
 from tests.covers import covers, NotLanguageFeature
 
 
@@ -11,7 +12,7 @@ def test_iefbr14_allocates_then_deletes(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = DD(
         ddname="D",
-        dsn=DirectDSN("J.TMP"),
+        dsn=DirectDSN(literal("J.TMP")),
         disp=Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE),
     )
     step = Step(name="DEL", pgm="IEFBR14", dds=(dd,))
@@ -26,7 +27,7 @@ def test_iefbr14_skips_sysout_dd(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     sysout = DD(
         ddname="SYSPRINT",
-        dsn=DirectDSN(""),
+        dsn=DirectDSN(()),
         disp=Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
         sysout=True,
     )

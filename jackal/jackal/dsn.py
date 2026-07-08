@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from jackal.value_parts import Value, resolve
+
 
 @dataclass(frozen=True)
 class DirectDSN:
-    name: str
+    name: Value
 
 
 @dataclass(frozen=True)
@@ -53,8 +55,9 @@ type DSN = DirectDSN | TempRef | BackwardRef | InStreamDSN | DummyDSN | NoDSN
 
 
 def dsn_key(dsn: DSN) -> str:
-    """Extract the string DSN name from a DirectDSN.
+    """Extract the string DSN name from a DirectDSN, resolving its Value.
 
+    Raises ValueError if the DirectDSN's Value has an unresolved Symbol part.
     Raises TypeError for every other DSN variant — none of them can be used
     as a string key (TempRef/BackwardRef must first be resolved via the
     catalog / runner; InStreamDSN/DummyDSN/NoDSN have no dataset to resolve
@@ -62,7 +65,7 @@ def dsn_key(dsn: DSN) -> str:
     """
     match dsn:
         case DirectDSN(name=n):
-            return n
+            return resolve(n)
         case TempRef(alias=a):
             raise TypeError(f"TempRef '{a}' must be resolved via the catalog")
         case BackwardRef(step=s, ddname=d):

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from jackal.dsn import DSN
+from jackal.value_parts import Value
 
 
 class DispStatus(Enum):
@@ -65,7 +66,7 @@ class Step:
     pgm: str
     dds: tuple[DD, ...]
     conds: tuple[Cond, ...] = ()
-    parm: str = ""
+    parm: Value = ()
 
 
 @dataclass(frozen=True)

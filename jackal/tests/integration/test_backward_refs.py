@@ -6,6 +6,7 @@ from jackal.dsn import DirectDSN, TempRef
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from jackal.results import StepDisposition
 from jackal.runner import JobRunner
+from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -32,7 +33,7 @@ def test_backward_ref_resolves_to_prior_step_dataset(tmp_path):
                 dds=(
                     DD(
                         "WRK",
-                        DirectDSN("MY.FILE"),
+                        DirectDSN(literal("MY.FILE")),
                         Disp(DispStatus.NEW, DispNormal.PASS, DispNormal.DELETE),
                     ),
                 ),
@@ -83,7 +84,7 @@ def test_backward_ref_to_bypassed_step_also_bypasses(tmp_path):
                 dds=(
                     DD(
                         "WRK",
-                        DirectDSN("MY.FILE"),
+                        DirectDSN(literal("MY.FILE")),
                         Disp(DispStatus.NEW, DispNormal.PASS, DispNormal.DELETE),
                     ),
                 ),

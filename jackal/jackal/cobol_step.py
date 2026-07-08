@@ -23,6 +23,7 @@ from jackal.catalog import DatasetCatalog
 from jackal.model import Step
 from jackal.parm import build_parm_region
 from jackal.results import StepDisposition, StepResult
+from jackal.value_parts import resolve
 
 # DDs whose absence is expected in the emulated environment and should be skipped
 # silently rather than raising an error.
@@ -76,7 +77,7 @@ def run_cobol_step(
         )
         parm_addr = Address("rgn_parm")
         parm_vm = VMState()
-        parm_vm.region_set(parm_addr, bytearray(build_parm_region(step.parm)))
+        parm_vm.region_set(parm_addr, bytearray(build_parm_region(resolve(step.parm))))
         parm_vm.call_stack.append(
             StackFrame(
                 function_name=FuncName("__jcl_entry__"),

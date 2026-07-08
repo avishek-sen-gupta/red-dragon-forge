@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
-from jackal.dsn import DirectDSN, InStreamDSN
+from jackal.dsn import DirectDSN, InStreamDSN, dsn_key
 from jackal.jcl.parser import parse_jcl
 from jackal.model import DispStatus, Job
 
@@ -74,7 +74,7 @@ def _job_to_graph(job: Job) -> tuple[list[GraphNode], list[GraphEdge]]:
                 continue
             if dd.sysout or not isinstance(dd.dsn, DirectDSN):
                 continue
-            dataset_id = _add_node(NodeKind.DATASET, dd.dsn.name.upper())
+            dataset_id = _add_node(NodeKind.DATASET, dsn_key(dd.dsn).upper())
             edges.append(
                 GraphEdge(
                     source=step_id,
