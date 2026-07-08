@@ -85,4 +85,12 @@ fileignoreconfig:
   checksum: f7e42ba1922031ab4bca18355346e3a3ca89234523d3bc27e4edc0b7903ee276
 - filename: jackal/docs/superpowers/plans/2026-07-08-idcams-comprehensive-grammar.md
   checksum: 45a01a150cb3de9aca89db81941c17759b8a0eaff1ca8c55b78a5012d082f177
+- filename: jackal/jackal/idcams/ast_define_cluster.py
+  checksum: aeb9c3dacba80bd7a75598e64c5cc738d07bad6fc6dbf54cba86e4baf68d8843
+- filename: jackal/jackal/idcams/grammar/ams.lark
+  checksum: dd217b68482e1cd9b0b375238bf10b07a11293b4b9c854dcd0ef054a421a2ffc
+- filename: jackal/jackal/idcams/parser_comprehensive.py
+  checksum: b385e0c08489ec07f1c2a5e31edc779a485b2ce326b75891274d2c5a872f7daf
+- filename: jackal/tests/unit/test_idcams_define_cluster.py
+  checksum: 7b434cf4404aa53a65724867a26c15ece77796a24aecf49ebcb61817f18c6a5c
 version: "1.0"
