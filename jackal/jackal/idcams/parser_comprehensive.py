@@ -1529,7 +1529,7 @@ class _Build(Transformer):
 _PARSER = Lark.open(_GRAMMAR_PATH, start="start", parser="earley")
 
 
-def parse_ams(text: str) -> tuple[AmsCommand, ...]:
+def parse_ams(text: str) -> tuple[AmsCommand | IfCommand, ...]:
     """Parse comprehensive-grammar IDCAMS control statements.
 
     Applies the "+" mid-token continuation preprocessing pass first (the
