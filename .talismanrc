@@ -113,4 +113,6 @@ fileignoreconfig:
   checksum: f136a378680c5bad83e81aca552401505119eab971e839190e9151ac14234ac7
 - filename: jackal/tests/unit/test_idcams_executor.py
   checksum: 1aaebb74c71fe35ab0366c32f99bfb24fb0ad57ef4f8185f8733fa7f72ac6be6
+- filename: jackal/docs/analysis/2026-07-09-carddemo-job-executability.md
+  checksum: c2850ccc1efc6df63fd3181abd2f3e23130f4628152ec90a7894153c2c015e6a
 version: "1.0"
