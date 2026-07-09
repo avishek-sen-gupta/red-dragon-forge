@@ -111,4 +111,6 @@ fileignoreconfig:
   checksum: 31dc998645f1a3ff4236e242697643868de7b14c23d3cb461b06bbc76f19ab20
 - filename: jackal/tests/unit/test_idcams_define_cluster.py
   checksum: f136a378680c5bad83e81aca552401505119eab971e839190e9151ac14234ac7
+- filename: jackal/tests/unit/test_idcams_executor.py
+  checksum: 1aaebb74c71fe35ab0366c32f99bfb24fb0ad57ef4f8185f8733fa7f72ac6be6
 version: "1.0"

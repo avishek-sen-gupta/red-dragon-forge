@@ -9,10 +9,14 @@ command: delete_cmd
        | if_cmd
        | set_cmd
 
-// DELETE dsname -\n CLUSTER
+// DELETE dsname -\n CLUSTER [PURGE]
 // CLUSTER is the default entry type and may be omitted (real IDCAMS
 // accepts a bare "DELETE dsname" with no trailing type keyword).
-delete_cmd: "DELETE" DSNAME "CLUSTER"?
+// PURGE forces deletion even if the entry's retention period hasn't
+// expired -- given as its own rule (not a filtered literal) so the
+// transformer can detect its presence.
+delete_cmd: "DELETE" DSNAME "CLUSTER"? purge_trailer?
+purge_trailer: "PURGE"
 
 // DEFINE CLUSTER ( params ) trailers
 define_cmd: "DEFINE" "CLUSTER" "(" _param+ ")" _trailer*
@@ -33,8 +37,12 @@ _ignored_param: IDCAMS_WORD ("(" INNER_TEXT ")")?
 // REPRO INFILE(dd) OUTFILE(dd)
 repro_cmd: "REPRO" "INFILE" "(" NAME ")" "OUTFILE" "(" NAME ")"
 
-// IF MAXCC op value THEN SET MAXCC = set_value
-if_cmd: "IF" "MAXCC" OP INT "THEN" "SET" "MAXCC" "=" INT
+// IF {MAXCC|LASTCC} op value THEN SET MAXCC = set_value
+// LASTCC tests the rc of the immediately-preceding functional command
+// (distinct from MAXCC, the running max); real CardDemo JCL (DEFGDGB.jcl)
+// uses LASTCC with a bare "=" operator rather than the EQ keyword.
+if_cmd: "IF" IF_FIELD OP INT "THEN" "SET" "MAXCC" "=" INT
+IF_FIELD: "MAXCC" | "LASTCC"
 
 // Standalone SET MAXCC = n (not wrapped in IF...THEN) -- a common
 // idempotency idiom: DELETE x then unconditionally reset MAXCC so a
@@ -50,7 +58,7 @@ _index_trailer: "INDEX" "(" "NAME" "(" DSNAME ")" ")"
 // One-or-more non-paren characters (content inside simple parentheses)
 INNER_TEXT: /[^)]+/
 
-OP:        "LE" | "LT" | "GE" | "GT" | "EQ" | "NE"
+OP:        "LE" | "LT" | "GE" | "GT" | "EQ" | "NE" | "="
 
 // A dataset-qualified name: one or more NAME segments separated by dots
 DSNAME:    /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/

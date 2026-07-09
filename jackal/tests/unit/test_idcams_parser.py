@@ -70,6 +70,47 @@ def test_parse_standalone_set_maxcc():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_if_lastcc_bare_equals():
+    """Real DEFGDGB.jcl idiom: IF LASTCC=n (bare '=', not the EQ keyword)
+    tests the immediately-preceding command's own rc, not the running
+    MAXCC."""
+    cmds = parse_idcams("   IF LASTCC=12 THEN SET MAXCC=0\n")
+    assert cmds[0] == IfMaxcc(op="EQ", value=12, set_value=0, test_field="LASTCC")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_if_maxcc_defaults_test_field_to_maxcc():
+    """Existing IF MAXCC form must still default test_field to MAXCC --
+    backward compatible with every already-parsed real job."""
+    cmds = parse_idcams("   IF MAXCC LE 08 THEN SET MAXCC = 0\n")
+    assert cmds[0] == IfMaxcc(op="LE", value=8, set_value=0, test_field="MAXCC")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_real_defgdgb_lastcc_idiom():
+    """Verbatim (whitespace-preserved) from DEFGDGB.jcl -- repeated 6x in
+    that real file after each DEFINE GENERATIONDATAGROUP block."""
+    cmds = parse_idcams(
+        "   IF LASTCC=12 THEN SET MAXCC=0                                            \n"
+    )
+    assert cmds[0] == IfMaxcc(op="EQ", value=12, set_value=0, test_field="LASTCC")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_delete_cluster_purge_trailer():
+    """Real CBEXPORT.jcl idiom: DELETE dsn CLUSTER PURGE -- forces deletion
+    even if the entry's retention period (TO/FOR) hasn't expired."""
+    cmds = parse_idcams("  DELETE AWS.M2.CARDDEMO.EXPORT.DATA CLUSTER PURGE\n")
+    assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.EXPORT.DATA", purge=True)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_delete_without_purge_defaults_false():
+    cmds = parse_idcams("   DELETE A.B.KSDS CLUSTER\n")
+    assert cmds[0] == Delete(dsn="A.B.KSDS", purge=False)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_real_carddemo_delete_set_idiom():
     """Exact opening of ESDSRRDS.jcl's IDCAMS SYSIN: bare DELETE followed
     by a standalone SET MAXCC -- two back-to-back top-level statements.

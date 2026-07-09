@@ -30,10 +30,19 @@ class _Build(Transformer):
         return int(t)
 
     def OP(self, t: Token) -> str:
+        text = str(t)
+        return "EQ" if text == "=" else text
+
+    def IF_FIELD(self, t: Token) -> str:
         return str(t)
 
+    def purge_trailer(self, c: list) -> tuple:
+        return ("purge", True)
+
     def delete_cmd(self, c: list) -> Delete:
-        return Delete(dsn=c[0])
+        dsn = c[0]
+        purge = any(isinstance(x, tuple) and x[0] == "purge" for x in c[1:])
+        return Delete(dsn=dsn, purge=purge)
 
     def name_param(self, c: list) -> tuple:
         return ("name", c[0])
@@ -59,8 +68,8 @@ class _Build(Transformer):
         return Repro(infile_dd=c[0], outfile_dd=c[1])
 
     def if_cmd(self, c: list) -> IfMaxcc:
-        op, value, set_value = c[0], c[1], c[2]
-        return IfMaxcc(op=op, value=value, set_value=set_value)
+        test_field, op, value, set_value = c[0], c[1], c[2], c[3]
+        return IfMaxcc(op=op, value=value, set_value=set_value, test_field=test_field)
 
     def set_cmd(self, c: list) -> SetMaxcc:
         return SetMaxcc(value=c[0])
