@@ -87,9 +87,13 @@ def test_parse_if_maxcc_defaults_test_field_to_maxcc():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_real_defgdgb_lastcc_idiom():
-    """Verbatim (whitespace-preserved) from DEFGDGB.jcl -- repeated 6x in
-    that real file after each DEFINE GENERATIONDATAGROUP block."""
+def test_parse_lastcc_line_with_trailing_whitespace():
+    """A hand-written LASTCC line matching the shape DEFGDGB.jcl uses
+    (bare '=', trailing padding). This is NOT a real-file test -- the
+    surrounding DEFINE GENERATIONDATAGROUP verb in that real file isn't
+    supported by this (minimal, execution-wired) grammar, so DEFGDGB's
+    actual SYSIN block cannot be parsed end-to-end here at all. This only
+    pins the isolated LASTCC-line grammar."""
     cmds = parse_idcams(
         "   IF LASTCC=12 THEN SET MAXCC=0                                            \n"
     )
