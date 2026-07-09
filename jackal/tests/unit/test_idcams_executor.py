@@ -212,12 +212,14 @@ def test_delete_purge_flag_deletes_existing_dsn_same_as_without_purge(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_real_cbexport_jcl_idcams_block_executes_end_to_end(tmp_path):
-    """The exact real STEP01 SYSIN from CBEXPORT.jcl: bare DELETE...PURGE,
-    standalone SET MAXCC=0, then DEFINE CLUSTER with DATA/INDEX trailers
-    and several ignored SMS-style params (INDEXED, CYLINDERS, FREESPACE,
-    SHAREOPTIONS). Proves the whole real block runs through run_idcams,
-    not just parses."""
+def test_delete_purge_set_define_sequence_executes(tmp_path):
+    """A representative (hand-written) multi-statement block in the shape
+    CBEXPORT.jcl's STEP01 uses: DELETE...CLUSTER PURGE, standalone
+    SET MAXCC=0, then DEFINE CLUSTER with DATA/INDEX trailers and several
+    ignored SMS-style params. This is a fast unit test with NO real-file
+    read -- the genuine end-to-end test that reads the real CBEXPORT.jcl
+    bytes through the jcl-bridge lives in
+    tests/integration/test_idcams_execution_carddemo_e2e.py."""
     from jackal.idcams.parser import parse_idcams
     from jackal.idcams.executor import run_idcams
 
