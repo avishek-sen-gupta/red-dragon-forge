@@ -117,4 +117,6 @@ fileignoreconfig:
   checksum: c2850ccc1efc6df63fd3181abd2f3e23130f4628152ec90a7894153c2c015e6a
 - filename: docs/superpowers/plans/2026-07-09-graph-analysis-core-decoupling.md
   checksum: 3ee954707626dec0b6da59718c216defc15e362d67022460bb2e161c0a411cc2
+- filename: cicada/cics/csd_parse.py
+  checksum: 72c715ad359f69a350cbe4c4a0157e2df7bda53b87c371a3898c5901c4911e52
 version: "1.0"
