@@ -95,19 +95,30 @@ def run_idcams(
     step_dds: tuple[DD, ...] | Sequence[DD],
     catalog: DatasetCatalog,
 ) -> int:
-    """Execute a sequence of IDCAMS commands and return the final MAXCC."""
+    """Execute a sequence of IDCAMS commands and return the final MAXCC.
+
+    LASTCC (the rc of the immediately-preceding functional command) and
+    MAXCC (the running maximum, overridable by SET) are tracked as two
+    distinct counters, per the manual: only Delete/DefineCluster/Repro
+    update LASTCC; IF and SET never do (SET MAXCC does not affect LASTCC).
+    """
     dds_by_ddname: dict[str, DD] = {dd.ddname: dd for dd in step_dds}
+    lastcc = 0
     maxcc = 0
 
     for cmd in commands:
         if isinstance(cmd, Delete):
-            maxcc = max(maxcc, _handle_delete(cmd, catalog))
+            lastcc = _handle_delete(cmd, catalog)
+            maxcc = max(maxcc, lastcc)
         elif isinstance(cmd, DefineCluster):
-            maxcc = max(maxcc, _handle_define_cluster(cmd, catalog))
+            lastcc = _handle_define_cluster(cmd, catalog)
+            maxcc = max(maxcc, lastcc)
         elif isinstance(cmd, Repro):
-            maxcc = max(maxcc, _handle_repro(cmd, dds_by_ddname, catalog))
+            lastcc = _handle_repro(cmd, dds_by_ddname, catalog)
+            maxcc = max(maxcc, lastcc)
         elif isinstance(cmd, IfMaxcc):
-            maxcc = _handle_if_maxcc(cmd, maxcc)
+            current = lastcc if cmd.test_field == "LASTCC" else maxcc
+            maxcc = _handle_if_maxcc(cmd, current)
         elif isinstance(cmd, SetMaxcc):
             maxcc = cmd.value
         else:

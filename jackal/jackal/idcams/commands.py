@@ -11,6 +11,7 @@ Command = Union["Delete", "DefineCluster", "Repro", "IfMaxcc", "SetMaxcc"]
 @dataclass(frozen=True)
 class Delete:
     dsn: str
+    purge: bool = False
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class IfMaxcc:
     op: str
     value: int
     set_value: int
+    test_field: str = "MAXCC"  # "MAXCC" | "LASTCC" -- which counter is tested
 
 
 @dataclass(frozen=True)

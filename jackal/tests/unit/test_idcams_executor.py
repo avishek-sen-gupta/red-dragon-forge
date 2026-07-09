@@ -147,6 +147,104 @@ def test_set_maxcc_overrides_accumulated_rc(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_if_lastcc_tests_immediately_preceding_command_rc(tmp_path):
+    from jackal.idcams.executor import run_idcams
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cmds = (
+        Delete(dsn="GHOST.DS"),  # missing -> rc 8, lastcc=8, maxcc=8
+        IfMaxcc(op="EQ", value=8, set_value=0, test_field="LASTCC"),
+    )
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 0
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_if_lastcc_reflects_only_the_most_recent_command_not_running_maxcc(tmp_path):
+    """LASTCC and MAXCC are genuinely distinct: a later, successful command
+    resets LASTCC to 0 even though MAXCC still remembers an earlier
+    failure. A test asserting against the wrong counter would give 8
+    here instead of 99."""
+    from jackal.idcams.executor import run_idcams
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cmds = (
+        Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
+        DefineCluster(
+            name="MY.KSDS", key_length=5, key_offset=0, record_size=80
+        ),  # succeeds -> rc 0; lastcc=0, maxcc stays 8 (max(8,0))
+        IfMaxcc(op="EQ", value=0, set_value=99, test_field="LASTCC"),
+    )
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 99
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_set_maxcc_does_not_change_lastcc(tmp_path):
+    """Per the manual: 'Setting MAXCC does not affect LASTCC.' A SET
+    MAXCC=n between two functional commands must not corrupt the next
+    IF LASTCC test."""
+    from jackal.idcams.executor import run_idcams
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cmds = (
+        Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
+        SetMaxcc(value=0),  # maxcc forced to 0; lastcc still 8
+        IfMaxcc(op="EQ", value=8, set_value=99, test_field="LASTCC"),
+    )
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 99
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_delete_purge_flag_deletes_existing_dsn_same_as_without_purge(tmp_path):
+    """No retention/expiration tracking exists in this simulated catalog
+    today, so PURGE is currently a documented no-op: parsing/execution
+    must not crash, and behavior matches an equivalent non-PURGE delete."""
+    from jackal.idcams.executor import run_idcams
+
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    (tmp_path / "MY_DS").write_bytes(b"")
+    cat.seed("MY.DS", tmp_path / "MY_DS")
+    cmds = (Delete(dsn="MY.DS", purge=True),)
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 0
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_cbexport_jcl_idcams_block_executes_end_to_end(tmp_path):
+    """The exact real STEP01 SYSIN from CBEXPORT.jcl: bare DELETE...PURGE,
+    standalone SET MAXCC=0, then DEFINE CLUSTER with DATA/INDEX trailers
+    and several ignored SMS-style params (INDEXED, CYLINDERS, FREESPACE,
+    SHAREOPTIONS). Proves the whole real block runs through run_idcams,
+    not just parses."""
+    from jackal.idcams.parser import parse_idcams
+    from jackal.idcams.executor import run_idcams
+
+    text = (
+        "  DELETE AWS.M2.CARDDEMO.EXPORT.DATA CLUSTER PURGE\n"
+        "  SET MAXCC = 0\n"
+        "  DEFINE CLUSTER (NAME(AWS.M2.CARDDEMO.EXPORT.DATA) -\n"
+        "                  INDEXED -\n"
+        "                  KEYS(4 28) -\n"
+        "                  RECORDSIZE(500 500) -\n"
+        "                  CYLINDERS(10 5) -\n"
+        "                  FREESPACE(10 10) -\n"
+        "                  SHAREOPTIONS(2 3)) -\n"
+        "         DATA (NAME(AWS.M2.CARDDEMO.EXPORT.DATA.DATA)) -\n"
+        "         INDEX (NAME(AWS.M2.CARDDEMO.EXPORT.DATA.INDEX))\n"
+    )
+    cmds = parse_idcams(text)
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    rc = run_idcams(cmds, (), cat)
+    assert rc == 0
+    ds = cat.resolve("AWS.M2.CARDDEMO.EXPORT.DATA")
+    assert ds.key_length == 4
+    assert ds.key_offset == 28
+    assert ds.record_size == 500
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_define_cluster_duplicate_dsn_returns_12(tmp_path):
     from jackal.idcams.executor import run_idcams
 
