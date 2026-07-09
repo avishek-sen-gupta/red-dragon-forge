@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
           cache: maven
       - name: Build ProLeap bridge JAR
         working-directory: vendor/red-dragon/proleap-bridge
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - name: Build the ProLeap bridge JAR
         run: make jar
       - name: Install Python dependencies
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - name: Build the bridge JARs (ProLeap + JCL)
         run: make jar
       - name: Install Python dependencies
@@ -134,7 +134,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - name: Build the shared ProLeap + JCL bridge JARs
         run: make jar
       - name: Install Python dependencies
