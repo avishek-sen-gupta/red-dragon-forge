@@ -2,3 +2,6 @@
 	path = vendor/carddemo
 	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
 	branch = main
+[submodule "proleap-bridge/proleap-cobol-parser"]
+	path = proleap-bridge/proleap-cobol-parser
+	url = git@github.com:avishek-sen-gupta/proleap-cobol-parser.git

@@ -7,8 +7,11 @@ BRIDGE_ENV         := PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(
 ## Full run from a fresh clone: build the bridge JARs, extract the graph, check it.
 all: jars verify
 
-## Build the two Java bridge JARs (Maven).
+## Build the Java bridge JARs (Maven). The proleap-cobol-parser FORK (submodule,
+## published as io.github.uwol:proleap-cobol-parser:4.0.0 — NOT on Maven Central)
+## must be installed to the local ~/.m2 first, then the bridge resolves it.
 jars:
+	cd proleap-bridge/proleap-cobol-parser && mvn -q -DskipTests clean install
 	cd proleap-bridge && mvn -q -DskipTests package
 	cd jcl-bridge && mvn -q -DskipTests package
 
