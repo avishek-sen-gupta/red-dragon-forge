@@ -16,11 +16,23 @@ from bms_copybook_gen.models import BmsField, BmsMap, BmsMapSet
 from cics.flow_map import extract_transaction_flow_graph
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
-from interpreter.project.graph_types import EdgeKind, NodeKind
+from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 from tests.covers import NotLanguageFeature, covers
 from tests.integration.cobol_helpers import bridge_jar  # noqa: F401 — pytest fixture
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
+
+
+class _ListSink:
+    def __init__(self) -> None:
+        self.nodes: list[GraphNode] = []
+        self.edges: list[GraphEdge] = []
+
+    def add_node(self, node: GraphNode) -> None:
+        self.nodes.append(node)
+
+    def add_edge(self, edge: GraphEdge) -> None:
+        self.edges.append(edge)
 
 
 @pytest.fixture
@@ -55,12 +67,15 @@ _ACCTPROG = b"""\
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_starts_edge_from_transaction_to_program(cics_parser):
-    nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=_CSD,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": _ACCTPROG},
         parser=cics_parser,
+        sink=sink,
     )
+    nodes, edges = sink.nodes, sink.edges
     starts = [e for e in edges if e.kind == EdgeKind.STARTS]
     assert len(starts) == 1
     assert starts[0].source == "ACCT"
@@ -71,12 +86,15 @@ def test_starts_edge_from_transaction_to_program(cics_parser):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_return_transid_edge_back_to_transaction(cics_parser):
-    _nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=_CSD,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": _ACCTPROG},
         parser=cics_parser,
+        sink=sink,
     )
+    edges = sink.edges
     ret = [e for e in edges if e.kind == EdgeKind.RETURN_TRANSID]
     assert len(ret) == 1
     assert ret[0].source == "ACCTPROG"
@@ -93,12 +111,15 @@ def test_send_and_receive_map_edges_with_bms_map_node(cics_parser):
             BmsField(label="ACCTNAME", length=50, attrb=["PROT"]),
         ],
     )
-    nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=_CSD,
         bms_mapsets={"ACCSET": mapset},
         cobol_sources={"ACCTPROG": _ACCTPROG},
         parser=cics_parser,
+        sink=sink,
     )
+    nodes, edges = sink.nodes, sink.edges
     sends = [e for e in edges if e.kind == EdgeKind.SENDS_MAP]
     receives = [e for e in edges if e.kind == EdgeKind.RECEIVES_MAP]
     assert len(sends) == 1 and len(receives) == 1
@@ -120,12 +141,15 @@ def test_xctl_edge_between_programs(cics_parser):
            EXEC CICS XCTL PROGRAM('NEXTPROG') END-EXEC.
            STOP RUN.
 """
-    nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"MENUPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    nodes, edges = sink.nodes, sink.edges
     xctl = [e for e in edges if e.kind == EdgeKind.XCTL]
     assert len(xctl) == 1
     assert xctl[0].source == "MENUPROG"
@@ -149,12 +173,15 @@ def test_read_edge_to_cics_file(cics_parser):
            EXEC CICS RETURN END-EXEC.
            STOP RUN.
 """
-    nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    nodes, edges = sink.nodes, sink.edges
     reads = [e for e in edges if e.kind == EdgeKind.READS and e.source == "ACCTPROG"]
     assert len(reads) == 1
     assert reads[0].target == "ACCTFILE"
@@ -178,12 +205,15 @@ def test_write_edge_to_cics_file(cics_parser):
            EXEC CICS RETURN END-EXEC.
            STOP RUN.
 """
-    nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    edges = sink.edges
     writes = [e for e in edges if e.kind == EdgeKind.WRITES]
     assert len(writes) == 1
     assert writes[0].source == "ACCTPROG"
@@ -204,12 +234,15 @@ def test_rewrite_edge_is_updates(cics_parser):
            EXEC CICS RETURN END-EXEC.
            STOP RUN.
 """
-    _nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    edges = sink.edges
     updates = [e for e in edges if e.kind == EdgeKind.UPDATES]
     assert len(updates) == 1
     assert updates[0].target == "CUSTDAT"
@@ -229,12 +262,15 @@ def test_delete_edge_is_deletes(cics_parser):
            EXEC CICS RETURN END-EXEC.
            STOP RUN.
 """
-    _nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    edges = sink.edges
     deletes = [e for e in edges if e.kind == EdgeKind.DELETES]
     assert len(deletes) == 1
     assert deletes[0].target == "CARDDAT"
@@ -261,12 +297,15 @@ def test_browse_verbs_are_reads_and_endbr_is_ends_browse(cics_parser):
            EXEC CICS RETURN END-EXEC.
            STOP RUN.
 """
-    _nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    edges = sink.edges
     reads = [e for e in edges if e.kind == EdgeKind.READS and e.target == "CARDAIX"]
     ends = [e for e in edges if e.kind == EdgeKind.ENDS_BROWSE]
     assert len(reads) == 3  # STARTBR + READNEXT + READPREV
@@ -294,12 +333,15 @@ def test_defines_dataset_edge_from_csd_file_dsname(cics_parser):
            EXEC CICS RETURN END-EXEC.
            STOP RUN.
 """
-    nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": src},
         parser=cics_parser,
+        sink=sink,
     )
+    nodes, edges = sink.nodes, sink.edges
     defines_dataset = [e for e in edges if e.kind == EdgeKind.DEFINES_DATASET]
     assert len(defines_dataset) == 1
     assert defines_dataset[0].source == "ACCTFILE"
@@ -316,22 +358,28 @@ def test_defines_dataset_edge_from_csd_file_dsname(cics_parser):
 def test_no_defines_dataset_edge_when_csd_has_no_file_definitions(cics_parser):
     """The synthetic-CSD tests above (no DEFINE FILE at all) must not error
     or produce a spurious edge — DEFINES_DATASET is additive, opt-in per CSD."""
-    _nodes, edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=_CSD,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": _ACCTPROG},
         parser=cics_parser,
+        sink=sink,
     )
+    edges = sink.edges
     assert [e for e in edges if e.kind == EdgeKind.DEFINES_DATASET] == []
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_node_ids_are_uppercased(cics_parser):
     csd = "DEFINE TRANSACTION(acct) GROUP(DEMO) PROGRAM(ACCTPROG)\n"
-    nodes, _edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=csd,
         bms_mapsets={},
         cobol_sources={"ACCTPROG": _ACCTPROG},
         parser=cics_parser,
+        sink=sink,
     )
+    nodes = sink.nodes
     assert any(n.kind == NodeKind.TRANSACTION and n.id == "ACCT" for n in nodes)
