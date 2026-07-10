@@ -11,3 +11,6 @@ cache/
 
 # Bridge parse caches (if any land here)
 .parse_cache/
+
+# Generated BMS symbolic copybooks (Stage-0 output)
+sym/
