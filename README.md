@@ -29,7 +29,7 @@ golden copied from production) exactly, on node `(kind,id)` and edge
 | `build_port.py` | Orchestrator — runs the four extractors (JCL, CALL/COPY, CICS flow, FILE-CONTROL) over the corpus, streams into the ported `GraphWriter`, writes `out/`. |
 | `compare.py` | Identity-diff `out/` vs `reference/`. |
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden). |
-| `proleap-bridge/`, `jcl-bridge/` | The two Java bridge Maven projects (COBOL→JSON ASG and JCL→JSON). Copied source, built here. Self-contained (external Maven deps only). |
+| `proleap-bridge/`, `jcl-bridge/` | The two Java bridge Maven projects (COBOL→JSON ASG and JCL→JSON). Copied source, built here. `proleap-bridge` depends on a **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**), vendored as the submodule `proleap-bridge/proleap-cobol-parser` and built (`mvn install`) *before* the bridge — see the `jars` target. |
 | `vendor/carddemo/` | The CardDemo corpus — a git **submodule**. |
 | `sym/`, `cics-copybooks/` | Copybooks the ProLeap parse needs: `sym/` is the pre-generated BMS symbolic copybooks (see caveat below); `cics-copybooks/` are the CICS system copybooks. |
 
@@ -39,8 +39,8 @@ Requires: JDK 21+ and Maven (to build the bridges), and [`uv`](https://docs.astr
 
 ```bash
 git clone <this-repo> cobble && cd cobble
-git submodule update --init        # fetch the CardDemo corpus
-make all                            # build both JARs, extract the graph, verify 449/803
+git submodule update --init        # fetch the CardDemo corpus + the proleap-cobol-parser fork
+make all                            # build the fork + both bridge JARs, extract the graph, verify 449/803
 ```
 
 Or step by step: `make jars` (build the two shaded JARs) → `make build`
