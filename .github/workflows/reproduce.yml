@@ -52,8 +52,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          # cobble ships no uv.lock (gitignored); key the uv cache on the pinned deps
-          cache-dependency-glob: "pyproject.toml"
+          # uv.lock is committed; setup-uv's default glob (**/uv.lock) keys the cache on it.
 
       - name: Resolve submodule SHAs (for cache keys)
         id: sha
