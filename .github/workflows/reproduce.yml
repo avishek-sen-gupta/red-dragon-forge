@@ -57,7 +57,7 @@ jobs:
       - name: Resolve submodule SHAs (for cache keys)
         id: sha
         run: |
-          echo "hlasm=$(git -C third-party/che-che4z-lsp-for-hlasm rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "hlasm=$(git -C vendor/che-che4z-lsp-for-hlasm rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "proleap=$(git -C proleap-bridge/proleap-cobol-parser rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # A cold cache still builds everything from source; a warm cache skips the
@@ -65,8 +65,8 @@ jobs:
       - name: Cache hlasm_export C++ build
         uses: actions/cache@v5
         with:
-          path: third-party/che-che4z-lsp-for-hlasm/build
-          key: hlasm-${{ runner.os }}-${{ steps.sha.outputs.hlasm }}-${{ hashFiles('third-party/che-che4z-lsp-for-hlasm/build.sh') }}
+          path: vendor/che-che4z-lsp-for-hlasm/build
+          key: hlasm-${{ runner.os }}-${{ steps.sha.outputs.hlasm }}-${{ hashFiles('vendor/che-che4z-lsp-for-hlasm/build.sh') }}
 
       - name: Cache Maven repository (proleap fork + bridges)
         uses: actions/cache@v5

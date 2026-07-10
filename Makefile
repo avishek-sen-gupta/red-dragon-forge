@@ -16,7 +16,7 @@ tools: hlasm jars
 
 ## Build hlasm_export from the che-che4z-lsp-for-hlasm submodule (cmake + Ninja + LLVM@18).
 hlasm:
-	cd third-party/che-che4z-lsp-for-hlasm && BUILD_TYPE=Release bash build.sh --target hlasm_export
+	cd vendor/che-che4z-lsp-for-hlasm && BUILD_TYPE=Release bash build.sh --target hlasm_export
 
 ## Build the proleap-cobol-parser FORK (io.github.uwol:proleap-cobol-parser:4.0.0, NOT on
 ## Maven Central — install to ~/.m2 first) then the two bridge JARs.
