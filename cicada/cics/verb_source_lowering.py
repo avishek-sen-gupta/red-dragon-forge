@@ -28,9 +28,13 @@ class GraphEmittingObserver:
 
     def on_verb(self, verb) -> None:
         tagged = CicsVerb(
-            verb=verb.verb, program=self._program, map_name=verb.map_name,
-            mapset_name=verb.mapset_name, xctl_target=verb.xctl_target,
-            transid=verb.transid, file_name=verb.file_name,
+            verb=verb.verb,
+            program=self._program,
+            map_name=verb.map_name,
+            mapset_name=verb.mapset_name,
+            xctl_target=verb.xctl_target,
+            transid=verb.transid,
+            file_name=verb.file_name,
         )
         edge = _verb_edge(tagged, self._bms)
         if edge is None:
@@ -44,11 +48,16 @@ def stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures):
     """Compile one program under a GraphEmittingObserver; isolate + loudly warn on failure."""
     from cics.bootstrap import compile_cics_program  # noqa: PLC0415
     from cics.coprocessor import build_cics_spec  # noqa: PLC0415
+
     try:
         observer = GraphEmittingObserver(prog_name, bms_mapsets, sink)
-        spec = build_cics_spec(context_holder=[None], result_holder=[None], observer=observer)
+        spec = build_cics_spec(
+            context_holder=[None], result_holder=[None], observer=observer
+        )
         compile_cics_program(raw, parser, spec)
     except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
-        logger.warning("CICS program %s failed to compile: %s", prog_name, exc, exc_info=True)
+        logger.warning(
+            "CICS program %s failed to compile: %s", prog_name, exc, exc_info=True
+        )
         if failures is not None:
             failures.append(f"CICS program {prog_name}: {exc}")

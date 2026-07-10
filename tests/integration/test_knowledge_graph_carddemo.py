@@ -40,6 +40,7 @@ class _ListSink:
     def add_edge(self, edge: GraphEdge) -> None:
         self.edges.append(edge)
 
+
 _SYNTHETIC_CICS_PROGRAM = b"""\
        IDENTIFICATION DIVISION.
        PROGRAM-ID. SYNACCT.
