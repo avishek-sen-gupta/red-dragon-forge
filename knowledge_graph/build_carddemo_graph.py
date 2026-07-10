@@ -26,10 +26,12 @@ Usage (from the red-dragon-forge repo root):
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 
+from interpreter.cobol.ast_store import AstStore, AstStrategy
 from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.project.cobol_connections import extract_cobol_connections
@@ -42,8 +44,12 @@ from cics.flow_map import extract_transaction_flow_graph
 from jackal.cobol_file_graph import extract_cobol_file_graph
 from jackal.jcl_graph import extract_jcl_graph
 
+from knowledge_graph.export import read_ndjson
+from knowledge_graph.graph_writer import GraphWriter
 from knowledge_graph.merge import merge_graph
 from knowledge_graph.render import render_html
+
+logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).parents[1]
 _CARDDEMO_HOME = _REPO_ROOT / "vendor" / "carddemo" / "app"
@@ -72,29 +78,7 @@ def _make_parser(copybook_dirs: list[Path]) -> ProLeapCobolParser:
     )
 
 
-def _dedupe_edges(edges: list) -> list:
-    """Drop exact-duplicate edges (same source/target/kind), keeping the
-    first occurrence's attrs.
-
-    extract_cobol_connections's program_source_dirs makes each top-level
-    file's compile transitively pull in whatever it CALLs — so when
-    _build_call_copy_graph loops over every .cbl file in the directory, a
-    subprogram's own COPY/CALL edges get emitted once via each caller that
-    (directly or transitively) reaches it, PLUS again when that subprogram
-    is itself processed as its own top-level entry in the same loop. This
-    is a property of running the extractor once per file across an entire
-    corpus (not a defect in extract_cobol_connections itself, which only
-    ever sees one compile at a time) — collapse the duplicates here.
-    """
-    seen: dict[tuple, object] = {}
-    for edge in edges:
-        key = (edge.source, edge.source_kind, edge.target, edge.target_kind, edge.kind)
-        seen.setdefault(key, edge)
-    return list(seen.values())
-
-
-def _build_jcl_graph(failures: list[str]) -> tuple[list, list]:
-    all_nodes, all_edges = [], []
+def _build_jcl_graph(writer: GraphWriter, failures: list[str]) -> None:
     jcl_dir = _CARDDEMO_HOME / "jcl"
     proclib_dirs = [_CARDDEMO_HOME / "proc"]
     jcl_files = sorted(jcl_dir.glob("*.jcl")) + sorted(jcl_dir.glob("*.JCL"))
@@ -102,17 +86,19 @@ def _build_jcl_graph(failures: list[str]) -> tuple[list, list]:
         try:
             nodes, edges = extract_jcl_graph(path.read_text(), proclib_dirs=proclib_dirs)
         except Exception as exc:  # noqa: BLE001 — one bad job must not abort the run
+            logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"JCL {path.name}: {exc}")
             continue
-        all_nodes.extend(nodes)
-        all_edges.extend(edges)
-    print(f"JCL: {len(jcl_files)} files, {len(all_nodes)} nodes, {len(all_edges)} edges")
-    return all_nodes, all_edges
+        writer.add_all(nodes, edges)
+    print(f"JCL: {len(jcl_files)} files")
 
 
 def _build_call_copy_graph(
-    copybook_dirs: list[Path], cics_program_names: set[str], failures: list[str]
-) -> tuple[list, list]:
+    copybook_dirs: list[Path],
+    cics_program_names: set[str],
+    writer: GraphWriter,
+    failures: list[str],
+) -> None:
     """CALL/COPY graph for every CardDemo COBOL program.
 
     A program named in the real CSD's DEFINE PROGRAM/TRANSACTION entries
@@ -125,7 +111,6 @@ def _build_call_copy_graph(
     synthetic program in Task 9's test) is not enough for these. Every
     other program compiles as plain batch COBOL.
     """
-    all_nodes, all_edges = [], []
     cbl_dir = _CARDDEMO_HOME / "cbl"
     plain_parser = _make_parser(copybook_dirs)
     cics_spec = build_cics_spec(context_holder=[None], result_holder=[None])
@@ -152,19 +137,19 @@ def _build_call_copy_graph(
                     parser=plain_parser,
                 )
         except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
+            logger.warning("COBOL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"COBOL {path.name}: {exc}")
             continue
-        all_nodes.extend(nodes)
-        all_edges.extend(edges)
-    print(
-        f"CALL/COPY: {len(cbl_files)} programs, {len(all_nodes)} nodes, {len(all_edges)} edges"
-    )
-    return all_nodes, all_edges
+        writer.add_all(nodes, edges)
+    print(f"CALL/COPY: {len(cbl_files)} programs")
 
 
 def _build_batch_file_graph(
-    copybook_dirs: list[Path], cics_program_names: set[str], failures: list[str]
-) -> tuple[list, list]:
+    copybook_dirs: list[Path],
+    cics_program_names: set[str],
+    writer: GraphWriter,
+    failures: list[str],
+) -> None:
     """PROGRAM -> COBOL_FILE graph (READS/WRITES/UPDATES, from OPEN mode) for
     every CardDemo batch COBOL program's FILE-CONTROL SELECT/OPEN statements.
 
@@ -175,29 +160,31 @@ def _build_batch_file_graph(
     dialect_parsers, unlike _build_call_copy_graph) can't even parse EXEC
     CICS statement nodes, since that needs red-dragon's CICS IR lowering.
     """
-    all_nodes, all_edges = [], []
     cbl_dir = _CARDDEMO_HOME / "cbl"
     parser = _make_parser(copybook_dirs)
     cbl_files = [
         p for p in sorted(cbl_dir.glob("*.cbl")) if p.stem.upper() not in cics_program_names
     ]
+    store = AstStore(AstStrategy.DISK)  # default DISK; MEMORY opt-in later
+    store.parse_all({p: p.read_bytes() for p in cbl_files}, parser)
     for path in cbl_files:
         try:
-            nodes, edges = extract_cobol_file_graph(path.read_bytes(), parser)
+            nodes, edges = extract_cobol_file_graph(store.get(path))
         except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
+            logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"FILE-CONTROL {path.name}: {exc}")
             continue
-        all_nodes.extend(nodes)
-        all_edges.extend(edges)
-    print(
-        f"FILE-CONTROL: {len(cbl_files)} batch programs, {len(all_nodes)} nodes, {len(all_edges)} edges"
-    )
-    return all_nodes, all_edges
+        writer.add_all(nodes, edges)
+    store.close()
+    print(f"FILE-CONTROL: {len(cbl_files)} batch programs")
 
 
 def _build_cics_flow_graph(
-    copybook_dirs: list[Path], transid_to_program: dict[str, str], failures: list[str]
-) -> tuple[list, list]:
+    copybook_dirs: list[Path],
+    transid_to_program: dict[str, str],
+    writer: GraphWriter,
+    failures: list[str],
+) -> None:
     """CICS transaction-flow graph (STARTS/XCTL/LINK/RETURN_TRANSID/
     SENDS_MAP/RECEIVES_MAP) for every transaction the real CSD defines."""
     csd_path = _CARDDEMO_HOME / "csd" / "CARDDEMO.CSD"
@@ -209,26 +196,23 @@ def _build_cics_flow_graph(
         if cbl_path.is_file():
             cobol_sources[prog_name] = cbl_path.read_bytes()
         else:
+            logger.warning("CICS program %s: no %s found", prog_name, cbl_path.name)
             failures.append(f"CICS program {prog_name}: no {cbl_path.name} found")
 
     parser = _make_parser(copybook_dirs)
-    try:
-        nodes, edges = extract_transaction_flow_graph(
-            csd_source=csd_path.read_text(),
-            bms_mapsets={},
-            cobol_sources=cobol_sources,
-            parser=parser,
-        )
-    except Exception as exc:  # noqa: BLE001
-        failures.append(f"CICS flow graph (whole CSD): {exc}")
-        nodes, edges = [], []
+    extract_transaction_flow_graph(
+        csd_source=csd_path.read_text(),
+        bms_mapsets={},
+        cobol_sources=cobol_sources,
+        parser=parser,
+        sink=writer,
+        failures=failures,
+    )
 
     print(
         f"CICS flow: {len(transid_to_program)} transactions, "
-        f"{len(cobol_sources)} programs compiled, "
-        f"{len(nodes)} nodes, {len(edges)} edges"
+        f"{len(cobol_sources)} programs compiled"
     )
-    return nodes, edges
 
 
 def main() -> int:
@@ -255,30 +239,26 @@ def main() -> int:
     transid_to_program = parse_csd(_CARDDEMO_HOME / "csd" / "CARDDEMO.CSD")
     cics_program_names = set(transid_to_program.values())
 
-    jcl_nodes, jcl_edges = _build_jcl_graph(failures)
-    call_nodes, call_edges = _build_call_copy_graph(
-        copybook_dirs, cics_program_names, failures
-    )
-    cics_nodes, cics_edges = _build_cics_flow_graph(
-        copybook_dirs, transid_to_program, failures
-    )
-    file_nodes, file_edges = _build_batch_file_graph(
-        copybook_dirs, cics_program_names, failures
-    )
+    nodes_jsonl = _OUTPUT_PATH.parent / "carddemo_graph.nodes.jsonl"
+    edges_jsonl = _OUTPUT_PATH.parent / "carddemo_graph.edges.jsonl"
+    _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with GraphWriter(nodes_jsonl, edges_jsonl) as writer:
+        _build_jcl_graph(writer, failures)
+        _build_call_copy_graph(copybook_dirs, cics_program_names, writer, failures)
+        _build_cics_flow_graph(copybook_dirs, transid_to_program, writer, failures)
+        _build_batch_file_graph(copybook_dirs, cics_program_names, writer, failures)
 
-    all_nodes = jcl_nodes + call_nodes + cics_nodes + file_nodes
-    all_edges = _dedupe_edges(jcl_edges + call_edges + cics_edges + file_edges)
-    graph = merge_graph(all_nodes, all_edges)
+    graph = merge_graph(*read_ndjson(nodes_jsonl, edges_jsonl))
 
     print(
         f"\nMerged graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges"
     )
 
-    _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     render_html(graph, _OUTPUT_PATH, title="CardDemo Knowledge Graph (full corpus)")
     print(f"Wrote {_OUTPUT_PATH}")
 
     if failures:
+        logger.warning("%d failure(s) (skipped, did not abort the run)", len(failures))
         print(f"\n{len(failures)} failure(s) (skipped, did not abort the run):")
         for f in failures:
             print(f"  - {f}")
