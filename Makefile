@@ -30,7 +30,7 @@ codegen: parser sym
 
 ## Generate the CICS EXEC parser (Python3) from the ANTLR .g4 grammar.
 parser: $(ANTLR_JAR)
-	cd port/cics/cics_grammar && java -jar $(ANTLR_JAR) -Dlanguage=Python3 -visitor CICSzLexer.g4 CICSzParser.g4
+	cd cobble/cics/cics_grammar && java -jar $(ANTLR_JAR) -Dlanguage=Python3 -visitor CICSzLexer.g4 CICSzParser.g4
 
 $(ANTLR_JAR):
 	mkdir -p tools
@@ -53,4 +53,4 @@ verify: build compare
 
 clean:
 	rm -rf out cache sym
-	rm -f port/cics/cics_grammar/CICSz*.py port/cics/cics_grammar/*.interp port/cics/cics_grammar/*.tokens
+	rm -f cobble/cics/cics_grammar/CICSz*.py cobble/cics/cics_grammar/*.interp cobble/cics/cics_grammar/*.tokens

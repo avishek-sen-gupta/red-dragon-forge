@@ -2,9 +2,9 @@
 extraction pipeline.
 
 Runs the same four extractors as knowledge_graph/build_carddemo_graph.py, but
-entirely through the ``port.*`` package tree (a byte-for-byte + import-rewrite
+entirely through the ``cobble.*`` package tree (a byte-for-byte + import-rewrite
 port of the production extractors, with ONE seam: VM-free CICS verb sourcing in
-port/cics/verb_source_asg.py). No VM, no compile/lower pipeline.
+cobble/cics/verb_source_asg.py). No VM, no compile/lower pipeline.
 
 Writes experiments/standalone-graph/out/{nodes,edges}.jsonl and prints per-
 extractor + merged counts.
@@ -25,21 +25,21 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))  # make `port` importable
 
-from port.interpreter.cobol.ast_store import AstStore, AstStrategy
-from port.interpreter.cobol.cobol_parser import ProLeapCobolParser
-from port.interpreter.cobol.subprocess_runner import RealSubprocessRunner
-from port.interpreter.project.cobol_imports import extract_cobol_imports
-from port.interpreter.project.import_types import ImportKind
-from port.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
+from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
+from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobble.interpreter.project.cobol_imports import extract_cobol_imports
+from cobble.interpreter.project.import_types import ImportKind
+from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
-from port.cics.csd_parse import parse_csd
-from port.cics.flow_map import extract_transaction_flow_graph
+from cobble.cics.csd_parse import parse_csd
+from cobble.cics.flow_map import extract_transaction_flow_graph
 
-from port.jackal.cobol_file_graph import extract_cobol_file_graph
-from port.jackal.jcl_graph import extract_jcl_graph
+from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
+from cobble.jackal.jcl_graph import extract_jcl_graph
 
-from port.knowledge_graph.graph_writer import GraphWriter
-from port.knowledge_graph.merge import merge_graph
+from cobble.knowledge_graph.graph_writer import GraphWriter
+from cobble.knowledge_graph.merge import merge_graph
 
 logger = logging.getLogger(__name__)
 
