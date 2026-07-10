@@ -1,0 +1,4 @@
+[submodule "vendor/carddemo"]
+	path = vendor/carddemo
+	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
+	branch = main

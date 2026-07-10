@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+uv.lock
+
+# Build artifacts
+out/
+cache/
+**/target/
+
+# Bridge parse caches (if any land here)
+.parse_cache/
