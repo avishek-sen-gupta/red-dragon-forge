@@ -1,4 +1,0 @@
-       IDENTIFICATION DIVISION.
-       PROGRAM-ID. ExecCics.      
-       PROCEDURE DIVISION.      
-         EXEC CICS RETURN END-EXEC.

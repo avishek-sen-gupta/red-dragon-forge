@@ -1,1 +1,0 @@
-001000 Display "txt extension"

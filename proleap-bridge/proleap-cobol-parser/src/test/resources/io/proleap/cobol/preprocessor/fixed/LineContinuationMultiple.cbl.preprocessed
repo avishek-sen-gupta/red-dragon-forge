@@ -1,5 +1,0 @@
-       IDENTIFICATION DIVISION.
-       PROGRAM-ID. LINECONTMLT.
-       DATA DIVISION.
-       WORKINGSTORAGE SECTION.
-           02 SOME-DAT PIC IS X(99) VALUE IS    " FEATURE               SS  PARAGRAPH-NAME                                                 REMARKS".

@@ -1,1 +1,0 @@
-001000 DISPLAY "Hello World 1"
