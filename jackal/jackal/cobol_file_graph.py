@@ -9,7 +9,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Iterator
 
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
+from interpreter.cobol.asg_types import CobolASG
 from interpreter.cobol.cobol_statements import OpenStatement
 from interpreter.cobol.file_enums import OpenMode
 from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
@@ -53,7 +53,7 @@ def _all_statements(asg: Any) -> Iterator[Any]:
 
 
 def extract_cobol_file_graph(
-    source: bytes, parser: ProLeapCobolParser
+    asg: CobolASG,
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Parse a batch COBOL program and return PROGRAM -> COBOL_FILE edges for
     every file it OPENs.
@@ -70,7 +70,6 @@ def extract_cobol_file_graph(
     an OPEN naming a file with no matching SELECT, contributes no edge — this
     pass only knows what FILE-CONTROL and OPEN both agree on.
     """
-    asg = parser.parse(source)
     program_id = asg.program_id.upper()
 
     select_to_dd = {
