@@ -2,9 +2,13 @@ PROLEAP_BRIDGE_JAR := $(CURDIR)/proleap-bridge/target/proleap-bridge-0.1.0-shade
 JCL_BRIDGE_JAR     := $(CURDIR)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
 BRIDGE_ENV         := PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR)
 
-.PHONY: all tools hlasm jars sym build compare verify clean
+ANTLR_VERSION := 4.13.1
+ANTLR_JAR     := $(CURDIR)/tools/antlr-$(ANTLR_VERSION)-complete.jar
+ANTLR_URL     := https://www.antlr.org/download/antlr-$(ANTLR_VERSION)-complete.jar
 
-## Full run from a fresh clone: submodules -> tools -> generate copybooks -> extract -> verify.
+.PHONY: all tools hlasm jars codegen parser sym build compare verify clean
+
+## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
 
 ## Build every tool from source: the HLASM exporter + the proleap fork + both bridge JARs.
@@ -20,6 +24,17 @@ jars:
 	cd proleap-bridge/proleap-cobol-parser && mvn -q -DskipTests clean install
 	cd proleap-bridge && mvn -q -DskipTests package
 	cd jcl-bridge && mvn -q -DskipTests package
+
+## Generate everything that's generated-from-a-grammar: the CICS parser + the BMS copybooks.
+codegen: parser sym
+
+## Generate the CICS EXEC parser (Python3) from the ANTLR .g4 grammar.
+parser: $(ANTLR_JAR)
+	cd port/cics/cics_grammar && java -jar $(ANTLR_JAR) -Dlanguage=Python3 -visitor CICSzLexer.g4 CICSzParser.g4
+
+$(ANTLR_JAR):
+	mkdir -p tools
+	curl -fsSL $(ANTLR_URL) -o $(ANTLR_JAR)
 
 ## Stage-0: GENERATE the BMS symbolic copybooks from the CardDemo .bms sources
 ## (hlasm_export | bms_copybook_gen -> sym/*.cpy). Nothing pre-generated is shipped.
@@ -38,3 +53,4 @@ verify: build compare
 
 clean:
 	rm -rf out cache sym
+	rm -f port/cics/cics_grammar/CICSz*.py port/cics/cics_grammar/*.interp port/cics/cics_grammar/*.tokens

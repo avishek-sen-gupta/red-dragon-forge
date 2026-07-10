@@ -19,8 +19,8 @@ git submodule update --init
 echo "==> [2/5] Building tools from source (hlasm_export + proleap fork + both bridge JARs)..."
 make tools
 
-echo "==> [3/5] Generating the BMS symbolic copybooks from the .bms sources..."
-make sym
+echo "==> [3/5] Generating from grammars: the CICS parser (ANTLR) + the BMS copybooks..."
+make codegen
 
 echo "==> [4/5] Extracting the CardDemo knowledge graph..."
 make build
