@@ -43,10 +43,10 @@ the copybooks) · `build` (extract) · `compare` (check 449/803).
 
 | Path | What |
 |------|------|
-| `port/` | The ported extraction code. Every module is byte-for-byte / import-rewired from its `red-dragon-forge` counterpart (imports → `port.*`). Imports **no** production Python — only `port.*`, stdlib, and pip (`lark`, `networkx`, `antlr4-python3-runtime`). Includes `port/bms_copybook_gen/` (the copybook generator, run as `python -m port.bms_copybook_gen`). |
-| `port/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
+| `cobble/` | The ported extraction code. Every module is byte-for-byte / import-rewired from its `red-dragon-forge` counterpart (imports → `cobble.*`). Imports **no** production Python — only `cobble.*`, stdlib, and pip (`lark`, `networkx`, `antlr4-python3-runtime`). Includes `cobble/bms_copybook_gen/` (the copybook generator, run as `python -m cobble.bms_copybook_gen`). |
+| `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
 | `build_port.py` / `compare.py` | Extract the graph → `out/`; identity-diff `out/` vs `reference/`. |
-| `generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m port.bms_copybook_gen → sym/*.cpy`. |
+| `generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy`. |
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden — the *target*, not an input to the extraction). |
 | `proleap-bridge/` | The COBOL→JSON ASG bridge (copied Maven source). Depends on the **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**) vendored as the submodule `proleap-bridge/proleap-cobol-parser`, built (`mvn install`) *before* the bridge. |
 | `jcl-bridge/` | The JCL→JSON bridge (copied Maven source, self-contained). |
@@ -64,7 +64,7 @@ the copybooks) · `build` (extract) · `compare` (check 449/803).
 
 ## Invariant
 
-`port/**` imports zero live production Python:
+`cobble/**` imports zero live production Python:
 
 ```bash
 grep -rE '^\s*(import|from)\s+(interpreter|cics|jackal|knowledge_graph)\b' port
@@ -73,7 +73,7 @@ grep -rE '^\s*(import|from)\s+(interpreter|cics|jackal|knowledge_graph)\b' port
 
 The only coupling to RedDragon is (a) the two bridge JARs and `hlasm_export`,
 invoked as subprocesses, all **built from source**, and (b) the one seam
-(`port/cics/verb_source_asg.py`). The graph identity (449/803) is reached by
+(`cobble/cics/verb_source_asg.py`). The graph identity (449/803) is reached by
 independent Python that shells out to those tools — the decoupling, proven from a
 repo that contains no production interpreter code and ships no generated
 artifacts.
