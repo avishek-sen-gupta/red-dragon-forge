@@ -16,3 +16,6 @@ __pycache__/
 .beads/
 tests/integration/output/
 .knowledge_graph_scratch/
+
+# macOS
+.DS_Store
