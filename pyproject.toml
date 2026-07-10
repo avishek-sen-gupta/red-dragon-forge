@@ -1,0 +1,13 @@
+[project]
+name = "cobble"
+version = "0.1.0"
+description = "Standalone, VM-free CardDemo knowledge-graph extractor. A file-by-file port of the red-dragon-forge streaming graph pipeline that reproduces the exact 449-node / 803-edge graph via nothing but the two bridge JARs — no production Python."
+requires-python = ">=3.11"
+dependencies = [
+    "lark>=1.3.1,<2.0.0",
+    "networkx>=3.0",
+    "antlr4-python3-runtime>=4.13,<4.14",
+]
+
+[tool.uv]
+package = false

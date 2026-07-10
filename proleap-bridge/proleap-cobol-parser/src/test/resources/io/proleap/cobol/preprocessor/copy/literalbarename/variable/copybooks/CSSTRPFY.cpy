@@ -1,0 +1,1 @@
+001000 DISPLAY "Hello Literal Bare"
