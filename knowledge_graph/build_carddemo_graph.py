@@ -200,14 +200,18 @@ def _build_cics_flow_graph(
             failures.append(f"CICS program {prog_name}: no {cbl_path.name} found")
 
     parser = _make_parser(copybook_dirs)
-    extract_transaction_flow_graph(
-        csd_source=csd_path.read_text(),
-        bms_mapsets={},
-        cobol_sources=cobol_sources,
-        parser=parser,
-        sink=writer,
-        failures=failures,
-    )
+    try:
+        extract_transaction_flow_graph(
+            csd_source=csd_path.read_text(),
+            bms_mapsets={},
+            cobol_sources=cobol_sources,
+            parser=parser,
+            sink=writer,
+            failures=failures,
+        )
+    except Exception as exc:  # noqa: BLE001 — a malformed CSD must not abort the run
+        logger.warning("CICS flow graph (whole CSD) failed: %s", exc, exc_info=True)
+        failures.append(f"CICS flow graph (whole CSD): {exc}")
 
     print(
         f"CICS flow: {len(transid_to_program)} transactions, "
