@@ -16,11 +16,16 @@ _GOLD = _ROOT / "tests" / "integration" / "fitness"
 
 
 def test_carddemo_graph_matches_golden():
-    subprocess.run([sys.executable, "knowledge_graph/build_carddemo_graph.py"],
-                   cwd=_ROOT, check=True)
+    subprocess.run(
+        [sys.executable, "knowledge_graph/build_carddemo_graph.py"],
+        cwd=_ROOT,
+        check=True,
+    )
     ndiff, ediff = identity_diff(
-        _OUT / "carddemo_graph.nodes.jsonl", _OUT / "carddemo_graph.edges.jsonl",
-        _GOLD / "carddemo_graph.nodes.jsonl", _GOLD / "carddemo_graph.edges.jsonl",
+        _OUT / "carddemo_graph.nodes.jsonl",
+        _OUT / "carddemo_graph.edges.jsonl",
+        _GOLD / "carddemo_graph.nodes.jsonl",
+        _GOLD / "carddemo_graph.edges.jsonl",
     )
     assert not ndiff["nodes_missing"] and not ndiff["nodes_extra"], ndiff
     assert not ediff["edges_missing"] and not ediff["edges_extra"], ediff

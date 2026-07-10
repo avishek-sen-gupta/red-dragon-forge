@@ -41,8 +41,15 @@ def extract_transaction_flow_graph(
         t, p = transid.upper(), prog_name.upper()
         sink.add_node(GraphNode(id=t, kind=NodeKind.TRANSACTION))
         sink.add_node(GraphNode(id=p, kind=NodeKind.PROGRAM))
-        sink.add_edge(GraphEdge(source=t, source_kind=NodeKind.TRANSACTION,
-                                target=p, target_kind=NodeKind.PROGRAM, kind=EdgeKind.STARTS))
+        sink.add_edge(
+            GraphEdge(
+                source=t,
+                source_kind=NodeKind.TRANSACTION,
+                target=p,
+                target_kind=NodeKind.PROGRAM,
+                kind=EdgeKind.STARTS,
+            )
+        )
 
     # verb-derived edges: stream each program through the observer
     seen: set[str] = set()
@@ -59,6 +66,12 @@ def extract_transaction_flow_graph(
     for file_name, dataset_name in file_to_dataset.items():
         sink.add_node(GraphNode(id=file_name, kind=NodeKind.CICS_FILE))
         sink.add_node(GraphNode(id=dataset_name, kind=NodeKind.DATASET))
-        sink.add_edge(GraphEdge(source=file_name, source_kind=NodeKind.CICS_FILE,
-                                target=dataset_name, target_kind=NodeKind.DATASET,
-                                kind=EdgeKind.DEFINES_DATASET))
+        sink.add_edge(
+            GraphEdge(
+                source=file_name,
+                source_kind=NodeKind.CICS_FILE,
+                target=dataset_name,
+                target_kind=NodeKind.DATASET,
+                kind=EdgeKind.DEFINES_DATASET,
+            )
+        )
