@@ -6,7 +6,7 @@ ANTLR_VERSION := 4.13.1
 ANTLR_JAR     := $(CURDIR)/tools/antlr-$(ANTLR_VERSION)-complete.jar
 ANTLR_URL     := https://www.antlr.org/download/antlr-$(ANTLR_VERSION)-complete.jar
 
-.PHONY: all tools hlasm jars codegen parser sym build compare verify clean
+.PHONY: all tools hlasm jars codegen parser sym build compare verify render clean
 
 ## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
@@ -50,6 +50,10 @@ compare:
 	uv run python compare.py
 
 verify: build compare
+
+## Render out/{nodes,edges}.jsonl as a self-contained interactive HTML graph.
+render:
+	uv run python render_graph.py
 
 clean:
 	rm -rf out cache sym

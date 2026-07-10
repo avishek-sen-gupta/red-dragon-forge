@@ -45,7 +45,38 @@ git clone <this-repo> cobble && cd cobble
 `make` targets: `tools` (hlasm + proleap fork + bridge JARs) · `codegen`
 (generate the CICS parser + BMS copybooks from their grammars) · `build`
 (extract → `out/`) · `compare` (identity-diff vs `reference/`, 449/803) ·
-`clean` (drop all generated artifacts).
+`render` (render `out/` as an interactive HTML graph) · `clean` (drop all
+generated artifacts).
+
+### Build the graph from CardDemo
+
+`./build.sh` runs the full pipeline end to end. To run it step by step instead:
+
+```bash
+git submodule update --init   # fetch the CardDemo corpus + parser/HLASM forks
+make tools                    # build hlasm_export + the proleap fork + both bridge JARs
+make codegen                  # generate the CICS parser (ANTLR) + BMS symbolic copybooks
+make build                    # extract the graph -> out/nodes.jsonl, out/edges.jsonl
+make compare                  # identity-diff out/ vs reference/ (must be empty: 449/803)
+```
+
+`make build` re-runs the four extractors (CALL/COPY, CICS flow, JCL, batch
+FILE-CONTROL) over `vendor/carddemo` from scratch every time — safe to re-run
+after touching any extractor code or the corpus submodule.
+
+### Render the HTML visualization
+
+```bash
+make render   # reads out/{nodes,edges}.jsonl -> writes out/graph.html
+```
+
+`out/graph.html` is a single self-contained file (vis-network is vendored at
+`cobble/knowledge_graph/vendor/vis-network.min.js` and inlined — no server,
+no CDN, no network access needed). Open it directly in a browser. It has
+checkboxes to filter by node/edge kind, a search box that highlights matching
+node labels, and click-to-highlight-neighbors on any node. Requires
+`out/nodes.jsonl` / `out/edges.jsonl` to already exist (i.e. run `make build`
+first).
 
 ## What's here
 
@@ -55,6 +86,7 @@ git clone <this-repo> cobble && cd cobble
 | `cobble/cics/cics_grammar/*.g4` | The ANTLR grammar **source** (`CICSzLexer.g4`, `CICSzParser.g4`). `make codegen` generates the `CICSz*.py` parser from these — the generated `.py` is gitignored, never shipped. |
 | `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
 | `build_port.py` / `compare.py` | Extract the graph → `out/`; identity-diff `out/` vs `reference/`. |
+| `render_graph.py` | Render `out/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `out/graph.html` (`cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
 | `generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy`. |
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden — the *target*, not an input to the extraction). |
 | `proleap-bridge/` | The COBOL→JSON ASG bridge (copied Maven source). Depends on the **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**) vendored as the submodule `proleap-bridge/proleap-cobol-parser`, built (`mvn install`) *before* the bridge. |
@@ -92,3 +124,5 @@ artifacts.
 ## License
 
 MIT — see [LICENSE.md](LICENSE.md). Project rationale in [PHILOSOPHY.md](PHILOSOPHY.md).
+The vendored `cobble/knowledge_graph/vendor/vis-network.min.js` ships under its
+own license — see `cobble/knowledge_graph/vendor/VIS_NETWORK_LICENSE.md`.

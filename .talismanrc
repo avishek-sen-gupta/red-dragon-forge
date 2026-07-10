@@ -1,4 +1,10 @@
 fileignoreconfig:
 - filename: .github/workflows/reproduce.yml
   checksum: 3f72a85cdd9652ff770e18e7811c20e396c2852315de67eb50cbcfcde85d4e76
+- filename: cobble/knowledge_graph/vendor/vis-network.min.js
+  checksum: dd3402a707ffb6804943b029115f0f0430994e2932b64f7c9be64f57b0d00597
+- filename: cobble/knowledge_graph/export.py
+  checksum: 28e3165d621ff40dde0bb127f81baae406a28a3f39ec1f4e08234ef0a44ceb35
+- filename: cobble/knowledge_graph/render.py
+  checksum: e528f5d5c5284461ab78473a5500221eea51a95f227156418fe41da1e10b2dc8
 version: "1.0"
