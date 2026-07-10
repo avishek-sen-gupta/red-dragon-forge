@@ -17,7 +17,7 @@ from pathlib import Path
 from interpreter.cobol.cobol_parser import ProLeapCobolParser, make_cobol_parser
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.project.cobol_connections import extract_cobol_connections
-from interpreter.project.graph_types import NodeKind
+from interpreter.project.graph_types import GraphEdge, GraphNode, NodeKind
 
 from cics.flow_map import extract_transaction_flow_graph
 from cics.statements import CicsDialectParser
@@ -27,6 +27,18 @@ from jackal.jcl_graph import extract_jcl_graph
 from knowledge_graph.merge import merge_graph
 from knowledge_graph.query import reachable_from
 from knowledge_graph.render import render_html
+
+
+class _ListSink:
+    def __init__(self) -> None:
+        self.nodes: list[GraphNode] = []
+        self.edges: list[GraphEdge] = []
+
+    def add_node(self, node: GraphNode) -> None:
+        self.nodes.append(node)
+
+    def add_edge(self, edge: GraphEdge) -> None:
+        self.edges.append(edge)
 
 _SYNTHETIC_CICS_PROGRAM = b"""\
        IDENTIFICATION DIVISION.
@@ -73,12 +85,15 @@ def test_readaccount_job_and_synthetic_cics_program_share_a_copybook_node(
     cics_parser = ProLeapCobolParser(
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[cpy_dir, _CICS_COPYBOOKS]
     )
-    cics_nodes, cics_edges = extract_transaction_flow_graph(
+    sink = _ListSink()
+    extract_transaction_flow_graph(
         csd_source=_SYNTHETIC_CSD,
         bms_mapsets={},
         cobol_sources={"SYNACCT": _SYNTHETIC_CICS_PROGRAM},
         parser=cics_parser,
+        sink=sink,
     )
+    cics_nodes, cics_edges = sink.nodes, sink.edges
 
     # extract_transaction_flow_graph only captures CICS-verb flow edges
     # (STARTS/XCTL/LINK/RETURN_TRANSID/SENDS_MAP/...) — it does not walk
