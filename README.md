@@ -39,8 +39,7 @@ Requires: JDK 21+ and Maven (to build the bridges), and [`uv`](https://docs.astr
 
 ```bash
 git clone <this-repo> cobble && cd cobble
-git submodule update --init        # fetch the CardDemo corpus + the proleap-cobol-parser fork
-make all                            # build the fork + both bridge JARs, extract the graph, verify 449/803
+./build.sh          # one command: submodules -> fork + bridge JARs -> extract -> verify 449/803
 ```
 
 Or step by step: `make jars` (build the two shaded JARs) → `make build`
