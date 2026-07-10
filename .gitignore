@@ -14,3 +14,12 @@ cache/
 
 # Generated BMS symbolic copybooks (Stage-0 output)
 sym/
+
+# Generated ANTLR CICS parser (from port/cics/cics_grammar/*.g4)
+port/cics/cics_grammar/CICSzLexer.py
+port/cics/cics_grammar/CICSzParser.py
+port/cics/cics_grammar/CICSzParserListener.py
+port/cics/cics_grammar/CICSzParserVisitor.py
+port/cics/cics_grammar/*.interp
+port/cics/cics_grammar/*.tokens
+tools/
