@@ -21,7 +21,7 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 
-_HLASM = _HERE / "third-party" / "che-che4z-lsp-for-hlasm" / "build" / "bin" / "hlasm_export"
+_HLASM = _HERE / "vendor" / "che-che4z-lsp-for-hlasm" / "build" / "bin" / "hlasm_export"
 _BMS_DIR = _HERE / "vendor" / "carddemo" / "app" / "bms"
 _MACROS = _HERE / "bms-macros"
 _OUT = _HERE / "sym"

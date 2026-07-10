@@ -59,9 +59,9 @@ git clone <this-repo> cobble && cd cobble
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden — the *target*, not an input to the extraction). |
 | `proleap-bridge/` | The COBOL→JSON ASG bridge (copied Maven source). Depends on the **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**) vendored as the submodule `proleap-bridge/proleap-cobol-parser`, built (`mvn install`) *before* the bridge. |
 | `jcl-bridge/` | The JCL→JSON bridge (copied Maven source, self-contained). |
-| `third-party/che-che4z-lsp-for-hlasm/` | The HLASM language-server **fork** (submodule) — `hlasm_export` is built from it (CMake + Ninja, OS-agnostic `build.sh`: CMake picks the system toolchain). |
 | `bms-macros/` | The hand-written `DFHMSD`/`DFHMDI`/`DFHMDF` prototype macros (assembler SYSLIB for `hlasm_export`). Source, not generated. |
 | `vendor/carddemo/` | The CardDemo corpus — a git **submodule** (includes `app/bms`, the BMS map sources). |
+| `vendor/che-che4z-lsp-for-hlasm/` | The HLASM language-server **fork** (submodule) — `hlasm_export` is built from it (CMake + Ninja, OS-agnostic `build.sh`: CMake picks the system toolchain). |
 | `.github/workflows/reproduce.yml` | CI: build everything from source on `ubuntu-latest` and verify 449/803. |
 
 ## Submodules (all pinned)
@@ -69,8 +69,8 @@ git clone <this-repo> cobble && cd cobble
 | Path | Repo |
 |------|------|
 | `vendor/carddemo` | `aws-mainframe-modernization-carddemo` (the corpus) |
+| `vendor/che-che4z-lsp-for-hlasm` | forked che-che4z HLASM LSP (builds `hlasm_export`) |
 | `proleap-bridge/proleap-cobol-parser` | forked `proleap-cobol-parser` (builds `4.0.0`) |
-| `third-party/che-che4z-lsp-for-hlasm` | forked che-che4z HLASM LSP (builds `hlasm_export`) |
 
 ## Invariant
 
