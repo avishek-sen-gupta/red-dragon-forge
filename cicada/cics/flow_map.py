@@ -1,11 +1,9 @@
-"""extract_transaction_flow_map() / extract_transaction_flow_graph() — static
-analysis builder APIs (public, unchanged signatures).
+"""extract_transaction_flow_graph() — streaming CICS flow extraction.
 
-Thin composition over: cics.verb_source_lowering (lowers each program to
-CicsVerb events), cics.csd_parse (CSD file→dataset edges), and
-cics.flow_graph_core (verbs-as-data graph/map building). The verb-sourcing and
-graph-building phases are separated so the knowledge-graph pipeline can reuse
-flow_graph_core with its own (lowering-free) verb source.
+Emits the CICS-flow portion of the knowledge graph into a GraphSink as each
+program lowers (via GraphEmittingObserver on the existing on_verb seam), plus the
+structural STARTS / DEFINES_DATASET edges from the CSD. Per-program failures are
+isolated and loudly warned; they do not abort the pass.
 """
 
 from __future__ import annotations
@@ -15,34 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from bms_copybook_gen.models import BmsMapSet
-from cics.csd_parse import parse_csd_files
-from cics.flow_graph_core import build_flow_graph, build_flow_map
-from cics.verb_source_lowering import compile_all_programs
-from interpreter.project.graph_types import GraphEdge, GraphNode
-
-
-def extract_transaction_flow_map(
-    csd_source: str,
-    bms_mapsets: dict[str, BmsMapSet],
-    cobol_sources: dict[str, bytes],
-    *,
-    parser: Any = None,
-) -> list[dict]:  # type: ignore[type-arg]
-    """Static analysis: extract a JSON transaction flow map from a CICS project.
-
-    Args:
-        csd_source: CSD text with DEFINE TRANSACTION(...) PROGRAM(...) entries.
-        bms_mapsets: parsed BmsMapSet models keyed by mapset name.
-        cobol_sources: program name → raw (un-prepassed) COBOL bytes.
-        parser: ProLeap parser instance.
-
-    Returns:
-        List of dicts, one per transaction, in CSD order.
-    """
-    transid_to_program, verbs_by_program = compile_all_programs(
-        csd_source, cobol_sources, parser
-    )
-    return build_flow_map(transid_to_program, verbs_by_program, bms_mapsets)
+from cics.csd_parse import parse_csd, parse_csd_files
+from cics.flow_observer import CicsVerb  # noqa: F401  (re-exported vocabulary)
+from cics.graph_sink import GraphSink
+from cics.verb_source_lowering import stream_program_verbs
+from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
 
 def extract_transaction_flow_graph(
@@ -51,30 +26,39 @@ def extract_transaction_flow_graph(
     cobol_sources: dict[str, bytes],
     *,
     parser: Any = None,
-) -> tuple[list[GraphNode], list[GraphEdge]]:
-    """Static analysis: extract the CICS-flow portion of the shared knowledge
-    graph (TRANSACTION/PROGRAM/BMS_MAP nodes; STARTS/XCTL/LINK/RETURN_TRANSID/
-    SENDS_MAP/RECEIVES_MAP edges).
-
-    Same inputs and compilation as extract_transaction_flow_map — a different
-    output shape, not new extraction. Every node id is uppercased (the
-    standard CICS/COBOL convention).
-
-    Also includes CICS_FILE -> DATASET edges from the CSD's own
-    DEFINE FILE(name) ... DSNAME(dataset) entries (see
-    cics.csd_parse.parse_csd_files) — a CSD with no such entries
-    contributes none, additively.
-    """
-    transid_to_program, verbs_by_program = compile_all_programs(
-        csd_source, cobol_sources, parser
-    )
-
+    sink: GraphSink,
+    failures: list[str] | None = None,
+) -> None:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csd", delete=False) as f:
         f.write(csd_source)
         csd_path = Path(f.name)
+    transid_to_program = parse_csd(csd_path)
     file_to_dataset = parse_csd_files(csd_path)
     csd_path.unlink(missing_ok=True)
 
-    return build_flow_graph(
-        transid_to_program, verbs_by_program, bms_mapsets, file_to_dataset
-    )
+    # structural edges: transaction -> program (STARTS)
+    for transid, prog_name in transid_to_program.items():
+        t, p = transid.upper(), prog_name.upper()
+        sink.add_node(GraphNode(id=t, kind=NodeKind.TRANSACTION))
+        sink.add_node(GraphNode(id=p, kind=NodeKind.PROGRAM))
+        sink.add_edge(GraphEdge(source=t, source_kind=NodeKind.TRANSACTION,
+                                target=p, target_kind=NodeKind.PROGRAM, kind=EdgeKind.STARTS))
+
+    # verb-derived edges: stream each program through the observer
+    seen: set[str] = set()
+    for prog_name in transid_to_program.values():
+        if prog_name in seen:
+            continue
+        seen.add(prog_name)
+        raw = cobol_sources.get(prog_name)
+        if raw is None:
+            continue
+        stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures)
+
+    # CSD file -> dataset (DEFINES_DATASET)
+    for file_name, dataset_name in file_to_dataset.items():
+        sink.add_node(GraphNode(id=file_name, kind=NodeKind.CICS_FILE))
+        sink.add_node(GraphNode(id=dataset_name, kind=NodeKind.DATASET))
+        sink.add_edge(GraphEdge(source=file_name, source_kind=NodeKind.CICS_FILE,
+                                target=dataset_name, target_kind=NodeKind.DATASET,
+                                kind=EdgeKind.DEFINES_DATASET))
