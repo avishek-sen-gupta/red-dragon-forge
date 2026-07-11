@@ -15,6 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIG=config/carddemo.yaml
+PROJECT_NAME=$(basename "$CONFIG" .yaml)
 
 echo "==> [1/7] Fetching submodules (CardDemo corpus + proleap fork + che-che4z HLASM fork)..."
 git submodule update --init
@@ -35,7 +36,7 @@ echo "==> [6/7] Rendering the HTML visualization..."
 make render CONFIG="$CONFIG"
 
 echo "==> [7/7] Exporting the canonical ingestion manifest..."
-make canonical CONFIG="$CONFIG"
+make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME="$PROJECT_NAME"
 
 echo
 echo "==> DONE — the standalone port reproduced the production graph (449 nodes / 803 edges)"

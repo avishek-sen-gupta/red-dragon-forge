@@ -12,7 +12,7 @@ fileignoreconfig:
 - filename: docs/superpowers/specs/2026-07-11-corpus-config-design.md
   checksum: ce633a6be05779c899157ed313f00b7839b447064df830cd6906d25c3dbafa0a
 - filename: uv.lock
-  checksum: 5235fdaff174eeb53f40ffc70679e83d321eb86bde30db5baaf9b35eba46a0b6
+  checksum: c7d021e7716a22b1ad0e8341c4daaa451607791387c4d77b6f059981f29c5899
 - filename: corpus_config.py
   checksum: dba9e58222fd87af8b08648440ac00ef934fbaef3b65adf8dbe129ddbd87f812
 - filename: tests/knowledge_graph/test_render.py
@@ -32,5 +32,5 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-07-11-canonical-export.md
   checksum: e4c9700cfaa591e17cdf93e7cc8dc1a49b599e900aebeb9508a2aebceac9f510
 - filename: tests/test_canonical_export_cli.py
-  checksum: 181f309e3a9edb60c732142f6329f9ca445e68f499cfa1456096be9de4c58f58
+  checksum: c4940bdfb8db44013f12ade8253d61011bbf431e5380f9078ecde56c593f186e
 version: "1.0"
