@@ -75,9 +75,9 @@ via [`cicada/third-party/che-che4z-lsp-for-hlasm-fork/build.sh`](cicada/third-pa
 Each package is independently testable from its own directory:
 
 ```bash
-cd cicada && make test    # 348 tests — unit + integration + CardDemo e2e
-cd squall && make test    # 271 tests + 1 skipped — needs SQUALL_DB2_DSN + a running Db2 (make db2-up)
-cd jackal && make test    # 127 tests
+cd cicada && make test    # unit + integration + CardDemo e2e
+cd squall && make test    # needs SQUALL_DB2_DSN + a running Db2 (make db2-up)
+cd jackal && make test
 ```
 
 Or run every package's suite in one pass from the repo root, building the shared ProLeap +

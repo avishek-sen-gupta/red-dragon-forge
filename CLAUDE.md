@@ -107,5 +107,11 @@ independently buildable — they must not import each other.
   must not import each other, only `red_dragon_forge/` may import more than one, and none of
   Cicada/Squall/Jackal may import `knowledge_graph`. Run `uv run lint-imports` to check.
 - **Formatting**: Black (line length 88); `make fmt` at the root, or per package.
+- **No test counts in docs.** Never state concrete test counts (e.g. "348 tests",
+  "271 passed / 1 skipped") in living documentation — READMEs, package docs,
+  architecture/design overviews. They go stale the instant a test is added or removed and
+  mislead readers; describe what a suite *covers*, not how many tests it has. (Point-in-time
+  "Expected: N passed" step instructions inside `docs/**/plans/` TDD plans are execution
+  records, not living claims, and are exempt.)
 - **Issue tracking**: Beads with the manual-export model described above — regenerate and stage
   `issues/issues.jsonl` before committing anything that touches issues.
