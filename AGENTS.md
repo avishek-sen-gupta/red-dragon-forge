@@ -2,16 +2,19 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
+> **Architecture in one line (this repo uses a MANUAL-EXPORT model, NOT
+> beads' Dolt remote sync):** Issues live in a local Dolt working DB under
+> `.beads/`, which is **fully gitignored**. The tracked git source of truth
+> is **`issues/issues.jsonl`**. There is **no** `bd dolt push`/`pull` and no
+> `refs/dolt/data` here. Whenever a change touches issues, regenerate and
+> stage the snapshot BEFORE committing (a deliberate manual step, not a git
+> hook):
 >
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+> ```bash
+> bd export -o issues/issues.jsonl && git add issues/issues.jsonl
+> ```
+>
+> On a fresh clone, `bd import issues/issues.jsonl` rebuilds the local DB.
 
 ## Quick Reference
 
@@ -20,7 +23,9 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --claim  # Claim work atomically
 bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
+
+# Persist the issue graph (manual-export model — do this before committing issue changes):
+bd export -o issues/issues.jsonl && git add issues/issues.jsonl
 ```
 
 ## Non-Interactive Shell Commands
@@ -67,7 +72,7 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line (manual-export model):** issues live in a local Dolt working DB under `.beads/`, which is **fully gitignored**; the tracked source of truth is `issues/issues.jsonl`. There is NO `bd dolt push` and no `refs/dolt/data` here — regenerate the snapshot with `bd export -o issues/issues.jsonl && git add issues/issues.jsonl` before committing any issue change; `bd import issues/issues.jsonl` rebuilds the DB on a fresh clone.
 
 ## Agent Context Profiles
 
@@ -91,7 +96,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
    # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
-   bd dolt push
+   bd export -o issues/issues.jsonl && git add issues/issues.jsonl  # manual export; NOT bd dolt push
    git push
    git status
    ```
@@ -124,5 +129,5 @@ bd prime                # Refresh Beads context
 - Run `bd prime` when Beads context is missing or stale. Codex 0.129.0+ can load Beads context automatically through native hooks; use `/hooks` to inspect or toggle them.
 - Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line (manual-export model):** issues live in a local Dolt working DB under `.beads/`, which is **fully gitignored**; the tracked source of truth is `issues/issues.jsonl`. There is NO `bd dolt push` and no `refs/dolt/data` here — regenerate the snapshot with `bd export -o issues/issues.jsonl && git add issues/issues.jsonl` before committing any issue change; `bd import issues/issues.jsonl` rebuilds the DB on a fresh clone.
 <!-- END BEADS CODEX SETUP -->

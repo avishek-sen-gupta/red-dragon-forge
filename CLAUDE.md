@@ -22,7 +22,7 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line:** this repo uses beads' **manual-export** model, NOT Dolt remote sync — `.beads/` (the local Dolt working DB) is fully gitignored, and `issues/issues.jsonl` is the tracked git source of truth, regenerated with `bd export -o issues/issues.jsonl` and staged before committing (there is no `bd dolt push`). See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for the underlying sync concepts this repo deliberately opts out of.
 
 ## Agent Context Profiles
 
@@ -71,18 +71,41 @@ On a fresh clone, `bd import issues/issues.jsonl` rebuilds the local DB.
 
 ## Build & Test
 
-_Add your build and test commands here_
+The root `Makefile` orchestrates the whole workspace (see `README.md` for details):
 
 ```bash
-# Example:
-# npm install
-# npm test
+make setup     # init submodules + build the ProLeap + JCL bridge JARs + uv sync --all-packages
+make jar       # build both bridge JARs (ProLeap + JCL); skipped if already built
+make python    # uv sync --all-packages
+make test      # root composition-layer + integration suite (needs the JARs)
+make test-all  # build JARs once, then run every package's suite (cicada, squall, jackal, forge)
 ```
+
+Each package is also independently buildable/testable from its own directory (`cd cicada && make test`, etc.).
+The CICS e2e and fitness-golden paths also need the native `hlasm_export` binary — build it via
+`cicada/third-party/che-che4z-lsp-for-hlasm-fork/build.sh --target hlasm_export` (cmake/ninja/clang).
+Db2-backed tests need `SQUALL_DB2_DSN` and a running Db2 (`cd squall && make db2-up`).
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+A `uv` workspace layering four runtimes plus an analysis package on top of the vendored
+RedDragon interpreter (`vendor/red-dragon`, never modified here):
+
+- `cicada/` — CICS runtime (pseudo-conversational dispatch, VSAM KSDS, BMS).
+- `squall/` — EXEC SQL / Db2 coprocessor runtime.
+- `jackal/` — JCL/batch execution engine.
+- `red_dragon_forge/` — composition layer; assembles multiple coprocessor extensions into one
+  compiled COBOL program via a generic `CoprocessorSpec` seam.
+- `knowledge_graph/` — whole-system knowledge-graph extraction/merge/render (analysis only).
+
+Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved) and stay
+independently buildable — they must not import each other.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Package independence** is enforced by the root `.importlinter` contract: the three runtimes
+  must not import each other, only `red_dragon_forge/` may import more than one, and none of
+  Cicada/Squall/Jackal may import `knowledge_graph`. Run `uv run lint-imports` to check.
+- **Formatting**: Black (line length 88); `make fmt` at the root, or per package.
+- **Issue tracking**: Beads with the manual-export model described above — regenerate and stage
+  `issues/issues.jsonl` before committing anything that touches issues.
