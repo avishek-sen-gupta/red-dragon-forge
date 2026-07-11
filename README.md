@@ -59,6 +59,30 @@ CardDemo run.
 FILE-CONTROL) over `vendor/carddemo` from scratch every time — safe to re-run
 after touching any extractor code or the corpus submodule.
 
+### Canonical export
+
+```bash
+make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME=carddemo
+```
+
+This is the point of cobble: converting a COBOL/CICS/JCL corpus's graph into
+CodeConcise's canonical ingestion manifest shape (`{version, generator, nodes,
+edges}`), so a mainframe corpus cobble has analyzed can be ingested the same
+way any other language's analyzer output is. Synthesizes `FILE`/`DIRECTORY`
+nodes and `MADE_OF` edges for every node whose `file_path` resolved to a real
+file; nodes with no resolved file (`DATASET`, `COBOL_FILE`, unconfigured
+`TRANSACTION`/`CICS_FILE`, `BMS_MAP`) get no such synthesis. Streaming and
+thread-pool-parallel throughout, with bounded memory — see
+`docs/superpowers/specs/2026-07-11-canonical-export-design.md` for the full
+design, including the deliberate lack of schema validation and the known
+lossy limitation (edge `attrs` have no home in the canonical edge shape and
+are dropped).
+
+Unlike `build`/`sym`/`render`, this doesn't take a `--config`/`CONFIG=` at
+all — `NODES=`, `EDGES=`, `OUTPUT=`, and `PROJECT_NAME=` are all required
+explicit paths/values, so it can run against any `nodes.jsonl`/`edges.jsonl`
+pair regardless of which config (if any) produced them.
+
 ### Point this at your own codebase
 
 `cobble.build_graph`/`cobble.generate_sym` take a required `--config <path>`
@@ -116,30 +140,6 @@ checkboxes to filter by node/edge kind, a search box that highlights matching
 node labels, and click-to-highlight-neighbors on any node. Requires
 `<out_dir>/nodes.jsonl` / `<out_dir>/edges.jsonl` to already exist (i.e. run `make build`
 first).
-
-### Canonical export
-
-```bash
-make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME=carddemo
-```
-
-Converts cobble's own graph into CodeConcise's canonical ingestion manifest
-shape (`{version, generator, nodes, edges}`), so a corpus cobble has already
-analyzed can be ingested the same way any other language's analyzer output
-is. Synthesizes `FILE`/`DIRECTORY` nodes and `MADE_OF` edges for every node
-whose `file_path` resolved to a real file; nodes with no resolved file
-(`DATASET`, `COBOL_FILE`, unconfigured `TRANSACTION`/`CICS_FILE`, `BMS_MAP`)
-get no such synthesis. Streaming and thread-pool-parallel throughout, with
-bounded memory — see
-`docs/superpowers/specs/2026-07-11-canonical-export-design.md` for the full
-design, including the deliberate lack of schema validation and the known
-lossy limitation (edge `attrs` have no home in the canonical edge shape and
-are dropped).
-
-Unlike `build`/`sym`/`render`, this doesn't take a `--config`/`CONFIG=` at
-all — `NODES=`, `EDGES=`, `OUTPUT=`, and `PROJECT_NAME=` are all required
-explicit paths/values, so it can run against any `nodes.jsonl`/`edges.jsonl`
-pair regardless of which config (if any) produced them.
 
 ### Unit tests
 
