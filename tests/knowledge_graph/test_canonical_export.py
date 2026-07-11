@@ -1,4 +1,6 @@
+import json
 from pathlib import Path
+from typing import Iterator
 
 from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 from cobble.knowledge_graph.canonical_export import (
@@ -6,6 +8,8 @@ from cobble.knowledge_graph.canonical_export import (
     _category_for,
     _language_for,
     _read_file_text,
+    _stream_edges,
+    _stream_nodes,
     _transform_edge,
     _transform_node,
 )
@@ -100,3 +104,49 @@ def test_transform_edge_prefixes_both_endpoints() -> None:
         "to_id": "COPYBOOK::CVACT01Y",
         "type": "COPY",
     }
+
+
+def test_stream_nodes_yields_graphnode_per_line(tmp_path: Path) -> None:
+    nodes_path = tmp_path / "nodes.jsonl"
+    nodes_path.write_text(
+        json.dumps({"id": "CBACT01C", "kind": "PROGRAM", "file_path": "a/CBACT01C.cbl", "attrs": {}}) + "\n"
+        + json.dumps({"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}}) + "\n"
+    )
+
+    nodes = list(_stream_nodes(nodes_path))
+
+    assert nodes == [
+        GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, file_path="a/CBACT01C.cbl"),
+        GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, file_path=None),
+    ]
+
+
+def test_stream_nodes_is_a_generator_not_a_list(tmp_path: Path) -> None:
+    nodes_path = tmp_path / "nodes.jsonl"
+    nodes_path.write_text(json.dumps({"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}) + "\n")
+
+    result = _stream_nodes(nodes_path)
+
+    assert not isinstance(result, list)
+    assert isinstance(result, Iterator)
+
+
+def test_stream_edges_yields_graphedge_per_line(tmp_path: Path) -> None:
+    edges_path = tmp_path / "edges.jsonl"
+    edges_path.write_text(
+        json.dumps({
+            "source": "CBACT01C", "source_kind": "PROGRAM",
+            "target": "CVACT01Y", "target_kind": "COPYBOOK",
+            "kind": "COPY", "attrs": {"line": 42},
+        }) + "\n"
+    )
+
+    edges = list(_stream_edges(edges_path))
+
+    assert edges == [
+        GraphEdge(
+            source="CBACT01C", source_kind=NodeKind.PROGRAM,
+            target="CVACT01Y", target_kind=NodeKind.COPYBOOK,
+            kind=EdgeKind.COPY, attrs={"line": 42},
+        )
+    ]
