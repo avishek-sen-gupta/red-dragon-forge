@@ -18,6 +18,8 @@ cd cicada
 uv sync
 # All Java artefacts — ProLeap parser + bridge (JDK 17+ and Maven required):
 make jar      # or `make jar-force` after a red-dragon bump
+# Native HLASM front end (only needed for BMS symbolic-copybook generation):
+make hlasm    # or `make hlasm-force`; builds hlasm_export from third-party/che-che4z-lsp-for-hlasm-fork
 ```
 
 ## Tests
@@ -80,22 +82,38 @@ rebuilds the local DB. See `beads/README.md`.
 
 ```
 cics/
-  strategy.py          # CicsLoweringStrategy — injected into CobolFrontend
+  strategy.py          # CicsLoweringStrategy (RedDragonExtensionLoweringStrategy impl)
+  coprocessor.py       # build_cics_spec — wraps the strategy as a CoprocessorSpec
+  statements.py        # ExecCicsStatement + CicsDialectParser (DialectParser impl)
+  cics_visitor.py      # ANTLR visitor: parse_exec_cics_text
+  cics_parser.py       # thin re-export of parse_exec_cics_text / CicsOperand
+  cics_grammar/        # ANTLR4 EXEC CICS grammar + generated parser
   preprocessor.py      # apply_cics_prepass (inject_dfheiblk)
   dfhresp_prepass.py   # DFHRESP ASG pre-pass
   dispatcher.py        # CicsRegion, run_cics, _advance_routing
+  vm_init.py           # make_cics_initial_vm, make_entry_point
+  csd_parse.py         # parse_csd, parse_csd_files (transid→program, file→DSNAME)
   bootstrap.py         # compile_cics_program, run_carddemo_region
+  conversational.py    # pseudo-conversational suspend/resume driver
   types.py             # CicsContext, DispatchResult, DispatchKind
   terminal.py          # ScreenChannel / InputChannel protocols
   le_stubs.py          # IBM LE service stubs (CEEDAYS, etc.)
   builtins/            # CICS service builtins: flow, screen, system, vsam
-  vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, codec, dump CLI
-  bms/                 # BMS symbolic map generation (bms-tools pipeline)
+  vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, format, dump CLI
+  bms/                 # BMS symbolic-copybook generation (hlasm_export → bms_copybook_gen; macros/ syslib)
+  flow_map.py, flow_graph_core.py, flow_observer.py, graph_sink.py, verb_source_lowering.py
+                       # streaming CICS transaction-flow graph extraction
 ```
 
-RedDragon contributes:
-- `interpreter/cobol/cics_parser.py` — Lark EXEC CICS grammar (`CicsOperand`, `parse_exec_cics_text`)
-- `interpreter/cobol/exec_cics_strategy.py` — `ExecCicsStrategy` protocol + `CatchAllLoweringStrategy`
+The EXEC CICS grammar is **ANTLR4** (`cics/cics_grammar/CICSzLexer.g4` + `CICSzParser.g4`, with
+generated `CICSzParser.py`) — not Lark. `ExecCicsStatement`, `CicsOperand`, and the
+`CicsDialectParser` all live in cicada now; RedDragon has zero CICS-specific type names.
+
+RedDragon contributes only generic, dialect-agnostic seams:
+- `interpreter/frontend_extension_lowering.py` — `RedDragonExtensionLoweringStrategy` protocol
+- `interpreter/frontend_extension.py` — `DialectParser` protocol (+ `NullDialectParser`)
+- `interpreter/project/coprocessor_compile.py` — `CoprocessorSpec` / `compile_program`, which
+  calls `compile_cobol(extension_strategies=[…], dialect_parsers=[…])`
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->

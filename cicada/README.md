@@ -24,9 +24,14 @@ cd cicada
 # Python dependencies (installs red-dragon from vendor/ in editable mode)
 uv sync
 
-# ProLeap COBOL bridge (required for COBOL compilation and integration tests)
-cd vendor/red-dragon/proleap-bridge && ./build.sh && cd -
-# Produces: vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+# Java + native artefacts (JDK 17+ and Maven required)
+make jar        # ProLeap COBOL bridge JAR (required for COBOL compilation and integration tests)
+# or `make jar-force` after a red-dragon bump.
+# Produces: ../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+
+# Optional — only for BMS symbolic-copybook generation from raw .bms maps (see §7):
+make hlasm      # builds hlasm_export from third-party/che-che4z-lsp-for-hlasm-fork (OS-agnostic build.sh)
+# or `make hlasm-force` to force a rebuild.
 ```
 
 ## Tests
@@ -53,29 +58,46 @@ registered builtins — the same mechanism any language frontend uses.
 
 ```
 cics/
-  strategy.py          # CicsLoweringStrategy — injected into CobolFrontend
+  strategy.py          # CicsLoweringStrategy (RedDragonExtensionLoweringStrategy impl)
+  coprocessor.py       # build_cics_spec — wraps the strategy as a CoprocessorSpec
+  statements.py        # ExecCicsStatement + CicsDialectParser (DialectParser impl)
+  cics_visitor.py      # ANTLR visitor: parse_exec_cics_text
+  cics_parser.py       # thin re-export of parse_exec_cics_text / CicsOperand
+  cics_grammar/        # ANTLR4 EXEC CICS grammar + generated parser
   preprocessor.py      # apply_cics_prepass (inject_dfheiblk)
   dfhresp_prepass.py   # DFHRESP ASG pre-pass
   dispatcher.py        # CicsRegion, run_cics, _advance_routing
+  vm_init.py           # make_cics_initial_vm, make_entry_point
+  csd_parse.py         # parse_csd, parse_csd_files (transid→program, file→DSNAME)
   bootstrap.py         # compile_cics_program, run_carddemo_region
+  conversational.py    # pseudo-conversational suspend/resume driver
   types.py             # CicsContext, DispatchResult, DispatchKind
   terminal.py          # ScreenChannel / InputChannel protocols
   le_stubs.py          # IBM LE service stubs (CEEDAYS, etc.)
   builtins/            # CICS service builtins: flow, screen, system, vsam
-  vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, codec, dump CLI
-  bms/                 # BMS symbolic map generation (bms-tools pipeline)
+  vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, format, dump CLI
+  bms/                 # BMS symbolic-copybook generation (hlasm_export → bms_copybook_gen)
+  flow_map.py, flow_graph_core.py, flow_observer.py, graph_sink.py, verb_source_lowering.py
+                       # streaming CICS transaction-flow graph extraction (see §6)
 ```
 
-RedDragon contributes one thin seam that lives in its COBOL layer:
+RedDragon contributes two generic, dialect-agnostic seams — no CICS names remain in RedDragon:
 
-- `interpreter/cobol/exec_cics_strategy.py` — `ExecCicsStrategy` protocol + `CatchAllLoweringStrategy` null object
+- `interpreter/frontend_extension_lowering.py` — `RedDragonExtensionLoweringStrategy` protocol,
+  the injectable extension-lowering seam.
+- `interpreter/frontend_extension.py` — `DialectParser` protocol (+ `NullDialectParser` default)
+  for turning bridge JSON into dialect statement objects.
 
-The EXEC CICS parser lives in cicada (not in RedDragon):
+Everything CICS-specific lives in cicada:
 
-- `cics/cics_grammar/` — ANTLR4 grammar (`CICSzParser.g4`, `CICSzLexer.g4`)
-- `cics/cics_visitor.py` — ANTLR visitor: grammar parse tree → `(verb, {OPTION: CicsOperand | None})`
+- `cics/statements.py` — `ExecCicsStatement` (relocated from RedDragon) + `CicsDialectParser`,
+  the `DialectParser` that builds it from bridge JSON.
+- `cics/cics_grammar/` — ANTLR4 grammar (`CICSzParser.g4`, `CICSzLexer.g4`) + generated `CICSzParser.py`.
+- `cics/cics_visitor.py` — ANTLR visitor: `parse_exec_cics_text(text) -> (verb, {OPTION: CicsOperand | None})`.
+- `cics/cics_parser.py` — thin re-export wrapper (`CicsOperand`, `parse_exec_cics_text`) used as the parse entry point.
 
-`CobolFrontend` accepts an injectable `CicsTextParser` seam; cicada supplies the ANTLR implementation at construction time.
+`compile_cobol` accepts injectable `extension_strategies` and `dialect_parsers` arrays; cicada
+supplies `CicsLoweringStrategy` and `CicsDialectParser`, composed via a `CoprocessorSpec` (see §1.6).
 
 ---
 
@@ -111,15 +133,18 @@ options. CICS support therefore splits into a **text pre-pass** (before ProLeap)
   so EIB references (`EIBRESP`, `EIBCALEN`, `EIBAID`, `EIBTRNID`) resolve to the real copybook.
   Detection uses a word-split (`line.strip().upper().split()`), not a regex.
 
-There is no regex surgery anywhere in the CICS path. The pre-pass exists only because ProLeap
-cannot inject DFHEIBLK itself; everything else is structural.
+The pre-pass exists only because ProLeap cannot inject DFHEIBLK itself. The only other textual
+step in the CICS path is comment stripping inside `CicsDialectParser.parse` (see §1.3), which
+uses a small regex; the pre-pass detection itself is a word-split, not a regex.
 
 ### 1.3 EXEC CICS as a structured statement
 
-When ProLeap surfaces an `EXEC CICS` block, the COBOL frontend builds an `ExecCicsStatement`
-from the block's raw text. `ExecCicsStatement.from_dict` calls
-**`parse_exec_cics_text(text) -> (verb, {OPTION: CicsOperand | None})`** from RedDragon's
-`interpreter.cobol.cics_parser`.
+When ProLeap surfaces an `EXEC CICS` block, the bridge emits its verbatim text as
+`exec_cics_text` in the block's JSON. cicada's `CicsDialectParser.parse` (in
+`cics/statements.py`) — the `DialectParser` injected into the compile — first strips comment
+lines with `re.sub(r"\*>.*", "", …, flags=re.MULTILINE)`, then calls
+**`parse_exec_cics_text(text) -> (verb, {OPTION: CicsOperand | None})`** from
+`cics.cics_visitor`, and wraps the result in an `ExecCicsStatement`.
 
 The grammar (ANTLR4):
 
@@ -130,9 +155,9 @@ The grammar (ANTLR4):
 - Multi-word values such as `LENGTH OF WS-CA` arrive as a single operand with the full text
   preserved — `cics/strategy.py` inspects the `text` where needed (e.g., `_resolve_cics_length_option`).
 
-**Comment lines inside EXEC CICS blocks** are filtered in the ProLeap fork's
-`TagUtils.getExecCicsText` — any token whose untagged text starts with `*>` is skipped before
-the string reaches the Python CICS parser.
+**Comment lines inside EXEC CICS blocks** are stripped in Python by `CicsDialectParser.parse`
+— `re.sub(r"\*>.*", "", exec_cics_text, flags=re.MULTILINE)` — before the text reaches
+`parse_exec_cics_text`. (The bridge no longer filters them; it hands the block over verbatim.)
 
 ### 1.4 DFHRESP structural lowering — `cics/dfhresp_prepass.py` + bridge grammar
 
@@ -150,13 +175,14 @@ rules so `DFHRESP(X)` is tried as `cicsDfhRespLiteral` first, emitted as
 
 ### 1.5 Lowering strategy — `cics/strategy.py`
 
-`CobolFrontend` accepts an injected **`ExecCicsStrategy`** (from
-`interpreter.cobol.exec_cics_strategy`). Two implementations:
+`compile_cobol` accepts a list of injected **`extension_strategies`** implementing
+`RedDragonExtensionLoweringStrategy` (from `interpreter.frontend_extension_lowering`). When no
+strategy handles an EXEC CICS statement the generic frontend emits no IR for it — a non-CICS
+COBOL compile passes an empty list, so the CICS machinery is inert unless opted in.
 
-- **`CatchAllLoweringStrategy`** (default, in RedDragon) — null object, logs a warning, emits
-  no IR. Used by non-CICS COBOL compiles; the CICS machinery is inert unless opted in.
-- **`CicsLoweringStrategy`** (in cicada) — registers CICS service builtins into the VM's
-  `Builtins.TABLE` (closures over region runtime state), then translates each verb to IR.
+- **`CicsLoweringStrategy`** (in cicada) — implements the protocol; registers CICS service
+  builtins into the VM's `Builtins.TABLE` (closures over region runtime state), then translates
+  each verb to IR.
 
 Translation pattern: **each CICS verb lowers to a `CallFunction` to a registered builtin**
 (`__cics_read`, `__cics_send_map`, `__cics_set_xctl_context`, …).
@@ -171,16 +197,24 @@ Translation pattern: **each CICS verb lowers to a `CallFunction` to a registered
 | System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD`, `HANDLE ABEND` | matching `__cics_*` builtin |
 | File control (VSAM) | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | matching `__cics_*` builtin |
 
-### 1.6 Compiling a region program — `cics/bootstrap.py`
+### 1.6 Compiling a region program — `cics/bootstrap.py` + `cics/coprocessor.py`
 
-`compile_cics_program(source, parser, strategy, …)` produces a `LinkedProgram` ready for
-`run_cics`. It is now a thin wrapper over RedDragon's public **Compile API**
-(`interpreter.project.cobol_compile.compile_cobol`): it passes the `CicsLoweringStrategy` as an
-`extension_strategy`, the EXEC-CICS text parser, and `apply_cics_prepass` as the per-callee
-`source_transform`; the generic single/multi-module compile + transitive `CALL` resolution +
-linking live in RedDragon (cicada's old `_compile_cics_module`/`_resolve_call_sources` were
-deleted). Callees that fail to compile are skipped with a warning. IBM LE services (`CEEDAYS`,
-etc.) are supplied as stubs from `cics/le_stubs.py`.
+`compile_cics_program(source, parser, spec, …)` produces a `LinkedProgram` ready for
+`run_cics`. It is a thin wrapper over RedDragon's **coprocessor compile API**
+(`interpreter.project.coprocessor_compile.compile_program`), which composes one or more
+`CoprocessorSpec`s and calls `compile_cobol(…, extension_strategies=[…], dialect_parsers=[…])`.
+cicada builds its `CoprocessorSpec` in `cics/coprocessor.py::build_cics_spec`:
+
+- `make_strategy` → a fresh `CicsLoweringStrategy` over the shared region runtime state,
+- `dialect_parser` → `CicsDialectParser`,
+- `source_prepass` → `apply_cics_prepass`,
+- `owns_execution=True` and `extra_program_source_dirs` → the IBM LE stub dir.
+
+The generic single/multi-module compile + transitive `CALL` resolution + linking live in
+RedDragon. Callees that fail to compile are skipped with a warning. IBM LE services (`CEEDAYS`,
+etc.) are supplied as stubs from `cics/le_stubs.py`. A *conversational* (non-pseudo-conversational)
+program is compiled with `CicsLoweringStrategy(conversational=True)` and driven via
+`cics/conversational.py`'s suspend/resume region — see that module.
 
 ---
 
@@ -213,15 +247,16 @@ class DispatchResult:
 max_steps)` executes a single program for one turn:
 
 - Seeds the context holder so `__cics_init_eib` can initialise `EIBTRNID`/`EIBCALEN`/`EIBAID`.
-- Delegates VM setup to `_make_cics_initial_vm(context, ca_bytes)` — builds a fresh `VMState`
+- Delegates VM setup to `make_cics_initial_vm(context, ca_bytes)` — builds a fresh `VMState`
   with a `rgn_commarea` region and a `StackFrame` carrying `__cics_transid`, `__cics_eibcalen`,
   `__cics_eibaid`, and `__params_region` (stored as the region name string `"rgn_commarea"`,
   not an `Address` object, so region writes from LINKAGE section items resolve cleanly).
-- Delegates entry-point selection to `_make_entry_point(program)` — uses `entry_func_label`
+- Delegates entry-point selection to `make_entry_point(program)` — uses `entry_func_label`
   when present (multi-module link), otherwise the `func_*` prefix predicate.
 - Runs via `run_linked`; returns the `DispatchResult` left in `result_holder`.
 
-Both helpers are module-level so `EXEC CICS LINK` can reuse them for linked sub-programs.
+Both helpers live in `cics/vm_init.py` (module-level) so `EXEC CICS LINK` can reuse them for
+linked sub-programs.
 
 ### 2.3 Synchronous program link — `EXEC CICS LINK`
 
@@ -234,7 +269,7 @@ synchronously within the same transaction:
    - Looks up the target in `program_cache` (must be pre-compiled; no lazy compilation).
    - Saves and then restores `result_holder` around the inner execution so the linked program's
      `EXEC CICS RETURN` never affects the outer transaction's routing.
-   - Builds a fresh `VMState` via `_make_cics_initial_vm` and runs the target with `run_linked`.
+   - Builds a fresh `VMState` via `make_cics_initial_vm` and runs the target with `run_linked`.
    - Writes the modified `rgn_commarea` back into the caller's WS at the original field's offset.
 3. After the `CallFunction`, `emit_resp_writeback` writes `0` (DFHRESP NORMAL) to `EIBRESP` and
    to the optional `RESP(var)` field.
@@ -288,11 +323,15 @@ Program ↔ driver I/O goes through explicit protocols: `ScreenChannel` (outboun
 `SEND TEXT`) and `InputChannel` (inbound: `RECEIVE MAP`) are `put(item)` + `get(block, timeout)`
 protocols. `queue.Queue` conforms; `queue.Empty` signals "no item."
 
-### 2.7 CSD and bootstrap
+### 2.7 CSD and bootstrap — `cics/csd_parse.py`
 
 `parse_csd(path)` reads a CICS CSD (`DEFINE TRANSACTION(x) PROGRAM(y)`) into a
-`{transid: program}` mapping. `run_carddemo_region` ties everything together: parse the CSD,
-construct a shared `CicsLoweringStrategy`, eagerly compile every distinct program, then run
+`{transid: program}` mapping; `parse_csd_files(path)` reads each `DEFINE FILE(name) …
+DSNAME(dataset)` into a `{logical file name: physical DSNAME}` mapping (resolving CICS FILE
+CONTROL access to physical datasets — the DSN-model / CSD dataset-definition work). Both live in
+the leaf module `cics/csd_parse.py` (a Lark grammar + transformer) and are re-exported through
+`cics/dispatcher.py`. `run_carddemo_region` ties everything together: parse the CSD, build one
+shared CICS `CoprocessorSpec`, eagerly compile every distinct program, then run
 `_run_dispatcher_with_runner` from the entry transid.
 
 ---
@@ -374,15 +413,17 @@ record) and `block` (human-readable `@offset name value 0xRAW` lines).
 
 - **No core-engine edits.** Nothing under `interpreter/vm/**`, `ir.py`, `run.py`, `executor.py`,
   `cfg.py` is modified. CICS verbs reach the VM only as `CallFunction` to registered builtins.
-- **Structure over text.** The only textual transform is `inject_dfheiblk` (word-split, not
-  regex). DFHRESP lowering is structural. CICS verb parsing is a grammar. Comment filtering is
-  in the ProLeap fork's `TagUtils` because ProLeap treats the EXEC CICS envelope as opaque.
+- **Structure over text.** The pre-pass transform `inject_dfheiblk` is a word-split, not a
+  regex; DFHRESP lowering is structural; CICS verb parsing is a grammar. The one textual
+  exception is comment stripping inside `CicsDialectParser.parse` (a small `re.sub`), done in
+  Python because the bridge now hands the EXEC CICS block over verbatim.
 - **One routing rule.** `_advance_routing` is the sole definition of inter-program routing.
 - **VSAM file control is a thin adapter.** Record I/O delegates to RedDragon's shared
   access-method drivers; the backing `.dat` file is the store (no in-memory copy, no pluggable
   backend). The adapter never interprets record internals — only FCT state + EIBRESP mapping.
-- **Default behaviour unchanged.** A non-CICS COBOL compile uses `CatchAllLoweringStrategy`;
-  CICS lowering + file control are opt-in (only an EXEC CICS program reaches the adapter).
+- **Default behaviour unchanged.** A non-CICS COBOL compile passes no `extension_strategies`,
+  so EXEC CICS statements lower to no IR; CICS lowering + file control are opt-in (only an
+  EXEC CICS program compiled with the CICS `CoprocessorSpec` reaches the adapter).
 
 ---
 
@@ -392,11 +433,53 @@ record) and `block` (human-readable `@offset name value 0xRAW` lines).
 |---|---|
 | Pre-pass | `cics/preprocessor.py` |
 | DFHRESP structural lowering | `cics/dfhresp_prepass.py`; `_DFHRESP_TABLE` in `preprocessor.py`; grammar fix in ProLeap fork |
-| EXEC CICS grammar | `cics/cics_grammar/` (ANTLR4); `cics/cics_visitor.py`; `ExecCicsStatement` in `interpreter/cobol/cobol_statements.py` (red-dragon) |
-| Lowering strategy | `cics/strategy.py`; protocol in `interpreter/cobol/exec_cics_strategy.py` (red-dragon) |
+| EXEC CICS grammar | `cics/cics_grammar/` (ANTLR4); `cics/cics_visitor.py`; `cics/cics_parser.py` (re-export); `ExecCicsStatement` + `CicsDialectParser` in `cics/statements.py` |
+| Lowering strategy | `cics/strategy.py`; protocol `RedDragonExtensionLoweringStrategy` in `interpreter/frontend_extension_lowering.py` (red-dragon); `DialectParser` in `interpreter/frontend_extension.py` (red-dragon) |
+| Coprocessor compile | `cics/coprocessor.py` (`build_cics_spec`); `CoprocessorSpec`/`compile_program` in `interpreter/project/coprocessor_compile.py` (red-dragon) |
 | Service builtins | `cics/builtins/{flow,screen,system,vsam}.py` (`flow.py` includes `__cics_link`) |
-| Dispatcher / region | `cics/dispatcher.py` (`run_cics`, `_make_cics_initial_vm`, `_make_entry_point`, `CicsRegion`), `cics/bootstrap.py`, `cics/types.py` |
+| Dispatcher / region | `cics/dispatcher.py` (`run_cics`, `_advance_routing`, `CicsRegion`), `cics/vm_init.py` (`make_cics_initial_vm`, `make_entry_point`), `cics/bootstrap.py`, `cics/types.py` |
+| CSD parsing | `cics/csd_parse.py` (`parse_csd`, `parse_csd_files`) |
+| Conversational driver | `cics/conversational.py` (suspend/resume) |
+| Flow-graph extraction | `cics/flow_map.py`, `cics/flow_graph_core.py`, `cics/flow_observer.py`, `cics/graph_sink.py`, `cics/verb_source_lowering.py` |
 | Terminal I/O | `cics/terminal.py` |
 | LE service stubs | `cics/le_stubs.py` |
-| VSAM | `cics/vsam/{fct,engine,backend,format,dump,seed}.py` |
-| BMS maps | `cics/bms/generate.py` (symbolic copybooks via bms-tools pipeline) |
+| VSAM | `cics/vsam/{fct,engine,eibresp,format,dump,seed}.py` |
+| BMS maps | `cics/bms/generate.py` + `cics/bms/macros/` (symbolic copybooks: `hlasm_export` → `bms_copybook_gen`) |
+
+---
+
+## 6. Streaming CICS flow-graph extraction
+
+Cicada can emit the CICS-flow portion of a knowledge graph as each program lowers, without a
+separate analysis pass. `extract_transaction_flow_graph(...)` (`cics/flow_map.py`) is the public
+entry point: given a transid→program map and program sources, it streams nodes and edges into a
+`GraphSink` (`cics/graph_sink.py` — a structural `Protocol` with `add_node`/`add_edge`; the
+knowledge-graph `GraphWriter` satisfies it without a hard import).
+
+- `cics/flow_observer.py` — `CicsVerb` (verb-as-data record), the `CicsFlowObserver` protocol,
+  and `NullCicsFlowObserver`. `CicsLoweringStrategy` notifies its observer on every verb via the
+  `on_verb` seam — including VSAM / FILE CONTROL verbs (`READ`, `WRITE`, `REWRITE`, `DELETE`,
+  `STARTBR`, `READNEXT`, `READPREV`), which carry the accessed `file_name`.
+- `cics/verb_source_lowering.py` — `GraphEmittingObserver` (bridges `on_verb` events to graph
+  edges) and `stream_program_verbs(...)`, production's "lower each program and emit edges" source.
+- `cics/flow_graph_core.py` — the verbs-as-data leaf shared by production and the KG pipeline;
+  `_verb_edge` maps each `CicsVerb` to a `GraphEdge`. VSAM verbs become `READS`/`WRITES`/`UPDATES`
+  edges to a `CICS_FILE` node; the CSD contributes structural `STARTS` and `DEFINES_DATASET`
+  (via `parse_csd_files`) edges.
+
+---
+
+## 7. HLASM / BMS build path
+
+BMS symbolic copybooks are generated from raw `.bms` map sources by an out-of-process HLASM
+assembler front end:
+
+- `make hlasm` / `make hlasm-force` build the `hlasm_export` binary from
+  `cicada/third-party/che-che4z-lsp-for-hlasm-fork` via its OS-agnostic `build.sh`
+  (output: `third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export`).
+- `cics/bms/generate.py` (`generate_symbolic_copybooks`) runs, per `.bms` file,
+  `hlasm_export <map>.bms --syslib <macros>` piped into `python -m bms_copybook_gen`, writing
+  `<out_dir>/<stem>.cpy`. `hlasm_export` only recognises the BMS macros (`DFHMSD`/`DFHMDI`/
+  `DFHMDF`) when their HLASM prototype definitions are on the assembler SYSLIB, so cicada ships
+  minimal prototypes in `cics/bms/macros/` (the default syslib). `bms_copybook_gen` is a
+  first-class package (not a vendored tool).
