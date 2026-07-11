@@ -2,11 +2,14 @@
 
 [![reproduce-graph](https://github.com/avishek-sen-gupta/cobble/actions/workflows/reproduce.yml/badge.svg)](https://github.com/avishek-sen-gupta/cobble/actions/workflows/reproduce.yml)
 
-A **standalone, VM-free** knowledge-graph extractor for the AWS CardDemo mainframe
-corpus. It is a file-by-file **port** of the streaming graph pipeline in the
-`red-dragon-forge` monorepo, lifted into its own repository to prove the
-extraction is decoupled from the RedDragon interpreter/VM. It reproduces the
-**exact same 449-node / 803-edge graph** starting from nothing but:
+A **standalone, VM-free** knowledge-graph extractor for COBOL/CICS/JCL
+mainframe codebases. It is a file-by-file **port** of the streaming graph
+pipeline in the `red-dragon-forge` monorepo, lifted into its own repository to
+prove the extraction is decoupled from the RedDragon interpreter/VM. Point it
+at any corpus via a YAML config (see [Point this at your own
+codebase](#point-this-at-your-own-codebase)) — the AWS **CardDemo** corpus is
+this repo's proof case, where it reproduces the **exact same 449-node /
+803-edge graph** starting from nothing but:
 
 - the **CardDemo repo** (a git submodule — the source corpus), and
 - the parsers/tools, all **built from source** (submodules + copied Maven source).
