@@ -2,25 +2,25 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+> **Architecture in one line (this repo uses a MANUAL-EXPORT model, NOT beads' Dolt sync):**
+> The local Dolt working DB lives under `.beads/`, which is **fully gitignored**. The
+> **tracked git source of truth** is `beads/issues.jsonl` (no leading dot). There is **no**
+> `bd dolt push`/`bd dolt pull` and no `refs/dolt/data` sync in this repo. Whenever a change
+> touches issues, regenerate and stage the snapshot **before committing**:
+> ```bash
+> bd export -o beads/issues.jsonl && git add beads/issues.jsonl
+> ```
+> On a fresh clone, `bd import beads/issues.jsonl` rebuilds the local DB. See `beads/README.md`
+> and the fuller note in `CLAUDE.md`.
 
 ## Quick Reference
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
+bd ready                # Find available work
+bd show <id>            # View issue details
 bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
+bd close <id>           # Complete work
+bd export -o beads/issues.jsonl && git add beads/issues.jsonl   # regenerate tracked snapshot before commit
 ```
 
 ## Non-Interactive Shell Commands
@@ -67,7 +67,7 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line (this repo):** manual-export model — the Dolt working DB under `.beads/` is fully gitignored; the tracked source of truth is `beads/issues.jsonl`. There is NO `bd dolt push`/`refs/dolt/data` sync here. Regenerate with `bd export -o beads/issues.jsonl` and `git add` it before committing; `bd import beads/issues.jsonl` rebuilds a fresh clone.
 
 ## Agent Context Profiles
 
@@ -89,9 +89,10 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
    # Conservative/minimal/default: report status and proposed commands; wait for approval.
    git status
 
-   # Team-maintainer opt-in only, unless current instructions forbid it:
+   # Team-maintainer opt-in only, unless current instructions forbid it.
+   # NOTE: no `bd dolt push` in this repo — if issues changed, regenerate the tracked snapshot first:
+   bd export -o beads/issues.jsonl && git add beads/issues.jsonl
    git pull --rebase
-   bd dolt push
    git push
    git status
    ```
@@ -124,5 +125,5 @@ bd prime                # Refresh Beads context
 - Run `bd prime` when Beads context is missing or stale. Codex 0.129.0+ can load Beads context automatically through native hooks; use `/hooks` to inspect or toggle them.
 - Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line (this repo):** manual-export model — the Dolt working DB under `.beads/` is fully gitignored; the tracked source of truth is `beads/issues.jsonl`. There is NO `bd dolt push`/`refs/dolt/data` sync here. Regenerate with `bd export -o beads/issues.jsonl` and `git add` it before committing.
 <!-- END BEADS CODEX SETUP -->
