@@ -36,14 +36,18 @@ $(ANTLR_JAR):
 	mkdir -p tools
 	curl -fsSL $(ANTLR_URL) -o $(ANTLR_JAR)
 
-## Stage-0: GENERATE the BMS symbolic copybooks from the CardDemo .bms sources
+## Stage-0: GENERATE the BMS symbolic copybooks from the corpus's .bms sources
 ## (hlasm_export | bms_copybook_gen -> sym/*.cpy). Nothing pre-generated is shipped.
+## Requires CONFIG=<path-to-corpus-yaml>, e.g. make sym CONFIG=config/carddemo.yaml
 sym:
-	uv run python generate_sym.py --config config/carddemo.yaml
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make sym CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	uv run python generate_sym.py --config $(CONFIG)
 
 ## Run the four ported extractors over the corpus -> out/{nodes,edges}.jsonl
+## Requires CONFIG=<path-to-corpus-yaml>, e.g. make build CONFIG=config/carddemo.yaml
 build:
-	$(BRIDGE_ENV) uv run python build_graph.py --config config/carddemo.yaml
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make build CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	$(BRIDGE_ENV) uv run python build_graph.py --config $(CONFIG)
 
 ## Identity-diff out/ against reference/ (must be an empty diff: 449 nodes / 803 edges).
 compare:
