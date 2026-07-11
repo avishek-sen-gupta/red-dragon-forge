@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from corpus_config import (
+from cobble.corpus_config import (
     BmsConfig,
     CorpusConfig,
     _bms_config_from_dict,

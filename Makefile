@@ -41,23 +41,23 @@ $(ANTLR_JAR):
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make sym CONFIG=config/carddemo.yaml
 sym:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make sym CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	uv run python generate_sym.py --config $(CONFIG)
+	uv run python -m cobble.generate_sym --config $(CONFIG)
 
 ## Run the four ported extractors over the corpus -> out/{nodes,edges}.jsonl
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make build CONFIG=config/carddemo.yaml
 build:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make build CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	$(BRIDGE_ENV) uv run python build_graph.py --config $(CONFIG)
+	$(BRIDGE_ENV) uv run python -m cobble.build_graph --config $(CONFIG)
 
 ## Identity-diff out/ against reference/ (must be an empty diff: 449 nodes / 803 edges).
 compare:
-	uv run python compare.py
+	uv run python -m cobble.compare
 
 verify: build compare
 
 ## Render out/{nodes,edges}.jsonl as a self-contained interactive HTML graph.
 render:
-	uv run python render_graph.py
+	uv run python -m cobble.render_graph
 
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
 test:
