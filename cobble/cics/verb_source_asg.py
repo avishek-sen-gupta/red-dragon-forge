@@ -29,13 +29,18 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from typing import TYPE_CHECKING
 
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb
 from cobble.cics.graph_sink import GraphSink
 from cobble.cics.statements import CicsDialectParser, ExecCicsStatement
+from cobble.file_location import to_json_value
 from cobble.interpreter.cobol import cobol_statements as _cobol_statements
 from cobble.interpreter.project.graph_types import GraphNode
+
+if TYPE_CHECKING:
+    from cobble.corpus_index import CorpusIndex
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +180,7 @@ def _statement_to_verb(stmt: ExecCicsStatement, program: str, data_fields):
     return None
 
 
-def stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures):
+def stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: "CorpusIndex"):
     """Parse one program's ASG and stream its CICS-verb graph edges into ``sink``.
 
     Signature-compatible with cics.verb_source_lowering.stream_program_verbs (the
@@ -195,8 +200,14 @@ def stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures):
             edge = _verb_edge(verb, bms_mapsets)
             if edge is None:
                 continue
-            sink.add_node(GraphNode(id=edge.source, kind=edge.source_kind))
-            sink.add_node(GraphNode(id=edge.target, kind=edge.target_kind))
+            sink.add_node(GraphNode(
+                id=edge.source, kind=edge.source_kind,
+                file_path=to_json_value(corpus_index.resolve_file_path(edge.source_kind, edge.source)),
+            ))
+            sink.add_node(GraphNode(
+                id=edge.target, kind=edge.target_kind,
+                file_path=to_json_value(corpus_index.resolve_file_path(edge.target_kind, edge.target)),
+            ))
             sink.add_edge(edge)
     except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
         logger.warning("CICS program %s failed: %s", prog_name, exc, exc_info=True)

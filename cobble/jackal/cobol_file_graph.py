@@ -7,8 +7,9 @@ _file_control there).
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 
+from cobble.file_location import to_json_value
 from cobble.interpreter.cobol.asg_types import CobolASG
 from cobble.interpreter.cobol.cobol_statements import OpenStatement
 from cobble.interpreter.cobol.file_enums import OpenMode
@@ -18,6 +19,9 @@ from cobble.interpreter.project.graph_types import (
     GraphNode,
     NodeKind,
 )
+
+if TYPE_CHECKING:
+    from cobble.corpus_index import CorpusIndex
 
 _OPEN_MODE_TO_EDGE_KIND: dict[OpenMode, EdgeKind] = {
     OpenMode.INPUT: EdgeKind.READS,
@@ -58,7 +62,7 @@ def _all_statements(asg: Any) -> Iterator[Any]:
 
 
 def extract_cobol_file_graph(
-    asg: CobolASG,
+    asg: CobolASG, corpus_index: "CorpusIndex",
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Parse a batch COBOL program and return PROGRAM -> COBOL_FILE edges for
     every file it OPENs.
@@ -84,7 +88,11 @@ def extract_cobol_file_graph(
     }
 
     nodes: dict[tuple[NodeKind, str], GraphNode] = {
-        (NodeKind.PROGRAM, program_id): GraphNode(id=program_id, kind=NodeKind.PROGRAM)
+        (NodeKind.PROGRAM, program_id): GraphNode(
+            id=program_id,
+            kind=NodeKind.PROGRAM,
+            file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.PROGRAM, program_id)),
+        )
     }
     edges: list[GraphEdge] = []
 
@@ -99,7 +107,13 @@ def extract_cobol_file_graph(
                     continue
                 nodes.setdefault(
                     (NodeKind.COBOL_FILE, dd_name),
-                    GraphNode(id=dd_name, kind=NodeKind.COBOL_FILE),
+                    GraphNode(
+                        id=dd_name,
+                        kind=NodeKind.COBOL_FILE,
+                        file_path=to_json_value(
+                            corpus_index.resolve_file_path(NodeKind.COBOL_FILE, dd_name)
+                        ),
+                    ),
                 )
                 attrs = {"select_name": file_name.upper()}
                 if mode is OpenMode.EXTEND:

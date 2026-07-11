@@ -21,4 +21,10 @@ fileignoreconfig:
   checksum: 29e7d9e2d46dd2149f7a6b723c29dda00193292bc4a07b9bd2e1fbbe6c3a0a0f
 - filename: docs/superpowers/plans/2026-07-11-corpus-config.md
   checksum: c5e3d9154a059402d1fc6035197fac87e94439bf75ffed1d2a3931a5730717d9
+- filename: cobble/knowledge_graph/merge.py
+  checksum: 74d1346118d5a02e1a8deeacde81eadee6694684dc412fe92e04564c1d99e526
+- filename: tests/knowledge_graph/test_graph_writer.py
+  checksum: 0c7a002271338c0337220bf65f845fdc6ce78737218970c5266547e6ff2810b2
+- filename: tests/test_corpus_index.py
+  checksum: 2e2391cf79e7470da5e7608370e7993eb5ed52d3819abb8b8987fbb9c24a7d02
 version: "1.0"
