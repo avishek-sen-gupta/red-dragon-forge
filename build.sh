@@ -13,6 +13,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+CONFIG=config/carddemo.yaml
+
 echo "==> [1/5] Fetching submodules (CardDemo corpus + proleap fork + che-che4z HLASM fork)..."
 git submodule update --init
 
@@ -20,10 +22,10 @@ echo "==> [2/5] Building tools from source (hlasm_export + proleap fork + both b
 make tools
 
 echo "==> [3/5] Generating from grammars: the CICS parser (ANTLR) + the BMS copybooks..."
-make codegen
+make codegen CONFIG="$CONFIG"
 
 echo "==> [4/5] Extracting the CardDemo knowledge graph..."
-make build
+make build CONFIG="$CONFIG"
 
 echo "==> [5/5] Verifying against the reference golden (must be 449/803, empty diff)..."
 make compare

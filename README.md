@@ -54,12 +54,18 @@ python-fp-lint) · `clean` (drop all generated artifacts).
 `./build.sh` runs the full pipeline end to end. To run it step by step instead:
 
 ```bash
-git submodule update --init   # fetch the CardDemo corpus + parser/HLASM forks
-make tools                    # build hlasm_export + the proleap fork + both bridge JARs
-make codegen                  # generate the CICS parser (ANTLR) + BMS symbolic copybooks
-make build                    # extract the graph -> out/nodes.jsonl, out/edges.jsonl
-make compare                  # identity-diff out/ vs reference/ (must be empty: 449/803)
+git submodule update --init                        # fetch the CardDemo corpus + parser/HLASM forks
+make tools                                          # build hlasm_export + the proleap fork + both bridge JARs
+make codegen CONFIG=config/carddemo.yaml            # generate the CICS parser (ANTLR) + BMS symbolic copybooks
+make build CONFIG=config/carddemo.yaml              # extract the graph -> out/nodes.jsonl, out/edges.jsonl
+make compare                                        # identity-diff out/ vs reference/ (must be empty: 449/803)
 ```
+
+`CONFIG=` is a required argument to `make build`/`make sym` (and transitively
+`make codegen`, which depends on `sym`) — there's no default, so a bare
+`make build` fails with a clear error instead of silently assuming CardDemo.
+`build.sh` hardcodes `CONFIG=config/carddemo.yaml` for its own from-scratch
+CardDemo run.
 
 `make build` re-runs the four extractors (CALL/COPY, CICS flow, JCL, batch
 FILE-CONTROL) over `vendor/carddemo` from scratch every time — safe to re-run
@@ -68,8 +74,9 @@ after touching any extractor code or the corpus submodule.
 ### Point this at your own codebase
 
 `build_graph.py`/`generate_sym.py` take a required `--config <path>` flag —
-nothing about a specific corpus is hardcoded in Python. `config/carddemo.yaml`
-is both the config `make build`/`make sym` use for CardDemo and a template for
+nothing about a specific corpus is hardcoded in Python. `make build`/`make sym`
+take a matching required `CONFIG=<path>` argument, which they simply forward.
+`config/carddemo.yaml` is both the config CardDemo uses and a template for
 your own corpus:
 
 ```yaml
