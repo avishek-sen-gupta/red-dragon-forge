@@ -31,4 +31,6 @@ fileignoreconfig:
   checksum: 1418b3588e949a986aa6fd47f5e6068283e530b9e0c39d8431f99582930b967d
 - filename: docs/superpowers/plans/2026-07-11-canonical-export.md
   checksum: e4c9700cfaa591e17cdf93e7cc8dc1a49b599e900aebeb9508a2aebceac9f510
+- filename: tests/test_canonical_export_cli.py
+  checksum: 181f309e3a9edb60c732142f6329f9ca445e68f499cfa1456096be9de4c58f58
 version: "1.0"
