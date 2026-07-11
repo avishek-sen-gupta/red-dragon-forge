@@ -55,9 +55,11 @@ compare:
 
 verify: build compare
 
-## Render out/{nodes,edges}.jsonl as a self-contained interactive HTML graph.
+## Render <out_dir>/{nodes,edges}.jsonl as a self-contained interactive HTML graph.
+## Requires CONFIG=<path-to-corpus-yaml>, e.g. make render CONFIG=config/carddemo.yaml
 render:
-	uv run python -m cobble.render_graph
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	uv run python -m cobble.render_graph --config $(CONFIG)
 
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
 test:

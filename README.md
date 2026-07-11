@@ -90,6 +90,7 @@ and `csd_files`, which default to empty if omitted. Then run:
 ```bash
 uv run python -m cobble.build_graph --config your-corpus.yaml
 uv run python -m cobble.generate_sym --config your-corpus.yaml   # only if you have BMS maps
+uv run python -m cobble.render_graph --config your-corpus.yaml   # optional HTML visualization
 ```
 
 `cobble.compare`'s golden-file check stays CardDemo-specific — it's not
@@ -98,15 +99,18 @@ meaningful against a different corpus's output.
 ### Render the HTML visualization
 
 ```bash
-make render   # reads out/{nodes,edges}.jsonl -> writes out/graph.html
+make render CONFIG=config/carddemo.yaml   # reads <out_dir>/{nodes,edges}.jsonl -> writes <out_dir>/graph.html
 ```
 
-`out/graph.html` is a single self-contained file (vis-network is vendored at
+`CONFIG=` is required here too (same as `build`/`sym`) — `out_dir` comes from
+the config's `corpus.out_dir` field, so `render_graph.py` looks in the same
+place `build_graph.py` wrote to. `<out_dir>/graph.html` is a single
+self-contained file (vis-network is vendored at
 `cobble/knowledge_graph/vendor/vis-network.min.js` and inlined — no server,
 no CDN, no network access needed). Open it directly in a browser. It has
 checkboxes to filter by node/edge kind, a search box that highlights matching
 node labels, and click-to-highlight-neighbors on any node. Requires
-`out/nodes.jsonl` / `out/edges.jsonl` to already exist (i.e. run `make build`
+`<out_dir>/nodes.jsonl` / `<out_dir>/edges.jsonl` to already exist (i.e. run `make build`
 first).
 
 ### Unit tests
@@ -147,7 +151,7 @@ consumers may not import each other).
 | `cobble/build_graph.py` / `cobble/compare.py` | This repo's own driver scripts (not ported from `red-dragon-forge`): extract the graph → `out/` (`python -m cobble.build_graph --config <path>`); identity-diff `out/` vs `reference/` (`python -m cobble.compare`). |
 | `cobble/corpus_config.py` | `CorpusConfig`/`BmsConfig` dataclasses + YAML loading — `cobble.build_graph`/`cobble.generate_sym` read the corpus location/layout from here instead of a hardcoded CardDemo path. |
 | `config/carddemo.yaml` | The tracked config `make build`/`make sym` use — captures CardDemo's layout in `corpus_config.py`'s schema. Copy this file as a starting point to point cobble at a different corpus. |
-| `cobble/render_graph.py` | Render `out/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `out/graph.html` (`python -m cobble.render_graph`; `cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
+| `cobble/render_graph.py` | Render `<out_dir>/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `<out_dir>/graph.html` (`python -m cobble.render_graph --config <path>`; `out_dir` comes from the config's `corpus.out_dir` field. `cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
 | `tests/` | The pytest unit suite (`make test`), mirroring `cobble/`'s package structure. No JARs/corpus needed — pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden — the *target*, not an input to the extraction). |
