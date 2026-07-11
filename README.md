@@ -16,22 +16,6 @@ is **generated here from its grammar/source**. No production Python is imported 
 runtime, and nothing pre-generated is shipped: the only things tracked are
 hand-written source, grammar source (`.g4` / `.bms` / `.mac`), and submodule pins.
 
-## Result
-
-```
-$ ./build.sh
-==> [1/5] Fetching submodules (CardDemo corpus + proleap fork + che-che4z HLASM fork)...
-==> [2/5] Building tools from source (hlasm_export + proleap fork + both bridge JARs)...
-==> [3/5] Generating from grammars: the CICS parser (ANTLR) + the BMS copybooks...
-==> [4/5] Extracting the CardDemo knowledge graph...
-Merged graph: 449 nodes, 803 edges
-==> [5/5] Verifying against the reference golden (must be 449/803, empty diff)...
-RESULT: EMPTY DIFF — out matches reference exactly.
-```
-
-CI runs exactly this on every push/PR (`ubuntu-latest`) — a green badge means the
-graph was reproduced from source, from nothing but the grammars and the corpus.
-
 ## Reproduce from a fresh clone
 
 Requires: `git`, JDK 21+, Maven (bridges); a C++ toolchain (clang or gcc) with
