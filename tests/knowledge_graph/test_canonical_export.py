@@ -15,6 +15,7 @@ from cobble.knowledge_graph.canonical_export import (
     _stream_nodes,
     _transform_edge,
     _transform_node,
+    write_manifest,
 )
 
 
@@ -257,3 +258,79 @@ def test_process_node_without_file_path_returns_only_the_node() -> None:
     assert len(results) == 1
     assert results[0]["id"] == "DATASET::ACCT.MASTER"
     assert fs.drain_edges() == []
+
+
+def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+
+def test_write_manifest_produces_valid_json_with_expected_shape(tmp_path: Path) -> None:
+    cbl = tmp_path / "CBACT01C.cbl"
+    cbl.write_text("       IDENTIFICATION DIVISION.\n")
+    cpy = tmp_path / "CVACT01Y.cpy"
+    cpy.write_text("       01 ACCT-RECORD.\n")
+
+    nodes_path = tmp_path / "nodes.jsonl"
+    _write_jsonl(nodes_path, [
+        {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
+        {"id": "CVACT01Y", "kind": "COPYBOOK", "file_path": str(cpy), "attrs": {}},
+        {"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}},
+    ])
+    edges_path = tmp_path / "edges.jsonl"
+    _write_jsonl(edges_path, [
+        {"source": "CBACT01C", "source_kind": "PROGRAM",
+         "target": "CVACT01Y", "target_kind": "COPYBOOK",
+         "kind": "COPY", "attrs": {}},
+    ])
+    output_path = tmp_path / "manifest.json"
+
+    write_manifest(nodes_path, edges_path, output_path, "carddemo", chunk_size=2, max_workers=2)
+
+    manifest = json.loads(output_path.read_text())
+    assert manifest["version"] == "1.0"
+    assert manifest["generator"] == "cobble"
+
+    node_ids = {n["id"] for n in manifest["nodes"]}
+    assert "PROGRAM::CBACT01C" in node_ids
+    assert "COPYBOOK::CVACT01Y" in node_ids
+    assert "DATASET::ACCT.MASTER" in node_ids
+    assert any(n["type"] == "FILE" for n in manifest["nodes"])
+
+    edge_pairs = {(e["from_id"], e["to_id"], e["type"]) for e in manifest["edges"]}
+    assert ("PROGRAM::CBACT01C", "COPYBOOK::CVACT01Y", "COPY") in edge_pairs
+    # FILE -> node MADE_OF edges are present for both file-backed nodes.
+    assert any(e["type"] == "MADE_OF" and e["to_id"] == "PROGRAM::CBACT01C" for e in manifest["edges"])
+    assert any(e["type"] == "MADE_OF" and e["to_id"] == "COPYBOOK::CVACT01Y" for e in manifest["edges"])
+
+
+def test_write_manifest_no_duplicate_node_ids(tmp_path: Path) -> None:
+    cbl = tmp_path / "sub" / "CBACT01C.cbl"
+    cbl.parent.mkdir()
+    cbl.write_text("x\n")
+    nodes_path = tmp_path / "nodes.jsonl"
+    _write_jsonl(nodes_path, [
+        {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
+        {"id": "CBACT01C.STEP", "kind": "STEP", "file_path": str(cbl), "attrs": {}},
+    ])
+    edges_path = tmp_path / "edges.jsonl"
+    edges_path.write_text("")
+    output_path = tmp_path / "manifest.json"
+
+    write_manifest(nodes_path, edges_path, output_path, "carddemo", chunk_size=1, max_workers=4)
+
+    manifest = json.loads(output_path.read_text())
+    node_ids = [n["id"] for n in manifest["nodes"]]
+    assert len(node_ids) == len(set(node_ids))  # no duplicates despite shared file
+
+
+def test_write_manifest_writes_to_tmp_then_renames(tmp_path: Path) -> None:
+    nodes_path = tmp_path / "nodes.jsonl"
+    _write_jsonl(nodes_path, [{"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}])
+    edges_path = tmp_path / "edges.jsonl"
+    edges_path.write_text("")
+    output_path = tmp_path / "manifest.json"
+
+    write_manifest(nodes_path, edges_path, output_path, "carddemo")
+
+    assert output_path.exists()
+    assert not output_path.with_suffix(".json.tmp").exists()
