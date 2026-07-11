@@ -1,9 +1,11 @@
 import json
+import threading
 from pathlib import Path
 from typing import Iterator
 
 from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 from cobble.knowledge_graph.canonical_export import (
+    FileSystemSynthesizer,
     _canonical_id,
     _category_for,
     _language_for,
@@ -150,3 +152,78 @@ def test_stream_edges_yields_graphedge_per_line(tmp_path: Path) -> None:
             kind=EdgeKind.COPY, attrs={"line": 42},
         )
     ]
+
+
+def test_synthesize_for_node_creates_file_and_directory_chain() -> None:
+    fs = FileSystemSynthesizer()
+
+    new_nodes = fs.synthesize_for_node("PROGRAM::CBACT01C", "vendor/carddemo/app/cbl/CBACT01C.cbl")
+
+    ids = {n["id"] for n in new_nodes}
+    assert ids == {
+        "DIRECTORY::vendor",
+        "DIRECTORY::vendor/carddemo",
+        "DIRECTORY::vendor/carddemo/app",
+        "DIRECTORY::vendor/carddemo/app/cbl",
+        "FILE::vendor/carddemo/app/cbl/CBACT01C.cbl",
+    }
+    for n in new_nodes:
+        assert n["category"] == ["FILE_SYSTEM"]
+        assert n["generator"] == "cobble"
+
+    edges = fs.drain_edges()
+    edge_pairs = {(e["from_id"], e["to_id"]) for e in edges}
+    assert edge_pairs == {
+        ("DIRECTORY::vendor", "DIRECTORY::vendor/carddemo"),
+        ("DIRECTORY::vendor/carddemo", "DIRECTORY::vendor/carddemo/app"),
+        ("DIRECTORY::vendor/carddemo/app", "DIRECTORY::vendor/carddemo/app/cbl"),
+        ("DIRECTORY::vendor/carddemo/app/cbl", "FILE::vendor/carddemo/app/cbl/CBACT01C.cbl"),
+        ("FILE::vendor/carddemo/app/cbl/CBACT01C.cbl", "PROGRAM::CBACT01C"),
+    }
+    assert all(e["type"] == "MADE_OF" for e in edges)
+
+
+def test_synthesize_for_node_dedups_shared_directories_and_file() -> None:
+    fs = FileSystemSynthesizer()
+    fs.synthesize_for_node("JOB::ACCTFILE", "vendor/carddemo/app/jcl/ACCTFILE.jcl")
+    fs.drain_edges()  # discard the first call's DIRECTORY/FILE chain edges
+
+    # A second node in the same file: only the new FILE->node edge and node
+    # itself are new; the FILE/DIRECTORY chain is not re-emitted.
+    new_nodes = fs.synthesize_for_node("STEP::ACCTFILE.STEP05", "vendor/carddemo/app/jcl/ACCTFILE.jcl")
+
+    assert new_nodes == []
+    edges = fs.drain_edges()
+    assert edges == [{
+        "from_id": "FILE::vendor/carddemo/app/jcl/ACCTFILE.jcl",
+        "to_id": "STEP::ACCTFILE.STEP05",
+        "type": "MADE_OF",
+    }]
+
+
+def test_drain_edges_clears_accumulated_edges() -> None:
+    fs = FileSystemSynthesizer()
+    fs.synthesize_for_node("PROGRAM::A", "a.cbl")
+    assert len(fs.drain_edges()) > 0
+    assert fs.drain_edges() == []
+
+
+def test_synthesize_for_node_is_thread_safe_no_duplicate_nodes() -> None:
+    fs = FileSystemSynthesizer()
+    results: list[list[dict]] = []
+    lock = threading.Lock()
+
+    def worker(i: int) -> None:
+        new_nodes = fs.synthesize_for_node(f"PROGRAM::P{i}", "shared/dir/PROG.cbl")
+        with lock:
+            results.append(new_nodes)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    all_new_node_ids = [n["id"] for batch in results for n in batch]
+    file_node_emissions = [i for i in all_new_node_ids if i == "FILE::shared/dir/PROG.cbl"]
+    assert len(file_node_emissions) == 1  # emitted exactly once across all 20 threads

@@ -114,3 +114,52 @@ def _stream_edges(path: Path) -> Iterator[GraphEdge]:
                 target=row["target"], target_kind=NodeKind(row["target_kind"]),
                 kind=EdgeKind(row["kind"]), attrs=row.get("attrs", {}),
             )
+
+
+class FileSystemSynthesizer:
+    """Thread-safe FILE/DIRECTORY node+edge synthesis, deduplicated across
+    the whole export run. Bounded by unique file/directory count, not node
+    count — see design spec's "Pipeline architecture" section."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._seen_node_ids: set[str] = set()
+        self._edges: list[dict] = []
+
+    def synthesize_for_node(self, canonical_node_id: str, file_path: str) -> list[dict]:
+        parts = Path(file_path).parts
+        new_nodes: list[dict] = []
+        prefix = ""
+        prev_id: str | None = None
+        with self._lock:
+            for i, part in enumerate(parts):
+                prefix = f"{prefix}/{part}" if prefix else part
+                is_file = i == len(parts) - 1
+                node_type = "FILE" if is_file else "DIRECTORY"
+                node_id = f"{node_type}::{prefix}"
+                if node_id not in self._seen_node_ids:
+                    self._seen_node_ids.add(node_id)
+                    new_nodes.append({
+                        "id": node_id,
+                        "display_name": part,
+                        "type": node_type,
+                        "code": "",
+                        "path": prefix,
+                        "language": None,
+                        "generator": GENERATOR,
+                        "loc": 0,
+                        "cyclomatic_complexity": 0,
+                        "category": ["FILE_SYSTEM"],
+                        "additional_properties": {},
+                    })
+                    if prev_id is not None:
+                        self._edges.append({"from_id": prev_id, "to_id": node_id, "type": "MADE_OF"})
+                prev_id = node_id
+            # FILE -> owning node: always new (canonical_node_id is unique per node).
+            self._edges.append({"from_id": prev_id, "to_id": canonical_node_id, "type": "MADE_OF"})
+        return new_nodes
+
+    def drain_edges(self) -> list[dict]:
+        with self._lock:
+            edges, self._edges = self._edges, []
+        return edges
