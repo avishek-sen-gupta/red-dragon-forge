@@ -1,5 +1,5 @@
 """render_graph.py — render out/nodes.jsonl + out/edges.jsonl (produced by
-build_port.py) as one self-contained interactive HTML visualization at
+build_graph.py) as one self-contained interactive HTML visualization at
 out/graph.html. No server, no CDN: vis-network is vendored under
 cobble/knowledge_graph/vendor/ and inlined into the generated file.
 """
