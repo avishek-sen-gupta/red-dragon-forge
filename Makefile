@@ -6,7 +6,7 @@ ANTLR_VERSION := 4.13.1
 ANTLR_JAR     := $(CURDIR)/tools/antlr-$(ANTLR_VERSION)-complete.jar
 ANTLR_URL     := https://www.antlr.org/download/antlr-$(ANTLR_VERSION)-complete.jar
 
-.PHONY: all tools hlasm jars codegen parser sym build compare verify render test fmt lint clean
+.PHONY: all tools hlasm jars codegen parser sym build compare verify render canonical test fmt lint clean
 
 ## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
@@ -60,6 +60,12 @@ verify: build compare
 render:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.yaml" >&2; exit 1; }
 	uv run python -m cobble.render_graph --config $(CONFIG)
+
+## Export <out_dir>/{nodes,edges}.jsonl as CodeConcise's canonical manifest.json.
+## Requires CONFIG=<path-to-corpus-yaml>, e.g. make canonical CONFIG=config/carddemo.yaml
+canonical:
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make canonical CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	uv run python -m cobble.canonical_export --config $(CONFIG)
 
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
 test:
