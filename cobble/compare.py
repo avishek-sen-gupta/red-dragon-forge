@@ -5,6 +5,8 @@ Edge identity   = (source, source_kind, target, target_kind, kind)
 
 Prints missing (in reference, not in out) and extra (in out, not in reference)
 for both nodes and edges. Exits nonzero if any diff. Goal: EMPTY diff.
+
+Invoke as: uv run python -m cobble.compare
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load(path: Path, keyer):
@@ -46,8 +48,8 @@ def _report(label, ref, out):
 
 
 def main() -> int:
-    out_dir = _HERE / "out"
-    ref_dir = _HERE / "reference"
+    out_dir = _REPO_ROOT / "out"
+    ref_dir = _REPO_ROOT / "reference"
     diff = 0
     diff += _report(
         "NODES",
