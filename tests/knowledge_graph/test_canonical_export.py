@@ -9,6 +9,7 @@ from cobble.knowledge_graph.canonical_export import (
     _canonical_id,
     _category_for,
     _language_for,
+    _process_node,
     _read_file_text,
     _stream_edges,
     _stream_nodes,
@@ -227,3 +228,32 @@ def test_synthesize_for_node_is_thread_safe_no_duplicate_nodes() -> None:
     all_new_node_ids = [n["id"] for batch in results for n in batch]
     file_node_emissions = [i for i in all_new_node_ids if i == "FILE::shared/dir/PROG.cbl"]
     assert len(file_node_emissions) == 1  # emitted exactly once across all 20 threads
+
+
+def test_process_node_with_file_path_returns_node_plus_filesystem_nodes(tmp_path: Path) -> None:
+    src = tmp_path / "CBACT01C.cbl"
+    src.write_text("       IDENTIFICATION DIVISION.\n")
+    node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, file_path=str(src))
+    fs = FileSystemSynthesizer()
+
+    results = _process_node(node, "carddemo", fs)
+
+    ids = {r["id"] for r in results}
+    assert "PROGRAM::CBACT01C" in ids
+    assert any(r["type"] == "FILE" for r in results)
+    own_node = next(r for r in results if r["id"] == "PROGRAM::CBACT01C")
+    assert own_node["code"] == "       IDENTIFICATION DIVISION.\n"
+    # The FILE -> node MADE_OF edge is now buffered on the synthesizer.
+    edge_targets = {e["to_id"] for e in fs.drain_edges()}
+    assert "PROGRAM::CBACT01C" in edge_targets
+
+
+def test_process_node_without_file_path_returns_only_the_node() -> None:
+    node = GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, file_path=None)
+    fs = FileSystemSynthesizer()
+
+    results = _process_node(node, "carddemo", fs)
+
+    assert len(results) == 1
+    assert results[0]["id"] == "DATASET::ACCT.MASTER"
+    assert fs.drain_edges() == []

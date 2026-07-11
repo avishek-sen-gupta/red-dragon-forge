@@ -95,6 +95,14 @@ def _transform_edge(edge: GraphEdge) -> dict:
     }
 
 
+def _process_node(node: GraphNode, project_name: str, fs: FileSystemSynthesizer) -> list[dict]:
+    canonical_node = _transform_node(node, project_name)
+    results = [canonical_node]
+    if node.file_path:
+        results.extend(fs.synthesize_for_node(canonical_node["id"], node.file_path))
+    return results
+
+
 def _stream_nodes(path: Path) -> Iterator[GraphNode]:
     with path.open() as f:
         for line in f:
