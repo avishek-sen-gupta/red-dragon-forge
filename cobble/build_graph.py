@@ -29,6 +29,8 @@ import sys
 from pathlib import Path
 
 from cobble.corpus_config import CorpusConfig, load_corpus_config
+from cobble.corpus_index import CorpusIndex
+from cobble.file_location import to_json_value
 
 from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
@@ -70,11 +72,15 @@ def _load_transid_to_program(config: CorpusConfig) -> dict[str, str]:
     return merged
 
 
-def _build_jcl_graph(config: CorpusConfig, writer: GraphWriter, failures: list[str]) -> None:
+def _build_jcl_graph(
+    config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter, failures: list[str]
+) -> None:
     jcl_files = _matching_files(config.jcl_dir, config.jcl_globs)
     for path in jcl_files:
         try:
-            nodes, edges = extract_jcl_graph(path.read_text(), proclib_dirs=config.proclib_dirs)
+            nodes, edges = extract_jcl_graph(
+                path.read_text(), corpus_index, proclib_dirs=config.proclib_dirs
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"JCL {path.name}: {exc}")
@@ -84,7 +90,11 @@ def _build_jcl_graph(config: CorpusConfig, writer: GraphWriter, failures: list[s
 
 
 def _build_call_copy_graph(
-    config: CorpusConfig, cics_program_names: set[str], writer: GraphWriter, failures: list[str]
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    cics_program_names: set[str],
+    writer: GraphWriter,
+    failures: list[str],
 ) -> None:
     """CALL/COPY graph for every COBOL program in the corpus, VM-free.
 
@@ -108,18 +118,27 @@ def _build_call_copy_graph(
             logger.warning("COBOL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"COBOL {path.name}: {exc}")
             continue
-        writer.add_node(GraphNode(id=prog, kind=NodeKind.PROGRAM))
+        writer.add_node(GraphNode(
+            id=prog, kind=NodeKind.PROGRAM,
+            file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.PROGRAM, prog)),
+        ))
         tgts: set[str] = set()
         for ref in refs:
             if ref.kind == ImportKind.INCLUDE:
                 tid = ref.module_path.upper()
-                writer.add_node(GraphNode(id=tid, kind=NodeKind.COPYBOOK))
+                writer.add_node(GraphNode(
+                    id=tid, kind=NodeKind.COPYBOOK,
+                    file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.COPYBOOK, tid)),
+                ))
                 writer.add_edge(GraphEdge(
                     source=prog, source_kind=NodeKind.PROGRAM,
                     target=tid, target_kind=NodeKind.COPYBOOK, kind=EdgeKind.COPY))
             elif ref.kind == ImportKind.REQUIRE:
                 tid = ref.module_path.upper()
-                writer.add_node(GraphNode(id=tid, kind=NodeKind.PROGRAM))
+                writer.add_node(GraphNode(
+                    id=tid, kind=NodeKind.PROGRAM,
+                    file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.PROGRAM, tid)),
+                ))
                 writer.add_edge(GraphEdge(
                     source=prog, source_kind=NodeKind.PROGRAM,
                     target=tid, target_kind=NodeKind.PROGRAM, kind=EdgeKind.CALL))
@@ -154,7 +173,10 @@ def _build_call_copy_graph(
                     stack.append(t)
     for sub in sorted(reached_subs):
         if has_ws.get(sub):
-            writer.add_node(GraphNode(id="DFHEIBLK", kind=NodeKind.COPYBOOK))
+            writer.add_node(GraphNode(
+                id="DFHEIBLK", kind=NodeKind.COPYBOOK,
+                file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.COPYBOOK, "DFHEIBLK")),
+            ))
             writer.add_edge(GraphEdge(
                 source=sub, source_kind=NodeKind.PROGRAM,
                 target="DFHEIBLK", target_kind=NodeKind.COPYBOOK, kind=EdgeKind.COPY))
@@ -163,7 +185,11 @@ def _build_call_copy_graph(
 
 
 def _build_cics_flow_graph(
-    config: CorpusConfig, transid_to_program: dict[str, str], writer: GraphWriter, failures: list[str]
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    transid_to_program: dict[str, str],
+    writer: GraphWriter,
+    failures: list[str],
 ) -> None:
     cobol_sources: dict[str, bytes] = {}
     # Build a map of uppercase file stems to paths using configured cobol_globs
@@ -186,6 +212,7 @@ def _build_cics_flow_graph(
             cobol_sources=cobol_sources,
             parser=parser,
             sink=writer,
+            corpus_index=corpus_index,
             failures=failures,
         )
     except Exception as exc:  # noqa: BLE001
@@ -198,7 +225,11 @@ def _build_cics_flow_graph(
 
 
 def _build_batch_file_graph(
-    config: CorpusConfig, cics_program_names: set[str], writer: GraphWriter, failures: list[str]
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    cics_program_names: set[str],
+    writer: GraphWriter,
+    failures: list[str],
 ) -> None:
     parser = _make_parser(config)
     cbl_files = [
@@ -209,7 +240,7 @@ def _build_batch_file_graph(
     store.parse_all({p: p.read_bytes() for p in cbl_files}, parser)
     for path in cbl_files:
         try:
-            nodes, edges = extract_cobol_file_graph(store.get(path))
+            nodes, edges = extract_cobol_file_graph(store.get(path), corpus_index)
         except Exception as exc:  # noqa: BLE001
             logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"FILE-CONTROL {path.name}: {exc}")
@@ -251,6 +282,7 @@ def main() -> int:
 
     args = _parse_args()
     config = load_corpus_config(args.config)
+    corpus_index = CorpusIndex(config)
 
     transid_to_program = _load_transid_to_program(config)
     cics_program_names = set(transid_to_program.values())
@@ -258,14 +290,14 @@ def main() -> int:
     config.out_dir.mkdir(parents=True, exist_ok=True)
     nodes_jsonl = config.out_dir / "nodes.jsonl"
     edges_jsonl = config.out_dir / "edges.jsonl"
-    with GraphWriter(nodes_jsonl, edges_jsonl) as writer:
-        _build_jcl_graph(config, writer, failures)
-        _build_call_copy_graph(config, cics_program_names, writer, failures)
+    with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
+        _build_jcl_graph(config, corpus_index, writer, failures)
+        _build_call_copy_graph(config, corpus_index, cics_program_names, writer, failures)
         if config.csd_files:
-            _build_cics_flow_graph(config, transid_to_program, writer, failures)
+            _build_cics_flow_graph(config, corpus_index, transid_to_program, writer, failures)
         else:
             print("CICS flow: skipped (no csd_files configured)")
-        _build_batch_file_graph(config, cics_program_names, writer, failures)
+        _build_batch_file_graph(config, corpus_index, cics_program_names, writer, failures)
 
     graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
     print(

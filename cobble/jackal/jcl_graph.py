@@ -6,8 +6,9 @@ existing parse_jcl — this module adds no new JCL parsing).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
+from cobble.file_location import to_json_value
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
@@ -20,6 +21,9 @@ from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
 from cobble.jackal.model import DispStatus, Job
 
+if TYPE_CHECKING:
+    from cobble.corpus_index import CorpusIndex
+
 _DISP_TO_EDGE_KIND: dict[DispStatus, EdgeKind] = {
     DispStatus.NEW: EdgeKind.WRITES,
     DispStatus.OLD: EdgeKind.UPDATES,
@@ -29,13 +33,20 @@ _DISP_TO_EDGE_KIND: dict[DispStatus, EdgeKind] = {
 
 
 def _job_to_graph(
-    job: Job, step_proc: dict[str, str]
+    job: Job, step_proc: dict[str, str], corpus_index: "CorpusIndex"
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     nodes: dict[tuple[NodeKind, str], GraphNode] = {}
     edges: list[GraphEdge] = []
 
     def _add_node(kind: NodeKind, node_id: str) -> str:
-        nodes.setdefault((kind, node_id), GraphNode(id=node_id, kind=kind))
+        nodes.setdefault(
+            (kind, node_id),
+            GraphNode(
+                id=node_id,
+                kind=kind,
+                file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
+            ),
+        )
         return node_id
 
     job_id = _add_node(NodeKind.JOB, job.name.upper())
@@ -102,7 +113,7 @@ def _job_to_graph(
     return list(nodes.values()), edges
 
 
-def _step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
+def step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
     """Map each expanded step's uppercased name to the PROC name it came
     from. expand_procs() replaces each outer step, in place, with either
     itself unchanged or a contiguous run of qualified "OUTERNAME.INNERNAME"
@@ -127,7 +138,7 @@ def _step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
 
 
 def extract_jcl_graph(
-    jcl_source: str, proclib_dirs: Sequence[Path] = ()
+    jcl_source: str, corpus_index: "CorpusIndex", proclib_dirs: Sequence[Path] = ()
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Parse JCL text and return its step-sequencing portion of the shared
     knowledge graph: JOB/STEP/PROGRAM/DATASET/INSTREAM_DATA nodes;
@@ -159,6 +170,6 @@ def extract_jcl_graph(
     step_proc: dict[str, str] = {}
     if proclib_dirs:
         expanded_job = expand_procs(job, proclib_dirs)
-        step_proc = _step_proc_provenance(job, expanded_job)
+        step_proc = step_proc_provenance(job, expanded_job)
         job = expanded_job
-    return _job_to_graph(job, step_proc)
+    return _job_to_graph(job, step_proc, corpus_index)
