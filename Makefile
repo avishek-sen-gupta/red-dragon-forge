@@ -6,7 +6,7 @@ ANTLR_VERSION := 4.13.1
 ANTLR_JAR     := $(CURDIR)/tools/antlr-$(ANTLR_VERSION)-complete.jar
 ANTLR_URL     := https://www.antlr.org/download/antlr-$(ANTLR_VERSION)-complete.jar
 
-.PHONY: all tools hlasm jars codegen parser sym build compare verify render test clean
+.PHONY: all tools hlasm jars codegen parser sym build compare verify render test fmt lint clean
 
 ## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
@@ -58,6 +58,16 @@ render:
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
 test:
 	uv run pytest
+
+## Auto-format the codebase with black.
+fmt:
+	uv run python -m black .
+
+## Run static analysis: import-linter contracts + pyright + python-fp-lint.
+lint:
+	uv run lint-imports
+	uv run pyright
+	uv run python -m python_fp_lint check cobble/
 
 clean:
 	rm -rf out cache sym

@@ -1,0 +1,20 @@
+{
+  "include": [
+    "cobble",
+    "tests",
+    "build_port.py",
+    "compare.py",
+    "generate_sym.py",
+    "render_graph.py"
+  ],
+  "exclude": [
+    "vendor",
+    "proleap-bridge",
+    "jcl-bridge",
+    "out",
+    "cache",
+    "sym",
+    "tools",
+    "**/__pycache__"
+  ]
+}

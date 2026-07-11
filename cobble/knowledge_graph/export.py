@@ -10,7 +10,12 @@ from pathlib import Path
 
 import networkx as nx
 
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 
 def write_ndjson(graph: nx.MultiDiGraph, nodes_path: Path, edges_path: Path) -> None:

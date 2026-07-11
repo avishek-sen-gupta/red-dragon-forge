@@ -15,7 +15,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Union
 
-from cobble.interpreter.cobol.cobol_expression import ExprNode, expr_from_dict, expr_to_dict
+from cobble.interpreter.cobol.cobol_expression import (
+    ExprNode,
+    expr_from_dict,
+    expr_to_dict,
+)
 
 
 @dataclass(frozen=True)

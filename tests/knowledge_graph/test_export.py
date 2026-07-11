@@ -10,17 +10,23 @@ def _sample_graph() -> nx.MultiDiGraph:
     graph = nx.MultiDiGraph()
     graph.add_node(
         (NodeKind.PROGRAM, "COACTVW"),
-        kind=NodeKind.PROGRAM, id="COACTVW",
-        file_path="app/cbl/COACTVW.cbl", attrs={"lang": "COBOL"},
+        kind=NodeKind.PROGRAM,
+        id="COACTVW",
+        file_path="app/cbl/COACTVW.cbl",
+        attrs={"lang": "COBOL"},
     )
     graph.add_node(
         (NodeKind.COPYBOOK, "COCOM01Y"),
-        kind=NodeKind.COPYBOOK, id="COCOM01Y",
-        file_path=None, attrs={},
+        kind=NodeKind.COPYBOOK,
+        id="COCOM01Y",
+        file_path=None,
+        attrs={},
     )
     graph.add_edge(
-        (NodeKind.PROGRAM, "COACTVW"), (NodeKind.COPYBOOK, "COCOM01Y"),
-        kind=EdgeKind.COPY, attrs={"line": 42},
+        (NodeKind.PROGRAM, "COACTVW"),
+        (NodeKind.COPYBOOK, "COCOM01Y"),
+        kind=EdgeKind.COPY,
+        attrs={"line": 42},
     )
     return graph
 

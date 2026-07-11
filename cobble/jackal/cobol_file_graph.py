@@ -12,7 +12,12 @@ from typing import Any, Iterator
 from cobble.interpreter.cobol.asg_types import CobolASG
 from cobble.interpreter.cobol.cobol_statements import OpenStatement
 from cobble.interpreter.cobol.file_enums import OpenMode
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 _OPEN_MODE_TO_EDGE_KIND: dict[OpenMode, EdgeKind] = {
     OpenMode.INPUT: EdgeKind.READS,

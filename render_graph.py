@@ -21,14 +21,19 @@ def main() -> int:
     nodes_jsonl = _OUT_DIR / "nodes.jsonl"
     edges_jsonl = _OUT_DIR / "edges.jsonl"
     if not nodes_jsonl.is_file() or not edges_jsonl.is_file():
-        print(f"error: {nodes_jsonl} / {edges_jsonl} not found — run `make build` first", file=sys.stderr)
+        print(
+            f"error: {nodes_jsonl} / {edges_jsonl} not found — run `make build` first",
+            file=sys.stderr,
+        )
         return 1
 
     nodes, edges = read_ndjson(nodes_jsonl, edges_jsonl)
     graph = merge_graph(nodes, edges)
     output_path = _OUT_DIR / "graph.html"
     render_html(graph, output_path, title="CardDemo Knowledge Graph")
-    print(f"Rendered {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges -> {output_path}")
+    print(
+        f"Rendered {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges -> {output_path}"
+    )
     return 0
 
 

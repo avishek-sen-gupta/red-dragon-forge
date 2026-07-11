@@ -8,7 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 from cobble.jackal.dsn import DirectDSN, InStreamDSN, dsn_key
 from cobble.jackal.jcl.parser import parse_jcl

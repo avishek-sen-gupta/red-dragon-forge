@@ -29,10 +29,15 @@ _OUT = _HERE / "sym"
 
 def main() -> int:
     if not _HLASM.is_file():
-        sys.exit(f"hlasm_export not built: {_HLASM} (run `make jars` / the HLASM build first)")
+        sys.exit(
+            f"hlasm_export not built: {_HLASM} (run `make jars` / the HLASM build first)"
+        )
     syslib_args = ["--syslib", str(_MACROS)]
     _OUT.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "PYTHONPATH": str(_HERE)}  # so `python -m cobble.bms_copybook_gen` resolves
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(_HERE),
+    }  # so `python -m cobble.bms_copybook_gen` resolves
 
     written = 0
     for bms in sorted(_BMS_DIR.glob("*.bms")):
@@ -41,7 +46,10 @@ def main() -> int:
         )
         gen = subprocess.run(
             [sys.executable, "-m", "cobble.bms_copybook_gen"],
-            input=export.stdout, capture_output=True, check=True, env=env,
+            input=export.stdout,
+            capture_output=True,
+            check=True,
+            env=env,
         )
         if not gen.stdout.strip():
             raise RuntimeError(

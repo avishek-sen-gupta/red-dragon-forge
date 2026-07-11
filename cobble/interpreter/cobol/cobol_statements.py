@@ -18,7 +18,11 @@ from cobble.interpreter.cobol.ref_mod import (
     FunctionCallOperand,
     is_function_operand,
 )
-from cobble.interpreter.cobol.cobol_expression import ExprNode, expr_from_dict, expr_to_dict
+from cobble.interpreter.cobol.cobol_expression import (
+    ExprNode,
+    expr_from_dict,
+    expr_to_dict,
+)
 from cobble.interpreter.cobol.file_enums import OpenMode, FileOrganization, AccessMode
 from cobble.interpreter.frontend_extension import DialectParser
 

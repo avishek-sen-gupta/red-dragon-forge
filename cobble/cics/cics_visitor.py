@@ -15,7 +15,11 @@ from dataclasses import dataclass
 
 from cobble.cics.cics_grammar.CICSzLexer import CICSzLexer
 from cobble.cics.cics_grammar.CICSzParser import CICSzParser
-from cobble.interpreter.cobol.cobol_expression import ExprNode, FieldRefNode, LiteralNode
+from cobble.interpreter.cobol.cobol_expression import (
+    ExprNode,
+    FieldRefNode,
+    LiteralNode,
+)
 from cobble.interpreter.cobol.ref_mod import RefModExpr, RefModLiteral, RefModReference
 
 
