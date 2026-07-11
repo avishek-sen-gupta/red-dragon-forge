@@ -2,7 +2,8 @@
   "include": [
     "cobble",
     "tests",
-    "build_port.py",
+    "build_graph.py",
+    "corpus_config.py",
     "compare.py",
     "generate_sym.py",
     "render_graph.py"

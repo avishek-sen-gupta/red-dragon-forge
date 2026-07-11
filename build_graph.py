@@ -167,13 +167,16 @@ def _build_cics_flow_graph(
     config: CorpusConfig, transid_to_program: dict[str, str], writer: GraphWriter, failures: list[str]
 ) -> None:
     cobol_sources: dict[str, bytes] = {}
+    # Build a map of uppercase file stems to paths using configured cobol_globs
+    cobol_files = _matching_files(config.cobol_dir, config.cobol_globs)
+    file_stem_map = {path.stem.upper(): path for path in cobol_files}
+
     for prog_name in set(transid_to_program.values()):
-        cbl_path = config.cobol_dir / f"{prog_name}.cbl"
-        if cbl_path.is_file():
-            cobol_sources[prog_name] = cbl_path.read_bytes()
+        if prog_name in file_stem_map:
+            cobol_sources[prog_name] = file_stem_map[prog_name].read_bytes()
         else:
-            logger.warning("CICS program %s: no %s found", prog_name, cbl_path.name)
-            failures.append(f"CICS program {prog_name}: no {cbl_path.name} found")
+            logger.warning("CICS program %s: not found in cobol_globs matches", prog_name)
+            failures.append(f"CICS program {prog_name}: not found in cobol_globs matches")
 
     csd_source = "\n".join(csd_file.read_text() for csd_file in config.csd_files)
     parser = _make_parser(config)
