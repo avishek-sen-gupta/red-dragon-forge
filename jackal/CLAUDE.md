@@ -88,13 +88,13 @@ uniform entry point across cicada/jackal/squall.)
 ### Running tests / committing (the pre-commit hook runs the full suite)
 Export these so the suite + gated e2e pass (the pre-commit hook needs them too):
 ```bash
-export PROLEAP_BRIDGE_JAR="$(pwd)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
+export PROLEAP_BRIDGE_JAR="$(pwd)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
 export JCL_BRIDGE_JAR="$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
 export CARDDEMO_HOME="$HOME/code/aws-mainframe-carddemo/app"
 ```
 
 **Always invoke tools with `uv run --no-sync`** (e.g. `uv run --no-sync python -m black jackal tests`,
-`uv run --no-sync pytest`). `red-dragon` is an **editable path dependency** (`vendor/red-dragon`);
+`uv run --no-sync pytest`). `red-dragon` is an **editable path dependency** (`../vendor/red-dragon`);
 a plain `uv run` re-checks the lockfile and **rebuilds the large red-dragon editable wheel**
 whenever that submodule changed — a multi-second-to-minute stall borne by the first `uv run`
 (historically the Black hook). `--no-sync` skips that; red-dragon's Python is still picked up

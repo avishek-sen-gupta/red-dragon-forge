@@ -4,7 +4,7 @@
 batch programs end-to-end." It is the durable companion to the Beads epic
 **`jackal-1o2`** ("broaden JCL execution coverage"); every gap below links to its issue.
 
-**Last updated:** 2026-06-22.
+**Last updated:** 2026-07-11.
 
 **Status legend:** ✅ done · 🔶 tracked (open issue) · ⬜ untracked / future.
 
@@ -17,6 +17,10 @@ runs behind a Java bridge and parses ~all real JCL structurally (38/38 CardDemo 
 So every item in this roadmap is **execution semantics over already-parsed structure**, plus
 the **utility** and **dataset/runtime** layers that programs assume exist. The work is
 interpretation, not grammar.
+
+For a snapshot of how much of a real workload this already runs, see the companion measurement
+[`docs/analysis/2026-07-09-carddemo-job-executability.md`](analysis/2026-07-09-carddemo-job-executability.md)
+(what fraction of the CardDemo batch jobs run end-to-end through `JobRunner` today, and what blocks the rest).
 
 The surface decomposes into six layers (0 = parse, 5 = far frontier). Layers 1–4 are the
 realistic roadmap; Layer 5 is separate, large, mostly-independent emulation.
@@ -34,15 +38,15 @@ How a job sequences and wires its steps.
 |---|---|---|---|
 | JOB → EXEC step sequencing | ✅ | — | any multi-step job |
 | DD: DSN / DISP / in-stream / SYSOUT | ✅ | — | file wiring |
-| `COND=` step bypass (RC-gated) | 🔶 | `1o2.1` | "stop the job if a step failed" — most chains |
+| `COND=` step bypass (RC-gated) | ✅ | `1o2.1` | "stop the job if a step failed" — most chains |
 | `IF/THEN/ELSE/ENDIF` + `COND=EVEN/ONLY` | 🔶 | `1o2.8` | modern conditional flow; abend-conditional steps |
-| PROC + symbolics (`&VAR`) | 🔶 | `1o2.2` | **most production JCL is unrunnable without it** |
+| PROC + symbolics (`&VAR`) | 🔶 | `1o2.2` | core expansion landed (`expand_procs`, wired in `runner.py`); remaining: `SET`/instream PROC/`--proclib-dir` CLI flag |
 | `INCLUDE` / `JCLLIB` | 🔶 | `1o2.15` | shared JCL fragments |
-| Referbacks (`DSN=*.STEP.DD`) | 🔶 | `1o2.10` | inter-step dataset passing |
-| Temp datasets (`&&NAME`) | 🔶 | `1o2.11` | scratch files between steps |
+| Referbacks (`DSN=*.STEP.DD`) | ✅ | `1o2.10` | inter-step dataset passing |
+| Temp datasets (`&&NAME`) | ✅ | `1o2.11` | scratch files between steps |
 | DD concatenation | 🔶 | `1o2.5` | multi-file input; load-lib / proc-lib chains |
 | `DCB=` (LRECL/RECFM/BLKSIZE) | 🔶 | `1o2.12` | correct record I/O (13 CardDemo jobs) |
-| `PARM=` into the program | 🔶 | `1o2.13` | parameterized programs |
+| `PARM=` into the program | ✅ | `1o2.13` | parameterized programs |
 | `DUMMY` / `DSN=NULLFILE` | 🔶 | `1o2.14` | empty-input / discard DDs |
 | System symbols (`&SYSUID`, `&SYSDATE`, JES) | ⬜→🔶 | `1o2.23` | date-stamped DSNs, generated names |
 
@@ -66,7 +70,7 @@ Each is its own SYSIN mini-language. This is where "useful program" frequently l
 | Utility | Status | Issue | Depth |
 |---|---|---|---|
 | IEFBR14 | ✅ | — | allocation no-op |
-| IDCAMS | ✅ core / 🔶 deeper | `1o2.6` | have DEFINE/DELETE/REPRO/IF-MAXCC; add LISTCAT/PRINT/ALTER/AIX |
+| IDCAMS | ✅ core / 🔶 deeper | `1o2.6` | grammar/typed-AST comprehensive (LISTCAT/PRINT/ALTER/DEFINE AIX·GDG·PATH, EXPORT/IMPORT, VERIFY, BLDINDEX, modal IF/THEN/ELSE); executor coverage incremental |
 | SORT (DFSORT) — subset | 🔶 | `1o2.3` | FIELDS, INCLUDE/OMIT, SUM |
 | IEBGENER | 🔶 | `1o2.3` | sequential copy (+ simple reformat) |
 | IEBCOPY | 🔶 | `1o2.18` | PDS member copy/compress (needs `1o2.16`) |
@@ -77,7 +81,7 @@ Invisible until a program needs it.
 
 | Facility | Status | Issue | Note |
 |---|---|---|---|
-| Return-code model (step RC, MAXCC) | 🔶 | `1o2.1` | COBOL RC hardcoded 0 today — fixed there |
+| Return-code model (step RC, MAXCC) | ✅ | `1o2.1` | COBOL RC read back from the VM via `read_return_code(vm)`; feeds `COND=` |
 | Abend model (Sxxx/Uxxx ≠ RC) | 🔶 | `1o2.19` | drives EVEN/ONLY + dump DDs + job flush |
 | Diagnostic DDs (SYSUDUMP/CEEDUMP/SYSABEND) | 🔶 | `1o2.20` | capture; content depends on abend model |
 | SYSOUT/SYSPRINT capture | 🔶 | `1o2.7` | reports + utility message decks |
