@@ -65,6 +65,45 @@ make compare                  # identity-diff out/ vs reference/ (must be empty:
 FILE-CONTROL) over `vendor/carddemo` from scratch every time — safe to re-run
 after touching any extractor code or the corpus submodule.
 
+### Point this at your own codebase
+
+`build_graph.py`/`generate_sym.py` take a required `--config <path>` flag —
+nothing about a specific corpus is hardcoded in Python. `config/carddemo.yaml`
+is both the config `make build`/`make sym` use for CardDemo and a template for
+your own corpus:
+
+```yaml
+corpus:
+  cobol_dir: path/to/your/cobol
+  cobol_globs: ["*.cbl", "*.CBL"]
+  jcl_dir: path/to/your/jcl
+  jcl_globs: ["*.jcl", "*.JCL"]
+  proclib_dirs:
+    - path/to/your/proclib
+  csd_files:               # omit or leave empty ([]) if your corpus has no CICS
+    - path/to/your/site.csd
+  copybook_dirs:
+    - path/to/your/copybooks
+  out_dir: out
+
+bms:
+  bms_dir: path/to/your/bms
+  macros_dir: bms-macros
+  sym_dir: sym
+```
+
+Every path is relative to wherever you invoke the script from (not to the
+config file's own location). Every field is required except `proclib_dirs`
+and `csd_files`, which default to empty if omitted. Then run:
+
+```bash
+uv run python build_graph.py --config your-corpus.yaml
+uv run python generate_sym.py --config your-corpus.yaml   # only if you have BMS maps
+```
+
+`compare.py`'s golden-file check stays CardDemo-specific — it's not meaningful
+against a different corpus's output.
+
 ### Render the HTML visualization
 
 ```bash
@@ -114,7 +153,9 @@ consumers may not import each other).
 | `cobble/` | The ported extraction code. Every module is byte-for-byte / import-rewired from its `red-dragon-forge` counterpart (imports → `cobble.*`). Imports **no** production Python — only `cobble.*`, stdlib, and pip (`lark`, `networkx`, `antlr4-python3-runtime`). Includes `cobble/bms_copybook_gen/` (the copybook generator, run as `python -m cobble.bms_copybook_gen`). |
 | `cobble/cics/cics_grammar/*.g4` | The ANTLR grammar **source** (`CICSzLexer.g4`, `CICSzParser.g4`). `make codegen` generates the `CICSz*.py` parser from these — the generated `.py` is gitignored, never shipped. |
 | `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
-| `build_port.py` / `compare.py` | Extract the graph → `out/`; identity-diff `out/` vs `reference/`. |
+| `build_graph.py` / `compare.py` | Extract the graph → `out/`; identity-diff `out/` vs `reference/`. |
+| `corpus_config.py` | `CorpusConfig`/`BmsConfig` dataclasses + YAML loading — `build_graph.py --config <path>` / `generate_sym.py --config <path>` read the corpus location/layout from here instead of a hardcoded CardDemo path. |
+| `config/carddemo.yaml` | The tracked config `make build`/`make sym` use — captures CardDemo's layout in `corpus_config.py`'s schema. Copy this file as a starting point to point cobble at a different corpus. |
 | `render_graph.py` | Render `out/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `out/graph.html` (`cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
 | `tests/` | The pytest unit suite (`make test`), mirroring `cobble/`'s package structure. No JARs/corpus needed — pure modules tested in isolation with hand-built inputs. |
 | `generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy`. |
