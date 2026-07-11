@@ -57,11 +57,44 @@ uv sync
 make jar      # or `make jar-force` after a red-dragon bump
 ```
 
+## Db2 test harness
+
+Most of the integration suite (`tests/integration/test_db2_*`) and the `Db2Backend` unit
+tests (`tests/unit/test_backend.py`) connect to a **live Db2** via
+`ibm_db.connect(os.environ["SQUALL_DB2_DSN"], …)`. There is **no skip** — without a
+reachable Db2 they **fail loud**. Stand one up locally with the Docker harness:
+
+```bash
+cp .env.example .env          # then edit .env: set DB2_PASSWORD (e.g. squalltest123)
+make db2-up                   # docker compose up -d db2; waits until healthy
+                              #   (first init is slow — minutes, much slower under
+                              #    Apple-Silicon emulation; the container is reused after)
+```
+
+The DSNs are built by `db2/dsn-env.sh` from `.env`. Source it before running tests directly
+(it exports `SQUALL_DB2_DSN` for `MOJO` and `SQUALL_DB2_DSN2` for the second database
+`MOJO2`; it also requires `PROLEAP_BRIDGE_JAR` to be set):
+
+```bash
+. db2/dsn-env.sh
+```
+
+The DSN shape (password comes from `.env`/CI secret, never committed):
+
+```
+DATABASE=MOJO;HOSTNAME=localhost;PORT=50000;PROTOCOL=TCPIP;UID=db2inst1;PWD=<DB2_PASSWORD>
+```
+
+`make test` sources `db2/dsn-env.sh` for you before running the suite. (The forge root also
+carries a sibling `tests/integration/db2_env.sh` for composed Cicada+Squall runs.) Harness
+lifecycle: `make db2-up` (idempotent), `make db2-restart` (rebind the TCP listener without
+re-init), `make db2-stop` (keep container), `make db2-clean` (full reset, drops the volume).
+
 ## Tests
 
 ```bash
-uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests (binding engine vs a fake backend; no JAR)
-uv run --no-sync python -m pytest tests/integration/ -x -q # integration tests (real VM + SQLite; needs ProLeap JAR)
+uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests; mostly a fake backend, but test_backend.py needs live Db2
+uv run --no-sync python -m pytest tests/integration/ -x -q # integration (real VM); test_db2_* need live Db2, all need the ProLeap JAR
 ```
 
 Quality gates (pre-commit, mirroring RedDragon/cicada/jackal): `black` (format), **`python_fp_lint`**
@@ -104,7 +137,8 @@ Beads DB) is the separate clone at `~/code/red-dragon`.
 - Write failing test first (TDD).
 - Unit tests go in `tests/unit/`, integration tests in `tests/integration/`.
 - Unit-test the binding engine against a **fake backend** (proves the generic layer in
-  isolation); integration tests exercise real VM execution against the SQLite backend.
+  isolation); integration tests exercise real VM execution — the `test_db2_*` suite against a
+  live Db2, other e2e tests against SQLite.
 - Run the full test suite before committing: `uv run --no-sync python -m pytest tests/ -x -q`.
 - Format: `uv run --no-sync python -m black squall tests`
 
@@ -129,26 +163,37 @@ bd export -o beads/issues.jsonl && git add beads/issues.jsonl
 Talisman `pre-commit.legacy` run there). On a fresh clone, `bd import beads/issues.jsonl`
 rebuilds the local DB. See `beads/README.md`.
 
-## Package layout (intended)
+## Package layout
 
 ```
 squall/
-  strategy.py        # SqlLoweringStrategy — the SQL RedDragonExtensionLoweringStrategy injected into CobolFrontend
-  parser.py          # EXEC SQL text analysis: host-var (:VAR) extraction, INTO stripping
+  strategy.py        # SqlLoweringStrategy — the SQL RedDragonExtensionLoweringStrategy injected into
+                     #   CobolFrontend; also registers the __cics_task_end_hook session-reset builtin
+                     #   (reset_session_fn) for the composed-with-Cicada case
+  preprocess.py      # EXEC SQL / DCLGEN / INCLUDE preprocessing over the source
+  parser/            # EXEC SQL parsing: grammar.lark + _grammar.py (Lark), parse.py, sql_model.py
+  statements.py      # parsed statement value types
+  coprocessor.py     # coprocessor entry point / wiring
   binding.py         # generic host-variable binding engine (field <-> param, INTO mapping,
                      #   SQLCODE/SQLCA) — dialect/backend-agnostic, reads/writes via data_layout
+  connector.py       # connection/session management
+  dclgen.py          # DCLGEN → copybook / host-structure handling
+  copybooks/         # bundled copybooks (SQLCA.cpy, ACCTREC.cpy)
   backend.py         # SqlBackend protocol: execute(sql, params) -> rows / rowcount / sqlcode
   backends/
-    sqlite.py        # SqliteBackend — first concrete backend (owns placeholder style + dialect)
-  builtins/          # SQL service builtins (CallFunction targets): __exec_sql, cursor ops
+    sqlite.py        # SqliteBackend — zero-dependency backend (owns placeholder style + dialect)
+    db2.py           # Db2Backend — real IBM Db2 via ibm-db; primary integration-test target
+  builtins/
+    exec_sql.py      # SQL service builtins (CallFunction targets): __exec_sql, cursor ops, session reset
 ```
 
-RedDragon contributes (the SQL seam — to be built):
-- bridge `serializeExecSql` — serialize the (already-parsed) `ExecSqlStatement` opaque text
+RedDragon contributes the SQL seam (**built and in use**):
+- bridge `serializeExecSql` — serializes the (already-parsed) `ExecSqlStatement` opaque text
 - a generic `RedDragonExtensionLoweringStrategy` protocol + a strategy **registry** keyed by EXEC kind
   (CICS / SQL / SQLIMS), replacing the single hardwired `exec_cics_strategy` hook
 - an `ExecSqlStatement` node + frontend dispatch
 
+The integration tests run the real VM through this seam.
 See `docs/design/2026-06-13-exec-sql-support-design.md` for the full design.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
