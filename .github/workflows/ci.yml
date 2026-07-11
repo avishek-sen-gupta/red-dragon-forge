@@ -48,19 +48,13 @@ jobs:
         run: ./build.sh
       - name: Install build dependencies for hlasm_export
         run: sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev
-      - name: Build hlasm_export
+      - name: Build hlasm_export (via the fork's OS-agnostic build.sh)
         working-directory: cicada/third-party/che-che4z-lsp-for-hlasm-fork
-        run: |
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$(pwd)/build/bin" \
-            -DHLASM_DEV_GUESS_BIN_SUBDIR=ON \
-            -DBUILD_VSIX=OFF \
-            -DDISCOVER_TESTS=OFF
-          cmake --build build --target hlasm_export
+        env:
+          CC: clang
+          CXX: clang++
+          BUILD_TYPE: Release
+        run: ./build.sh --target hlasm_export
       - name: Install Python dependencies
         run: uv sync
       - name: Run tests
@@ -139,19 +133,13 @@ jobs:
         run: make jar
       - name: Install build dependencies for hlasm_export
         run: sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev
-      - name: Build hlasm_export (needed by the CardDemo fitness-golden extraction)
+      - name: Build hlasm_export (via the fork's OS-agnostic build.sh; needed by the fitness-golden extraction)
         working-directory: cicada/third-party/che-che4z-lsp-for-hlasm-fork
-        run: |
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$(pwd)/build/bin" \
-            -DHLASM_DEV_GUESS_BIN_SUBDIR=ON \
-            -DBUILD_VSIX=OFF \
-            -DDISCOVER_TESTS=OFF
-          cmake --build build --target hlasm_export
+        env:
+          CC: clang
+          CXX: clang++
+          BUILD_TYPE: Release
+        run: ./build.sh --target hlasm_export
       - name: Install Python dependencies
         run: make python
       - name: Start DB2 (reuses Squall's own compose stack)
