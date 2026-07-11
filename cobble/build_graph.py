@@ -28,6 +28,8 @@ import os
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
 from cobble.file_location import to_json_value
@@ -76,7 +78,7 @@ def _build_jcl_graph(
     config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter, failures: list[str]
 ) -> None:
     jcl_files = _matching_files(config.jcl_dir, config.jcl_globs)
-    for path in jcl_files:
+    for path in tqdm(jcl_files, desc="JCL", unit="file"):
         try:
             nodes, edges = extract_jcl_graph(
                 path.read_text(), corpus_index, proclib_dirs=config.proclib_dirs
@@ -109,7 +111,7 @@ def _build_call_copy_graph(
     # per-program CALL/COPY edges + CALL adjacency + working-storage presence
     call_targets: dict[str, set[str]] = {}
     has_ws: dict[str, bool] = {}
-    for path in cbl_files:
+    for path in tqdm(cbl_files, desc="CALL/COPY", unit="program"):
         prog = path.stem.upper()
         try:
             src = path.read_bytes()
@@ -196,7 +198,7 @@ def _build_cics_flow_graph(
     cobol_files = _matching_files(config.cobol_dir, config.cobol_globs)
     file_stem_map = {path.stem.upper(): path for path in cobol_files}
 
-    for prog_name in set(transid_to_program.values()):
+    for prog_name in tqdm(set(transid_to_program.values()), desc="CICS flow", unit="program"):
         if prog_name in file_stem_map:
             cobol_sources[prog_name] = file_stem_map[prog_name].read_bytes()
         else:
@@ -238,7 +240,7 @@ def _build_batch_file_graph(
     ]
     store = AstStore(AstStrategy.DISK)
     store.parse_all({p: p.read_bytes() for p in cbl_files}, parser)
-    for path in cbl_files:
+    for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program"):
         try:
             nodes, edges = extract_cobol_file_graph(store.get(path), corpus_index)
         except Exception as exc:  # noqa: BLE001

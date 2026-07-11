@@ -61,11 +61,15 @@ render:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.yaml" >&2; exit 1; }
 	uv run python -m cobble.render_graph --config $(CONFIG)
 
-## Export <out_dir>/{nodes,edges}.jsonl as CodeConcise's canonical manifest.json.
-## Requires CONFIG=<path-to-corpus-yaml>, e.g. make canonical CONFIG=config/carddemo.yaml
+## Export a nodes/edges.jsonl pair as CodeConcise's canonical manifest.json.
+## Requires NODES=, EDGES=, OUTPUT=, PROJECT_NAME= (all explicit, no defaults),
+## e.g. make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME=carddemo
 canonical:
-	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make canonical CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	uv run python -m cobble.canonical_export --config $(CONFIG)
+	@test -n "$(NODES)" || { echo "error: NODES is required, e.g. make canonical NODES=out/nodes.jsonl ..." >&2; exit 1; }
+	@test -n "$(EDGES)" || { echo "error: EDGES is required, e.g. make canonical ... EDGES=out/edges.jsonl ..." >&2; exit 1; }
+	@test -n "$(OUTPUT)" || { echo "error: OUTPUT is required, e.g. make canonical ... OUTPUT=out/manifest.json ..." >&2; exit 1; }
+	@test -n "$(PROJECT_NAME)" || { echo "error: PROJECT_NAME is required, e.g. make canonical ... PROJECT_NAME=carddemo" >&2; exit 1; }
+	uv run python -m cobble.canonical_export --nodes $(NODES) --edges $(EDGES) --output $(OUTPUT) --project-name $(PROJECT_NAME)
 
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
 test:
