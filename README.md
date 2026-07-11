@@ -29,13 +29,20 @@ git clone <this-repo> cobble && cd cobble
 ./build.sh   # submodules -> build tools -> generate parser+copybooks -> extract -> verify 449/803
 ```
 
-`make` targets: `tools` (hlasm + proleap fork + bridge JARs) · `codegen`
-(generate the CICS parser + BMS copybooks from their grammars) · `build`
-(extract → `out/`) · `compare` (identity-diff vs `reference/`, 449/803) ·
-`render` (render `out/` as an interactive HTML graph) · `canonical` (export
-`out/` as CodeConcise's canonical `manifest.json`) · `test` (run the pytest
-unit suite) · `fmt` (black) · `lint` (import-linter + pyright +
-python-fp-lint) · `clean` (drop all generated artifacts).
+`make` targets:
+
+| Target | What it does |
+|--------|--------------|
+| `tools` | Build hlasm, proleap fork, and bridge JARs |
+| `codegen` | Generate the CICS parser and BMS copybooks from their grammars |
+| `build` | Extract the graph to `out/` |
+| `compare` | Identity-diff vs `reference/` (449/803) |
+| `render` | Render `out/` as an interactive HTML graph |
+| `canonical` | Export `out/` as CodeConcise's canonical `manifest.json` |
+| `test` | Run the pytest unit suite |
+| `fmt` | Format with black |
+| `lint` | Run import-linter, pyright, and python-fp-lint |
+| `clean` | Drop all generated artifacts |
 
 ### Build the graph from CardDemo
 
