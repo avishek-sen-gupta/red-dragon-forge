@@ -48,12 +48,18 @@ _HTML_TEMPLATE = """<!doctype html>
   #controls {{ padding: 8px; }}
   #controls fieldset {{ display: inline-block; vertical-align: top; margin-right: 16px; }}
   label {{ display: block; font-size: 13px; }}
+  #filters-toggle {{ display: inline-block; vertical-align: top; margin-right: 16px; }}
+  #filters-toggle summary {{ cursor: pointer; font-size: 13px; padding: 4px 0; }}
+  #filters-toggle[open] summary {{ margin-bottom: 4px; }}
 </style>
 </head>
 <body>
 <div id="controls">
-  <fieldset id="node-filters"><legend>Node kinds</legend></fieldset>
-  <fieldset id="edge-filters"><legend>Edge kinds</legend></fieldset>
+  <details id="filters-toggle" open>
+    <summary>Filters</summary>
+    <fieldset id="node-filters"><legend>Node kinds</legend></fieldset>
+    <fieldset id="edge-filters"><legend>Edge kinds</legend></fieldset>
+  </details>
   <fieldset id="search-box"><legend>Search</legend>
     <input type="text" id="search-input" placeholder="node name contains...">
   </fieldset>
