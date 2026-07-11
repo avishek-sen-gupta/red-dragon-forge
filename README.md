@@ -190,8 +190,20 @@ independent Python that shells out to those tools — the decoupling, proven fro
 repo that contains no production interpreter code and ships no generated
 artifacts.
 
+## Acknowledgments
+
+The JCL grammar (`jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4` /
+`JCLParser.g4`) and the CICS `EXEC CICS` grammar
+(`cobble/cics/cics_grammar/CICSzLexer.g4` / `CICSzParser.g4`, adapted for the
+Python3 ANTLR runtime) are both vendored from **Craig Schneiderwent's
+[mapa](https://github.com/cschneid-the-elder/mapa)** project — thank you for
+making these available. See `jcl-bridge/PROVENANCE.md` for the exact vendored
+commit/files, and `jcl-bridge/LICENSE` for mapa's MIT license text.
+
 ## License
 
 MIT — see [LICENSE.md](LICENSE.md). Project rationale in [PHILOSOPHY.md](PHILOSOPHY.md).
 The vendored `cobble/knowledge_graph/vendor/vis-network.min.js` ships under its
 own license — see `cobble/knowledge_graph/vendor/VIS_NETWORK_LICENSE.md`.
+The vendored mapa grammars (see Acknowledgments above) ship under their own
+MIT license — see `jcl-bridge/LICENSE`.
