@@ -45,8 +45,8 @@ git clone <this-repo> cobble && cd cobble
 `make` targets: `tools` (hlasm + proleap fork + bridge JARs) · `codegen`
 (generate the CICS parser + BMS copybooks from their grammars) · `build`
 (extract → `out/`) · `compare` (identity-diff vs `reference/`, 449/803) ·
-`render` (render `out/` as an interactive HTML graph) · `clean` (drop all
-generated artifacts).
+`render` (render `out/` as an interactive HTML graph) · `test` (run the
+pytest unit suite) · `clean` (drop all generated artifacts).
 
 ### Build the graph from CardDemo
 
@@ -78,6 +78,19 @@ node labels, and click-to-highlight-neighbors on any node. Requires
 `out/nodes.jsonl` / `out/edges.jsonl` to already exist (i.e. run `make build`
 first).
 
+### Unit tests
+
+```bash
+make test   # uv run pytest — no JARs, no corpus, runs in well under a second
+```
+
+Unlike `make verify` (one big end-to-end golden-file check over the real
+CardDemo corpus, needing JDK/Maven/CMake), `tests/` unit-tests cobble's pure
+modules in isolation — grammars, dataclass transforms, graph merging — with
+hand-built inputs, giving localized signal on which piece broke rather than
+just "449/803 doesn't match." Coverage is still partial; see `tests/` for
+what's covered so far.
+
 ## What's here
 
 | Path | What |
@@ -87,6 +100,7 @@ first).
 | `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
 | `build_port.py` / `compare.py` | Extract the graph → `out/`; identity-diff `out/` vs `reference/`. |
 | `render_graph.py` | Render `out/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `out/graph.html` (`cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
+| `tests/` | The pytest unit suite (`make test`), mirroring `cobble/`'s package structure. No JARs/corpus needed — pure modules tested in isolation with hand-built inputs. |
 | `generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy`. |
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden — the *target*, not an input to the extraction). |
 | `proleap-bridge/` | The COBOL→JSON ASG bridge (copied Maven source). Depends on the **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**) vendored as the submodule `proleap-bridge/proleap-cobol-parser`, built (`mvn install`) *before* the bridge. |
