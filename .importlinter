@@ -1,0 +1,33 @@
+[importlinter]
+root_packages =
+    cobble
+
+[importlinter:contract:interpreter-is-leaf]
+name = interpreter must not import other cobble modules
+type = forbidden
+source_modules =
+    cobble.interpreter
+forbidden_modules =
+    cobble.cics
+    cobble.jackal
+    cobble.knowledge_graph
+    cobble.bms_copybook_gen
+
+[importlinter:contract:bms-copybook-gen-is-leaf]
+name = bms_copybook_gen must not import other cobble modules
+type = forbidden
+source_modules =
+    cobble.bms_copybook_gen
+forbidden_modules =
+    cobble.cics
+    cobble.interpreter
+    cobble.jackal
+    cobble.knowledge_graph
+
+[importlinter:contract:consumer-independence]
+name = cics, jackal, and knowledge_graph must not import each other
+type = independence
+modules =
+    cobble.cics
+    cobble.jackal
+    cobble.knowledge_graph

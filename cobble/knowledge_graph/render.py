@@ -185,9 +185,7 @@ def render_html(
     silently producing a broken page.
     """
     if not _VENDOR_JS_PATH.is_file():
-        raise FileNotFoundError(
-            f"vis-network not vendored at {_VENDOR_JS_PATH}"
-        )
+        raise FileNotFoundError(f"vis-network not vendored at {_VENDOR_JS_PATH}")
     vis_js = _VENDOR_JS_PATH.read_text()
 
     vis_nodes = []

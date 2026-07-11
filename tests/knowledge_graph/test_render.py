@@ -12,15 +12,23 @@ def _sample_graph() -> nx.MultiDiGraph:
     graph = nx.MultiDiGraph()
     graph.add_node(
         (NodeKind.PROGRAM, "COACTVW"),
-        kind=NodeKind.PROGRAM, id="COACTVW", file_path=None, attrs={},
+        kind=NodeKind.PROGRAM,
+        id="COACTVW",
+        file_path=None,
+        attrs={},
     )
     graph.add_node(
         (NodeKind.COPYBOOK, "COCOM01Y"),
-        kind=NodeKind.COPYBOOK, id="COCOM01Y", file_path=None, attrs={},
+        kind=NodeKind.COPYBOOK,
+        id="COCOM01Y",
+        file_path=None,
+        attrs={},
     )
     graph.add_edge(
-        (NodeKind.PROGRAM, "COACTVW"), (NodeKind.COPYBOOK, "COCOM01Y"),
-        kind=EdgeKind.COPY, attrs={},
+        (NodeKind.PROGRAM, "COACTVW"),
+        (NodeKind.COPYBOOK, "COCOM01Y"),
+        kind=EdgeKind.COPY,
+        attrs={},
     )
     return graph
 
@@ -37,8 +45,12 @@ def test_render_html_writes_self_contained_file(tmp_path: Path) -> None:
     assert "vis" in html.lower()
 
 
-def test_render_html_raises_when_vendored_js_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(render_module, "_VENDOR_JS_PATH", tmp_path / "does-not-exist.js")
+def test_render_html_raises_when_vendored_js_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        render_module, "_VENDOR_JS_PATH", tmp_path / "does-not-exist.js"
+    )
 
     with pytest.raises(FileNotFoundError):
         render_html(_sample_graph(), tmp_path / "graph.html")

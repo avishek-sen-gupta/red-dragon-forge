@@ -46,7 +46,8 @@ git clone <this-repo> cobble && cd cobble
 (generate the CICS parser + BMS copybooks from their grammars) · `build`
 (extract → `out/`) · `compare` (identity-diff vs `reference/`, 449/803) ·
 `render` (render `out/` as an interactive HTML graph) · `test` (run the
-pytest unit suite) · `clean` (drop all generated artifacts).
+pytest unit suite) · `fmt` (black) · `lint` (import-linter + pyright +
+python-fp-lint) · `clean` (drop all generated artifacts).
 
 ### Build the graph from CardDemo
 
@@ -90,6 +91,21 @@ modules in isolation — grammars, dataclass transforms, graph merging — with
 hand-built inputs, giving localized signal on which piece broke rather than
 just "449/803 doesn't match." Coverage is still partial; see `tests/` for
 what's covered so far.
+
+### Formatting, linting, and pre-commit hooks
+
+```bash
+make fmt    # uv run python -m black .
+make lint   # uv run lint-imports && uv run pyright && uv run python -m python_fp_lint check cobble/
+```
+
+`.pre-commit-config.yaml` wires these up (plus the terminology guard and
+`make test`) to run automatically on every commit: `black` auto-formats and
+re-stages, `pyright` and `python-fp-lint` report warnings without blocking
+the commit, and `import-linter` / the unit tests block it on failure.
+Architecture contracts live in `.importlinter` (e.g. `interpreter` may not
+import `cics`/`jackal`/`knowledge_graph`/`bms_copybook_gen`, and those four
+consumers may not import each other).
 
 ## What's here
 

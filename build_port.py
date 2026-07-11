@@ -30,7 +30,12 @@ from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
 from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from cobble.interpreter.project.cobol_imports import extract_cobol_imports
 from cobble.interpreter.project.import_types import ImportKind
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 from cobble.cics.csd_parse import parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
@@ -73,7 +78,9 @@ def _build_jcl_graph(writer: GraphWriter, failures: list[str]) -> None:
     jcl_files = sorted(jcl_dir.glob("*.jcl")) + sorted(jcl_dir.glob("*.JCL"))
     for path in jcl_files:
         try:
-            nodes, edges = extract_jcl_graph(path.read_text(), proclib_dirs=proclib_dirs)
+            nodes, edges = extract_jcl_graph(
+                path.read_text(), proclib_dirs=proclib_dirs
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"JCL {path.name}: {exc}")
@@ -114,20 +121,33 @@ def _build_call_copy_graph(
             if ref.kind == ImportKind.INCLUDE:
                 tid = ref.module_path.upper()
                 writer.add_node(GraphNode(id=tid, kind=NodeKind.COPYBOOK))
-                writer.add_edge(GraphEdge(
-                    source=prog, source_kind=NodeKind.PROGRAM,
-                    target=tid, target_kind=NodeKind.COPYBOOK, kind=EdgeKind.COPY))
+                writer.add_edge(
+                    GraphEdge(
+                        source=prog,
+                        source_kind=NodeKind.PROGRAM,
+                        target=tid,
+                        target_kind=NodeKind.COPYBOOK,
+                        kind=EdgeKind.COPY,
+                    )
+                )
             elif ref.kind == ImportKind.REQUIRE:
                 tid = ref.module_path.upper()
                 writer.add_node(GraphNode(id=tid, kind=NodeKind.PROGRAM))
-                writer.add_edge(GraphEdge(
-                    source=prog, source_kind=NodeKind.PROGRAM,
-                    target=tid, target_kind=NodeKind.PROGRAM, kind=EdgeKind.CALL))
+                writer.add_edge(
+                    GraphEdge(
+                        source=prog,
+                        source_kind=NodeKind.PROGRAM,
+                        target=tid,
+                        target_kind=NodeKind.PROGRAM,
+                        kind=EdgeKind.CALL,
+                    )
+                )
                 tgts.add(tid)
         call_targets[prog] = tgts
         txt = src.decode("utf-8", errors="replace")
         has_ws[prog] = any(
-            (toks := line.strip().upper().split())[:2] == ["WORKING-STORAGE", "SECTION."]
+            (toks := line.strip().upper().split())[:2]
+            == ["WORKING-STORAGE", "SECTION."]
             for line in txt.splitlines()
             if line.strip()
         )
@@ -155,9 +175,15 @@ def _build_call_copy_graph(
     for sub in sorted(reached_subs):
         if has_ws.get(sub):
             writer.add_node(GraphNode(id="DFHEIBLK", kind=NodeKind.COPYBOOK))
-            writer.add_edge(GraphEdge(
-                source=sub, source_kind=NodeKind.PROGRAM,
-                target="DFHEIBLK", target_kind=NodeKind.COPYBOOK, kind=EdgeKind.COPY))
+            writer.add_edge(
+                GraphEdge(
+                    source=sub,
+                    source_kind=NodeKind.PROGRAM,
+                    target="DFHEIBLK",
+                    target_kind=NodeKind.COPYBOOK,
+                    kind=EdgeKind.COPY,
+                )
+            )
 
     print(f"CALL/COPY: {len(cbl_files)} programs")
 
@@ -201,7 +227,8 @@ def _build_batch_file_graph(
     cbl_dir = _CARDDEMO_HOME / "cbl"
     parser = _make_parser()
     cbl_files = [
-        p for p in sorted(cbl_dir.glob("*.cbl"))
+        p
+        for p in sorted(cbl_dir.glob("*.cbl"))
         if p.stem.upper() not in cics_program_names
     ]
     store = AstStore(AstStrategy.DISK)
@@ -222,16 +249,27 @@ def _read_ndjson(nodes_path: Path, edges_path: Path):
     nodes = []
     for line in nodes_path.read_text().splitlines():
         d = json.loads(line)
-        nodes.append(GraphNode(
-            id=d["id"], kind=NodeKind(d["kind"]),
-            file_path=d.get("file_path"), attrs=d.get("attrs", {})))
+        nodes.append(
+            GraphNode(
+                id=d["id"],
+                kind=NodeKind(d["kind"]),
+                file_path=d.get("file_path"),
+                attrs=d.get("attrs", {}),
+            )
+        )
     edges = []
     for line in edges_path.read_text().splitlines():
         d = json.loads(line)
-        edges.append(GraphEdge(
-            source=d["source"], source_kind=NodeKind(d["source_kind"]),
-            target=d["target"], target_kind=NodeKind(d["target_kind"]),
-            kind=EdgeKind(d["kind"]), attrs=d.get("attrs", {})))
+        edges.append(
+            GraphEdge(
+                source=d["source"],
+                source_kind=NodeKind(d["source_kind"]),
+                target=d["target"],
+                target_kind=NodeKind(d["target_kind"]),
+                kind=EdgeKind(d["kind"]),
+                attrs=d.get("attrs", {}),
+            )
+        )
     return nodes, edges
 
 

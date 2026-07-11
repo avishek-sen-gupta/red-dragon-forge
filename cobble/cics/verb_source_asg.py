@@ -108,43 +108,68 @@ def _statement_to_verb(stmt: ExecCicsStatement, program: str, data_fields):
     if verb == "RETURN":
         if "TRANSID" in opts:
             return CicsVerb(
-                verb="RETURN_TRANSID", program=program, map_name=None,
-                mapset_name=None, xctl_target=None,
+                verb="RETURN_TRANSID",
+                program=program,
+                map_name=None,
+                mapset_name=None,
+                xctl_target=None,
                 transid=_resolve_operand(opts.get("TRANSID"), data_fields),
             )
         return None
     if verb == "XCTL":
         return CicsVerb(
-            verb="XCTL", program=program, map_name=None, mapset_name=None,
+            verb="XCTL",
+            program=program,
+            map_name=None,
+            mapset_name=None,
             xctl_target=_resolve_operand(opts.get("PROGRAM"), data_fields),
             transid=None,
         )
     if verb == "LINK":
         return CicsVerb(
-            verb="LINK", program=program, map_name=None, mapset_name=None,
+            verb="LINK",
+            program=program,
+            map_name=None,
+            mapset_name=None,
             xctl_target=_resolve_operand(opts.get("PROGRAM"), data_fields),
             transid=None,
         )
     if verb == "SEND MAP":
         return CicsVerb(
-            verb="SEND_MAP", program=program,
+            verb="SEND_MAP",
+            program=program,
             map_name=r("MAP", "MAPNAME"),
             mapset_name=_resolve_operand(opts.get("MAPSET"), data_fields),
-            xctl_target=None, transid=None,
+            xctl_target=None,
+            transid=None,
         )
     if verb == "RECEIVE MAP":
         return CicsVerb(
-            verb="RECEIVE_MAP", program=program,
+            verb="RECEIVE_MAP",
+            program=program,
             map_name=r("MAP", "MAPNAME"),
             mapset_name=_resolve_operand(opts.get("MAPSET"), data_fields),
-            xctl_target=None, transid=None,
+            xctl_target=None,
+            transid=None,
         )
-    if verb in ("READ", "WRITE", "REWRITE", "DELETE",
-                "STARTBR", "READNEXT", "READPREV", "ENDBR"):
+    if verb in (
+        "READ",
+        "WRITE",
+        "REWRITE",
+        "DELETE",
+        "STARTBR",
+        "READNEXT",
+        "READPREV",
+        "ENDBR",
+    ):
         file_opt = opts.get("FILE") or opts.get("DATASET")
         return CicsVerb(
-            verb=verb, program=program, map_name=None, mapset_name=None,
-            xctl_target=None, transid=None,
+            verb=verb,
+            program=program,
+            map_name=None,
+            mapset_name=None,
+            xctl_target=None,
+            transid=None,
             file_name=_resolve_operand(file_opt, data_fields),
         )
     return None

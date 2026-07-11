@@ -7,12 +7,18 @@ fileignoreconfig:
   checksum: 28e3165d621ff40dde0bb127f81baae406a28a3f39ec1f4e08234ef0a44ceb35
 - filename: cobble/knowledge_graph/render.py
   checksum: e528f5d5c5284461ab78473a5500221eea51a95f227156418fe41da1e10b2dc8
-- filename: uv.lock
-  checksum: abd2f994cb093014e6e09391f0b39012a5aa3e6a34ee960628a7ba49af432377
 - filename: tests/jackal/test_dsn.py
   checksum: 194d7d244a0e2ee24ddf217b0e47ab3645f6acc0777855a376772483d28c59f7
-- filename: tests/knowledge_graph/test_render.py
-  checksum: 39a5c9458a9e7f09c212f970d88888319a3a69789bbb273222b8af7e225eabfa
 - filename: docs/superpowers/specs/2026-07-11-corpus-config-design.md
   checksum: ce633a6be05779c899157ed313f00b7839b447064df830cd6906d25c3dbafa0a
+- filename: uv.lock
+  checksum: 5235fdaff174eeb53f40ffc70679e83d321eb86bde30db5baaf9b35eba46a0b6
+- filename: corpus_config.py
+  checksum: dba9e58222fd87af8b08648440ac00ef934fbaef3b65adf8dbe129ddbd87f812
+- filename: tests/knowledge_graph/test_render.py
+  checksum: 5e617296b45c02d90f45fc1cf0a682f574d6b9321e0caed54996cde4c647d467
+- filename: tests/test_corpus_config.py
+  checksum: 29e7d9e2d46dd2149f7a6b723c29dda00193292bc4a07b9bd2e1fbbe6c3a0a0f
+- filename: docs/superpowers/plans/2026-07-11-corpus-config.md
+  checksum: c5e3d9154a059402d1fc6035197fac87e94439bf75ffed1d2a3931a5730717d9
 version: "1.0"
