@@ -1,0 +1,20 @@
+corpus:
+  cobol_dir: vendor/carddemo/app/cbl
+  cobol_globs: ["*.cbl"]
+  jcl_dir: vendor/carddemo/app/jcl
+  jcl_globs: ["*.jcl", "*.JCL"]
+  proclib_dirs:
+    - vendor/carddemo/app/proc
+  csd_files:
+    - vendor/carddemo/app/csd/CARDDEMO.CSD
+  copybook_dirs:
+    - sym
+    - vendor/carddemo/app/cpy
+    - vendor/carddemo/app/cpy-bms
+    - cics-copybooks
+  out_dir: out
+
+bms:
+  bms_dir: vendor/carddemo/app/bms
+  macros_dir: bms-macros
+  sym_dir: sym
