@@ -27,4 +27,6 @@ fileignoreconfig:
   checksum: 0c7a002271338c0337220bf65f845fdc6ce78737218970c5266547e6ff2810b2
 - filename: tests/test_corpus_index.py
   checksum: 2e2391cf79e7470da5e7608370e7993eb5ed52d3819abb8b8987fbb9c24a7d02
+- filename: docs/superpowers/specs/2026-07-11-canonical-export-design.md
+  checksum: 1418b3588e949a986aa6fd47f5e6068283e530b9e0c39d8431f99582930b967d
 version: "1.0"
