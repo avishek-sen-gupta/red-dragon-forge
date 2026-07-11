@@ -11,6 +11,8 @@ and writes <sym_dir>/<stem>.cpy. This produces the symbolic copybooks the CICS
 COBOL programs `COPY`, from source -- nothing pre-generated is shipped.
 hlasm_export is built from the che-che4z-lsp-for-hlasm submodule; the
 DFHMSD/DFHMDI/DFHMDF prototype macros are the assembler SYSLIB.
+
+Invoke as: uv run python -m cobble.generate_sym --config <path>
 """
 
 from __future__ import annotations
@@ -21,19 +23,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))  # make `corpus_config` importable
+from cobble.corpus_config import load_bms_config
 
-from corpus_config import load_bms_config
-
-_HLASM = _HERE / "vendor" / "che-che4z-lsp-for-hlasm" / "build" / "bin" / "hlasm_export"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_HLASM = _REPO_ROOT / "vendor" / "che-che4z-lsp-for-hlasm" / "build" / "bin" / "hlasm_export"
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config", required=True, type=Path,
-        help="Path to a corpus YAML config (see corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
     )
     return parser.parse_args()
 
@@ -46,7 +46,7 @@ def main() -> int:
         sys.exit(f"hlasm_export not built: {_HLASM} (run `make jars` / the HLASM build first)")
     syslib_args = ["--syslib", str(config.macros_dir)]
     config.sym_dir.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "PYTHONPATH": str(_HERE)}  # so `python -m cobble.bms_copybook_gen` resolves
+    env = {**os.environ, "PYTHONPATH": str(_REPO_ROOT)}  # so `python -m cobble.bms_copybook_gen` resolves
 
     written = 0
     for bms in sorted(config.bms_dir.glob("*.bms")):

@@ -1,7 +1,9 @@
 """render_graph.py — render out/nodes.jsonl + out/edges.jsonl (produced by
-build_graph.py) as one self-contained interactive HTML visualization at
+cobble.build_graph) as one self-contained interactive HTML visualization at
 out/graph.html. No server, no CDN: vis-network is vendored under
 cobble/knowledge_graph/vendor/ and inlined into the generated file.
+
+Invoke as: uv run python -m cobble.render_graph
 """
 
 from __future__ import annotations
@@ -13,8 +15,8 @@ from cobble.knowledge_graph.export import read_ndjson
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.knowledge_graph.render import render_html
 
-_HERE = Path(__file__).resolve().parent
-_OUT_DIR = _HERE / "out"
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_OUT_DIR = _REPO_ROOT / "out"
 
 
 def main() -> int:

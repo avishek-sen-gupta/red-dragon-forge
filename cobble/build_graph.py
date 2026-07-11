@@ -8,9 +8,11 @@ verb sourcing in cobble/cics/verb_source_asg.py). No VM, no compile/lower
 pipeline.
 
 Corpus location and layout come from a YAML config file (see
-corpus_config.py) passed via --config -- nothing about the corpus is
+cobble/corpus_config.py) passed via --config -- nothing about the corpus is
 hardcoded here. Writes <out_dir>/{nodes,edges}.jsonl and prints per-extractor
 + merged counts.
+
+Invoke as: uv run python -m cobble.build_graph --config <path>
 
 Env:
     PROLEAP_BRIDGE_JAR=$(pwd)/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
@@ -26,10 +28,7 @@ import os
 import sys
 from pathlib import Path
 
-_HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))  # make `cobble`/`corpus_config` importable
-
-from corpus_config import CorpusConfig, load_corpus_config
+from cobble.corpus_config import CorpusConfig, load_corpus_config
 
 from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
@@ -241,7 +240,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config", required=True, type=Path,
-        help="Path to a corpus YAML config (see corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
     )
     return parser.parse_args()
 
