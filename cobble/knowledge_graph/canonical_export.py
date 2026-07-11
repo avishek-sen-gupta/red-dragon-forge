@@ -1,0 +1,95 @@
+"""canonical_export — convert cobble's own nodes.jsonl/edges.jsonl into
+CodeConcise's canonical ingestion manifest JSON, alongside cobble's existing
+nodes.jsonl/edges.jsonl/graph.html outputs.
+
+Streaming and thread-pool-parallel throughout, with bounded memory — see
+docs/superpowers/specs/2026-07-11-canonical-export-design.md for the full
+design rationale, including the deliberate lack of schema validation.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+from pathlib import Path
+from typing import Iterator
+
+from cobble.interpreter.project.graph_types import GraphEdge, GraphNode, NodeKind
+
+logger = logging.getLogger(__name__)
+
+GENERATOR = "cobble"
+
+_CODE_CHUNK_KINDS = frozenset({
+    NodeKind.PROGRAM, NodeKind.COBOL_FILE, NodeKind.COPYBOOK, NodeKind.BMS_MAP,
+    NodeKind.JOB, NodeKind.STEP, NodeKind.TRANSACTION, NodeKind.INSTREAM_DATA,
+})
+_DATABASE_KINDS = frozenset({NodeKind.DATASET, NodeKind.CICS_FILE})
+
+_LANGUAGE_FOR_KIND: dict[NodeKind, str] = {
+    NodeKind.PROGRAM: "COBOL",
+    NodeKind.COBOL_FILE: "COBOL",
+    NodeKind.COPYBOOK: "COBOL",
+    NodeKind.BMS_MAP: "COBOL",
+    NodeKind.JOB: "JCL",
+    NodeKind.STEP: "JCL",
+    NodeKind.INSTREAM_DATA: "JCL",
+}
+
+
+def _canonical_id(kind: NodeKind, raw_id: str) -> str:
+    return f"{kind.value}::{raw_id}"
+
+
+def _category_for(kind: NodeKind) -> list[str]:
+    if kind in _CODE_CHUNK_KINDS:
+        return ["CODE_CHUNK"]
+    if kind in _DATABASE_KINDS:
+        return ["DATABASE"]
+    raise ValueError(f"no category mapping for {kind!r}")
+
+
+def _language_for(kind: NodeKind) -> str | None:
+    return _LANGUAGE_FOR_KIND.get(kind)
+
+
+def _read_file_text(path: Path) -> str:
+    try:
+        return path.read_text(errors="replace")
+    except OSError as exc:
+        logger.warning("canonical_export: could not read %s: %s", path, exc)
+        return ""
+
+
+def _loc(text: str) -> int:
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+def _transform_node(node: GraphNode, project_name: str) -> dict:
+    code = _read_file_text(Path(node.file_path)) if node.file_path else ""
+    return {
+        "id": _canonical_id(node.kind, node.id),
+        "display_name": node.id,
+        "type": node.kind.value,
+        "code": code,
+        "path": node.file_path or "",
+        "language": _language_for(node.kind),
+        "generator": GENERATOR,
+        "loc": _loc(code),
+        "cyclomatic_complexity": 0,
+        "category": _category_for(node.kind),
+        "additional_properties": {
+            **node.attrs,
+            "kind": node.kind.value,
+            "project_name": project_name,
+        },
+    }
+
+
+def _transform_edge(edge: GraphEdge) -> dict:
+    return {
+        "from_id": _canonical_id(edge.source_kind, edge.source),
+        "to_id": _canonical_id(edge.target_kind, edge.target),
+        "type": edge.kind.value,
+    }
