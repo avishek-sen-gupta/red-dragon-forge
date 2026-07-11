@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Iterator
 
-from cobble.interpreter.project.graph_types import GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +93,24 @@ def _transform_edge(edge: GraphEdge) -> dict:
         "to_id": _canonical_id(edge.target_kind, edge.target),
         "type": edge.kind.value,
     }
+
+
+def _stream_nodes(path: Path) -> Iterator[GraphNode]:
+    with path.open() as f:
+        for line in f:
+            row = json.loads(line)
+            yield GraphNode(
+                id=row["id"], kind=NodeKind(row["kind"]),
+                file_path=row.get("file_path"), attrs=row.get("attrs", {}),
+            )
+
+
+def _stream_edges(path: Path) -> Iterator[GraphEdge]:
+    with path.open() as f:
+        for line in f:
+            row = json.loads(line)
+            yield GraphEdge(
+                source=row["source"], source_kind=NodeKind(row["source_kind"]),
+                target=row["target"], target_kind=NodeKind(row["target_kind"]),
+                kind=EdgeKind(row["kind"]), attrs=row.get("attrs", {}),
+            )
