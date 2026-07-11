@@ -12,8 +12,10 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
@@ -171,3 +173,58 @@ class FileSystemSynthesizer:
         with self._lock:
             edges, self._edges = self._edges, []
         return edges
+
+
+def _chunked(iterable: Iterable, size: int) -> Iterator[list]:
+    chunk = []
+    for item in iterable:
+        chunk.append(item)
+        if len(chunk) >= size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def write_manifest(
+    nodes_path: Path,
+    edges_path: Path,
+    output_path: Path,
+    project_name: str,
+    *,
+    chunk_size: int = 200,
+    max_workers: int = 8,
+) -> None:
+    fs = FileSystemSynthesizer()
+    tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+
+    with tmp_path.open("w") as f:
+        f.write(f'{{"version": "1.0", "generator": "{GENERATOR}", "nodes": [')
+        first = True
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            process = partial(_process_node, project_name=project_name, fs=fs)
+            for chunk in _chunked(_stream_nodes(nodes_path), chunk_size):
+                for node_results in pool.map(process, chunk):
+                    for node_dict in node_results:
+                        if not first:
+                            f.write(",")
+                        f.write(json.dumps(node_dict))
+                        first = False
+
+        f.write('], "edges": [')
+        first = True
+        for edge_dict in fs.drain_edges():
+            if not first:
+                f.write(",")
+            f.write(json.dumps(edge_dict))
+            first = False
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            for chunk in _chunked(_stream_edges(edges_path), chunk_size):
+                for edge_dict in pool.map(_transform_edge, chunk):
+                    if not first:
+                        f.write(",")
+                    f.write(json.dumps(edge_dict))
+                    first = False
+        f.write("]}")
+
+    tmp_path.rename(output_path)
