@@ -5,12 +5,15 @@ JCL graph) into one networkx.MultiDiGraph, keyed by (kind, id).
 
 from __future__ import annotations
 
-import networkx as nx
+from collections.abc import Sequence
 
+import networkx as nx
 from interpreter.project.graph_types import GraphEdge, GraphNode
 
 
-def merge_graph(nodes: list[GraphNode], edges: list[GraphEdge]) -> nx.MultiDiGraph:
+def merge_graph(
+    nodes: Sequence[GraphNode], edges: Sequence[GraphEdge]
+) -> nx.MultiDiGraph:
     """Build one MultiDiGraph from GraphNode/GraphEdge sequences.
 
     Nodes are keyed by (kind, id) — two GraphNode instances with the same
