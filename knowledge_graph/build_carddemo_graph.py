@@ -83,8 +83,11 @@ def _build_jcl_graph(writer: GraphWriter, failures: list[str]) -> None:
     jcl_files = sorted(jcl_dir.glob("*.jcl")) + sorted(jcl_dir.glob("*.JCL"))
     for path in jcl_files:
         try:
-            nodes, edges = extract_jcl_graph(path.read_text(), proclib_dirs=proclib_dirs)
-        except Exception as exc:  # noqa: BLE001 — one bad job must not abort the run
+            nodes, edges = extract_jcl_graph(
+                path.read_text(), proclib_dirs=proclib_dirs
+            )
+        # one bad job must not abort the run
+        except Exception as exc:  # noqa: BLE001
             logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"JCL {path.name}: {exc}")
             continue
@@ -135,7 +138,8 @@ def _build_call_copy_graph(
                     program_source_dirs=[cbl_dir],
                     parser=plain_parser,
                 )
-        except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
+        # one bad program must not abort the run
+        except Exception as exc:  # noqa: BLE001
             logger.warning("COBOL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"COBOL {path.name}: {exc}")
             continue
@@ -162,14 +166,17 @@ def _build_batch_file_graph(
     cbl_dir = _CARDDEMO_HOME / "cbl"
     parser = _make_parser(copybook_dirs)
     cbl_files = [
-        p for p in sorted(cbl_dir.glob("*.cbl")) if p.stem.upper() not in cics_program_names
+        p
+        for p in sorted(cbl_dir.glob("*.cbl"))
+        if p.stem.upper() not in cics_program_names
     ]
     store = AstStore(AstStrategy.DISK)  # default DISK; MEMORY opt-in later
     store.parse_all({p: p.read_bytes() for p in cbl_files}, parser)
     for path in cbl_files:
         try:
             nodes, edges = extract_cobol_file_graph(store.get(path))
-        except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
+        # one bad program must not abort the run
+        except Exception as exc:  # noqa: BLE001
             logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"FILE-CONTROL {path.name}: {exc}")
             continue
@@ -208,7 +215,8 @@ def _build_cics_flow_graph(
             sink=writer,
             failures=failures,
         )
-    except Exception as exc:  # noqa: BLE001 — a malformed CSD must not abort the run
+    # a malformed CSD must not abort the run
+    except Exception as exc:  # noqa: BLE001
         logger.warning("CICS flow graph (whole CSD) failed: %s", exc, exc_info=True)
         failures.append(f"CICS flow graph (whole CSD): {exc}")
 

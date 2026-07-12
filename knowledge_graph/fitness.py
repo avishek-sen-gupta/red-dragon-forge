@@ -12,7 +12,9 @@ from pathlib import Path
 
 
 def _node_keys(path: Path) -> set[tuple[str, str]]:
-    return {(r["kind"], r["id"]) for r in map(json.loads, path.read_text().splitlines())}
+    return {
+        (r["kind"], r["id"]) for r in map(json.loads, path.read_text().splitlines())
+    }
 
 
 def _edge_keys(path: Path) -> set[tuple]:
@@ -35,9 +37,20 @@ def write_golden(src_nodes_jsonl, src_edges_jsonl, golden_nodes, golden_edges) -
     """Copy build output into the golden, sorted for stable diffs."""
     for src, dst, keyf in (
         (src_nodes_jsonl, golden_nodes, lambda r: (r["kind"], r["id"])),
-        (src_edges_jsonl, golden_edges,
-         lambda r: (r["source"], r["source_kind"], r["target"], r["target_kind"], r["kind"])),
+        (
+            src_edges_jsonl,
+            golden_edges,
+            lambda r: (
+                r["source"],
+                r["source_kind"],
+                r["target"],
+                r["target_kind"],
+                r["kind"],
+            ),
+        ),
     ):
         rows = [json.loads(line) for line in Path(src).read_text().splitlines()]
         rows.sort(key=keyf)
-        Path(dst).write_text("\n".join(json.dumps(r, sort_keys=True) for r in rows) + "\n")
+        Path(dst).write_text(
+            "\n".join(json.dumps(r, sort_keys=True) for r in rows) + "\n"
+        )
