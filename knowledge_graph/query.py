@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import networkx as nx
-
 from interpreter.project.graph_types import EdgeKind, NodeKind
 
 NodeId = tuple[NodeKind, str]

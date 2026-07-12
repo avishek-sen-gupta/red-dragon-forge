@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 
 import networkx as nx
-
 from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
 

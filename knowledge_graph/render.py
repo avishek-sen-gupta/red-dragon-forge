@@ -6,6 +6,7 @@ knowledge_graph/vendor/) and inlined directly into the generated file.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import networkx as nx
@@ -161,7 +162,7 @@ searchInput.addEventListener("input", () => {{
 """
 
 
-def _attrs_suffix(attrs: dict) -> str:
+def _attrs_suffix(attrs: Mapping) -> str:
     """Format attrs as extra tooltip lines, e.g. IDCAMS SYSIN text — empty
     string (no suffix) when there's nothing to show."""
     if not attrs:

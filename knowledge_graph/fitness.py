@@ -38,6 +38,6 @@ def write_golden(src_nodes_jsonl, src_edges_jsonl, golden_nodes, golden_edges) -
         (src_edges_jsonl, golden_edges,
          lambda r: (r["source"], r["source_kind"], r["target"], r["target_kind"], r["kind"])),
     ):
-        rows = [json.loads(l) for l in Path(src).read_text().splitlines()]
+        rows = [json.loads(line) for line in Path(src).read_text().splitlines()]
         rows.sort(key=keyf)
         Path(dst).write_text("\n".join(json.dumps(r, sort_keys=True) for r in rows) + "\n")

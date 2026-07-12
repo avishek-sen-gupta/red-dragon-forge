@@ -71,7 +71,7 @@ class GraphWriter:
         ntmp.rename(self._nodes_path)
         self._etmp.rename(self._edges_path)
 
-    def __enter__(self) -> "GraphWriter":
+    def __enter__(self) -> GraphWriter:
         return self
 
     def __exit__(self, *exc: object) -> None:

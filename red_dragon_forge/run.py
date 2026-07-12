@@ -8,10 +8,10 @@ build here — only a real second execution-owning coprocessor would justify one
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from cics.dispatcher import run_cics
-
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 
 

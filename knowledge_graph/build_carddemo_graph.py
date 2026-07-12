@@ -29,18 +29,17 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-
-from interpreter.cobol.ast_store import AstStore, AstStrategy
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
-from interpreter.project.cobol_connections import extract_cobol_connections
 
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import parse_csd
 from cics.flow_map import extract_transaction_flow_graph
-
+from interpreter.cobol.ast_store import AstStore, AstStrategy
+from interpreter.cobol.cobol_parser import ProLeapCobolParser
+from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from interpreter.project.cobol_connections import extract_cobol_connections
 from jackal.cobol_file_graph import extract_cobol_file_graph
 from jackal.jcl_graph import extract_jcl_graph
 
@@ -72,7 +71,7 @@ def _bridge_jar() -> str:
     return os.environ["PROLEAP_BRIDGE_JAR"]
 
 
-def _make_parser(copybook_dirs: list[Path]) -> ProLeapCobolParser:
+def _make_parser(copybook_dirs: Sequence[Path]) -> ProLeapCobolParser:
     return ProLeapCobolParser(
         RealSubprocessRunner(), _bridge_jar(), copybook_dirs=copybook_dirs
     )
@@ -94,7 +93,7 @@ def _build_jcl_graph(writer: GraphWriter, failures: list[str]) -> None:
 
 
 def _build_call_copy_graph(
-    copybook_dirs: list[Path],
+    copybook_dirs: Sequence[Path],
     cics_program_names: set[str],
     writer: GraphWriter,
     failures: list[str],
@@ -145,7 +144,7 @@ def _build_call_copy_graph(
 
 
 def _build_batch_file_graph(
-    copybook_dirs: list[Path],
+    copybook_dirs: Sequence[Path],
     cics_program_names: set[str],
     writer: GraphWriter,
     failures: list[str],
@@ -180,8 +179,8 @@ def _build_batch_file_graph(
 
 
 def _build_cics_flow_graph(
-    copybook_dirs: list[Path],
-    transid_to_program: dict[str, str],
+    copybook_dirs: Sequence[Path],
+    transid_to_program: Mapping[str, str],
     writer: GraphWriter,
     failures: list[str],
 ) -> None:
