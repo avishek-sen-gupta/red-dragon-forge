@@ -22,7 +22,7 @@ repos:
 
       - id: python-fp-lint
         name: Python FP lint (warnings only)
-        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cicada/cics/ squall/squall/ jackal/jackal/ || true'
+        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cicada/cics/ squall/squall/ jackal/jackal/ red_dragon_forge/ knowledge_graph/ || true'
         language: system
         pass_filenames: false
         always_run: true
