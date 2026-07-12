@@ -8,7 +8,9 @@ from interpreter.project.graph_types import EdgeKind, NodeKind
 NodeId = tuple[NodeKind, str]
 
 
-def _filtered_view(graph: nx.MultiDiGraph, edge_kinds: set[EdgeKind] | None) -> nx.MultiDiGraph:
+def _filtered_view(
+    graph: nx.MultiDiGraph, edge_kinds: set[EdgeKind] | None
+) -> nx.MultiDiGraph:
     if edge_kinds is None:
         return graph
     view = nx.MultiDiGraph()

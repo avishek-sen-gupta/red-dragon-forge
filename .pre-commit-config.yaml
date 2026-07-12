@@ -15,7 +15,7 @@ repos:
 
       - id: black
         name: Black (auto-fix)
-        entry: bash -c 'uv run --no-sync python -m black cicada/cics cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge tests && git add -u'
+        entry: bash -c 'uv run --no-sync python -m black cicada/cics cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge knowledge_graph tests && git add -u'
         language: system
         pass_filenames: false
         always_run: true

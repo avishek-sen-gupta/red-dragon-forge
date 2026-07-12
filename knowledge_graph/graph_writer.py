@@ -47,11 +47,19 @@ class GraphWriter:
         if key in self._edge_seen:
             return
         self._edge_seen.add(key)
-        self._ef.write(json.dumps({
-            "source": edge.source, "source_kind": edge.source_kind.value,
-            "target": edge.target, "target_kind": edge.target_kind.value,
-            "kind": edge.kind.value, "attrs": edge.attrs,
-        }) + "\n")
+        self._ef.write(
+            json.dumps(
+                {
+                    "source": edge.source,
+                    "source_kind": edge.source_kind.value,
+                    "target": edge.target,
+                    "target_kind": edge.target_kind.value,
+                    "kind": edge.kind.value,
+                    "attrs": edge.attrs,
+                }
+            )
+            + "\n"
+        )
 
     def add_all(self, nodes, edges) -> None:
         for n in nodes:
@@ -64,10 +72,17 @@ class GraphWriter:
         ntmp = self._nodes_path.with_suffix(self._nodes_path.suffix + ".tmp")
         with ntmp.open("w") as nf:
             for (kind, node_id), data in self._nodes.items():
-                nf.write(json.dumps({
-                    "id": node_id, "kind": kind.value,
-                    "file_path": data["file_path"], "attrs": data["attrs"],
-                }) + "\n")
+                nf.write(
+                    json.dumps(
+                        {
+                            "id": node_id,
+                            "kind": kind.value,
+                            "file_path": data["file_path"],
+                            "attrs": data["attrs"],
+                        }
+                    )
+                    + "\n"
+                )
         ntmp.rename(self._nodes_path)
         self._etmp.rename(self._edges_path)
 
