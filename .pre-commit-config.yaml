@@ -15,14 +15,14 @@ repos:
 
       - id: black
         name: Black (auto-fix)
-        entry: bash -c 'uv run --no-sync python -m black cicada/cics cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge knowledge_graph tests && git add -u'
+        entry: bash -c 'uv run --no-sync python -m black cicada/cics cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge knowledge_graph tools tests && git add -u'
         language: system
         pass_filenames: false
         always_run: true
 
       - id: python-fp-lint
         name: Python FP lint (warnings only)
-        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cicada/cics/ squall/squall/ jackal/jackal/ red_dragon_forge/ knowledge_graph/ || true'
+        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cicada/cics/ squall/squall/ jackal/jackal/ red_dragon_forge/ knowledge_graph/ tools/ || true'
         language: system
         pass_filenames: false
         always_run: true
