@@ -119,4 +119,8 @@ fileignoreconfig:
   checksum: 3ee954707626dec0b6da59718c216defc15e362d67022460bb2e161c0a411cc2
 - filename: cicada/cics/csd_parse.py
   checksum: 72c715ad359f69a350cbe4c4a0157e2df7bda53b87c371a3898c5901c4911e52
+- filename: tools/mainframe_inventory.py
+  checksum: 4112d616e47371f2a2dfe675f426d88e5edb2836eb5b918144e1e82a6b2a7084
+- filename: tests/integration/test_mainframe_inventory_carddemo.py
+  checksum: d200d7552d4e98bbad54174fb06304554861352f193df0ff43f8baccf1341b45
 version: "1.0"
