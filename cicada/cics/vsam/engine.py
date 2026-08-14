@@ -23,6 +23,7 @@ from interpreter.cobol.file_drivers import (
 )
 from interpreter.cobol.file_enums import FileOrganization, OpenMode
 
+from cics.vsam.browse import BrowseStart
 from cics.vsam.eibresp import (
     RESP_DISABLED,
     RESP_ENDFILE,
@@ -208,19 +209,26 @@ class VsamEngine:
     # ── Browse operations ─────────────────────────────────────────────
 
     def startbr(
-        self, file_name: str, key: bytes, key_length: int, cursor_key: _CursorKey
+        self,
+        file_name: str,
+        key: bytes,
+        key_length: int,
+        cursor_key: _CursorKey,
+        start: BrowseStart = BrowseStart.GTEQ,
     ) -> int:
-        """STARTBR FILE. Positions a per-cursor driver at or after key."""
+        """STARTBR FILE. Positions a per-cursor driver at the key per ``start``."""
         geom = self._geom(file_name)
         if geom is None:
             return RESP_DISABLED
         klen = self._klen(geom, key_length)
         drv = self._open(file_name, OpenMode.INPUT, key_length)
         assert drv is not None
-        # GTEQ position. A past-end GTEQ (NOT_FOUND) still positions the cursor
-        # at EOF (the seek-last idiom: STARTBR HIGH-VALUES then READPREV), so a
-        # NOT_FOUND here is a valid browse start — STARTBR returns RESP_NORMAL.
-        drv.start(key[:klen], ">=")
+        result = drv.start(key[:klen], start.value)
+        missed = result.condition is not AccessCondition.OK
+        if missed and start is BrowseStart.EQUAL:
+            return RESP_NOTFND
+        # A past-end GTEQ leaves the cursor at EOF, which the seek-last idiom
+        # (STARTBR HIGH-VALUES then READPREV) depends on — still a valid start.
         self._browse[cursor_key] = drv
         return RESP_NORMAL
 

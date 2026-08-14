@@ -151,3 +151,64 @@ def test_inquire_program_not_found():
     args = [typed("MISSING", UNKNOWN)]
     result = builtin(args, _vm())
     assert result.value == 27  # PGMIDERR
+
+
+def _formatted(*args: str) -> str:
+    return str(
+        make_formattime_builtin()([typed(a, UNKNOWN) for a in args], _vm()).value
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_ddmmyyyy_puts_the_day_first():
+    import re
+
+    assert re.fullmatch(r"\d{8}", _formatted("DDMMYYYY"))
+    assert _formatted("DDMMYYYY")[4:] == _formatted("YYYYMMDD")[:4]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_ddmmyy_uses_a_two_digit_year():
+    import re
+
+    assert re.fullmatch(r"\d{6}", _formatted("DDMMYY"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_year_returns_four_digits():
+    assert _formatted("YEAR") == _formatted("YYYYMMDD")[:4]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_datesep_separates_the_date_parts():
+    import re
+
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", _formatted("YYYYMMDD", "-"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_datesep_does_not_reach_the_time():
+    import re
+
+    assert re.fullmatch(r"\d{6}", _formatted("TIME", "-"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_warns_on_an_unimplemented_suboption(caplog):
+    _formatted("MILLISECONDS")
+
+    assert "MILLISECONDS" in caplog.text
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_assign_builtin_returns_the_configured_userid():
+    builtin = make_assign_builtin(applid="CARDDEMO", sysid="SYS1", userid="TESTUSR1")
+
+    assert builtin([typed("USERID", UNKNOWN)], _vm()).value == "TESTUSR1"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_assign_builtin_warns_on_an_unimplemented_suboption(caplog):
+    make_assign_builtin()([typed("NETNAME", UNKNOWN)], _vm())
+
+    assert "NETNAME" in caplog.text

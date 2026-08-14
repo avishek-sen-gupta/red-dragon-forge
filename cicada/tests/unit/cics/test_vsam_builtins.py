@@ -13,6 +13,7 @@ from cics.vsam.engine import (
     RESP_NOTFND,
     RESP_ENDFILE,
 )
+from cics.vsam.browse import BrowseStart
 from cics.vsam.fct import FctConfig, DatasetConfig
 from cics.builtins.vsam import (
     make_vsam_read_builtin,
@@ -228,7 +229,7 @@ def test_endbr_returns_normal():
 from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
 from interpreter.cobol.field_resolution import ResolvedFieldRef
-from interpreter.instructions import CallFunction
+from interpreter.instructions import CallFunction, Const
 from interpreter.register import Register
 
 
@@ -407,7 +408,7 @@ def test_lower_startbr_emits_call_and_resp_writeback():
     )
     calls = _calls_to(ctx, "__cics_startbr")
     assert len(calls) == 1
-    assert len(calls[0].args) == 3  # file, key, key_len
+    assert len(calls[0].args) == 4  # file, key, key_len, browse_start
     assert any(fl.name == "EIBRESP" for (_, fl, _, _) in ctx.encode_writes)
 
 
@@ -457,3 +458,144 @@ def test_lower_endbr_emits_call_with_one_arg():
     calls = _calls_to(ctx, "__cics_endbr")
     assert len(calls) == 1
     assert len(calls[0].args) == 1  # file only
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_startbr_equal_on_absent_key_returns_notfnd():
+    engine = _engine_with_records([_rec("AA01"), _rec("CC03")])
+    startbr = make_vsam_startbr_builtin(engine)
+
+    result = startbr(
+        _args("TESTDS", b"BB02", KEY_LEN, BrowseStart.EQUAL.name), VMState()
+    )
+
+    assert result.value == RESP_NOTFND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_startbr_without_a_mode_argument_browses_gteq():
+    engine = _engine_with_records([_rec("AA01"), _rec("CC03")])
+    startbr = make_vsam_startbr_builtin(engine)
+
+    result = startbr(_args("TESTDS", b"BB02", KEY_LEN), VMState())
+
+    assert result.value == RESP_NORMAL
+
+
+def _lowered_browse_start(options) -> str:
+    ctx = FakeCtx({"EIBRESP": (20, 4)})
+    _make_strategy().lower(ctx, FakeStmt("STARTBR", options), MATERIALISED)
+    start_reg = _calls_to(ctx, "__cics_startbr")[0].args[3]
+    return next(
+        i.value
+        for i in ctx.emitted
+        if isinstance(i, Const) and str(i.result_reg) == str(start_reg)
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_startbr_equal_selects_an_exact_match_browse():
+    options = {"FILE": CicsOperand("TESTDS", True), "EQUAL": None}
+
+    assert _lowered_browse_start(options) == BrowseStart.EQUAL.name
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_startbr_gteq_selects_a_gteq_browse():
+    options = {"FILE": CicsOperand("TESTDS", True), "GTEQ": None}
+
+    assert _lowered_browse_start(options) == BrowseStart.GTEQ.name
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_startbr_without_a_positioning_option_defaults_to_gteq():
+    options = {"FILE": CicsOperand("TESTDS", True)}
+
+    assert _lowered_browse_start(options) == BrowseStart.GTEQ.name
+
+
+def _formattime_calls(options):
+    ctx = FakeCtx({"WS-DATE": (0, 10)})
+    _make_strategy().lower(ctx, FakeStmt("FORMATTIME", options), MATERIALISED)
+    return _calls_to(ctx, "__cics_formattime")
+
+
+def _const_of(ctx_emitted, reg) -> str:
+    return next(
+        i.value
+        for i in ctx_emitted
+        if isinstance(i, Const) and str(i.result_reg) == str(reg)
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_formattime_emits_a_call_for_ddmmyyyy():
+    calls = _formattime_calls(
+        {
+            "ABSTIME": CicsOperand("WS-T", False),
+            "DDMMYYYY": CicsOperand("WS-DATE", False),
+        }
+    )
+
+    assert len(calls) == 1
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_formattime_passes_the_datesep_character():
+    ctx = FakeCtx({"WS-DATE": (0, 10)})
+    _make_strategy().lower(
+        ctx,
+        FakeStmt(
+            "FORMATTIME",
+            {
+                "YYYYMMDD": CicsOperand("WS-DATE", False),
+                "DATESEP": CicsOperand("-", True),
+            },
+        ),
+        MATERIALISED,
+    )
+
+    separator_reg = _calls_to(ctx, "__cics_formattime")[0].args[1]
+    assert _const_of(ctx.emitted, separator_reg) == "-"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_formattime_datesep_without_an_argument_defaults_to_slash():
+    ctx = FakeCtx({"WS-DATE": (0, 10)})
+    _make_strategy().lower(
+        ctx,
+        FakeStmt(
+            "FORMATTIME",
+            {"YYYYMMDD": CicsOperand("WS-DATE", False), "DATESEP": None},
+        ),
+        MATERIALISED,
+    )
+
+    separator_reg = _calls_to(ctx, "__cics_formattime")[0].args[1]
+    assert _const_of(ctx.emitted, separator_reg) == "/"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_formattime_without_datesep_passes_no_separator():
+    ctx = FakeCtx({"WS-DATE": (0, 10)})
+    _make_strategy().lower(
+        ctx,
+        FakeStmt("FORMATTIME", {"YYYYMMDD": CicsOperand("WS-DATE", False)}),
+        MATERIALISED,
+    )
+
+    separator_reg = _calls_to(ctx, "__cics_formattime")[0].args[1]
+    assert _const_of(ctx.emitted, separator_reg) == ""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lower_assign_userid_writes_back_to_the_named_field():
+    ctx = FakeCtx({"WS-USER": (0, 8)})
+    _make_strategy().lower(
+        ctx,
+        FakeStmt("ASSIGN", {"USERID": CicsOperand("WS-USER", False)}),
+        MATERIALISED,
+    )
+
+    assert len(_calls_to(ctx, "__cics_assign")) == 1
+    assert any(fl.name == "WS-USER" for (_, fl, _, _) in ctx.encode_writes)

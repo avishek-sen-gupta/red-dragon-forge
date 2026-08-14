@@ -12,7 +12,15 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_strategy.py
   checksum: 23a738dd050096c4209e232136f429b26e94d7317cc39126b900d948e01335a0
 - filename: cicada/cics/strategy.py
-  checksum: 48c26284adbfa9dcb605ba70595c4359c3ffec752c2287b1b93dbc2a37b37ff2
+  checksum: 787b0c75ccaf41dd66760852afb6e67240a2b2e293f7c1c2204083f77cc8470e
+- filename: cicada/cics/builtins/vsam.py
+  checksum: 2f021cbbae55f41d8c34b6aecf38e02822a66e3ccc2a829bbdbe7c7a23a7b780
+- filename: cicada/cics/vsam/engine.py
+  checksum: 081ac76912438c895fe6570de6262b1f6534d7861abf4cf0e0547495ee1986e4
+- filename: cicada/tests/unit/cics/test_vsam_engine.py
+  checksum: 074dc2f8bf57a2f865b834d4a779315702306b3180b2a3e74f1c510fb332d861
+- filename: cicada/tests/unit/cics/test_vsam_builtins.py
+  checksum: 7b6599bd0f5464bd1922db61db2c9c12209fd1fbe80104fb0db95ede41d6420f
 - filename: docs/design/2026-07-04-cics-sql-composition-design.md
   checksum: 65635c68516ce860ce0ddf8838ab582e03311cb9820d81627e7f1fe66d877da3
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
