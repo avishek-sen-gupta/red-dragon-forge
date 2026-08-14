@@ -21,6 +21,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from cics.builtins.system import _get_ws_region_addr
+from cics.vsam.browse import BrowseStart
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
 if TYPE_CHECKING:
@@ -68,6 +69,11 @@ def _bytes(args: list[TypedValue], i: int) -> bytes:
 
 def _int(args: list[TypedValue], i: int) -> int:
     return int(args[i].value) if len(args) > i else 0
+
+
+def _browse_start(args: list[TypedValue], i: int) -> BrowseStart:
+    name = str(args[i].value).strip() if len(args) > i else ""
+    return BrowseStart[name] if name in BrowseStart.__members__ else BrowseStart.GTEQ
 
 
 def make_vsam_read_builtin(engine: VsamEngine) -> object:
@@ -129,15 +135,19 @@ def make_vsam_delete_builtin(engine: VsamEngine) -> object:
 
 
 def make_vsam_startbr_builtin(engine: VsamEngine) -> object:
-    """STARTBR: args (file, key_bytes, key_len); returns resp.
+    """STARTBR: args (file, key_bytes, key_len, browse_start_name); returns resp.
 
-    Positions the file's implicit cursor at or after the key.
+    Positions the file's implicit cursor per the BrowseStart mode, GTEQ by default.
     """
 
     def __cics_startbr(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         fname = _file(args, 0)
         resp = engine.startbr(
-            fname, _bytes(args, 1), _int(args, 2), (_TASK_ID, fname, "0")
+            fname,
+            _bytes(args, 1),
+            _int(args, 2),
+            (_TASK_ID, fname, "0"),
+            start=_browse_start(args, 3),
         )
         return BuiltinResult(value=resp)
 

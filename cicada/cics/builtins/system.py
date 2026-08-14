@@ -79,19 +79,30 @@ def make_init_eib_builtin(context_holder: list[CicsContext]) -> object:
     return __cics_init_eib
 
 
-def make_assign_builtin(applid: str = "CARDDEMO", sysid: str = "SYS1") -> object:
+ASSIGN_SUBOPTIONS = ("APPLID", "SYSID", "USERID")
+
+# The userid CICS reports for a task that has not signed on.
+DEFAULT_USERID = "CICSUSER"
+
+
+def make_assign_builtin(
+    applid: str = "CARDDEMO", sysid: str = "SYS1", userid: str = DEFAULT_USERID
+) -> object:
     """Return a builtin that yields the value of an ASSIGN output sub-option.
 
-    Called once per output sub-option with the sub-option key in ``args[0]``
-    (e.g. "APPLID", "SYSID"); returns the configured value so the caller can
-    copy it back into the named field. Unknown keys (and the no-arg call) yield
-    an empty string.
+    Called once per sub-option in ``ASSIGN_SUBOPTIONS`` with the key in
+    ``args[0]``; returns the configured value so the caller can copy it back into
+    the named field. Anything else yields an empty string.
     """
 
-    values = {"APPLID": applid, "SYSID": sysid}
+    values: dict[str, str] = dict(zip(ASSIGN_SUBOPTIONS, (applid, sysid, userid)))
 
     def __cics_assign(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         key = str(args[0].value).strip().upper() if args else ""
+        if key and key not in values:
+            logger.warning(
+                "ASSIGN %s is not implemented — yielding an empty value", key
+            )
         return BuiltinResult(value=values.get(key, ""))
 
     return __cics_assign
@@ -109,22 +120,48 @@ def make_asktime_builtin() -> object:
     return __cics_asktime
 
 
+_DATE_PARTS = {
+    "YYYYMMDD": ("%Y", "%m", "%d"),
+    "DATE": ("%Y", "%m", "%d"),
+    "DDMMYYYY": ("%d", "%m", "%Y"),
+    "DDMMYY": ("%d", "%m", "%y"),
+    "YEAR": ("%Y",),
+}
+_TIME_FORMAT = "%H%M%S"
+_DEFAULT_SUBOPTION = "YYYYMMDD"
+
+
+def _formattime_format(suboption: str, date_separator: str) -> str:
+    """DATESEP separates date parts only — TIME is governed by TIMESEP."""
+    if suboption == "TIME":
+        return _TIME_FORMAT
+    parts = _DATE_PARTS.get(suboption)
+    if parts is None:
+        logger.warning(
+            "FORMATTIME %s is not implemented — formatting as %s",
+            suboption,
+            _DEFAULT_SUBOPTION,
+        )
+        parts = _DATE_PARTS[_DEFAULT_SUBOPTION]
+    return date_separator.join(parts)
+
+
 def make_formattime_builtin() -> object:
     """Return a builtin that formats the current time per a FORMATTIME sub-option.
 
-    Called once per output sub-option with the sub-option key in ``args[0]``:
-    "YYYYMMDD" → ``%Y%m%d``, "DATE" → ``%Y%m%d``, "TIME" → ``%H%M%S``. The no-arg
-    call defaults to YYYYMMDD (back-compat).
+    Called once per output sub-option with args (sub-option, date_separator).
     """
-
-    formats = {"YYYYMMDD": "%Y%m%d", "DATE": "%Y%m%d", "TIME": "%H%M%S"}
 
     def __cics_formattime(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         from datetime import datetime, timezone
 
-        key = str(args[0].value).strip().upper() if args else "YYYYMMDD"
-        fmt = formats.get(key, "%Y%m%d")
-        return BuiltinResult(value=datetime.now(timezone.utc).strftime(fmt))
+        suboption = str(args[0].value).strip().upper() if args else _DEFAULT_SUBOPTION
+        separator = str(args[1].value) if len(args) > 1 else ""
+        return BuiltinResult(
+            value=datetime.now(timezone.utc).strftime(
+                _formattime_format(suboption, separator)
+            )
+        )
 
     return __cics_formattime
 

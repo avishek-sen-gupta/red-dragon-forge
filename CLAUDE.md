@@ -107,6 +107,15 @@ independently buildable — they must not import each other.
   must not import each other, only `red_dragon_forge/` may import more than one, and none of
   Cicada/Squall/Jackal may import `knowledge_graph`. Run `uv run lint-imports` to check.
 - **Formatting**: Black (line length 88); `make fmt` at the root, or per package.
+- **Comments are a smell.** Reaching for a comment means the code did not say it — rename,
+  extract, or restructure until it does. Comments that survive earn it by carrying what code
+  cannot: an external constraint, a non-obvious "why", a reference to an issue or standard.
+- **Decouple.** Prefer a named seam over a flag threaded through a call chain, and a value
+  object over a tuple whose meaning lives in the caller's head.
+- **Write concisely, without dropping information.** Documentation and issue text should be
+  short because it is dense, never because it is vague. Cutting a fact is not concision.
+- **Answer in 5–6 lines, 10 at the outside.** Explanations to a human are subject to the same
+  rule as documentation: dense, not padded.
 - **No test counts in docs.** Never state concrete test counts (e.g. "348 tests",
   "271 passed / 1 skipped") in living documentation — READMEs, package docs,
   architecture/design overviews. They go stale the instant a test is added or removed and

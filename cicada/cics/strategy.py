@@ -7,6 +7,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from cics.builtins.system import (
+    ASSIGN_SUBOPTIONS,
+    DEFAULT_USERID,
     make_init_eib_builtin,
     make_assign_builtin,
     make_asktime_builtin,
@@ -32,6 +34,7 @@ from interpreter.types.type_expr import UNKNOWN
 
 from cics.statements import ExecCicsStatement
 from cics.flow_observer import CicsFlowObserver, CicsVerb, NullCicsFlowObserver
+from cics.vsam.browse import BrowseStart
 
 if TYPE_CHECKING:
     from cics.terminal import InputChannel, ScreenChannel
@@ -342,6 +345,22 @@ def _resolve_keylen(
     return 0
 
 
+_FORMATTIME_OUTPUTS = ("YYYYMMDD", "DATE", "DDMMYYYY", "DDMMYY", "YEAR", "TIME")
+_DEFAULT_DATE_SEPARATOR = "/"
+
+
+def _date_separator(opts: dict[str, "CicsOperand | None"]) -> str:
+    """DATESEP present but bare means the CICS default separator."""
+    if "DATESEP" not in opts:
+        return ""
+    operand = opts["DATESEP"]
+    return operand.text if operand is not None else _DEFAULT_DATE_SEPARATOR
+
+
+def _browse_start(opts: dict[str, "CicsOperand | None"]) -> BrowseStart:
+    return BrowseStart.EQUAL if "EQUAL" in opts else BrowseStart.GTEQ
+
+
 def _resolve_into(
     ctx: "EmitContext",
     operand: "CicsOperand | None",
@@ -416,6 +435,7 @@ class CicsLoweringStrategy:
         td_queue: list[str] | None = None,
         applid: str = "CARDDEMO",
         sysid: str = "SYS1",
+        userid: str = DEFAULT_USERID,
         screen_queue: "ScreenChannel | None" = None,
         input_queue: "InputChannel | None" = None,
         vsam_engine: object = None,
@@ -452,7 +472,9 @@ class CicsLoweringStrategy:
         td = td_queue if td_queue is not None else []
         prog_cache = {} if program_cache is None else program_cache
 
-        _register(Builtins.TABLE, "__cics_assign", make_assign_builtin(applid, sysid))
+        _register(
+            Builtins.TABLE, "__cics_assign", make_assign_builtin(applid, sysid, userid)
+        )
         _register(Builtins.TABLE, "__cics_asktime", make_asktime_builtin())
         _register(Builtins.TABLE, "__cics_formattime", make_formattime_builtin())
         _register(Builtins.TABLE, "__cics_inquire", make_inquire_builtin(prog_cache))
@@ -795,7 +817,7 @@ class CicsLoweringStrategy:
 
         # ── ASSIGN / FORMATTIME: write each output sub-option to its field ──
         if verb == "ASSIGN":
-            for subopt in ("APPLID", "SYSID"):
+            for subopt in ASSIGN_SUBOPTIONS:
                 field_name = opts.get(subopt)
                 if field_name is None:
                     continue
@@ -814,9 +836,9 @@ class CicsLoweringStrategy:
             return
 
         if verb == "FORMATTIME":
-            # ABSTIME(src) names the time base; each remaining output sub-option
-            # names a field to receive a formatted value.
-            for subopt in ("YYYYMMDD", "DATE", "TIME"):
+            r_sep = ctx.fresh_reg()
+            ctx.emit_inst(Const.string(r_sep, _date_separator(opts)))
+            for subopt in _FORMATTIME_OUTPUTS:
                 field_name = opts.get(subopt)
                 if field_name is None:
                     continue
@@ -827,7 +849,7 @@ class CicsLoweringStrategy:
                     CallFunction(
                         result_reg=r_res,
                         func_name=FuncName("__cics_formattime"),
-                        args=(r_key,),
+                        args=(r_key, r_sep),
                     )
                 )
                 str_reg = ctx.emit_to_string(r_res)
@@ -917,12 +939,14 @@ class CicsLoweringStrategy:
                 klen = _resolve_keylen(ctx, opts, materialised)
                 r_klen = ctx.fresh_reg()
                 ctx.emit_inst(Const.int_(r_klen, klen))
+                r_start = ctx.fresh_reg()
+                ctx.emit_inst(Const.string(r_start, _browse_start(opts).name))
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
                         result_reg=r_res,
                         func_name=FuncName("__cics_startbr"),
-                        args=(r_file, r_key, r_klen),
+                        args=(r_file, r_key, r_klen, r_start),
                     )
                 )
             elif verb in ("READNEXT", "READPREV"):

@@ -15,6 +15,7 @@ from cics.vsam.engine import (
     RESP_DUPREC,
     RESP_ENDFILE,
 )
+from cics.vsam.browse import BrowseStart
 from cics.vsam.fct import FctConfig, DatasetConfig
 from cics.vsam.seed import seed_records
 
@@ -294,3 +295,29 @@ def test_write_lands_on_backing_file_and_survives_new_engine(tmp_path: Path) -> 
     eng2.load_all()
     rec, resp = eng2.read("DS", b"ZZZZ", 4)
     assert resp == RESP_NORMAL and rec == b"ZZZZ"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_startbr_equal_on_absent_key_is_notfnd(tmp_path: Path) -> None:
+    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
+    cursor = ("task0", "TESTDS", "cur0")
+    resp = engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor, start=BrowseStart.EQUAL)
+    assert resp == RESP_NOTFND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_startbr_equal_positions_on_the_matching_record(tmp_path: Path) -> None:
+    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02")])
+    cursor = ("task0", "TESTDS", "cur0")
+    engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor, start=BrowseStart.EQUAL)
+    rec, resp = engine.readnext("TESTDS", cursor)
+    assert (resp, rec[:4]) == (RESP_NORMAL, b"BB02")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_startbr_defaults_to_gteq(tmp_path: Path) -> None:
+    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
+    cursor = ("task0", "TESTDS", "cur0")
+    assert engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor) == RESP_NORMAL
+    rec, _ = engine.readnext("TESTDS", cursor)
+    assert rec[:4] == b"CC03"
