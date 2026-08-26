@@ -110,17 +110,31 @@ corpus:
     - path/to/your/site.csd
   copybook_dirs:
     - path/to/your/copybooks
+  copybook_extensions: ["cpy", "txt"]   # omit unless your copybooks are named unconventionally
   out_dir: out
 
 bms:
   bms_dir: path/to/your/bms
+  bms_globs: ["*.bms"]     # omit unless your map sources are named unconventionally
   macros_dir: bms-macros
   sym_dir: sym
 ```
 
 Every path is relative to wherever you invoke the script from (not to the
 config file's own location). Every field is required except `proclib_dirs`
-and `csd_files`, which default to empty if omitted. Then run:
+and `csd_files`, which default to empty if omitted, and `copybook_extensions`
+and `bms_globs`, which default to the conventions cobble ships with.
+
+Those last two exist because a corpus that doesn't follow file-naming
+convention would otherwise need a directory of symlinks. `cobol_globs`,
+`jcl_globs` and `bms_globs` select files by listing a directory, so they take
+globs; `copybook_extensions` is a list of bare extensions instead, because a
+`COPY X` is resolved by ProLeap as *name + extension* rather than by listing
+anything. Keep `cpy` in that list if you also generate BMS symbolic maps —
+`generate_sym` writes them as `<mapname>.cpy`. A private corpus config is one worked
+example: a corpus where every member is a `.txt`.
+
+Then run:
 
 ```bash
 uv run python -m cobble.build_graph --config your-corpus.yaml

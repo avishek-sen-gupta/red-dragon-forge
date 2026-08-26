@@ -33,13 +33,19 @@ from tqdm import tqdm
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
 from cobble.file_location import to_json_value
+from cobble.matching_files import matching_files
 
 from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
 from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from cobble.interpreter.project.cobol_imports import extract_cobol_imports
 from cobble.interpreter.project.import_types import ImportKind
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 from cobble.cics.csd_parse import parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
@@ -59,12 +65,11 @@ def _bridge_jar() -> str:
 
 def _make_parser(config: CorpusConfig) -> ProLeapCobolParser:
     return ProLeapCobolParser(
-        RealSubprocessRunner(), _bridge_jar(), copybook_dirs=list(config.copybook_dirs)
+        RealSubprocessRunner(),
+        _bridge_jar(),
+        copybook_dirs=list(config.copybook_dirs),
+        copybook_extensions=list(config.copybook_extensions),
     )
-
-
-def _matching_files(directory: Path, globs: tuple[str, ...]) -> list[Path]:
-    return sorted({p for pattern in globs for p in directory.glob(pattern)})
 
 
 def _load_transid_to_program(config: CorpusConfig) -> dict[str, str]:
@@ -75,9 +80,12 @@ def _load_transid_to_program(config: CorpusConfig) -> dict[str, str]:
 
 
 def _build_jcl_graph(
-    config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter, failures: list[str]
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    writer: GraphWriter,
+    failures: list[str],
 ) -> None:
-    jcl_files = _matching_files(config.jcl_dir, config.jcl_globs)
+    jcl_files = matching_files(config.jcl_dir, config.jcl_globs)
     for path in tqdm(jcl_files, desc="JCL", unit="file"):
         try:
             nodes, edges = extract_jcl_graph(
@@ -106,7 +114,7 @@ def _build_call_copy_graph(
     transitive DFHEIBLK edge production gets from CICS-source-prepassing each
     subprogram a CICS program statically CALLs (see below).
     """
-    cbl_files = _matching_files(config.cobol_dir, config.cobol_globs)
+    cbl_files = matching_files(config.cobol_dir, config.cobol_globs)
 
     # per-program CALL/COPY edges + CALL adjacency + working-storage presence
     call_targets: dict[str, set[str]] = {}
@@ -120,35 +128,63 @@ def _build_call_copy_graph(
             logger.warning("COBOL %s failed: %s", path.name, exc, exc_info=True)
             failures.append(f"COBOL {path.name}: {exc}")
             continue
-        writer.add_node(GraphNode(
-            id=prog, kind=NodeKind.PROGRAM,
-            file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.PROGRAM, prog)),
-        ))
+        writer.add_node(
+            GraphNode(
+                id=prog,
+                kind=NodeKind.PROGRAM,
+                file_path=to_json_value(
+                    corpus_index.resolve_file_path(NodeKind.PROGRAM, prog)
+                ),
+            )
+        )
         tgts: set[str] = set()
         for ref in refs:
             if ref.kind == ImportKind.INCLUDE:
                 tid = ref.module_path.upper()
-                writer.add_node(GraphNode(
-                    id=tid, kind=NodeKind.COPYBOOK,
-                    file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.COPYBOOK, tid)),
-                ))
-                writer.add_edge(GraphEdge(
-                    source=prog, source_kind=NodeKind.PROGRAM,
-                    target=tid, target_kind=NodeKind.COPYBOOK, kind=EdgeKind.COPY))
+                writer.add_node(
+                    GraphNode(
+                        id=tid,
+                        kind=NodeKind.COPYBOOK,
+                        file_path=to_json_value(
+                            corpus_index.resolve_file_path(NodeKind.COPYBOOK, tid)
+                        ),
+                    )
+                )
+                writer.add_edge(
+                    GraphEdge(
+                        source=prog,
+                        source_kind=NodeKind.PROGRAM,
+                        target=tid,
+                        target_kind=NodeKind.COPYBOOK,
+                        kind=EdgeKind.COPY,
+                    )
+                )
             elif ref.kind == ImportKind.REQUIRE:
                 tid = ref.module_path.upper()
-                writer.add_node(GraphNode(
-                    id=tid, kind=NodeKind.PROGRAM,
-                    file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.PROGRAM, tid)),
-                ))
-                writer.add_edge(GraphEdge(
-                    source=prog, source_kind=NodeKind.PROGRAM,
-                    target=tid, target_kind=NodeKind.PROGRAM, kind=EdgeKind.CALL))
+                writer.add_node(
+                    GraphNode(
+                        id=tid,
+                        kind=NodeKind.PROGRAM,
+                        file_path=to_json_value(
+                            corpus_index.resolve_file_path(NodeKind.PROGRAM, tid)
+                        ),
+                    )
+                )
+                writer.add_edge(
+                    GraphEdge(
+                        source=prog,
+                        source_kind=NodeKind.PROGRAM,
+                        target=tid,
+                        target_kind=NodeKind.PROGRAM,
+                        kind=EdgeKind.CALL,
+                    )
+                )
                 tgts.add(tid)
         call_targets[prog] = tgts
         txt = src.decode("utf-8", errors="replace")
         has_ws[prog] = any(
-            (toks := line.strip().upper().split())[:2] == ["WORKING-STORAGE", "SECTION."]
+            (toks := line.strip().upper().split())[:2]
+            == ["WORKING-STORAGE", "SECTION."]
             for line in txt.splitlines()
             if line.strip()
         )
@@ -175,13 +211,24 @@ def _build_call_copy_graph(
                     stack.append(t)
     for sub in sorted(reached_subs):
         if has_ws.get(sub):
-            writer.add_node(GraphNode(
-                id="DFHEIBLK", kind=NodeKind.COPYBOOK,
-                file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.COPYBOOK, "DFHEIBLK")),
-            ))
-            writer.add_edge(GraphEdge(
-                source=sub, source_kind=NodeKind.PROGRAM,
-                target="DFHEIBLK", target_kind=NodeKind.COPYBOOK, kind=EdgeKind.COPY))
+            writer.add_node(
+                GraphNode(
+                    id="DFHEIBLK",
+                    kind=NodeKind.COPYBOOK,
+                    file_path=to_json_value(
+                        corpus_index.resolve_file_path(NodeKind.COPYBOOK, "DFHEIBLK")
+                    ),
+                )
+            )
+            writer.add_edge(
+                GraphEdge(
+                    source=sub,
+                    source_kind=NodeKind.PROGRAM,
+                    target="DFHEIBLK",
+                    target_kind=NodeKind.COPYBOOK,
+                    kind=EdgeKind.COPY,
+                )
+            )
 
     print(f"CALL/COPY: {len(cbl_files)} programs")
 
@@ -195,15 +242,21 @@ def _build_cics_flow_graph(
 ) -> None:
     cobol_sources: dict[str, bytes] = {}
     # Build a map of uppercase file stems to paths using configured cobol_globs
-    cobol_files = _matching_files(config.cobol_dir, config.cobol_globs)
+    cobol_files = matching_files(config.cobol_dir, config.cobol_globs)
     file_stem_map = {path.stem.upper(): path for path in cobol_files}
 
-    for prog_name in tqdm(set(transid_to_program.values()), desc="CICS flow", unit="program"):
+    for prog_name in tqdm(
+        set(transid_to_program.values()), desc="CICS flow", unit="program"
+    ):
         if prog_name in file_stem_map:
             cobol_sources[prog_name] = file_stem_map[prog_name].read_bytes()
         else:
-            logger.warning("CICS program %s: not found in cobol_globs matches", prog_name)
-            failures.append(f"CICS program {prog_name}: not found in cobol_globs matches")
+            logger.warning(
+                "CICS program %s: not found in cobol_globs matches", prog_name
+            )
+            failures.append(
+                f"CICS program {prog_name}: not found in cobol_globs matches"
+            )
 
     csd_source = "\n".join(csd_file.read_text() for csd_file in config.csd_files)
     parser = _make_parser(config)
@@ -235,7 +288,8 @@ def _build_batch_file_graph(
 ) -> None:
     parser = _make_parser(config)
     cbl_files = [
-        p for p in _matching_files(config.cobol_dir, config.cobol_globs)
+        p
+        for p in matching_files(config.cobol_dir, config.cobol_globs)
         if p.stem.upper() not in cics_program_names
     ]
     store = AstStore(AstStrategy.DISK)
@@ -256,23 +310,36 @@ def _read_ndjson(nodes_path: Path, edges_path: Path):
     nodes = []
     for line in nodes_path.read_text().splitlines():
         d = json.loads(line)
-        nodes.append(GraphNode(
-            id=d["id"], kind=NodeKind(d["kind"]),
-            file_path=d.get("file_path"), attrs=d.get("attrs", {})))
+        nodes.append(
+            GraphNode(
+                id=d["id"],
+                kind=NodeKind(d["kind"]),
+                file_path=d.get("file_path"),
+                attrs=d.get("attrs", {}),
+            )
+        )
     edges = []
     for line in edges_path.read_text().splitlines():
         d = json.loads(line)
-        edges.append(GraphEdge(
-            source=d["source"], source_kind=NodeKind(d["source_kind"]),
-            target=d["target"], target_kind=NodeKind(d["target_kind"]),
-            kind=EdgeKind(d["kind"]), attrs=d.get("attrs", {})))
+        edges.append(
+            GraphEdge(
+                source=d["source"],
+                source_kind=NodeKind(d["source_kind"]),
+                target=d["target"],
+                target_kind=NodeKind(d["target_kind"]),
+                kind=EdgeKind(d["kind"]),
+                attrs=d.get("attrs", {}),
+            )
+        )
     return nodes, edges
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--config", required=True, type=Path,
+        "--config",
+        required=True,
+        type=Path,
         help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
     )
     return parser.parse_args()
@@ -294,12 +361,18 @@ def main() -> int:
     edges_jsonl = config.out_dir / "edges.jsonl"
     with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
         _build_jcl_graph(config, corpus_index, writer, failures)
-        _build_call_copy_graph(config, corpus_index, cics_program_names, writer, failures)
+        _build_call_copy_graph(
+            config, corpus_index, cics_program_names, writer, failures
+        )
         if config.csd_files:
-            _build_cics_flow_graph(config, corpus_index, transid_to_program, writer, failures)
+            _build_cics_flow_graph(
+                config, corpus_index, transid_to_program, writer, failures
+            )
         else:
             print("CICS flow: skipped (no csd_files configured)")
-        _build_batch_file_graph(config, corpus_index, cics_program_names, writer, failures)
+        _build_batch_file_graph(
+            config, corpus_index, cics_program_names, writer, failures
+        )
 
     graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
     print(

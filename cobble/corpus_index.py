@@ -36,6 +36,7 @@ from typing import Sequence
 from cobble.corpus_config import CorpusConfig
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
+from cobble.matching_files import matching_files
 from cobble.jackal.dsn import InStreamDSN
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
@@ -46,10 +47,6 @@ logger = logging.getLogger(__name__)
 _NOT_FILE_BASED = NoFileLocation(FileLocationReason.NOT_FILE_BASED)
 _NO_DEFINITION_SOURCE = NoFileLocation(FileLocationReason.NO_DEFINITION_SOURCE)
 _UNRESOLVED = NoFileLocation(FileLocationReason.UNRESOLVED)
-
-
-def _matching_files(directory: Path, globs: tuple[str, ...]) -> list[Path]:
-    return sorted({p for pattern in globs for p in directory.glob(pattern)})
 
 
 def _proc_file(name: str, proclib_dirs: Sequence[Path]) -> Path | None:
@@ -73,7 +70,7 @@ class CorpusIndex:
         self._build(config)
 
     def _build(self, config: CorpusConfig) -> None:
-        for path in _matching_files(config.cobol_dir, config.cobol_globs):
+        for path in matching_files(config.cobol_dir, config.cobol_globs):
             self._programs.setdefault(path.stem.upper(), path)
 
         for copybook_dir in config.copybook_dirs:
@@ -83,7 +80,7 @@ class CorpusIndex:
                 if path.is_file():
                     self._copybooks.setdefault(path.stem.upper(), path)
 
-        for path in _matching_files(config.jcl_dir, config.jcl_globs):
+        for path in matching_files(config.jcl_dir, config.jcl_globs):
             self._index_jcl_file(path, config.proclib_dirs)
 
         for csd_file in config.csd_files:
@@ -129,13 +126,19 @@ class CorpusIndex:
             for file_name in parse_csd_files(csd_file):
                 self._cics_files.setdefault(file_name.upper(), csd_file)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("CorpusIndex: CSD %s failed to parse: %s", csd_file.name, exc)
+            logger.warning(
+                "CorpusIndex: CSD %s failed to parse: %s", csd_file.name, exc
+            )
 
-    def _get_or_warn(self, mapping: dict[str, Path], kind: NodeKind, node_id: str) -> FileLocation:
+    def _get_or_warn(
+        self, mapping: dict[str, Path], kind: NodeKind, node_id: str
+    ) -> FileLocation:
         result = mapping.get(node_id)
         if result is not None:
             return result
-        logger.warning("CorpusIndex: %s %r not found in corpus — UNRESOLVED", kind.value, node_id)
+        logger.warning(
+            "CorpusIndex: %s %r not found in corpus — UNRESOLVED", kind.value, node_id
+        )
         return _UNRESOLVED
 
     def resolve_file_path(self, kind: NodeKind, node_id: str) -> FileLocation:

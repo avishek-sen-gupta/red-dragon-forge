@@ -53,15 +53,21 @@ class ProLeapCobolParser(CobolParser):
         runner: SubprocessRunner,
         bridge_jar: str,
         copybook_dirs: list[Path] = [],
+        copybook_extensions: list[str] = [],
     ):
         self._runner = runner
         self._bridge_jar = bridge_jar
         self._copybook_dirs: list[Path] = list(copybook_dirs)
+        self._copybook_extensions: list[str] = list(copybook_extensions)
 
     def _build_command(self) -> list[str]:
         command = ["java", "-jar", self._bridge_jar]
         for d in self._copybook_dirs:
             command += ["-copybook-dir", str(d)]
+        # Left off entirely when unset, so the bridge applies its own default
+        # list rather than searching nothing.
+        for ext in self._copybook_extensions:
+            command += ["-copybook-ext", ext]
         return command
 
     def parse(
@@ -120,6 +126,7 @@ class ProLeapCobolParser(CobolParser):
 
 def make_cobol_parser(
     copybook_dirs: list[Path] = [],
+    copybook_extensions: list[str] = [],
 ) -> ProLeapCobolParser:
     """Construct a ProLeapCobolParser from PROLEAP_BRIDGE_JAR env var.
 
@@ -130,5 +137,8 @@ def make_cobol_parser(
         "proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar",
     )
     return ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=copybook_dirs
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybook_dirs=copybook_dirs,
+        copybook_extensions=copybook_extensions,
     )

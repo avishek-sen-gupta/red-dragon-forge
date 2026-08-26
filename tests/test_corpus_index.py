@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cobble.corpus_config import CorpusConfig
+from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
 from cobble.corpus_index import CorpusIndex
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
@@ -20,6 +20,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         proclib_dirs=(),
         csd_files=(),
         copybook_dirs=(tmp_path / "cpy",),
+        copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
         out_dir=tmp_path / "out",
     )
     defaults.update(overrides)
@@ -36,14 +37,20 @@ def test_resolves_program_by_filename_stem(tmp_path: Path) -> None:
     _touch(tmp_path / "cbl" / "ACCTFILE.cbl")
     config = _config(tmp_path)
     index = CorpusIndex(config)
-    assert index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE") == tmp_path / "cbl" / "ACCTFILE.cbl"
+    assert (
+        index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
+        == tmp_path / "cbl" / "ACCTFILE.cbl"
+    )
 
 
 def test_program_resolution_is_case_insensitive(tmp_path: Path) -> None:
     _touch(tmp_path / "cbl" / "acctfile.cbl")
     config = _config(tmp_path)
     index = CorpusIndex(config)
-    assert index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE") == tmp_path / "cbl" / "acctfile.cbl"
+    assert (
+        index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
+        == tmp_path / "cbl" / "acctfile.cbl"
+    )
 
 
 def test_unresolved_program_is_flagged_not_silently_none(tmp_path: Path) -> None:
@@ -59,7 +66,10 @@ def test_resolves_copybook_from_copybook_dirs(tmp_path: Path) -> None:
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
     index = CorpusIndex(config)
-    assert index.resolve_file_path(NodeKind.COPYBOOK, "COCOM01Y") == tmp_path / "cpy" / "COCOM01Y.cpy"
+    assert (
+        index.resolve_file_path(NodeKind.COPYBOOK, "COCOM01Y")
+        == tmp_path / "cpy" / "COCOM01Y.cpy"
+    )
 
 
 def test_dataset_is_always_not_file_based(tmp_path: Path) -> None:
@@ -130,12 +140,19 @@ def _instream_dd(ddname: str) -> DD:
     )
 
 
-def test_job_and_step_resolve_to_owning_jcl_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_job_and_step_resolve_to_owning_jcl_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     jcl_path = _touch(tmp_path / "jcl" / "ACCTFILE.jcl", "//ACCTFILE JOB ...\n")
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
 
-    job = Job(name="ACCTFILE", steps=(Step(name="STEP05", pgm="IDCAMS", dds=(_simple_dd("SYSIN", "SOME.DSN"),)),))
+    job = Job(
+        name="ACCTFILE",
+        steps=(
+            Step(name="STEP05", pgm="IDCAMS", dds=(_simple_dd("SYSIN", "SOME.DSN"),)),
+        ),
+    )
     monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
 
     index = CorpusIndex(config)
@@ -143,34 +160,50 @@ def test_job_and_step_resolve_to_owning_jcl_file(tmp_path: Path, monkeypatch: py
     assert index.resolve_file_path(NodeKind.STEP, "ACCTFILE.STEP05") == jcl_path
 
 
-def test_instream_data_resolves_to_owning_jcl_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_instream_data_resolves_to_owning_jcl_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     jcl_path = _touch(tmp_path / "jcl" / "ACCTFILE.jcl", "//ACCTFILE JOB ...\n")
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
 
-    job = Job(name="ACCTFILE", steps=(Step(name="STEP05", pgm="IDCAMS", dds=(_instream_dd("SYSIN"),)),))
+    job = Job(
+        name="ACCTFILE",
+        steps=(Step(name="STEP05", pgm="IDCAMS", dds=(_instream_dd("SYSIN"),)),),
+    )
     monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
 
     index = CorpusIndex(config)
-    assert index.resolve_file_path(NodeKind.INSTREAM_DATA, "ACCTFILE.STEP05.SYSIN") == jcl_path
+    assert (
+        index.resolve_file_path(NodeKind.INSTREAM_DATA, "ACCTFILE.STEP05.SYSIN")
+        == jcl_path
+    )
 
 
-def test_step_from_proc_resolves_to_the_proc_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_step_from_proc_resolves_to_the_proc_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     jcl_path = _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
     proc_path = _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
     config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
     (tmp_path / "cbl").mkdir()
 
-    outer_job = Job(name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),))
+    outer_job = Job(
+        name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),)
+    )
     expanded_job = Job(
         name="RUNSORT", steps=(Step(name="STEP01.SORTSTEP", pgm="SORT", dds=()),)
     )
     monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: outer_job)
-    monkeypatch.setattr("cobble.corpus_index.expand_procs", lambda job, proclib_dirs: expanded_job)
+    monkeypatch.setattr(
+        "cobble.corpus_index.expand_procs", lambda job, proclib_dirs: expanded_job
+    )
     monkeypatch.setattr(
         "cobble.corpus_index.step_proc_provenance",
         lambda job, expanded: {"STEP01.SORTSTEP": "SORTPROC"},
     )
 
     index = CorpusIndex(config)
-    assert index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01.SORTSTEP") == proc_path
+    assert (
+        index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01.SORTSTEP") == proc_path
+    )
