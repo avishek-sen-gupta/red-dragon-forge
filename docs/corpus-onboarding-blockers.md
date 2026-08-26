@@ -95,105 +95,112 @@ and not EBCDIC. A future EBCDIC corpus needs detection, not this helper.
 
 ---
 
-## #5 `DISP=(,PASS)` — omitted positional subparameter — OPEN
+## #5 `DISP=(,PASS)` — omitted positional subparameter — FIXED
 
 **`DISP=(,PASS)` is correct JCL.** `DISP=(status,normal-disp,abnormal-disp)` is
 positional; omitting the status defaults it to `NEW`, so `(,PASS)` means
 `(NEW,PASS)`. `PASS` hands the dataset to a later step in the same job.
 
-**It is not a grammar failure.** An earlier ledger attributed this to the JCL
-grammar. Measured with the real jar:
+**It was never a grammar failure.** An earlier ledger entry attributed this to
+the JCL grammar. Measured with the real jar:
 
 ```
 DISP=(,PASS)      FAIL 'PASS' is not a valid DispStatus — output: '{"name":"TESTJOB","steps":[{...
 DISP=(NEW,PASS)   OK
 ```
 
-The ANTLR parse succeeds and the emitted JSON is well-formed. The failure is on
+The ANTLR parse succeeds and the emitted JSON is well-formed. The failure was on
 the Python side, after the bridge.
 
-**Measured shapes** across 21,133 `DISP=(...)` occurrences in the 860 members:
+**Measured shapes** across the 12,833 parenthesised `DISP=(...)` occurrences in
+the 860 members:
 
 ```
-10535  DISP=(X,X)
- 1574  DISP=(_,X)        <- breaks
-  687  DISP=(X,X,X)
-   37  DISP=(_,X,X)      <- breaks
+10535  DISP=(X,X)     in 657 members
+ 1574  DISP=(_,X)     in 327 members   <- raised
+  687  DISP=(X,X,X)   in  88 members
+   37  DISP=(_,X,X)   in  11 members   <- raised
     0  DISP=(_,_,X)
+    0  DISP=(X,_,X)
 ```
 
-1611 broken occurrences across **328 of 860** members. Note the zero: no member
-omits two leading slots, which is exactly the case a Python-side heuristic would
-silently mis-slot.
+1611 raising occurrences across **328 of 860** members. Note the two zeros: no
+member omits two leading slots, and none omits an inner slot — so this corpus
+never exercised the mis-slotting the old serializer would have done silently.
 
-**Root cause.** Positional structure is discarded at the JSON boundary:
+**Root cause.** Positional structure was discarded at the JSON boundary. The
+serializer collected `keywordOrSymbolic` nodes recursively and dropped empty
+text, so an omitted slot left no trace:
 
-- `jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java:644` — `extractWords`
-  recursively collects `keywordOrSymbolic` nodes and skips empty text, so
-  `DISP=(,PASS)` serialises as `["PASS"]`, indistinguishable from `DISP=PASS`.
-- `cobble/jackal/jcl/bridge_parser.py:44` — `DispStatus(words[0])` is
-  index-positional with no notion of an omitted slot.
-- `cobble/jackal/model.py:12` — `DispStatus` is `NEW|OLD|SHR|MOD`, correctly
-  excluding `PASS` (a `DispNormal`), so the enum raises.
+```
+DISP=(,PASS)            -> ["PASS"]           indistinguishable from DISP=PASS
+DISP=(NEW,,DELETE)      -> ["NEW","DELETE"]   silently read as (NEW,DELETE)
+```
 
-`extractWords` has exactly **one** caller, the DISP fold at `JclSerializer.java:597`,
-so changing it cannot disturb any other DD parameter.
+The first raised `'PASS' is not a valid DispStatus`. The second is worse and the
+earlier analysis missed it: it does not raise, it shifts, so the abnormal
+disposition is read as the normal one. Zero occurrences in this corpus, but it
+was wrong for any corpus that has them.
 
-**Chosen fix.** Keep positional knowledge in the serializer, where the parse tree
-still has it, rather than inferring it back in Python.
+**Fix, three parts.**
 
-*Change 1 — `JclSerializer.java:644`.* Walk the `singleOrMultipleValue` node's
-direct children and emit one array entry per positional slot: `LPAREN` opens the
-list, `COMMA` closes the current slot (empty or not) and opens the next, a
-`keywordOrSymbolic` child appends its text to the current slot, `RPAREN` closes
-the last. No `LPAREN` at depth 0 (`DISP=SHR`) means a single slot, as today.
+*`JclSerializer.extractWords`.* Now splits the `singleOrMultipleValue` node's
+terminals on `COMMA`, skipping `LPAREN`/`RPAREN`, and emits one array entry per
+positional slot — empty or not. The comma tokens are the only record of position,
+so they are what gets read; a `keywordOrSymbolic` collection cannot express a gap.
+Flattening to terminals rather than walking direct children also makes it
+independent of which `singleOrMultipleValue` alternative the parser chose:
+`(,PASS)` matches the `parenList` alternative and `(NEW,,DELETE)` does not, and
+the two put their keywords at different depths.
 
 ```
 DISP=(,PASS)            -> ["", "PASS"]
-DISP=(,PASS,DELETE)     -> ["", "PASS", "DELETE"]
+DISP=(NEW,,DELETE)      -> ["NEW", "", "DELETE"]
 DISP=(NEW,CATLG,DELETE) -> ["NEW", "CATLG", "DELETE"]
 DISP=SHR                -> ["SHR"]
+DISP=(SHR)              -> ["SHR"]
+no DISP=                -> []
 ```
 
-*Change 2 — `bridge_parser.py:43`.* Treat `""` as omitted and apply the z/OS
-positional defaults — status → `NEW`, normal → `KEEP`, abnormal → the normal
-disposition:
+DISP is `extractWords`'s only caller, so this cannot disturb any other DD
+parameter. A value with nested parentheses or an embedded equality (the `PARM=`
+shapes) would have its inner commas counted as separators; DISP cannot contain
+either.
 
-```python
-def _disp_from_words(words: tuple[str, ...]) -> Disp:
-    """DISP=(status,normal,abnormal). An omitted positional subparameter arrives
-    as "" (see JclSerializer.extractWords) — omitted status defaults to NEW,
-    omitted normal to KEEP, omitted abnormal to the normal disposition. The
-    production corpus has 1611 such DDs across 328 members, nearly all
-    DISP=(,PASS)."""
-    status = DispStatus(words[0]) if words[0] else DispStatus.NEW
-    normal = DispNormal(words[1]) if len(words) > 1 and words[1] else DispNormal.KEEP
-    abnormal = DispNormal(words[2]) if len(words) > 2 and words[2] else normal
-    return Disp(status, normal, abnormal)
-```
+*`bridge_parser._disp_from_words`.* Treats `""` as omitted and applies the z/OS
+positional defaults. **The defaults are chained, not a fixed triple** — an
+earlier draft of this fix had the normal disposition defaulting to a flat `KEEP`,
+which is wrong. It defaults to `DELETE` for a data set the step creates and
+`KEEP` for one that already existed, and the abnormal disposition defaults to
+whichever normal disposition resolved.
 
-The caller's `if words else _DEFAULT_DISP` guard stays, so a DD with no `DISP` at
-all is untouched.
+`MOD` is read as already-existing. It can be either — `MOD` creates the data set
+when absent and appends when present — and JCL alone cannot say which. Only
+`status` reaches the graph, so the choice affects the model's fidelity and no
+edge.
 
-*Tests — `tests/jackal/test_bridge_parser.py` (new).* Pure Python, no JVM:
-`("", "PASS")` → `Disp(NEW, PASS, PASS)`; `("", "PASS", "DELETE")` →
-`Disp(NEW, PASS, DELETE)`; `("SHR",)` → `Disp(SHR, KEEP, KEEP)` as a regression
-guard on the 11,222 shapes that already work; `("NEW", "")` →
-`Disp(NEW, KEEP, KEEP)` for a trailing empty slot.
+*The `_DEFAULT_DISP` constant is gone.* It held `Disp(SHR, KEEP, KEEP)` for a DD
+with no `DISP=` at all, where z/OS says `(NEW,DELETE,DELETE)`. With the chained
+defaults that case needs no special handling: no words → status `NEW` → normal
+`DELETE` → abnormal `DELETE`, by the same rule. One rule replaced a rule plus a
+contradicting constant.
 
-No Java test is committed: `jcl-bridge/src/test` does not exist (the repo has no
-Java test infrastructure) and `make test` does not export `JCL_BRIDGE_JAR`, so a
-JVM-dependent test would break `uv run pytest` on a fresh clone. The Java half is
-verified by running the 328 affected members before and after.
+**Tests.** `tests/jackal/test_bridge_parser.py` covers the seven default
+combinations in pure Python. `jcl-bridge/src/test/java/org/jackal/jcl/JclSerializerTest.java`
+is new, and so is jcl-bridge's junit dependency — the module had no test
+infrastructure at all. `JclSerializer.serialize(String)` was extracted out of
+`main` so a test can state a JCL snippet and read the JSON the Python side would
+receive, exercising the real grammar rather than a hand-built parse tree. It runs
+under `mvn test`, not `make test`, which stays JVM-free.
 
-**Graph payoff.** Omitted status resolves to `NEW`, which
-`jcl_graph.py:_DISP_TO_EDGE_KIND` maps to `WRITES`. Those 1611 DDs go from
-killing their member outright to emitting real `WRITES` edges.
+**Graph payoff, measured.**
 
-**Adjacent, deliberately out of scope.** `bridge_parser.py:30` has
-`_DEFAULT_DISP = Disp(SHR, KEEP, KEEP)` for a DD with no `DISP` at all, but the
-z/OS default is `(NEW,DELETE,DELETE)`. Correcting it would flip those DDs from
-`READS` to `WRITES` — a real graph change that deserves its own decision.
+- The 1611 `(_,X)` / `(_,X,X)` DDs across 328 members went from killing their
+  member outright to resolving as `NEW`, which `jcl_graph._DISP_TO_EDGE_KIND`
+  maps to `WRITES`.
+- The `_DEFAULT_DISP` correction moves 1016 DDs across 133 members from `READS`
+  to `WRITES` — those are DDs with a `DSN=` and no `DISP=` at all. CardDemo has
+  zero such DDs, which is why the 449/803 identity diff stayed empty.
 
 ---
 
@@ -222,13 +229,19 @@ job's statement group, after all `jclStep`s. It is absent from the mid-job
 alternation. So a `/*` between steps closes the group, and the enclosing `( … )+`
 restarts wanting a fresh JOB card.
 
-**Measured.** 568 of 860 members contain a bare `/*` line; 350 of those do not
-also contain `DISP=(,` (so #5 does not confound). Parsing 60 of those 350:
+**Measured.** With #5 fixed, this is the *only* remaining JCL failure. All 860
+members through the bridge:
 
 ```
-32  OK
-28  jcl-bridge failed (exit 1): line N:9 mismatched input 'EXEC' expecting JOB
+601  OK
+259  jcl-bridge failed (exit 1): line N:9 mismatched input 'EXEC' expecting JOB
 ```
+
+One signature, no others — so the 259 figure is exact rather than sampled, and no
+`DispStatus` failure is left to confound it. 568 members contain a bare `/*`
+line, so containing one is not sufficient to fail; 309 of the 568 parse fine.
+That gap is unexplained and is the reason the mechanism below is still labelled a
+hypothesis.
 
 Not one error mentions `/*`. The `expecting JOB` symptom is the group having
 closed early — exactly the tail-position placement above.
@@ -354,9 +367,11 @@ must never be hardcoded in the extractor.
   `listFiles()` returns null: `NullPointerException: Cannot read the array length
   because "<local4>" is null` in `org.reddragon.bridge.Main.resolveInputFile`.
   cobble should reject or drop nonexistent directories before invoking the bridge.
-- **Generated-symbolic output is untracked by the cleanup targets.** `.gitignore`
-  and the `clean` target both name only the default `sym/` directory, not a
-  per-corpus one.
+- **`clean` does not remove per-corpus output directories.** `make clean` names
+  `out cache sym` literally, so a corpus configured with `out_dir: out-<name>` or
+  `sym_dir: sym-<name>` leaves both behind. `.gitignore` half of this is done —
+  it now carries `out-*/` and `sym-*/`, so per-corpus output cannot be committed
+  by accident — but the `clean` target still only knows the defaults.
 - **The online members need `make sym CONFIG=<corpus>` first**, otherwise every
   one of them fails with `Copybook not found`.
 - **Empty-copybook synthesis** to get past `Copybook not found` for copybooks

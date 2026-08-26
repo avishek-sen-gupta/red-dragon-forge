@@ -38,7 +38,17 @@ fileignoreconfig:
 # false positives, no credential. Checksummed rather than detector-ignored, so
 # editing this living ledger re-runs the scan (and needs a fresh checksum).
 - filename: docs/corpus-onboarding-blockers.md
-  checksum: db1c8b2950acd0de7ff93b4639db539bf8749a6ca43e622199d9ad1f0c1dc7ea
+  checksum: 26129008ad3cdd163a217020a657dc55d73d38402a7c35736bc155f05bcdbbf9
+# The DISP fix. Same false positive as the ledger above: talisman reads the JCL
+# disposition keyword PASS as a password-like token, so every assertion naming a
+# DISP subparameter trips it. Checksummed, not detector-ignored, so a future edit
+# to any of the three re-runs the scan.
+- filename: tests/jackal/test_bridge_parser.py
+  checksum: cf74463907bafeba9a4bbc397b09a21ab8b955d40a4198d992bdc32ef6d53167
+- filename: jcl-bridge/src/test/java/org/jackal/jcl/JclSerializerTest.java
+  checksum: 5a396c78efaa9bce2aca84d3a4fd3cf894c839ea9868362fe89e97b9fc7c32c0
+- filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
+  checksum: 3d9bf96297b80850cfb0a5e4756e8af02e4624c6ffc790698c465b7f1b3bd436
 # A submodule pointer's whole content is the 40-hex commit SHA it pins, which
 # talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
 # all: "error parsing filesize ... submodule"). No checksum here on purpose —
