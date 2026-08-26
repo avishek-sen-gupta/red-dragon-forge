@@ -22,3 +22,9 @@ cobble/cics/cics_grammar/CICSzParserVisitor.py
 cobble/cics/cics_grammar/*.interp
 cobble/cics/cics_grammar/*.tokens
 tools/
+
+# Eclipse / JDT language-server project files, generated per-machine for the
+# two Maven bridges. Maven's pom.xml is the build definition, not these.
+.classpath
+.project
+.settings/
