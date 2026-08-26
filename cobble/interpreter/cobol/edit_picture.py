@@ -24,11 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-# Picture symbols that mark a position as numeric-edited (vs. plain numeric /
-# alphanumeric). The presence of any of these — or an actual '.' decimal point —
-# makes the PIC a numeric-edited item.
 _SIGN_SYMS = frozenset("+-")
-_EDIT_SYMS = frozenset("Z+-,.B0/")
 
 
 def _expand(pic: str) -> list[str]:
@@ -54,31 +50,6 @@ def _expand(pic: str) -> list[str]:
         out.append(ch)
         i += 1
     return out
-
-
-def is_numeric_edited(pic: str) -> bool:
-    """Return True if ``pic`` is a numeric-edited picture.
-
-    A picture is numeric-edited when it contains digit positions and at least
-    one editing symbol (sign, Z suppression, comma, or an actual decimal point),
-    but no alphanumeric ``X``/``A`` positions. ``V`` is an *implied* decimal
-    point (plain numeric), not an editing symbol, so ``S9(5)V99`` is not edited.
-    """
-    upper = pic.upper()
-    if "X" in upper or "A" in upper:
-        return False
-    has_digit = "9" in upper or "Z" in upper
-    if not has_digit:
-        return False
-    # Scan the EXPANDED positions, not the raw string: a digit inside a repeat
-    # count (e.g. the '0' in "9(10)") is a count, not a PIC '0' zero-insertion
-    # symbol. _expand consumes "(10)" into ten '9's, while a genuine insertion
-    # '0' (as in "9(3)09") survives as its own position (red-dragon-r9s9).
-    try:
-        positions = _expand(upper)
-    except ValueError:
-        positions = list(upper)
-    return any(c in _EDIT_SYMS for c in positions)
 
 
 @dataclass(frozen=True)

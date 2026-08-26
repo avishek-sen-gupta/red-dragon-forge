@@ -2,25 +2,8 @@ import pytest
 
 from cobble.interpreter.cobol.edit_picture import (
     format_edited,
-    is_numeric_edited,
     parse_edit_picture,
 )
-
-
-def test_is_numeric_edited_true_for_sign_and_zero_suppression() -> None:
-    assert is_numeric_edited("+ZZZ,ZZZ,ZZZ.99")
-
-
-def test_is_numeric_edited_false_for_plain_numeric() -> None:
-    assert not is_numeric_edited("S9(5)V99")
-
-
-def test_is_numeric_edited_false_for_alphanumeric() -> None:
-    assert not is_numeric_edited("X(8)")
-
-
-def test_is_numeric_edited_false_with_no_digit_positions() -> None:
-    assert not is_numeric_edited("+++")
 
 
 def test_parse_edit_picture_expands_repeat_counts() -> None:
