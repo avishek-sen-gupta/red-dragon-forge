@@ -35,6 +35,7 @@ from typing import Sequence
 
 from cobble.corpus_config import CorpusConfig
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
+from cobble.interpreter.cobol.source_text import decode_source
 from cobble.interpreter.project.graph_types import NodeKind
 from cobble.matching_files import matching_files
 from cobble.jackal.dsn import InStreamDSN
@@ -91,7 +92,7 @@ class CorpusIndex:
 
     def _index_jcl_file(self, path: Path, proclib_dirs: tuple[Path, ...]) -> None:
         try:
-            job = parse_jcl(path.read_text())
+            job = parse_jcl(decode_source(path.read_bytes()))
         except Exception as exc:  # noqa: BLE001
             logger.warning("CorpusIndex: JCL %s failed to parse: %s", path.name, exc)
             return

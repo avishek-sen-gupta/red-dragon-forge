@@ -19,9 +19,11 @@ class RecordingRunner(SubprocessRunner):
 
     def __init__(self) -> None:
         self.command: list[str] = []
+        self.input_data: str = ""
 
     def run(self, command: list[str], input_data: str) -> str:
         self.command = command
+        self.input_data = input_data
         return _MINIMAL_ASG
 
 
@@ -47,6 +49,24 @@ def test_parse_passes_each_copybook_extension_as_a_repeated_flag() -> None:
 def test_parse_omits_the_extension_flag_when_no_extensions_configured() -> None:
     """No flag means the bridge keeps its own default list."""
     assert "-copybook-ext" not in _command_for()
+
+
+def test_parse_accepts_a_member_that_is_not_valid_utf_8() -> None:
+    """Members are 8-bit text. 0xA6 0xA6 is not legal UTF-8, and a strict decode
+    raised UnicodeDecodeError before the source reached the bridge."""
+    runner = RecordingRunner()
+    ProLeapCobolParser(runner, "bridge.jar").parse(b"      * \xa6\xa6")
+    assert runner.input_data == "      * ¦¦"
+
+
+def test_parse_to_file_accepts_a_member_that_is_not_valid_utf_8(
+    tmp_path: Path,
+) -> None:
+    runner = RecordingRunner()
+    ProLeapCobolParser(runner, "bridge.jar").parse_to_file(
+        b"      * \xa6\xa6", tmp_path / "out.ast.json"
+    )
+    assert runner.input_data == "      * ¦¦"
 
 
 def test_parse_emits_copybook_dirs_before_extensions() -> None:

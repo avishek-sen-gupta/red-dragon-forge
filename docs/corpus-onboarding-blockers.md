@@ -21,7 +21,7 @@ Status key: **OPEN** (analysed, not fixed) · **FIXED** (committed) · **ACCEPTE
 
 ---
 
-## #4 Non-UTF-8 members — OPEN
+## #4 Non-UTF-8 members — FIXED
 
 **Symptom.** `UnicodeDecodeError` before the source ever reaches a parser.
 
@@ -61,32 +61,90 @@ report layout:
 So `errors="replace"` is not free — it would turn 146 load-bearing literal
 characters into `U+FFFD`.
 
-**Root cause.** Three strict decode sites:
+**Root cause: five strict decode sites, not three.** An earlier draft of this
+entry listed three. Grepping every decode in `cobble/` while implementing found
+two more, both reading corpus members:
 
-| site | code |
-|---|---|
-| `cobble/interpreter/cobol/cobol_parser.py:81` | `source.decode("utf-8")` before bridge stdin |
-| `cobble/interpreter/cobol/cobol_parser.py:103` | same, in `parse_to_file` |
-| `cobble/build_graph.py:92` | `path.read_text()` — no encoding, locale default |
+| site | was | now |
+|---|---|---|
+| `cobol_parser.py:82` | `source.decode("utf-8")` before bridge stdin | `decode_source(source)` |
+| `cobol_parser.py:104` | same, in `parse_to_file` | `decode_source(source)` |
+| `build_graph.py:92` | `path.read_text()` — locale default, JCL | `decode_source(path.read_bytes())` |
+| `corpus_index.py:95` | `parse_jcl(path.read_text())` | `decode_source(path.read_bytes())` |
+| `build_graph.py:265` | `csd_file.read_text()` | `decode_source(csd_file.read_bytes())` |
 
-Two sites are already tolerant and need no change: `cobol_imports.py:99` and
-`build_graph.py:184` both pass `errors="replace"`.
+The two extra sites fail differently from the first three, which is why they were
+missed: both sit inside a per-file `try/except`, so they never aborted anything.
+They dropped the member and logged a warning — `CorpusIndex: JCL <name> failed to
+parse: 'utf-8' codec can't decode byte 0xa6` — leaving every job, step and dataset
+in it unresolvable later. Silent degradation, not a crash.
 
-**Fix.** One shared helper, used at all three sites:
+**Fix.** One shared helper, `cobble/interpreter/cobol/source_text.py`:
 
 ```python
 def decode_source(raw: bytes) -> str:
-    """Fixed-format mainframe members are 8-bit text, not UTF-8. latin-1 is the
-    byte-identity codec — defined for all 256 bytes, so it never raises and never
-    loses a character. Measured on the production corpus: no member is valid UTF-8
-    with non-ASCII content, so trying UTF-8 first would buy nothing."""
     return raw.decode("latin-1")
 ```
 
-One byte stays one character, so fixed-format column positions hold and `PIC`
-lengths are unaffected. The bridge is safe too: Python's `subprocess` encodes the
-`str` to UTF-8 for stdin and Java decodes it back with `StandardCharsets.UTF_8`,
-so `U+00A6` round-trips as one Java `char`.
+It lives under `interpreter` so `cobble.interpreter` stays a leaf that imports
+nothing else in cobble (the `interpreter-is-leaf` contract), which it would have
+lost had the helper gone top-level. `build_graph` and `corpus_index` reach in.
+`lint-imports` is unchanged by this: 3 kept, 1 broken — the same pre-existing
+`consumer-independence` break via `corpus_index`.
+
+latin-1 is the byte-identity codec: defined for all 256 byte values, so it never
+raises and never loses a character. One byte stays one character, so fixed-format
+column positions hold and `PIC` lengths are unaffected. The bridge is safe too:
+Python's `subprocess` encodes the `str` to UTF-8 for stdin and Java decodes it
+back with `StandardCharsets.UTF_8`, so `U+00A6` round-trips as one Java `char`.
+
+**One site deliberately left strict.** `cobble/jackal/jcl/proc_expand.py:116`
+(`parse_proc(proc_path.read_text())`) reads PROC members. Fixing it would cost
+`cobble.jackal` its leaf status — it too imports nothing else in cobble today —
+and the site is latent in both corpora: the production config declares no
+`proclib_dirs` at all, so `expand_procs` is never called, and CardDemo's two PROC
+members are pure ASCII. A corpus with a high byte in a PROC needs this fixed, and
+then the placement question reopens.
+
+**Sites left tolerant-but-lossy**, unchanged on purpose to keep the diff about
+this blocker: `cobol_imports.py:99`, `build_graph.py:187` and `cics/csd_parse.py`
+(twice) all pass `errors="replace"`. They never raise, so no member is lost; they
+would corrupt a high byte to `U+FFFD`, which does not affect what any of them
+extracts (COPY/CALL names, `DEFINE` statements).
+
+**Tests.** `tests/interpreter/cobol/test_source_text.py` pins the codec: all 256
+bytes round-trip, `0xA6` → `¦`, one byte stays one character at the same index,
+and `b"\xa6\xa6"` — the sequence that raised — decodes. `test_cobol_parser.py`
+covers both bridge sites through the existing `RecordingRunner`, asserting the
+runner receives `U+00A6`. `test_corpus_index.py` covers the silent-drop site: a
+JCL member with `0xA6` in a `//*` comment now reaches `parse_jcl` and its job
+resolves. `build_graph.py`'s two sites are pure one-line substitutions with no
+branching; that module has no test harness at all, and building one is separate
+work, so their correctness rides on `decode_source`'s own tests.
+
+**Measured payoff.** JCL, all 58 high-byte members through cobble's own path:
+
+```
+48  OK  (270 steps recovered)
+10  blocker #6 — mismatched input 'EXEC'/'DD', statement group closed early
+```
+
+Previously all 58 were lost. (The 601/860 figure under #6 came from a standalone
+harness that decoded permissively, so it already counted these members — the loss
+was cobble's, not the grammar's.)
+
+COBOL, all 52 high-byte members: the decode wall is gone, and what they hit next
+is not this blocker. Before the fix, a single one of them inside
+`_build_batch_file_graph` aborted the entire 3779-member run — the
+`UnicodeDecodeError` was raised in a worker thread and re-raised by `fut.result()`
+inside `parse_all` (blocker #3). Probed individually with the batch parser now:
+5 parse, 44 raise `Copybook not found` (they need `make sym` first — a separate
+open item), 3 raise `Unknown COBOL statement type: 'EXEC_CICS'` because the probe
+handed CICS members to the batch parser, which is a harness artifact rather than a
+cobble defect.
+
+CardDemo is unaffected: `make compare` is still an empty diff at 449 nodes / 803
+edges.
 
 **Caveat to keep in mind.** This is a decode choice, not a codepage claim. A
 genuinely EBCDIC member would come through as silent garbage instead of raising.
