@@ -37,6 +37,7 @@ from cobble.matching_files import matching_files
 
 from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
+from cobble.interpreter.cobol.source_text import decode_source
 from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from cobble.interpreter.project.cobol_imports import extract_cobol_imports
 from cobble.interpreter.project.import_types import ImportKind
@@ -89,7 +90,9 @@ def _build_jcl_graph(
     for path in tqdm(jcl_files, desc="JCL", unit="file"):
         try:
             nodes, edges = extract_jcl_graph(
-                path.read_text(), corpus_index, proclib_dirs=config.proclib_dirs
+                decode_source(path.read_bytes()),
+                corpus_index,
+                proclib_dirs=config.proclib_dirs,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
@@ -258,7 +261,9 @@ def _build_cics_flow_graph(
                 f"CICS program {prog_name}: not found in cobol_globs matches"
             )
 
-    csd_source = "\n".join(csd_file.read_text() for csd_file in config.csd_files)
+    csd_source = "\n".join(
+        decode_source(csd_file.read_bytes()) for csd_file in config.csd_files
+    )
     parser = _make_parser(config)
     try:
         extract_transaction_flow_graph(

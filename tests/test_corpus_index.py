@@ -160,6 +160,34 @@ def test_job_and_step_resolve_to_owning_jcl_file(
     assert index.resolve_file_path(NodeKind.STEP, "ACCTFILE.STEP05") == jcl_path
 
 
+def test_indexes_a_jcl_member_that_is_not_valid_utf_8(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Members are 8-bit text; 58 JCL members in a production corpus carry bytes
+    >= 0x80, mostly the 0xA6 broken bar in //* box-drawing comments. A strict
+    decode raised inside the per-file try/except, so the member was silently
+    dropped from the index and every job, step and dataset in it went
+    unresolvable."""
+    jcl_path = tmp_path / "jcl" / "ACCTFILE.jcl"
+    jcl_path.parent.mkdir(parents=True, exist_ok=True)
+    jcl_path.write_bytes(b"//*\xa6\xa6\n//ACCTFILE JOB ...\n")
+    config = _config(tmp_path)
+    (tmp_path / "cbl").mkdir()
+
+    seen: list[str] = []
+    job = Job(name="ACCTFILE", steps=())
+
+    def fake_parse_jcl(text: str) -> Job:
+        seen.append(text)
+        return job
+
+    monkeypatch.setattr("cobble.corpus_index.parse_jcl", fake_parse_jcl)
+
+    index = CorpusIndex(config)
+    assert seen == ["//*¦¦\n//ACCTFILE JOB ...\n"]
+    assert index.resolve_file_path(NodeKind.JOB, "ACCTFILE") == jcl_path
+
+
 def test_instream_data_resolves_to_owning_jcl_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
