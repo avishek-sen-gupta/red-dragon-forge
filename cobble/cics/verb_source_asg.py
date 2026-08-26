@@ -10,8 +10,10 @@ the VM). This module reproduces the SAME ``{program: [CicsVerb]}`` shape from a
 typed-ASG walk instead, so the port pulls in no VM:
 
   * Parse each program to a ``CobolASG`` with the ported ProLeap bridge, with the
-    ported ``CicsDialectParser`` registered on the ``_dialect_parsers`` ContextVar
-    so EXEC CICS blocks materialise as ``ExecCicsStatement`` (verb + options).
+    coprocessor dialect parsers (see ``asg_dialect_parsers``) registered on the
+    ``_dialect_parsers`` ContextVar so EXEC CICS blocks materialise as
+    ``ExecCicsStatement`` (verb + options) and EXEC SQL blocks as opaque
+    ``ExecSqlStatement`` text rather than aborting the program.
   * Recursively walk the ASG for every ``ExecCicsStatement``.
   * For each, build a ``CicsVerb`` exactly as ``CicsLoweringStrategy.lower``'s
     ``self._observer.on_verb(...)`` calls do — resolving each data-name operand to
@@ -38,6 +40,7 @@ from cobble.cics.statements import CicsDialectParser, ExecCicsStatement
 from cobble.file_location import to_json_value
 from cobble.interpreter.cobol import cobol_statements as _cobol_statements
 from cobble.interpreter.project.graph_types import GraphNode
+from cobble.sql.statements import SqlDialectParser
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
@@ -180,6 +183,23 @@ def _statement_to_verb(stmt: ExecCicsStatement, program: str, data_fields):
     return None
 
 
+def asg_dialect_parsers() -> tuple[CicsDialectParser, SqlDialectParser]:
+    """The dialect parsers an ASG walk needs registered.
+
+    Production composes these in ``interpreter.project.coprocessor_compile``,
+    which threads every coprocessor's parser through at once. This port has a
+    single ASG parse, so the composition lives here.
+
+    Cicada's parser is what the graph actually reads — every edge comes from an
+    ``ExecCicsStatement``. Squall's is here because a coprocessor statement type
+    with no dialect parser is a hard error: ``parse_statement`` raises
+    ``Unknown COBOL statement type: 'EXEC_SQL'`` and takes the whole program's
+    verbs down with it. Registering it makes an EXEC SQL block parse to opaque
+    text that the walk then ignores.
+    """
+    return (CicsDialectParser(), SqlDialectParser())
+
+
 def stream_program_verbs(
     prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: "CorpusIndex"
 ):
@@ -190,7 +210,7 @@ def stream_program_verbs(
     import. Isolates + loudly warns on failure, exactly as production does.
     """
     try:
-        token = _cobol_statements._dialect_parsers.set((CicsDialectParser(),))
+        token = _cobol_statements._dialect_parsers.set(asg_dialect_parsers())
         try:
             asg = parser.parse(raw)
         finally:
