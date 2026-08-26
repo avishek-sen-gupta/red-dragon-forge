@@ -33,6 +33,12 @@ fileignoreconfig:
   checksum: e4c9700cfaa591e17cdf93e7cc8dc1a49b599e900aebeb9508a2aebceac9f510
 - filename: tests/test_canonical_export_cli.py
   checksum: c4940bdfb8db44013f12ade8253d61011bbf431e5380f9078ecde56c593f186e
+# Prose about JCL. Talisman reads the DISP keyword PASS as a password-like
+# token, plus ALTERNATE KEY, RPAREN and errors="replace" — twelve low-severity
+# false positives, no credential. Checksummed rather than detector-ignored, so
+# editing this living ledger re-runs the scan (and needs a fresh checksum).
+- filename: docs/corpus-onboarding-blockers.md
+  checksum: ce5e99c1979c29c60eaf26ad3b0469256feaef42ce08fc9d62fbcf7dd891eeef
 # A submodule pointer's whole content is the 40-hex commit SHA it pins, which
 # talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
 # all: "error parsing filesize ... submodule"). No checksum here on purpose —
