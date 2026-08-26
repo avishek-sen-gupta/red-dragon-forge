@@ -21,9 +21,9 @@ hlasm:
 ## Build the proleap-cobol-parser FORK (io.github.uwol:proleap-cobol-parser:4.0.0, NOT on
 ## Maven Central — install to ~/.m2 first) then the two bridge JARs.
 jars:
-	cd proleap-bridge/proleap-cobol-parser && mvn -q -DskipTests clean install
-	cd proleap-bridge && mvn -q -DskipTests package
-	cd jcl-bridge && mvn -q -DskipTests package
+	cd proleap-bridge/proleap-cobol-parser && mvn -q -DskipTests clean install -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -Daether.connector.https.securityMode=insecure
+	cd proleap-bridge && mvn -q -DskipTests package -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -Daether.connector.https.securityMode=insecure
+	cd jcl-bridge && mvn -q -DskipTests package -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -Daether.connector.https.securityMode=insecure
 
 ## Generate everything that's generated-from-a-grammar: the CICS parser + the BMS copybooks.
 codegen: parser sym
