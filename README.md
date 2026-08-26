@@ -131,8 +131,9 @@ convention would otherwise need a directory of symlinks. `cobol_globs`,
 globs; `copybook_extensions` is a list of bare extensions instead, because a
 `COPY X` is resolved by ProLeap as *name + extension* rather than by listing
 anything. Keep `cpy` in that list if you also generate BMS symbolic maps —
-`generate_sym` writes them as `<mapname>.cpy`. A private corpus config is one worked
-example: a corpus where every member is a `.txt`.
+`generate_sym` writes them as `<mapname>.cpy`. The shape these options exist for
+is a corpus where every member carries the same extension — say `.txt` — with
+programs, copybooks and maps distinguished only by directory and name.
 
 Then run:
 

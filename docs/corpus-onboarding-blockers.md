@@ -364,10 +364,16 @@ must never be hardcoded in the extractor.
 
 ## Fixed
 
+Fixes are named by what they changed rather than by commit SHA: this history has
+been rewritten, so any SHA recorded here would be stale. `git log --grep` on the
+description finds the commit.
+
 - **#1, #2** — earlier sessions.
-- **`ALTERNATE KEY` grammar** — ProLeap fork, pinned at `aaa1acc`.
-- **`PIC X(8)B(3)`** — `e8b1172`.
-- **`EXEC SQL` aborts the program** — `5cc3b5c`. `parse_statement` raised
+- **`ALTERNATE KEY` grammar** — added to the ProLeap fork's
+  `alternateRecordKeyClause`; cobble tracks it through the submodule pin.
+- **`PIC X(8)B(3)`** — `pic_parser` now accepts a `B` (blank-insertion)
+  character in a PICTURE string.
+- **`EXEC SQL` aborts the program** — `parse_statement` raised
   `Unknown COBOL statement type: 'EXEC_SQL'` with only Cicada's dialect parser
   registered; `cobble/sql/` now ports Squall's parse-time `DialectParser` and
   `verb_source_asg.asg_dialect_parsers()` registers both.

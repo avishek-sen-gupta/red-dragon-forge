@@ -128,7 +128,7 @@ def parse_pic(
         # The string has the shape of a picture but breaks a rule that depends on
         # a repeat count or on a run's length, so it would not compile (see
         # picture.analyse for the rules and their spec citations). No picture in
-        # CardDemo or the production corpus reaches this: both corpora are 0 for it.
+        # CardDemo or the production corpus reaches this: both are 0 for it.
         raise ValueError(f"Invalid PIC clause: {pic!r}: " + "; ".join(analysis.errors))
 
     # USAGE governs the category for numeric pictures; the picture governs it for
