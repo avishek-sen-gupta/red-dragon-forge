@@ -26,7 +26,9 @@ from cobble.knowledge_graph.render import render_html
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--config", required=True, type=Path,
+        "--config",
+        required=True,
+        type=Path,
         help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
     )
     return parser.parse_args()

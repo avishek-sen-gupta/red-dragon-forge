@@ -23,19 +23,26 @@ from cobble.knowledge_graph.canonical_export import write_manifest
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--nodes", required=True, type=Path,
+        "--nodes",
+        required=True,
+        type=Path,
         help="Path to a nodes.jsonl file (produced by cobble.build_graph)",
     )
     parser.add_argument(
-        "--edges", required=True, type=Path,
+        "--edges",
+        required=True,
+        type=Path,
         help="Path to an edges.jsonl file (produced by cobble.build_graph)",
     )
     parser.add_argument(
-        "--output", required=True, type=Path,
+        "--output",
+        required=True,
+        type=Path,
         help="Path to write the canonical manifest.json to",
     )
     parser.add_argument(
-        "--project-name", required=True,
+        "--project-name",
+        required=True,
         help="Project name recorded in each node's additional_properties",
     )
     return parser.parse_args()
