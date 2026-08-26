@@ -38,7 +38,7 @@ fileignoreconfig:
 # false positives, no credential. Checksummed rather than detector-ignored, so
 # editing this living ledger re-runs the scan (and needs a fresh checksum).
 - filename: docs/corpus-onboarding-blockers.md
-  checksum: ce5e99c1979c29c60eaf26ad3b0469256feaef42ce08fc9d62fbcf7dd891eeef
+  checksum: db1c8b2950acd0de7ff93b4639db539bf8749a6ca43e622199d9ad1f0c1dc7ea
 # A submodule pointer's whole content is the 40-hex commit SHA it pins, which
 # talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
 # all: "error parsing filesize ... submodule"). No checksum here on purpose —

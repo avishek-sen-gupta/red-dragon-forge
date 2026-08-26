@@ -13,6 +13,12 @@ cache/
 
 # Generated BMS symbolic copybooks (Stage-0 output)
 sym/
+sym-*/
+
+# Corpus configs for private codebases. A config carries absolute paths and the
+# corpus's own member-name globs, so it identifies the codebase it points at —
+# only config/carddemo.yaml (a public sample) belongs in the repo.
+config/*.local.yaml
 
 # Generated ANTLR CICS parser (from cobble/cics/cics_grammar/*.g4)
 cobble/cics/cics_grammar/CICSzLexer.py
