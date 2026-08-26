@@ -26,7 +26,7 @@ fileignoreconfig:
 - filename: tests/knowledge_graph/test_graph_writer.py
   checksum: 0c7a002271338c0337220bf65f845fdc6ce78737218970c5266547e6ff2810b2
 - filename: tests/test_corpus_index.py
-  checksum: 08b9a2ba1afd910d06dc5a34fcc8852cf2d815cdb0a9638e967d57486edfb691
+  checksum: 0154e60f76bc0d0ef757d5ba0ba84c7b1dd9a09b7c3d697ac085be30ccdbad9e
 - filename: docs/superpowers/specs/2026-07-11-canonical-export-design.md
   checksum: 1418b3588e949a986aa6fd47f5e6068283e530b9e0c39d8431f99582930b967d
 - filename: docs/superpowers/plans/2026-07-11-canonical-export.md
@@ -38,7 +38,7 @@ fileignoreconfig:
 # false positives, no credential. Checksummed rather than detector-ignored, so
 # editing this living ledger re-runs the scan (and needs a fresh checksum).
 - filename: docs/corpus-onboarding-blockers.md
-  checksum: 578a1469ce39511de0ceb7e44c9068c0ade9a41b4ea546ff6e70ae73103315b9
+  checksum: 4b13a6ca53f6ecd66c989894442e6e5b32b61b823511673a8f9b147f59b22972
 # The DISP fix. Same false positive as the ledger above: talisman reads the JCL
 # disposition keyword PASS as a password-like token, so every assertion naming a
 # DISP subparameter trips it. Checksummed, not detector-ignored, so a future edit
