@@ -262,6 +262,62 @@ under `mvn test`, not `make test`, which stays JVM-free.
 
 ---
 
+## Silently skipped index members — FIXED
+
+Found while fixing #4, and it is the reason that entry undercounted its own decode
+sites. `CorpusIndex._index_jcl_file` and `_index_csd_file` each wrapped their parse
+in `except Exception`, logged a warning and returned. Two separate defects:
+
+- **`except Exception` filed cobble's own bugs as corpus shape.** An
+  `AttributeError` in the indexing code was indistinguishable from a member that
+  genuinely does not parse, and both produced "skipped, carried on".
+- **The skip never reached the report anyone reads.** `logging.basicConfig(level=
+  WARNING)` does put the line on stderr, but `CorpusIndex` had no access to the
+  `failures` list, so the run ended with `N failure(s)` counting only
+  graph-building failures. A member missing from the index takes its jobs, steps,
+  instream data and transactions with it, and every later reference to those
+  resolves `UNRESOLVED` — with nothing in the summary to say why.
+
+**The strongest evidence is an accident.** A new test that indexed a real JCL file
+failed with `KeyError: 'JCL_BRIDGE_JAR'`. That env var is set by the Makefile, so
+running cobble any other way made *every* member "fail to parse" — 860 corpus-shape
+failures reported for one unset variable, and a run that still claimed success.
+The old handler could not tell the two apart. This one could not have been found by
+reading the code; it fell out of narrowing the catch.
+
+**Fix.** Both handlers narrow to the corpus-shaped failures only —
+`(JclParseError, OSError)` and `(CsdParseError, OSError)` — so anything else
+propagates. `CorpusIndex.failures` exposes the skips as a tuple of strings, and
+`build_graph.main` folds them into the run's own `failures` list right after the
+index is built, so they appear in the same end-of-run report.
+
+`CsdParseError` is new in `cobble/cics/csd_parse.py`: `parse_csd` and
+`parse_csd_files` now wrap lark's `UnexpectedInput`, which is what a malformed CSD
+actually raises. Without it there was no type to narrow to, and a consumer would
+have had to import lark to catch it. This mirrors `pic_parser.py:119`, which
+already converts `UnexpectedInput` into a domain error.
+
+**Deleting the handlers outright was considered and rejected on the measurement.**
+259 of 860 members currently fail JCL parse on #6, so an unguarded index would
+abort before any graph work and the production run would produce no output at all
+until #6 lands. Skip-and-report also matches what `build_graph` already does per
+member; the defect was never that it skipped, it was that it skipped quietly and
+lumped bugs in with corpus shape.
+
+**Remaining gap, deliberate.** Only the `parse_jcl` call is inside the guarded
+block. `expand_procs` runs after it, so a `ProcExpansionError` — a circular PROC
+reference — still aborts the whole index. Latent in both corpora: the production
+config declares no `proclib_dirs`, and CardDemo's two PROC members do not recurse.
+
+**Measured.** Indexing the production corpus now reports 259 skipped members —
+the same 259 as #6, every one of them a `mismatched input ... expecting JOB`
+signature, with no `OSError` and no `CsdParseError` among them. That number was
+previously absent from the run's summary entirely. CardDemo is unaffected:
+`make compare` is an empty diff at 449 nodes / 803 edges, and its report still
+shows the one pre-existing `CICS program COCRDSEC: not found` failure.
+
+---
+
 ## #6 Bare `/*` delimiter line — OPEN
 
 **Bare `/*` is correct JCL.** It is the JES2 *delimiter statement*, terminating

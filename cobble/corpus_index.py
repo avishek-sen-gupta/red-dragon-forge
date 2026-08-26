@@ -39,6 +39,7 @@ from cobble.interpreter.cobol.source_text import decode_source
 from cobble.interpreter.project.graph_types import NodeKind
 from cobble.matching_files import matching_files
 from cobble.jackal.dsn import InStreamDSN
+from cobble.jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
 from cobble.jackal.jcl_graph import step_proc_provenance
@@ -68,7 +69,21 @@ class CorpusIndex:
         self._bms_maps: dict[str, Path] = {}
         self._transactions: dict[str, Path] = {}
         self._cics_files: dict[str, Path] = {}
+        self._failures: list[str] = []
         self._build(config)
+
+    @property
+    def failures(self) -> tuple[str, ...]:
+        """Members the index skipped, one string each.
+
+        A skipped member has to reach the caller: everything in it — its jobs,
+        steps, instream data, transactions — is missing from the index, and every
+        later reference to those resolves UNRESOLVED. This used to be a
+        ``logger.warning`` and nothing else, so the run's end-of-run failure
+        report claimed nothing had gone wrong while 259 members were absent.
+        ``build_graph.main`` folds these into the run's own failure list.
+        """
+        return tuple(self._failures)
 
     def _build(self, config: CorpusConfig) -> None:
         for path in matching_files(config.cobol_dir, config.cobol_globs):
@@ -91,10 +106,14 @@ class CorpusIndex:
         # resolution is left UNRESOLVED until that's threaded through too.
 
     def _index_jcl_file(self, path: Path, proclib_dirs: tuple[Path, ...]) -> None:
+        # Narrow on purpose. A parse failure or an unreadable file is corpus shape
+        # and gets reported; anything else is a bug in cobble and must surface
+        # rather than be filed as a corpus problem and skipped.
         try:
             job = parse_jcl(decode_source(path.read_bytes()))
-        except Exception as exc:  # noqa: BLE001
+        except (JclParseError, OSError) as exc:
             logger.warning("CorpusIndex: JCL %s failed to parse: %s", path.name, exc)
+            self._failures.append(f"index JCL {path.name}: {exc}")
             return
 
         job_name = job.name.upper()
@@ -119,17 +138,18 @@ class CorpusIndex:
                     self._instream.setdefault(instream_id, path)
 
     def _index_csd_file(self, csd_file: Path) -> None:
-        from cobble.cics.csd_parse import parse_csd, parse_csd_files
+        from cobble.cics.csd_parse import CsdParseError, parse_csd, parse_csd_files
 
         try:
             for transid in parse_csd(csd_file):
                 self._transactions.setdefault(transid.upper(), csd_file)
             for file_name in parse_csd_files(csd_file):
                 self._cics_files.setdefault(file_name.upper(), csd_file)
-        except Exception as exc:  # noqa: BLE001
+        except (CsdParseError, OSError) as exc:
             logger.warning(
                 "CorpusIndex: CSD %s failed to parse: %s", csd_file.name, exc
             )
+            self._failures.append(f"index CSD {csd_file.name}: {exc}")
 
     def _get_or_warn(
         self, mapping: dict[str, Path], kind: NodeKind, node_id: str

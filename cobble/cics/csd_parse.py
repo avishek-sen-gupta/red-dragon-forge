@@ -14,8 +14,18 @@ import logging
 from pathlib import Path
 
 from lark import Lark, Transformer
+from lark.exceptions import UnexpectedInput
 
 logger = logging.getLogger(__name__)
+
+
+class CsdParseError(Exception):
+    """The CSD did not parse.
+
+    Wraps lark's ``UnexpectedInput`` so a consumer can distinguish a
+    corpus-shaped failure from a bug in cobble without importing lark and
+    without catching bare ``Exception``.
+    """
 
 
 # CSD grammar: a file is a sequence of DEFINE statements, each a kind followed by
@@ -64,7 +74,10 @@ def parse_csd(csd_path: Path) -> dict[str, str]:
     definitions, or a TRANSACTION whose program is defined elsewhere) are skipped.
     """
     content = csd_path.read_text(encoding="utf-8", errors="replace")
-    defines = _CsdTransformer().transform(_csd_parser.parse(content))
+    try:
+        defines = _CsdTransformer().transform(_csd_parser.parse(content))
+    except UnexpectedInput as exc:
+        raise CsdParseError(str(exc)) from exc
     result = {}
     for attrs in defines:
         if "TRANSACTION" in attrs and "PROGRAM" in attrs:
@@ -82,7 +95,10 @@ def parse_csd_files(csd_path: Path) -> dict[str, str]:
     DSNAME attribute is skipped (no physical dataset to resolve to).
     """
     content = csd_path.read_text(encoding="utf-8", errors="replace")
-    defines = _CsdTransformer().transform(_csd_parser.parse(content))
+    try:
+        defines = _CsdTransformer().transform(_csd_parser.parse(content))
+    except UnexpectedInput as exc:
+        raise CsdParseError(str(exc)) from exc
     result = {}
     for attrs in defines:
         if "FILE" in attrs and "DSNAME" in attrs:

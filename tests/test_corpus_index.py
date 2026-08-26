@@ -7,6 +7,7 @@ from cobble.corpus_index import CorpusIndex
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
 from cobble.jackal.dsn import DirectDSN, InStreamDSN
+from cobble.jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from cobble.jackal.value_parts import Literal
 
@@ -158,6 +159,71 @@ def test_job_and_step_resolve_to_owning_jcl_file(
     index = CorpusIndex(config)
     assert index.resolve_file_path(NodeKind.JOB, "ACCTFILE") == jcl_path
     assert index.resolve_file_path(NodeKind.STEP, "ACCTFILE.STEP05") == jcl_path
+
+
+def test_a_member_that_does_not_parse_is_reported_not_only_logged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A skipped member has to reach the caller. It used to be a log line only, so
+    the run's end-of-run failure report said nothing about 259 members missing
+    from the index."""
+    _touch(tmp_path / "jcl" / "ACCTFILE.jcl", "//ACCTFILE JOB ...\n")
+    config = _config(tmp_path)
+    (tmp_path / "cbl").mkdir()
+
+    def boom(text: str) -> Job:
+        raise JclParseError("line 70:9 mismatched input 'EXEC' expecting JOB")
+
+    monkeypatch.setattr("cobble.corpus_index.parse_jcl", boom)
+
+    index = CorpusIndex(config)
+    assert index.failures == (
+        "index JCL ACCTFILE.jcl: line 70:9 mismatched input 'EXEC' expecting JOB",
+    )
+
+
+def test_an_index_with_nothing_wrong_reports_no_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _touch(tmp_path / "jcl" / "ACCTFILE.jcl", "//ACCTFILE JOB ...\n")
+    config = _config(tmp_path)
+    (tmp_path / "cbl").mkdir()
+    monkeypatch.setattr(
+        "cobble.corpus_index.parse_jcl", lambda text: Job(name="ACCTFILE", steps=())
+    )
+
+    index = CorpusIndex(config)
+    assert index.failures == ()
+
+
+def test_a_bug_in_indexing_is_not_filed_as_a_corpus_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``except Exception`` filed cobble's own bugs as corpus shape and carried on.
+    Only a parse failure is a corpus problem; anything else must surface."""
+    _touch(tmp_path / "jcl" / "ACCTFILE.jcl", "//ACCTFILE JOB ...\n")
+    config = _config(tmp_path)
+    (tmp_path / "cbl").mkdir()
+
+    def bug(text: str) -> Job:
+        raise AttributeError("'NoneType' object has no attribute 'upper'")
+
+    monkeypatch.setattr("cobble.corpus_index.parse_jcl", bug)
+
+    with pytest.raises(AttributeError):
+        CorpusIndex(config)
+
+
+def test_a_csd_that_does_not_parse_is_reported_not_only_logged(
+    tmp_path: Path,
+) -> None:
+    csd_path = _touch(tmp_path / "csd" / "BROKEN.CSD", "this is not a DEFINE\n")
+    config = _config(tmp_path, csd_files=(csd_path,))
+    (tmp_path / "cbl").mkdir()
+
+    index = CorpusIndex(config)
+    assert len(index.failures) == 1
+    assert index.failures[0].startswith("index CSD BROKEN.CSD: ")
 
 
 def test_indexes_a_jcl_member_that_is_not_valid_utf_8(

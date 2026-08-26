@@ -357,6 +357,9 @@ def main() -> int:
     args = _parse_args()
     config = load_corpus_config(args.config)
     corpus_index = CorpusIndex(config)
+    # Members the index skipped. Everything in them is absent from the index, so
+    # they belong in the same report as the graph-building failures below.
+    failures.extend(corpus_index.failures)
 
     transid_to_program = _load_transid_to_program(config)
     cics_program_names = set(transid_to_program.values())
