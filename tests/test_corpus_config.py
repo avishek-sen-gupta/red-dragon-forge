@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from cobble.corpus_config import (
+    DEFAULT_BMS_GLOBS,
+    DEFAULT_COPYBOOK_EXTENSIONS,
     BmsConfig,
     CorpusConfig,
     _bms_config_from_dict,
@@ -21,6 +23,7 @@ def test_corpus_config_from_dict_full() -> None:
         "proclib_dirs": ["vendor/carddemo/app/proc"],
         "csd_files": ["vendor/carddemo/app/csd/CARDDEMO.CSD"],
         "copybook_dirs": ["sym", "vendor/carddemo/app/cpy"],
+        "copybook_extensions": ["cpy", "txt"],
         "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
@@ -32,7 +35,34 @@ def test_corpus_config_from_dict_full() -> None:
         proclib_dirs=(Path("vendor/carddemo/app/proc"),),
         csd_files=(Path("vendor/carddemo/app/csd/CARDDEMO.CSD"),),
         copybook_dirs=(Path("sym"), Path("vendor/carddemo/app/cpy")),
+        copybook_extensions=("cpy", "txt"),
         out_dir=Path("out"),
+    )
+
+
+def test_corpus_config_omitting_copybook_extensions_keeps_the_shipped_defaults() -> (
+    None
+):
+    # A config written before the key existed must resolve copybooks exactly as
+    # it did before, so the fallback is the bridge's own historical list.
+    data = {
+        "cobol_dir": "cbl",
+        "cobol_globs": ["*.cbl"],
+        "jcl_dir": "jcl",
+        "jcl_globs": ["*.jcl"],
+        "copybook_dirs": ["cpy"],
+        "out_dir": "out",
+    }
+    config = _corpus_config_from_dict(data)
+    assert config.copybook_extensions == DEFAULT_COPYBOOK_EXTENSIONS
+    assert config.copybook_extensions == (
+        "",
+        "cpy",
+        "CPY",
+        "cob",
+        "cbl",
+        "copy",
+        "COPY",
     )
 
 
@@ -71,10 +101,25 @@ def test_corpus_config_from_dict_missing_required_key_raises() -> None:
 
 
 def test_bms_config_from_dict() -> None:
-    data = {"bms_dir": "app/bms", "macros_dir": "bms-macros", "sym_dir": "sym"}
+    data = {
+        "bms_dir": "app/bms",
+        "bms_globs": ["MAP*.txt"],
+        "macros_dir": "bms-macros",
+        "sym_dir": "sym",
+    }
     assert _bms_config_from_dict(data) == BmsConfig(
-        bms_dir=Path("app/bms"), macros_dir=Path("bms-macros"), sym_dir=Path("sym")
+        bms_dir=Path("app/bms"),
+        bms_globs=("MAP*.txt",),
+        macros_dir=Path("bms-macros"),
+        sym_dir=Path("sym"),
     )
+
+
+def test_bms_config_omitting_bms_globs_keeps_the_shipped_default() -> None:
+    data = {"bms_dir": "app/bms", "macros_dir": "bms-macros", "sym_dir": "sym"}
+    config = _bms_config_from_dict(data)
+    assert config.bms_globs == DEFAULT_BMS_GLOBS
+    assert config.bms_globs == ("*.bms",)
 
 
 def test_bms_config_from_dict_missing_required_key_raises() -> None:
