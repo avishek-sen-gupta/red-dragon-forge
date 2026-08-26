@@ -33,4 +33,11 @@ fileignoreconfig:
   checksum: e4c9700cfaa591e17cdf93e7cc8dc1a49b599e900aebeb9508a2aebceac9f510
 - filename: tests/test_canonical_export_cli.py
   checksum: c4940bdfb8db44013f12ade8253d61011bbf431e5380f9078ecde56c593f186e
+# A submodule pointer's whole content is the 40-hex commit SHA it pins, which
+# talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
+# all: "error parsing filesize ... submodule"). No checksum here on purpose —
+# one would go stale on every pin bump.
+- filename: proleap-bridge/proleap-cobol-parser
+  ignore_detectors:
+    - filecontent
 version: "1.0"
