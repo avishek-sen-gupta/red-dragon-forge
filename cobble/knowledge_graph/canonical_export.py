@@ -17,16 +17,29 @@ from functools import partial
 from pathlib import Path
 from typing import Iterable, Iterator
 
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 logger = logging.getLogger(__name__)
 
 GENERATOR = "cobble"
 
-_CODE_CHUNK_KINDS = frozenset({
-    NodeKind.PROGRAM, NodeKind.COBOL_FILE, NodeKind.COPYBOOK, NodeKind.BMS_MAP,
-    NodeKind.JOB, NodeKind.STEP, NodeKind.TRANSACTION, NodeKind.INSTREAM_DATA,
-})
+_CODE_CHUNK_KINDS = frozenset(
+    {
+        NodeKind.PROGRAM,
+        NodeKind.COBOL_FILE,
+        NodeKind.COPYBOOK,
+        NodeKind.BMS_MAP,
+        NodeKind.JOB,
+        NodeKind.STEP,
+        NodeKind.TRANSACTION,
+        NodeKind.INSTREAM_DATA,
+    }
+)
 _DATABASE_KINDS = frozenset({NodeKind.DATASET, NodeKind.CICS_FILE})
 
 _LANGUAGE_FOR_KIND: dict[NodeKind, str] = {
@@ -97,7 +110,9 @@ def _transform_edge(edge: GraphEdge) -> dict:
     }
 
 
-def _process_node(node: GraphNode, project_name: str, fs: FileSystemSynthesizer) -> list[dict]:
+def _process_node(
+    node: GraphNode, project_name: str, fs: FileSystemSynthesizer
+) -> list[dict]:
     canonical_node = _transform_node(node, project_name)
     results = [canonical_node]
     if node.file_path:
@@ -110,8 +125,10 @@ def _stream_nodes(path: Path) -> Iterator[GraphNode]:
         for line in f:
             row = json.loads(line)
             yield GraphNode(
-                id=row["id"], kind=NodeKind(row["kind"]),
-                file_path=row.get("file_path"), attrs=row.get("attrs", {}),
+                id=row["id"],
+                kind=NodeKind(row["kind"]),
+                file_path=row.get("file_path"),
+                attrs=row.get("attrs", {}),
             )
 
 
@@ -120,9 +137,12 @@ def _stream_edges(path: Path) -> Iterator[GraphEdge]:
         for line in f:
             row = json.loads(line)
             yield GraphEdge(
-                source=row["source"], source_kind=NodeKind(row["source_kind"]),
-                target=row["target"], target_kind=NodeKind(row["target_kind"]),
-                kind=EdgeKind(row["kind"]), attrs=row.get("attrs", {}),
+                source=row["source"],
+                source_kind=NodeKind(row["source_kind"]),
+                target=row["target"],
+                target_kind=NodeKind(row["target_kind"]),
+                kind=EdgeKind(row["kind"]),
+                attrs=row.get("attrs", {}),
             )
 
 
@@ -149,24 +169,30 @@ class FileSystemSynthesizer:
                 node_id = f"{node_type}::{prefix}"
                 if node_id not in self._seen_node_ids:
                     self._seen_node_ids.add(node_id)
-                    new_nodes.append({
-                        "id": node_id,
-                        "display_name": part,
-                        "type": node_type,
-                        "code": "",
-                        "path": prefix,
-                        "language": None,
-                        "generator": GENERATOR,
-                        "loc": 0,
-                        "cyclomatic_complexity": 0,
-                        "category": ["FILE_SYSTEM"],
-                        "additional_properties": {},
-                    })
+                    new_nodes.append(
+                        {
+                            "id": node_id,
+                            "display_name": part,
+                            "type": node_type,
+                            "code": "",
+                            "path": prefix,
+                            "language": None,
+                            "generator": GENERATOR,
+                            "loc": 0,
+                            "cyclomatic_complexity": 0,
+                            "category": ["FILE_SYSTEM"],
+                            "additional_properties": {},
+                        }
+                    )
                     if prev_id is not None:
-                        self._edges.append({"from_id": prev_id, "to_id": node_id, "type": "MADE_OF"})
+                        self._edges.append(
+                            {"from_id": prev_id, "to_id": node_id, "type": "MADE_OF"}
+                        )
                 prev_id = node_id
             # FILE -> owning node: always new (canonical_node_id is unique per node).
-            self._edges.append({"from_id": prev_id, "to_id": canonical_node_id, "type": "MADE_OF"})
+            self._edges.append(
+                {"from_id": prev_id, "to_id": canonical_node_id, "type": "MADE_OF"}
+            )
         return new_nodes
 
     def drain_edges(self) -> list[dict]:

@@ -180,7 +180,9 @@ def _statement_to_verb(stmt: ExecCicsStatement, program: str, data_fields):
     return None
 
 
-def stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: "CorpusIndex"):
+def stream_program_verbs(
+    prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: "CorpusIndex"
+):
     """Parse one program's ASG and stream its CICS-verb graph edges into ``sink``.
 
     Signature-compatible with cics.verb_source_lowering.stream_program_verbs (the
@@ -200,14 +202,24 @@ def stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures, co
             edge = _verb_edge(verb, bms_mapsets)
             if edge is None:
                 continue
-            sink.add_node(GraphNode(
-                id=edge.source, kind=edge.source_kind,
-                file_path=to_json_value(corpus_index.resolve_file_path(edge.source_kind, edge.source)),
-            ))
-            sink.add_node(GraphNode(
-                id=edge.target, kind=edge.target_kind,
-                file_path=to_json_value(corpus_index.resolve_file_path(edge.target_kind, edge.target)),
-            ))
+            sink.add_node(
+                GraphNode(
+                    id=edge.source,
+                    kind=edge.source_kind,
+                    file_path=to_json_value(
+                        corpus_index.resolve_file_path(edge.source_kind, edge.source)
+                    ),
+                )
+            )
+            sink.add_node(
+                GraphNode(
+                    id=edge.target,
+                    kind=edge.target_kind,
+                    file_path=to_json_value(
+                        corpus_index.resolve_file_path(edge.target_kind, edge.target)
+                    ),
+                )
+            )
             sink.add_edge(edge)
     except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
         logger.warning("CICS program %s failed: %s", prog_name, exc, exc_info=True)

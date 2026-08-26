@@ -3,7 +3,12 @@ import threading
 from pathlib import Path
 from typing import Iterator
 
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 from cobble.knowledge_graph.canonical_export import (
     FileSystemSynthesizer,
     _canonical_id,
@@ -26,8 +31,14 @@ def test_canonical_id_prefixes_with_kind() -> None:
 
 def test_category_for_code_chunk_kinds() -> None:
     for kind in (
-        NodeKind.PROGRAM, NodeKind.COBOL_FILE, NodeKind.COPYBOOK, NodeKind.BMS_MAP,
-        NodeKind.JOB, NodeKind.STEP, NodeKind.TRANSACTION, NodeKind.INSTREAM_DATA,
+        NodeKind.PROGRAM,
+        NodeKind.COBOL_FILE,
+        NodeKind.COPYBOOK,
+        NodeKind.BMS_MAP,
+        NodeKind.JOB,
+        NodeKind.STEP,
+        NodeKind.TRANSACTION,
+        NodeKind.INSTREAM_DATA,
     ):
         assert _category_for(kind) == ["CODE_CHUNK"]
 
@@ -56,7 +67,9 @@ def test_read_file_text_returns_contents(tmp_path: Path) -> None:
     assert _read_file_text(p) == "       IDENTIFICATION DIVISION.\n"
 
 
-def test_read_file_text_missing_file_returns_empty_and_does_not_raise(tmp_path: Path) -> None:
+def test_read_file_text_missing_file_returns_empty_and_does_not_raise(
+    tmp_path: Path,
+) -> None:
     assert _read_file_text(tmp_path / "does-not-exist.cbl") == ""
 
 
@@ -74,7 +87,10 @@ def test_transform_node_with_resolved_file_path(tmp_path: Path) -> None:
     assert result["generator"] == "cobble"
     assert result["language"] == "COBOL"
     assert result["category"] == ["CODE_CHUNK"]
-    assert result["code"] == "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CBACT01C.\n"
+    assert (
+        result["code"]
+        == "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CBACT01C.\n"
+    )
     assert result["loc"] == 2
     assert result["cyclomatic_complexity"] == 0
     assert result["additional_properties"]["project_name"] == "carddemo"
@@ -96,9 +112,12 @@ def test_transform_node_without_resolved_file_path() -> None:
 
 def test_transform_edge_prefixes_both_endpoints() -> None:
     edge = GraphEdge(
-        source="CBACT01C", source_kind=NodeKind.PROGRAM,
-        target="CVACT01Y", target_kind=NodeKind.COPYBOOK,
-        kind=EdgeKind.COPY, attrs={"line": 42},
+        source="CBACT01C",
+        source_kind=NodeKind.PROGRAM,
+        target="CVACT01Y",
+        target_kind=NodeKind.COPYBOOK,
+        kind=EdgeKind.COPY,
+        attrs={"line": 42},
     )
 
     result = _transform_edge(edge)
@@ -113,8 +132,19 @@ def test_transform_edge_prefixes_both_endpoints() -> None:
 def test_stream_nodes_yields_graphnode_per_line(tmp_path: Path) -> None:
     nodes_path = tmp_path / "nodes.jsonl"
     nodes_path.write_text(
-        json.dumps({"id": "CBACT01C", "kind": "PROGRAM", "file_path": "a/CBACT01C.cbl", "attrs": {}}) + "\n"
-        + json.dumps({"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}}) + "\n"
+        json.dumps(
+            {
+                "id": "CBACT01C",
+                "kind": "PROGRAM",
+                "file_path": "a/CBACT01C.cbl",
+                "attrs": {},
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}}
+        )
+        + "\n"
     )
 
     nodes = list(_stream_nodes(nodes_path))
@@ -127,7 +157,10 @@ def test_stream_nodes_yields_graphnode_per_line(tmp_path: Path) -> None:
 
 def test_stream_nodes_is_a_generator_not_a_list(tmp_path: Path) -> None:
     nodes_path = tmp_path / "nodes.jsonl"
-    nodes_path.write_text(json.dumps({"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}) + "\n")
+    nodes_path.write_text(
+        json.dumps({"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}})
+        + "\n"
+    )
 
     result = _stream_nodes(nodes_path)
 
@@ -138,20 +171,29 @@ def test_stream_nodes_is_a_generator_not_a_list(tmp_path: Path) -> None:
 def test_stream_edges_yields_graphedge_per_line(tmp_path: Path) -> None:
     edges_path = tmp_path / "edges.jsonl"
     edges_path.write_text(
-        json.dumps({
-            "source": "CBACT01C", "source_kind": "PROGRAM",
-            "target": "CVACT01Y", "target_kind": "COPYBOOK",
-            "kind": "COPY", "attrs": {"line": 42},
-        }) + "\n"
+        json.dumps(
+            {
+                "source": "CBACT01C",
+                "source_kind": "PROGRAM",
+                "target": "CVACT01Y",
+                "target_kind": "COPYBOOK",
+                "kind": "COPY",
+                "attrs": {"line": 42},
+            }
+        )
+        + "\n"
     )
 
     edges = list(_stream_edges(edges_path))
 
     assert edges == [
         GraphEdge(
-            source="CBACT01C", source_kind=NodeKind.PROGRAM,
-            target="CVACT01Y", target_kind=NodeKind.COPYBOOK,
-            kind=EdgeKind.COPY, attrs={"line": 42},
+            source="CBACT01C",
+            source_kind=NodeKind.PROGRAM,
+            target="CVACT01Y",
+            target_kind=NodeKind.COPYBOOK,
+            kind=EdgeKind.COPY,
+            attrs={"line": 42},
         )
     ]
 
@@ -159,7 +201,9 @@ def test_stream_edges_yields_graphedge_per_line(tmp_path: Path) -> None:
 def test_synthesize_for_node_creates_file_and_directory_chain() -> None:
     fs = FileSystemSynthesizer()
 
-    new_nodes = fs.synthesize_for_node("PROGRAM::CBACT01C", "vendor/carddemo/app/cbl/CBACT01C.cbl")
+    new_nodes = fs.synthesize_for_node(
+        "PROGRAM::CBACT01C", "vendor/carddemo/app/cbl/CBACT01C.cbl"
+    )
 
     ids = {n["id"] for n in new_nodes}
     assert ids == {
@@ -179,7 +223,10 @@ def test_synthesize_for_node_creates_file_and_directory_chain() -> None:
         ("DIRECTORY::vendor", "DIRECTORY::vendor/carddemo"),
         ("DIRECTORY::vendor/carddemo", "DIRECTORY::vendor/carddemo/app"),
         ("DIRECTORY::vendor/carddemo/app", "DIRECTORY::vendor/carddemo/app/cbl"),
-        ("DIRECTORY::vendor/carddemo/app/cbl", "FILE::vendor/carddemo/app/cbl/CBACT01C.cbl"),
+        (
+            "DIRECTORY::vendor/carddemo/app/cbl",
+            "FILE::vendor/carddemo/app/cbl/CBACT01C.cbl",
+        ),
         ("FILE::vendor/carddemo/app/cbl/CBACT01C.cbl", "PROGRAM::CBACT01C"),
     }
     assert all(e["type"] == "MADE_OF" for e in edges)
@@ -192,15 +239,19 @@ def test_synthesize_for_node_dedups_shared_directories_and_file() -> None:
 
     # A second node in the same file: only the new FILE->node edge and node
     # itself are new; the FILE/DIRECTORY chain is not re-emitted.
-    new_nodes = fs.synthesize_for_node("STEP::ACCTFILE.STEP05", "vendor/carddemo/app/jcl/ACCTFILE.jcl")
+    new_nodes = fs.synthesize_for_node(
+        "STEP::ACCTFILE.STEP05", "vendor/carddemo/app/jcl/ACCTFILE.jcl"
+    )
 
     assert new_nodes == []
     edges = fs.drain_edges()
-    assert edges == [{
-        "from_id": "FILE::vendor/carddemo/app/jcl/ACCTFILE.jcl",
-        "to_id": "STEP::ACCTFILE.STEP05",
-        "type": "MADE_OF",
-    }]
+    assert edges == [
+        {
+            "from_id": "FILE::vendor/carddemo/app/jcl/ACCTFILE.jcl",
+            "to_id": "STEP::ACCTFILE.STEP05",
+            "type": "MADE_OF",
+        }
+    ]
 
 
 def test_drain_edges_clears_accumulated_edges() -> None:
@@ -227,11 +278,15 @@ def test_synthesize_for_node_is_thread_safe_no_duplicate_nodes() -> None:
         t.join()
 
     all_new_node_ids = [n["id"] for batch in results for n in batch]
-    file_node_emissions = [i for i in all_new_node_ids if i == "FILE::shared/dir/PROG.cbl"]
+    file_node_emissions = [
+        i for i in all_new_node_ids if i == "FILE::shared/dir/PROG.cbl"
+    ]
     assert len(file_node_emissions) == 1  # emitted exactly once across all 20 threads
 
 
-def test_process_node_with_file_path_returns_node_plus_filesystem_nodes(tmp_path: Path) -> None:
+def test_process_node_with_file_path_returns_node_plus_filesystem_nodes(
+    tmp_path: Path,
+) -> None:
     src = tmp_path / "CBACT01C.cbl"
     src.write_text("       IDENTIFICATION DIVISION.\n")
     node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, file_path=str(src))
@@ -271,20 +326,33 @@ def test_write_manifest_produces_valid_json_with_expected_shape(tmp_path: Path) 
     cpy.write_text("       01 ACCT-RECORD.\n")
 
     nodes_path = tmp_path / "nodes.jsonl"
-    _write_jsonl(nodes_path, [
-        {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
-        {"id": "CVACT01Y", "kind": "COPYBOOK", "file_path": str(cpy), "attrs": {}},
-        {"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}},
-    ])
+    _write_jsonl(
+        nodes_path,
+        [
+            {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
+            {"id": "CVACT01Y", "kind": "COPYBOOK", "file_path": str(cpy), "attrs": {}},
+            {"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}},
+        ],
+    )
     edges_path = tmp_path / "edges.jsonl"
-    _write_jsonl(edges_path, [
-        {"source": "CBACT01C", "source_kind": "PROGRAM",
-         "target": "CVACT01Y", "target_kind": "COPYBOOK",
-         "kind": "COPY", "attrs": {}},
-    ])
+    _write_jsonl(
+        edges_path,
+        [
+            {
+                "source": "CBACT01C",
+                "source_kind": "PROGRAM",
+                "target": "CVACT01Y",
+                "target_kind": "COPYBOOK",
+                "kind": "COPY",
+                "attrs": {},
+            },
+        ],
+    )
     output_path = tmp_path / "manifest.json"
 
-    write_manifest(nodes_path, edges_path, output_path, "carddemo", chunk_size=2, max_workers=2)
+    write_manifest(
+        nodes_path, edges_path, output_path, "carddemo", chunk_size=2, max_workers=2
+    )
 
     manifest = json.loads(output_path.read_text())
     assert manifest["version"] == "1.0"
@@ -299,8 +367,14 @@ def test_write_manifest_produces_valid_json_with_expected_shape(tmp_path: Path) 
     edge_pairs = {(e["from_id"], e["to_id"], e["type"]) for e in manifest["edges"]}
     assert ("PROGRAM::CBACT01C", "COPYBOOK::CVACT01Y", "COPY") in edge_pairs
     # FILE -> node MADE_OF edges are present for both file-backed nodes.
-    assert any(e["type"] == "MADE_OF" and e["to_id"] == "PROGRAM::CBACT01C" for e in manifest["edges"])
-    assert any(e["type"] == "MADE_OF" and e["to_id"] == "COPYBOOK::CVACT01Y" for e in manifest["edges"])
+    assert any(
+        e["type"] == "MADE_OF" and e["to_id"] == "PROGRAM::CBACT01C"
+        for e in manifest["edges"]
+    )
+    assert any(
+        e["type"] == "MADE_OF" and e["to_id"] == "COPYBOOK::CVACT01Y"
+        for e in manifest["edges"]
+    )
 
 
 def test_write_manifest_no_duplicate_node_ids(tmp_path: Path) -> None:
@@ -308,15 +382,20 @@ def test_write_manifest_no_duplicate_node_ids(tmp_path: Path) -> None:
     cbl.parent.mkdir()
     cbl.write_text("x\n")
     nodes_path = tmp_path / "nodes.jsonl"
-    _write_jsonl(nodes_path, [
-        {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
-        {"id": "CBACT01C.STEP", "kind": "STEP", "file_path": str(cbl), "attrs": {}},
-    ])
+    _write_jsonl(
+        nodes_path,
+        [
+            {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
+            {"id": "CBACT01C.STEP", "kind": "STEP", "file_path": str(cbl), "attrs": {}},
+        ],
+    )
     edges_path = tmp_path / "edges.jsonl"
     edges_path.write_text("")
     output_path = tmp_path / "manifest.json"
 
-    write_manifest(nodes_path, edges_path, output_path, "carddemo", chunk_size=1, max_workers=4)
+    write_manifest(
+        nodes_path, edges_path, output_path, "carddemo", chunk_size=1, max_workers=4
+    )
 
     manifest = json.loads(output_path.read_text())
     node_ids = [n["id"] for n in manifest["nodes"]]
@@ -325,7 +404,9 @@ def test_write_manifest_no_duplicate_node_ids(tmp_path: Path) -> None:
 
 def test_write_manifest_writes_to_tmp_then_renames(tmp_path: Path) -> None:
     nodes_path = tmp_path / "nodes.jsonl"
-    _write_jsonl(nodes_path, [{"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}])
+    _write_jsonl(
+        nodes_path, [{"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}]
+    )
     edges_path = tmp_path / "edges.jsonl"
     edges_path.write_text("")
     output_path = tmp_path / "manifest.json"

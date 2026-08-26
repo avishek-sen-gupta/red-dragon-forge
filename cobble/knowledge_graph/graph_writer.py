@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 
 
 class GraphWriter:
-    def __init__(self, nodes_path: Path, edges_path: Path, corpus_index: "CorpusIndex") -> None:
+    def __init__(
+        self, nodes_path: Path, edges_path: Path, corpus_index: "CorpusIndex"
+    ) -> None:
         self._corpus_index = corpus_index
         self._node_seen: set[tuple[NodeKind, str]] = set()
         self._edge_seen: set[tuple] = set()
@@ -60,14 +62,24 @@ class GraphWriter:
         # add_node'd still yields those nodes, resolved via the same
         # corpus_index as every real construction site, so this can never
         # under-resolve relative to an explicit add_node for the same key.
-        self.add_node(GraphNode(
-            id=edge.source, kind=edge.source_kind,
-            file_path=to_json_value(self._corpus_index.resolve_file_path(edge.source_kind, edge.source)),
-        ))
-        self.add_node(GraphNode(
-            id=edge.target, kind=edge.target_kind,
-            file_path=to_json_value(self._corpus_index.resolve_file_path(edge.target_kind, edge.target)),
-        ))
+        self.add_node(
+            GraphNode(
+                id=edge.source,
+                kind=edge.source_kind,
+                file_path=to_json_value(
+                    self._corpus_index.resolve_file_path(edge.source_kind, edge.source)
+                ),
+            )
+        )
+        self.add_node(
+            GraphNode(
+                id=edge.target,
+                kind=edge.target_kind,
+                file_path=to_json_value(
+                    self._corpus_index.resolve_file_path(edge.target_kind, edge.target)
+                ),
+            )
+        )
         key = (edge.source, edge.source_kind, edge.target, edge.target_kind, edge.kind)
         if key in self._edge_seen:
             return

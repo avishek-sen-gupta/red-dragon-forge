@@ -62,7 +62,8 @@ def _all_statements(asg: Any) -> Iterator[Any]:
 
 
 def extract_cobol_file_graph(
-    asg: CobolASG, corpus_index: "CorpusIndex",
+    asg: CobolASG,
+    corpus_index: "CorpusIndex",
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Parse a batch COBOL program and return PROGRAM -> COBOL_FILE edges for
     every file it OPENs.
@@ -91,7 +92,9 @@ def extract_cobol_file_graph(
         (NodeKind.PROGRAM, program_id): GraphNode(
             id=program_id,
             kind=NodeKind.PROGRAM,
-            file_path=to_json_value(corpus_index.resolve_file_path(NodeKind.PROGRAM, program_id)),
+            file_path=to_json_value(
+                corpus_index.resolve_file_path(NodeKind.PROGRAM, program_id)
+            ),
         )
     }
     edges: list[GraphEdge] = []

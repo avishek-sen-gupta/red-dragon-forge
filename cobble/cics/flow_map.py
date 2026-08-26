@@ -50,7 +50,8 @@ def extract_transaction_flow_graph(
 
     def _node(kind: NodeKind, node_id: str) -> GraphNode:
         return GraphNode(
-            id=node_id, kind=kind,
+            id=node_id,
+            kind=kind,
             file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
         )
 
@@ -78,7 +79,9 @@ def extract_transaction_flow_graph(
         raw = cobol_sources.get(prog_name)
         if raw is None:
             continue
-        stream_program_verbs(prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index)
+        stream_program_verbs(
+            prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index
+        )
 
     # CSD file -> dataset (DEFINES_DATASET)
     for file_name, dataset_name in file_to_dataset.items():
