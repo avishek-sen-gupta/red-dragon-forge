@@ -3,8 +3,10 @@ __pycache__/
 *.pyc
 .venv/
 
-# Build artifacts
+# Build artifacts. out-*/ because a private corpus config points out_dir at its
+# own directory, and the graph there names that corpus's programs and datasets.
 out/
+out-*/
 cache/
 **/target/
 

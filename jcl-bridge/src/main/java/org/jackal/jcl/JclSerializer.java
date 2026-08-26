@@ -75,11 +75,37 @@ public final class JclSerializer {
 
     public static void main(String[] args) throws IOException {
         String src = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
+        JsonObject job;
+        try {
+            job = serialize(src);
+        } catch (SyntaxErrorException e) {
+            System.err.print(e.getMessage());
+            System.exit(1);
+            return;
+        }
+        System.out.print(new Gson().toJson(job));
+    }
+
+    /** Thrown when the grammar rejects the source; carries the collected error text. */
+    static final class SyntaxErrorException extends RuntimeException {
+        SyntaxErrorException(String text) {
+            super(text);
+        }
+    }
+
+    /**
+     * Parse JCL source and serialize it to the Jackal JCL JSON contract.
+     *
+     * <p>Split out of {@link #main} so the whole grammar-to-JSON path is
+     * exercisable without stdin/stdout or a process exit: a test states a JCL
+     * snippet and reads the JSON the Python side would receive.
+     */
+    static JsonObject serialize(String src) {
         JCLLexer lexer = new JCLLexer(CharStreams.fromString(src));
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         JCLParser parser = new JCLParser(tokens);
 
-        // Fail loud: collect syntax errors, exit non-zero if any.
+        // Fail loud: collect syntax errors, throw if any.
         FailingErrorListener errs = new FailingErrorListener();
         lexer.removeErrorListeners();
         lexer.addErrorListener(errs);
@@ -88,12 +114,10 @@ public final class JclSerializer {
 
         ParseTree tree = parser.startRule();
         if (errs.hasErrors()) {
-            System.err.print(errs.text());
-            System.exit(1);
+            throw new SyntaxErrorException(errs.text());
         }
 
-        JsonObject job = new JobBuilder().build((JCLParser.StartRuleContext) tree);
-        System.out.print(new Gson().toJson(job));
+        return new JobBuilder().build((JCLParser.StartRuleContext) tree);
     }
 
     // -------------------------------------------------------------------------
@@ -637,22 +661,70 @@ public final class JclSerializer {
         }
 
         /**
-         * Extract the individual keyword words from a singleOrMultipleValue context.
-         * For plain SHR -> ["SHR"]
-         * For (NEW,CATLG,DELETE) -> ["NEW","CATLG","DELETE"]
+         * Extract the positional words of a singleOrMultipleValue context, keeping an
+         * empty string for each omitted subparameter.
+         *
+         * <pre>
+         *   SHR                  -> ["SHR"]
+         *   (SHR)                -> ["SHR"]
+         *   (NEW,CATLG,DELETE)   -> ["NEW","CATLG","DELETE"]
+         *   (,PASS)              -> ["","PASS"]
+         *   (NEW,,DELETE)        -> ["NEW","","DELETE"]
+         * </pre>
+         *
+         * <p>Splits the context's terminals on COMMA instead of collecting its
+         * keywordOrSymbolic children, because a keyword collection cannot express an
+         * omitted slot: {@code (,PASS)} and {@code (PASS)} would both yield one word,
+         * and {@code (NEW,,DELETE)} would silently read as {@code (NEW,DELETE)}. The
+         * comma tokens are the only record of position.
+         *
+         * <p>Flattening to terminals also makes this independent of which
+         * singleOrMultipleValue alternative the parser chose: {@code (,PASS)} matches
+         * the parenList alternative and {@code (NEW,,DELETE)} does not, and the two
+         * put their keywords at different depths.
+         *
+         * <p>DISP is the only caller. A value with nested parentheses or an embedded
+         * equality (the PARM= shapes) would have its inner commas counted as
+         * separators here; DISP cannot contain either.
          */
         private JsonArray extractWords(JCLParser.SingleOrMultipleValueContext ctx) {
-            JsonArray arr = new JsonArray();
-            // Collect all keywordOrSymbolic children, which carry the actual word text
-            List<JCLParser.KeywordOrSymbolicContext> kwList = new ArrayList<>();
-            collectAll(ctx, JCLParser.KeywordOrSymbolicContext.class, kwList);
-            for (JCLParser.KeywordOrSymbolicContext kw : kwList) {
-                String word = kw.getText().trim();
-                if (!word.isEmpty()) {
-                    arr.add(word);
+            List<TerminalNode> terminals = new ArrayList<>();
+            collectTerminals(ctx, terminals);
+
+            List<String> slots = new ArrayList<>();
+            StringBuilder current = new StringBuilder();
+            for (TerminalNode t : terminals) {
+                int type = t.getSymbol().getType();
+                if (type == JCLParser.LPAREN || type == JCLParser.RPAREN) {
+                    continue;
                 }
+                if (type == JCLParser.COMMA) {
+                    slots.add(current.toString().trim());
+                    current.setLength(0);
+                    continue;
+                }
+                current.append(t.getText());
             }
+            slots.add(current.toString().trim());
+
+            JsonArray arr = new JsonArray();
+            // A value with no subparameter at all (DISP=()) is absent, not one empty slot.
+            if (slots.size() == 1 && slots.get(0).isEmpty()) {
+                return arr;
+            }
+            slots.forEach(arr::add);
             return arr;
+        }
+
+        /** ctx's terminal nodes, depth-first, in source order. */
+        private void collectTerminals(ParseTree node, List<TerminalNode> out) {
+            if (node instanceof TerminalNode t) {
+                out.add(t);
+                return;
+            }
+            for (int i = 0; i < node.getChildCount(); i++) {
+                collectTerminals(node.getChild(i), out);
+            }
         }
 
         /**
