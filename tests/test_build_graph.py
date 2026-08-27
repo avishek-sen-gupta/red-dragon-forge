@@ -1,6 +1,7 @@
 """The run-level failure guards: one bad member must not abort a corpus run,
 and what was skipped must be impossible to miss in the output."""
 
+import logging
 from pathlib import Path
 
 from cobble.build_graph import (
@@ -94,18 +95,23 @@ def test_the_failure_report_tallies_by_category() -> None:
     )
 
 
-def test_the_report_goes_to_stderr_whole(capsys) -> None:
-    """stderr, not stdout: the per-stage counts above it go to stdout, and under
-    ``make build | tee log`` a report on stdout is exactly what gets scrolled past."""
+def test_the_report_is_logged_whole_and_at_error_level(capsys, caplog) -> None:
+    """One record, not one per line: a handler that prefixes or timestamps each
+    record must not interleave anything through the middle of the report. ERROR
+    because it says the artifact just written is wrong, which is not progress
+    information -- a caller that raises the level to hide the per-stage counts
+    still has to see this."""
+    caplog.set_level(logging.INFO)
     failures = ["index JCL A.jcl: boom"]
 
     _report_failures(failures)
 
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == "\n".join(_failure_report_lines(failures)) + "\n"
+    assert caplog.messages == ["\n".join(_failure_report_lines(failures))]
+    assert caplog.records[0].levelno == logging.ERROR
+    assert capsys.readouterr() == ("", "")
 
 
-def test_no_failures_prints_no_report(capsys) -> None:
+def test_no_failures_logs_no_report(caplog) -> None:
+    caplog.set_level(logging.INFO)
     _report_failures([])
-    assert capsys.readouterr().err == ""
+    assert caplog.messages == []
