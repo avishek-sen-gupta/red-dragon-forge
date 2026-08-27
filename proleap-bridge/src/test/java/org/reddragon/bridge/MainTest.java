@@ -6,6 +6,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Copybook extension resolution from the command line.
@@ -46,5 +48,18 @@ public class MainTest {
 
         assertEquals(
             Arrays.asList("", "cpy", "CPY", "cob", "cbl", "copy", "COPY"), extensions);
+    }
+
+    @Test
+    public void scanCopyModeIsOffByDefault() {
+        assertFalse(Main.isScanCopyMode(new String[] {"-copybook-dir", "sym"}));
+    }
+
+    @Test
+    public void scanCopyModeIsRecognisedAmongOtherFlags() {
+        // The scan reads a path list from stdin and never resolves a copybook, so
+        // it takes none of the flags the ASG parse needs; it only has to be
+        // distinguishable from it.
+        assertTrue(Main.isScanCopyMode(new String[] {"-format", "FIXED", "-scan-copy"}));
     }
 }

@@ -2,11 +2,14 @@
 without running the COBOL parser.
 
 The expensive phase of a corpus build is COBOL parsing: one JVM subprocess per
-program, thousands of programs. A COPY the ProLeap preprocessor cannot resolve
+member, thousands of members. A COPY the ProLeap preprocessor cannot resolve
 fails that whole program -- so a corpus with widespread missing copybooks spends
-hours to report what a scan of the raw source can report in seconds.
+hours to report what a COPY scan reports in one JVM.
 
-Resolution mirrors ProLeap's CobolWordCopyBookFinderImpl EXACTLY, because a
+COPY statements come from the bridge's ``-scan-copy`` mode (see
+:mod:`cobble.copy_scan`), which parses with ProLeap's own
+``CobolPreprocessor.g4`` and resolves nothing. Resolution is what this module
+adds, and it mirrors ProLeap's CobolWordCopyBookFinderImpl EXACTLY, because a
 diagnostic that disagrees with the parser is worse than no diagnostic:
 
   - a candidate file matches iff its FULL FILENAME equalsIgnoreCase either the
@@ -18,10 +21,6 @@ Note this is stricter than CorpusIndex, which indexes every file in
 copybook_dirs whatever its extension. A name can therefore resolve to a
 file_path in the knowledge graph and still fail the parse, which is why the
 graph's UNRESOLVED count is a lower bound on what this reports.
-
-COPY statements come from the same scanner build_graph's CALL/COPY extractor
-uses (interpreter.project.cobol_imports), deliberately, so the two cannot
-disagree about what the corpus asks for.
 
 stdout (or --output) is JSON and nothing else: missing copybook name -> program
 -> the lines its COPY statements are on. The human summary goes to stderr, so
@@ -39,18 +38,19 @@ import logging
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Callable, Sequence
 
-from lark.exceptions import UnexpectedInput
-
+from cobble.copy_scan import ScanResult, make_copy_scanner, scan_copy_statements
 from cobble.corpus_config import CorpusConfig, load_corpus_config
-from cobble.interpreter.project.cobol_imports import extract_cobol_imports
-from cobble.interpreter.project.import_types import ImportKind
 from cobble.matching_files import matching_files
 
 logger = logging.getLogger(__name__)
 
 # name -> program -> lines of the COPY statements naming it
 MissingCopybooks = dict[str, dict[str, list[int]]]
+
+# Sequence[Path] -> one ScanResult per member, in the order given
+Scanner = Callable[[Sequence[Path]], list[ScanResult]]
 
 
 def _copybook_filenames(copybook_dirs: tuple[Path, ...]) -> set[str]:
@@ -82,42 +82,28 @@ def _candidate_filenames(name: str, extensions: tuple[str, ...]) -> list[str]:
 
 
 def find_missing_copybooks(
-    config: CorpusConfig, unscanned: list[str] | None = None
+    config: CorpusConfig, results: Sequence[ScanResult]
 ) -> MissingCopybooks:
-    """Scan every COBOL source for COPY statements the parser will not resolve.
+    """Group the COPYs in ``results`` that will not resolve, by copybook name.
 
-    Programs the scanner itself could not read are appended to ``unscanned``,
-    one string each. They matter to the reader: an unscanned program is one whose
-    missing copybooks are absent from the result, so every total here is a lower
-    bound by however many there are.
+    A member whose scan reported syntax errors still contributes every COPY it
+    named: ANTLR recovers and keeps reporting them, so dropping the member would
+    lose real answers to make the totals look tidier. Whether its list is
+    complete is the reader's business, and :func:`_report` says so.
     """
     available = _copybook_filenames(config.copybook_dirs)
 
     missing: MissingCopybooks = defaultdict(lambda: defaultdict(list))
-    for path in matching_files(config.cobol_dir, config.cobol_globs):
-        program = path.stem.upper()
-        try:
-            refs = extract_cobol_imports(path.read_bytes(), path)
-        except (OSError, UnexpectedInput) as exc:
-            # Corpus shape: unreadable, or source the COPY/CALL grammar chokes on
-            # (an odd number of quotes anywhere leaves a literal unterminated for
-            # the tokeniser). Narrow on purpose -- anything else is a bug in
-            # cobble and must surface rather than be filed as corpus shape.
-            logger.warning("could not scan %s: %s", path.name, exc)
-            if unscanned is not None:
-                unscanned.append(f"{path.name}: {str(exc).splitlines()[0]}")
-            continue
-        for ref in refs:
-            if ref.kind is not ImportKind.INCLUDE:
-                continue
-            name = ref.module_path.upper()
+    for result in results:
+        program = result.path.stem.upper()
+        for copy in result.copies:
+            name = copy.name.upper()
             if any(
-                c in available
-                for c in _candidate_filenames(name, config.copybook_extensions)
+                candidate in available
+                for candidate in _candidate_filenames(name, config.copybook_extensions)
             ):
                 continue
-            if ref.line is not None:
-                missing[name][program].append(ref.line)
+            missing[name][program].append(copy.line)
 
     # Sorted throughout: the JSON is diffed between runs to see whether staging
     # copybooks actually moved the number.
@@ -148,7 +134,7 @@ def _suffixes_on_disk(
 
 
 def _report(
-    missing: MissingCopybooks, config: CorpusConfig, unscanned: list[str]
+    missing: MissingCopybooks, config: CorpusConfig, results: Sequence[ScanResult]
 ) -> None:
     """Human summary, on stderr, with no corpus identifiers in it.
 
@@ -156,20 +142,29 @@ def _report(
     put, not in a terminal. What goes here is shape: how many, how concentrated,
     and which of the two fixes applies.
     """
-    total_programs = len(matching_files(config.cobol_dir, config.cobol_globs))
+    total_programs = len(results)
+    unreadable = [r for r in results if r.message]
+    degraded = [r for r in results if r.errors and not r.message]
     rule = "=" * 78
     print(f"\n{rule}", file=sys.stderr)
-    if unscanned:
+    if unreadable or degraded:
         # Said before the counts, not after: it qualifies every one of them.
-        print(
-            f"  !! {len(unscanned)} of {total_programs} program(s) COULD NOT BE "
-            f"SCANNED -- every count below is a lower bound",
-            file=sys.stderr,
-        )
+        if unreadable:
+            print(
+                f"  !! {len(unreadable)} of {total_programs} member(s) COULD NOT BE "
+                f"READ -- they contribute nothing below",
+                file=sys.stderr,
+            )
+        if degraded:
+            print(
+                f"  !! {len(degraded)} of {total_programs} member(s) had syntax "
+                f"errors -- their COPY lists may be incomplete",
+                file=sys.stderr,
+            )
         print(rule, file=sys.stderr)
     if not missing:
         print(
-            f"  No missing copybooks. {total_programs} programs scanned.",
+            f"  No missing copybooks. {total_programs} members scanned.",
             file=sys.stderr,
         )
         print(rule, file=sys.stderr)
@@ -239,6 +234,16 @@ def _report(
     print(rule, file=sys.stderr)
 
 
+def _bridge_scanner() -> Scanner:
+    """The production scanner: one bridge invocation for the whole corpus."""
+    runner, bridge_jar = make_copy_scanner()
+
+    def scan(paths: Sequence[Path]) -> list[ScanResult]:
+        return scan_copy_statements(paths, runner, bridge_jar)
+
+    return scan
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -256,13 +261,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, scan: Scanner | None = None) -> int:
     logging.basicConfig(level=logging.WARNING)
     args = _parse_args(argv)
     config = load_corpus_config(args.config)
 
-    unscanned: list[str] = []
-    missing = find_missing_copybooks(config, unscanned)
+    results = (scan or _bridge_scanner())(
+        matching_files(config.cobol_dir, config.cobol_globs)
+    )
+    missing = find_missing_copybooks(config, results)
     payload = json.dumps(missing, indent=2)
     if args.output is None:
         print(payload)
@@ -271,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(payload + "\n")
         print(f"Wrote {args.output}", file=sys.stderr)
 
-    _report(missing, config, unscanned)
+    _report(missing, config, results)
     return 0
 
 
