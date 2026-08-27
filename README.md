@@ -146,6 +146,37 @@ uv run python -m cobble.render_graph --config your-corpus.yaml   # optional HTML
 `cobble.compare`'s golden-file check stays CardDemo-specific: it's not
 meaningful against a different corpus's output.
 
+### Diagnose missing copybooks before parsing
+
+```bash
+uv run diagnose-copybooks --config your-corpus.yaml
+uv run diagnose-copybooks --config your-corpus.yaml --output out/missing-copybooks.json
+```
+
+Worth running first on a corpus you've never built. One `COPY` the ProLeap
+preprocessor can't resolve fails that whole member's parse, and parsing is the
+expensive phase — one JVM per member, thousands of members. This scans the
+`COPY` statements instead, so it reports in one pass what a full build would
+take hours to tell you.
+
+Resolution mirrors ProLeap's `CobolWordCopyBookFinderImpl` exactly, because a
+diagnostic that disagrees with the parser is worse than none: a candidate
+matches iff its full filename equals (ignoring case) the copy name itself or
+`<name>.<ext>` for one of the configured `copybook_extensions`, and
+`copybook_dirs` are listed non-recursively. That's stricter than the corpus
+index, which indexes every file in `copybook_dirs` whatever its extension — so
+a name can carry a real `file_path` in the graph and still fail the parse, and
+the graph's UNRESOLVED count is a lower bound on what this reports.
+
+stdout (or `--output`) is JSON and nothing else — missing name → program → the
+lines its `COPY` statements are on — so `| jq` works. The human summary goes to
+stderr. Those names are corpus identifiers; prefer `--output` to a shared
+terminal on a client corpus.
+
+This one is a console script rather than a `make` target: `[project.scripts]` in
+`pyproject.toml`, which is why the project is installed editable into the venv
+instead of `package = false`.
+
 ### Render the HTML visualization
 
 ```bash
