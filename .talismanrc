@@ -38,7 +38,7 @@ fileignoreconfig:
 # false positives, no credential. Checksummed rather than detector-ignored, so
 # editing this living ledger re-runs the scan (and needs a fresh checksum).
 - filename: docs/corpus-onboarding-blockers.md
-  checksum: ac0e0a789f52d34aeab04dc8b39f1e32ebd59bb8150d5b95fb6bb7d60525d5a0
+  checksum: 2189d70c1754f3fed4282b87abc826275f0aa6a8c2688538ddadd47dcb2e0c42
 # The DISP fix. Same false positive as the ledger above: talisman reads the JCL
 # disposition keyword PASS as a password-like token, so every assertion naming a
 # DISP subparameter trips it. Checksummed, not detector-ignored, so a future edit
