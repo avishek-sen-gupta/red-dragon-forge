@@ -396,6 +396,9 @@ patched:  789 members parse, 10075 steps
 transitions: 601 stay OK, 188 newly parse, 0 regress
 ```
 
+Both jars ran over every member in the same pass, 6 at a time with a 150s cap.
+That cap is why 789 understates the fix — see the third bullet below.
+
 +188 members, and the corpus's step count nearly doubles. `DelimiterStatementTest`
 covers the ladder plus the in-stream case; that last test passes unfixed, which is
 the point — it pins the boundary between the two kinds of `/*`.
@@ -421,15 +424,16 @@ begins *every* JCL statement into a loop alternation, and ANTLR's prediction cos
 for that outweighs what it recovers. Real defect, latent in this corpus — not
 worth the grammar change until a corpus shows it.
 
-### What is left: 71 members, three separate blockers
+### What is left: 71 members short of the whole corpus, three separate causes
 
 - **54** still fail with `mismatched input 'DD' expecting JOB` (45 at column 12,
   9 at column 11). Same symptom, different cause — the delimiter fix does not
   move them. Not yet analysed.
-- **9** never return: the bridge runs past 150s on a single member. Unrelated to
-  `/*` — 10 of the 11 slowest members contain no orphan `/*` at all. This has
-  always been there and was invisible because nothing in cobble times the
-  subprocess out, so a hung member looks like a slow run.
+- **9** hit a 150s cap in the sweep and were counted as failures. Most are not:
+  run one at a time they parse. See the parse-time entry under *Other open
+  blockers* — the sweep ran 6 bridges at once, so its own contention produced
+  most of that number. Excluding them the patched figure is nearer 797 than 789,
+  with one member genuinely unparseable inside 900s.
 - **8** assorted, one member each: `EXEC SORT,COND=(`, `no viable alternative` on
   an EXEC line (four members), `mismatched input '0' expecting {COMMENT_FLAG, SS}`,
   and two where the bridge's stderr is a line of corpus prose rather than an ANTLR
@@ -527,10 +531,20 @@ must never be hardcoded in the extractor.
   by accident — but the `clean` target still only knows the defaults.
 - **The online members need `make sym CONFIG=<corpus>` first**, otherwise every
   one of them fails with `Copybook not found`.
-- **The bridge can hang on a member.** Nine of 860 JCL members do not return
-  within 150s of `java -jar jcl-bridge`, and cobble never times the subprocess
-  out, so a hung member is indistinguishable from a slow run. Whatever the cause,
-  it is not `/*` — 10 of the 11 slowest members contain no orphan `/*`. See #6.
+- **Bridge parse time blows up on large members.** Screening all 860 JCL members
+  with 8 bridges running at once, 114 exceeded 20s — but that number is mostly the
+  screen's own CPU contention, so it is not the measurement. Re-run **one at a
+  time**, 113 of those 114 complete: mostly tens of seconds, slowest 599s. One
+  member (3317 lines) is still running at 900s.
+
+  Cost is steeply superlinear in line count and not monotonic in it — 2843 lines
+  parses in 105s while 2537 lines takes 599s — so member size is a correlate, not
+  the cause. Untriaged; ANTLR ALL(*) prediction is the obvious suspect.
+
+  Two consequences. cobble never times the subprocess out, so the one long member
+  makes a run look stuck with no diagnostic. And `CorpusIndex` parses all 860
+  serially, so these members dominate its wall-clock. Any timeout added has to be
+  a *reported* skip (see the index-failures entry), not a silent one.
 - **Empty-copybook synthesis** to get past `Copybook not found` for copybooks
   absent from the corpus entirely. Deferred by decision, not by oversight.
 
