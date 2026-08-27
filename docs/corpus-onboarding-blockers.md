@@ -129,9 +129,9 @@ work, so their correctness rides on `decode_source`'s own tests.
 10  blocker #6 — mismatched input 'EXEC'/'DD', statement group closed early
 ```
 
-Previously all 58 were lost. (The 601/860 figure under #6 came from a standalone
+Previously all 58 were lost. (The 601/860 baseline under #6 came from a standalone
 harness that decoded permissively, so it already counted these members — the loss
-was cobble's, not the grammar's.)
+was cobble's, not the grammar's. The #6 fix has since cleared those 10 too.)
 
 COBOL, all 52 high-byte members: the decode wall is gone, and what they hit next
 is not this blocker. Before the fix, a single one of them inside
@@ -298,19 +298,19 @@ have had to import lark to catch it. This mirrors `pic_parser.py:119`, which
 already converts `UnexpectedInput` into a domain error.
 
 **Deleting the handlers outright was considered and rejected on the measurement.**
-259 of 860 members currently fail JCL parse on #6, so an unguarded index would
+259 of 860 members failed JCL parse on #6 at the time, so an unguarded index would
 abort before any graph work and the production run would produce no output at all
-until #6 lands. Skip-and-report also matches what `build_graph` already does per
-member; the defect was never that it skipped, it was that it skipped quietly and
-lumped bugs in with corpus shape.
+(#6 has since landed and cut that count sharply). Skip-and-report also matches
+what `build_graph` already does per member; the defect was never that it skipped,
+it was that it skipped quietly and lumped bugs in with corpus shape.
 
 **Remaining gap, deliberate.** Only the `parse_jcl` call is inside the guarded
 block. `expand_procs` runs after it, so a `ProcExpansionError` — a circular PROC
 reference — still aborts the whole index. Latent in both corpora: the production
 config declares no `proclib_dirs`, and CardDemo's two PROC members do not recurse.
 
-**Measured.** Indexing the production corpus now reports 259 skipped members —
-the same 259 as #6, every one of them a `mismatched input ... expecting JOB`
+**Measured.** Indexing the production corpus reported 259 skipped members at the
+time — the same failures as #6, every one of them a `mismatched input ... expecting JOB`
 signature, with no `OSError` and no `CsdParseError` among them. That number was
 previously absent from the run's summary entirely. CardDemo is unaffected:
 `make compare` is an empty diff at 449 nodes / 803 edges, and its report still
@@ -318,7 +318,7 @@ shows the one pre-existing `CICS program COCRDSEC: not found` failure.
 
 ---
 
-## #6 Bare `/*` delimiter line — OPEN
+## #6 Bare `/*` delimiter line — FIXED
 
 **Bare `/*` is correct JCL.** It is the JES2 *delimiter statement*, terminating
 in-stream data (`DD *` / `DD DATA`). `//*` is the comment; `/*` is not.
@@ -334,70 +334,109 @@ DELIMITER_STATEMENT_2 : SA NEWLINE -> type(DELIMITER_STATEMENT) ;
 
 plus `DATA_MODE_TERMINATOR3` inside `mode DATA_MODE`, guarded on
 `dlmVals.contains("/*")`. ANTLR's longest-match means `/*`+spaces and `/*`+newline
-both beat the 2-character `SA`, so the token is produced correctly.
+both beat the 2-character `SA`, so the token is produced correctly. Those are two
+different `/*`: one that really terminates in-stream data is consumed in
+`DATA_MODE` and reaches the parser as `DATA_MODE_TERMINATOR3` *inside* the DD it
+belongs to, never as a `delimiterStatement`. Only an **orphan** `/*` — lexed in
+`DEFAULT_MODE`, terminating nothing — becomes a `DELIMITER_STATEMENT` token.
 
-**The parser is where it breaks.** `JCLParser.g4:1003` defines
-`delimiterStatement : DELIMITER_STATEMENT ;`, and it is referenced at exactly two
-places — lines 53 and 79 — both as `delimiterStatement*` at the **tail** of a
-job's statement group, after all `jclStep`s. It is absent from the mid-job
-alternation. So a `/*` between steps closes the group, and the enclosing `( … )+`
-restarts wanting a fresh JOB card.
+### Root cause — the group is written twice, not looped
 
-**Measured.** With #5 fixed, this is the *only* remaining JCL failure. All 860
-members through the bridge:
-
-```
-601  OK
-259  jcl-bridge failed (exit 1): line N:9 mismatched input 'EXEC' expecting JOB
-```
-
-One signature, no others — so the 259 figure is exact rather than sampled, and no
-`DispStatus` failure is left to confound it. 568 members contain a bare `/*`
-line, so containing one is not sufficient to fail; 309 of the 568 parse fine.
-That gap is unexplained and is the reason the mechanism below is still labelled a
-hypothesis.
-
-Not one error mentions `/*`. The `expecting JOB` symptom is the group having
-closed early — exactly the tail-position placement above.
-
-**Decisive test** on one affected member:
+The earlier reading of this entry blamed tail-position placement and left the
+mechanism labelled a hypothesis. The mechanism is now proven, and it is one level
+more general. `JCLParser.g4:26-81` reduces to:
 
 ```
-wholefile_asis:          FAIL line 70:9 mismatched input 'EXEC' expecting JOB
-wholefile_no_slashstar:  OK steps=8
+execJCL : jesExecutionControlStatements ( jobCard SEG ( SEG ) )+ EOF?
+   where SEG = prologue* statements* nullStatement* jes2CntlStatement* delimiterStatement*
 ```
 
-Removing only its 4 bare `/*` lines takes the member from zero steps to eight.
-The relevant region — note the `/*` with no preceding `DD *`, so it is not
-terminating in-stream data at all:
+`delimiterStatement` appears only at the end of `SEG`, and `SEG` is **spelled out
+twice rather than starred**. Two segments per job means two tails, so one job
+tolerates exactly **one** interior delimiter boundary. The second one closes the
+job, and the enclosing `( … )+` restarts wanting a fresh JOB card — reported at
+the next statement as `mismatched input 'EXEC' expecting JOB`. Nothing in the
+message mentions `/*`.
 
-```jcl
-//SYSIN    DD DSN=<library>(<member>),DISP=SHR
-/*
-//*--------------------------------------------------------------------
-//<step>   EXEC    PGM=IEBGENER          <- reported error position
+**Six lines reproduce it**, against the unpatched grammar:
+
+```
+0 interior /*   OK
+1 interior /*   OK
+2 interior /*   FAIL  line 6:10 mismatched input 'EXEC' expecting JOB
+3 interior /*   FAIL
 ```
 
-**Fix: grammar, not preprocessing.** Add `delimiterStatement` to the mid-job
-statement alternation in `JCLParser.g4`. The token and the rule both already
-exist; the grammar simply lists the rule in one of the two positions z/OS
-permits. This grammar has been patched in-tree before (see the cobble-authored
-comment on `DATA_MODE_TERMINATORX`).
+That is why every earlier synthetic parsed cleanly: each had at most one interior
+boundary. The break has nothing to do with long token streams or ANTLR's adaptive
+prediction — that theory is withdrawn.
 
-Preprocessing is rejected on the merits, not on taste: when `/*` genuinely
-terminates in-stream data the lexer consumes it as `DATA_MODE_TERMINATOR3` and
-the parser never sees a token, so a text-level stripper would have to
-re-implement `dlmVals` and `DATA_MODE` tracking to know which lines are safe to
-delete — and a custom `DLM=` means the delimiter is not `/*` at all.
+**Confirmed at corpus scale.** A line-level model of the lexer's modes, counting
+maximal runs of orphan `/*` that still have a step after them, predicts the
+failure over all 860 members at tp=246 fp=12 fn=12 tn=579. The 24 misses are the
+model's continuation and `DLM=` handling, not the mechanism.
 
-**Open risk — the mechanism is unproven.** Every minimal synthetic parses
-cleanly: `/*` bare, `/*` followed by 78 spaces, `/*` before and after `//*`
-comment lines, `/*` after a real `DD *` block, `/*` under a continued JOB card,
-`/*` after a PROC-form `EXEC`. The break only fires in long real token streams,
-which points at ANTLR's adaptive prediction choosing the tail-position reduction
-only once enough statements precede it. If that is the mechanism, the alternation
-edit may fix it or may relocate the ambiguity. Confirming requires `make jars`
-and a re-sweep of the 568 members.
+### The signature count was wrong
+
+This entry used to claim "one signature, no others" and put the failure count at
+259. That came from a sweep printing only its six commonest signatures. The full
+tally over 860 members is **260** failures: 252 carry the `expecting JOB`
+signature, 7 carry other signatures, and 1 member never returns (see below).
+
+### Fix
+
+`| delimiterStatement` added to the mid-job statement alternation in both copies
+of `SEG` (`JCLParser.g4:49-53`, `:75-79`). Four lines. The rule and the token both
+already existed; the grammar simply now lists the rule in one of the two positions
+z/OS permits.
+
+```
+baseline: 601 members parse, 5253 steps
+patched:  789 members parse, 10075 steps
+transitions: 601 stay OK, 188 newly parse, 0 regress
+```
+
++188 members, and the corpus's step count nearly doubles. `DelimiterStatementTest`
+covers the ladder plus the in-stream case; that last test passes unfixed, which is
+the point — it pins the boundary between the two kinds of `/*`.
+
+Preprocessing was rejected on the merits, not on taste: when `/*` genuinely
+terminates in-stream data the lexer consumes it as `DATA_MODE_TERMINATOR3` and the
+parser never sees a token, so a text-level stripper would have to re-implement
+`dlmVals` and `DATA_MODE` tracking to know which lines are safe to delete — and a
+custom `DLM=` means the delimiter is not `/*` at all.
+
+### The same defect for `nullStatement` and `jes2CntlStatement` — measured, left alone
+
+`nullStatement` and `jes2CntlStatement` sit in the same tail and inherit the same
+one-per-job allowance. Two mid-job `//` null statements fail; two mid-job
+`/*ROUTE` statements fail; both with the identical message. So the defect is real
+and general.
+
+Adding all three to the alternation measured **worse** than adding only
+`delimiterStatement`: 787 members and 9916 steps instead of 789 and 10075, one
+member that previously parsed now exceeding a 150s parse budget, and not one of
+the 54 residual failures below fixed. `nullStatement : SS` puts the token that
+begins *every* JCL statement into a loop alternation, and ANTLR's prediction cost
+for that outweighs what it recovers. Real defect, latent in this corpus — not
+worth the grammar change until a corpus shows it.
+
+### What is left: 71 members, three separate blockers
+
+- **54** still fail with `mismatched input 'DD' expecting JOB` (45 at column 12,
+  9 at column 11). Same symptom, different cause — the delimiter fix does not
+  move them. Not yet analysed.
+- **9** never return: the bridge runs past 150s on a single member. Unrelated to
+  `/*` — 10 of the 11 slowest members contain no orphan `/*` at all. This has
+  always been there and was invisible because nothing in cobble times the
+  subprocess out, so a hung member looks like a slow run.
+- **8** assorted, one member each: `EXEC SORT,COND=(`, `no viable alternative` on
+  an EXEC line (four members), `mismatched input '0' expecting {COMMENT_FLAG, SS}`,
+  and two where the bridge's stderr is a line of corpus prose rather than an ANTLR
+  error at all.
+
+CardDemo is unaffected: `make compare` is an empty diff at 449 nodes / 803 edges.
+12 jcl-bridge Java tests and 166 pytest tests pass.
 
 ---
 
@@ -488,6 +527,10 @@ must never be hardcoded in the extractor.
   by accident — but the `clean` target still only knows the defaults.
 - **The online members need `make sym CONFIG=<corpus>` first**, otherwise every
   one of them fails with `Copybook not found`.
+- **The bridge can hang on a member.** Nine of 860 JCL members do not return
+  within 150s of `java -jar jcl-bridge`, and cobble never times the subprocess
+  out, so a hung member is indistinguishable from a slow run. Whatever the cause,
+  it is not `/*` — 10 of the 11 slowest members contain no orphan `/*`. See #6.
 - **Empty-copybook synthesis** to get past `Copybook not found` for copybooks
   absent from the corpus entirely. Deferred by decision, not by oversight.
 
@@ -502,6 +545,10 @@ description finds the commit.
   `alternateRecordKeyClause`; cobble tracks it through the submodule pin.
 - **`PIC X(8)B(3)`** — `pic_parser` now accepts a `B` (blank-insertion)
   character in a PICTURE string.
+- **Bare `/*` closed the job early (#6)** — `delimiterStatement` reached only the
+  tail of a statement group that `execJCL` spells out twice instead of looping, so
+  a job allowed exactly one interior `/*`. Added to the mid-job alternation:
+  601 -> 789 of 860 members parse, 5253 -> 10075 steps, no regressions.
 - **`EXEC SQL` aborts the program** — `parse_statement` raised
   `Unknown COBOL statement type: 'EXEC_SQL'` with only Cicada's dialect parser
   registered; `cobble/sql/` now ports Squall's parse-time `DialectParser` and
