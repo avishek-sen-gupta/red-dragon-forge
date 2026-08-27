@@ -33,36 +33,20 @@ fileignoreconfig:
   checksum: e4c9700cfaa591e17cdf93e7cc8dc1a49b599e900aebeb9508a2aebceac9f510
 - filename: tests/test_canonical_export_cli.py
   checksum: c4940bdfb8db44013f12ade8253d61011bbf431e5380f9078ecde56c593f186e
-# Prose about JCL. Talisman reads the DISP keyword PASS as a password-like
-# token, plus ALTERNATE KEY, RPAREN and errors="replace" — twelve low-severity
-# false positives, no credential. Checksummed rather than detector-ignored, so
-# editing this living ledger re-runs the scan (and needs a fresh checksum).
 - filename: docs/corpus-onboarding-blockers.md
   checksum: d8e29abe150289d0eefbc0e2df48ae11ec032b8bb6958d636338182b0b8476ca
-# The DISP fix. Same false positive as the ledger above: talisman reads the JCL
-# disposition keyword PASS as a password-like token, so every assertion naming a
-# DISP subparameter trips it. Checksummed, not detector-ignored, so a future edit
-# to any of the three re-runs the scan.
 - filename: tests/jackal/test_bridge_parser.py
   checksum: cf74463907bafeba9a4bbc397b09a21ab8b955d40a4198d992bdc32ef6d53167
 - filename: jcl-bridge/src/test/java/org/jackal/jcl/JclSerializerTest.java
   checksum: 5a396c78efaa9bce2aca84d3a4fd3cf894c839ea9868362fe89e97b9fc7c32c0
 - filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
   checksum: 3d9bf96297b80850cfb0a5e4756e8af02e4624c6ffc790698c465b7f1b3bd436
-# The corpus_index split. Talisman reads a row of the resolver table as a secret
-# pattern (`NodeKind.COBOL_FILE: lambda index, kind, key: _NOT_FILE_BASED`), a
-# prose comment in the builder about dict last-write-wins, and the argument list
-# of the tests' `_patch(monkeypatch, **targets: object)` helper. Three
-# low-severity false positives, no credential. Checksummed, not
-# detector-ignored, so a future edit to any of them re-runs the scan.
 - filename: cobble/corpus_index.py
   checksum: e9891f67a9ac022fea61fb887d9787462277efcf3a78a12338d4150bde0db7cd
 - filename: cobble/corpus_index_builder.py
   checksum: 4ecb54db84a73168a3ea41fa55c1238b5d1d28d494cc5c0498f9cc2dc0d123df
-# A submodule pointer's whole content is the 40-hex commit SHA it pins, which
-# talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
-# all: "error parsing filesize ... submodule"). No checksum here on purpose —
-# one would go stale on every pin bump.
+- filename: cobble/diagnose_copybooks.py
+  checksum: a7934d75877efce70b445206ff01235a5ec4ecd93732eeec0eb42d36f6d0e863
 - filename: proleap-bridge/proleap-cobol-parser
   ignore_detectors:
     - filecontent

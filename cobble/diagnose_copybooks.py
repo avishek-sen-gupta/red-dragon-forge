@@ -27,6 +27,13 @@ stdout (or --output) is JSON and nothing else: missing copybook name -> program
 the JSON stays pipeable and a run writing names to a file does not also print
 them to a shared terminal.
 
+Read-only unless --fix DIR is passed, which writes an empty stub copybook into
+DIR for every missing name nobody staged. That buys a PARSE, not data: a stubbed
+COPY declares nothing, so whatever records, fields or PROCEDURE text the real
+member carried is absent from the graph. A name that is on disk under an
+unlisted suffix is deliberately never stubbed -- a stub beside the real member
+would resolve first and the real member would never be read again.
+
 Invoke as: uv run diagnose-copybooks --config <path>
 """
 
@@ -204,6 +211,103 @@ def _suffixes_on_disk(
     }
 
 
+# Fixed-format comment lines (asterisk in column 7), so a stub parses. Every line
+# is a comment on purpose: a zero-byte file is indistinguishable from a truncated
+# real member, and whoever finds this in a copybook dir a year from now needs to
+# know it declares nothing.
+STUB_TEXT = (
+    "      * GENERATED EMPTY STUB -- cobble diagnose-copybooks\n"
+    "      * The real member was not staged in any configured copybook dir.\n"
+    "      * Anything it declared is ABSENT from the parse and the graph.\n"
+)
+
+
+@dataclass(frozen=True)
+class StubWrite:
+    """What --fix did.
+
+    ``shadowed`` is the names it deliberately did NOT write, and ``configured``
+    says whether the directory it wrote into is one ProLeap will look in at all --
+    both are reasons a run that wrote files may still have fixed nothing.
+    """
+
+    written: tuple[Path, ...] = ()
+    shadowed: tuple[str, ...] = ()
+    configured: bool = True
+
+
+def _stub_filename(name: str, extensions: Sequence[str]) -> str:
+    """The corpus's own convention: the first real extension it lists, or the bare
+    name when the only thing listed is the empty extension."""
+    suffixes = tuple(ext for ext in extensions if ext)
+    return f"{name}.{suffixes[0]}" if suffixes else name
+
+
+def _write_stub(target: Path, extensions: Sequence[str], name: str) -> Path:
+    path = target / _stub_filename(name, extensions)
+    path.write_text(STUB_TEXT)
+    return path
+
+
+def write_stubs(
+    missing: MissingCopybooks, config: CorpusConfig, target: Path
+) -> StubWrite:
+    """Write an empty stub into ``target`` for every missing name nobody staged.
+
+    A name that IS on disk under a suffix copybook_extensions does not list is
+    skipped: a stub beside the real member would resolve first and the real member
+    would never be read again. That name needs a config edit, not a file.
+    """
+    shadowed = _suffixes_on_disk(tuple(missing), config.copybook_dirs)
+    target.mkdir(parents=True, exist_ok=True)
+    configured = frozenset(directory.resolve() for directory in config.copybook_dirs)
+    return StubWrite(
+        written=tuple(
+            _write_stub(target, config.copybook_extensions, name)
+            for name in sorted(missing)
+            if name not in shadowed
+        ),
+        shadowed=tuple(sorted(shadowed)),
+        configured=target.resolve() in configured,
+    )
+
+
+def _shadowed_lines(fix: StubWrite) -> tuple[str, ...]:
+    if not fix.shadowed:
+        return ()
+    return (
+        f"  {len(fix.shadowed)} name(s) NOT stubbed: on disk under a suffix "
+        f"copybook_extensions does not list.",
+        "    A stub beside the real member would resolve first and the real member "
+        "would never be read. Fix those in the config instead.",
+    )
+
+
+def _unconfigured_lines(fix: StubWrite, target: Path) -> tuple[str, ...]:
+    if fix.configured:
+        return ()
+    return (
+        f"  !! {target} is NOT one of this config's copybook_dirs. ProLeap lists "
+        f"those directories and nothing else,",
+        "  !! so these stubs resolve nothing until the directory is added to the "
+        "config.",
+    )
+
+
+def _fix_lines(fix: StubWrite, target: Path) -> tuple[str, ...]:
+    return (
+        RULE,
+        f"  Wrote {len(fix.written)} empty stub(s) to {target}",
+        *_unconfigured_lines(fix, target),
+        *_shadowed_lines(fix),
+        "  !! A stubbed COPY parses but declares nothing: the records, fields and "
+        "any PROCEDURE",
+        "  !! text the real member carried are ABSENT from the graph. This buys a "
+        "parse, not data.",
+        RULE,
+    )
+
+
 def _unreadable_lines(results: Sequence[ScanResult]) -> tuple[str, ...]:
     """The members that could not be read, said before the counts rather than
     after, because it qualifies every one of them."""
@@ -310,6 +414,11 @@ def _report(
     print("\n" + "\n".join(_report_lines(missing, config, results)), file=sys.stderr)
 
 
+def _report_fix(fix: StubWrite, target: Path) -> None:
+    """What --fix did, on stderr with the summary, and without naming a copybook."""
+    print("\n" + "\n".join(_fix_lines(fix, target)), file=sys.stderr)
+
+
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -323,6 +432,16 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Write the JSON here instead of stdout (the names are corpus identifiers)",
+    )
+    parser.add_argument(
+        "--fix",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Write an empty stub copybook into DIR for every missing name nobody "
+        "staged, so the parse gets past it. Buys a parse, not data. DIR should be "
+        "one of the config's copybook_dirs; anywhere else and ProLeap will not look "
+        "in it",
     )
     return parser.parse_args(argv)
 
@@ -350,8 +469,12 @@ def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
 
     results = scan(matching_files(config.cobol_dir, config.cobol_globs))
     missing = find_missing_copybooks(config, results)
+    # The JSON describes the corpus as it was FOUND, before any stub was written:
+    # it is diffed between runs to see whether a fix moved the number.
     _emit_json(json.dumps(missing, indent=2), args)
     _report(missing, config, results)
+    if args.fix:
+        _report_fix(write_stubs(missing, config, args.fix), args.fix)
     return 0
 
 
