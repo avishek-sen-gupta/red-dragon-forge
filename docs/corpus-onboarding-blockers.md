@@ -397,7 +397,8 @@ transitions: 601 stay OK, 188 newly parse, 0 regress
 ```
 
 Both jars ran over every member in the same pass, 6 at a time with a 150s cap.
-That cap is why 789 understates the fix — see the third bullet below.
+That cap is why 789 understates the fix: uncapped and serial it is 798 — see
+*What is left* below.
 
 +188 members, and the corpus's step count nearly doubles. `DelimiterStatementTest`
 covers the ladder plus the in-stream case; that last test passes unfixed, which is
@@ -424,20 +425,25 @@ begins *every* JCL statement into a loop alternation, and ANTLR's prediction cos
 for that outweighs what it recovers. Real defect, latent in this corpus — not
 worth the grammar change until a corpus shows it.
 
-### What is left: 71 members short of the whole corpus, three separate causes
+### What is left: 62 members short of the whole corpus, two separate causes
 
-- **54** still fail with `mismatched input 'DD' expecting JOB` (45 at column 12,
-  9 at column 11). Same symptom, different cause — the delimiter fix does not
-  move them. Not yet analysed.
-- **9** hit a 150s cap in the sweep and were counted as failures. Most are not:
-  run one at a time they parse. See the parse-time entry under *Other open
-  blockers* — the sweep ran 6 bridges at once, so its own contention produced
-  most of that number. Excluding them the patched figure is nearer 797 than 789,
-  with one member genuinely unparseable inside 900s.
+The 789-of-860 figure above comes from the comparison sweep, which capped each
+bridge at 150s while running 6 at a time and so charged its own contention to 11
+members. A real `CorpusIndex` build over the same corpus — serial, no cap — gives
+the honest number: **798 of 860 parse, 62 fail**, and the index completes.
+
+- **54** fail with `mismatched input 'DD' expecting JOB` (45 at column 12, 9 at
+  column 11). Same symptom as #6, different cause — the delimiter fix does not
+  move them. 40 of the 54 report the identical `line 35:12`, so most of the slice
+  is one repeated member shape rather than 54 distinct problems. Not yet analysed.
 - **8** assorted, one member each: `EXEC SORT,COND=(`, `no viable alternative` on
   an EXEC line (four members), `mismatched input '0' expecting {COMMENT_FLAG, SS}`,
   and two where the bridge's stderr is a line of corpus prose rather than an ANTLR
   error at all.
+
+No member is unparseable given time: the timeouts were all measurement artifacts.
+One member still takes ~900s (see the parse-time entry under *Other open
+blockers*), which is why a serial index run is slow, not why it fails.
 
 CardDemo is unaffected: `make compare` is an empty diff at 449 nodes / 803 edges.
 12 jcl-bridge Java tests and 166 pytest tests pass.
@@ -562,7 +568,7 @@ description finds the commit.
 - **Bare `/*` closed the job early (#6)** — `delimiterStatement` reached only the
   tail of a statement group that `execJCL` spells out twice instead of looping, so
   a job allowed exactly one interior `/*`. Added to the mid-job alternation:
-  601 -> 789 of 860 members parse, 5253 -> 10075 steps, no regressions.
+  601 -> 798 of 860 members parse, 5253 -> 10075 steps, no regressions.
 - **`EXEC SQL` aborts the program** — `parse_statement` raised
   `Unknown COBOL statement type: 'EXEC_SQL'` with only Cicada's dialect parser
   registered; `cobble/sql/` now ports Squall's parse-time `DialectParser` and
