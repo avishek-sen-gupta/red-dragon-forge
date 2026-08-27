@@ -27,8 +27,11 @@ stdout (or --output) is JSON and nothing else: missing copybook name -> program
 the JSON stays pipeable and a run writing names to a file does not also print
 them to a shared terminal.
 
-Invoke as: uv run python -m cobble.diagnose_copybooks --config <path>
+Invoke as: uv run diagnose-copybooks --config <path>
 """
+
+# ruff: noqa: T201 -- the JSON on stdout and the summary on stderr ARE this
+# script's output; it is a diagnostic entry point, not a library.
 
 from __future__ import annotations
 
@@ -292,8 +295,8 @@ def _report_lines(
     header = _unreadable_lines(results)
     if not missing:
         scanned = f"  No missing copybooks. {len(results)} members scanned."
-        return header + (scanned, RULE)
-    return header + _missing_lines(missing, config, results)
+        return (*header, scanned, RULE)
+    return (*header, *_missing_lines(missing, config, results))
 
 
 def _report(
@@ -324,6 +327,22 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _emit_json(payload: str, args: argparse.Namespace) -> None:
+    """--output if it was given, stdout otherwise.
+
+    Takes the parsed args rather than an optional path so that "no --output" stays
+    argparse's absent-flag default and does not become a None this module has to
+    thread through its own signatures.
+    """
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(payload + "\n")
+        # Only the path, never the names: they are the corpus's own identifiers.
+        print(f"Wrote {args.output}", file=sys.stderr)
+    else:
+        print(payload)
+
+
 def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
     logging.basicConfig(level=logging.WARNING)
     args = _parse_args(argv)
@@ -331,17 +350,20 @@ def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
 
     results = scan(matching_files(config.cobol_dir, config.cobol_globs))
     missing = find_missing_copybooks(config, results)
-    payload = json.dumps(missing, indent=2)
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(payload + "\n")
-        print(f"Wrote {args.output}", file=sys.stderr)
-    else:
-        print(payload)
-
+    _emit_json(json.dumps(missing, indent=2), args)
     _report(missing, config, results)
     return 0
 
 
+def cli() -> int:
+    """Entry point for the ``diagnose-copybooks`` console script.
+
+    A console script's generated wrapper calls its target with no arguments, so
+    reading sys.argv has to happen here rather than as a default on ``main``
+    (whose argv parameter is what the tests drive it through).
+    """
+    return main(sys.argv[1:])
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(cli())

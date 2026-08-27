@@ -11,8 +11,21 @@ dependencies = [
     "tqdm>=4.68.4",
 ]
 
-[tool.uv]
-package = false
+[project.scripts]
+diagnose-copybooks = "cobble.diagnose_copybooks:cli"
+
+# The project is installed (editable) into the venv so that [project.scripts]
+# exists at all -- `uv run diagnose-copybooks` needs an installed entry point,
+# which `package = false` cannot produce. Editable, so the installed cobble is
+# this working tree: the ANTLR-generated parser and the generated BMS copybooks
+# are picked up where codegen writes them, not copied into site-packages.
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "cobble"
 
 [dependency-groups]
 dev = [
