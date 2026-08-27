@@ -41,8 +41,9 @@ from cobble.matching_files import matching_files
 from cobble.jackal.dsn import InStreamDSN
 from cobble.jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.jcl.parser import parse_jcl
-from cobble.jackal.jcl.proc_expand import expand_procs
+from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs
 from cobble.jackal.jcl_graph import step_proc_provenance
+from cobble.jackal.model import Job
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +120,7 @@ class CorpusIndex:
         job_name = job.name.upper()
         self._jobs.setdefault(job_name, path)
 
-        expanded_job = expand_procs(job, proclib_dirs) if proclib_dirs else job
-        proc_of_step = step_proc_provenance(job, expanded_job) if proclib_dirs else {}
+        expanded_job, proc_of_step = self._expand(job, path, proclib_dirs)
 
         for step in expanded_job.steps:
             step_name = step.name.upper()
@@ -136,6 +136,42 @@ class CorpusIndex:
                     # even when the step is proc-expanded — a PROC can't carry
                     # DD * content of its own, only DD overrides.
                     self._instream.setdefault(instream_id, path)
+
+    def _expand(
+        self, job: Job, path: Path, proclib_dirs: tuple[Path, ...]
+    ) -> tuple[Job, dict[str, str]]:
+        """Inline the job's PROC calls, or report why not and carry on.
+
+        PROC resolution fails on corpus shape the same way parsing does — an
+        unbound symbol, a circular reference, a .prc that is not valid UTF-8, a
+        .prc the grammar rejects. This used to run outside the caller's
+        try/except, so ONE such member aborted the entire index build and every
+        member after it was never indexed at all.
+
+        The outer job itself parsed, so on failure its own steps stay indexed
+        unexpanded: those are exactly what the JCL states. Only the PROC's inner
+        steps are lost, and they are lost from the graph too — the JCL extractor
+        expands through this same function and reports the same member.
+
+        Narrow on purpose, as above: anything outside this handler is a bug in
+        cobble and must surface rather than be filed as a corpus problem.
+        """
+        if not proclib_dirs:
+            return job, {}
+        try:
+            expanded_job = expand_procs(job, proclib_dirs)
+        except (
+            ProcExpansionError,
+            JclParseError,
+            UnicodeDecodeError,
+            OSError,
+        ) as exc:
+            logger.warning(
+                "CorpusIndex: JCL %s failed to expand its PROCs: %s", path.name, exc
+            )
+            self._failures.append(f"index JCL {path.name}: {exc}")
+            return job, {}
+        return expanded_job, step_proc_provenance(job, expanded_job)
 
     def _index_csd_file(self, csd_file: Path) -> None:
         from cobble.cics.csd_parse import CsdParseError, parse_csd, parse_csd_files

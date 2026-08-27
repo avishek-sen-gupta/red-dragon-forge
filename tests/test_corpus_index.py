@@ -8,6 +8,7 @@ from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
 from cobble.jackal.dsn import DirectDSN, InStreamDSN
 from cobble.jackal.jcl.bridge_parser import JclParseError
+from cobble.jackal.jcl.proc_expand import ProcExpansionError
 from cobble.jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from cobble.jackal.value_parts import Literal
 
@@ -272,6 +273,84 @@ def test_instream_data_resolves_to_owning_jcl_file(
         index.resolve_file_path(NodeKind.INSTREAM_DATA, "ACCTFILE.STEP05.SYSIN")
         == jcl_path
     )
+
+
+def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``expand_procs`` sat outside the per-member try/except, so one unbound
+    symbol, one circular PROC or one non-UTF-8 .prc file aborted the whole index
+    build — every member after it never indexed at all."""
+    _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
+    _touch(tmp_path / "jcl" / "LATER.jcl", "//LATER JOB ...\n")
+    _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
+    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
+    (tmp_path / "cbl").mkdir()
+
+    monkeypatch.setattr(
+        "cobble.corpus_index.parse_jcl",
+        lambda text: Job(name=text.split()[0].lstrip("/"), steps=()),
+    )
+
+    def boom(job: Job, proclib_dirs) -> Job:
+        if job.name != "RUNSORT":
+            return job
+        raise ProcExpansionError("Unbound symbol '&HLQ'")
+
+    monkeypatch.setattr("cobble.corpus_index.expand_procs", boom)
+
+    index = CorpusIndex(config)
+    assert index.failures == ("index JCL RUNSORT.jcl: Unbound symbol '&HLQ'",)
+    # The member after the failing one still got indexed.
+    assert (
+        index.resolve_file_path(NodeKind.JOB, "LATER") == tmp_path / "jcl" / "LATER.jcl"
+    )
+
+
+def test_a_member_whose_procs_do_not_expand_keeps_its_unexpanded_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The outer job parsed; only the inlining failed. Its own steps are exactly
+    what the JCL says, so they stay in the index rather than vanishing with the
+    PROC's."""
+    jcl_path = _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
+    _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
+    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
+    (tmp_path / "cbl").mkdir()
+
+    job = Job(name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),))
+    monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
+
+    def boom(job: Job, proclib_dirs) -> Job:
+        raise ProcExpansionError("Circular PROC reference: SORTPROC -> SORTPROC")
+
+    monkeypatch.setattr("cobble.corpus_index.expand_procs", boom)
+
+    index = CorpusIndex(config)
+    assert index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01") == jcl_path
+
+
+def test_a_bug_in_proc_expansion_is_not_filed_as_a_corpus_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guards the new handler's width: PROC resolution failures are corpus shape,
+    a TypeError in cobble's own expansion code is not."""
+    _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
+    _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
+    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
+    (tmp_path / "cbl").mkdir()
+
+    monkeypatch.setattr(
+        "cobble.corpus_index.parse_jcl", lambda text: Job(name="RUNSORT", steps=())
+    )
+
+    def bug(job: Job, proclib_dirs) -> Job:
+        raise TypeError("'NoneType' object is not iterable")
+
+    monkeypatch.setattr("cobble.corpus_index.expand_procs", bug)
+
+    with pytest.raises(TypeError):
+        CorpusIndex(config)
 
 
 def test_step_from_proc_resolves_to_the_proc_file(
