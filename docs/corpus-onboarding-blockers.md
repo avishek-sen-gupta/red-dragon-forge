@@ -104,7 +104,9 @@ back with `StandardCharsets.UTF_8`, so `U+00A6` round-trips as one Java `char`.
 and the site is latent in both corpora: the production config declares no
 `proclib_dirs` at all, so `expand_procs` is never called, and CardDemo's two PROC
 members are pure ASCII. A corpus with a high byte in a PROC needs this fixed, and
-then the placement question reopens.
+then the placement question reopens. Until then the `UnicodeDecodeError` it raises
+is at least caught: `CorpusIndex._expand` reports the member and carries on rather
+than aborting the index build (see the index-failures section).
 
 **Sites left tolerant-but-lossy**, unchanged on purpose to keep the diff about
 this blocker: `cobol_imports.py:99`, `build_graph.py:187` and `cics/csd_parse.py`
@@ -304,10 +306,27 @@ abort before any graph work and the production run would produce no output at al
 what `build_graph` already does per member; the defect was never that it skipped,
 it was that it skipped quietly and lumped bugs in with corpus shape.
 
-**Remaining gap, deliberate.** Only the `parse_jcl` call is inside the guarded
-block. `expand_procs` runs after it, so a `ProcExpansionError` — a circular PROC
-reference — still aborts the whole index. Latent in both corpora: the production
-config declares no `proclib_dirs`, and CardDemo's two PROC members do not recurse.
+**Two gaps closed afterwards.** `expand_procs` ran *after* the guarded block, so
+one unbound symbol, one circular PROC reference or one `.prc` file that is not
+valid UTF-8 aborted the whole index — and every member after it was never indexed.
+It is now `CorpusIndex._expand`, guarded on
+`(ProcExpansionError, JclParseError, UnicodeDecodeError, OSError)`. The outer job
+parsed, so on failure its own steps stay indexed *unexpanded*: those are exactly
+what the JCL states, and the PROC's inner steps are lost from the graph too since
+the JCL extractor expands through the same function.
+
+`build_graph._load_transid_to_program` had the same shape — `parse_csd` unguarded,
+called before the writer opens, so a malformed CSD killed the run outright while
+`CorpusIndex._index_csd_file` guarded that very same file two calls later. Now
+guarded per file, reporting into the same list.
+
+**The report is loud.** It was a quiet `print` on stdout after `Wrote …`, trivially
+scrolled past on a corpus where 62 members are missing from a graph whose printed
+counts look finished. `_report_failures` now writes a ruled block to **stderr**
+saying `N FAILURE(S) -- THIS GRAPH IS INCOMPLETE`, then a tally by category, then
+the lines. The tally is the part a reader acts on: 62 detail lines hide the shape,
+`54 index JCL` does not. Exit code stays 0 — the run did what it could, and a
+non-zero exit would break callers that legitimately tolerate a partial corpus.
 
 **Measured.** Indexing the production corpus reported 259 skipped members at the
 time — the same failures as #6, every one of them a `mismatched input ... expecting JOB`

@@ -48,7 +48,7 @@ from cobble.interpreter.project.graph_types import (
     NodeKind,
 )
 
-from cobble.cics.csd_parse import parse_csd
+from cobble.cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
 
 from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
@@ -73,11 +73,66 @@ def _make_parser(config: CorpusConfig) -> ProLeapCobolParser:
     )
 
 
-def _load_transid_to_program(config: CorpusConfig) -> dict[str, str]:
+def _load_transid_to_program(
+    config: CorpusConfig, failures: list[str]
+) -> dict[str, str]:
+    # Guarded per file, like every other corpus read in this module. Unguarded,
+    # one malformed CSD aborted the run here -- before the writer even opened --
+    # while CorpusIndex went on to guard the very same file and report it.
     merged: dict[str, str] = {}
     for csd_file in config.csd_files:
-        merged.update(parse_csd(csd_file))
+        try:
+            merged.update(parse_csd(csd_file))
+        except (CsdParseError, OSError) as exc:
+            logger.warning("CSD %s failed to parse: %s", csd_file.name, exc)
+            failures.append(f"CSD {csd_file.name}: {exc}")
     return merged
+
+
+def _report_failures(failures: list[str]) -> None:
+    """Say loudly, on stderr, that the graph just written is missing things.
+
+    A skipped member is not a warning about the run -- it is a statement about
+    the output: those jobs, steps, programs and datasets are absent from
+    nodes.jsonl, and every reference to them resolves UNRESOLVED. The counts
+    printed above this look like a finished graph either way, so this has to be
+    hard to scroll past and it has to name the shape of what went wrong, not
+    just list lines.
+    """
+    if not failures:
+        return
+
+    tally: dict[str, int] = {}
+    for failure in failures:
+        # "index JCL X.jcl: ...", "JCL X.jcl: ...", "COBOL X.cbl: ..." -- the
+        # category is everything before the member name.
+        head = failure.split(":", 1)[0].rsplit(" ", 1)[0] or failure
+        tally[head] = tally.get(head, 0) + 1
+
+    rule = "=" * 78
+    print(f"\n{rule}", file=sys.stderr)
+    print(
+        f"!!  {len(failures)} FAILURE(S) -- THIS GRAPH IS INCOMPLETE", file=sys.stderr
+    )
+    print(
+        "!!  The members below were SKIPPED. Everything in them is absent from",
+        file=sys.stderr,
+    )
+    print(
+        "!!  nodes.jsonl/edges.jsonl and every reference to it is UNRESOLVED.",
+        file=sys.stderr,
+    )
+    print(rule, file=sys.stderr)
+    # Commonest category first, ties by name. Sorted on negated counts rather
+    # than with a sort-order callback, which talisman reads as a secret pattern.
+    for negated_count, category in sorted(
+        (-count, category) for category, count in tally.items()
+    ):
+        print(f"  {-negated_count:5}  {category}", file=sys.stderr)
+    print(rule, file=sys.stderr)
+    for failure in failures:
+        print(f"  - {failure}", file=sys.stderr)
+    print(rule, file=sys.stderr)
 
 
 def _build_jcl_graph(
@@ -361,7 +416,7 @@ def main() -> int:
     # they belong in the same report as the graph-building failures below.
     failures.extend(corpus_index.failures)
 
-    transid_to_program = _load_transid_to_program(config)
+    transid_to_program = _load_transid_to_program(config, failures)
     cics_program_names = set(transid_to_program.values())
 
     config.out_dir.mkdir(parents=True, exist_ok=True)
@@ -389,10 +444,7 @@ def main() -> int:
     )
     print(f"Wrote {nodes_jsonl}\nWrote {edges_jsonl}")
 
-    if failures:
-        print(f"\n{len(failures)} failure(s) (skipped, did not abort the run):")
-        for f in failures:
-            print(f"  - {f}")
+    _report_failures(failures)
     return 0
 
 
