@@ -49,7 +49,8 @@ execJCL
 			| procStatement 
 			| pendStatement 
 			| scheduleStatement 
-			| setStatement)*
+			| setStatement
+			| delimiterStatement)*
 			nullStatement* jes2CntlStatement* delimiterStatement*
 		(
 			(jclCommandStatement 
@@ -75,7 +76,8 @@ execJCL
 			| procStatement 
 			| pendStatement 
 			| scheduleStatement 
-			| setStatement)*
+			| setStatement
+			| delimiterStatement)*
 			nullStatement* jes2CntlStatement* delimiterStatement*))+
 	EOF?
 	;
