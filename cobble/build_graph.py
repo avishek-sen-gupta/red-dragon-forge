@@ -12,12 +12,21 @@ cobble/corpus_config.py) passed via --config -- nothing about the corpus is
 hardcoded here. Writes <out_dir>/{nodes,edges}.jsonl and prints per-extractor
 + merged counts.
 
+Every extractor RETURNS what it skipped rather than appending to a shared list,
+so a failure is part of a stage's result instead of an effect it had on its
+caller's state, and the run's report is one fold over those results. The
+GraphWriter it feeds is the one real accumulator here, and deliberately so: its
+job is to stream to disk.
+
 Invoke as: uv run python -m cobble.build_graph --config <path>
 
 Env:
     PROLEAP_BRIDGE_JAR=$(pwd)/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
     JCL_BRIDGE_JAR=$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
 """
+
+# ruff: noqa: T201 -- the per-stage counts and the failure report ARE this
+# script's output; it is the run's entry point, not a library.
 
 from __future__ import annotations
 
@@ -26,38 +35,52 @@ import json
 import logging
 import os
 import sys
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
+from types import MappingProxyType
 
 from tqdm import tqdm
 
+from cobble.cics.csd_parse import CsdParseError, parse_csd
+from cobble.cics.flow_map import extract_transaction_flow_graph
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
 from cobble.file_location import to_json_value
-from cobble.matching_files import matching_files
-
 from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
 from cobble.interpreter.cobol.source_text import decode_source
 from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from cobble.interpreter.project.cobol_imports import extract_cobol_imports
-from cobble.interpreter.project.import_types import ImportKind
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
-
-from cobble.cics.csd_parse import CsdParseError, parse_csd
-from cobble.cics.flow_map import extract_transaction_flow_graph
-
+from cobble.interpreter.project.import_types import ImportKind, ImportRef
 from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
 from cobble.jackal.jcl_graph import extract_jcl_graph
-
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobble.knowledge_graph.merge import merge_graph
+from cobble.matching_files import matching_files
 
 logger = logging.getLogger(__name__)
+
+RULE = "=" * 78
+
+_NO_TRANSACTIONS: Mapping[str, str] = MappingProxyType({})
+
+# The two ref kinds the CALL/COPY scan produces an edge for, and what that edge
+# is. A ref of any other kind is not an import of a corpus artefact.
+_REF_GRAPH_SHAPE: Mapping[ImportKind, tuple[NodeKind, EdgeKind]] = MappingProxyType(
+    {
+        ImportKind.INCLUDE: (NodeKind.COPYBOOK, EdgeKind.COPY),
+        ImportKind.REQUIRE: (NodeKind.PROGRAM, EdgeKind.CALL),
+    }
+)
 
 
 def _bridge_jar() -> str:
@@ -73,23 +96,80 @@ def _make_parser(config: CorpusConfig) -> ProLeapCobolParser:
     )
 
 
-def _load_transid_to_program(
-    config: CorpusConfig, failures: list[str]
-) -> dict[str, str]:
+def _out_paths(config: CorpusConfig) -> tuple[Path, Path]:
+    return config.out_dir / "nodes.jsonl", config.out_dir / "edges.jsonl"
+
+
+# ── CSD: transaction -> program ──────────────────────────────────
+
+
+@dataclass(frozen=True)
+class _CsdRead:
+    """The transaction map one or more CSD files yielded, and what would not read."""
+
+    transid_to_program: Mapping[str, str] = _NO_TRANSACTIONS
+    failures: tuple[str, ...] = ()
+
+
+def _read_one_csd(csd_file: Path) -> _CsdRead:
     # Guarded per file, like every other corpus read in this module. Unguarded,
     # one malformed CSD aborted the run here -- before the writer even opened --
     # while CorpusIndex went on to guard the very same file and report it.
-    merged: dict[str, str] = {}
-    for csd_file in config.csd_files:
-        try:
-            merged.update(parse_csd(csd_file))
-        except (CsdParseError, OSError) as exc:
-            logger.warning("CSD %s failed to parse: %s", csd_file.name, exc)
-            failures.append(f"CSD {csd_file.name}: {exc}")
-    return merged
+    try:
+        return _CsdRead(transid_to_program=parse_csd(csd_file))
+    except (CsdParseError, OSError) as exc:
+        logger.warning("CSD %s failed to parse: %s", csd_file.name, exc)
+        return _CsdRead(failures=(f"CSD {csd_file.name}: {exc}",))
 
 
-def _report_failures(failures: list[str]) -> None:
+def _load_transid_to_program(config: CorpusConfig) -> _CsdRead:
+    """Merge every configured CSD's transaction map, later files winning."""
+    reads = tuple(map(_read_one_csd, config.csd_files))
+    return _CsdRead(
+        transid_to_program=MappingProxyType(
+            dict(chain.from_iterable(read.transid_to_program.items() for read in reads))
+        ),
+        failures=tuple(chain.from_iterable(read.failures for read in reads)),
+    )
+
+
+# ── the failure report ───────────────────────────────────────────
+
+
+def _category(failure: str) -> str:
+    """Everything before the member name: given "index JCL X.jcl: ...",
+    "JCL X.jcl: ..." or "COBOL X.cbl: ...", the category is the leading words."""
+    return failure.split(":", 1)[0].rsplit(" ", 1)[0] or failure
+
+
+def _tally_lines(failures: Sequence[str]) -> tuple[str, ...]:
+    """Commonest category first, ties by name. Sorted on negated counts rather
+    than with a sort-order callback, which talisman reads as a secret pattern."""
+    tally = Counter(map(_category, failures))
+    return tuple(
+        f"  {-negated_count:5}  {category}"
+        for negated_count, category in sorted(
+            (-count, category) for category, count in tally.items()
+        )
+    )
+
+
+def _failure_report_lines(failures: Sequence[str]) -> tuple[str, ...]:
+    return (
+        "",
+        RULE,
+        f"!!  {len(failures)} FAILURE(S) -- THIS GRAPH IS INCOMPLETE",
+        "!!  The members below were SKIPPED. Everything in them is absent from",
+        "!!  nodes.jsonl/edges.jsonl and every reference to it is UNRESOLVED.",
+        RULE,
+        *_tally_lines(failures),
+        RULE,
+        *(f"  - {failure}" for failure in failures),
+        RULE,
+    )
+
+
+def _report_failures(failures: Sequence[str]) -> None:
     """Say loudly, on stderr, that the graph just written is missing things.
 
     A skipped member is not a warning about the run -- it is a statement about
@@ -101,297 +181,441 @@ def _report_failures(failures: list[str]) -> None:
     """
     if not failures:
         return
+    print("\n".join(_failure_report_lines(failures)), file=sys.stderr)
 
-    tally: dict[str, int] = {}
-    for failure in failures:
-        # "index JCL X.jcl: ...", "JCL X.jcl: ...", "COBOL X.cbl: ..." -- the
-        # category is everything before the member name.
-        head = failure.split(":", 1)[0].rsplit(" ", 1)[0] or failure
-        tally[head] = tally.get(head, 0) + 1
 
-    rule = "=" * 78
-    print(f"\n{rule}", file=sys.stderr)
-    print(
-        f"!!  {len(failures)} FAILURE(S) -- THIS GRAPH IS INCOMPLETE", file=sys.stderr
-    )
-    print(
-        "!!  The members below were SKIPPED. Everything in them is absent from",
-        file=sys.stderr,
-    )
-    print(
-        "!!  nodes.jsonl/edges.jsonl and every reference to it is UNRESOLVED.",
-        file=sys.stderr,
-    )
-    print(rule, file=sys.stderr)
-    # Commonest category first, ties by name. Sorted on negated counts rather
-    # than with a sort-order callback, which talisman reads as a secret pattern.
-    for negated_count, category in sorted(
-        (-count, category) for category, count in tally.items()
-    ):
-        print(f"  {-negated_count:5}  {category}", file=sys.stderr)
-    print(rule, file=sys.stderr)
-    for failure in failures:
-        print(f"  - {failure}", file=sys.stderr)
-    print(rule, file=sys.stderr)
+# ── extractor 1: JCL ─────────────────────────────────────────────
+
+
+def _jcl_file_failures(
+    path: Path, config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter
+) -> tuple[str, ...]:
+    try:
+        nodes, edges = extract_jcl_graph(
+            decode_source(path.read_bytes()),
+            corpus_index,
+            proclib_dirs=config.proclib_dirs,
+        )
+    except Exception as exc:
+        logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
+        return (f"JCL {path.name}: {exc}",)
+    writer.add_all(nodes, edges)
+    return ()
 
 
 def _build_jcl_graph(
-    config: CorpusConfig,
-    corpus_index: CorpusIndex,
-    writer: GraphWriter,
-    failures: list[str],
-) -> None:
+    config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter
+) -> tuple[str, ...]:
     jcl_files = matching_files(config.jcl_dir, config.jcl_globs)
-    for path in tqdm(jcl_files, desc="JCL", unit="file"):
-        try:
-            nodes, edges = extract_jcl_graph(
-                decode_source(path.read_bytes()),
-                corpus_index,
-                proclib_dirs=config.proclib_dirs,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)
-            failures.append(f"JCL {path.name}: {exc}")
-            continue
-        writer.add_all(nodes, edges)
+    failures = tuple(
+        chain.from_iterable(
+            _jcl_file_failures(path, config, corpus_index, writer)
+            for path in tqdm(jcl_files, desc="JCL", unit="file")
+        )
+    )
     print(f"JCL: {len(jcl_files)} files")
+    return failures
+
+
+# ── extractor 2: CALL/COPY ───────────────────────────────────────
+
+
+def _program_node(program: str, corpus_index: CorpusIndex) -> GraphNode:
+    return GraphNode(
+        id=program,
+        kind=NodeKind.PROGRAM,
+        file_path=to_json_value(
+            corpus_index.resolve_file_path(NodeKind.PROGRAM, program)
+        ),
+    )
+
+
+def _ref_node(target: str, kind: NodeKind, corpus_index: CorpusIndex) -> GraphNode:
+    return GraphNode(
+        id=target,
+        kind=kind,
+        file_path=to_json_value(corpus_index.resolve_file_path(kind, target)),
+    )
+
+
+def _ref_edge(
+    program: str, target: str, target_kind: NodeKind, kind: EdgeKind
+) -> GraphEdge:
+    return GraphEdge(
+        source=program,
+        source_kind=NodeKind.PROGRAM,
+        target=target,
+        target_kind=target_kind,
+        kind=kind,
+    )
+
+
+def _graph_refs(refs: Sequence[ImportRef]) -> tuple[tuple[str, ImportKind], ...]:
+    """The refs that become an edge, as (uppercased target, ref kind)."""
+    return tuple(
+        (ref.module_path.upper(), ref.kind)
+        for ref in refs
+        if ref.kind in _REF_GRAPH_SHAPE
+    )
+
+
+def _ref_graph(
+    program: str, refs: Sequence[ImportRef], corpus_index: CorpusIndex
+) -> tuple[tuple[GraphNode, ...], tuple[GraphEdge, ...]]:
+    """One program's COPY/CALL targets as nodes plus the edges reaching them."""
+    graphed = _graph_refs(refs)
+    return (
+        tuple(
+            _ref_node(target, _REF_GRAPH_SHAPE[kind][0], corpus_index)
+            for target, kind in graphed
+        ),
+        tuple(
+            _ref_edge(program, target, *_REF_GRAPH_SHAPE[kind])
+            for target, kind in graphed
+        ),
+    )
+
+
+def _has_working_storage(source: bytes) -> bool:
+    return any(
+        line.strip().upper().split()[:2] == ["WORKING-STORAGE", "SECTION."]
+        for line in source.decode("utf-8", errors="replace").splitlines()
+        if line.strip()
+    )
+
+
+@dataclass(frozen=True)
+class _Scanned:
+    """One program's contribution to the CALL closure, or why it made none."""
+
+    program: str
+    call_targets: frozenset[str] = frozenset()
+    has_working_storage: bool = False
+    failures: tuple[str, ...] = ()
+
+
+def _scan_program(
+    path: Path, corpus_index: CorpusIndex, writer: GraphWriter
+) -> _Scanned:
+    program = path.stem.upper()
+    try:
+        source = path.read_bytes()
+        refs = extract_cobol_imports(source, path)
+    except Exception as exc:
+        logger.warning("COBOL %s failed: %s", path.name, exc, exc_info=True)
+        return _Scanned(program=program, failures=(f"COBOL {path.name}: {exc}",))
+    nodes, edges = _ref_graph(program, refs, corpus_index)
+    writer.add_all((_program_node(program, corpus_index), *nodes), edges)
+    return _Scanned(
+        program=program,
+        call_targets=frozenset(
+            target for target, kind in _graph_refs(refs) if kind == ImportKind.REQUIRE
+        ),
+        has_working_storage=_has_working_storage(source),
+    )
+
+
+def _call_closure(
+    frontier: frozenset[str], seen: frozenset[str], calls: Mapping[str, frozenset[str]]
+) -> frozenset[str]:
+    """Every program reachable from ``frontier`` over CALL edges within the corpus.
+
+    Breadth at a time, and only through programs the corpus actually has: a CALL
+    to something absent is an edge in the graph but not a place the closure can
+    continue from.
+    """
+    if not frontier:
+        return seen
+    reached = frozenset(
+        chain.from_iterable(calls.get(program, frozenset()) for program in frontier)
+    ).intersection(calls)
+    return _call_closure(reached - seen - frontier, seen | frontier, calls)
+
+
+def _dfheiblk_graph(
+    subprograms: Sequence[str], corpus_index: CorpusIndex
+) -> tuple[tuple[GraphNode, ...], tuple[GraphEdge, ...]]:
+    """The transitive DFHEIBLK copies, one node and one edge per subprogram.
+
+    A CICS program that statically CALLs a corpus program causes that callee's
+    source to be CICS-source-prepassed (inject COPY DFHEIBLK after
+    WORKING-STORAGE SECTION), so each reached non-CICS program that HAS a
+    WORKING-STORAGE SECTION gains a PROGRAM -> COPYBOOK(DFHEIBLK) COPY edge.
+    """
+    return (
+        tuple(
+            _ref_node("DFHEIBLK", NodeKind.COPYBOOK, corpus_index) for _ in subprograms
+        ),
+        tuple(
+            _ref_edge(sub, "DFHEIBLK", NodeKind.COPYBOOK, EdgeKind.COPY)
+            for sub in subprograms
+        ),
+    )
+
+
+def _prepassed_subprograms(
+    scanned: Sequence[_Scanned], cics_program_names: frozenset[str]
+) -> tuple[str, ...]:
+    """The non-CICS corpus programs the CICS CALL closure reaches that have a
+    WORKING-STORAGE SECTION for the injected COPY to follow.
+
+    A program that failed to scan is not in the corpus adjacency at all, so a
+    CALL into it is an edge the closure cannot continue through -- same as the
+    ``continue`` it replaced.
+    """
+    calls = MappingProxyType(
+        {item.program: item.call_targets for item in scanned if not item.failures}
+    )
+    with_working_storage = frozenset(
+        item.program for item in scanned if item.has_working_storage
+    )
+    reached = _call_closure(cics_program_names, frozenset(), calls)
+    return tuple(sorted((reached - cics_program_names) & with_working_storage))
 
 
 def _build_call_copy_graph(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
-    cics_program_names: set[str],
+    cics_program_names: frozenset[str],
     writer: GraphWriter,
-    failures: list[str],
-) -> None:
+) -> tuple[str, ...]:
     """CALL/COPY graph for every COBOL program in the corpus, VM-free.
 
     Reproduces the (kind, id) node/edge identity of production's
     interpreter.project.cobol_connections.extract_cobol_connections output from
     the raw COPY/CALL scan (interpreter.project.cobol_imports), plus the single
     transitive DFHEIBLK edge production gets from CICS-source-prepassing each
-    subprogram a CICS program statically CALLs (see below).
+    subprogram a CICS program statically CALLs.
     """
     cbl_files = matching_files(config.cobol_dir, config.cobol_globs)
-
-    # per-program CALL/COPY edges + CALL adjacency + working-storage presence
-    call_targets: dict[str, set[str]] = {}
-    has_ws: dict[str, bool] = {}
-    for path in tqdm(cbl_files, desc="CALL/COPY", unit="program"):
-        prog = path.stem.upper()
-        try:
-            src = path.read_bytes()
-            refs = extract_cobol_imports(src, path)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("COBOL %s failed: %s", path.name, exc, exc_info=True)
-            failures.append(f"COBOL {path.name}: {exc}")
-            continue
-        writer.add_node(
-            GraphNode(
-                id=prog,
-                kind=NodeKind.PROGRAM,
-                file_path=to_json_value(
-                    corpus_index.resolve_file_path(NodeKind.PROGRAM, prog)
-                ),
-            )
+    scanned = tuple(
+        _scan_program(path, corpus_index, writer)
+        for path in tqdm(cbl_files, desc="CALL/COPY", unit="program")
+    )
+    writer.add_all(
+        *_dfheiblk_graph(
+            _prepassed_subprograms(scanned, cics_program_names), corpus_index
         )
-        tgts: set[str] = set()
-        for ref in refs:
-            if ref.kind == ImportKind.INCLUDE:
-                tid = ref.module_path.upper()
-                writer.add_node(
-                    GraphNode(
-                        id=tid,
-                        kind=NodeKind.COPYBOOK,
-                        file_path=to_json_value(
-                            corpus_index.resolve_file_path(NodeKind.COPYBOOK, tid)
-                        ),
-                    )
-                )
-                writer.add_edge(
-                    GraphEdge(
-                        source=prog,
-                        source_kind=NodeKind.PROGRAM,
-                        target=tid,
-                        target_kind=NodeKind.COPYBOOK,
-                        kind=EdgeKind.COPY,
-                    )
-                )
-            elif ref.kind == ImportKind.REQUIRE:
-                tid = ref.module_path.upper()
-                writer.add_node(
-                    GraphNode(
-                        id=tid,
-                        kind=NodeKind.PROGRAM,
-                        file_path=to_json_value(
-                            corpus_index.resolve_file_path(NodeKind.PROGRAM, tid)
-                        ),
-                    )
-                )
-                writer.add_edge(
-                    GraphEdge(
-                        source=prog,
-                        source_kind=NodeKind.PROGRAM,
-                        target=tid,
-                        target_kind=NodeKind.PROGRAM,
-                        kind=EdgeKind.CALL,
-                    )
-                )
-                tgts.add(tid)
-        call_targets[prog] = tgts
-        txt = src.decode("utf-8", errors="replace")
-        has_ws[prog] = any(
-            (toks := line.strip().upper().split())[:2]
-            == ["WORKING-STORAGE", "SECTION."]
-            for line in txt.splitlines()
-            if line.strip()
-        )
-
-    # Transitive DFHEIBLK: a CICS program that statically CALLs a corpus program
-    # causes that callee's source to be CICS-source-prepassed (inject COPY
-    # DFHEIBLK after WORKING-STORAGE SECTION). Walk the CALL closure from CICS
-    # programs over corpus targets; each reached subprogram (non-CICS) that has a
-    # WORKING-STORAGE SECTION gains a PROGRAM -> COPYBOOK(DFHEIBLK) COPY edge.
-    corpus = set(call_targets)
-    seen: set[str] = set()
-    stack = list(cics_program_names)
-    reached_subs: set[str] = set()
-    while stack:
-        p = stack.pop()
-        if p in seen:
-            continue
-        seen.add(p)
-        for t in call_targets.get(p, ()):
-            if t in corpus:
-                if t not in cics_program_names:
-                    reached_subs.add(t)
-                if t not in seen:
-                    stack.append(t)
-    for sub in sorted(reached_subs):
-        if has_ws.get(sub):
-            writer.add_node(
-                GraphNode(
-                    id="DFHEIBLK",
-                    kind=NodeKind.COPYBOOK,
-                    file_path=to_json_value(
-                        corpus_index.resolve_file_path(NodeKind.COPYBOOK, "DFHEIBLK")
-                    ),
-                )
-            )
-            writer.add_edge(
-                GraphEdge(
-                    source=sub,
-                    source_kind=NodeKind.PROGRAM,
-                    target="DFHEIBLK",
-                    target_kind=NodeKind.COPYBOOK,
-                    kind=EdgeKind.COPY,
-                )
-            )
-
+    )
     print(f"CALL/COPY: {len(cbl_files)} programs")
+    return tuple(chain.from_iterable(item.failures for item in scanned))
+
+
+# ── extractor 3: CICS flow ───────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class _CicsSources:
+    """The CICS programs whose source was found, and the ones that were not."""
+
+    sources: tuple[tuple[str, bytes], ...] = ()
+    failures: tuple[str, ...] = ()
+
+
+def _cics_source(program: str, stems: Mapping[str, Path]) -> _CicsSources:
+    if program not in stems:
+        message = f"CICS program {program}: not found in cobol_globs matches"
+        logger.warning("CICS program %s: not found in cobol_globs matches", program)
+        return _CicsSources(failures=(message,))
+    return _CicsSources(sources=((program, stems[program].read_bytes()),))
+
+
+def _cics_sources(
+    program_names: frozenset[str], stems: Mapping[str, Path]
+) -> _CicsSources:
+    found = tuple(
+        _cics_source(program, stems)
+        for program in tqdm(program_names, desc="CICS flow", unit="program")
+    )
+    return _CicsSources(
+        sources=tuple(chain.from_iterable(item.sources for item in found)),
+        failures=tuple(chain.from_iterable(item.failures for item in found)),
+    )
 
 
 def _build_cics_flow_graph(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
-    transid_to_program: dict[str, str],
+    transid_to_program: Mapping[str, str],
     writer: GraphWriter,
-    failures: list[str],
-) -> None:
-    cobol_sources: dict[str, bytes] = {}
-    # Build a map of uppercase file stems to paths using configured cobol_globs
-    cobol_files = matching_files(config.cobol_dir, config.cobol_globs)
-    file_stem_map = {path.stem.upper(): path for path in cobol_files}
+) -> tuple[str, ...]:
+    stems = {
+        path.stem.upper(): path
+        for path in matching_files(config.cobol_dir, config.cobol_globs)
+    }
+    found = _cics_sources(frozenset(transid_to_program.values()), stems)
+    stage_failures = _run_flow_extractor(config, corpus_index, found, writer)
+    print(
+        f"CICS flow: {len(transid_to_program)} transactions, "
+        f"{len(found.sources)} programs compiled"
+    )
+    return found.failures + stage_failures
 
-    for prog_name in tqdm(
-        set(transid_to_program.values()), desc="CICS flow", unit="program"
-    ):
-        if prog_name in file_stem_map:
-            cobol_sources[prog_name] = file_stem_map[prog_name].read_bytes()
-        else:
-            logger.warning(
-                "CICS program %s: not found in cobol_globs matches", prog_name
-            )
-            failures.append(
-                f"CICS program {prog_name}: not found in cobol_globs matches"
-            )
 
+def _run_flow_extractor(
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    found: _CicsSources,
+    writer: GraphWriter,
+) -> tuple[str, ...]:
+    """Run the flow extractor over the whole CSD and return what it reported.
+
+    The sink list is this function's own, not the run's: extract_transaction_flow_graph
+    reports into a list it is handed (cobble/cics/flow_map.py owns that contract),
+    so the list stays local and leaves here as a tuple. The whole CSD is one
+    call, so a failure escaping it is the stage's, not one member's.
+    """
     csd_source = "\n".join(
         decode_source(csd_file.read_bytes()) for csd_file in config.csd_files
     )
-    parser = _make_parser(config)
+    sink: list[str] = []
     try:
         extract_transaction_flow_graph(
             csd_source=csd_source,
             bms_mapsets={},
-            cobol_sources=cobol_sources,
-            parser=parser,
+            cobol_sources=dict(found.sources),
+            parser=_make_parser(config),
             sink=writer,
             corpus_index=corpus_index,
-            failures=failures,
+            failures=sink,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("CICS flow graph (whole CSD) failed: %s", exc, exc_info=True)
-        failures.append(f"CICS flow graph (whole CSD): {exc}")
-    print(
-        f"CICS flow: {len(transid_to_program)} transactions, "
-        f"{len(cobol_sources)} programs compiled"
-    )
+        return (*sink, f"CICS flow graph (whole CSD): {exc}")
+    return tuple(sink)
+
+
+def _cics_flow_or_skip(
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    transid_to_program: Mapping[str, str],
+    writer: GraphWriter,
+) -> tuple[str, ...]:
+    if not config.csd_files:
+        print("CICS flow: skipped (no csd_files configured)")
+        return ()
+    return _build_cics_flow_graph(config, corpus_index, transid_to_program, writer)
+
+
+# ── extractor 4: batch FILE-CONTROL ──────────────────────────────
+
+
+def _file_control_failures(
+    path: Path, store: AstStore, corpus_index: CorpusIndex, writer: GraphWriter
+) -> tuple[str, ...]:
+    try:
+        nodes, edges = extract_cobol_file_graph(store.get(path), corpus_index)
+    except Exception as exc:
+        logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
+        return (f"FILE-CONTROL {path.name}: {exc}",)
+    writer.add_all(nodes, edges)
+    return ()
 
 
 def _build_batch_file_graph(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
-    cics_program_names: set[str],
+    cics_program_names: frozenset[str],
     writer: GraphWriter,
-    failures: list[str],
-) -> None:
-    parser = _make_parser(config)
-    cbl_files = [
-        p
-        for p in matching_files(config.cobol_dir, config.cobol_globs)
-        if p.stem.upper() not in cics_program_names
-    ]
+) -> tuple[str, ...]:
+    cbl_files = tuple(
+        path
+        for path in matching_files(config.cobol_dir, config.cobol_globs)
+        if path.stem.upper() not in cics_program_names
+    )
     store = AstStore(AstStrategy.DISK)
-    store.parse_all({p: p.read_bytes() for p in cbl_files}, parser)
-    for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program"):
-        try:
-            nodes, edges = extract_cobol_file_graph(store.get(path), corpus_index)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
-            failures.append(f"FILE-CONTROL {path.name}: {exc}")
-            continue
-        writer.add_all(nodes, edges)
+    store.parse_all(
+        {path: path.read_bytes() for path in cbl_files}, _make_parser(config)
+    )
+    failures = tuple(
+        chain.from_iterable(
+            _file_control_failures(path, store, corpus_index, writer)
+            for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program")
+        )
+    )
     store.close()
     print(f"FILE-CONTROL: {len(cbl_files)} batch programs")
+    return failures
 
 
-def _read_ndjson(nodes_path: Path, edges_path: Path):
-    nodes = []
-    for line in nodes_path.read_text().splitlines():
-        d = json.loads(line)
-        nodes.append(
-            GraphNode(
-                id=d["id"],
-                kind=NodeKind(d["kind"]),
-                file_path=d.get("file_path"),
-                attrs=d.get("attrs", {}),
-            )
+# ── the run ──────────────────────────────────────────────────────
+
+
+def _text(value: object) -> str:
+    """A field the writer wrote as a string, read back as one.
+
+    ``json.loads`` yields ``object``; every id/name field here was written from a
+    ``str``, so this narrows rather than converts. A non-string would be a
+    GraphWriter bug and shows up as its own repr in the merged graph.
+    """
+    return value if isinstance(value, str) else str(value)
+
+
+def _attrs(row: Mapping[str, object]) -> dict[str, object]:
+    value = row.get("attrs")
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _node_from_json(row: Mapping[str, object]) -> GraphNode:
+    file_path = row.get("file_path")
+    return GraphNode(
+        id=_text(row["id"]),
+        kind=NodeKind(row["kind"]),
+        # Absent, JSON null and a non-string all mean "no file" here, exactly as
+        # the dict.get this replaced handed them to GraphNode.
+        file_path=file_path if isinstance(file_path, str) else None,
+        attrs=_attrs(row),
+    )
+
+
+def _edge_from_json(row: Mapping[str, object]) -> GraphEdge:
+    return GraphEdge(
+        source=_text(row["source"]),
+        source_kind=NodeKind(row["source_kind"]),
+        target=_text(row["target"]),
+        target_kind=NodeKind(row["target_kind"]),
+        kind=EdgeKind(row["kind"]),
+        attrs=_attrs(row),
+    )
+
+
+def _rows(path: Path) -> tuple[Mapping[str, object], ...]:
+    return tuple(json.loads(line) for line in path.read_text().splitlines())
+
+
+def _read_ndjson(
+    nodes_path: Path, edges_path: Path
+) -> tuple[list[GraphNode], list[GraphEdge]]:
+    return (
+        [_node_from_json(row) for row in _rows(nodes_path)],
+        [_edge_from_json(row) for row in _rows(edges_path)],
+    )
+
+
+def _extract_all(
+    config: CorpusConfig, corpus_index: CorpusIndex, csd: _CsdRead
+) -> tuple[str, ...]:
+    """Run the four extractors into one writer, returning everything they skipped."""
+    cics_program_names = frozenset(csd.transid_to_program.values())
+    config.out_dir.mkdir(parents=True, exist_ok=True)
+    nodes_jsonl, edges_jsonl = _out_paths(config)
+    with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
+        return (
+            _build_jcl_graph(config, corpus_index, writer)
+            + _build_call_copy_graph(config, corpus_index, cics_program_names, writer)
+            + _cics_flow_or_skip(config, corpus_index, csd.transid_to_program, writer)
+            + _build_batch_file_graph(config, corpus_index, cics_program_names, writer)
         )
-    edges = []
-    for line in edges_path.read_text().splitlines():
-        d = json.loads(line)
-        edges.append(
-            GraphEdge(
-                source=d["source"],
-                source_kind=NodeKind(d["source_kind"]),
-                target=d["target"],
-                target_kind=NodeKind(d["target_kind"]),
-                kind=EdgeKind(d["kind"]),
-                attrs=d.get("attrs", {}),
-            )
-        )
-    return nodes, edges
+
+
+def _print_merged(config: CorpusConfig) -> None:
+    nodes_jsonl, edges_jsonl = _out_paths(config)
+    graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
+    print(
+        f"\nMerged graph: {graph.number_of_nodes()} nodes, "
+        f"{graph.number_of_edges()} edges"
+    )
+    print(f"Wrote {nodes_jsonl}\nWrote {edges_jsonl}")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -412,43 +636,15 @@ def main() -> int:
     # (or not until exit) while the tqdm bars, being on stderr, come through
     # live. Line-buffer it so the two interleave in the order they happened.
     sys.stdout.reconfigure(line_buffering=True)
-    failures: list[str] = []
-
-    args = _parse_args()
-    config = load_corpus_config(args.config)
+    config = load_corpus_config(_parse_args().config)
     corpus_index = CorpusIndex(config)
-    # Members the index skipped. Everything in them is absent from the index, so
-    # they belong in the same report as the graph-building failures below.
-    failures.extend(corpus_index.failures)
-
-    transid_to_program = _load_transid_to_program(config, failures)
-    cics_program_names = set(transid_to_program.values())
-
-    config.out_dir.mkdir(parents=True, exist_ok=True)
-    nodes_jsonl = config.out_dir / "nodes.jsonl"
-    edges_jsonl = config.out_dir / "edges.jsonl"
-    with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
-        _build_jcl_graph(config, corpus_index, writer, failures)
-        _build_call_copy_graph(
-            config, corpus_index, cics_program_names, writer, failures
-        )
-        if config.csd_files:
-            _build_cics_flow_graph(
-                config, corpus_index, transid_to_program, writer, failures
-            )
-        else:
-            print("CICS flow: skipped (no csd_files configured)")
-        _build_batch_file_graph(
-            config, corpus_index, cics_program_names, writer, failures
-        )
-
-    graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
-    print(
-        f"\nMerged graph: {graph.number_of_nodes()} nodes, "
-        f"{graph.number_of_edges()} edges"
+    csd = _load_transid_to_program(config)
+    # Members the index skipped come first: everything in them is absent from the
+    # index, so they belong in the same report as the graph-building failures.
+    failures = (
+        corpus_index.failures + csd.failures + _extract_all(config, corpus_index, csd)
     )
-    print(f"Wrote {nodes_jsonl}\nWrote {edges_jsonl}")
-
+    _print_merged(config)
     _report_failures(failures)
     return 0
 
