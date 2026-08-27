@@ -48,6 +48,7 @@ from cobble.cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
+from cobble.corpus_index_builder import build_corpus_index
 from cobble.file_location import to_json_value
 from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
@@ -637,7 +638,7 @@ def main() -> int:
     # live. Line-buffer it so the two interleave in the order they happened.
     sys.stdout.reconfigure(line_buffering=True)
     config = load_corpus_config(_parse_args().config)
-    corpus_index = CorpusIndex(config)
+    corpus_index = build_corpus_index(config)
     csd = _load_transid_to_program(config)
     # Members the index skipped come first: everything in them is absent from the
     # index, so they belong in the same report as the graph-building failures.

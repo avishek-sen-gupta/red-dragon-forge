@@ -1,13 +1,6 @@
 [importlinter]
 root_packages =
     cobble
-# The five graph consumers import CorpusIndex under TYPE_CHECKING only, purely
-# to annotate the index they are handed. Counting those edges makes the
-# consumer-independence and leaf contracts break on a dependency that does not
-# exist at runtime. Exempted here rather than left broken; the next commit
-# removes the exemption by splitting corpus_index so the runtime cycle it is
-# papering over is gone.
-exclude_type_checking_imports = True
 
 [importlinter:contract:interpreter-is-leaf]
 name = interpreter must not import other cobble modules
@@ -53,6 +46,20 @@ forbidden_modules =
 name = cics, jackal, and knowledge_graph must not import each other
 type = independence
 modules =
+    cobble.cics
+    cobble.jackal
+    cobble.knowledge_graph
+
+# The split of corpus_index into lookup (here) plus corpus_index_builder exists
+# so this holds: populating the index needs the JCL and CSD parsers, and both of
+# those packages consume the index. With both halves in one module that was a
+# real cycle, held apart only by the consumers' TYPE_CHECKING guards.
+[importlinter:contract:corpus-index-is-lookup-only]
+name = corpus_index must not import the graph consumers
+type = forbidden
+source_modules =
+    cobble.corpus_index
+forbidden_modules =
     cobble.cics
     cobble.jackal
     cobble.knowledge_graph

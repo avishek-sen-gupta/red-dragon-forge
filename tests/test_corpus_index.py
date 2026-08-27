@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
-from cobble.corpus_index import CorpusIndex
+from cobble.corpus_index_builder import build_corpus_index
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
 from cobble.jackal.dsn import DirectDSN, InStreamDSN
@@ -35,7 +35,7 @@ def _touch(path: Path, text: str = "") -> Path:
 
 
 # Every monkeypatch here targets the module that reads the corpus.
-_MODULE = "cobble.corpus_index"
+_MODULE = "cobble.corpus_index_builder"
 
 
 def _patch(monkeypatch: pytest.MonkeyPatch, **targets: object) -> None:
@@ -70,7 +70,7 @@ def _write_bytes(path: Path, data: bytes) -> Path:
 def test_resolves_program_by_filename_stem(tmp_path: Path) -> None:
     _touch(tmp_path / "cbl" / "ACCTFILE.cbl")
     config = _config(tmp_path)
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     resolved = index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
     assert resolved == tmp_path / "cbl" / "ACCTFILE.cbl"
 
@@ -78,7 +78,7 @@ def test_resolves_program_by_filename_stem(tmp_path: Path) -> None:
 def test_program_resolution_is_case_insensitive(tmp_path: Path) -> None:
     _touch(tmp_path / "cbl" / "acctfile.cbl")
     config = _config(tmp_path)
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     resolved = index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
     assert resolved == tmp_path / "cbl" / "acctfile.cbl"
 
@@ -86,7 +86,7 @@ def test_program_resolution_is_case_insensitive(tmp_path: Path) -> None:
 def test_unresolved_program_is_flagged_not_silently_none(tmp_path: Path) -> None:
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     result = index.resolve_file_path(NodeKind.PROGRAM, "MISSING")
     assert result == NoFileLocation(FileLocationReason.UNRESOLVED)
 
@@ -95,7 +95,7 @@ def test_resolves_copybook_from_copybook_dirs(tmp_path: Path) -> None:
     _touch(tmp_path / "cpy" / "COCOM01Y.cpy")
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     resolved = index.resolve_file_path(NodeKind.COPYBOOK, "COCOM01Y")
     assert resolved == tmp_path / "cpy" / "COCOM01Y.cpy"
 
@@ -103,7 +103,7 @@ def test_resolves_copybook_from_copybook_dirs(tmp_path: Path) -> None:
 def test_dataset_is_always_not_file_based(tmp_path: Path) -> None:
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.DATASET, "ACCT.MASTER") == NoFileLocation(
         FileLocationReason.NOT_FILE_BASED
     )
@@ -114,7 +114,7 @@ def test_cobol_file_is_always_not_file_based(tmp_path: Path) -> None:
     # to use it — never a single owning program's file.
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.COBOL_FILE, "ACCTFILE") == NoFileLocation(
         FileLocationReason.NOT_FILE_BASED
     )
@@ -123,7 +123,7 @@ def test_cobol_file_is_always_not_file_based(tmp_path: Path) -> None:
 def test_transaction_without_csd_has_no_definition_source(tmp_path: Path) -> None:
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.TRANSACTION, "CC00") == NoFileLocation(
         FileLocationReason.NO_DEFINITION_SOURCE
     )
@@ -136,7 +136,7 @@ def test_transaction_resolves_to_its_csd_file(tmp_path: Path) -> None:
     )
     config = _config(tmp_path, csd_files=(csd_path,))
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.TRANSACTION, "CC00") == csd_path
 
 
@@ -147,7 +147,7 @@ def test_cics_file_resolves_to_its_csd_file(tmp_path: Path) -> None:
     )
     config = _config(tmp_path, csd_files=(csd_path,))
     (tmp_path / "cbl").mkdir()
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.CICS_FILE, "ACCTFILE") == csd_path
 
 
@@ -181,9 +181,9 @@ def test_job_and_step_resolve_to_owning_jcl_file(
             Step(name="STEP05", pgm="IDCAMS", dds=(_simple_dd("SYSIN", "SOME.DSN"),)),
         ),
     )
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
+    monkeypatch.setattr("cobble.corpus_index_builder.parse_jcl", lambda text: job)
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.JOB, "ACCTFILE") == jcl_path
     assert index.resolve_file_path(NodeKind.STEP, "ACCTFILE.STEP05") == jcl_path
 
@@ -201,9 +201,9 @@ def test_a_member_that_does_not_parse_is_reported_not_only_logged(
     def boom(text: str) -> Job:
         raise JclParseError("line 70:9 mismatched input 'EXEC' expecting JOB")
 
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", boom)
+    monkeypatch.setattr("cobble.corpus_index_builder.parse_jcl", boom)
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.failures == (
         "index JCL ACCTFILE.jcl: line 70:9 mismatched input 'EXEC' expecting JOB",
     )
@@ -216,11 +216,11 @@ def test_an_index_with_nothing_wrong_reports_no_failures(
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
     monkeypatch.setattr(
-        "cobble.corpus_index.parse_jcl",
+        "cobble.corpus_index_builder.parse_jcl",
         lambda text: Job(name="ACCTFILE", steps=()),
     )
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.failures == ()
 
 
@@ -236,10 +236,10 @@ def test_a_bug_in_indexing_is_not_filed_as_a_corpus_failure(
     def bug(text: str) -> Job:
         raise AttributeError("'NoneType' object has no attribute 'upper'")
 
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", bug)
+    monkeypatch.setattr("cobble.corpus_index_builder.parse_jcl", bug)
 
     with pytest.raises(AttributeError) as raised:
-        CorpusIndex(config)
+        build_corpus_index(config)
     assert str(raised.value) == "'NoneType' object has no attribute 'upper'"
 
 
@@ -250,7 +250,7 @@ def test_a_csd_that_does_not_parse_is_reported_not_only_logged(
     config = _config(tmp_path, csd_files=(csd_path,))
     (tmp_path / "cbl").mkdir()
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert len(index.failures) == 1
     assert index.failures[0].startswith("index CSD BROKEN.CSD: ")
 
@@ -274,7 +274,7 @@ def test_indexes_a_jcl_member_that_is_not_valid_utf_8(
     job = Job(name="ACCTFILE", steps=())
     _patch(monkeypatch, parse_jcl=lambda text: _record(seen_path, text, job))
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert seen_path.read_text() == "//*¦¦\n//ACCTFILE JOB ...\n"
     assert index.resolve_file_path(NodeKind.JOB, "ACCTFILE") == jcl_path
 
@@ -290,9 +290,9 @@ def test_instream_data_resolves_to_owning_jcl_file(
         name="ACCTFILE",
         steps=(Step(name="STEP05", pgm="IDCAMS", dds=(_instream_dd("SYSIN"),)),),
     )
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
+    monkeypatch.setattr("cobble.corpus_index_builder.parse_jcl", lambda text: job)
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     resolved = index.resolve_file_path(NodeKind.INSTREAM_DATA, "ACCTFILE.STEP05.SYSIN")
     assert resolved == jcl_path
 
@@ -317,7 +317,7 @@ def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(
         ),
     )
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.failures == ("index JCL RUNSORT.jcl: Unbound symbol '&HLQ'",)
     # The member after the failing one still got indexed.
     assert (
@@ -343,7 +343,7 @@ def test_a_member_whose_procs_do_not_expand_keeps_its_unexpanded_steps(
         ),
     )
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     assert index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01") == jcl_path
 
 
@@ -364,7 +364,7 @@ def test_a_bug_in_proc_expansion_is_not_filed_as_a_corpus_failure(
     )
 
     with pytest.raises(TypeError) as raised:
-        CorpusIndex(config)
+        build_corpus_index(config)
     assert str(raised.value) == "'NoneType' object is not iterable"
 
 
@@ -387,6 +387,6 @@ def test_step_from_proc_resolves_to_the_proc_file(
         step_proc_provenance=lambda job, expanded: {"STEP01.SORTSTEP": "SORTPROC"},
     )
 
-    index = CorpusIndex(config)
+    index = build_corpus_index(config)
     resolved = index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01.SORTSTEP")
     assert resolved == proc_path

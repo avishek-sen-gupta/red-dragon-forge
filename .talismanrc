@@ -26,7 +26,7 @@ fileignoreconfig:
 - filename: tests/knowledge_graph/test_graph_writer.py
   checksum: 0c7a002271338c0337220bf65f845fdc6ce78737218970c5266547e6ff2810b2
 - filename: tests/test_corpus_index.py
-  checksum: f773c7893f473c78a8f973161f8ab373edea8c134a3d13ffb743870200302369
+  checksum: f0ea23e3adff2dd815a7476a0919bd05136f572500217c5ad484d53beaf357c6
 - filename: docs/superpowers/specs/2026-07-11-canonical-export-design.md
   checksum: 1418b3588e949a986aa6fd47f5e6068283e530b9e0c39d8431f99582930b967d
 - filename: docs/superpowers/plans/2026-07-11-canonical-export.md
@@ -49,14 +49,16 @@ fileignoreconfig:
   checksum: 5a396c78efaa9bce2aca84d3a4fd3cf894c839ea9868362fe89e97b9fc7c32c0
 - filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
   checksum: 3d9bf96297b80850cfb0a5e4756e8af02e4624c6ffc790698c465b7f1b3bd436
-# The functional rewrite of the run's entry point. Talisman reads the argument
-# list of a helper that takes a callable per patched name as a secret pattern --
-# `_patch(monkeypatch, **targets: object)` and the two call sites that pass
-# lambdas to it, plus the line handing `_prepassed_subprograms(...)` an index.
-# Three low-severity false positives, no credential. Checksummed, not
-# detector-ignored, so a future edit to either file re-runs the scan.
-- filename: cobble/build_graph.py
-  checksum: 32cfc52c390edb485c1b86e4d6b189f4783840e2bc47ec408e35260a0a0727aa
+# The corpus_index split. Talisman reads a row of the resolver table as a secret
+# pattern (`NodeKind.COBOL_FILE: lambda index, kind, key: _NOT_FILE_BASED`), a
+# prose comment in the builder about dict last-write-wins, and the argument list
+# of the tests' `_patch(monkeypatch, **targets: object)` helper. Three
+# low-severity false positives, no credential. Checksummed, not
+# detector-ignored, so a future edit to any of them re-runs the scan.
+- filename: cobble/corpus_index.py
+  checksum: e9891f67a9ac022fea61fb887d9787462277efcf3a78a12338d4150bde0db7cd
+- filename: cobble/corpus_index_builder.py
+  checksum: 4ecb54db84a73168a3ea41fa55c1238b5d1d28d494cc5c0498f9cc2dc0d123df
 # A submodule pointer's whole content is the 40-hex commit SHA it pins, which
 # talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
 # all: "error parsing filesize ... submodule"). No checksum here on purpose —
