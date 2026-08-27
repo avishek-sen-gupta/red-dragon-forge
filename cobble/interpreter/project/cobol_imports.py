@@ -51,43 +51,50 @@ _cobol_import_parser = Lark(_COBOL_IMPORT_GRAMMAR, parser="lalr")
 
 
 class _CobolImportTransformer(LarkTransformer):
-    def start(self, items: list) -> list[tuple[str, str]]:
+    def start(self, items: list) -> list[tuple[str, str, int]]:
         return [item for item in items if item is not None]
 
-    def item(self, items: list) -> tuple[str, str] | None:
+    def item(self, items: list) -> tuple[str, str, int] | None:
         return items[0]
 
-    def copy_stmt(self, items: list) -> tuple[str, str]:
+    def copy_stmt(self, items: list) -> tuple[str, str, int]:
         # COPY_STMT token is e.g. "COPY CUSTOMER-RECORD" — name is the last word
-        return ("COPY", str(items[0]).split()[-1])
+        return ("COPY", str(items[0]).split()[-1], items[0].line)
 
-    def call_stmt(self, items: list) -> tuple[str, str]:
+    def call_stmt(self, items: list) -> tuple[str, str, int]:
         # CALL_STMT token is e.g. "CALL 'SUBPROG'" — extract between quotes
         raw = str(items[0])
         q = "'" if "'" in raw else '"'
-        return ("CALL", raw[raw.index(q) + 1 : raw.rindex(q)])
+        return ("CALL", raw[raw.index(q) + 1 : raw.rindex(q)], items[0].line)
 
     def noise(self, _: list) -> None:
         return None
 
 
-def _strip_cobol_comment_lines(text: str) -> str:
-    """Remove COBOL comment lines before grammar tokenisation.
+def _blank_cobol_comment_lines(text: str) -> str:
+    """Blank out COBOL comment lines before grammar tokenisation.
 
     - Fixed-format: column-7 indicator '*' or '/' (index 6).
     - Free-format: trimmed line starts with '*>'.
 
     Must run before the grammar because %ignore /\\s+/ strips positional
     whitespace, making column-7 anchoring impossible inside the tokeniser.
+
+    Emptied rather than removed: a dropped line shifts every Lark token position
+    after it up by one, so an ImportRef.line reported against a member with box
+    comments above the COPY pointed at the wrong source line. An empty line is
+    whitespace the grammar already ignores, so the tokens themselves are
+    unaffected.
     """
-    clean: list[str] = []
-    for line in text.splitlines():
-        if len(line) > 6 and line[6] in ("*", "/"):
-            continue
-        if line.lstrip().startswith("*>"):
-            continue
-        clean.append(line)
-    return "\n".join(clean)
+    return "\n".join(
+        (
+            ""
+            if (len(line) > 6 and line[6] in ("*", "/"))
+            or line.lstrip().startswith("*>")
+            else line
+        )
+        for line in text.splitlines()
+    )
 
 
 def extract_cobol_imports(source: bytes, source_file: Path) -> list[ImportRef]:
@@ -96,8 +103,8 @@ def extract_cobol_imports(source: bytes, source_file: Path) -> list[ImportRef]:
     Uses a light Lark grammar so keywords inside string literals are
     consumed as opaque STRING tokens and never produce false imports.
     """
-    text = _strip_cobol_comment_lines(source.decode("utf-8", errors="replace"))
-    pairs: list[tuple[str, str]] = _CobolImportTransformer().transform(
+    text = _blank_cobol_comment_lines(source.decode("utf-8", errors="replace"))
+    found: list[tuple[str, str, int]] = _CobolImportTransformer().transform(
         _cobol_import_parser.parse(text)
     )
     return [
@@ -105,6 +112,7 @@ def extract_cobol_imports(source: bytes, source_file: Path) -> list[ImportRef]:
             source_file=source_file,
             module_path=name,
             kind=ImportKind.INCLUDE if kind == "COPY" else ImportKind.REQUIRE,
+            line=line,
         )
-        for kind, name in pairs
+        for kind, name, line in found
     ]
