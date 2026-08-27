@@ -26,7 +26,7 @@ fileignoreconfig:
 - filename: tests/knowledge_graph/test_graph_writer.py
   checksum: 0c7a002271338c0337220bf65f845fdc6ce78737218970c5266547e6ff2810b2
 - filename: tests/test_corpus_index.py
-  checksum: 7fffcc2299e7ddd5b44f543671edc4277ca9741de460ae81d5d2ffda58003e37
+  checksum: f773c7893f473c78a8f973161f8ab373edea8c134a3d13ffb743870200302369
 - filename: docs/superpowers/specs/2026-07-11-canonical-export-design.md
   checksum: 1418b3588e949a986aa6fd47f5e6068283e530b9e0c39d8431f99582930b967d
 - filename: docs/superpowers/plans/2026-07-11-canonical-export.md
@@ -49,6 +49,14 @@ fileignoreconfig:
   checksum: 5a396c78efaa9bce2aca84d3a4fd3cf894c839ea9868362fe89e97b9fc7c32c0
 - filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
   checksum: 3d9bf96297b80850cfb0a5e4756e8af02e4624c6ffc790698c465b7f1b3bd436
+# The functional rewrite of the run's entry point. Talisman reads the argument
+# list of a helper that takes a callable per patched name as a secret pattern --
+# `_patch(monkeypatch, **targets: object)` and the two call sites that pass
+# lambdas to it, plus the line handing `_prepassed_subprograms(...)` an index.
+# Three low-severity false positives, no credential. Checksummed, not
+# detector-ignored, so a future edit to either file re-runs the scan.
+- filename: cobble/build_graph.py
+  checksum: 32cfc52c390edb485c1b86e4d6b189f4783840e2bc47ec408e35260a0a0727aa
 # A submodule pointer's whole content is the 40-hex commit SHA it pins, which
 # talisman reads as hex-encoded text (and whose gitlink mode it cannot stat at
 # all: "error parsing filesize ... submodule"). No checksum here on purpose —

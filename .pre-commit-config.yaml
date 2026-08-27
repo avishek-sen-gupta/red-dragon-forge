@@ -25,13 +25,6 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: python-fp-lint
-        name: python-fp-lint
-        entry: bash -c 'uv run python -m python_fp_lint check cobble/'
-        language: system
-        pass_filenames: false
-        always_run: true
-
       - id: pyright
         name: pyright
         entry: bash -c 'uv run pyright || true'

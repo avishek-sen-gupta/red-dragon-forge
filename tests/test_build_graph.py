@@ -3,7 +3,13 @@ and what was skipped must be impossible to miss in the output."""
 
 from pathlib import Path
 
-from cobble.build_graph import _load_transid_to_program, _report_failures
+from cobble.build_graph import (
+    RULE,
+    _failure_report_lines,
+    _load_transid_to_program,
+    _report_failures,
+    _tally_lines,
+)
 from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
 
 
@@ -19,8 +25,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
         out_dir=tmp_path / "out",
     )
-    defaults.update(overrides)
-    return CorpusConfig(**defaults)
+    return CorpusConfig(**{**defaults, **overrides})
 
 
 def _touch(path: Path, text: str) -> Path:
@@ -31,16 +36,15 @@ def _touch(path: Path, text: str) -> Path:
 
 def test_a_csd_that_does_not_parse_does_not_abort_the_run(tmp_path: Path) -> None:
     """``_load_transid_to_program`` ran before the writer opened and did not guard
-    ``parse_csd``, so a malformed CSD killed the whole run — even though
-    ``CorpusIndex`` already guards the very same file."""
+    ``parse_csd``, so a malformed CSD killed the whole run — even though the corpus
+    index already guards the very same file."""
     broken = _touch(tmp_path / "csd" / "BROKEN.CSD", "this is not a DEFINE\n")
-    failures: list[str] = []
 
-    assert (
-        _load_transid_to_program(_config(tmp_path, csd_files=(broken,)), failures) == {}
-    )
-    assert len(failures) == 1
-    assert failures[0].startswith("CSD BROKEN.CSD: ")
+    read = _load_transid_to_program(_config(tmp_path, csd_files=(broken,)))
+
+    assert dict(read.transid_to_program) == {}
+    assert len(read.failures) == 1
+    assert read.failures[0].startswith("CSD BROKEN.CSD: ")
 
 
 def test_a_good_csd_still_loads_alongside_a_broken_one(tmp_path: Path) -> None:
@@ -49,40 +53,57 @@ def test_a_good_csd_still_loads_alongside_a_broken_one(tmp_path: Path) -> None:
         "DEFINE TRANSACTION(CC00) PROGRAM(COSGN00C) GROUP(CARDDEMO)\n",
     )
     broken = _touch(tmp_path / "csd" / "BROKEN.CSD", "this is not a DEFINE\n")
-    failures: list[str] = []
 
-    config = _config(tmp_path, csd_files=(broken, good))
-    assert _load_transid_to_program(config, failures) == {"CC00": "COSGN00C"}
-    assert len(failures) == 1
+    read = _load_transid_to_program(_config(tmp_path, csd_files=(broken, good)))
+
+    assert dict(read.transid_to_program) == {"CC00": "COSGN00C"}
+    assert len(read.failures) == 1
 
 
-def test_the_failure_report_says_the_output_is_incomplete(capsys) -> None:
+def test_the_failure_report_says_the_output_is_incomplete() -> None:
     """The report used to be a quiet stdout line after "Wrote ...", easy to scroll
     past on a corpus where 62 members are missing from a graph that otherwise looks
     finished."""
-    _report_failures(["index JCL A.jcl: boom", "JCL B.jcl: boom"])
+    lines = _failure_report_lines(["index JCL A.jcl: boom", "JCL B.jcl: boom"])
 
-    err = capsys.readouterr().err
-    assert "2 FAILURE" in err
-    assert "INCOMPLETE" in err
-    assert "index JCL A.jcl: boom" in err
+    assert lines[2] == "!!  2 FAILURE(S) -- THIS GRAPH IS INCOMPLETE"
+    assert lines[-3:] == (
+        "  - index JCL A.jcl: boom",
+        "  - JCL B.jcl: boom",
+        RULE,
+    )
 
 
-def test_the_failure_report_tallies_by_category(capsys) -> None:
-    """62 lines of detail hide the shape. The tally is what a reader acts on."""
-    _report_failures(
+def test_the_failure_report_tallies_by_category() -> None:
+    """62 lines of detail hide the shape. The tally is what a reader acts on.
+
+    Commonest category first, ties by name — so a corpus whose problem is one
+    kind of member reads as one line, not as sixty-two.
+    """
+    assert _tally_lines(
         [
             "index JCL A.jcl: boom",
             "index JCL B.jcl: boom",
             "JCL C.jcl: boom",
             "CSD D.CSD: boom",
         ]
+    ) == (
+        "      2  index JCL",
+        "      1  CSD",
+        "      1  JCL",
     )
 
-    err = capsys.readouterr().err
-    assert "2  index JCL" in err
-    assert "1  JCL" in err
-    assert "1  CSD" in err
+
+def test_the_report_goes_to_stderr_whole(capsys) -> None:
+    """stderr, not stdout: the per-stage counts above it go to stdout, and under
+    ``make build | tee log`` a report on stdout is exactly what gets scrolled past."""
+    failures = ["index JCL A.jcl: boom"]
+
+    _report_failures(failures)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "\n".join(_failure_report_lines(failures)) + "\n"
 
 
 def test_no_failures_prints_no_report(capsys) -> None:

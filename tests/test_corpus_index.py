@@ -25,8 +25,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
         out_dir=tmp_path / "out",
     )
-    defaults.update(overrides)
-    return CorpusConfig(**defaults)
+    return CorpusConfig(**{**defaults, **overrides})
 
 
 def _touch(path: Path, text: str = "") -> Path:
@@ -35,24 +34,53 @@ def _touch(path: Path, text: str = "") -> Path:
     return path
 
 
+# Every monkeypatch here targets the module that reads the corpus.
+_MODULE = "cobble.corpus_index"
+
+
+def _patch(monkeypatch: pytest.MonkeyPatch, **targets: object) -> None:
+    """Patch reader-module names by attribute name, one call for however many."""
+    for name, value in targets.items():
+        monkeypatch.setattr(f"{_MODULE}.{name}", value)
+
+
+def _prepared(tmp_path: Path, **overrides) -> CorpusConfig:
+    """A config whose cobol_dir exists — every index build walks it."""
+    (tmp_path / "cbl").mkdir(exist_ok=True)
+    return _config(tmp_path, **overrides)
+
+
+def _raise(exc: Exception) -> Job:
+    """Fail from inside a lambda, so a stand-in step that raises is one statement."""
+    raise exc
+
+
+def _record(path: Path, text: str, job: Job) -> Job:
+    """Write what the reader passed where the test can read it back."""
+    path.write_text(text)
+    return job
+
+
+def _write_bytes(path: Path, data: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
 def test_resolves_program_by_filename_stem(tmp_path: Path) -> None:
     _touch(tmp_path / "cbl" / "ACCTFILE.cbl")
     config = _config(tmp_path)
     index = CorpusIndex(config)
-    assert (
-        index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
-        == tmp_path / "cbl" / "ACCTFILE.cbl"
-    )
+    resolved = index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
+    assert resolved == tmp_path / "cbl" / "ACCTFILE.cbl"
 
 
 def test_program_resolution_is_case_insensitive(tmp_path: Path) -> None:
     _touch(tmp_path / "cbl" / "acctfile.cbl")
     config = _config(tmp_path)
     index = CorpusIndex(config)
-    assert (
-        index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
-        == tmp_path / "cbl" / "acctfile.cbl"
-    )
+    resolved = index.resolve_file_path(NodeKind.PROGRAM, "ACCTFILE")
+    assert resolved == tmp_path / "cbl" / "acctfile.cbl"
 
 
 def test_unresolved_program_is_flagged_not_silently_none(tmp_path: Path) -> None:
@@ -68,10 +96,8 @@ def test_resolves_copybook_from_copybook_dirs(tmp_path: Path) -> None:
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
     index = CorpusIndex(config)
-    assert (
-        index.resolve_file_path(NodeKind.COPYBOOK, "COCOM01Y")
-        == tmp_path / "cpy" / "COCOM01Y.cpy"
-    )
+    resolved = index.resolve_file_path(NodeKind.COPYBOOK, "COCOM01Y")
+    assert resolved == tmp_path / "cpy" / "COCOM01Y.cpy"
 
 
 def test_dataset_is_always_not_file_based(tmp_path: Path) -> None:
@@ -190,7 +216,8 @@ def test_an_index_with_nothing_wrong_reports_no_failures(
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
     monkeypatch.setattr(
-        "cobble.corpus_index.parse_jcl", lambda text: Job(name="ACCTFILE", steps=())
+        "cobble.corpus_index.parse_jcl",
+        lambda text: Job(name="ACCTFILE", steps=()),
     )
 
     index = CorpusIndex(config)
@@ -211,8 +238,9 @@ def test_a_bug_in_indexing_is_not_filed_as_a_corpus_failure(
 
     monkeypatch.setattr("cobble.corpus_index.parse_jcl", bug)
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(AttributeError) as raised:
         CorpusIndex(config)
+    assert str(raised.value) == "'NoneType' object has no attribute 'upper'"
 
 
 def test_a_csd_that_does_not_parse_is_reported_not_only_logged(
@@ -235,23 +263,19 @@ def test_indexes_a_jcl_member_that_is_not_valid_utf_8(
     decode raised inside the per-file try/except, so the member was silently
     dropped from the index and every job, step and dataset in it went
     unresolvable."""
-    jcl_path = tmp_path / "jcl" / "ACCTFILE.jcl"
-    jcl_path.parent.mkdir(parents=True, exist_ok=True)
-    jcl_path.write_bytes(b"//*\xa6\xa6\n//ACCTFILE JOB ...\n")
-    config = _config(tmp_path)
-    (tmp_path / "cbl").mkdir()
+    jcl_path = _write_bytes(
+        tmp_path / "jcl" / "ACCTFILE.jcl", b"//*\xa6\xa6\n//ACCTFILE JOB ...\n"
+    )
+    config = _prepared(tmp_path)
 
-    seen: list[str] = []
+    # Recorded to a file rather than to a captured list: there is exactly one JCL
+    # member, so one write, and the spy stays free of accumulator mutation.
+    seen_path = tmp_path / "seen.txt"
     job = Job(name="ACCTFILE", steps=())
-
-    def fake_parse_jcl(text: str) -> Job:
-        seen.append(text)
-        return job
-
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", fake_parse_jcl)
+    _patch(monkeypatch, parse_jcl=lambda text: _record(seen_path, text, job))
 
     index = CorpusIndex(config)
-    assert seen == ["//*¦¦\n//ACCTFILE JOB ...\n"]
+    assert seen_path.read_text() == "//*¦¦\n//ACCTFILE JOB ...\n"
     assert index.resolve_file_path(NodeKind.JOB, "ACCTFILE") == jcl_path
 
 
@@ -269,10 +293,8 @@ def test_instream_data_resolves_to_owning_jcl_file(
     monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
 
     index = CorpusIndex(config)
-    assert (
-        index.resolve_file_path(NodeKind.INSTREAM_DATA, "ACCTFILE.STEP05.SYSIN")
-        == jcl_path
-    )
+    resolved = index.resolve_file_path(NodeKind.INSTREAM_DATA, "ACCTFILE.STEP05.SYSIN")
+    assert resolved == jcl_path
 
 
 def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(
@@ -284,20 +306,16 @@ def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(
     _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
     _touch(tmp_path / "jcl" / "LATER.jcl", "//LATER JOB ...\n")
     _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
-    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    (tmp_path / "cbl").mkdir()
-
-    monkeypatch.setattr(
-        "cobble.corpus_index.parse_jcl",
-        lambda text: Job(name=text.split()[0].lstrip("/"), steps=()),
+    config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
+    _patch(
+        monkeypatch,
+        parse_jcl=lambda text: Job(name=text.split()[0].lstrip("/"), steps=()),
+        expand_procs=lambda job, proclib_dirs: (
+            job
+            if job.name != "RUNSORT"
+            else _raise(ProcExpansionError("Unbound symbol '&HLQ'"))
+        ),
     )
-
-    def boom(job: Job, proclib_dirs) -> Job:
-        if job.name != "RUNSORT":
-            return job
-        raise ProcExpansionError("Unbound symbol '&HLQ'")
-
-    monkeypatch.setattr("cobble.corpus_index.expand_procs", boom)
 
     index = CorpusIndex(config)
     assert index.failures == ("index JCL RUNSORT.jcl: Unbound symbol '&HLQ'",)
@@ -315,16 +333,15 @@ def test_a_member_whose_procs_do_not_expand_keeps_its_unexpanded_steps(
     PROC's."""
     jcl_path = _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
     _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
-    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    (tmp_path / "cbl").mkdir()
-
+    config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
     job = Job(name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),))
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: job)
-
-    def boom(job: Job, proclib_dirs) -> Job:
-        raise ProcExpansionError("Circular PROC reference: SORTPROC -> SORTPROC")
-
-    monkeypatch.setattr("cobble.corpus_index.expand_procs", boom)
+    _patch(
+        monkeypatch,
+        parse_jcl=lambda text: job,
+        expand_procs=lambda job, proclib_dirs: _raise(
+            ProcExpansionError("Circular PROC reference: SORTPROC -> SORTPROC")
+        ),
+    )
 
     index = CorpusIndex(config)
     assert index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01") == jcl_path
@@ -337,46 +354,39 @@ def test_a_bug_in_proc_expansion_is_not_filed_as_a_corpus_failure(
     a TypeError in cobble's own expansion code is not."""
     _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
     _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
-    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    (tmp_path / "cbl").mkdir()
-
-    monkeypatch.setattr(
-        "cobble.corpus_index.parse_jcl", lambda text: Job(name="RUNSORT", steps=())
+    config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
+    _patch(
+        monkeypatch,
+        parse_jcl=lambda text: Job(name="RUNSORT", steps=()),
+        expand_procs=lambda job, proclib_dirs: _raise(
+            TypeError("'NoneType' object is not iterable")
+        ),
     )
 
-    def bug(job: Job, proclib_dirs) -> Job:
-        raise TypeError("'NoneType' object is not iterable")
-
-    monkeypatch.setattr("cobble.corpus_index.expand_procs", bug)
-
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError) as raised:
         CorpusIndex(config)
+    assert str(raised.value) == "'NoneType' object is not iterable"
 
 
 def test_step_from_proc_resolves_to_the_proc_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    jcl_path = _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
+    _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
     proc_path = _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
-    config = _config(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    (tmp_path / "cbl").mkdir()
-
+    config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
     outer_job = Job(
         name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),)
     )
     expanded_job = Job(
         name="RUNSORT", steps=(Step(name="STEP01.SORTSTEP", pgm="SORT", dds=()),)
     )
-    monkeypatch.setattr("cobble.corpus_index.parse_jcl", lambda text: outer_job)
-    monkeypatch.setattr(
-        "cobble.corpus_index.expand_procs", lambda job, proclib_dirs: expanded_job
-    )
-    monkeypatch.setattr(
-        "cobble.corpus_index.step_proc_provenance",
-        lambda job, expanded: {"STEP01.SORTSTEP": "SORTPROC"},
+    _patch(
+        monkeypatch,
+        parse_jcl=lambda text: outer_job,
+        expand_procs=lambda job, proclib_dirs: expanded_job,
+        step_proc_provenance=lambda job, expanded: {"STEP01.SORTSTEP": "SORTPROC"},
     )
 
     index = CorpusIndex(config)
-    assert (
-        index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01.SORTSTEP") == proc_path
-    )
+    resolved = index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01.SORTSTEP")
+    assert resolved == proc_path
