@@ -33,6 +33,8 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from tqdm import tqdm
+
 from cobble.corpus_config import CorpusConfig
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
 from cobble.interpreter.cobol.source_text import decode_source
@@ -97,7 +99,13 @@ class CorpusIndex:
                 if path.is_file():
                     self._copybooks.setdefault(path.stem.upper(), path)
 
-        for path in matching_files(config.jcl_dir, config.jcl_globs):
+        # The bar matters here more than anywhere else in the run: this loop is
+        # one JVM subprocess per member, it runs before any extractor and before
+        # GraphWriter opens its output, and it is the slowest phase of a corpus
+        # build. Without it the whole indexing pass is indistinguishable from a
+        # hang. tqdm writes to stderr, so it survives a stdout pipe.
+        jcl_files = matching_files(config.jcl_dir, config.jcl_globs)
+        for path in tqdm(jcl_files, desc="index JCL", unit="file"):
             self._index_jcl_file(path, config.proclib_dirs)
 
         for csd_file in config.csd_files:

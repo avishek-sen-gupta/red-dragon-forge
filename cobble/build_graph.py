@@ -407,6 +407,11 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     logging.basicConfig(level=logging.WARNING)
+    # Python block-buffers stdout at 8KB when it is a pipe rather than a tty, so
+    # under `make build | tee log` every per-stage count below arrives in bursts
+    # (or not until exit) while the tqdm bars, being on stderr, come through
+    # live. Line-buffer it so the two interleave in the order they happened.
+    sys.stdout.reconfigure(line_buffering=True)
     failures: list[str] = []
 
     args = _parse_args()
