@@ -173,6 +173,26 @@ lines its `COPY` statements are on — so `| jq` works. The human summary goes t
 stderr. Those names are corpus identifiers; prefer `--output` to a shared
 terminal on a client corpus.
 
+`--fix DIR` writes an empty stub copybook into `DIR` for every missing name
+nobody staged, so a parse gets past it:
+
+```bash
+uv run diagnose-copybooks --config your-corpus.yaml --fix path/to/your/copybooks
+```
+
+That buys a **parse, not data**. A stubbed `COPY` declares nothing, so whatever
+records, fields or `PROCEDURE` text the real member carried is absent from the
+graph — the summary says so every time. Each stub is three fixed-format comment
+lines saying what it is, not a zero-byte file, so a stub is greppable and
+distinguishable from a truncated real member.
+
+Two things it deliberately does not do. A name already on disk under an
+*unlisted* suffix is never stubbed: the stub would resolve first and the real
+member would never be read again — that one needs a `copybook_extensions` edit.
+And `DIR` outside the config's `copybook_dirs` is written but flagged loudly,
+since ProLeap lists those directories and nothing else, so stubs anywhere else
+resolve nothing.
+
 This one is a console script rather than a `make` target: `[project.scripts]` in
 `pyproject.toml`, which is why the project is installed editable into the venv
 instead of `package = false`.

@@ -20,15 +20,17 @@ still fail the parse.
 """
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from cobble.corpus_config import CorpusConfig
 from cobble.diagnose_copybooks import (
+    STUB_TEXT,
     ScanResult,
     find_missing_copybooks,
     main,
     scan_members,
+    write_stubs,
 )
 from cobble.interpreter.project.import_types import ImportKind, ImportRef
 
@@ -45,8 +47,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         copybook_extensions=("", "cpy"),
         out_dir=tmp_path / "out",
     )
-    defaults.update(overrides)
-    return CorpusConfig(**defaults)
+    return CorpusConfig(**{**defaults, **overrides})
 
 
 def _scanned(tmp_path: Path, program: str, *copies: tuple[str, int]) -> ScanResult:
@@ -198,6 +199,98 @@ def test_a_member_that_cannot_be_read_is_reported_rather_than_raising(
     assert results[1].message == ""
 
 
+def test_fix_writes_one_stub_per_missing_copybook(tmp_path: Path) -> None:
+    """The point of --fix: a member nobody staged becomes a file ProLeap resolves,
+    so the parse gets past it instead of failing the whole program."""
+    missing = {"ACCTREC": {"PROGA": [2]}, "CUSTREC": {"PROGA": [1]}}
+    target = tmp_path / "cpy"
+
+    result = write_stubs(missing, _config(tmp_path), target)
+
+    assert result.written == (target / "ACCTREC.cpy", target / "CUSTREC.cpy")
+    assert (target / "CUSTREC.cpy").read_text() == STUB_TEXT
+
+
+def test_a_stub_is_a_fixed_format_comment_and_says_it_is_a_stub(tmp_path: Path) -> None:
+    """A zero-byte file is indistinguishable from a truncated real member. Every
+    line is a comment (asterisk in column 7), so the stub parses and still tells
+    whoever finds it in a copybook dir what it is."""
+    write_stubs({"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), tmp_path / "cpy")
+
+    lines = (tmp_path / "cpy" / "CUSTREC.cpy").read_text().splitlines()
+
+    assert lines
+    assert all(line.startswith("      *") for line in lines)
+    assert "STUB" in lines[0]
+
+
+def test_the_stub_carries_the_first_extension_the_config_lists(tmp_path: Path) -> None:
+    """Named for the corpus's own convention, not a hardcoded .cpy -- the whole
+    reason copybook_extensions is configurable is corpora that do not use it."""
+    config = _config(tmp_path, copybook_extensions=("txt", "cpy"))
+
+    result = write_stubs({"CUSTREC": {"PROGA": [1]}}, config, tmp_path / "cpy")
+
+    assert result.written == (tmp_path / "cpy" / "CUSTREC.txt",)
+
+
+def test_a_corpus_whose_copybooks_carry_no_extension_gets_a_bare_stub(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, copybook_extensions=("",))
+
+    result = write_stubs({"CUSTREC": {"PROGA": [1]}}, config, tmp_path / "cpy")
+
+    assert result.written == (tmp_path / "cpy" / "CUSTREC",)
+
+
+def test_a_name_already_on_disk_under_an_unlisted_suffix_is_not_stubbed(
+    tmp_path: Path,
+) -> None:
+    """The dangerous case. CUSTREC.txt is the real member; copybook_extensions
+    does not list txt, so it reads as missing. Writing CUSTREC.cpy beside it would
+    resolve -- to a stub declaring nothing -- and the real member would never be
+    read again. That name needs a config edit, not a file."""
+    _touch(tmp_path / "cpy" / "CUSTREC.txt", "       01 CUST-REC.\n")
+    missing = {"ACCTREC": {"PROGA": [2]}, "CUSTREC": {"PROGA": [1]}}
+
+    result = write_stubs(missing, _config(tmp_path), tmp_path / "cpy")
+
+    assert result.written == (tmp_path / "cpy" / "ACCTREC.cpy",)
+    assert result.shadowed == ("CUSTREC",)
+    assert not (tmp_path / "cpy" / "CUSTREC.cpy").exists()
+
+
+def test_a_target_dir_the_config_does_not_list_is_flagged(tmp_path: Path) -> None:
+    """copybook_dirs is what ProLeap lists. A stub anywhere else is a file nobody
+    reads, so a run that wrote 300 of them there must not read as a fix."""
+    result = write_stubs(
+        {"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), tmp_path / "elsewhere"
+    )
+
+    assert result.written == (tmp_path / "elsewhere" / "CUSTREC.cpy",)
+    assert result.configured is False
+
+
+def test_a_target_dir_that_is_a_configured_copybook_dir_is_not_flagged(
+    tmp_path: Path,
+) -> None:
+    result = write_stubs(
+        {"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), tmp_path / "cpy"
+    )
+
+    assert result.configured is True
+
+
+def test_the_target_dir_is_created_when_it_does_not_exist(tmp_path: Path) -> None:
+    target = tmp_path / "staged" / "cpy"
+
+    result = write_stubs({"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), target)
+
+    assert result.written == (target / "CUSTREC.cpy",)
+    assert target.is_dir()
+
+
 def _write_config_yaml(tmp_path: Path) -> Path:
     return _touch(
         tmp_path / "corpus.yaml",
@@ -256,3 +349,42 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
     assert exit_code == 0
     assert json.loads(out.read_text()) == {"CUSTREC": {"PROGA": [1]}}
     assert capsys.readouterr().out == ""
+
+
+def test_fix_through_the_cli_writes_the_stubs_and_reports_them_on_stderr(
+    tmp_path: Path, capsys
+) -> None:
+    """The JSON stays what was missing BEFORE the fix -- it is diffed between runs
+    to see whether a fix moved the number, so it cannot describe the tree the fix
+    just left behind."""
+    _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
+    (tmp_path / "cpy").mkdir()
+    (tmp_path / "jcl").mkdir()
+
+    exit_code = main(
+        [
+            "--config",
+            str(_write_config_yaml(tmp_path)),
+            "--fix",
+            str(tmp_path / "cpy"),
+        ],
+        scan=_fake_scan(tmp_path),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert (tmp_path / "cpy" / "CUSTREC.cpy").read_text() == STUB_TEXT
+    assert json.loads(captured.out) == {"CUSTREC": {"PROGA": [1]}}
+    assert "1 empty stub" in captured.err
+
+
+def test_without_fix_nothing_is_written(tmp_path: Path) -> None:
+    """The diagnostic stays read-only unless asked: it is pointed at corpora
+    nobody has permission to add files to."""
+    _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
+    (tmp_path / "cpy").mkdir()
+    (tmp_path / "jcl").mkdir()
+
+    main(["--config", str(_write_config_yaml(tmp_path))], scan=_fake_scan(tmp_path))
+
+    assert list((tmp_path / "cpy").iterdir()) == []
