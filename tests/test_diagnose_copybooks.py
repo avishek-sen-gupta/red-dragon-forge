@@ -20,6 +20,7 @@ still fail the parse.
 """
 
 import json
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -351,12 +352,14 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
     assert capsys.readouterr().out == ""
 
 
-def test_fix_through_the_cli_writes_the_stubs_and_reports_them_on_stderr(
-    tmp_path: Path, capsys
+def test_fix_through_the_cli_writes_the_stubs_and_logs_what_it_did(
+    tmp_path: Path, capsys, caplog
 ) -> None:
     """The JSON stays what was missing BEFORE the fix -- it is diffed between runs
     to see whether a fix moved the number, so it cannot describe the tree the fix
-    just left behind."""
+    just left behind. The summary is a log record, so stdout stays only the JSON.
+    """
+    caplog.set_level(logging.INFO)
     _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
     (tmp_path / "cpy").mkdir()
     (tmp_path / "jcl").mkdir()
@@ -371,11 +374,46 @@ def test_fix_through_the_cli_writes_the_stubs_and_reports_them_on_stderr(
         scan=_fake_scan(tmp_path),
     )
 
-    captured = capsys.readouterr()
     assert exit_code == 0
     assert (tmp_path / "cpy" / "CUSTREC.cpy").read_text() == STUB_TEXT
-    assert json.loads(captured.out) == {"CUSTREC": {"PROGA": [1]}}
-    assert "1 empty stub" in captured.err
+    assert json.loads(capsys.readouterr().out) == {"CUSTREC": {"PROGA": [1]}}
+    assert "1 empty stub" in caplog.text
+
+
+def test_the_summary_is_logged_rather_than_printed(
+    tmp_path: Path, capsys, caplog
+) -> None:
+    """stdout is the machine channel and carries the JSON alone, so a run piped to
+    jq cannot be broken by adding a line to the human summary."""
+    caplog.set_level(logging.INFO)
+    _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
+    (tmp_path / "cpy").mkdir()
+    (tmp_path / "jcl").mkdir()
+
+    main(["--config", str(_write_config_yaml(tmp_path))], scan=_fake_scan(tmp_path))
+
+    assert json.loads(capsys.readouterr().out) == {"CUSTREC": {"PROGA": [1]}}
+    assert "will not resolve" in caplog.text
+
+
+def test_the_output_path_is_logged_and_the_names_are_not(
+    tmp_path: Path, caplog
+) -> None:
+    """--output logs the path it wrote and nothing else: the copybook names are the
+    corpus's own identifiers and belong in the file, not in a log someone tails."""
+    caplog.set_level(logging.INFO)
+    _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
+    (tmp_path / "cpy").mkdir()
+    (tmp_path / "jcl").mkdir()
+    out = tmp_path / "missing.json"
+
+    main(
+        ["--config", str(_write_config_yaml(tmp_path)), "--output", str(out)],
+        scan=_fake_scan(tmp_path),
+    )
+
+    assert f"Wrote {out}" in caplog.text
+    assert "CUSTREC" not in caplog.text
 
 
 def test_without_fix_nothing_is_written(tmp_path: Path) -> None:

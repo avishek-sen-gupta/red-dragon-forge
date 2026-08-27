@@ -14,10 +14,14 @@ Invoke as:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
+from cobble.cli_logging import configure_cli_logging
 from cobble.knowledge_graph.canonical_export import write_manifest
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -49,17 +53,17 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_cli_logging()
     args = _parse_args()
 
     if not args.nodes.is_file() or not args.edges.is_file():
-        print(
-            f"error: {args.nodes} / {args.edges} not found — run `make build` first",
-            file=sys.stderr,
+        logger.error(
+            "error: %s / %s not found — run `make build` first", args.nodes, args.edges
         )
         return 1
 
     write_manifest(args.nodes, args.edges, args.output, args.project_name)
-    print(f"Wrote {args.output}")
+    logger.info("Wrote %s", args.output)
     return 0
 
 

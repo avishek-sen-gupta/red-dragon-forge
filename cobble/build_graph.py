@@ -25,9 +25,6 @@ Env:
     JCL_BRIDGE_JAR=$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
 """
 
-# ruff: noqa: T201 -- the per-stage counts and the failure report ARE this
-# script's output; it is the run's entry point, not a library.
-
 from __future__ import annotations
 
 import argparse
@@ -46,6 +43,7 @@ from tqdm import tqdm
 
 from cobble.cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
+from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
 from cobble.corpus_index_builder import build_corpus_index
@@ -171,18 +169,22 @@ def _failure_report_lines(failures: Sequence[str]) -> tuple[str, ...]:
 
 
 def _report_failures(failures: Sequence[str]) -> None:
-    """Say loudly, on stderr, that the graph just written is missing things.
+    """Say loudly that the graph just written is missing things.
 
     A skipped member is not a warning about the run -- it is a statement about
     the output: those jobs, steps, programs and datasets are absent from
     nodes.jsonl, and every reference to them resolves UNRESOLVED. The counts
-    printed above this look like a finished graph either way, so this has to be
+    logged above this look like a finished graph either way, so this has to be
     hard to scroll past and it has to name the shape of what went wrong, not
     just list lines.
+
+    ERROR, not INFO: it describes the artifact rather than the progress, so a
+    caller that raises the level to silence the per-stage counts must still get
+    this. One record, so nothing interleaves through the middle of the report.
     """
     if not failures:
         return
-    print("\n".join(_failure_report_lines(failures)), file=sys.stderr)
+    logger.error("%s", "\n".join(_failure_report_lines(failures)))
 
 
 # ── extractor 1: JCL ─────────────────────────────────────────────
@@ -214,7 +216,7 @@ def _build_jcl_graph(
             for path in tqdm(jcl_files, desc="JCL", unit="file")
         )
     )
-    print(f"JCL: {len(jcl_files)} files")
+    logger.info("JCL: %d files", len(jcl_files))
     return failures
 
 
@@ -398,7 +400,7 @@ def _build_call_copy_graph(
             _prepassed_subprograms(scanned, cics_program_names), corpus_index
         )
     )
-    print(f"CALL/COPY: {len(cbl_files)} programs")
+    logger.info("CALL/COPY: %d programs", len(cbl_files))
     return tuple(chain.from_iterable(item.failures for item in scanned))
 
 
@@ -446,9 +448,10 @@ def _build_cics_flow_graph(
     }
     found = _cics_sources(frozenset(transid_to_program.values()), stems)
     stage_failures = _run_flow_extractor(config, corpus_index, found, writer)
-    print(
-        f"CICS flow: {len(transid_to_program)} transactions, "
-        f"{len(found.sources)} programs compiled"
+    logger.info(
+        "CICS flow: %d transactions, %d programs compiled",
+        len(transid_to_program),
+        len(found.sources),
     )
     return found.failures + stage_failures
 
@@ -493,7 +496,7 @@ def _cics_flow_or_skip(
     writer: GraphWriter,
 ) -> tuple[str, ...]:
     if not config.csd_files:
-        print("CICS flow: skipped (no csd_files configured)")
+        logger.info("CICS flow: skipped (no csd_files configured)")
         return ()
     return _build_cics_flow_graph(config, corpus_index, transid_to_program, writer)
 
@@ -535,7 +538,7 @@ def _build_batch_file_graph(
         )
     )
     store.close()
-    print(f"FILE-CONTROL: {len(cbl_files)} batch programs")
+    logger.info("FILE-CONTROL: %d batch programs", len(cbl_files))
     return failures
 
 
@@ -609,14 +612,16 @@ def _extract_all(
         )
 
 
-def _print_merged(config: CorpusConfig) -> None:
+def _report_merged(config: CorpusConfig) -> None:
     nodes_jsonl, edges_jsonl = _out_paths(config)
     graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
-    print(
-        f"\nMerged graph: {graph.number_of_nodes()} nodes, "
-        f"{graph.number_of_edges()} edges"
+    logger.info(
+        "\nMerged graph: %d nodes, %d edges\nWrote %s\nWrote %s",
+        graph.number_of_nodes(),
+        graph.number_of_edges(),
+        nodes_jsonl,
+        edges_jsonl,
     )
-    print(f"Wrote {nodes_jsonl}\nWrote {edges_jsonl}")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -631,12 +636,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.WARNING)
-    # Python block-buffers stdout at 8KB when it is a pipe rather than a tty, so
-    # under `make build | tee log` every per-stage count below arrives in bursts
-    # (or not until exit) while the tqdm bars, being on stderr, come through
-    # live. Line-buffer it so the two interleave in the order they happened.
-    sys.stdout.reconfigure(line_buffering=True)
+    # Everything this run says is a log record on stderr, which is where the tqdm
+    # bars already are -- so the per-stage counts and the bar each followed
+    # interleave in the order they happened, with no stdout buffering to work
+    # around. stdout stays empty.
+    configure_cli_logging()
     config = load_corpus_config(_parse_args().config)
     corpus_index = build_corpus_index(config)
     csd = _load_transid_to_program(config)
@@ -645,7 +649,7 @@ def main() -> int:
     failures = (
         corpus_index.failures + csd.failures + _extract_all(config, corpus_index, csd)
     )
-    _print_merged(config)
+    _report_merged(config)
     _report_failures(failures)
     return 0
 

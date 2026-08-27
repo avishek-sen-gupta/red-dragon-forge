@@ -32,7 +32,7 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-07-11-canonical-export.md
   checksum: e4c9700cfaa591e17cdf93e7cc8dc1a49b599e900aebeb9508a2aebceac9f510
 - filename: tests/test_canonical_export_cli.py
-  checksum: c4940bdfb8db44013f12ade8253d61011bbf431e5380f9078ecde56c593f186e
+  checksum: 7f07e37eb8c85c741f3f2efd4b68c561db32d3f742d00f1db6509c6393a39d39
 - filename: docs/corpus-onboarding-blockers.md
   checksum: d8e29abe150289d0eefbc0e2df48ae11ec032b8bb6958d636338182b0b8476ca
 - filename: tests/jackal/test_bridge_parser.py
@@ -47,6 +47,10 @@ fileignoreconfig:
   checksum: 4ecb54db84a73168a3ea41fa55c1238b5d1d28d494cc5c0498f9cc2dc0d123df
 - filename: cobble/diagnose_copybooks.py
   checksum: a7934d75877efce70b445206ff01235a5ec4ecd93732eeec0eb42d36f6d0e863
+- filename: cobble/compare.py
+  checksum: 2b6f4f9efeef6f46927049a097b79df8686dba883d6b3d4f6ea3a4e140b8997c
+- filename: tests/test_compare.py
+  checksum: 90f9662c399be91a1699c5923027cdda0633e0afc4e1df2838e972569f16bc0e
 - filename: proleap-bridge/proleap-cobol-parser
   ignore_detectors:
     - filecontent

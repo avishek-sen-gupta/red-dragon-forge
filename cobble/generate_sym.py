@@ -19,13 +19,18 @@ Invoke as: uv run python -m cobble.generate_sym --config <path>
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
+from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import BmsConfig, load_bms_config
 from cobble.matching_files import matching_files
+
+logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _HLASM = (
@@ -55,42 +60,54 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _child_env() -> Mapping[str, str]:
+    """The generator runs as `python -m cobble.bms_copybook_gen`, so the child needs
+    the repo on its PYTHONPATH to import it."""
+    return {**os.environ, "PYTHONPATH": str(_REPO_ROOT)}
+
+
+def _generate_one(bms: Path, config: BmsConfig, env: Mapping[str, str]) -> Path:
+    """hlasm_export <map> | bms_copybook_gen -> <sym_dir>/<stem>.cpy.
+
+    An empty copybook is raised rather than written: it would resolve at parse time
+    and declare nothing, which reads downstream as a program with no working
+    storage instead of as a build that failed here.
+    """
+    export = subprocess.run(
+        [str(_HLASM), str(bms), "--syslib", str(config.macros_dir)],
+        capture_output=True,
+        check=True,
+    )
+    gen = subprocess.run(
+        [sys.executable, "-m", "cobble.bms_copybook_gen"],
+        input=export.stdout,
+        capture_output=True,
+        check=True,
+        env=env,
+    )
+    if not gen.stdout.strip():
+        raise RuntimeError(
+            f"bms_copybook_gen produced an empty copybook for {bms.name} "
+            f"(a BMS macro keyword is likely undeclared in {config.macros_dir})"
+        )
+    target = config.sym_dir / (bms.stem + ".cpy")
+    target.write_bytes(gen.stdout)
+    logger.info("  BMS: %s.cpy", bms.stem)
+    return target
+
+
 def main() -> int:
-    args = _parse_args()
-    config = load_bms_config(args.config)
+    configure_cli_logging()
+    config = load_bms_config(_parse_args().config)
 
     if not _HLASM.is_file():
         sys.exit(
             f"hlasm_export not built: {_HLASM} (run `make jars` / the HLASM build first)"
         )
-    syslib_args = ["--syslib", str(config.macros_dir)]
     config.sym_dir.mkdir(parents=True, exist_ok=True)
-    env = {
-        **os.environ,
-        "PYTHONPATH": str(_REPO_ROOT),
-    }  # so `python -m cobble.bms_copybook_gen` resolves
-
-    written = 0
-    for bms in _bms_sources(config):
-        export = subprocess.run(
-            [str(_HLASM), str(bms), *syslib_args], capture_output=True, check=True
-        )
-        gen = subprocess.run(
-            [sys.executable, "-m", "cobble.bms_copybook_gen"],
-            input=export.stdout,
-            capture_output=True,
-            check=True,
-            env=env,
-        )
-        if not gen.stdout.strip():
-            raise RuntimeError(
-                f"bms_copybook_gen produced an empty copybook for {bms.name} "
-                f"(a BMS macro keyword is likely undeclared in {config.macros_dir})"
-            )
-        (config.sym_dir / (bms.stem + ".cpy")).write_bytes(gen.stdout)
-        written += 1
-        print(f"  BMS: {bms.stem}.cpy")
-    print(f"generated {written} symbolic copybooks -> {config.sym_dir}")
+    env = _child_env()
+    written = tuple(_generate_one(bms, config, env) for bms in _bms_sources(config))
+    logger.info("generated %d symbolic copybooks -> %s", len(written), config.sym_dir)
     return 0
 
 

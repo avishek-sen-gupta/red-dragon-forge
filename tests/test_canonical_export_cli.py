@@ -1,5 +1,6 @@
 import json
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -7,36 +8,54 @@ import pytest
 from cobble import canonical_export
 
 
-def _write_jsonl(path: Path, rows: list[dict]) -> None:
+def _write_jsonl(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n" if rows else "")
 
 
-def test_main_reads_explicit_paths_and_writes_manifest_json(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    nodes_path = tmp_path / "nodes.jsonl"
-    edges_path = tmp_path / "edges.jsonl"
-    output_path = tmp_path / "manifest.json"
-    _write_jsonl(
-        nodes_path, [{"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}]
+def _paths(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """The nodes/edges/output triple every one of these tests works with."""
+    return (
+        tmp_path / "nodes.jsonl",
+        tmp_path / "edges.jsonl",
+        tmp_path / "manifest.json",
     )
-    _write_jsonl(edges_path, [])
 
+
+def _set_argv(
+    monkeypatch: pytest.MonkeyPatch,
+    nodes: Path,
+    edges: Path,
+    output: Path,
+    project_name: str,
+) -> None:
+    """All four flags are required, so every invocation passes all four."""
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "canonical_export",
             "--nodes",
-            str(nodes_path),
+            str(nodes),
             "--edges",
-            str(edges_path),
+            str(edges),
             "--output",
-            str(output_path),
+            str(output),
             "--project-name",
-            "carddemo",
+            project_name,
         ],
     )
+
+
+def test_main_reads_explicit_paths_and_writes_manifest_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nodes_path, edges_path, output_path = _paths(tmp_path)
+    _write_jsonl(
+        nodes_path, [{"id": "A", "kind": "PROGRAM", "file_path": None, "attrs": {}}]
+    )
+    _write_jsonl(edges_path, [])
+    _set_argv(monkeypatch, nodes_path, edges_path, output_path, "carddemo")
+
     exit_code = canonical_export.main()
 
     assert exit_code == 0
@@ -111,7 +130,7 @@ def test_main_writes_given_project_name(
 
 
 def test_main_returns_1_if_nodes_jsonl_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     nodes_path = tmp_path / "nodes.jsonl"
     edges_path = tmp_path / "edges.jsonl"
@@ -138,13 +157,12 @@ def test_main_returns_1_if_nodes_jsonl_missing(
 
     assert exit_code == 1
     assert not output_path.exists()
-    captured = capsys.readouterr()
-    assert "not found" in captured.err
-    assert "make build" in captured.err
+    assert "not found" in caplog.text
+    assert "make build" in caplog.text
 
 
 def test_main_returns_1_if_edges_jsonl_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     nodes_path = tmp_path / "nodes.jsonl"
     edges_path = tmp_path / "edges.jsonl"
@@ -173,6 +191,5 @@ def test_main_returns_1_if_edges_jsonl_missing(
 
     assert exit_code == 1
     assert not output_path.exists()
-    captured = capsys.readouterr()
-    assert "not found" in captured.err
-    assert "make build" in captured.err
+    assert "not found" in caplog.text
+    assert "make build" in caplog.text

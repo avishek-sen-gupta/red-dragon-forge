@@ -23,9 +23,11 @@ file_path in the knowledge graph and still fail the parse, which is why the
 graph's UNRESOLVED count is a lower bound on what this reports.
 
 stdout (or --output) is JSON and nothing else: missing copybook name -> program
--> the lines its COPY statements are on. The human summary goes to stderr, so
-the JSON stays pipeable and a run writing names to a file does not also print
-them to a shared terminal.
+-> the lines its COPY statements are on. The human summary is LOGGED (so it
+lands on stderr, and a caller that wants it in a file gets that from logging
+config rather than from shell redirection), which keeps the JSON pipeable and
+keeps a run that writes names to a file from also putting them on a shared
+terminal.
 
 Read-only unless --fix DIR is passed, which writes an empty stub copybook into
 DIR for every missing name nobody staged. That buys a PARSE, not data: a stubbed
@@ -36,9 +38,6 @@ would resolve first and the real member would never be read again.
 
 Invoke as: uv run diagnose-copybooks --config <path>
 """
-
-# ruff: noqa: T201 -- the JSON on stdout and the summary on stderr ARE this
-# script's output; it is a diagnostic entry point, not a library.
 
 from __future__ import annotations
 
@@ -53,6 +52,7 @@ from itertools import chain, groupby
 from operator import itemgetter
 from pathlib import Path
 
+from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.interpreter.project.cobol_imports import extract_cobol_imports
 from cobble.interpreter.project.import_types import ImportKind, ImportRef
@@ -94,7 +94,7 @@ def _scan_member(path: Path) -> ScanResult:
     try:
         refs = extract_cobol_imports(path.read_bytes(), path)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("could not scan %s: %s", path.name, exc)
+        logger.warning("!! could not scan %s: %s", path.name, exc)
         return ScanResult(path=path, message=f"{type(exc).__name__}: {exc}")
     return ScanResult(
         path=path, copies=tuple(r for r in refs if r.kind == ImportKind.INCLUDE)
@@ -114,7 +114,7 @@ def _filenames_in(directory: Path) -> tuple[str, ...]:
     copybook library is staged.
     """
     if not directory.is_dir():
-        logger.warning("copybook dir does not exist: %s", directory)
+        logger.warning("!! copybook dir does not exist: %s", directory)
         return ()
     return tuple(path.name.lower() for path in directory.iterdir() if path.is_file())
 
@@ -406,17 +406,21 @@ def _report_lines(
 def _report(
     missing: MissingCopybooks, config: CorpusConfig, results: Sequence[ScanResult]
 ) -> None:
-    """Human summary, on stderr, with no corpus identifiers in it.
+    """Human summary, logged, with no corpus identifiers in it.
 
     Names are the corpus's own; they belong in the JSON the caller chose where to
-    put, not in a terminal. What goes here is shape only.
+    put, not in a log anyone tails. What goes here is shape only.
+
+    One record rather than one per line, so a handler that adds a prefix or a
+    timestamp does not interleave another thread's output through the middle of a
+    bracketed report.
     """
-    print("\n" + "\n".join(_report_lines(missing, config, results)), file=sys.stderr)
+    logger.info("\n%s", "\n".join(_report_lines(missing, config, results)))
 
 
 def _report_fix(fix: StubWrite, target: Path) -> None:
-    """What --fix did, on stderr with the summary, and without naming a copybook."""
-    print("\n" + "\n".join(_fix_lines(fix, target)), file=sys.stderr)
+    """What --fix did, logged with the summary, and without naming a copybook."""
+    logger.info("\n%s", "\n".join(_fix_lines(fix, target)))
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -457,13 +461,16 @@ def _emit_json(payload: str, args: argparse.Namespace) -> None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(payload + "\n")
         # Only the path, never the names: they are the corpus's own identifiers.
-        print(f"Wrote {args.output}", file=sys.stderr)
+        logger.info("Wrote %s", args.output)
     else:
-        print(payload)
+        # Written, not logged: this is the machine channel. A log record would put
+        # the JSON on stderr behind whatever prefix the handler adds, and `| jq`
+        # would get nothing.
+        sys.stdout.write(payload + "\n")
 
 
 def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
-    logging.basicConfig(level=logging.WARNING)
+    configure_cli_logging()
     args = _parse_args(argv)
     config = load_corpus_config(args.config)
 
