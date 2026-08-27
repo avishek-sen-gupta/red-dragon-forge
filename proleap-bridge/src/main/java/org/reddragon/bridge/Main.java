@@ -12,9 +12,7 @@ import io.proleap.cobol.preprocessor.CobolPreprocessor.CobolSourceFormatEnum;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,9 +31,6 @@ import java.util.logging.Logger;
  *   <li>{@code -copybook-dir <dir>}: copybook search directory (repeatable)</li>
  *   <li>{@code -copybook-ext <ext>}: copybook filename extension (repeatable;
  *       defaults to {@link #DEFAULT_COPYBOOK_EXTENSIONS} when not given)</li>
- *   <li>{@code -scan-copy}: batch COPY scan. Reads newline-separated source paths
- *       from stdin and writes one JSON object per line (see {@link CopyScanner}).
- *       Resolves nothing and builds no ASG, so it takes no copybook flags.</li>
  * </ul>
  *
  * <p>Writes JSON ASG to stdout, matching the RedDragon {@code CobolASG} contract.
@@ -59,12 +54,6 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         suppressProLeapLogging();
-
-        if (isScanCopyMode(args)) {
-            CopyScanner.runBatch(
-                new InputStreamReader(System.in, StandardCharsets.UTF_8), System.out);
-            return;
-        }
 
         CobolSourceFormatEnum format = CobolSourceFormatEnum.FIXED;
         String filePath = "";
@@ -110,18 +99,6 @@ public final class Main {
         if (filePath.isEmpty()) {
             cobolFile.delete();
         }
-    }
-
-    /**
-     * Whether to run the batch COPY scan instead of a full ASG parse.
-     *
-     * <p>The scan answers which copybooks a corpus names without resolving any of
-     * them, which is the question worth asking before a parse: resolution is the
-     * step that fails, and it fails one member at a time after a JVM has already
-     * built an ASG.
-     */
-    static boolean isScanCopyMode(String[] args) {
-        return Arrays.asList(args).contains("-scan-copy");
     }
 
     /**

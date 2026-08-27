@@ -4,11 +4,10 @@ The expensive phase of a corpus build is COBOL parsing, and a COPY the ProLeap
 preprocessor cannot resolve fails the whole program. Finding that out costs hours
 of JVM subprocesses; finding it out from a COPY scan costs one JVM.
 
-COPY statements come from the bridge's ``-scan-copy`` mode, which parses with
-ProLeap's own ``CobolPreprocessor.g4`` and resolves nothing. What is left for
-this module is resolution, and it mirrors ProLeap's CobolWordCopyBookFinderImpl
-exactly, because an answer that disagrees with the parser is worse than no
-answer:
+COPY statements come from ``cobol_imports.extract_cobol_imports``, which folds
+fixed-format continuations and resolves nothing. What is left for this module is
+resolution, and it mirrors ProLeap's CobolWordCopyBookFinderImpl exactly, because
+an answer that disagrees with the parser is worse than no answer:
 
   - a candidate matches iff its FULL FILENAME equalsIgnoreCase either the copy
     name itself (for the empty extension) or ``<name>.<ext>`` for a configured
@@ -24,9 +23,14 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from cobble.copy_scan import CopyRef, ScanResult
 from cobble.corpus_config import CorpusConfig
-from cobble.diagnose_copybooks import find_missing_copybooks, main
+from cobble.diagnose_copybooks import (
+    ScanResult,
+    find_missing_copybooks,
+    main,
+    scan_members,
+)
+from cobble.interpreter.project.import_types import ImportKind, ImportRef
 
 
 def _config(tmp_path: Path, **overrides) -> CorpusConfig:
@@ -46,11 +50,19 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
 
 
 def _scanned(tmp_path: Path, program: str, *copies: tuple[str, int]) -> ScanResult:
-    """A scan result as the bridge would report one, for ``<program>.cbl``."""
+    """A scan result as the scanner would report one, for ``<program>.cbl``."""
+    path = tmp_path / "cbl" / f"{program}.cbl"
     return ScanResult(
-        path=tmp_path / "cbl" / f"{program}.cbl",
-        copies=tuple(CopyRef(name, line) for name, line in copies),
-        errors=0,
+        path=path,
+        copies=tuple(
+            ImportRef(
+                source_file=path,
+                module_path=name,
+                kind=ImportKind.INCLUDE,
+                line=line,
+            )
+            for name, line in copies
+        ),
     )
 
 
@@ -153,23 +165,37 @@ def test_a_missing_copybook_dir_is_not_fatal(tmp_path: Path) -> None:
     assert find_missing_copybooks(config, results) == {"CUSTREC": {"PROGA": [1]}}
 
 
-def test_a_member_with_syntax_errors_still_contributes_the_copies_it_named(
+def test_an_unreadable_member_contributes_nothing_and_does_not_hide_the_others(
     tmp_path: Path,
 ) -> None:
-    """ANTLR recovers and keeps reporting COPYs after a syntax error. Dropping
-    such a member would lose real answers to make the totals look tidier."""
+    """A member that cannot be read names no copybooks, which makes the report a
+    lower bound rather than an answer -- so it must not silently vanish, and it
+    must not cost the report on every member scanned after it."""
     (tmp_path / "cpy").mkdir()
     results = [
-        ScanResult(
-            path=tmp_path / "cbl" / "PROGA.cbl",
-            copies=(CopyRef("CUSTREC", 1),),
-            errors=4,
-        )
+        ScanResult(path=tmp_path / "cbl" / "BAD.cbl", message="OSError: boom"),
+        _scanned(tmp_path, "PROGA", ("CUSTREC", 1)),
     ]
 
     assert find_missing_copybooks(_config(tmp_path), results) == {
         "CUSTREC": {"PROGA": [1]}
     }
+
+
+def test_a_member_that_cannot_be_read_is_reported_rather_than_raising(
+    tmp_path: Path,
+) -> None:
+    """Onboarding a corpus means meeting members that do not read. One of them
+    must not cost the scan of the other 3778."""
+    good = _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
+    absent = tmp_path / "cbl" / "GONE.cbl"
+
+    results = scan_members([absent, good])
+
+    assert results[0].message
+    assert results[0].copies == ()
+    assert [r.module_path for r in results[1].copies] == ["CUSTREC"]
+    assert results[1].message == ""
 
 
 def _write_config_yaml(tmp_path: Path) -> Path:
@@ -189,7 +215,7 @@ corpus:
 
 
 def _fake_scan(tmp_path: Path):
-    """Stands in for the bridge, so the CLI tests need no JVM."""
+    """Stands in for the scanner, so the CLI tests assert on plumbing only."""
 
     def scan(paths: Sequence[Path]) -> list[ScanResult]:
         return [_scanned(tmp_path, path.stem, ("CUSTREC", 1)) for path in paths]
