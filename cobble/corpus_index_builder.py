@@ -17,7 +17,7 @@ a duplicate name later in that order does not displace the file already found.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
@@ -36,6 +36,11 @@ from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs
 from cobble.jackal.jcl_graph import step_proc_provenance
 from cobble.jackal.model import Job, Step
 from cobble.matching_files import matching_files
+
+# How the index turns a member's path into a Job: parse it now, or take it from a
+# store that already has. Named because both halves of a corpus build need the
+# same members and the second must not pay for them again.
+ReadJob = Callable[[Path], Job]
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +187,14 @@ def _entries_for(job: Job, path: Path, proclib_dirs: Sequence[Path]) -> _JclEntr
     )
 
 
-def _index_jcl_file(path: Path, proclib_dirs: Sequence[Path]) -> _JclEntries:
+def _read_member(path: Path) -> Job:
+    """One member, parsed with its own JVM. The default reader."""
+    return parse_jcl(decode_source(path.read_bytes()))
+
+
+def _index_jcl_file(
+    path: Path, proclib_dirs: Sequence[Path], read_job: ReadJob
+) -> _JclEntries:
     """Index one JCL member, reporting a member cobble cannot read rather than
     raising.
 
@@ -191,24 +203,27 @@ def _index_jcl_file(path: Path, proclib_dirs: Sequence[Path]) -> _JclEntries:
     be filed as a corpus problem and skipped.
     """
     try:
-        job = parse_jcl(decode_source(path.read_bytes()))
+        job = read_job(path)
     except (JclParseError, OSError) as exc:
         logger.warning("CorpusIndex: JCL %s failed to parse: %s", path.name, exc)
         return _JclEntries(failures=(f"index JCL {path.name}: {exc}",))
     return _entries_for(job, path, proclib_dirs)
 
 
-def _index_jcl(config: CorpusConfig) -> tuple[_JclEntries, ...]:
+def _index_jcl(config: CorpusConfig, read_job: ReadJob) -> tuple[_JclEntries, ...]:
     """Every JCL member, with a progress bar.
 
-    The bar matters here more than anywhere else in the run: this is one JVM
-    subprocess per member, it runs before any extractor and before GraphWriter
-    opens its output, and it is the slowest phase of a corpus build. Without it
-    the whole indexing pass is indistinguishable from a hang. tqdm writes to
-    stderr, so it survives a stdout pipe.
+    The bar matters here more than anywhere else in the run: with the default
+    reader this is one JVM subprocess per member, it runs before any extractor
+    and before GraphWriter opens its output, and it is the slowest phase of a
+    corpus build. Without it the whole indexing pass is indistinguishable from a
+    hang. tqdm writes to stderr, so it survives a stdout pipe.
+
+    A corpus build hands in a JclStore's ``get`` instead, which has already
+    parsed every member in parallel, so the bar there tracks deserialization.
     """
     return tuple(
-        _index_jcl_file(path, config.proclib_dirs)
+        _index_jcl_file(path, config.proclib_dirs, read_job)
         for path in tqdm(
             matching_files(config.jcl_dir, config.jcl_globs),
             desc="index JCL",
@@ -242,17 +257,24 @@ def _index_csd_file(csd_file: Path) -> _CsdEntries:
         return _CsdEntries(failures=(f"index CSD {csd_file.name}: {exc}",))
 
 
-def build_corpus_index(config: CorpusConfig) -> CorpusIndex:
+def build_corpus_index(
+    config: CorpusConfig, read_job: ReadJob = _read_member
+) -> CorpusIndex:
     """Read the corpus once and return the index every extractor resolves against.
 
     Failures are ordered JCL then CSD, i.e. the order the corpus was read in, so
     the run's failure report reads in the order things happened.
 
+    ``read_job`` is how a member becomes a Job, defaulting to parsing it here. A
+    corpus build passes a JclStore's ``get``, because the graph pass needs the
+    same members again and re-parsing them is the single largest avoidable cost
+    in a run; see cobble.jackal.jcl.jcl_store.
+
     BMS maps are absent by construction: bms_dir is not part of CorpusConfig
     today (see BmsConfig), so BMS_MAP resolution stays UNRESOLVED until that is
     threaded through too.
     """
-    jcl = _index_jcl(config)
+    jcl = _index_jcl(config, read_job)
     csd = tuple(map(_index_csd_file, config.csd_files))
     return CorpusIndex(
         programs=_first_wins(_program_pairs(config)),

@@ -8,9 +8,15 @@ from cobble.jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from cobble.jackal.model import Job, ProcDef
 
 
-def parse_jcl(text: str) -> Job:
+def bridge_parser() -> JclBridgeParser:
+    """The production bridge, for a caller driving many members through one store
+    rather than a single text through ``parse_jcl``."""
     jar = os.environ["JCL_BRIDGE_JAR"]  # fail loud if unset
-    return JclBridgeParser(JclSubprocessRunner(), jar).parse(text)
+    return JclBridgeParser(JclSubprocessRunner(), jar)
+
+
+def parse_jcl(text: str) -> Job:
+    return bridge_parser().parse(text)
 
 
 def parse_proc(text: str) -> ProcDef:

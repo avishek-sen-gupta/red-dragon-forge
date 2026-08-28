@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
+from typing import TypeVar
 
 from cobble.jackal.dsn import (
     DSN,
@@ -28,6 +30,8 @@ from cobble.jackal.model import (
 from cobble.jackal.value_parts import Literal, Symbol, Value, resolve
 
 _PREEXISTING_STATUSES = frozenset({DispStatus.OLD, DispStatus.SHR, DispStatus.MOD})
+
+T = TypeVar("T")
 
 
 def _value_from_json(parts: list[dict]) -> Value:
@@ -137,6 +141,42 @@ class JclParseError(Exception):
     """Raised when the jcl-bridge fails to parse JCL."""
 
 
+def _malformed(out: str, cause: Exception) -> JclParseError:
+    snippet = out[:120].replace("\n", " ")
+    return JclParseError(
+        f"bridge returned malformed/incomplete JSON: {cause} — output: {snippet!r}"
+    )
+
+
+def _from_bridge_json(out: str, build: Callable[[dict], T]) -> T:
+    """Deserialize bridge output, reporting anything unusable as a parse failure.
+
+    Wraps model construction as well as the JSON decode: ``_dd_from_json`` and the
+    ``Disp*`` enums raise ``ValueError`` on shapes the model does not cover, and a
+    caller cannot tell those apart from a bad member.
+
+    Shared with JclStore, which deserializes the same output later from cache and
+    so must fail with the same text as parsing it directly would have.
+    """
+    try:
+        return build(json.loads(out))
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        raise _malformed(out, e) from e
+
+
+def _validate_bridge_json(out: str) -> None:
+    """Decode and discard, so a response that is not JSON fails here."""
+    try:
+        json.loads(out)
+    except json.JSONDecodeError as e:
+        raise _malformed(out, e) from e
+
+
+def job_from_bridge_json(out: str) -> Job:
+    """A Job from bridge output, as ``JclBridgeParser.parse`` would have built it."""
+    return _from_bridge_json(out, _job_from_json)
+
+
 class JclSubprocessRunner:
     """Production runner: invoke the bridge JAR, fail loud on non-zero exit."""
 
@@ -158,24 +198,28 @@ class JclBridgeParser:
         self._runner = runner
         self._bridge_jar = bridge_jar
 
+    def _run(self, text: str) -> str:
+        return self._runner.run(["java", "-jar", self._bridge_jar], text)
+
     def parse(self, text: str) -> Job:
-        command = ["java", "-jar", self._bridge_jar]
-        out = self._runner.run(command, text)
-        try:
-            return _job_from_json(json.loads(out))
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            snippet = out[:120].replace("\n", " ")
-            raise JclParseError(
-                f"bridge returned malformed/incomplete JSON: {e} — output: {snippet!r}"
-            ) from e
+        return _from_bridge_json(self._run(text), _job_from_json)
 
     def parse_proc(self, text: str) -> ProcDef:
-        command = ["java", "-jar", self._bridge_jar]
-        out = self._runner.run(command, text)
-        try:
-            return _proc_from_json(json.loads(out))
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            snippet = out[:120].replace("\n", " ")
-            raise JclParseError(
-                f"bridge returned malformed/incomplete JSON: {e} — output: {snippet!r}"
-            ) from e
+        return _from_bridge_json(self._run(text), _proc_from_json)
+
+    def parse_to_json(self, text: str) -> str:
+        """The bridge's JSON for this member, without building the Job.
+
+        What JclStore caches: the JSON the bridge emitted, not what it
+        deserialized to. Holding a Job per member does not scale to a corpus, and
+        the bridge hands its output back as a string already, so caching costs a
+        file write rather than a serializer.
+
+        Decoded and thrown away here on purpose. A truncated or empty response
+        has to fail while the member that produced it is still in hand — from
+        cache it would surface much later, against a member name the store would
+        have to carry solely to report it.
+        """
+        out = self._run(text)
+        _validate_bridge_json(out)
+        return out

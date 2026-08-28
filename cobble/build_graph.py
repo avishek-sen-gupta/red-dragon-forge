@@ -61,7 +61,9 @@ from cobble.interpreter.project.graph_types import (
 )
 from cobble.interpreter.project.import_types import ImportKind, ImportRef
 from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
-from cobble.jackal.jcl_graph import extract_jcl_graph
+from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
+from cobble.jackal.jcl.parser import bridge_parser
+from cobble.jackal.jcl_graph import jcl_graph_from_job
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
@@ -191,11 +193,15 @@ def _report_failures(failures: Sequence[str]) -> None:
 
 
 def _jcl_file_failures(
-    path: Path, config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter
+    path: Path,
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    writer: GraphWriter,
+    store: JclStore,
 ) -> tuple[str, ...]:
     try:
-        nodes, edges = extract_jcl_graph(
-            decode_source(path.read_bytes()),
+        nodes, edges = jcl_graph_from_job(
+            store.get(path),
             corpus_index,
             proclib_dirs=config.proclib_dirs,
         )
@@ -207,12 +213,15 @@ def _jcl_file_failures(
 
 
 def _build_jcl_graph(
-    config: CorpusConfig, corpus_index: CorpusIndex, writer: GraphWriter
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    writer: GraphWriter,
+    store: JclStore,
 ) -> tuple[str, ...]:
     jcl_files = matching_files(config.jcl_dir, config.jcl_globs)
     failures = tuple(
         chain.from_iterable(
-            _jcl_file_failures(path, config, corpus_index, writer)
+            _jcl_file_failures(path, config, corpus_index, writer, store)
             for path in tqdm(jcl_files, desc="JCL", unit="file")
         )
     )
@@ -597,7 +606,7 @@ def _read_ndjson(
 
 
 def _extract_all(
-    config: CorpusConfig, corpus_index: CorpusIndex, csd: _CsdRead
+    config: CorpusConfig, corpus_index: CorpusIndex, csd: _CsdRead, store: JclStore
 ) -> tuple[str, ...]:
     """Run the four extractors into one writer, returning everything they skipped."""
     cics_program_names = frozenset(csd.transid_to_program.values())
@@ -605,7 +614,7 @@ def _extract_all(
     nodes_jsonl, edges_jsonl = _out_paths(config)
     with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
         return (
-            _build_jcl_graph(config, corpus_index, writer)
+            _build_jcl_graph(config, corpus_index, writer, store)
             + _build_call_copy_graph(config, corpus_index, cics_program_names, writer)
             + _cics_flow_or_skip(config, corpus_index, csd.transid_to_program, writer)
             + _build_batch_file_graph(config, corpus_index, cics_program_names, writer)
@@ -642,13 +651,25 @@ def main() -> int:
     # around. stdout stays empty.
     configure_cli_logging()
     config = load_corpus_config(_parse_args().config)
-    corpus_index = build_corpus_index(config)
-    csd = _load_transid_to_program(config)
-    # Members the index skipped come first: everything in them is absent from the
-    # index, so they belong in the same report as the graph-building failures.
-    failures = (
-        corpus_index.failures + csd.failures + _extract_all(config, corpus_index, csd)
-    )
+    # Both JCL passes read every member, so the bridge runs once per member here
+    # rather than once per pass. The store keeps only the bridge's JSON, on disk,
+    # and deserializes one Job at a time -- a resident Job per member does not
+    # scale to a corpus. Its cache dies with the store, so no run can be served
+    # output from a different grammar.
+    with temp_jcl_store() as store:
+        store.parse_all(
+            matching_files(config.jcl_dir, config.jcl_globs), bridge_parser()
+        )
+        corpus_index = build_corpus_index(config, store.get)
+        csd = _load_transid_to_program(config)
+        # Members the index skipped come first: everything in them is absent from
+        # the index, so they belong in the same report as the graph-building
+        # failures.
+        failures = (
+            corpus_index.failures
+            + csd.failures
+            + _extract_all(config, corpus_index, csd, store)
+        )
     _report_merged(config)
     _report_failures(failures)
     return 0
