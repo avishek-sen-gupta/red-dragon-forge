@@ -20,8 +20,7 @@ def test_graph_node_equality_is_by_value() -> None:
 
 def test_graph_node_defaults() -> None:
     node = GraphNode(id="COACTVW", kind=NodeKind.PROGRAM)
-    assert node.file_path is None
-    assert node.attrs == {}
+    assert (node.file_path, node.attrs) == (None, {})
 
 
 def test_graph_node_is_unhashable_due_to_dict_attrs_field() -> None:
@@ -73,6 +72,7 @@ def test_edge_kind_values() -> None:
         "LINK",
         "RETURN_TRANSID",
         "STARTS",
+        "START_TRANSID",
         "SENDS_MAP",
         "RECEIVES_MAP",
         "JCL_STEP_RUNS",

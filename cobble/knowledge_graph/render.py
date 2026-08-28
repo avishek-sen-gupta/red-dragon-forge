@@ -6,9 +6,12 @@ cobble/knowledge_graph/vendor/) and inlined directly into the generated file.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import networkx as nx
+
+from cobble.interpreter.project.graph_types import AttrValue, EdgeKind, NodeKind
 
 _VENDOR_JS_PATH = Path(__file__).parent / "vendor" / "vis-network.min.js"
 
@@ -28,6 +31,7 @@ _EDGE_COLORS = {
     "XCTL": "#C44E52",
     "LINK": "#C44E52",
     "RETURN_TRANSID": "#C44E52",
+    "START_TRANSID": "#C44E52",
     "STARTS": "#8172B2",
     "SENDS_MAP": "#DD8452",
     "RECEIVES_MAP": "#DD8452",
@@ -167,7 +171,7 @@ searchInput.addEventListener("input", () => {{
 """
 
 
-def _attrs_suffix(attrs: dict) -> str:
+def _attrs_suffix(attrs: Mapping[str, AttrValue]) -> str:
     """Format attrs as extra tooltip lines, e.g. IDCAMS SYSIN text — empty
     string (no suffix) when there's nothing to show."""
     if not attrs:
@@ -178,6 +182,38 @@ def _attrs_suffix(attrs: dict) -> str:
 def _node_id_str(key: tuple) -> str:
     kind, node_id = key
     return f"{kind.value}:{node_id}"
+
+
+def _vis_node(
+    key: tuple, node_id: str, kind: NodeKind, attrs: Mapping[str, AttrValue]
+) -> dict:
+    """One vis-network node: colour by kind, tooltip carrying the attrs."""
+    return {
+        "id": _node_id_str(key),
+        "label": node_id,
+        "kind": kind.value,
+        "color": _NODE_COLORS.get(kind.value, "#999999"),
+        "title": f"{kind.value}: {node_id}" + _attrs_suffix(attrs),
+    }
+
+
+def _vis_edge(
+    index: int,
+    source: tuple,
+    target: tuple,
+    kind: EdgeKind,
+    attrs: Mapping[str, AttrValue],
+) -> dict:
+    """One vis-network edge, keyed by position so parallel edges stay distinct."""
+    return {
+        "id": index,
+        "from": _node_id_str(source),
+        "to": _node_id_str(target),
+        "kind": kind.value,
+        "label": kind.value,
+        "color": _EDGE_COLORS.get(kind.value, "#999999"),
+        "title": kind.value + _attrs_suffix(attrs),
+    }
 
 
 def render_html(
@@ -194,32 +230,14 @@ def render_html(
         raise FileNotFoundError(f"vis-network not vendored at {_VENDOR_JS_PATH}")
     vis_js = _VENDOR_JS_PATH.read_text()
 
-    vis_nodes = []
-    for key, data in graph.nodes(data=True):
-        vis_nodes.append(
-            {
-                "id": _node_id_str(key),
-                "label": data["id"],
-                "kind": data["kind"].value,
-                "color": _NODE_COLORS.get(data["kind"].value, "#999999"),
-                "title": f"{data['kind'].value}: {data['id']}"
-                + _attrs_suffix(data["attrs"]),
-            }
-        )
-
-    vis_edges = []
-    for i, (source, target, data) in enumerate(graph.edges(data=True)):
-        vis_edges.append(
-            {
-                "id": i,
-                "from": _node_id_str(source),
-                "to": _node_id_str(target),
-                "kind": data["kind"].value,
-                "label": data["kind"].value,
-                "color": _EDGE_COLORS.get(data["kind"].value, "#999999"),
-                "title": data["kind"].value + _attrs_suffix(data["attrs"]),
-            }
-        )
+    vis_nodes = [
+        _vis_node(key, data["id"], data["kind"], data["attrs"])
+        for key, data in graph.nodes(data=True)
+    ]
+    vis_edges = [
+        _vis_edge(index, source, target, data["kind"], data["attrs"])
+        for index, (source, target, data) in enumerate(graph.edges(data=True))
+    ]
 
     html = _HTML_TEMPLATE.format(
         title=title,
