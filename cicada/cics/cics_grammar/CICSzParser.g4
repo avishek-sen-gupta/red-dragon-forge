@@ -6280,6 +6280,8 @@ linkOptions
 	| sysidOption
 	| synconreturnOption
 	| transidOption
+	| applidOption
+	| retcodeOption
 	| exceptionOptions
 	)
 	;
