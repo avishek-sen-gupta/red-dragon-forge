@@ -195,6 +195,25 @@ Implemented as `forbidden` contracts in `.importlinter`, with `cobble` added to
 `root_packages` (and `red_dragon_forge` added so it can be named as a forbidden
 target). `uv run lint-imports` already runs in pre-commit and CI.
 
+### Generated parser policy
+
+The two repositories treat the ANTLR-generated CICS parser differently, and
+cicada should adopt cobble's approach as part of the consolidation. Cobble
+gitignores `cics_grammar/CICSzParser.py` and regenerates it from a `make parser`
+target; cicada checks the generated files into git.
+
+Checking them in has a concrete cost, seen this session: a two-line grammar change
+produced a 40,000-line commit, because the serialized ATN shifts wholesale when
+alternatives are added and Black reformats it to one integer per line. That diff
+is unreviewable, and it hides whether the checked-in parser actually corresponds
+to the checked-in grammar — which at one point it did not: ANTLR 4.13.1 emits
+257k lines from cicada's grammar against the 475k checked in, a discrepancy
+explained only by Black, and which took a control regeneration to establish.
+
+Generating at build removes the question. It costs a build-time dependency on the
+ANTLR jar, which cobble already vendors under `tools/` with a Makefile rule to
+fetch it.
+
 ## Reconciliation
 
 Cobble has moved ahead of the canonical modules in two distinct ways, and the two
