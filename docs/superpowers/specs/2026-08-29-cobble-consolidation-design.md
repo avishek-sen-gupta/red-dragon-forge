@@ -20,6 +20,28 @@ then failed in the model.
 The backporting is a symptom. The cause is that cobble holds **copies** of code
 that red-dragon and forge already own.
 
+### Drift observed while this design was being written
+
+Cobble states its own invariant, in `cics/verb_source_asg.py`: *"THIS IS THE ONE
+SEAM FILE — the only ported module permitted to contain real logic changes
+(everything else in cobble/ is byte-for-byte + import-rewrite)."* That invariant
+no longer holds. In the hours between the backport sweep and this document, eight
+commits landed in cobble, and four modules that are meant to be identical copies
+diverged:
+
+| Module | Changed lines vs. canonical |
+| --- | --- |
+| `cics/flow_map.py` | 239 |
+| `cics/flow_graph_core.py` | 172 |
+| `knowledge_graph/render.py` | 96 |
+| `interpreter/project/graph_types.py` | 20 |
+
+This is not an argument against the design; it is the strongest argument for it,
+and it changes two things below. The reconciliation list is no longer short, and
+it grows with elapsed time — so the cutover is time-sensitive in a way a
+structural refactor normally is not. Deletion can no longer be assumed safe for
+the CICS graph layer, because there the copies genuinely differ.
+
 ## The key observation
 
 There is no duplication between red-dragon and forge. Forge consumes red-dragon
@@ -60,6 +82,8 @@ Its own work, which exists nowhere else:
 | `matching_files.py` | Glob resolution over a corpus |
 | `jcl/jcl_store.py` | Parsed-JCL cache, so a corpus parses each member once |
 | `canonical_export.py` | Canonical knowledge-graph export |
+| `build_graph.py` | Corpus-generic graph build (forge's `build_carddemo_graph` is corpus-specific) |
+| `cics/synth_csd.py`, `generate_csd.py` | Synthetic CSD for a corpus that arrived without one |
 
 Its corpus assets move with it: `config/*.yaml`, `sym/`, `bms-macros/`,
 `cics-copybooks/`, `reference/`.
@@ -88,6 +112,35 @@ Imports rewrite mechanically: `cobble.interpreter.cobol.*` → `interpreter.cobo
 `cobble.cics.*` → `cics.*`, `cobble.jackal.*` → `jackal.*`,
 `cobble.knowledge_graph.*` → `knowledge_graph.*`,
 `cobble.bms_copybook_gen` → `cics.bms`, `cobble.sql.statements` → `squall.statements`.
+
+### What moves into cicada rather than staying in cobble
+
+Two cobble modules are not corpus tooling and do not belong behind the cobble
+boundary:
+
+**`cics/verb_source_asg.py`** is the VM-free, ASG-walk source of `CicsVerb`
+values. Cicada already documents this exact seam from the other side — its
+`verb_source_lowering.py` says the knowledge-graph pipeline "sources the same
+`{program: [CicsVerb]} shape from a typed-ASG walk instead", which is precisely
+this module. It is the second implementation of a two-implementation seam cicada
+already owns, so it lands beside its sibling and shares `cics.flow_graph_core`.
+
+**`cics/asg_dialect_scope.py`** registers the coprocessor dialect parsers around
+ASG construction. `parse_statement` resolves coprocessor statement types through
+the `_dialect_parsers` ContextVar, whose default is empty, and an unregistered
+type is fatal to the whole program's ASG rather than to the one statement. Any
+path that turns bridge JSON into a `CobolASG` needs this, not just cobble's.
+
+Forge has the same defect latently. `knowledge_graph/build_carddemo_graph.py`'s
+`_build_cobol_file_graph` builds ASGs through `AstStore.get` without registering
+dialect parsers; it escapes today only because it filters CICS programs out by
+name using the CSD-derived set, and because each program is wrapped in
+`except Exception` that downgrades the failure to a logged warning. A batch
+program with embedded `EXEC SQL` and no CICS would still raise
+`Unknown COBOL statement type: 'EXEC_SQL'` and be silently absent from the graph.
+On cobble's corpus the equivalent defect accounted for 2,129 of 3,779 members.
+This is tracked as a bug in its own right, fixable before or independently of the
+consolidation.
 
 ### Out of scope
 
@@ -144,8 +197,27 @@ target). `uv run lint-imports` already runs in pre-commit and CI.
 
 ## Reconciliation
 
-Cobble moved ahead of the canonical modules in four places. Each is a one-time
-decision, not ongoing maintenance, and each lands as its own commit **after** the
+Cobble has moved ahead of the canonical modules in two distinct ways, and the two
+need opposite treatment.
+
+**Group A — copies that genuinely differ.** `cics/flow_map.py`,
+`cics/flow_graph_core.py`, `knowledge_graph/render.py`, and
+`interpreter/project/graph_types.py` carry real changes (see *Drift observed*
+above): a `START_TRANSID` edge kind for `EXEC CICS START TRANSID`, an `AttrValue`
+type replacing `Any` on graph attributes, a CICS-flow pass that accounts for
+itself, collision reporting restricted to transactions the corpus names, and an
+invariant that every CICS program is defined.
+
+For these, **reconcile before deleting, not after**. Deleting cobble's copy and
+repointing imports would silently drop the newer behaviour, and the suite would
+not necessarily catch it — cobble's tests would move to the canonical module and
+fail, but only if they were ported in the same step. Each of these four is a
+merge decision taken with both versions in hand, landed into the canonical module
+first, with cobble's copy deleted only once its tests pass against the canonical
+one.
+
+**Group B — cobble-only additions with a coupling.** Each is a one-time decision,
+not ongoing maintenance, and each lands as its own commit **after** the
 deletions:
 
 1. **`ast_store`** — cobble removed a `MEMORY` strategy it found dead and
@@ -174,10 +246,21 @@ Incremental, with a green suite at every step:
 2. Delete the two Maven bridges and the ProLeap submodule. Pure deletion — only
    JAR paths change, no Python coupling to unpick, and it is where the largest
    share of the manual backporting went.
-3. Delete and repoint, one layer per step: `interpreter`, `cics`, `jackal`,
-   `knowledge_graph`, `bms_copybook_gen`, `sql`.
-4. Add the import contract once the copies are gone.
-5. Reconcile the four divergences.
+3. Delete and repoint the layers whose copies are still identical, one per step:
+   `interpreter` (excluding `project/graph_types.py`), `jackal`,
+   `bms_copybook_gen`, `sql`.
+4. Reconcile Group A, one module per step, then delete cobble's copy: `flow_map`,
+   `flow_graph_core`, `render`, `graph_types`. Move `verb_source_asg` and
+   `asg_dialect_scope` into cicada.
+5. Delete and repoint the rest of `cics` and `knowledge_graph`.
+6. Add the import contract once the copies are gone.
+7. Reconcile Group B.
+
+**Freeze cobble's shared copies for the duration.** Group A exists because
+development continued in copies during a window when nobody had decided the
+copies were frozen. Changes to a shared module made in cobble after this design
+is approved should land in the canonical module instead — otherwise step 4's
+merge list grows underneath the work.
 
 ## Verification
 
@@ -206,6 +289,12 @@ this is an installation-weight cost, not an architectural one.
 
 **Also lost.** Cobble's separate repository, release cadence, and Beads database.
 Its issues merge into forge's.
+
+**Cost of delay, measured.** Between the backport sweep and this document, four
+shared modules diverged by roughly 530 lines, turning a four-item reconciliation
+into an eight-item one with a merge phase it did not previously need. That rate
+is the price of leaving the copies live, and it is why the sequencing above puts
+a freeze on shared modules ahead of the mechanical work.
 
 ## Future optionality
 
