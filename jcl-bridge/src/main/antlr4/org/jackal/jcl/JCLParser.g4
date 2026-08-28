@@ -335,7 +335,11 @@ ddParmASTERISK_DATA : DD_ASTERISK_DATA+ (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMI
 ddParmAVGREC : AVGREC EQUAL keywordOrSymbolic ;
 ddParmBFALN : BFALN EQUAL keywordOrSymbolic ;
 ddParmBFTEK : BFTEK EQUAL keywordOrSymbolic ;
-ddParmBLKSIZE : BLKSIZE EQUAL keywordOrSymbolic ;
+// The value is optional, as it is for DATACLAS below: the lexer already lets a
+// keyword subparameter be null on purpose (see KYWD_VAL_MODE), and cobble records
+// no block size anywhere, so a null one costs nothing to accept and cost two
+// corpus members every DD edge they had to reject.
+ddParmBLKSIZE : BLKSIZE EQUAL keywordOrSymbolic? ;
 ddParmBLKSZLIM : BLKSZLIM EQUAL keywordOrSymbolic ;
 ddParmBUFIN : BUFIN EQUAL keywordOrSymbolic ;
 ddParmBUFL : BUFL EQUAL keywordOrSymbolic ;

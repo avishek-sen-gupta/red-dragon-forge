@@ -463,7 +463,7 @@ earlier — so the printed position says nothing about which parameter broke.
 | D | 4 | omitted trailing positional: `SPACE=(CYL,(2,2,),RLSE)`, `UNIT=(SYSDA,3,)` | tolerated in practice — FIXED |
 | A | 1 | `DCB=*.ddname` followed by a continuation card | valid JCL — FIXED |
 | E | 1 | `PROC` with no parameters and a cols 73-80 sequence number | valid JCL — FIXED |
-| C | 2 | empty keyword subparameter: `DCB=(RECFM=FB,BLKSIZE=)` | **invalid JCL — WON'T FIX** |
+| C | 2 | empty keyword subparameter: `DCB=(RECFM=FB,BLKSIZE=)` | z/OS verdict unconfirmed — FIXED anyway |
 
 **B — `/*` inside a step's DD list.** The #6 fix put `delimiterStatement` in the
 mid-job alternation, which handles a delimiter *between steps*. `jclStep` listed
@@ -515,28 +515,56 @@ sequence-field handling anywhere in its 104 lexer modes; every other member gets
 away with it because its sequence number lands somewhere a value or comment is
 already being absorbed.
 
-**C — empty keyword subparameter value. Not fixed, because the JCL is wrong.**
+**C — empty keyword subparameter value. FIXED.**
 
 ```
-DCB=(RECFM=FB,BLKSIZE=)     both members
-DCB=(BLKSIZE=,LRECL=80)     same shape, constructed
+DCB=(RECFM=FB,LRECL=2000,BLKSIZE=)     both members, 3 cards
+DCB=(BLKSIZE=,LRECL=80)                same shape, constructed
 ```
 
-`BLKSIZE=0` is z/OS's documented "let the system choose" form, and both members
-elsewhere write exactly that — one of them has `DCB=(BLKSIZE=0,LRECL=3300,RECFM=FB)`
-four cards above the `BLKSIZE=` that fails. So the empty form is a typo the
-authors made in one DD each, not a JCL dialect the grammar is missing.
+This entry previously read **"invalid JCL — WON'T FIX"**, on two arguments. The
+first is unproven and the second is wrong.
 
-Loosening `ddParmBLKSIZE` to accept an absent value is a two-character change and
-the grammar already has the idiom for it (`ddParmDDNAME : DDNAME EQUAL
-keywordOrSymbolic?`). It was rejected on what it would mean: cobble would have to
-invent a block size, and any value it invented would be a claim about the data
-set that the JCL does not make. Two members stay unparsed, correctly. The fix
-belongs in the members.
+*Is the form legal?* Unconfirmed. The IBM z/OS JCL Reference could not be
+reached to settle it, and no secondary source consulted addresses a null value on
+a keyword *sub*parameter. It is worth being explicit that the earlier verdict was
+an inference stated as a fact. What is settled is that this is not the one null
+form that is unambiguously legal — symbolic parameter nullification (`//P PROC
+BLK=`, `// EXEC P,BLK=`) — because the raw cards put it inside a DD's `DCB=(...)`.
+
+The typo reading still looks right, and is now measured: **3 occurrences against
+2193 `BLKSIZE=0` and 2566 numeric `BLKSIZE=` corpus-wide**, in two members that
+write `BLKSIZE=0` themselves 4 and 6 times. One has
+`DCB=(BLKSIZE=0,LRECL=3300,RECFM=FB)` a few cards above the card that failed.
+A dropped `0`.
+
+*Does that justify rejecting the member?* No, and this is what overturned it.
+The old reason was that cobble "would have to invent a block size, a claim about
+the data set the JCL does not make." cobble records no block size at all:
+`BLKSIZE` appears nowhere in the Python, and `JclSerializer` emits no `DCB`. The
+whole DCB subtree is parsed and discarded. So accepting a null value invents
+nothing and discards nothing extra — the justification described a risk that does
+not exist. Rejecting the members cost **37 steps / 168 DDs and 19 steps / 73
+DDs** of real graph content to enforce a rule about a field that is thrown away.
+cobble is an analysis tool, not a JCL validator; a typo in a discarded field is
+not a reason to lose the job.
+
+The lexer already permitted this deliberately — `KYWD_VAL_MODE` carries
+`KYWD_VAL_COMMA` and `KYWD_VAL_RPAREN` so that `DATACLAS=` and `COPIES=,` lex,
+and its comment says exactly that. Only the parser rule disagreed, so the fix is
+the grammar's own idiom for a nullable keyword applied to one more rule:
+
+```
+ddParmBLKSIZE : BLKSIZE EQUAL keywordOrSymbolic? ;
+```
+
+`keywordOrSymbolic` itself is **not** loosened, and neither is any rule whose
+value cobble uses. A null `DSN=` would be a real loss of information, since
+dataset edges are built out of it.
 
 ### Where the corpus ended up
 
-Four grammar commits, each measured over all 860 members with the *only*
+Five grammar commits, each measured over all 860 members with the *only*
 difference being the jar, and each requiring not just more members parsing but
 **zero regressions and zero changes to any member that already parsed** — no
 member's step count, DD count or program list moved:
@@ -546,13 +574,16 @@ member's step count, DD count or program list moved:
 | after #6 (delimiter between steps) | 798 | 62 | 11114 | 59320 |
 | + B (delimiter inside a step) | 852 | 8 | 11587 | 61378 |
 | + D (omitted trailing positional) | 856 | 4 | 11695 | 61910 |
-| + A and E (DCB continuation, PROC sequence field) | **858** | **2** | **11701** | **61940** |
+| + A and E (DCB continuation, PROC sequence field) | 858 | 2 | 11701 | 61940 |
+| + C (null keyword subparameter value) | **860** | **0** | **11757** | **62181** |
 
-The two that remain are cause C. Every fix is one or two lines and all four are
-upstreamable to mapa.
+The corpus parses whole. The last row's step and DD deltas — 56 and 241 — are
+exactly the two recovered members' own counts (37 + 19, 168 + 73), which is the
+zero-regression check for that row: nothing that already parsed moved. Every fix
+is one or two lines and all five are upstreamable to mapa.
 
 CardDemo is unaffected throughout: `make compare` is an empty diff at 449 nodes /
-803 edges. 34 jcl-bridge Java tests and 221 pytest tests pass.
+803 edges. 39 jcl-bridge Java tests and 241 pytest tests pass.
 
 ---
 
@@ -728,6 +759,9 @@ description finds the commit.
 - **`PROC` with no parameters and a cols 73-80 sequence number** — `PROC_MODE`
   assumed whitespace is always followed by a parameter field; the sequence digits
   became a parameter name with no value. With the DCB fix, 856 -> 858 of 860.
+- **Null keyword subparameter value** — `ddParmBLKSIZE` required a value the
+  lexer already allowed to be absent, and that cobble never records. 858 -> 860
+  of 860.
 - **Bridge parse time superlinear in member size** — SLL-then-LL two-stage parse
   in `JclSerializer`. p90 member 25.66s -> 0.71s, largest member never completed
   -> 2.19s, nine members that never returned now all return, output identical.
