@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from tqdm import tqdm
+
 from cobble.interpreter.cobol.source_text import decode_source
 from cobble.jackal.jcl.bridge_parser import JclParseError, job_from_bridge_json
 from cobble.jackal.model import Job
@@ -103,12 +105,27 @@ class JclStore:
         This is where a corpus build's JCL time now goes, and the only place it
         goes: ``_index_jcl`` was serial, so the pass it replaces ran one JVM at a
         time. See ``_parse_one`` for what happens to a member that fails.
+
+        The bar is not decoration. This runs before the index, before any
+        extractor and before GraphWriter opens its output, so it is the first
+        thing a run does and on a real corpus it is minutes of subprocesses --
+        exactly the stretch ``_index_jcl`` used to cover and warns about, where
+        silence is indistinguishable from a hang. tqdm writes to stderr, so it
+        survives a stdout pipe.
         """
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures = [
                 executor.submit(_parse_one, path, parser, self._dir) for path in paths
             ]
-            results = [future.result() for future in as_completed(futures)]
+            results = [
+                future.result()
+                for future in tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc="parse JCL",
+                    unit="file",
+                )
+            ]
         self._cached = {r.key: r.path for r in results if isinstance(r, _Cached)}
         self._failures = {r.key: r.error for r in results if isinstance(r, _Failed)}
 
