@@ -1,4 +1,4 @@
-"""diagnose_copybooks.py — which COPY statements the COBOL parser will not resolve,
+"""cobble.diagnosis.copybooks — which COPY statements the COBOL parser will not resolve,
 without running the COBOL parser.
 
 The expensive phase of a corpus build is COBOL parsing: one JVM subprocess per

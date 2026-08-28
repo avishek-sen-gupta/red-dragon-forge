@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.corpus_config import CorpusConfig
-from cobble.diagnose_copybooks import (
+from cobble.diagnosis.copybooks import (
     STUB_TEXT,
     ScanResult,
     find_missing_copybooks,
