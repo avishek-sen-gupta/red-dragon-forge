@@ -56,7 +56,7 @@ make build CONFIG=config/carddemo.yaml              # extract the graph -> out/n
 make compare                                        # identity-diff out/ vs reference/ (must be empty: 449/803)
 ```
 
-`CONFIG=` is a required argument to `make build`/`make sym` (and transitively
+`CONFIG=` is a required argument to `make build`/`make sym`/`make csd` (and transitively
 `make codegen`, which depends on `sym`); there's no default, so a bare
 `make build` fails with a clear error instead of silently assuming CardDemo.
 `build.sh` hardcodes `CONFIG=config/carddemo.yaml` for its own from-scratch
@@ -111,6 +111,9 @@ corpus:
   copybook_dirs:
     - path/to/your/copybooks
   copybook_extensions: ["cpy", "txt"]   # omit unless your copybooks are named unconventionally
+  transid_rules:           # omit unless you have no CSD; see "Recover a CSD" below
+    - member_pattern: "^PGM(?P<tail>.{3})$"
+      transid_template: "T{tail}"
   out_dir: out
 
 bms:
@@ -121,9 +124,10 @@ bms:
 ```
 
 Every path is relative to wherever you invoke the script from (not to the
-config file's own location). Every field is required except `proclib_dirs`
-and `csd_files`, which default to empty if omitted, and `copybook_extensions`
-and `bms_globs`, which default to the conventions cobble ships with.
+config file's own location). Every field is required except `proclib_dirs`,
+`csd_files` and `transid_rules`, which default to empty if omitted, and
+`copybook_extensions` and `bms_globs`, which default to the conventions cobble
+ships with.
 
 Those last two exist because a corpus that doesn't follow file-naming
 convention would otherwise need a directory of symlinks. `cobol_globs`,
@@ -145,6 +149,51 @@ uv run python -m cobble.render_graph --config your-corpus.yaml   # optional HTML
 
 `cobble.compare`'s golden-file check stays CardDemo-specific: it's not
 meaningful against a different corpus's output.
+
+### Recover a CSD your corpus never shipped
+
+A CSD is an export of a running CICS region, and plenty of handovers don't
+include one. With `csd_files` empty, `build_graph` skips the CICS flow stage
+entirely: no transaction gets a worklist entry, so no member is scanned for its
+`EXEC CICS LINK`/`XCTL` operands and none of those edges reach the graph.
+
+```bash
+make csd CONFIG=your-corpus.yaml    # -> <out_dir>/synthetic.csd
+```
+
+This reconstructs the `DEFINE TRANSACTION(...) PROGRAM(...)` pairs from the
+members themselves, in three tiers of evidence:
+
+| Tier | What it means |
+| --- | --- |
+| `corroborated` | `transid_rules` places a transaction id on this member *and* the member's own source names that id literally, and no other member claims it |
+| `convention` | `transid_rules` places it and nothing contradicts that |
+| `synthetic` | nothing establishes a transaction, so the member gets `UNKNOWN.<member>` |
+
+Nothing is guessed. A transaction id two members both claim demotes both and is
+reported; a literal id no member claims is reported. `transid_rules` is an
+ordered list of regex + template pairs — the first whose `member_pattern`
+matches wins, and its named groups fill `transid_template` — because how member
+names encode transaction ids is a fact about your site, not about cobble.
+
+A `synthetic` entry is a worklist entry, not a claim: it gets the member parsed
+and its `LINK`/`XCTL` edges read, and `build_graph` then suppresses the
+placeholder `TRANSACTION` node and any edge touching it, so nothing the corpus
+never stated appears in the graph. With no `transid_rules` at all every member
+goes synthetic, which still recovers every program-derived edge — you just get
+no `TRANSACTION` nodes and no `STARTS` edges.
+
+The generated file is not picked up automatically. Point `csd_files` at it to
+use it, which keeps it an explicit, reviewable input to the next run:
+
+```yaml
+  csd_files:
+    - out/synthetic.csd
+```
+
+`DEFINE FILE` entries can't be reconstructed this way, so a generated CSD also
+yields no `DEFINES_DATASET` edges and only the CICS files programs actually
+name.
 
 ### Diagnose missing copybooks before parsing
 
@@ -296,6 +345,7 @@ consumers may not import each other).
 | `cobble/canonical_export.py` | Export a nodes/edges.jsonl pair as CodeConcise's canonical `manifest.json` (`python -m cobble.canonical_export --nodes <path> --edges <path> --output <path> --project-name <name>`; all four required, no config-derived defaults. The streaming/thread-pool/bounded-memory transform pipeline itself lives in `cobble/knowledge_graph/canonical_export.py`). |
 | `tests/` | The pytest unit suite (`make test`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
+| `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
 | `reference/` | The 449/803 identity golden (copied from the production fitness golden, the *target*, not an input to the extraction). |
 | `proleap-bridge/` | The COBOL→JSON ASG bridge (copied Maven source). Depends on the **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**) vendored as the submodule `proleap-bridge/proleap-cobol-parser`, built (`mvn install`) *before* the bridge. |
 | `jcl-bridge/` | The JCL→JSON bridge (copied Maven source, self-contained). |
