@@ -1,4 +1,4 @@
-# Generated from ~/code/red-dragon/interpreter/cobol/cics_grammar/CICSzLexer.g4 by ANTLR 4.13.1
+# Generated from CICSzLexer.g4 by ANTLR 4.13.1
 from antlr4 import *
 from io import StringIO
 import sys

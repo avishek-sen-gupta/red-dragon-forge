@@ -90,6 +90,18 @@ def test_parse_xctl():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_link_applid_and_retcode():
+    """APPLID and RETCODE are accepted on LINK, not only on ASSIGN/ABEND."""
+    verb, opts = parse_exec_cics_text(
+        "EXEC CICS LINK PROGRAM(COSGN00C) APPLID(WS-APPLID) " "RETCODE(WS-RC) END-EXEC"
+    )
+    assert verb == "LINK"
+    assert opts["PROGRAM"] == CicsOperand("COSGN00C", False)
+    assert opts["APPLID"] == CicsOperand("WS-APPLID", False)
+    assert opts["RETCODE"] == CicsOperand("WS-RC", False)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_startbr():
     verb, opts = parse_exec_cics_text(
         "EXEC CICS STARTBR FILE('CARDDAT') RIDFLD(WS-KEY) KEYLENGTH(16) RESP(WS-RESP) END-EXEC"

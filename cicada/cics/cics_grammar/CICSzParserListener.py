@@ -1,4 +1,4 @@
-# Generated from ~/code/red-dragon/interpreter/cobol/cics_grammar/CICSzParser.g4 by ANTLR 4.13.1
+# Generated from CICSzParser.g4 by ANTLR 4.13.1
 from antlr4 import *
 
 if "." in __name__:
