@@ -14,6 +14,7 @@ dependencies = [
 [project.scripts]
 diagnose-copybooks = "cobble.diagnosis.copybooks:cli"
 diagnose-jcl = "cobble.diagnosis.jcl:cli"
+diagnose-cobol = "cobble.diagnosis.cobol:cli"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,
