@@ -40,6 +40,34 @@ def _synthesise(members, *rules: TransidRule):
     return synthesise_csd(members, rules or (_RULE,))
 
 
+def test_every_member_that_uses_cics_is_defined_exactly_once() -> None:
+    """The invariant the whole module exists to hold: a program using CICS is
+    referenced by the CSD, without exception.
+
+    The worklist is transid_to_program.values(), so a member with no define is a
+    member the flow stage never parses -- its LINK/XCTL edges are silently absent
+    from the graph and nothing in the run says so. Which tier a member lands in is
+    a question about evidence; whether it lands in one at all is not negotiable.
+
+    The other direction matters too: a define for a member with no EXEC CICS
+    drags it out of the batch FILE-CONTROL stage, and a member defined twice is a
+    dict key collision in parse_csd that drops one of them.
+    """
+    members = {
+        "PGM101": _cics_member("EXEC CICS RETURN TRANSID('T101') END-EXEC."),
+        "PGM102": _cics_member(),
+        "OTHER99": _cics_member(),
+        "BATCH01": _member("MOVE 1 TO WS-X."),
+    }
+
+    result = _synthesise(members)
+
+    uses_cics = {"PGM101", "PGM102", "OTHER99"}
+    defined = [d.program for d in result.defines]
+    assert sorted(defined) == sorted(uses_cics)
+    assert len(defined) == len(set(defined))
+
+
 def test_a_transaction_a_member_returns_to_is_owned_by_the_named_member() -> None:
     """The strongest evidence available without a CSD: the member names the
     transaction in its own source, and the convention says that member owns it."""
