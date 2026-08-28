@@ -68,3 +68,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^(red_dragon_forge|cicada|squall|vendor/)/
+
+  # Talisman was installed as a bare git hook, which pre-commit demoted to
+  # .git/hooks/pre-commit.legacy on taking over pre-commit. Talisman derives its
+  # hook type from the name it is invoked under and rejects that one, so it
+  # failed every commit without ever scanning. Run it as a hook here instead,
+  # where pre-commit owns the ordering and the name.
+  - repo: https://github.com/thoughtworks/talisman
+    rev: v1.37.0
+    hooks:
+      - id: talisman-commit
+        entry: cmd --githook pre-commit
