@@ -41,6 +41,7 @@ from types import MappingProxyType
 
 from tqdm import tqdm
 
+from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
 from cobble.cli_logging import configure_cli_logging
@@ -517,7 +518,9 @@ def _file_control_failures(
     path: Path, store: AstStore, corpus_index: CorpusIndex, writer: GraphWriter
 ) -> tuple[str, ...]:
     try:
-        nodes, edges = extract_cobol_file_graph(store.get(path), corpus_index)
+        with asg_dialect_parsers_registered():
+            asg = store.get(path)
+        nodes, edges = extract_cobol_file_graph(asg, corpus_index)
     except Exception as exc:
         logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
         return (f"FILE-CONTROL {path.name}: {exc}",)
