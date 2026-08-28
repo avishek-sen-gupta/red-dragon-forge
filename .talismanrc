@@ -54,4 +54,8 @@ fileignoreconfig:
 - filename: proleap-bridge/proleap-cobol-parser
   ignore_detectors:
     - filecontent
+- filename: jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
+  checksum: c7bfe59d12e056dacceb248a986cfb186513dd9a723b500dabc76c52dce47570
+- filename: jcl-bridge/src/test/java/org/jackal/jcl/DcbContinuationTest.java
+  checksum: eb9fd66791d8e1ed4912adf0802ef1215c81210eb285235545ef9ad1437d5062
 version: "1.0"
