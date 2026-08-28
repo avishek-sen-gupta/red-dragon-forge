@@ -1968,6 +1968,31 @@ ERROR_CHAR_OUTPUT_STMT_PARM
 mode PROC_MODE
 	;
 
+/*
+Whitespace that runs to column 73 means the statement has no parameter field:
+what follows is the identification/sequence field, which the system ignores and
+card-era members use for a line number. PROC_WS assumed a parameter field always
+followed and went to PROC_PARM_MODE, where the digits hit ERROR_CHAR_PROC_PARM --
+"mismatched input '0' expecting {COMMENT_FLAG, SS}".
+
+This has to key on the column rather than absorb whatever trails the statement:
+a comment field is only permitted on a statement that HAS a parameter field, so
+//NAME PROC with nothing after it cannot be carrying one. A PROC with parameters
+escaped this only incidentally, its = pushing PROC_PARM_VALUE_MODE, which
+absorbs the trailing field already.
+
+Both this and PROC_WS match the same run of spaces, so the predicate is what
+chooses between them; per DATA_MODE_TERMINATORX below, getCharPositionInLine()
+in a trailing predicate is the END of the match, i.e. the column the next
+character sits in, zero-based.
+*/
+PROC_WS_SEQUENCE_FIELD
+	: [ ]+
+	{
+		getCharPositionInLine() >= 72
+	}?
+	->channel(HIDDEN),mode(PROC_SEQUENCE_FIELD_MODE)
+	;
 PROC_WS
 	: [ ]+
 	->channel(HIDDEN),mode(PROC_PARM_MODE)
@@ -1983,6 +2008,24 @@ PROC_WS_NEWLINE
 
 ERROR_CHAR_PROC
 	: .
+	;
+
+/*
+Past column 72 there is nothing left to lex: the sequence field holds whatever
+the member's author put there and no rule applies to it. Reached only from
+PROC_WS_SEQUENCE_FIELD, so the swallow-everything rule cannot hide anything
+that occupies a real field.
+*/
+mode PROC_SEQUENCE_FIELD_MODE
+	;
+
+PROC_SEQUENCE_FIELD
+	: ~[\n\r]+
+	->channel(HIDDEN)
+	;
+PROC_SEQUENCE_FIELD_NEWLINE
+	: [\n\r]
+	->channel(HIDDEN),mode(DEFAULT_MODE)
 	;
 
 mode PROC_PARM_MODE
@@ -3895,6 +3938,32 @@ DCB_EQUAL
 DCB_SQUOTE
 	: SQUOTE
 	->channel(HIDDEN),pushMode(QS_MODE)
+	;
+/*
+A DCB value that is a bare value rather than a keyword subparameter --
+DCB=*.ddname, or a model dataset name -- is consumed by DCB_KEYWORD_VALUE
+without leaving this mode, so a comma after it reaches DCB_COMMA. That rule
+folds the comma into the following token with `more` and pops, leaving the
+lexer in DD_PARM_MODE looking at a naked newline: DD_NEWLINE matched it and
+ended the statement, losing the continuation line.
+
+So this mode needs both continuation rules KYWD_VAL_MODE already has (the mode a
+keyword subparameter switches to, which is why DCB=(RECFM=FB,...) always
+continued correctly): ,\n and , followed by blanks. The second is the one the
+production corpus needs, its cards being blank-padded to 80 columns so nothing
+ever reaches the newline directly.
+
+mode, not pushMode, in both: DCB_MODE is entered with pushMode, so the stack
+already holds DD_PARM_MODE, and that is where COMMA_NEWLINE_MODE's popMode --
+and COMMA_WS_NEWLINE_MODE's two -- have to land.
+*/
+DCB_COMMA_NEWLINE
+	: COMMA_DFLT NEWLINE
+	->channel(HIDDEN),mode(COMMA_NEWLINE_MODE)
+	;
+DCB_COMMA_WS
+	: COMMA_DFLT [ ]+
+	->channel(HIDDEN),mode(COMMA_WS_MODE)
 	;
 DCB_COMMA
 	: COMMA_DFLT

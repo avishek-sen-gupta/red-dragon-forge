@@ -81,8 +81,6 @@ fileignoreconfig:
   checksum: 8b4766155fb1f041e8bd35ad41a776e5e6f02dcb56c4255b5d1e738b71f99625
 - filename: jackal/tests/unit/test_dsn.py
   checksum: f9233e84a3bac6245b00d0a9a2dd52c7ec8aee84daa61827431b50913fc62c93
-- filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
-  checksum: 2dcc83553869e00858dc3ff99d4ae9231210821306b585b5f5446f5d036253a1
 - filename: jackal/docs/superpowers/plans/2026-07-08-jcl-proc-expansion.md
   checksum: 97075a791957f4905a35f10d65d49d1bc30360f2dc8b24da879a47481b819659
 - filename: jackal/jackal/jcl/bridge_parser.py
@@ -131,4 +129,18 @@ fileignoreconfig:
   checksum: 4112d616e47371f2a2dfe675f426d88e5edb2836eb5b918144e1e82a6b2a7084
 - filename: tests/integration/test_mainframe_inventory_carddemo.py
   checksum: d200d7552d4e98bbad54174fb06304554861352f193df0ff43f8baccf1341b45
+- filename: jackal/jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
+  checksum: c9245dcb129368906838e7686d2011f4e6da3a11388a66508e6036af9c7a43ec
+- filename: jackal/jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
+  checksum: 45571209d7e9b9da8fb827bb6be8bf7423f3f377cf9dcc5399d7520722c7ef9c
+- filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
+  checksum: 732d0607a8e5b04cc16e04a63c8e89edeacb0fdd9b3fb7fefdc0c1543adf4cac
+- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/JclSerializerTest.java
+  checksum: 9c86f7440e60664b4dacbca2cd5aafcd101dd7a9c0bfb3ace2a095acb8fdbe3f
+- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/DcbContinuationTest.java
+  checksum: 67ef82a7c319421e6365b47d1765e9c3f88d2149cd53ee959e04592b6c141ad5
+- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/NullDcbSubparameterTest.java
+  checksum: e950a4e351054bde43e2858ab7783083a41afa7528f2c0f93a6fe9dcb6280bba
+- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/ProcSequenceNumberTest.java
+  checksum: 0e8c1ccc38a02a4b94940fe1db94b2a1b37cbdeccc161b79782ae2a567bae001
 version: "1.0"
