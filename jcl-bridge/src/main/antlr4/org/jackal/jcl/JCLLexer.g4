@@ -3896,6 +3896,32 @@ DCB_SQUOTE
 	: SQUOTE
 	->channel(HIDDEN),pushMode(QS_MODE)
 	;
+/*
+A DCB value that is a bare value rather than a keyword subparameter --
+DCB=*.ddname, or a model dataset name -- is consumed by DCB_KEYWORD_VALUE
+without leaving this mode, so a comma after it reaches DCB_COMMA. That rule
+folds the comma into the following token with `more` and pops, leaving the
+lexer in DD_PARM_MODE looking at a naked newline: DD_NEWLINE matched it and
+ended the statement, losing the continuation line.
+
+So this mode needs both continuation rules KYWD_VAL_MODE already has -- the mode
+a keyword subparameter switches to, which is why a parenthesised DCB always
+continued correctly: ,\n and , followed by blanks. The second is the one the
+production corpus needs, its cards being blank-padded to 80 columns so nothing
+ever reaches the newline directly.
+
+mode, not pushMode, in both: DCB_MODE is entered with pushMode, so the stack
+already holds DD_PARM_MODE, and that is where COMMA_NEWLINE_MODE's popMode --
+and COMMA_WS_NEWLINE_MODE's two -- have to land.
+*/
+DCB_COMMA_NEWLINE
+	: COMMA_DFLT NEWLINE
+	->channel(HIDDEN),mode(COMMA_NEWLINE_MODE)
+	;
+DCB_COMMA_WS
+	: COMMA_DFLT [ ]+
+	->channel(HIDDEN),mode(COMMA_WS_MODE)
+	;
 DCB_COMMA
 	: COMMA_DFLT
 	->more,popMode
