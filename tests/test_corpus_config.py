@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from cobble.cics.synth_csd import TransidRule
 from cobble.corpus_config import (
     DEFAULT_BMS_GLOBS,
     DEFAULT_COPYBOOK_EXTENSIONS,
@@ -98,6 +99,51 @@ def test_corpus_config_from_dict_empty_csd_files_is_valid() -> None:
 def test_corpus_config_from_dict_missing_required_key_raises() -> None:
     with pytest.raises(KeyError, match="cobol_dir"):
         _corpus_config_from_dict({})
+
+
+def _minimal(**overrides) -> dict:
+    return {
+        "cobol_dir": "cbl",
+        "cobol_globs": ["*.cbl"],
+        "jcl_dir": "jcl",
+        "jcl_globs": ["*.jcl"],
+        "copybook_dirs": ["cpy"],
+        "out_dir": "out",
+        **overrides,
+    }
+
+
+def test_corpus_config_reads_the_transid_naming_conventions() -> None:
+    """Which member serves which transaction is encoded in the member names, and
+    that encoding differs per site. It belongs in the config for the same reason
+    the directories do: a wrong convention has to be correctable where the corpus
+    is described, not in cobble's source.
+    """
+    data = _minimal(
+        transid_rules=[
+            {"member_pattern": r"^PGM(?P<tail>.{3})$", "transid_template": "T{tail}"},
+            {"member_pattern": r"^OLD(?P<tail>.{3})$", "transid_template": "T{tail}"},
+        ]
+    )
+
+    assert _corpus_config_from_dict(data).transid_rules == (
+        TransidRule(member_pattern=r"^PGM(?P<tail>.{3})$", transid_template="T{tail}"),
+        TransidRule(member_pattern=r"^OLD(?P<tail>.{3})$", transid_template="T{tail}"),
+    )
+
+
+def test_corpus_config_omitting_transid_rules_means_no_convention() -> None:
+    """A corpus with a real CSD needs no convention at all, so the key is optional
+    and its absence is an empty tuple rather than a guess."""
+    assert _corpus_config_from_dict(_minimal()).transid_rules == ()
+
+
+def test_a_transid_rule_missing_its_template_raises() -> None:
+    """Half a rule would derive the transaction "" for every member it matches."""
+    data = _minimal(transid_rules=[{"member_pattern": "^PGM...$"}])
+
+    with pytest.raises(KeyError, match="transid_template"):
+        _corpus_config_from_dict(data)
 
 
 def test_bms_config_from_dict() -> None:

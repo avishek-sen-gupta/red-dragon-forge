@@ -13,9 +13,17 @@ from cobble.build_graph import (
     _load_transid_to_program,
     _report_failures,
     _tally_lines,
+    _without_synthetic_transactions,
 )
+from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
 from cobble.interpreter.cobol.ast_store import AstStore
+from cobble.interpreter.project.graph_types import (
+    EdgeKind,
+    GraphEdge,
+    GraphNode,
+    NodeKind,
+)
 
 
 def _config(tmp_path: Path, **overrides) -> CorpusConfig:
@@ -119,6 +127,78 @@ def test_no_failures_logs_no_report(caplog) -> None:
     caplog.set_level(logging.INFO)
     _report_failures([])
     assert caplog.messages == []
+
+
+# ── synthetic transactions get a member parsed, not a node drawn ──
+
+
+class _CollectingSink:
+    def __init__(self) -> None:
+        self.nodes: tuple = ()
+        self.edges: tuple = ()
+
+    def add_node(self, node: GraphNode) -> None:
+        self.nodes = (*self.nodes, node)
+
+    def add_edge(self, edge: GraphEdge) -> None:
+        self.edges = (*self.edges, edge)
+
+
+def _starts(transid: str) -> GraphEdge:
+    return GraphEdge(
+        source=transid,
+        source_kind=NodeKind.TRANSACTION,
+        target="SOMEPROG",
+        target_kind=NodeKind.PROGRAM,
+        kind=EdgeKind.STARTS,
+    )
+
+
+def test_a_synthetic_transaction_is_a_worklist_entry_not_a_graph_node() -> None:
+    """A generated CSD (cobble/cics/synth_csd.py) defines a transaction for every
+    CICS member, including the ones whose real transaction is not recoverable,
+    because that definition is the only way a member reaches the flow stage's
+    worklist and gets its literal LINK/XCTL edges read.
+
+    Those placeholder transactions must not reach the graph: nothing in the corpus
+    says they exist. flow_map emits a TRANSACTION node and a STARTS edge for every
+    definition it parses and is byte-for-byte ported, so the suppression belongs
+    on this side of the sink.
+    """
+    inner = _CollectingSink()
+    sink = _without_synthetic_transactions(inner)
+    synthetic = f"{SYNTHETIC_TRANSID_PREFIX}SOMEPROG"
+
+    sink.add_node(GraphNode(id=synthetic, kind=NodeKind.TRANSACTION))
+    sink.add_node(GraphNode(id="SOMEPROG", kind=NodeKind.PROGRAM))
+    sink.add_edge(_starts(synthetic))
+    sink.add_edge(
+        GraphEdge(
+            source="SOMEPROG",
+            source_kind=NodeKind.PROGRAM,
+            target="OTHERPROG",
+            target_kind=NodeKind.PROGRAM,
+            kind=EdgeKind.XCTL,
+        )
+    )
+
+    assert [node.id for node in inner.nodes] == ["SOMEPROG"]
+    assert [(edge.source, edge.kind) for edge in inner.edges] == [
+        ("SOMEPROG", EdgeKind.XCTL)
+    ]
+
+
+def test_a_recovered_transaction_reaches_the_graph_unchanged() -> None:
+    """The filter keys off the prefix synth_csd reserves, so a real transaction --
+    from a real CSD or a recovered one -- passes through untouched."""
+    inner = _CollectingSink()
+    sink = _without_synthetic_transactions(inner)
+
+    sink.add_node(GraphNode(id="CC00", kind=NodeKind.TRANSACTION))
+    sink.add_edge(_starts("CC00"))
+
+    assert [node.id for node in inner.nodes] == ["CC00"]
+    assert [edge.source for edge in inner.edges] == ["CC00"]
 
 
 # ── the FILE-CONTROL stage's own ASG construction ────────────────
