@@ -22,6 +22,8 @@ from pathlib import Path
 
 import yaml
 
+from cobble.cics.synth_csd import TransidRule
+
 # The extensions the ProLeap bridge has always searched (see
 # proleap-bridge/src/main/java/org/reddragon/bridge/Main.java). Kept as the
 # default so a config written before `copybook_extensions` existed resolves
@@ -50,6 +52,10 @@ class CorpusConfig:
     copybook_dirs: tuple[Path, ...]
     copybook_extensions: tuple[str, ...]
     out_dir: Path
+    # How this corpus's member names encode the transaction each one serves, for
+    # `python -m cobble.generate_csd` to reconstruct a CSD the site never
+    # exported. Empty for a corpus that ships a real one; see cics/synth_csd.py.
+    transid_rules: tuple[TransidRule, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,6 +72,13 @@ def _require(data: Mapping, key: str) -> object:
     return data[key]
 
 
+def _transid_rule(data: Mapping) -> TransidRule:
+    return TransidRule(
+        member_pattern=str(_require(data, "member_pattern")),
+        transid_template=str(_require(data, "transid_template")),
+    )
+
+
 def _corpus_config_from_dict(data: Mapping) -> CorpusConfig:
     return CorpusConfig(
         cobol_dir=Path(_require(data, "cobol_dir")),
@@ -79,6 +92,9 @@ def _corpus_config_from_dict(data: Mapping) -> CorpusConfig:
             data.get("copybook_extensions", DEFAULT_COPYBOOK_EXTENSIONS)
         ),
         out_dir=Path(_require(data, "out_dir")),
+        transid_rules=tuple(
+            _transid_rule(rule) for rule in data.get("transid_rules", ())
+        ),
     )
 
 

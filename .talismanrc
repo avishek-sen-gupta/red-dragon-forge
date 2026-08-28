@@ -18,7 +18,7 @@ fileignoreconfig:
 - filename: tests/knowledge_graph/test_render.py
   checksum: 5e617296b45c02d90f45fc1cf0a682f574d6b9321e0caed54996cde4c647d467
 - filename: tests/test_corpus_config.py
-  checksum: 29e7d9e2d46dd2149f7a6b723c29dda00193292bc4a07b9bd2e1fbbe6c3a0a0f
+  checksum: 3b4726c6b1c4af52930e4600bca0716908fa70878eb4fda1fe035b25cfb79700
 - filename: docs/superpowers/plans/2026-07-11-corpus-config.md
   checksum: c5e3d9154a059402d1fc6035197fac87e94439bf75ffed1d2a3931a5730717d9
 - filename: cobble/knowledge_graph/merge.py
@@ -64,4 +64,10 @@ fileignoreconfig:
   checksum: abcda4114e5f190d90fb00cfbd61e0bcfee6542e15757986ce8f09ee41256c89
 - filename: jcl-bridge/src/test/java/org/jackal/jcl/NullDcbSubparameterTest.java
   checksum: 554921fed4f8fc823c591a8e6995bf675a5a0657cc149221f9c4cccbb3b42d47
+- filename: cobble/cics/synth_csd.py
+  checksum: 4f35fc171a4c78068bc9e20479d5c53326a689fb62b035a308b552bfbacb9c1c
+- filename: tests/test_build_graph.py
+  checksum: 7b72eff6cbcba2eb852e67dbd5ff9b0b472e552d6c981f7e47b6fb4a84ee7cc1
+- filename: tests/test_generate_csd.py
+  checksum: 909233d1d36694b9c34536bf5e55e2cd00f78d40ae352727826ec600a01878a6
 version: "1.0"

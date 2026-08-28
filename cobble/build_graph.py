@@ -44,6 +44,8 @@ from tqdm import tqdm
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
+from cobble.cics.graph_sink import GraphSink
+from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
@@ -466,6 +468,45 @@ def _build_cics_flow_graph(
     return found.failures + stage_failures
 
 
+def _is_synthetic_transaction(kind: NodeKind, node_id: str) -> bool:
+    return kind is NodeKind.TRANSACTION and node_id.startswith(SYNTHETIC_TRANSID_PREFIX)
+
+
+@dataclass(frozen=True)
+class _WithoutSyntheticTransactions:
+    """A sink that drops the placeholder transactions a generated CSD carries.
+
+    cobble/cics/synth_csd.py defines a transaction for every CICS member, because
+    that definition is the only way a member reaches the flow stage's worklist and
+    has its literal LINK/XCTL edges read. The members whose real transaction is not
+    recoverable are defined under ``UNKNOWN.<member>``, and nothing in the corpus
+    says those transactions exist -- so they must not reach the graph.
+
+    Filtered here rather than upstream because the ported flow_map parses the CSD
+    itself and emits a TRANSACTION node and a STARTS edge for every definition in
+    it. Edges are dropped by either endpoint: an edge to a node that was never
+    written would dangle.
+    """
+
+    inner: GraphSink
+
+    def add_node(self, node: GraphNode) -> None:
+        if _is_synthetic_transaction(node.kind, node.id):
+            return
+        self.inner.add_node(node)
+
+    def add_edge(self, edge: GraphEdge) -> None:
+        if _is_synthetic_transaction(
+            edge.source_kind, edge.source
+        ) or _is_synthetic_transaction(edge.target_kind, edge.target):
+            return
+        self.inner.add_edge(edge)
+
+
+def _without_synthetic_transactions(sink: GraphSink) -> _WithoutSyntheticTransactions:
+    return _WithoutSyntheticTransactions(inner=sink)
+
+
 def _run_flow_extractor(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
@@ -489,7 +530,7 @@ def _run_flow_extractor(
             bms_mapsets={},
             cobol_sources=dict(found.sources),
             parser=_make_parser(config),
-            sink=writer,
+            sink=_without_synthetic_transactions(writer),
             corpus_index=corpus_index,
             failures=sink,
         )

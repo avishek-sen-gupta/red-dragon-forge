@@ -6,7 +6,7 @@ ANTLR_VERSION := 4.13.1
 ANTLR_JAR     := $(CURDIR)/tools/antlr-$(ANTLR_VERSION)-complete.jar
 ANTLR_URL     := https://www.antlr.org/download/antlr-$(ANTLR_VERSION)-complete.jar
 
-.PHONY: all tools hlasm jars codegen parser sym build compare verify render canonical test fmt lint clean
+.PHONY: all tools hlasm jars codegen parser sym csd build compare verify render canonical test fmt lint clean
 
 ## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
@@ -42,6 +42,15 @@ $(ANTLR_JAR):
 sym:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make sym CONFIG=config/carddemo.yaml" >&2; exit 1; }
 	uv run python -m cobble.generate_sym --config $(CONFIG)
+
+## Stage-0: GENERATE a synthetic CSD for a corpus that arrived without one, from
+## literal transaction ids plus the corpus's own naming convention
+## (`transid_rules:` in the config) -> <out_dir>/synthetic.csd. Point the config's
+## csd_files at it afterwards; without a CSD the whole CICS flow stage is skipped.
+## Requires CONFIG=<path-to-corpus-yaml>, e.g. make csd CONFIG=config/carddemo.yaml
+csd:
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make csd CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	uv run python -m cobble.generate_csd --config $(CONFIG)
 
 ## Run the four ported extractors over the corpus -> out/{nodes,edges}.jsonl
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make build CONFIG=config/carddemo.yaml
