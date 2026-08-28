@@ -16,9 +16,19 @@ interpreter.project.coprocessor_compile plays for CoprocessorSpec.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TypeAlias
+
+# What an attribute may hold: whatever the nodes/edges JSONL can carry, spelled
+# out rather than Any so a value that could never serialise is a type error here
+# instead of a json.dumps failure at the end of a corpus run. Written as a quoted
+# TypeAlias rather than a 3.12 `type` statement because the lint config still
+# parses this package as 3.11.
+AttrValue: TypeAlias = (
+    "str | int | float | bool | Sequence[AttrValue] | Mapping[str, AttrValue]"
+)
 
 
 class NodeKind(Enum):
@@ -54,6 +64,10 @@ class EdgeKind(Enum):
     LINK = "LINK"
     RETURN_TRANSID = "RETURN_TRANSID"
     STARTS = "STARTS"
+    # PROGRAM -> TRANSACTION, from EXEC CICS START TRANSID(...): asynchronous
+    # dispatch, so it is neither STARTS (TRANSACTION -> PROGRAM, which says who
+    # serves a transaction) nor RETURN_TRANSID (the current task ending).
+    START_TRANSID = "START_TRANSID"
     SENDS_MAP = "SENDS_MAP"
     RECEIVES_MAP = "RECEIVES_MAP"
     JCL_STEP_RUNS = "JCL_STEP_RUNS"
@@ -71,7 +85,7 @@ class GraphNode:
     id: str
     kind: NodeKind
     file_path: str | None = None
-    attrs: dict[str, Any] = field(default_factory=dict)
+    attrs: dict[str, AttrValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -81,4 +95,4 @@ class GraphEdge:
     target: str
     target_kind: NodeKind
     kind: EdgeKind
-    attrs: dict[str, Any] = field(default_factory=dict)
+    attrs: dict[str, AttrValue] = field(default_factory=dict)

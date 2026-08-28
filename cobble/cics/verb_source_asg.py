@@ -148,6 +148,22 @@ def _return_verb(stmt: ExecCicsStatement, program: str, data_fields):
     )
 
 
+def _start_verb(stmt: ExecCicsStatement, program: str, data_fields):
+    """START is only a graph event when it names the transaction it dispatches.
+
+    TRANSID is optional in the API (START also carries TERMID/INTERVAL/FROM), and
+    the transaction is what the edge points at, so a START without one is nothing
+    the graph can record -- the rule RETURN already follows.
+    """
+    if "TRANSID" not in stmt.options:
+        return None
+    return _verb(
+        "START_TRANSID",
+        program,
+        transid=_resolve_operand(stmt.options.get("TRANSID"), data_fields),
+    )
+
+
 def _transfer_verb(stmt: ExecCicsStatement, program: str, data_fields):
     """XCTL and LINK: both name the program they transfer to in PROGRAM(...)."""
     return _verb(
@@ -195,6 +211,7 @@ _FILE_VERBS = (
 
 _VERB_BUILDERS = {
     "RETURN": _return_verb,
+    "START": _start_verb,
     "XCTL": _transfer_verb,
     "LINK": _transfer_verb,
     "SEND MAP": _map_verb,
@@ -216,8 +233,7 @@ def _program_edges(asg, prog_name, bms_mapsets):
         _statement_to_verb(stmt, prog_name, asg.data_fields)
         for stmt in _iter_exec_cics(asg)
     )
-    edges = (_verb_edge(verb, bms_mapsets) for verb in verbs if verb)
-    return [edge for edge in edges if edge]
+    return [edge for verb in verbs if verb for edge in _verb_edge(verb, bms_mapsets)]
 
 
 def _endpoint(node_id, kind, corpus_index: CorpusIndex) -> GraphNode:
