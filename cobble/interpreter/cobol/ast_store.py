@@ -43,6 +43,17 @@ class AsgJsonParser(Protocol):
     def parse_to_file(self, source: bytes, out: Path) -> None: ...
 
 
+class AstParseError(Exception):
+    """A program the bridge would not parse, named.
+
+    The bridge reads a program on stdin and writes it to a temp file of its own
+    naming, so what it raises identifies the syntax but not the corpus member: on a
+    3779-program corpus the failure arrives thousands of subprocesses deep with
+    nothing in it to say which file to open. This carries the name, and chains what
+    the bridge raised so the original message and traceback survive.
+    """
+
+
 def _digest(path: Path) -> str:
     return hashlib.md5(str(path).encode()).hexdigest()  # FULL hex, no [:8]
 
@@ -54,10 +65,19 @@ def _parse_one(
 
     The cache filename carries the stem for a human reading the directory, and the
     digest for uniqueness: two libraries can hold programs of the same name.
+
+    A failure is re-raised named rather than handled: the parses run on a pool, so
+    the name has to travel with the failure -- which program the sweep stopped on
+    is not recoverable from where it stopped. Everything is caught, not just
+    CobolParseError, because the class name is part of what the caller has to be
+    told: a rejected program and a full disk are the same stack trace otherwise.
     """
     digest = _digest(path)
     out = cache_dir / f"{path.stem}-{digest}.ast.json"
-    parser.parse_to_file(source, out)  # raw JSON, freed immediately
+    try:
+        parser.parse_to_file(source, out)  # raw JSON, freed immediately
+    except Exception as exc:
+        raise AstParseError(f"{path.name}: {type(exc).__name__}: {exc}") from exc
     return digest, out
 
 
