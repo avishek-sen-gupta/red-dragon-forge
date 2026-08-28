@@ -127,6 +127,29 @@ def test_two_members_the_convention_maps_to_one_transaction_are_both_reported() 
     assert [d.tier for d in result.defines] == [Tier.SYNTHETIC, Tier.SYNTHETIC]
 
 
+def test_a_collision_on_a_transaction_the_corpus_never_names_is_not_reported() -> None:
+    """A collision is only news when the transaction is real.
+
+    Two members whose names derive the same id are already both synthetic when
+    that id appears nowhere in the corpus -- the derivation lost to no evidence,
+    not to the ambiguity. Reporting it as a collision reads as "your convention
+    does not fit", which is a different and much bigger claim: on the onboarding
+    corpus 221 of 223 reported collisions were this, burying the 2 real ones.
+    """
+    result = _synthesise(
+        {
+            "PGM010": _cics_member("EXEC CICS START TRANSID('T999') END-EXEC."),
+            "PGM010X": _cics_member(),
+        },
+        TransidRule(
+            member_pattern=r"^PGM(?P<tail>.{3}).*$", transid_template="T{tail}"
+        ),
+    )
+
+    assert result.collisions == ()
+    assert [d.tier for d in result.defines] == [Tier.SYNTHETIC, Tier.SYNTHETIC]
+
+
 def test_the_first_convention_that_fits_the_member_name_wins() -> None:
     """A corpus rarely has one member-naming family. The rules are ordered, and a
     member is placed by the first one that fits it, so a narrow rule can be listed
