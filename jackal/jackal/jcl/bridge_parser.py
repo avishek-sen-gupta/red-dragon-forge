@@ -27,7 +27,7 @@ from jackal.model import (
 )
 from jackal.value_parts import Literal, Symbol, Value, resolve
 
-_DEFAULT_DISP = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
+_PREEXISTING_STATUSES = frozenset({DispStatus.OLD, DispStatus.SHR, DispStatus.MOD})
 
 
 def _value_from_json(parts: list[dict]) -> Value:
@@ -41,15 +41,36 @@ def _value_from_json(parts: list[dict]) -> Value:
 
 
 def _disp_from_words(words: tuple[str, ...]) -> Disp:
-    status = DispStatus(words[0])
-    normal = DispNormal(words[1]) if len(words) > 1 else DispNormal.KEEP
-    abnormal = DispNormal(words[2]) if len(words) > 2 else normal
+    """``DISP=(status,normal,abnormal)``, with any subparameter omissible.
+
+    An omitted positional subparameter arrives as ``""`` (JclSerializer keeps the
+    slot); a DD with no ``DISP=`` at all arrives as ``()``. The z/OS defaults are
+    positional and chained rather than one fixed triple: the status defaults to
+    NEW, the normal disposition to DELETE for a data set this step creates and
+    KEEP for one that already existed, and the abnormal disposition to whichever
+    normal disposition resolved. So a DD with no ``DISP=`` is (NEW,DELETE,DELETE)
+    by the same rule, not by a separate constant.
+
+    MOD is read as already-existing. It can be either — MOD creates the data set
+    when it is absent and appends when it is present — and JCL alone cannot say
+    which. Only ``status`` reaches the graph (``jcl_graph._DISP_TO_EDGE_KIND``),
+    so this choice affects the model's fidelity and no edge.
+    """
+
+    def slot(i: int) -> str:
+        return words[i] if i < len(words) else ""
+
+    status = DispStatus(slot(0)) if slot(0) else DispStatus.NEW
+    default_normal = (
+        DispNormal.KEEP if status in _PREEXISTING_STATUSES else DispNormal.DELETE
+    )
+    normal = DispNormal(slot(1)) if slot(1) else default_normal
+    abnormal = DispNormal(slot(2)) if slot(2) else normal
     return Disp(status, normal, abnormal)
 
 
 def _dd_from_json(d: dict) -> DD:
-    words = tuple(d.get("disp_words", ()))
-    disp = _disp_from_words(words) if words else _DEFAULT_DISP
+    disp = _disp_from_words(tuple(d.get("disp_words", ())))
     dsn_value = _value_from_json(d.get("dsn", []))
     raw_dsn = (
         resolve(dsn_value) if not any(isinstance(p, Symbol) for p in dsn_value) else ""
