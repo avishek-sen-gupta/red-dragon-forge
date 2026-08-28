@@ -922,7 +922,14 @@ singleOrMultipleValue : (
 	embeddedEquality
   ) ;
 
-parenList : (LPAREN COMMA* keywordOrSymbolic (COMMA+ keywordOrSymbolic)* RPAREN) ;
+/*
+The trailing COMMA* is the omitted LAST positional: SPACE=(CYL,(2,2,),RLSE) and
+UNIT=(SYSDA,3,). The leading COMMA* and the inner COMMA+ already allowed a
+position to be left empty at the front and in the middle, so requiring a value
+after the final comma was an inconsistency in this rule rather than a rule about
+JCL.
+*/
+parenList : (LPAREN COMMA* keywordOrSymbolic (COMMA+ keywordOrSymbolic)* COMMA* RPAREN) ;
 /*parenList : (LPAREN keywordOrSymbolic (COMMA keywordOrSymbolic)* RPAREN) ;*/
 embeddedEquality : (keywordOrSymbolic EQUAL singleOrMultipleValue) ;
 
