@@ -166,7 +166,19 @@ def extract_jcl_graph(
     following the same "opaque discriminant on the edge" precedent as
     attrs["text"] (SYSIN) and attrs["select_name"] (COBOL_FILE).
     """
-    job = parse_jcl(jcl_source)
+    return jcl_graph_from_job(parse_jcl(jcl_source), corpus_index, proclib_dirs)
+
+
+def jcl_graph_from_job(
+    job: Job, corpus_index: "CorpusIndex", proclib_dirs: Sequence[Path] = ()
+) -> tuple[list[GraphNode], list[GraphEdge]]:
+    """``extract_jcl_graph`` for a member already parsed.
+
+    A corpus build parses each member once into a JclStore and reaches the graph
+    through here; ``extract_jcl_graph`` above is the entry point for a caller
+    holding text rather than a Job. Same graph either way — the split exists only
+    so the parse can be hoisted out of the pass.
+    """
     step_proc: dict[str, str] = {}
     if proclib_dirs:
         expanded_job = expand_procs(job, proclib_dirs)
