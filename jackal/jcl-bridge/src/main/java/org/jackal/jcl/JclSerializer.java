@@ -64,6 +64,8 @@ package org.jackal.jcl;
 
 import com.google.gson.*;
 import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.atn.PredictionMode;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.antlr.v4.runtime.tree.*;
 
 import java.io.*;
@@ -75,25 +77,89 @@ public final class JclSerializer {
 
     public static void main(String[] args) throws IOException {
         String src = new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
+        JsonObject job;
+        try {
+            job = serialize(src);
+        } catch (SyntaxErrorException e) {
+            System.err.print(e.getMessage());
+            System.exit(1);
+            return;
+        }
+        System.out.print(new Gson().toJson(job));
+    }
+
+    /** Thrown when the grammar rejects the source; carries the collected error text. */
+    static final class SyntaxErrorException extends RuntimeException {
+        SyntaxErrorException(String text) {
+            super(text);
+        }
+    }
+
+    /**
+     * Parse JCL source and serialize it to the Jackal JCL JSON contract.
+     *
+     * <p>Split out of {@link #main} so the whole grammar-to-JSON path is
+     * exercisable without stdin/stdout or a process exit: a test states a JCL
+     * snippet and reads the JSON the Python side would receive.
+     *
+     * <p>Two-stage parse (the pattern from ANTLR's own TestPerformance): SLL
+     * prediction with {@link BailErrorStrategy} first, full LL only if that
+     * bails. {@code jcl : (execJCL+ SS?) | (procJCL SS?)} makes the top-level
+     * alternative decidable only from deep in the member, so under the default
+     * full-context LL prediction the cost grows superlinearly with input size --
+     * measured at roughly O(n^1.8): 2.0s for a 10 KB member, 25.7s for 46 KB,
+     * minutes for the largest. SLL decides the same alternatives without the
+     * full-context work whenever the input is unambiguous, which is every member
+     * that is valid JCL.
+     *
+     * <p>The LL stage is configured exactly as the single-stage parse was, so a
+     * member SLL cannot decide gets the same tree and the same error text as
+     * before: this changes how long a parse takes, never what it returns.
+     */
+    static JsonObject serialize(String src) {
         JCLLexer lexer = new JCLLexer(CharStreams.fromString(src));
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         JCLParser parser = new JCLParser(tokens);
 
-        // Fail loud: collect syntax errors, exit non-zero if any.
+        // Fail loud: collect syntax errors, throw if any. The lexer's listener
+        // stays attached across both stages -- a bad character is not something
+        // SLL can bail out of, and the token stream is lexed once, so this
+        // collects each lexer error exactly once however the parse goes.
         FailingErrorListener errs = new FailingErrorListener();
         lexer.removeErrorListeners();
         lexer.addErrorListener(errs);
         parser.removeErrorListeners();
-        parser.addErrorListener(errs);
 
-        ParseTree tree = parser.startRule();
+        ParseTree tree = parseTwoStage(parser, tokens, errs);
         if (errs.hasErrors()) {
-            System.err.print(errs.text());
-            System.exit(1);
+            throw new SyntaxErrorException(errs.text());
         }
 
-        JsonObject job = new JobBuilder().build((JCLParser.StartRuleContext) tree);
-        System.out.print(new Gson().toJson(job));
+        return new JobBuilder().build((JCLParser.StartRuleContext) tree);
+    }
+
+    /**
+     * startRule() under SLL, falling back to full LL if SLL cannot decide.
+     *
+     * <p>No parser error listener during the SLL stage: BailErrorStrategy throws
+     * on the first error rather than reporting it, so anything SLL rejects must
+     * be re-parsed under LL before it can be called a syntax error. Reporting it
+     * here would put a spurious error in {@code errs} for input LL accepts.
+     */
+    private static ParseTree parseTwoStage(
+            JCLParser parser, CommonTokenStream tokens, FailingErrorListener errs) {
+        parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+        parser.setErrorHandler(new BailErrorStrategy());
+        try {
+            return parser.startRule();
+        } catch (ParseCancellationException e) {
+            tokens.seek(0);
+            parser.reset();
+            parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+            parser.setErrorHandler(new DefaultErrorStrategy());
+            parser.addErrorListener(errs);
+            return parser.startRule();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -637,22 +703,70 @@ public final class JclSerializer {
         }
 
         /**
-         * Extract the individual keyword words from a singleOrMultipleValue context.
-         * For plain SHR -> ["SHR"]
-         * For (NEW,CATLG,DELETE) -> ["NEW","CATLG","DELETE"]
+         * Extract the positional words of a singleOrMultipleValue context, keeping an
+         * empty string for each omitted subparameter.
+         *
+         * <pre>
+         *   SHR                  -> ["SHR"]
+         *   (SHR)                -> ["SHR"]
+         *   (NEW,CATLG,DELETE)   -> ["NEW","CATLG","DELETE"]
+         *   (,PASS)              -> ["","PASS"]
+         *   (NEW,,DELETE)        -> ["NEW","","DELETE"]
+         * </pre>
+         *
+         * <p>Splits the context's terminals on COMMA instead of collecting its
+         * keywordOrSymbolic children, because a keyword collection cannot express an
+         * omitted slot: {@code (,PASS)} and {@code (PASS)} would both yield one word,
+         * and {@code (NEW,,DELETE)} would silently read as {@code (NEW,DELETE)}. The
+         * comma tokens are the only record of position.
+         *
+         * <p>Flattening to terminals also makes this independent of which
+         * singleOrMultipleValue alternative the parser chose: {@code (,PASS)} matches
+         * the parenList alternative and {@code (NEW,,DELETE)} does not, and the two
+         * put their keywords at different depths.
+         *
+         * <p>DISP is the only caller. A value with nested parentheses or an embedded
+         * equality (the PARM= shapes) would have its inner commas counted as
+         * separators here; DISP cannot contain either.
          */
         private JsonArray extractWords(JCLParser.SingleOrMultipleValueContext ctx) {
-            JsonArray arr = new JsonArray();
-            // Collect all keywordOrSymbolic children, which carry the actual word text
-            List<JCLParser.KeywordOrSymbolicContext> kwList = new ArrayList<>();
-            collectAll(ctx, JCLParser.KeywordOrSymbolicContext.class, kwList);
-            for (JCLParser.KeywordOrSymbolicContext kw : kwList) {
-                String word = kw.getText().trim();
-                if (!word.isEmpty()) {
-                    arr.add(word);
+            List<TerminalNode> terminals = new ArrayList<>();
+            collectTerminals(ctx, terminals);
+
+            List<String> slots = new ArrayList<>();
+            StringBuilder current = new StringBuilder();
+            for (TerminalNode t : terminals) {
+                int type = t.getSymbol().getType();
+                if (type == JCLParser.LPAREN || type == JCLParser.RPAREN) {
+                    continue;
                 }
+                if (type == JCLParser.COMMA) {
+                    slots.add(current.toString().trim());
+                    current.setLength(0);
+                    continue;
+                }
+                current.append(t.getText());
             }
+            slots.add(current.toString().trim());
+
+            JsonArray arr = new JsonArray();
+            // A value with no subparameter at all (DISP=()) is absent, not one empty slot.
+            if (slots.size() == 1 && slots.get(0).isEmpty()) {
+                return arr;
+            }
+            slots.forEach(arr::add);
             return arr;
+        }
+
+        /** ctx's terminal nodes, depth-first, in source order. */
+        private void collectTerminals(ParseTree node, List<TerminalNode> out) {
+            if (node instanceof TerminalNode t) {
+                out.add(t);
+                return;
+            }
+            for (int i = 0; i < node.getChildCount(); i++) {
+                collectTerminals(node.getChild(i), out);
+            }
         }
 
         /**

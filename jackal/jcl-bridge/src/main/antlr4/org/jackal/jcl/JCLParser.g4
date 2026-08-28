@@ -49,7 +49,8 @@ execJCL
 			| procStatement 
 			| pendStatement 
 			| scheduleStatement 
-			| setStatement)*
+			| setStatement
+			| delimiterStatement)*
 			nullStatement* jes2CntlStatement* delimiterStatement*
 		(
 			(jclCommandStatement 
@@ -75,7 +76,8 @@ execJCL
 			| procStatement 
 			| pendStatement 
 			| scheduleStatement 
-			| setStatement)*
+			| setStatement
+			| delimiterStatement)*
 			nullStatement* jes2CntlStatement* delimiterStatement*))+
 	EOF?
 	;
@@ -204,7 +206,19 @@ errorChars
 	| ERROR_CHAR_KYWD_VAL_PAREN)+
 	;
 
-jclStep : execStatement (cntlStatementAmalgamation | ddStatementAmalgamation | outputStatement | includeStatement | commentStatement | errorChars)* ddParmASTERISK_DATA* ;
+/*
+A bare /* inside a step's DD list terminates nothing: the delimiter statement is
+permitted anywhere in a job, and production JCL puts one between two DDs of one
+step. Without delimiterStatement here the step's DD list ended at it, the job
+ended with it, and execJCL+ restarted wanting a fresh JOB card -- surfacing at
+the NEXT DD as "mismatched input 'DD' expecting JOB".
+
+Only delimiterStatement is listed, not nullStatement or jes2CntlStatement: SS is
+the token every statement in this loop STARTS with, so a nullStatement (: SS)
+alternative here would compete with all of them. DELIMITER_STATEMENT starts
+nothing else, so this alternative is decided by one token.
+*/
+jclStep : execStatement (cntlStatementAmalgamation | ddStatementAmalgamation | outputStatement | includeStatement | commentStatement | delimiterStatement | errorChars)* ddParmASTERISK_DATA* ;
 
 /*
 System symbols can be substringed...
@@ -321,7 +335,11 @@ ddParmASTERISK_DATA : DD_ASTERISK_DATA+ (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMI
 ddParmAVGREC : AVGREC EQUAL keywordOrSymbolic ;
 ddParmBFALN : BFALN EQUAL keywordOrSymbolic ;
 ddParmBFTEK : BFTEK EQUAL keywordOrSymbolic ;
-ddParmBLKSIZE : BLKSIZE EQUAL keywordOrSymbolic ;
+// The value is optional, as it is for DATACLAS below: the lexer already lets a
+// keyword subparameter be null on purpose (see KYWD_VAL_MODE), and cobble records
+// no block size anywhere, so a null one costs nothing to accept and cost two
+// corpus members every DD edge they had to reject.
+ddParmBLKSIZE : BLKSIZE EQUAL keywordOrSymbolic? ;
 ddParmBLKSZLIM : BLKSZLIM EQUAL keywordOrSymbolic ;
 ddParmBUFIN : BUFIN EQUAL keywordOrSymbolic ;
 ddParmBUFL : BUFL EQUAL keywordOrSymbolic ;
@@ -908,7 +926,14 @@ singleOrMultipleValue : (
 	embeddedEquality
   ) ;
 
-parenList : (LPAREN COMMA* keywordOrSymbolic (COMMA+ keywordOrSymbolic)* RPAREN) ;
+/*
+The trailing COMMA* is the omitted LAST positional: SPACE=(CYL,(2,2,),RLSE) and
+UNIT=(SYSDA,3,). The leading COMMA* and the inner COMMA+ already allowed a
+position to be left empty at the front and in the middle, so requiring a value
+after the final comma was an inconsistency in this rule rather than a rule about
+JCL.
+*/
+parenList : (LPAREN COMMA* keywordOrSymbolic (COMMA+ keywordOrSymbolic)* COMMA* RPAREN) ;
 /*parenList : (LPAREN keywordOrSymbolic (COMMA keywordOrSymbolic)* RPAREN) ;*/
 embeddedEquality : (keywordOrSymbolic EQUAL singleOrMultipleValue) ;
 
