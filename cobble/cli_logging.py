@@ -13,7 +13,7 @@ Two choices worth stating, because both are deliberate rather than default:
     shows in the output, so the warnings cobble raises mark themselves with '!!'.
   - stderr. The tqdm progress bars are already there, so a per-stage count and
     the bar it followed interleave in the order they happened; and it leaves
-    stdout for the one thing that is machine-readable, diagnose_copybooks' JSON.
+    stdout for the one thing that is machine-readable, cobble.diagnosis' JSON.
 
 basicConfig is a no-op when the root logger already has a handler, which is what
 makes this safe to call from a main() that pytest is driving: the test harness's

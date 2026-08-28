@@ -69,7 +69,7 @@ def _program_pairs(config: CorpusConfig) -> tuple[_Pair, ...]:
 def _copybook_pairs(copybook_dirs: Sequence[Path]) -> tuple[_Pair, ...]:
     """Every file in every configured copybook dir, one level deep.
 
-    Deliberately extension-agnostic, unlike diagnose_copybooks: a name can
+    Deliberately extension-agnostic, unlike cobble.diagnosis.copybooks: a name can
     resolve to a file_path here and still fail the ProLeap preprocessor, which
     matches only the configured copybook_extensions.
 

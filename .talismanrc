@@ -45,7 +45,7 @@ fileignoreconfig:
   checksum: e9891f67a9ac022fea61fb887d9787462277efcf3a78a12338d4150bde0db7cd
 - filename: cobble/corpus_index_builder.py
   checksum: 4ecb54db84a73168a3ea41fa55c1238b5d1d28d494cc5c0498f9cc2dc0d123df
-- filename: cobble/diagnose_copybooks.py
+- filename: cobble/diagnosis/copybooks.py
   checksum: a7934d75877efce70b445206ff01235a5ec4ecd93732eeec0eb42d36f6d0e863
 - filename: cobble/compare.py
   checksum: 2b6f4f9efeef6f46927049a097b79df8686dba883d6b3d4f6ea3a4e140b8997c
