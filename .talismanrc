@@ -34,7 +34,7 @@ fileignoreconfig:
 - filename: tests/test_canonical_export_cli.py
   checksum: 7f07e37eb8c85c741f3f2efd4b68c561db32d3f742d00f1db6509c6393a39d39
 - filename: docs/corpus-onboarding-blockers.md
-  checksum: d8e29abe150289d0eefbc0e2df48ae11ec032b8bb6958d636338182b0b8476ca
+  checksum: 0e5105506c263629b596ea478050928a941db4b7435226c52b14a1f55b3df9a3
 - filename: tests/jackal/test_bridge_parser.py
   checksum: cf74463907bafeba9a4bbc397b09a21ab8b955d40a4198d992bdc32ef6d53167
 - filename: jcl-bridge/src/test/java/org/jackal/jcl/JclSerializerTest.java

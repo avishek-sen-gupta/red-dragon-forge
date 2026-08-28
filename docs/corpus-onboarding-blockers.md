@@ -444,28 +444,115 @@ begins *every* JCL statement into a loop alternation, and ANTLR's prediction cos
 for that outweighs what it recovers. Real defect, latent in this corpus — not
 worth the grammar change until a corpus shows it.
 
-### What is left: 62 members short of the whole corpus, two separate causes
+### What was left: 62 members, five causes — four fixed, one is not our bug
 
 The 789-of-860 figure above comes from the comparison sweep, which capped each
 bridge at 150s while running 6 at a time and so charged its own contention to 11
-members. A real `CorpusIndex` build over the same corpus — serial, no cap — gives
-the honest number: **798 of 860 parse, 62 fail**, and the index completes.
+members. Serial and uncapped, the honest number after the delimiter fix is
+**798 of 860 parse, 62 fail**, and the index completes.
 
-- **54** fail with `mismatched input 'DD' expecting JOB` (45 at column 12, 9 at
-  column 11). Same symptom as #6, different cause — the delimiter fix does not
-  move them. 40 of the 54 report the identical `line 35:12`, so most of the slice
-  is one repeated member shape rather than 54 distinct problems. Not yet analysed.
-- **8** assorted, one member each: `EXEC SORT,COND=(`, `no viable alternative` on
-  an EXEC line (four members), `mismatched input '0' expecting {COMMENT_FLAG, SS}`,
-  and two where the bridge's stderr is a line of corpus prose rather than an ANTLR
-  error at all.
+Every one of the 62 was pinned the same way: bisect the member by truncation to
+the smallest failing `1..N` line prefix, then rebuild that prefix as a minimal
+repro. Bisection was not optional. ANTLR reports all of these against the
+position where `jclStep` *started* — the step's EXEC line, often dozens of lines
+earlier — so the printed position says nothing about which parameter broke.
 
-No member is unparseable given time: the timeouts were all measurement artifacts.
-One member still takes ~900s (see the parse-time entry under *Other open
-blockers*), which is why a serial index run is slow, not why it fails.
+| cause | members | shape | verdict |
+|---|---|---|---|
+| B | 54 | bare `/*` between two DDs of **one step** | valid JCL — FIXED |
+| D | 4 | omitted trailing positional: `SPACE=(CYL,(2,2,),RLSE)`, `UNIT=(SYSDA,3,)` | tolerated in practice — FIXED |
+| A | 1 | `DCB=*.ddname` followed by a continuation card | valid JCL — FIXED |
+| E | 1 | `PROC` with no parameters and a cols 73-80 sequence number | valid JCL — FIXED |
+| C | 2 | empty keyword subparameter: `DCB=(RECFM=FB,BLKSIZE=)` | **invalid JCL — WON'T FIX** |
 
-CardDemo is unaffected: `make compare` is an empty diff at 449 nodes / 803 edges.
-12 jcl-bridge Java tests and 166 pytest tests pass.
+**B — `/*` inside a step's DD list.** The #6 fix put `delimiterStatement` in the
+mid-job alternation, which handles a delimiter *between steps*. `jclStep` listed
+none at all, so a delimiter among a step's DDs ended the step's DD list, ended
+the job with it, and `execJCL+` restarted wanting a fresh JOB card — surfacing at
+the *next* DD as `mismatched input 'DD' expecting JOB`. One added alternative.
+Only `delimiterStatement` is listed there, deliberately: `SS` is the token every
+statement in that loop starts with, so a `nullStatement : SS` alternative would
+compete with all of them, while `DELIMITER_STATEMENT` starts nothing else and so
+decides the alternative on one token.
+
+**D — omitted trailing positional.** `parenList` already allowed a positional to
+be omitted at the front (`DISP=(,PASS)`) and in the middle
+(`SPACE=(CYL,(2,,2),RLSE)`) but required a value after the last comma. One
+trailing `COMMA*`. Unlike A, B and E this one is a tolerance rather than a
+correction: IBM's documented way to omit a *trailing* positional omits its comma
+too, so `(2,2,)` is what real systems accept rather than what the manual states.
+
+**A — `DCB=*.ddname` then a continuation.** `DCB=` puts the lexer in
+`DCB_MODE`. A *keyword* subparameter there (`DCB=(RECFM=FB,…)`) switches to
+`KYWD_VAL_MODE`, which carries both continuation rules and so always worked. A
+*bare* value — a backward reference `*.ddname`, or a model dataset name — is
+consumed by `DCB_KEYWORD_VALUE` without leaving the mode, so the following comma
+reached `DCB_COMMA : COMMA_DFLT ->more,popMode`: that folds the comma into the
+next token and pops to `DD_PARM_MODE`, where what remains of the line matched an
+end-of-statement rule and the continuation card became a new statement.
+`DCB_MODE` now has the same `,\n` and `,`-then-blanks rules `KYWD_VAL_MODE` has.
+
+The second of those is the one that mattered, and a first attempt shipped only
+the first. Production cards are blank-padded to 80 columns, so the continuing
+comma is followed by blanks and never reaches the newline — a `,\n` rule alone
+fixed the synthetic repro and moved the member not at all. The repro had to be
+rebuilt with padded cards before it reproduced what the corpus does.
+
+**E — `PROC` with no parameters and a sequence number.** Columns 73-80 are the
+identification/sequence field; the system ignores them and card-era members keep
+a line number there. `PROC_MODE`'s `PROC_WS` assumed a parameter field always
+follows the whitespace and went to `PROC_PARM_MODE`, where the digits hit
+`ERROR_CHAR_PROC_PARM`: `mismatched input '0' expecting {COMMENT_FLAG, SS}`. A
+`PROC` *with* parameters escaped this only incidentally — its `=` pushes
+`PROC_PARM_VALUE_MODE`, which absorbs the trailing field already.
+
+The fix keys on the column, not on absorbing whatever trails the statement, and
+that distinction is load-bearing: a comment field is permitted only on a
+statement that *has* a parameter field, so `//NAME PROC` with nothing after it
+cannot be carrying one. A predicated rule recognises whitespace that runs to
+column 73 and switches to a mode that swallows the rest of the card. mapa has no
+sequence-field handling anywhere in its 104 lexer modes; every other member gets
+away with it because its sequence number lands somewhere a value or comment is
+already being absorbed.
+
+**C — empty keyword subparameter value. Not fixed, because the JCL is wrong.**
+
+```
+DCB=(RECFM=FB,BLKSIZE=)     both members
+DCB=(BLKSIZE=,LRECL=80)     same shape, constructed
+```
+
+`BLKSIZE=0` is z/OS's documented "let the system choose" form, and both members
+elsewhere write exactly that — one of them has `DCB=(BLKSIZE=0,LRECL=3300,RECFM=FB)`
+four cards above the `BLKSIZE=` that fails. So the empty form is a typo the
+authors made in one DD each, not a JCL dialect the grammar is missing.
+
+Loosening `ddParmBLKSIZE` to accept an absent value is a two-character change and
+the grammar already has the idiom for it (`ddParmDDNAME : DDNAME EQUAL
+keywordOrSymbolic?`). It was rejected on what it would mean: cobble would have to
+invent a block size, and any value it invented would be a claim about the data
+set that the JCL does not make. Two members stay unparsed, correctly. The fix
+belongs in the members.
+
+### Where the corpus ended up
+
+Four grammar commits, each measured over all 860 members with the *only*
+difference being the jar, and each requiring not just more members parsing but
+**zero regressions and zero changes to any member that already parsed** — no
+member's step count, DD count or program list moved:
+
+| | parsed | failed | steps | DDs |
+|---|---|---|---|---|
+| after #6 (delimiter between steps) | 798 | 62 | 11114 | 59320 |
+| + B (delimiter inside a step) | 852 | 8 | 11587 | 61378 |
+| + D (omitted trailing positional) | 856 | 4 | 11695 | 61910 |
+| + A and E (DCB continuation, PROC sequence field) | **858** | **2** | **11701** | **61940** |
+
+The two that remain are cause C. Every fix is one or two lines and all four are
+upstreamable to mapa.
+
+CardDemo is unaffected throughout: `make compare` is an empty diff at 449 nodes /
+803 edges. 34 jcl-bridge Java tests and 221 pytest tests pass.
 
 ---
 
@@ -556,22 +643,62 @@ must never be hardcoded in the extractor.
   by accident — but the `clean` target still only knows the defaults.
 - **The online members need `make sym CONFIG=<corpus>` first**, otherwise every
   one of them fails with `Copybook not found`.
-- **Bridge parse time blows up on large members.** Screening all 860 JCL members
-  with 8 bridges running at once, 114 exceeded 20s — but that number is mostly the
-  screen's own CPU contention, so it is not the measurement. Re-run **one at a
-  time**, 113 of those 114 complete: mostly tens of seconds, slowest 599s. One
-  member (3317 lines) is still running at 900s.
-
-  Cost is steeply superlinear in line count and not monotonic in it — 2843 lines
-  parses in 105s while 2537 lines takes 599s — so member size is a correlate, not
-  the cause. Untriaged; ANTLR ALL(*) prediction is the obvious suspect.
-
-  Two consequences. cobble never times the subprocess out, so the one long member
-  makes a run look stuck with no diagnostic. And `CorpusIndex` parses all 860
-  serially, so these members dominate its wall-clock. Any timeout added has to be
-  a *reported* skip (see the index-failures entry), not a silent one.
 - **Empty-copybook synthesis** to get past `Copybook not found` for copybooks
   absent from the corpus entirely. Deferred by decision, not by oversight.
+
+---
+
+## Bridge parse time blew up on large members — FIXED
+
+Screening all 860 JCL members with 8 bridges at once, 114 exceeded 20s — but most
+of that was the screen's own CPU contention. Re-run **one at a time**, 113 of the
+114 completed: mostly tens of seconds, slowest 599s. One member (3317 lines) was
+still running at 900s. Cost was steeply superlinear in line count and not
+monotonic in it — 2843 lines in 105s while 2537 lines took 599s — so member size
+was a correlate, not the cause.
+
+**Root cause: full-context LL prediction on the top-level alternative.**
+`jcl : (execJCL+ SS?) | (procJCL SS?)` is decidable only from deep inside the
+member, and under ANTLR's default `LL` prediction the cost of carrying that
+decision grows at roughly O(n^1.8) in input size.
+
+**Fix: the two-stage parse from ANTLR's own `TestPerformance`.** SLL prediction
+with `BailErrorStrategy` first, full LL only if SLL bails. SLL decides the same
+alternatives without the full-context work whenever the input is unambiguous,
+which is every member that is valid JCL. The LL stage is configured exactly as
+the single-stage parse was, so a member SLL cannot decide gets the same tree and
+the same error text as before.
+
+**Measured, same jar except for this change:**
+
+| member | before | after |
+|---|---|---|
+| median, 10 KB | 2.04s | 0.54s |
+| p90, 46 KB | 25.66s | 0.71s |
+| largest, 262 KB | never completed | 2.19s |
+
+Nine members never returned from the bridge at all; all nine return now. This is
+a speed change only, and the sweep proves it: 798 members parsed before and 798
+after, with no member's output altered.
+
+**What the remaining wall-clock is, now that parsing is not it.** A full 860-member
+sweep is ~150s, of which the actual parse work is ~1.0s per member. Two costs
+dominate what is left, and neither is in the parser:
+
+- **301s of CPU (26%) is JVM startup** — 860 process launches at ~0.35s each.
+- **Each member is parsed twice per run** — once building the corpus index, once
+  building the graph. Roughly a 2× on everything.
+
+The 4-way parallelism configured for `build_graph`'s JCL passes is not actually
+used, which is a third. All three are open items; none of them is a grammar or
+prediction problem.
+
+One consequence of the original blocker stands unfixed: cobble never times the
+bridge subprocess out, so a member that does hang makes a run look stuck with no
+diagnostic. Any timeout added has to be a *reported* skip (see the index-failures
+entry), not a silent one.
+
+---
 
 ## Fixed
 
@@ -588,6 +715,22 @@ description finds the commit.
   tail of a statement group that `execJCL` spells out twice instead of looping, so
   a job allowed exactly one interior `/*`. Added to the mid-job alternation:
   601 -> 798 of 860 members parse, 5253 -> 10075 steps, no regressions.
+- **Bare `/*` inside a step's DD list** — `jclStep` listed no
+  `delimiterStatement` at all, so a delimiter among a step's DDs ended the step,
+  the job, and the parse: 798 -> 852 of 860. The commonest single defect in the
+  corpus, 54 members.
+- **Omitted trailing positional subparameter** — `parenList` required a value
+  after its last comma while already allowing leading and middle omissions:
+  852 -> 856 of 860.
+- **`DCB=*.ddname` lost its continuation card** — `DCB_MODE` had neither of the
+  two comma-continuation rules `KYWD_VAL_MODE` has, so a bare DCB value ended the
+  statement instead of continuing it.
+- **`PROC` with no parameters and a cols 73-80 sequence number** — `PROC_MODE`
+  assumed whitespace is always followed by a parameter field; the sequence digits
+  became a parameter name with no value. With the DCB fix, 856 -> 858 of 860.
+- **Bridge parse time superlinear in member size** — SLL-then-LL two-stage parse
+  in `JclSerializer`. p90 member 25.66s -> 0.71s, largest member never completed
+  -> 2.19s, nine members that never returned now all return, output identical.
 - **`EXEC SQL` aborts the program** — `parse_statement` raised
   `Unknown COBOL statement type: 'EXEC_SQL'` with only Cicada's dialect parser
   registered; `cobble/sql/` now ports Squall's parse-time `DialectParser` and
