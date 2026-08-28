@@ -34,8 +34,8 @@ Which yields three tiers of definition, and the report says how many of each:
 
 Nothing else is asserted. A transaction the corpus names but the convention
 cannot place is reported as unclaimed, not given an invented program; two members
-whose names claim one transaction are reported as a collision and both fall back
-to synthetic, because a convention that collides does not fit this corpus.
+whose names claim one real transaction are reported as a collision and both fall
+back to synthetic, because a convention that collides does not fit this corpus.
 """
 
 from __future__ import annotations
@@ -234,9 +234,21 @@ def _unclaimed(literals: frozenset[str], defines: Sequence[Define]) -> tuple[str
 
 def _collisions(
     claimants: Mapping[str, tuple[str, ...]],
+    literals: frozenset[str],
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Transactions the corpus names that more than one member's name claims.
+
+    Restricted to transactions that are real, because that is what makes the
+    ambiguity worth a line: those members would otherwise have been defined, and
+    the collision is the only reason they were not. Two members deriving an id
+    that appears nowhere are already synthetic for want of evidence -- reporting
+    that as a collision says the convention does not fit the corpus, which is a
+    far bigger claim than the data supports.
+    """
     return tuple(
-        (transid, names) for transid, names in claimants.items() if len(names) > 1
+        (transid, names)
+        for transid, names in claimants.items()
+        if len(names) > 1 and transid in literals
     )
 
 
@@ -259,7 +271,7 @@ def synthesise_csd(
     return SynthesisedCsd(
         defines=defines,
         unclaimed=_unclaimed(literals, defines),
-        collisions=_collisions(claimants),
+        collisions=_collisions(claimants, literals),
     )
 
 
