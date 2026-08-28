@@ -206,7 +206,19 @@ errorChars
 	| ERROR_CHAR_KYWD_VAL_PAREN)+
 	;
 
-jclStep : execStatement (cntlStatementAmalgamation | ddStatementAmalgamation | outputStatement | includeStatement | commentStatement | errorChars)* ddParmASTERISK_DATA* ;
+/*
+A bare /* inside a step's DD list terminates nothing: the delimiter statement is
+permitted anywhere in a job, and production JCL puts one between two DDs of one
+step. Without delimiterStatement here the step's DD list ended at it, the job
+ended with it, and execJCL+ restarted wanting a fresh JOB card -- surfacing at
+the NEXT DD as "mismatched input 'DD' expecting JOB".
+
+Only delimiterStatement is listed, not nullStatement or jes2CntlStatement: SS is
+the token every statement in this loop STARTS with, so a nullStatement (: SS)
+alternative here would compete with all of them. DELIMITER_STATEMENT starts
+nothing else, so this alternative is decided by one token.
+*/
+jclStep : execStatement (cntlStatementAmalgamation | ddStatementAmalgamation | outputStatement | includeStatement | commentStatement | delimiterStatement | errorChars)* ddParmASTERISK_DATA* ;
 
 /*
 System symbols can be substringed...

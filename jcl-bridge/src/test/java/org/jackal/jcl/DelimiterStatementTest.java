@@ -1,5 +1,6 @@
 package org.jackal.jcl;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import org.junit.Test;
@@ -7,7 +8,8 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 /**
- * A bare {@code /*} between steps does not end the job.
+ * A bare {@code /*} between steps -- or between the DD statements of one step --
+ * does not end the job.
  *
  * <p>Bare {@code /*} is the JES2 delimiter statement, not a comment ({@code //*}
  * is the comment). It terminates in-stream data, and z/OS permits it anywhere in
@@ -26,6 +28,26 @@ public class DelimiterStatementTest {
     private static int steps(String... lines) {
         JsonObject job = JclSerializer.serialize(String.join("\n", lines) + "\n");
         return job.getAsJsonArray("steps").size();
+    }
+
+    /** The DD names of the job's only step, so a swallowed DD shows as an absence. */
+    private static JsonArray ddNames(String... lines) {
+        JsonObject job = JclSerializer.serialize(String.join("\n", lines) + "\n");
+        JsonArray steps = job.getAsJsonArray("steps");
+        assertEquals("expected exactly one step", 1, steps.size());
+        JsonArray names = new JsonArray();
+        for (var dd : steps.get(0).getAsJsonObject().getAsJsonArray("dds")) {
+            names.add(dd.getAsJsonObject().get("ddname"));
+        }
+        return names;
+    }
+
+    private static JsonArray namesOf(String... names) {
+        JsonArray expected = new JsonArray();
+        for (String name : names) {
+            expected.add(name);
+        }
+        return expected;
     }
 
     @Test
@@ -87,6 +109,79 @@ public class DelimiterStatementTest {
                         "//STEP2    EXEC PGM=IEFBR14",
                         "/*",
                         "//STEP3    EXEC PGM=IEFBR14"));
+    }
+
+    /**
+     * The commonest shape in the production corpus: a bare {@code /*} sitting
+     * between two DD statements of ONE step, terminating nothing.
+     *
+     * <p>{@code jclStep} listed no delimiterStatement at all, so the step's DD
+     * list ended at the delimiter, the job ended with it, and {@code execJCL+}
+     * restarted demanding a fresh JOB card -- reported at the NEXT DD as {@code
+     * mismatched input 'DD' expecting JOB}. That is 40 of the 62 members the
+     * corpus could not parse, all at the first such delimiter in the member.
+     */
+    @Test
+    public void aDelimiterBetweenTwoDdsOfOneStepKeepsBothDds() {
+        assertEquals(
+                namesOf("IN", "OUT"),
+                ddNames(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "//IN       DD  DSN=A.B,DISP=SHR",
+                        "/*",
+                        "//OUT      DD  DSN=C.D,DISP=SHR"));
+    }
+
+    /** Continuation lines still fold across a delimiter that follows them. */
+    @Test
+    public void aDelimiterAfterAContinuedDdKeepsBothDds() {
+        assertEquals(
+                namesOf("IN", "OUT"),
+                ddNames(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "//IN       DD  DSN=A.B,",
+                        "//             DISP=(NEW,CATLG),",
+                        "//             SPACE=(CYL,(2,1),RLSE)",
+                        "/*",
+                        "//OUT      DD  DSN=C.D,DISP=SHR"));
+    }
+
+    /** More than one, because the fix has to loop rather than admit exactly one. */
+    @Test
+    public void everyDelimiterInOneStepsDdListIsAbsorbed() {
+        assertEquals(
+                namesOf("IN", "WORK", "OUT"),
+                ddNames(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "/*",
+                        "//IN       DD  DSN=A.B,DISP=SHR",
+                        "/*",
+                        "//WORK     DD  DSN=&&T,DISP=(NEW,PASS)",
+                        "/*",
+                        "//OUT      DD  DSN=C.D,DISP=SHR",
+                        "/*"));
+    }
+
+    /**
+     * A step whose DD list holds BOTH kinds: a real in-stream-data terminator and
+     * a delimiter terminating nothing. The first is consumed by the lexer in
+     * DATA_MODE, the second reaches the parser.
+     */
+    @Test
+    public void aStepMixingBothKindsOfDelimiterKeepsEveryDd() {
+        assertEquals(
+                namesOf("SYSIN", "OUT"),
+                ddNames(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEBGENER",
+                        "//SYSIN    DD *",
+                        "  GENERATE MAXFLDS=1",
+                        "/*",
+                        "//OUT      DD  DSN=C.D,DISP=SHR",
+                        "/*"));
     }
 
     /** A delimiter before the first step is a delimiter like any other. */
