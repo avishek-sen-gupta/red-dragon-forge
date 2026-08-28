@@ -32,12 +32,13 @@ import json
 import logging
 import sys
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import load_corpus_config
+from cobble.diagnosis.report import RULE, emit_json, member_label
 from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
 from cobble.jackal.jcl.parser import bridge_parser
 from cobble.matching_files import matching_files
@@ -46,8 +47,6 @@ logger = logging.getLogger(__name__)
 
 # member -> {"type": exception class name, "message": what it said}
 Unparseable = dict[str, dict[str, str]]
-
-RULE = "=" * 78
 
 
 @dataclass(frozen=True)
@@ -94,19 +93,6 @@ def tally(results: Sequence[SweepResult]) -> Tally:
     )
 
 
-def _member_label(path: Path, seen: Mapping[str, int]) -> str:
-    """The filename alone, or ``<library>/<filename>`` when two libraries hold a
-    member of that name.
-
-    The report exists to say which file to open, and the full path would put a
-    corpus directory into the JSON for no gain -- the config that produced the run
-    already says which directories were walked.
-    """
-    if seen[path.name] == 1:
-        return path.name
-    return f"{path.parent.name}/{path.name}"
-
-
 def find_unparseable(results: Sequence[SweepResult]) -> Unparseable:
     """The failures in ``results``, by member, with the error that rejected each.
 
@@ -117,7 +103,7 @@ def find_unparseable(results: Sequence[SweepResult]) -> Unparseable:
     failed = {str(result.path): result for result in results if result.kind}
     seen = Counter(Path(path).name for path in failed)
     return {
-        _member_label(Path(path), seen): {
+        member_label(Path(path), seen): {
             "type": failed[path].kind,
             "message": failed[path].message,
         }
@@ -231,31 +217,12 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _emit_json(payload: str, args: argparse.Namespace) -> None:
-    """--output if it was given, stdout otherwise.
-
-    Deliberately the same as the sibling module's rather than shared with it: it
-    takes the parsed args so that "no --output" stays argparse's absent-flag
-    default and does not become a None threaded through this module's signatures.
-    """
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(payload + "\n")
-        # Only the path: the JSON holds corpus names and quoted corpus source.
-        logger.info("Wrote %s", args.output)
-    else:
-        # Written, not logged: this is the machine channel. A log record would put
-        # the JSON on stderr behind whatever prefix the handler adds, and `| jq`
-        # would get nothing.
-        sys.stdout.write(payload + "\n")
-
-
 def main(argv: Sequence[str] = (), sweep: Sweeper = sweep_members) -> int:
     configure_cli_logging()
     args = _parse_args(argv)
     config = load_corpus_config(args.config)
     results = sweep(matching_files(config.jcl_dir, config.jcl_globs), args.max_workers)
-    _emit_json(json.dumps(find_unparseable(results), indent=2), args)
+    emit_json(json.dumps(find_unparseable(results), indent=2), args)
     _report(results)
     return 0
 

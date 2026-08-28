@@ -54,6 +54,7 @@ from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
+from cobble.diagnosis.report import RULE, emit_json
 from cobble.interpreter.project.cobol_imports import extract_cobol_imports
 from cobble.interpreter.project.import_types import ImportKind, ImportRef
 from cobble.matching_files import matching_files
@@ -62,8 +63,6 @@ logger = logging.getLogger(__name__)
 
 # name -> program -> lines of the COPY statements naming it
 MissingCopybooks = dict[str, dict[str, list[int]]]
-
-RULE = "=" * 78
 
 
 @dataclass(frozen=True)
@@ -450,25 +449,6 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _emit_json(payload: str, args: argparse.Namespace) -> None:
-    """--output if it was given, stdout otherwise.
-
-    Takes the parsed args rather than an optional path so that "no --output" stays
-    argparse's absent-flag default and does not become a None this module has to
-    thread through its own signatures.
-    """
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(payload + "\n")
-        # Only the path, never the names: they are the corpus's own identifiers.
-        logger.info("Wrote %s", args.output)
-    else:
-        # Written, not logged: this is the machine channel. A log record would put
-        # the JSON on stderr behind whatever prefix the handler adds, and `| jq`
-        # would get nothing.
-        sys.stdout.write(payload + "\n")
-
-
 def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
     configure_cli_logging()
     args = _parse_args(argv)
@@ -478,7 +458,7 @@ def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
     missing = find_missing_copybooks(config, results)
     # The JSON describes the corpus as it was FOUND, before any stub was written:
     # it is diffed between runs to see whether a fix moved the number.
-    _emit_json(json.dumps(missing, indent=2), args)
+    emit_json(json.dumps(missing, indent=2), args)
     _report(missing, config, results)
     if args.fix:
         _report_fix(write_stubs(missing, config, args.fix), args.fix)

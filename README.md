@@ -197,6 +197,45 @@ This one is a console script rather than a `make` target: `[project.scripts]` in
 `pyproject.toml`, which is why the project is installed editable into the venv
 instead of `package = false`.
 
+### Diagnose unparseable JCL and COBOL before building
+
+```bash
+JCL_BRIDGE_JAR=jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar \
+  uv run diagnose-jcl --config your-corpus.yaml --output out/unparseable-jcl.json
+
+PROLEAP_BRIDGE_JAR=proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar \
+  uv run diagnose-cobol --config your-corpus.yaml --output out/unparseable-cobol.json
+```
+
+Two more pre-flight reports, same shape as the copybook one: `--config` names
+the corpus, JSON is the machine channel, the human summary is logged to stderr
+with counts only, and the exit status is 0 whatever they find. They report; they
+don't gate.
+
+`diagnose-jcl` runs the build's own JCL parse phase and stops. It prints the four
+numbers that say where a corpus stands — members parsed, members failed, steps,
+DDs — which are the columns of the table in
+`docs/corpus-onboarding-blockers.md`. The steps and DDs are the regression check:
+a grammar change that recovers members has to leave every member that already
+parsed with the counts it already had, and that delta is readable off two runs.
+
+`diagnose-cobol` does the same for the COBOL side, and matters more, because the
+build's COBOL phase dies on the *first* program the bridge rejects — thousands of
+subprocesses and tens of minutes to learn one program's name. This one keeps
+going and groups the rejections by **signature**: the parser's own exception
+line with the quoted source text and the line and column numbers stripped out.
+227 programs failing one way is a single fix; 227 failing forty ways is a survey,
+and the summary tells you which you have.
+
+That stripping is also what makes grouping loggable. A ProLeap message quotes the
+bytes it choked on, and a missing-copybook error names the copybook and the
+directories searched, so the full messages stay in the JSON and only the stripped
+signature is logged. Neither tool ever logs a member name.
+
+Both take `--max-workers` (default 4, matching a build). `diagnose-cobol` writes
+no cache: each ASG is written and unlinked at once, so peak disk is one ASG per
+worker rather than the gigabytes a full corpus of them would be.
+
 ### Render the HTML visualization
 
 ```bash
