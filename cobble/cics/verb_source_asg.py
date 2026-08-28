@@ -251,30 +251,17 @@ def _emit(edge, sink, corpus_index: CorpusIndex) -> None:
     sink.add_edge(edge)
 
 
-def _report(failures, message: str) -> None:
-    """Record a skipped program in the caller's list, which may be absent.
-
-    ``+=`` on a list mutates it in place, so the caller sees the report. That
-    mutation is the contract with the ported ``flow_map``, which only forwards the
-    list ``build_graph`` owns and reads afterwards; removing it means changing
-    ``flow_map`` too, which is byte-for-byte ported. Hence the one fp-lint
-    violation this file carries.
-    """
-    match failures:
-        case None:
-            pass
-        case _:
-            failures += [message]
-
-
 def stream_program_verbs(
-    prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: CorpusIndex
-):
+    prog_name, raw, parser, bms_mapsets, sink, corpus_index: CorpusIndex
+) -> tuple[str, ...]:
     """Parse one program's ASG and stream its CICS-verb graph edges into ``sink``.
 
-    Signature-compatible with cics.verb_source_lowering.stream_program_verbs (the
-    production, VM-lowering implementation) so the ported flow_map only swaps the
-    import. Isolates + loudly warns on failure, exactly as production does.
+    Isolates + loudly warns on failure, exactly as production does, and returns the
+    failure rather than appending it to a list the caller handed down: what one
+    program did is this function's result, not an effect it had on its caller's
+    state. Production's ``cics.verb_source_lowering.stream_program_verbs`` takes a
+    ``failures`` list instead; the ported ``flow_map`` folds what comes back here,
+    so the two differ by that argument alone.
     """
     try:
         with asg_dialect_parsers_registered():
@@ -283,4 +270,5 @@ def stream_program_verbs(
             _emit(edge, sink, corpus_index)
     except Exception as exc:  # one bad program must not abort the run
         logger.warning("CICS program %s failed: %s", prog_name, exc, exc_info=True)
-        _report(failures, f"CICS program {prog_name}: {exc}")
+        return (f"CICS program {prog_name}: {exc}",)
+    return ()

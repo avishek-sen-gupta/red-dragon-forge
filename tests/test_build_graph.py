@@ -8,6 +8,7 @@ from pathlib import Path
 
 from cobble.build_graph import (
     RULE,
+    _edge_kind_lines,
     _failure_report_lines,
     _file_control_failures,
     _load_transid_to_program,
@@ -24,6 +25,7 @@ from cobble.interpreter.project.graph_types import (
     GraphNode,
     NodeKind,
 )
+from cobble.knowledge_graph.merge import merge_graph
 
 
 def _config(tmp_path: Path, **overrides) -> CorpusConfig:
@@ -161,9 +163,10 @@ def test_a_synthetic_transaction_is_a_worklist_entry_not_a_graph_node() -> None:
     worklist and gets its literal LINK/XCTL edges read.
 
     Those placeholder transactions must not reach the graph: nothing in the corpus
-    says they exist. flow_map emits a TRANSACTION node and a STARTS edge for every
-    definition it parses and is byte-for-byte ported, so the suppression belongs
-    on this side of the sink.
+    says they exist. The flow pass emits a TRANSACTION node and a STARTS edge for
+    every definition it parses, and cannot know which of them are placeholders --
+    that prefix is this module's convention -- so the suppression belongs on this
+    side of the sink.
     """
     inner = _CollectingSink()
     sink = _without_synthetic_transactions(inner)
@@ -186,6 +189,48 @@ def test_a_synthetic_transaction_is_a_worklist_entry_not_a_graph_node() -> None:
     assert [(edge.source, edge.kind) for edge in inner.edges] == [
         ("SOMEPROG", EdgeKind.XCTL)
     ]
+
+
+def test_what_the_filter_removed_is_counted_not_just_dropped() -> None:
+    """A stage that silently drops 1,125 transactions and their edges reads, in the
+    log, exactly like a stage that found none -- every count around it describes its
+    inputs. So the filter counts what it removed, and counts transactions by id: the
+    sink sees each placeholder once as a node and again as an edge endpoint.
+    """
+    sink = _without_synthetic_transactions(_CollectingSink())
+    synthetic = f"{SYNTHETIC_TRANSID_PREFIX}SOMEPROG"
+
+    sink.add_node(GraphNode(id=synthetic, kind=NodeKind.TRANSACTION))
+    sink.add_node(GraphNode(id=synthetic, kind=NodeKind.TRANSACTION))
+    sink.add_edge(_starts(synthetic))
+
+    assert (len(sink.suppressed.transactions), sink.suppressed.edges) == (1, 1)
+
+
+def test_the_edge_tally_says_which_kinds_reached_the_written_graph() -> None:
+    """Per-stage counts are inputs: transactions defined, programs compiled. None of
+    them says whether a kind of edge came out at all, which is the question after a
+    change that adds one -- so the merged summary tallies the edges by kind.
+    """
+    graph = merge_graph(
+        [],
+        [
+            _starts("AAAA"),
+            _starts("BBBB"),
+            GraphEdge(
+                source="SOMEPROG",
+                source_kind=NodeKind.PROGRAM,
+                target="CCCC",
+                target_kind=NodeKind.TRANSACTION,
+                kind=EdgeKind.START_TRANSID,
+            ),
+        ],
+    )
+
+    assert _edge_kind_lines(graph) == (
+        "      2  STARTS",
+        "      1  START_TRANSID",
+    )
 
 
 def test_a_recovered_transaction_reaches_the_graph_unchanged() -> None:

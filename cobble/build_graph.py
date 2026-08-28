@@ -34,11 +34,12 @@ import os
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from types import MappingProxyType
 
+import networkx as nx
 from tqdm import tqdm
 
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
@@ -146,16 +147,19 @@ def _category(failure: str) -> str:
     return failure.split(":", 1)[0].rsplit(" ", 1)[0] or failure
 
 
-def _tally_lines(failures: Sequence[str]) -> tuple[str, ...]:
-    """Commonest category first, ties by name. Sorted on negated counts rather
-    than with a sort-order callback, which talisman reads as a secret pattern."""
-    tally = Counter(map(_category, failures))
+def _counted_lines(tally: Mapping[str, int]) -> tuple[str, ...]:
+    """Commonest first, ties by name. Sorted on negated counts rather than with a
+    sort-order callback, which talisman reads as a secret pattern."""
     return tuple(
-        f"  {-negated_count:5}  {category}"
-        for negated_count, category in sorted(
-            (-count, category) for category, count in tally.items()
+        f"  {-negated_count:5}  {name}"
+        for negated_count, name in sorted(
+            (-count, name) for name, count in tally.items()
         )
     )
+
+
+def _tally_lines(failures: Sequence[str]) -> tuple[str, ...]:
+    return _counted_lines(Counter(map(_category, failures)))
 
 
 def _failure_report_lines(failures: Sequence[str]) -> tuple[str, ...]:
@@ -438,9 +442,12 @@ def _cics_source(program: str, stems: Mapping[str, Path]) -> _CicsSources:
 def _cics_sources(
     program_names: frozenset[str], stems: Mapping[str, Path]
 ) -> _CicsSources:
+    # "CICS sources", not "CICS flow": this loop only reads each member's bytes off
+    # disk. The flow pass -- one bridge subprocess and one ASG per member, i.e. all
+    # of the stage's cost -- runs after it, under its own bar in cics/flow_map.py.
     found = tuple(
         _cics_source(program, stems)
-        for program in tqdm(program_names, desc="CICS flow", unit="program")
+        for program in tqdm(program_names, desc="CICS sources", unit="program")
     )
     return _CicsSources(
         sources=tuple(chain.from_iterable(item.sources for item in found)),
@@ -459,17 +466,41 @@ def _build_cics_flow_graph(
         for path in matching_files(config.cobol_dir, config.cobol_globs)
     }
     found = _cics_sources(frozenset(transid_to_program.values()), stems)
-    stage_failures = _run_flow_extractor(config, corpus_index, found, writer)
+    # The stage's inputs first, then the pass over them, then what it read: the two
+    # counts answer different questions, and a stage that only ever printed its
+    # inputs could not say whether anything came out.
     logger.info(
-        "CICS flow: %d transactions, %d programs compiled",
+        "CICS flow: %d transactions, %d program sources found",
         len(transid_to_program),
         len(found.sources),
     )
-    return found.failures + stage_failures
+    return found.failures + _run_flow_extractor(config, corpus_index, found, writer)
 
 
 def _is_synthetic_transaction(kind: NodeKind, node_id: str) -> bool:
     return kind is NodeKind.TRANSACTION and node_id.startswith(SYNTHETIC_TRANSID_PREFIX)
+
+
+class _Suppressed:
+    """What the placeholder filter removed, so the stage can say so.
+
+    A filter that drops a thousand transactions in silence reads, in the log,
+    exactly like one that found none: every count the stage prints describes its
+    inputs. Transactions are counted by id because the sink sees each placeholder
+    more than once -- as a node, and again as an edge endpoint; edges are counted as
+    seen, since each is emitted once. Rebuilt rather than mutated in place so both
+    counts are only ever read whole.
+    """
+
+    def __init__(self) -> None:
+        self.transactions: frozenset[str] = frozenset()
+        self.edges = 0
+
+    def transaction(self, node_id: str) -> None:
+        self.transactions = self.transactions | {node_id}
+
+    def edge(self) -> None:
+        self.edges = self.edges + 1
 
 
 @dataclass(frozen=True)
@@ -482,16 +513,19 @@ class _WithoutSyntheticTransactions:
     recoverable are defined under ``UNKNOWN.<member>``, and nothing in the corpus
     says those transactions exist -- so they must not reach the graph.
 
-    Filtered here rather than upstream because the ported flow_map parses the CSD
-    itself and emits a TRANSACTION node and a STARTS edge for every definition in
-    it. Edges are dropped by either endpoint: an edge to a node that was never
-    written would dangle.
+    Filtered here rather than upstream because the flow pass parses the CSD itself
+    and emits a TRANSACTION node and a STARTS edge for every definition in it, and
+    because which transactions are placeholders is this module's own convention, not
+    something the pass over a CSD can know. Edges are dropped by either endpoint: an
+    edge to a node that was never written would dangle.
     """
 
     inner: GraphSink
+    suppressed: _Suppressed = field(default_factory=_Suppressed)
 
     def add_node(self, node: GraphNode) -> None:
         if _is_synthetic_transaction(node.kind, node.id):
+            self.suppressed.transaction(node.id)
             return
         self.inner.add_node(node)
 
@@ -499,6 +533,7 @@ class _WithoutSyntheticTransactions:
         if _is_synthetic_transaction(
             edge.source_kind, edge.source
         ) or _is_synthetic_transaction(edge.target_kind, edge.target):
+            self.suppressed.edge()
             return
         self.inner.add_edge(edge)
 
@@ -507,37 +542,59 @@ def _without_synthetic_transactions(sink: GraphSink) -> _WithoutSyntheticTransac
     return _WithoutSyntheticTransactions(inner=sink)
 
 
+def _csd_source(config: CorpusConfig) -> str:
+    """Every configured CSD as one document, which is what the flow pass parses."""
+    return "\n".join(
+        decode_source(csd_file.read_bytes()) for csd_file in config.csd_files
+    )
+
+
+def _log_suppressed(suppressed: _Suppressed) -> None:
+    """Say what the placeholder filter removed, or say nothing when it removed
+    nothing -- a real CSD has no placeholders and needs no line about them."""
+    if not suppressed.transactions:
+        return
+    logger.info(
+        "CICS flow: %d placeholder transactions suppressed, with %d of their edges",
+        len(suppressed.transactions),
+        suppressed.edges,
+    )
+
+
 def _run_flow_extractor(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
     found: _CicsSources,
     writer: GraphWriter,
 ) -> tuple[str, ...]:
-    """Run the flow extractor over the whole CSD and return what it reported.
+    """Run the flow extractor over the whole CSD and return what it skipped.
 
-    The sink list is this function's own, not the run's: extract_transaction_flow_graph
-    reports into a list it is handed (cobble/cics/flow_map.py owns that contract),
-    so the list stays local and leaves here as a tuple. The whole CSD is one
-    call, so a failure escaping it is the stage's, not one member's.
+    The whole CSD is one call, so a failure escaping it is the stage's, not one
+    member's -- and one that escapes takes the pass's own report with it, so the
+    per-program failures it had already collected are lost. Hence the sink is built
+    here: what it suppressed survives the exception and is logged either way.
     """
-    csd_source = "\n".join(
-        decode_source(csd_file.read_bytes()) for csd_file in config.csd_files
-    )
-    sink: list[str] = []
+    sink = _without_synthetic_transactions(writer)
     try:
-        extract_transaction_flow_graph(
-            csd_source=csd_source,
+        extraction = extract_transaction_flow_graph(
+            csd_source=_csd_source(config),
             bms_mapsets={},
             cobol_sources=dict(found.sources),
             parser=_make_parser(config),
-            sink=_without_synthetic_transactions(writer),
+            sink=sink,
             corpus_index=corpus_index,
-            failures=sink,
         )
     except Exception as exc:
         logger.warning("CICS flow graph (whole CSD) failed: %s", exc, exc_info=True)
-        return (*sink, f"CICS flow graph (whole CSD): {exc}")
-    return tuple(sink)
+        return (f"CICS flow graph (whole CSD): {exc}",)
+    finally:
+        _log_suppressed(sink.suppressed)
+    logger.info(
+        "CICS flow: %d programs read, %d skipped",
+        extraction.programs_read,
+        len(extraction.failures),
+    )
+    return extraction.failures
 
 
 def _cics_flow_or_skip(
@@ -664,13 +721,27 @@ def _extract_all(
         )
 
 
+def _edge_kind_lines(graph: nx.MultiDiGraph) -> tuple[str, ...]:
+    """How many edges of each kind the graph just written has.
+
+    Every other count a run prints is an input -- transactions defined, programs
+    compiled -- so nothing said whether a kind of edge came out at all, which is the
+    question after any change that adds one. Counted from the graph read back off
+    disk, so it counts what a consumer will read: deduped, filtered and merged.
+    """
+    return _counted_lines(
+        Counter(attrs["kind"].value for *_endpoints, attrs in graph.edges(data=True))
+    )
+
+
 def _report_merged(config: CorpusConfig) -> None:
     nodes_jsonl, edges_jsonl = _out_paths(config)
     graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
     logger.info(
-        "\nMerged graph: %d nodes, %d edges\nWrote %s\nWrote %s",
+        "\nMerged graph: %d nodes, %d edges\n%s\nWrote %s\nWrote %s",
         graph.number_of_nodes(),
         graph.number_of_edges(),
+        "\n".join(_edge_kind_lines(graph)),
         nodes_jsonl,
         edges_jsonl,
     )
