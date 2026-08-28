@@ -10,7 +10,7 @@ the VM). This module reproduces the SAME ``{program: [CicsVerb]}`` shape from a
 typed-ASG walk instead, so the port pulls in no VM:
 
   * Parse each program to a ``CobolASG`` with the ported ProLeap bridge, with the
-    coprocessor dialect parsers (see ``asg_dialect_parsers``) registered on the
+    coprocessor dialect parsers (see ``cics.asg_dialect_scope``) registered on the
     ``_dialect_parsers`` ContextVar so EXEC CICS blocks materialise as
     ``ExecCicsStatement`` (verb + options) and EXEC SQL blocks as opaque
     ``ExecSqlStatement`` text rather than aborting the program.
@@ -31,16 +31,15 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from functools import reduce
 from typing import TYPE_CHECKING
 
+from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb
-from cobble.cics.graph_sink import GraphSink
-from cobble.cics.statements import CicsDialectParser, ExecCicsStatement
+from cobble.cics.statements import ExecCicsStatement
 from cobble.file_location import to_json_value
-from cobble.interpreter.cobol import cobol_statements as _cobol_statements
 from cobble.interpreter.project.graph_types import GraphNode
-from cobble.sql.statements import SqlDialectParser
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
@@ -50,158 +49,210 @@ logger = logging.getLogger(__name__)
 
 # ── operand → static VALUE resolution (mirrors cics.strategy._field_value /
 #    _resolve_operand, which walk ctx._asg.data_fields) ──────────────────────
+def _static_value(field):
+    """A field's VALUE clause, or nothing when it has none or it is figurative."""
+    return field.value if field.value and not field.value_is_figurative else None
+
+
 def _field_value(name, fields):
     """Walk CobolField tree to find a field by name and return its static VALUE, or None."""
     name_upper = name.upper()
-    direct = next((f for f in fields if f.name.upper() == name_upper), None)
-    if direct is not None:
-        return direct.value if direct.value and not direct.value_is_figurative else None
+    named = [f for f in fields if f.name.upper() == name_upper]
+    if named:
+        return _static_value(named[0])
     return next(
-        (v for v in (_field_value(name, f.children) for f in fields) if v is not None),
-        None,
+        (v for v in (_field_value(name, f.children) for f in fields) if v), None
     )
 
 
 def _resolve_operand(opt, data_fields):
-    if opt is None:
-        return None
-    if opt.is_literal:
-        return opt.text
-    resolved = _field_value(opt.text, data_fields)
-    return resolved if resolved is not None else opt.text
+    match opt:
+        case None:
+            return None
+        case _ if opt.is_literal:
+            return opt.text
+        case _:
+            return _field_value(opt.text, data_fields) or opt.text
 
 
 # ── ASG walk: collect every ExecCicsStatement (including nested in IF/PERFORM/…) ──
+def _container_values(obj):
+    match obj:
+        case list() | tuple():
+            return list(obj)
+        case dict():
+            return list(obj.values())
+        case _:
+            return []
+
+
+def _child_values(obj):
+    """What a walk descends into: a dataclass's fields, or a container's items."""
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return [getattr(obj, f.name) for f in dataclasses.fields(obj)]
+    return _container_values(obj)
+
+
+def _descend(acc, child):
+    """One fold step over a node's children: acc is (statements, ids visited)."""
+    found, seen = acc
+    child_found, child_seen = _exec_cics_in(child, seen)
+    return (*found, *child_found), child_seen
+
+
+def _exec_cics_in(obj, seen):
+    """The statements under ``obj``, and the object ids visited reaching them.
+
+    Memoised on id() so an object reachable by two paths is walked once; the
+    visited set is threaded through the fold rather than mutated.
+    """
+    if id(obj) in seen:
+        return (), seen
+    if isinstance(obj, ExecCicsStatement):
+        return (obj,), seen | {id(obj)}
+    return reduce(_descend, _child_values(obj), ((), seen | {id(obj)}))
+
+
 def _iter_exec_cics(asg):
-    seen: set[int] = set()
-    out: list[ExecCicsStatement] = []
-
-    def walk(o) -> None:
-        oid = id(o)
-        if oid in seen:
-            return
-        seen.add(oid)
-        if isinstance(o, ExecCicsStatement):
-            out.append(o)
-            return
-        if dataclasses.is_dataclass(o) and not isinstance(o, type):
-            for f in dataclasses.fields(o):
-                walk(getattr(o, f.name))
-        elif isinstance(o, (list, tuple)):
-            for x in o:
-                walk(x)
-        elif isinstance(o, dict):
-            for x in o.values():
-                walk(x)
-
-    walk(asg)
-    return out
+    found, _ = _exec_cics_in(asg, frozenset())
+    return list(found)
 
 
 # Which CicsVerb the strategy's observer emits for each EXEC CICS verb — a faithful
 # transcription of the self._observer.on_verb(...) call sites in
 # cics.strategy.CicsLoweringStrategy.lower (RETURN/XCTL/LINK/SEND MAP/RECEIVE MAP,
 # the VSAM point verbs, and the VSAM browse verbs).
-def _statement_to_verb(stmt: ExecCicsStatement, program: str, data_fields):
-    verb = stmt.verb
-    opts = stmt.options
+def _verb(verb: str, program: str, **operands) -> CicsVerb:
+    """A CicsVerb with every operand the verb does not carry left absent."""
+    return CicsVerb(
+        verb=verb,
+        program=program,
+        **{
+            "map_name": None,
+            "mapset_name": None,
+            "xctl_target": None,
+            "transid": None,
+            **operands,
+        },
+    )
 
-    def r(key, *fallback):
-        opt = opts.get(key)
-        for fk in fallback:
-            if opt is None:
-                opt = opts.get(fk)
-        return _resolve_operand(opt, data_fields)
 
-    if verb == "RETURN":
-        if "TRANSID" in opts:
-            return CicsVerb(
-                verb="RETURN_TRANSID",
-                program=program,
-                map_name=None,
-                mapset_name=None,
-                xctl_target=None,
-                transid=_resolve_operand(opts.get("TRANSID"), data_fields),
-            )
+def _return_verb(stmt: ExecCicsStatement, program: str, data_fields):
+    """RETURN is only a graph event when it names the next transaction."""
+    if "TRANSID" not in stmt.options:
         return None
-    if verb == "XCTL":
-        return CicsVerb(
-            verb="XCTL",
-            program=program,
-            map_name=None,
-            mapset_name=None,
-            xctl_target=_resolve_operand(opts.get("PROGRAM"), data_fields),
-            transid=None,
-        )
-    if verb == "LINK":
-        return CicsVerb(
-            verb="LINK",
-            program=program,
-            map_name=None,
-            mapset_name=None,
-            xctl_target=_resolve_operand(opts.get("PROGRAM"), data_fields),
-            transid=None,
-        )
-    if verb == "SEND MAP":
-        return CicsVerb(
-            verb="SEND_MAP",
-            program=program,
-            map_name=r("MAP", "MAPNAME"),
-            mapset_name=_resolve_operand(opts.get("MAPSET"), data_fields),
-            xctl_target=None,
-            transid=None,
-        )
-    if verb == "RECEIVE MAP":
-        return CicsVerb(
-            verb="RECEIVE_MAP",
-            program=program,
-            map_name=r("MAP", "MAPNAME"),
-            mapset_name=_resolve_operand(opts.get("MAPSET"), data_fields),
-            xctl_target=None,
-            transid=None,
-        )
-    if verb in (
-        "READ",
-        "WRITE",
-        "REWRITE",
-        "DELETE",
-        "STARTBR",
-        "READNEXT",
-        "READPREV",
-        "ENDBR",
-    ):
-        file_opt = opts.get("FILE") or opts.get("DATASET")
-        return CicsVerb(
-            verb=verb,
-            program=program,
-            map_name=None,
-            mapset_name=None,
-            xctl_target=None,
-            transid=None,
-            file_name=_resolve_operand(file_opt, data_fields),
-        )
-    return None
+    return _verb(
+        "RETURN_TRANSID",
+        program,
+        transid=_resolve_operand(stmt.options.get("TRANSID"), data_fields),
+    )
 
 
-def asg_dialect_parsers() -> tuple[CicsDialectParser, SqlDialectParser]:
-    """The dialect parsers an ASG walk needs registered.
+def _transfer_verb(stmt: ExecCicsStatement, program: str, data_fields):
+    """XCTL and LINK: both name the program they transfer to in PROGRAM(...)."""
+    return _verb(
+        stmt.verb,
+        program,
+        xctl_target=_resolve_operand(stmt.options.get("PROGRAM"), data_fields),
+    )
 
-    Production composes these in ``interpreter.project.coprocessor_compile``,
-    which threads every coprocessor's parser through at once. This port has a
-    single ASG parse, so the composition lives here.
 
-    Cicada's parser is what the graph actually reads — every edge comes from an
-    ``ExecCicsStatement``. Squall's is here because a coprocessor statement type
-    with no dialect parser is a hard error: ``parse_statement`` raises
-    ``Unknown COBOL statement type: 'EXEC_SQL'`` and takes the whole program's
-    verbs down with it. Registering it makes an EXEC SQL block parse to opaque
-    text that the walk then ignores.
+def _map_verb(stmt: ExecCicsStatement, program: str, data_fields):
+    """SEND MAP / RECEIVE MAP, with MAPNAME as the older spelling of MAP."""
+    options = stmt.options
+    return _verb(
+        stmt.verb.replace(" ", "_"),
+        program,
+        map_name=_resolve_operand(
+            options.get("MAP") or options.get("MAPNAME"), data_fields
+        ),
+        mapset_name=_resolve_operand(options.get("MAPSET"), data_fields),
+    )
+
+
+def _file_verb(stmt: ExecCicsStatement, program: str, data_fields):
+    """The VSAM point and browse verbs, with DATASET as the older spelling of FILE."""
+    options = stmt.options
+    return _verb(
+        stmt.verb,
+        program,
+        file_name=_resolve_operand(
+            options.get("FILE") or options.get("DATASET"), data_fields
+        ),
+    )
+
+
+_FILE_VERBS = (
+    "READ",
+    "WRITE",
+    "REWRITE",
+    "DELETE",
+    "STARTBR",
+    "READNEXT",
+    "READPREV",
+    "ENDBR",
+)
+
+_VERB_BUILDERS = {
+    "RETURN": _return_verb,
+    "XCTL": _transfer_verb,
+    "LINK": _transfer_verb,
+    "SEND MAP": _map_verb,
+    "RECEIVE MAP": _map_verb,
+    **{verb: _file_verb for verb in _FILE_VERBS},
+}
+
+
+def _statement_to_verb(stmt: ExecCicsStatement, program: str, data_fields):
+    """The CicsVerb this statement is, or None for a verb the graph does not read."""
+    builder = _VERB_BUILDERS.get(stmt.verb)
+    return builder(stmt, program, data_fields) if builder else None
+
+
+# ── one program's edges, into the sink ───────────────────────────────────────
+def _program_edges(asg, prog_name, bms_mapsets):
+    """Every graph edge the program's EXEC CICS statements yield, in source order."""
+    verbs = (
+        _statement_to_verb(stmt, prog_name, asg.data_fields)
+        for stmt in _iter_exec_cics(asg)
+    )
+    edges = (_verb_edge(verb, bms_mapsets) for verb in verbs if verb)
+    return [edge for edge in edges if edge]
+
+
+def _endpoint(node_id, kind, corpus_index: CorpusIndex) -> GraphNode:
+    return GraphNode(
+        id=node_id,
+        kind=kind,
+        file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
+    )
+
+
+def _emit(edge, sink, corpus_index: CorpusIndex) -> None:
+    """An edge and both its endpoints, exactly as GraphEmittingObserver emits them."""
+    sink.add_node(_endpoint(edge.source, edge.source_kind, corpus_index))
+    sink.add_node(_endpoint(edge.target, edge.target_kind, corpus_index))
+    sink.add_edge(edge)
+
+
+def _report(failures, message: str) -> None:
+    """Record a skipped program in the caller's list, which may be absent.
+
+    ``+=`` on a list mutates it in place, so the caller sees the report. That
+    mutation is the contract with the ported ``flow_map``, which only forwards the
+    list ``build_graph`` owns and reads afterwards; removing it means changing
+    ``flow_map`` too, which is byte-for-byte ported. Hence the one fp-lint
+    violation this file carries.
     """
-    return (CicsDialectParser(), SqlDialectParser())
+    match failures:
+        case None:
+            pass
+        case _:
+            failures += [message]
 
 
 def stream_program_verbs(
-    prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: "CorpusIndex"
+    prog_name, raw, parser, bms_mapsets, sink, failures, corpus_index: CorpusIndex
 ):
     """Parse one program's ASG and stream its CICS-verb graph edges into ``sink``.
 
@@ -210,38 +261,10 @@ def stream_program_verbs(
     import. Isolates + loudly warns on failure, exactly as production does.
     """
     try:
-        token = _cobol_statements._dialect_parsers.set(asg_dialect_parsers())
-        try:
+        with asg_dialect_parsers_registered():
             asg = parser.parse(raw)
-        finally:
-            _cobol_statements._dialect_parsers.reset(token)
-        for stmt in _iter_exec_cics(asg):
-            verb = _statement_to_verb(stmt, prog_name, asg.data_fields)
-            if verb is None:
-                continue
-            edge = _verb_edge(verb, bms_mapsets)
-            if edge is None:
-                continue
-            sink.add_node(
-                GraphNode(
-                    id=edge.source,
-                    kind=edge.source_kind,
-                    file_path=to_json_value(
-                        corpus_index.resolve_file_path(edge.source_kind, edge.source)
-                    ),
-                )
-            )
-            sink.add_node(
-                GraphNode(
-                    id=edge.target,
-                    kind=edge.target_kind,
-                    file_path=to_json_value(
-                        corpus_index.resolve_file_path(edge.target_kind, edge.target)
-                    ),
-                )
-            )
-            sink.add_edge(edge)
-    except Exception as exc:  # noqa: BLE001 — one bad program must not abort the run
+        for edge in _program_edges(asg, prog_name, bms_mapsets):
+            _emit(edge, sink, corpus_index)
+    except Exception as exc:  # one bad program must not abort the run
         logger.warning("CICS program %s failed: %s", prog_name, exc, exc_info=True)
-        if failures is not None:
-            failures.append(f"CICS program {prog_name}: {exc}")
+        _report(failures, f"CICS program {prog_name}: {exc}")
