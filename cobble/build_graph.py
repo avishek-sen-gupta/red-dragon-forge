@@ -48,7 +48,7 @@ from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex
 from cobble.corpus_index_builder import build_corpus_index
 from cobble.file_location import to_json_value
-from cobble.interpreter.cobol.ast_store import AstStore, AstStrategy
+from cobble.interpreter.cobol.ast_store import AstStore, temp_ast_store
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
 from cobble.interpreter.cobol.source_text import decode_source
 from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
@@ -536,17 +536,16 @@ def _build_batch_file_graph(
         for path in matching_files(config.cobol_dir, config.cobol_globs)
         if path.stem.upper() not in cics_program_names
     )
-    store = AstStore(AstStrategy.DISK)
-    store.parse_all(
-        {path: path.read_bytes() for path in cbl_files}, _make_parser(config)
-    )
-    failures = tuple(
-        chain.from_iterable(
-            _file_control_failures(path, store, corpus_index, writer)
-            for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program")
+    with temp_ast_store() as store:
+        store.parse_all(
+            {path: path.read_bytes() for path in cbl_files}, _make_parser(config)
         )
-    )
-    store.close()
+        failures = tuple(
+            chain.from_iterable(
+                _file_control_failures(path, store, corpus_index, writer)
+                for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program")
+            )
+        )
     logger.info("FILE-CONTROL: %d batch programs", len(cbl_files))
     return failures
 
