@@ -94,3 +94,34 @@ def test_dd_sysout():
 def test_dsn_disp_still_parses():  # regression: v1 forms unaffected
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,DISP=SHR\n"
     assert parse_jcl(jcl).steps[0].dds[0].dsn == DirectDSN(literal("A.B"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_disp_omitted_trailing_positional():
+    """DISP=(NEW,CATLG,) — the grammar keeps the empty slot, so the abnormal
+    disposition has to fall back rather than be read as the empty string."""
+    jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,DISP=(NEW,CATLG,)\n"
+    disp = parse_jcl(jcl).steps[0].dds[0].disp
+    assert disp.status is DispStatus.NEW
+    assert disp.normal is DispNormal.CATLG
+    assert disp.abnormal is DispNormal.CATLG
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_disp_omitted_status_defaults_new():
+    """DISP=(,CATLG) — an omitted status is NEW, not the first listed value."""
+    jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,DISP=(,CATLG)\n"
+    disp = parse_jcl(jcl).steps[0].dds[0].disp
+    assert disp.status is DispStatus.NEW
+    assert disp.normal is DispNormal.CATLG
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dd_without_disp_defaults_new_delete_delete():
+    """No DISP= at all takes the same positional defaults: the data set is
+    created by this step, so it is deleted at the end of it."""
+    jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B\n"
+    disp = parse_jcl(jcl).steps[0].dds[0].disp
+    assert disp.status is DispStatus.NEW
+    assert disp.normal is DispNormal.DELETE
+    assert disp.abnormal is DispNormal.DELETE
