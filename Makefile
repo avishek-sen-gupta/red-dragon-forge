@@ -6,7 +6,7 @@ ANTLR_VERSION := 4.13.1
 ANTLR_JAR     := $(CURDIR)/tools/antlr-$(ANTLR_VERSION)-complete.jar
 ANTLR_URL     := https://www.antlr.org/download/antlr-$(ANTLR_VERSION)-complete.jar
 
-.PHONY: all tools hlasm jars codegen parser sym csd build compare verify render canonical test fmt lint clean
+.PHONY: all tools hlasm jars codegen parser sym csd build compare verify render render-webgl canonical test fmt lint clean
 
 ## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
@@ -69,6 +69,15 @@ verify: build compare
 render:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.yaml" >&2; exit 1; }
 	uv run python -m cobble.render_graph --config $(CONFIG)
+
+## Render the same pair as a WebGL view built for showing a whole corpus-sized
+## graph at once (sibling of `render`, which is for navigating one). Lays the
+## graph out up front with graphviz's sfdp, so graphviz must be installed and
+## the layout takes about a minute at corpus scale.
+## Requires CONFIG=<path-to-corpus-yaml>, e.g. make render-webgl CONFIG=config/carddemo.yaml
+render-webgl:
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render-webgl CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	uv run python -m cobble.render_graph_webgl --config $(CONFIG)
 
 ## Export a nodes/edges.jsonl pair as CodeConcise's canonical manifest.json.
 ## Requires NODES=, EDGES=, OUTPUT=, PROJECT_NAME= (all explicit, no defaults),
