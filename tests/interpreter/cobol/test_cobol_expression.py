@@ -2,8 +2,12 @@ import pytest
 
 from cobble.interpreter.cobol.cobol_expression import (
     BinOpNode,
+    DfhRespNode,
     FieldRefNode,
+    FigurativeNode,
     FunctionNode,
+    JsonExpr,
+    LengthOfNode,
     LiteralNode,
     RefModNode,
     expr_from_dict,
@@ -74,6 +78,44 @@ def test_expr_from_dict_function() -> None:
     assert node == FunctionNode(name="UPPER-CASE", args=(FieldRefNode(name="WS-IN"),))
 
 
+def test_expr_from_dict_figurative_constant() -> None:
+    """COMPUTE WS-PCT = ZEROES is legal COBOL, and the bridge serializes that
+    operand as its own node kind. Rejecting the kind cost the whole program: the
+    ValueError escaped CobolASG.from_dict, so a member lost every fact it had
+    over one figurative operand.
+    """
+    node = expr_from_dict({"kind": "figurative", "value": "ZEROS"})
+    assert node == FigurativeNode(value="ZEROS")
+
+
+def test_expr_from_dict_length_of_special_register() -> None:
+    """LENGTH OF WS-A is a compile-time byte count, not a read of the field.
+
+    The bridge emits it as an arithmetic operand (``serializeBasisCtx``), so
+    COMPUTE WS-N = LENGTH OF WS-A + 1 reaches here.
+    """
+    node = expr_from_dict(
+        {
+            "kind": "binop",
+            "op": "+",
+            "left": {"kind": "length_of", "name": "WS-A"},
+            "right": {"kind": "lit", "value": "1"},
+        }
+    )
+    assert node == BinOpNode(
+        op="+", left=LengthOfNode(name="WS-A"), right=LiteralNode(value="1")
+    )
+
+
+def test_expr_from_dict_dfhresp_condition() -> None:
+    """DFHRESP(NORMAL) is a CICS response code the translator substitutes for a
+    number; the bridge keeps the condition name rather than the number, because
+    the number is release-dependent.
+    """
+    node = expr_from_dict({"kind": "dfhresp", "condition": "NORMAL"})
+    assert node == DfhRespNode(condition="NORMAL")
+
+
 def test_expr_from_dict_unknown_kind_raises() -> None:
     with pytest.raises(ValueError, match="Unknown expression node kind"):
         expr_from_dict({"kind": "bogus"})
@@ -92,9 +134,12 @@ def test_expr_from_dict_unknown_kind_raises() -> None:
             "right": {"kind": "ref", "name": "WS-A"},
         },
         {"kind": "function", "name": "TRIM", "args": [{"kind": "ref", "name": "WS-A"}]},
+        {"kind": "figurative", "value": "SPACES"},
+        {"kind": "length_of", "name": "WS-A"},
+        {"kind": "dfhresp", "condition": "NOTFND"},
     ],
 )
-def test_expr_from_dict_and_expr_to_dict_round_trip(data: dict) -> None:
+def test_expr_from_dict_and_expr_to_dict_round_trip(data: JsonExpr) -> None:
     assert expr_to_dict(expr_from_dict(data)) == data
 
 
