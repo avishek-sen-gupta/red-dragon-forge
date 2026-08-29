@@ -118,7 +118,11 @@ const visibleEdgeKinds = new Set(EDGE_KINDS);
 let matching = null;
 
 const renderer = new Sigma(graph, document.getElementById("graph"), {{
-  defaultEdgeType: "line",
+  // Arrowheads, because every edge kind here is directional and reads wrong
+  // without one (A CALLS B is not B CALLS A). sigma's arrow program draws a
+  // head quad on top of the body quad, so this is roughly twice the edge
+  // geometry of its line program -- the deliberate cost of being readable.
+  defaultEdgeType: "arrow",
   // Six figures of edges cannot be redrawn while the camera moves, and labels
   // are the most expensive thing on the canvas: drop both mid-gesture, restore
   // them the moment the gesture ends.

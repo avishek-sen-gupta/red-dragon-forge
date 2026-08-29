@@ -150,6 +150,15 @@ def test_kinds_are_named_once_and_referenced_by_index(tmp_path: Path) -> None:
     assert _json_array(html, "EDGE_KINDS") == ["COPY"]
 
 
+def test_edges_are_drawn_with_arrowheads(tmp_path: Path) -> None:
+    """The graph is directed and the direction is the information: CALL and
+    COPY read backwards without a head. sigma's arrow program is about twice
+    the geometry per edge of its line program, which is the price."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert 'defaultEdgeType: "arrow"' in html
+
+
 def test_a_hub_is_drawn_larger_than_a_leaf(tmp_path: Path) -> None:
     """Sizing by degree is what makes the shape of the corpus legible when the
     whole graph is on screen and no label is."""
