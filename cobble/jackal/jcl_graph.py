@@ -5,8 +5,10 @@ existing parse_jcl — this module adds no new JCL parsing).
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
+from itertools import accumulate, takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, TypeAlias
 
 from cobble.file_location import to_json_value
 from cobble.interpreter.project.graph_types import (
@@ -15,16 +17,21 @@ from cobble.interpreter.project.graph_types import (
     GraphNode,
     NodeKind,
 )
-
-from cobble.jackal.dsn import DirectDSN, InStreamDSN, dsn_key
+from cobble.jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
-from cobble.jackal.model import DispStatus, Job
+from cobble.jackal.model import DD, DispStatus, Job, Step
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
 
-_DISP_TO_EDGE_KIND: dict[DispStatus, EdgeKind] = {
+# What one part of a job contributes: its nodes, then its edges. Built bottom
+# up (DD, step, job) and concatenated, so emission order is the walk order.
+# ``TypeAlias`` rather than a 3.12 ``type`` statement because the lint config
+# still parses this package as 3.11.
+Graph: TypeAlias = "tuple[tuple[GraphNode, ...], tuple[GraphEdge, ...]]"
+
+_DISP_TO_EDGE_KIND: Mapping[DispStatus, EdgeKind] = {
     DispStatus.NEW: EdgeKind.WRITES,
     DispStatus.OLD: EdgeKind.UPDATES,
     DispStatus.SHR: EdgeKind.READS,
@@ -32,85 +39,162 @@ _DISP_TO_EDGE_KIND: dict[DispStatus, EdgeKind] = {
 }
 
 
+def _node(kind: NodeKind, node_id: str, corpus_index: CorpusIndex) -> GraphNode:
+    return GraphNode(
+        id=node_id,
+        kind=kind,
+        file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
+    )
+
+
+def _step_id(job: Job, step: Step) -> str:
+    return f"{job.name.upper()}.{step.name.upper()}"
+
+
+def _instream_graph(job: Job, step: Step, dd: DD, corpus_index: CorpusIndex) -> Graph:
+    """A DD fed by inline content: its own node, scoped to this occurrence."""
+    node = _node(
+        NodeKind.INSTREAM_DATA,
+        f"{_step_id(job, step)}.{dd.ddname.upper()}",
+        corpus_index,
+    )
+    edge = GraphEdge(
+        source=_step_id(job, step),
+        source_kind=NodeKind.STEP,
+        target=node.id,
+        target_kind=NodeKind.INSTREAM_DATA,
+        kind=EdgeKind.READS,
+        attrs={"ddname": dd.ddname, "text": "\n".join(dd.in_stream)},
+    )
+    return ((node,), (edge,))
+
+
+def _dataset_graph(
+    step_id: str, dd: DD, dsn: DirectDSN, corpus_index: CorpusIndex
+) -> Graph:
+    node = _node(NodeKind.DATASET, dsn_key(dsn).upper(), corpus_index)
+    edge = GraphEdge(
+        source=step_id,
+        source_kind=NodeKind.STEP,
+        target=node.id,
+        target_kind=NodeKind.DATASET,
+        kind=_DISP_TO_EDGE_KIND[dd.disp.status],
+        attrs={"ddname": dd.ddname, "disp": dd.disp.status.value},
+    )
+    return ((node,), (edge,))
+
+
+def _has_dataset_identity(dd: DD, dsn: DSN) -> bool:
+    """Whether this DD names a dataset other jobs can name too.
+
+    SYSOUT does not, and neither does any DSN that is not a resolvable name:
+    TempRef (&&NAME and its one-ampersand spelling), BackwardRef (*.STEP.DD)
+    and DummyDSN all live and die inside a single job.
+    """
+    return not dd.sysout and isinstance(dsn, DirectDSN)
+
+
+def _dd_graph(job: Job, step: Step, dd: DD, corpus_index: CorpusIndex) -> Graph:
+    """What one DD contributes — nothing at all, for a DD with no identity."""
+    if isinstance(dd.dsn, InStreamDSN):
+        return _instream_graph(job, step, dd, corpus_index)
+    dsn = temp_if_unresolved(dd.dsn)
+    if _has_dataset_identity(dd, dsn):
+        return _dataset_graph(_step_id(job, step), dd, dsn, corpus_index)
+    return ((), ())
+
+
+def _nodes_of(graphs: Iterable[Graph]) -> tuple[GraphNode, ...]:
+    return tuple(node for nodes, _edges in graphs for node in nodes)
+
+
+def _edges_of(graphs: Iterable[Graph]) -> tuple[GraphEdge, ...]:
+    return tuple(edge for _nodes, edges in graphs for edge in edges)
+
+
+def _step_graph(
+    job: Job, step: Step, step_proc: Mapping[str, str], corpus_index: CorpusIndex
+) -> Graph:
+    step_node = _node(NodeKind.STEP, _step_id(job, step), corpus_index)
+    program_node = _node(NodeKind.PROGRAM, step.pgm.upper(), corpus_index)
+    proc_name = step_proc.get(step.name.upper())
+    runs_step = GraphEdge(
+        source=job.name.upper(),
+        source_kind=NodeKind.JOB,
+        target=step_node.id,
+        target_kind=NodeKind.STEP,
+        kind=EdgeKind.JCL_STEP_RUNS,
+        attrs={"proc": proc_name} if proc_name else {},
+    )
+    runs_program = GraphEdge(
+        source=step_node.id,
+        source_kind=NodeKind.STEP,
+        target=program_node.id,
+        target_kind=NodeKind.PROGRAM,
+        kind=EdgeKind.JCL_STEP_RUNS,
+    )
+    dd_graphs = tuple(_dd_graph(job, step, dd, corpus_index) for dd in step.dds)
+    return (
+        (step_node, program_node, *_nodes_of(dd_graphs)),
+        (runs_step, runs_program, *_edges_of(dd_graphs)),
+    )
+
+
+def _one_per_identity(nodes: Iterable[GraphNode]) -> list[GraphNode]:
+    """One node per (kind, id), in first-sighting order — two DDs naming the
+    same dataset are one node, and the second sighting carries nothing the
+    first does not."""
+    return list({(node.kind, node.id): node for node in nodes}.values())
+
+
 def _job_to_graph(
-    job: Job, step_proc: dict[str, str], corpus_index: "CorpusIndex"
+    job: Job, step_proc: Mapping[str, str], corpus_index: CorpusIndex
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
-    nodes: dict[tuple[NodeKind, str], GraphNode] = {}
-    edges: list[GraphEdge] = []
+    job_node = _node(NodeKind.JOB, job.name.upper(), corpus_index)
+    step_graphs = tuple(
+        _step_graph(job, step, step_proc, corpus_index) for step in job.steps
+    )
+    return (
+        _one_per_identity((job_node, *_nodes_of(step_graphs))),
+        list(_edges_of(step_graphs)),
+    )
 
-    def _add_node(kind: NodeKind, node_id: str) -> str:
-        nodes.setdefault(
-            (kind, node_id),
-            GraphNode(
-                id=node_id,
-                kind=kind,
-                file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
-            ),
-        )
-        return node_id
 
-    job_id = _add_node(NodeKind.JOB, job.name.upper())
+def _is_unexpanded(outer_step: Step, expanded: Sequence[Step], at: int) -> bool:
+    """Whether the expanded list carries this outer step through unchanged."""
+    return at < len(expanded) and expanded[at].name.upper() == outer_step.name.upper()
 
-    for step in job.steps:
-        step_id = _add_node(NodeKind.STEP, f"{job.name.upper()}.{step.name.upper()}")
-        proc_name = step_proc.get(step.name.upper())
-        edges.append(
-            GraphEdge(
-                source=job_id,
-                source_kind=NodeKind.JOB,
-                target=step_id,
-                target_kind=NodeKind.STEP,
-                kind=EdgeKind.JCL_STEP_RUNS,
-                attrs={"proc": proc_name} if proc_name else {},
-            )
-        )
 
-        prog_id = _add_node(NodeKind.PROGRAM, step.pgm.upper())
-        edges.append(
-            GraphEdge(
-                source=step_id,
-                source_kind=NodeKind.STEP,
-                target=prog_id,
-                target_kind=NodeKind.PROGRAM,
-                kind=EdgeKind.JCL_STEP_RUNS,
-            )
-        )
+def _expansion_of(
+    outer_step: Step, expanded: Sequence[Step], at: int
+) -> tuple[Step, ...]:
+    """The contiguous run of "OUTERNAME.INNERNAME" steps this outer step became.
 
-        for dd in step.dds:
-            if isinstance(dd.dsn, InStreamDSN):
-                instream_id = _add_node(
-                    NodeKind.INSTREAM_DATA,
-                    f"{job.name.upper()}.{step.name.upper()}.{dd.ddname.upper()}",
-                )
-                edges.append(
-                    GraphEdge(
-                        source=step_id,
-                        source_kind=NodeKind.STEP,
-                        target=instream_id,
-                        target_kind=NodeKind.INSTREAM_DATA,
-                        kind=EdgeKind.READS,
-                        attrs={
-                            "ddname": dd.ddname,
-                            "text": "\n".join(dd.in_stream),
-                        },
-                    )
-                )
-                continue
-            if dd.sysout or not isinstance(dd.dsn, DirectDSN):
-                continue
-            dataset_id = _add_node(NodeKind.DATASET, dsn_key(dd.dsn).upper())
-            edges.append(
-                GraphEdge(
-                    source=step_id,
-                    source_kind=NodeKind.STEP,
-                    target=dataset_id,
-                    target_kind=NodeKind.DATASET,
-                    kind=_DISP_TO_EDGE_KIND[dd.disp.status],
-                    attrs={"ddname": dd.ddname, "disp": dd.disp.status.value},
-                )
-            )
+    Empty when the step was no PROC call at all, and empty as well when nothing
+    at this position carries its name — a PROC that resolved to no steps.
+    """
+    if _is_unexpanded(outer_step, expanded, at):
+        return ()
+    prefix = f"{outer_step.name.upper()}."
+    return tuple(
+        takewhile(lambda step: step.name.upper().startswith(prefix), expanded[at:])
+    )
 
-    return list(nodes.values()), edges
+
+def _consumed(outer_step: Step, expanded: Sequence[Step], at: int) -> int:
+    """How many expanded steps this outer step accounts for: the length of its
+    expansion, the single slot it occupies unchanged, or nothing."""
+    expansion = _expansion_of(outer_step, expanded, at)
+    if expansion:
+        return len(expansion)
+    return 1 if _is_unexpanded(outer_step, expanded, at) else 0
+
+
+def _walk_positions(job: Job, expanded: Sequence[Step]) -> Iterable[int]:
+    """Where each outer step's own share of the expanded list starts."""
+    return accumulate(
+        job.steps, lambda at, step: at + _consumed(step, expanded, at), initial=0
+    )
 
 
 def step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
@@ -119,26 +203,24 @@ def step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
     itself unchanged or a contiguous run of qualified "OUTERNAME.INNERNAME"
     inner steps — so a single left-to-right walk of both step lists in
     lockstep attributes each expanded step to its true originating outer
-    step, even when two outer steps share the same literal name (as
-    real CardDemo JCL does — see forge-c53). A name-keyed lookup would
-    silently pick whichever same-named outer step happened to be last."""
-    provenance: dict[str, str] = {}
-    expanded_iter = iter(expanded_job.steps)
-    pending = next(expanded_iter, None)
-    for outer_step in job.steps:
-        outer_name = outer_step.name.upper()
-        if pending is not None and pending.name.upper() == outer_name:
-            pending = next(expanded_iter, None)  # unexpanded, ordinary step
-            continue
-        prefix = f"{outer_name}."
-        while pending is not None and pending.name.upper().startswith(prefix):
-            provenance[pending.name.upper()] = outer_step.pgm.upper()
-            pending = next(expanded_iter, None)
-    return provenance
+    step, rather than to whichever same-named outer step happened to be last
+    (as real CardDemo JCL has — see forge-c53).
+
+    The walk reads position, not name, but an expanded name carries the outer
+    step's name and not which occurrence of it: two same-named outer steps
+    that both call PROCs are still told apart only by where their runs start,
+    so the first one takes both runs.
+    """
+    expanded = expanded_job.steps
+    return {
+        inner.name.upper(): outer.pgm.upper()
+        for outer, at in zip(job.steps, _walk_positions(job, expanded), strict=False)
+        for inner in _expansion_of(outer, expanded, at)
+    }
 
 
 def extract_jcl_graph(
-    jcl_source: str, corpus_index: "CorpusIndex", proclib_dirs: Sequence[Path] = ()
+    jcl_source: str, corpus_index: CorpusIndex, proclib_dirs: Sequence[Path] = ()
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Parse JCL text and return its step-sequencing portion of the shared
     knowledge graph: JOB/STEP/PROGRAM/DATASET/INSTREAM_DATA nodes;
@@ -157,7 +239,8 @@ def extract_jcl_graph(
 
     TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
     DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not
-    represented as nodes at all.
+    represented as nodes at all. A DSN that is one lone unresolved symbol is
+    a TempRef in the reading z/OS gives it, and is skipped the same way.
 
     proclib_dirs (default empty — no-op) resolves and inlines EXEC PROC=
     calls via expand_procs before building the graph. An expanded step's
@@ -170,7 +253,7 @@ def extract_jcl_graph(
 
 
 def jcl_graph_from_job(
-    job: Job, corpus_index: "CorpusIndex", proclib_dirs: Sequence[Path] = ()
+    job: Job, corpus_index: CorpusIndex, proclib_dirs: Sequence[Path] = ()
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
     """``extract_jcl_graph`` for a member already parsed.
 
@@ -179,9 +262,9 @@ def jcl_graph_from_job(
     holding text rather than a Job. Same graph either way — the split exists only
     so the parse can be hoisted out of the pass.
     """
-    step_proc: dict[str, str] = {}
-    if proclib_dirs:
-        expanded_job = expand_procs(job, proclib_dirs)
-        step_proc = step_proc_provenance(job, expanded_job)
-        job = expanded_job
-    return _job_to_graph(job, step_proc, corpus_index)
+    if not proclib_dirs:
+        return _job_to_graph(job, {}, corpus_index)
+    expanded_job = expand_procs(job, proclib_dirs)
+    return _job_to_graph(
+        expanded_job, step_proc_provenance(job, expanded_job), corpus_index
+    )
