@@ -174,6 +174,20 @@ def test_the_arrowheads_are_enlarged_past_sigma_defaults(tmp_path: Path) -> None
     assert wideness > 2
 
 
+def test_the_page_redraws_once_the_camera_settles(tmp_path: Path) -> None:
+    """hideEdgesOnMove skips edges for any frame the camera is moving, and
+    sigma's own recovery is a refresh scheduled at setTimeout(0) on mouseup --
+    which runs while the 200ms inertia animation is still going, so that frame
+    is skipped too and nothing renders again once it ends. Result: edges stay
+    hidden after a pan. The page has to redraw once the camera is quiet."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert 'getCamera().on("updated"' in html
+    assert "isAnimated()" in html
+    # A redraw, not a reindex: the graph's structure never changes here.
+    assert html.count("skipIndexation: true") >= 3
+
+
 def test_a_hub_is_drawn_larger_than_a_leaf(tmp_path: Path) -> None:
     """Sizing by degree is what makes the shape of the corpus legible when the
     whole graph is on screen and no label is."""
