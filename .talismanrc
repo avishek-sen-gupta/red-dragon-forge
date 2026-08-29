@@ -80,4 +80,8 @@ fileignoreconfig:
   checksum: f17c784dea9e45112ad8b3bfcc0ba3a1bb64bb5f17cd6074275c64b00e289073
 - filename: cobble/interpreter/cobol/cobol_expression.py
   checksum: 5fec5864a039f3c551398db5abb7727ae073bd361eb03ad57281cf020d8f6fe1
+- filename: cobble/jackal/jcl_graph.py
+  checksum: 9aef3bb51f78ce0061df701ed925389c5f51d98da3ea3d64a5117ed43118053d
+- filename: tests/jackal/test_jcl_graph.py
+  checksum: b5ad49c3893e54cddd3dc9e6b78f062f96c863f4e982bc77590aa79162ec3f32
 version: "1.0"
