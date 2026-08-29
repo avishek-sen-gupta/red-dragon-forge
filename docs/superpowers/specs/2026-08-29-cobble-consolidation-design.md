@@ -25,22 +25,49 @@ that red-dragon and forge already own.
 Cobble states its own invariant, in `cics/verb_source_asg.py`: *"THIS IS THE ONE
 SEAM FILE — the only ported module permitted to contain real logic changes
 (everything else in cobble/ is byte-for-byte + import-rewrite)."* That invariant
-no longer holds. In the hours between the backport sweep and this document, eight
-commits landed in cobble, and four modules that are meant to be identical copies
-diverged:
+no longer holds. In the hours between the backport sweep and this document,
+twelve commits landed in cobble, and eight modules that are meant to be identical
+copies diverged:
 
-| Module | Changed lines vs. canonical |
-| --- | --- |
-| `cics/flow_map.py` | 239 |
-| `cics/flow_graph_core.py` | 172 |
-| `knowledge_graph/render.py` | 96 |
-| `interpreter/project/graph_types.py` | 20 |
+| Module | Canonical home | Changed lines |
+| --- | --- | --- |
+| `interpreter/cobol/cobol_expression.py` | red-dragon | 334 |
+| `jackal/jcl_graph.py` | jackal | 297 |
+| `jackal/jcl/proc_expand.py` | jackal | 273 |
+| `cics/flow_map.py` | cicada | 239 |
+| `cics/flow_graph_core.py` | cicada | 172 |
+| `knowledge_graph/render.py` | knowledge_graph | 96 |
+| `jackal/dsn.py` | jackal | 72 |
+| `interpreter/project/graph_types.py` | red-dragon | 20 |
 
 This is not an argument against the design; it is the strongest argument for it,
 and it changes two things below. The reconciliation list is no longer short, and
-it grows with elapsed time — so the cutover is time-sensitive in a way a
-structural refactor normally is not. Deletion can no longer be assumed safe for
-the CICS graph layer, because there the copies genuinely differ.
+it grows with elapsed time. Deletion can no longer be assumed safe for the CICS
+graph layer, the JCL graph layer, or COBOL expression handling, because there the
+copies genuinely differ.
+
+### A recurring defect shape
+
+Three of the divergences fix the same class of bug, which is worth naming because
+it predicts where the next one will be. In each case a **single unrecognised
+input is fatal to an entire program or job**, not to the one construct:
+
+| Where | Trigger | Lost |
+| --- | --- | --- |
+| Dialect parsers unregistered | any `EXEC CICS`/`EXEC SQL` reaching the FILE-CONTROL stage | whole program's ASG |
+| `expr_from_dict` knows 5 of 8 bridge kinds | `COMPUTE WS-PCT = ZEROES` (`figurative`) | whole program's ASG |
+| Unresolved JCL symbol | `DSN=&WORK` where `WORK` is no defined symbol | whole job's steps, programs, datasets |
+
+The expression case is the sharpest: the bridge and its own deserializer live in
+the same repository and disagree. `StatementSerializer.java` emits `figurative`,
+`dfhresp`, and `length_of`; `expr_from_dict` raises `ValueError` on all three.
+
+The shared cause is that these paths raise on unknown input rather than degrading
+to an opaque-but-preserved node, and the raise escapes to a boundary that
+abandons the whole unit of work. Cobble's fix for the expression case replaces
+if-chains with dispatch tables keyed by kind, so a future divergence is a missing
+table row rather than a silently lost member. Each is filed as a bug in its own
+right and is fixable independently of this consolidation.
 
 ## The key observation
 
