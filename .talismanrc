@@ -78,4 +78,6 @@ fileignoreconfig:
   checksum: 49b4113be9082b13c281e5b437e1a552a3f1858c063d351f2ff2428e57e39e34
 - filename: cobble/cics/flow_map.py
   checksum: f17c784dea9e45112ad8b3bfcc0ba3a1bb64bb5f17cd6074275c64b00e289073
+- filename: cobble/interpreter/cobol/cobol_expression.py
+  checksum: 5fec5864a039f3c551398db5abb7727ae073bd361eb03ad57281cf020d8f6fe1
 version: "1.0"
