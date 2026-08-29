@@ -84,4 +84,6 @@ fileignoreconfig:
   checksum: 9aef3bb51f78ce0061df701ed925389c5f51d98da3ea3d64a5117ed43118053d
 - filename: tests/jackal/test_jcl_graph.py
   checksum: b5ad49c3893e54cddd3dc9e6b78f062f96c863f4e982bc77590aa79162ec3f32
+- filename: tests/jackal/test_proc_expand.py
+  checksum: 3b21c7272dad0e4a448e15e8abbc6e75d0aa843f0bc5b104fc691ef2514d8293
 version: "1.0"
