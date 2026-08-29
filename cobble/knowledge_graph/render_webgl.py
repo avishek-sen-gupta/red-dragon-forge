@@ -192,6 +192,25 @@ search.addEventListener("input", () => {{
   renderer.refresh({{ skipIndexation: true }});
 }});
 
+// hideEdgesOnMove skips the edge programs for any frame the camera is moving.
+// sigma's own recovery is a refresh scheduled at setTimeout(0) on mouseup,
+// which fires while the 200ms inertia animation is still running -- so that
+// frame is skipped as well, and once the animation ends nothing renders again.
+// The edges then stay missing until the next gesture. A mouseup released
+// outside the canvas loses that refresh altogether, with the same result.
+// So: after the camera stops changing, and once it is no longer animating,
+// redraw once.
+let settle = null;
+const redrawWhenSettled = () => {{
+  clearTimeout(settle);
+  settle = setTimeout(() => {{
+    // Still coasting on inertia: a redraw now would be skipped too. Wait.
+    if (renderer.getCamera().isAnimated()) return redrawWhenSettled();
+    renderer.refresh({{ skipIndexation: true }});
+  }}, 80);
+}};
+renderer.getCamera().on("updated", redrawWhenSettled);
+
 const selected = document.getElementById("selected");
 renderer.on("clickNode", ({{ node }}) => {{
   const data = graph.getNodeAttributes(node);
