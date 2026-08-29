@@ -144,5 +144,5 @@ fileignoreconfig:
 - filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/ProcSequenceNumberTest.java
   checksum: 0e8c1ccc38a02a4b94940fe1db94b2a1b37cbdeccc161b79782ae2a567bae001
 - filename: docs/superpowers/specs/2026-08-29-cobble-consolidation-design.md
-  checksum: cd901292ef624dc3a0a0cd10f9f4a9ac20b490707f2af89158169feb6f20bca5
+  checksum: a74040a37f00dded2075068e8fbb4723566e1c1a1e715b36477037b6a8749ef3
 version: "1.0"
