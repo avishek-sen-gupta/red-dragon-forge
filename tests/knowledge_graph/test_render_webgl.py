@@ -159,6 +159,21 @@ def test_edges_are_drawn_with_arrowheads(tmp_path: Path) -> None:
     assert 'defaultEdgeType: "arrow"' in html
 
 
+def test_the_arrowheads_are_enlarged_past_sigma_defaults(tmp_path: Path) -> None:
+    """sigma's stock ratios (2.5 length, 2 wideness) off a 1.7 minimum
+    thickness give a head about 4px long, which is invisible with the whole
+    corpus on screen. The head is enlarged rather than the edge thickened, so
+    the extra ink is on the end that carries the direction, not on 113k edge
+    bodies."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert "createEdgeArrowProgram" in html
+    length = float(re.search(r"lengthToThicknessRatio: ([0-9.]+)", html).group(1))
+    wideness = float(re.search(r"widenessToThicknessRatio: ([0-9.]+)", html).group(1))
+    assert length > 2.5
+    assert wideness > 2
+
+
 def test_a_hub_is_drawn_larger_than_a_leaf(tmp_path: Path) -> None:
     """Sizing by degree is what makes the shape of the corpus legible when the
     whole graph is on screen and no label is."""

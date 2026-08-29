@@ -117,7 +117,19 @@ const visibleNodeKinds = new Set(NODE_KINDS);
 const visibleEdgeKinds = new Set(EDGE_KINDS);
 let matching = null;
 
+// sigma sizes an arrowhead off the edge's thickness, and its stock ratios
+// (2.5 long, 2 wide) off a 1.7px minimum give a head about 4px long -- not
+// visible with a whole corpus on screen. Enlarging the head rather than
+// thickening the edge puts the extra ink on the end that carries the
+// direction, instead of on 113k edge bodies where it would just blur the
+// graph into a mat.
+const ArrowProgram = Sigma.rendering.createEdgeArrowProgram({{
+  lengthToThicknessRatio: 9,
+  widenessToThicknessRatio: 6,
+}});
+
 const renderer = new Sigma(graph, document.getElementById("graph"), {{
+  edgeProgramClasses: {{ arrow: ArrowProgram }},
   // Arrowheads, because every edge kind here is directional and reads wrong
   // without one (A CALLS B is not B CALLS A). sigma's arrow program draws a
   // head quad on top of the body quad, so this is roughly twice the edge
