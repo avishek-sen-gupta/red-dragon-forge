@@ -12,34 +12,9 @@ from pathlib import Path
 import networkx as nx
 
 from cobble.interpreter.project.graph_types import AttrValue, EdgeKind, NodeKind
+from cobble.knowledge_graph.palette import DEFAULT_COLOR, EDGE_COLORS, NODE_COLORS
 
 _VENDOR_JS_PATH = Path(__file__).parent / "vendor" / "vis-network.min.js"
-
-_NODE_COLORS = {
-    "PROGRAM": "#4C72B0",
-    "COPYBOOK": "#55A868",
-    "TRANSACTION": "#C44E52",
-    "JOB": "#8172B2",
-    "STEP": "#CCB974",
-    "DATASET": "#64B5CD",
-    "BMS_MAP": "#DD8452",
-}
-
-_EDGE_COLORS = {
-    "CALL": "#4C72B0",
-    "COPY": "#55A868",
-    "XCTL": "#C44E52",
-    "LINK": "#C44E52",
-    "RETURN_TRANSID": "#C44E52",
-    "START_TRANSID": "#C44E52",
-    "STARTS": "#8172B2",
-    "SENDS_MAP": "#DD8452",
-    "RECEIVES_MAP": "#DD8452",
-    "JCL_STEP_RUNS": "#8172B2",
-    "READS": "#64B5CD",
-    "WRITES": "#64B5CD",
-    "UPDATES": "#64B5CD",
-}
 
 _HTML_TEMPLATE = """<!doctype html>
 <html>
@@ -192,7 +167,7 @@ def _vis_node(
         "id": _node_id_str(key),
         "label": node_id,
         "kind": kind.value,
-        "color": _NODE_COLORS.get(kind.value, "#999999"),
+        "color": NODE_COLORS.get(kind.value, DEFAULT_COLOR),
         "title": f"{kind.value}: {node_id}" + _attrs_suffix(attrs),
     }
 
@@ -211,7 +186,7 @@ def _vis_edge(
         "to": _node_id_str(target),
         "kind": kind.value,
         "label": kind.value,
-        "color": _EDGE_COLORS.get(kind.value, "#999999"),
+        "color": EDGE_COLORS.get(kind.value, DEFAULT_COLOR),
         "title": kind.value + _attrs_suffix(attrs),
     }
 

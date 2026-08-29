@@ -86,4 +86,18 @@ fileignoreconfig:
   checksum: b5ad49c3893e54cddd3dc9e6b78f062f96c863f4e982bc77590aa79162ec3f32
 - filename: tests/jackal/test_proc_expand.py
   checksum: 3b21c7272dad0e4a448e15e8abbc6e75d0aa843f0bc5b104fc691ef2514d8293
+- filename: cobble/knowledge_graph/node_key.py
+  checksum: edaa9d8c3bc740740f3931c45d527e68cba65f8199bb4350e01136538b800390
+- filename: tests/knowledge_graph/test_layout.py
+  checksum: f7ea68a1d7ad3ac7796c1a6fc525032375390f487edaa0a27da5631de7b98d1e
+- filename: cobble/knowledge_graph/layout.py
+  checksum: f7d0d0708029df646bd4a455c386673eaa89dde12c948e34d24fd98b35dccd8e
+- filename: tests/knowledge_graph/test_render_webgl.py
+  checksum: a4e2ba5c44199aa59afabc8d7f7adf2efd0521e788c1f12c076e3c9a5d18381e
+- filename: cobble/knowledge_graph/render_webgl.py
+  checksum: ff39640f95227ade26006298a9e2550158fc9e4f581432dbd9742f4701c6bf48
+- filename: cobble/knowledge_graph/vendor/graphology.umd.min.js
+  checksum: ff11c0ec252b016cf1cacb35933e782b018619cf95b1bece2eeafc51bcc3b86e
+- filename: cobble/knowledge_graph/vendor/sigma.min.js
+  checksum: 1fd2b19275d848253756139e1e9b22f44d858458e8a56785cc02ea3142ad6105
 version: "1.0"
