@@ -69,6 +69,50 @@ if-chains with dispatch tables keyed by kind, so a future divergence is a missin
 table row rather than a silently lost member. Each is filed as a bug in its own
 right and is fixable independently of this consolidation.
 
+### Cobble validates against one consumer only
+
+**This governs every Group A adoption and is the main risk in this design.**
+
+Cobble exists to build a graph of relationships. It parses, walks the ASG, and
+emits nodes and edges. It never lowers to IR and never executes. So a change made
+in cobble is validated against exactly one consumer, and the canonical modules
+have two more — red-dragon's lowering and the three runtimes.
+
+The expression fix shows what that costs. `condition_lowering.py` has two
+fallbacks for an `ExprNode` it does not recognise:
+
+```python
+logger.warning("Unknown expression node type: %s", type(node).__name__)
+return ctx.const_to_reg(0)
+...
+# RefModNode and any other shape: stringify via the ref name as a fallback.
+return {"kind": "ref", "name": getattr(node, "name", "")}
+```
+
+Adding `FigurativeNode`, `LengthOfNode`, and `DfhRespNode` so the ASG parses,
+without teaching the lowering what they mean, converts a loud `ValueError` into
+silently wrong IR: a figurative constant lowers to 0 — correct for `ZEROS`, wrong
+for `SPACES`, `HIGH-VALUES`, `LOW-VALUES` and `ALL` literals — and `LENGTH OF`
+becomes a reference to a field named `""`. For a graph that never lowers, neither
+matters. Here, trading a crash for a wrong answer is a regression.
+
+The JCL fix is the counter-example, and shows the discipline that works. Cobble
+placed `temp_if_unresolved` in the graph pass rather than in `dsn.py`, for its own
+reasons (PROC substitution matches `DirectDSN` and runs after the parse). That
+placement also happens to leave jackal's execution path untouched. Adopting it
+must preserve the placement; "simplifying" it down into `dsn.py` would change
+what the runner and catalog resolve.
+
+So Group A splits by how many consumers a change reaches:
+
+- **Graph-only, low risk:** `flow_map`, `flow_graph_core`, `render`,
+  `graph_types` (`START_TRANSID`, `AttrValue`). Nothing lowers these.
+- **Shared-consumer, needs a second decision:** `cobol_expression`, `dsn`,
+  `proc_expand`, `jcl_graph`. Each adoption is incomplete until the lowering or
+  execution behaviour is decided explicitly, and no reconciliation in this group
+  is done when the parse succeeds — only when a consumer that lowers or executes
+  has been considered and covered by a test.
+
 ## The key observation
 
 There is no duplication between red-dragon and forge. Forge consumes red-dragon
