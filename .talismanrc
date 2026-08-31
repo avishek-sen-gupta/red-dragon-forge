@@ -148,6 +148,8 @@ fileignoreconfig:
   checksum: e950a4e351054bde43e2858ab7783083a41afa7528f2c0f93a6fe9dcb6280bba
 - filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/ProcSequenceNumberTest.java
   checksum: 0e8c1ccc38a02a4b94940fe1db94b2a1b37cbdeccc161b79782ae2a567bae001
+- filename: docs/superpowers/plans/2026-09-01-index-items-and-search.md
+  checksum: 900ac83f01bef64a9c2a81352b57aa05365267981ea41c31933b8a0d068d9f4b
 - filename: docs/superpowers/specs/2026-08-29-cobble-consolidation-design.md
   checksum: ced0001719ce3efb3da7f7e3f527eb9f29bc59b3d542d5b77375aa1a1bfa44f1
 - filename: docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md
