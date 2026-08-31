@@ -38,7 +38,6 @@ from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb
 from cobble.cics.statements import ExecCicsStatement
-from cobble.file_location import to_json_value
 from cobble.interpreter.project.graph_types import GraphNode
 
 if TYPE_CHECKING:
@@ -240,7 +239,7 @@ def _endpoint(node_id, kind, corpus_index: CorpusIndex) -> GraphNode:
     return GraphNode(
         id=node_id,
         kind=kind,
-        file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
+        location=corpus_index.resolve_file_path(kind, node_id),
     )
 
 

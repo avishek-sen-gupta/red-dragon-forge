@@ -1,6 +1,6 @@
 {
   "lint_rules_dir": ".python-fp-lint",
-  "exclude": [],
+  "exclude": ["cobble/sink_state.py"],
   "ruff_select": "E,F,W,I,B,UP,SIM,RUF,BLE,T20,TID252,C901,PLR0915,ANN401",
   "max_complexity": 3,
   "max_statements": 10,

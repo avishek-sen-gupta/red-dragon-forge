@@ -14,6 +14,7 @@ import shutil
 import networkx as nx
 import pytest
 
+from cobble.file_location import NOT_ATTEMPTED
 from cobble.interpreter.project.graph_types import EdgeKind, NodeKind
 from cobble.knowledge_graph import layout as layout_module
 from cobble.knowledge_graph.layout import sfdp_positions
@@ -26,7 +27,7 @@ needs_graphviz = pytest.mark.skipif(
 
 def _node(graph: nx.MultiDiGraph, kind: NodeKind, node_id: str) -> NodeKey:
     key = (kind, node_id)
-    graph.add_node(key, kind=kind, id=node_id, file_path=None, attrs={})
+    graph.add_node(key, kind=kind, id=node_id, location=NOT_ATTEMPTED, attrs={})
     return key
 
 

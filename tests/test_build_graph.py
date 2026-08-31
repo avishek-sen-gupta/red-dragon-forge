@@ -18,6 +18,8 @@ from cobble.build_graph import (
 )
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
+from cobble.corpus_index import FileLocationResolver
+from cobble.file_location import NOT_ATTEMPTED, FileLocation
 from cobble.interpreter.cobol.ast_store import AstStore
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
@@ -259,11 +261,15 @@ class _CannedBridge:
         out.write_text(json.dumps(self._asg), encoding="utf-8")
 
 
-class _NoFilePaths:
-    """The one thing the file-graph extractor asks of the corpus index."""
+class _NoFilePaths(FileLocationResolver):
+    """The one thing the file-graph extractor asks of the corpus index.
 
-    def resolve_file_path(self, kind, node_id):
-        return None
+    NOT_ATTEMPTED rather than a resolution failure: this stub stands in for a
+    run with no index behind it, which is what that reason says.
+    """
+
+    def resolve_file_path(self, kind: NodeKind, node_id: str) -> FileLocation:
+        return NOT_ATTEMPTED
 
 
 class _CollectingWriter:

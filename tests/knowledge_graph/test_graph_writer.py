@@ -1,8 +1,10 @@
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 from unittest.mock import MagicMock
 
-from cobble.file_location import FileLocationReason, NoFileLocation
+from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
@@ -11,13 +13,16 @@ from cobble.interpreter.project.graph_types import (
 )
 from cobble.knowledge_graph.graph_writer import GraphWriter
 
+# Shared read-only default: a stub that resolves nothing wants the same empty
+# lookup every time, and a mutable {} default would be one per call site.
+EMPTY_LOCATIONS: Mapping[tuple[NodeKind, str], FileLocation] = MappingProxyType({})
+
 
 def _corpus_index_stub(
-    file_paths: dict[tuple[NodeKind, str], object] | None = None,
+    locations: Mapping[tuple[NodeKind, str], FileLocation] = EMPTY_LOCATIONS,
 ) -> MagicMock:
-    file_paths = file_paths or {}
     stub = MagicMock()
-    stub.resolve_file_path.side_effect = lambda kind, node_id: file_paths.get(
+    stub.resolve_file_path.side_effect = lambda kind, node_id: locations.get(
         (kind, node_id), NoFileLocation(FileLocationReason.UNRESOLVED)
     )
     return stub
@@ -33,14 +38,16 @@ def test_add_node_writes_immediately_no_merge_on_duplicate(tmp_path: Path) -> No
     with GraphWriter(nodes_path, edges_path, corpus_index) as writer:
         writer.add_node(
             GraphNode(
-                id="ACCTFILE", kind=NodeKind.PROGRAM, file_path="cbl/ACCTFILE.cbl"
+                id="ACCTFILE", kind=NodeKind.PROGRAM, location=Path("cbl/ACCTFILE.cbl")
             )
         )
         # A second occurrence of the same key is dropped outright, not merged —
-        # its (different) file_path/attrs never win, unlike the old buffer-merge.
+        # its (different) location/attrs never win, unlike the old buffer-merge.
         writer.add_node(
             GraphNode(
-                id="ACCTFILE", kind=NodeKind.PROGRAM, file_path="something/else.cbl"
+                id="ACCTFILE",
+                kind=NodeKind.PROGRAM,
+                location=Path("something/else.cbl"),
             )
         )
 
@@ -67,9 +74,13 @@ def test_add_edge_resolves_endpoint_file_path_via_corpus_index(tmp_path: Path) -
 
     nodes = {n["id"]: n for n in _read_jsonl(nodes_path)}
     assert nodes["ACCTFILE"]["file_path"] == "cbl/ACCTFILE.cbl"
-    assert (
-        nodes["COCOM01Y"]["file_path"] is None
-    )  # UNRESOLVED collapses to null on write
+    # ...and an unresolved endpoint says which kind of "no file" that is, rather
+    # than leaving a reader to re-derive it from COPYBOOK against cobble's own
+    # resolver table.
+    assert (nodes["COCOM01Y"]["file_path"], nodes["COCOM01Y"]["file_path_reason"]) == (
+        None,
+        "unresolved",
+    )
 
 
 def test_add_edge_endpoint_synthesis_never_overrides_an_explicit_add_node(
@@ -86,7 +97,7 @@ def test_add_edge_endpoint_synthesis_never_overrides_an_explicit_add_node(
     with GraphWriter(nodes_path, edges_path, corpus_index) as writer:
         writer.add_node(
             GraphNode(
-                id="ACCTFILE", kind=NodeKind.PROGRAM, file_path="cbl/ACCTFILE.cbl"
+                id="ACCTFILE", kind=NodeKind.PROGRAM, location=Path("cbl/ACCTFILE.cbl")
             )
         )
         writer.add_edge(

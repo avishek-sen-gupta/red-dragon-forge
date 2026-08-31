@@ -33,7 +33,6 @@ from cobble.cics.graph_sink import GraphSink
 from cobble.cics.verb_source_asg import (
     stream_program_verbs,
 )  # SEAM: VM-free verb source (was cics.verb_source_lowering)
-from cobble.file_location import to_json_value
 from cobble.interpreter.cobol.cobol_parser import CobolParser
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
@@ -79,7 +78,7 @@ def _node(kind: NodeKind, node_id: str, corpus_index: CorpusIndex) -> GraphNode:
     return GraphNode(
         id=node_id,
         kind=kind,
-        file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
+        location=corpus_index.resolve_file_path(kind, node_id),
     )
 
 

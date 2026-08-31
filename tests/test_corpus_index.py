@@ -120,6 +120,19 @@ def test_cobol_file_is_always_not_file_based(tmp_path: Path) -> None:
     )
 
 
+def test_bms_map_is_not_indexed_rather_than_unresolved(tmp_path: Path) -> None:
+    """cobble keeps no BMS index, so no lookup happens for a BMS_MAP at all.
+    Calling that UNRESOLVED accuses the corpus of missing files it was never
+    asked for — and at corpus scale that is thousands of nodes asserting a
+    problem that does not exist."""
+    config = _config(tmp_path)
+    (tmp_path / "cbl").mkdir()
+    index = build_corpus_index(config)
+    assert index.resolve_file_path(NodeKind.BMS_MAP, "MAPONE") == NoFileLocation(
+        FileLocationReason.NOT_INDEXED
+    )
+
+
 def test_transaction_without_csd_has_no_definition_source(tmp_path: Path) -> None:
     config = _config(tmp_path)
     (tmp_path / "cbl").mkdir()
