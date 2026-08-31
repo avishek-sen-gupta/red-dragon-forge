@@ -147,6 +147,79 @@ def test_instream_dd_reads_edge_carries_raw_text():
     )
 
 
+_TSO_JCL = """//DB2J JOB 'demo'
+//STEP1 EXEC PGM=IKJEFT01
+//SYSTSIN DD *
+  DSN SYSTEM(DSN)
+  RUN PROGRAM(PAYROLL) PLAN(PAYPLAN) -
+      LIB('BATCH.LOADLIB')
+  END
+/*
+"""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_tso_monitor_step_runs_the_program_its_systsin_names():
+    """The step's EXEC PGM= names the monitor, so this is the only place the
+    program doing the work is named at all."""
+    nodes, edges = extract_jcl_graph(_TSO_JCL)
+    tso = [e for e in edges if e.kind == EdgeKind.TSO_RUNS_PROGRAM]
+
+    assert [(e.source, e.target) for e in tso] == [("DB2J.STEP1", "PAYROLL")]
+    assert tso[0].target_kind == NodeKind.PROGRAM
+    assert tso[0].attrs == {
+        "monitor": "IKJEFT01",
+        "ddname": "SYSTSIN",
+        "plan": "PAYPLAN",
+    }
+    assert any(n.kind == NodeKind.PROGRAM and n.id == "PAYROLL" for n in nodes)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_the_monitor_edge_and_the_instream_text_both_survive():
+    """Both facts are true: the step runs IKJEFT01, and IKJEFT01 runs PAYROLL.
+    Reading the commands adds an edge; it does not consume the DD."""
+    _nodes, edges = extract_jcl_graph(_TSO_JCL)
+
+    assert [
+        (e.kind, e.target) for e in edges if e.target_kind == NodeKind.PROGRAM
+    ] == [
+        (EdgeKind.JCL_STEP_RUNS, "IKJEFT01"),
+        (EdgeKind.TSO_RUNS_PROGRAM, "PAYROLL"),
+    ]
+    reads = [e for e in edges if e.kind == EdgeKind.READS]
+    assert "RUN PROGRAM(PAYROLL)" in reads[0].attrs["text"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_run_under_an_ordinary_program_is_not_read():
+    """Only the monitor reads SYSTSIN as commands. Under any other program the
+    in-stream content is data, and stays the opaque text on the READS edge."""
+    jcl = """//DB2J JOB 'demo'
+//STEP1 EXEC PGM=IEFBR14
+//SYSTSIN DD *
+  RUN PROGRAM(PAYROLL) PLAN(PAYPLAN)
+/*
+"""
+    _nodes, edges = extract_jcl_graph(jcl)
+    assert not any(e.kind == EdgeKind.TSO_RUNS_PROGRAM for e in edges)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_run_in_a_dd_the_monitor_does_not_read_is_not_a_run():
+    """SYSTSIN is the monitor's input. A SYSIN alongside it belongs to the
+    program the monitor runs, so a RUN subcommand there is that program's data
+    and nothing executes it."""
+    jcl = """//DB2J JOB 'demo'
+//STEP1 EXEC PGM=IKJEFT01
+//SYSIN DD *
+  RUN PROGRAM(PAYROLL) PLAN(PAYPLAN)
+/*
+"""
+    _nodes, edges = extract_jcl_graph(jcl)
+    assert not any(e.kind == EdgeKind.TSO_RUNS_PROGRAM for e in edges)
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_two_instream_dds_in_different_steps_get_distinct_nodes():
     jcl = """//DELJ JOB 'demo'
