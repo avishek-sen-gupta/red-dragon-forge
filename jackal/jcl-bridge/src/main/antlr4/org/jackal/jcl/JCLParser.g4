@@ -331,7 +331,20 @@ ddParameter : ddParmACCODE | ddParmAMP | ddParmASTERISK | ddParmAVGREC | ddParmB
 ddParmACCODE : ACCODE EQUAL keywordOrSymbolic;
 ddParmAMP : AMP EQUAL singleOrMultipleValue ;
 ddParmASTERISK : ASTERISK ;
-ddParmASTERISK_DATA : DD_ASTERISK_DATA+ (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)? ;
+/*
+An in-stream data block is allowed to be empty: `//SYSIN DD *` immediately
+followed by `/*` is a real and common way to say "this step gets an empty SYSIN".
+Requiring DD_ASTERISK_DATA+ made that shape unmatchable, which was not a parse
+error -- ddStatement closes fine with zero ddParmASTERISK_DATA -- it just left the
+delimiter token with no rule to consume it, and the parse stopped there. Spelled
+as two alternatives rather than DD_ASTERISK_DATA* so the rule stays non-nullable:
+ddStatement uses it under a closure, and a nullable subrule in a closure is an
+ANTLR error.
+*/
+ddParmASTERISK_DATA
+	: DD_ASTERISK_DATA+ (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)?
+	| (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)
+	;
 ddParmAVGREC : AVGREC EQUAL keywordOrSymbolic ;
 ddParmBFALN : BFALN EQUAL keywordOrSymbolic ;
 ddParmBFTEK : BFTEK EQUAL keywordOrSymbolic ;
@@ -1015,9 +1028,12 @@ jes2SignonStatement : SA JES2_SIGNON
 
 jes2XEQStatement : SA JES2_XEQ JES2_XEQ_NODE ;
 
+// DD_ASTERISK_DATA* for the same reason as ddParmASTERISK_DATA above: the data
+// a /*XMIT carries may be empty. Safe as a bare closure here because the
+// statement's own SA JES2_XMIT JES2_XMIT_NODE prefix keeps it non-nullable.
 jes2XMITStatement : SA JES2_XMIT JES2_XMIT_NODE
     (DLM EQUAL keywordOrSymbolic)?
-    DD_ASTERISK_DATA+
+    DD_ASTERISK_DATA*
     (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)?
   ;
 
