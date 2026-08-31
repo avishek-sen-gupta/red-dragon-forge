@@ -35,6 +35,11 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: vendor/cicada
   ignore_detectors: [filecontent]
+- filename: cicada/third-party/che-che4z-lsp-for-hlasm-fork
+  # A submodule pointer is a commit SHA, so filecontent always reads as a hex
+  # blob and a checksum pin would churn on every bump. Same treatment as the
+  # vendor/* submodules above.
+  ignore_detectors: [filecontent]
 - filename: vendor/bank-of-z
   checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
 - filename: tests/integration/db2_env.sh
