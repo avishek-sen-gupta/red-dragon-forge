@@ -184,6 +184,94 @@ public class DelimiterStatementTest {
                         "/*"));
     }
 
+    /**
+     * The third shape, past the two above: in-stream data that is EMPTY. {@code
+     * //SYSIN DD *} immediately followed by {@code /*} says "this step gets an
+     * empty SYSIN", and the corpus says it often.
+     *
+     * <p>{@code ddParmASTERISK_DATA} required {@code DD_ASTERISK_DATA+}, so with
+     * no data lines the rule could not match, and the terminator the lexer had
+     * already emitted in DATA_MODE had no rule left to consume it. That was not
+     * reported as an error: {@code ddStatement} closes fine with zero
+     * ddParmASTERISK_DATA, and {@code EOF} is optional in {@code execJCL}, so the
+     * parse simply STOPPED at the terminator and returned the prefix it had. Every
+     * step after the empty in-stream block vanished silently. On the production
+     * corpus that cost 126 of 860 members 745 steps between them, one member
+     * losing 69 of its 74.
+     */
+    @Test
+    public void anEmptyInStreamDataBlockDoesNotEndTheJob() {
+        assertEquals(
+                2,
+                steps(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "//SYSIN    DD *",
+                        "/*",
+                        "//STEP2    EXEC PGM=IEFBR14"));
+    }
+
+    /** The empty block's own DD has to survive too, not just the steps after it. */
+    @Test
+    public void anEmptyInStreamDataBlockKeepsItsOwnDdAndTheNext() {
+        assertEquals(
+                namesOf("SYSIN", "OUT"),
+                ddNames(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "//SYSIN    DD *",
+                        "/*",
+                        "//OUT      DD  DSN=C.D,DISP=SHR"));
+    }
+
+    /**
+     * A populated in-stream block followed by an empty one, which is how the shape
+     * actually appears in the corpus: a real SYSTSIN, then {@code //SYSIN DD *}
+     * with nothing under it.
+     */
+    @Test
+    public void anEmptyInStreamBlockAfterAPopulatedOneDoesNotEndTheJob() {
+        assertEquals(
+                2,
+                steps(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IKJEFT01",
+                        "//SYSTSIN  DD *",
+                        "  DSN SYSTEM(DSN)",
+                        "  END",
+                        "//SYSIN    DD *",
+                        "/*",
+                        "//STEP2    EXEC PGM=IEFBR14"));
+    }
+
+    /** An empty in-stream block at the very end of the job is still a valid job. */
+    @Test
+    public void anEmptyInStreamDataBlockAtTheEndOfTheJobIsAccepted() {
+        assertEquals(
+                1,
+                steps(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "//SYSIN    DD *",
+                        "/*"));
+    }
+
+    /**
+     * An empty in-stream block with no terminator at all -- the next {@code //}
+     * card ends it. This shape already worked (DATA_MODE_TERMINATOR2 is consumed
+     * by a different path), so it guards the fix against regressing it.
+     */
+    @Test
+    public void anEmptyInStreamDataBlockWithNoTerminatorStillEndsAtTheNextCard() {
+        assertEquals(
+                2,
+                steps(
+                        "//TESTJOB  JOB (ACCT),CLASS=A",
+                        "//STEP1    EXEC PGM=IEFBR14",
+                        "//SYSIN    DD *",
+                        "//STEP2    EXEC PGM=IEFBR14"));
+    }
+
     /** A delimiter before the first step is a delimiter like any other. */
     @Test
     public void aDelimiterAheadOfEveryStepIsAbsorbed() {
