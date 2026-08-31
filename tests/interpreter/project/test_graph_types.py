@@ -100,6 +100,7 @@ def test_edge_kind_values() -> None:
         "SENDS_MAP",
         "RECEIVES_MAP",
         "JCL_STEP_RUNS",
+        "TSO_RUNS_PROGRAM",
         "READS",
         "WRITES",
         "UPDATES",
