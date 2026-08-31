@@ -42,6 +42,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
+from typing import Protocol
 
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
@@ -51,10 +52,24 @@ logger = logging.getLogger(__name__)
 _NOT_FILE_BASED = NoFileLocation(FileLocationReason.NOT_FILE_BASED)
 _NO_DEFINITION_SOURCE = NoFileLocation(FileLocationReason.NO_DEFINITION_SOURCE)
 _UNRESOLVED = NoFileLocation(FileLocationReason.UNRESOLVED)
+_NOT_INDEXED = NoFileLocation(FileLocationReason.NOT_INDEXED)
 
 # Read-only and shared: a default of {} would be a mutable default, and every
 # index that leaves a group unpopulated wants the same empty lookup anyway.
 EMPTY: Mapping[str, Path] = MappingProxyType({})
+
+
+class FileLocationResolver(Protocol):
+    """The one question an extractor asks of the corpus index.
+
+    Extractors take this rather than :class:`CorpusIndex` itself: resolving a
+    node's location is all of what they use, so a stub that answers only that
+    is a legitimate argument instead of an object pretending to be a whole
+    index. Declared here, next to the implementation, because the consumers
+    already import this module (under TYPE_CHECKING) for the concrete class.
+    """
+
+    def resolve_file_path(self, kind: NodeKind, node_id: str) -> FileLocation: ...
 
 
 def _get_or_warn(
@@ -122,11 +137,13 @@ _RESOLVERS: Mapping[NodeKind, Callable[[CorpusIndex, NodeKind, str], FileLocatio
             NodeKind.INSTREAM_DATA: lambda index, kind, key: _get_or_warn(
                 index.instream, kind, key
             ),
-            # BMS_MAP is file-based in principle but not indexed yet (bms_dir
-            # isn't part of CorpusConfig today -- see the builder), so it is
-            # UNRESOLVED by construction rather than a per-corpus problem worth
-            # warning about individually.
-            NodeKind.BMS_MAP: lambda index, kind, key: _UNRESOLVED,
+            # BMS_MAP is file-based in principle but cobble keeps no index for
+            # it (bms_dir isn't part of CorpusConfig today -- see the builder),
+            # so no lookup is even attempted. NOT_INDEXED rather than
+            # UNRESOLVED: the latter asserts the corpus was missing a file it
+            # should have had, which would accuse every corpus of thousands of
+            # absences that are cobble's gap, not theirs.
+            NodeKind.BMS_MAP: lambda index, kind, key: _NOT_INDEXED,
             # CSD-defined: no entry means this corpus configured no CSD, or the
             # CSD does not define it. Corpus shape, not a missing file.
             NodeKind.TRANSACTION: lambda index, kind, key: index.transactions.get(

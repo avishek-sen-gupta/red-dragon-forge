@@ -1,14 +1,15 @@
 """GraphWriter — streaming sink for the knowledge graph.
 
 Both nodes and edges stream to their .jsonl file deduped keep-first, on
-first sighting, with no buffering. This is only correct because file_path is
-resolved once, up front, by a CorpusIndex passed in at construction — every
-occurrence of a given (kind, id), whether from an extractor's explicit
-add_node or add_edge's own defensive endpoint-stub synthesis, resolves to
-the same file_path no matter what order things arrive in. (Previously, node
-identity was reconciled by buffering everything in a dict and merging
-file_path = existing or new on every add_node, because file_path was only
-opportunistically available at some call sites — see corpus_index.py.)
+first sighting, with no buffering. This is only correct because a node's
+location is resolved once, up front, by a CorpusIndex passed in at
+construction — every occurrence of a given (kind, id), whether from an
+extractor's explicit add_node or add_edge's own defensive endpoint-stub
+synthesis, resolves to the same location no matter what order things arrive
+in. (Previously, node identity was reconciled by buffering everything in a
+dict and merging file_path = existing or new on every add_node, because the
+path was only opportunistically available at some call sites — see
+corpus_index.py.)
 Files are written to temp paths and renamed on close() so a crash leaves no
 truncated output. Structurally satisfies cicada's GraphSink.
 """
@@ -19,8 +20,9 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cobble.file_location import to_json_value
-from cobble.interpreter.project.graph_types import GraphEdge, GraphNode, NodeKind
+from cobble.file_location import to_json_fields
+from cobble.interpreter.project.graph_types import GraphEdge, GraphNode
+from cobble.sink_state import FirstSighting
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
@@ -28,11 +30,13 @@ if TYPE_CHECKING:
 
 class GraphWriter:
     def __init__(
-        self, nodes_path: Path, edges_path: Path, corpus_index: "CorpusIndex"
+        self, nodes_path: Path, edges_path: Path, corpus_index: CorpusIndex
     ) -> None:
         self._corpus_index = corpus_index
-        self._node_seen: set[tuple[NodeKind, str]] = set()
-        self._edge_seen: set[tuple] = set()
+        # Nodes and edges dedupe separately: the same (kind, id) pair can
+        # legitimately appear in both an edge key and a node key.
+        self._nodes_written = FirstSighting()
+        self._edges_written = FirstSighting()
         self._ntmp = nodes_path.with_suffix(nodes_path.suffix + ".tmp")
         self._etmp = edges_path.with_suffix(edges_path.suffix + ".tmp")
         self._nodes_path = nodes_path
@@ -41,16 +45,16 @@ class GraphWriter:
         self._ef = self._etmp.open("w")
 
     def add_node(self, node: GraphNode) -> None:
-        key = (node.kind, node.id)
-        if key in self._node_seen:
+        if not self._nodes_written.first_time((node.kind, node.id)):
             return
-        self._node_seen.add(key)
         self._nf.write(
             json.dumps(
                 {
                     "id": node.id,
                     "kind": node.kind.value,
-                    "file_path": node.file_path,
+                    # file_path plus, when there is none, why not — so a reader
+                    # need not re-derive the reason from the node's kind.
+                    **to_json_fields(node.location),
                     "attrs": node.attrs,
                 }
             )
@@ -66,8 +70,8 @@ class GraphWriter:
             GraphNode(
                 id=edge.source,
                 kind=edge.source_kind,
-                file_path=to_json_value(
-                    self._corpus_index.resolve_file_path(edge.source_kind, edge.source)
+                location=self._corpus_index.resolve_file_path(
+                    edge.source_kind, edge.source
                 ),
             )
         )
@@ -75,15 +79,14 @@ class GraphWriter:
             GraphNode(
                 id=edge.target,
                 kind=edge.target_kind,
-                file_path=to_json_value(
-                    self._corpus_index.resolve_file_path(edge.target_kind, edge.target)
+                location=self._corpus_index.resolve_file_path(
+                    edge.target_kind, edge.target
                 ),
             )
         )
         key = (edge.source, edge.source_kind, edge.target, edge.target_kind, edge.kind)
-        if key in self._edge_seen:
+        if not self._edges_written.first_time(key):
             return
-        self._edge_seen.add(key)
         self._ef.write(
             json.dumps(
                 {
@@ -110,7 +113,7 @@ class GraphWriter:
         self._ntmp.rename(self._nodes_path)
         self._etmp.rename(self._edges_path)
 
-    def __enter__(self) -> "GraphWriter":
+    def __enter__(self) -> GraphWriter:
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -17,6 +17,7 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
+from cobble.file_location import NOT_ATTEMPTED
 from cobble.interpreter.project.graph_types import AttrValue, EdgeKind, NodeKind
 from cobble.knowledge_graph import render_webgl as render_webgl_module
 from cobble.knowledge_graph.node_key import NodeKey
@@ -32,7 +33,9 @@ def _node(
     attrs: Mapping[str, AttrValue] = _NO_ATTRS,
 ) -> NodeKey:
     key = (kind, node_id)
-    graph.add_node(key, kind=kind, id=node_id, file_path=None, attrs=dict(attrs))
+    graph.add_node(
+        key, kind=kind, id=node_id, location=NOT_ATTEMPTED, attrs=dict(attrs)
+    )
     return key
 
 

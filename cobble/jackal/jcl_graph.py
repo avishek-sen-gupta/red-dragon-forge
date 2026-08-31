@@ -10,7 +10,6 @@ from itertools import accumulate, takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
-from cobble.file_location import to_json_value
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
@@ -43,7 +42,7 @@ def _node(kind: NodeKind, node_id: str, corpus_index: CorpusIndex) -> GraphNode:
     return GraphNode(
         id=node_id,
         kind=kind,
-        file_path=to_json_value(corpus_index.resolve_file_path(kind, node_id)),
+        location=corpus_index.resolve_file_path(kind, node_id),
     )
 
 

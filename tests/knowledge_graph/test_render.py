@@ -3,6 +3,7 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
+from cobble.file_location import NOT_ATTEMPTED
 from cobble.interpreter.project.graph_types import EdgeKind, NodeKind
 from cobble.knowledge_graph import render as render_module
 from cobble.knowledge_graph.render import render_html
@@ -14,14 +15,14 @@ def _sample_graph() -> nx.MultiDiGraph:
         (NodeKind.PROGRAM, "COACTVW"),
         kind=NodeKind.PROGRAM,
         id="COACTVW",
-        file_path=None,
+        location=NOT_ATTEMPTED,
         attrs={},
     )
     graph.add_node(
         (NodeKind.COPYBOOK, "COCOM01Y"),
         kind=NodeKind.COPYBOOK,
         id="COCOM01Y",
-        file_path=None,
+        location=NOT_ATTEMPTED,
         attrs={},
     )
     graph.add_edge(

@@ -28,7 +28,6 @@ Env:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -49,9 +48,8 @@ from cobble.cics.graph_sink import GraphSink
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
-from cobble.corpus_index import CorpusIndex
+from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
-from cobble.file_location import to_json_value
 from cobble.interpreter.cobol.ast_store import AstStore, temp_ast_store
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
 from cobble.interpreter.cobol.source_text import decode_source
@@ -68,6 +66,7 @@ from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
 from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
 from cobble.jackal.jcl.parser import bridge_parser
 from cobble.jackal.jcl_graph import jcl_graph_from_job
+from cobble.knowledge_graph.export import read_ndjson
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
@@ -243,9 +242,7 @@ def _program_node(program: str, corpus_index: CorpusIndex) -> GraphNode:
     return GraphNode(
         id=program,
         kind=NodeKind.PROGRAM,
-        file_path=to_json_value(
-            corpus_index.resolve_file_path(NodeKind.PROGRAM, program)
-        ),
+        location=corpus_index.resolve_file_path(NodeKind.PROGRAM, program),
     )
 
 
@@ -253,7 +250,7 @@ def _ref_node(target: str, kind: NodeKind, corpus_index: CorpusIndex) -> GraphNo
     return GraphNode(
         id=target,
         kind=kind,
-        file_path=to_json_value(corpus_index.resolve_file_path(kind, target)),
+        location=corpus_index.resolve_file_path(kind, target),
     )
 
 
@@ -613,7 +610,10 @@ def _cics_flow_or_skip(
 
 
 def _file_control_failures(
-    path: Path, store: AstStore, corpus_index: CorpusIndex, writer: GraphWriter
+    path: Path,
+    store: AstStore,
+    corpus_index: FileLocationResolver,
+    writer: GraphWriter,
 ) -> tuple[str, ...]:
     try:
         with asg_dialect_parsers_registered():
@@ -654,57 +654,6 @@ def _build_batch_file_graph(
 # ── the run ──────────────────────────────────────────────────────
 
 
-def _text(value: object) -> str:
-    """A field the writer wrote as a string, read back as one.
-
-    ``json.loads`` yields ``object``; every id/name field here was written from a
-    ``str``, so this narrows rather than converts. A non-string would be a
-    GraphWriter bug and shows up as its own repr in the merged graph.
-    """
-    return value if isinstance(value, str) else str(value)
-
-
-def _attrs(row: Mapping[str, object]) -> dict[str, object]:
-    value = row.get("attrs")
-    return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _node_from_json(row: Mapping[str, object]) -> GraphNode:
-    file_path = row.get("file_path")
-    return GraphNode(
-        id=_text(row["id"]),
-        kind=NodeKind(row["kind"]),
-        # Absent, JSON null and a non-string all mean "no file" here, exactly as
-        # the dict.get this replaced handed them to GraphNode.
-        file_path=file_path if isinstance(file_path, str) else None,
-        attrs=_attrs(row),
-    )
-
-
-def _edge_from_json(row: Mapping[str, object]) -> GraphEdge:
-    return GraphEdge(
-        source=_text(row["source"]),
-        source_kind=NodeKind(row["source_kind"]),
-        target=_text(row["target"]),
-        target_kind=NodeKind(row["target_kind"]),
-        kind=EdgeKind(row["kind"]),
-        attrs=_attrs(row),
-    )
-
-
-def _rows(path: Path) -> tuple[Mapping[str, object], ...]:
-    return tuple(json.loads(line) for line in path.read_text().splitlines())
-
-
-def _read_ndjson(
-    nodes_path: Path, edges_path: Path
-) -> tuple[list[GraphNode], list[GraphEdge]]:
-    return (
-        [_node_from_json(row) for row in _rows(nodes_path)],
-        [_edge_from_json(row) for row in _rows(edges_path)],
-    )
-
-
 def _extract_all(
     config: CorpusConfig, corpus_index: CorpusIndex, csd: _CsdRead, store: JclStore
 ) -> tuple[str, ...]:
@@ -736,7 +685,7 @@ def _edge_kind_lines(graph: nx.MultiDiGraph) -> tuple[str, ...]:
 
 def _report_merged(config: CorpusConfig) -> None:
     nodes_jsonl, edges_jsonl = _out_paths(config)
-    graph = merge_graph(*_read_ndjson(nodes_jsonl, edges_jsonl))
+    graph = merge_graph(*read_ndjson(nodes_jsonl, edges_jsonl))
     logger.info(
         "\nMerged graph: %d nodes, %d edges\n%s\nWrote %s\nWrote %s",
         graph.number_of_nodes(),

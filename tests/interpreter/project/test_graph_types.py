@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import pytest
 
+from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
@@ -10,17 +13,38 @@ from cobble.interpreter.project.graph_types import (
 
 def test_graph_node_equality_is_by_value() -> None:
     a = GraphNode(
-        id="ACCTFILE", kind=NodeKind.PROGRAM, file_path="app/cbl/ACCTFILE.cbl"
+        id="ACCTFILE", kind=NodeKind.PROGRAM, location=Path("app/cbl/ACCTFILE.cbl")
     )
     b = GraphNode(
-        id="ACCTFILE", kind=NodeKind.PROGRAM, file_path="app/cbl/ACCTFILE.cbl"
+        id="ACCTFILE", kind=NodeKind.PROGRAM, location=Path("app/cbl/ACCTFILE.cbl")
     )
     assert a == b
 
 
-def test_graph_node_defaults() -> None:
+def test_a_node_carries_why_it_has_no_file_not_merely_that_it_has_none() -> None:
+    """A node's location is a FileLocation, not a collapsed str | None, so the
+    reason survives all the way to serialisation instead of being thrown away
+    at construction by whichever extractor built the node."""
+    missing = GraphNode(
+        id="PROGONE",
+        kind=NodeKind.PROGRAM,
+        location=NoFileLocation(FileLocationReason.UNRESOLVED),
+    )
+    never_had_one = GraphNode(
+        id="TEST.DATA",
+        kind=NodeKind.DATASET,
+        location=NoFileLocation(FileLocationReason.NOT_FILE_BASED),
+    )
+
+    assert missing.location != never_had_one.location
+
+
+def test_graph_node_defaults_to_having_asked_nobody() -> None:
+    """Not UNRESOLVED: a node built without a CorpusIndex has not failed to
+    resolve, it has never been looked up."""
     node = GraphNode(id="COACTVW", kind=NodeKind.PROGRAM)
-    assert (node.file_path, node.attrs) == (None, {})
+    assert node.location == NoFileLocation(FileLocationReason.NOT_ATTEMPTED)
+    assert node.attrs == {}
 
 
 def test_graph_node_is_unhashable_due_to_dict_attrs_field() -> None:

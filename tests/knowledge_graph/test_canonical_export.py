@@ -1,8 +1,9 @@
 import json
-import threading
+from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Iterator
 
+from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
@@ -22,6 +23,8 @@ from cobble.knowledge_graph.canonical_export import (
     _transform_node,
     write_manifest,
 )
+
+_NOT_FILE_BASED = NoFileLocation(FileLocationReason.NOT_FILE_BASED)
 
 
 def test_canonical_id_prefixes_with_kind() -> None:
@@ -49,16 +52,20 @@ def test_category_for_database_kinds() -> None:
 
 
 def test_language_for_cobol_and_jcl_kinds() -> None:
-    assert _language_for(NodeKind.PROGRAM) == "COBOL"
-    assert _language_for(NodeKind.COBOL_FILE) == "COBOL"
-    assert _language_for(NodeKind.COPYBOOK) == "COBOL"
-    assert _language_for(NodeKind.BMS_MAP) == "COBOL"
-    assert _language_for(NodeKind.JOB) == "JCL"
-    assert _language_for(NodeKind.STEP) == "JCL"
-    assert _language_for(NodeKind.INSTREAM_DATA) == "JCL"
-    assert _language_for(NodeKind.DATASET) is None
-    assert _language_for(NodeKind.TRANSACTION) is None
-    assert _language_for(NodeKind.CICS_FILE) is None
+    """Over every NodeKind, so a kind added later cannot silently default to a
+    language it has nothing to do with."""
+    assert {kind: _language_for(kind) for kind in NodeKind} == {
+        NodeKind.PROGRAM: "COBOL",
+        NodeKind.COBOL_FILE: "COBOL",
+        NodeKind.COPYBOOK: "COBOL",
+        NodeKind.BMS_MAP: "COBOL",
+        NodeKind.JOB: "JCL",
+        NodeKind.STEP: "JCL",
+        NodeKind.INSTREAM_DATA: "JCL",
+        NodeKind.DATASET: None,
+        NodeKind.TRANSACTION: None,
+        NodeKind.CICS_FILE: None,
+    }
 
 
 def test_read_file_text_returns_contents(tmp_path: Path) -> None:
@@ -76,38 +83,45 @@ def test_read_file_text_missing_file_returns_empty_and_does_not_raise(
 def test_transform_node_with_resolved_file_path(tmp_path: Path) -> None:
     src = tmp_path / "CBACT01C.cbl"
     src.write_text("       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CBACT01C.\n")
-    node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, file_path=str(src))
+    node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, location=src)
 
     result = _transform_node(node, project_name="carddemo")
 
-    assert result["id"] == "PROGRAM::CBACT01C"
-    assert result["display_name"] == "CBACT01C"
-    assert result["type"] == "PROGRAM"
-    assert result["path"] == str(src)
-    assert result["generator"] == "cobble"
-    assert result["language"] == "COBOL"
-    assert result["category"] == ["CODE_CHUNK"]
-    assert (
-        result["code"]
-        == "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CBACT01C.\n"
-    )
-    assert result["loc"] == 2
-    assert result["cyclomatic_complexity"] == 0
-    assert result["additional_properties"]["project_name"] == "carddemo"
-    assert result["additional_properties"]["kind"] == "PROGRAM"
+    assert result == {
+        "id": "PROGRAM::CBACT01C",
+        "display_name": "CBACT01C",
+        "type": "PROGRAM",
+        "code": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. CBACT01C.\n",
+        "path": str(src),
+        "language": "COBOL",
+        "generator": "cobble",
+        "loc": 2,
+        "cyclomatic_complexity": 0,
+        "category": ["CODE_CHUNK"],
+        "additional_properties": {"kind": "PROGRAM", "project_name": "carddemo"},
+    }
 
 
 def test_transform_node_without_resolved_file_path() -> None:
-    node = GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, file_path=None)
+    """The canonical schema has one path field and nowhere to say why a node has
+    none, so a location with only a reason flattens to "" and reads no code."""
+    node = GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, location=_NOT_FILE_BASED)
 
     result = _transform_node(node, project_name="carddemo")
 
-    assert result["id"] == "DATASET::ACCT.MASTER"
-    assert result["path"] == ""
-    assert result["code"] == ""
-    assert result["loc"] == 0
-    assert result["category"] == ["DATABASE"]
-    assert result["language"] is None
+    assert result == {
+        "id": "DATASET::ACCT.MASTER",
+        "display_name": "ACCT.MASTER",
+        "type": "DATASET",
+        "code": "",
+        "path": "",
+        "language": None,
+        "generator": "cobble",
+        "loc": 0,
+        "cyclomatic_complexity": 0,
+        "category": ["DATABASE"],
+        "additional_properties": {"kind": "DATASET", "project_name": "carddemo"},
+    }
 
 
 def test_transform_edge_prefixes_both_endpoints() -> None:
@@ -142,7 +156,13 @@ def test_stream_nodes_yields_graphnode_per_line(tmp_path: Path) -> None:
         )
         + "\n"
         + json.dumps(
-            {"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}}
+            {
+                "id": "ACCT.MASTER",
+                "kind": "DATASET",
+                "file_path": None,
+                "file_path_reason": "not_file_based",
+                "attrs": {},
+            }
         )
         + "\n"
     )
@@ -150,8 +170,10 @@ def test_stream_nodes_yields_graphnode_per_line(tmp_path: Path) -> None:
     nodes = list(_stream_nodes(nodes_path))
 
     assert nodes == [
-        GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, file_path="a/CBACT01C.cbl"),
-        GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, file_path=None),
+        GraphNode(
+            id="CBACT01C", kind=NodeKind.PROGRAM, location=Path("a/CBACT01C.cbl")
+        ),
+        GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, location=_NOT_FILE_BASED),
     ]
 
 
@@ -262,26 +284,23 @@ def test_drain_edges_clears_accumulated_edges() -> None:
 
 
 def test_synthesize_for_node_is_thread_safe_no_duplicate_nodes() -> None:
+    """Twenty nodes in one file, resolved concurrently: the FILE node is emitted
+    once in total, not once per thread that happened to get there first."""
     fs = FileSystemSynthesizer()
-    results: list[list[dict]] = []
-    lock = threading.Lock()
 
-    def worker(i: int) -> None:
-        new_nodes = fs.synthesize_for_node(f"PROGRAM::P{i}", "shared/dir/PROG.cbl")
-        with lock:
-            results.append(new_nodes)
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        batches = list(
+            pool.map(
+                lambda i: fs.synthesize_for_node(
+                    f"PROGRAM::P{i}", "shared/dir/PROG.cbl"
+                ),
+                range(20),
+            )
+        )
 
-    threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    emitted = [node["id"] for batch in batches for node in batch]
 
-    all_new_node_ids = [n["id"] for batch in results for n in batch]
-    file_node_emissions = [
-        i for i in all_new_node_ids if i == "FILE::shared/dir/PROG.cbl"
-    ]
-    assert len(file_node_emissions) == 1  # emitted exactly once across all 20 threads
+    assert emitted.count("FILE::shared/dir/PROG.cbl") == 1
 
 
 def test_process_node_with_file_path_returns_node_plus_filesystem_nodes(
@@ -289,23 +308,33 @@ def test_process_node_with_file_path_returns_node_plus_filesystem_nodes(
 ) -> None:
     src = tmp_path / "CBACT01C.cbl"
     src.write_text("       IDENTIFICATION DIVISION.\n")
-    node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, file_path=str(src))
+    node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, location=src)
+
+    results = _process_node(node, "carddemo", FileSystemSynthesizer())
+
+    own_node = next(r for r in results if r["id"] == "PROGRAM::CBACT01C")
+
+    assert own_node["code"] == "       IDENTIFICATION DIVISION.\n"
+    assert any(r["type"] == "FILE" for r in results)
+
+
+def test_process_node_buffers_the_file_to_node_edge_on_the_synthesizer(
+    tmp_path: Path,
+) -> None:
+    """The FILE -> node MADE_OF edge is not returned with the nodes; it is
+    buffered on the synthesizer for drain_edges() to collect later."""
+    src = tmp_path / "CBACT01C.cbl"
+    src.write_text("       IDENTIFICATION DIVISION.\n")
+    node = GraphNode(id="CBACT01C", kind=NodeKind.PROGRAM, location=src)
     fs = FileSystemSynthesizer()
 
-    results = _process_node(node, "carddemo", fs)
+    _process_node(node, "carddemo", fs)
 
-    ids = {r["id"] for r in results}
-    assert "PROGRAM::CBACT01C" in ids
-    assert any(r["type"] == "FILE" for r in results)
-    own_node = next(r for r in results if r["id"] == "PROGRAM::CBACT01C")
-    assert own_node["code"] == "       IDENTIFICATION DIVISION.\n"
-    # The FILE -> node MADE_OF edge is now buffered on the synthesizer.
-    edge_targets = {e["to_id"] for e in fs.drain_edges()}
-    assert "PROGRAM::CBACT01C" in edge_targets
+    assert "PROGRAM::CBACT01C" in {e["to_id"] for e in fs.drain_edges()}
 
 
 def test_process_node_without_file_path_returns_only_the_node() -> None:
-    node = GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, file_path=None)
+    node = GraphNode(id="ACCT.MASTER", kind=NodeKind.DATASET, location=_NOT_FILE_BASED)
     fs = FileSystemSynthesizer()
 
     results = _process_node(node, "carddemo", fs)
@@ -315,28 +344,30 @@ def test_process_node_without_file_path_returns_only_the_node() -> None:
     assert fs.drain_edges() == []
 
 
-def _write_jsonl(path: Path, rows: list[dict]) -> None:
+def _write_jsonl(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
 
 
-def test_write_manifest_produces_valid_json_with_expected_shape(tmp_path: Path) -> None:
+def _exported_manifest(tmp_path: Path) -> dict:
+    """A program, the copybook it COPYs, and a dataset with no file — exported.
+
+    Shared by the two tests below so each can stay one question: the node side
+    of the manifest and the edge side are independent claims about this input.
+    """
     cbl = tmp_path / "CBACT01C.cbl"
     cbl.write_text("       IDENTIFICATION DIVISION.\n")
     cpy = tmp_path / "CVACT01Y.cpy"
     cpy.write_text("       01 ACCT-RECORD.\n")
-
-    nodes_path = tmp_path / "nodes.jsonl"
     _write_jsonl(
-        nodes_path,
+        tmp_path / "nodes.jsonl",
         [
             {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
             {"id": "CVACT01Y", "kind": "COPYBOOK", "file_path": str(cpy), "attrs": {}},
             {"id": "ACCT.MASTER", "kind": "DATASET", "file_path": None, "attrs": {}},
         ],
     )
-    edges_path = tmp_path / "edges.jsonl"
     _write_jsonl(
-        edges_path,
+        tmp_path / "edges.jsonl",
         [
             {
                 "source": "CBACT01C",
@@ -348,58 +379,67 @@ def test_write_manifest_produces_valid_json_with_expected_shape(tmp_path: Path) 
             },
         ],
     )
-    output_path = tmp_path / "manifest.json"
-
     write_manifest(
-        nodes_path, edges_path, output_path, "carddemo", chunk_size=2, max_workers=2
+        tmp_path / "nodes.jsonl",
+        tmp_path / "edges.jsonl",
+        tmp_path / "manifest.json",
+        "carddemo",
+        chunk_size=2,
+        max_workers=2,
     )
+    return json.loads((tmp_path / "manifest.json").read_text())
 
-    manifest = json.loads(output_path.read_text())
-    assert manifest["version"] == "1.0"
-    assert manifest["generator"] == "cobble"
 
-    node_ids = {n["id"] for n in manifest["nodes"]}
-    assert "PROGRAM::CBACT01C" in node_ids
-    assert "COPYBOOK::CVACT01Y" in node_ids
-    assert "DATASET::ACCT.MASTER" in node_ids
+def test_write_manifest_produces_valid_json_with_expected_shape(tmp_path: Path) -> None:
+    manifest = _exported_manifest(tmp_path)
+
+    assert (manifest["version"], manifest["generator"]) == ("1.0", "cobble")
+    assert {"PROGRAM::CBACT01C", "COPYBOOK::CVACT01Y", "DATASET::ACCT.MASTER"} <= {
+        n["id"] for n in manifest["nodes"]
+    }
     assert any(n["type"] == "FILE" for n in manifest["nodes"])
 
-    edge_pairs = {(e["from_id"], e["to_id"], e["type"]) for e in manifest["edges"]}
-    assert ("PROGRAM::CBACT01C", "COPYBOOK::CVACT01Y", "COPY") in edge_pairs
-    # FILE -> node MADE_OF edges are present for both file-backed nodes.
-    assert any(
-        e["type"] == "MADE_OF" and e["to_id"] == "PROGRAM::CBACT01C"
-        for e in manifest["edges"]
-    )
-    assert any(
-        e["type"] == "MADE_OF" and e["to_id"] == "COPYBOOK::CVACT01Y"
-        for e in manifest["edges"]
-    )
+
+def test_write_manifest_carries_extractor_edges_alongside_synthesized_ones(
+    tmp_path: Path,
+) -> None:
+    manifest = _exported_manifest(tmp_path)
+    triples = {(e["from_id"], e["to_id"], e["type"]) for e in manifest["edges"]}
+    made_of = {t for f, t, kind in triples if kind == "MADE_OF"}
+
+    assert ("PROGRAM::CBACT01C", "COPYBOOK::CVACT01Y", "COPY") in triples
+    # Both file-backed nodes hang off the FILE node they were extracted from.
+    assert {"PROGRAM::CBACT01C", "COPYBOOK::CVACT01Y"} <= made_of
 
 
 def test_write_manifest_no_duplicate_node_ids(tmp_path: Path) -> None:
+    """Two nodes extracted from one file: the FILE/DIRECTORY chain is emitted
+    once, not once per node that resolved to it."""
     cbl = tmp_path / "sub" / "CBACT01C.cbl"
     cbl.parent.mkdir()
     cbl.write_text("x\n")
-    nodes_path = tmp_path / "nodes.jsonl"
     _write_jsonl(
-        nodes_path,
+        tmp_path / "nodes.jsonl",
         [
             {"id": "CBACT01C", "kind": "PROGRAM", "file_path": str(cbl), "attrs": {}},
             {"id": "CBACT01C.STEP", "kind": "STEP", "file_path": str(cbl), "attrs": {}},
         ],
     )
-    edges_path = tmp_path / "edges.jsonl"
-    edges_path.write_text("")
+    (tmp_path / "edges.jsonl").write_text("")
     output_path = tmp_path / "manifest.json"
 
     write_manifest(
-        nodes_path, edges_path, output_path, "carddemo", chunk_size=1, max_workers=4
+        tmp_path / "nodes.jsonl",
+        tmp_path / "edges.jsonl",
+        output_path,
+        "carddemo",
+        chunk_size=1,
+        max_workers=4,
     )
 
-    manifest = json.loads(output_path.read_text())
-    node_ids = [n["id"] for n in manifest["nodes"]]
-    assert len(node_ids) == len(set(node_ids))  # no duplicates despite shared file
+    node_ids = [n["id"] for n in json.loads(output_path.read_text())["nodes"]]
+
+    assert len(node_ids) == len(set(node_ids))
 
 
 def test_write_manifest_writes_to_tmp_then_renames(tmp_path: Path) -> None:

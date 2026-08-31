@@ -4,7 +4,7 @@ fileignoreconfig:
 - filename: cobble/knowledge_graph/vendor/vis-network.min.js
   checksum: dd3402a707ffb6804943b029115f0f0430994e2932b64f7c9be64f57b0d00597
 - filename: cobble/knowledge_graph/export.py
-  checksum: 28e3165d621ff40dde0bb127f81baae406a28a3f39ec1f4e08234ef0a44ceb35
+  checksum: 7f033f62ae1ae0522d14359a4d95c213521302cf339fc75690e624293f0a30a8
 - filename: cobble/knowledge_graph/render.py
   checksum: 96dff2f3d040412d880b42663d5df279f3b05b90a077cc53faffb9a4ac8903c0
 - filename: tests/jackal/test_dsn.py
@@ -22,7 +22,7 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-07-11-corpus-config.md
   checksum: c5e3d9154a059402d1fc6035197fac87e94439bf75ffed1d2a3931a5730717d9
 - filename: cobble/knowledge_graph/merge.py
-  checksum: 74d1346118d5a02e1a8deeacde81eadee6694684dc412fe92e04564c1d99e526
+  checksum: c465897d90fef92fcad6a903c4fd0d17285e27f348d6a0afd0b2b4351327b8d1
 - filename: tests/knowledge_graph/test_graph_writer.py
   checksum: 0c7a002271338c0337220bf65f845fdc6ce78737218970c5266547e6ff2810b2
 - filename: tests/test_corpus_index.py
@@ -42,7 +42,7 @@ fileignoreconfig:
 - filename: jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
   checksum: 3d9bf96297b80850cfb0a5e4756e8af02e4624c6ffc790698c465b7f1b3bd436
 - filename: cobble/corpus_index.py
-  checksum: e9891f67a9ac022fea61fb887d9787462277efcf3a78a12338d4150bde0db7cd
+  checksum: 37b869da086c0277553b78a741508c8fb1d689cd03ba8ed56242d598de697a2c
 - filename: cobble/corpus_index_builder.py
   checksum: 4ecb54db84a73168a3ea41fa55c1238b5d1d28d494cc5c0498f9cc2dc0d123df
 - filename: cobble/diagnosis/copybooks.py
@@ -89,15 +89,21 @@ fileignoreconfig:
 - filename: cobble/knowledge_graph/node_key.py
   checksum: edaa9d8c3bc740740f3931c45d527e68cba65f8199bb4350e01136538b800390
 - filename: tests/knowledge_graph/test_layout.py
-  checksum: f7ea68a1d7ad3ac7796c1a6fc525032375390f487edaa0a27da5631de7b98d1e
+  checksum: 1a883fd53777dd0161ea60586194d6219e795ad59767627c096c4583637f7b38
 - filename: cobble/knowledge_graph/layout.py
   checksum: f7d0d0708029df646bd4a455c386673eaa89dde12c948e34d24fd98b35dccd8e
 - filename: tests/knowledge_graph/test_render_webgl.py
-  checksum: a4e2ba5c44199aa59afabc8d7f7adf2efd0521e788c1f12c076e3c9a5d18381e
+  checksum: d0db0ceb273c3eace56124d40778a12eb988148afb6c2ca4f574190180746e19
 - filename: cobble/knowledge_graph/render_webgl.py
   checksum: ff39640f95227ade26006298a9e2550158fc9e4f581432dbd9742f4701c6bf48
 - filename: cobble/knowledge_graph/vendor/graphology.umd.min.js
   checksum: ff11c0ec252b016cf1cacb35933e782b018619cf95b1bece2eeafc51bcc3b86e
 - filename: cobble/knowledge_graph/vendor/sigma.min.js
   checksum: 1fd2b19275d848253756139e1e9b22f44d858458e8a56785cc02ea3142ad6105
+- filename: cobble/sink_state.py
+  checksum: 0f72b3cd1b5f4c7a30cb9a2e54d9d4da15a6744e5358a0856eca2e584d80e870
+- filename: tests/knowledge_graph/test_merge.py
+  checksum: ebf54e2f15cf6d21d598225e62e395a51bbdd76185c3ff17869ec79da7569320
+- filename: cobble/jackal/cobol_file_graph.py
+  checksum: 129fe81349c54f296f95772360c368ce6e359ffbe83968545cbfff2eb1ddfeff
 version: "1.0"

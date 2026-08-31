@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TypeAlias
 
+from cobble.file_location import NOT_ATTEMPTED, FileLocation
+
 # What an attribute may hold: whatever the nodes/edges JSONL can carry, spelled
 # out rather than Any so a value that could never serialise is a type error here
 # instead of a json.dumps failure at the end of a corpus run. Written as a quoted
@@ -84,7 +86,18 @@ class EdgeKind(Enum):
 class GraphNode:
     id: str
     kind: NodeKind
-    file_path: str | None = None
+    location: FileLocation = NOT_ATTEMPTED
+    """Where this node is defined, or an explicit statement of why it has no file.
+
+    A ``str | None`` here for as long as there was one, which meant every
+    producer called CorpusIndex, got back a reason, and threw it away at
+    construction — the node could then only say "no file", not which of the
+    several unrelated reasons applied. Keeping the FileLocation whole is what
+    lets the reason reach nodes.jsonl; see cobble.file_location.
+
+    Defaults to NOT_ATTEMPTED rather than "unresolved": a node built with no
+    CorpusIndex in reach has not failed to resolve, it was never looked up.
+    """
     attrs: dict[str, AttrValue] = field(default_factory=dict)
 
 
