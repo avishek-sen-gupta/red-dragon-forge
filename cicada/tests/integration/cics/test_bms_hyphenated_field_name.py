@@ -64,6 +64,6 @@ def test_hyphenated_field_name_reaches_the_symbolic_copybook(tmp_path: Path) -> 
     text = (out_dir / "HYMAP.cpy").read_text().upper()
     assert "PLAINO" in text, "an ordinary-symbol field name still comes through"
     for suffix in ("L", "A", "F", "O", "I"):
-        assert f"HY-FLD{suffix}" in text, (
-            f"HY-FLD{suffix} missing: the hyphenated field name was dropped"
-        )
+        assert (
+            f"HY-FLD{suffix}" in text
+        ), f"HY-FLD{suffix} missing: the hyphenated field name was dropped"
