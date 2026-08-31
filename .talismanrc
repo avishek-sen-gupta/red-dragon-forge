@@ -81,7 +81,7 @@ fileignoreconfig:
 - filename: cobble/interpreter/cobol/cobol_expression.py
   checksum: 5fec5864a039f3c551398db5abb7727ae073bd361eb03ad57281cf020d8f6fe1
 - filename: cobble/jackal/jcl_graph.py
-  checksum: 9aef3bb51f78ce0061df701ed925389c5f51d98da3ea3d64a5117ed43118053d
+  checksum: 0468d34e6c433f62c513be8838d8ceaf6f1c9d6c6b3d829675b1fbd376ec0a9a
 - filename: tests/jackal/test_jcl_graph.py
   checksum: b5ad49c3893e54cddd3dc9e6b78f062f96c863f4e982bc77590aa79162ec3f32
 - filename: tests/jackal/test_proc_expand.py
@@ -106,4 +106,8 @@ fileignoreconfig:
   checksum: ebf54e2f15cf6d21d598225e62e395a51bbdd76185c3ff17869ec79da7569320
 - filename: cobble/jackal/cobol_file_graph.py
   checksum: 129fe81349c54f296f95772360c368ce6e359ffbe83968545cbfff2eb1ddfeff
+# False positive: the entropy detector fires on comment prose -- "IKJEFT1B
+# passes both -- one monitor" -- and not on any value. No credential here.
+- filename: cobble/jackal/tso.py
+  checksum: e0b506e323b5a0fa5140e7e2a623939fedbc139eabe51671cd99da77a46e4d01
 version: "1.0"

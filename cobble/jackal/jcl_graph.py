@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
 from cobble.interpreter.project.graph_types import (
+    AttrValue,
     EdgeKind,
     GraphEdge,
     GraphNode,
@@ -20,6 +21,7 @@ from cobble.jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unre
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
 from cobble.jackal.model import DD, DispStatus, Job, Step
+from cobble.jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
@@ -66,6 +68,71 @@ def _instream_graph(job: Job, step: Step, dd: DD, corpus_index: CorpusIndex) -> 
         attrs={"ddname": dd.ddname, "text": "\n".join(dd.in_stream)},
     )
     return ((node,), (edge,))
+
+
+def _tso_edge_attrs(step: Step, run: TsoRun) -> dict[str, AttrValue]:
+    """What the edge says about itself: which monitor ran the program, out of
+    which DD, and under which DB2 plan. An absent plan is omitted rather than
+    empty — RUN without PLAN named none, which is not the same as unknown."""
+    return {
+        "monitor": step.pgm.upper(),
+        "ddname": TSO_COMMAND_DD,
+        **({"plan": run.plan} if run.plan else {}),
+    }
+
+
+def _command_stream_runs(step: Step) -> tuple[TsoRun, ...]:
+    """Every RUN subcommand in the step's command stream, in the order the
+    monitor would execute them. Only out of SYSTSIN: a SYSIN alongside it
+    belongs to the program the monitor runs, so a RUN subcommand written there
+    is that program's data and nothing executes it."""
+    return tuple(
+        run
+        for dd in step.dds
+        if dd.ddname.upper() == TSO_COMMAND_DD
+        for run in tso_runs(dd.in_stream)
+    )
+
+
+def _one_run_per_program(runs: Sequence[TsoRun]) -> tuple[TsoRun, ...]:
+    """The first run of each distinct program, in first-sighting order.
+
+    A stream that runs the same program twice describes one relationship
+    between that step and that program, and the second sighting carries nothing
+    the first does not — the same rule _one_per_identity applies to nodes.
+    """
+    return tuple(
+        next(run for run in runs if run.program == program)
+        for program in dict.fromkeys(run.program for run in runs)
+    )
+
+
+def _tso_graph(job: Job, step: Step, corpus_index: CorpusIndex) -> Graph:
+    """The programs a TSO monitor step runs, named in its own SYSTSIN stream.
+
+    Nothing at all for any other step. For a monitor step it is the one place
+    the program doing the work is named: the step's EXEC PGM= names the
+    monitor, so without this the graph has the step running IKJEFT01 and
+    stopping there. The INSTREAM_DATA node the same DD produces carries the
+    command text verbatim, but as an opaque string no traversal can follow.
+    """
+    if not is_tso_monitor(step.pgm):
+        return ((), ())
+    runs = _one_run_per_program(_command_stream_runs(step))
+    return (
+        tuple(_node(NodeKind.PROGRAM, run.program, corpus_index) for run in runs),
+        tuple(
+            GraphEdge(
+                source=_step_id(job, step),
+                source_kind=NodeKind.STEP,
+                target=run.program,
+                target_kind=NodeKind.PROGRAM,
+                kind=EdgeKind.TSO_RUNS_PROGRAM,
+                attrs=_tso_edge_attrs(step, run),
+            )
+            for run in runs
+        ),
+    )
 
 
 def _dataset_graph(
@@ -133,9 +200,10 @@ def _step_graph(
         kind=EdgeKind.JCL_STEP_RUNS,
     )
     dd_graphs = tuple(_dd_graph(job, step, dd, corpus_index) for dd in step.dds)
+    tso_nodes, tso_edges = _tso_graph(job, step, corpus_index)
     return (
-        (step_node, program_node, *_nodes_of(dd_graphs)),
-        (runs_step, runs_program, *_edges_of(dd_graphs)),
+        (step_node, program_node, *_nodes_of(dd_graphs), *tso_nodes),
+        (runs_step, runs_program, *_edges_of(dd_graphs), *tso_edges),
     )
 
 
@@ -235,6 +303,13 @@ def extract_jcl_graph(
     attrs["text"] carries the raw in-stream lines verbatim (e.g. IDCAMS
     control statements) as an opaque string — this module does no semantic
     parsing of the content, just passes it through.
+
+    One in-stream content is read rather than passed through: the SYSTSIN of a
+    step whose program is the TSO terminal monitor. There the commands name the
+    program that actually runs, so the step gets a TSO_RUNS_PROGRAM edge to it
+    (one per distinct program, attrs carrying the monitor, the DD, and the DB2
+    plan where the subcommand named one) alongside its JCL_STEP_RUNS edge to
+    the monitor itself. Both edges are true; see cobble.jackal.tso.
 
     TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
     DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not
