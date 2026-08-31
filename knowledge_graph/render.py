@@ -33,6 +33,7 @@ _EDGE_COLORS = {
     "SENDS_MAP": "#DD8452",
     "RECEIVES_MAP": "#DD8452",
     "JCL_STEP_RUNS": "#8172B2",
+    "TSO_RUNS_PROGRAM": "#8172B2",
     "READS": "#64B5CD",
     "WRITES": "#64B5CD",
     "UPDATES": "#64B5CD",

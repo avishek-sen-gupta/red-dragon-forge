@@ -13,7 +13,8 @@ from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, Node
 from jackal.dsn import DirectDSN, InStreamDSN, dsn_key
 from jackal.jcl.parser import parse_jcl
 from jackal.jcl.proc_expand import expand_procs
-from jackal.model import DispStatus, Job
+from jackal.model import DispStatus, Job, Step
+from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 
 _DISP_TO_EDGE_KIND: dict[DispStatus, EdgeKind] = {
     DispStatus.NEW: EdgeKind.WRITES,
@@ -21,6 +22,36 @@ _DISP_TO_EDGE_KIND: dict[DispStatus, EdgeKind] = {
     DispStatus.SHR: EdgeKind.READS,
     DispStatus.MOD: EdgeKind.WRITES,
 }
+
+
+def _tso_runs_once_each(step: Step) -> list[TsoRun]:
+    """The first run of each distinct program the step's command stream names.
+
+    Only out of SYSTSIN: a SYSIN alongside it belongs to the program the monitor
+    runs, so a RUN subcommand written there is that program's data and nothing
+    executes it. A stream that runs the same program twice describes one
+    relationship between that step and that program, so it is one edge.
+    """
+    runs = [
+        run
+        for dd in step.dds
+        if dd.ddname.upper() == TSO_COMMAND_DD
+        for run in tso_runs(dd.in_stream)
+    ]
+    first: dict[str, TsoRun] = {}
+    for run in runs:
+        first.setdefault(run.program, run)
+    return list(first.values())
+
+
+def _tso_edge_attrs(step: Step, run: TsoRun) -> dict[str, str]:
+    """Which monitor ran the program, out of which DD, under which DB2 plan. An
+    absent plan is omitted rather than empty — RUN without PLAN named none,
+    which is not the same as unknown."""
+    attrs = {"monitor": step.pgm.upper(), "ddname": TSO_COMMAND_DD}
+    if run.plan:
+        attrs["plan"] = run.plan
+    return attrs
 
 
 def _job_to_graph(
@@ -94,6 +125,20 @@ def _job_to_graph(
                 )
             )
 
+        if not is_tso_monitor(step.pgm):
+            continue
+        for run in _tso_runs_once_each(step):
+            edges.append(
+                GraphEdge(
+                    source=step_id,
+                    source_kind=NodeKind.STEP,
+                    target=_add_node(NodeKind.PROGRAM, run.program),
+                    target_kind=NodeKind.PROGRAM,
+                    kind=EdgeKind.TSO_RUNS_PROGRAM,
+                    attrs=_tso_edge_attrs(step, run),
+                )
+            )
+
     return list(nodes.values()), edges
 
 
@@ -138,6 +183,13 @@ def extract_jcl_graph(
     attrs["text"] carries the raw in-stream lines verbatim (e.g. IDCAMS
     control statements) as an opaque string — this module does no semantic
     parsing of the content, just passes it through.
+
+    One in-stream content is read rather than passed through: the SYSTSIN of a
+    step whose program is the TSO terminal monitor. There the commands name the
+    program that actually runs, so the step gets a TSO_RUNS_PROGRAM edge to it
+    (one per distinct program, attrs carrying the monitor, the DD, and the DB2
+    plan where the subcommand named one) alongside its JCL_STEP_RUNS edge to the
+    monitor itself. Both edges are true; see jackal.tso.
 
     TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
     DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not
