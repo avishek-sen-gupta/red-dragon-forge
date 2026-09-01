@@ -1,0 +1,16 @@
+{
+  "include": [
+    "cobble",
+    "tests"
+  ],
+  "exclude": [
+    "vendor",
+    "proleap-bridge",
+    "jcl-bridge",
+    "out",
+    "cache",
+    "sym",
+    "tools",
+    "**/__pycache__"
+  ]
+}

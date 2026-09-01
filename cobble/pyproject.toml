@@ -1,0 +1,44 @@
+[project]
+name = "cobble"
+version = "0.1.0"
+description = "Standalone, VM-free CardDemo knowledge-graph extractor. A file-by-file port of the red-dragon-forge streaming graph pipeline that reproduces the exact 449-node / 803-edge graph via nothing but the two bridge JARs — no production Python."
+requires-python = ">=3.11"
+dependencies = [
+    "lark>=1.3.1,<2.0.0",
+    "networkx>=3.0",
+    "antlr4-python3-runtime>=4.13,<4.14",
+    "pyyaml>=6.0.3",
+    "tqdm>=4.68.4",
+]
+
+[project.scripts]
+diagnose-copybooks = "cobble.diagnosis.copybooks:cli"
+diagnose-jcl = "cobble.diagnosis.jcl:cli"
+diagnose-cobol = "cobble.diagnosis.cobol:cli"
+
+# The project is installed (editable) into the venv so that [project.scripts]
+# exists at all -- `uv run diagnose-copybooks` needs an installed entry point,
+# which `package = false` cannot produce. Editable, so the installed cobble is
+# this working tree: the ANTLR-generated parser and the generated BMS copybooks
+# are picked up where codegen writes them, not copied into site-packages.
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "cobble"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "black>=26.1.0",
+    "pyright>=1.1.408",
+    "import-linter>=2.0",
+    "python-fp-lint @ git+https://github.com/avishek-sen-gupta/python-fp-lint.git",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+pythonpath = ["."]

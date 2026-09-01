@@ -1,0 +1,411 @@
+# cobble
+
+[![reproduce-graph](https://github.com/avishek-sen-gupta/cobble/actions/workflows/reproduce.yml/badge.svg)](https://github.com/avishek-sen-gupta/cobble/actions/workflows/reproduce.yml)
+
+A **standalone, VM-free** knowledge-graph extractor for COBOL/CICS/JCL
+mainframe codebases. It is a file-by-file **port** of the streaming graph
+pipeline in the `red-dragon-forge` monorepo, lifted into its own repository to
+prove the extraction is decoupled from the RedDragon interpreter/VM. Point it
+at any corpus via a YAML config (see [Point this at your own
+codebase](#point-this-at-your-own-codebase)); the AWS **CardDemo** corpus is
+this repo's proof case, where it reproduces the **exact same 449-node /
+803-edge graph** starting from nothing but:
+
+- the **CardDemo repo** (a git submodule, the source corpus), and
+- the parsers/tools, all **built from source** (submodules + copied Maven source).
+
+Everything generated (the ANTLR CICS parser **and** the BMS symbolic copybooks)
+is **generated here from its grammar/source**. No production Python is imported at
+runtime, and nothing pre-generated is shipped: the only things tracked are
+hand-written source, grammar source (`.g4` / `.bms` / `.mac`), and submodule pins.
+
+## Reproduce from a fresh clone
+
+Requires: `git`, JDK 21+, Maven (bridges); a C++ toolchain (clang or gcc) with
+CMake + Ninja (`hlasm_export`); and [`uv`](https://docs.astral.sh/uv/).
+
+```bash
+git clone <this-repo> cobble && cd cobble
+./build.sh   # submodules -> build tools -> generate parser+copybooks -> extract -> verify 449/803
+```
+
+`make` targets:
+
+| Target | What it does |
+|--------|--------------|
+| `tools` | Build hlasm, proleap fork, and bridge JARs |
+| `codegen` | Generate the CICS parser and BMS copybooks from their grammars |
+| `build` | Extract the graph to `out/` |
+| `compare` | Identity-diff vs `reference/` (449/803) |
+| `render` | Render `out/` as an interactive HTML graph |
+| `canonical` | Export `out/` as CodeConcise's canonical `manifest.json` |
+| `test` | Run the pytest unit suite |
+| `fmt` | Format with black |
+| `lint` | Run import-linter, pyright, and python-fp-lint |
+| `clean` | Drop all generated artifacts |
+
+### Build the graph from CardDemo
+
+`./build.sh` runs the full pipeline end to end. To run it step by step instead:
+
+```bash
+git submodule update --init                        # fetch the CardDemo corpus + parser/HLASM forks
+make tools                                          # build hlasm_export + the proleap fork + both bridge JARs
+make codegen CONFIG=config/carddemo.yaml            # generate the CICS parser (ANTLR) + BMS symbolic copybooks
+make build CONFIG=config/carddemo.yaml              # extract the graph -> out/nodes.jsonl, out/edges.jsonl
+make compare                                        # identity-diff out/ vs reference/ (must be empty: 449/803)
+```
+
+`CONFIG=` is a required argument to `make build`/`make sym`/`make csd` (and transitively
+`make codegen`, which depends on `sym`); there's no default, so a bare
+`make build` fails with a clear error instead of silently assuming CardDemo.
+`build.sh` hardcodes `CONFIG=config/carddemo.yaml` for its own from-scratch
+CardDemo run.
+
+`make build` re-runs the four extractors (CALL/COPY, CICS flow, JCL, batch
+FILE-CONTROL) over `vendor/carddemo` from scratch every time; safe to re-run
+after touching any extractor code or the corpus submodule.
+
+### Canonical export
+
+```bash
+make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME=carddemo
+```
+
+This is the point of cobble: converting a COBOL/CICS/JCL corpus's graph into
+CodeConcise's canonical ingestion manifest shape (`{version, generator, nodes,
+edges}`), so a mainframe corpus cobble has analyzed can be ingested the same
+way any other language's analyzer output is. Synthesizes `FILE`/`DIRECTORY`
+nodes and `MADE_OF` edges for every node whose `file_path` resolved to a real
+file; nodes with no resolved file (`DATASET`, `COBOL_FILE`, unconfigured
+`TRANSACTION`/`CICS_FILE`, `BMS_MAP`) get no such synthesis. Streaming and
+thread-pool-parallel throughout, with bounded memory; see
+`docs/superpowers/specs/2026-07-11-canonical-export-design.md` for the full
+design, including the deliberate lack of schema validation and the known
+lossy limitation (edge `attrs` have no home in the canonical edge shape and
+are dropped).
+
+Unlike `build`/`sym`/`render`, this doesn't take a `--config`/`CONFIG=` at
+all: `NODES=`, `EDGES=`, `OUTPUT=`, and `PROJECT_NAME=` are all required
+explicit paths/values, so it can run against any `nodes.jsonl`/`edges.jsonl`
+pair regardless of which config (if any) produced them.
+
+### Point this at your own codebase
+
+`cobble.build_graph`/`cobble.generate_sym` take a required `--config <path>`
+flag; nothing about a specific corpus is hardcoded in Python. `make build`/
+`make sym` take a matching required `CONFIG=<path>` argument, which they
+simply forward. `config/carddemo.yaml` is both the config CardDemo uses and a
+template for your own corpus:
+
+```yaml
+corpus:
+  cobol_dir: path/to/your/cobol
+  cobol_globs: ["*.cbl", "*.CBL"]
+  jcl_dir: path/to/your/jcl
+  jcl_globs: ["*.jcl", "*.JCL"]
+  proclib_dirs:
+    - path/to/your/proclib
+  csd_files:               # omit or leave empty ([]) if your corpus has no CICS
+    - path/to/your/site.csd
+  copybook_dirs:
+    - path/to/your/copybooks
+  copybook_extensions: ["cpy", "txt"]   # omit unless your copybooks are named unconventionally
+  transid_rules:           # omit unless you have no CSD; see "Recover a CSD" below
+    - member_pattern: "^PGM(?P<tail>.{3})$"
+      transid_template: "T{tail}"
+  out_dir: out
+
+bms:
+  bms_dir: path/to/your/bms
+  bms_globs: ["*.bms"]     # omit unless your map sources are named unconventionally
+  macros_dir: bms-macros
+  sym_dir: sym
+```
+
+Every path is relative to wherever you invoke the script from (not to the
+config file's own location). Every field is required except `proclib_dirs`,
+`csd_files` and `transid_rules`, which default to empty if omitted, and
+`copybook_extensions` and `bms_globs`, which default to the conventions cobble
+ships with.
+
+Those last two exist because a corpus that doesn't follow file-naming
+convention would otherwise need a directory of symlinks. `cobol_globs`,
+`jcl_globs` and `bms_globs` select files by listing a directory, so they take
+globs; `copybook_extensions` is a list of bare extensions instead, because a
+`COPY X` is resolved by ProLeap as *name + extension* rather than by listing
+anything. Keep `cpy` in that list if you also generate BMS symbolic maps —
+`generate_sym` writes them as `<mapname>.cpy`. The shape these options exist for
+is a corpus where every member carries the same extension — say `.txt` — with
+programs, copybooks and maps distinguished only by directory and name.
+
+Then run:
+
+```bash
+uv run python -m cobble.build_graph --config your-corpus.yaml
+uv run python -m cobble.generate_sym --config your-corpus.yaml   # only if you have BMS maps
+uv run python -m cobble.render_graph --config your-corpus.yaml   # optional HTML visualization
+```
+
+`cobble.compare`'s golden-file check stays CardDemo-specific: it's not
+meaningful against a different corpus's output.
+
+### Recover a CSD your corpus never shipped
+
+A CSD is an export of a running CICS region, and plenty of handovers don't
+include one. With `csd_files` empty, `build_graph` skips the CICS flow stage
+entirely: no transaction gets a worklist entry, so no member is scanned for its
+`EXEC CICS LINK`/`XCTL` operands and none of those edges reach the graph.
+
+```bash
+make csd CONFIG=your-corpus.yaml    # -> <out_dir>/synthetic.csd
+```
+
+This reconstructs the `DEFINE TRANSACTION(...) PROGRAM(...)` pairs from the
+members themselves, in three tiers of evidence:
+
+| Tier | What it means |
+| --- | --- |
+| `corroborated` | `transid_rules` places a transaction id on this member *and* the member's own source names that id literally, and no other member claims it |
+| `convention` | `transid_rules` places it and nothing contradicts that |
+| `synthetic` | nothing establishes a transaction, so the member gets `UNKNOWN.<member>` |
+
+Nothing is guessed. A transaction id two members both claim demotes both and is
+reported; a literal id no member claims is reported. `transid_rules` is an
+ordered list of regex + template pairs — the first whose `member_pattern`
+matches wins, and its named groups fill `transid_template` — because how member
+names encode transaction ids is a fact about your site, not about cobble.
+
+A `synthetic` entry is a worklist entry, not a claim: it gets the member parsed
+and its `LINK`/`XCTL` edges read, and `build_graph` then suppresses the
+placeholder `TRANSACTION` node and any edge touching it, so nothing the corpus
+never stated appears in the graph. With no `transid_rules` at all every member
+goes synthetic, which still recovers every program-derived edge — you just get
+no `TRANSACTION` nodes and no `STARTS` edges.
+
+The generated file is not picked up automatically. Point `csd_files` at it to
+use it, which keeps it an explicit, reviewable input to the next run:
+
+```yaml
+  csd_files:
+    - out/synthetic.csd
+```
+
+Because it lives under `out_dir`, cleaning `out_dir` leaves `csd_files` pointing
+at a path nothing has written — so `build_graph` **refuses to start** when a
+`csd_files` entry is not a readable regular file, naming the paths, before the
+expensive phase. That used to be one guarded warning, and the run went on to
+write a graph missing the entire CICS stage. An empty `csd_files` is still a
+choice, not an error: the stage says it skipped. Content stays the guarded
+stage's business — a malformed CSD is reported per file, as before.
+
+`DEFINE FILE` entries can't be reconstructed this way, so a generated CSD also
+yields no `DEFINES_DATASET` edges and only the CICS files programs actually
+name.
+
+### Diagnose missing copybooks before parsing
+
+```bash
+uv run diagnose-copybooks --config your-corpus.yaml
+uv run diagnose-copybooks --config your-corpus.yaml --output out/missing-copybooks.json
+```
+
+Worth running first on a corpus you've never built. One `COPY` the ProLeap
+preprocessor can't resolve fails that whole member's parse, and parsing is the
+expensive phase — one JVM per member, thousands of members. This scans the
+`COPY` statements instead, so it reports in one pass what a full build would
+take hours to tell you.
+
+Resolution mirrors ProLeap's `CobolWordCopyBookFinderImpl` exactly, because a
+diagnostic that disagrees with the parser is worse than none: a candidate
+matches iff its full filename equals (ignoring case) the copy name itself or
+`<name>.<ext>` for one of the configured `copybook_extensions`, and
+`copybook_dirs` are listed non-recursively. That's stricter than the corpus
+index, which indexes every file in `copybook_dirs` whatever its extension — so
+a name can carry a real `file_path` in the graph and still fail the parse, and
+the graph's UNRESOLVED count is a lower bound on what this reports.
+
+stdout (or `--output`) is JSON and nothing else — missing name → program → the
+lines its `COPY` statements are on — so `| jq` works. The human summary goes to
+stderr. Those names are corpus identifiers; prefer `--output` to a shared
+terminal on a client corpus.
+
+`--fix DIR` writes an empty stub copybook into `DIR` for every missing name
+nobody staged, so a parse gets past it:
+
+```bash
+uv run diagnose-copybooks --config your-corpus.yaml --fix path/to/your/copybooks
+```
+
+That buys a **parse, not data**. A stubbed `COPY` declares nothing, so whatever
+records, fields or `PROCEDURE` text the real member carried is absent from the
+graph — the summary says so every time. Each stub is three fixed-format comment
+lines saying what it is, not a zero-byte file, so a stub is greppable and
+distinguishable from a truncated real member.
+
+Two things it deliberately does not do. A name already on disk under an
+*unlisted* suffix is never stubbed: the stub would resolve first and the real
+member would never be read again — that one needs a `copybook_extensions` edit.
+And `DIR` outside the config's `copybook_dirs` is **refused before anything is
+created** — nothing written, the listed dirs printed, exit code 2. ProLeap lists
+those directories and nothing else, so stubs anywhere else resolve nothing, and a
+path outside them may belong to something that is not a copybook dir at all: one
+`--fix <out_dir>/synthetic.csd` put a *directory* where `make csd` writes the
+generated CSD, and the next build came out with 32,463 nodes and zero
+`TRANSACTION`. A listed dir that does not exist yet is still created.
+
+This one is a console script rather than a `make` target: `[project.scripts]` in
+`pyproject.toml`, which is why the project is installed editable into the venv
+instead of `package = false`.
+
+### Diagnose unparseable JCL and COBOL before building
+
+```bash
+JCL_BRIDGE_JAR=jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar \
+  uv run diagnose-jcl --config your-corpus.yaml --output out/unparseable-jcl.json
+
+PROLEAP_BRIDGE_JAR=proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar \
+  uv run diagnose-cobol --config your-corpus.yaml --output out/unparseable-cobol.json
+```
+
+Two more pre-flight reports, same shape as the copybook one: `--config` names
+the corpus, JSON is the machine channel, the human summary is logged to stderr
+with counts only, and the exit status is 0 whatever they find. They report; they
+don't gate.
+
+`diagnose-jcl` runs the build's own JCL parse phase and stops. It prints the four
+numbers that say where a corpus stands — members parsed, members failed, steps,
+DDs — which are the columns of the table in
+`docs/corpus-onboarding-blockers.md`. The steps and DDs are the regression check:
+a grammar change that recovers members has to leave every member that already
+parsed with the counts it already had, and that delta is readable off two runs.
+
+`diagnose-cobol` does the same for the COBOL side, and matters more, because the
+build's COBOL phase dies on the *first* program the bridge rejects — thousands of
+subprocesses and tens of minutes to learn one program's name. This one keeps
+going and groups the rejections by **signature**: the parser's own exception
+line with the quoted source text and the line and column numbers stripped out.
+227 programs failing one way is a single fix; 227 failing forty ways is a survey,
+and the summary tells you which you have.
+
+That stripping is also what makes grouping loggable. A ProLeap message quotes the
+bytes it choked on, and a missing-copybook error names the copybook and the
+directories searched, so the full messages stay in the JSON and only the stripped
+signature is logged. Neither tool ever logs a member name.
+
+Both take `--max-workers` (default 4, matching a build). `diagnose-cobol` writes
+no cache: each ASG is written and unlinked at once, so peak disk is one ASG per
+worker rather than the gigabytes a full corpus of them would be.
+
+### Render the HTML visualization
+
+```bash
+make render CONFIG=config/carddemo.yaml   # reads <out_dir>/{nodes,edges}.jsonl -> writes <out_dir>/graph.html
+```
+
+`CONFIG=` is required here too (same as `build`/`sym`): `out_dir` comes from
+the config's `corpus.out_dir` field, so `render_graph.py` looks in the same
+place `build_graph.py` wrote to. `<out_dir>/graph.html` is a single
+self-contained file (vis-network is vendored at
+`cobble/knowledge_graph/vendor/vis-network.min.js` and inlined; no server,
+no CDN, no network access needed). Open it directly in a browser. It has
+checkboxes to filter by node/edge kind, a search box that highlights matching
+node labels, and click-to-highlight-neighbors on any node. Requires
+`<out_dir>/nodes.jsonl` / `<out_dir>/edges.jsonl` to already exist (i.e. run `make build`
+first).
+
+### Unit tests
+
+```bash
+make test   # uv run pytest, no JARs, no corpus, runs in well under a second
+```
+
+Unlike `make verify` (one big end-to-end golden-file check over the real
+CardDemo corpus, needing JDK/Maven/CMake), `tests/` unit-tests cobble's pure
+modules in isolation (grammars, dataclass transforms, graph merging) with
+hand-built inputs, giving localized signal on which piece broke rather than
+just "449/803 doesn't match." Coverage is still partial; see `tests/` for
+what's covered so far.
+
+### Formatting, linting, and pre-commit hooks
+
+```bash
+make fmt    # uv run python -m black .
+make lint   # uv run lint-imports && uv run pyright && uv run python -m python_fp_lint check cobble/
+```
+
+`.pre-commit-config.yaml` wires these up (plus the terminology guard and
+`make test`) to run automatically on every commit: `black` auto-formats and
+re-stages, `pyright` and `python-fp-lint` report warnings without blocking
+the commit, and `import-linter` / the unit tests block it on failure.
+Architecture contracts live in `.importlinter` (e.g. `interpreter` may not
+import `cics`/`jackal`/`knowledge_graph`/`bms_copybook_gen`, and those four
+consumers may not import each other).
+
+## What's here
+
+| Path | What |
+|------|------|
+| `cobble/` | The ported extraction code, plus this repo's own driver scripts (see below); everything lives under one package so there's no Python at the repo root. Extraction modules are byte-for-byte / import-rewired from their `red-dragon-forge` counterpart (imports → `cobble.*`), with the two documented exceptions below (`cics/verb_source_asg.py`, `cics/flow_map.py`). Imports **no** production Python: only `cobble.*`, stdlib, and pip (`lark`, `networkx`, `pyyaml`, `antlr4-python3-runtime`). Includes `cobble/bms_copybook_gen/` (the copybook generator, run as `python -m cobble.bms_copybook_gen`). |
+| `cobble/cics/cics_grammar/*.g4` | The ANTLR grammar **source** (`CICSzLexer.g4`, `CICSzParser.g4`). `make codegen` generates the `CICSz*.py` parser from these; the generated `.py` is gitignored, never shipped. |
+| `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
+| `cobble/cics/flow_map.py` | Ported, and the one other module that diverges — in how the pass *reports*, not in what it emits. It returns what it read and what it could not (production reports into a list the caller hands down), and it says where it is: a bar over its per-program loop, which is where a corpus run spends its time, and each member's name at DEBUG before it is read. Every node and edge, and the order they reach the sink, are unchanged. |
+| `cobble/build_graph.py` / `cobble/compare.py` | This repo's own driver scripts (not ported from `red-dragon-forge`): extract the graph → `out/` (`python -m cobble.build_graph --config <path>`); identity-diff `out/` vs `reference/` (`python -m cobble.compare`). |
+| `cobble/corpus_config.py` | `CorpusConfig`/`BmsConfig` dataclasses + YAML loading; `cobble.build_graph`/`cobble.generate_sym` read the corpus location/layout from here instead of a hardcoded CardDemo path. |
+| `config/carddemo.yaml` | The tracked config `make build`/`make sym` use; captures CardDemo's layout in `corpus_config.py`'s schema. Copy this file as a starting point to point cobble at a different corpus. |
+| `cobble/corpus_index.py` / `cobble/file_location.py` | `CorpusIndex` resolves every `(NodeKind, id)` to a `FileLocation` (a real `Path`, or a `NoFileLocation` explaining why not: not file-based, no CSD/definition source, or genuinely unresolved) once per run, from the same `CorpusConfig`. Every extractor and `GraphWriter` resolve a given node identically regardless of call order, which is what lets `GraphWriter` stream nodes keep-first with no merge step. |
+| `cobble/render_graph.py` | Render `<out_dir>/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `<out_dir>/graph.html` (`python -m cobble.render_graph --config <path>`; `out_dir` comes from the config's `corpus.out_dir` field. `cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
+| `cobble/canonical_export.py` | Export a nodes/edges.jsonl pair as CodeConcise's canonical `manifest.json` (`python -m cobble.canonical_export --nodes <path> --edges <path> --output <path> --project-name <name>`; all four required, no config-derived defaults. The streaming/thread-pool/bounded-memory transform pipeline itself lives in `cobble/knowledge_graph/canonical_export.py`). |
+| `tests/` | The pytest unit suite (`make test`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
+| `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
+| `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
+| `reference/` | The 449/803 identity golden (copied from the production fitness golden, the *target*, not an input to the extraction). |
+| `proleap-bridge/` | The COBOL→JSON ASG bridge (copied Maven source). Depends on the **forked** `proleap-cobol-parser` (`io.github.uwol:proleap-cobol-parser:4.0.0`, **not on Maven Central**) vendored as the submodule `proleap-bridge/proleap-cobol-parser`, built (`mvn install`) *before* the bridge. |
+| `jcl-bridge/` | The JCL→JSON bridge (copied Maven source, self-contained). |
+| `bms-macros/` | The hand-written `DFHMSD`/`DFHMDI`/`DFHMDF` prototype macros (assembler SYSLIB for `hlasm_export`). Source, not generated. |
+| `vendor/carddemo/` | The CardDemo corpus, a git **submodule** (includes `app/bms`, the BMS map sources). |
+| `vendor/che-che4z-lsp-for-hlasm/` | The HLASM language-server **fork** (submodule); `hlasm_export` is built from it (CMake + Ninja, OS-agnostic `build.sh`: CMake picks the system toolchain). |
+| `.github/workflows/reproduce.yml` | CI: build everything from source on `ubuntu-latest` and verify 449/803. |
+
+## Submodules (all pinned)
+
+| Path | Repo |
+|------|------|
+| `vendor/carddemo` | `aws-mainframe-modernization-carddemo` (the corpus) |
+| `vendor/che-che4z-lsp-for-hlasm` | forked che-che4z HLASM LSP (builds `hlasm_export`) |
+| `proleap-bridge/proleap-cobol-parser` | forked `proleap-cobol-parser` (builds `4.0.0`) |
+
+## Invariant
+
+`cobble/**` imports zero live production Python (no bare `interpreter` / `cics` /
+`jackal` / `knowledge_graph` absolute imports; only `cobble.*`):
+
+```bash
+grep -rE '^\s*(import|from)\s+(interpreter|cics|jackal|knowledge_graph)\b' cobble
+# (no output)
+```
+
+The only coupling to RedDragon is (a) the two bridge JARs and `hlasm_export`,
+invoked as subprocesses, all **built from source**, and (b) the one seam
+(`cobble/cics/verb_source_asg.py`). The graph identity (449/803) is reached by
+independent Python that shells out to those tools: the decoupling, proven from a
+repo that contains no production interpreter code and ships no generated
+artifacts.
+
+## Acknowledgments
+
+The JCL grammar (`jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4` /
+`JCLParser.g4`) and the CICS `EXEC CICS` grammar
+(`cobble/cics/cics_grammar/CICSzLexer.g4` / `CICSzParser.g4`, adapted for the
+Python3 ANTLR runtime) are both vendored from **Craig Schneiderwent's
+[mapa](https://github.com/cschneid-the-elder/mapa)** project; thank you for
+making these available. See `jcl-bridge/PROVENANCE.md` for the exact vendored
+commit/files, and `jcl-bridge/LICENSE` for mapa's MIT license text.
+
+## License
+
+MIT; see [LICENSE.md](LICENSE.md). Project rationale in [PHILOSOPHY.md](PHILOSOPHY.md).
+The vendored `cobble/knowledge_graph/vendor/vis-network.min.js` ships under its
+own license: see `cobble/knowledge_graph/vendor/VIS_NETWORK_LICENSE.md`.
+The vendored mapa grammars (see Acknowledgments above) ship under their own
+MIT license: see `jcl-bridge/LICENSE`.

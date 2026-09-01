@@ -1,0 +1,65 @@
+[importlinter]
+root_packages =
+    cobble
+
+[importlinter:contract:interpreter-is-leaf]
+name = interpreter must not import other cobble modules
+type = forbidden
+source_modules =
+    cobble.interpreter
+forbidden_modules =
+    cobble.cics
+    cobble.jackal
+    cobble.knowledge_graph
+    cobble.bms_copybook_gen
+    cobble.sql
+
+[importlinter:contract:bms-copybook-gen-is-leaf]
+name = bms_copybook_gen must not import other cobble modules
+type = forbidden
+source_modules =
+    cobble.bms_copybook_gen
+forbidden_modules =
+    cobble.cics
+    cobble.interpreter
+    cobble.jackal
+    cobble.knowledge_graph
+    cobble.sql
+
+# cobble.sql holds one coprocessor's parse-time DialectParser. Like the
+# interpreter it is a leaf: cobble.cics imports it to register the parser, never
+# the other way round. Deliberately absent from consumer-independence, which
+# governs the three graph consumers.
+[importlinter:contract:sql-is-leaf]
+name = sql must not import other cobble modules
+type = forbidden
+source_modules =
+    cobble.sql
+forbidden_modules =
+    cobble.bms_copybook_gen
+    cobble.cics
+    cobble.interpreter
+    cobble.jackal
+    cobble.knowledge_graph
+
+[importlinter:contract:consumer-independence]
+name = cics, jackal, and knowledge_graph must not import each other
+type = independence
+modules =
+    cobble.cics
+    cobble.jackal
+    cobble.knowledge_graph
+
+# The split of corpus_index into lookup (here) plus corpus_index_builder exists
+# so this holds: populating the index needs the JCL and CSD parsers, and both of
+# those packages consume the index. With both halves in one module that was a
+# real cycle, held apart only by the consumers' TYPE_CHECKING guards.
+[importlinter:contract:corpus-index-is-lookup-only]
+name = corpus_index must not import the graph consumers
+type = forbidden
+source_modules =
+    cobble.corpus_index
+forbidden_modules =
+    cobble.cics
+    cobble.jackal
+    cobble.knowledge_graph
