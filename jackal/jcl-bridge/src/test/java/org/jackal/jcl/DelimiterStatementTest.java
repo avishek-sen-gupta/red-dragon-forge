@@ -195,9 +195,12 @@ public class DelimiterStatementTest {
      * reported as an error: {@code ddStatement} closes fine with zero
      * ddParmASTERISK_DATA, and {@code EOF} is optional in {@code execJCL}, so the
      * parse simply STOPPED at the terminator and returned the prefix it had. Every
-     * step after the empty in-stream block vanished silently. On the production
-     * corpus that cost 126 of 860 members 745 steps between them, one member
-     * losing 69 of its 74.
+     * step after the empty in-stream block vanished silently. Measured on the
+     * production corpus by running the serializer under both grammars: 26 of 860
+     * members gained 510 steps between them, none lost any, one member going from
+     * 5 steps to 74. Instrumenting the token stream puts the same 29 members --
+     * the 26 plus three whose leftover began after their last step -- at 7218
+     * source lines consumed by nothing, with zero syntax errors reported.
      */
     @Test
     public void anEmptyInStreamDataBlockDoesNotEndTheJob() {
