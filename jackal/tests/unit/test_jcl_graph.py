@@ -312,3 +312,48 @@ def test_extract_jcl_graph_without_proclib_dirs_is_unchanged():
         if e.kind == EdgeKind.JCL_STEP_RUNS and e.source.startswith("PIPE.")
     }
     assert step_to_prog["PIPE.STEP1"] == "UPCASE"
+
+
+_ONE_AMPERSAND_TEMP_JCL = """//TEMPJOB JOB 'demo'
+//STEP1 EXEC PGM=WRITER
+//WORKDD DD DSN=&WORK,DISP=(NEW,PASS)
+//KEEPDD DD DSN=REAL.DATA,DISP=SHR
+//STEP2 EXEC PGM=READER
+//WORKDD DD DSN=&&WORK,DISP=SHR
+"""
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_one_ampersand_temp_dsn_is_not_a_dataset_node():
+    """z/OS reads DSN=&WORK as DSN=&&WORK when WORK is no defined symbol, and
+    real JCL writes the temp with one ampersand where it is created and two
+    where it is read back. Both spellings name a file that lives and dies inside
+    the job, so neither is a cross-job DATASET identity."""
+    nodes, _edges = extract_jcl_graph(_ONE_AMPERSAND_TEMP_JCL)
+    assert [n.id for n in nodes if n.kind == NodeKind.DATASET] == ["REAL.DATA"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_one_ampersand_temp_does_not_cost_the_member_its_graph():
+    """The DSN used to reach dsn_key as an unresolved Symbol, which raises — so
+    one such DD lost every node and edge the member had, not just its own."""
+    nodes, edges = extract_jcl_graph(_ONE_AMPERSAND_TEMP_JCL)
+    assert {n.id for n in nodes if n.kind == NodeKind.STEP} == {
+        "TEMPJOB.STEP1",
+        "TEMPJOB.STEP2",
+    }
+    assert any(
+        e.kind == EdgeKind.READS and e.target == "REAL.DATA" for e in edges
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_symbol_glued_to_literal_text_is_still_reported():
+    """An unbound parameter is not a work file. Reading &HLQ..DATA as one would
+    invent a dataset, so it stays the error it was."""
+    with pytest.raises(ValueError, match="Unresolved symbol '&HLQ'"):
+        extract_jcl_graph(
+            "//GLUEJOB JOB 'demo'\n"
+            "//STEP1 EXEC PGM=IEFBR14\n"
+            "//GLUEDD DD DSN=&HLQ..DATA,DISP=SHR\n"
+        )

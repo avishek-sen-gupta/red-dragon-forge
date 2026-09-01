@@ -10,7 +10,7 @@ from typing import Sequence
 
 from interpreter.project.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
-from jackal.dsn import DirectDSN, InStreamDSN, dsn_key
+from jackal.dsn import DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
 from jackal.jcl.parser import parse_jcl
 from jackal.jcl.proc_expand import expand_procs
 from jackal.model import DispStatus, Job, Step
@@ -111,9 +111,14 @@ def _job_to_graph(
                     )
                 )
                 continue
-            if dd.sysout or not isinstance(dd.dsn, DirectDSN):
+            # temp_if_unresolved first: a DSN that is one lone symbol nothing
+            # defines is the temporary dataset z/OS reads it as, not a dataset
+            # name with an unresolved symbol in it. Without this, dsn_key raises
+            # on it and the whole member yields no graph at all.
+            dsn = temp_if_unresolved(dd.dsn)
+            if dd.sysout or not isinstance(dsn, DirectDSN):
                 continue
-            dataset_id = _add_node(NodeKind.DATASET, dsn_key(dd.dsn).upper())
+            dataset_id = _add_node(NodeKind.DATASET, dsn_key(dsn).upper())
             edges.append(
                 GraphEdge(
                     source=step_id,
@@ -193,7 +198,11 @@ def extract_jcl_graph(
 
     TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
     DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not
-    represented as nodes at all.
+    represented as nodes at all. A DSN that is one whole symbol nothing defines
+    counts as a TempRef too: z/OS reads DSN=&NAME as DSN=&&NAME when NAME is no
+    defined symbol, and real JCL writes the temp with one ampersand in the step
+    that creates it and two in the step that reads it back. See
+    jackal.dsn.temp_if_unresolved for where that reading stops.
 
     proclib_dirs (default empty — no-op) resolves and inlines EXEC PROC=
     calls via expand_procs before building the graph. An expanded step's

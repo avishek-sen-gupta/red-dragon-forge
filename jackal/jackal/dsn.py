@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from jackal.value_parts import Value, resolve
+from jackal.value_parts import Symbol, Value, resolve
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,29 @@ class NoDSN:
 
 
 type DSN = DirectDSN | TempRef | BackwardRef | InStreamDSN | DummyDSN | NoDSN
+
+# A temporary dataset name is a data set name qualifier: at most 8 characters.
+_MAX_TEMP_NAME = 8
+
+
+def temp_if_unresolved(dsn: DSN) -> DSN:
+    """Re-read a DSN that is one lone unresolved symbol as a temporary dataset.
+
+    z/OS reads ``DSN=&NAME`` as ``DSN=&&NAME`` when NAME is no defined symbol,
+    so one ampersand and two name the same temporary file, and real JCL relies
+    on it: a job writes ``DSN=&WORK`` in the step that creates the file and
+    ``DSN=&&WORK`` in the step that reads it back.
+
+    Only a whole DSN that is a single symbol short enough to be a temp name
+    qualifies. A longer symbol, or a symbol glued to literal text
+    (``&HLQ..DATA``), is an unbound parameter rather than a temp file, and
+    stays what it is so :func:`dsn_key` still reports it.
+    """
+    match dsn:
+        case DirectDSN(name=(Symbol(name=n),)) if len(n) <= _MAX_TEMP_NAME:
+            return TempRef(f"&{n}")
+        case _:
+            return dsn
 
 
 def dsn_key(dsn: DSN) -> str:

@@ -136,3 +136,40 @@ def test_job_steps_flatten_in_order_around_a_proc_call():
     job = Job(name="J", steps=(before, proc_call, after))
     result = expand_procs(job, proclib_dirs=[_FIXTURES])
     assert [s.name for s in result.steps] == ["STEP01", "STEP05R.PRC001", "STEP10"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lone_unbound_symbol_dsn_in_a_proc_is_a_temp():
+    """Inside a PROC exactly as outside one: DSN=&WORK with nothing binding WORK
+    is the temporary dataset z/OS reads it as, not an unbound parameter."""
+    from jackal.dsn import TempRef
+
+    step = _step(
+        "STEP10", "WORKPROC", proc_parms={"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")}
+    )
+    job = Job(name="TEMPJOB", steps=(step,))
+    result = expand_procs(job, proclib_dirs=[_FIXTURES])
+    dds = {dd.ddname: dd.dsn for dd in result.steps[0].dds}
+    assert dds["WORKDD"] == TempRef("&WORK")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_bound_symbol_dsn_in_the_same_proc_still_substitutes():
+    """The temp reading is the exception, not the rule — a symbol the caller did
+    pass is substituted as before."""
+    step = _step(
+        "STEP10", "WORKPROC", proc_parms={"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")}
+    )
+    job = Job(name="TEMPJOB", steps=(step,))
+    result = expand_procs(job, proclib_dirs=[_FIXTURES])
+    dds = {dd.ddname: dd.dsn for dd in result.steps[0].dds}
+    assert dds["KEEPDD"] == DirectDSN(literal("AWS.M2.CARDDEMO.CNTL"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_unbound_symbol_glued_to_literal_text_is_still_an_error():
+    """&HLQ..DATA is a parameter the caller forgot to pass. Reading it as a work
+    file would invent a dataset, so PROC expansion still refuses it."""
+    job = Job(name="GLUEJOB", steps=(_step("STEP20", "GLUEPROC"),))
+    with pytest.raises(ProcExpansionError, match="Unbound symbol '&HLQ'"):
+        expand_procs(job, proclib_dirs=[_FIXTURES])
