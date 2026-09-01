@@ -94,9 +94,37 @@ lost had the helper gone top-level. `build_graph` and `corpus_index` reach in.
 
 latin-1 is the byte-identity codec: defined for all 256 byte values, so it never
 raises and never loses a character. One byte stays one character, so fixed-format
-column positions hold and `PIC` lengths are unaffected. The bridge is safe too:
-Python's `subprocess` encodes the `str` to UTF-8 for stdin and Java decodes it
-back with `StandardCharsets.UTF_8`, so `U+00A6` round-trips as one Java `char`.
+column positions hold and `PIC` lengths are unaffected.
+
+**The wire to the bridge has to use the same codec, and for a while it did not.**
+An earlier version of this paragraph said the bridge was safe because "Python's
+`subprocess` encodes the `str` to UTF-8 for stdin and Java decodes it back with
+`StandardCharsets.UTF_8`". That was true when it was written and stopped being
+true when the bridge was resynced with red-dragon: `Main.SOURCE_CHARSET` is now
+`ISO_8859_1`, `Main` no longer decodes stdin at all (`System.in.readAllBytes`
+straight into the temp file), and ProLeap reads that temp file as ISO-8859-1. So
+a UTF-8 wire turned one `0xA6` into `0xC2 0xA6`, ProLeap saw two characters where
+the member had one, and every column right of it shifted:
+
+```
+member line: terminating period in column 72
+as ProLeap read it: column 73 -- outside the code area, truncated away
+```
+
+The entry then never terminates and the next line's `FILLER` arrives as
+`extraneous input 'FILLER'`, a syntax error hundreds of lines from anything
+malformed. It cost the one member with code-area high bytes, and because
+`AstStore.parse_all` re-raises out of `future.result()`, that one member aborted
+the whole corpus run.
+
+`RealSubprocessRunner` now names latin-1 as the subprocess `encoding` rather than
+asking for text mode and letting the locale choose, so the wire is byte-identity
+both ways, matching `decode_source` on this side and `SOURCE_CHARSET` on the
+bridge's. The return path needed it just as
+much: `Main` pins its stdout to `SOURCE_CHARSET`, so a high byte in a `VALUE`
+literal comes back as a raw `0xA6`, which a locale-encoded read rejects outright.
+The locale default round-tripped only by coincidence, on the days both ends
+happened to be UTF-8.
 
 **One site deliberately left strict.** `cobble/jackal/jcl/proc_expand.py:116`
 (`parse_proc(proc_path.read_text())`) reads PROC members. Fixing it would cost
