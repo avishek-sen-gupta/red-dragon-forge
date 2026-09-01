@@ -126,6 +126,39 @@ def _read_one_csd(csd_file: Path) -> _CsdRead:
         return _CsdRead(failures=(f"CSD {csd_file.name}: {exc}",))
 
 
+def _unusable_csd_paths(config: CorpusConfig) -> tuple[Path, ...]:
+    """Every configured CSD that is not a regular file, which no read can recover.
+
+    Content is the guarded stage's business: a CSD that parses to nothing is a
+    corpus problem, reported per file. A path that is not a file is the CONFIG
+    being wrong, and it costs the whole CICS flow stage -- every TRANSACTION node,
+    every STARTS edge, and the parse of every CICS member, because the worklist is
+    the transaction map's values.
+
+    Empty csd_files is not here: a corpus with no CICS configures none, and the
+    stage says it skipped.
+    """
+    return tuple(path for path in config.csd_files if not path.is_file())
+
+
+def _unusable_csd_message(unusable: Sequence[Path]) -> str:
+    """Why the run is refusing to start, and the two ways out.
+
+    A generated CSD lives under out_dir, so cleaning out_dir leaves the config
+    pointing at nothing -- and a directory can appear at that path from any tool
+    told to write there. Both read the same from here.
+    """
+    return "\n".join(
+        (
+            f"{len(unusable)} configured csd_files entr(y/ies) not a readable file:",
+            *(f"  - {path}" for path in unusable),
+            "The whole CICS flow stage reads these, so the graph would have no",
+            "TRANSACTION nodes and no CICS member parsed at all. Regenerate a",
+            "synthetic CSD (`make csd CONFIG=<config>`), or correct csd_files.",
+        )
+    )
+
+
 def _load_transid_to_program(config: CorpusConfig) -> _CsdRead:
     """Merge every configured CSD's transaction map, later files winning."""
     reads = tuple(map(_read_one_csd, config.csd_files))
@@ -707,18 +740,15 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    # Everything this run says is a log record on stderr, which is where the tqdm
-    # bars already are -- so the per-stage counts and the bar each followed
-    # interleave in the order they happened, with no stdout buffering to work
-    # around. stdout stays empty.
-    configure_cli_logging()
-    config = load_corpus_config(_parse_args().config)
-    # Both JCL passes read every member, so the bridge runs once per member here
-    # rather than once per pass. The store keeps only the bridge's JSON, on disk,
-    # and deserializes one Job at a time -- a resident Job per member does not
-    # scale to a corpus. Its cache dies with the store, so no run can be served
-    # output from a different grammar.
+def _corpus_failures(config: CorpusConfig) -> tuple[str, ...]:
+    """One full pass over the corpus, returning everything it skipped.
+
+    Both JCL passes read every member, so the bridge runs once per member here
+    rather than once per pass. The store keeps only the bridge's JSON, on disk,
+    and deserializes one Job at a time -- a resident Job per member does not
+    scale to a corpus. Its cache dies with the store, so no run can be served
+    output from a different grammar.
+    """
     with temp_jcl_store() as store:
         store.parse_all(
             matching_files(config.jcl_dir, config.jcl_globs), bridge_parser()
@@ -728,11 +758,27 @@ def main() -> int:
         # Members the index skipped come first: everything in them is absent from
         # the index, so they belong in the same report as the graph-building
         # failures.
-        failures = (
+        return (
             corpus_index.failures
             + csd.failures
             + _extract_all(config, corpus_index, csd, store)
         )
+
+
+def main() -> int:
+    # Everything this run says is a log record on stderr, which is where the tqdm
+    # bars already are -- so the per-stage counts and the bar each followed
+    # interleave in the order they happened, with no stdout buffering to work
+    # around. stdout stays empty.
+    configure_cli_logging()
+    config = load_corpus_config(_parse_args().config)
+    # Before the expensive phase, because this one cannot be recovered from later:
+    # read as a per-file failure it was one warning in a report under a graph that
+    # otherwise looked finished.
+    unusable_csd = _unusable_csd_paths(config)
+    if unusable_csd:
+        sys.exit(_unusable_csd_message(unusable_csd))
+    failures = _corpus_failures(config)
     _report_merged(config)
     _report_failures(failures)
     return 0

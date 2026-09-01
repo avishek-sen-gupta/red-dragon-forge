@@ -75,7 +75,7 @@ fileignoreconfig:
 - filename: tests/cics/test_flow_map.py
   checksum: 6b551e3f2a913db95710ee5a3d3ddb8d391539889859100deffc88777ae88a5d
 - filename: cobble/build_graph.py
-  checksum: 49b4113be9082b13c281e5b437e1a552a3f1858c063d351f2ff2428e57e39e34
+  checksum: f40da215acd253c6e596cc3e6b5a5ff95652ca5652fa53547226f5c88f0f3c1e
 - filename: cobble/cics/flow_map.py
   checksum: f17c784dea9e45112ad8b3bfcc0ba3a1bb64bb5f17cd6074275c64b00e289073
 - filename: cobble/interpreter/cobol/cobol_expression.py
