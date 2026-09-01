@@ -225,9 +225,10 @@ STUB_TEXT = (
 class StubWrite:
     """What --fix did.
 
-    ``shadowed`` is the names it deliberately did NOT write, and ``configured``
-    says whether the directory it wrote into is one ProLeap will look in at all --
-    both are reasons a run that wrote files may still have fixed nothing.
+    ``shadowed`` is the names it deliberately did NOT write. ``configured`` says
+    whether the target is a directory ProLeap will look in at all; when it is
+    False nothing was written, because a stub anywhere else is a file nobody reads
+    and the path may belong to something that is not a copybook dir.
     """
 
     written: tuple[Path, ...] = ()
@@ -256,10 +257,19 @@ def write_stubs(
     A name that IS on disk under a suffix copybook_extensions does not list is
     skipped: a stub beside the real member would resolve first and the real member
     would never be read again. That name needs a config edit, not a file.
+
+    A target the config does not list is refused BEFORE anything is created. That
+    used to be written and then flagged, which is too late twice over: the stubs
+    are files nobody reads, and the path may be one another tool owns -- `--fix
+    <out_dir>/synthetic.csd` put a directory where the generated CSD goes and cost
+    the next build every TRANSACTION node. Comparison is on resolved paths, so a
+    listed dir reached by a different spelling is still listed.
     """
     shadowed = _suffixes_on_disk(tuple(missing), config.copybook_dirs)
-    target.mkdir(parents=True, exist_ok=True)
     configured = frozenset(directory.resolve() for directory in config.copybook_dirs)
+    if target.resolve() not in configured:
+        return StubWrite(shadowed=tuple(sorted(shadowed)), configured=False)
+    target.mkdir(parents=True, exist_ok=True)
     return StubWrite(
         written=tuple(
             _write_stub(target, config.copybook_extensions, name)
@@ -267,7 +277,6 @@ def write_stubs(
             if name not in shadowed
         ),
         shadowed=tuple(sorted(shadowed)),
-        configured=target.resolve() in configured,
     )
 
 
@@ -282,22 +291,33 @@ def _shadowed_lines(fix: StubWrite) -> tuple[str, ...]:
     )
 
 
-def _unconfigured_lines(fix: StubWrite, target: Path) -> tuple[str, ...]:
-    if fix.configured:
-        return ()
+def _refusal_lines(target: Path, copybook_dirs: Sequence[Path]) -> tuple[str, ...]:
+    """Why nothing was written, and where it could have gone.
+
+    The dirs are listed because the way here is a mistyped path, and the config
+    already names every target that would have worked.
+    """
     return (
-        f"  !! {target} is NOT one of this config's copybook_dirs. ProLeap lists "
-        f"those directories and nothing else,",
-        "  !! so these stubs resolve nothing until the directory is added to the "
-        "config.",
+        RULE,
+        f"  !! wrote nothing: {target} is NOT one of this config's copybook_dirs.",
+        "  !! ProLeap lists those directories and nothing else, so stubs anywhere "
+        "else resolve nothing",
+        "  !! -- and a path outside them may belong to something that is not a "
+        "copybook dir at all.",
+        "  Listed copybook_dirs:",
+        *(f"    - {directory}" for directory in copybook_dirs),
+        RULE,
     )
 
 
-def _fix_lines(fix: StubWrite, target: Path) -> tuple[str, ...]:
+def _fix_lines(
+    fix: StubWrite, target: Path, copybook_dirs: Sequence[Path]
+) -> tuple[str, ...]:
+    if not fix.configured:
+        return _refusal_lines(target, copybook_dirs)
     return (
         RULE,
         f"  Wrote {len(fix.written)} empty stub(s) to {target}",
-        *_unconfigured_lines(fix, target),
         *_shadowed_lines(fix),
         "  !! A stubbed COPY parses but declares nothing: the records, fields and "
         "any PROCEDURE",
@@ -417,9 +437,9 @@ def _report(
     logger.info("\n%s", "\n".join(_report_lines(missing, config, results)))
 
 
-def _report_fix(fix: StubWrite, target: Path) -> None:
+def _report_fix(fix: StubWrite, target: Path, config: CorpusConfig) -> None:
     """What --fix did, logged with the summary, and without naming a copybook."""
-    logger.info("\n%s", "\n".join(_fix_lines(fix, target)))
+    logger.info("\n%s", "\n".join(_fix_lines(fix, target, config.copybook_dirs)))
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -460,9 +480,13 @@ def main(argv: Sequence[str] = (), scan: Scanner = scan_members) -> int:
     # it is diffed between runs to see whether a fix moved the number.
     emit_json(json.dumps(missing, indent=2), args)
     _report(missing, config, results)
-    if args.fix:
-        _report_fix(write_stubs(missing, config, args.fix), args.fix)
-    return 0
+    if not args.fix:
+        return 0
+    fix = write_stubs(missing, config, args.fix)
+    _report_fix(fix, args.fix, config)
+    # A refused --fix exits non-zero: the run fixed nothing, and what follows it is
+    # a build that would silently lack whatever the mistyped target stood in for.
+    return 0 if fix.configured else 2
 
 
 def cli() -> int:

@@ -14,6 +14,8 @@ from cobble.build_graph import (
     _load_transid_to_program,
     _report_failures,
     _tally_lines,
+    _unusable_csd_message,
+    _unusable_csd_paths,
     _without_synthetic_transactions,
 )
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
@@ -75,6 +77,58 @@ def test_a_good_csd_still_loads_alongside_a_broken_one(tmp_path: Path) -> None:
 
     assert dict(read.transid_to_program) == {"CC00": "COSGN00C"}
     assert len(read.failures) == 1
+
+
+# ── a configured CSD that is not a file is a config error, not a member ──
+
+
+def test_a_csd_path_that_is_a_directory_is_unusable(tmp_path: Path) -> None:
+    """The whole CICS flow stage hangs off csd_files, and a path that is not a file
+    cannot be a member the corpus handed over badly -- it is the config being wrong.
+
+    Guarded as a member it read as one warning, and the run went on to write a
+    32,463-node graph with zero TRANSACTION nodes: `diagnose-copybooks --fix
+    out-corpus/synthetic.csd` had created a DIRECTORY where the generated CSD goes,
+    and nothing in the run said the graph was missing a whole stage.
+    """
+    generated = tmp_path / "out" / "synthetic.csd"
+    generated.mkdir(parents=True)
+
+    assert _unusable_csd_paths(_config(tmp_path, csd_files=(generated,))) == (
+        generated,
+    )
+
+
+def test_a_csd_path_that_does_not_exist_is_unusable(tmp_path: Path) -> None:
+    """A generated CSD is deleted whenever out_dir is cleaned, so the config keeps
+    pointing at a path nothing has written yet -- the commonest way to reach here."""
+    absent = tmp_path / "out" / "synthetic.csd"
+
+    assert _unusable_csd_paths(_config(tmp_path, csd_files=(absent,))) == (absent,)
+
+
+def test_a_readable_csd_file_is_usable_however_malformed(tmp_path: Path) -> None:
+    """Content is the guarded stage's business: a CSD that parses to nothing is a
+    corpus problem and stays a reported failure, not a refusal to start."""
+    broken = _touch(tmp_path / "csd" / "BROKEN.CSD", "this is not a DEFINE\n")
+
+    assert _unusable_csd_paths(_config(tmp_path, csd_files=(broken,))) == ()
+
+
+def test_no_configured_csd_is_not_an_error(tmp_path: Path) -> None:
+    """A corpus with no CICS at all configures no CSD, and the flow stage says it
+    skipped. That is a choice, not a broken path."""
+    assert _unusable_csd_paths(_config(tmp_path)) == ()
+
+
+def test_the_message_names_every_bad_path_and_how_to_regenerate(tmp_path: Path) -> None:
+    absent = tmp_path / "out" / "synthetic.csd"
+
+    message = _unusable_csd_message((absent,))
+
+    assert str(absent) in message
+    assert "csd_files" in message
+    assert "make csd" in message
 
 
 def test_the_failure_report_says_the_output_is_incomplete() -> None:

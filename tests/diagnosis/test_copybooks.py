@@ -262,18 +262,41 @@ def test_a_name_already_on_disk_under_an_unlisted_suffix_is_not_stubbed(
     assert not (tmp_path / "cpy" / "CUSTREC.cpy").exists()
 
 
-def test_a_target_dir_the_config_does_not_list_is_flagged(tmp_path: Path) -> None:
-    """copybook_dirs is what ProLeap lists. A stub anywhere else is a file nobody
-    reads, so a run that wrote 300 of them there must not read as a fix."""
-    result = write_stubs(
-        {"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), tmp_path / "elsewhere"
-    )
+def test_a_target_dir_the_config_does_not_list_is_refused_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """copybook_dirs is what ProLeap lists, so a stub anywhere else is a file nobody
+    reads -- and it was written anyway, with the mismatch reported afterwards.
 
-    assert result.written == (tmp_path / "elsewhere" / "CUSTREC.cpy",)
+    Reporting is too late when the target is a path something else owns: `--fix
+    out-corpus/synthetic.csd` created a DIRECTORY over where the generated CSD goes,
+    put 328 stubs nobody would read inside it, and cost the next build every
+    TRANSACTION node. So the check happens first, and nothing is created.
+    """
+    target = tmp_path / "elsewhere"
+
+    result = write_stubs({"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), target)
+
+    assert result.written == ()
     assert result.configured is False
+    assert not target.exists()
 
 
-def test_a_target_dir_that_is_a_configured_copybook_dir_is_not_flagged(
+def test_a_refusal_still_reports_what_was_missing_rather_than_pretending_to_fix(
+    tmp_path: Path,
+) -> None:
+    """The refusal is about where, not about what: the names it would have stubbed
+    are the same, so re-running against a listed dir needs no second scan."""
+    _touch(tmp_path / "cpy" / "CUSTREC.txt", "       01 CUST-REC.\n")
+    missing = {"ACCTREC": {"PROGA": [2]}, "CUSTREC": {"PROGA": [1]}}
+
+    result = write_stubs(missing, _config(tmp_path), tmp_path / "elsewhere")
+
+    assert result.written == ()
+    assert result.shadowed == ("CUSTREC",)
+
+
+def test_a_target_dir_that_is_a_configured_copybook_dir_is_written(
     tmp_path: Path,
 ) -> None:
     result = write_stubs(
@@ -281,15 +304,36 @@ def test_a_target_dir_that_is_a_configured_copybook_dir_is_not_flagged(
     )
 
     assert result.configured is True
+    assert result.written == (tmp_path / "cpy" / "CUSTREC.cpy",)
 
 
-def test_the_target_dir_is_created_when_it_does_not_exist(tmp_path: Path) -> None:
+def test_a_configured_target_dir_is_created_when_it_does_not_exist(
+    tmp_path: Path,
+) -> None:
+    """A corpus can list a staging dir it has not populated yet -- that is the
+    normal way to start stubbing, so listed-but-absent is created, not refused."""
     target = tmp_path / "staged" / "cpy"
+    config = _config(tmp_path, copybook_dirs=(tmp_path / "cpy", target))
 
-    result = write_stubs({"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), target)
+    result = write_stubs({"CUSTREC": {"PROGA": [1]}}, config, target)
 
     assert result.written == (target / "CUSTREC.cpy",)
     assert target.is_dir()
+
+
+def test_a_target_spelled_a_different_way_than_the_config_is_still_configured(
+    tmp_path: Path,
+) -> None:
+    """The comparison is on resolved paths, so `--fix ./cpy/../cpy` from the repo
+    root is the dir the config lists, and a refusal here would be a false one."""
+    (tmp_path / "cpy").mkdir()
+
+    result = write_stubs(
+        {"CUSTREC": {"PROGA": [1]}}, _config(tmp_path), tmp_path / "cpy" / ".." / "cpy"
+    )
+
+    assert result.configured is True
+    assert (tmp_path / "cpy" / "CUSTREC.cpy").exists()
 
 
 def _write_config_yaml(tmp_path: Path) -> Path:
@@ -378,6 +422,49 @@ def test_fix_through_the_cli_writes_the_stubs_and_logs_what_it_did(
     assert (tmp_path / "cpy" / "CUSTREC.cpy").read_text() == STUB_TEXT
     assert json.loads(capsys.readouterr().out) == {"CUSTREC": {"PROGA": [1]}}
     assert "1 empty stub" in caplog.text
+
+
+def _fix_into_an_unlisted_dir(tmp_path: Path) -> tuple[int, Path]:
+    """Run --fix at a path this config's copybook_dirs does not list, and return
+    the exit code and the target it was pointed at."""
+    _touch(tmp_path / "cbl" / "PROGA.cbl", "       COPY CUSTREC.\n")
+    (tmp_path / "cpy").mkdir()
+    (tmp_path / "jcl").mkdir()
+    target = tmp_path / "out" / "synthetic.csd"
+    exit_code = main(
+        ["--config", str(_write_config_yaml(tmp_path)), "--fix", str(target)],
+        scan=_fake_scan(tmp_path),
+    )
+    return exit_code, target
+
+
+def test_fix_into_an_unlisted_dir_writes_nothing_and_exits_non_zero(
+    tmp_path: Path,
+) -> None:
+    """A run that fixed nothing must not exit 0: this one is reached by a typo in a
+    path, and the next thing the caller does is a build that would silently lack
+    whatever the mistyped target was standing in for. Nothing is created either --
+    the target may be a path another tool owns.
+    """
+    exit_code, target = _fix_into_an_unlisted_dir(tmp_path)
+
+    assert exit_code == 2
+    assert not target.exists()
+
+
+def test_a_refused_fix_still_reports_the_scan_and_names_the_listed_dirs(
+    tmp_path: Path, capsys, caplog
+) -> None:
+    """The JSON still goes out -- the scan happened and its answer is good -- and
+    the summary names the dirs the stubs could have gone into, since the way here
+    is a mistyped path the config already has the right spelling of."""
+    caplog.set_level(logging.INFO)
+
+    _fix_into_an_unlisted_dir(tmp_path)
+
+    assert json.loads(capsys.readouterr().out) == {"CUSTREC": {"PROGA": [1]}}
+    assert "wrote nothing" in caplog.text
+    assert str(tmp_path / "cpy") in caplog.text
 
 
 def test_the_summary_is_logged_rather_than_printed(

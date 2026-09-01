@@ -191,6 +191,14 @@ use it, which keeps it an explicit, reviewable input to the next run:
     - out/synthetic.csd
 ```
 
+Because it lives under `out_dir`, cleaning `out_dir` leaves `csd_files` pointing
+at a path nothing has written — so `build_graph` **refuses to start** when a
+`csd_files` entry is not a readable regular file, naming the paths, before the
+expensive phase. That used to be one guarded warning, and the run went on to
+write a graph missing the entire CICS stage. An empty `csd_files` is still a
+choice, not an error: the stage says it skipped. Content stays the guarded
+stage's business — a malformed CSD is reported per file, as before.
+
 `DEFINE FILE` entries can't be reconstructed this way, so a generated CSD also
 yields no `DEFINES_DATASET` edges and only the CICS files programs actually
 name.
@@ -238,9 +246,13 @@ distinguishable from a truncated real member.
 Two things it deliberately does not do. A name already on disk under an
 *unlisted* suffix is never stubbed: the stub would resolve first and the real
 member would never be read again — that one needs a `copybook_extensions` edit.
-And `DIR` outside the config's `copybook_dirs` is written but flagged loudly,
-since ProLeap lists those directories and nothing else, so stubs anywhere else
-resolve nothing.
+And `DIR` outside the config's `copybook_dirs` is **refused before anything is
+created** — nothing written, the listed dirs printed, exit code 2. ProLeap lists
+those directories and nothing else, so stubs anywhere else resolve nothing, and a
+path outside them may belong to something that is not a copybook dir at all: one
+`--fix <out_dir>/synthetic.csd` put a *directory* where `make csd` writes the
+generated CSD, and the next build came out with 32,463 nodes and zero
+`TRANSACTION`. A listed dir that does not exist yet is still created.
 
 This one is a console script rather than a `make` target: `[project.scripts]` in
 `pyproject.toml`, which is why the project is installed editable into the venv
