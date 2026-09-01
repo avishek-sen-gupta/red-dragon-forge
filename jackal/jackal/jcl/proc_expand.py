@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from jackal.dsn import DirectDSN
+from jackal.dsn import DSN, DirectDSN, TempRef, temp_if_unresolved
 from jackal.jcl.parser import parse_proc
 from jackal.model import DD, Job, Step
 from jackal.value_parts import Literal, Symbol, Value
@@ -45,12 +45,30 @@ def _substitute(value: Value, symbols: dict[str, Value]) -> Value:
     return tuple(parts)
 
 
+def _substitute_dsn(name: Value, symbols: dict[str, Value]) -> DSN:
+    """The DSN a DD names once the PROC's symbols are known.
+
+    One exception to plain substitution: a DSN that is a whole lone symbol
+    nothing binds is the temporary dataset z/OS reads DSN=&NAME as, inside a
+    PROC exactly as outside one — the same reading temp_if_unresolved gives a
+    job-level DD. Anything else unbound stays the error it is: a symbol too long
+    to be a temp name, or one glued to literal text, is a parameter the caller
+    forgot to pass, and reading it as a work file would invent a dataset.
+    """
+    match name:
+        case (Symbol(name=n),) if n not in symbols:
+            temp = temp_if_unresolved(DirectDSN(name))
+            if isinstance(temp, TempRef):
+                return temp
+    return DirectDSN(_substitute(name, symbols))
+
+
 def _substitute_dd(dd: DD, symbols: dict[str, Value]) -> DD:
     match dd.dsn:
         case DirectDSN(name=n):
             return DD(
                 dd.ddname,
-                DirectDSN(_substitute(n, symbols)),
+                _substitute_dsn(n, symbols),
                 dd.disp,
                 dd.in_stream,
                 dd.sysout,

@@ -85,7 +85,7 @@ fileignoreconfig:
 - filename: jackal/docs/superpowers/plans/2026-07-08-jcl-symbolic-value-type.md
   checksum: 8b4766155fb1f041e8bd35ad41a776e5e6f02dcb56c4255b5d1e738b71f99625
 - filename: jackal/tests/unit/test_dsn.py
-  checksum: f9233e84a3bac6245b00d0a9a2dd52c7ec8aee84daa61827431b50913fc62c93
+  checksum: 03bfd8d7bfcfe92a71a506be7a13ad25083f3a7aface5abdac2e62683b12fd9a
 - filename: jackal/docs/superpowers/plans/2026-07-08-jcl-proc-expansion.md
   checksum: 97075a791957f4905a35f10d65d49d1bc30360f2dc8b24da879a47481b819659
 - filename: jackal/jackal/jcl/bridge_parser.py
@@ -159,9 +159,19 @@ fileignoreconfig:
 - filename: jackal/jackal/jcl_graph.py
   # Flagged on comment prose -- "the SYSTSIN of a" -- and not on any value.
   # No credentials in this file.
-  checksum: ea5259d8f6ed55dcf4c7c1da8fbd99bab7add97ff2d07c5c652771cc06e92284
+  checksum: 2526b0b6c4444d71678e70d6bbecc19f30ead9f771adef53fe5b36c7f750926d
 - filename: jackal/jackal/tso.py
   # Flagged on comment prose -- "IKJEFT1B passes both -- one monitor" -- and
   # not on any value. No credentials in this file.
   checksum: 6ca8635fdde4d7217c6db04e310b6f9d0bb9c63319ee563be7111f61b530e62d
+- filename: jackal/jackal/jcl/proc_expand.py
+  # Flagged on docstring prose about a symbol nothing binds. No credentials.
+  checksum: 1687ad878695c2f8416ac91028409af832ecca1799eb3b7d9d7d7548ee12af60
+- filename: jackal/tests/unit/test_jcl_graph.py
+  # Flagged on docstring prose -- "a work file" -- and not on any value.
+  # No credentials in this file.
+  checksum: 7fcca21c82196948e3eb9dab33a5635d2a6f6c1dd008c35280e9c1e6dc1ab8cd
+- filename: jackal/tests/unit/fixtures/proc/WORKPROC.prc
+  # Test fixture: a PROC whose DSN is one unbound symbol. No credentials.
+  checksum: 8c67811f0adcae4b0bfaa2ab3e0147bdda964f020e8a6c4c5cf587741d547d71
 version: "1.0"
