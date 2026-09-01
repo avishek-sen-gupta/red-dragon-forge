@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Callable
 
 from cobble.interpreter.cobol.asg_types import CobolASG
-from cobble.interpreter.cobol.source_text import decode_source
-from cobble.interpreter.cobol.subprocess_runner import (
+from interpreter.cobol.source_text import decode_source
+from interpreter.cobol.subprocess_runner import (
     SubprocessRunner,
     CobolParseError,
     RealSubprocessRunner,

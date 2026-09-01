@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cobble.jackal.tso import TsoRun, is_tso_monitor, tso_runs
+from jackal.tso import TsoRun, is_tso_monitor, tso_runs
 
 
 def test_the_dsn_run_subcommand_names_the_program_and_its_plan() -> None:

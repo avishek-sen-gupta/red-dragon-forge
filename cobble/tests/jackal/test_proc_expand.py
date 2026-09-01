@@ -16,8 +16,8 @@ import pytest
 from cobble.jackal.dsn import DirectDSN, TempRef
 from cobble.jackal.jcl import proc_expand
 from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs
-from cobble.jackal.model import DD, Disp, DispNormal, DispStatus, Job, ProcDef, Step
-from cobble.jackal.value_parts import Symbol, Value, literal, resolve
+from jackal.model import DD, Disp, DispNormal, DispStatus, Job, ProcDef, Step
+from jackal.value_parts import Symbol, Value, literal, resolve
 
 _NEW = Disp(DispStatus.NEW, DispNormal.PASS, DispNormal.PASS)
 _SHR = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)

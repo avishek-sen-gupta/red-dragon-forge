@@ -33,7 +33,7 @@ from cobble.diagnosis.copybooks import (
     scan_members,
     write_stubs,
 )
-from cobble.interpreter.project.import_types import ImportKind, ImportRef
+from interpreter.project.import_types import ImportKind, ImportRef
 
 
 def _config(tmp_path: Path, **overrides) -> CorpusConfig:

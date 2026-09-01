@@ -10,8 +10,8 @@ from __future__ import annotations
 from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, NodeKind
 from cobble.jackal.dsn import DirectDSN, InStreamDSN, TempRef
 from cobble.jackal.jcl_graph import jcl_graph_from_job, step_proc_provenance
-from cobble.jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
-from cobble.jackal.value_parts import Symbol, literal
+from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.value_parts import Symbol, literal
 
 _SHR = Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP)
 _NEW = Disp(DispStatus.NEW, DispNormal.PASS, DispNormal.PASS)

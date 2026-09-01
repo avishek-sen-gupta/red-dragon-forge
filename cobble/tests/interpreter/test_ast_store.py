@@ -15,7 +15,7 @@ import pytest
 
 from cobble.interpreter.cobol.asg_types import CobolASG
 from cobble.interpreter.cobol.ast_store import AstParseError, AstStore, temp_ast_store
-from cobble.interpreter.cobol.subprocess_runner import CobolParseError
+from interpreter.cobol.subprocess_runner import CobolParseError
 
 
 class CountingParser:

@@ -6,7 +6,7 @@ A port of cics.bms.generate.generate_symbolic_copybooks. For each map source
 in <bms_dir> matching <bms_globs> (both come from the --config YAML's `bms:`
 section; bms_globs defaults to ["*.bms"]), runs
 
-    hlasm_export <map>.bms --syslib <macros_dir>/ | python -m cobble.bms_copybook_gen
+    hlasm_export <map>.bms --syslib <macros_dir>/ | python -m bms_copybook_gen
 
 and writes <sym_dir>/<stem>.cpy. This produces the symbolic copybooks the CICS
 COBOL programs `COPY`, from source -- nothing pre-generated is shipped.
@@ -61,7 +61,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _child_env() -> Mapping[str, str]:
-    """The generator runs as `python -m cobble.bms_copybook_gen`, so the child needs
+    """The generator runs as `python -m bms_copybook_gen`, so the child needs
     the repo on its PYTHONPATH to import it."""
     return {**os.environ, "PYTHONPATH": str(_REPO_ROOT)}
 
@@ -79,7 +79,7 @@ def _generate_one(bms: Path, config: BmsConfig, env: Mapping[str, str]) -> Path:
         check=True,
     )
     gen = subprocess.run(
-        [sys.executable, "-m", "cobble.bms_copybook_gen"],
+        [sys.executable, "-m", "bms_copybook_gen"],
         input=export.stdout,
         capture_output=True,
         check=True,

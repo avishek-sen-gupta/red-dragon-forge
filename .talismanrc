@@ -1,8 +1,6 @@
 fileignoreconfig:
 - filename: docs/superpowers/specs/2026-07-07-knowledge-graph-config-driven-driver-design.md
   checksum: 261569048f4017914bd4cee19732a4ddad3bb05d565df599dbdc6ea72c670180
-- filename: knowledge_graph/build_carddemo_graph.py
-  checksum: ec19c72c85de66a87a337c6b431b84aadecdb106d2e6066c4079a5cc711fcf72
 - filename: docs/superpowers/plans/2026-07-07-cobol-knowledge-graph.md
   checksum: d2cd33c177e8444bac414fe7003ac104e73c238349328189d10d7971d13c25ee
 - filename: docs/superpowers/specs/2026-07-07-cobol-knowledge-graph-design.md
@@ -25,15 +23,9 @@ fileignoreconfig:
   checksum: 65635c68516ce860ce0ddf8838ab582e03311cb9820d81627e7f1fe66d877da3
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
   checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
-- filename: red_dragon_forge/coprocessor.py
-  checksum: 25f4d437264805b4e274af959a44c1309d2e64dd9ceabbeb950ca23b4cd3da2c
-- filename: tests/integration/test_compile_program.py
-  checksum: 985cb3ba9cda6a8aee937a86aafab5b0385d18d91379624f0a814395c3419388
 - filename: vendor/red-dragon
   ignore_detectors: [filecontent]
 - filename: vendor/squall
-  ignore_detectors: [filecontent]
-- filename: vendor/cicada
   ignore_detectors: [filecontent]
 - filename: cicada/third-party/che-che4z-lsp-for-hlasm-fork
   # A submodule pointer is a commit SHA, so filecontent always reads as a hex
@@ -48,12 +40,6 @@ fileignoreconfig:
   checksum: 12726c2e3db64b1a7267643bcd8da2f1b8eee34ae7bb3475133def1fd01a43c0
 - filename: .superpowers/sdd/progress.md
   checksum: 7203e638ff1ba870dc5345166ddff5e52f3dbf50fa4ac243319c79cabec5e817
-- filename: red_dragon_forge/adapters/cics.py
-  checksum: a1c2bd799f240e06e8cfd8fbdf54c469546cac77375926c7d5cf23438495a796
-- filename: red_dragon_forge/adapters/sql.py
-  checksum: 2fadacb595691f3dba326bd462bfe349bea62ab6572334a6e0ba608f8ddfea4e
-- filename: red_dragon_forge/compile.py
-  checksum: 69c75a57da53919640c9d1cc1c3b654dd0790a2e3cc73b2f26529a08f4ef1e34
 - filename: docs/superpowers/specs/2026-07-05-monorepo-migration-design.md
   checksum: eae5f17de46d9792e64cac6012e668b445524e596da53ead0803a5619d1d5b40
 - filename: docs/superpowers/plans/2026-07-05-monorepo-migration.md
@@ -67,21 +53,10 @@ fileignoreconfig:
 - filename: squall/db2/dsn-env.sh
   checksum: 2d7483163dcb8f46d67b45409dc4c5a082b08492e31e871020aa9bfff0df72fe
 - filename: uv.lock
-  checksum: ecbb672e5cf054e0a547e9af6362735f7e2c1a79ff4cd273a401edae75097dae
-- filename: knowledge_graph/merge.py
-  checksum: b04b6e4b2192d5ff42a1d86ec5aeb91c38c7f543cfa46b7707d432ed57aa9658
-- filename: knowledge_graph/export.py
-  checksum: cf3b0e1ccbe505fbee4df4a343aea048bef84c86078389e6e7f10d5a3d3d6e35
-- filename: knowledge_graph/vendor/vis-network.min.js
+  # A lockfile is sha256 hashes and package URLs by nature, so filecontent always
+  # reads as hex blobs and a checksum pin churns on every dependency change.
+  # Same treatment as the issues.jsonl exports.
   ignore_detectors: [filecontent]
-- filename: knowledge_graph/render.py
-  checksum: 2bf6b94500ca5f78e3691844d4c4c2d1e4c505084afefe9a52efa2230be06fa9
-- filename: tests/unit/knowledge_graph/test_render.py
-  checksum: d4d07008070fb6cb0c62b5cb302b57aee02a3b42931a3758656d307b18ee0a35
-- filename: tests/integration/test_knowledge_graph_carddemo.py
-  checksum: 0f1a0a792b8b195100c5a30b59f8cd19ed7f2d91bd4796a987e70b7614c922bf
-- filename: jackal/tests/unit/test_cobol_file_graph.py
-  checksum: a41fa58ef6cc88ae92539090462dfe332d5d91afe7fe045da489e01bde30347b
 - filename: jackal/docs/superpowers/plans/2026-07-08-jcl-symbolic-value-type.md
   checksum: 8b4766155fb1f041e8bd35ad41a776e5e6f02dcb56c4255b5d1e738b71f99625
 - filename: jackal/tests/unit/test_dsn.py

@@ -25,16 +25,16 @@ from types import MappingProxyType
 
 from tqdm import tqdm
 
-from cobble.cics.csd_parse import CsdParseError, parse_csd, parse_csd_files
+from cics.csd_parse import CsdParseError, parse_csd, parse_csd_files
 from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index import CorpusIndex
-from cobble.interpreter.cobol.source_text import decode_source
+from interpreter.cobol.source_text import decode_source
 from cobble.jackal.dsn import InStreamDSN
 from cobble.jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs
 from cobble.jackal.jcl_graph import step_proc_provenance
-from cobble.jackal.model import Job, Step
+from jackal.model import Job, Step
 from cobble.matching_files import matching_files
 
 # How the index turns a member's path into a Job: parse it now, or take it from a

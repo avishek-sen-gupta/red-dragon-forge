@@ -9,8 +9,8 @@ from cobble.interpreter.project.graph_types import NodeKind
 from cobble.jackal.dsn import DirectDSN, InStreamDSN
 from cobble.jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.jcl.proc_expand import ProcExpansionError
-from cobble.jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
-from cobble.jackal.value_parts import Literal
+from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.value_parts import Literal
 
 
 def _config(tmp_path: Path, **overrides) -> CorpusConfig:

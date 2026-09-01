@@ -11,7 +11,7 @@ synthetic or reported; nothing is guessed into an edge.
 
 from __future__ import annotations
 
-from cobble.cics.csd_parse import parse_csd
+from cics.csd_parse import parse_csd
 from cobble.cics.synth_csd import (
     SYNTHETIC_TRANSID_PREFIX,
     Tier,

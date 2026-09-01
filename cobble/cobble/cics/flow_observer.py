@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from cobble.bms_copybook_gen.models import BmsField
+from bms_copybook_gen.models import BmsField
 
 
 @dataclass(frozen=True)

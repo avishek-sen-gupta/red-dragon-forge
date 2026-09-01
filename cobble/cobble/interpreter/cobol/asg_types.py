@@ -16,7 +16,7 @@ from cobble.interpreter.cobol.cobol_statements import (
     FileControlEntry,
 )
 from cobble.interpreter.cobol.cobol_types import CobolTypeDescriptor
-from cobble.interpreter.cobol.condition_name import ConditionName, ConditionValue
+from interpreter.cobol.condition_name import ConditionName, ConditionValue
 from cobble.interpreter.cobol.pic_parser import parse_pic
 
 

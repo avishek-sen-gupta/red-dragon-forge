@@ -9,7 +9,7 @@ from cobble.jackal.dsn import (
     TempRef,
     dsn_key,
 )
-from cobble.jackal.value_parts import Symbol, literal
+from jackal.value_parts import Symbol, literal
 
 
 def test_dsn_key_resolves_direct_dsn() -> None:

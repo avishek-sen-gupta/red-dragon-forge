@@ -24,7 +24,7 @@ from cobble.interpreter.cobol.cobol_statements import (
     IfStatement,
     OpenStatement,
 )
-from cobble.interpreter.cobol.file_enums import OpenMode
+from interpreter.cobol.file_enums import OpenMode
 from cobble.interpreter.project.graph_types import EdgeKind, NodeKind
 from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
 

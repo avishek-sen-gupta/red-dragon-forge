@@ -42,7 +42,7 @@ import networkx as nx
 from tqdm import tqdm
 
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
-from cobble.cics.csd_parse import CsdParseError, parse_csd
+from cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.flow_map import extract_transaction_flow_graph
 from cobble.cics.graph_sink import GraphSink
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
@@ -52,16 +52,16 @@ from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
 from cobble.interpreter.cobol.ast_store import AstStore, temp_ast_store
 from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
-from cobble.interpreter.cobol.source_text import decode_source
-from cobble.interpreter.cobol.subprocess_runner import RealSubprocessRunner
-from cobble.interpreter.project.cobol_imports import extract_cobol_imports
+from interpreter.cobol.source_text import decode_source
+from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from interpreter.project.cobol_imports import extract_cobol_imports
 from cobble.interpreter.project.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
-from cobble.interpreter.project.import_types import ImportKind, ImportRef
+from interpreter.project.import_types import ImportKind, ImportRef
 from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
 from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
 from cobble.jackal.jcl.parser import bridge_parser

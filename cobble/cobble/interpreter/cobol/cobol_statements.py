@@ -23,8 +23,8 @@ from cobble.interpreter.cobol.cobol_expression import (
     expr_from_dict,
     expr_to_dict,
 )
-from cobble.interpreter.cobol.file_enums import OpenMode, FileOrganization, AccessMode
-from cobble.interpreter.frontend_extension import DialectParser
+from interpreter.cobol.file_enums import OpenMode, FileOrganization, AccessMode
+from interpreter.frontend_extension import DialectParser
 
 # ── Dialect parser injection ──────────────────────────────────────
 # Set by CobolFrontend.lower() for the duration of each parse call. Cicada

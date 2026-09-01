@@ -7,7 +7,7 @@ literals. So the codec has to be lossless, not merely non-raising: errors=
 "replace" would turn load-bearing literal characters into U+FFFD.
 """
 
-from cobble.interpreter.cobol.source_text import decode_source
+from interpreter.cobol.source_text import decode_source
 
 
 def test_every_byte_survives_the_round_trip() -> None:

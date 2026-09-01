@@ -32,9 +32,9 @@ from typing import Protocol
 
 from tqdm import tqdm
 
-from cobble.interpreter.cobol.source_text import decode_source
+from interpreter.cobol.source_text import decode_source
 from cobble.jackal.jcl.bridge_parser import JclParseError, job_from_bridge_json
-from cobble.jackal.model import Job
+from jackal.model import Job
 
 
 class JclJsonParser(Protocol):

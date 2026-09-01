@@ -6,7 +6,7 @@ member, thousands of members. A COPY the ProLeap preprocessor cannot resolve
 fails that whole program -- so a corpus with widespread missing copybooks spends
 hours to report what a COPY scan reports in one JVM.
 
-COPY statements come from :func:`cobble.interpreter.project.cobol_imports
+COPY statements come from :func:`interpreter.project.cobol_imports
 .extract_cobol_imports`, which folds fixed-format continuations and resolves
 nothing. Resolution is what this module adds, and it mirrors ProLeap's
 CobolWordCopyBookFinderImpl EXACTLY, because a diagnostic that disagrees with
@@ -55,8 +55,8 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json
-from cobble.interpreter.project.cobol_imports import extract_cobol_imports
-from cobble.interpreter.project.import_types import ImportKind, ImportRef
+from interpreter.project.cobol_imports import extract_cobol_imports
+from interpreter.project.import_types import ImportKind, ImportRef
 from cobble.matching_files import matching_files
 
 logger = logging.getLogger(__name__)
