@@ -393,6 +393,7 @@ dependencies = [
     { name = "networkx" },
     { name = "pyyaml" },
     { name = "red-dragon" },
+    { name = "squall" },
     { name = "tqdm" },
 ]
 
@@ -414,6 +415,7 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
+    { name = "squall", editable = "squall" },
     { name = "tqdm", specifier = ">=4.68.4" },
 ]
 

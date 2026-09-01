@@ -4,7 +4,7 @@ An unmapped type is a hard error that takes the whole program's ASG down
 (parse_statement raises), so a type the bridge can emit needs an entry here.
 """
 
-from cobble.interpreter.cobol.cobol_statements import (
+from interpreter.cobol.cobol_statements import (
     XmlGenerateStatement,
     parse_statement,
 )

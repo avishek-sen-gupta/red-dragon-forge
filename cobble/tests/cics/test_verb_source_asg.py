@@ -3,8 +3,8 @@ from collections.abc import Mapping
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.statements import ExecCicsStatement
 from cobble.cics.verb_source_asg import _statement_to_verb
-from cobble.interpreter.cobol import cobol_statements
-from cobble.sql.statements import ExecSqlStatement
+from interpreter.cobol import cobol_statements
+from squall.statements import ExecSqlStatement
 
 
 def _parse_under_production_dialects(data: Mapping):

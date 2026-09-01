@@ -18,8 +18,8 @@ import pytest
 
 from cobble.corpus_index import FileLocationResolver
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
-from cobble.interpreter.cobol.asg_types import CobolASG, CobolParagraph, CobolSection
-from cobble.interpreter.cobol.cobol_statements import (
+from interpreter.cobol.asg_types import CobolASG, CobolParagraph, CobolSection
+from interpreter.cobol.cobol_statements import (
     FileControlEntry,
     IfStatement,
     OpenStatement,

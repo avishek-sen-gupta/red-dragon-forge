@@ -17,7 +17,7 @@ from cobble.interpreter.project.graph_types import (
     GraphNode,
     NodeKind,
 )
-from cobble.jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
+from jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
 from jackal.model import DD, DispStatus, Job, Step

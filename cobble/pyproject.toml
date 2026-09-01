@@ -12,12 +12,14 @@ dependencies = [
     "red-dragon",
     "cicada",
     "jackal",
+    "squall",
 ]
 
 [tool.uv.sources]
 red-dragon = { path = "../vendor/red-dragon", editable = true }
 cicada = { workspace = true }
 jackal = { workspace = true }
+squall = { workspace = true }
 
 [project.scripts]
 diagnose-copybooks = "cobble.diagnosis.copybooks:cli"

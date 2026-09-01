@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable
 
-from cobble.interpreter.cobol.asg_types import CobolASG
+from interpreter.cobol.asg_types import CobolASG
 from interpreter.cobol.source_text import decode_source
 from interpreter.cobol.subprocess_runner import (
     SubprocessRunner,

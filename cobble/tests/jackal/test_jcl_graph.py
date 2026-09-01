@@ -8,7 +8,7 @@ not about the bridge, and the bridge costs a JVM per call.
 from __future__ import annotations
 
 from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, NodeKind
-from cobble.jackal.dsn import DirectDSN, InStreamDSN, TempRef
+from jackal.dsn import DirectDSN, InStreamDSN, TempRef
 from cobble.jackal.jcl_graph import jcl_graph_from_job, step_proc_provenance
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from jackal.value_parts import Symbol, literal

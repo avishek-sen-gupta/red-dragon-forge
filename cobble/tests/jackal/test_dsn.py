@@ -1,6 +1,6 @@
 import pytest
 
-from cobble.jackal.dsn import (
+from jackal.dsn import (
     BackwardRef,
     DirectDSN,
     DummyDSN,

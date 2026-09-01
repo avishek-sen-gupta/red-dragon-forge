@@ -145,4 +145,12 @@ fileignoreconfig:
   # Flagged on design prose about module names and verification steps, not on
   # any value. No credentials in this file.
   checksum: 603553fc076120db3965cd66a0dcb60c3dc1f100b56a446b8c716ca63524a004
+- filename: cobble/cobble/jackal/jcl_graph.py
+  # Flagged on an import line naming dsn helpers, not on any value.
+  # No credentials in this file.
+  checksum: b2a7c2c648f5ed65de823543d894e7dbbc4dd69663d1cf820455e1457ba2524a
+- filename: docs/superpowers/specs/2026-09-02-cobble-divergence-reconciliation-design.md
+  # Flagged on design prose about module and identifier names, not on any value.
+  # No credentials in this file.
+  checksum: 747a520d2f6dccb91eeeb7b159ae27d52a08b2d5654f85c5dba64717a2d26460
 version: "1.0"
