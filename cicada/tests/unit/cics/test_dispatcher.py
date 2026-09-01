@@ -9,6 +9,7 @@ import pytest
 from tests.covers import covers, NotLanguageFeature
 from interpreter.run import run_linked
 from cics.types import CicsContext, DispatchKind, DispatchResult
+from cics.csd_parse import CsdParseError
 from cics.dispatcher import (
     _run_dispatcher_with_runner,
     _advance_routing,
@@ -469,3 +470,38 @@ def test_parse_csd_files_ignores_defines_without_dsname(tmp_path):
     )
     mapping = parse_csd_files(csd)
     assert mapping == {"ACCTDAT": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_csd_raises_csd_parse_error_on_a_csd_that_does_not_parse(tmp_path):
+    # A CSD that does not parse is corpus shape, not a bug in cicada, and the
+    # caller is run_cics's bootstrap. Without a wrapper it can only tell the two
+    # apart by importing lark itself and catching UnexpectedInput -- so the
+    # failure it actually gets is a lark internal leaking out of the VM.
+    csd = tmp_path / "broken.csd"
+    csd.write_text("DEFINE TRANSACTION(CC00\n")
+
+    with pytest.raises(CsdParseError):
+        parse_csd(csd)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_csd_files_raises_csd_parse_error_on_a_csd_that_does_not_parse(tmp_path):
+    csd = tmp_path / "broken.csd"
+    csd.write_text("DEFINE FILE(ACCTDAT) DSNAME(\n")
+
+    with pytest.raises(CsdParseError):
+        parse_csd_files(csd)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_csd_parse_error_keeps_the_lark_failure_as_its_cause(tmp_path):
+    # The wrapper narrows what callers must catch; it must not cost whoever is
+    # diagnosing the CSD the position lark found the problem at.
+    csd = tmp_path / "broken.csd"
+    csd.write_text("DEFINE TRANSACTION(CC00\n")
+
+    with pytest.raises(CsdParseError) as excinfo:
+        parse_csd(csd)
+
+    assert excinfo.value.__cause__ is not None
