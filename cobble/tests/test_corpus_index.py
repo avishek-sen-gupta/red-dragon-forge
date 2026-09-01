@@ -7,8 +7,8 @@ from cobble.corpus_index_builder import build_corpus_index
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.interpreter.project.graph_types import NodeKind
 from jackal.dsn import DirectDSN, InStreamDSN
-from cobble.jackal.jcl.bridge_parser import JclParseError
-from cobble.jackal.jcl.proc_expand import ProcExpansionError
+from jackal.jcl.bridge_parser import JclParseError
+from jackal.jcl.proc_expand import ProcExpansionError
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
 from jackal.value_parts import Literal
 

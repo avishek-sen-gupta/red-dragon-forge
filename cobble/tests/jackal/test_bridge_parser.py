@@ -5,7 +5,7 @@ be absent from a DD altogether. The defaults are positional and depend on each
 other, so they are one rule rather than one fixed fallback triple.
 """
 
-from cobble.jackal.jcl.bridge_parser import _disp_from_words
+from jackal.jcl.bridge_parser import _disp_from_words
 from jackal.model import Disp, DispNormal, DispStatus
 
 

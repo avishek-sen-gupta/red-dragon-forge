@@ -10,13 +10,15 @@ real PROC in the CardDemo corpus.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
+from itertools import chain
 from pathlib import Path
-from typing import Sequence
 
 from jackal.dsn import DSN, DirectDSN, TempRef, temp_if_unresolved
 from jackal.jcl.parser import parse_proc
-from jackal.model import DD, Job, Step
-from jackal.value_parts import Literal, Symbol, Value
+from jackal.model import DD, Job, ProcDef, Step
+from jackal.value_parts import Symbol, Value, ValuePart
 
 
 class ProcExpansionError(Exception):
@@ -24,57 +26,126 @@ class ProcExpansionError(Exception):
     unbound symbol, or a circular PROC reference."""
 
 
-def _resolve_proc_path(name: str, proclib_dirs: Sequence[Path]) -> Path | None:
-    for proclib_dir in proclib_dirs:
-        candidate = proclib_dir / f"{name}.prc"
-        if candidate.is_file():
-            return candidate
-    return None
+def _proc_paths(name: str, proclib_dirs: Sequence[Path]) -> tuple[Path, ...]:
+    """Every .prc file carrying this name, in proclib order.
+
+    Empty when no proclib has one, which is how a step whose pgm is a program
+    rather than a PROC call is told apart — a tuple rather than an optional
+    path, so the "no such PROC" case is a length and not a None.
+    """
+    return tuple(
+        candidate
+        for proclib_dir in proclib_dirs
+        if (candidate := proclib_dir / f"{name}.prc").is_file()
+    )
 
 
-def _substitute(value: Value, symbols: dict[str, Value]) -> Value:
-    parts: list[Literal] = []
-    for part in value:
-        match part:
-            case Literal():
-                parts.append(part)
-            case Symbol(name=n):
-                if n not in symbols:
-                    raise ProcExpansionError(f"Unbound symbol '&{n}'")
-                parts.extend(symbols[n])
-    return tuple(parts)
+# ── Symbol substitution ───────────────────────────────────────────
 
 
-def _substitute_dsn(name: Value, symbols: dict[str, Value]) -> DSN:
+def _substitute_symbol(name: str, symbols: Mapping[str, Value]) -> Value:
+    """The parts a symbol stands for — an error when nothing binds it, because
+    a PROC parameter the caller never passed has no value to stand in."""
+    if name not in symbols:
+        raise ProcExpansionError(f"Unbound symbol '&{name}'")
+    return symbols[name]
+
+
+def _substitute_part(part: ValuePart, symbols: Mapping[str, Value]) -> Value:
+    """One value part, as the parts it stands for once symbols are known."""
+    if isinstance(part, Symbol):
+        return _substitute_symbol(part.name, symbols)
+    return (part,)
+
+
+def _substitute(value: Value, symbols: Mapping[str, Value]) -> Value:
+    """A value with every symbol replaced by the parts bound to it.
+
+    Substitution splices, it does not re-join: ``&HLQ..DATA`` with HLQ=TEST
+    stays two literals worth one name, which ``resolve`` reads as TEST.DATA.
+    """
+    return tuple(chain.from_iterable(_substitute_part(p, symbols) for p in value))
+
+
+def _lone_unbound_symbol_dsn(name: Value, symbols: Mapping[str, Value]) -> DSN:
+    """``temp_if_unresolved``'s reading of a DSN that is one symbol nothing
+    binds, and the DSN unchanged for anything else."""
+    match name:
+        case (Symbol(name=n),) if n not in symbols:
+            return temp_if_unresolved(DirectDSN(name))
+        case _:
+            return DirectDSN(name)
+
+
+def _substitute_dsn(name: Value, symbols: Mapping[str, Value]) -> DSN:
     """The DSN a DD names once the PROC's symbols are known.
 
     One exception to plain substitution: a DSN that is a whole lone symbol
-    nothing binds is the temporary dataset z/OS reads DSN=&NAME as, inside a
-    PROC exactly as outside one — the same reading temp_if_unresolved gives a
-    job-level DD. Anything else unbound stays the error it is: a symbol too long
-    to be a temp name, or one glued to literal text, is a parameter the caller
-    forgot to pass, and reading it as a work file would invent a dataset.
+    nothing binds is the temporary dataset z/OS reads ``DSN=&NAME`` as, inside
+    a PROC exactly as outside one — the same reading
+    :func:`jackal.dsn.temp_if_unresolved` gives a job-level DD. Anything
+    else unbound stays the error it is: a symbol too long to be a temp name, or
+    one glued to literal text, is a parameter the caller forgot to pass, and
+    reading it as a work file would invent a dataset.
     """
-    match name:
-        case (Symbol(name=n),) if n not in symbols:
-            temp = temp_if_unresolved(DirectDSN(name))
-            if isinstance(temp, TempRef):
-                return temp
+    temp = _lone_unbound_symbol_dsn(name, symbols)
+    if isinstance(temp, TempRef):
+        return temp
     return DirectDSN(_substitute(name, symbols))
 
 
-def _substitute_dd(dd: DD, symbols: dict[str, Value]) -> DD:
-    match dd.dsn:
-        case DirectDSN(name=n):
-            return DD(
-                dd.ddname,
-                _substitute_dsn(n, symbols),
-                dd.disp,
-                dd.in_stream,
-                dd.sysout,
-            )
-        case _:
-            return dd
+def _substitute_dd(dd: DD, symbols: Mapping[str, Value]) -> DD:
+    """Only a DirectDSN carries symbols; every other DSN passes through."""
+    if isinstance(dd.dsn, DirectDSN):
+        return replace(dd, dsn=_substitute_dsn(dd.dsn.name, symbols))
+    return dd
+
+
+# ── DD overriding ─────────────────────────────────────────────────
+
+
+def _qualified_override(dd: DD, inner_name: str) -> tuple[tuple[str, DD], ...]:
+    """A stepname.ddname override, keyed by the inner ddname it replaces —
+    nothing, when it names a different step."""
+    qualifier, real_ddname = dd.ddname.split(".", 1)
+    if qualifier != inner_name:
+        return ()
+    return ((real_ddname, replace(dd, ddname=real_ddname)),)
+
+
+def _override_for(
+    dd: DD, inner_name: str, single_step: bool
+) -> tuple[tuple[str, DD], ...]:
+    """This outer DD as an override of one inner DD, or nothing at all.
+
+    An unqualified override is only unambiguous when the PROC has a single
+    step; with more there is no telling which step it meant.
+    """
+    if "." in dd.ddname:
+        return _qualified_override(dd, inner_name)
+    return ((dd.ddname, dd),) if single_step else ()
+
+
+def _overrides(
+    inner_step: Step, outer_dds: Sequence[DD], single_step: bool
+) -> Mapping[str, DD]:
+    """The outer step's overrides that apply to this inner step, keyed by the
+    inner ddname, the last of two overrides of one ddname winning."""
+    return dict(
+        chain.from_iterable(
+            _override_for(dd, inner_step.name, single_step) for dd in outer_dds
+        )
+    )
+
+
+def _merged_dds(inner_dds: Sequence[DD], overrides: Mapping[str, DD]) -> tuple[DD, ...]:
+    """Inner DDs with overridden ones replaced where they stand, then the
+    overrides that matched no inner DD appended."""
+    seen = {dd.ddname for dd in inner_dds}
+    return (
+        *(overrides.get(dd.ddname, dd) for dd in inner_dds),
+        *(dd for ddname, dd in overrides.items() if ddname not in seen),
+    )
 
 
 def _merge_dd_overrides(
@@ -83,72 +154,62 @@ def _merge_dd_overrides(
     """Apply qualified (stepname.ddname) DD overrides from the outer step's
     own dds onto this inner step — full replace of a matching ddname, append
     if new. A single-step PROC also accepts an unqualified override."""
-    targeted: dict[str, DD] = {}
-    for dd in outer_dds:
-        if "." in dd.ddname:
-            qualifier, real_ddname = dd.ddname.split(".", 1)
-            if qualifier == inner_step.name:
-                targeted[real_ddname] = DD(
-                    real_ddname, dd.dsn, dd.disp, dd.in_stream, dd.sysout
-                )
-        elif single_step:
-            targeted[dd.ddname] = dd
-
-    if not targeted:
+    overrides = _overrides(inner_step, outer_dds, single_step)
+    if not overrides:
         return inner_step
+    return replace(inner_step, dds=_merged_dds(inner_step.dds, overrides))
 
-    new_dds: list[DD] = []
-    seen: set[str] = set()
-    for dd in inner_step.dds:
-        if dd.ddname in targeted:
-            new_dds.append(targeted[dd.ddname])
-            seen.add(dd.ddname)
-        else:
-            new_dds.append(dd)
-    for ddname, dd in targeted.items():
-        if ddname not in seen:
-            new_dds.append(dd)
 
-    return Step(
-        inner_step.name,
-        inner_step.pgm,
-        tuple(new_dds),
-        inner_step.conds,
-        inner_step.parm,
-        inner_step.proc_parms,
+# ── Inlining ──────────────────────────────────────────────────────
+
+
+def _inlined(
+    outer_step: Step,
+    inner_step: Step,
+    symbols: Mapping[str, Value],
+    single_step: bool,
+) -> Step:
+    """One inner step as it reads inside the calling step: name qualified by
+    the caller's step name, DDs overridden and then substituted."""
+    merged = _merge_dd_overrides(inner_step, outer_step.dds, single_step)
+    return replace(
+        merged,
+        name=f"{outer_step.name}.{merged.name}",
+        dds=tuple(_substitute_dd(dd, symbols) for dd in merged.dds),
+        parm=_substitute(merged.parm, symbols),
+    )
+
+
+def _expand_proc(
+    step: Step, proc_def: ProcDef, proclib_dirs: Sequence[Path], stack: frozenset[str]
+) -> tuple[Step, ...]:
+    """The PROC's steps inlined into the calling step, each one then expanded
+    itself — a PROC step may name another PROC."""
+    symbols = {**proc_def.defaults, **step.proc_parms}
+    single_step = len(proc_def.steps) == 1
+    return tuple(
+        chain.from_iterable(
+            _expand_step(
+                _inlined(step, inner_step, symbols, single_step),
+                proclib_dirs,
+                stack | {step.pgm},
+            )
+            for inner_step in proc_def.steps
+        )
     )
 
 
 def _expand_step(
     step: Step, proclib_dirs: Sequence[Path], stack: frozenset[str]
-) -> list[Step]:
-    proc_path = _resolve_proc_path(step.pgm, proclib_dirs)
-    if proc_path is None:
-        return [step]
-
+) -> tuple[Step, ...]:
+    paths = _proc_paths(step.pgm, proclib_dirs)
+    if not paths:
+        return (step,)
     if step.pgm in stack:
         raise ProcExpansionError(
             f"Circular PROC reference: {' -> '.join((*stack, step.pgm))}"
         )
-
-    proc_def = parse_proc(proc_path.read_text())
-    symbols: dict[str, Value] = dict(proc_def.defaults)
-    symbols.update(step.proc_parms)
-    single_step = len(proc_def.steps) == 1
-
-    expanded: list[Step] = []
-    for inner_step in proc_def.steps:
-        merged = _merge_dd_overrides(inner_step, step.dds, single_step)
-        substituted = Step(
-            name=f"{step.name}.{merged.name}",
-            pgm=merged.pgm,
-            dds=tuple(_substitute_dd(dd, symbols) for dd in merged.dds),
-            conds=merged.conds,
-            parm=_substitute(merged.parm, symbols),
-            proc_parms=merged.proc_parms,
-        )
-        expanded.extend(_expand_step(substituted, proclib_dirs, stack | {step.pgm}))
-    return expanded
+    return _expand_proc(step, parse_proc(paths[0].read_text()), proclib_dirs, stack)
 
 
 def expand_procs(job: Job, proclib_dirs: Sequence[Path]) -> Job:
@@ -156,7 +217,11 @@ def expand_procs(job: Job, proclib_dirs: Sequence[Path]) -> Job:
     recursively-expanded, symbol-substituted, DD-merged inner steps. A step
     whose pgm doesn't resolve to a {proclib_dir}/{pgm}.prc file is returned
     unchanged — this function is a safe no-op for a job with no PROC calls."""
-    new_steps: list[Step] = []
-    for step in job.steps:
-        new_steps.extend(_expand_step(step, proclib_dirs, frozenset()))
-    return Job(name=job.name, steps=tuple(new_steps), cond=job.cond)
+    return replace(
+        job,
+        steps=tuple(
+            chain.from_iterable(
+                _expand_step(step, proclib_dirs, frozenset()) for step in job.steps
+            )
+        ),
+    )

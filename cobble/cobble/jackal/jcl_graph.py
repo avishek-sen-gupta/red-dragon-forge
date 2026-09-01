@@ -18,8 +18,8 @@ from cobble.interpreter.project.graph_types import (
     NodeKind,
 )
 from jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
-from cobble.jackal.jcl.parser import parse_jcl
-from cobble.jackal.jcl.proc_expand import expand_procs
+from jackal.jcl.parser import parse_jcl
+from jackal.jcl.proc_expand import expand_procs
 from jackal.model import DD, DispStatus, Job, Step
 from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 

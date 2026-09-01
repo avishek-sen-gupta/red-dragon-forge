@@ -30,9 +30,9 @@ from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index import CorpusIndex
 from interpreter.cobol.source_text import decode_source
 from jackal.dsn import InStreamDSN
-from cobble.jackal.jcl.bridge_parser import JclParseError
-from cobble.jackal.jcl.parser import parse_jcl
-from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs
+from jackal.jcl.bridge_parser import JclParseError
+from jackal.jcl.parser import parse_jcl
+from jackal.jcl.proc_expand import ProcExpansionError, expand_procs
 from cobble.jackal.jcl_graph import step_proc_provenance
 from jackal.model import Job, Step
 from cobble.matching_files import matching_files

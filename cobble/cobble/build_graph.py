@@ -64,7 +64,7 @@ from cobble.interpreter.project.graph_types import (
 from interpreter.project.import_types import ImportKind, ImportRef
 from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
 from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
-from cobble.jackal.jcl.parser import bridge_parser
+from jackal.jcl.parser import bridge_parser
 from cobble.jackal.jcl_graph import jcl_graph_from_job
 from cobble.knowledge_graph.export import read_ndjson
 from cobble.knowledge_graph.graph_writer import GraphWriter
