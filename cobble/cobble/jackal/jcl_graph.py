@@ -20,8 +20,8 @@ from cobble.interpreter.project.graph_types import (
 from cobble.jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import expand_procs
-from cobble.jackal.model import DD, DispStatus, Job, Step
-from cobble.jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
+from jackal.model import DD, DispStatus, Job, Step
+from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
@@ -309,7 +309,7 @@ def extract_jcl_graph(
     program that actually runs, so the step gets a TSO_RUNS_PROGRAM edge to it
     (one per distinct program, attrs carrying the monitor, the DD, and the DB2
     plan where the subcommand named one) alongside its JCL_STEP_RUNS edge to
-    the monitor itself. Both edges are true; see cobble.jackal.tso.
+    the monitor itself. Both edges are true; see jackal.tso.
 
     TempRef (&&NAME) and BackwardRef (*.STEP.DD) datasets, DummyDSN (DD
     DUMMY), and SYSOUT DDs, are not stable cross-job identities and are not

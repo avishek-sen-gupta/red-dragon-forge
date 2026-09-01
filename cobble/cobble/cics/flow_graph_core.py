@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from cobble.bms_copybook_gen.models import BmsMapSet
+from bms_copybook_gen.models import BmsMapSet
 from cobble.cics.flow_observer import CicsVerb, field_direction
 from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, NodeKind
 

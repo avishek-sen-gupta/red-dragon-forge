@@ -17,8 +17,8 @@ from pathlib import Path
 
 from cobble.jackal.dsn import DSN, DirectDSN, TempRef, temp_if_unresolved
 from cobble.jackal.jcl.parser import parse_proc
-from cobble.jackal.model import DD, Job, ProcDef, Step
-from cobble.jackal.value_parts import Symbol, Value, ValuePart
+from jackal.model import DD, Job, ProcDef, Step
+from jackal.value_parts import Symbol, Value, ValuePart
 
 
 class ProcExpansionError(Exception):

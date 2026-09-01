@@ -6,7 +6,7 @@ other, so they are one rule rather than one fixed fallback triple.
 """
 
 from cobble.jackal.jcl.bridge_parser import _disp_from_words
-from cobble.jackal.model import Disp, DispNormal, DispStatus
+from jackal.model import Disp, DispNormal, DispStatus
 
 
 def test_all_three_subparameters_given() -> None:

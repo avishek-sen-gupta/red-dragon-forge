@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TypeAlias
 
-from cobble.jackal.value_parts import Symbol, Value, resolve
+from jackal.value_parts import Symbol, Value, resolve
 
 
 @dataclass(frozen=True)

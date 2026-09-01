@@ -16,7 +16,7 @@ from cobble.jackal.dsn import (
     TempRef,
     BackwardRef,
 )
-from cobble.jackal.model import (
+from jackal.model import (
     Cond,
     CondOp,
     DD,
@@ -27,7 +27,7 @@ from cobble.jackal.model import (
     ProcDef,
     Step,
 )
-from cobble.jackal.value_parts import Literal, Symbol, Value, resolve
+from jackal.value_parts import Literal, Symbol, Value, resolve
 
 _PREEXISTING_STATUSES = frozenset({DispStatus.OLD, DispStatus.SHR, DispStatus.MOD})
 

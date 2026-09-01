@@ -17,7 +17,7 @@ from cobble.interpreter.cobol.asg_types import (
     CobolSection,
 )
 from cobble.interpreter.cobol.cobol_statements import OpenStatement
-from cobble.interpreter.cobol.file_enums import OpenMode
+from interpreter.cobol.file_enums import OpenMode
 from cobble.interpreter.project.graph_types import (
     AttrValue,
     EdgeKind,

@@ -78,7 +78,7 @@ class EdgeKind(Enum):
     # JCL_STEP_RUNS because both facts are true and neither substitutes for the
     # other: the step really does run IKJEFT01, and IKJEFT01 really does run
     # this program under DB2. Collapsing them into one kind would claim the JCL
-    # names a program it never names. See cobble.jackal.tso.
+    # names a program it never names. See jackal.tso.
     TSO_RUNS_PROGRAM = "TSO_RUNS_PROGRAM"
     READS = "READS"
     WRITES = "WRITES"

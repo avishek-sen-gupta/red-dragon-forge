@@ -26,8 +26,8 @@ from typing import TYPE_CHECKING
 
 from tqdm import tqdm
 
-from cobble.bms_copybook_gen.models import BmsMapSet
-from cobble.cics.csd_parse import parse_csd, parse_csd_files
+from bms_copybook_gen.models import BmsMapSet
+from cics.csd_parse import parse_csd, parse_csd_files
 from cobble.cics.flow_observer import CicsVerb  # noqa: F401  (re-exported vocabulary)
 from cobble.cics.graph_sink import GraphSink
 from cobble.cics.verb_source_asg import (

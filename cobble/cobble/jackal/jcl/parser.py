@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from cobble.jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
-from cobble.jackal.model import Job, ProcDef
+from jackal.model import Job, ProcDef
 
 
 def bridge_parser() -> JclBridgeParser:
