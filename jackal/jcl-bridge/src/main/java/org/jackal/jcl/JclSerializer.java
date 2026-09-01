@@ -95,6 +95,40 @@ public final class JclSerializer {
         }
     }
 
+    /** DOS/CP-M end-of-file marker, Ctrl-Z. Not a JCL character. */
+    private static final char END_OF_FILE_MARKER = '\u001A';
+
+    /**
+     * Drop a single trailing {@code 0x1A} at end of input, with any whitespace
+     * after it.
+     *
+     * <p>Members downloaded from a mainframe in binary mode can carry one: 27 of
+     * the 860 in one production corpus end with a lone {@code 0x1A} on its own
+     * line. It is a transfer artifact, not source, and no JCL rule can consume
+     * it -- the lexer is in DATA_MODE at end of input, so it comes out as a
+     * {@code DD_ASTERISK_DATA} token that nothing matches.
+     *
+     * <p>That was invisible while {@code EOF} was optional in {@code startRule}:
+     * the parse returned the prefix and reported nothing. Anchoring {@code EOF}
+     * turns leftover input into a syntax error, which is the point -- but it
+     * would fail those 27 members over a byte that is not theirs. So the byte is
+     * removed here, ahead of the lexer, and every OTHER kind of leftover is now
+     * reported.
+     *
+     * <p>Scoped to end of input on purpose. A {@code 0x1A} inside an in-stream
+     * data block is data and is left alone.
+     */
+    private static String withoutEndOfFileMarker(String src) {
+        int end = src.length();
+        while (end > 0 && Character.isWhitespace(src.charAt(end - 1))) {
+            end--;
+        }
+        if (end == 0 || src.charAt(end - 1) != END_OF_FILE_MARKER) {
+            return src;
+        }
+        return src.substring(0, end - 1);
+    }
+
     /**
      * Parse JCL source and serialize it to the Jackal JCL JSON contract.
      *
@@ -117,7 +151,7 @@ public final class JclSerializer {
      * before: this changes how long a parse takes, never what it returns.
      */
     static JsonObject serialize(String src) {
-        JCLLexer lexer = new JCLLexer(CharStreams.fromString(src));
+        JCLLexer lexer = new JCLLexer(CharStreams.fromString(withoutEndOfFileMarker(src)));
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         JCLParser parser = new JCLParser(tokens);
 
