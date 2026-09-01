@@ -19,7 +19,16 @@ parser grammar JCLParser;
 options {tokenVocab=JCLLexer;}
 
 
-startRule : jcl | EOF ;
+/*
+EOF is anchored here so a parse cannot stop early and stay quiet. Without it, a
+member whose tail no rule can consume still produced a tree for the PREFIX and
+reported nothing -- the parser had no way to say "I stopped at line 40 of 300".
+
+Matching EOF here does not conflict with the optional EOF at the end of execJCL,
+procJCL and commentStatement: ANTLR's Parser.consume() special-cases EOF and does
+not advance the token stream on it, so EOF can be matched more than once.
+*/
+startRule : jcl EOF | EOF ;
 
 jcl : (execJCL+ SS?) | (procJCL SS?) ;
 
