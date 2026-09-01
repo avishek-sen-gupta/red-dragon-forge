@@ -102,6 +102,63 @@ def test_return_transid_edge_back_to_transaction(cics_parser):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_start_transid_edge_to_the_dispatched_transaction(cics_parser):
+    """START TRANSID dispatches another transaction asynchronously — a PROGRAM ->
+    TRANSACTION edge of its own kind, not the RETURN_TRANSID of a task ending."""
+    csd = "DEFINE TRANSACTION(MENU) GROUP(DEMO) PROGRAM(MENUPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. MENUPROG.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('BKGD') INTERVAL(000500) END-EXEC.
+           STOP RUN.
+"""
+    sink = _ListSink()
+    extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"MENUPROG": src},
+        parser=cics_parser,
+        sink=sink,
+    )
+    nodes, edges = sink.nodes, sink.edges
+    started = [e for e in edges if e.kind == EdgeKind.START_TRANSID]
+    assert len(started) == 1
+    assert started[0].source == "MENUPROG"
+    assert started[0].source_kind == NodeKind.PROGRAM
+    assert started[0].target == "BKGD"
+    assert started[0].target_kind == NodeKind.TRANSACTION
+    assert any(n.kind == NodeKind.TRANSACTION and n.id == "BKGD" for n in nodes)
+    # Not folded into the kinds that already join these two node kinds.
+    assert [e for e in edges if e.kind == EdgeKind.RETURN_TRANSID] == []
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_start_without_transid_makes_no_edge(cics_parser):
+    """TRANSID is optional on START; with no transaction named there is no target
+    to point at, so the program gets no outgoing flow edge at all."""
+    csd = "DEFINE TRANSACTION(MENU) GROUP(DEMO) PROGRAM(MENUPROG)\n"
+    src = b"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. MENUPROG.
+       PROCEDURE DIVISION.
+           EXEC CICS START TERMID(EIBTRMID) END-EXEC.
+           STOP RUN.
+"""
+    sink = _ListSink()
+    extract_transaction_flow_graph(
+        csd_source=csd,
+        bms_mapsets={},
+        cobol_sources={"MENUPROG": src},
+        parser=cics_parser,
+        sink=sink,
+    )
+    edges = sink.edges
+    assert [e for e in edges if e.source == "MENUPROG"] == []
+    assert [e for e in edges if e.kind == EdgeKind.START_TRANSID] == []
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_and_receive_map_edges_with_bms_map_node(cics_parser):
     mapset = _make_mapset(
         "ACCSET",
