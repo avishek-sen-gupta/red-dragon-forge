@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from cobble.jackal.jcl.bridge_parser import JclParseError
+from jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
 
 

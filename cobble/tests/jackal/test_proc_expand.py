@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 from jackal.dsn import DirectDSN, TempRef
-from cobble.jackal.jcl import proc_expand
-from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs
+from jackal.jcl import proc_expand
+from jackal.jcl.proc_expand import ProcExpansionError, expand_procs
 from jackal.model import DD, Disp, DispNormal, DispStatus, Job, ProcDef, Step
 from jackal.value_parts import Symbol, Value, literal, resolve
 

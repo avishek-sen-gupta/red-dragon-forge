@@ -40,7 +40,7 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json, member_label
 from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
-from cobble.jackal.jcl.parser import bridge_parser
+from jackal.jcl.parser import bridge_parser
 from cobble.matching_files import matching_files
 
 logger = logging.getLogger(__name__)

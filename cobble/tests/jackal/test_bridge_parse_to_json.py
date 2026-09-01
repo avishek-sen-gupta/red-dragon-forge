@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from cobble.jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
+from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
 
 _MINIMAL_JOB = '{"name": "PAYROLL", "steps": []}'
 
