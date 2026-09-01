@@ -53,8 +53,8 @@ def _disp_from_words(words: tuple[str, ...]) -> Disp:
 
     MOD is read as already-existing. It can be either — MOD creates the data set
     when it is absent and appends when it is present — and JCL alone cannot say
-    which. Only ``status`` reaches the graph (``jcl_graph._DISP_TO_EDGE_KIND``),
-    so this choice affects the model's fidelity and no edge.
+    which. The choice affects the model's fidelity only; no consumer of
+    ``status`` distinguishes the two cases.
     """
 
     def slot(i: int) -> str:
