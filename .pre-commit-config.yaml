@@ -15,10 +15,17 @@ repos:
 
       - id: black
         name: Black (auto-fix)
-        entry: bash -c 'uv run --no-sync python -m black cicada/cics cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge knowledge_graph tools tests && git add -u'
+        # Formats and re-stages ONLY the files pre-commit hands us, which are the
+        # staged ones. It used to format a fixed directory list then `git add -u`,
+        # and `git add -u` stages EVERY modified tracked file — so an unrelated
+        # edit in flight was swept into whatever commit happened to be running.
+        # That bundled a cicada test reformat into a docs commit here, and in
+        # red-dragon mis-attributed a COBOL fix to a lint-config commit.
+        # `files:` keeps the same scope the directory list had.
+        entry: bash -c 'uv run --no-sync python -m black "$@" && git add -- "$@"' --
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [python]
+        files: ^(cicada/cics|cicada/tests|squall/squall|squall/tests|jackal/jackal|jackal/tests|red_dragon_forge|knowledge_graph|tools|tests)/
 
       - id: python-fp-lint
         name: Python FP lint (warnings only)
