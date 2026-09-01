@@ -44,6 +44,15 @@ _VSAM_FILE_EDGE_KIND: dict[str, EdgeKind] = {
 }
 
 
+# RETURN TRANSID hands control on as the task ends; START TRANSID dispatches work
+# asynchronously. Same endpoints (PROGRAM -> TRANSACTION), so one branch, with the
+# kind saying which.
+_TRANSACTION_EDGE_KIND: dict[str, EdgeKind] = {
+    "RETURN_TRANSID": EdgeKind.RETURN_TRANSID,
+    "START_TRANSID": EdgeKind.START_TRANSID,
+}
+
+
 def _verb_edge(verb: CicsVerb, bms_mapsets: dict[str, BmsMapSet]) -> GraphEdge | None:
     """Convert one CicsVerb event into a GraphEdge, or None for verbs with no
     graph-relevant target (e.g. a plain RETURN with no TRANSID)."""
@@ -72,13 +81,13 @@ def _verb_edge(verb: CicsVerb, bms_mapsets: dict[str, BmsMapSet]) -> GraphEdge |
             target_kind=NodeKind.PROGRAM,
             kind=EdgeKind.LINK,
         )
-    if verb.verb == "RETURN_TRANSID" and verb.transid:
+    if verb.verb in _TRANSACTION_EDGE_KIND and verb.transid:
         return GraphEdge(
             source=program_id,
             source_kind=NodeKind.PROGRAM,
             target=verb.transid.upper(),
             target_kind=NodeKind.TRANSACTION,
-            kind=EdgeKind.RETURN_TRANSID,
+            kind=_TRANSACTION_EDGE_KIND[verb.verb],
         )
     if verb.verb in ("SEND_MAP", "RECEIVE_MAP") and verb.mapset_name and verb.map_name:
         bms_id = f"{verb.mapset_name.upper()}.{verb.map_name.upper()}"

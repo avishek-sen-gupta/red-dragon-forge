@@ -29,6 +29,7 @@ _EDGE_COLORS = {
     "XCTL": "#C44E52",
     "LINK": "#C44E52",
     "RETURN_TRANSID": "#C44E52",
+    "START_TRANSID": "#C44E52",
     "STARTS": "#8172B2",
     "SENDS_MAP": "#DD8452",
     "RECEIVES_MAP": "#DD8452",

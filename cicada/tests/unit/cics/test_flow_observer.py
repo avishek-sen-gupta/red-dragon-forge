@@ -186,6 +186,48 @@ def test_return_transid_notifies_observer():
     assert v.transid == "CA00"
 
 
+def _lower_source(text: str, observer):
+    """Lower one EXEC CICS statement written as source, through the real CICS
+    dialect parser, so the verb comes from the grammar and not a hand-built
+    ExecCicsStatement."""
+    from cics.statements import CicsDialectParser
+    from cics.strategy import CicsLoweringStrategy
+
+    stmt = CicsDialectParser().parse({"type": "EXEC_CICS", "exec_cics_text": text})
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        observer=observer,
+    )
+    strategy.lower(_minimal_ctx(), stmt, materialised=None)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_start_transid_notifies_observer():
+    """START is the third way a program names another unit of work, after XCTL and
+    RETURN TRANSID, and the only asynchronous one. Nothing lowered it, so every
+    EXEC CICS START was parsed and dropped."""
+    observer = _CapturingObserver()
+    _lower_source(
+        "EXEC CICS START TRANSID('A123') INTERVAL(000500) END-EXEC", observer
+    )
+
+    assert len(observer.captured) == 1
+    v = observer.captured[0]
+    assert v.verb == "START_TRANSID"
+    assert v.transid == "A123"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_start_without_transid_is_not_a_graph_event():
+    """TRANSID is optional in the API. With no transaction named there is nothing
+    for the graph to point at — the same rule RETURN already follows."""
+    observer = _CapturingObserver()
+    _lower_source("EXEC CICS START TERMID(EIBTRMID) END-EXEC", observer)
+
+    assert observer.captured == []
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_read_notifies_observer_with_file_name():
     from cics.statements import ExecCicsStatement, CicsOperand

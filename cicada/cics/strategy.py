@@ -1061,6 +1061,30 @@ class CicsLoweringStrategy:
             emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 
+        # ── START (observed for the flow graph, not executed) ────────────────
+        # START is the third way a program names another unit of work, after
+        # XCTL and RETURN TRANSID, and the only asynchronous one. The
+        # interpreter has no task scheduler, so this deliberately falls through
+        # to the unimplemented-verb warning below and emits no IR — but the
+        # transaction it dispatches is a real edge, and this lowering pass is
+        # the only place that sees it.
+        #
+        # TRANSID is optional in the API (START also carries TERMID/INTERVAL/
+        # FROM), and the transaction is what the edge points at, so a START
+        # without one is nothing the graph can record — the rule RETURN already
+        # follows.
+        if verb == "START" and "TRANSID" in opts:
+            self._observer.on_verb(
+                CicsVerb(
+                    verb="START_TRANSID",
+                    program="",
+                    map_name=None,
+                    mapset_name=None,
+                    xctl_target=None,
+                    transid=_resolve_operand(opts.get("TRANSID"), ctx),
+                )
+            )
+
         logger.warning(
             "CicsLoweringStrategy: unimplemented verb %r — no IR emitted", verb
         )
