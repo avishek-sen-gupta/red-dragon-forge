@@ -25014,7 +25014,7 @@ timererrOption
 
 timesepOption
 	: (
-	TIMESEP arg
+	TIMESEP arg?
 	)
 	;
 
