@@ -289,3 +289,19 @@ def test_parse_send_map_literal_collision_guard():
     """g5gx guard: a quoted MAP literal stays is_literal=True."""
     _, opts = parse_exec_cics_text("EXEC CICS SEND MAP('SGNMAP') END-EXEC")
     assert opts["MAP"] == CicsOperand("SGNMAP", True)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_formattime_separator_options_take_no_value():
+    """DATESEP and TIMESEP may be written bare: CICS then uses its own default
+    separator ("/" and ":"). The grammar allows a bare DATESEP but requires a
+    value after TIMESEP, so a program writing the documented bare form fails to
+    parse -- and with it every CICS edge in that program.
+    """
+    verb, opts = parse_exec_cics_text(
+        "EXEC CICS FORMATTIME ABSTIME(WS-ABSTIME) MMDDYYYY(WS-DATE) DATESEP "
+        "TIME(WS-TIME) TIMESEP END-EXEC"
+    )
+    assert verb == "FORMATTIME"
+    assert opts["TIME"] == CicsOperand("WS-TIME", False)
+    assert ("DATESEP" in opts, "TIMESEP" in opts) == (True, True)
