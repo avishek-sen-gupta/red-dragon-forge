@@ -110,4 +110,9 @@ fileignoreconfig:
 # passes both -- one monitor" -- and not on any value. No credential here.
 - filename: cobble/jackal/tso.py
   checksum: e0b506e323b5a0fa5140e7e2a623939fedbc139eabe51671cd99da77a46e4d01
+# False positive: the pattern detector reads the assertion message and key name
+# in `assertTrue("no indexed_by key emitted", group.has("indexed_by"))` as a
+# secret. It is an OCCURS ... INDEXED BY test, and there is no value in the file.
+- filename: proleap-bridge/src/test/java/org/reddragon/bridge/IndexedBySerializerTest.java
+  checksum: 5bead0999783b6295bceb57cad208277aa632eed753cd49a04999338c5c7ccd5
 version: "1.0"
