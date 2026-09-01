@@ -18,8 +18,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from cobble.cics.statements import CicsDialectParser
-from cobble.interpreter.cobol import cobol_statements as _cobol_statements
-from cobble.sql.statements import SqlDialectParser
+from interpreter.cobol import cobol_statements as _cobol_statements
+from squall.statements import SqlDialectParser
 
 
 def asg_dialect_parsers() -> tuple[CicsDialectParser, SqlDialectParser]:

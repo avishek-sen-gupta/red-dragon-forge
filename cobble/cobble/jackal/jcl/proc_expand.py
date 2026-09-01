@@ -15,7 +15,7 @@ from dataclasses import replace
 from itertools import chain
 from pathlib import Path
 
-from cobble.jackal.dsn import DSN, DirectDSN, TempRef, temp_if_unresolved
+from jackal.dsn import DSN, DirectDSN, TempRef, temp_if_unresolved
 from cobble.jackal.jcl.parser import parse_proc
 from jackal.model import DD, Job, ProcDef, Step
 from jackal.value_parts import Symbol, Value, ValuePart
@@ -83,7 +83,7 @@ def _substitute_dsn(name: Value, symbols: Mapping[str, Value]) -> DSN:
     One exception to plain substitution: a DSN that is a whole lone symbol
     nothing binds is the temporary dataset z/OS reads ``DSN=&NAME`` as, inside
     a PROC exactly as outside one — the same reading
-    :func:`cobble.jackal.dsn.temp_if_unresolved` gives a job-level DD. Anything
+    :func:`jackal.dsn.temp_if_unresolved` gives a job-level DD. Anything
     else unbound stays the error it is: a symbol too long to be a temp name, or
     one glued to literal text, is a parameter the caller forgot to pass, and
     reading it as a work file would invent a dataset.

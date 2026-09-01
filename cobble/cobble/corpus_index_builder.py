@@ -29,7 +29,7 @@ from cics.csd_parse import CsdParseError, parse_csd, parse_csd_files
 from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index import CorpusIndex
 from interpreter.cobol.source_text import decode_source
-from cobble.jackal.dsn import InStreamDSN
+from jackal.dsn import InStreamDSN
 from cobble.jackal.jcl.bridge_parser import JclParseError
 from cobble.jackal.jcl.parser import parse_jcl
 from cobble.jackal.jcl.proc_expand import ProcExpansionError, expand_procs

@@ -1,6 +1,6 @@
 import pytest
 
-from cobble.interpreter.cobol.edit_picture import (
+from interpreter.cobol.edit_picture import (
     format_edited,
     parse_edit_picture,
 )

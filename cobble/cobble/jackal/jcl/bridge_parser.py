@@ -7,7 +7,7 @@ import subprocess
 from collections.abc import Callable
 from typing import TypeVar
 
-from cobble.jackal.dsn import (
+from jackal.dsn import (
     DSN,
     DirectDSN,
     DummyDSN,

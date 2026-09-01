@@ -1,7 +1,8 @@
 import pytest
 
-from cobble.interpreter.cobol.cobol_types import CobolDataCategory
-from cobble.interpreter.cobol.pic_parser import parse_pic
+from interpreter.cobol.cobol_types import CobolDataCategory
+from interpreter.cobol.edit_picture import UnsupportedEditPictureError
+from interpreter.cobol.pic_parser import parse_pic
 
 
 def test_parse_pic_plain_numeric() -> None:
@@ -97,22 +98,22 @@ def test_parse_pic_alphanumeric_edited_counts_insertion_positions() -> None:
     assert desc.byte_length == 11
 
 
-def test_parse_pic_alphabetic() -> None:
+def test_parse_pic_alphabetic_is_stored_as_alphanumeric() -> None:
+    # The descriptor's categories are STORAGE categories, coarser than the
+    # PICTURE clause's: a PIC A item and a PIC X item are stored and moved
+    # identically, so there is no separate ALPHABETIC member to assert.
     desc = parse_pic("A(5)")
-    assert desc.category == CobolDataCategory.ALPHABETIC
+    assert desc.category == CobolDataCategory.ALPHANUMERIC
     assert desc.char_positions == 5
     assert desc.byte_length == 5
 
 
-def test_parse_pic_external_floating_point() -> None:
-    # "Pic +999.99E+99" -- p. 215. The exponent's two 9s are part of the format,
-    # not the value's precision.
-    desc = parse_pic("+999.99E+99")
-    assert desc.category == CobolDataCategory.EXTERNAL_FLOAT
-    assert desc.char_positions == 11
-    assert desc.total_digits == 5
-    assert desc.decimal_digits == 2
-    assert desc.byte_length == 11
+def test_parse_pic_external_floating_point_is_refused() -> None:
+    # "Pic +999.99E+99" -- p. 215. External floating-point has no storage
+    # category here: it is refused at field ingestion rather than given one, so
+    # a picture nothing can represent fails where the field is read.
+    with pytest.raises(UnsupportedEditPictureError, match="external floating-point"):
+        parse_pic("+999.99E+99")
 
 
 def test_parse_pic_floating_currency_run_is_one_fewer_digit_than_its_length() -> None:
@@ -129,10 +130,12 @@ def test_parse_pic_scaling_positions_are_digits_but_not_stored() -> None:
     # "P ... Not counted in the size of the data item. Scaling position
     # characters are counted in determining the maximum number of digit
     # positions" -- Table 12, p. 209.
+    # The descriptor keeps only the STORED digits -- P holds none in any usage
+    # -- and reports the shift the Ps imply as `scale` instead.
     desc = parse_pic("PPP999")
     assert desc.category == CobolDataCategory.ZONED_DECIMAL
-    assert desc.total_digits == 6
-    assert desc.decimal_digits == 6
+    assert desc.total_digits == 3
+    assert desc.scale == -6
     assert desc.char_positions == 3
     assert desc.byte_length == 3
 
@@ -163,10 +166,12 @@ def test_parse_pic_sign_separate_adds_a_character_position() -> None:
     assert desc.byte_length == 6
 
 
-def test_parse_pic_blank_when_zero_makes_a_numeric_picture_numeric_edited() -> None:
-    # "Either the BLANK WHEN ZERO clause must be specified for the item, or the
-    # string must contain at least one of the following symbols ..." -- p. 218.
+def test_parse_pic_blank_when_zero_is_a_flag_not_a_category() -> None:
+    # The spec makes BLANK WHEN ZERO put the item in category numeric-edited
+    # (p. 218), but the descriptor's categories are storage categories and
+    # BLANK WHEN ZERO changes no storage: the picture stays ZONED_DECIMAL and
+    # the clause travels as its own flag.
     desc = parse_pic("9(5)", blank_when_zero=True)
-    assert desc.category == CobolDataCategory.NUMERIC_EDITED
+    assert desc.category == CobolDataCategory.ZONED_DECIMAL
     assert desc.char_positions == 5
     assert desc.blank_when_zero

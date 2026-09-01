@@ -1,4 +1,4 @@
-from cobble.sql.statements import ExecSqlStatement, SqlDialectParser
+from squall.statements import ExecSqlStatement, SqlDialectParser
 
 
 def test_sql_dialect_parser_applies_to_exec_sql() -> None:
