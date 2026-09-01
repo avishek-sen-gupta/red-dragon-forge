@@ -7,17 +7,18 @@ import io.proleap.cobol.asg.metamodel.data.datadescription.DataDescriptionEntryC
 import io.proleap.cobol.asg.metamodel.data.datadescription.DataDescriptionEntryGroup;
 import io.proleap.cobol.asg.metamodel.data.datadescription.DataDescriptionEntryRename;
 import io.proleap.cobol.asg.metamodel.data.datadescription.BlankWhenZeroClause;
+import io.proleap.cobol.asg.metamodel.data.datadescription.Index;
 import io.proleap.cobol.asg.metamodel.data.datadescription.OccursClause;
+import io.proleap.cobol.asg.metamodel.data.datadescription.OccursIndexed;
 import io.proleap.cobol.asg.metamodel.data.datadescription.JustifiedClause;
 import io.proleap.cobol.asg.metamodel.data.datadescription.SignClause;
 import io.proleap.cobol.asg.metamodel.data.datadescription.SynchronizedClause;
 import io.proleap.cobol.asg.metamodel.data.datadescription.ValueInterval;
 import io.proleap.cobol.asg.metamodel.valuestmt.ValueStmt;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Serializes DATA DIVISION entries to JSON matching the CobolField contract.
@@ -29,12 +30,6 @@ public final class DataFieldSerializer {
 
     private static final Logger LOG = Logger.getLogger(DataFieldSerializer.class.getName());
 
-    /**
-     * Pattern for PIC repetition notation: X(5), 9(3), S9(5)V99, etc.
-     * Matches individual PIC characters optionally followed by (count).
-     */
-    private static final Pattern PIC_TOKEN_PATTERN =
-            Pattern.compile("([SsVv])|([9AaXx])(?:\\((\\d+)\\))?");
 
     /** Running counter for disambiguating FILLER fields within a serialization session. */
     private int fillerCount = 0;
@@ -110,6 +105,15 @@ public final class DataFieldSerializer {
             obj.addProperty("occurs", occursCount);
             int elementSize = computeElementSize(group);
             obj.addProperty("element_size", elementSize);
+        }
+
+        List<String> indexNames = extractIndexNames(group);
+        if (!indexNames.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (String n : indexNames) {
+                arr.add(n);
+            }
+            obj.add("indexed_by", arr);
         }
 
         int occursMin = extractOccursMin(group);
@@ -417,70 +421,41 @@ public final class DataFieldSerializer {
      * character width (mirroring Python edit_picture.parse_edit_picture().width).
      */
     public static int countStoragePositions(String pic) {
-        if (isNumericEdited(pic)) {
-            return countEditedWidth(pic);
-        }
-        int count = 0;
-        Matcher matcher = PIC_TOKEN_PATTERN.matcher(pic.toUpperCase());
-
-        while (matcher.find()) {
-            if (matcher.group(1) != null) {
-                // S or V — no storage position
-                continue;
-            }
-            String countStr = matcher.group(3);
-            count += (countStr != null) ? Integer.parseInt(countStr) : 1;
-        }
-        return count;
-    }
-
-    /**
-     * True if {@code pic} is a numeric-edited picture: it has digit positions
-     * (9/Z) and at least one editing symbol (sign, Z, comma, or an actual '.'
-     * decimal point) and no alphanumeric X/A positions. Mirrors Python
-     * {@code edit_picture.is_numeric_edited}.
-     */
-    public static boolean isNumericEdited(String pic) {
-        String upper = pic.toUpperCase();
-        if (upper.indexOf('X') >= 0 || upper.indexOf('A') >= 0) {
-            return false;
-        }
-        boolean hasDigit = upper.indexOf('9') >= 0 || upper.indexOf('Z') >= 0;
-        if (!hasDigit) {
-            return false;
-        }
-        for (int i = 0; i < upper.length(); i++) {
-            char c = upper.charAt(i);
-            if (c == 'Z' || c == '+' || c == '-' || c == ',' || c == '.') {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Counts the character width of a numeric-edited picture: every symbol is a
-     * stored position (sign, Z, 9, '.', ','), with {@code (N)} expanding the
-     * preceding symbol. The repeat notation itself is not counted.
-     */
-    public static int countEditedWidth(String pic) {
         String upper = pic.toUpperCase();
         int count = 0;
         int i = 0;
+        char previous = 0;
         while (i < upper.length()) {
             char c = upper.charAt(i);
             if (c == '(') {
                 int close = upper.indexOf(')', i);
                 int repeat = Integer.parseInt(upper.substring(i + 1, close));
-                // The preceding symbol already added 1; add the remainder.
-                count += (repeat - 1);
+                // The preceding symbol already contributed 1 — add the remainder,
+                // but only if that symbol occupies storage at all (P(3) is still 0).
+                if (isStoredPosition(previous)) {
+                    count += repeat - 1;
+                }
                 i = close + 1;
             } else {
-                count += 1;
+                if (isStoredPosition(c)) {
+                    count += 1;
+                }
+                previous = c;
                 i++;
             }
         }
         return count;
+    }
+
+    /**
+     * True if a PIC symbol occupies a storage position.
+     *
+     * <p>S (operational sign), V (implied decimal point) and P (decimal scaling)
+     * are the only PIC symbols that occupy none. Everything else — digits, Z,
+     * currency, check protection, and every insertion character — is one byte.
+     */
+    private static boolean isStoredPosition(char c) {
+        return c != 'S' && c != 'V' && c != 'P';
     }
 
     private static String extractPic(DataDescriptionEntryGroup group) {
@@ -689,6 +664,38 @@ public final class DataFieldSerializer {
             LOG.fine("Could not extract OCCURS for " + group.getName() + ": " + e.getMessage());
         }
         return 0;
+    }
+
+    /**
+     * The INDEXED BY names on a group's OccursClause, in declaration order.
+     *
+     * <p>An index declared this way is compiler-allocated: there is deliberately no
+     * `01 IX PIC ...` anywhere, so this clause is the item's only declaration. Order
+     * matters — a Format 1 SEARCH with no VARYING advances the FIRST index. Names are
+     * preserved verbatim as declared, matching every other identifier extractor in
+     * this class (e.g. {@code extractRedefines}, {@code extractOccursDependingOn}) —
+     * case-insensitive matching is done by callers, not by upper-casing here.
+     */
+    private static List<String> extractIndexNames(DataDescriptionEntryGroup group) {
+        List<String> names = new ArrayList<>();
+        try {
+            List<OccursClause> clauses = group.getOccursClauses();
+            if (clauses == null || clauses.isEmpty()) {
+                return names;
+            }
+            OccursIndexed indexed = clauses.get(0).getOccursIndexed();
+            if (indexed == null || indexed.getIndices() == null) {
+                return names;
+            }
+            for (Index ix : indexed.getIndices()) {
+                if (ix.getName() != null) {
+                    names.add(ix.getName());
+                }
+            }
+        } catch (Exception e) {
+            LOG.fine("No INDEXED BY names: " + e.getMessage());
+        }
+        return names;
     }
 
     /**
