@@ -234,6 +234,90 @@ the pattern to follow: the decode path wants the same treatment, so that
 integration test three layers away. Extracting the read into a static method that
 takes bytes and returns a String is the whole change.
 
+cobble is worse off than red-dragon here, because it has **no** bridge-backed
+integration test of any kind — nothing in cobble runs the jar. red-dragon's
+`test_copybook_with_a_high_byte_in_a_comment_is_inlined` is not portable as-is: it
+goes through the VM, and it covers the high byte in a *copybook*, which the bridge
+opens itself. cobble's own charset defect was a high byte in the **member**, which
+crosses the stdin wire instead — a path red-dragon's test never exercises. That
+half is now covered by `tests/interpreter/cobol/test_subprocess_runner.py`, which
+asserts the wire is byte-identity without needing a JVM. What remains uncovered in
+cobble is everything downstream of the wire.
+
+---
+
+## 8. SPECIAL-NAMES never reaches the picture parser — OPEN
+
+**Repository:** cobble.
+
+Same shape as entry 1 — the bridge emits it, the Python side drops it — but this
+one produces a **wrong answer** rather than a missing one, and the capability to
+use it is already present and merely unwired.
+
+The bridge serializes the clause. `AsgSerializer.java:92` adds a `special_names`
+object to the ASG when the compilation unit has one, carrying `currency_sign` and
+`currency_picture_symbol` (:126, :130); the comment at :107 states why, namely that
+a multi-character currency literal changes every affected field's size.
+
+Nothing reads it. `CobolASG.from_dict` has no `special_names` branch, so the key is
+dropped at ingest, and `cobble/interpreter/cobol/pic_parser.py:75` builds the
+picture parser once at import with the defaults:
+
+```python
+_parser = picture.build_parser()
+```
+
+`parse_pic` (same file, :78) takes no currency or decimal-point argument, so there
+is no way to pass one even if the ASG had carried it. `parse_pic` is live —
+`asg_types.py:68` calls it for every field — so every descriptor in a graph built
+from a program with `CURRENCY SIGN IS 'EUR'` or `DECIMAL-POINT IS COMMA` is sized
+and scaled against `$` and `.` instead.
+
+The notable part: cobble is **ahead** of red-dragon on the parser itself.
+`picture.build_parser(currency_symbols, decimal_point_is_comma)` already accepts
+multiple currency symbols and the comma point; red-dragon's `_parser_for(currency)`
+handles a single symbol, and red-dragon commit `dd377200` records that its grammar
+was backported from cobble. So this is not a port — the machinery exists on the
+better side and three layers of plumbing are missing above it.
+
+**Fix shape:** read `special_names` in `CobolASG.from_dict`; give `parse_pic` a
+`currency_symbols`/`decimal_point_is_comma` pair; build (and cache per unique
+combination) rather than at import. `UnsupportedEditPictureError` needs the same
+treatment, since which pictures are unsupported depends on the symbol set.
+
+---
+
+## 9. PIC P scaling is not on the type descriptor — OPEN
+
+**Repository:** cobble.
+
+`CobolTypeDescriptor` (`cobble/interpreter/cobol/cobol_types.py:65`) has
+`total_digits`, `decimal_digits`, `signed`, `char_positions` and the sign flags —
+and no `scale`. red-dragon added one (`cobol_types.py:96`, commit `e8cda012`) with
+the distinction stated in its comment: `decimal_digits` is the point the picture
+*writes* (V or .), `scale` is the power of ten the P positions apply.
+
+cobble stops at the point's position. `picture.py:320` `_implied_point` returns
+either 0 or `digits`, and :269 turns that into `scale = digits - digits_before_point`
+— which is the fraction-digit count, red-dragon's `decimal_digits`. red-dragon's
+`_point_shift` (`picture.py:350`) returns the factor instead, and handles both
+sides: trailing Ps multiply (`999PP` holding 009 is 900), leading Ps put the point
+left of themselves so the rightmost stored digit lands at
+`10**-(P count + stored digits)` (`PP999` holding 123 is .00123).
+
+Under cobble's arithmetic `PP999` gets `digits_before_point = 0` and therefore
+`scale = digits`, which counts the stored digits as fraction digits but loses the
+two P positions — it describes `V999`, not `PP999`. `999PP` gets no factor at all.
+
+Consequence is confined to consumers that read a field's numeric magnitude, which
+today is nothing in cobble (it does not evaluate). It becomes wrong the moment one
+does, and the field is absent rather than obviously zero, which is the same
+notice-it-from-outside problem as entry 1.
+
+**Fix shape:** port `_point_shift` and add `scale` to the descriptor. Both repos'
+`picture.py` already carry the identical docstring citing p. 211, so the reasoning
+does not need re-deriving — only the return value differs.
+
 ---
 
 ## Note on `--no-verify`
