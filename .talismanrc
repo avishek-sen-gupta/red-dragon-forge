@@ -156,10 +156,6 @@ fileignoreconfig:
   # Flagged on the word KEY inside the COBOL field name MSG-KEY in the
   # synthetic reproduction programs. No credentials in this file.
   checksum: b0be2d3e0b61877bf81415d1e819eb807f5adc870a2c3db34433bf0b1d25ef75
-- filename: jackal/jackal/jcl_graph.py
-  # Flagged on comment prose -- "the SYSTSIN of a" -- and not on any value.
-  # No credentials in this file.
-  checksum: 2526b0b6c4444d71678e70d6bbecc19f30ead9f771adef53fe5b36c7f750926d
 - filename: jackal/jackal/tso.py
   # Flagged on comment prose -- "IKJEFT1B passes both -- one monitor" -- and
   # not on any value. No credentials in this file.
@@ -167,11 +163,11 @@ fileignoreconfig:
 - filename: jackal/jackal/jcl/proc_expand.py
   # Flagged on docstring prose about a symbol nothing binds. No credentials.
   checksum: 1687ad878695c2f8416ac91028409af832ecca1799eb3b7d9d7d7548ee12af60
-- filename: jackal/tests/unit/test_jcl_graph.py
-  # Flagged on docstring prose -- "a work file" -- and not on any value.
-  # No credentials in this file.
-  checksum: 7fcca21c82196948e3eb9dab33a5635d2a6f6c1dd008c35280e9c1e6dc1ab8cd
 - filename: jackal/tests/unit/fixtures/proc/WORKPROC.prc
   # Test fixture: a PROC whose DSN is one unbound symbol. No credentials.
   checksum: 8c67811f0adcae4b0bfaa2ab3e0147bdda964f020e8a6c4c5cf587741d547d71
+- filename: docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md
+  # Flagged on design prose about module names and verification steps, not on
+  # any value. No credentials in this file.
+  checksum: 603553fc076120db3965cd66a0dcb60c3dc1f100b56a446b8c716ca63524a004
 version: "1.0"

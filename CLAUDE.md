@@ -82,13 +82,13 @@ make test-all  # build JARs once, then run every package's suite (cicada, squall
 ```
 
 Each package is also independently buildable/testable from its own directory (`cd cicada && make test`, etc.).
-The CICS e2e and fitness-golden paths also need the native `hlasm_export` binary — build it via
+The CICS e2e path also needs the native `hlasm_export` binary — build it via
 `cicada/third-party/che-che4z-lsp-for-hlasm-fork/build.sh --target hlasm_export` (cmake/ninja/clang).
 Db2-backed tests need `SQUALL_DB2_DSN` and a running Db2 (`cd squall && make db2-up`).
 
 ## Architecture Overview
 
-A `uv` workspace layering four runtimes plus an analysis package on top of the vendored
+A `uv` workspace layering four runtimes on top of the vendored
 RedDragon interpreter (`vendor/red-dragon`, never modified here):
 
 - `cicada/` — CICS runtime (pseudo-conversational dispatch, VSAM KSDS, BMS).
@@ -96,7 +96,6 @@ RedDragon interpreter (`vendor/red-dragon`, never modified here):
 - `jackal/` — JCL/batch execution engine.
 - `red_dragon_forge/` — composition layer; assembles multiple coprocessor extensions into one
   compiled COBOL program via a generic `CoprocessorSpec` seam.
-- `knowledge_graph/` — whole-system knowledge-graph extraction/merge/render (analysis only).
 
 Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved) and stay
 independently buildable — they must not import each other.
@@ -104,8 +103,8 @@ independently buildable — they must not import each other.
 ## Conventions & Patterns
 
 - **Package independence** is enforced by the root `.importlinter` contract: the three runtimes
-  must not import each other, only `red_dragon_forge/` may import more than one, and none of
-  Cicada/Squall/Jackal may import `knowledge_graph`. Run `uv run lint-imports` to check.
+  must not import each other, and only `red_dragon_forge/` may import more than one. Run
+  `uv run lint-imports` to check.
 - **Formatting**: Black (line length 88); `make fmt` at the root, or per package.
 - **Comments are a smell.** Reaching for a comment means the code did not say it — rename,
   extract, or restructure until it does. Comments that survive earn it by carrying what code

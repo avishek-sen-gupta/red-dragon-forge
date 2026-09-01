@@ -22,15 +22,13 @@ general-purpose multi-language interpreter, vendored separately, never modified 
   (`interpreter.project.coprocessor_compile`, contributed to RedDragon itself). See
   [`docs/design/2026-07-04-cics-sql-composition-design.md`](docs/design/2026-07-04-cics-sql-composition-design.md)
   for the composition design.
-- **[`knowledge_graph/`](knowledge_graph/)** — a static-analysis package that extracts and
-  merges a whole-system knowledge graph across the runtimes. It combines RedDragon's
-  CALL/COPY graph, Cicada's CICS flow graph (transactions, BMS maps, VSAM file control), and
-  Jackal's JCL graph (jobs, steps, datasets) into one `networkx.MultiDiGraph`, streamed to
-  JSONL through `GraphWriter` and rendered to a self-contained, CDN-free HTML visualization.
-  `build_carddemo_graph.py` runs all extractors over the full AWS CardDemo corpus, pinned by
-  a fitness golden (`tests/integration/test_fitness_golden.py`, 449 nodes / 803 edges). The
-  standalone **cobble** repo is a VM-free port of this extraction that reproduces the same
-  449-node/803-edge CardDemo graph in its own repository.
+
+Whole-system knowledge-graph extraction used to live here as a `knowledge_graph/` package,
+with per-runtime extractors inside Cicada and Jackal. It was deleted ahead of folding the
+standalone **cobble** repository into this workspace: cobble is a VM-free successor to that
+pipeline, not a lagging copy of it, so the graph stack arrives with cobble rather than being
+merged into its own ancestor. See
+[`docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md`](docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md).
 
 ## Repository structure
 
@@ -41,8 +39,7 @@ still walks back across the merge boundary). Each keeps its own `CLAUDE.md`, `Ma
 merging them didn't couple their release cadences or make them depend on each other.
 Cross-package imports are enforced against by a shared root
 [`.importlinter`](.importlinter) contract; only `red_dragon_forge/` is allowed to import
-from more than one of them. A further contract keeps the runtimes free of analysis
-dependencies: Cicada, Squall, and Jackal must not import `knowledge_graph`. See
+from more than one of them. See
 [`docs/superpowers/specs/2026-07-05-monorepo-migration-design.md`](docs/superpowers/specs/2026-07-05-monorepo-migration-design.md)
 for the full migration design and rationale.
 
@@ -53,9 +50,8 @@ red-dragon-forge/
   squall/                  # EXEC SQL runtime, full history preserved via git subtree
   jackal/                  # JCL/batch runtime, full history preserved via git subtree
   red_dragon_forge/        # composition-layer package (this repo's own code)
-  knowledge_graph/         # whole-system knowledge-graph extraction + render (analysis only)
-  tests/                   # root composition + integration suites, incl. KG + fitness golden
-  pyproject.toml           # uv workspace root (members: cicada, squall, jackal, knowledge_graph)
+  tests/                   # root composition + integration suites
+  pyproject.toml           # uv workspace root (members: cicada, squall, jackal)
   Makefile                 # root orchestrator — builds the shared JARs once, runs all suites
   .importlinter            # cross-package independence contract
   .pre-commit-config.yaml  # consolidated hooks (static checks global, test suites per-package)

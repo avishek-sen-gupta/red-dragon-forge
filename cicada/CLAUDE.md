@@ -101,8 +101,6 @@ cics/
   builtins/            # CICS service builtins: flow, screen, system, vsam
   vsam/                # VsamEngine (CICS adapter over shared drivers), eibresp, seed, format, dump CLI
   bms/                 # BMS symbolic-copybook generation (hlasm_export → bms_copybook_gen; macros/ syslib)
-  flow_map.py, flow_graph_core.py, flow_observer.py, graph_sink.py, verb_source_lowering.py
-                       # streaming CICS transaction-flow graph extraction
 ```
 
 The EXEC CICS grammar is **ANTLR4** (`cics/cics_grammar/CICSzLexer.g4` + `CICSzParser.g4`, with

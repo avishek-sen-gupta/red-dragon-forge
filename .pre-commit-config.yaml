@@ -25,11 +25,11 @@ repos:
         entry: bash -c 'uv run --no-sync python -m black "$@" && git add -- "$@"' --
         language: system
         types: [python]
-        files: ^(cicada/cics|cicada/tests|squall/squall|squall/tests|jackal/jackal|jackal/tests|red_dragon_forge|knowledge_graph|tools|tests)/
+        files: ^(cicada/cics|cicada/tests|squall/squall|squall/tests|jackal/jackal|jackal/tests|red_dragon_forge|tools|tests)/
 
       - id: python-fp-lint
         name: Python FP lint (warnings only)
-        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cicada/cics/ squall/squall/ jackal/jackal/ red_dragon_forge/ knowledge_graph/ tools/ || true'
+        entry: bash -c 'uv run --no-sync python -m python_fp_lint check cicada/cics/ squall/squall/ jackal/jackal/ red_dragon_forge/ tools/ || true'
         language: system
         pass_filenames: false
         always_run: true
