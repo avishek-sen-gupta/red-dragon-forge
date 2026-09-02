@@ -201,6 +201,71 @@ def test_a_hub_is_drawn_larger_than_a_leaf(tmp_path: Path) -> None:
     assert by_label["PROGONE"] > by_label["COPYONE"]
 
 
+# ── Pointing at one thing in a corpus-sized graph ─────────────────
+
+
+def test_hovering_hides_the_edges_that_are_not_emphasised(tmp_path: Path) -> None:
+    """Dimming cannot lift one arrow above six figures of others: the emphasis
+    redraw runs with skipIndexation, so sigma never re-sorts by zIndex and a
+    dimmed edge drawn later paints over the bright one. The rest are hidden."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert "if (emphasisEdges) {" in html
+    assert "if (!emphasisEdges.has(edge)) return { ...data, hidden: true };" in html
+
+
+def test_an_edge_can_be_pointed_at(tmp_path: Path) -> None:
+    """Hit-testing edges costs a second geometry pass into a picking buffer plus
+    a pixel readback per pointer move, and it is what makes one arrow among six
+    figures reachable at all."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert "enableEdgeEvents: true" in html
+    assert 'renderer.on("enterEdge"' in html
+    assert 'renderer.on("leaveEdge", clearEmphasis)' in html
+
+
+def test_hovering_a_node_emphasises_its_own_edges(tmp_path: Path) -> None:
+    """The cheap half of the same gesture: node hit-testing is a quadtree
+    lookup, so this keeps working if edge events are ever turned back off."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert "new Set(graph.edges(node))" in html
+
+
+def test_an_edge_names_its_kind_and_direction_on_hover(tmp_path: Path) -> None:
+    """No edge on this page carries a label, so hovering is the only way to
+    read what an arrow is and which way it points."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert 'getEdgeAttribute(edge, "kind")' in html
+    assert '+ " -> " +' in html
+
+
+def test_a_node_can_be_dragged_without_a_relayout(tmp_path: Path) -> None:
+    """Positions are precomputed and nothing simulates in the browser, so moving
+    a node is a coordinate write: sigma redraws from the graph's own x/y and the
+    incident edges follow. The camera must not pan during the same gesture."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert 'renderer.on("downNode"' in html
+    assert 'renderer.on("moveBody"' in html
+    assert 'graph.setNodeAttribute(dragged, "x", point.x)' in html
+    assert "event.preventSigmaDefault()" in html
+    assert 'renderer.on("upNode", dropNode)' in html
+    assert 'renderer.on("upStage", dropNode)' in html
+
+
+def test_a_dragged_node_stays_emphasised_when_the_pointer_leaves_it(
+    tmp_path: Path,
+) -> None:
+    """Otherwise the thing being dragged greys out the moment it moves, which is
+    exactly when its edges are worth watching."""
+    html = _render(tmp_path, _sample_graph())
+
+    assert 'renderer.on("leaveNode", () => { if (!dragged) clearEmphasis(); })' in html
+
+
 # ── What it deliberately leaves out ───────────────────────────────
 
 

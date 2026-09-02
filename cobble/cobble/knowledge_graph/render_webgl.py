@@ -97,6 +97,13 @@ const EDGES = {edges_json};
 
 const DIMMED = "#e8e8e8";
 
+// A hovered arrow has to win against six figures of others, and dimming them
+// cannot do it: the emphasis redraw runs with skipIndexation, so sigma never
+// re-sorts by zIndex and any edge drawn later paints over the bright one.
+// Hiding the rest for the duration of the hover is both correct and the only
+// way one arrow is legible in a mat this dense.
+const EMPHASIS_EDGE_SIZE = 4;
+
 const graph = new graphology.MultiDirectedGraph();
 NODES.forEach(([label, kind, x, y, size], index) => {{
   graph.addNode(String(index), {{
@@ -116,6 +123,13 @@ EDGES.forEach(([source, target, kind], index) => {{
 const visibleNodeKinds = new Set(NODE_KINDS);
 const visibleEdgeKinds = new Set(EDGE_KINDS);
 let matching = null;
+
+// What the pointer is over: the edges to keep drawn and the nodes to keep
+// coloured. Both null when nothing is hovered. Computed once per hover rather
+// than per frame -- graph.edges() on a degree-1361 hub is not a reducer's job.
+let emphasisEdges = null;
+let emphasisNodes = null;
+let dragged = null;
 
 // sigma sizes an arrowhead off the edge's thickness, and its stock ratios
 // (2.5 long, 2 wide) off a 1.7px minimum give a head about 4px long -- not
@@ -144,11 +158,20 @@ const renderer = new Sigma(graph, document.getElementById("graph"), {{
   // whole-corpus view draws almost none and zooming in reveals them.
   labelRenderedSizeThreshold: 9,
   labelDensity: 0.5,
-  // Edges are not clickable here, which skips hit-testing every one of them.
-  enableEdgeEvents: false,
+  // Hovering an arrow names it, so edges are hit-tested. sigma does that by
+  // drawing the whole edge scene a second time into an offscreen framebuffer,
+  // one colour per edge, and reading a pixel back on every pointer move -- a
+  // second geometry pass plus a GPU sync stall. That is the price of being able
+  // to point at one arrow among six figures of them; hovering a NODE lights its
+  // incident edges without any of it, so turning this off leaves that working.
+  enableEdgeEvents: true,
   zIndex: false,
   nodeReducer: (node, data) => {{
     if (!visibleNodeKinds.has(data.kind)) return {{ ...data, hidden: true }};
+    if (emphasisNodes) {{
+      if (!emphasisNodes.has(node)) return {{ ...data, color: DIMMED, label: null }};
+      return {{ ...data, forceLabel: true }};
+    }}
     if (matching && !matching.has(node)) {{
       return {{ ...data, color: DIMMED, label: null, zIndex: 0 }};
     }}
@@ -156,6 +179,10 @@ const renderer = new Sigma(graph, document.getElementById("graph"), {{
   }},
   edgeReducer: (edge, data) => {{
     if (!visibleEdgeKinds.has(data.kind)) return {{ ...data, hidden: true }};
+    if (emphasisEdges) {{
+      if (!emphasisEdges.has(edge)) return {{ ...data, hidden: true }};
+      return {{ ...data, size: EMPHASIS_EDGE_SIZE }};
+    }}
     if (matching) return {{ ...data, color: DIMMED }};
     return data;
   }},
@@ -210,6 +237,54 @@ const redrawWhenSettled = () => {{
   }}, 80);
 }};
 renderer.getCamera().on("updated", redrawWhenSettled);
+
+function emphasise(edges, nodes) {{
+  emphasisEdges = edges;
+  emphasisNodes = nodes;
+  renderer.refresh({{ skipIndexation: true }});
+}}
+
+function clearEmphasis() {{
+  if (emphasisEdges === null) return;
+  emphasisEdges = null;
+  emphasisNodes = null;
+  renderer.refresh({{ skipIndexation: true }});
+}}
+
+// An edge carries no label, so pointing at one is also the only way to read its
+// kind and its direction off the page.
+renderer.on("enterEdge", ({{ edge }}) => {{
+  const [source, target] = graph.extremities(edge);
+  emphasise(new Set([edge]), new Set([source, target]));
+  document.getElementById("selected").textContent =
+    graph.getEdgeAttribute(edge, "kind") + ": "
+    + graph.getNodeAttribute(source, "label")
+    + " -> " + graph.getNodeAttribute(target, "label");
+}});
+renderer.on("leaveEdge", clearEmphasis);
+renderer.on("enterNode", ({{ node }}) => {{
+  emphasise(new Set(graph.edges(node)), new Set([node, ...graph.neighbors(node)]));
+}});
+// A drag holds its node's neighbourhood lit even as the pointer leaves it --
+// otherwise the thing being dragged goes grey the moment it moves.
+renderer.on("leaveNode", () => {{ if (!dragged) clearEmphasis(); }});
+
+// Dragging moves one node and nothing else: sigma redraws from the graph's own
+// coordinates, so the incident edges follow and no layout is recomputed. The
+// camera must not pan at the same time, hence preventSigmaDefault.
+renderer.on("downNode", ({{ node }}) => {{ dragged = node; }});
+renderer.on("moveBody", ({{ event }}) => {{
+  if (!dragged) return;
+  const point = renderer.viewportToGraph(event);
+  graph.setNodeAttribute(dragged, "x", point.x);
+  graph.setNodeAttribute(dragged, "y", point.y);
+  event.preventSigmaDefault();
+  event.original.preventDefault();
+  event.original.stopPropagation();
+}});
+const dropNode = () => {{ dragged = null; }};
+renderer.on("upNode", dropNode);
+renderer.on("upStage", dropNode);
 
 const selected = document.getElementById("selected");
 renderer.on("clickNode", ({{ node }}) => {{
