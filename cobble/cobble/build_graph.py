@@ -50,8 +50,8 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
-from cobble.interpreter.cobol.ast_store import AstStore, temp_ast_store
-from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
+from interpreter.cobol.ast_store import AstStore, temp_ast_store
+from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.source_text import decode_source
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.project.cobol_imports import extract_cobol_imports
@@ -96,7 +96,7 @@ def _make_parser(config: CorpusConfig) -> ProLeapCobolParser:
         RealSubprocessRunner(),
         _bridge_jar(),
         copybook_dirs=list(config.copybook_dirs),
-        copybook_extensions=list(config.copybook_extensions),
+        copybook_exts=list(config.copybook_extensions),
     )
 
 

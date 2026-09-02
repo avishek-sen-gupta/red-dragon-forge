@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from interpreter.cobol.asg_types import CobolASG
-from cobble.interpreter.cobol.ast_store import AstParseError, AstStore, temp_ast_store
+from interpreter.cobol.ast_store import AstParseError, AstStore, temp_ast_store
 from interpreter.cobol.subprocess_runner import CobolParseError
 
 
