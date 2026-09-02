@@ -25,6 +25,16 @@ squall = { workspace = true }
 diagnose-copybooks = "cobble.diagnosis.copybooks:cli"
 diagnose-jcl = "cobble.diagnosis.jcl:cli"
 diagnose-cobol = "cobble.diagnosis.cobol:cli"
+# The pipeline stages, in the order a corpus goes through them. Prefixed because
+# these land in the workspace's one venv alongside cicada's, jackal's and
+# squall's -- `build` and `render` are not names to claim there.
+cobble-sym = "cobble.generate_sym:main"
+cobble-csd = "cobble.generate_csd:main"
+cobble-build = "cobble.build_graph:main"
+cobble-compare = "cobble.compare:main"
+cobble-render = "cobble.render_graph:main"
+cobble-render-webgl = "cobble.render_graph_webgl:main"
+cobble-canonical = "cobble.canonical_export:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,

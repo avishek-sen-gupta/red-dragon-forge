@@ -34,7 +34,7 @@ codegen: sym
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make sym CONFIG=config/carddemo.yaml
 sym:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make sym CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	uv run python -m cobble.generate_sym --config $(CONFIG)
+	uv run cobble-sym --config $(CONFIG)
 
 ## Stage-0: GENERATE a synthetic CSD for a corpus that arrived without one, from
 ## literal transaction ids plus the corpus's own naming convention
@@ -43,17 +43,17 @@ sym:
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make csd CONFIG=config/carddemo.yaml
 csd:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make csd CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	uv run python -m cobble.generate_csd --config $(CONFIG)
+	uv run cobble-csd --config $(CONFIG)
 
 ## Run the four ported extractors over the corpus -> out/{nodes,edges}.jsonl
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make build CONFIG=config/carddemo.yaml
 build:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make build CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	$(BRIDGE_ENV) uv run python -m cobble.build_graph --config $(CONFIG)
+	$(BRIDGE_ENV) uv run cobble-build --config $(CONFIG)
 
 ## Identity-diff out/ against reference/ (must be an empty diff: 449 nodes / 803 edges).
 compare:
-	uv run python -m cobble.compare
+	uv run cobble-compare
 
 verify: build compare
 
@@ -61,7 +61,7 @@ verify: build compare
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make render CONFIG=config/carddemo.yaml
 render:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	uv run python -m cobble.render_graph --config $(CONFIG)
+	uv run cobble-render --config $(CONFIG)
 
 ## Render the same pair as a WebGL view built for showing a whole corpus-sized
 ## graph at once (sibling of `render`, which is for navigating one). Lays the
@@ -70,7 +70,7 @@ render:
 ## Requires CONFIG=<path-to-corpus-yaml>, e.g. make render-webgl CONFIG=config/carddemo.yaml
 render-webgl:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render-webgl CONFIG=config/carddemo.yaml" >&2; exit 1; }
-	uv run python -m cobble.render_graph_webgl --config $(CONFIG)
+	uv run cobble-render-webgl --config $(CONFIG)
 
 ## Export a nodes/edges.jsonl pair as CodeConcise's canonical manifest.json.
 ## Requires NODES=, EDGES=, OUTPUT=, PROJECT_NAME= (all explicit, no defaults),
@@ -80,7 +80,7 @@ canonical:
 	@test -n "$(EDGES)" || { echo "error: EDGES is required, e.g. make canonical ... EDGES=out/edges.jsonl ..." >&2; exit 1; }
 	@test -n "$(OUTPUT)" || { echo "error: OUTPUT is required, e.g. make canonical ... OUTPUT=out/manifest.json ..." >&2; exit 1; }
 	@test -n "$(PROJECT_NAME)" || { echo "error: PROJECT_NAME is required, e.g. make canonical ... PROJECT_NAME=carddemo" >&2; exit 1; }
-	uv run python -m cobble.canonical_export --nodes $(NODES) --edges $(EDGES) --output $(OUTPUT) --project-name $(PROJECT_NAME)
+	uv run cobble-canonical --nodes $(NODES) --edges $(EDGES) --output $(OUTPUT) --project-name $(PROJECT_NAME)
 
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
 test:
