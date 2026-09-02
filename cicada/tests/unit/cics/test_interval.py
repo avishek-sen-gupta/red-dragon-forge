@@ -77,3 +77,19 @@ def test_discard_for_abend_clears_pending_but_keeps_the_record():
     assert q.pending == ()
     assert len(q.rejected) == 1
     assert q.ignored_delays == (timed,)
+
+
+def test_peek_does_not_remove():
+    q = StartQueue()
+    req = StartRequest(transid="SRTB", termid="T001")
+    q.queue(req)
+
+    assert q.pop_runnable_peek("T001") == (req,)
+    assert q.pending == (req,)
+
+
+def test_peek_is_empty_when_only_another_terminals_request_is_pending():
+    q = StartQueue()
+    q.queue(StartRequest(transid="SRTB", termid="T002"))
+
+    assert q.pop_runnable_peek("T001") == ()

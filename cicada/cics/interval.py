@@ -64,6 +64,12 @@ class StartQueue:
         self._pending = self._pending[:index] + self._pending[index + 1 :]
         return (taken,)
 
+    def pop_runnable_peek(self, region_termid: str) -> tuple[StartRequest, ...]:
+        """Like pop_runnable, without removing — a driver has to know whether a
+        start will run before it decides what to do with a next-transid."""
+        runnable = [req for req in self._pending if req.termid in ("", region_termid)]
+        return (runnable[0],) if runnable else ()
+
     def put_start_data(self, data: bytes) -> None:
         self._start_data = (data,)
 

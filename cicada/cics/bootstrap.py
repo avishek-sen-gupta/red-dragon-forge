@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import _run_dispatcher_with_runner, parse_csd, run_cics
+from cics.interval import StartQueue
 from cics.types import CicsContext, DispatchResult
 
 from interpreter.project.coprocessor_compile import CoprocessorSpec
@@ -72,6 +73,7 @@ def run_carddemo_region(
     sysid: str = "SYS1",
     max_steps: int = 50_000,
     program_source_dirs: Sequence[Path] = (),
+    region_termid: str = "T001",
 ) -> DispatchResult:
     """Assemble and run a CICS region; return the terminal :class:`DispatchResult`.
 
@@ -100,6 +102,8 @@ def run_carddemo_region(
     context_holder: list[CicsContext] = [None]  # type: ignore[list-item]
     result_holder: list = [None]
 
+    start_queue = StartQueue()
+
     spec = build_cics_spec(
         context_holder=context_holder,
         result_holder=result_holder,
@@ -108,6 +112,9 @@ def run_carddemo_region(
         input_queue=input_queue,
         applid=applid,
         sysid=sysid,
+        start_queue=start_queue,
+        transid_to_program=transid_to_program,
+        region_termid=region_termid,
     )
 
     program_cache: dict[str, Any] = {}
@@ -147,7 +154,9 @@ def run_carddemo_region(
         run_fn,
         program_cache,
         transid_to_program,
-        CicsContext(transid=entry_transid, commarea=b"", eibaid="\x7d"),
+        CicsContext(
+            transid=entry_transid, commarea=b"", eibaid="\x7d", termid=region_termid
+        ),
         screen_queue,
         input_queue,
     )

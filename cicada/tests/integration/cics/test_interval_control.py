@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
-from cics.dispatcher import run_cics
+from cics.dispatcher import CicsRegion, InputEvent, run_cics
 from cics.interval import StartQueue, StartRequest
 from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
@@ -233,3 +233,68 @@ def test_retrieve_with_no_start_data_yields_enddata(cobol_parser):
 
     assert result.commarea[:4] == struct.pack(">i", 29)  # DFHRESP(ENDDATA)
     assert result.commarea[4:12] == "UNTOUCHD".encode("cp037")
+
+
+COBOL_START_B = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTB.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-IN.
+           05  WS-IN-KEY   PIC X(6)  VALUE SPACES.
+           05  WS-IN-AMT   PIC X(8)  VALUE SPACES.
+       01  WS-LEN          PIC S9(4) COMP VALUE 14.
+       01  WS-CA.
+           05  WS-CA-CALEN PIC S9(4) COMP.
+           05  WS-CA-KEY   PIC X(6).
+           05  WS-CA-AMT   PIC X(8).
+       PROCEDURE DIVISION.
+           MOVE EIBCALEN TO WS-CA-CALEN.
+           EXEC CICS RETRIEVE INTO(WS-IN) LENGTH(WS-LEN) END-EXEC.
+           MOVE WS-IN-KEY TO WS-CA-KEY.
+           MOVE WS-IN-AMT TO WS-CA-AMT.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_started_task_runs_and_retrieves_the_data(cobol_parser):
+    """S1: the corpus idiom end to end through a region."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTA", "SRTB": "STARTB"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
+        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    first = region.start("SRTA", input_event=InputEvent())
+    assert first.kind == DispatchKind.RETURN
+    assert first.commarea == "RANAFTER".encode("cp037")
+    assert region.done is False, "a runnable START was pending — not done"
+    assert region.transid == "SRTB"
+
+    # A started task needs no terminal input, so no input_event — the same
+    # convention CicsRegion already states for the turn after an XCTL.
+    second = region.step()
+
+    assert second.kind == DispatchKind.RETURN
+    assert second.commarea[0:2] == struct.pack(">h", 0)
+    assert second.commarea[2:8] == "ACCT01".encode("cp037")
+    assert second.commarea[8:16] == "00012345".encode("cp037")
+    assert region.done is True
