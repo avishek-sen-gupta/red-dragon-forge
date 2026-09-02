@@ -25,5 +25,5 @@
            02 EIBRSRCE   PIC X(8).
            02 EIBSYSID   PIC X(4).
            02 EIBUSER    PIC X(8).
-           02 EIBTERM    PIC X(4).
+           02 EIBTRMID   PIC X(4).
            02 EIBLINK    PIC X(4).

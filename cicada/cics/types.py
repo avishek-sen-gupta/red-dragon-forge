@@ -13,6 +13,7 @@ class CicsContext:
     transid: str
     commarea: bytes
     eibaid: str  # 1-char attention identifier (e.g. "\x7d" = DFHENTER)
+    termid: str = ""  # "" == a non-terminal task (a START with no TERMID)
 
 
 class DispatchKind(Enum):

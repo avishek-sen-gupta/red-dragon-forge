@@ -619,12 +619,14 @@ class CicsLoweringStrategy:
                     )
                 )
             else:
+                r_ca = emit_copy_in(ctx, opts.get("COMMAREA"), materialised)
+                return_args = (r_ca,) if r_ca is not None else ()
                 r_res = ctx.fresh_reg()
                 ctx.emit_inst(
                     CallFunction(
                         result_reg=r_res,
                         func_name=FuncName("__cics_set_return_context"),
-                        args=(),
+                        args=return_args,
                     )
                 )
             # Task end (both RETURN and RETURN TRANSID — but not XCTL, which

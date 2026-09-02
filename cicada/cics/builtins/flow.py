@@ -40,9 +40,14 @@ def make_set_return_context_builtin(result_holder: list) -> object:
     def __cics_set_return_context(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         if not args:
             result_holder[0] = DispatchResult(kind=DispatchKind.RETURN)
+        elif len(args) == 1:
+            result_holder[0] = DispatchResult(
+                kind=DispatchKind.RETURN,
+                commarea=bytes(args[0].value),
+            )
         else:
             transid = str(args[0].value).strip()
-            commarea = bytes(args[1].value) if len(args) > 1 else b""
+            commarea = bytes(args[1].value)
             result_holder[0] = DispatchResult(
                 kind=DispatchKind.RETURN_TRANSID,
                 transid=transid,
