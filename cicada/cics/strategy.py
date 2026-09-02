@@ -32,6 +32,7 @@ from interpreter.instructions import (
 )
 from interpreter.types.type_expr import UNKNOWN
 
+from cics.interval import StartQueue
 from cics.statements import ExecCicsStatement
 from cics.vsam.browse import BrowseStart
 
@@ -378,6 +379,24 @@ def _resolve_into(
     return 0, 0
 
 
+_TIMING_OPTIONS = ("INTERVAL", "AFTER", "AT", "HOURS", "MINUTES", "SECONDS")
+
+
+def _timing_text(opts: dict[str, "CicsOperand | None"]) -> str:
+    """The timing operands as written, or "" when none were coded.
+
+    Recorded, never scheduled on: a region has no clock, so every START is
+    dispatched as soon as the issuing task ends. Keeping the raw text lets a
+    caller assert on what was asked for and ignored (StartQueue.ignored_delays).
+    """
+    present = [
+        f"{name}({opts[name].text})" if opts.get(name) is not None else name
+        for name in _TIMING_OPTIONS
+        if name in opts
+    ]
+    return " ".join(present)
+
+
 def _register(table: dict, name: str, fn: object) -> None:  # type: ignore[type-arg]
     key = FuncName(name)
     if key in table:
@@ -402,6 +421,9 @@ def _operand_text(opt: "CicsOperand | None") -> str | None:
     return opt.text if opt is not None else None
 
 
+_OWN_START_QUEUE = StartQueue()  # sentinel: "I was not given one — make my own"
+
+
 class CicsLoweringStrategy:
     """Full CICS lowering strategy. Inject at CobolFrontend construction for CICS mode."""
 
@@ -419,8 +441,16 @@ class CicsLoweringStrategy:
         vsam_engine: object = None,
         receive_timeout: float = 30.0,
         conversational: bool = False,
+        start_queue: StartQueue = _OWN_START_QUEUE,
+        transid_to_program: dict[
+            str, str
+        ] = {},  # never mutated: membership + lookup only
+        region_termid: str = "",
     ) -> None:
         self._context_holder = context_holder
+        self._start_queue = (
+            StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
+        )
         # Conversational mode lowers EXEC CICS RECEIVE MAP to a SUSPEND (yielding
         # to a run_resumable/resume driver) instead of a blocking input-queue read.
         self._conversational = conversational
@@ -567,6 +597,14 @@ class CicsLoweringStrategy:
                 make_vsam_endbr_builtin(vsam_engine),
             )
 
+        from cics.builtins.interval import make_start_builtin  # noqa: PLC0415
+
+        _register(
+            Builtins.TABLE,
+            "__cics_start",
+            make_start_builtin(self._start_queue, transid_to_program, region_termid),
+        )
+
     def handles(self, stmt: object) -> bool:
         return isinstance(stmt, ExecCicsStatement)
 
@@ -675,6 +713,27 @@ class CicsLoweringStrategy:
                 )
             )
             ctx.emit_inst(Return_())
+            return
+
+        if verb == "START":
+            r_transid = emit_operand_value(ctx, opts.get("TRANSID"), materialised)
+            r_data = emit_copy_in(ctx, opts.get("FROM"), materialised)
+            if r_data is None:
+                r_data = ctx.fresh_reg()
+                ctx.emit_inst(Const(result_reg=r_data, value=b"", type_expr=UNKNOWN))
+            r_termid = emit_operand_value(ctx, opts.get("TERMID"), materialised)
+            r_reqid = emit_operand_value(ctx, opts.get("REQID"), materialised)
+            r_timing = ctx.fresh_reg()
+            ctx.emit_inst(Const.string(r_timing, _timing_text(opts)))
+            r_res = ctx.fresh_reg()
+            ctx.emit_inst(
+                CallFunction(
+                    result_reg=r_res,
+                    func_name=FuncName("__cics_start"),
+                    args=(r_transid, r_data, r_termid, r_reqid, r_timing),
+                )
+            )
+            emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 
         # ── BMS screen verbs ──────────────────────────────────────────────
