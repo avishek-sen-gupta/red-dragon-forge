@@ -251,4 +251,6 @@ fileignoreconfig:
   checksum: b9be99df753705c311959beff5c4f31bb3fb3cf4d099dafa1af5d3942d25b479
 - filename: cobble/uv.lock
   checksum: eb4d16e76eefae068c5ee1d27d9619ee8afc159153b527493f2ac9a48a2b0649
+- filename: .python-fp-lint/rules/no-subscript-tuple-mutation.yml
+  checksum: e15ef52716569a749ac3d9ea5c0710dfce9085a24a6c6a6b2e99a8bee34923b6
 version: "1.0"
