@@ -58,26 +58,23 @@ class StartQueue:
         terminal at all (a non-terminal task). One naming another terminal stays
         pending forever — this region has no channel for it.
         """
-        runnable = [
-            req for req in self._pending if req.termid in (NO_TERMINAL, region_termid)
-        ]
-        if not runnable:
-            return ()
-        taken = runnable[0]
-        index = self._pending.index(taken)
-        self._pending = self._pending[:index] + self._pending[index + 1 :]
-        return (taken,)
-
-    def pop_runnable_peek(self, region_termid: str) -> tuple[StartRequest, ...]:
-        """Like pop_runnable, without removing — a driver has to know whether a
-        start will run before it decides what to do with a next-transid."""
-        runnable = [
-            req for req in self._pending if req.termid in (NO_TERMINAL, region_termid)
-        ]
-        return (runnable[0],) if runnable else ()
+        for index, req in enumerate(self._pending):
+            if req.termid in (NO_TERMINAL, region_termid):
+                self._pending = self._pending[:index] + self._pending[index + 1 :]
+                return (req,)
+        return ()
 
     def put_start_data(self, data: bytes) -> None:
-        self._start_data = (data,)
+        """The current task's start data. An empty payload leaves the slot EMPTY:
+        a START with no FROM gives the started task nothing, and RETRIEVE must
+        answer ENDDATA for it rather than a zero-length read that reports NORMAL.
+        """
+        self._start_data = (data,) if data else ()
+
+    def clear_start_data(self) -> None:
+        """The slot belongs to the CURRENT task. Data no task retrieved is
+        discarded when that task ends, never handed to the next one."""
+        self._start_data = ()
 
     def take_start_data(self) -> tuple[bytes, ...]:
         """The started task's data, consumed. Empty for a task nobody started."""

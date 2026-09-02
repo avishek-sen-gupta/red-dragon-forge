@@ -22,6 +22,7 @@ from cics.builtins.screen import (
     make_send_map_builtin,
     make_receive_map_builtin,
 )
+from cics.interval import StartQueue
 from cics.dispatcher import _run_dispatcher_with_runner, InputEvent
 from tests.integration.cics.channel_drain import drain
 from interpreter.types.typed_value import typed
@@ -66,7 +67,7 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
 
     send_map = make_send_map_builtin(screen_q, _AT_TERMINAL)
     # short timeout so a missing input fails fast rather than hanging the suite
-    receive_map = make_receive_map_builtin(input_q, _AT_TERMINAL, timeout=5.0)
+    receive_map = make_receive_map_builtin(input_q, _AT_TERMINAL, [None], timeout=5.0)
 
     # Sign-on map COSGN0A: symbolic output leaves USERIDO / PASSWDO and the
     # matching input leaves USERIDI / PASSWDI (REDEFINES, same offsets).
@@ -116,7 +117,13 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
 
     initial_context = CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")
     result = _run_dispatcher_with_runner(
-        run_fn, program_cache, transid_to_program, initial_context, screen_q, input_q
+        run_fn,
+        program_cache,
+        transid_to_program,
+        initial_context,
+        screen_q,
+        input_q,
+        start_queue=StartQueue(),
     )
 
     # Loop terminated on the menu program's RETURN.
@@ -161,7 +168,13 @@ def test_return_transid_blocks_on_input_then_resumes():
 
     initial_context = CicsContext(transid="AA00", commarea=b"", eibaid="\x7d")
     result = _run_dispatcher_with_runner(
-        run_fn, program_cache, transid_to_program, initial_context, screen_q, input_q
+        run_fn,
+        program_cache,
+        transid_to_program,
+        initial_context,
+        screen_q,
+        input_q,
+        start_queue=StartQueue(),
     )
 
     assert result.kind == DispatchKind.RETURN

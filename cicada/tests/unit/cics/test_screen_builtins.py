@@ -9,7 +9,7 @@ from cics.builtins.screen import (
     make_send_text_builtin,
 )
 from cics.dispatcher import InputEvent
-from cics.types import NO_TERMINAL, CicsContext
+from cics.types import NO_TERMINAL, CicsContext, DispatchKind
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
 from interpreter.vm.vm_types import VMState, BuiltinResult
@@ -68,7 +68,7 @@ def test_receive_map_writes_eibaid_from_input_event(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(InputEvent(eibaid="\x33", fields={"USERID": "ALICE"}))
-    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, [None], timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     # The attention key from the InputEvent lands in EIBAID in the WS region.
     assert region[200] == ord("\x33")
@@ -90,7 +90,7 @@ def test_receive_map_backcompat_dict_leaves_eibaid_default(monkeypatch):
     # Plain dict on the queue (legacy producers) — duck-typed as field values
     # with no .eibaid, so the default DFHENTER aid is written.
     iq.put({"USERID": "BOB"})
-    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, [None], timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     # A named input field still writes into the WS region.
     assert region[0:8].decode("cp037").rstrip() == "BOB"
@@ -119,7 +119,7 @@ def test_receive_map_writes_named_input_fields_to_ws(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"USERID": "USER0001"}))
-    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, [None], timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     assert bytes(region[0:8]) == "USER0001".encode("cp037")
     assert struct.unpack(">h", bytes(region[100:102]))[0] == 8
@@ -144,7 +144,7 @@ def test_receive_map_numeric_field_is_de_edited(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"AMOUNT": "100", "NAME": "BOB"}))
-    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, [None], timeout=1.0)
     builtin([_tv("M"), _tv(["AMOUNT", "NAME"])], vm)
 
     # Numeric: "100" -> right-justified, zero-filled.
@@ -174,7 +174,7 @@ def test_receive_map_in_a_non_terminal_task_is_invreq_and_consumes_no_input():
     iq: queue.Queue = queue.Queue()
     pending = InputEvent(eibaid="\x33", fields={"USERID": "ALICE"})
     iq.put(pending)
-    builtin = make_receive_map_builtin(iq, _NO_TERMINAL_TASK, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _NO_TERMINAL_TASK, [None], timeout=1.0)
 
     result = builtin([_tv("COSGN0A"), _tv(["USERID"])], _FakeVM(bytearray(210), {}))
 
@@ -193,3 +193,19 @@ def test_send_map_in_a_non_terminal_task_is_invreq_and_writes_no_screen():
 
     assert result.value == 16  # DFHRESP(INVREQ)
     assert sq.qsize() == 0
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_receive_map_that_times_out_does_not_report_normal():
+    """A read that gets no input filled nothing: EIBRESP must not say NORMAL, and
+    the region must see the read-timeout abend CICS raises on RTIMOUT expiry."""
+    result_holder: list = [None]
+    builtin = make_receive_map_builtin(
+        queue.Queue(), _AT_TERMINAL, result_holder, timeout=0.01
+    )
+
+    result = builtin([_tv("COSGN0A"), _tv(["USERID"])], _FakeVM(bytearray(210), {}))
+
+    assert result.value == 36  # DFHRESP(MAPFAIL) — nothing was mapped in
+    assert result_holder[0].kind == DispatchKind.ABEND
+    assert result_holder[0].abcode == "AZCT"

@@ -972,3 +972,118 @@ def test_a_next_transid_turn_resets_the_runaway_guard(cobol_parser):
     assert turns[-2].commarea[2:8] == "ACCT01".encode("cp037")
     assert turns[-1].commarea == "FROMSRTA".encode("cp037")
     assert region.done is False
+
+
+COBOL_START_NO_FROM = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTNF.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'NOFROMOK'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTR')
+                           TERMID(EIBTRMID)
+           END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_task_started_with_no_from_retrieves_enddata(cobol_parser):
+    """S3 for a task that WAS started: no FROM means no start data, so RETRIEVE
+    is ENDDATA and the INTO area is unchanged. The lowering passes an empty
+    payload for a missing FROM, which must not read as "data of length zero"."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTF": "STARTNF", "SRTR": "RTVNONE"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTNF": compile_cics_program(
+            COBOL_START_NO_FROM.encode(), cobol_parser, spec
+        ),
+        "RTVNONE": compile_cics_program(
+            COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec
+        ),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    first = region.start("SRTF", input_event=InputEvent())
+    assert first.commarea == "NOFROMOK".encode("cp037")
+    assert region.transid == "SRTR"
+
+    second = region.step()
+
+    assert second.commarea[:4] == struct.pack(">i", 29)  # DFHRESP(ENDDATA)
+    assert second.commarea[4:12] == "UNTOUCHD".encode("cp037")
+    assert region.done is True
+
+
+COBOL_STARTED_NO_RETRIEVE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. NORTRV.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'NORETRVD'.
+       PROCEDURE DIVISION.
+           EXEC CICS RETURN TRANSID('SRTR') COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_start_data_nobody_retrieved_does_not_reach_the_next_task(cobol_parser):
+    """S3's stale-data rule end to end: the started task ends without RETRIEVEing,
+    so its data is discarded — the next-transid task, entered from the terminal
+    and started by nobody, must see ENDDATA and an untouched INTO area."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTA", "SRTB": "NORTRV", "SRTR": "RTVNONE"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
+        "NORTRV": compile_cics_program(
+            COBOL_STARTED_NO_RETRIEVE.encode(), cobol_parser, spec
+        ),
+        "RTVNONE": compile_cics_program(
+            COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec
+        ),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    first = region.start("SRTA", input_event=InputEvent())
+    assert first.commarea == "RANAFTER".encode("cp037")
+    assert region.transid == "SRTB"
+
+    second = region.step()
+    assert second.kind == DispatchKind.RETURN_TRANSID
+    assert region.transid == "SRTR"
+
+    third = region.step(input_event=InputEvent())
+
+    assert third.commarea[:4] == struct.pack(">i", 29)  # DFHRESP(ENDDATA)
+    assert third.commarea[4:12] == "UNTOUCHD".encode("cp037")

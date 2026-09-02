@@ -537,7 +537,7 @@ class CicsLoweringStrategy:
                 Builtins.TABLE,
                 "__cics_receive_map",
                 make_receive_map_builtin(
-                    input_queue, context_holder, timeout=receive_timeout
+                    input_queue, context_holder, _holder, timeout=receive_timeout
                 ),
             )
             # Conversational mode lowers RECEIVE MAP to SUSPEND + this builtin,

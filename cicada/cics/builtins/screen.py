@@ -8,6 +8,7 @@ import struct
 from typing import Any
 
 from cics.terminal import InputChannel, ScreenChannel
+from cics.types import DispatchKind, DispatchResult
 from interpreter.types.typed_value import TypedValue
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
@@ -21,6 +22,12 @@ _NUMERIC_DISPLAY = "ZONED_DECIMAL"
 # DFHRESP values written back into EIBRESP by the BMS verbs.
 _RESP_NORMAL = 0
 _RESP_INVREQ = 16
+_RESP_MAPFAIL = 36
+
+# A terminal read that never gets input is RTIMOUT expiry: CICS purges the task
+# with abend AZCT, the same abcode _run_dispatcher_with_runner reports when its
+# own wait for input times out.
+_READ_TIMEOUT_ABCODE = "AZCT"
 
 
 def _has_terminal(context_holder: list) -> bool:
@@ -174,10 +181,20 @@ def _base_names(args: list[TypedValue], idx: int) -> set:
 
 
 def make_receive_map_builtin(
-    input_queue: InputChannel, context_holder: list, timeout: float = 30.0
+    input_queue: InputChannel,
+    context_holder: list,
+    result_holder: list,
+    timeout: float = 30.0,
 ) -> object:
     """Pseudo-conversational RECEIVE MAP: block on the input queue for one event,
-    then apply it. (Conversational mode lowers RECEIVE to SUSPEND + apply-input.)"""
+    then apply it. (Conversational mode lowers RECEIVE to SUSPEND + apply-input.)
+
+    A read that times out reports MAPFAIL and records the AZCT abend: the INTO
+    area was not filled, so EIBRESP must not say NORMAL, and a program that codes
+    no RESP would otherwise carry on over a map it never received. The builtin
+    cannot itself end the task, hence both — the resp for the program, the
+    result_holder abend for the region.
+    """
 
     def __cics_receive_map(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         if not _has_terminal(context_holder):
@@ -186,8 +203,13 @@ def make_receive_map_builtin(
         try:
             item: Any = input_queue.get(timeout=timeout)
         except queue.Empty:
-            logger.warning("RECEIVE MAP: timeout waiting for input")
-            return BuiltinResult(value=_RESP_NORMAL)
+            logger.warning(
+                "RECEIVE MAP: timeout waiting for input — %s", _READ_TIMEOUT_ABCODE
+            )
+            result_holder[0] = DispatchResult(
+                kind=DispatchKind.ABEND, abcode=_READ_TIMEOUT_ABCODE
+            )
+            return BuiltinResult(value=_RESP_MAPFAIL)
         _apply_input(vm, item, base_names)
         return BuiltinResult(value=_RESP_NORMAL)
 
