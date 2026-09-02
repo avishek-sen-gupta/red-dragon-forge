@@ -39,7 +39,8 @@ python:
 	uv sync --all-packages
 
 test: jar
-	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) $(PYTEST) tests/ $(PYTEST_ARGS)
+	export PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) SQUALL_DIR=squall; \
+	  . squall/db2/dsn-env.sh && $(PYTEST) tests/ $(PYTEST_ARGS)
 
 test-all: jar
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C cicada test

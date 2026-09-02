@@ -51,7 +51,7 @@ fileignoreconfig:
 - filename: CLAUDE.md
   checksum: a2f21ef67ecfc14b9850c7de2d11c6ac487d78e41859c1d9b66666312e45dc9a
 - filename: squall/db2/dsn-env.sh
-  checksum: 2d7483163dcb8f46d67b45409dc4c5a082b08492e31e871020aa9bfff0df72fe
+  checksum: 75359a29913b33af44ff342008e35ed779e588cf3365adb02d8b3cd3cdf9700d
 - filename: uv.lock
   # A lockfile is sha256 hashes and package URLs by nature, so filecontent always
   # reads as hex blobs and a checksum pin churns on every dependency change.

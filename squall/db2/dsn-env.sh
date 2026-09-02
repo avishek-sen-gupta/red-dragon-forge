@@ -1,4 +1,6 @@
-# Source this (from the repo root) to export SQUALL_DB2_DSN / SQUALL_DB2_DSN2.
+# Source this to export SQUALL_DB2_DSN / SQUALL_DB2_DSN2. Sourced from squall/ as
+# `. db2/dsn-env.sh`; from another directory (the workspace root) set SQUALL_DIR to
+# squall's path so .env is still found.
 # The password comes from .env (gitignored) or the environment (CI secret) — it is
 # NEVER committed; only the DSN shape lives here. POSIX-sh safe (sourced by Make's
 # /bin/sh and by CI); intentionally does not `set -e`/`-u` (would affect the caller).
@@ -6,7 +8,7 @@
 # set shell-local variables invisible to any subprocess (e.g. pytest) launched later
 # in the same recipe — `set -a` marks every variable sourced afterwards for export.
 set -a
-[ -f .env ] && . ./.env
+[ -f "${SQUALL_DIR:-.}/.env" ] && . "${SQUALL_DIR:-.}/.env"
 set +a
 
 : "${DB2_PASSWORD:?DB2_PASSWORD not set (copy .env.example to .env, or set it in CI)}"
