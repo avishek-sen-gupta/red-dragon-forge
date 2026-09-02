@@ -68,6 +68,7 @@ def make_init_eib_builtin(context_holder: list[CicsContext]) -> object:
             region[off : off + length] = data[:length]
 
         _write_field("EIBTRNID", _ascii_to_ebcdic_bytes(ctx.transid, 4))
+        _write_field("EIBTRMID", _ascii_to_ebcdic_bytes(ctx.termid, 4))
         _write_field("EIBCALEN", list(struct.pack(">h", len(ctx.commarea))))
         aid_byte = ord(ctx.eibaid) if ctx.eibaid else 0x7D
         _write_field("EIBAID", [aid_byte])
