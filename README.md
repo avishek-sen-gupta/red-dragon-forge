@@ -49,9 +49,10 @@ red-dragon-forge/
   cicada/                  # CICS runtime, full history preserved via git subtree
   squall/                  # EXEC SQL runtime, full history preserved via git subtree
   jackal/                  # JCL/batch runtime, full history preserved via git subtree
+  cobble/                  # corpus onboarding + knowledge-graph extraction, via git subtree
   red_dragon_forge/        # composition-layer package (this repo's own code)
   tests/                   # root composition + integration suites
-  pyproject.toml           # uv workspace root (members: cicada, squall, jackal)
+  pyproject.toml           # uv workspace root (members: cicada, squall, jackal, cobble)
   Makefile                 # root orchestrator — builds the shared JARs once, runs all suites
   .importlinter            # cross-package independence contract
   .pre-commit-config.yaml  # consolidated hooks (static checks global, test suites per-package)

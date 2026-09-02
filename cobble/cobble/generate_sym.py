@@ -108,9 +108,7 @@ def main() -> int:
     config = load_bms_config(_parse_args().config)
 
     if not _HLASM.is_file():
-        sys.exit(
-            f"hlasm_export not built: {_HLASM} (run `make hlasm` first)"
-        )
+        sys.exit(f"hlasm_export not built: {_HLASM} (run `make hlasm` first)")
     config.sym_dir.mkdir(parents=True, exist_ok=True)
     env = _child_env()
     written = tuple(_generate_one(bms, config, env) for bms in _bms_sources(config))

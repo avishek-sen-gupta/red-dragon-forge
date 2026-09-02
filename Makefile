@@ -12,7 +12,7 @@ help:
 	@echo "make jar-force - force-rebuild both bridge JARs"
 	@echo "make python    - uv sync (all workspace members)"
 	@echo "make test      - full test suite (needs jar)"
-	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, forge)"
+	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
 
 setup:
@@ -45,6 +45,7 @@ test-all: jar
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C cicada test
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C squall test
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) $(MAKE) -C jackal test
+	$(MAKE) -C cobble test
 	$(MAKE) test
 
 fmt:
