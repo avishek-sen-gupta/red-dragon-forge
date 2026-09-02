@@ -824,23 +824,101 @@ def test_loop_given_no_start_queue_makes_its_own():
     from cics.interval import StartRequest
 
     stray = StartRequest(transid="SRTB", termid="T001")
-    dispatcher_mod._OWN_START_QUEUE.queue(stray)
     ran: list[str] = []
 
     def mock_run(program, ctx, sq, iq):
         ran.append(ctx.transid)
         return DispatchResult(kind=DispatchKind.RETURN)
 
+    dispatcher_mod._OWN_START_QUEUE.queue(stray)
+    try:
+        result = _run_dispatcher_with_runner(
+            mock_run,
+            {"STARTA": MagicMock(), "STARTB": MagicMock()},
+            {"SRTA": "STARTA", "SRTB": "STARTB"},
+            CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001"),
+            queue.Queue(),
+            queue.Queue(),
+        )
+
+        assert ran == ["SRTA"]
+        assert result.kind == DispatchKind.RETURN
+        assert dispatcher_mod._OWN_START_QUEUE.pending == (stray,)
+    finally:
+        # The sentinel is process-wide: leaving `stray` on it after a failing
+        # assert would corrupt every later test in the session.
+        dispatcher_mod._OWN_START_QUEUE.discard_for_abend()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_loop_start_xctl_cycle_hits_the_runaway_guard(monkeypatch):
+    """Guard evasion case, the loop's copy of the region's
+    test_a_start_xctl_cycle_hits_the_runaway_guard: an XCTL is a transfer within
+    the same task and waits for no terminal input, so it must NOT reset the
+    count. Only the terminal wait on a next-transid turn does."""
+    from cics.interval import StartQueue, StartRequest
+
+    start_queue = StartQueue()
+    log: list[str] = []
+    _logged_bounded_peek(monkeypatch, log)
+    startlx, xctlend = MagicMock(), MagicMock()
+
+    def mock_run(program, ctx, sq, iq):
+        if len(log) > 20:
+            # Without a bound, a reset moved above the XCTL branch's `continue`
+            # would spin here forever instead of failing.
+            raise AssertionError(f"runaway guard never fired: {log}")
+        if program is startlx:
+            log.append("run:STARTLX")
+            start_queue.queue(StartRequest(transid="SRTL", termid="T001"))
+            return DispatchResult(
+                kind=DispatchKind.XCTL, program="XCTLEND", commarea=b""
+            )
+        log.append("run:XCTLEND")
+        return DispatchResult(kind=DispatchKind.RETURN)
+
     result = _run_dispatcher_with_runner(
         mock_run,
-        {"STARTA": MagicMock(), "STARTB": MagicMock()},
-        {"SRTA": "STARTA", "SRTB": "STARTB"},
-        CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001"),
+        {"STARTLX": startlx, "XCTLEND": xctlend},
+        {"SRTL": "STARTLX"},
+        CicsContext(transid="SRTL", commarea=b"", eibaid="\x7d", termid="T001"),
+        queue.Queue(),
+        queue.Queue(),
+        start_queue=start_queue,
+        region_termid="T001",
+        max_consecutive_starts=2,
+    )
+
+    assert result.kind == DispatchKind.ABEND
+    assert result.abcode == "ASTL"
+    # Two runs per cycle — STARTLX's XCTL, then XCTLEND's RETURN — with the
+    # entry task's own cycle preceding the first adoption, so the cap-th
+    # adoption is refused on the (cap + 1)-th cycle.
+    assert log == ["run:STARTLX", "run:XCTLEND"] * 3
+    assert start_queue.pending == ()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_loop_unknown_return_transid_abends_trni_without_waiting(monkeypatch):
+    """Routing is resolved before the terminal wait, so an unknown RETURN TRANSID
+    target abends TRNI immediately instead of burning the 30s peek and reporting
+    the AZCT read-time-out for what is really a CSD error."""
+    log: list[str] = []
+    _logged_bounded_peek(monkeypatch, log)
+
+    def mock_run(program, ctx, sq, iq):
+        log.append(f"run:{ctx.transid}")
+        return DispatchResult(kind=DispatchKind.RETURN_TRANSID, transid="ZZZZ")
+
+    result = _run_dispatcher_with_runner(
+        mock_run,
+        {"PROG1": MagicMock()},
+        {"CC00": "PROG1"},
+        CicsContext(transid="CC00", commarea=b"", eibaid="\x7d", termid="T001"),
         queue.Queue(),
         queue.Queue(),
     )
 
-    assert ran == ["SRTA"]
-    assert result.kind == DispatchKind.RETURN
-    assert dispatcher_mod._OWN_START_QUEUE.pending == (stray,)
-    dispatcher_mod._OWN_START_QUEUE.discard_for_abend()
+    assert result.kind == DispatchKind.ABEND
+    assert result.abcode == "TRNI"
+    assert log == ["run:CC00"]
