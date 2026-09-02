@@ -114,12 +114,24 @@ docker exec squall-db2 dmesg | grep -i oom
 ```
 
 `global_oom` means the VM ran out, not the container's cgroup — so a per-container
-`mem_limit` will not help. Raise the VM:
+`mem_limit` will not help.
+
+**Raising the VM alone does not fix this.** `INSTANCE_MEMORY` defaults to
+`AUTOMATIC`, so Db2 sizes itself to a share of whatever memory it can see and grows
+into it over a session's worth of connections: a 2 GiB VM died within minutes, a
+6 GiB VM ran five hours and then died the same way with the container holding
+5.4 GiB. Give the VM headroom **and** cap the instance:
 
 ```bash
-colima stop && colima start --cpu 4 --memory 6   # colima
-# Docker Desktop: Settings -> Resources -> Memory
+colima stop && colima start --cpu 4 --memory 6   # colima; Docker Desktop: Settings -> Resources
+docker exec squall-db2 bash -lc \
+  "su - db2inst1 -c 'db2 update dbm cfg using INSTANCE_MEMORY 262144'"
+cd squall && make db2-restart
 ```
+
+262144 pages is 1 GiB, ample for these test databases; the container then settles
+around 1 GiB instead of expanding to fill the VM. The setting lives in the
+container's `dbm cfg`, so `make db2-clean` or a rebuilt container loses it.
 
 `cd squall && make db2-restart` revives a killed instance in about fifteen seconds without a
 re-init, which is the fast way out when it happens mid-run.

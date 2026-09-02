@@ -568,7 +568,6 @@ def _logged_bounded_peek(monkeypatch, log):
 def test_loop_runs_a_started_task_without_waiting_for_terminal_input(monkeypatch):
     """A START issued by a task that then RETURNs runs on this driver, and runs
     without any terminal input — its data comes from RETRIEVE."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -600,7 +599,6 @@ def test_loop_runs_a_started_task_before_a_parked_next_transid(monkeypatch):
     """A pending start runs BEFORE the RETURN TRANSID target — the peek that
     target needs would otherwise strand the started task behind terminal input
     nobody sends. The parked next-transid still runs afterwards."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -639,7 +637,6 @@ def test_loop_started_task_gets_start_data_no_commarea_and_the_start_termid(
 ):
     """The started task is dispatched with EIBCALEN 0, the terminal the START
     named, and its data in the queue's slot for RETRIEVE."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -679,7 +676,6 @@ def test_loop_started_task_gets_start_data_no_commarea_and_the_start_termid(
 def test_loop_xctl_does_not_dispatch_a_pending_start(monkeypatch):
     """An XCTL transfers control within the SAME task, so it is not a task end
     and must not let a started task in ahead of the XCTL'd program."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -714,7 +710,6 @@ def test_loop_xctl_does_not_dispatch_a_pending_start(monkeypatch):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_loop_abend_discards_pending_starts(monkeypatch):
     """START is recoverable: an abending task's pending starts back out with it."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -747,7 +742,6 @@ def test_loop_runaway_started_tasks_abend_astl(monkeypatch):
     """A transaction that STARTs itself never waits for terminal input, so this
     blocking driver has nothing to break the cycle — the same runaway guard the
     region has must stop it rather than spin forever."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -783,7 +777,6 @@ def test_loop_next_transid_turn_resets_the_runaway_guard(monkeypatch):
     """Interleaving started tasks with next-transid turns is legitimate work:
     the terminal input each next-transid turn waits for breaks the chain, so the
     guard must not fire however long the region runs."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -826,7 +819,6 @@ def test_loop_next_transid_turn_resets_the_runaway_guard(monkeypatch):
 def test_loop_start_for_another_terminal_never_runs(monkeypatch):
     """A START naming a terminal this region does not emulate stays pending —
     the region has no channel for it — and must not be dispatched here."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -885,7 +877,6 @@ def test_loop_start_xctl_cycle_hits_the_runaway_guard(monkeypatch):
     test_a_start_xctl_cycle_hits_the_runaway_guard: an XCTL is a transfer within
     the same task and waits for no terminal input, so it must NOT reset the
     count. Only the terminal wait on a next-transid turn does."""
-    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
