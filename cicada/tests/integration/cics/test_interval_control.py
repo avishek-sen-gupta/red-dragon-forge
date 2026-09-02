@@ -298,3 +298,137 @@ def test_started_task_runs_and_retrieves_the_data(cobol_parser):
     assert second.commarea[2:8] == "ACCT01".encode("cp037")
     assert second.commarea[8:16] == "00012345".encode("cp037")
     assert region.done is True
+
+
+COBOL_START_THEN_XCTL = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTX.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-START-DATA.
+           05  WS-SD-KEY   PIC X(6)  VALUE 'ACCT01'.
+           05  WS-SD-AMT   PIC X(8)  VALUE '00012345'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB')
+                           TERMID(EIBTRMID)
+                           FROM(WS-START-DATA)
+                           LENGTH(14)
+           END-EXEC.
+           EXEC CICS XCTL PROGRAM('XCTLTGT') END-EXEC.
+"""
+
+COBOL_XCTL_TARGET = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. XCTLTGT.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'XCTLDONE'.
+       PROCEDURE DIVISION.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_xctl_after_a_start_runs_the_xctl_target_first(cobol_parser):
+    """An XCTL is not a task end: the started task must wait for the issuing task
+    to actually END, so the XCTL'd program runs before it."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTX": "STARTX", "SRTB": "STARTB"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTX": compile_cics_program(
+            COBOL_START_THEN_XCTL.encode(), cobol_parser, spec
+        ),
+        "XCTLTGT": compile_cics_program(COBOL_XCTL_TARGET.encode(), cobol_parser, spec),
+        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    first = region.start("SRTX", input_event=InputEvent())
+    assert first.kind == DispatchKind.XCTL
+    assert region.transid == "SRTX", "XCTL carries the transid — same task"
+
+    second = region.step()
+    assert second.kind == DispatchKind.RETURN
+    assert second.commarea == "XCTLDONE".encode("cp037")
+
+    # Only NOW has the task ended, so the started task becomes runnable.
+    assert region.transid == "SRTB"
+    third = region.step()
+    assert third.commarea[0:2] == struct.pack(">h", 0)
+    assert third.commarea[2:8] == "ACCT01".encode("cp037")
+    assert region.done is True
+
+
+COBOL_START_NON_TERMINAL = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTN.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'QUEUEDIT'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTM') END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+COBOL_STARTED_XCTL = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTM.
+       PROCEDURE DIVISION.
+           EXEC CICS XCTL PROGRAM('TERMPRB') END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_xctl_from_a_non_terminal_started_task_keeps_its_empty_terminal(cobol_parser):
+    """An XCTL keeps the SAME task, so it keeps that task's terminal: a task
+    started with no TERMID must still see a blank EIBTRMID after the transfer."""
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTN": "STARTN", "SRTM": "STARTM"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTN": compile_cics_program(
+            COBOL_START_NON_TERMINAL.encode(), cobol_parser, spec
+        ),
+        "STARTM": compile_cics_program(COBOL_STARTED_XCTL.encode(), cobol_parser, spec),
+        "TERMPRB": compile_cics_program(COBOL_EIBTRMID.encode(), cobol_parser, spec),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    first = region.start("SRTN", input_event=InputEvent())
+    assert first.commarea == "QUEUEDIT".encode("cp037")
+    assert region.transid == "SRTM"
+
+    second = region.step()
+    assert second.kind == DispatchKind.XCTL
+
+    third = region.step()
+    assert third.kind == DispatchKind.RETURN
+    assert third.commarea == "    ".encode("cp037")
+    assert region.done is True
