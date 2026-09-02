@@ -34,6 +34,7 @@ from interpreter.types.type_expr import UNKNOWN
 
 from cics.interval import StartQueue
 from cics.statements import ExecCicsStatement
+from cics.types import DEFAULT_TERMID
 from cics.vsam.browse import BrowseStart
 
 if TYPE_CHECKING:
@@ -445,7 +446,7 @@ class CicsLoweringStrategy:
         transid_to_program: dict[
             str, str
         ] = {},  # never mutated: membership + lookup only
-        region_termid: str = "",
+        region_termid: str = DEFAULT_TERMID,
     ) -> None:
         self._context_holder = context_holder
         self._start_queue = (
@@ -530,12 +531,14 @@ class CicsLoweringStrategy:
             _register(
                 Builtins.TABLE,
                 "__cics_send_map",
-                make_send_map_builtin(screen_queue),
+                make_send_map_builtin(screen_queue, context_holder),
             )
             _register(
                 Builtins.TABLE,
                 "__cics_receive_map",
-                make_receive_map_builtin(input_queue, timeout=receive_timeout),
+                make_receive_map_builtin(
+                    input_queue, context_holder, timeout=receive_timeout
+                ),
             )
             # Conversational mode lowers RECEIVE MAP to SUSPEND + this builtin,
             # which applies the InputEvent the driver injects on resume.
@@ -826,6 +829,7 @@ class CicsLoweringStrategy:
                     args=(r_map, r_names),
                 )
             )
+            emit_resp_writeback(ctx, r_res, opts, materialised)
             return
 
         # ── ASSIGN / FORMATTIME: write each output sub-option to its field ──

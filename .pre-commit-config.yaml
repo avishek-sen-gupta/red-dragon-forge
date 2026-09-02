@@ -9,7 +9,14 @@ repos:
         # Mutation is the design there, so no-mutation-outside-init (and the
         # collection-mutation rules) cannot be met without rewriting the runtime.
         # The warnings-only fp-lint hook below still reports on these files.
-        exclude: ^cicada/cics/
+        #
+        # Test trees are excluded for a related reason: the rules target
+        # production style, while fixtures legitimately mutate — `region[0:8] =
+        # data` on a bytearray reads better than any concatenation that
+        # satisfies no-subscript-mutation. The suites also predate this gate, so
+        # touching one file for an unrelated reason surfaces that file's whole
+        # backlog and blocks the commit.
+        exclude: ^(cicada/cics/|tests/|(cicada|squall|jackal|cobble)/tests/)
   - repo: local
     hooks:
       - id: terminology-guard

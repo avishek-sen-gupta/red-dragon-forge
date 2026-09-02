@@ -27,6 +27,10 @@ from tests.integration.cics.channel_drain import drain
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
 
+_AT_TERMINAL: list = [
+    CicsContext(transid="MENU", commarea=b"", eibaid="\x7d", termid="T001")
+]
+
 
 class _FakeVM:
     """Minimal VM standing in for the symbolic map group in WORKING-STORAGE.
@@ -60,9 +64,9 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
     # The screen builtins locate the WS region via _get_ws_region_addr; pin it.
     monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
 
-    send_map = make_send_map_builtin(screen_q)
+    send_map = make_send_map_builtin(screen_q, _AT_TERMINAL)
     # short timeout so a missing input fails fast rather than hanging the suite
-    receive_map = make_receive_map_builtin(input_q, timeout=5.0)
+    receive_map = make_receive_map_builtin(input_q, _AT_TERMINAL, timeout=5.0)
 
     # Sign-on map COSGN0A: symbolic output leaves USERIDO / PASSWDO and the
     # matching input leaves USERIDI / PASSWDI (REDEFINES, same offsets).

@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+# The single terminal a region emulates when the caller names none. It has to be
+# a real id rather than "": "" is reserved to mean "this task has no terminal at
+# all" (a START with no TERMID), and terminal I/O is INVREQ for such a task.
+DEFAULT_TERMID = "T001"
+
 
 @dataclass
 class CicsContext:
