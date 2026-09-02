@@ -18,13 +18,13 @@ import pytest
 
 from cobble.corpus_index import FileLocationResolver
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
-from interpreter.cobol.asg_types import CobolASG, CobolParagraph, CobolSection
-from interpreter.cobol.cobol_statements import (
+from cobol_asg.asg_types import CobolASG, CobolParagraph, CobolSection
+from cobol_asg.cobol_statements import (
     FileControlEntry,
     IfStatement,
     OpenStatement,
 )
-from interpreter.cobol.file_enums import OpenMode
+from cobol_asg.file_enums import OpenMode
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
 

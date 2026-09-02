@@ -8,8 +8,8 @@ how that reaches the java command line.
 
 from pathlib import Path
 
-from interpreter.cobol.subprocess_runner import SubprocessRunner
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import SubprocessRunner
+from cobol_asg.cobol_parser import ProLeapCobolParser
 
 _MINIMAL_ASG = '{"data_fields": [], "sections": [], "paragraphs": []}'
 

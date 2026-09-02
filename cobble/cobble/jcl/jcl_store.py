@@ -32,7 +32,7 @@ from typing import Protocol
 
 from tqdm import tqdm
 
-from interpreter.cobol.source_text import decode_source
+from cobol_asg.source_text import decode_source
 from jackal.jcl.bridge_parser import JclParseError, job_from_bridge_json
 from jackal.model import Job
 

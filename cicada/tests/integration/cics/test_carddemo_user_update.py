@@ -116,8 +116,8 @@ def _drive_to_user_update(tmp_path: Path, bridge_jar):
 
     Returns (region, screen_q, engine).
     """
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
     signon_path = app / "cbl" / "COSGN00C.cbl"

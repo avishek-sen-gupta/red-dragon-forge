@@ -28,7 +28,7 @@ from tqdm import tqdm
 from cics.csd_parse import CsdParseError, parse_csd, parse_csd_files
 from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index import CorpusIndex
-from interpreter.cobol.source_text import decode_source
+from cobol_asg.source_text import decode_source
 from jackal.dsn import InStreamDSN
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl

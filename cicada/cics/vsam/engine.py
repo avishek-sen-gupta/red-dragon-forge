@@ -21,7 +21,7 @@ from interpreter.cobol.file_drivers import (
     open_alternate_key_driver,
     open_driver,
 )
-from interpreter.cobol.file_enums import FileOrganization, OpenMode
+from cobol_asg.file_enums import FileOrganization, OpenMode
 
 from cics.vsam.browse import BrowseStart
 from cics.vsam.eibresp import (

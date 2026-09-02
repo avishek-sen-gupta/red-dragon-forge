@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from interpreter.cobol.access_result import AccessCondition
-from interpreter.cobol.file_enums import OpenMode
+from cobol_asg.file_enums import OpenMode
 
 from jackal.catalog import DatasetCatalog, DatasetSpec
 from jackal.dsn import dsn_key

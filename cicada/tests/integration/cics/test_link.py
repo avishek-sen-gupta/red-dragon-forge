@@ -37,8 +37,8 @@ def _require_bridge_jar(bridge_jar):
 
 @pytest.fixture
 def cobol_parser(bridge_jar):
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     return ProLeapCobolParser(
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]

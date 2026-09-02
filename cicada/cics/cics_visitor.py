@@ -15,8 +15,8 @@ from dataclasses import dataclass
 
 from cics.cics_grammar.CICSzLexer import CICSzLexer
 from cics.cics_grammar.CICSzParser import CICSzParser
-from interpreter.cobol.cobol_expression import ExprNode, FieldRefNode, LiteralNode
-from interpreter.cobol.ref_mod import RefModExpr, RefModLiteral, RefModReference
+from cobol_asg.cobol_expression import ExprNode, FieldRefNode, LiteralNode
+from cobol_asg.ref_mod import RefModExpr, RefModLiteral, RefModReference
 
 
 @dataclass(frozen=True)

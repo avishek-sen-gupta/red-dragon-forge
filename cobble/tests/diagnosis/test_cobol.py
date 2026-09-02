@@ -27,7 +27,7 @@ from cobble.diagnosis.cobol import (
     signature,
     tally,
 )
-from interpreter.cobol.subprocess_runner import CobolParseError
+from cobol_asg.subprocess_runner import CobolParseError
 
 # What the bridge actually wrote to stderr for the program that killed a prod run,
 # with the corpus's own text left in so the stripping is tested against the real

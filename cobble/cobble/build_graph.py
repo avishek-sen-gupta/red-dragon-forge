@@ -50,18 +50,18 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
-from interpreter.cobol.ast_store import AstStore, temp_ast_store
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.source_text import decode_source
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
-from interpreter.project.cobol_imports import extract_cobol_imports
+from cobol_asg.ast_store import AstStore, temp_ast_store
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.source_text import decode_source
+from cobol_asg.subprocess_runner import RealSubprocessRunner
+from cobol_asg.cobol_imports import extract_cobol_imports
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
-from interpreter.project.import_types import ImportKind, ImportRef
+from cobol_asg.import_types import ImportKind, ImportRef
 from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
 from jackal.jcl.parser import bridge_parser
@@ -432,7 +432,7 @@ def _build_call_copy_graph(
 
     Reproduces the (kind, id) node/edge identity of production's
     interpreter.project.cobol_connections.extract_cobol_connections output from
-    the raw COPY/CALL scan (interpreter.project.cobol_imports), plus the single
+    the raw COPY/CALL scan (cobol_asg.cobol_imports), plus the single
     transitive DFHEIBLK edge production gets from CICS-source-prepassing each
     subprogram a CICS program statically CALLs.
     """

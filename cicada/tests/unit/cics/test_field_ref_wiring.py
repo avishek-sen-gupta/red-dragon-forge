@@ -8,7 +8,7 @@ from cics.strategy import (
     emit_resp_writeback,
 )
 from cics.statements import CicsOperand
-from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
 from interpreter.cobol.field_resolution import ResolvedFieldRef
 from interpreter.instructions import LoadRegion
@@ -115,7 +115,7 @@ def test_copy_in_emits_loadregion_for_field() -> None:
 def test_copy_in_ref_mod_reads_sliced_bytes() -> None:
     """A ref-mod copy-in WS-FIELD(2:1) reads `length` bytes (1) at an offset
     advanced by start-1, NOT the full field."""
-    from interpreter.cobol.ref_mod import RefModLiteral
+    from cobol_asg.ref_mod import RefModLiteral
     from interpreter.instructions import Binop
 
     ctx = _ctx()
@@ -143,7 +143,7 @@ def test_copy_in_ref_mod_data_name_length_raises_not_implemented() -> None:
     size a static LoadRegion, so it raises loudly rather than silently reading the
     full field (which would clobber adjacent fields)."""
     import pytest
-    from interpreter.cobol.ref_mod import RefModLiteral, RefModReference
+    from cobol_asg.ref_mod import RefModLiteral, RefModReference
 
     ctx = _ctx()
     with pytest.raises(NotImplementedError):

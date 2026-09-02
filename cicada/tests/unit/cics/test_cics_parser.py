@@ -3,8 +3,8 @@
 from tests.covers import covers, NotLanguageFeature
 from cics.cics_parser import parse_exec_cics_text
 from cics.statements import CicsOperand
-from interpreter.cobol.ref_mod import RefModLiteral, RefModReference
-from interpreter.cobol.cobol_expression import FieldRefNode
+from cobol_asg.ref_mod import RefModLiteral, RefModReference
+from cobol_asg.cobol_expression import FieldRefNode
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

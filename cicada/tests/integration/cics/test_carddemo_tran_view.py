@@ -147,8 +147,8 @@ def _drive_to_tran_view(tmp_path: Path, bridge_jar):
     Returns (region, screen_q) positioned just after the menu XCTL into
     COTRN01C — the caller's next step() runs COTRN01C's first display (turn 4).
     """
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
     signon_path = app / "cbl" / "COSGN00C.cbl"

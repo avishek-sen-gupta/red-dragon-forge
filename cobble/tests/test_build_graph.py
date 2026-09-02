@@ -22,7 +22,7 @@ from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
 from cobble.corpus_index import FileLocationResolver
 from cobble.file_location import NOT_ATTEMPTED, FileLocation
-from interpreter.cobol.ast_store import AstStore
+from cobol_asg.ast_store import AstStore
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,

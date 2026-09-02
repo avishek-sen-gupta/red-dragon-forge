@@ -87,8 +87,8 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
 
 
 def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     prog_path = _FIXTURES / "ZBANK.cbl"
     assert prog_path.is_file(), f"zBANK program not vendored: {prog_path}"
@@ -136,8 +136,8 @@ def _build_conversational(tmp_path: Path, bridge_jar):
     """Wire zBANK behind the suspend/resume ConversationalRegion: the strategy is
     built with conversational=True (RECEIVE MAP -> SUSPEND), and the region drives
     via run_linked_resumable/resume_linked."""
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     sym_dir = tmp_path / "sym"
     generate_symbolic_copybooks(

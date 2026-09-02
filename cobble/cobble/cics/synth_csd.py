@@ -47,7 +47,7 @@ from enum import StrEnum
 from itertools import chain, groupby
 from operator import itemgetter
 
-from interpreter.cobol.source_text import decode_source
+from cobol_asg.source_text import decode_source
 
 # The transid a member with no recoverable transaction is defined under. Dots are
 # legal in a DFHCSDUP value, so cics.csd_parse reads these back unchanged.

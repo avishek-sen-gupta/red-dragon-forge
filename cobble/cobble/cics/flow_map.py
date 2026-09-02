@@ -33,7 +33,7 @@ from cobble.cics.graph_sink import GraphSink
 from cobble.cics.verb_source_asg import (
     stream_program_verbs,
 )  # SEAM: VM-free verb source (was cics.verb_source_lowering)
-from interpreter.cobol.cobol_parser import CobolParser
+from cobol_asg.cobol_parser import CobolParser
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,

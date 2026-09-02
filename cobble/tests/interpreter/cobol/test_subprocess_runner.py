@@ -24,7 +24,7 @@ were written.
 
 import sys
 
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 
 # 0xA6, the broken bar, is by far the commonest high byte in a real corpus -- it
 # draws the boxes in report layouts. One character in latin-1, two bytes in UTF-8.

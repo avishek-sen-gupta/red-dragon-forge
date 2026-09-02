@@ -226,7 +226,7 @@ def test_endbr_returns_normal():
 # ── Lowering tests (fake-ctx, mirror test_field_ref_wiring.py) ────────────────
 
 
-from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
 from interpreter.cobol.field_resolution import ResolvedFieldRef
 from interpreter.instructions import CallFunction, Const

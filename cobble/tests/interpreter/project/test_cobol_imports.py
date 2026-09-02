@@ -10,8 +10,8 @@ reported position downstream of it wrong.
 
 from pathlib import Path
 
-from interpreter.project.cobol_imports import extract_cobol_imports
-from interpreter.project.import_types import ImportKind
+from cobol_asg.cobol_imports import extract_cobol_imports
+from cobol_asg.import_types import ImportKind
 
 
 def test_a_copy_reports_the_line_it_is_on() -> None:

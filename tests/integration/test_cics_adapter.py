@@ -59,8 +59,8 @@ _CICS_CEEDAYS_PROGRAM = b"""\
 
 
 def test_cics_only_spec_compiles_and_returns(bridge_jar):
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     context_holder = [None]
     result_holder = [None]
@@ -87,8 +87,8 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
 
 
 def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     context_holder = [None]
     result_holder = [None]

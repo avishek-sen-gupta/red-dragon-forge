@@ -11,7 +11,7 @@ from cics.vsam.dump import (
     render_jsonl,
     select_record_layout,
 )
-from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import DataLayout, FieldLayout
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from interpreter.cobol.comp3 import encode_comp3
