@@ -24,6 +24,7 @@ from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.conversational import ConversationalRegion
 from cics.coprocessor import build_cics_spec
+from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
@@ -110,7 +111,9 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
+    start_queue = StartQueue()
     spec = build_cics_spec(
+        start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -126,6 +129,7 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
         screen_q,
         input_q,
         context_holder=context_holder,
+        start_queue=start_queue,
         result_holder=result_holder,
         max_steps=2_000_000,
     )

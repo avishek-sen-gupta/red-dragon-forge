@@ -19,6 +19,7 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import CicsContext, DispatchKind
 from interpreter.cobol.features import CobolFeature
@@ -85,7 +86,9 @@ def test_link_commarea_written_back(cobol_parser):
     # program_cache is built first so the strategy can close over it.
     program_cache: dict = {}
 
+    start_queue = StartQueue()
     spec = build_cics_spec(
+        start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
         screen_queue=screen_q,
@@ -105,6 +108,7 @@ def test_link_commarea_written_back(cobol_parser):
         screen_q,
         input_q,
         context_holder=context_holder,
+        start_queue=start_queue,
         result_holder=result_holder,
     )
 

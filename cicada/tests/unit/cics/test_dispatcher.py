@@ -19,6 +19,7 @@ from cics.dispatcher import (
     parse_csd_files,
 )
 import cics.dispatcher as dispatcher_mod
+from cics.interval import StartQueue, StartRequest
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -41,7 +42,13 @@ def test_dispatcher_return_stops_loop():
     sq, iq = queue.Queue(), queue.Queue()
 
     result = _run_dispatcher_with_runner(
-        mock_run, program_cache, transid_to_program, ctx, sq, iq
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
     )
     assert result.kind == DispatchKind.RETURN
     assert len(calls) == 1
@@ -63,7 +70,13 @@ def test_dispatcher_xctl_switches_program():
     sq, iq = queue.Queue(), queue.Queue()
 
     result = _run_dispatcher_with_runner(
-        mock_run, program_cache, transid_to_program, ctx, sq, iq
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
     )
     assert call_count[0] == 2
     assert result.kind == DispatchKind.RETURN
@@ -88,7 +101,13 @@ def test_dispatcher_return_transid_blocks_then_resumes():
     iq.put(InputEvent(eibaid="\x7d", fields={}))
 
     result = _run_dispatcher_with_runner(
-        mock_run, program_cache, transid_to_program, ctx, sq, iq
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
     )
     assert call_count[0] == 2
     assert result.kind == DispatchKind.RETURN
@@ -116,7 +135,13 @@ def test_dispatcher_resume_propagates_event_eibaid_to_context():
     iq.put(InputEvent(eibaid="\xf3", fields={}))
 
     _run_dispatcher_with_runner(
-        mock_run, program_cache, transid_to_program, ctx, sq, iq
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
     )
     assert seen_eibaids[0] == "\x7d"  # first turn: initial context aid
     assert seen_eibaids[1] == "\xf3"  # resumed turn: event's aid propagated
@@ -148,7 +173,13 @@ def test_dispatcher_resume_leaves_event_on_queue_for_receive_map(monkeypatch):
     iq.put(event)
 
     _run_dispatcher_with_runner(
-        mock_run, program_cache, transid_to_program, ctx, sq, iq
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
     )
     assert seen_eibaids[1] == "\xf3"  # loop still learns the eibaid
     assert drained_by_receive_map == [event]  # AND RECEIVE MAP still gets the event
@@ -186,7 +217,13 @@ def test_dispatcher_return_transid_timeout_abends_azct(monkeypatch):
     sq, iq = queue.Queue(), queue.Queue()
 
     result = _run_dispatcher_with_runner(
-        mock_run, program_cache, transid_to_program, ctx, sq, iq
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
     )
     assert result.kind == DispatchKind.ABEND
     assert result.abcode == "AZCT"
@@ -277,6 +314,7 @@ def _region(program_cache, transid_to_program):
         queue.Queue(),
         context_holder=[None],
         result_holder=[None],
+        start_queue=StartQueue(),
     )
 
 
@@ -530,7 +568,7 @@ def _logged_bounded_peek(monkeypatch, log):
 def test_loop_runs_a_started_task_without_waiting_for_terminal_input(monkeypatch):
     """A START issued by a task that then RETURNs runs on this driver, and runs
     without any terminal input — its data comes from RETRIEVE."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -562,7 +600,7 @@ def test_loop_runs_a_started_task_before_a_parked_next_transid(monkeypatch):
     """A pending start runs BEFORE the RETURN TRANSID target — the peek that
     target needs would otherwise strand the started task behind terminal input
     nobody sends. The parked next-transid still runs afterwards."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -601,7 +639,7 @@ def test_loop_started_task_gets_start_data_no_commarea_and_the_start_termid(
 ):
     """The started task is dispatched with EIBCALEN 0, the terminal the START
     named, and its data in the queue's slot for RETRIEVE."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -641,7 +679,7 @@ def test_loop_started_task_gets_start_data_no_commarea_and_the_start_termid(
 def test_loop_xctl_does_not_dispatch_a_pending_start(monkeypatch):
     """An XCTL transfers control within the SAME task, so it is not a task end
     and must not let a started task in ahead of the XCTL'd program."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -676,7 +714,7 @@ def test_loop_xctl_does_not_dispatch_a_pending_start(monkeypatch):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_loop_abend_discards_pending_starts(monkeypatch):
     """START is recoverable: an abending task's pending starts back out with it."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -709,7 +747,7 @@ def test_loop_runaway_started_tasks_abend_astl(monkeypatch):
     """A transaction that STARTs itself never waits for terminal input, so this
     blocking driver has nothing to break the cycle — the same runaway guard the
     region has must stop it rather than spin forever."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -745,7 +783,7 @@ def test_loop_next_transid_turn_resets_the_runaway_guard(monkeypatch):
     """Interleaving started tasks with next-transid turns is legitimate work:
     the terminal input each next-transid turn waits for breaks the chain, so the
     guard must not fire however long the region runs."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -788,7 +826,7 @@ def test_loop_next_transid_turn_resets_the_runaway_guard(monkeypatch):
 def test_loop_start_for_another_terminal_never_runs(monkeypatch):
     """A START naming a terminal this region does not emulate stays pending —
     the region has no channel for it — and must not be dispatched here."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -817,37 +855,28 @@ def test_loop_start_for_another_terminal_never_runs(monkeypatch):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_loop_given_no_start_queue_makes_its_own():
-    """The default is an identity sentinel, not a ``StartQueue()`` evaluated once
-    at def time: the loop must drain a queue of its own, so a request sitting on
-    the shared sentinel is never scheduled by anybody."""
-    from cics.interval import StartRequest
-
-    stray = StartRequest(transid="SRTB", termid="T001")
-    ran: list[str] = []
-
-    def mock_run(program, ctx, sq, iq):
-        ran.append(ctx.transid)
-        return DispatchResult(kind=DispatchKind.RETURN)
-
-    dispatcher_mod._OWN_START_QUEUE.queue(stray)
-    try:
-        result = _run_dispatcher_with_runner(
-            mock_run,
-            {"STARTA": MagicMock(), "STARTB": MagicMock()},
-            {"SRTA": "STARTA", "SRTB": "STARTB"},
+def test_a_driver_refuses_to_invent_its_own_start_queue():
+    """A driver that defaulted its queue could drain one the __cics_start builtin
+    never queues into: every START accepted, none ever dispatched. Both drivers
+    make the caller name the queue instead, so that mismatch cannot be silent."""
+    with pytest.raises(TypeError):
+        _run_dispatcher_with_runner(
+            MagicMock(),
+            {"STARTA": MagicMock()},
+            {"SRTA": "STARTA"},
             CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001"),
             queue.Queue(),
             queue.Queue(),
         )
-
-        assert ran == ["SRTA"]
-        assert result.kind == DispatchKind.RETURN
-        assert dispatcher_mod._OWN_START_QUEUE.pending == (stray,)
-    finally:
-        # The sentinel is process-wide: leaving `stray` on it after a failing
-        # assert would corrupt every later test in the session.
-        dispatcher_mod._OWN_START_QUEUE.discard_for_abend()
+    with pytest.raises(TypeError):
+        CicsRegion(
+            {"STARTA": MagicMock()},
+            {"SRTA": "STARTA"},
+            queue.Queue(),
+            queue.Queue(),
+            context_holder=[None],
+            result_holder=[None],
+        )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -856,7 +885,7 @@ def test_loop_start_xctl_cycle_hits_the_runaway_guard(monkeypatch):
     test_a_start_xctl_cycle_hits_the_runaway_guard: an XCTL is a transfer within
     the same task and waits for no terminal input, so it must NOT reset the
     count. Only the terminal wait on a next-transid turn does."""
-    from cics.interval import StartQueue, StartRequest
+    from cics.interval import StartQueue, StartRequest, StartRequest
 
     start_queue = StartQueue()
     log: list[str] = []
@@ -917,6 +946,7 @@ def test_loop_unknown_return_transid_abends_trni_without_waiting(monkeypatch):
         CicsContext(transid="CC00", commarea=b"", eibaid="\x7d", termid="T001"),
         queue.Queue(),
         queue.Queue(),
+        start_queue=StartQueue(),
     )
 
     assert result.kind == DispatchKind.ABEND
@@ -946,3 +976,118 @@ def test_production_runaway_cap_is_256_on_both_drivers():
         .default
     )
     assert region_default == 256
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_loop_discards_start_data_the_started_task_never_retrieved():
+    """Start data belongs to the task it was queued for. A started task that ends
+    without RETRIEVEing it must not leave it for the next-transid task, which was
+    entered from the terminal and started by nobody (S3's stale-data rule)."""
+    start_queue = StartQueue()
+    seen_by_next: list = []
+    turns: list[str] = []
+
+    def mock_run(program, ctx, sq, iq):
+        turns.append(ctx.transid)
+        if ctx.transid == "SRTA":
+            start_queue.queue(
+                StartRequest(transid="SRTB", data=b"PAYLOAD", termid="T001")
+            )
+            return DispatchResult(kind=DispatchKind.RETURN)
+        if ctx.transid == "SRTB":
+            return DispatchResult(kind=DispatchKind.RETURN_TRANSID, transid="SRTC")
+        seen_by_next.append(start_queue.take_start_data())
+        return DispatchResult(kind=DispatchKind.RETURN)
+
+    iq: queue.Queue = queue.Queue()
+    iq.put(InputEvent())
+
+    result = _run_dispatcher_with_runner(
+        mock_run,
+        {"STARTA": MagicMock(), "STARTB": MagicMock(), "STARTC": MagicMock()},
+        {"SRTA": "STARTA", "SRTB": "STARTB", "SRTC": "STARTC"},
+        CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001"),
+        queue.Queue(),
+        iq,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    assert turns == ["SRTA", "SRTB", "SRTC"]
+    assert seen_by_next == [()]
+    assert result.kind == DispatchKind.RETURN
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_region_discards_start_data_the_started_task_never_retrieved(monkeypatch):
+    """The region driver's copy of the same rule."""
+    start_queue = StartQueue()
+    seen_by_next: list = []
+
+    def fake_run(program, ctx, sq, iq, **kw):
+        if ctx.transid == "SRTA":
+            start_queue.queue(
+                StartRequest(transid="SRTB", data=b"PAYLOAD", termid="T001")
+            )
+            return DispatchResult(kind=DispatchKind.RETURN)
+        if ctx.transid == "SRTB":
+            return DispatchResult(kind=DispatchKind.RETURN_TRANSID, transid="SRTC")
+        seen_by_next.append(start_queue.take_start_data())
+        return DispatchResult(kind=DispatchKind.RETURN)
+
+    monkeypatch.setattr(dispatcher_mod, "run_cics", fake_run)
+    region = CicsRegion(
+        {"STARTA": MagicMock(), "STARTB": MagicMock(), "STARTC": MagicMock()},
+        {"SRTA": "STARTA", "SRTB": "STARTB", "SRTC": "STARTC"},
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=[None],
+        result_holder=[None],
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    region.step()
+    region.step(input_event=InputEvent())
+
+    assert seen_by_next == [()]
+    assert region.transid == "SRTC"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_region_xctl_keeps_the_started_tasks_data_for_the_new_program(monkeypatch):
+    """An XCTL is a transfer WITHIN the started task, so the data survives it —
+    the XCTL'd program is entitled to RETRIEVE what the START sent."""
+    start_queue = StartQueue()
+    seen_after_xctl: list = []
+
+    def fake_run(program, ctx, sq, iq, **kw):
+        if ctx.transid == "SRTA":
+            start_queue.queue(
+                StartRequest(transid="SRTB", data=b"PAYLOAD", termid="T001")
+            )
+            return DispatchResult(kind=DispatchKind.RETURN)
+        if program is _first:
+            return DispatchResult(kind=DispatchKind.XCTL, program="STARTB2")
+        seen_after_xctl.append(start_queue.take_start_data())
+        return DispatchResult(kind=DispatchKind.RETURN)
+
+    _first = MagicMock()
+    monkeypatch.setattr(dispatcher_mod, "run_cics", fake_run)
+    region = CicsRegion(
+        {"STARTA": MagicMock(), "STARTB": _first, "STARTB2": MagicMock()},
+        {"SRTA": "STARTA", "SRTB": "STARTB"},
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=[None],
+        result_holder=[None],
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    region.step()
+    region.step()
+
+    assert seen_after_xctl == [(b"PAYLOAD",)]

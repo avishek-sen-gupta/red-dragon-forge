@@ -28,11 +28,6 @@ _RUNAWAY_ABCODE = "ASTL"
 
 _NO_OVERRIDE: "tuple[DispatchResult, ...]" = ()
 
-# Sentinel: "I was not given a queue — make my own". A plain StartQueue() default
-# would be evaluated once at def time and shared by every region that omits it,
-# and this code mutates the queue.
-_OWN_START_QUEUE = StartQueue()
-
 _NO_PENDING_NEXT: "tuple[str, Any, bytes]" = ("", (), b"")
 
 
@@ -169,7 +164,7 @@ def _run_dispatcher_with_runner(
     screen_queue: ScreenChannel,
     input_queue: InputChannel,
     *,
-    start_queue: StartQueue = _OWN_START_QUEUE,
+    start_queue: StartQueue,
     region_termid: str = DEFAULT_TERMID,
     max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
 ) -> DispatchResult:
@@ -182,7 +177,6 @@ def _run_dispatcher_with_runner(
     terminal, so dispatching it after the blocking ``_peek_input_event`` below
     would leave it waiting on input nobody sends until the AZCT timeout.
     """
-    starts = StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
     context = initial_context
     program = program_cache[transid_to_program[context.transid]]
     # A RETURN TRANSID target parked because a started task, which needs no
@@ -197,7 +191,7 @@ def _run_dispatcher_with_runner(
         )
 
         if isinstance(routing, DispatchResult) and routing.kind == DispatchKind.ABEND:
-            starts.discard_for_abend()
+            start_queue.discard_for_abend()
             return routing
 
         if result.kind == DispatchKind.XCTL:
@@ -216,16 +210,16 @@ def _run_dispatcher_with_runner(
         if not isinstance(routing, DispatchResult):
             pending_next = routing
 
-        started = starts.pop_runnable(region_termid)
+        started = start_queue.pop_runnable(region_termid)
         if started and consecutive_starts >= max_consecutive_starts:
-            starts.discard_for_abend()
+            start_queue.discard_for_abend()
             return _runaway_abend(started[0], consecutive_starts)
         if started:
             # A started task carries start data, no COMMAREA (so EIBCALEN is 0),
             # and the terminal the START named — NO_TERMINAL for a non-terminal
             # task.
             consecutive_starts = consecutive_starts + 1
-            starts.put_start_data(started[0].data)
+            start_queue.put_start_data(started[0].data)
             program = program_cache[transid_to_program[started[0].transid]]
             context = CicsContext(
                 transid=started[0].transid,
@@ -254,6 +248,7 @@ def _run_dispatcher_with_runner(
         # That wait for terminal input is the only thing that breaks a chain of
         # started tasks, so it is what resets the runaway count.
         consecutive_starts = 0
+        start_queue.clear_start_data()
         next_transid, program, next_commarea = pending_next
         pending_next = _NO_PENDING_NEXT
         context = CicsContext(
@@ -296,7 +291,7 @@ class CicsRegion:
         result_holder: list,
         max_steps: int = 50_000,
         min_commarea_len: int = 0,
-        start_queue: StartQueue = _OWN_START_QUEUE,
+        start_queue: StartQueue,
         region_termid: str = DEFAULT_TERMID,
         max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
     ) -> None:
@@ -315,9 +310,7 @@ class CicsRegion:
         # used as-is (the entry program's own EIBCALEN is authoritative).
         self._min_commarea_len = min_commarea_len
 
-        self._start_queue = (
-            StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
-        )
+        self._start_queue = start_queue
         self._region_termid = region_termid
         # Lowered by tests so both halves of the runaway rule — it fires, and it
         # does NOT fire when a next-transid turn breaks the chain — cost a couple
@@ -363,6 +356,7 @@ class CicsRegion:
         self._task_termid = self._region_termid
         self._pending_next = _NO_PENDING_NEXT
         self._consecutive_starts = 0
+        self._start_queue.clear_start_data()
         self._done = False
         return self._dispatch(input_event=input_event, max_steps=max_steps)
 
@@ -435,11 +429,10 @@ class CicsRegion:
             # so no started task may run yet, and the task keeps its own terminal.
             self._adopt(routing, self._task_termid)
             return _NO_OVERRIDE
-        if self._start_queue.pop_runnable_peek(self._region_termid):
+        started = self._start_queue.pop_runnable(self._region_termid)
+        if started:
             self._pending_next = routing
-            return self._adopt_started(
-                self._start_queue.pop_runnable(self._region_termid)[0]
-            )
+            return self._adopt_started(started[0])
         self._pending_next = _NO_PENDING_NEXT
         self._adopt_next_transid(routing)
         return _NO_OVERRIDE
@@ -481,11 +474,14 @@ class CicsRegion:
         )
 
     def _adopt_next_transid(self, routing: "tuple[str, Any, bytes]") -> None:
-        """A next-transid task waits for terminal input before it runs, and that
-        wait is the only thing that breaks a chain of started tasks. An XCTL is a
-        transfer within the same task and breaks nothing, so it does not come
-        here — a START/XCTL cycle must still reach the runaway guard."""
+        """A next-transid task is a NEW task the caller must supply input for, so
+        it owns an empty start-data slot and it breaks a chain of started tasks —
+        the region cannot block on the terminal, so adopting the turn is where
+        that break happens. An XCTL is a transfer within the same task and breaks
+        nothing, so it does not come here — a START/XCTL cycle must still reach
+        the runaway guard, and the XCTL'd program may still RETRIEVE."""
         self._consecutive_starts = 0
+        self._start_queue.clear_start_data()
         self._adopt(routing, self._region_termid)
 
     def _adopt_started(self, req: StartRequest) -> "tuple[DispatchResult, ...]":

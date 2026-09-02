@@ -40,6 +40,7 @@ import pytest
 
 from cics.coprocessor import build_cics_spec
 from cics.types import DispatchKind
+from cics.interval import StartQueue
 from cics.dispatcher import InputEvent, CicsRegion
 from cics.bootstrap import compile_cics_program
 from cics.vsam.engine import VsamEngine
@@ -240,7 +241,9 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
+    start_queue = StartQueue()
     spec = build_cics_spec(
+        start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_usrsec_engine(tmp_path / "vsam"),
@@ -271,6 +274,7 @@ def _drive_through_turn4(tmp_path, bridge_jar):
         screen_q,
         input_q,
         context_holder=context_holder,
+        start_queue=start_queue,
         result_holder=result_holder,
         max_steps=1_000_000,
         min_commarea_len=400,
@@ -486,7 +490,9 @@ def _compile_update_programs(tmp_path, bridge_jar, vsam_dir=None):
     context_holder = [None]
     result_holder: list = [None]
     engine = _usrsec_engine(vsam_dir or (tmp_path / "vsam"))
+    start_queue = StartQueue()
     spec = build_cics_spec(
+        start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -506,6 +512,7 @@ def _compile_update_programs(tmp_path, bridge_jar, vsam_dir=None):
         context_holder,
         result_holder,
         engine,
+        start_queue,
     )
 
 
@@ -525,6 +532,7 @@ def _drive_to_coactupc(tmp_path, bridge_jar, vsam_dir=None):
         context_holder,
         result_holder,
         engine,
+        start_queue,
     ) = _compile_update_programs(tmp_path, bridge_jar, vsam_dir=vsam_dir)
 
     # Region config: this run routes the menu's option '02' to COACTUPC.
@@ -540,6 +548,7 @@ def _drive_to_coactupc(tmp_path, bridge_jar, vsam_dir=None):
         screen_q,
         input_q,
         context_holder=context_holder,
+        start_queue=start_queue,
         result_holder=result_holder,
         max_steps=2_000_000,
         min_commarea_len=400,  # menu/update programs index a 400-byte commarea
@@ -891,7 +900,9 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
     context_holder = [None]
     result_holder: list = [None]
     engine = _add_engine(vsam_dir or (tmp_path / "vsam"))
+    start_queue = StartQueue()
     spec = build_cics_spec(
+        start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -925,6 +936,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
         screen_q,
         input_q,
         context_holder=context_holder,
+        start_queue=start_queue,
         result_holder=result_holder,
         max_steps=2_000_000,
         min_commarea_len=400,

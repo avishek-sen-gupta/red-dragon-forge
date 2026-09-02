@@ -149,7 +149,7 @@ def test_receive_map_consumes_from_a_custom_non_queue_channel(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     ch = _ListInputChannel()
     ch.put(InputEvent(eibaid="\x33", fields={"USERID": "USER0001"}))
-    builtin = make_receive_map_builtin(ch, _AT_TERMINAL, timeout=1.0)
+    builtin = make_receive_map_builtin(ch, _AT_TERMINAL, [None], timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     assert bytes(region[0:8]) == "USER0001".encode("cp037")
     assert struct.unpack(">h", bytes(region[100:102]))[0] == 8

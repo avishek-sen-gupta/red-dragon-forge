@@ -79,17 +79,20 @@ def test_discard_for_abend_clears_pending_but_keeps_the_record():
     assert q.ignored_delays == (timed,)
 
 
-def test_peek_does_not_remove():
+def test_start_with_no_from_leaves_the_slot_empty():
+    """An empty payload is NOT data: a START with no FROM must leave the slot
+    empty so RETRIEVE answers ENDDATA rather than a zero-length NORMAL read."""
     q = StartQueue()
-    req = StartRequest(transid="SRTB", termid="T001")
-    q.queue(req)
 
-    assert q.pop_runnable_peek("T001") == (req,)
-    assert q.pending == (req,)
+    q.put_start_data(b"")
+
+    assert q.take_start_data() == ()
 
 
-def test_peek_is_empty_when_only_another_terminals_request_is_pending():
+def test_clear_start_data_drops_what_the_current_task_never_retrieved():
     q = StartQueue()
-    q.queue(StartRequest(transid="SRTB", termid="T002"))
+    q.put_start_data(b"PAYLOAD")
 
-    assert q.pop_runnable_peek("T001") == ()
+    q.clear_start_data()
+
+    assert q.take_start_data() == ()

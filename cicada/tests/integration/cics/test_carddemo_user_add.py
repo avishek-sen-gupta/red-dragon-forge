@@ -25,6 +25,7 @@ import pytest
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.coprocessor import build_cics_spec
+from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
@@ -139,7 +140,9 @@ def _drive_to_user_add(tmp_path: Path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
+    start_queue = StartQueue()
     spec = build_cics_spec(
+        start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
@@ -163,6 +166,7 @@ def _drive_to_user_add(tmp_path: Path, bridge_jar):
         screen_q,
         input_q,
         context_holder=context_holder,
+        start_queue=start_queue,
         result_holder=result_holder,
         max_steps=2_000_000,
         min_commarea_len=400,
