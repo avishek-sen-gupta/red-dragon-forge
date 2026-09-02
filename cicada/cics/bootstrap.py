@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import _run_dispatcher_with_runner, parse_csd, run_cics
 from cics.interval import StartQueue
-from cics.types import CicsContext, DispatchResult
+from cics.types import DEFAULT_TERMID, CicsContext, DispatchResult
 
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 
@@ -73,7 +73,7 @@ def run_carddemo_region(
     sysid: str = "SYS1",
     max_steps: int = 50_000,
     program_source_dirs: Sequence[Path] = (),
-    region_termid: str = "T001",
+    region_termid: str = DEFAULT_TERMID,
 ) -> DispatchResult:
     """Assemble and run a CICS region; return the terminal :class:`DispatchResult`.
 

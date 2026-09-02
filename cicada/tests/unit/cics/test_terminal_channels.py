@@ -19,10 +19,15 @@ from cics.builtins.screen import (
     make_send_text_builtin,
 )
 from cics.dispatcher import InputEvent
+from cics.types import CicsContext
 from cics.terminal import ScreenChannel, InputChannel
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
 from interpreter.vm.vm_types import VMState
+
+_AT_TERMINAL: list = [
+    CicsContext(transid="MENU", commarea=b"", eibaid="\x7d", termid="T001")
+]
 
 
 class _ListChannel:
@@ -90,7 +95,7 @@ def test_send_map_drives_a_custom_non_queue_channel(monkeypatch):
     vm = _FakeVM(region, layout)
     monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     ch = _ListScreenChannel()
-    builtin = make_send_map_builtin(ch)
+    builtin = make_send_map_builtin(ch, _AT_TERMINAL)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     assert len(ch.items) == 1
     assert ch.items[0]["map"] == "COSGN0A"
@@ -144,7 +149,7 @@ def test_receive_map_consumes_from_a_custom_non_queue_channel(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     ch = _ListInputChannel()
     ch.put(InputEvent(eibaid="\x33", fields={"USERID": "USER0001"}))
-    builtin = make_receive_map_builtin(ch, timeout=1.0)
+    builtin = make_receive_map_builtin(ch, _AT_TERMINAL, timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     assert bytes(region[0:8]) == "USER0001".encode("cp037")
     assert struct.unpack(">h", bytes(region[100:102]))[0] == 8

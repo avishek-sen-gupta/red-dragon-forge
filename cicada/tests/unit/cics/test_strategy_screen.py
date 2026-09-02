@@ -52,6 +52,14 @@ def test_send_map_lowers_to_call_function():
         def group_leaf_names(self, group_name, materialised):
             return []
 
+        def has_field(self, name, materialised):
+            return False
+
+        def emit_to_string(self, value_reg):
+            out = self.fresh_reg()
+            self.emit_inst(("to_string", out, value_reg))
+            return out
+
     ctx = _Ctx()
     stmt = ExecCicsStatement(
         verb="SEND MAP",
@@ -118,6 +126,14 @@ def test_send_map_lowering_passes_base_field_names():
 
         def group_leaf_names(self, group_name, mat):
             return mat.group_leaf_names(group_name)
+
+        def has_field(self, name, materialised):
+            return False
+
+        def emit_to_string(self, value_reg):
+            out = self.fresh_reg()
+            self.emit_inst(("to_string", out, value_reg))
+            return out
 
     ctx = _Ctx()
     stmt = ExecCicsStatement(
@@ -194,6 +210,14 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
 
         def group_leaf_names(self, group_name, mat):
             return mat.group_leaf_names(group_name)
+
+        def has_field(self, name, materialised):
+            return False
+
+        def emit_to_string(self, value_reg):
+            out = self.fresh_reg()
+            self.emit_inst(("to_string", out, value_reg))
+            return out
 
     ctx = _Ctx()
     stmt = ExecCicsStatement(

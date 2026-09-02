@@ -27,7 +27,7 @@ from typing import Any
 
 from interpreter.run import Suspended, resume_linked, run_linked_resumable
 
-from cics.types import CicsContext, DispatchKind, DispatchResult
+from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
 
 _DFHENTER = "\x7d"
 
@@ -99,9 +99,11 @@ class ConversationalRegion:
         context_holder: list,
         result_holder: list,
         max_steps: int = 2_000_000,
+        termid: str = DEFAULT_TERMID,
     ) -> None:
         self._program = program
         self._transid = transid
+        self._termid = termid
         self._screen_queue = screen_queue
         self._context_holder = context_holder
         self._result_holder = result_holder
@@ -111,7 +113,12 @@ class ConversationalRegion:
         self._result: DispatchResult | None = None
 
     def start(self, *, commarea: bytes = b"", eibaid: str = _DFHENTER) -> list[dict]:
-        ctx = CicsContext(transid=self._transid, commarea=commarea, eibaid=eibaid)
+        ctx = CicsContext(
+            transid=self._transid,
+            commarea=commarea,
+            eibaid=eibaid,
+            termid=self._termid,
+        )
         self._context_holder[0] = ctx
         self._result_holder[0] = None
         vm = _build_initial_vm(ctx)

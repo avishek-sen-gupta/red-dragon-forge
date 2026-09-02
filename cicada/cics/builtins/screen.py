@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 # de-edited on RECEIVE (right-justified, zero-filled), as z/OS BMS does.
 _NUMERIC_DISPLAY = "ZONED_DECIMAL"
 
+# DFHRESP values written back into EIBRESP by the BMS verbs.
+_RESP_NORMAL = 0
+_RESP_INVREQ = 16
+
+
+def _has_terminal(context_holder: list) -> bool:
+    """A task started with no TERMID has no terminal; CICS makes terminal I/O
+    invalid for it rather than writing to some other user's screen."""
+    ctx = context_holder[0]
+    return bool(ctx) and bool(ctx.termid)
+
 
 def _map_name(args: list[TypedValue], idx: int = 0) -> str:
     return str(args[idx].value).strip("'\" ") if len(args) > idx else ""
@@ -76,8 +87,10 @@ def _write_ws_field(
     return True
 
 
-def make_send_map_builtin(screen_queue: ScreenChannel) -> object:
+def make_send_map_builtin(screen_queue: ScreenChannel, context_holder: list) -> object:
     def __cics_send_map(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        if not _has_terminal(context_holder):
+            return BuiltinResult(value=_RESP_INVREQ)
         map_name = _map_name(args, 0)
         base_names = (
             list(args[1].value)
@@ -92,7 +105,7 @@ def make_send_map_builtin(screen_queue: ScreenChannel) -> object:
                 if raw is not None:
                     symbolic[base] = raw.decode("cp037", errors="replace").rstrip()
         screen_queue.put({"map": map_name, "fields": symbolic})
-        return BuiltinResult(value=None)
+        return BuiltinResult(value=_RESP_NORMAL)
 
     return __cics_send_map
 
@@ -161,20 +174,22 @@ def _base_names(args: list[TypedValue], idx: int) -> set:
 
 
 def make_receive_map_builtin(
-    input_queue: InputChannel, timeout: float = 30.0
+    input_queue: InputChannel, context_holder: list, timeout: float = 30.0
 ) -> object:
     """Pseudo-conversational RECEIVE MAP: block on the input queue for one event,
     then apply it. (Conversational mode lowers RECEIVE to SUSPEND + apply-input.)"""
 
     def __cics_receive_map(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        if not _has_terminal(context_holder):
+            return BuiltinResult(value=_RESP_INVREQ)
         base_names = _base_names(args, 1)
         try:
             item: Any = input_queue.get(timeout=timeout)
         except queue.Empty:
             logger.warning("RECEIVE MAP: timeout waiting for input")
-            return BuiltinResult(value=None)
+            return BuiltinResult(value=_RESP_NORMAL)
         _apply_input(vm, item, base_names)
-        return BuiltinResult(value=None)
+        return BuiltinResult(value=_RESP_NORMAL)
 
     return __cics_receive_map
 

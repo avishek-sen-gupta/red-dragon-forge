@@ -580,3 +580,83 @@ def test_start_for_another_terminal_yields_termiderr(cobol_parser):
     assert result.commarea[:4] == struct.pack(">i", 11)  # TERMIDERR
     assert start_queue.pending == ()
     assert start_queue.rejected[0][1] == RejectReason.NO_SUCH_TERMINAL
+
+
+COBOL_START_NOTERM = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTNT.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'FROMNTRM'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTD') END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+COBOL_NONTERMINAL_TASK = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTD.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA.
+           05  WS-CA-TRAN  PIC X(4)  VALUE SPACES.
+           05  WS-CA-TERM  PIC X(4)  VALUE SPACES.
+           05  WS-CA-RESP  PIC S9(8) COMP VALUE ZERO.
+       PROCEDURE DIVISION.
+           EXEC CICS SEND MAP('NOMAP') END-EXEC.
+           MOVE EIBRESP  TO WS-CA-RESP.
+           MOVE EIBTRNID TO WS-CA-TRAN.
+           MOVE EIBTRMID TO WS-CA-TERM.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
+    """S4: a START with no TERMID runs, but terminal I/O is invalid for it."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTNT", "SRTD": "STARTD"}
+    screen_queue: queue.Queue = queue.Queue()
+    input_queue: queue.Queue = queue.Queue()
+    spec = build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        transid_to_program=transid_map,
+        region_termid="T001",
+        screen_queue=screen_queue,
+        input_queue=input_queue,
+    )
+    program_cache = {
+        "STARTNT": compile_cics_program(
+            COBOL_START_NOTERM.encode(), cobol_parser, spec
+        ),
+        "STARTD": compile_cics_program(
+            COBOL_NONTERMINAL_TASK.encode(), cobol_parser, spec
+        ),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        screen_queue,
+        input_queue,
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    assert region.transid == "SRTD"
+
+    started = region.step()
+
+    assert started.commarea[0:4].decode("cp037") == "SRTD"
+    assert started.commarea[4:8].decode("cp037") == "    "
+    assert struct.unpack(">i", started.commarea[8:12])[0] == 16  # INVREQ
+    assert screen_queue.empty() is True

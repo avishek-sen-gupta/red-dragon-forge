@@ -9,9 +9,14 @@ from cics.builtins.screen import (
     make_send_text_builtin,
 )
 from cics.dispatcher import InputEvent
+from cics.types import CicsContext
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
 from interpreter.vm.vm_types import VMState, BuiltinResult
+
+_AT_TERMINAL: list = [
+    CicsContext(transid="MENU", commarea=b"", eibaid="\x7d", termid="T001")
+]
 
 
 class _FakeVM:
@@ -39,7 +44,7 @@ def test_send_map_reads_named_output_fields_from_ws(monkeypatch):
     vm = _FakeVM(region, layout)
     monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
     sq: queue.Queue = queue.Queue()
-    builtin = make_send_map_builtin(sq)
+    builtin = make_send_map_builtin(sq, _AT_TERMINAL)
     builtin([_tv("COSGN0A"), _tv(["USERID", "ERRMSG"])], vm)
     item = sq.get(block=False)
     assert item["map"] == "COSGN0A"
@@ -59,7 +64,7 @@ def test_receive_map_writes_eibaid_from_input_event(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(InputEvent(eibaid="\x33", fields={"USERID": "ALICE"}))
-    builtin = make_receive_map_builtin(iq, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     # The attention key from the InputEvent lands in EIBAID in the WS region.
     assert region[200] == ord("\x33")
@@ -81,7 +86,7 @@ def test_receive_map_backcompat_dict_leaves_eibaid_default(monkeypatch):
     # Plain dict on the queue (legacy producers) — duck-typed as field values
     # with no .eibaid, so the default DFHENTER aid is written.
     iq.put({"USERID": "BOB"})
-    builtin = make_receive_map_builtin(iq, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     # A named input field still writes into the WS region.
     assert region[0:8].decode("cp037").rstrip() == "BOB"
@@ -110,7 +115,7 @@ def test_receive_map_writes_named_input_fields_to_ws(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"USERID": "USER0001"}))
-    builtin = make_receive_map_builtin(iq, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
     assert bytes(region[0:8]) == "USER0001".encode("cp037")
     assert struct.unpack(">h", bytes(region[100:102]))[0] == 8
@@ -135,7 +140,7 @@ def test_receive_map_numeric_field_is_de_edited(monkeypatch):
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"AMOUNT": "100", "NAME": "BOB"}))
-    builtin = make_receive_map_builtin(iq, timeout=1.0)
+    builtin = make_receive_map_builtin(iq, _AT_TERMINAL, timeout=1.0)
     builtin([_tv("M"), _tv(["AMOUNT", "NAME"])], vm)
 
     # Numeric: "100" -> right-justified, zero-filled.

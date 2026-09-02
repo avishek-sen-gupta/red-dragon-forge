@@ -10,7 +10,7 @@ from typing import Any, Callable
 from cics.csd_parse import parse_csd as parse_csd, parse_csd_files as parse_csd_files
 from cics.interval import StartQueue, StartRequest
 from cics.terminal import InputChannel, ScreenChannel
-from cics.types import CicsContext, DispatchKind, DispatchResult
+from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
 from cics.vm_init import make_cics_initial_vm, make_entry_point
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,10 @@ def _run_dispatcher_with_runner(
 
         next_transid, program, next_commarea = routing
         context = CicsContext(
-            transid=next_transid, commarea=next_commarea, eibaid=eibaid
+            transid=next_transid,
+            commarea=next_commarea,
+            eibaid=eibaid,
+            termid=initial_context.termid,
         )
 
 
@@ -211,7 +214,7 @@ class CicsRegion:
         max_steps: int = 50_000,
         min_commarea_len: int = 0,
         start_queue: StartQueue = _OWN_START_QUEUE,
-        region_termid: str = "",
+        region_termid: str = DEFAULT_TERMID,
     ) -> None:
         self._program_cache = program_cache
         self._transid_to_program = transid_to_program
