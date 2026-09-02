@@ -660,3 +660,146 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
     assert started.commarea[4:8].decode("cp037") == "    "
     assert struct.unpack(">i", started.commarea[8:12])[0] == 16  # INVREQ
     assert screen_queue.empty() is True
+
+
+COBOL_START_INTERVAL = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTIV.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'FROMIVAL'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB')
+                           TERMID(EIBTRMID)
+                           INTERVAL(000005)
+           END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_non_zero_interval_is_recorded_and_dispatched_immediately(cobol_parser):
+    """S7: INTERVAL(000005) cannot be honoured (no region clock), so the request
+    still runs immediately, and the delay it asked for is recorded, not silently
+    dropped."""
+    start_queue = StartQueue()
+    result = _run_one(
+        cobol_parser, COBOL_START_INTERVAL, {"SRTB": "STARTB"}, start_queue
+    )
+
+    assert result.commarea == "FROMIVAL".encode("cp037")
+    assert len(start_queue.pending) == 1
+    assert len(start_queue.ignored_delays) == 1
+    assert start_queue.ignored_delays[0].transid == "SRTB"
+    assert start_queue.ignored_delays[0].timing_text == "INTERVAL(000005)"
+
+
+COBOL_START_TWICE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTTW.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-FIRST.
+           05  FILLER      PIC X(6)  VALUE 'FIRST1'.
+           05  FILLER      PIC X(8)  VALUE '00000001'.
+       01  WS-SECOND.
+           05  FILLER      PIC X(6)  VALUE 'SECND2'.
+           05  FILLER      PIC X(8)  VALUE '00000002'.
+       01  WS-CA           PIC X(8)  VALUE 'TWOSTART'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB') TERMID(EIBTRMID)
+                           FROM(WS-FIRST) LENGTH(14) END-EXEC.
+           EXEC CICS START TRANSID('SRTB') TERMID(EIBTRMID)
+                           FROM(WS-SECOND) LENGTH(14) END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_two_starts_run_in_order_each_with_its_own_data(cobol_parser):
+    """S9: two STARTs against the same TRANSID run FIFO, and each started task
+    RETRIEVEs its own payload — no cross-talk between the two queued requests."""
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTTW", "SRTB": "STARTB"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTTW": compile_cics_program(COBOL_START_TWICE.encode(), cobol_parser, spec),
+        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+    }
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    first = region.step()
+    assert first.commarea[2:8] == "FIRST1".encode("cp037")
+    assert first.commarea[8:16] == "00000001".encode("cp037")
+
+    second = region.step()
+    assert second.commarea[2:8] == "SECND2".encode("cp037")
+    assert second.commarea[8:16] == "00000002".encode("cp037")
+    assert region.done is True
+
+
+COBOL_RETRIEVE_TWICE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. RTVTWICE.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-IN           PIC X(14) VALUE SPACES.
+       01  WS-LEN          PIC S9(4) COMP VALUE 14.
+       01  WS-CA.
+           05  WS-CA-FIRST PIC X(14).
+           05  WS-CA-RESP2 PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS RETRIEVE INTO(WS-IN) LENGTH(WS-LEN) END-EXEC.
+           MOVE WS-IN TO WS-CA-FIRST.
+           EXEC CICS RETRIEVE INTO(WS-IN) LENGTH(WS-LEN) END-EXEC.
+           MOVE EIBRESP TO WS-CA-RESP2.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_start_data_is_consumed_by_the_first_retrieve(cobol_parser):
+    """S10: the second RETRIEVE in the same task gets ENDDATA — take_start_data
+    is a consume, not a peek."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTA", "SRTB": "RTVTWICE"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTA": compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec),
+        "RTVTWICE": compile_cics_program(
+            COBOL_RETRIEVE_TWICE.encode(), cobol_parser, spec
+        ),
+    }
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    started = region.step()
+
+    assert started.commarea[:6] == "ACCT01".encode("cp037")
+    assert started.commarea[6:14] == "00012345".encode("cp037")
+    assert started.commarea[14:18] == struct.pack(">i", 29)  # ENDDATA
