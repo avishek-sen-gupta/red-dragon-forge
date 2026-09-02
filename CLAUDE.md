@@ -105,8 +105,9 @@ independently buildable — they must not import each other.
 ## Conventions & Patterns
 
 - **Package independence** is enforced by the root `.importlinter` contract: the three runtimes
-  must not import each other, and only `red_dragon_forge/` may import more than one. Run
-  `uv run lint-imports` to check.
+  must not import each other, and only `red_dragon_forge/` and `cobble/` may import more than
+  one. Cobble is further held to the static surface — it must not reach into any runtime, and
+  nothing may import it. Run `uv run lint-imports` to check.
 - **Formatting**: Black (line length 88); `make fmt` at the root, or per package.
 - **Comments are a smell.** Reaching for a comment means the code did not say it — rename,
   extract, or restructure until it does. Comments that survive earn it by carrying what code

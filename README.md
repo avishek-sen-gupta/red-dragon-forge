@@ -39,7 +39,10 @@ still walks back across the merge boundary). Each keeps its own `CLAUDE.md`, `Ma
 merging them didn't couple their release cadences or make them depend on each other.
 Cross-package imports are enforced against by a shared root
 [`.importlinter`](.importlinter) contract; only `red_dragon_forge/` is allowed to import
-from more than one of them. See
+from more than one of them — `red_dragon_forge/` and `cobble/`. Cobble carries two contracts
+of its own: it is static analysis, so it must not import any runtime (cicada's dispatcher/VSAM/
+BMS/strategy, jackal's runner/catalog/IDCAMS, squall beyond `statements`), and nothing in the
+workspace may import it. See
 [`docs/superpowers/specs/2026-07-05-monorepo-migration-design.md`](docs/superpowers/specs/2026-07-05-monorepo-migration-design.md)
 for the full migration design and rationale.
 
