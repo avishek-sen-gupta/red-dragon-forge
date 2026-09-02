@@ -94,6 +94,36 @@ make test-all
 `red-dragon-forge`'s own composition-layer tests (`make test`, run from the repo root) need
 the same `SQUALL_DB2_DSN` as Squall for their one live-Db2 end-to-end test.
 
+### The Db2 container needs a VM with at least 6 GiB
+
+`icr.io/db2_community/db2` is amd64-only, so on Apple Silicon it runs under emulation, and
+`db2sysc` maps roughly **3 GB of virtual memory**. Give the container VM **6 GiB or more**.
+A second Db2 container sharing the VM doubles the requirement.
+
+Starved of memory, Db2 fails in a way that does not look like a memory problem: the
+*container stays up and reports no restart*, while the database manager is killed underneath
+it. Tests then fail with `SQL30081N` (communication error), and a local connect reports
+`SQL1032N  No start database manager command was issued`. `docker stats` looks innocent —
+it reports resident memory, not the mapping that triggers the kill. The real evidence is the
+kernel log:
+
+```bash
+docker exec squall-db2 dmesg | grep -i oom
+# Out of memory: Killed process ... (db2sysc) total-vm:3128012kB
+# oom-kill: constraint=CONSTRAINT_NONE ... global_oom
+```
+
+`global_oom` means the VM ran out, not the container's cgroup — so a per-container
+`mem_limit` will not help. Raise the VM:
+
+```bash
+colima stop && colima start --cpu 4 --memory 6   # colima
+# Docker Desktop: Settings -> Resources -> Memory
+```
+
+`cd squall && make db2-restart` revives a killed instance in about fifteen seconds without a
+re-init, which is the fast way out when it happens mid-run.
+
 ## Issue tracking
 
 Uses [Beads](https://github.com/gastownhall/beads) (`bd`). `.beads/` (the local Dolt working

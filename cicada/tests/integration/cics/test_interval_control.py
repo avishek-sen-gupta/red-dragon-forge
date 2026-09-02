@@ -21,10 +21,17 @@ import pytest
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import run_cics
+from cics.interval import StartQueue, StartRequest
+from cics.preprocessor import apply_cics_prepass
+from cics.statements import CicsDialectParser
+from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.cobol.cobol_frontend import CobolFrontend
 from interpreter.cobol.features import CobolFeature
+from interpreter.func_name import FuncName
+from interpreter.instructions import Return_
 
 from tests.covers import covers
 from tests.integration.cobol_helpers import bridge_jar  # noqa: F401
@@ -76,3 +83,109 @@ def test_eibterm_is_readable_by_the_program(cobol_parser):
 
     assert result.kind == DispatchKind.RETURN
     assert result.commarea == "T001".encode("cp037")
+
+
+COBOL_START_A = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-START-DATA.
+           05  WS-SD-KEY   PIC X(6)  VALUE 'ACCT01'.
+           05  WS-SD-AMT   PIC X(8)  VALUE '00012345'.
+       01  WS-AFTER        PIC X(8)  VALUE SPACES.
+       01  WS-CA           PIC X(8)  VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB')
+                           TERMID(EIBTRMID)
+                           FROM(WS-START-DATA)
+                           LENGTH(14)
+           END-EXEC.
+           MOVE 'RANAFTER' TO WS-AFTER.
+           MOVE WS-AFTER   TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+def _spec_with_queue(context_holder, result_holder, start_queue, transid_map):
+    return build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        transid_to_program=transid_map,
+        region_termid="T001",
+    )
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_start_queues_the_request_and_the_program_keeps_running(cobol_parser):
+    """S1 assertions 1 and 3, without a region: the request lands AND the
+    statement after the START executes."""
+    context_holder = [
+        CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001")
+    ]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    spec = _spec_with_queue(
+        context_holder, result_holder, start_queue, {"SRTB": "STARTB"}
+    )
+    program = compile_cics_program(COBOL_START_A.encode(), cobol_parser, spec)
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert start_queue.pending == (
+        StartRequest(
+            transid="SRTB",
+            data="ACCT01".encode("cp037") + "00012345".encode("cp037"),
+            termid="T001",
+        ),
+    )
+    # The MOVE after the START ran: START is not a task end.
+    assert result.commarea == "RANAFTER".encode("cp037")
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_start_lowering_emits_no_return(cobol_parser):
+    """The invariant no passing scenario can observe: if START ever emits a
+    Return_ again, the program silently stops there."""
+    context_holder = [
+        CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001")
+    ]
+    strategy = CicsLoweringStrategy(
+        context_holder=context_holder,
+        result_holder=[None],
+        start_queue=StartQueue(),
+        transid_to_program={"SRTB": "STARTB"},
+        region_termid="T001",
+    )
+    frontend = CobolFrontend(
+        cobol_parser=cobol_parser,
+        extension_strategies=[strategy],
+        dialect_parsers=[CicsDialectParser()],
+    )
+    instructions = frontend.lower(apply_cics_prepass(COBOL_START_A).encode())
+
+    start_calls = [
+        n
+        for n, inst in enumerate(instructions)
+        if getattr(inst, "func_name", None) == FuncName("__cics_start")
+    ]
+    assert len(start_calls) == 1, f"expected one __cics_start call, got {start_calls}"
+
+    # COBOL_START_A has exactly one EXEC CICS statement that ends a task — the
+    # trailing RETURN — so the whole program must emit exactly one Return_. A
+    # second one anywhere would mean START itself ended the task, which is the
+    # regression this test exists to catch (a windowed slice after the START
+    # call would miss a Return_ emitted further down as the program grows).
+    return_instructions = [i for i in instructions if isinstance(i, Return_)]
+    assert len(return_instructions) == 1, (
+        f"expected exactly one Return_ (from the trailing RETURN), got "
+        f"{len(return_instructions)} — START must not emit its own"
+    )
