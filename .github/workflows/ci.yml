@@ -126,6 +126,11 @@ jobs:
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@v6
+      # The knowledge-graph layout is precomputed by graphviz's sfdp, and its
+      # tests skip without the binary — so without this the layout code was not
+      # exercised in CI at all.
+      - name: Install graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
       - name: Install Python dependencies
         run: make -C .. python
       - name: Run the full test suite
