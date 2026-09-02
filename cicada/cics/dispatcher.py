@@ -326,12 +326,16 @@ class CicsRegion:
         )
         if isinstance(routing, DispatchResult):
             self._settle_terminal(routing)
+        elif result.kind == DispatchKind.XCTL:
+            # XCTL transfers control WITHIN the same task: the task has not ended,
+            # so no started task may run yet, and the task keeps its own terminal.
+            self._adopt(routing, self._task_termid)
         elif self._start_queue.pop_runnable_peek(self._region_termid):
             self._pending_next = routing
             self._adopt_started(self._start_queue.pop_runnable(self._region_termid)[0])
         else:
             self._pending_next = _NO_PENDING_NEXT
-            self._adopt(routing)
+            self._adopt(routing, self._region_termid)
         return result
 
     def _settle_terminal(self, routing: DispatchResult) -> None:
@@ -347,15 +351,17 @@ class CicsRegion:
             self._adopt_started(started[0])
             return
         if self._pending_next[0]:
-            self._adopt(self._pending_next)
+            self._adopt(self._pending_next, self._region_termid)
             self._pending_next = _NO_PENDING_NEXT
             return
         self._done = True
         logger.info("dispatch → terminal %s", routing.kind.name)
 
-    def _adopt(self, routing: "tuple[str, Any, bytes]") -> None:
+    def _adopt(self, routing: "tuple[str, Any, bytes]", task_termid: str) -> None:
+        """``task_termid`` is the region's terminal for a fresh next-transid task,
+        and the CURRENT task's terminal for an XCTL, which does not start a task."""
         self._transid, self._program, next_commarea = routing
-        self._task_termid = self._region_termid
+        self._task_termid = task_termid
         if len(next_commarea) < self._min_commarea_len:
             next_commarea = next_commarea.ljust(self._min_commarea_len, b"\x00")
         self._commarea = next_commarea
