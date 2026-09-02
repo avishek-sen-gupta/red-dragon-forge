@@ -1,5 +1,16 @@
 # Index items, SEARCH and the unknown-name policy — Implementation Plan
 
+> **COMPLETE (2026-09-02).** All eight tasks landed; red-dragon is pushed and the
+> forge pointer bumped (`7130300`, `21fa444`, and later). Commit-by-commit mapping and
+> the three deviations from this plan are recorded in the spec's *Status* section.
+> Two of them matter to anyone reading the steps below as instructions: Task 5's index
+> items needed their **own region**, not the sibling scope written here (in LINKAGE
+> they corrupt the caller's argument storage — `db7b9c63`), and Task 6's bound had to
+> read the **index value** rather than iterations performed, since `SET ix TO 5` can
+> start the loop anywhere but 1 (`968e4bf8`). Task 3's `getIndexNames()` does not
+> exist; the real chain is `getOccursIndexed()` → `getIndices()`, corrected in place
+> at Task 3 Step 4.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `OCCURS ... INDEXED BY` tables searchable and subscriptable correctly, so a `SEARCH` over a real table returns a real answer instead of a silent false match.
@@ -48,7 +59,7 @@ below from a wrong answer into a diagnosable one.
 - Produces: `_unresolvable_operand(ctx, name: str) -> Register` in
   `interpreter/cobol/condition_lowering.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `tests/integration/test_cobol_programs.py`, add to the end of the file:
 
@@ -90,7 +101,7 @@ class TestUnresolvableNamePolicy:
         assert _decode_zoned_unsigned(region, 6, 4) == 0
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd ~/code/red-dragon
@@ -99,7 +110,7 @@ uv run pytest tests/integration/test_cobol_programs.py::TestUnresolvableNamePoli
 
 Expected: FAIL — `WS-FOUND` is 1, because the symbolic subscript compares equal to `'ZZZ'`.
 
-- [ ] **Step 3: Extract the shared policy**
+- [x] **Step 3: Extract the shared policy**
 
 In `interpreter/cobol/condition_lowering.py`, add above `_lower_expr_dict`:
 
@@ -125,7 +136,7 @@ def _unresolvable_operand(ctx: EmitContext, name: str) -> Register:
     return ctx.const_to_reg(f"UNRESOLVABLE__{name}")
 ```
 
-- [ ] **Step 4: Route both lowerers through it**
+- [x] **Step 4: Route both lowerers through it**
 
 In `_lower_expr_dict`, replace the five lines from `# The bridge sometimes tags` through
 `return ctx.const_to_reg(f"UNRESOLVABLE__{name}")` with:
@@ -146,7 +157,7 @@ with:
         return _unresolvable_operand(ctx, node.name)
 ```
 
-- [ ] **Step 5: Run the test and the surrounding suite**
+- [x] **Step 5: Run the test and the surrounding suite**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestUnresolvableNamePolicy -v
@@ -156,7 +167,7 @@ uv run pytest tests/unit -q -p no:randomly
 Expected: new test PASSES; unit suite unchanged. If existing tests fail, they were
 relying on a name-as-string coercion — read each one; that reliance is the bug.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 uv run black interpreter/cobol/condition_lowering.py tests/integration/test_cobol_programs.py
@@ -180,7 +191,7 @@ two characters of a name into a numeric field, which encodes as `0` and looks fi
 - Consumes: nothing
 - Produces: no new names; behaviour change only
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 class TestSetFromDataItem:
@@ -225,7 +236,7 @@ class TestSetFromDataItem:
         assert _decode_zoned_unsigned(region, 0, 4) == 13
 ```
 
-- [ ] **Step 2: Run to verify both fail**
+- [x] **Step 2: Run to verify both fail**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestSetFromDataItem -v
@@ -234,7 +245,7 @@ uv run pytest tests/integration/test_cobol_programs.py::TestSetFromDataItem -v
 Expected: FAIL. The `TO` case yields 0 (the name `"WS-B"` encoded into a numeric
 field). The `BY` case yields 10 or errors (`parse_literal("WS-B")` is not a number).
 
-- [ ] **Step 3: Read the source when it resolves — `TO` branch**
+- [x] **Step 3: Read the source when it resolves — `TO` branch**
 
 In `lower_arithmetic.py`, in the `if stmt.set_type == "TO":` branch, replace:
 
@@ -258,7 +269,7 @@ with:
                 value_str_reg = ctx.const_to_reg(str(value_str))
 ```
 
-- [ ] **Step 4: Same for the `BY` branch**
+- [x] **Step 4: Same for the `BY` branch**
 
 Replace:
 
@@ -279,7 +290,7 @@ with:
                 step_reg = ctx.const_to_reg(ctx.parse_literal(step_val))
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestSetFromDataItem -v
@@ -288,7 +299,7 @@ uv run pytest tests/unit -q -p no:randomly
 
 Expected: both new tests PASS, unit suite unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 uv run black interpreter/cobol/lower_arithmetic.py tests/integration/test_cobol_programs.py
@@ -312,7 +323,7 @@ Defect A, part 1 of 3. `OccursClause.getIndexNames()` is never called; a grep fo
 - Consumes: nothing
 - Produces: bridge JSON key `"indexed_by": ["MSG-IX", ...]` on a group carrying `OCCURS ... INDEXED BY`
 
-- [ ] **Step 1: Write the fixture**
+- [x] **Step 1: Write the fixture**
 
 `proleap-bridge/src/test/resources/fixtures/indexed_by.cbl`:
 
@@ -330,7 +341,7 @@ Defect A, part 1 of 3. `OccursClause.getIndexNames()` is never called; a grep fo
            STOP RUN.
 ```
 
-- [ ] **Step 2: Write the failing Java test**
+- [x] **Step 2: Write the failing Java test**
 
 `proleap-bridge/src/test/java/org/reddragon/bridge/IndexedBySerializerTest.java`, modelled
 on the existing `XmlGenerateSerializerTest`:
@@ -376,7 +387,7 @@ If `TestFixtures` does not exist, read `XmlGenerateSerializerTest.java` and inli
 same fixture-loading and field-walking it uses; do not invent a helper class that the
 build does not have.
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 ```bash
 cd ~/code/red-dragon/proleap-bridge
@@ -385,7 +396,7 @@ mvn -q -B test -Dtest=IndexedBySerializerTest
 
 Expected: FAIL — `no indexed_by key emitted`.
 
-- [ ] **Step 4: Emit the names**
+- [x] **Step 4: Emit the names**
 
 In `DataFieldSerializer.java`, immediately after the `occurs` block near `:100`:
 
@@ -447,7 +458,7 @@ import io.proleap.cobol.asg.metamodel.data.datadescription.OccursIndexed;
 > above uses the real API; the spec's grep evidence ("`grep -rn "IndexName"` returns
 > nothing") still stands and its conclusion is unaffected.
 
-- [ ] **Step 5: Build and run**
+- [x] **Step 5: Build and run**
 
 ```bash
 cd ~/code/red-dragon/proleap-bridge && ./build.sh
@@ -457,7 +468,7 @@ mvn -q -B test -Dtest=IndexedBySerializerTest
 Expected: PASS. `./build.sh` must succeed — later Python tasks parse COBOL through
 this JAR and will not see the change otherwise.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd ~/code/red-dragon
@@ -481,7 +492,7 @@ Defect A, part 2 of 3.
 - Consumes: bridge key `"indexed_by"` from Task 3
 - Produces: `CobolField.indexed_by: list[str]`
 
-- [ ] **Step 1: Write the failing round-trip test**
+- [x] **Step 1: Write the failing round-trip test**
 
 Append to `tests/unit/test_asg_types.py`:
 
@@ -514,7 +525,7 @@ def test_absent_indexed_by_defaults_empty_and_is_omitted():
     assert "indexed_by" not in f.to_dict()
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 cd ~/code/red-dragon
@@ -523,7 +534,7 @@ uv run pytest tests/unit/test_asg_types.py -k indexed_by -v
 
 Expected: FAIL — `CobolField` has no attribute `indexed_by`.
 
-- [ ] **Step 3: Add the field**
+- [x] **Step 3: Add the field**
 
 In `asg_types.py`, beside `occurs_min` in the `CobolField` dataclass:
 
@@ -546,7 +557,7 @@ In `to_dict`, beside the `occurs_min` write:
             result["indexed_by"] = list(self.indexed_by)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_asg_types.py -k indexed_by -v
@@ -555,7 +566,7 @@ uv run pytest tests/unit -q -p no:randomly
 
 Expected: new tests PASS, unit suite unchanged.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 uv run black interpreter/cobol/asg_types.py tests/unit/test_asg_types.py
@@ -580,7 +591,7 @@ is true and the Task 1 sentinel stops firing for index subscripts.
   the table; and `DataLayout.index_owner: dict[str, str]` mapping index name → table
   group name, which Task 7 reads to find a Format 1 `SEARCH`'s implicit index
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/unit/test_data_layout.py`:
 
@@ -666,7 +677,7 @@ class TestIndexItemAllocation:
         assert _decode_alpha(region, 8, 4) == "E408"
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 uv run pytest tests/unit/test_data_layout.py -k indexed_by -v
@@ -675,7 +686,7 @@ uv run pytest tests/integration/test_cobol_programs.py::TestIndexItemAllocation 
 
 Expected: FAIL — no `TBL-IX` in the layout; `OUT-KEY` is spaces or a sentinel.
 
-- [ ] **Step 3: Allocate in `_flatten_field`**
+- [x] **Step 3: Allocate in `_flatten_field`**
 
 In `data_layout.py`, where a group's children are flattened, after the group's own
 extent is computed, add an index item per name into the *sibling* scope (indexes are
@@ -712,7 +723,7 @@ Record ownership on the `DataLayout` that holds the table:
         index_owner: dict[str, str] = field(default_factory=dict)
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 uv run pytest tests/unit/test_data_layout.py -k indexed_by -v
@@ -723,7 +734,7 @@ uv run pytest tests/unit -q -p no:randomly
 Expected: all PASS. The `WARNING ... SET target MSG-IX not found in layout` from the
 spec's reproduction should no longer appear.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 uv run black interpreter/cobol/data_layout.py tests/unit/test_data_layout.py \
@@ -748,7 +759,7 @@ false hit past the end of a short table and the blind spot above 256.
 - Consumes: `SearchStatement.table`; `DataLayout` occurrence counts
 - Produces: no new names
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 class TestSearchBounds:
@@ -810,7 +821,7 @@ class TestSearchBounds:
         assert _decode_zoned_unsigned(region, 1500, 4) == 301
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestSearchBounds -v
@@ -819,7 +830,7 @@ uv run pytest tests/integration/test_cobol_programs.py::TestSearchBounds -v
 Expected: FAIL with 257 in both — exactly the spec's observed `G-AT-END-AT-SUB=257`
 and `F-AT-END-AT-N=257`.
 
-- [ ] **Step 3: Derive the bound from the table**
+- [x] **Step 3: Derive the bound from the table**
 
 In `lower_search.py`, replace `max_iterations = 256` with a lookup of `stmt.table`:
 
@@ -853,7 +864,7 @@ and a resolver that reads the occurrence count from the materialised layout. Mod
 on how `EmitContext.resolve_field_ref` reaches the layout; return `None` when the name
 does not resolve rather than guessing.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestSearchBounds -v
@@ -866,7 +877,7 @@ Expected: new tests PASS. `TestSearchStatement`'s two existing tests search a sc
 That is correct behaviour for a nonsense "table", and they should still pass; if they
 do not, read them before changing anything.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 uv run black interpreter/cobol/lower_search.py tests/integration/test_cobol_programs.py
@@ -889,7 +900,7 @@ to advance.
 - Consumes: `DataLayout.index_owner` from Task 5; `stmt.table`
 - Produces: no new names
 
-- [ ] **Step 1: Write the failing test — the spec's own reproduction**
+- [x] **Step 1: Write the failing test — the spec's own reproduction**
 
 ```python
 class TestSearchImplicitIndex:
@@ -964,7 +975,7 @@ class TestSearchImplicitIndex:
         assert _decode_alpha(region, 32, 10) == "NOTFOUND  "
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestSearchImplicitIndex -v
@@ -973,7 +984,7 @@ uv run pytest tests/integration/test_cobol_programs.py::TestSearchImplicitIndex 
 Expected: FAIL — the first asserts spaces (the false-hit-writes-nothing symptom); the
 second may spuriously "hit" entry 1.
 
-- [ ] **Step 3: Advance the implicit index**
+- [x] **Step 3: Advance the implicit index**
 
 In `lower_search.py`, replace the `if stmt.varying and ctx.has_field(...)` guard with a
 resolution that falls back to the table's first index:
@@ -997,7 +1008,7 @@ resolution that falls back to the table's first index:
 `_implicit_index_for` reads `DataLayout.index_owner` (Task 5) in reverse: find the
 first index name whose owner is `stmt.table`. Return `None` when there is none.
 
-- [ ] **Step 4: Run tests, including the spec's full reproduction**
+- [x] **Step 4: Run tests, including the spec's full reproduction**
 
 ```bash
 uv run pytest tests/integration/test_cobol_programs.py::TestSearchImplicitIndex -v
@@ -1007,7 +1018,7 @@ uv run pytest tests/unit -q -p no:randomly
 
 Expected: all PASS.
 
-- [ ] **Step 5: Run the spec's SRCHPROBE end to end**
+- [x] **Step 5: Run the spec's SRCHPROBE end to end**
 
 Paste the spec's `SRCHPROBE` program (§ Defect B, Reproduction) through the probe
 harness. Expected, versus the spec's recorded output:
@@ -1016,7 +1027,7 @@ harness. Expected, versus the spec's recorded output:
 - `B-WHEN-HIT` still appears, but `B-OUT-TEXT=MSG-FOR-40` is now non-empty
 - no `SET target MSG-IX not found in layout` warning
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 uv run black interpreter/cobol/lower_search.py tests/integration/test_cobol_programs.py
@@ -1031,7 +1042,7 @@ git commit -m "fix(cobol): advance the table's implicit index in a Format 1 SEAR
 **Files:**
 - Modify: `vendor/red-dragon` pointer in `~/code/red-dragon-forge`
 
-- [ ] **Step 1: Run red-dragon's full suite**
+- [x] **Step 1: Run red-dragon's full suite**
 
 ```bash
 cd ~/code/red-dragon
@@ -1041,13 +1052,13 @@ cd proleap-bridge && mvn -q -B test && cd ..
 
 Expected: green.
 
-- [ ] **Step 2: Push**
+- [x] **Step 2: Push**
 
 ```bash
 cd ~/code/red-dragon && git push origin main
 ```
 
-- [ ] **Step 3: Bump the pointer and rebuild the JAR**
+- [x] **Step 3: Bump the pointer and rebuild the JAR**
 
 ```bash
 cd ~/code/red-dragon-forge/vendor/red-dragon
@@ -1055,7 +1066,7 @@ git fetch origin && git checkout main && git pull --ff-only origin main
 cd proleap-bridge && ./build.sh && cd ../../..
 ```
 
-- [ ] **Step 4: Run the consuming suites**
+- [x] **Step 4: Run the consuming suites**
 
 ```bash
 cd ~/code/red-dragon-forge
@@ -1069,7 +1080,7 @@ cd cicada && make test && cd ..
 Expected: green. If Db2 refuses the connection, `cd squall && make db2-restart` — the
 container's TCP listener drops under emulation.
 
-- [ ] **Step 5: Commit the bump**
+- [x] **Step 5: Commit the bump**
 
 ```bash
 git add vendor/red-dragon
