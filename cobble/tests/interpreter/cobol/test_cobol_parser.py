@@ -9,7 +9,7 @@ how that reaches the java command line.
 from pathlib import Path
 
 from interpreter.cobol.subprocess_runner import SubprocessRunner
-from cobble.interpreter.cobol.cobol_parser import ProLeapCobolParser
+from interpreter.cobol.cobol_parser import ProLeapCobolParser
 
 _MINIMAL_ASG = '{"data_fields": [], "sections": [], "paragraphs": []}'
 
@@ -34,7 +34,7 @@ def _command_for(**kwargs: object) -> list[str]:
 
 
 def test_parse_passes_each_copybook_extension_as_a_repeated_flag() -> None:
-    command = _command_for(copybook_extensions=["cpy", "txt"])
+    command = _command_for(copybook_exts=["cpy", "txt"])
     assert command == [
         "java",
         "-jar",
@@ -70,7 +70,7 @@ def test_parse_to_file_accepts_a_member_that_is_not_valid_utf_8(
 
 
 def test_parse_emits_copybook_dirs_before_extensions() -> None:
-    command = _command_for(copybook_dirs=[Path("sym")], copybook_extensions=["cpy"])
+    command = _command_for(copybook_dirs=[Path("sym")], copybook_exts=["cpy"])
     assert command == [
         "java",
         "-jar",
