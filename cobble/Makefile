@@ -7,7 +7,7 @@ JCL_BRIDGE_JAR     := $(FORGE)/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.
 HLASM_FORK         := $(FORGE)/cicada/third-party/che-che4z-lsp-for-hlasm-fork
 BRIDGE_ENV         := PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR)
 
-.PHONY: all tools hlasm jars codegen sym csd build compare verify render render-webgl canonical test fmt lint clean
+.PHONY: all tools hlasm jars codegen sym csd build compare verify render render-webgl test fmt lint clean
 
 ## Full run from a fresh clone: submodules -> tools -> codegen -> extract -> verify.
 all: ; @./build.sh
@@ -71,30 +71,6 @@ render:
 render-webgl:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render-webgl CONFIG=config/carddemo.yaml" >&2; exit 1; }
 	uv run --no-sync cobble-render-webgl --config $(CONFIG)
-
-## Export a nodes/edges.jsonl pair as CodeConcise's canonical manifest.json.
-## Requires NODES=, EDGES=, OUTPUT=, PROJECT_NAME= (all explicit, no defaults),
-## e.g. make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME=carddemo
-canonical:
-	@test -n "$(NODES)" || { echo "error: NODES is required, e.g. make canonical NODES=out/nodes.jsonl ..." >&2; exit 1; }
-	@test -n "$(EDGES)" || { echo "error: EDGES is required, e.g. make canonical ... EDGES=out/edges.jsonl ..." >&2; exit 1; }
-	@test -n "$(OUTPUT)" || { echo "error: OUTPUT is required, e.g. make canonical ... OUTPUT=out/manifest.json ..." >&2; exit 1; }
-	@test -n "$(PROJECT_NAME)" || { echo "error: PROJECT_NAME is required, e.g. make canonical ... PROJECT_NAME=carddemo" >&2; exit 1; }
-	uv run --no-sync cobble-canonical --nodes $(NODES) --edges $(EDGES) --output $(OUTPUT) --project-name $(PROJECT_NAME)
-
-## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
-test:
-	uv run --no-sync pytest
-
-## Auto-format the codebase with black.
-fmt:
-	uv run --no-sync python -m black .
-
-## Run static analysis: import-linter contracts + pyright + python-fp-lint.
-lint:
-	uv run --no-sync lint-imports
-	uv run --no-sync pyright
-	uv run --no-sync python -m python_fp_lint check cobble/
 
 ## Drop this corpus's generated output. NOTE: sym/ is a copybook_dirs entry, so
 ## `make sym` has to run again before the next `make build`.

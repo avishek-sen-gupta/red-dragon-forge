@@ -79,21 +79,6 @@ def to_json_fields(location: FileLocation) -> Mapping[str, object]:
             return {"file_path": None, "file_path_reason": reason.value}
 
 
-def to_json_path(location: FileLocation) -> str:
-    """The path as a string, empty when there is none.
-
-    For a consumer whose own schema has a single path field and nowhere to put
-    a reason -- canonical_export's, today. Empty string rather than None so the
-    caller has one type to handle: no file and an unnamed file are the same
-    thing to a schema that cannot say why.
-    """
-    match location:
-        case Path():
-            return str(location)
-        case NoFileLocation():
-            return ""
-
-
 def from_json(row: Mapping[str, object]) -> FileLocation:
     """A location read back from a nodes.jsonl row.
 
