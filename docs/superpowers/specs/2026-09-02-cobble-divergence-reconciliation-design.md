@@ -1,7 +1,7 @@
 # Reconciling cobble's divergences: one canonical version of each module
 
 **Date:** 2026-09-02
-**Status:** design, approved; execution in progress
+**Status:** executed (forge ca7a6c26..a413494b, red-dragon 0301168a and 265b6aa6)
 **Follows:** `2026-09-01-delete-stale-graph-stack-design.md` (deleted forge's graph
 stack) and the wave-1 integration commit `ca7a6c26` (landed cobble as a workspace
 member and deleted its identical copies).
@@ -105,6 +105,29 @@ divergence to decide, not a mechanical fix to paper over.
    whole EXEC CICS parsing layer — `ref_mod`, `cics_visitor`, `statements` and
    `cics_parser` all pull the expression vocabulary in with them, and both CICS
    grammars are already byte-identical.
+
+## Correction: what step 5 actually found
+
+The assessment above says cobble's `cobol_expression` carries three node kinds
+red-dragon lacks. That was wrong. red-dragon already read `figurative`,
+`length_of` and `dfhresp` — commit `aac34001`, "read the three operand kinds the
+bridge already emits" — so the whole-program ASG loss was already fixed there.
+What cobble actually adds is the `_BUILDERS` dispatch table replacing the
+if-chain, and the typed `JsonExpr` reading helpers.
+
+Chasing that difference turned up a live defect neither side had diagnosed, and
+it is the one the reasoning below was written for after all, just one layer
+down. red-dragon could **parse** all three kinds and **lower** none: each fell
+through `lower_expr_node`'s "Unknown expression node type" branch to the constant
+0, so `COMPUTE WS-N = LENGTH OF WS-A` silently computed 0. Reading a kind without
+lowering it is exactly the crash-traded-for-a-wrong-answer this design warned
+about — it had simply already happened. Fixed in red-dragon `265b6aa6`, with a
+test per kind; four of the eight fail against the unfixed lowering.
+
+`ToFieldEnd` was **not** adopted. Nothing outside cobble's own
+`cobol_expression` reads it — cobble never lowers — while taking it would
+rewrite `ref_mod_length is not None` at eight sites in executing lowering paths.
+red-dragon keeps `None`.
 
 ## The `cobol_expression` decision
 
