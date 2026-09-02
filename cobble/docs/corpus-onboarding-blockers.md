@@ -126,10 +126,10 @@ literal comes back as a raw `0xA6`, which a locale-encoded read rejects outright
 The locale default round-tripped only by coincidence, on the days both ends
 happened to be UTF-8.
 
-**One site deliberately left strict.** `cobble/jackal/jcl/proc_expand.py:116`
-(`parse_proc(proc_path.read_text())`) reads PROC members. Fixing it would cost
-`cobble.jackal` its leaf status — it too imports nothing else in cobble today —
-and the site is latent in both corpora: the production config declares no
+**One site deliberately left strict.** `../../jackal/jackal/jcl/proc_expand.py:212`
+(`parse_proc(paths[0].read_text())`) reads PROC members. Now the workspace's, not
+cobble's — `e71951c` adopted cobble's copy into jackal.
+The site is latent in both corpora: the production config declares no
 `proclib_dirs` at all, so `expand_procs` is never called, and CardDemo's two PROC
 members are pure ASCII. A corpus with a high byte in a PROC needs this fixed, and
 then the placement question reopens. Until then the `UnicodeDecodeError` it raises

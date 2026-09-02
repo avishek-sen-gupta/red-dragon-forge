@@ -145,12 +145,116 @@ fileignoreconfig:
   # Flagged on design prose about module names and verification steps, not on
   # any value. No credentials in this file.
   checksum: 603553fc076120db3965cd66a0dcb60c3dc1f100b56a446b8c716ca63524a004
-- filename: cobble/cobble/jackal/jcl_graph.py
-  # Flagged on an import line naming dsn helpers, not on any value.
-  # No credentials in this file.
-  checksum: b2a7c2c648f5ed65de823543d894e7dbbc4dd69663d1cf820455e1457ba2524a
 - filename: docs/superpowers/specs/2026-09-02-cobble-divergence-reconciliation-design.md
   # Flagged on design prose about module and identifier names, not on any value.
   # No credentials in this file.
   checksum: 747a520d2f6dccb91eeeb7b159ae27d52a08b2d5654f85c5dba64717a2d26460
+# cobble/**: false positives from the graph extractor. Flagged on identifier and
+# path names (DSN/dataset/copybook helpers), vendored minified JS, and NDJSON
+# graph fixtures -- no values. Regenerate after touching these files:
+#   talisman --pattern 'cobble/**/*'
+- filename: cobble/.github/workflows/reproduce.yml
+  checksum: 6d669efcdca8d2719cc0ac29f1d971adc84317d18f7e4564236b114ed2e0358a
+- filename: cobble/.pre-commit-config.yaml
+  checksum: 5b07860e5a00deef732f4bb59a5f264de39db5107a1a1ee5bc8cf58f5a1678b9
+- filename: cobble/.python-fp-lint/rules/no-subscript-tuple-mutation.yml
+  checksum: 349f5b174d36b9a7e45a02bf1359aae738ffb5bd4dd562983f7956d177c507ba
+- filename: cobble/README.md
+  checksum: 092fd5d2c5502d40b9340335cc53a2aef87b3be7cebc4acc87c210194162814a
+- filename: cobble/cobble/build_graph.py
+  checksum: 17b97e112097e3ff9a6b4704abeec662d1a2c8d8e82394bf418c845fec7a2b20
+- filename: cobble/cobble/cics/flow_map.py
+  checksum: 96cf5407e6f7a09014727091e367396ba054a0c19181c22518fbd78b8df8eba6
+- filename: cobble/cobble/cics/synth_csd.py
+  checksum: bb3791aad555b9395f84d223903dab127dfa28a63329e08a5ecd602197b7547d
+- filename: cobble/cobble/compare.py
+  checksum: 3bed4bd4a32a5d38ddd9d1ae62c6d1cc681a294997519e97f9796906f944d2d6
+- filename: cobble/cobble/corpus_config.py
+  checksum: 879566701c34b3e7c717f50b9c68098ddac0c4a9155a44f703daecc0182170f2
+- filename: cobble/cobble/corpus_index.py
+  checksum: 092a4dc44e6e9aefb6a03b695b0261907e2bc7302f704c57de6c4798d9e7bd64
+- filename: cobble/cobble/corpus_index_builder.py
+  checksum: 11bb10aad1eb4aeb8b9ca66c3deafbcf06bb14ad962b937e49691950ce06e94c
+- filename: cobble/cobble/diagnosis/copybooks.py
+  checksum: 97afa2bc67633c475fe22bb374ce3ab7e416caf2c844b1483b0068a9e4dff2e7
+- filename: cobble/cobble/jcl/cobol_file_graph.py
+  checksum: cb4fef584d4feb3bfc6e6f3f405890129ad36b73fef9767e30e53d8adc28ca35
+- filename: cobble/cobble/jcl/jcl_graph.py
+  checksum: 21d2c6b3d039d2059ec8b42778c3d69a483d904683814bc9c961175d49a934a7
+- filename: cobble/cobble/jcl/jcl_store.py
+  checksum: 490e91d8d163a8480937a1062309cfb434e60db1e6fc72eae08a3419af02140b
+- filename: cobble/cobble/knowledge_graph/export.py
+  checksum: 826011f8434861a5d90b2ca83bb5e9eaf0eb0a13f6c96433f2ea3d9885047641
+- filename: cobble/cobble/knowledge_graph/graph_writer.py
+  checksum: f2ad6071fd4d938b2eb2d1c369b0d0d30f427f91c955a74d1802e35fad637845
+- filename: cobble/cobble/knowledge_graph/layout.py
+  checksum: ed1c86f2507a992c95416e2e0b26b557bc497297b87a480059e3dcf48d6bb00a
+- filename: cobble/cobble/knowledge_graph/merge.py
+  checksum: 0141de8cb164892ac3e680cc41b163614cab23e2151a259bbd94d52540247336
+- filename: cobble/cobble/knowledge_graph/node_key.py
+  checksum: 1dada7ede893f840e52600e5844baeb83b6004b0c0c6bb80d752ec0c000dea5c
+- filename: cobble/cobble/knowledge_graph/render.py
+  checksum: c506e3dfda9664593063dc74ba28fd404a300ef1da78296bae308169a237b588
+- filename: cobble/cobble/knowledge_graph/render_webgl.py
+  checksum: 74e4a8053b6dd99fb41ec7e9dc1232e59331d727c41762f48f10096f23e83320
+- filename: cobble/cobble/knowledge_graph/vendor/graphology.umd.min.js
+  checksum: 55f9d309aa688f951b4f0bee78d18608da4a482c76d381baafe39d8b4c4fd0f1
+- filename: cobble/cobble/knowledge_graph/vendor/sigma.min.js
+  checksum: 6e440b5feac15fa73b0c1cf9532743b8e588ce6b8601bb0c2b4e33e497d76801
+- filename: cobble/cobble/knowledge_graph/vendor/vis-network.min.js
+  checksum: 725b49cad8f203b9118a095c5cd0489cfb421e1c219f3d61fe7fb297d753494b
+- filename: cobble/cobble/matching_files.py
+  checksum: ba487ea58770b0f282b8df70f46730538296843fce39c4b2824ccb6f46b05f73
+- filename: cobble/cobble/sink_state.py
+  checksum: accadd04f36d2317ee05850b0d180eff72bf54012361e335793dcba09f2f6974
+- filename: cobble/docs/corpus-onboarding-blockers.md
+  checksum: 16da0e60a6a3e22358ab33674b5d8d797f310c90bab466162ff326a1a363f754
+- filename: cobble/docs/outstanding-issues.md
+  checksum: 48b3a5d7f9c8b0b16c8bc812ee397ab19396110a0acfc309f34c5bcef4280ec5
+- filename: cobble/docs/superpowers/plans/2026-07-11-canonical-export.md
+  checksum: 4d943f9ef399d8e2990f4fc4c78764292cb41daeffdc60b5d62634f2bc444033
+- filename: cobble/docs/superpowers/plans/2026-07-11-corpus-config.md
+  checksum: 4e2b999a6db46b5c62909da8cf4cb58eaf4060a92a8e837f4c638bdc6cf7e702
+- filename: cobble/docs/superpowers/specs/2026-07-11-canonical-export-design.md
+  checksum: 5bf7b47c498d1c508b363acdf42b851203e05d2165efc01cae104dcaa1823150
+- filename: cobble/docs/superpowers/specs/2026-07-11-corpus-config-design.md
+  checksum: f8134203939ab2a66414f5e2644f5eac8e72b3df1a61671ac6a961368683e928
+- filename: cobble/reference/edges.jsonl
+  checksum: 67851ac2e55e41cb6e295e998fdcc7469486f78ffb53f0cab756004b87c3fa22
+- filename: cobble/tests/cics/test_flow_map.py
+  checksum: d526f5817ca7317c48fcddccf8ba97f9ad25b03a4305c434a968be373dd97945
+- filename: cobble/tests/jackal/test_bridge_parser.py
+  checksum: bea623529979e29ad723c843e93ad6b8651fbf9676f8e77e640be8634162a3d7
+- filename: cobble/tests/jackal/test_dsn.py
+  checksum: ecb7303ffe4f99e549afd3662ef16255df2987d8ac3dd618a6b8ef8c9475af80
+- filename: cobble/tests/jackal/test_proc_expand.py
+  checksum: 0f7f15006244582930d217c82ca1578fcaf1d77d07cf7dc46e8fc766cf7b6ebe
+- filename: cobble/tests/jcl/test_jcl_graph.py
+  checksum: a9ac1c486debc74b4cfc5112f5c381bad06b8573ee97b75e65643406124dc2c6
+- filename: cobble/tests/jcl/test_jcl_store.py
+  checksum: c615111b422ea068c9480261cb765e5ed3cfed310440ddfc3e0217e68f326384
+- filename: cobble/tests/knowledge_graph/test_graph_writer.py
+  checksum: 76c64b7ec0e1fc5b7a929b175879214b9fdb8627ee075e2337bfc9bc26e0342b
+- filename: cobble/tests/knowledge_graph/test_layout.py
+  checksum: c0ce39ec50b69b17723f6e07f635f28f42f4c9a7ee0d6261bb08fc054c880caf
+- filename: cobble/tests/knowledge_graph/test_merge.py
+  checksum: a4c9579e593c41f56b5e593749144e2bd62b5f4c7ec1ddb1f0669203c69ab813
+- filename: cobble/tests/knowledge_graph/test_render.py
+  checksum: 58ec7ac5b53dacc99a6d6cc8bfa02233a6bd6b5ce0671d3625a4a783f6305509
+- filename: cobble/tests/knowledge_graph/test_render_webgl.py
+  checksum: fabc6b964193f18d93f2b6ecba9410c7eed97d7aa49dd1d5e49f13f72d693fe2
+- filename: cobble/tests/test_build_graph.py
+  checksum: d23404218dd86ffb89967f633d36cf9824dc6ca25e92b6951eca0023d8e47d96
+- filename: cobble/tests/test_canonical_export_cli.py
+  checksum: da83e2ffae7f9af43c8fb6ca603c36dd7d0f0ba6142d15f1cbf47db26e79f235
+- filename: cobble/tests/test_compare.py
+  checksum: 9a829a2c47ddec316d0bf9549ebe232639ddd74547233239e3645c0044697a46
+- filename: cobble/tests/test_corpus_config.py
+  checksum: 350de0b9b5118851437ec1bb62a3b99c3b8e5d9d07292fbdc4055b6fc4aeb46a
+- filename: cobble/tests/test_corpus_index.py
+  checksum: 9fff22215b3b0171dccd8f953da924a8eee94c2cb093febb33dbcea26e332aa8
+- filename: cobble/tests/test_generate_csd.py
+  checksum: b9be99df753705c311959beff5c4f31bb3fb3cf4d099dafa1af5d3942d25b479
+- filename: cobble/uv.lock
+  checksum: eb4d16e76eefae068c5ee1d27d9619ee8afc159153b527493f2ac9a48a2b0649
 version: "1.0"
