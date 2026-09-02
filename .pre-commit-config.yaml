@@ -4,6 +4,12 @@ repos:
     hooks:
       - id: python-fp-lint
         args: [--config, fp.json]
+        # cicada/cics/ models a CICS region: a dispatcher state machine plus the
+        # result_holder/context_holder/td_queue cells every builtin closes over.
+        # Mutation is the design there, so no-mutation-outside-init (and the
+        # collection-mutation rules) cannot be met without rewriting the runtime.
+        # The warnings-only fp-lint hook below still reports on these files.
+        exclude: ^cicada/cics/
   - repo: local
     hooks:
       - id: terminology-guard
