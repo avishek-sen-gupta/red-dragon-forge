@@ -432,3 +432,79 @@ def test_xctl_from_a_non_terminal_started_task_keeps_its_empty_terminal(cobol_pa
     assert third.kind == DispatchKind.RETURN
     assert third.commarea == "    ".encode("cp037")
     assert region.done is True
+
+
+COBOL_START_THEN_TRANSID = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTA2.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-START-DATA.
+           05  WS-SD-KEY   PIC X(6)  VALUE 'ACCT01'.
+           05  WS-SD-AMT   PIC X(8)  VALUE '00012345'.
+       01  WS-CA           PIC X(8)  VALUE 'FROMSRTA'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB')
+                           TERMID(EIBTRMID)
+                           FROM(WS-START-DATA)
+                           LENGTH(14)
+           END-EXEC.
+           EXEC CICS RETURN TRANSID('SRTC') COMMAREA(WS-CA) END-EXEC.
+"""
+
+COBOL_NEXT_TRANSID = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTC.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE SPACES.
+       PROCEDURE DIVISION.
+           MOVE 'RANSRTC0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_started_task_runs_before_the_next_transid(cobol_parser):
+    """S2: runnable first — SRTB needs no input, SRTC does, and the next-transid
+    slot survives the started task."""
+    import struct
+
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTA2", "SRTB": "STARTB", "SRTC": "STARTC"}
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        "STARTA2": compile_cics_program(
+            COBOL_START_THEN_TRANSID.encode(), cobol_parser, spec
+        ),
+        "STARTB": compile_cics_program(COBOL_START_B.encode(), cobol_parser, spec),
+        "STARTC": compile_cics_program(COBOL_NEXT_TRANSID.encode(), cobol_parser, spec),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    assert region.transid == "SRTB", "the started task must run before SRTC"
+
+    # A started task needs no terminal input, so no input_event — same
+    # convention CicsRegion states for the turn after an XCTL.
+    started = region.step()
+    assert started.commarea[0:2] == struct.pack(">h", 0)
+    assert started.commarea[2:8] == "ACCT01".encode("cp037")
+    assert region.transid == "SRTC", "the next-transid must survive the started task"
+    assert region.done is False
+
+    last = region.step(input_event=InputEvent())
+    assert last.commarea == "RANSRTC0".encode("cp037")
+    assert region.done is True
