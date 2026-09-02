@@ -34,7 +34,6 @@ cobble-build = "cobble.build_graph:main"
 cobble-compare = "cobble.compare:main"
 cobble-render = "cobble.render_graph:main"
 cobble-render-webgl = "cobble.render_graph_webgl:main"
-cobble-canonical = "cobble.canonical_export:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,

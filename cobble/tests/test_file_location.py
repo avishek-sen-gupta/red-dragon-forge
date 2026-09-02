@@ -18,7 +18,6 @@ from cobble.file_location import (
     NoFileLocation,
     from_json,
     to_json_fields,
-    to_json_path,
 )
 
 
@@ -92,13 +91,6 @@ def test_a_row_whose_fields_are_not_strings_reads_as_saying_nothing() -> None:
     assert from_json({"file_path": 7, "file_path_reason": []}) == NoFileLocation(
         FileLocationReason.NOT_STATED
     )
-
-
-def test_a_schema_with_only_one_path_field_gets_a_string_either_way() -> None:
-    """canonical_export's schema has nowhere to say why a node has no file, so
-    it reads the path as a plain string and "" is the whole of "no file"."""
-    assert to_json_path(Path("cbl/PROGONE.cbl")) == "cbl/PROGONE.cbl"
-    assert to_json_path(NoFileLocation(FileLocationReason.UNRESOLVED)) == ""
 
 
 def test_a_node_built_without_a_corpus_index_says_so() -> None:

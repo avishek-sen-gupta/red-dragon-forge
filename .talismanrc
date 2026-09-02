@@ -211,12 +211,8 @@ fileignoreconfig:
   checksum: 16da0e60a6a3e22358ab33674b5d8d797f310c90bab466162ff326a1a363f754
 - filename: cobble/docs/outstanding-issues.md
   checksum: 48b3a5d7f9c8b0b16c8bc812ee397ab19396110a0acfc309f34c5bcef4280ec5
-- filename: cobble/docs/superpowers/plans/2026-07-11-canonical-export.md
-  checksum: 4d943f9ef399d8e2990f4fc4c78764292cb41daeffdc60b5d62634f2bc444033
 - filename: cobble/docs/superpowers/plans/2026-07-11-corpus-config.md
   checksum: 4e2b999a6db46b5c62909da8cf4cb58eaf4060a92a8e837f4c638bdc6cf7e702
-- filename: cobble/docs/superpowers/specs/2026-07-11-canonical-export-design.md
-  checksum: 5bf7b47c498d1c508b363acdf42b851203e05d2165efc01cae104dcaa1823150
 - filename: cobble/docs/superpowers/specs/2026-07-11-corpus-config-design.md
   checksum: f8134203939ab2a66414f5e2644f5eac8e72b3df1a61671ac6a961368683e928
 - filename: cobble/reference/edges.jsonl
@@ -245,8 +241,6 @@ fileignoreconfig:
   checksum: fabc6b964193f18d93f2b6ecba9410c7eed97d7aa49dd1d5e49f13f72d693fe2
 - filename: cobble/tests/test_build_graph.py
   checksum: d23404218dd86ffb89967f633d36cf9824dc6ca25e92b6951eca0023d8e47d96
-- filename: cobble/tests/test_canonical_export_cli.py
-  checksum: da83e2ffae7f9af43c8fb6ca603c36dd7d0f0ba6142d15f1cbf47db26e79f235
 - filename: cobble/tests/test_compare.py
   checksum: 9a829a2c47ddec316d0bf9549ebe232639ddd74547233239e3645c0044697a46
 - filename: cobble/tests/test_corpus_config.py

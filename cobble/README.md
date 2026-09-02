@@ -26,7 +26,7 @@ CMake + Ninja (`hlasm_export`); and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 git clone <this-repo> cobble && cd cobble
-./build.sh   # submodules -> build tools -> generate parser+copybooks -> extract -> verify 449/803
+./build.sh   # submodules -> build tools -> generate parser+copybooks -> extract -> verify 449/803 -> render
 ```
 
 `make` targets:
@@ -38,7 +38,6 @@ git clone <this-repo> cobble && cd cobble
 | `build` | Extract the graph to `out/` |
 | `compare` | Identity-diff vs `reference/` (449/803) |
 | `render` | Render `out/` as an interactive HTML graph |
-| `canonical` | Export `out/` as CodeConcise's canonical `manifest.json` |
 | `test` | Run the pytest unit suite |
 | `fmt` | Format with black |
 | `lint` | Run import-linter, pyright, and python-fp-lint |
@@ -65,30 +64,6 @@ CardDemo run.
 `make build` re-runs the four extractors (CALL/COPY, CICS flow, JCL, batch
 FILE-CONTROL) over `vendor/carddemo` from scratch every time; safe to re-run
 after touching any extractor code or the corpus submodule.
-
-### Canonical export
-
-```bash
-make canonical NODES=out/nodes.jsonl EDGES=out/edges.jsonl OUTPUT=out/manifest.json PROJECT_NAME=carddemo
-```
-
-This is the point of cobble: converting a COBOL/CICS/JCL corpus's graph into
-CodeConcise's canonical ingestion manifest shape (`{version, generator, nodes,
-edges}`), so a mainframe corpus cobble has analyzed can be ingested the same
-way any other language's analyzer output is. Synthesizes `FILE`/`DIRECTORY`
-nodes and `MADE_OF` edges for every node whose `file_path` resolved to a real
-file; nodes with no resolved file (`DATASET`, `COBOL_FILE`, unconfigured
-`TRANSACTION`/`CICS_FILE`, `BMS_MAP`) get no such synthesis. Streaming and
-thread-pool-parallel throughout, with bounded memory; see
-`docs/superpowers/specs/2026-07-11-canonical-export-design.md` for the full
-design, including the deliberate lack of schema validation and the known
-lossy limitation (edge `attrs` have no home in the canonical edge shape and
-are dropped).
-
-Unlike `build`/`sym`/`render`, this doesn't take a `--config`/`CONFIG=` at
-all: `NODES=`, `EDGES=`, `OUTPUT=`, and `PROJECT_NAME=` are all required
-explicit paths/values, so it can run against any `nodes.jsonl`/`edges.jsonl`
-pair regardless of which config (if any) produced them.
 
 ### Point this at your own codebase
 
@@ -355,7 +330,6 @@ consumers may not import each other).
 | `config/carddemo.yaml` | The tracked config `make build`/`make sym` use; captures CardDemo's layout in `corpus_config.py`'s schema. Copy this file as a starting point to point cobble at a different corpus. |
 | `cobble/corpus_index.py` / `cobble/file_location.py` | `CorpusIndex` resolves every `(NodeKind, id)` to a `FileLocation` (a real `Path`, or a `NoFileLocation` explaining why not: not file-based, no CSD/definition source, or genuinely unresolved) once per run, from the same `CorpusConfig`. Every extractor and `GraphWriter` resolve a given node identically regardless of call order, which is what lets `GraphWriter` stream nodes keep-first with no merge step. |
 | `cobble/render_graph.py` | Render `<out_dir>/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `<out_dir>/graph.html` (`python -m cobble.render_graph --config <path>`; `out_dir` comes from the config's `corpus.out_dir` field. `cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
-| `cobble/canonical_export.py` | Export a nodes/edges.jsonl pair as CodeConcise's canonical `manifest.json` (`python -m cobble.canonical_export --nodes <path> --edges <path> --output <path> --project-name <name>`; all four required, no config-derived defaults. The streaming/thread-pool/bounded-memory transform pipeline itself lives in `cobble/knowledge_graph/canonical_export.py`). |
 | `tests/` | The pytest unit suite (`make test`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
