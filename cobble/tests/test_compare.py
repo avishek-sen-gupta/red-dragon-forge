@@ -3,7 +3,8 @@ the detail it emits is what someone reads when 449/803 does not reproduce."""
 
 import logging
 
-from cobble.compare import _edge_key, _node_key, _report
+import cobble.compare
+from cobble.compare import _absent_inputs, _edge_key, _node_key, _report
 
 
 def test_identical_sets_report_no_differences(caplog) -> None:
@@ -52,6 +53,29 @@ def test_the_report_is_logged_rather_than_printed(capsys, caplog) -> None:
 
     assert capsys.readouterr() == ("", "")
     assert caplog.messages
+
+
+def test_an_unextracted_tree_names_the_command_that_extracts(
+    tmp_path, monkeypatch, caplog
+) -> None:
+    """`make compare` on a clean checkout used to raise FileNotFoundError from
+    _load, which tells the reader nothing about what to run first."""
+    caplog.set_level(logging.ERROR)
+    (tmp_path / "reference").mkdir()
+    for name in ("nodes.jsonl", "edges.jsonl"):
+        (tmp_path / "reference" / name).write_text("")
+    monkeypatch.setattr(cobble.compare, "_REPO_ROOT", tmp_path)
+
+    assert cobble.compare.main() == 1
+    assert "out/nodes.jsonl" in caplog.text
+    assert "make build CONFIG=" in caplog.text
+
+
+def test_absent_inputs_names_both_sides(tmp_path) -> None:
+    absent = _absent_inputs(tmp_path / "reference", tmp_path / "out")
+
+    assert {p.name for p in absent} == {"nodes.jsonl", "edges.jsonl"}
+    assert len(absent) == 4
 
 
 def test_the_keys_are_the_documented_identities() -> None:

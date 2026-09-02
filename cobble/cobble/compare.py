@@ -77,10 +77,28 @@ _SETS = (
 )
 
 
+def _absent_inputs(ref_dir: Path, out_dir: Path) -> tuple[Path, ...]:
+    return tuple(
+        d / name
+        for _, name, _ in _SETS
+        for d in (ref_dir, out_dir)
+        if not (d / name).is_file()
+    )
+
+
 def main() -> int:
     configure_cli_logging()
     out_dir = _REPO_ROOT / "out"
     ref_dir = _REPO_ROOT / "reference"
+    absent = _absent_inputs(ref_dir, out_dir)
+    if absent:
+        logger.error(
+            "nothing to compare — absent: %s\n"
+            "  out/ is produced by:  make build CONFIG=config/carddemo.yaml\n"
+            "  reference/ is committed — if it is absent, the checkout is incomplete.",
+            ", ".join(str(p.relative_to(_REPO_ROOT)) for p in absent),
+        )
+        return 1
     # sum over a generator rather than a running total: the reports still come out
     # in _SETS order because a generator is consumed in order.
     diff = sum(
