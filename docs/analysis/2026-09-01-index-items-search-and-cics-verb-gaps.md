@@ -29,7 +29,7 @@ a complete COBOL program you can paste into a probe script.
 | B | Unknown data-name lowered as a string literal | **wrong answer, silent** | `condition_lowering.py:952` | **fixed** |
 | C | `SEARCH` ignores the table: no implicit index, no OCCURS bound, walks out of bounds | **wrong answer, silent** | `lower_search.py` | **fixed** (C1–C3; C4 open) |
 | D | `SET target TO <data-item>` writes the item's *name* | **wrong answer, silent** | `lower_arithmetic.py:1772` | **fixed** |
-| E | Unimplemented `EXEC CICS` verbs emit no IR and only warn | **missing behaviour, silent** | `cics/strategy.py:1064` | open |
+| E | Unimplemented `EXEC CICS` verbs emit no IR and only warn | **missing behaviour, silent** | `cics/strategy.py:1064` | **partially fixed** (`START`/`RETRIEVE`; the loud-by-default policy is still open) |
 | F | `HANDLE CONDITION` is a no-op and no condition is ever raised | **wrong control flow, silent** | `cics/strategy.py:60` | open |
 
 Severity here means *what a consumer sees*, not how hard the fix is. All six are
@@ -79,6 +79,51 @@ is an order of magnitude above the corpus's largest real table (357).
 opened with. What is left in that run is defect E and nothing else: `START` ×3 and
 `RETRIEVE` ×1, no IR emitted, plus defect F's INFO-level no-op. Both remaining
 defects are in cicada; steps 1–5 were all in red-dragon.
+
+**Step 6 — `START` + `RETRIEVE` — is done**, in cicada:
+
+| Commit | Change |
+|---|---|
+| `e33ec7ee` | the interval-control start queue |
+| `b9477871` | a task gets a terminal id and writes `EIBTRMID` |
+| `fca614f7` | `START` lowers onto the start queue |
+| `4259c67f` | `RETRIEVE` lowers; `ENDDATA` when nothing started the task |
+| `ed203db1` | a started task dispatches when the issuing task ends |
+| `c43f7b51` | a pending `START` must not preempt an `XCTL` |
+| `16ace408` | terminal I/O is `INVREQ` in a non-terminal task |
+| `0d2f1fdf` | terminal-attached is the default; the non-terminal value is named `NO_TERMINAL` |
+| `726e2377` | runaway guard for self-starting transactions |
+| `745adf6d` | the runaway counter resets, not just fires |
+| `6eef3d82` | the blocking dispatcher loop drains the start queue too |
+| `0f808ccb` | the XCTL evasion is pinned on the blocking loop as well |
+
+`START` queues a request and does not end the task; `RETRIEVE` consumes it,
+`ENDDATA` when nothing started the task. Scheduling rule: run what is runnable,
+what waits on input waits — a started task runs before a next-transid, which is
+parked and still runs afterwards. Both drivers (`CicsRegion` and the blocking
+loop) drain the queue and carry their own runaway guard. Rejections
+(`TRANSIDERR` / `TERMIDERR`) are recorded on the queue so a caller can assert on
+what was refused. A non-terminal task (a `START` with no `TERMID`) runs, and its
+terminal I/O is `INVREQ`.
+
+Five implementation findings the diagnosis did not predict:
+
+* `DFHEIBLK.cpy` declared `EIBTERM`, which is not a field IBM's EIB defines. The
+  real name, and the one every COBOL program uses, is `EIBTRMID`. Renamed in
+  place (`b9477871`).
+* Plain `EXEC CICS RETURN COMMAREA(x)` (no `TRANSID`) silently discarded the
+  commarea — a pre-existing bug the whole test approach depended on, found and
+  fixed alongside the `EIBTRMID` rename (`b9477871`).
+* `SEND MAP` / `RECEIVE MAP` never called `emit_resp_writeback`, so a response
+  code set in the builtin could never reach `EIBRESP` — any guard there would
+  have been invisible to the program it protects (`16ace408`).
+* The empty terminal id was overloaded: it meant both "non-terminal task" and
+  "no terminal configured", so guarding on it reclassified every existing
+  region and broke 35 tests before `DEFAULT_TERMID` / `NO_TERMINAL` separated
+  the two meanings (`16ace408`, `0d2f1fdf`).
+* `run_carddemo_region` built a start queue and handed it to the strategy, but
+  the blocking loop never drained it — a `START` there was validated, accepted,
+  queued and never run (`6eef3d82`).
 
 ---
 
@@ -734,8 +779,8 @@ both together, or expect the noise and say so up front.
 
 ## Suggested order
 
-Dependencies first, then radius. **Steps 1–5 are done** (see *Status* above); the
-queue now starts at step 6.
+Dependencies first, then radius. **Steps 1–6 are done** (see *Status* above); the
+queue now starts at step 7.
 
 1. **B** — unify the two lowerers' unknown-name policy. Smallest change, and it
    makes A and C visible instead of silent. Do this first even though it fixes no
