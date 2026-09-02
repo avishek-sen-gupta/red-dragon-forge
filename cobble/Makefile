@@ -72,6 +72,20 @@ render-webgl:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render-webgl CONFIG=config/carddemo.yaml" >&2; exit 1; }
 	uv run --no-sync cobble-render-webgl --config $(CONFIG)
 
+## Run the pytest unit suite (pure modules only — no JARs/corpus needed).
+test:
+	uv run --no-sync python -m pytest $(PYTEST_ARGS)
+
+## Auto-format the codebase with black.
+fmt:
+	uv run --no-sync python -m black cobble tests
+
+## Run static analysis: import-linter contracts + pyright + python-fp-lint.
+lint:
+	uv run --no-sync lint-imports
+	uv run --no-sync pyright
+	uv run --no-sync python -m python_fp_lint check cobble/
+
 ## Drop this corpus's generated output. NOTE: sym/ is a copybook_dirs entry, so
 ## `make sym` has to run again before the next `make build`.
 clean:
