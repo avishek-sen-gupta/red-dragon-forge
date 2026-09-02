@@ -62,10 +62,10 @@ from cobble.knowledge_graph.graph_types import (
     NodeKind,
 )
 from interpreter.project.import_types import ImportKind, ImportRef
-from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
-from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
+from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
+from cobble.jcl.jcl_store import JclStore, temp_jcl_store
 from jackal.jcl.parser import bridge_parser
-from cobble.jackal.jcl_graph import jcl_graph_from_job
+from cobble.jcl.jcl_graph import jcl_graph_from_job
 from cobble.knowledge_graph.export import read_ndjson
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobble.knowledge_graph.merge import merge_graph

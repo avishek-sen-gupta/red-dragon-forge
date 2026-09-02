@@ -22,13 +22,7 @@ sym-*/
 # only config/carddemo.yaml (a public sample) belongs in the repo.
 config/*.local.yaml
 
-# Generated ANTLR CICS parser (from cobble/cics/cics_grammar/*.g4)
-cobble/cics/cics_grammar/CICSzLexer.py
-cobble/cics/cics_grammar/CICSzParser.py
-cobble/cics/cics_grammar/CICSzParserListener.py
-cobble/cics/cics_grammar/CICSzParserVisitor.py
-cobble/cics/cics_grammar/*.interp
-cobble/cics/cics_grammar/*.tokens
+# Local tool builds (hlasm_export and friends, when built from here)
 tools/
 
 # Eclipse / JDT language-server project files, generated per-machine for the

@@ -96,6 +96,7 @@ lint:
 	uv run --no-sync pyright
 	uv run --no-sync python -m python_fp_lint check cobble/
 
+## Drop this corpus's generated output. NOTE: sym/ is a copybook_dirs entry, so
+## `make sym` has to run again before the next `make build`.
 clean:
 	rm -rf out cache sym
-	rm -f cobble/cics/cics_grammar/CICSz*.py cobble/cics/cics_grammar/*.interp cobble/cics/cics_grammar/*.tokens

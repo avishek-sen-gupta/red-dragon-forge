@@ -12,7 +12,7 @@ knowledge_graph/graph_writer.py).
 This module is the lookup only: finished mappings in, FileLocation out. Reading
 the corpus to populate them lives in corpus_index_builder, which is imported by
 build_graph and nothing else. The split is not cosmetic -- the reading needs the
-JCL and CSD parsers, i.e. cobble.jackal and cobble.cics, and every consumer of
+JCL and CSD parsers, i.e. cobble.jcl and cobble.cics, and every consumer of
 the index lives in one of those two packages. With both halves in one module
 that was a genuine import cycle (jackal.jcl_graph -> corpus_index ->
 jackal.jcl_graph), held apart only by the consumers' TYPE_CHECKING guards. The

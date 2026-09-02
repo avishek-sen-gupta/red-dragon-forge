@@ -26,7 +26,7 @@ from interpreter.cobol.cobol_statements import (
 )
 from interpreter.cobol.file_enums import OpenMode
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
-from cobble.jackal.cobol_file_graph import extract_cobol_file_graph
+from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
 
 _UNRESOLVED = NoFileLocation(FileLocationReason.UNRESOLVED)
 _NO_LOCATIONS: Mapping[tuple[NodeKind, str], FileLocation] = MappingProxyType({})

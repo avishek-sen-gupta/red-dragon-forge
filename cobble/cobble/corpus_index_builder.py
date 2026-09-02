@@ -1,7 +1,7 @@
 """Reads a corpus and returns the finished CorpusIndex it resolves against.
 
 Split out of corpus_index.py, which is now the lookup alone. Populating the index
-means parsing JCL and CSD, i.e. reaching into cobble.jackal and cobble.cics --
+means parsing JCL and CSD, i.e. reaching into cobble.jcl and cobble.cics --
 and both of those packages consume the index. Keeping the reading here means the
 lookup module imports leaf modules only, so the cycle those two directions used
 to form is gone rather than deferred behind a TYPE_CHECKING guard.
@@ -33,7 +33,7 @@ from jackal.dsn import InStreamDSN
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
 from jackal.jcl.proc_expand import ProcExpansionError, expand_procs
-from cobble.jackal.jcl_graph import step_proc_provenance
+from cobble.jcl.jcl_graph import step_proc_provenance
 from jackal.model import Job, Step
 from cobble.matching_files import matching_files
 
@@ -268,7 +268,7 @@ def build_corpus_index(
     ``read_job`` is how a member becomes a Job, defaulting to parsing it here. A
     corpus build passes a JclStore's ``get``, because the graph pass needs the
     same members again and re-parsing them is the single largest avoidable cost
-    in a run; see cobble.jackal.jcl.jcl_store.
+    in a run; see cobble.jcl.jcl_store.
 
     BMS maps are absent by construction: bms_dir is not part of CorpusConfig
     today (see BmsConfig), so BMS_MAP resolution stays UNRESOLVED until that is

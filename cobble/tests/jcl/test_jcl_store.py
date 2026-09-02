@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from jackal.jcl.bridge_parser import JclParseError
-from cobble.jackal.jcl.jcl_store import JclStore, temp_jcl_store
+from cobble.jcl.jcl_store import JclStore, temp_jcl_store
 
 
 def _job_json(name: str, step: str = "STEP1", pgm: str = "IEFBR14") -> str:
