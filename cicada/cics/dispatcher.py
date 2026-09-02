@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from cics.csd_parse import parse_csd as parse_csd, parse_csd_files as parse_csd_files
+from cics.interval import StartQueue, StartRequest
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from cics.vm_init import make_cics_initial_vm, make_entry_point
@@ -15,6 +16,13 @@ from cics.vm_init import make_cics_initial_vm, make_entry_point
 logger = logging.getLogger(__name__)
 
 _DFHENTER = "\x7d"
+
+# Sentinel: "I was not given a queue — make my own". A plain StartQueue() default
+# would be evaluated once at def time and shared by every region that omits it,
+# and this code mutates the queue.
+_OWN_START_QUEUE = StartQueue()
+
+_NO_PENDING_NEXT: "tuple[str, Any, bytes]" = ("", (), b"")
 
 
 @dataclass
@@ -202,6 +210,8 @@ class CicsRegion:
         result_holder: list,
         max_steps: int = 50_000,
         min_commarea_len: int = 0,
+        start_queue: StartQueue = _OWN_START_QUEUE,
+        region_termid: str = "",
     ) -> None:
         self._program_cache = program_cache
         self._transid_to_program = transid_to_program
@@ -218,11 +228,20 @@ class CicsRegion:
         # used as-is (the entry program's own EIBCALEN is authoritative).
         self._min_commarea_len = min_commarea_len
 
+        self._start_queue = (
+            StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
+        )
+        self._region_termid = region_termid
+
         self._transid: str = ""
         self._program: Any = None
         self._commarea: bytes = b""
+        self._task_termid: str = region_termid
         self._last_eibaid: str = _DFHENTER
         self._done: bool = False
+        # A RETURN TRANSID target parked because a started task, which needs no
+        # terminal input, runs before it. The terminal holds one such slot.
+        self._pending_next: "tuple[str, Any, bytes]" = _NO_PENDING_NEXT
 
     @property
     def transid(self) -> str:
@@ -249,6 +268,8 @@ class CicsRegion:
         self._transid = entry_transid
         self._commarea = commarea
         self._program = self._program_cache[self._transid_to_program[entry_transid]]
+        self._task_termid = self._region_termid
+        self._pending_next = _NO_PENDING_NEXT
         self._done = False
         return self._dispatch(input_event=input_event, max_steps=max_steps)
 
@@ -278,7 +299,12 @@ class CicsRegion:
         max_steps: int | None,
     ) -> DispatchResult:
         eibaid = input_event.eibaid if input_event is not None else self._last_eibaid
-        ctx = CicsContext(transid=self._transid, commarea=self._commarea, eibaid=eibaid)
+        ctx = CicsContext(
+            transid=self._transid,
+            commarea=self._commarea,
+            eibaid=eibaid,
+            termid=self._task_termid,
+        )
         if input_event is not None:
             # The program's RECEIVE MAP consumes this (fields + eibaid). We do NOT
             # do a separate get() for eibaid — the context already carries it.
@@ -299,16 +325,52 @@ class CicsRegion:
             result, self._transid, self._program_cache, self._transid_to_program
         )
         if isinstance(routing, DispatchResult):
-            logger.info("dispatch → terminal %s", routing.kind.name)
-            self._done = True
+            self._settle_terminal(routing)
+        elif self._start_queue.pop_runnable_peek(self._region_termid):
+            self._pending_next = routing
+            self._adopt_started(self._start_queue.pop_runnable(self._region_termid)[0])
         else:
-            self._transid, self._program, next_commarea = routing
-            if len(next_commarea) < self._min_commarea_len:
-                next_commarea = next_commarea.ljust(self._min_commarea_len, b"\x00")
-            self._commarea = next_commarea
-            logger.info(
-                "dispatch → transid=%s commarea=%d B",
-                self._transid,
-                len(self._commarea),
-            )
+            self._pending_next = _NO_PENDING_NEXT
+            self._adopt(routing)
         return result
+
+    def _settle_terminal(self, routing: DispatchResult) -> None:
+        """A task ended. Run what is runnable before waiting on terminal input:
+        a started task needs none, a next-transid task does."""
+        if routing.kind == DispatchKind.ABEND:
+            self._start_queue.discard_for_abend()
+            self._done = True
+            logger.info("dispatch → terminal %s", routing.kind.name)
+            return
+        started = self._start_queue.pop_runnable(self._region_termid)
+        if started:
+            self._adopt_started(started[0])
+            return
+        if self._pending_next[0]:
+            self._adopt(self._pending_next)
+            self._pending_next = _NO_PENDING_NEXT
+            return
+        self._done = True
+        logger.info("dispatch → terminal %s", routing.kind.name)
+
+    def _adopt(self, routing: "tuple[str, Any, bytes]") -> None:
+        self._transid, self._program, next_commarea = routing
+        self._task_termid = self._region_termid
+        if len(next_commarea) < self._min_commarea_len:
+            next_commarea = next_commarea.ljust(self._min_commarea_len, b"\x00")
+        self._commarea = next_commarea
+        logger.info(
+            "dispatch → transid=%s commarea=%d B",
+            self._transid,
+            len(self._commarea),
+        )
+
+    def _adopt_started(self, req: StartRequest) -> None:
+        """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
+        the terminal the START named — "" for a non-terminal task."""
+        self._transid = req.transid
+        self._program = self._program_cache[self._transid_to_program[req.transid]]
+        self._commarea = b""
+        self._task_termid = req.termid
+        self._start_queue.put_start_data(req.data)
+        logger.info("dispatch → started transid=%s termid=%r", req.transid, req.termid)
