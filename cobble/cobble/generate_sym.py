@@ -10,8 +10,9 @@ section; bms_globs defaults to ["*.bms"]), runs
 
 and writes <sym_dir>/<stem>.cpy. This produces the symbolic copybooks the CICS
 COBOL programs `COPY`, from source -- nothing pre-generated is shipped.
-hlasm_export is built from the che-che4z-lsp-for-hlasm submodule; the
-DFHMSD/DFHMDI/DFHMDF prototype macros are the assembler SYSLIB.
+hlasm_export is built from the workspace's che-che4z-lsp-for-hlasm fork, which
+cicada vendors; the DFHMSD/DFHMDI/DFHMDF prototype macros are the assembler
+SYSLIB.
 
 Invoke as: uv run python -m cobble.generate_sym --config <path>
 """
@@ -34,7 +35,13 @@ logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _HLASM = (
-    _REPO_ROOT / "vendor" / "che-che4z-lsp-for-hlasm" / "build" / "bin" / "hlasm_export"
+    _REPO_ROOT.parent
+    / "cicada"
+    / "third-party"
+    / "che-che4z-lsp-for-hlasm-fork"
+    / "build"
+    / "bin"
+    / "hlasm_export"
 )
 
 
@@ -102,7 +109,7 @@ def main() -> int:
 
     if not _HLASM.is_file():
         sys.exit(
-            f"hlasm_export not built: {_HLASM} (run `make jars` / the HLASM build first)"
+            f"hlasm_export not built: {_HLASM} (run `make hlasm` first)"
         )
     config.sym_dir.mkdir(parents=True, exist_ok=True)
     env = _child_env()

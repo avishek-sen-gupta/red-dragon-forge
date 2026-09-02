@@ -1,5 +1,10 @@
-PROLEAP_BRIDGE_JAR := $(CURDIR)/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
-JCL_BRIDGE_JAR     := $(CURDIR)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
+# The bridges, the corpus and the HLASM exporter are the workspace's, not
+# cobble's: cobble carried its own copies of all three as a standalone repo, and
+# every one pointed at the same upstream forge already vendors.
+FORGE              := $(CURDIR)/..
+PROLEAP_BRIDGE_JAR := $(FORGE)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+JCL_BRIDGE_JAR     := $(FORGE)/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
+HLASM_FORK         := $(FORGE)/cicada/third-party/che-che4z-lsp-for-hlasm-fork
 BRIDGE_ENV         := PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR)
 
 .PHONY: all tools hlasm jars codegen sym csd build compare verify render render-webgl canonical test fmt lint clean
@@ -10,16 +15,14 @@ all: ; @./build.sh
 ## Build every tool from source: the HLASM exporter + the proleap fork + both bridge JARs.
 tools: hlasm jars
 
-## Build hlasm_export from the che-che4z-lsp-for-hlasm submodule (cmake + Ninja + LLVM@18).
+## Build hlasm_export from the workspace's fork (cmake + Ninja + LLVM@18).
 hlasm:
-	cd vendor/che-che4z-lsp-for-hlasm && BUILD_TYPE=Release bash build.sh --target hlasm_export
+	cd $(HLASM_FORK) && BUILD_TYPE=Release bash build.sh --target hlasm_export
 
-## Build the proleap-cobol-parser FORK (io.github.uwol:proleap-cobol-parser:4.0.0, NOT on
-## Maven Central — install to ~/.m2 first) then the two bridge JARs.
+## Build both bridge JARs via the workspace's own target, which also installs the
+## proleap-cobol-parser FORK (not on Maven Central) into ~/.m2 first.
 jars:
-	cd proleap-bridge/proleap-cobol-parser && mvn -q -DskipTests clean install -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -Daether.connector.https.securityMode=insecure
-	cd proleap-bridge && mvn -q -DskipTests package -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -Daether.connector.https.securityMode=insecure
-	cd jcl-bridge && mvn -q -DskipTests package -Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true -Daether.connector.https.securityMode=insecure
+	$(MAKE) -C $(FORGE) jar
 
 ## Generate everything that's generated-from-a-grammar: the BMS copybooks.
 ## The EXEC CICS parser is no longer generated here -- cobble uses cicada's,
