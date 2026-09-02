@@ -837,21 +837,29 @@ COBOL_XCTL_END = """\
            EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
 """
 
-# The guard's cap: the region abends on the dispatch that would make the chain
-# exceed it, so the count of turns it takes to stop is exactly the cap.
-_GUARD_CAP = 256
-_STEP_BOUND = _GUARD_CAP * 4
+COBOL_START_THEN_SELF_TRANSID = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTA3.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-START-DATA.
+           05  WS-SD-KEY   PIC X(6)  VALUE 'ACCT01'.
+           05  WS-SD-AMT   PIC X(8)  VALUE '00012345'.
+       01  WS-CA           PIC X(8)  VALUE 'FROMSRTA'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB')
+                           TERMID(EIBTRMID)
+                           FROM(WS-START-DATA)
+                           LENGTH(14)
+           END-EXEC.
+           EXEC CICS RETURN TRANSID('SRTA') COMMAREA(WS-CA) END-EXEC.
+"""
 
-
-def _run_until_done(region):
-    """Drive the region with no terminal input at all, bounded so a guard that
-    fails to fire ends the test instead of hanging it."""
-    turns = []
-    for _ in range(_STEP_BOUND):
-        if region.done:
-            break
-        turns.append(region.step())
-    return turns
+# The region's cap is injectable so both halves of the runaway rule can be
+# driven in a handful of program runs. The production default is 256; the code
+# path under test is the same one, with a smaller number.
+_TEST_CAP = 2
+_STEP_BOUND = _TEST_CAP * 8
 
 
 def _looping_region(cobol_parser, sources, transid_map):
@@ -872,7 +880,19 @@ def _looping_region(cobol_parser, sources, transid_map):
         result_holder=result_holder,
         start_queue=start_queue,
         region_termid="T001",
+        max_consecutive_starts=_TEST_CAP,
     )
+
+
+def _run_until_done(region):
+    """Drive the region with no terminal input at all, bounded so a guard that
+    fails to fire ends the test instead of hanging it."""
+    turns = []
+    for _ in range(_STEP_BOUND):
+        if region.done:
+            break
+        turns.append(region.step())
+    return turns
 
 
 @covers(CobolFeature.EXEC_CICS)
@@ -888,7 +908,9 @@ def test_a_self_starting_transaction_hits_the_runaway_guard(cobol_parser):
     assert region.done is True
     assert turns[-1].kind == DispatchKind.ABEND
     assert turns[-1].abcode == "ASTL"
-    assert len(turns) == _GUARD_CAP
+    # The cap counts started tasks ADOPTED and start() adopts the first, so the
+    # turn that refuses the adoption is the cap-th.
+    assert len(turns) == _TEST_CAP
 
 
 @covers(CobolFeature.EXEC_CICS)
@@ -910,4 +932,43 @@ def test_a_start_xctl_cycle_hits_the_runaway_guard(cobol_parser):
     assert turns[-1].abcode == "ASTL"
     # Two turns per cycle — XCTLEND's RETURN, then STARTLX's XCTL — with the
     # entry task's own XCTL consumed by start().
-    assert len(turns) == _GUARD_CAP * 2 + 1
+    assert len(turns) == _TEST_CAP * 2 + 1
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_next_transid_turn_resets_the_runaway_guard(cobol_parser):
+    """S8, false-positive case: a region interleaving started tasks with
+    next-transid turns is doing legitimate work — the terminal input each
+    next-transid turn waits for breaks the chain, so the guard must not fire
+    however long the region runs."""
+    import struct
+
+    transid_map = {"SRTA": "STARTA3", "SRTB": "STARTB"}
+    region = _looping_region(
+        cobol_parser,
+        {"STARTA3": COBOL_START_THEN_SELF_TRANSID, "STARTB": COBOL_START_B},
+        transid_map,
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    assert region.transid == "SRTB"
+
+    turns = []
+    for turn in range(_TEST_CAP * 4):
+        assert region.done is False, "the guard fired on a chain terminal input broke"
+        # Even turns run the started task (no terminal input); odd turns run the
+        # next-transid task, whose terminal input is what resets the count.
+        turns.append(
+            region.step() if turn % 2 == 0 else region.step(input_event=InputEvent())
+        )
+
+    assert [each.kind for each in turns] == [
+        DispatchKind.RETURN,
+        DispatchKind.RETURN_TRANSID,
+    ] * (_TEST_CAP * 2)
+    assert turns[0].commarea[0:2] == struct.pack(">h", 0)
+    assert turns[0].commarea[2:8] == "ACCT01".encode("cp037")
+    assert turns[1].commarea == "FROMSRTA".encode("cp037")
+    assert turns[-2].commarea[2:8] == "ACCT01".encode("cp037")
+    assert turns[-1].commarea == "FROMSRTA".encode("cp037")
+    assert region.done is False
