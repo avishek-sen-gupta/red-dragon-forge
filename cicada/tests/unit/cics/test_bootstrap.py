@@ -50,7 +50,9 @@ def test_run_region_builds_program_cache_keyed_by_program_name(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    def _fake_loop(run_fn, program_cache, transid_to_program, initial_context, sq, iq):
+    def _fake_loop(
+        run_fn, program_cache, transid_to_program, initial_context, sq, iq, **kwargs
+    ):
         captured["program_cache"] = program_cache
         captured["transid_to_program"] = transid_to_program
         captured["initial_context"] = initial_context
@@ -97,7 +99,9 @@ def test_run_region_from_csd_wires_transid_mapping(monkeypatch, tmp_path):
 
     captured: dict[str, object] = {}
 
-    def _fake_loop(run_fn, program_cache, transid_to_program, initial_context, sq, iq):
+    def _fake_loop(
+        run_fn, program_cache, transid_to_program, initial_context, sq, iq, **kwargs
+    ):
         captured["transid_to_program"] = transid_to_program
         captured["program_cache"] = program_cache
         return DispatchResult(kind=DispatchKind.RETURN)
@@ -115,3 +119,43 @@ def test_run_region_from_csd_wires_transid_mapping(monkeypatch, tmp_path):
 
     assert captured["transid_to_program"] == {"CC00": "SGNPGM", "CM00": "MENUPGM"}
     assert set(captured["program_cache"].keys()) == {"SGNPGM", "MENUPGM"}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch):
+    """The region's StartQueue goes to BOTH the coprocessor (which queues a
+    START) and the dispatcher loop (which drains it) — otherwise a START on this
+    path is validated, queued, and never run."""
+    captured: dict[str, object] = {}
+
+    def _fake_build_spec(**kwargs):
+        captured["spec_start_queue"] = kwargs["start_queue"]
+        return object()
+
+    def _fake_loop(
+        run_fn, program_cache, transid_to_program, initial_context, sq, iq, **kwargs
+    ):
+        captured["loop_start_queue"] = kwargs["start_queue"]
+        captured["loop_region_termid"] = kwargs["region_termid"]
+        return DispatchResult(kind=DispatchKind.RETURN)
+
+    monkeypatch.setattr(bootstrap, "build_cics_spec", _fake_build_spec)
+    monkeypatch.setattr(
+        bootstrap,
+        "compile_cics_program",
+        lambda source, parser, strategy, **kwargs: object(),
+    )
+    monkeypatch.setattr(bootstrap, "_run_dispatcher_with_runner", _fake_loop)
+
+    bootstrap.run_carddemo_region(
+        transid_to_program={"CC00": "SGNPGM"},
+        program_sources={"SGNPGM": b"src"},
+        parser=object(),
+        entry_transid="CC00",
+        screen_queue=queue.Queue(),
+        input_queue=queue.Queue(),
+        region_termid="T009",
+    )
+
+    assert captured["loop_start_queue"] is captured["spec_start_queue"]
+    assert captured["loop_region_termid"] == "T009"

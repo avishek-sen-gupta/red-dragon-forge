@@ -159,4 +159,6 @@ def run_carddemo_region(
         ),
         screen_queue,
         input_queue,
+        start_queue=start_queue,
+        region_termid=region_termid,
     )
