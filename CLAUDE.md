@@ -78,7 +78,7 @@ make setup     # init submodules + build the ProLeap + JCL bridge JARs + uv sync
 make jar       # build both bridge JARs (ProLeap + JCL); skipped if already built
 make python    # uv sync --all-packages
 make test      # root composition-layer + integration suite (needs the JARs)
-make test-all  # build JARs once, then run every package's suite (cicada, squall, jackal, forge)
+make test-all  # build JARs once, then run every package's suite (cicada, squall, jackal, cobble, forge)
 ```
 
 Each package is also independently buildable/testable from its own directory (`cd cicada && make test`, etc.).
@@ -96,6 +96,8 @@ RedDragon interpreter (`vendor/red-dragon`, never modified here):
 - `jackal/` — JCL/batch execution engine.
 - `red_dragon_forge/` — composition layer; assembles multiple coprocessor extensions into one
   compiled COBOL program via a generic `CoprocessorSpec` seam.
+- `cobble/` — corpus onboarding and whole-system knowledge-graph extraction (analysis only);
+  runs its pipeline from `cobble/` via `make build CONFIG=…` or the `cobble-*` entry points.
 
 Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved) and stay
 independently buildable — they must not import each other.

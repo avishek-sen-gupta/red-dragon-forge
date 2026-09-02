@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages
       - name: Check formatting with Black
-        run: uv run black --check cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge tools tests
+        run: uv run black --check cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squall/tests jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
       - name: Check architectural contracts
         run: uv run lint-imports
 
@@ -110,6 +110,24 @@ jobs:
         run: make jar
       - name: Install Python dependencies
         run: make python
+      - name: Run the full test suite
+        run: make test
+
+  cobble:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cobble
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Python dependencies
+        run: make -C .. python
       - name: Run the full test suite
         run: make test
 
