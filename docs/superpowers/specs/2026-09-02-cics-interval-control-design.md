@@ -115,9 +115,31 @@ real use is a printer (`START TRANSID('PRNT') TERMID(printer)`). Dispatching a
 printer transaction onto the user's screen, its `SEND MAP`s interleaved into their
 flow, is exactly the silent-wrong-answer shape this work exists to remove.
 
-So `CicsContext` gains `termid: str = ""` (defaulted — 36 construction sites stand
-unchanged) and `make_init_eib_builtin` writes `EIBTERM`. This is also what the
-corpus's own `START TERMID(EIBTRMID)` chaining idiom needs in order to work at all.
+So `CicsContext` gains a `termid` and `make_init_eib_builtin` writes it to
+**`EIBTRMID`**. (This document originally said `EIBTERM`, copying the name from
+`DFHEIBLK.cpy`. That was wrong: IBM's EIB defines no `EIBTERM`, and `EIBTRMID` is
+what every COBOL program names — including the corpus's own
+`START TERMID(EIBTRMID)` chaining idiom, which is the whole reason this section
+exists. The copybook field was renamed in place.)
+
+**The empty terminal id was overloaded, and reserving it took more than a default.**
+This design says `termid == ""` means "non-terminal task". But the runtime already
+used `""` for "no terminal configured": `CicsRegion.region_termid` defaulted to it,
+`ConversationalRegion` never set a termid at all, and `_run_dispatcher_with_runner`
+dropped it from every follow-on context — so a terminal task silently lost its
+terminal after its first `RETURN TRANSID`. Three of the four production
+`CicsContext` sites therefore produced `""`. Guarding terminal I/O on that value
+reclassified every existing region as non-terminal.
+
+Making the reservation real: `DEFAULT_TERMID` is the default terminal for
+`CicsRegion`, `CicsLoweringStrategy`, `run_carddemo_region` and
+`ConversationalRegion`, the blocking loop carries the terminal forward, and
+`NO_TERMINAL` names the reserved empty value so a context is terminal-attached
+unless something explicitly asks otherwise.
+
+One consequence to know: `START TERMID('T001')` against a strategy built with no
+explicit `region_termid` is now accepted, where it previously gave `TERMIDERR` —
+because such a strategy now has a real terminal rather than `""`.
 
 ### No `None` in signatures
 
@@ -136,7 +158,7 @@ transaction, each with its own data, and `()` is precisely the `ENDDATA` case.
 class StartRequest:
     transid: str
     data: bytes = b""
-    termid: str = ""          # "" == non-terminal task (CICS: no TERMID coded)
+    termid: str = NO_TERMINAL  # non-terminal task (CICS: no TERMID coded)
     reqid: str = ""
     timing_text: str = ""     # the timing operands as written; never scheduled on
 

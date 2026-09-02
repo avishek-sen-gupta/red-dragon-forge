@@ -10,15 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from cics.types import NO_TERMINAL
+
 
 @dataclass(frozen=True)
 class StartRequest:
-    """One EXEC CICS START. ``termid`` is "" for a non-terminal task (no TERMID
-    coded), which is a distinct case from a START naming another terminal."""
+    """One EXEC CICS START. ``termid`` is NO_TERMINAL for a non-terminal task (no
+    TERMID coded), which is a distinct case from a START naming another terminal."""
 
     transid: str
     data: bytes = b""
-    termid: str = ""
+    termid: str = NO_TERMINAL
     reqid: str = ""
     timing_text: str = ""
 
@@ -56,7 +58,9 @@ class StartQueue:
         terminal at all (a non-terminal task). One naming another terminal stays
         pending forever — this region has no channel for it.
         """
-        runnable = [req for req in self._pending if req.termid in ("", region_termid)]
+        runnable = [
+            req for req in self._pending if req.termid in (NO_TERMINAL, region_termid)
+        ]
         if not runnable:
             return ()
         taken = runnable[0]
@@ -67,7 +71,9 @@ class StartQueue:
     def pop_runnable_peek(self, region_termid: str) -> tuple[StartRequest, ...]:
         """Like pop_runnable, without removing — a driver has to know whether a
         start will run before it decides what to do with a next-transid."""
-        runnable = [req for req in self._pending if req.termid in ("", region_termid)]
+        runnable = [
+            req for req in self._pending if req.termid in (NO_TERMINAL, region_termid)
+        ]
         return (runnable[0],) if runnable else ()
 
     def put_start_data(self, data: bytes) -> None:

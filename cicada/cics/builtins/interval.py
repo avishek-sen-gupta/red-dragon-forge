@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from cics.builtins.system import _get_ws_region_addr
 from cics.interval import RejectReason, StartQueue, StartRequest
+from cics.types import NO_TERMINAL
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ def make_start_builtin(
         if req.transid not in transid_to_program:
             start_queue.reject(req, RejectReason.UNKNOWN_TRANSID)
             return BuiltinResult(value=_RESP_TRANSIDERR)
-        if req.termid not in ("", region_termid):
+        if req.termid not in (NO_TERMINAL, region_termid):
             start_queue.reject(req, RejectReason.NO_SUCH_TERMINAL)
             return BuiltinResult(value=_RESP_TERMIDERR)
         start_queue.queue(req)
