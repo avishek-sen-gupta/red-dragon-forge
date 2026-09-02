@@ -260,6 +260,11 @@ fileignoreconfig:
   checksum: 45f39708d8deaa8fec94135c7e116aca35df6a304d7555e1a28a6f430a15b639
 - filename: docs/superpowers/plans/2026-09-02-cics-interval-control.md
   checksum: c04978b4a27f19f27ddc7df98987f564a83c04cb6b8809b71a90f27031189723
+- filename: cicada/tests/unit/cics/test_dispatcher.py
+  # monkeypatch.setattr lines read as high-entropy blobs to the secret detector.
+  ignore_detectors: [filecontent]
+- filename: cicada/tests/unit/cics/test_bootstrap.py
+  ignore_detectors: [filecontent]
 - filename: cicada/tests/integration/cics/test_interval_control.py
   # Inline COBOL source and cp037 literals read as high-entropy blobs. Detector-
   # ignored rather than checksum-pinned because the interval-control tasks each

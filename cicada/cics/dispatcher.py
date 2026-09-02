@@ -153,41 +153,105 @@ def _run_dispatcher_with_runner(
     initial_context: CicsContext,
     screen_queue: ScreenChannel,
     input_queue: InputChannel,
+    *,
+    start_queue: StartQueue = _OWN_START_QUEUE,
+    region_termid: str = DEFAULT_TERMID,
+    max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
 ) -> DispatchResult:
-    """Core dispatcher loop — separated for testability."""
+    """Core dispatcher loop — separated for testability.
+
+    Scheduling matches CicsRegion (see ``CicsRegion._advance``): when a task
+    ends, a runnable started task runs BEFORE any next-transid target, which is
+    parked in ``pending_next`` and runs once nothing is startable. That order is
+    not cosmetic here — a started task's data comes from RETRIEVE, never the
+    terminal, so dispatching it after the blocking ``_peek_input_event`` below
+    would leave it waiting on input nobody sends until the AZCT timeout.
+    """
+    starts = StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
     context = initial_context
     program = program_cache[transid_to_program[context.transid]]
+    # A RETURN TRANSID target parked because a started task, which needs no
+    # terminal input, runs before it. The terminal holds one such slot.
+    pending_next: "tuple[str, Any, bytes]" = _NO_PENDING_NEXT
+    consecutive_starts = 0
 
     while True:
         result = run_fn(program, context, screen_queue, input_queue)
+        routing = _advance_routing(
+            result, context.transid, program_cache, transid_to_program
+        )
+
+        if isinstance(routing, DispatchResult) and routing.kind == DispatchKind.ABEND:
+            starts.discard_for_abend()
+            return routing
+
+        if result.kind == DispatchKind.XCTL:
+            # XCTL transfers control WITHIN the same task: the task has not
+            # ended, so no started task may run yet, and the task keeps its own
+            # terminal.
+            next_transid, program, next_commarea = routing
+            context = CicsContext(
+                transid=next_transid,
+                commarea=next_commarea,
+                eibaid=context.eibaid,
+                termid=context.termid,
+            )
+            continue
+
+        if not isinstance(routing, DispatchResult):
+            pending_next = routing
+
+        started = starts.pop_runnable(region_termid)
+        if started and consecutive_starts >= max_consecutive_starts:
+            logger.error(
+                "runaway guard: %d consecutive started tasks with no terminal "
+                "input (next transid %s) — abending %s",
+                consecutive_starts,
+                started[0].transid,
+                _RUNAWAY_ABCODE,
+            )
+            starts.discard_for_abend()
+            return DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE)
+        if started:
+            # A started task carries start data, no COMMAREA (so EIBCALEN is 0),
+            # and the terminal the START named — NO_TERMINAL for a non-terminal
+            # task.
+            consecutive_starts = consecutive_starts + 1
+            starts.put_start_data(started[0].data)
+            program = program_cache[transid_to_program[started[0].transid]]
+            context = CicsContext(
+                transid=started[0].transid,
+                commarea=b"",
+                eibaid=context.eibaid,
+                termid=started[0].termid,
+            )
+            continue
+
+        if isinstance(routing, DispatchResult) and not pending_next[0]:
+            return routing
 
         # On a pseudo-conversational RETURN TRANSID, the next turn's terminal
         # input arrives here (blocks, up to a timeout). Its attention key seeds
         # the next EIBAID; the event itself is left on the queue for the
         # resumed turn's own RECEIVE MAP to consume (see _peek_input_event).
         # CicsRegion doesn't need this — see CicsRegion.dispatch.
-        eibaid = context.eibaid
-        if result.kind == DispatchKind.RETURN_TRANSID:
-            try:
-                event = _peek_input_event(input_queue)
-            except queue.Empty:
-                # No further terminal input ever arrived — matches real CICS's
-                # AZCT abend (terminal read-time-out condition) rather than
-                # hanging the region forever (red-dragon-pz9g.14).
-                return DispatchResult(kind=DispatchKind.ABEND, abcode="AZCT")
-            eibaid = event.eibaid
+        try:
+            event = _peek_input_event(input_queue)
+        except queue.Empty:
+            # No further terminal input ever arrived — matches real CICS's
+            # AZCT abend (terminal read-time-out condition) rather than
+            # hanging the region forever (red-dragon-pz9g.14).
+            return DispatchResult(kind=DispatchKind.ABEND, abcode="AZCT")
 
-        routing = _advance_routing(
-            result, context.transid, program_cache, transid_to_program
-        )
-        if isinstance(routing, DispatchResult):
-            return routing
-
-        next_transid, program, next_commarea = routing
+        # That wait for terminal input is the only thing that breaks a chain of
+        # started tasks, so it is what resets the runaway count.
+        consecutive_starts = 0
+        next_transid, program, next_commarea = pending_next
+        pending_next = _NO_PENDING_NEXT
         context = CicsContext(
             transid=next_transid,
             commarea=next_commarea,
-            eibaid=eibaid,
+            eibaid=event.eibaid,
             termid=initial_context.termid,
         )
 
