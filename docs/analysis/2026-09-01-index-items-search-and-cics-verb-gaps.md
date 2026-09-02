@@ -23,17 +23,62 @@ a complete COBOL program you can paste into a probe script.
 
 ## Table of contents
 
-| # | Defect | Severity | Where |
-|---|---|---|---|
-| A | `INDEXED BY` index items are never allocated | **wrong answer, silent** | bridge → layout → subscript |
-| B | Unknown data-name lowered as a string literal | **wrong answer, silent** | `condition_lowering.py:952` |
-| C | `SEARCH` ignores the table: no implicit index, no OCCURS bound, walks out of bounds | **wrong answer, silent** | `lower_search.py` |
-| D | `SET target TO <data-item>` writes the item's *name* | **wrong answer, silent** | `lower_arithmetic.py:1772` |
-| E | Unimplemented `EXEC CICS` verbs emit no IR and only warn | **missing behaviour, silent** | `cics/strategy.py:1064` |
-| F | `HANDLE CONDITION` is a no-op and no condition is ever raised | **wrong control flow, silent** | `cics/strategy.py:60` |
+| # | Defect | Severity | Where | Status |
+|---|---|---|---|---|
+| A | `INDEXED BY` index items are never allocated | **wrong answer, silent** | bridge → layout → subscript | **fixed** |
+| B | Unknown data-name lowered as a string literal | **wrong answer, silent** | `condition_lowering.py:952` | **fixed** |
+| C | `SEARCH` ignores the table: no implicit index, no OCCURS bound, walks out of bounds | **wrong answer, silent** | `lower_search.py` | **fixed** (C1–C3; C4 open) |
+| D | `SET target TO <data-item>` writes the item's *name* | **wrong answer, silent** | `lower_arithmetic.py:1772` | **fixed** |
+| E | Unimplemented `EXEC CICS` verbs emit no IR and only warn | **missing behaviour, silent** | `cics/strategy.py:1064` | open |
+| F | `HANDLE CONDITION` is a no-op and no condition is ever raised | **wrong control flow, silent** | `cics/strategy.py:60` | open |
 
 Severity here means *what a consumer sees*, not how hard the fix is. All six are
 "silent": nothing raises, nothing abends, and the run reports success.
+
+## Status — 2026-09-02
+
+The diagnosis below is left as written; it is the record of what one execution
+found. Steps 1–5 of the Suggested Order have since been implemented in red-dragon
+via `docs/superpowers/plans/2026-09-01-index-items-and-search.md`, so **defects A,
+B, C1, C2, C3 and D are closed**, in these commits:
+
+| Commit | Change |
+|---|---|
+| `9f14b79f` | one unknown-name policy for both expression lowerers (B) |
+| `e3a534aa` | `SET TO`/`BY` a data item reads the item, not its name (D) |
+| `d309879f` | bridge emits `OCCURS ... INDEXED BY` names (A) |
+| `9bdb6c2f` | bridge preserves index-name casing verbatim (A) |
+| `1b478f41` | the ASG carries `indexed_by` (A) |
+| `93971e44` | one index item allocated per `INDEXED BY` name (A) |
+| `db7b9c63` | index items get their own region, not the caller's LINKAGE (A) |
+| `7caf8cca` | `SEARCH` bounded by the table's `OCCURS` count (C2, C3) |
+| `968e4bf8` | that bound reads the index *value*, not iterations performed (C2, C3) |
+| `4d427a3a` | Format 1 `SEARCH` advances the table's implicit index (C1) |
+| `08980090` | the last unrouted unresolvable-name sites, and a false SEARCH diagnostic (B) |
+| `265b6aa6` | figurative, `LENGTH OF` and `DFHRESP` operands lower to themselves, not `0` |
+
+Three implementation findings the diagnosis did not predict:
+
+* **Index items need their own region**, not the surrounding sibling scope the fix
+  shape proposed. Placed in LINKAGE they corrupt the caller's argument storage,
+  whose region is not sized from `total_bytes`. `build_index_layout`
+  (`data_layout.py:663`) allocates them the way `special_registers` allocates
+  `RETURN-CODE`.
+* **A bound counted in iterations cannot express "past the last occurrence"** once
+  `SET ix TO 5` can start the loop anywhere but 1. `7caf8cca` bounded by iteration
+  count and `968e4bf8` had to redo it against the index value.
+* `OccursClause.getIndexNames()`, named in defect A's fix shape, **does not
+  exist**. The real chain is `getOccursIndexed()` → `getIndices()` → `List<Index>`.
+
+`_RUNAWAY_GUARD` landed at 4096, not the plan's 100,000: it is now reachable only
+on the already-logged path where the table has no known occurrence count, and 4096
+is an order of magnitude above the corpus's largest real table (357).
+
+**Re-measured on the executed program.** Its screen now carries the error code
+*and* the matching message text, which is the acceptance condition this document
+opened with. What is left in that run is defect E and nothing else: `START` ×3 and
+`RETRIEVE` ×1, no IR emitted, plus defect F's INFO-level no-op. Both remaining
+defects are in cicada; steps 1–5 were all in red-dragon.
 
 ---
 
@@ -83,7 +128,7 @@ which points at the `SET` — the one part of this that did no damage.
 
 ---
 
-## Defect A — `INDEXED BY` index items are never allocated
+## Defect A — `INDEXED BY` index items are never allocated — FIXED
 
 ### What COBOL says
 
@@ -148,7 +193,7 @@ the affected-program count is far higher than 122 — see defect C.
 
 ---
 
-## Defect B — an unknown data-name is lowered as a string literal
+## Defect B — an unknown data-name is lowered as a string literal — FIXED
 
 This is the mechanism behind defect A's silent half, and it is a general defect
 independent of indexes.
@@ -279,7 +324,7 @@ value that flows.
 
 ---
 
-## Defect C — `SEARCH` ignores the table it was given
+## Defect C — `SEARCH` ignores the table it was given — FIXED (C1–C3)
 
 `interpreter/cobol/lower_search.py` is 134 lines. `stmt.table` is **never
 referenced** — `grep -n "stmt\." lower_search.py` returns only `stmt.whens`,
@@ -394,7 +439,7 @@ Observed:
 * **F**: a 300-occurrence table stopped at 257. Occurrences 257–300 unreachable,
   and `AT END` reported not-found. C2 confirmed.
 
-### C4 — `SEARCH ALL` is indistinguishable from `SEARCH`
+### C4 — `SEARCH ALL` is indistinguishable from `SEARCH` — still open, deliberately
 
 `serializeSearch` calls `newStatement("SEARCH")` with no flag for the `ALL` form,
 and `SearchStatement` (`cobol_statements.py:957-963`) has no field for it. So
@@ -453,9 +498,18 @@ Any fix should land with a test built on a real `OCCURS ... INDEXED BY` table:
 assert the matching occurrence's *data* (not just that some branch ran), assert
 `AT END` on a genuine miss, and assert the bound at both `n < 256` and `n > 256`.
 
+That is what landed. `tests/integration/test_cobol_programs.py` now carries
+`test_plain_search_advances_the_tables_index`,
+`test_plain_search_reaches_at_end_on_a_genuine_miss`,
+`test_table_larger_than_256_is_fully_searched`,
+`test_search_starting_past_one_still_stops_at_the_last_occurrence`,
+`test_search_over_scalar_warns_not_a_table`, `test_index_subscript_resolves` and
+`test_linkage_index_does_not_corrupt_the_callers_argument` — each over a real table,
+each asserting decoded data rather than a branch.
+
 ---
 
-## Defect D — `SET target TO <data-item>` writes the item's name
+## Defect D — `SET target TO <data-item>` writes the item's name — FIXED
 
 Separate from indexes, found while investigating them, and it will bite
 immediately after defect A is fixed.
@@ -680,7 +734,8 @@ both together, or expect the noise and say so up front.
 
 ## Suggested order
 
-Dependencies first, then radius.
+Dependencies first, then radius. **Steps 1–5 are done** (see *Status* above); the
+queue now starts at step 6.
 
 1. **B** — unify the two lowerers' unknown-name policy. Smallest change, and it
    makes A and C visible instead of silent. Do this first even though it fixes no
