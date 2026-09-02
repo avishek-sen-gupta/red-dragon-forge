@@ -1,9 +1,8 @@
 #!/bin/bash
-# NOTE: squall/.env's own vars are plain KEY=VALUE (no `export`), so a bare
-# `source` would only set shell-local variables invisible to the pytest
-# subprocess below (which reads PROLEAP_BRIDGE_JAR / DB2_* via os.environ).
-# `set -a` marks every variable sourced afterwards for export.
-set -a
-[ -f squall/.env ] && source squall/.env
-set +a
+set -e
+# db2/dsn-env.sh is the single source of the DSN shape (and of the `set -a`
+# handling squall/.env needs); SQUALL_DIR points it at .env from the repo root.
+export SQUALL_DIR=squall
+export PROLEAP_BRIDGE_JAR="${PROLEAP_BRIDGE_JAR:-$(git rev-parse --show-toplevel)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar}"
+. squall/db2/dsn-env.sh
 cd squall && uv run --no-sync python -m pytest tests/unit -x -q
