@@ -15,8 +15,8 @@ import pytest
 
 from interpreter.cobol.cobol_frontend import CobolFrontend
 from cics.statements import CicsDialectParser
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy

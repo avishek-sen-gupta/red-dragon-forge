@@ -190,7 +190,7 @@ class SqlLoweringStrategy:
         so RedDragon's native IF + GO TO lowering (condition + label resolution)
         is reused — no raw-IR branch emission, no coupling to label naming.
         """
-        from interpreter.cobol.cobol_statements import parse_statement
+        from cobol_asg.cobol_statements import parse_statement
 
         for condition, action in self._whenever.items():
             match action:

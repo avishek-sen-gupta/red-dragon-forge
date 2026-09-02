@@ -137,7 +137,7 @@ def test_mod_creates_when_absent(tmp_path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_open_dataset_ps_empty_returns_eof(tmp_path):
     from interpreter.cobol.access_result import AccessCondition
-    from interpreter.cobol.file_enums import OpenMode
+    from cobol_asg.file_enums import OpenMode
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = DD(
@@ -229,7 +229,7 @@ def test_temp_new_duplicate_alias_raises(tmp_path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_open_dataset_ksds_write_then_read(tmp_path):
     from interpreter.cobol.access_result import AccessCondition
-    from interpreter.cobol.file_enums import OpenMode
+    from cobol_asg.file_enums import OpenMode
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     spec = DatasetSpec(

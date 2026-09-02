@@ -74,7 +74,7 @@ def test_send_map_lowering_passes_base_field_names():
     from cics.statements import ExecCicsStatement
     from cics.statements import CicsOperand
     from interpreter.cobol.data_layout import DataLayout, FieldLayout
-    from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+    from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
     from interpreter.register import Register
 
@@ -150,7 +150,7 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
     from cics.statements import ExecCicsStatement
     from cics.statements import CicsOperand
     from interpreter.cobol.data_layout import DataLayout, FieldLayout
-    from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+    from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
     from interpreter.register import Register
 
@@ -285,7 +285,7 @@ def test_writeq_td_lowers_with_resp_writeback():
     from interpreter.instructions import CallFunction
     from cics.statements import ExecCicsStatement
     from cics.statements import CicsOperand
-    from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+    from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.data_layout import FieldLayout
     from interpreter.cobol.field_resolution import ResolvedFieldRef
     from interpreter.register import Register

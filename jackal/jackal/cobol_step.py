@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from interpreter.address import Address
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
+from cobol_asg.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.real_file_provider import RealFileIOProvider
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.constants import Language
 from interpreter.func_name import FuncName

@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from interpreter.cobol.asg_types import CobolASG
-from interpreter.cobol.ast_store import AstParseError, AstStore, temp_ast_store
-from interpreter.cobol.subprocess_runner import CobolParseError
+from cobol_asg.asg_types import CobolASG
+from cobol_asg.ast_store import AstParseError, AstStore, temp_ast_store
+from cobol_asg.subprocess_runner import CobolParseError
 
 
 class CountingParser:

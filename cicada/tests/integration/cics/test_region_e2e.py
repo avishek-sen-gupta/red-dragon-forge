@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import run_carddemo_region
 from cics.dispatcher import InputEvent

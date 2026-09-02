@@ -10,8 +10,8 @@ so the crash blocked parsing every BMS symbolic-map copybook.
 
 from __future__ import annotations
 
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
 from tests.integration.cobol_helpers import (

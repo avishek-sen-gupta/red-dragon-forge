@@ -1,6 +1,6 @@
 import pytest
 
-from interpreter.cobol.edit_picture import (
+from cobol_asg.edit_picture import (
     format_edited,
     parse_edit_picture,
 )

@@ -200,8 +200,8 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     ``(acct_program, region, r4, screen_q, input_q, context_holder,
     result_holder)``.
     """
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
     signon_path = app / "cbl" / "COSGN00C.cbl"
@@ -460,8 +460,8 @@ def _compile_update_programs(tmp_path, bridge_jar, vsam_dir=None):
     stored ACCTDAT/CUSTDAT records back after the REWRITE. Pass ``vsam_dir`` to
     point the shared VsamEngine's backing files at a durable directory.
     """
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
     signon_path = app / "cbl" / "COSGN00C.cbl"
@@ -865,8 +865,8 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
     on CT02 showing the empty transaction-add screen. Pass ``vsam_dir`` to make the
     shared VsamEngine write the WRITE through to durable storage.
     """
-    from interpreter.cobol.cobol_parser import ProLeapCobolParser
-    from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+    from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
     signon_path = app / "cbl" / "COSGN00C.cbl"

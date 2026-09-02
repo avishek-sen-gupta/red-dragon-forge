@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 
 from interpreter.cobol.cobol_frontend import CobolFrontend
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.types import LinkedProgram
 from interpreter.project.entry_point import EntryPoint
 from interpreter.run import run_linked

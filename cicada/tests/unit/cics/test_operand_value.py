@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from cics.strategy import emit_operand_value
 from cics.statements import CicsOperand
-from interpreter.cobol.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
 from interpreter.cobol.field_resolution import ResolvedFieldRef
-from interpreter.cobol.ref_mod import RefModLiteral
+from cobol_asg.ref_mod import RefModLiteral
 from interpreter.cobol.cobol_constants import BuiltinName
 from interpreter.func_name import FuncName
 from interpreter.instructions import CallFunction, Const

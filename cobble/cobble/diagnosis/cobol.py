@@ -39,8 +39,8 @@ from tqdm import tqdm
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json, member_label
-from interpreter.cobol.ast_store import AsgJsonParser
-from interpreter.cobol.cobol_parser import make_cobol_parser
+from cobol_asg.ast_store import AsgJsonParser
+from cobol_asg.cobol_parser import make_cobol_parser
 from cobble.matching_files import matching_files
 
 logger = logging.getLogger(__name__)

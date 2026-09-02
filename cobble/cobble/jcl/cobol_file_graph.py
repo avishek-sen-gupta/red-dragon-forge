@@ -11,13 +11,13 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import TYPE_CHECKING, TypeGuard
 
-from interpreter.cobol.asg_types import (
+from cobol_asg.asg_types import (
     CobolASG,
     CobolParagraph,
     CobolSection,
 )
-from interpreter.cobol.cobol_statements import OpenStatement
-from interpreter.cobol.file_enums import OpenMode
+from cobol_asg.cobol_statements import OpenStatement
+from cobol_asg.file_enums import OpenMode
 from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,

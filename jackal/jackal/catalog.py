@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
-from interpreter.cobol.file_enums import FileOrganization, OpenMode
+from cobol_asg.file_enums import FileOrganization, OpenMode
 from jackal.dsn import DirectDSN, TempRef, dsn_key
 from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
 from jackal.value_parts import literal

@@ -5,6 +5,7 @@ root_packages =
     jackal
     cobble
     red_dragon_forge
+    interpreter
 
 [importlinter:contract:cicada-squall-jackal-independence]
 name = Cicada, Squall, and Jackal must not import each other
@@ -85,17 +86,25 @@ forbidden_modules =
 
 # ── Cobble ────────────────────────────────────────────────────────────────────
 # Cobble parses, walks the ASG and emits a graph. It never lowers to IR and never
-# executes, so it reaches for the workspace's STATIC surface only: interpreter's
-# COBOL model, cicada's EXEC CICS parsing, jackal's JCL model and parsing, and
-# squall's statement vocabulary.
+# executes, so it reaches for the workspace's STATIC surface only: red-dragon's
+# cobol_asg package, cicada's EXEC CICS parsing, jackal's JCL model and parsing,
+# and squall's statement vocabulary.
 #
 # Import-linter enforces prohibitions, not permissions, so only the forbidden
-# list below is machine-checked. The allowed surface -- interpreter.cobol.*,
-# interpreter.project.{cobol_imports,import_types}, cics.{cics_parser,
-# cics_visitor,cics_grammar,csd_parse,statements,bms}, bms_copybook_gen,
-# jackal.{model,dsn,value_parts,tso,jcl.*} and squall.statements -- is stated
-# here because it is what a future extraction of a lean core would have to
-# contain. Keeping the two in step is a review obligation, not an automated one.
+# lists below are machine-checked. The allowed surface -- cobol_asg.*,
+# cics.{cics_parser,cics_visitor,cics_grammar,csd_parse,statements,bms},
+# bms_copybook_gen, jackal.{model,dsn,value_parts,tso,jcl.*} and
+# squall.statements -- is stated here because it is what a future extraction of a
+# lean core would have to contain. Keeping the two in step is a review
+# obligation, not an automated one.
+
+[importlinter:contract:cobble-no-interpreter]
+name = Cobble must not import the interpreter
+type = forbidden
+source_modules =
+    cobble
+forbidden_modules =
+    interpreter
 
 [importlinter:contract:cobble-no-runtime]
 name = Cobble is static analysis — it must not reach into any runtime

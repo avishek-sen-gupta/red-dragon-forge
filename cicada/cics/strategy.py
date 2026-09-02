@@ -20,7 +20,7 @@ from cics.builtins.system import (
     make_abend_builtin,
 )
 from interpreter.cobol.cobol_constants import BuiltinName
-from interpreter.cobol.ref_mod import RefModLiteral
+from cobol_asg.ref_mod import RefModLiteral
 from interpreter.func_name import FuncName
 from interpreter.instructions import (
     Binop,

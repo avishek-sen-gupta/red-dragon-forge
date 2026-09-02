@@ -43,7 +43,7 @@ def test_repro_loads_ps_into_ksds(tmp_path):
     assert rc == 0
     # read OUT.KSDS back via the IndexedDriver and confirm BBB record present
     from interpreter.cobol.file_drivers import IndexedDriver
-    from interpreter.cobol.file_enums import OpenMode
+    from cobol_asg.file_enums import OpenMode
 
     drv = IndexedDriver()
     drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)

@@ -27,11 +27,11 @@ from pathlib import Path
 from cics.vsam.format import read_flat_file
 from interpreter.cobol.binary import decode_binary
 from interpreter.cobol.comp3 import decode_comp3
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.cobol_types import CobolDataCategory
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.cobol_types import CobolDataCategory
 from interpreter.cobol.data_layout import DataLayout, FieldLayout, build_data_layout
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.zoned_decimal import decode_zoned
 
 

@@ -19,8 +19,8 @@ import importlib.resources
 from pathlib import Path
 
 import cics
-from interpreter.cobol.cobol_parser import ProLeapCobolParser
-from interpreter.cobol.subprocess_runner import RealSubprocessRunner
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 
 
 def squall_copybooks_dir() -> Path:

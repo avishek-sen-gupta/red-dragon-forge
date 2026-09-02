@@ -1,8 +1,8 @@
 import pytest
 
-from interpreter.cobol.cobol_types import CobolDataCategory
-from interpreter.cobol.edit_picture import UnsupportedEditPictureError
-from interpreter.cobol.pic_parser import parse_pic
+from cobol_asg.cobol_types import CobolDataCategory
+from cobol_asg.edit_picture import UnsupportedEditPictureError
+from cobol_asg.pic_parser import parse_pic
 
 
 def test_parse_pic_plain_numeric() -> None:
