@@ -803,3 +803,111 @@ def test_start_data_is_consumed_by_the_first_retrieve(cobol_parser):
     assert started.commarea[:6] == "ACCT01".encode("cp037")
     assert started.commarea[6:14] == "00012345".encode("cp037")
     assert started.commarea[14:18] == struct.pack(">i", 29)  # ENDDATA
+
+
+COBOL_START_SELF = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTLP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'LOOPING0'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTL') TERMID(EIBTRMID) END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+COBOL_START_SELF_THEN_XCTL = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTLX.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'LOOPING1'.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTL') TERMID(EIBTRMID) END-EXEC.
+           EXEC CICS XCTL PROGRAM('XCTLEND') COMMAREA(WS-CA) END-EXEC.
+"""
+
+COBOL_XCTL_END = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. XCTLEND.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'ENDEDXCT'.
+       PROCEDURE DIVISION.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+# The guard's cap: the region abends on the dispatch that would make the chain
+# exceed it, so the count of turns it takes to stop is exactly the cap.
+_GUARD_CAP = 256
+_STEP_BOUND = _GUARD_CAP * 4
+
+
+def _run_until_done(region):
+    """Drive the region with no terminal input at all, bounded so a guard that
+    fails to fire ends the test instead of hanging it."""
+    turns = []
+    for _ in range(_STEP_BOUND):
+        if region.done:
+            break
+        turns.append(region.step())
+    return turns
+
+
+def _looping_region(cobol_parser, sources, transid_map):
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program_cache = {
+        name: compile_cics_program(source.encode(), cobol_parser, spec)
+        for name, source in sources.items()
+    }
+    return CicsRegion(
+        program_cache,
+        transid_map,
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_self_starting_transaction_hits_the_runaway_guard(cobol_parser):
+    """S8: 'runnable first' has no terminal input to break the cycle, so the
+    region must stop itself rather than spin."""
+    transid_map = {"SRTL": "STARTLP"}
+    region = _looping_region(cobol_parser, {"STARTLP": COBOL_START_SELF}, transid_map)
+
+    region.start("SRTL", input_event=InputEvent())
+    turns = _run_until_done(region)
+
+    assert region.done is True
+    assert turns[-1].kind == DispatchKind.ABEND
+    assert turns[-1].abcode == "ASTL"
+    assert len(turns) == _GUARD_CAP
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_start_xctl_cycle_hits_the_runaway_guard(cobol_parser):
+    """S8, evasion case: an XCTL is a transfer within the same task and waits for
+    no terminal input, so a START/XCTL cycle must not reset the guard's count."""
+    transid_map = {"SRTL": "STARTLX"}
+    region = _looping_region(
+        cobol_parser,
+        {"STARTLX": COBOL_START_SELF_THEN_XCTL, "XCTLEND": COBOL_XCTL_END},
+        transid_map,
+    )
+
+    region.start("SRTL", input_event=InputEvent())
+    turns = _run_until_done(region)
+
+    assert region.done is True
+    assert turns[-1].kind == DispatchKind.ABEND
+    assert turns[-1].abcode == "ASTL"
+    # Two turns per cycle — XCTLEND's RETURN, then STARTLX's XCTL — with the
+    # entry task's own XCTL consumed by start().
+    assert len(turns) == _GUARD_CAP * 2 + 1

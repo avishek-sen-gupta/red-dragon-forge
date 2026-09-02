@@ -17,6 +17,15 @@ logger = logging.getLogger(__name__)
 
 _DFHENTER = "\x7d"
 
+# A transaction that STARTs its own transid never waits for terminal input, so
+# nothing in the region breaks the cycle. Mirrors red-dragon's _RUNAWAY_GUARD: a
+# cap far above any real flow, logged when it is what stopped the region, so a
+# scheduling bug is loud rather than a hang.
+_MAX_CONSECUTIVE_STARTS = 256
+_RUNAWAY_ABCODE = "ASTL"
+
+_NO_OVERRIDE: "tuple[DispatchResult, ...]" = ()
+
 # Sentinel: "I was not given a queue — make my own". A plain StartQueue() default
 # would be evaluated once at def time and shared by every region that omits it,
 # and this code mutates the queue.
@@ -245,6 +254,7 @@ class CicsRegion:
         # A RETURN TRANSID target parked because a started task, which needs no
         # terminal input, runs before it. The terminal holds one such slot.
         self._pending_next: "tuple[str, Any, bytes]" = _NO_PENDING_NEXT
+        self._consecutive_starts: int = 0
 
     @property
     def transid(self) -> str:
@@ -273,6 +283,7 @@ class CicsRegion:
         self._program = self._program_cache[self._transid_to_program[entry_transid]]
         self._task_termid = self._region_termid
         self._pending_next = _NO_PENDING_NEXT
+        self._consecutive_starts = 0
         self._done = False
         return self._dispatch(input_event=input_event, max_steps=max_steps)
 
@@ -327,38 +338,54 @@ class CicsRegion:
         routing = _advance_routing(
             result, self._transid, self._program_cache, self._transid_to_program
         )
+        override = self._advance(result, routing)
+        return override[0] if override else result
+
+    def _advance(
+        self,
+        result: DispatchResult,
+        routing: "tuple[str, Any, bytes] | DispatchResult",
+    ) -> "tuple[DispatchResult, ...]":
+        """Settle the finished task and adopt whatever runs next. Returns the
+        result ``_dispatch`` must report INSTEAD of the finished task's own, or
+        empty when the finished task's result stands."""
         if isinstance(routing, DispatchResult):
-            self._settle_terminal(routing)
-        elif result.kind == DispatchKind.XCTL:
+            return self._settle_terminal(routing)
+        if result.kind == DispatchKind.XCTL:
             # XCTL transfers control WITHIN the same task: the task has not ended,
             # so no started task may run yet, and the task keeps its own terminal.
             self._adopt(routing, self._task_termid)
-        elif self._start_queue.pop_runnable_peek(self._region_termid):
+            return _NO_OVERRIDE
+        if self._start_queue.pop_runnable_peek(self._region_termid):
             self._pending_next = routing
-            self._adopt_started(self._start_queue.pop_runnable(self._region_termid)[0])
-        else:
-            self._pending_next = _NO_PENDING_NEXT
-            self._adopt(routing, self._region_termid)
-        return result
+            return self._adopt_started(
+                self._start_queue.pop_runnable(self._region_termid)[0]
+            )
+        self._pending_next = _NO_PENDING_NEXT
+        self._adopt_next_transid(routing)
+        return _NO_OVERRIDE
 
-    def _settle_terminal(self, routing: DispatchResult) -> None:
+    def _settle_terminal(self, routing: DispatchResult) -> "tuple[DispatchResult, ...]":
         """A task ended. Run what is runnable before waiting on terminal input:
-        a started task needs none, a next-transid task does."""
+        a started task needs none, a next-transid task does.
+
+        Returns the result ``_dispatch`` must report INSTEAD of the finished
+        task's own, or empty when the finished task's result stands."""
         if routing.kind == DispatchKind.ABEND:
             self._start_queue.discard_for_abend()
             self._done = True
             logger.info("dispatch → terminal %s", routing.kind.name)
-            return
+            return _NO_OVERRIDE
         started = self._start_queue.pop_runnable(self._region_termid)
         if started:
-            self._adopt_started(started[0])
-            return
+            return self._adopt_started(started[0])
         if self._pending_next[0]:
-            self._adopt(self._pending_next, self._region_termid)
+            self._adopt_next_transid(self._pending_next)
             self._pending_next = _NO_PENDING_NEXT
-            return
+            return _NO_OVERRIDE
         self._done = True
         logger.info("dispatch → terminal %s", routing.kind.name)
+        return _NO_OVERRIDE
 
     def _adopt(self, routing: "tuple[str, Any, bytes]", task_termid: str) -> None:
         """``task_termid`` is the region's terminal for a fresh next-transid task,
@@ -374,12 +401,36 @@ class CicsRegion:
             len(self._commarea),
         )
 
-    def _adopt_started(self, req: StartRequest) -> None:
+    def _adopt_next_transid(self, routing: "tuple[str, Any, bytes]") -> None:
+        """A next-transid task waits for terminal input before it runs, and that
+        wait is the only thing that breaks a chain of started tasks. An XCTL is a
+        transfer within the same task and breaks nothing, so it does not come
+        here — a START/XCTL cycle must still reach the runaway guard."""
+        self._consecutive_starts = 0
+        self._adopt(routing, self._region_termid)
+
+    def _adopt_started(self, req: StartRequest) -> "tuple[DispatchResult, ...]":
         """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
-        the terminal the START named — NO_TERMINAL for a non-terminal task."""
+        the terminal the START named — NO_TERMINAL for a non-terminal task.
+
+        Returns the runaway-guard abend once the chain of started tasks has run
+        past ``_MAX_CONSECUTIVE_STARTS``, or empty when the task was adopted."""
+        if self._consecutive_starts >= _MAX_CONSECUTIVE_STARTS:
+            logger.error(
+                "runaway guard: %d consecutive started tasks with no terminal "
+                "input (next transid %s) — abending %s",
+                self._consecutive_starts,
+                req.transid,
+                _RUNAWAY_ABCODE,
+            )
+            self._start_queue.discard_for_abend()
+            self._done = True
+            return (DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE),)
+        self._consecutive_starts = self._consecutive_starts + 1
         self._transid = req.transid
         self._program = self._program_cache[self._transid_to_program[req.transid]]
         self._commarea = b""
         self._task_termid = req.termid
         self._start_queue.put_start_data(req.data)
         logger.info("dispatch → started transid=%s termid=%r", req.transid, req.termid)
+        return _NO_OVERRIDE
