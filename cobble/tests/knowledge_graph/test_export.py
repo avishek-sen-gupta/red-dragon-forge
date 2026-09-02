@@ -4,7 +4,7 @@ from pathlib import Path
 import networkx as nx
 
 from cobble.file_location import NOT_ATTEMPTED, FileLocationReason, NoFileLocation
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,

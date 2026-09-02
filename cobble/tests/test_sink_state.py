@@ -9,7 +9,7 @@ behind them stays in one tested place.
 
 from __future__ import annotations
 
-from cobble.interpreter.project.graph_types import NodeKind
+from cobble.knowledge_graph.graph_types import NodeKind
 from cobble.sink_state import Buffer, FirstSighting
 
 

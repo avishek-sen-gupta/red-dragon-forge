@@ -15,7 +15,7 @@ import networkx as nx
 import pytest
 
 from cobble.file_location import NOT_ATTEMPTED
-from cobble.interpreter.project.graph_types import EdgeKind, NodeKind
+from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 from cobble.knowledge_graph import layout as layout_module
 from cobble.knowledge_graph.layout import sfdp_positions
 from cobble.knowledge_graph.node_key import NodeKey

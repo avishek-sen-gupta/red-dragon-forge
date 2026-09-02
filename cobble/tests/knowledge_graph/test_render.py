@@ -4,7 +4,7 @@ import networkx as nx
 import pytest
 
 from cobble.file_location import NOT_ATTEMPTED
-from cobble.interpreter.project.graph_types import EdgeKind, NodeKind
+from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 from cobble.knowledge_graph import render as render_module
 from cobble.knowledge_graph.render import render_html
 

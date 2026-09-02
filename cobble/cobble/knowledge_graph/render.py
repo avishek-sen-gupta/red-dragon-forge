@@ -11,7 +11,7 @@ from pathlib import Path
 
 import networkx as nx
 
-from cobble.interpreter.project.graph_types import AttrValue, EdgeKind, NodeKind
+from cobble.knowledge_graph.graph_types import AttrValue, EdgeKind, NodeKind
 from cobble.knowledge_graph.palette import DEFAULT_COLOR, EDGE_COLORS, NODE_COLORS
 
 _VENDOR_JS_PATH = Path(__file__).parent / "vendor" / "vis-network.min.js"

@@ -55,7 +55,7 @@ from interpreter.cobol.cobol_parser import ProLeapCobolParser
 from interpreter.cobol.source_text import decode_source
 from interpreter.cobol.subprocess_runner import RealSubprocessRunner
 from interpreter.project.cobol_imports import extract_cobol_imports
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,

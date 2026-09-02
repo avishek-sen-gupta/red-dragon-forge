@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from cobble.cics.statements import CicsDialectParser
+from cics.statements import CicsDialectParser
 from interpreter.cobol import cobol_statements as _cobol_statements
 from squall.statements import SqlDialectParser
 

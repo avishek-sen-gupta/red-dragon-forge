@@ -10,7 +10,7 @@ from itertools import accumulate, takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,
     GraphEdge,

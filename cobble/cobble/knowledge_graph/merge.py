@@ -14,7 +14,7 @@ from types import MappingProxyType
 import networkx as nx
 
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
-from cobble.interpreter.project.graph_types import GraphEdge, GraphNode
+from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 
 # Every reason states something about the node except this one, which states
 # only that nothing was asked -- so it alone ranks below a stated reason.

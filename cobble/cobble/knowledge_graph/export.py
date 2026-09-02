@@ -23,7 +23,7 @@ from cobble.file_location import (
     from_json,
     to_json_fields,
 )
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,
     GraphEdge,

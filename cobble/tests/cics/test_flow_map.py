@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 
 from cobble.cics.flow_map import extract_transaction_flow_graph
-from cobble.interpreter.project.graph_types import GraphEdge, GraphNode
+from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 
 _CSD = """
 DEFINE TRANSACTION(AAAA) GROUP(GRP) PROGRAM(PROGONE)

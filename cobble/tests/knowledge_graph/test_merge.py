@@ -8,7 +8,7 @@ the precedence is pinned here rather than left to arrival order.
 from pathlib import Path
 
 from cobble.file_location import NOT_ATTEMPTED, FileLocationReason, NoFileLocation
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,

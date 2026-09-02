@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cobble.file_location import to_json_fields
-from cobble.interpreter.project.graph_types import GraphEdge, GraphNode
+from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.sink_state import FirstSighting
 
 if TYPE_CHECKING:
