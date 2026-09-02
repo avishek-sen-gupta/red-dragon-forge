@@ -20,7 +20,9 @@ _DFHENTER = "\x7d"
 # A transaction that STARTs its own transid never waits for terminal input, so
 # nothing in the region breaks the cycle. Mirrors red-dragon's _RUNAWAY_GUARD: a
 # cap far above any real flow, logged when it is what stopped the region, so a
-# scheduling bug is loud rather than a hang.
+# scheduling bug is loud rather than a hang. The cap counts started tasks
+# ADOPTED, and the guard refuses the adoption that would exceed it, so a region
+# doing nothing but started tasks stops on its (cap + 1)-th such dispatch.
 _MAX_CONSECUTIVE_STARTS = 256
 _RUNAWAY_ABCODE = "ASTL"
 
@@ -224,6 +226,7 @@ class CicsRegion:
         min_commarea_len: int = 0,
         start_queue: StartQueue = _OWN_START_QUEUE,
         region_termid: str = DEFAULT_TERMID,
+        max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
     ) -> None:
         self._program_cache = program_cache
         self._transid_to_program = transid_to_program
@@ -244,6 +247,10 @@ class CicsRegion:
             StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
         )
         self._region_termid = region_termid
+        # Lowered by tests so both halves of the runaway rule — it fires, and it
+        # does NOT fire when a next-transid turn breaks the chain — cost a couple
+        # of program runs instead of a couple of hundred.
+        self._max_consecutive_starts = max_consecutive_starts
 
         self._transid: str = ""
         self._program: Any = None
@@ -413,9 +420,9 @@ class CicsRegion:
         """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
         the terminal the START named — NO_TERMINAL for a non-terminal task.
 
-        Returns the runaway-guard abend once the chain of started tasks has run
-        past ``_MAX_CONSECUTIVE_STARTS``, or empty when the task was adopted."""
-        if self._consecutive_starts >= _MAX_CONSECUTIVE_STARTS:
+        Returns the runaway-guard abend when adopting this task would take the
+        chain past the region's cap, or empty when the task was adopted."""
+        if self._consecutive_starts >= self._max_consecutive_starts:
             logger.error(
                 "runaway guard: %d consecutive started tasks with no terminal "
                 "input (next transid %s) — abending %s",
