@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TypeAlias
 
-from cobble.interpreter.project.graph_types import NodeKind
+from cobble.knowledge_graph.graph_types import NodeKind
 
 # Written as a quoted TypeAlias rather than a 3.12 `type` statement for the
 # same reason graph_types.py's AttrValue is: the lint config parses this

@@ -37,8 +37,8 @@ from typing import TYPE_CHECKING
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb
-from cobble.cics.statements import ExecCicsStatement
-from cobble.interpreter.project.graph_types import GraphNode
+from cics.statements import ExecCicsStatement
+from cobble.knowledge_graph.graph_types import GraphNode
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex

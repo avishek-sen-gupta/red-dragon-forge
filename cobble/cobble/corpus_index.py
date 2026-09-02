@@ -45,7 +45,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
-from cobble.interpreter.project.graph_types import NodeKind
+from cobble.knowledge_graph.graph_types import NodeKind
 
 logger = logging.getLogger(__name__)
 

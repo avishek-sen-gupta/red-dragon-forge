@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from cobble.interpreter.project.graph_types import GraphEdge, GraphNode
+from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 
 
 class GraphSink(Protocol):

@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from cobble.file_location import FileLocationReason, NoFileLocation
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,

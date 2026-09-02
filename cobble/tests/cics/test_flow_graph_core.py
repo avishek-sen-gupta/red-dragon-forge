@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb
-from cobble.interpreter.project.graph_types import EdgeKind, NodeKind
+from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 
 
 def _verb(verb: str, **operands) -> CicsVerb:

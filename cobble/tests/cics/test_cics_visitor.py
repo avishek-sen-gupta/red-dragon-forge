@@ -1,6 +1,6 @@
 """EXEC CICS command text parsing: verb plus the options each command allows."""
 
-from cobble.cics.cics_visitor import parse_exec_cics_text
+from cics.cics_visitor import parse_exec_cics_text
 
 
 def test_link_dpl_form() -> None:

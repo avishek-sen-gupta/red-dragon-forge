@@ -5,7 +5,7 @@ from types import MappingProxyType
 from unittest.mock import MagicMock
 
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,

@@ -1,6 +1,6 @@
 import pytest
 
-from cobble.interpreter.cobol.cobol_expression import (
+from interpreter.cobol.cobol_expression import (
     BinOpNode,
     DfhRespNode,
     FieldRefNode,

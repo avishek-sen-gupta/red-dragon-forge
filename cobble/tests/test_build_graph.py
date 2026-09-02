@@ -23,7 +23,7 @@ from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
 from cobble.corpus_index import FileLocationResolver
 from cobble.file_location import NOT_ATTEMPTED, FileLocation
 from interpreter.cobol.ast_store import AstStore
-from cobble.interpreter.project.graph_types import (
+from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,

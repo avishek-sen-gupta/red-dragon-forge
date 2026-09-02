@@ -18,7 +18,7 @@ import networkx as nx
 import pytest
 
 from cobble.file_location import NOT_ATTEMPTED
-from cobble.interpreter.project.graph_types import AttrValue, EdgeKind, NodeKind
+from cobble.knowledge_graph.graph_types import AttrValue, EdgeKind, NodeKind
 from cobble.knowledge_graph import render_webgl as render_webgl_module
 from cobble.knowledge_graph.node_key import NodeKey
 from cobble.knowledge_graph.render_webgl import render_webgl_html

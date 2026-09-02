@@ -16,7 +16,7 @@ from collections.abc import Mapping
 
 from bms_copybook_gen.models import BmsMapSet
 from cobble.cics.flow_observer import CicsVerb, field_direction
-from cobble.interpreter.project.graph_types import EdgeKind, GraphEdge, NodeKind
+from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, NodeKind
 
 # Which edge each verb yields, grouped by what the edge points at. A verb absent
 # from all four tables is one the graph does not read.

@@ -1,5 +1,5 @@
-from cobble.interpreter.cobol.cobol_expression import LiteralNode
-from cobble.interpreter.cobol.ref_mod import (
+from interpreter.cobol.cobol_expression import LiteralNode
+from interpreter.cobol.ref_mod import (
     RefModBinOp,
     RefModLengthOf,
     RefModLiteral,
