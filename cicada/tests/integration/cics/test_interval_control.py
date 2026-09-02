@@ -21,7 +21,7 @@ import pytest
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent, run_cics
-from cics.interval import StartQueue, StartRequest
+from cics.interval import RejectReason, StartQueue, StartRequest
 from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
 from cics.strategy import CicsLoweringStrategy
@@ -508,3 +508,75 @@ def test_started_task_runs_before_the_next_transid(cobol_parser):
     last = region.step(input_event=InputEvent())
     assert last.commarea == "RANSRTC0".encode("cp037")
     assert region.done is True
+
+
+COBOL_START_BAD_TRANSID = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTBT.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('ZZZZ') TERMID(EIBTRMID) END-EXEC.
+           MOVE EIBRESP TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+COBOL_START_BAD_TERMID = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTBM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS START TRANSID('SRTB') TERMID('P001') END-EXEC.
+           MOVE EIBRESP TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+def _run_one(cobol_parser, source, transid_map, start_queue):
+    context_holder = [
+        CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001")
+    ]
+    result_holder: list = [None]
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, transid_map)
+    program = compile_cics_program(source.encode(), cobol_parser, spec)
+    return run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_start_to_an_unknown_transid_yields_transiderr(cobol_parser):
+    """S6."""
+    import struct
+
+    start_queue = StartQueue()
+    result = _run_one(
+        cobol_parser, COBOL_START_BAD_TRANSID, {"SRTB": "STARTB"}, start_queue
+    )
+
+    assert result.commarea[:4] == struct.pack(">i", 28)  # TRANSIDERR
+    assert start_queue.pending == ()
+    assert start_queue.rejected[0][1] == RejectReason.UNKNOWN_TRANSID
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_start_for_another_terminal_yields_termiderr(cobol_parser):
+    """S5: this region has no terminal P001, so the request never runs here."""
+    import struct
+
+    start_queue = StartQueue()
+    result = _run_one(
+        cobol_parser, COBOL_START_BAD_TERMID, {"SRTB": "STARTB"}, start_queue
+    )
+
+    assert result.commarea[:4] == struct.pack(">i", 11)  # TERMIDERR
+    assert start_queue.pending == ()
+    assert start_queue.rejected[0][1] == RejectReason.NO_SUCH_TERMINAL
