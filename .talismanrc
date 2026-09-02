@@ -264,6 +264,7 @@ fileignoreconfig:
   # monkeypatch.setattr lines read as high-entropy blobs to the secret detector.
   ignore_detectors: [filecontent]
 - filename: cicada/tests/unit/cics/test_bootstrap.py
+  # Same monkeypatch.setattr entropy as test_dispatcher.py above.
   ignore_detectors: [filecontent]
 - filename: cicada/tests/integration/cics/test_interval_control.py
   # Inline COBOL source and cp037 literals read as high-entropy blobs. Detector-

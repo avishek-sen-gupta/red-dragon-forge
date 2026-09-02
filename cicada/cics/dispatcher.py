@@ -146,6 +146,21 @@ def _peek_input_event(input_queue: InputChannel, timeout: float = 30.0) -> Any:
     return event
 
 
+def _runaway_abend(req: StartRequest, consecutive_starts: int) -> DispatchResult:
+    """The runaway guard's refusal. Both drivers implement the RULE separately —
+    what breaks a chain of started tasks differs between them — but the refusal
+    itself is one thing, and the count plus the transid it refused are the only
+    way to tell a runaway from a slow region in a log."""
+    logger.error(
+        "runaway guard: %d consecutive started tasks with no terminal "
+        "input (next transid %s) — abending %s",
+        consecutive_starts,
+        req.transid,
+        _RUNAWAY_ABCODE,
+    )
+    return DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE)
+
+
 def _run_dispatcher_with_runner(
     run_fn: RunCicsFn,
     program_cache: dict[str, Any],
@@ -203,15 +218,8 @@ def _run_dispatcher_with_runner(
 
         started = starts.pop_runnable(region_termid)
         if started and consecutive_starts >= max_consecutive_starts:
-            logger.error(
-                "runaway guard: %d consecutive started tasks with no terminal "
-                "input (next transid %s) — abending %s",
-                consecutive_starts,
-                started[0].transid,
-                _RUNAWAY_ABCODE,
-            )
             starts.discard_for_abend()
-            return DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE)
+            return _runaway_abend(started[0], consecutive_starts)
         if started:
             # A started task carries start data, no COMMAREA (so EIBCALEN is 0),
             # and the terminal the START named — NO_TERMINAL for a non-terminal
@@ -487,16 +495,9 @@ class CicsRegion:
         Returns the runaway-guard abend when adopting this task would take the
         chain past the region's cap, or empty when the task was adopted."""
         if self._consecutive_starts >= self._max_consecutive_starts:
-            logger.error(
-                "runaway guard: %d consecutive started tasks with no terminal "
-                "input (next transid %s) — abending %s",
-                self._consecutive_starts,
-                req.transid,
-                _RUNAWAY_ABCODE,
-            )
             self._start_queue.discard_for_abend()
             self._done = True
-            return (DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE),)
+            return (_runaway_abend(req, self._consecutive_starts),)
         self._consecutive_starts = self._consecutive_starts + 1
         self._transid = req.transid
         self._program = self._program_cache[self._transid_to_program[req.transid]]
