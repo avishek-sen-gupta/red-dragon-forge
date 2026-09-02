@@ -76,10 +76,14 @@ def test_a_missing_sfdp_is_reported_as_a_missing_sfdp(
         sfdp_positions(_sample_graph())
 
 
+@needs_graphviz
 def test_a_failing_sfdp_reports_its_own_complaint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A graphviz that runs but rejects the input must not pass for a layout."""
+    """A graphviz that runs but rejects the input must not pass for a layout.
+
+    Needs the real binary: the point is a graphviz that RUNS and then refuses,
+    which is a different failure from the missing-binary one above."""
     monkeypatch.setattr(layout_module, "_SFDP_COMMAND", ("sfdp", "-Tnosuchformat"))
 
     with pytest.raises(RuntimeError, match="sfdp"):
