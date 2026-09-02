@@ -9,13 +9,17 @@ from cics.builtins.screen import (
     make_send_text_builtin,
 )
 from cics.dispatcher import InputEvent
-from cics.types import CicsContext
+from cics.types import NO_TERMINAL, CicsContext
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
 from interpreter.vm.vm_types import VMState, BuiltinResult
 
 _AT_TERMINAL: list = [
     CicsContext(transid="MENU", commarea=b"", eibaid="\x7d", termid="T001")
+]
+
+_NO_TERMINAL_TASK: list = [
+    CicsContext(transid="SRTD", commarea=b"", eibaid="\x7d", termid=NO_TERMINAL)
 ]
 
 
@@ -161,3 +165,31 @@ def test_send_text_enqueues_text():
     item = screen_q.get(block=False)
     assert item["type"] == "text"
     assert "Hello" in item["text"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_receive_map_in_a_non_terminal_task_is_invreq_and_consumes_no_input():
+    """A task started with no TERMID has no screen to read: RECEIVE MAP is INVREQ
+    and must leave the terminal's pending input for the task that owns it."""
+    iq: queue.Queue = queue.Queue()
+    pending = InputEvent(eibaid="\x33", fields={"USERID": "ALICE"})
+    iq.put(pending)
+    builtin = make_receive_map_builtin(iq, _NO_TERMINAL_TASK, timeout=1.0)
+
+    result = builtin([_tv("COSGN0A"), _tv(["USERID"])], _FakeVM(bytearray(210), {}))
+
+    assert result.value == 16  # DFHRESP(INVREQ)
+    assert iq.qsize() == 1
+    assert iq.get_nowait() is pending
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_send_map_in_a_non_terminal_task_is_invreq_and_writes_no_screen():
+    """The SEND side of the same rule, at the builtin level."""
+    sq: queue.Queue = queue.Queue()
+    builtin = make_send_map_builtin(sq, _NO_TERMINAL_TASK)
+
+    result = builtin([_tv("COSGN0A"), _tv(["USERID"])], _FakeVM(bytearray(210), {}))
+
+    assert result.value == 16  # DFHRESP(INVREQ)
+    assert sq.qsize() == 0

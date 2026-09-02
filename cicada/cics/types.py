@@ -5,9 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-# The single terminal a region emulates when the caller names none. It has to be
-# a real id rather than "": "" is reserved to mean "this task has no terminal at
-# all" (a START with no TERMID), and terminal I/O is INVREQ for such a task.
+# The reserved termid meaning "this task has no terminal at all" — a START with
+# no TERMID coded. Terminal I/O (SEND MAP / RECEIVE MAP) is INVREQ for such a
+# task, so this value must never be reached by omission: ask for it by name.
+NO_TERMINAL = ""
+
+# The single terminal a region emulates when the caller names none. A real id
+# rather than NO_TERMINAL, so the terminal-attached case is what you get by
+# default and the non-terminal case is the one you have to spell out.
 DEFAULT_TERMID = "T001"
 
 
@@ -18,7 +23,9 @@ class CicsContext:
     transid: str
     commarea: bytes
     eibaid: str  # 1-char attention identifier (e.g. "\x7d" = DFHENTER)
-    termid: str = ""  # "" == a non-terminal task (a START with no TERMID)
+    # Terminal-attached by default; pass NO_TERMINAL for a task started with no
+    # TERMID, for which terminal I/O is INVREQ.
+    termid: str = DEFAULT_TERMID
 
 
 class DispatchKind(Enum):

@@ -376,7 +376,7 @@ class CicsRegion:
 
     def _adopt_started(self, req: StartRequest) -> None:
         """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
-        the terminal the START named — "" for a non-terminal task."""
+        the terminal the START named — NO_TERMINAL for a non-terminal task."""
         self._transid = req.transid
         self._program = self._program_cache[self._transid_to_program[req.transid]]
         self._commarea = b""
