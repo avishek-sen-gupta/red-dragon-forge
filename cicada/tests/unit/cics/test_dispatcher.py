@@ -922,3 +922,27 @@ def test_loop_unknown_return_transid_abends_trni_without_waiting(monkeypatch):
     assert result.kind == DispatchKind.ABEND
     assert result.abcode == "TRNI"
     assert log == ["run:CC00"]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_production_runaway_cap_is_256_on_both_drivers():
+    """The tests above lower ``max_consecutive_starts`` to 2-3 so proving the
+    guard fires (and resets) costs a handful of runs, not hundreds — but that
+    means nothing exercises the real production default. A typo shrinking
+    ``_MAX_CONSECUTIVE_STARTS`` would fail no test; pin the constant each driver
+    actually defaults to."""
+    assert dispatcher_mod._MAX_CONSECUTIVE_STARTS == 256
+
+    loop_default = (
+        inspect.signature(_run_dispatcher_with_runner)
+        .parameters["max_consecutive_starts"]
+        .default
+    )
+    assert loop_default == 256
+
+    region_default = (
+        inspect.signature(CicsRegion.__init__)
+        .parameters["max_consecutive_starts"]
+        .default
+    )
+    assert region_default == 256

@@ -209,7 +209,7 @@ A started task with `termid == ""` is dispatched with no terminal. `SEND MAP` an
 `RECEIVE MAP` from such a task raise `INVREQ`, as in CICS. This requires the screen
 builtins to read the current `termid`, so `make_send_map_builtin` /
 `make_receive_map_builtin` take `context_holder` (already threaded to other
-builtins). `EIBTERM` for such a task is spaces.
+builtins). `EIBTRMID` for such a task is spaces.
 
 ## Conditions
 
@@ -351,7 +351,7 @@ issuing terminal's screen.
 A started task issues `RETRIEVE` twice. Asserts the first yields its data and the
 second yields `ENDDATA` — `take_start_data` is a consume, not a peek.
 
-### S11 — `EIBTERM` is readable
+### S11 — `EIBTRMID` is readable
 
 A program moves `EIBTRMID` into working storage and returns it in its COMMAREA;
 asserts it decodes to `T001`. S1 depends on this working, since `TERMID(EIBTRMID)`
