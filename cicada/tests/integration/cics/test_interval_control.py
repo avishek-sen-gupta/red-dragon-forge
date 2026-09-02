@@ -189,3 +189,47 @@ def test_start_lowering_emits_no_return(cobol_parser):
         f"expected exactly one Return_ (from the trailing RETURN), got "
         f"{len(return_instructions)} — START must not emit its own"
     )
+
+
+COBOL_RETRIEVE_NO_DATA = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. RTVNONE.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-IN           PIC X(8)  VALUE 'UNTOUCHD'.
+       01  WS-LEN          PIC S9(4) COMP VALUE 8.
+       01  WS-CA.
+           05  WS-CA-RESP  PIC S9(8) COMP.
+           05  WS-CA-IN    PIC X(8).
+       PROCEDURE DIVISION.
+           EXEC CICS RETRIEVE INTO(WS-IN) LENGTH(WS-LEN) END-EXEC.
+           MOVE EIBRESP TO WS-CA-RESP.
+           MOVE WS-IN   TO WS-CA-IN.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_retrieve_with_no_start_data_yields_enddata(cobol_parser):
+    """S3: a task nobody started gets ENDDATA and its INTO area is UNCHANGED."""
+    import struct
+
+    context_holder = [
+        CicsContext(transid="RTV0", commarea=b"", eibaid="\x7d", termid="T001")
+    ]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    spec = _spec_with_queue(context_holder, result_holder, start_queue, {})
+    program = compile_cics_program(COBOL_RETRIEVE_NO_DATA.encode(), cobol_parser, spec)
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea[:4] == struct.pack(">i", 29)  # DFHRESP(ENDDATA)
+    assert result.commarea[4:12] == "UNTOUCHD".encode("cp037")

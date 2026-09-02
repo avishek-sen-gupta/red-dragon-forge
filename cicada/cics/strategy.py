@@ -597,12 +597,18 @@ class CicsLoweringStrategy:
                 make_vsam_endbr_builtin(vsam_engine),
             )
 
-        from cics.builtins.interval import make_start_builtin  # noqa: PLC0415
+        from cics.builtins.interval import (  # noqa: PLC0415
+            make_retrieve_builtin,
+            make_start_builtin,
+        )
 
         _register(
             Builtins.TABLE,
             "__cics_start",
             make_start_builtin(self._start_queue, transid_to_program, region_termid),
+        )
+        _register(
+            Builtins.TABLE, "__cics_retrieve", make_retrieve_builtin(self._start_queue)
         )
 
     def handles(self, stmt: object) -> bool:
@@ -731,6 +737,23 @@ class CicsLoweringStrategy:
                     result_reg=r_res,
                     func_name=FuncName("__cics_start"),
                     args=(r_transid, r_data, r_termid, r_reqid, r_timing),
+                )
+            )
+            emit_resp_writeback(ctx, r_res, opts, materialised)
+            return
+
+        if verb == "RETRIEVE":
+            into_off, into_len = _resolve_into(ctx, opts.get("INTO"), materialised)
+            r_off = ctx.fresh_reg()
+            ctx.emit_inst(Const.int_(r_off, into_off))
+            r_len = ctx.fresh_reg()
+            ctx.emit_inst(Const.int_(r_len, into_len))
+            r_res = ctx.fresh_reg()
+            ctx.emit_inst(
+                CallFunction(
+                    result_reg=r_res,
+                    func_name=FuncName("__cics_retrieve"),
+                    args=(r_off, r_len),
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
