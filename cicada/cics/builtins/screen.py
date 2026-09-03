@@ -218,13 +218,17 @@ def make_receive_map_builtin(
 
 def make_apply_input_builtin() -> object:
     """Conversational RECEIVE MAP tail: apply the InputEvent the driver injected at
-    the SUSPEND (args[0]) to the WS region. args[1] is the field base-name list."""
+    the SUSPEND (args[0]) to the WS region. args[1] is the field base-name list.
+
+    Returns an EIBRESP code, like the blocking RECEIVE MAP builtin: the same
+    source must not behave differently in conversational mode. No event at the
+    resume means the INTO area was never filled, which is MAPFAIL."""
 
     def __cics_apply_input(args: list[TypedValue], vm: VMState) -> BuiltinResult:
-        item = args[0].value if args else None
-        if item is not None:
+        events = [args[0].value] if args and args[0].value else []
+        for item in events:
             _apply_input(vm, item, _base_names(args, 1))
-        return BuiltinResult(value=None)
+        return BuiltinResult(value=_RESP_NORMAL if events else _RESP_MAPFAIL)
 
     return __cics_apply_input
 

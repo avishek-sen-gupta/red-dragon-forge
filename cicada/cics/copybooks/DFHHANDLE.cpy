@@ -1,14 +1,37 @@
       * Condition handler tables, indexed by DFHRESP code + 1
       * (COBOL OCCURS is 1-based). DFH-RAISABLE marks the conditions
       * this runtime raises; its literal is generated from
-      * cics/conditions.py. HANDLE CONDITION sets it, IGNORE CONDITION
-      * clears it. DFH-HANDLER holds a label index, LOW-VALUES meaning
-      * none, so WORKING-STORAGE initialisation gives each program an
-      * empty table and a called program cannot inherit one.
-       01  DFH-RAISABLE-BYTES PIC X(37) VALUE
-           'NYNNNNNNNNNNNYYYYNYYNNYNNNNNNNNNNNNNY'.
+      * cics/conditions.py, in parts because a 524-byte literal cannot
+      * fit fixed-format columns 12-72. HANDLE CONDITION sets it, IGNORE
+      * CONDITION clears it. DFH-HANDLER holds a label index, LOW-VALUES
+      * meaning none, so WORKING-STORAGE initialisation gives each
+      * program an empty table and a called program cannot inherit one.
+       01  DFH-RAISABLE-BYTES.
+           05  DFH-RAISABLE-P01 PIC X(50) VALUE
+               'NYNNNNNNNNNNNYYYYNYYNNYNNNNNNNNNNNNNYNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P02 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNYNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P03 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P04 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P05 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P06 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P07 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P08 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P09 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P10 PIC X(50) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN'.
+           05  DFH-RAISABLE-P11 PIC X(24) VALUE
+               'NNNNNNNNNNNNNNNNNNNNNNNN'.
        01  DFH-RAISABLE-TAB REDEFINES DFH-RAISABLE-BYTES.
-           05  DFH-RAISABLE OCCURS 37 TIMES PIC X.
-       01  DFH-HANDLER-BYTES PIC X(74) VALUE LOW-VALUES.
+           05  DFH-RAISABLE OCCURS 524 TIMES PIC X.
+       01  DFH-HANDLER-BYTES PIC X(1048) VALUE
+           LOW-VALUES.
        01  DFH-HANDLER-TAB REDEFINES DFH-HANDLER-BYTES.
-           05  DFH-HANDLER OCCURS 37 TIMES PIC S9(4) COMP.
+           05  DFH-HANDLER OCCURS 524 TIMES PIC S9(4) COMP.
