@@ -166,10 +166,14 @@ def test_return_commarea_literal_falls_back_to_const(cobol_parser):
     )
     # Arg ordering preserved: (transid, commarea).
     assert len(call.args) == 2, f"expected (transid, commarea), got {call.args}"
-    # No LoadRegion was emitted — there is no COMMAREA data-name to copy in.
-    assert not any(isinstance(i, LoadRegion) for i in instructions)
-    # The COMMAREA arg falls back to a Const(b"") placeholder.
     commarea_reg = call.args[1]
+    # No COMMAREA copy-in: the arg is fed by no LoadRegion. Scoped to the arg
+    # rather than the whole program, which also carries the condition
+    # dispatcher's decode of DFH-HANDLER.
+    assert commarea_reg not in {
+        i.result_reg for i in instructions if isinstance(i, LoadRegion)
+    }
+    # The COMMAREA arg falls back to a Const(b"") placeholder.
     const_b_regs = {
         i.result_reg for i in instructions if isinstance(i, Const) and i.value == b""
     }

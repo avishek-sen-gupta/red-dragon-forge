@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from cics.bootstrap import compile_cics_program
-from cics.conditions import MAX_CODE
+from cics.conditions import MAX_CODE, code_for
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import run_cics
 from cics.preprocessor import raisable_literal
@@ -426,12 +426,6 @@ COBOL_UNHANDLED = """\
 """
 
 
-@pytest.mark.xfail(
-    reason="nothing branches to __cics_cond_dispatch until Task 7 adds the "
-    "raise tail; falls through to RETURN instead of abending. Remove this "
-    "marker then.",
-    strict=True,
-)
 @covers(CobolFeature.EXEC_CICS)
 def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
     """A READ that misses, with no HANDLE registered and no RESP coded, abends
@@ -452,6 +446,180 @@ def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
         queue.Queue(),
         context_holder=context_holder,
         result_holder=result_holder,
+    )
+
+    assert result.kind == DispatchKind.ABEND
+    assert result.abcode == "AEIZ"
+
+
+COBOL_HANDLED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDCORP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-MISSING) END-EXEC.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC.
+           MOVE 'NOTTAKEN' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-MISSING.
+           MOVE 'HANDLED0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_registered_handler_takes_control(cobol_parser, vsam_engine_with_acctfile):
+    """The scenario the whole feature exists for: a READ that misses transfers to
+    the HANDLE CONDITION NOTFND paragraph. The NOTTAKEN write on the fall-through
+    path is the discriminator — the commarea says which path ran."""
+    context_holder = [CicsContext(transid="HND7", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        vsam_engine=vsam_engine_with_acctfile,
+    )
+    program = compile_cics_program(COBOL_HANDLED.encode(), cobol_parser, spec)
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea == "HANDLED0".encode("cp037")
+
+
+COBOL_RESP_SUPPRESSES = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDRESP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-RESP       PIC S9(8) COMP.
+       01  WS-CA.
+           05  WS-CA-TAG   PIC X(8).
+           05  WS-CA-RESP  PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-MISSING) END-EXEC.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+               RESP(WS-RESP) END-EXEC.
+           MOVE 'INLINE00' TO WS-CA-TAG.
+           MOVE EIBRESP TO WS-CA-RESP.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-MISSING.
+           MOVE 'HANDLED0' TO WS-CA-TAG.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+COBOL_NOHANDLE_SUPPRESSES = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDNOH.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-CA.
+           05  WS-CA-TAG   PIC X(8).
+           05  WS-CA-RESP  PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-MISSING) END-EXEC.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+               NOHANDLE END-EXEC.
+           MOVE 'INLINE00' TO WS-CA-TAG.
+           MOVE EIBRESP TO WS-CA-RESP.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-MISSING.
+           MOVE 'HANDLED0' TO WS-CA-TAG.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+def _run_source(source, transid, cobol_parser, vsam_engine):
+    context_holder = [CicsContext(transid=transid, commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        vsam_engine=vsam_engine,
+    )
+    program = compile_cics_program(source.encode(), cobol_parser, spec)
+    return run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_resp_suppresses_the_raise(cobol_parser, vsam_engine_with_acctfile):
+    """RESP is the program's undertaking to check the code inline, so the same
+    failing READ under a registered NOTFND handler must fall through — and
+    EIBRESP must still hold 13 for the inline check to read."""
+    result = _run_source(
+        COBOL_RESP_SUPPRESSES, "HND8", cobol_parser, vsam_engine_with_acctfile
+    )
+
+    assert result.commarea[0:8] == "INLINE00".encode("cp037")
+    assert result.commarea[8:12] == struct.pack(">i", code_for("NOTFND"))
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_nohandle_suppresses_the_raise(cobol_parser, vsam_engine_with_acctfile):
+    """NOHANDLE is RESP's bare form: no handler dispatch, EIBRESP still written."""
+    result = _run_source(
+        COBOL_NOHANDLE_SUPPRESSES, "HND9", cobol_parser, vsam_engine_with_acctfile
+    )
+
+    assert result.commarea[0:8] == "INLINE00".encode("cp037")
+    assert result.commarea[8:12] == struct.pack(">i", code_for("NOTFND"))
+
+
+COBOL_HANDLE_NOT_EXECUTED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDCOND.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-FLAG       PIC X VALUE 'N'.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           IF WS-FLAG = 'Y'
+               EXEC CICS HANDLE CONDITION NOTFND(PARA-MISSING) END-EXEC
+           END-IF.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC.
+           MOVE 'NOTTAKEN' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-MISSING.
+           MOVE 'HANDLED0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_handle_that_never_executes_leaves_the_condition_unhandled(
+    cobol_parser, vsam_engine_with_acctfile
+):
+    """Registration is a runtime write, not a compile-time declaration: a HANDLE
+    CONDITION inside a branch that is not taken leaves slot 14 at zero, so the
+    miss abends even though the paragraph exists and was numbered."""
+    result = _run_source(
+        COBOL_HANDLE_NOT_EXECUTED, "HNDA", cobol_parser, vsam_engine_with_acctfile
     )
 
     assert result.kind == DispatchKind.ABEND

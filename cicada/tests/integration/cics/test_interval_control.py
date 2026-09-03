@@ -180,12 +180,16 @@ def test_start_lowering_emits_no_return(cobol_parser):
     ]
     assert len(start_calls) == 1, f"expected one __cics_start call, got {start_calls}"
 
-    # COBOL_START_A has exactly one EXEC CICS statement that ends a task — the
-    # trailing RETURN — so the whole program must emit exactly one Return_. A
-    # second one anywhere would mean START itself ended the task, which is the
-    # regression this test exists to catch (a windowed slice after the START
-    # call would miss a Return_ emitted further down as the program grows).
-    return_instructions = [i for i in instructions if isinstance(i, Return_)]
+    # Everything from the START call onwards: COBOL_START_A has exactly one
+    # EXEC CICS statement there that ends a task — the trailing RETURN — so
+    # exactly one Return_ may follow. A second one would mean START itself
+    # ended the task. The window opens at the START rather than covering the
+    # whole program because the condition dispatcher emitted at procedure entry
+    # ends in its own Return_; it still catches any Return_ emitted further
+    # down as the program grows.
+    return_instructions = [
+        i for i in instructions[start_calls[0] :] if isinstance(i, Return_)
+    ]
     assert len(return_instructions) == 1, (
         f"expected exactly one Return_ (from the trailing RETURN), got "
         f"{len(return_instructions)} — START must not emit its own"
@@ -604,7 +608,7 @@ COBOL_NONTERMINAL_TASK = """\
            05  WS-CA-TERM  PIC X(4)  VALUE SPACES.
            05  WS-CA-RESP  PIC S9(8) COMP VALUE ZERO.
        PROCEDURE DIVISION.
-           EXEC CICS SEND MAP('NOMAP') END-EXEC.
+           EXEC CICS SEND MAP('NOMAP') RESP(WS-CA-RESP) END-EXEC.
            MOVE EIBRESP  TO WS-CA-RESP.
            MOVE EIBTRNID TO WS-CA-TRAN.
            MOVE EIBTRMID TO WS-CA-TERM.
@@ -614,7 +618,10 @@ COBOL_NONTERMINAL_TASK = """\
 
 @covers(CobolFeature.EXEC_CICS)
 def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
-    """S4: a START with no TERMID runs, but terminal I/O is invalid for it."""
+    """S4: a START with no TERMID runs, but terminal I/O is invalid for it.
+
+    STARTD codes RESP on the SEND MAP, which is what makes INVREQ readable
+    inline instead of a raised condition."""
     import struct
 
     context_holder: list = [None]
@@ -660,6 +667,66 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
     assert started.commarea[0:4].decode("cp037") == "SRTD"
     assert started.commarea[4:8].decode("cp037") == "    "
     assert struct.unpack(">i", started.commarea[8:12])[0] == 16  # INVREQ
+    assert screen_queue.empty() is True
+
+
+COBOL_NONTERMINAL_TASK_UNHANDLED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STARTD.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA           PIC X(8)  VALUE 'RANAFTER'.
+       PROCEDURE DIVISION.
+           EXEC CICS SEND MAP('NOMAP') END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_non_terminal_send_map_without_resp_abends(cobol_parser):
+    """The same invalid terminal I/O with no RESP, no NOHANDLE and no HANDLE
+    CONDITION INVREQ: CICS abends the task rather than running the RETURN that
+    follows, so there is no commarea to inspect."""
+    context_holder: list = [None]
+    result_holder: list = [None]
+    start_queue = StartQueue()
+    transid_map = {"SRTA": "STARTNT", "SRTD": "STARTD"}
+    screen_queue: queue.Queue = queue.Queue()
+    input_queue: queue.Queue = queue.Queue()
+    spec = build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        transid_to_program=transid_map,
+        region_termid="T001",
+        screen_queue=screen_queue,
+        input_queue=input_queue,
+    )
+    program_cache = {
+        "STARTNT": compile_cics_program(
+            COBOL_START_NOTERM.encode(), cobol_parser, spec
+        ),
+        "STARTD": compile_cics_program(
+            COBOL_NONTERMINAL_TASK_UNHANDLED.encode(), cobol_parser, spec
+        ),
+    }
+
+    region = CicsRegion(
+        program_cache,
+        transid_map,
+        screen_queue,
+        input_queue,
+        context_holder=context_holder,
+        result_holder=result_holder,
+        start_queue=start_queue,
+        region_termid="T001",
+    )
+
+    region.start("SRTA", input_event=InputEvent())
+    started = region.step()
+
+    assert started.kind == DispatchKind.ABEND
+    assert started.abcode == "AEIZ"
     assert screen_queue.empty() is True
 
 
