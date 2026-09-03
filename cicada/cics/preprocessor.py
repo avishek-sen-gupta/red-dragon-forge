@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from cics.conditions import MAX_CODE, RAISABLE, code_for
+
 logger = logging.getLogger(__name__)
 
 # Canonical CICS DFHRESP / EIBRESP code set. The contiguous 0-44 block is the
@@ -76,6 +78,7 @@ _DFHRESP_UNKNOWN = 9999
 
 # 7 spaces = Area A (column 8); valid for COPY, matches IBM CICS translator output
 _DFHEIBLK_COPY = "       COPY DFHEIBLK."
+_DFHHANDLE_COPY = "       COPY DFHHANDLE."
 
 
 def _is_ws_section(line: str) -> bool:
@@ -85,22 +88,42 @@ def _is_ws_section(line: str) -> bool:
     )
 
 
+def _inject_after_ws_section(source: str, copy_line: str) -> str:
+    lines = source.splitlines(keepends=True)
+    section = next(
+        (index for index, line in enumerate(lines) if _is_ws_section(line)), len(lines)
+    )
+    logger.debug(
+        (
+            "%s injected after WORKING-STORAGE SECTION"
+            if section < len(lines)
+            else "no WORKING-STORAGE SECTION found; %s not injected"
+        ),
+        copy_line.strip(),
+    )
+    inserted = (
+        [copy_line + ("\r\n" if lines[section].endswith("\r\n") else "\n")]
+        if section < len(lines)
+        else []
+    )
+    return "".join(lines[: section + 1] + inserted + lines[section + 1 :])
+
+
 def inject_dfheiblk(source: str) -> str:
     """Insert COPY DFHEIBLK. on the line immediately after WORKING-STORAGE SECTION."""
-    lines = source.splitlines(keepends=True)
-    result: list[str] = []
-    injected = False
-    for line in lines:
-        result.append(line)
-        if not injected and _is_ws_section(line):
-            ending = "\r\n" if line.endswith("\r\n") else "\n"
-            result.append(_DFHEIBLK_COPY + ending)
-            injected = True
-    if injected:
-        logger.debug("DFHEIBLK injected after WORKING-STORAGE SECTION")
-    else:
-        logger.debug("no WORKING-STORAGE SECTION found; DFHEIBLK not injected")
-    return "".join(result)
+    return _inject_after_ws_section(source, _DFHEIBLK_COPY)
+
+
+def raisable_literal() -> str:
+    """The DFH-RAISABLE VALUE literal, generated from the condition table so the
+    copybook cannot drift from it."""
+    codes = {code_for(name) for name in RAISABLE}
+    return "".join("Y" if c in codes else "N" for c in range(MAX_CODE + 1))
+
+
+def inject_dfhhandle(source: str) -> str:
+    """Insert COPY DFHHANDLE. on the line immediately after WORKING-STORAGE SECTION."""
+    return _inject_after_ws_section(source, _DFHHANDLE_COPY)
 
 
 def apply_cics_prepass(source: str) -> str:
@@ -110,4 +133,4 @@ def apply_cics_prepass(source: str) -> str:
     bridge (red-dragon-kieo) — no text substitution needed here.
     """
     logger.debug("CICS pre-pass: %d bytes", len(source))
-    return inject_dfheiblk(source)
+    return inject_dfhhandle(inject_dfheiblk(source))
