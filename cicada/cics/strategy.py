@@ -339,6 +339,56 @@ def emit_resp_writeback(
     emit_copy_back_str(ctx, opts.get("RESP"), str_reg, materialised)
 
 
+_CONDITION_TABLE_FIELDS = ("DFH-HANDLER", "DFH-RAISABLE", "EIBRESP")
+
+
+def has_condition_tables(
+    ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
+) -> bool:
+    """Whether this module carries the state both halves of condition handling
+    need — the dispatcher and every raise tail must agree, or a tail branches to
+    a label no dispatcher defined."""
+    return all(ctx.has_field(name, materialised) for name in _CONDITION_TABLE_FIELDS)
+
+
+def emit_raise_tail(
+    ctx: "EmitContext",
+    opts: dict[str, "CicsOperand | None"],
+    materialised: "MaterialisedSectionedLayout",
+) -> None:
+    """Branch to the dispatcher when the command raised a condition this runtime
+    handles. RESP and NOHANDLE are the program's undertaking to check inline, so
+    a command coding either does not raise (CICS)."""
+    if "RESP" in opts or "NOHANDLE" in opts:
+        return
+    if not has_condition_tables(ctx, materialised):
+        return
+    ref, region_reg = ctx.resolve_field_ref(
+        "DFH-RAISABLE",
+        materialised,
+        subscripts=(BinOpNode("+", FieldRefNode("EIBRESP"), LiteralNode("1")),),
+    )
+    flag_reg = ctx.emit_decode_field(region_reg, ref.fl, ref.offset_reg)
+    y_reg = ctx.const_to_reg("Y")
+    cmp_reg = ctx.fresh_reg()
+    ctx.emit_inst(
+        Binop(
+            result_reg=cmp_reg,
+            operator=resolve_binop("=="),
+            left=Register(str(flag_reg)),
+            right=Register(str(y_reg)),
+        )
+    )
+    cont_lbl = ctx.fresh_label("cond_continue")
+    ctx.emit_inst(
+        BranchIf(
+            cond_reg=cmp_reg,
+            branch_targets=(CodeLabel("__cics_cond_dispatch"), cont_lbl),
+        )
+    )
+    ctx.emit_inst(Label_(label=cont_lbl))
+
+
 def _resolve_cics_length_option(
     opt: "CicsOperand | None",
     fallback: int,
@@ -711,14 +761,20 @@ class CicsLoweringStrategy:
         its own. Raising beats compiling a module whose handlers silently never
         dispatch.
         """
-        if not self._handler_labels:
+        if has_condition_tables(ctx, materialised):
+            # Entered only by a raise tail's Branch, so it must not be reachable
+            # by falling through from the init-EIB call above.
+            skip_lbl = ctx.fresh_label("cond_dispatch_skip")
+            ctx.emit_inst(Branch(label=skip_lbl))
+            self._emit_dispatcher(ctx, materialised)
+            ctx.emit_inst(Label_(label=skip_lbl))
             return
-        missing = [
-            name
-            for name in ("DFH-HANDLER", "EIBRESP")
-            if not ctx.has_field(name, materialised)
-        ]
-        if missing:
+        if self._handler_labels:
+            missing = [
+                name
+                for name in _CONDITION_TABLE_FIELDS
+                if not ctx.has_field(name, materialised)
+            ]
             raise NotImplementedError(
                 f"Module registers EXEC CICS HANDLE CONDITION handlers "
                 f"({sorted(self._handler_labels)}) but is missing "
@@ -729,12 +785,6 @@ class CicsLoweringStrategy:
                 "handlers must bring both copybooks itself: COPY DFHHANDLE. "
                 "for DFH-HANDLER/DFH-RAISABLE, COPY DFHEIBLK. for EIBRESP."
             )
-        # Entered only by a Branch (Task 7's raise tail), so it must not be
-        # reachable by falling through from the init-EIB call above.
-        skip_lbl = ctx.fresh_label("cond_dispatch_skip")
-        ctx.emit_inst(Branch(label=skip_lbl))
-        self._emit_dispatcher(ctx, materialised)
-        ctx.emit_inst(Label_(label=skip_lbl))
 
     def lower(
         self,
@@ -839,6 +889,7 @@ class CicsLoweringStrategy:
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         if verb == "RETRIEVE":
@@ -856,6 +907,7 @@ class CicsLoweringStrategy:
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         # ── BMS screen verbs ──────────────────────────────────────────────
@@ -926,6 +978,7 @@ class CicsLoweringStrategy:
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         # ── ASSIGN / FORMATTIME: write each output sub-option to its field ──
@@ -1022,6 +1075,7 @@ class CicsLoweringStrategy:
                     )
                 )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         # ── VSAM browse operations (implicit single cursor per file) ───────
@@ -1074,6 +1128,7 @@ class CicsLoweringStrategy:
                     )
                 )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         # ── WRITEQ TD ────────────────────────────────────────────────────
@@ -1089,6 +1144,7 @@ class CicsLoweringStrategy:
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         # ── Condition handler registration ────────────────────────────────
@@ -1133,6 +1189,7 @@ class CicsLoweringStrategy:
             )
             if verb in _RESP_PRODUCING_VERBS:
                 emit_resp_writeback(ctx, r_res, opts, materialised)
+                emit_raise_tail(ctx, opts, materialised)
             return
 
         # ── LINK ─────────────────────────────────────────────────────────────
@@ -1165,6 +1222,7 @@ class CicsLoweringStrategy:
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            emit_raise_tail(ctx, opts, materialised)
             return
 
         logger.warning(

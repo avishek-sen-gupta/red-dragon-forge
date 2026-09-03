@@ -24,6 +24,20 @@
 - **The blocking fp-lint hook excludes `cicada/cics/` and all test trees**, so a "Skipped" there proves nothing. For real signal run `uv run --no-sync python -m python_fp_lint check <file>` directly.
 - **Tests run from `cicada/`** via `make test`, which sets `PROLEAP_BRIDGE_JAR`. Running `pytest` directly without it produces ~73 errors that are not your bug.
 - **Baseline: 413 cicada tests pass** before this plan starts.
+- **No commit may leave the suite red, so no task may end red.** The pre-commit hook
+  runs the full cicada suite including the CardDemo e2e set, and `--no-verify` is
+  forbidden. Where a task below says to commit with failures and let a later task
+  clean up, that instruction is void: either mark the not-yet-satisfiable test
+  `xfail(strict=True)` naming the task that retires it (`strict` makes an unexpected
+  pass fail, so the marker cannot be left behind), or merge the task with the one
+  that makes it green. Tasks 4 and 6 took the xfail route; Tasks 7 and 8 were merged
+  for this reason.
+- **Synthetic COBOL fixtures must end at or before column 72.** Fixed format reserves
+  columns 73-80 and the parser's line reader discards them, so a longer line silently
+  loses its `END-EXEC` and surfaces as a misleading "missing END_EXEC" ANTLR error —
+  the operand count is a red herring. This cost this project a wrongly-filed P1.
+- **Implementers leave work staged; the controller commits.** Report status only from
+  a test run you personally observed in the foreground.
 
 ## The seams you will use
 
