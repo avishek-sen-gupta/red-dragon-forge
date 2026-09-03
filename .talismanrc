@@ -28,9 +28,6 @@ fileignoreconfig:
 - filename: vendor/squall
   ignore_detectors: [filecontent]
 - filename: cicada/third-party/che-che4z-lsp-for-hlasm-fork
-  # A submodule pointer is a commit SHA, so filecontent always reads as a hex
-  # blob and a checksum pin would churn on every bump. Same treatment as the
-  # vendor/* submodules above.
   ignore_detectors: [filecontent]
 - filename: vendor/bank-of-z
   checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
@@ -53,9 +50,6 @@ fileignoreconfig:
 - filename: squall/db2/dsn-env.sh
   checksum: 75359a29913b33af44ff342008e35ed779e588cf3365adb02d8b3cd3cdf9700d
 - filename: uv.lock
-  # A lockfile is sha256 hashes and package URLs by nature, so filecontent always
-  # reads as hex blobs and a checksum pin churns on every dependency change.
-  # Same treatment as the issues.jsonl exports.
   ignore_detectors: [filecontent]
 - filename: jackal/docs/superpowers/plans/2026-07-08-jcl-symbolic-value-type.md
   checksum: 8b4766155fb1f041e8bd35ad41a776e5e6f02dcb56c4255b5d1e738b71f99625
@@ -128,31 +122,17 @@ fileignoreconfig:
 - filename: docs/superpowers/specs/2026-08-29-cobble-consolidation-design.md
   checksum: ced0001719ce3efb3da7f7e3f527eb9f29bc59b3d542d5b77375aa1a1bfa44f1
 - filename: docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md
-  # Flagged on the word KEY inside the COBOL field name MSG-KEY in the
-  # synthetic reproduction programs. No credentials in this file.
   checksum: b0be2d3e0b61877bf81415d1e819eb807f5adc870a2c3db34433bf0b1d25ef75
 - filename: jackal/jackal/tso.py
-  # Flagged on comment prose -- "IKJEFT1B passes both -- one monitor" -- and
-  # not on any value. No credentials in this file.
   checksum: 6ca8635fdde4d7217c6db04e310b6f9d0bb9c63319ee563be7111f61b530e62d
 - filename: jackal/jackal/jcl/proc_expand.py
-  # Flagged on docstring prose about a symbol nothing binds. No credentials.
   checksum: 1687ad878695c2f8416ac91028409af832ecca1799eb3b7d9d7d7548ee12af60
 - filename: jackal/tests/unit/fixtures/proc/WORKPROC.prc
-  # Test fixture: a PROC whose DSN is one unbound symbol. No credentials.
   checksum: 8c67811f0adcae4b0bfaa2ab3e0147bdda964f020e8a6c4c5cf587741d547d71
 - filename: docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md
-  # Flagged on design prose about module names and verification steps, not on
-  # any value. No credentials in this file.
   checksum: 603553fc076120db3965cd66a0dcb60c3dc1f100b56a446b8c716ca63524a004
 - filename: docs/superpowers/specs/2026-09-02-cobble-divergence-reconciliation-design.md
-  # Flagged on design prose about module and identifier names, not on any value.
-  # No credentials in this file.
   checksum: 747a520d2f6dccb91eeeb7b159ae27d52a08b2d5654f85c5dba64717a2d26460
-# cobble/**: false positives from the graph extractor. Flagged on identifier and
-# path names (DSN/dataset/copybook helpers), vendored minified JS, and NDJSON
-# graph fixtures -- no values. Regenerate after touching these files:
-#   talisman --pattern 'cobble/**/*'
 - filename: cobble/.github/workflows/reproduce.yml
   checksum: 6d669efcdca8d2719cc0ac29f1d971adc84317d18f7e4564236b114ed2e0358a
 - filename: cobble/.pre-commit-config.yaml
@@ -254,28 +234,19 @@ fileignoreconfig:
 - filename: .python-fp-lint/rules/no-subscript-tuple-mutation.yml
   checksum: e15ef52716569a749ac3d9ea5c0710dfce9085a24a6c6a6b2e99a8bee34923b6
 - filename: docs/superpowers/specs/2026-09-02-cics-interval-control-design.md
-  # Prose design doc: talisman's entropy detector reads ordinary English
-  # sentences as "potential secret pattern". Same treatment as the other
-  # specs/plans listed above.
   checksum: 45f39708d8deaa8fec94135c7e116aca35df6a304d7555e1a28a6f430a15b639
 - filename: docs/superpowers/plans/2026-09-02-cics-interval-control.md
   checksum: c04978b4a27f19f27ddc7df98987f564a83c04cb6b8809b71a90f27031189723
 - filename: docs/superpowers/plans/2026-09-03-cics-condition-handling.md
-  # Prose plan; its tables and code blocks read as high-entropy to the detector.
   ignore_detectors: [filecontent]
 - filename: docs/superpowers/specs/2026-09-03-cics-condition-handling-design.md
-  # Lists of CICS condition names read as high-entropy blobs. Detector-ignored
-  # rather than checksum-pinned because a design doc gets revised.
+  ignore_detectors: [filecontent]
+- filename: cicada/tests/unit/cics/test_handler_labels.py
   ignore_detectors: [filecontent]
 - filename: cicada/tests/unit/cics/test_dispatcher.py
-  # monkeypatch.setattr lines read as high-entropy blobs to the secret detector.
   ignore_detectors: [filecontent]
 - filename: cicada/tests/unit/cics/test_bootstrap.py
-  # Same monkeypatch.setattr entropy as test_dispatcher.py above.
   ignore_detectors: [filecontent]
 - filename: cicada/tests/integration/cics/test_interval_control.py
-  # Inline COBOL source and cp037 literals read as high-entropy blobs. Detector-
-  # ignored rather than checksum-pinned because the interval-control tasks each
-  # append a scenario to this file, so a pin would churn on every one.
   ignore_detectors: [filecontent]
 version: "1.0"
