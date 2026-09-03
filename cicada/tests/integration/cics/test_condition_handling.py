@@ -14,7 +14,9 @@ from cics.conditions import MAX_CODE
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import run_cics
 from cics.preprocessor import raisable_literal
-from cics.types import CicsContext
+from cics.types import CicsContext, DispatchKind
+from cics.vsam.engine import VsamEngine
+from cics.vsam.fct import DatasetConfig, FctConfig
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
@@ -35,6 +37,16 @@ def _require_bridge_jar(bridge_jar):  # noqa: F811
 def cobol_parser(bridge_jar):  # noqa: F811
     runner = RealSubprocessRunner()
     return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
+
+
+@pytest.fixture
+def vsam_engine_with_acctfile(tmp_path):
+    config = FctConfig(
+        datasets={"ACCTFILE": DatasetConfig(record_length=80, key_length=11)}
+    )
+    engine = VsamEngine(config, tmp_path / "vsam")
+    engine.load_all()
+    return engine
 
 
 def _copybook_capture(pattern: str) -> str:
@@ -344,12 +356,15 @@ HNDLINKA_SRC = """\
 # Not prepassed by build_cics_spec's source_prepass -- only the main source
 # passed to compile_cics_program gets that (interpreter.project.coprocessor_compile.
 # compile_program folds source_prepass over the main source only); a disk-resolved
-# CALL callee must bring its own COPY DFHHANDLE.
+# CALL callee must bring its own COPY DFHHANDLE and COPY DFHEIBLK -- the strategy's
+# dispatcher needs both DFH-HANDLER (from DFHHANDLE) and EIBRESP (from DFHEIBLK)
+# and raises if a module registers handlers without them (forge-43l).
 HNDLINKB_SRC = """\
        IDENTIFICATION DIVISION.
        PROGRAM-ID. HNDLINKB.
        DATA DIVISION.
        WORKING-STORAGE SECTION.
+       COPY DFHEIBLK.
        COPY DFHHANDLE.
        LINKAGE SECTION.
        01  LS-ERROR PIC S9(4) COMP.
@@ -395,3 +410,49 @@ def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
     )
 
     assert result.commarea[0:2] == struct.pack(">h", 1)
+
+
+COBOL_UNHANDLED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDUNH.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       PROCEDURE DIVISION.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@pytest.mark.xfail(
+    reason="nothing branches to __cics_cond_dispatch until Task 7 adds the "
+    "raise tail; falls through to RETURN instead of abending. Remove this "
+    "marker then.",
+    strict=True,
+)
+@covers(CobolFeature.EXEC_CICS)
+def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
+    """A READ that misses, with no HANDLE registered and no RESP coded, abends
+    rather than falling through to RETURN on an untouched record area."""
+    context_holder = [CicsContext(transid="HND6", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        vsam_engine=vsam_engine_with_acctfile,
+    )
+    program = compile_cics_program(COBOL_UNHANDLED.encode(), cobol_parser, spec)
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.kind == DispatchKind.ABEND
+    assert result.abcode == "AEIZ"
