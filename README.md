@@ -129,9 +129,15 @@ docker exec squall-db2 bash -lc \
 cd squall && make db2-restart
 ```
 
-262144 pages is 1 GiB, ample for these test databases; the container then settles
-around 1 GiB instead of expanding to fill the VM. The setting lives in the
+262144 pages is 1 GiB, ample for these test databases. The setting lives in the
 container's `dbm cfg`, so `make db2-clean` or a rebuilt container loses it.
+
+**The cap alone is still not sufficient** — it bounds database manager shared
+memory, not agent private memory or the process's total footprint, which is what
+the kernel kills on. A capped instance has been observed OOM-killed at ~4.8 GiB
+resident / ~9 GiB mapped after 23 hours, with the container still reporting
+`(healthy)`. Treat the cap as reducing the frequency, not eliminating the failure;
+see bead forge-zka.
 
 `cd squall && make db2-restart` revives a killed instance in about fifteen seconds without a
 re-init, which is the fast way out when it happens mid-run.
