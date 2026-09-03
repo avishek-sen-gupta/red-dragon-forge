@@ -122,7 +122,7 @@ fileignoreconfig:
 - filename: docs/superpowers/specs/2026-08-29-cobble-consolidation-design.md
   checksum: ced0001719ce3efb3da7f7e3f527eb9f29bc59b3d542d5b77375aa1a1bfa44f1
 - filename: docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md
-  checksum: b0be2d3e0b61877bf81415d1e819eb807f5adc870a2c3db34433bf0b1d25ef75
+  checksum: 54dcc96675ed1a91f1a092151decf9600879632e33c55cd6a48073a6d33187ad
 - filename: jackal/jackal/tso.py
   checksum: 6ca8635fdde4d7217c6db04e310b6f9d0bb9c63319ee563be7111f61b530e62d
 - filename: jackal/jackal/jcl/proc_expand.py
