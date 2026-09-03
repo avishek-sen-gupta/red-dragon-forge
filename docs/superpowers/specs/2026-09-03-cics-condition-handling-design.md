@@ -126,13 +126,31 @@ confirms the `FILLER`/`VALUE`/`REDEFINES`/`OCCURS` chain works).
 |---|---|
 | `HANDLE CONDITION NOTFND(PARA-X)` | write the compile-time index of `PARA-X` into `DFH-HANDLER(13)` |
 | a later `HANDLE CONDITION NOTFND(PARA-Y)` | write `PARA-Y`'s index to the same slot |
-| `IGNORE CONDITION NOTFND` | write 0 to that slot |
+| `IGNORE CONDITION NOTFND` | write `'N'` to `DFH-RAISABLE(14)`, 0 to `DFH-HANDLER(14)` |
 | program entry | nothing — the `VALUE` clause |
 | `LINK` / `XCTL` | nothing — separate WORKING-STORAGE |
 
 A `HANDLE CONDITION` inside a loop or an `IF` needs no special handling: it is a
 write executed when reached, which is precisely why CICS calls handler activation a
 runtime property.
+
+**`IGNORE` is encoded in `DFH-RAISABLE`, not as a sentinel in `DFH-HANDLER`.** Slot 0
+of the handler table already means "never registered", and at dispatch that means the
+system default action — an abend. `IGNORE` means the opposite: carry on inline with
+`EIBRESP` set. Writing 0 for both would make an ignored condition abend, which is what
+`IGNORE` exists to prevent.
+
+Marking the condition non-raisable says exactly what `IGNORE` means — no action taken
+— so the raise tail's single flag comparison skips it, with no second test and without
+needing to resume from a dispatcher that was entered by a branch and cannot return.
+`HANDLE` therefore writes `'Y'` back alongside its index, but **only for a condition in
+`RAISABLE`**: writing it unconditionally would make an out-of-scope condition raisable
+and silently widen this slice past the nine. That `'Y'` is also what lets a `HANDLE`
+after an `IGNORE` work again.
+
+Bare `HANDLE CONDITION cond` with no label means "restore the default action", so it
+writes 0 plus the same conditional `'Y'` — correctly collapsing into the same state as
+never-registered.
 
 ### Label indices
 

@@ -33,7 +33,7 @@ from interpreter.instructions import (
 )
 from interpreter.types.type_expr import UNKNOWN
 
-from cics.conditions import code_for
+from cics.conditions import RAISABLE, code_for
 from cics.interval import StartQueue
 from cics.statements import ExecCicsStatement
 from cics.types import DEFAULT_TERMID
@@ -273,6 +273,27 @@ def emit_copy_back_str(
     # write-back targets are plain data-names (RESP/APPLID/...), never subscripted; no subscripts to thread
     ref, region_reg = ctx.resolve_field_ref(name, materialised)
     ctx.emit_encode_and_write(region_reg, ref.fl, value_str_reg, ref.offset_reg)
+
+
+def condition_slot(verb: str, condition: str) -> int:
+    """The DFH table subscript for a condition: DFHRESP code + 1, because COBOL
+    OCCURS is 1-based.
+
+    A name absent from CONDITION_CODES is a gap in this runtime's table rather
+    than a fault in the program being compiled, so the bare KeyError is re-raised
+    naming the statement it came from and how to close the gap. CICS defines many
+    more conditions than the twenty here (QIDERR, DSIDERR, NOTAUTH, TERMERR,
+    SYSIDERR...), so this is a path real corpus code will reach.
+    """
+    try:
+        return code_for(condition) + 1
+    except KeyError as exc:
+        raise NotImplementedError(
+            f"EXEC CICS {verb} names condition {condition!r}, which has no DFHRESP"
+            " code in cics.conditions.CONDITION_CODES. Add it there with its code"
+            " and regenerate cics/copybooks/DFHHANDLE.cpy; add it to RAISABLE only"
+            " if this runtime actually raises it."
+        ) from exc
 
 
 def emit_indexed_write(
@@ -1011,11 +1032,12 @@ class CicsLoweringStrategy:
 
         # ── Condition handler registration ────────────────────────────────
         if verb in ("HANDLE CONDITION", "IGNORE CONDITION"):
+            handles = verb == "HANDLE CONDITION"
             for condition, operand in opts.items():
-                slot = code_for(condition) + 1
+                slot = condition_slot(verb, condition)
                 index = (
                     self._handler_labels.get(operand.text, 0)
-                    if verb == "HANDLE CONDITION" and operand is not None
+                    if handles and operand is not None
                     else 0
                 )
                 r_idx = ctx.fresh_reg()
@@ -1023,6 +1045,18 @@ class CicsLoweringStrategy:
                 emit_indexed_write(
                     ctx, "DFH-HANDLER", slot, ctx.emit_to_string(r_idx), materialised
                 )
+                # Handler index 0 already means "never registered", whose dispatch
+                # action is the system default (abend). IGNORE must not collapse
+                # into that, so the ignored/default distinction lives in the
+                # raisable flag: an ignored condition simply stops being raised,
+                # which is precisely "no action taken". HANDLE re-arms the flag so
+                # a HANDLE after an IGNORE works again — but only for conditions
+                # this runtime actually raises, since writing 'Y' unconditionally
+                # would widen RAISABLE past the set cics.conditions declares.
+                if condition in RAISABLE:
+                    r_flag = ctx.fresh_reg()
+                    ctx.emit_inst(Const.string(r_flag, "Y" if handles else "N"))
+                    emit_indexed_write(ctx, "DFH-RAISABLE", slot, r_flag, materialised)
             return
 
         # ── System verbs ──────────────────────────────────────────────────

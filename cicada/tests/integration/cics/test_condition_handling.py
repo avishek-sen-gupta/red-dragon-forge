@@ -137,11 +137,7 @@ COBOL_HANDLE_WRITES_THE_SLOT = """\
 def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
     """PARA-A is index 1 and PARA-B index 2, so NOTFND holds 1, ERROR 2, and
     LENGERR 1 again — the same paragraph keeps one index. The three slots hold
-    three different pairings, so a write shifted by one slot reads back 0.
-
-    One condition per HANDLE CONDITION: ProLeap's own COBOL grammar rejects a
-    second condition in the same statement ("missing END_EXEC at 'EXEC'"), even
-    though cicada's EXEC CICS grammar parses it."""
+    three different pairings, so a write shifted by one slot reads back 0."""
     context_holder = [CicsContext(transid="HND1", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
@@ -169,14 +165,23 @@ COBOL_OVERRIDE_AND_IGNORE = """\
        DATA DIVISION.
        WORKING-STORAGE SECTION.
        01  WS-CA.
-           05  WS-CA-AFTER-OVERRIDE PIC S9(4) COMP.
-           05  WS-CA-AFTER-IGNORE   PIC S9(4) COMP.
+           05  WS-CA-HANDLER-1 PIC S9(4) COMP.
+           05  WS-CA-RAISE-1   PIC X.
+           05  WS-CA-HANDLER-2 PIC S9(4) COMP.
+           05  WS-CA-RAISE-2   PIC X.
+           05  WS-CA-HANDLER-3 PIC S9(4) COMP.
+           05  WS-CA-RAISE-3   PIC X.
        PROCEDURE DIVISION.
            EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
            EXEC CICS HANDLE CONDITION NOTFND(PARA-B) END-EXEC.
-           MOVE DFH-HANDLER(14) TO WS-CA-AFTER-OVERRIDE.
+           MOVE DFH-HANDLER(14)  TO WS-CA-HANDLER-1.
+           MOVE DFH-RAISABLE(14) TO WS-CA-RAISE-1.
            EXEC CICS IGNORE CONDITION NOTFND END-EXEC.
-           MOVE DFH-HANDLER(14) TO WS-CA-AFTER-IGNORE.
+           MOVE DFH-HANDLER(14)  TO WS-CA-HANDLER-2.
+           MOVE DFH-RAISABLE(14) TO WS-CA-RAISE-2.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
+           MOVE DFH-HANDLER(14)  TO WS-CA-HANDLER-3.
+           MOVE DFH-RAISABLE(14) TO WS-CA-RAISE-3.
            EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
        PARA-A.
            EXEC CICS RETURN END-EXEC.
@@ -192,7 +197,10 @@ COBOL_OVERRIDE_AND_IGNORE = """\
 )
 @covers(CobolFeature.EXEC_CICS)
 def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
-    """Override and cancellation are just later writes to the same slot."""
+    """The three CICS states for one condition, in sequence: PARA-B registered
+    (index 2, raisable); IGNORE, which must not collapse into "never registered"
+    — the handler goes to 0 but the raisable flag goes to 'N', so nothing is
+    raised at all; then PARA-A registered again (index 1, raisable restored)."""
     context_holder = [CicsContext(transid="HND2", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
@@ -210,4 +218,65 @@ def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
     )
 
     assert result.commarea[0:2] == struct.pack(">h", 2)
-    assert result.commarea[2:4] == struct.pack(">h", 0)
+    assert result.commarea[2:3] == "Y".encode("cp037")
+    assert result.commarea[3:5] == struct.pack(">h", 0)
+    assert result.commarea[5:6] == "N".encode("cp037")
+    assert result.commarea[6:8] == struct.pack(">h", 1)
+    assert result.commarea[8:9] == "Y".encode("cp037")
+
+
+COBOL_RAISABLE_FLAG = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDFLAG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA.
+           05  WS-CA-AFTER-HANDLE PIC X.
+           05  WS-CA-AFTER-IGNORE PIC X.
+           05  WS-CA-AFTER-AGAIN  PIC X.
+           05  WS-CA-PGMIDERR     PIC X.
+           05  WS-CA-NEIGHBOUR    PIC X.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
+           MOVE DFH-RAISABLE(14) TO WS-CA-AFTER-HANDLE.
+           EXEC CICS IGNORE CONDITION NOTFND END-EXEC.
+           MOVE DFH-RAISABLE(14) TO WS-CA-AFTER-IGNORE.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
+           MOVE DFH-RAISABLE(14) TO WS-CA-AFTER-AGAIN.
+           EXEC CICS HANDLE CONDITION PGMIDERR(PARA-A) END-EXEC.
+           MOVE DFH-RAISABLE(28) TO WS-CA-PGMIDERR.
+           MOVE DFH-RAISABLE(23) TO WS-CA-NEIGHBOUR.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-A.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
+    """The raisable flag is what separates "ignored" from "never registered", and
+    it does not depend on the label map, so this holds before Task 5.
+
+    PGMIDERR is the discriminating case: it is a real condition with a DFHRESP
+    code but is not in RAISABLE, so HANDLE must leave its flag 'N' rather than
+    silently widening what this runtime raises. LENGERR's slot is read untouched
+    to show the subscripted writes land on one slot and do not smear."""
+    context_holder = [CicsContext(transid="HND3", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(COBOL_RAISABLE_FLAG.encode(), cobol_parser, spec)
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea[0:1] == "Y".encode("cp037")
+    assert result.commarea[1:2] == "N".encode("cp037")
+    assert result.commarea[2:3] == "Y".encode("cp037")
+    assert result.commarea[3:4] == "N".encode("cp037")
+    assert result.commarea[4:5] == "Y".encode("cp037")
