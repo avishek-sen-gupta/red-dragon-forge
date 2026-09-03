@@ -101,7 +101,7 @@ def test_inquire_resp_writeback_round_trips(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
-        context_holder=context_holder, result_holder=result_holder
+        context_holder=context_holder, result_holder=result_holder, handler_source=[]
     )
     source = apply_cics_prepass(COBOL_RESP).encode()
     frontend = CobolFrontend(

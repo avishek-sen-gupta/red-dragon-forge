@@ -245,7 +245,9 @@ def _make_strategy():
     from cics.types import CicsContext
 
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
-    return CicsLoweringStrategy(context_holder=holder, applid="CARDDEMO", sysid="SYS1")
+    return CicsLoweringStrategy(
+        context_holder=holder, applid="CARDDEMO", sysid="SYS1", handler_source=[]
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

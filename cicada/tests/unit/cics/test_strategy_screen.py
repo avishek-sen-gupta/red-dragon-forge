@@ -18,6 +18,7 @@ def test_strategy_registers_screen_builtins():
         result_holder=[None],
         screen_queue=screen_q,
         input_queue=input_q,
+        handler_source=[],
     )
     assert FuncName("__cics_send_map") in Builtins.TABLE
     assert FuncName("__cics_receive_map") in Builtins.TABLE
@@ -27,7 +28,7 @@ def test_strategy_registers_screen_builtins():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_strategy_without_bms_still_constructs():
     # No screen_queue/input_queue -> screen builtins simply not registered, no error.
-    CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    CicsLoweringStrategy(context_holder=[None], result_holder=[None], handler_source=[])
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -68,7 +69,9 @@ def test_send_map_lowers_to_call_function():
             "MAPSET": CicsOperand("COSGN00", True),
         },
     )
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     strategy.lower(ctx, stmt, materialised=None)
     calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
     assert any(c.func_name == FuncName("__cics_send_map") for c in calls)
@@ -144,7 +147,9 @@ def test_send_map_lowering_passes_base_field_names():
             "FROM": CicsOperand("COSGN0AO", False),
         },
     )
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     strategy.lower(ctx, stmt, materialised=materialised)
 
     send_calls = [
@@ -227,7 +232,9 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
             "MAPSET": CicsOperand("COSGN00", True),
         },  # no INTO -> derive COSGN0AI from the literal map name
     )
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     strategy.lower(ctx, stmt, materialised=materialised)
 
     recv = [
@@ -285,7 +292,9 @@ def test_writeq_td_lowers_with_real_args():
             "FROM": CicsOperand("SOME-DATA", True),
         },
     )
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     strategy.lower(ctx, stmt, materialised=None)
 
     calls = [
@@ -367,7 +376,9 @@ def test_writeq_td_lowers_with_resp_writeback():
             "RESP": CicsOperand("WS-RC", False),
         },
     )
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     strategy.lower(ctx, stmt, materialised=None)
 
     calls = [

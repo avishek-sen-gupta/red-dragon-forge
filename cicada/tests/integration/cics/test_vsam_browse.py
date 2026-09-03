@@ -131,6 +131,7 @@ def test_vsam_browse_forward_round_trips(cobol_parser):
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_engine(),
+        handler_source=[],
     )
     source = apply_cics_prepass(COBOL_BROWSE).encode()
     frontend = CobolFrontend(
