@@ -243,6 +243,8 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: cicada/tests/unit/cics/test_handler_labels.py
   ignore_detectors: [filecontent]
+- filename: cicada/cics/handler_labels.py
+  ignore_detectors: [filecontent]
 - filename: cicada/tests/unit/cics/test_dispatcher.py
   ignore_detectors: [filecontent]
 - filename: cicada/tests/unit/cics/test_bootstrap.py

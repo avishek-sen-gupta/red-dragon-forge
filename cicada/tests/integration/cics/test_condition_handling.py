@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import queue
 import re
 import struct
@@ -10,10 +11,11 @@ from pathlib import Path
 import pytest
 
 from cics.bootstrap import compile_cics_program
-from cics.conditions import MAX_CODE, code_for
+from cics.conditions import code_for
+from cics.conversational import ConversationalRegion
 from cics.coprocessor import build_cics_spec
-from cics.dispatcher import run_cics
-from cics.preprocessor import raisable_literal
+from cics.dispatcher import InputEvent, run_cics
+from cics.preprocessor import CONDITION_TABLE_SLOTS, raisable_literal
 from cics.types import CicsContext, DispatchKind
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import DatasetConfig, FctConfig
@@ -56,21 +58,41 @@ def _copybook_capture(pattern: str) -> str:
     return re.findall(pattern, _DFHHANDLE_CPY.read_text())[0]
 
 
+def _copybook_raisable_value() -> str:
+    """The DFH-RAISABLE-BYTES VALUE, reassembled from its parts. The literal is
+    524 bytes and a fixed-format line stops at column 72, so it is declared as
+    consecutive PIC X(n) parts of one group; the table is their concatenation."""
+    text = _DFHHANDLE_CPY.read_text()
+    parts = re.findall(r"DFH-RAISABLE-P\d+ PIC X\((\d+)\) VALUE\s+'([NY]+)'", text)
+    assert all(int(width) == len(value) for width, value in parts)
+    return "".join(value for _, value in parts)
+
+
 def test_the_copybook_literal_matches_the_condition_table():
     """The copybook's Y positions are generated from conditions.py. This reads the
     committed copybook, not a recomputation, so a stale paste cannot pass."""
-    assert _copybook_capture(r"'([NY]+)'") == raisable_literal()
+    assert _copybook_raisable_value() == raisable_literal()
 
 
 def test_the_copybook_table_sizes_match_the_condition_table():
-    """One slot per DFHRESP code, and twice the bytes for the handler area because
-    S9(4) COMP is two bytes per slot. A code above the largest one the copybook was
-    generated for would index out of bounds."""
-    slots = MAX_CODE + 1
-    assert int(_copybook_capture(r"DFH-RAISABLE-BYTES PIC X\((\d+)\)")) == slots
+    """One slot per DFHRESP code the runtime can put in EIBRESP, and twice the
+    bytes for the handler area because S9(4) COMP is two bytes per slot. A code
+    above the largest one the copybook was generated for would index out of
+    bounds, which resolve_field_ref does not check."""
+    slots = CONDITION_TABLE_SLOTS
+    assert len(_copybook_raisable_value()) == slots
     assert int(_copybook_capture(r"DFH-RAISABLE OCCURS (\d+) TIMES")) == slots
     assert int(_copybook_capture(r"DFH-HANDLER-BYTES PIC X\((\d+)\)")) == slots * 2
     assert int(_copybook_capture(r"DFH-HANDLER OCCURS (\d+) TIMES")) == slots
+
+
+def test_no_copybook_line_runs_past_column_72():
+    """Fixed format discards columns 73-80: a line over the margin silently loses
+    its tail, and a truncated VALUE literal shifts every slot after it."""
+    overlong = [
+        line for line in _DFHHANDLE_CPY.read_text().splitlines() if len(line) > 72
+    ]
+    assert overlong == []
 
 
 COBOL_READS_ITS_OWN_TABLE = """\
@@ -79,13 +101,17 @@ COBOL_READS_ITS_OWN_TABLE = """\
        DATA DIVISION.
        WORKING-STORAGE SECTION.
        01  WS-CA.
-           05  WS-CA-NOTFND  PIC X.
-           05  WS-CA-NORMAL  PIC X.
-           05  WS-CA-MAPFAIL PIC X.
+           05  WS-CA-NOTFND   PIC X.
+           05  WS-CA-NORMAL   PIC X.
+           05  WS-CA-MAPFAIL  PIC X.
+           05  WS-CA-DISABLED PIC X.
+           05  WS-CA-LAST     PIC X.
        PROCEDURE DIVISION.
-           MOVE DFH-RAISABLE(14) TO WS-CA-NOTFND.
-           MOVE DFH-RAISABLE(1)  TO WS-CA-NORMAL.
-           MOVE DFH-RAISABLE(37) TO WS-CA-MAPFAIL.
+           MOVE DFH-RAISABLE(14)  TO WS-CA-NOTFND.
+           MOVE DFH-RAISABLE(1)   TO WS-CA-NORMAL.
+           MOVE DFH-RAISABLE(37)  TO WS-CA-MAPFAIL.
+           MOVE DFH-RAISABLE(85)  TO WS-CA-DISABLED.
+           MOVE DFH-RAISABLE(524) TO WS-CA-LAST.
            EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
 """
 
@@ -93,8 +119,10 @@ COBOL_READS_ITS_OWN_TABLE = """\
 @covers(CobolFeature.EXEC_CICS)
 def test_the_injected_table_is_visible_to_the_program(cobol_parser):
     """DFH-RAISABLE(14) is NOTFND (code 13, 1-based) and must be Y; slot 1 is
-    NORMAL and must not be; slot 37 is MAPFAIL, the last slot, and must be Y —
-    that is the subscript a wrong OCCURS count would run past."""
+    NORMAL and must not be; slot 37 is MAPFAIL. Slot 85 is DISABLED — the code
+    VsamEngine returns for a file with no FCT entry, and the one that used to
+    fall off a 37-slot table. Slot 524 is the last, the subscript a wrong OCCURS
+    count would run past."""
     context_holder = [CicsContext(transid="HND0", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
@@ -114,6 +142,8 @@ def test_the_injected_table_is_visible_to_the_program(cobol_parser):
     assert result.commarea[0:1] == "Y".encode("cp037")
     assert result.commarea[1:2] == "N".encode("cp037")
     assert result.commarea[2:3] == "Y".encode("cp037")
+    assert result.commarea[3:4] == "Y".encode("cp037")
+    assert result.commarea[4:5] == "N".encode("cp037")
 
 
 COBOL_HANDLE_WRITES_THE_SLOT = """\
@@ -624,3 +654,241 @@ def test_a_handle_that_never_executes_leaves_the_condition_unhandled(
 
     assert result.kind == DispatchKind.ABEND
     assert result.abcode == "AEIZ"
+
+
+COBOL_UNCONFIGURED_FILE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDNOFCT.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80) VALUE SPACES.
+       01  WS-KEY        PIC X(11) VALUE '00000000001'.
+       PROCEDURE DIVISION.
+           EXEC CICS READ FILE('NOSUCHFL') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-REC) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_read_on_a_file_with_no_fct_entry_abends(
+    cobol_parser, vsam_engine_with_acctfile
+):
+    """DISABLED (84) is what VsamEngine returns for a file the FCT does not
+    define. It used to subscript a 37-slot table 48 bytes past its end, read
+    LOW-VALUES instead of 'Y' and raise nothing, so the program went on to use
+    a record area the READ never wrote. Now it raises, and with no handler it
+    abends."""
+    result = _run_source(
+        COBOL_UNCONFIGURED_FILE, "HNDB", cobol_parser, vsam_engine_with_acctfile
+    )
+
+    assert result.kind == DispatchKind.ABEND
+    assert result.abcode == "AEIZ"
+
+
+COBOL_UNCONFIGURED_FILE_RESP = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDNOFCR.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80) VALUE SPACES.
+       01  WS-KEY        PIC X(11) VALUE '00000000001'.
+       01  WS-RESP       PIC S9(8) COMP.
+       01  WS-CA.
+           05  WS-CA-TAG   PIC X(8).
+           05  WS-CA-RESP  PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS READ FILE('NOSUCHFL') INTO(WS-REC) RIDFLD(WS-KEY)
+               RESP(WS-RESP) END-EXEC.
+           MOVE 'INLINE00' TO WS-CA-TAG.
+           MOVE WS-RESP TO WS-CA-RESP.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_an_unconfigured_file_still_reports_inline_under_resp(
+    cobol_parser, vsam_engine_with_acctfile
+):
+    """Raising DISABLED must not take the choice away from a program that codes
+    RESP: it checks the code itself, so the READ falls through with 84 in hand."""
+    result = _run_source(
+        COBOL_UNCONFIGURED_FILE_RESP, "HNDC", cobol_parser, vsam_engine_with_acctfile
+    )
+
+    assert result.commarea[0:8] == "INLINE00".encode("cp037")
+    assert result.commarea[8:12] == struct.pack(">i", code_for("DISABLED"))
+
+
+COBOL_HANDLER_TARGET_MISSING = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDGHOST.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(NO-SUCH-PARA) END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-REAL.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_handler_naming_no_paragraph_is_rejected_at_compile_time(cobol_parser):
+    """build_cfg wires an edge only for a label it knows, so a dispatcher branch
+    to an undefined para_ label produces no edge at all: the task would neither
+    handle nor abend, it would simply end. The compile must refuse instead."""
+    context_holder = [CicsContext(transid="HNDD", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+
+    with pytest.raises(NotImplementedError) as excinfo:
+        compile_cics_program(COBOL_HANDLER_TARGET_MISSING.encode(), cobol_parser, spec)
+
+    assert "NOTFND(NO-SUCH-PARA)" in str(excinfo.value)
+
+
+COBOL_IGNORE_CONTINUES_INLINE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDIGN.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-CA.
+           05  WS-CA-TAG   PIC X(8).
+           05  WS-CA-RESP  PIC S9(8) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-MISSING) END-EXEC.
+           EXEC CICS IGNORE CONDITION NOTFND END-EXEC.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC.
+           MOVE 'INLINE00' TO WS-CA-TAG.
+           MOVE EIBRESP TO WS-CA-RESP.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-MISSING.
+           MOVE 'HANDLED0' TO WS-CA-TAG.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_ignore_condition_lets_the_failed_command_continue_inline(
+    cobol_parser, vsam_engine_with_acctfile
+):
+    """IGNORE CONDITION means "take no action", which is neither the registered
+    handler nor the default abend: the READ misses, EIBRESP still says NOTFND,
+    and the next statement runs. The earlier HANDLE is what IGNORE has to beat."""
+    result = _run_source(
+        COBOL_IGNORE_CONTINUES_INLINE, "HNDE", cobol_parser, vsam_engine_with_acctfile
+    )
+
+    assert result.commarea[0:8] == "INLINE00".encode("cp037")
+    assert result.commarea[8:12] == struct.pack(">i", code_for("NOTFND"))
+
+
+COBOL_HANDLE_UNRAISED_CONDITION = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDENDF.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION ENDFILE(PARA-EOF) END-EXEC.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-EOF.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_handler_for_an_unraised_condition_is_reported(cobol_parser, caplog):
+    """ENDFILE is not in RAISABLE, so its handler can never be dispatched to.
+    The limitation is tracked; registering the handler in silence is not — a
+    READNEXT loop written against it would loop past the end of the file."""
+    context_holder = [CicsContext(transid="HNDF", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+
+    with caplog.at_level(logging.WARNING, logger="cics.strategy"):
+        compile_cics_program(
+            COBOL_HANDLE_UNRAISED_CONDITION.encode(), cobol_parser, spec
+        )
+
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    ]
+    assert [w for w in warnings if "ENDFILE" in w and "PARA-EOF" in w] != []
+
+
+COBOL_CONVERSATIONAL_RECEIVE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDCONV.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  CONVMAPI.
+           05  FLD1L PIC S9(4) COMP.
+           05  FLD1F PIC X.
+           05  FLD1I PIC X(8).
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION MAPFAIL(PARA-NOMAP) END-EXEC.
+           EXEC CICS RECEIVE MAP('CONVMAP') INTO(CONVMAPI) END-EXEC.
+           MOVE 'RECEIVED' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-NOMAP.
+           MOVE 'MAPFAIL0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+def _conversational_region(cobol_parser, transid):
+    context_holder = [CicsContext(transid=transid, commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    screen_queue: queue.Queue = queue.Queue()
+    spec = build_cics_spec(
+        context_holder=context_holder,
+        result_holder=result_holder,
+        screen_queue=screen_queue,
+        input_queue=queue.Queue(),
+        conversational=True,
+    )
+    program = compile_cics_program(
+        COBOL_CONVERSATIONAL_RECEIVE.encode(), cobol_parser, spec
+    )
+    return ConversationalRegion(
+        program,
+        transid,
+        screen_queue=screen_queue,
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_conversational_receive_with_no_input_raises_mapfail(cobol_parser):
+    """The conversational RECEIVE MAP path used to return before writing EIBRESP
+    at all, so the same source raised MAPFAIL when compiled for the blocking
+    dispatcher and silently carried on when compiled conversational."""
+    region = _conversational_region(cobol_parser, "HNDG")
+    region.start()
+
+    region.send(None)
+
+    assert region.result.commarea == "MAPFAIL0".encode("cp037")
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_conversational_receive_with_input_runs_on(cobol_parser):
+    """The raise tail must leave the normal path alone: an input event applied at
+    the resume is EIBRESP 0, so the statement after the RECEIVE runs."""
+    region = _conversational_region(cobol_parser, "HNDH")
+    region.start()
+
+    region.send(InputEvent(fields={"FLD1": "ABC"}, eibaid="\x7d"))
+
+    assert region.result.commarea == "RECEIVED".encode("cp037")

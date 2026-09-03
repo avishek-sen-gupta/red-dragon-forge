@@ -25,8 +25,15 @@ are written that way throughout.
 ### Only the conditions the corpus handles are raised
 
 The nine the corpus codes handlers for: `NOTOPEN`, `NOTFND`, `INVREQ`, `ERROR`,
-`LENGERR`, `MAPFAIL`, `NOSPACE`, `DUPKEY`, `DUPREC`. Every verb keeps writing
-`EIBRESP` exactly as it does now; only these gain the raise-and-transfer path.
+`LENGERR`, `MAPFAIL`, `NOSPACE`, `DUPKEY`, `DUPREC`, plus `DISABLED` — not a
+corpus-handled condition but what `VsamEngine` returns for a file with no FCT
+entry, which left unraised means a `READ` failing into an untouched record area.
+Every verb keeps writing `EIBRESP` exactly as it does now; only these gain the
+raise-and-transfer path.
+
+A `HANDLE CONDITION` for a condition outside this set is logged at lowering: the
+handler is registered but can never be dispatched to, and the program asked for
+something the runtime will not do.
 
 Raising every condition a verb can produce is the uniform alternative and was
 rejected for this slice: it turns on error paths nothing has exercised across every
@@ -94,23 +101,33 @@ after `DFHEIBLK` — the same technique, in the same place.
 
 ```cobol
       * Y marks a condition this runtime raises; the position is its DFHRESP
-      * code, so slot 1 is NORMAL (0) and is never Y.
-       01  DFH-RAISABLE-BYTES PIC X(37) VALUE
-           'NNNNNNNNNNNNYYNNYNNNNNNNNNNNNNNNNNNNY'.
+      * code, so slot 1 is NORMAL (0) and is never Y. The literal is declared
+      * in consecutive PIC X(n) parts of one group because a fixed-format line
+      * stops at column 72.
+       01  DFH-RAISABLE-BYTES.
+           05  DFH-RAISABLE-P01 PIC X(50) VALUE
+               'NYNNNNNNNNNNNYYYYNYYNNYNNNNNNNNNNNNNYNNNNNNNNNNNNN'.
+           ...
        01  DFH-RAISABLE-TAB REDEFINES DFH-RAISABLE-BYTES.
-           05  DFH-RAISABLE OCCURS 37 TIMES PIC X.
-       01  DFH-HANDLER-BYTES PIC X(74) VALUE LOW-VALUES.
+           05  DFH-RAISABLE OCCURS 524 TIMES PIC X.
+       01  DFH-HANDLER-BYTES PIC X(1048) VALUE
+           LOW-VALUES.
        01  DFH-HANDLER-TAB REDEFINES DFH-HANDLER-BYTES.
-           05  DFH-HANDLER OCCURS 37 TIMES PIC S9(4) COMP.
+           05  DFH-HANDLER OCCURS 524 TIMES PIC S9(4) COMP.
 ```
 
 Two tables rather than one group with two fields per slot, because it keeps both
 `VALUE` clauses writable and legible: the raisable set is a literal you can read
 off against the DFHRESP numbering, and `LOW-VALUES` gives every handler slot the
 binary zero that means "none". A single interleaved table would need one opaque
-111-byte constant with binary zeros embedded in it.
+constant of three times the width with binary zeros embedded in it.
 
-Both are indexed by DFHRESP code; 37 slots covers `MAPFAIL` at 36. `DFH-RAISABLE`
+Both are indexed by DFHRESP code, and sized from the largest code the runtime can
+put in `EIBRESP` — `max(preprocessor._DFHRESP_TABLE.values()) + 1`, not the handful
+of conditions `cics/conditions.py` names. `emit_raise_tail` subscripts
+`DFH-RAISABLE(EIBRESP + 1)` and `resolve_field_ref` does not bounds-check, so a
+table sized to the raisable set alone is read out of bounds by any larger legal
+code — `DISABLED` at 84 was exactly that. `DFH-RAISABLE`
 is what enforces the scope decision — an out-of-scope condition can never reach the
 dispatcher. The literal above is illustrative of the shape: the exact `Y` positions
 must be set from the consolidated code table described below, not transcribed from
@@ -162,6 +179,14 @@ command that must already branch to the dispatcher.
 Paragraph labels are `CodeLabel(f"para_{name}")` — the convention
 `lower_goto`/`_lower_computed_goto` already use, so a handler paragraph is directly
 targetable.
+
+A target that names no paragraph of the module is rejected at compile time.
+`build_cfg` wires an edge only for a label it knows, so a branch to an undefined
+`para_` label produces no edge at all and the task ends where the transfer should
+have been — neither the handler nor the abend. The paragraph names come from the
+raw bridge dict in `preprocess_program_dict`, because `on_procedure_entry` runs
+before `ctx.section_paragraphs` is populated and standalone paragraphs never
+appear there.
 
 ### The raise tail
 
@@ -294,6 +319,6 @@ paths actually execute.
 * `PUSH HANDLE` / `POP HANDLE`.
 * `HANDLE AID`, which is keyed on `EIBAID` rather than `EIBRESP` and needs its own
   table (10 occurrences).
-* Conditions outside the nine.
+* Conditions outside the raisable set (a `HANDLE` for one is logged, not honoured).
 * `RESP2`.
 * Revisiting the `NOTOPEN` → `IOERR` adapter decision, recorded above.

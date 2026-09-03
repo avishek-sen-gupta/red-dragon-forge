@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from cics.conditions import MAX_CODE, RAISABLE, code_for
+from cics.conditions import RAISABLE, code_for
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,14 @@ _DFHRESP_TABLE: dict[str, int] = {
     "UNEXPIN": 523,  # non-standard; canonical 35 collides with TSIOERR, kept distinct
 }
 
+# EIBRESP can legitimately hold any code in the table above — DISABLED (84) is
+# returned by VsamEngine for a file with no FCT entry, and the raise tail
+# subscripts DFH-RAISABLE by EIBRESP + 1 — so the injected tables are sized from
+# that ceiling, not from the handful of conditions cics.conditions names. An
+# OCCURS sized any smaller is subscripted out of bounds by a legal EIBRESP, and
+# emit_context.resolve_field_ref does not bounds-check.
+CONDITION_TABLE_SLOTS: int = max(_DFHRESP_TABLE.values()) + 1
+
 # Sentinel for unknown/typo'd conditions. Chosen so it can never equal a real
 # EIBRESP value a program checks — substituting 0 (=NORMAL) would let a bogus
 # condition silently masquerade as the normal path.
@@ -119,7 +127,9 @@ def raisable_literal() -> str:
     """The DFH-RAISABLE VALUE literal, generated from the condition table so the
     copybook cannot drift from it."""
     codes = {code_for(name) for name in RAISABLE}
-    return "".join("Y" if c in codes else "N" for c in range(MAX_CODE + 1))
+    return "".join(
+        "Y" if code in codes else "N" for code in range(CONDITION_TABLE_SLOTS)
+    )
 
 
 def inject_dfhhandle(source: str) -> str:

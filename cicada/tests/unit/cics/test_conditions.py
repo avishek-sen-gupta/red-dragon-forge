@@ -6,11 +6,12 @@ import pytest
 
 from cics.conditions import (
     CONDITION_CODES,
-    MAX_CODE,
     RAISABLE,
     code_for,
     is_raisable_code,
 )
+from cics.preprocessor import CONDITION_TABLE_SLOTS
+from cics.vsam.eibresp import RESP_DISABLED
 
 
 def test_codes_match_the_values_already_used_across_the_runtime():
@@ -28,7 +29,7 @@ def test_codes_match_the_values_already_used_across_the_runtime():
     assert code_for("MAPFAIL") == 36
 
 
-def test_the_raisable_set_is_the_nine_the_corpus_handles():
+def test_the_raisable_set_is_the_corpus_nine_plus_the_fct_miss():
     assert RAISABLE == frozenset(
         {
             "NOTOPEN",
@@ -40,6 +41,7 @@ def test_the_raisable_set_is_the_nine_the_corpus_handles():
             "NOSPACE",
             "DUPKEY",
             "DUPREC",
+            "DISABLED",
         }
     )
 
@@ -49,15 +51,34 @@ def test_normal_is_never_raisable():
     assert is_raisable_code(0) is False
 
 
-def test_every_raisable_condition_has_a_code_and_is_raisable_by_code():
-    for name in RAISABLE:
-        assert is_raisable_code(code_for(name)) is True
+def test_the_raisable_codes_are_the_ten_written_down_here():
+    """Written out independently of CONDITION_CODES: is_raisable_code is defined
+    as membership in the codes of RAISABLE, so checking it against code_for()
+    would restate the same dict rather than test it. A code that changed on one
+    side only fails here."""
+    assert {
+        code for code in range(CONDITION_TABLE_SLOTS) if is_raisable_code(code)
+    } == {
+        1,
+        13,
+        14,
+        15,
+        16,
+        18,
+        19,
+        22,
+        36,
+        84,
+    }
 
 
-def test_max_code_covers_every_raisable_condition():
-    """The injected table is sized MAX_CODE + 1; a raisable code beyond it would
-    index past the table."""
-    assert MAX_CODE >= max(code_for(name) for name in RAISABLE)
+def test_the_table_covers_the_file_control_disabled_code():
+    """RESP_DISABLED is the code VsamEngine returns for a file with no FCT entry;
+    the raise tail subscripts DFH-RAISABLE by EIBRESP + 1, so its slot must exist
+    and must be raisable, or the failed READ falls through in silence."""
+    assert RESP_DISABLED == 84
+    assert CONDITION_TABLE_SLOTS > RESP_DISABLED + 1
+    assert is_raisable_code(RESP_DISABLED) is True
 
 
 def test_an_unknown_condition_name_raises():

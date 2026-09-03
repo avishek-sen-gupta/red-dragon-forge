@@ -1,10 +1,11 @@
 """CICS condition names and their DFHRESP codes.
 
-The single source of truth. These codes were previously spelled as module
-constants in cics/vsam/eibresp.py, cics/builtins/system.py,
-cics/builtins/interval.py and cics/builtins/screen.py, partially duplicated
-between them; the injected handler table, the raise tail and the unhandled
-abend all index by code, so they need one table to agree on.
+The single source of truth these codes are converging on. They are still also
+spelled as module constants in cics/vsam/eibresp.py, cics/builtins/system.py,
+cics/builtins/interval.py and cics/builtins/screen.py, and as a fifth table in
+cics/preprocessor.py; the injected handler table, the raise tail and the
+unhandled abend all index by code, so they need one table to agree on, and
+those spellings are meant to fold into this one.
 """
 
 from __future__ import annotations
@@ -30,11 +31,17 @@ CONDITION_CODES: dict[str, int] = {
     "TRANSIDERR": 28,
     "ENDDATA": 29,
     "MAPFAIL": 36,
+    "DISABLED": 84,
 }
 
 # The conditions this runtime raises: the ones the production corpus codes
-# HANDLE CONDITION for. Everything else keeps writing EIBRESP and nothing more,
-# which is exactly as truthful as it is today.
+# HANDLE CONDITION for, plus DISABLED. Everything else keeps writing EIBRESP and
+# nothing more, which is exactly as truthful as it is today.
+#
+# DISABLED is not a corpus-handled condition; it is what VsamEngine returns for a
+# file with no FCT entry. Left unraisable, such a READ falls through to code that
+# then uses an untouched record area as though the read had succeeded — the exact
+# silent wrong answer this machinery exists to stop.
 RAISABLE: frozenset[str] = frozenset(
     {
         "NOTOPEN",
@@ -46,10 +53,9 @@ RAISABLE: frozenset[str] = frozenset(
         "NOSPACE",
         "DUPKEY",
         "DUPREC",
+        "DISABLED",
     }
 )
-
-MAX_CODE: int = max(CONDITION_CODES.values())
 
 # IBM assigns a distinct AEIx code per unhandled condition. That mapping is not
 # reproduced here because it has not been sourced from documentation; one code

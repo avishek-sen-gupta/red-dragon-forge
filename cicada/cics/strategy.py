@@ -41,7 +41,11 @@ from interpreter.instructions import (
 from interpreter.types.type_expr import UNKNOWN
 
 from cics.conditions import RAISABLE, code_for
-from cics.handler_labels import collect_handler_labels
+from cics.handler_labels import (
+    HandlerLabels,
+    collect_handler_labels,
+    paragraph_names,
+)
 from cics.interval import StartQueue
 from cics.statements import ExecCicsStatement
 from cics.types import DEFAULT_TERMID
@@ -547,7 +551,8 @@ class CicsLoweringStrategy:
     ) -> None:
         self._context_holder = context_holder
         self._handler_source = handler_source
-        self._handler_labels: dict[str, int] = {}
+        self._handler_labels = HandlerLabels(indices={}, conditions={})
+        self._paragraph_names: frozenset[str] = frozenset()
         self._start_queue = (
             StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
         )
@@ -722,6 +727,9 @@ class CicsLoweringStrategy:
         )  # noqa: PLC0415
 
         logger.debug("DFHRESP prepass on program dict")
+        # Same consume-and-clear discipline as handler_source: both are gathered
+        # from this one module's parse and read once, at its procedure entry.
+        self._paragraph_names = paragraph_names(data)
         result = resolve_dfhresp_nodes(data)  # type: ignore[return-value]
         logger.debug("DFHRESP prepass done")
         return result
@@ -745,6 +753,28 @@ class CicsLoweringStrategy:
         )
         self._emit_dispatcher_if_needed(ctx, materialised)
 
+    def _reject_unknown_handler_targets(self) -> None:
+        """A handler naming a paragraph the module does not define compiles to a
+        Branch whose label no block owns, and interpreter.cfg.build_cfg wires an
+        edge only for a label it knows — so the task neither dispatches nor
+        abends, it simply ends. Reject it while the program's own names are
+        still in hand."""
+        unknown = sorted(
+            (paragraph, self._handler_labels.conditions[paragraph])
+            for paragraph in self._handler_labels.indices
+            if paragraph not in self._paragraph_names
+        )
+        if not unknown:
+            return
+        named = ", ".join(
+            f"{condition}({paragraph})" for paragraph, condition in unknown
+        )
+        raise NotImplementedError(
+            f"EXEC CICS HANDLE CONDITION names {named}, but this module defines "
+            "no such paragraph. The dispatcher would branch to a label no block "
+            "owns, which ends the task silently instead of transferring control."
+        )
+
     def _emit_dispatcher_if_needed(
         self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
     ) -> None:
@@ -761,6 +791,7 @@ class CicsLoweringStrategy:
         its own. Raising beats compiling a module whose handlers silently never
         dispatch.
         """
+        self._reject_unknown_handler_targets()
         if has_condition_tables(ctx, materialised):
             # Entered only by a raise tail's Branch, so it must not be reachable
             # by falling through from the init-EIB call above.
@@ -777,7 +808,7 @@ class CicsLoweringStrategy:
             ]
             raise NotImplementedError(
                 f"Module registers EXEC CICS HANDLE CONDITION handlers "
-                f"({sorted(self._handler_labels)}) but is missing "
+                f"({sorted(self._handler_labels.indices)}) but is missing "
                 f"{' and '.join(missing)} from its DATA DIVISION. "
                 "build_cics_spec's source_prepass injects COPY DFHHANDLE. and "
                 "COPY DFHEIBLK. into the main compiled source only "
@@ -967,6 +998,8 @@ class CicsLoweringStrategy:
                         args=(r_evt, r_names),
                     )
                 )
+                emit_resp_writeback(ctx, r_res, opts, materialised)
+                emit_raise_tail(ctx, opts, materialised)
                 return
 
             r_res = ctx.fresh_reg()
@@ -1153,7 +1186,7 @@ class CicsLoweringStrategy:
             for condition, operand in opts.items():
                 slot = condition_slot(verb, condition)
                 index = (
-                    self._handler_labels.get(operand.text, 0)
+                    self._handler_labels.index_of(operand.text)
                     if handles and operand is not None
                     else 0
                 )
@@ -1174,6 +1207,18 @@ class CicsLoweringStrategy:
                     r_flag = ctx.fresh_reg()
                     ctx.emit_inst(Const.string(r_flag, "Y" if handles else "N"))
                     emit_indexed_write(ctx, "DFH-RAISABLE", slot, r_flag, materialised)
+                elif handles:
+                    logger.warning(
+                        "EXEC CICS HANDLE CONDITION %s(%s) registers a handler "
+                        "this runtime can never dispatch to: %s is not among the "
+                        "conditions it raises (cics.conditions.RAISABLE). The "
+                        "command that fails with %s will write EIBRESP and "
+                        "continue inline.",
+                        condition,
+                        getattr(operand, "text", ""),
+                        condition,
+                        condition,
+                    )
             return
 
         # ── System verbs ──────────────────────────────────────────────────
@@ -1247,7 +1292,7 @@ class CicsLoweringStrategy:
             subscripts=(BinOpNode("+", FieldRefNode("EIBRESP"), LiteralNode("1")),),
         )
         idx_reg = ctx.emit_decode_field(region_reg, ref.fl, ref.offset_reg)
-        for name, index in self._handler_labels.items():
+        for name, index in self._handler_labels.indices.items():
             k_reg = ctx.const_to_reg(index)
             cmp_reg = ctx.fresh_reg()
             ctx.emit_inst(
