@@ -29,8 +29,13 @@ def build_cics_spec(
     SAME dicts/lists across multiple compile_program() calls for programs
     that LINK to each other within one region.
     """
+    dialect_parser = CicsDialectParser()
 
     def _make_strategy() -> CicsLoweringStrategy:
+        # One dialect_parser instance is shared across every module compile_cobol
+        # lowers (main + subprograms); CicsLoweringStrategy.on_procedure_entry
+        # consumes-and-clears dialect_parser.statements per module, so no clear
+        # belongs here.
         return CicsLoweringStrategy(
             context_holder=context_holder,
             result_holder=result_holder,
@@ -38,6 +43,7 @@ def build_cics_spec(
             vsam_engine=vsam_engine,
             screen_queue=screen_queue,
             input_queue=input_queue,
+            handler_source=dialect_parser.statements,
             **kwargs,
         )
 
@@ -46,6 +52,6 @@ def build_cics_spec(
         make_strategy=_make_strategy,
         source_prepass=apply_cics_prepass,
         owns_execution=True,
-        dialect_parser=CicsDialectParser(),
+        dialect_parser=dialect_parser,
         extra_program_source_dirs=lambda: (LE_STUBS_DIR,),
     )

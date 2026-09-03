@@ -35,7 +35,16 @@ class ExecCicsStatement:
 
 
 class CicsDialectParser:
-    """Constructs ExecCicsStatement from raw EXEC CICS bridge JSON."""
+    """Constructs ExecCicsStatement from raw EXEC CICS bridge JSON.
+
+    Also accumulates every statement into ``statements``, in program order.
+    This instance is shared across every module a compile lowers, so a reader
+    consuming ``statements`` must clear it once read, per module — see
+    CicsLoweringStrategy.on_procedure_entry.
+    """
+
+    def __init__(self) -> None:
+        self.statements: list[ExecCicsStatement] = []
 
     def applies(self, data: dict) -> bool:
         return data.get("type") == "EXEC_CICS"
@@ -45,4 +54,6 @@ class CicsDialectParser:
             r"\*>.*", "", data.get("exec_cics_text", ""), flags=re.MULTILINE
         ).strip()
         verb, options = parse_exec_cics_text(text)
-        return ExecCicsStatement(verb=verb, options=options)
+        stmt = ExecCicsStatement(verb=verb, options=options)
+        self.statements.append(stmt)
+        return stmt

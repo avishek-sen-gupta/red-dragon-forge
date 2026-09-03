@@ -63,7 +63,9 @@ def _task_end_hook_calls(ctx: _Ctx) -> list[CallFunction]:
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_plain_return_emits_task_end_hook_call():
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     stmt = ExecCicsStatement(verb="RETURN", options={})
     ctx = _Ctx()
 
@@ -74,7 +76,9 @@ def test_plain_return_emits_task_end_hook_call():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_return_transid_emits_task_end_hook_call():
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     stmt = ExecCicsStatement(
         verb="RETURN",
         options={"TRANSID": CicsOperand("CA00", True)},
@@ -90,7 +94,9 @@ def test_return_transid_emits_task_end_hook_call():
 def test_xctl_does_not_emit_task_end_hook_call():
     """XCTL continues the same task (no new terminal input, same unit of
     work) — it must not fire the task-end hook."""
-    strategy = CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    strategy = CicsLoweringStrategy(
+        context_holder=[None], result_holder=[None], handler_source=[]
+    )
     stmt = ExecCicsStatement(
         verb="XCTL",
         options={"PROGRAM": CicsOperand("COSGN00C", True)},
@@ -106,7 +112,7 @@ def test_xctl_does_not_emit_task_end_hook_call():
 def test_default_hook_is_registered_and_is_a_noop():
     Builtins.TABLE.pop(_HOOK_NAME, None)
 
-    CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    CicsLoweringStrategy(context_holder=[None], result_holder=[None], handler_source=[])
 
     assert _HOOK_NAME in Builtins.TABLE
     result = Builtins.TABLE[_HOOK_NAME]([], vm=None)
@@ -124,6 +130,6 @@ def test_default_hook_does_not_overwrite_an_existing_registration():
 
     Builtins.TABLE[_HOOK_NAME] = _real_reset
 
-    CicsLoweringStrategy(context_holder=[None], result_holder=[None])
+    CicsLoweringStrategy(context_holder=[None], result_holder=[None], handler_source=[])
 
     assert Builtins.TABLE[_HOOK_NAME] is _real_reset

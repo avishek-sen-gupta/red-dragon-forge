@@ -128,11 +128,6 @@ COBOL_HANDLE_WRITES_THE_SLOT = """\
 """
 
 
-@pytest.mark.xfail(
-    reason="handler_labels is empty until Task 5 wires collect_handler_labels "
-    "into compilation; the write emits index 0. Remove this marker then.",
-    strict=True,
-)
 @covers(CobolFeature.EXEC_CICS)
 def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
     """PARA-A is index 1 and PARA-B index 2, so NOTFND holds 1, ERROR 2, and
@@ -157,6 +152,58 @@ def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
     assert result.commarea[0:2] == struct.pack(">h", 1)
     assert result.commarea[2:4] == struct.pack(">h", 2)
     assert result.commarea[4:6] == struct.pack(">h", 1)
+
+
+COBOL_MULTI_CONDITION_HANDLE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDMULTI.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA.
+           05  WS-CA-NOTFND  PIC S9(4) COMP.
+           05  WS-CA-ERROR   PIC S9(4) COMP.
+           05  WS-CA-LENGERR PIC S9(4) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A)
+               ERROR(PARA-B) END-EXEC.
+           MOVE DFH-HANDLER(14) TO WS-CA-NOTFND.
+           MOVE DFH-HANDLER(2)  TO WS-CA-ERROR.
+           MOVE DFH-HANDLER(23) TO WS-CA-LENGERR.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-A.
+           EXEC CICS RETURN END-EXEC.
+       PARA-B.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_one_statement_naming_several_conditions_writes_each_slot(cobol_parser):
+    """A single HANDLE CONDITION naming two conditions is the untested path:
+    Task 4's fixture split multi-condition HANDLE into separate statements to
+    dodge a ProLeap bug that turned out not to exist. NOTFND(PARA-A) and
+    ERROR(PARA-B) are one statement's two conditions, so each must land in its
+    own slot with its own paragraph's index; LENGERR is never named here and
+    its neighbouring slot must stay 0."""
+    context_holder = [CicsContext(transid="HND4", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(
+        COBOL_MULTI_CONDITION_HANDLE.encode(), cobol_parser, spec
+    )
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea[0:2] == struct.pack(">h", 1)
+    assert result.commarea[2:4] == struct.pack(">h", 2)
+    assert result.commarea[4:6] == struct.pack(">h", 0)
 
 
 COBOL_OVERRIDE_AND_IGNORE = """\
@@ -190,11 +237,6 @@ COBOL_OVERRIDE_AND_IGNORE = """\
 """
 
 
-@pytest.mark.xfail(
-    reason="handler_labels is empty until Task 5 wires collect_handler_labels "
-    "into compilation; the overriding write emits index 0. Remove this marker then.",
-    strict=True,
-)
 @covers(CobolFeature.EXEC_CICS)
 def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
     """The three CICS states for one condition, in sequence: PARA-B registered
@@ -280,3 +322,76 @@ def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
     assert result.commarea[2:3] == "Y".encode("cp037")
     assert result.commarea[3:4] == "N".encode("cp037")
     assert result.commarea[4:5] == "Y".encode("cp037")
+
+
+HNDLINKA_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDLINKA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-B-ERROR    PIC S9(4) COMP.
+       01  WS-CA.
+           05  WS-CA-B-ERROR PIC S9(4) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
+           CALL 'HNDLINKB' USING BY REFERENCE WS-B-ERROR.
+           MOVE WS-B-ERROR TO WS-CA-B-ERROR.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-A.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+# Not prepassed by build_cics_spec's source_prepass -- only the main source
+# passed to compile_cics_program gets that (interpreter.project.coprocessor_compile.
+# compile_program folds source_prepass over the main source only); a disk-resolved
+# CALL callee must bring its own COPY DFHHANDLE.
+HNDLINKB_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDLINKB.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       COPY DFHHANDLE.
+       LINKAGE SECTION.
+       01  LS-ERROR PIC S9(4) COMP.
+       PROCEDURE DIVISION USING LS-ERROR.
+           EXEC CICS HANDLE CONDITION ERROR(PARA-X) END-EXEC.
+           MOVE DFH-HANDLER(2) TO LS-ERROR.
+           EXIT PROGRAM.
+       PARA-X.
+           EXIT PROGRAM.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
+    """One compile_cics_program() call lowers TWO modules -- HNDLINKA (main) then
+    its disk-resolved CALL callee HNDLINKB (interpreter.project.cobol_compile.
+    compile_cobol lowers every module fully, one at a time, off the SAME
+    CicsDialectParser). HNDLINKA's own HANDLE CONDITION NOTFND(PARA-A) must not
+    shift HNDLINKB's numbering: HNDLINKB's only HANDLE CONDITION is
+    ERROR(PARA-X), so it must read index 1, not 2 (which is what leaks in if
+    HNDLINKA's statement is still counted when HNDLINKB is numbered)."""
+    cbl_dir = tmp_path / "cbl"
+    cbl_dir.mkdir()
+    (cbl_dir / "HNDLINKB.cbl").write_text(HNDLINKB_SRC)
+
+    context_holder = [CicsContext(transid="HND5", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(
+        HNDLINKA_SRC.encode(),
+        cobol_parser,
+        spec,
+        program_source_dirs=[cbl_dir],
+    )
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea[0:2] == struct.pack(">h", 1)

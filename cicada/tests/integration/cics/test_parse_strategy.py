@@ -94,6 +94,7 @@ def test_return_lowers_to_call_and_return(cobol_parser):
     strategy = CicsLoweringStrategy(
         context_holder=context_holder,
         result_holder=result_holder,
+        handler_source=[],
     )
 
     source = apply_cics_prepass(COBOL_RETURN.decode()).encode()

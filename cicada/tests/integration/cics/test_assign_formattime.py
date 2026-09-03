@@ -105,6 +105,7 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
         result_holder=result_holder,
         applid="CARDDEMO",
         sysid="SYS1",
+        handler_source=[],
     )
     source = apply_cics_prepass(COBOL_ASSIGN).encode()
     frontend = CobolFrontend(

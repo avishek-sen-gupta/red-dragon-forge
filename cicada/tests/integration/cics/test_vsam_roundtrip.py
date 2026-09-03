@@ -118,6 +118,7 @@ def test_vsam_write_then_read_round_trips(cobol_parser):
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_engine(),
+        handler_source=[],
     )
     source = apply_cics_prepass(COBOL_VSAM).encode()
     frontend = CobolFrontend(
@@ -184,6 +185,7 @@ def test_vsam_dataset_keyword_and_dataname_resolution(cobol_parser):
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_engine(),
+        handler_source=[],
     )
     source = apply_cics_prepass(COBOL_VSAM_DATASET).encode()
     frontend = CobolFrontend(

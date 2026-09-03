@@ -293,7 +293,9 @@ def _make_strategy():
 
     engine = _engine_with_records([])
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
-    return CicsLoweringStrategy(context_holder=holder, vsam_engine=engine)
+    return CicsLoweringStrategy(
+        context_holder=holder, vsam_engine=engine, handler_source=[]
+    )
 
 
 def _calls_to(ctx, name):

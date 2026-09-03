@@ -34,6 +34,7 @@ from interpreter.instructions import (
 from interpreter.types.type_expr import UNKNOWN
 
 from cics.conditions import RAISABLE, code_for
+from cics.handler_labels import collect_handler_labels
 from cics.interval import StartQueue
 from cics.statements import ExecCicsStatement
 from cics.types import DEFAULT_TERMID
@@ -485,10 +486,12 @@ class CicsLoweringStrategy:
             str, str
         ] = {},  # never mutated: membership + lookup only
         region_termid: str = DEFAULT_TERMID,
-        handler_labels: dict[str, int] = {},  # never mutated: lookup only
+        *,
+        handler_source: list[ExecCicsStatement],
     ) -> None:
         self._context_holder = context_holder
-        self._handler_labels = handler_labels
+        self._handler_source = handler_source
+        self._handler_labels: dict[str, int] = {}
         self._start_queue = (
             StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
         )
@@ -667,6 +670,11 @@ class CicsLoweringStrategy:
         ctx: "EmitContext",
         materialised: "MaterialisedSectionedLayout",
     ) -> None:
+        # Consume-and-clear: handler_source is shared with every other module
+        # compile_cobol lowers off the same dialect_parser, and each module is
+        # fully parsed and lowered before the next starts.
+        self._handler_labels = collect_handler_labels(self._handler_source)
+        self._handler_source.clear()
         ctx.emit_inst(
             CallFunction(
                 result_reg=ctx.fresh_reg(),
