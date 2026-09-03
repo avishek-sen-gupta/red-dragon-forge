@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 import re
+import struct
 from pathlib import Path
 
 import pytest
@@ -101,3 +102,112 @@ def test_the_injected_table_is_visible_to_the_program(cobol_parser):
     assert result.commarea[0:1] == "Y".encode("cp037")
     assert result.commarea[1:2] == "N".encode("cp037")
     assert result.commarea[2:3] == "Y".encode("cp037")
+
+
+COBOL_HANDLE_WRITES_THE_SLOT = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDWRITE.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA.
+           05  WS-CA-NOTFND  PIC S9(4) COMP.
+           05  WS-CA-ERROR   PIC S9(4) COMP.
+           05  WS-CA-LENGERR PIC S9(4) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
+           EXEC CICS HANDLE CONDITION ERROR(PARA-B) END-EXEC.
+           EXEC CICS HANDLE CONDITION LENGERR(PARA-A) END-EXEC.
+           MOVE DFH-HANDLER(14) TO WS-CA-NOTFND.
+           MOVE DFH-HANDLER(2)  TO WS-CA-ERROR.
+           MOVE DFH-HANDLER(23) TO WS-CA-LENGERR.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-A.
+           EXEC CICS RETURN END-EXEC.
+       PARA-B.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@pytest.mark.xfail(
+    reason="handler_labels is empty until Task 5 wires collect_handler_labels "
+    "into compilation; the write emits index 0. Remove this marker then.",
+    strict=True,
+)
+@covers(CobolFeature.EXEC_CICS)
+def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
+    """PARA-A is index 1 and PARA-B index 2, so NOTFND holds 1, ERROR 2, and
+    LENGERR 1 again — the same paragraph keeps one index. The three slots hold
+    three different pairings, so a write shifted by one slot reads back 0.
+
+    One condition per HANDLE CONDITION: ProLeap's own COBOL grammar rejects a
+    second condition in the same statement ("missing END_EXEC at 'EXEC'"), even
+    though cicada's EXEC CICS grammar parses it."""
+    context_holder = [CicsContext(transid="HND1", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(
+        COBOL_HANDLE_WRITES_THE_SLOT.encode(), cobol_parser, spec
+    )
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea[0:2] == struct.pack(">h", 1)
+    assert result.commarea[2:4] == struct.pack(">h", 2)
+    assert result.commarea[4:6] == struct.pack(">h", 1)
+
+
+COBOL_OVERRIDE_AND_IGNORE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDOVER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-CA.
+           05  WS-CA-AFTER-OVERRIDE PIC S9(4) COMP.
+           05  WS-CA-AFTER-IGNORE   PIC S9(4) COMP.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-A) END-EXEC.
+           EXEC CICS HANDLE CONDITION NOTFND(PARA-B) END-EXEC.
+           MOVE DFH-HANDLER(14) TO WS-CA-AFTER-OVERRIDE.
+           EXEC CICS IGNORE CONDITION NOTFND END-EXEC.
+           MOVE DFH-HANDLER(14) TO WS-CA-AFTER-IGNORE.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       PARA-A.
+           EXEC CICS RETURN END-EXEC.
+       PARA-B.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+@pytest.mark.xfail(
+    reason="handler_labels is empty until Task 5 wires collect_handler_labels "
+    "into compilation; the overriding write emits index 0. Remove this marker then.",
+    strict=True,
+)
+@covers(CobolFeature.EXEC_CICS)
+def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
+    """Override and cancellation are just later writes to the same slot."""
+    context_holder = [CicsContext(transid="HND2", commarea=b"", eibaid="\x7d")]
+    result_holder: list = [None]
+    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    program = compile_cics_program(
+        COBOL_OVERRIDE_AND_IGNORE.encode(), cobol_parser, spec
+    )
+
+    result = run_cics(
+        program,
+        context_holder[0],
+        queue.Queue(),
+        queue.Queue(),
+        context_holder=context_holder,
+        result_holder=result_holder,
+    )
+
+    assert result.commarea[0:2] == struct.pack(">h", 2)
+    assert result.commarea[2:4] == struct.pack(">h", 0)

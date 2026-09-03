@@ -20,6 +20,7 @@ from cics.builtins.system import (
     make_abend_builtin,
 )
 from interpreter.cobol.cobol_constants import BuiltinName
+from cobol_asg.cobol_expression import LiteralNode
 from cobol_asg.ref_mod import RefModLiteral
 from interpreter.func_name import FuncName
 from interpreter.instructions import (
@@ -32,6 +33,7 @@ from interpreter.instructions import (
 )
 from interpreter.types.type_expr import UNKNOWN
 
+from cics.conditions import code_for
 from cics.interval import StartQueue
 from cics.statements import ExecCicsStatement
 from cics.types import DEFAULT_TERMID
@@ -55,10 +57,8 @@ _SYS_VERBS: dict[str, str] = {
     "FORMATTIME": "__cics_formattime",
     "INQUIRE": "__cics_inquire",
     "HANDLE ABEND": "__cics_handle_abend",
-    # HANDLE CONDITION / HANDLE AID are explicit no-ops for now — the real
-    # runtime-dispatch machinery is a deferred follow-up
-    # (docs/superpowers/plans/2026-06-07-cics-handle-condition-machinery.md).
-    "HANDLE CONDITION": "__cics_handle_condition",
+    # HANDLE AID is still an explicit no-op — AID dispatch is out of scope for
+    # the condition-handling work.
     "HANDLE AID": "__cics_handle_aid",
 }
 
@@ -275,6 +275,23 @@ def emit_copy_back_str(
     ctx.emit_encode_and_write(region_reg, ref.fl, value_str_reg, ref.offset_reg)
 
 
+def emit_indexed_write(
+    ctx: "EmitContext",
+    name: str,
+    index: int,
+    value_str_reg: "Register",
+    materialised: "MaterialisedSectionedLayout",
+) -> None:
+    """Write into a fixed element of a table. emit_copy_back_str deliberately
+    does not thread subscripts, so the handler table needs its own path."""
+    if not ctx.has_field(name, materialised):
+        return
+    ref, region_reg = ctx.resolve_field_ref(
+        name, materialised, subscripts=(LiteralNode(str(index)),)
+    )
+    ctx.emit_encode_and_write(region_reg, ref.fl, value_str_reg, ref.offset_reg)
+
+
 def emit_resp_writeback(
     ctx: "EmitContext",
     r_resp_result: "Register",
@@ -447,8 +464,10 @@ class CicsLoweringStrategy:
             str, str
         ] = {},  # never mutated: membership + lookup only
         region_termid: str = DEFAULT_TERMID,
+        handler_labels: dict[str, int] = {},  # never mutated: lookup only
     ) -> None:
         self._context_holder = context_holder
+        self._handler_labels = handler_labels
         self._start_queue = (
             StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
         )
@@ -491,11 +510,6 @@ class CicsLoweringStrategy:
         # what, if anything, is registered under it.
         _register_default(
             Builtins.TABLE, "__cics_task_end_hook", make_noop_task_end_hook_builtin()
-        )
-        _register(
-            Builtins.TABLE,
-            "__cics_handle_condition",
-            make_handle_noop_builtin("HANDLE CONDITION"),
         )
         _register(
             Builtins.TABLE,
@@ -993,6 +1007,22 @@ class CicsLoweringStrategy:
                 )
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
+            return
+
+        # ── Condition handler registration ────────────────────────────────
+        if verb in ("HANDLE CONDITION", "IGNORE CONDITION"):
+            for condition, operand in opts.items():
+                slot = code_for(condition) + 1
+                index = (
+                    self._handler_labels.get(operand.text, 0)
+                    if verb == "HANDLE CONDITION" and operand is not None
+                    else 0
+                )
+                r_idx = ctx.fresh_reg()
+                ctx.emit_inst(Const.int_(r_idx, index))
+                emit_indexed_write(
+                    ctx, "DFH-HANDLER", slot, ctx.emit_to_string(r_idx), materialised
+                )
             return
 
         # ── System verbs ──────────────────────────────────────────────────
