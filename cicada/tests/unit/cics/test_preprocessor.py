@@ -33,8 +33,9 @@ def test_inject_dfheiblk_case_insensitive():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_apply_cics_prepass_injects_dfheiblk_and_preserves_dfhresp():
-    """apply_cics_prepass injects DFHEIBLK but leaves DFHRESP literals intact.
+def test_apply_cics_prepass_injects_both_copybooks_and_preserves_dfhresp():
+    """apply_cics_prepass injects DFHEIBLK and DFHHANDLE but leaves DFHRESP
+    literals intact.
 
     DFHRESP(X) is now lowered structurally by the ProLeap bridge (red-dragon-kieo);
     the pre-pass no longer performs text substitution.
@@ -48,6 +49,7 @@ def test_apply_cics_prepass_injects_dfheiblk_and_preserves_dfhresp():
     )
     result = apply_cics_prepass(source)
     assert "COPY DFHEIBLK." in result
+    assert "COPY DFHHANDLE." in result
     assert "DFHRESP(NORMAL)" in result
 
 

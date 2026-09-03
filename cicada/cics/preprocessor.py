@@ -93,17 +93,18 @@ def _inject_after_ws_section(source: str, copy_line: str) -> str:
     section = next(
         (index for index, line in enumerate(lines) if _is_ws_section(line)), len(lines)
     )
+    found = section < len(lines)
     logger.debug(
         (
             "%s injected after WORKING-STORAGE SECTION"
-            if section < len(lines)
+            if found
             else "no WORKING-STORAGE SECTION found; %s not injected"
         ),
         copy_line.strip(),
     )
     inserted = (
         [copy_line + ("\r\n" if lines[section].endswith("\r\n") else "\n")]
-        if section < len(lines)
+        if found
         else []
     )
     return "".join(lines[: section + 1] + inserted + lines[section + 1 :])
