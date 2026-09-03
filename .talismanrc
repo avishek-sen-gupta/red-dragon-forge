@@ -260,6 +260,9 @@ fileignoreconfig:
   checksum: 45f39708d8deaa8fec94135c7e116aca35df6a304d7555e1a28a6f430a15b639
 - filename: docs/superpowers/plans/2026-09-02-cics-interval-control.md
   checksum: c04978b4a27f19f27ddc7df98987f564a83c04cb6b8809b71a90f27031189723
+- filename: docs/superpowers/plans/2026-09-03-cics-condition-handling.md
+  # Prose plan; its tables and code blocks read as high-entropy to the detector.
+  ignore_detectors: [filecontent]
 - filename: docs/superpowers/specs/2026-09-03-cics-condition-handling-design.md
   # Lists of CICS condition names read as high-entropy blobs. Detector-ignored
   # rather than checksum-pinned because a design doc gets revised.
