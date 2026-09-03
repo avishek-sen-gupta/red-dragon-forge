@@ -10,6 +10,7 @@ from interpreter.vm.vm_types import BuiltinResult, VMState
 from interpreter.types.typed_value import TypedValue
 from interpreter.var_name import VarName
 from interpreter.address import Address
+from cics.conditions import UNHANDLED_ABCODE
 from cics.types import DispatchKind, DispatchResult
 
 if TYPE_CHECKING:
@@ -208,6 +209,29 @@ def make_abend_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
         return BuiltinResult(value=None)
 
     return __cics_abend
+
+
+def make_abend_unhandled_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
+    """Abend for a raised condition with no handler registered.
+
+    Real CICS assigns a distinct AEIx code per condition; that mapping is not
+    reproduced here (see cics/conditions.py), so the message carries the resp
+    code and the abcode is one value meaning "unhandled condition".
+    """
+
+    def __cics_abend_unhandled(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        resp = int(args[0].value) if args else 0
+        logger.error(
+            "unhandled CICS condition, EIBRESP=%d — abending %s",
+            resp,
+            UNHANDLED_ABCODE,
+        )
+        result_holder[0] = DispatchResult(
+            kind=DispatchKind.ABEND, abcode=UNHANDLED_ABCODE
+        )
+        return BuiltinResult(value=resp)
+
+    return __cics_abend_unhandled
 
 
 def make_inquire_builtin(program_cache: dict) -> object:  # type: ignore[type-arg]

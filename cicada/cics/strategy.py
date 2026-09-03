@@ -18,15 +18,22 @@ from cics.builtins.system import (
     make_handle_abend_builtin,
     make_handle_noop_builtin,
     make_abend_builtin,
+    make_abend_unhandled_builtin,
 )
 from interpreter.cobol.cobol_constants import BuiltinName
-from cobol_asg.cobol_expression import LiteralNode
+from cobol_asg.cobol_expression import BinOpNode, FieldRefNode, LiteralNode
 from cobol_asg.ref_mod import RefModLiteral
 from interpreter.func_name import FuncName
+from interpreter.ir import CodeLabel
+from interpreter.operator_kind import resolve_binop
+from interpreter.register import Register
 from interpreter.instructions import (
     Binop,
+    Branch,
+    BranchIf,
     CallFunction,
     Const,
+    Label_,
     LoadRegion,
     Return_,
     Suspend,
@@ -46,7 +53,6 @@ if TYPE_CHECKING:
     from interpreter.cobol.sectioned_layout import MaterialisedSectionedLayout
     from cics.types import CicsContext
     from cics.statements import CicsOperand
-    from interpreter.register import Register
 
 logger = logging.getLogger(__name__)
 
@@ -543,6 +549,11 @@ class CicsLoweringStrategy:
         _register(Builtins.TABLE, "__cics_abend", make_abend_builtin(_holder))
         _register(
             Builtins.TABLE,
+            "__cics_abend_unhandled",
+            make_abend_unhandled_builtin(_holder),
+        )
+        _register(
+            Builtins.TABLE,
             "__cics_set_return_context",
             make_set_return_context_builtin(_holder),
         )
@@ -682,6 +693,48 @@ class CicsLoweringStrategy:
                 args=(),
             )
         )
+        self._emit_dispatcher_if_needed(ctx, materialised)
+
+    def _emit_dispatcher_if_needed(
+        self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
+    ) -> None:
+        """Emit the dispatcher at procedure entry, not after the module's last
+        EXEC CICS statement: interpreter.cfg.build_cfg indexes labels over the
+        complete instruction list before wiring any edge, so a forward
+        reference to a not-yet-emitted ``para_<name>`` resolves like a backward
+        one — the same mechanism lower_goto relies on for a GOTO to a later
+        paragraph.
+
+        Handlers registered but DFH-HANDLER or EIBRESP missing means forge-43l
+        has bitten this module: source_prepass injects the copybooks into the
+        main compiled source only, so a disk-resolved CALL callee must bring
+        its own. Raising beats compiling a module whose handlers silently never
+        dispatch.
+        """
+        if not self._handler_labels:
+            return
+        missing = [
+            name
+            for name in ("DFH-HANDLER", "EIBRESP")
+            if not ctx.has_field(name, materialised)
+        ]
+        if missing:
+            raise NotImplementedError(
+                f"Module registers EXEC CICS HANDLE CONDITION handlers "
+                f"({sorted(self._handler_labels)}) but is missing "
+                f"{' and '.join(missing)} from its DATA DIVISION. "
+                "build_cics_spec's source_prepass injects COPY DFHHANDLE. and "
+                "COPY DFHEIBLK. into the main compiled source only "
+                "(forge-43l) — a disk-resolved CALL callee that registers "
+                "handlers must bring both copybooks itself: COPY DFHHANDLE. "
+                "for DFH-HANDLER/DFH-RAISABLE, COPY DFHEIBLK. for EIBRESP."
+            )
+        # Entered only by a Branch (Task 7's raise tail), so it must not be
+        # reachable by falling through from the init-EIB call above.
+        skip_lbl = ctx.fresh_label("cond_dispatch_skip")
+        ctx.emit_inst(Branch(label=skip_lbl))
+        self._emit_dispatcher(ctx, materialised)
+        ctx.emit_inst(Label_(label=skip_lbl))
 
     def lower(
         self,
@@ -1117,3 +1170,50 @@ class CicsLoweringStrategy:
         logger.warning(
             "CicsLoweringStrategy: unimplemented verb %r — no IR emitted", verb
         )
+
+    def _eibresp_ref(
+        self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
+    ) -> tuple["Register", object, "Register"]:
+        ref, region_reg = ctx.resolve_field_ref("EIBRESP", materialised)
+        return region_reg, ref.fl, ref.offset_reg
+
+    def _emit_dispatcher(
+        self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
+    ) -> None:
+        """One per program. Entered by a Branch, so it takes no arguments: it
+        reads EIBRESP, which emit_resp_writeback has already written."""
+        ctx.emit_inst(Label_(label=CodeLabel("__cics_cond_dispatch")))
+        ref, region_reg = ctx.resolve_field_ref(
+            "DFH-HANDLER",
+            materialised,
+            subscripts=(BinOpNode("+", FieldRefNode("EIBRESP"), LiteralNode("1")),),
+        )
+        idx_reg = ctx.emit_decode_field(region_reg, ref.fl, ref.offset_reg)
+        for name, index in self._handler_labels.items():
+            k_reg = ctx.const_to_reg(index)
+            cmp_reg = ctx.fresh_reg()
+            ctx.emit_inst(
+                Binop(
+                    result_reg=cmp_reg,
+                    operator=resolve_binop("=="),
+                    left=Register(str(idx_reg)),
+                    right=Register(str(k_reg)),
+                )
+            )
+            match_lbl = ctx.fresh_label("cond_match")
+            next_lbl = ctx.fresh_label("cond_next")
+            ctx.emit_inst(
+                BranchIf(cond_reg=cmp_reg, branch_targets=(match_lbl, next_lbl))
+            )
+            ctx.emit_inst(Label_(label=match_lbl))
+            ctx.emit_inst(Branch(label=CodeLabel(f"para_{name}")))
+            ctx.emit_inst(Label_(label=next_lbl))
+        r_resp = ctx.emit_decode_field(*self._eibresp_ref(ctx, materialised))
+        ctx.emit_inst(
+            CallFunction(
+                result_reg=ctx.fresh_reg(),
+                func_name=FuncName("__cics_abend_unhandled"),
+                args=(r_resp,),
+            )
+        )
+        ctx.emit_inst(Return_())
