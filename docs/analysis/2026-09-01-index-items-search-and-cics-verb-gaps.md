@@ -125,6 +125,66 @@ Five implementation findings the diagnosis did not predict:
   the blocking loop never drained it — a `START` there was validated, accepted,
   queued and never run (`6eef3d82`).
 
+**Step 8 — defect F, `HANDLE CONDITION` — is done**, in cicada:
+
+| Commit | Change |
+|---|---|
+| `1917ed0c` | one condition-name to `DFHRESP`-code table |
+| `4e1e2c8e` | the condition handler table injected into WORKING-STORAGE |
+| `e5fe66fb` | the copybook drift test reads the copybook it guards |
+| `f4b0ef76` | `HANDLE CONDITION` target paragraphs collected and numbered |
+| `8301a556` | `HANDLE` and `IGNORE CONDITION` write the handler table |
+| `ac0d1cc0` | `IGNORE CONDITION` must not encode as "no handler" |
+| `4c58a1e5` | a program's handler paragraphs numbered before lowering |
+| `396bf478` | the per-program condition dispatcher and unhandled abend |
+| `97ea2c61` | conditions the corpus handles are raised |
+
+A program's `HANDLE CONDITION` targets are numbered at parse time into an
+injected `DFH-HANDLER` table indexed by `EIBRESP + 1`; after a command writes
+`EIBRESP`, a raise tail tests `DFH-RAISABLE` and branches to a per-program
+dispatcher, which runs the registered paragraph or abends `AEIZ`. `RESP` and
+`NOHANDLE` are the program's undertaking to check inline, so a command coding
+either does not raise. `IGNORE CONDITION` is encoded as `DFH-RAISABLE = 'N'`
+rather than as a handler-table sentinel, because slot 0 already means "never
+registered" and those two states differ: one carries on inline, the other
+abends. The table lives in WORKING-STORAGE, so `LINK`/`XCTL` isolation is a
+consequence of COBOL scoping rather than something the runtime enforces.
+
+Findings the diagnosis did not predict:
+
+* **`BranchIf` is strictly two-way**, so an n-way dispatch on a handler index
+  has to be a comparison cascade. This is what `_lower_computed_goto` already
+  does, and following it meant no change to red-dragon's VM.
+* **Forward label references resolve**, which the plan assumed they did not.
+  `build_cfg` indexes labels over the complete instruction list before wiring
+  any edge, so the dispatcher can be emitted at procedure entry and branch
+  forward to paragraphs not yet lowered. That deleted a fragile mechanism for
+  detecting a module's last EXEC CICS statement.
+* **The dispatcher must be jumped over.** Emitted without a branch around it, a
+  program running off the end of its own code falls into it and abends with
+  `EIBRESP=0`. This broke every CardDemo end-to-end path at once.
+* **One dialect parser is shared across every module a compile lowers** — the
+  main program, its subprograms, and disk-resolved `CALL` callees. Statements
+  must be consumed per module, or a callee's handlers are numbered with its
+  caller's count still included.
+* **The copybook prepass reaches the main source only**, so a `CALL`ed
+  subprogram that registers a handler gets neither `DFHHANDLE` nor `DFHEIBLK`
+  and cannot compile. Filed as `forge-43l`; the runtime now raises naming it
+  rather than silently emitting no dispatcher.
+* **Turning raising on broke three tests, none of them runtime bugs.** One was a
+  program the runtime had been protecting: a task started with no `TERMID`
+  issued `SEND MAP` unchecked, and the test asserted on a commarea built by the
+  `RETURN` after the failed command. The other two asserted over whole
+  instruction lists and were narrowed, not deleted.
+
+**`NOTOPEN` is registered but unreachable.** It is in the raisable set, so a
+program can code `HANDLE CONDITION NOTOPEN` and the flag is set — but nothing
+produces `EIBRESP` 19. The VSAM adapter deliberately maps a driver-level
+`NOT_OPEN` to `IOERR` (an adapter bug is not a program-visible condition) and
+returns `DISABLED` for a file the FCT disabled. The gap is that no path yet
+raises the condition CICS would raise here, not that the existing mapping is
+wrong. Tracked separately.
+
 ---
 
 ## The observed failure
