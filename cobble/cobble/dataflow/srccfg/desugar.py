@@ -515,9 +515,10 @@ def _between(branches: tuple[_Branch, ...]) -> tuple[Edge, ...]:
 def _search(statement, ctx: Ctx, path: str) -> Fragment:
     """The whens chain like EVALUATE's branches, and AT END is the last FALSE arm.
 
-    A WHEN's condition is opaque text in the ASG, so its atom is UNRESOLVED. The
-    fork is real and the node exists; inventing parts from the text would be a
-    guess no report could qualify.
+    A WHEN's condition arrives structured or as text, depending on the cache, and
+    _search_condition reads whichever it is. Only the text form stays UNRESOLVED:
+    the fork is real and the node exists, but inventing parts from the text would
+    be a guess no report could qualify.
     """
     head = _plain_without_arms(statement, ctx, path)
     whens = getattr(statement, "whens", ())
@@ -538,19 +539,37 @@ def _search_tail(whens, at_end: Fragment, ctx: Ctx, path: str) -> Fragment:
 
 def _search_branch(when, ctx: Ctx, path: str) -> _Branch:
     body = lower_statements(getattr(when, "children", ()), ctx, path)
-    node = Node(
+    cond = _search_condition(when, ctx, path)
+    return _Branch(
+        nodes=(*cond.nodes, *body.nodes),
+        edges=(*cond.edges, *body.edges, *_attach(cond.true_exits, body)),
+        entry=cond.entry,
+        body_exits=body.exits if body.nodes else cond.true_exits,
+        false_exits=cond.false_exits,
+    )
+
+
+def _search_condition(when, ctx: Ctx, path: str) -> CondFragment:
+    """A WHEN's condition, decomposed wherever the cache holds its parts.
+
+    Some caches give the condition as text with the subject already folded in, and
+    there is nothing to take apart; that form still yields one UNRESOLVED test,
+    because the fork is real either way. Where the parts are present, reading them
+    is what puts the fields the guard depends on into a dependency report -- and
+    what keeps a Python dict repr out of the predicate a person reads.
+    """
+    raw = getattr(when, "condition", "")
+    if isinstance(raw, str):
+        return _exits_of(_opaque_test(ctx, path, raw))
+    return lower_condition(read_condition(raw), ctx, path)
+
+
+def _opaque_test(ctx: Ctx, path: str, text: str) -> Node:
+    return Node(
         id=node_id(ctx, path, "#test"),
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
-        atom=Atom(text=str(getattr(when, "condition", "")), resolved=False),
-    )
-    cond = _exits_of(node)
-    return _Branch(
-        nodes=(node, *body.nodes),
-        edges=_attach(cond.true_exits, body),
-        entry=node.id,
-        body_exits=body.exits if body.nodes else cond.true_exits,
-        false_exits=cond.false_exits,
+        atom=Atom(text=text, resolved=False),
     )
 
 
