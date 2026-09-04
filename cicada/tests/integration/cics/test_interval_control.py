@@ -165,6 +165,7 @@ def test_start_lowering_emits_no_return(cobol_parser):
         transid_to_program={"SRTB": "STARTB"},
         region_termid="T001",
         handler_source=[],
+        unsupported_verbs=set(),
     )
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,

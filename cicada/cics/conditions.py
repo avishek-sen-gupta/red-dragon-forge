@@ -63,6 +63,12 @@ RAISABLE: frozenset[str] = frozenset(
 # authoritative. See the design doc's "__cics_abend_unhandled" section.
 UNHANDLED_ABCODE = "AEIZ"
 
+# An unimplemented verb is this runtime's own gap, not a CICS condition, so it
+# gets a code outside IBM's AEIx space rather than borrowing one: a program
+# reaching it has hit emulator coverage, and reporting AEIx would claim CICS
+# refused the command.
+UNSUPPORTED_VERB_ABCODE = "UNSP"
+
 _RAISABLE_CODES: frozenset[int] = frozenset(CONDITION_CODES[name] for name in RAISABLE)
 
 

@@ -17,8 +17,10 @@ from cics.builtins.system import (
     make_writeq_td_builtin,
     make_handle_abend_builtin,
     make_handle_noop_builtin,
+    make_runtime_noop_builtin,
     make_abend_builtin,
     make_abend_unhandled_builtin,
+    make_abend_unsupported_builtin,
 )
 from interpreter.cobol.cobol_constants import BuiltinName
 from cobol_asg.cobol_expression import BinOpNode, FieldRefNode, LiteralNode
@@ -71,6 +73,10 @@ _SYS_VERBS: dict[str, str] = {
     # HANDLE AID is still an explicit no-op — AID dispatch is out of scope for
     # the condition-handling work.
     "HANDLE AID": "__cics_handle_aid",
+    # Nothing to release: this runtime emulates one task at a time, so a VSAM
+    # record lock has no other task to exclude. A real no-op, not a gap --
+    # see cicada-lkx.3.
+    "UNLOCK": "__cics_unlock",
 }
 
 # Verbs whose builtin returns a CICS response code to be written into EIBRESP
@@ -556,9 +562,11 @@ class CicsLoweringStrategy:
         region_termid: str = DEFAULT_TERMID,
         *,
         handler_source: list[ExecCicsStatement],
+        unsupported_verbs: set[str],
     ) -> None:
         self._context_holder = context_holder
         self._handler_source = handler_source
+        self._unsupported_verbs = unsupported_verbs
         self._handler_labels = HandlerLabels(indices={}, conditions={})
         self._paragraph_names: frozenset[str] = frozenset()
         self._start_queue = (
@@ -609,11 +617,24 @@ class CicsLoweringStrategy:
             "__cics_handle_aid",
             make_handle_noop_builtin("HANDLE AID"),
         )
+        _register(
+            Builtins.TABLE,
+            "__cics_unlock",
+            make_runtime_noop_builtin(
+                "EXEC CICS UNLOCK",
+                "single-task emulation holds no lock another task could see",
+            ),
+        )
         _register(Builtins.TABLE, "__cics_abend", make_abend_builtin(_holder))
         _register(
             Builtins.TABLE,
             "__cics_abend_unhandled",
             make_abend_unhandled_builtin(_holder),
+        )
+        _register(
+            Builtins.TABLE,
+            "__cics_abend_unsupported",
+            make_abend_unsupported_builtin(_holder),
         )
         _register(
             Builtins.TABLE,
@@ -1278,9 +1299,23 @@ class CicsLoweringStrategy:
             emit_raise_tail(ctx, opts, materialised)
             return
 
+        self._unsupported_verbs.add(verb)
         logger.warning(
-            "CicsLoweringStrategy: unimplemented verb %r — no IR emitted", verb
+            "CicsLoweringStrategy: unimplemented verb %r — emitting an abend", verb
         )
+        r_verb = ctx.fresh_reg()
+        ctx.emit_inst(Const.string(r_verb, verb))
+        ctx.emit_inst(
+            CallFunction(
+                result_reg=ctx.fresh_reg(),
+                func_name=FuncName("__cics_abend_unsupported"),
+                args=(r_verb,),
+            )
+        )
+        # Ends the task, as EXEC CICS ABEND's own lowering does. Without it the
+        # program runs on into whatever followed the unsupported statement and
+        # that statement's own result overwrites the abend.
+        ctx.emit_inst(Return_())
 
     def _emit_decode_eibresp(
         self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"

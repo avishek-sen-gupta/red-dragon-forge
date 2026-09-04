@@ -10,7 +10,7 @@ from interpreter.vm.vm_types import BuiltinResult, VMState
 from interpreter.types.typed_value import TypedValue
 from interpreter.var_name import VarName
 from interpreter.address import Address
-from cics.conditions import UNHANDLED_ABCODE
+from cics.conditions import UNHANDLED_ABCODE, UNSUPPORTED_VERB_ABCODE
 from cics.types import DispatchKind, DispatchResult
 
 if TYPE_CHECKING:
@@ -186,6 +186,24 @@ def make_handle_abend_builtin() -> object:
     return __cics_handle_abend
 
 
+def make_runtime_noop_builtin(verb: str, reason: str) -> object:
+    """A verb with nothing to do in this runtime, as opposed to one not yet
+    implemented.
+
+    The distinction is the point: an unimplemented verb abends
+    (__cics_abend_unsupported) because a program depending on it would
+    otherwise run on as though it had executed. A verb registered here has been
+    judged to have no work in this emulation, and ``reason`` records that
+    judgement at the registration site so it cannot decay into silence.
+    """
+
+    def __cics_runtime_noop(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        logger.debug("%s is a no-op in this runtime: %s", verb, reason)
+        return BuiltinResult(value=0)
+
+    return __cics_runtime_noop
+
+
 def make_handle_noop_builtin(verb: str) -> object:
     """Explicit no-op for HANDLE CONDITION / HANDLE AID.
 
@@ -232,6 +250,31 @@ def make_abend_unhandled_builtin(result_holder: list) -> object:  # type: ignore
         return BuiltinResult(value=resp)
 
     return __cics_abend_unhandled
+
+
+def make_abend_unsupported_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
+    """Abend for an EXEC CICS verb this runtime does not implement.
+
+    Reached only if the program actually executes the statement. Lowering
+    cannot refuse the whole program: the corpus carries unimplemented verbs on
+    abend and error paths that a healthy run never touches, so refusing to
+    compile would block programs over code that never runs. Emitting this abend
+    puts the failure where the program depended on the verb.
+    """
+
+    def __cics_abend_unsupported(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        verb = str(args[0].value).strip() if args else ""
+        logger.error(
+            "EXEC CICS %s is not implemented by this runtime — abending %s",
+            verb,
+            UNSUPPORTED_VERB_ABCODE,
+        )
+        result_holder[0] = DispatchResult(
+            kind=DispatchKind.ABEND, abcode=UNSUPPORTED_VERB_ABCODE
+        )
+        return BuiltinResult(value=0)
+
+    return __cics_abend_unsupported
 
 
 def make_inquire_builtin(program_cache: dict) -> object:  # type: ignore[type-arg]

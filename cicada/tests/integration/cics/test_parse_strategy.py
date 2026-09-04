@@ -95,6 +95,7 @@ def test_return_lowers_to_call_and_return(cobol_parser):
         context_holder=context_holder,
         result_holder=result_holder,
         handler_source=[],
+        unsupported_verbs=set(),
     )
 
     source = apply_cics_prepass(COBOL_RETURN.decode()).encode()

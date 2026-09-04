@@ -257,7 +257,11 @@ def _make_strategy():
 
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     return CicsLoweringStrategy(
-        context_holder=holder, applid="CARDDEMO", sysid="SYS1", handler_source=[]
+        context_holder=holder,
+        applid="CARDDEMO",
+        sysid="SYS1",
+        handler_source=[],
+        unsupported_verbs=set(),
     )
 
 
