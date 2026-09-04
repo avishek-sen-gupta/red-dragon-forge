@@ -1,0 +1,6 @@
+# Copy to config/srccfg.toml and point at a parsed corpus. Both keys are required.
+[srccfg]
+# The directory cobble-parse-corpus wrote: one JSON ASG per member.
+asg_dir = "/abs/path/to/out-parsed"
+# Where one CFG JSON per member goes.
+out_dir = "/abs/path/to/out-srccfg"

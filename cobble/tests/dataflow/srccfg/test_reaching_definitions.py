@@ -1,0 +1,407 @@
+"""Which write does a read see.
+
+A gen/kill fixpoint rather than a per-path walk: the same definition reached by four
+paths is one definition, and answering per path would report it four times with four
+guards -- guards are a separate lookup, joined when a query asks for them.
+"""
+
+from __future__ import annotations
+
+from cobol_asg.asg_types import CobolASG
+
+from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
+from cobble.dataflow.srccfg.build import build_program
+from cobble.dataflow.srccfg.dataflow import (
+    Definition,
+    def_use,
+    definitions_of,
+    reaching_definitions,
+    writers_of,
+)
+
+
+def _asg(paragraphs: list[dict]) -> CobolASG:
+    with cached_asg_dialect_parsers_registered():
+        return CobolASG.from_dict({"program_id": "PROGA", "paragraphs": paragraphs})
+
+
+def _move(value: str, target: str) -> dict:
+    return {"type": "MOVE", "operands": [{"name": value}, {"name": target}]}
+
+
+def _if(condition: dict, then: list[dict], otherwise: list[dict]) -> dict:
+    return {
+        "type": "IF",
+        "condition": condition,
+        "children": then,
+        "else_children": otherwise,
+    }
+
+
+def _rel(left: str, op: str, right: str) -> dict:
+    return {"kind": "relation", "left": left, "operator": op, "right": right}
+
+
+def _fields_of(uses, field: str):
+    return next(use for use in uses if use.field == field)
+
+
+def test_a_write_is_a_definition_at_its_own_node() -> None:
+    cfg = build_program(
+        _asg([{"name": "MAIN", "statements": [_move("'A'", "WS-FLAG-A")]}])
+    )
+
+    generated = definitions_of(cfg)
+
+    assert Definition(node="MAIN/0", field="WS-FLAG-A") in generated["MAIN/0"]
+
+
+def test_a_nodes_own_write_does_not_reach_its_own_entry() -> None:
+    """The in-set is what a read on this node sees, and MOVE WS-X TO WS-X must read
+    the previous write, not itself."""
+    cfg = build_program(
+        _asg([{"name": "MAIN", "statements": [_move("'A'", "WS-FLAG-A")]}])
+    )
+
+    assert reaching_definitions(cfg)["MAIN/0"] == frozenset()
+
+
+def test_a_later_read_sees_the_earlier_write() -> None:
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        _move("WS-FLAG-A", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    assert (
+        Definition(node="MAIN/0", field="WS-FLAG-A")
+        in reaching_definitions(cfg)["MAIN/1"]
+    )
+
+
+def test_a_second_write_on_the_same_path_kills_the_first() -> None:
+    """Without the kill, a derivation lists every write to a field ever, and the
+    commonest COBOL shape -- initialise then overwrite -- reads as two sources."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        _move("'B'", "WS-FLAG-A"),
+                        _move("WS-FLAG-A", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    reaching = reaching_definitions(cfg)["MAIN/2"]
+
+    assert Definition(node="MAIN/1", field="WS-FLAG-A") in reaching
+    assert Definition(node="MAIN/0", field="WS-FLAG-A") not in reaching
+
+
+def test_a_write_on_one_arm_only_does_not_kill_the_write_before_the_if() -> None:
+    """The join is a union, so a read after a conditional overwrite sees both -- and
+    the question "which one" is what the guards answer."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        _if(
+                            _rel("WS-OTHER", "=", "'Y'"),
+                            [_move("'B'", "WS-FLAG-A")],
+                            [],
+                        ),
+                        _move("WS-FLAG-A", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+    reader = next(node.id for node in cfg.nodes if "WS-RESULT" in node.writes)
+
+    fields = {d.field for d in reaching_definitions(cfg)[reader]}
+    writers = {
+        d.node for d in reaching_definitions(cfg)[reader] if d.field == "WS-FLAG-A"
+    }
+
+    assert "WS-FLAG-A" in fields
+    assert len(writers) == 2
+
+
+def test_a_write_on_both_arms_kills_the_write_before_the_if() -> None:
+    """A kill on every path is a kill, and reporting the pre-IF write here would put
+    a dead source in every derivation of this field."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        _if(
+                            _rel("WS-OTHER", "=", "'Y'"),
+                            [_move("'B'", "WS-FLAG-A")],
+                            [_move("'C'", "WS-FLAG-A")],
+                        ),
+                        _move("WS-FLAG-A", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+    reader = next(node.id for node in cfg.nodes if "WS-RESULT" in node.writes)
+
+    writers = {
+        d.node for d in reaching_definitions(cfg)[reader] if d.field == "WS-FLAG-A"
+    }
+
+    assert "MAIN/0" not in writers
+    assert len(writers) == 2
+
+
+def test_a_definition_reaches_a_performed_paragraph() -> None:
+    """M1: The write and the read are in different paragraphs. USE-IT comes before
+    MAIN in source order so fallthrough cannot reach it; only PERFORM/RETURN can."""
+    cfg = build_program(
+        _asg(
+            [
+                {"name": "USE-IT", "statements": [_move("WS-FLAG-A", "WS-RESULT")]},
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        {"type": "PERFORM", "operands": ["USE-IT"]},
+                    ],
+                },
+            ]
+        )
+    )
+    reader = next(node.id for node in cfg.nodes if "WS-RESULT" in node.writes)
+
+    assert (
+        Definition(node="MAIN/0", field="WS-FLAG-A")
+        in reaching_definitions(cfg)[reader]
+    )
+
+
+def test_a_write_inside_a_performed_paragraph_reaches_after_the_call() -> None:
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        {"type": "PERFORM", "operands": ["SET-IT"]},
+                        _move("WS-FLAG-A", "WS-RESULT"),
+                    ],
+                },
+                {"name": "SET-IT", "statements": [_move("'A'", "WS-FLAG-A")]},
+            ]
+        )
+    )
+    reader = next(node.id for node in cfg.nodes if "WS-RESULT" in node.writes)
+
+    assert {
+        d.node for d in reaching_definitions(cfg)[reader] if d.field == "WS-FLAG-A"
+    } == {"SET-IT/0"}
+
+
+def test_a_loop_reaches_a_fixpoint_rather_than_iterating_forever() -> None:
+    """M2: A loop must converge. At STEP/0 (MOVE WS-FLAG-A TO WS-PREV), the
+    definitions of WS-FLAG-A should include STEP/1 from the back-edge."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        {
+                            "type": "PERFORM",
+                            "operands": ["STEP"],
+                            "spec": {
+                                "kind": "until",
+                                "condition": _rel("WS-FLAG-A", "=", "'Y'"),
+                                "test_before": True,
+                            },
+                        }
+                    ],
+                },
+                {
+                    "name": "STEP",
+                    "statements": [
+                        _move("WS-FLAG-A", "WS-PREV"),
+                        _move("'Y'", "WS-FLAG-A"),
+                    ],
+                },
+            ]
+        )
+    )
+
+    result = reaching_definitions(cfg)
+    assert {(d.node, d.field) for d in result["STEP/0"]} == {
+        ("STEP/0", "WS-PREV"),
+        ("STEP/1", "WS-FLAG-A"),
+    }
+
+
+def test_def_use_pairs_name_the_field_and_every_definition_that_reaches_it() -> None:
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        _move("WS-FLAG-A", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    use = _fields_of(def_use(cfg), "WS-FLAG-A")
+
+    assert use.node == "MAIN/1"
+    assert use.definitions == frozenset({Definition(node="MAIN/0", field="WS-FLAG-A")})
+
+
+def test_a_read_with_no_definition_is_still_a_use_with_an_empty_set() -> None:
+    """An empty set is the answer for a field written by the caller, by a file read,
+    or in a copybook VALUE clause -- and dropping the use would hide it entirely."""
+    cfg = build_program(
+        _asg([{"name": "MAIN", "statements": [_move("WS-FROM-CALLER", "WS-RESULT")]}])
+    )
+
+    assert _fields_of(def_use(cfg), "WS-FROM-CALLER").definitions == frozenset()
+
+
+def test_writers_of_lists_every_node_that_writes_a_field_in_source_order() -> None:
+    """The first query anyone asks. Source order, because a reader compares it
+    against the listing."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-FLAG-A"),
+                        _move("'B'", "WS-FLAG-A"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    assert writers_of(cfg, "WS-FLAG-A") == ("MAIN/0", "MAIN/1")
+
+
+def test_a_long_straight_line_reaches_fixpoint_without_exhausting_time() -> None:
+    """R33: Measure the Jacobi fixpoint on 400 sequential writes. A definition needs
+    one sweep per hop, so this costs O(N) sweeps at O(N × |defs|) each. The number
+    may be bad — that's for follow-up — but it must be measured."""
+    import time
+
+    statements = [
+        _move(f"'{chr(65 + i % 26)}'", f"WS-FIELD-{i:03d}") for i in range(400)
+    ]
+    cfg = build_program(_asg([{"name": "MAIN", "statements": statements}]))
+
+    start = time.perf_counter()
+    result = reaching_definitions(cfg)
+    elapsed = time.perf_counter() - start
+
+    # Verify correctness: the last node sees only the immediately preceding definitions
+    last_node = f"MAIN/{len(statements) - 1}"
+    assert last_node in result
+    # Each field should have exactly one reaching definition at the last node
+    assert len(result[last_node]) == len(statements) - 1
+
+    print(f"\n400-MOVE fixpoint wall-clock: {elapsed:.4f}s")
+    assert elapsed < 30.0, f"Fixpoint took {elapsed:.2f}s, expecting under 30s"
+
+
+def test_a_subscripted_write_is_visible_to_a_read_of_the_base_name() -> None:
+    """I1: MOVE 'A' TO WS-TAB(1) generates a definition that writers_of('WS-TAB')
+    finds and that a read of WS-TAB sees."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-TAB(1)"),
+                        _move("WS-TAB", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    assert writers_of(cfg, "WS-TAB") == ("MAIN/0",)
+    uses = [u for u in def_use(cfg) if u.field == "WS-TAB"]
+    assert len(uses) == 1
+    assert len(uses[0].definitions) == 1
+    assert next(iter(uses[0].definitions)).field == "WS-TAB(1)"
+
+
+def test_a_reference_modified_write_is_visible_to_a_read_of_the_base_name() -> None:
+    """I1: MOVE 'X' TO WS-FIELD(1:4) generates a definition that writers_of and
+    def_use both find via base-name matching."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'X'", "WS-FIELD(1:4)"),
+                        _move("WS-FIELD", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    assert writers_of(cfg, "WS-FIELD") == ("MAIN/0",)
+    uses = [u for u in def_use(cfg) if u.field == "WS-FIELD"]
+    assert len(uses[0].definitions) == 1
+    assert next(iter(uses[0].definitions)).field == "WS-FIELD(1:4)"
+
+
+def test_a_subscripted_write_does_not_kill_the_base_name() -> None:
+    """I1: A write to WS-TAB(1) does not kill WS-TAB or WS-TAB(2). Over-approximate
+    on gen, never on kill."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("'A'", "WS-TAB"),
+                        _move("'B'", "WS-TAB(1)"),
+                        _move("WS-TAB", "WS-RESULT"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    uses = [u for u in def_use(cfg) if u.field == "WS-TAB"]
+    fields_reaching = {d.field for d in uses[0].definitions}
+    assert "WS-TAB" in fields_reaching
+    assert "WS-TAB(1)" in fields_reaching
+    assert len(fields_reaching) == 2

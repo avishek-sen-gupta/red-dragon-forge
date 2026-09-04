@@ -269,7 +269,7 @@ def test_a_target_dir_the_config_does_not_list_is_refused_before_any_write(
     reads -- and it was written anyway, with the mismatch reported afterwards.
 
     Reporting is too late when the target is a path something else owns: `--fix
-    out-corpus/synthetic.csd` created a DIRECTORY over where the generated CSD goes,
+    out/synthetic.csd` created a DIRECTORY over where the generated CSD goes,
     put 328 stubs nobody would read inside it, and cost the next build every
     TRANSACTION node. So the check happens first, and nothing is created.
     """

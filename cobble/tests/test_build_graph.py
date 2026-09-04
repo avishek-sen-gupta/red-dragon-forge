@@ -88,7 +88,7 @@ def test_a_csd_path_that_is_a_directory_is_unusable(tmp_path: Path) -> None:
 
     Guarded as a member it read as one warning, and the run went on to write a
     32,463-node graph with zero TRANSACTION nodes: `diagnose-copybooks --fix
-    out-corpus/synthetic.csd` had created a DIRECTORY where the generated CSD goes,
+    out/synthetic.csd` had created a DIRECTORY where the generated CSD goes,
     and nothing in the run said the graph was missing a whole stage.
     """
     generated = tmp_path / "out" / "synthetic.csd"
