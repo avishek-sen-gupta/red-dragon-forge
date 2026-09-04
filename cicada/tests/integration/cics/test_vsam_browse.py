@@ -132,6 +132,7 @@ def test_vsam_browse_forward_round_trips(cobol_parser):
         result_holder=result_holder,
         vsam_engine=_engine(),
         handler_source=[],
+        unsupported_verbs=set(),
     )
     source = apply_cics_prepass(COBOL_BROWSE).encode()
     frontend = CobolFrontend(

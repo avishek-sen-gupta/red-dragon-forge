@@ -12,6 +12,8 @@ from cics.strategy import CicsLoweringStrategy
 
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 
+_OWN_UNSUPPORTED: set[str] = set()
+
 
 def build_cics_spec(
     context_holder: list,
@@ -20,6 +22,7 @@ def build_cics_spec(
     vsam_engine: Any = None,
     screen_queue: Any = None,
     input_queue: Any = None,
+    unsupported_verbs: set[str] = _OWN_UNSUPPORTED,
     **kwargs: Any,
 ) -> CoprocessorSpec:
     """Build the EXEC CICS CoprocessorSpec.
@@ -28,7 +31,14 @@ def build_cics_spec(
     mutable cells CicsLoweringStrategy already uses internally -- pass the
     SAME dicts/lists across multiple compile_program() calls for programs
     that LINK to each other within one region.
+
+    ``unsupported_verbs`` is the caller's cell for the same reason: it collects
+    every EXEC CICS verb this runtime dropped while lowering, so a harness can
+    assert on the set rather than scrape a log. Each such statement also
+    lowers to an abend, so a program that reaches one fails there instead of
+    running on as though it had executed (forge-p9t).
     """
+    collected = set() if unsupported_verbs is _OWN_UNSUPPORTED else unsupported_verbs
     dialect_parser = CicsDialectParser()
 
     def _make_strategy() -> CicsLoweringStrategy:
@@ -44,6 +54,7 @@ def build_cics_spec(
             screen_queue=screen_queue,
             input_queue=input_queue,
             handler_source=dialect_parser.statements,
+            unsupported_verbs=collected,
             **kwargs,
         )
 

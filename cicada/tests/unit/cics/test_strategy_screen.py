@@ -19,6 +19,7 @@ def test_strategy_registers_screen_builtins():
         screen_queue=screen_q,
         input_queue=input_q,
         handler_source=[],
+        unsupported_verbs=set(),
     )
     assert FuncName("__cics_send_map") in Builtins.TABLE
     assert FuncName("__cics_receive_map") in Builtins.TABLE
@@ -28,7 +29,12 @@ def test_strategy_registers_screen_builtins():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_strategy_without_bms_still_constructs():
     # No screen_queue/input_queue -> screen builtins simply not registered, no error.
-    CicsLoweringStrategy(context_holder=[None], result_holder=[None], handler_source=[])
+    CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -70,7 +76,10 @@ def test_send_map_lowers_to_call_function():
         },
     )
     strategy = CicsLoweringStrategy(
-        context_holder=[None], result_holder=[None], handler_source=[]
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     strategy.lower(ctx, stmt, materialised=None)
     calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
@@ -148,7 +157,10 @@ def test_send_map_lowering_passes_base_field_names():
         },
     )
     strategy = CicsLoweringStrategy(
-        context_holder=[None], result_holder=[None], handler_source=[]
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     strategy.lower(ctx, stmt, materialised=materialised)
 
@@ -233,7 +245,10 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
         },  # no INTO -> derive COSGN0AI from the literal map name
     )
     strategy = CicsLoweringStrategy(
-        context_holder=[None], result_holder=[None], handler_source=[]
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     strategy.lower(ctx, stmt, materialised=materialised)
 
@@ -293,7 +308,10 @@ def test_writeq_td_lowers_with_real_args():
         },
     )
     strategy = CicsLoweringStrategy(
-        context_holder=[None], result_holder=[None], handler_source=[]
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     strategy.lower(ctx, stmt, materialised=None)
 
@@ -387,7 +405,10 @@ def test_writeq_td_lowers_with_resp_writeback():
         },
     )
     strategy = CicsLoweringStrategy(
-        context_holder=[None], result_holder=[None], handler_source=[]
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     strategy.lower(ctx, stmt, materialised=None)
 

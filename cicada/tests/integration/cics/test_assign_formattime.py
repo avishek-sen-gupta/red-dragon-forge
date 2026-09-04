@@ -106,6 +106,7 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
         applid="CARDDEMO",
         sysid="SYS1",
         handler_source=[],
+        unsupported_verbs=set(),
     )
     source = apply_cics_prepass(COBOL_ASSIGN).encode()
     frontend = CobolFrontend(

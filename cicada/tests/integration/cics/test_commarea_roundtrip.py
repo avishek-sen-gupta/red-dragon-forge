@@ -112,7 +112,10 @@ def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
-        context_holder=context_holder, result_holder=result_holder, handler_source=[]
+        context_holder=context_holder,
+        result_holder=result_holder,
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     source = apply_cics_prepass(COBOL_COMMAREA).encode()
     frontend = CobolFrontend(
@@ -148,7 +151,10 @@ def test_return_commarea_literal_falls_back_to_const(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
-        context_holder=context_holder, result_holder=result_holder, handler_source=[]
+        context_holder=context_holder,
+        result_holder=result_holder,
+        handler_source=[],
+        unsupported_verbs=set(),
     )
     source = apply_cics_prepass(COBOL_RETURN_LIT).encode()
     frontend = CobolFrontend(
