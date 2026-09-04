@@ -839,8 +839,12 @@ both together, or expect the noise and say so up front.
 
 ## Suggested order
 
-Dependencies first, then radius. **Steps 1–6 are done** (see *Status* above); the
-queue now starts at step 7.
+Dependencies first, then radius. **Steps 1–6 and 8 are done** (see *Status* above).
+**Step 7 is the only one of these left**, and it is now the largest remaining
+correctness gap in cicada: `forge-p9t`, making an unimplemented verb loud rather
+than dropping the statement and running on. Step 8 landing ahead of it does not
+cover it — condition handling makes a *failed* command visible; a *skipped* one
+still leaves no trace in the return value.
 
 1. **B** — unify the two lowerers' unknown-name policy. Smallest change, and it
    makes A and C visible instead of silent. Do this first even though it fixes no
