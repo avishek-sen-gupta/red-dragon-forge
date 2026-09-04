@@ -15,12 +15,11 @@ one thing the closure establishes is that these programs are a single path.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import cfg_from_dict
+from cobble.dataflow.srccfg.build_corpus import load_cfgs
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
 
 QUALIFIER = "::"
@@ -194,21 +193,6 @@ def dot_of(cfgs: Sequence[Cfg]) -> str:
             "}",
         )
     )
-
-
-def _cfgs_of(document) -> tuple[Cfg, ...]:
-    """A list is a closure; a bare object is the single-CFG file build_one writes.
-
-    Accepting both means a caller does not have to know which shape they are holding
-    before they can draw it, and passing the wrong one is not a crash.
-    """
-    if isinstance(document, list):
-        return tuple(cfg_from_dict(entry) for entry in document)
-    return (cfg_from_dict(document),)
-
-
-def load_cfgs(path: Path) -> tuple[Cfg, ...]:
-    return _cfgs_of(json.loads(path.read_text(encoding="utf-8")))
 
 
 def _parser() -> argparse.ArgumentParser:

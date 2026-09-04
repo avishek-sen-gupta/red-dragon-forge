@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import load_cfg
+from cobble.dataflow.srccfg.build_corpus import load_cfgs
 from cobble.dataflow.srccfg.cfg import Atom, Cfg
 from cobble.dataflow.srccfg.coassign import Tier, caveats, co_assigned
 from cobble.dataflow.srccfg.conditions import VALUE_OPS
@@ -302,10 +302,21 @@ def main(argv: Sequence[str] = ()) -> int:
         # F10: Use sys.stderr.write() instead of print() to avoid RUF100
         sys.stderr.write(f"No CFG at {arguments.cfg}\n")
         return 2
-    for line in _lines(load_cfg(arguments.cfg), arguments):
+    for line in _all_lines(load_cfgs(arguments.cfg), arguments):
         # F10: Use sys.stdout.write() instead of print()
         sys.stdout.write(f"{line}\n")
     return 0
+
+
+def _all_lines(cfgs: Sequence[Cfg], arguments) -> tuple[str, ...]:
+    """Every program in the file, reported on in turn.
+
+    A file may hold one program or a whole call closure, and a query that read only
+    the first would answer about the seed while looking like it had searched all of
+    them. No heading is added: each report already names its own program, so the
+    single-program case reads exactly as it did before.
+    """
+    return tuple(line for cfg in cfgs for line in _lines(cfg, arguments))
 
 
 def _parser() -> argparse.ArgumentParser:
