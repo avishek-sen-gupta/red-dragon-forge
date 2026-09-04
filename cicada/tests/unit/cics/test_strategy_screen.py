@@ -320,7 +320,11 @@ def test_writeq_td_lowers_with_resp_writeback():
     from cics.statements import CicsOperand
     from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
     from interpreter.cobol.data_layout import FieldLayout
-    from interpreter.cobol.field_resolution import ResolvedFieldRef
+    from interpreter.cobol.field_resolution import (
+        ResolvedFieldRef,
+        whole_field_extent,
+    )
+    from interpreter.cobol.region_id import RegionId
     from interpreter.register import Register
 
     class _RespCtx:
@@ -357,9 +361,15 @@ def test_writeq_td_lowers_with_resp_writeback():
             )
             offset_reg = self.fresh_reg()
             self.emit_inst(("const_offset", offset_reg, offset))
-            return ResolvedFieldRef(fl=fl, offset_reg=offset_reg), Register("%region")
+            return ResolvedFieldRef(
+                fl=fl,
+                offset_reg=offset_reg,
+                extent=whole_field_extent(fl, RegionId.WORKING_STORAGE),
+            ), Register("%region")
 
-        def emit_encode_and_write(self, region_reg, fl, value_str_reg, offset_reg=None):
+        def emit_encode_and_write(
+            self, region_reg, fl, value_str_reg, offset_reg=None, *, extent=None
+        ):
             self.encode_writes.append((region_reg, fl, value_str_reg, offset_reg))
 
         def emit_to_string(self, value_reg):

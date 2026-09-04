@@ -10,7 +10,11 @@ from cics.strategy import emit_operand_value
 from cics.statements import CicsOperand
 from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
-from interpreter.cobol.field_resolution import ResolvedFieldRef
+from interpreter.cobol.field_resolution import (
+    ResolvedFieldRef,
+    whole_field_extent,
+)
+from interpreter.cobol.region_id import RegionId
 from cobol_asg.ref_mod import RefModLiteral
 from interpreter.cobol.cobol_constants import BuiltinName
 from interpreter.func_name import FuncName
@@ -52,9 +56,13 @@ class FakeCtx:
             byte_length=byte_length,
         )
         offset_reg = self.fresh_reg()
-        return ResolvedFieldRef(fl=fl, offset_reg=offset_reg), Register("%region")
+        return ResolvedFieldRef(
+            fl=fl,
+            offset_reg=offset_reg,
+            extent=whole_field_extent(fl, RegionId.WORKING_STORAGE),
+        ), Register("%region")
 
-    def emit_decode_field(self, region_reg, fl, offset_reg=None):  # type: ignore[no-untyped-def]
+    def emit_decode_field(self, region_reg, fl, offset_reg=None, *, extent=None):  # type: ignore[no-untyped-def]
         out = self.fresh_reg()
         self.decoded.append((region_reg, fl, out))
         return out

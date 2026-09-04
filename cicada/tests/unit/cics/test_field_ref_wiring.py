@@ -10,7 +10,11 @@ from cics.strategy import (
 from cics.statements import CicsOperand
 from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
 from interpreter.cobol.data_layout import FieldLayout
-from interpreter.cobol.field_resolution import ResolvedFieldRef
+from interpreter.cobol.field_resolution import (
+    ResolvedFieldRef,
+    whole_field_extent,
+)
+from interpreter.cobol.region_id import RegionId
 from interpreter.instructions import LoadRegion
 from interpreter.register import Register
 from tests.covers import covers, NotLanguageFeature
@@ -55,10 +59,17 @@ class FakeCtx:
         offset_reg = self.fresh_reg()
         self.emit_inst(("const_offset", offset_reg, offset))
         region_reg = Region_for(name)
-        return ResolvedFieldRef(fl=fl, offset_reg=offset_reg), region_reg
+        return (
+            ResolvedFieldRef(
+                fl=fl,
+                offset_reg=offset_reg,
+                extent=whole_field_extent(fl, RegionId.WORKING_STORAGE),
+            ),
+            region_reg,
+        )
 
     def emit_encode_and_write(
-        self, region_reg, fl, value_str_reg, offset_reg=None
+        self, region_reg, fl, value_str_reg, offset_reg=None, *, extent=None
     ):  # type: ignore[no-untyped-def]
         self.encode_writes.append((region_reg, fl, value_str_reg, offset_reg))
 
