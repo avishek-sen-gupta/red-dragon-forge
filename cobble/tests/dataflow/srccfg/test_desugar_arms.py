@@ -399,3 +399,96 @@ def test_a_statement_with_only_not_at_end_still_builds_the_guard(program_of) -> 
         for e in cfg.successors(test_node.id)
         if e.kind is EdgeKind.FALSE
     ] == [("MAIN/0.not_at_end.0", EdgeKind.FALSE)]
+
+
+def _structured_when(left: str, right: str) -> dict:
+    """The shape a real cache holds for a SEARCH WHEN: a relation, not text."""
+    return {
+        "condition": {
+            "not": False,
+            "relation": {
+                "left": {"kind": "ref", "name": left},
+                "op": "==",
+                "right": {"kind": "ref", "name": right},
+            },
+        },
+        "children": [_move("'F'", "WS-RESULT")],
+    }
+
+
+def test_a_search_when_with_a_structured_condition_reads_its_parts(program_of) -> None:
+    """A WHEN condition is not always opaque text. Where the cache gives a relation,
+    stringifying it wrote a Python dict repr into the predicate -- unreadable in a
+    report, and the fields it names were not recorded as the guard's dependencies."""
+    cfg = _cfg(
+        program_of,
+        [
+            {
+                "type": "SEARCH",
+                "table": "WS-TABLE",
+                "whens": [_structured_when("WS-KEY", "WS-WANTED")],
+            }
+        ],
+    )
+
+    test_node = next(n for n in cfg.nodes if n.kind == NodeKind.TEST)
+    assert test_node.atom.resolved is True
+    assert test_node.atom.text == "WS-KEY == WS-WANTED"
+    assert (test_node.atom.left, test_node.atom.right) == ("WS-KEY", "WS-WANTED")
+
+
+def test_a_search_when_predicate_is_never_a_python_dict_repr(program_of) -> None:
+    cfg = _cfg(
+        program_of,
+        [
+            {
+                "type": "SEARCH",
+                "table": "WS-TABLE",
+                "whens": [_structured_when("WS-KEY", "WS-WANTED")],
+            }
+        ],
+    )
+
+    for node in cfg.nodes:
+        assert not node.atom.text.startswith("{")
+
+
+def test_a_structured_search_when_still_forks_into_its_body(program_of) -> None:
+    """The lowering changed, so the edge the body hangs off has to be re-established:
+    an arm reached unconditionally is the failure this module exists to prevent."""
+    cfg = _cfg(
+        program_of,
+        [
+            {
+                "type": "SEARCH",
+                "table": "WS-TABLE",
+                "whens": [_structured_when("WS-KEY", "WS-WANTED")],
+            }
+        ],
+    )
+
+    test_node = next(n for n in cfg.nodes if n.kind == NodeKind.TEST)
+    assert [(e.target, e.kind) for e in cfg.successors(test_node.id)] == [
+        ("MAIN/0.when.0.0", EdgeKind.TRUE)
+    ]
+
+
+def test_a_search_when_body_keeps_the_edges_between_its_own_statements(
+    program_of,
+) -> None:
+    """`_guarded_branch` passes `body.edges` on and this arm did not, so a WHEN body
+    of two statements arrived as two nodes with nothing joining them: the second was
+    unreachable, and every guard reported for it was the guard of nothing."""
+    when = {
+        "condition": "WS-KEY = WS-WANTED",
+        "children": [_move("'F'", "WS-FIRST"), _move("'S'", "WS-SECOND")],
+    }
+    cfg = _cfg(
+        program_of,
+        [{"type": "SEARCH", "table": "WS-TABLE", "whens": [when]}],
+    )
+
+    first = next(n for n in cfg.nodes if "WS-FIRST" in n.writes)
+    assert [e.target for e in cfg.successors(first.id)] == [
+        next(n for n in cfg.nodes if "WS-SECOND" in n.writes).id
+    ]

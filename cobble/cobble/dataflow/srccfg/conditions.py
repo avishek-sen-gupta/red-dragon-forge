@@ -98,7 +98,11 @@ def _operand(raw: object) -> str:
     kind = raw.get("kind")
     if kind == "ref":
         return str(raw.get("name", ""))
-    if kind == "lit":
+    if kind in ("lit", "figurative"):
+        # A figurative constant is a literal that happens to have a name. Reading it
+        # as one keeps `IF X = SPACES OR LOW-VALUES` two distinguishable predicates
+        # rather than two copies of "X == "; is_literal already covers these names,
+        # so nothing downstream mistakes SPACES for a field.
         return str(raw.get("value", ""))
     if kind == "dfhresp":
         return dfhresp_operand(str(raw.get("condition", "")))

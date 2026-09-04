@@ -189,3 +189,55 @@ def test_negating_a_predicate_with_no_opposite_operator_says_not() -> None:
 
 def test_negating_the_unresolved_atom_stays_unresolved() -> None:
     assert negate_atom(UNRESOLVED).resolved is False
+
+
+def _fig(left: str, op: str, constant: str) -> dict:
+    """`IF IRRA-ERR-CDE = SPACES` -- the shape the cache actually holds."""
+    return {
+        "not": False,
+        "relation": {
+            "left": {"kind": "ref", "name": left},
+            "op": op,
+            "right": {"kind": "figurative", "value": constant},
+        },
+    }
+
+
+def test_a_figurative_constant_is_kept_as_the_right_operand() -> None:
+    """SPACES and LOW-VALUES arrive with kind "figurative", not "lit". Dropping them
+    printed the guard as "IRRA-ERR-CDE == " with nothing on the right, which names no
+    condition a reader can check against the listing."""
+    assert read_condition(_fig("IRRA-ERR-CDE", "==", "SPACES")) == Atom(
+        text="IRRA-ERR-CDE == SPACES",
+        left="IRRA-ERR-CDE",
+        op="==",
+        right="SPACES",
+    )
+
+
+def test_two_figurative_constants_in_one_condition_stay_distinct() -> None:
+    """`IF X = SPACES OR LOW-VALUES` lowers to two tests. With both right operands
+    empty the two atoms were byte-identical, so a guard listing could not say which
+    branch tested which -- the halves became indistinguishable rather than merely
+    unlabelled."""
+    both = read_condition(
+        {
+            "op": "OR",
+            "left": _fig("IRRA-ERR-CDE", "==", "SPACES"),
+            "right": _fig("IRRA-ERR-CDE", "==", "LOW-VALUES"),
+        }
+    )
+
+    assert isinstance(both, Or)
+    assert both.left != both.right
+    assert (both.left.right, both.right.right) == ("SPACES", "LOW-VALUES")
+
+
+def test_a_figurative_constant_is_not_reported_as_a_field_dependency() -> None:
+    """It goes into `right`, and is_literal already covers the figurative names, so
+    filling it in must not turn SPACES into a field written nowhere."""
+    from cobble.dataflow.srccfg.literals import is_literal
+
+    atom = read_condition(_fig("IRRA-ERR-CDE", "==", "SPACES"))
+
+    assert is_literal(atom.right)
