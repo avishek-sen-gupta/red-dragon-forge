@@ -21,6 +21,15 @@ sym-*/
 # corpus's own member-name globs, so it identifies the codebase it points at —
 # only config/carddemo.yaml (a public sample) belongs in the repo.
 config/*.local.yaml
+# Every depgraph config, not just a .local one. It carries absolute corpus paths
+# AND the pass-through set, whose entries are that corpus's own working-storage
+# field names -- as identifying as a path. The example shape lives in
+# cobble/dataflow/depgraph/config.py's docstring, so nothing is lost by keeping
+# all of these out.
+config/*.toml
+# ...but an .example.toml carries no absolute paths and no corpus identifiers: it is
+# the only documentation of a config's shape, so it has to be in the repo.
+!config/*.example.toml
 
 # Local tool builds (hlasm_export and friends, when built from here)
 tools/

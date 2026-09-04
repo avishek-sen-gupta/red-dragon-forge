@@ -1,0 +1,5 @@
+# Copy to config/srccfg-tests.toml to run the acceptance tests against a parsed corpus.
+# Without it they skip -- there is no corpus in this repo and there must never be one.
+# Top-level keys, no table.
+cache_dir = "/abs/path/to/out-parsed"
+members = ["MEMBERONE", "MEMBERTWO"]

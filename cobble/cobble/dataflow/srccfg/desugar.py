@@ -1,0 +1,1043 @@
+"""One ASG statement to one Fragment.
+
+What a statement MOVES is not decided here. ``depgraph.flows`` already holds the
+verb table -- 30-odd statement kinds, the CICS verbs, the FD-to-record pairing --
+and a second copy of it would drift from the first. This module asks flows what
+the blocks are and turns them into nodes.
+
+One gap has to be filled locally: flows has no INITIALIZE rule, because a
+source-to-target edge needs a source. A definition with no source still kills the
+definition before it, so reaching definitions needs the node even though the
+dependency graph does not.
+
+Identity is a path, because no ASG statement carries a line number. ``MAIN/3`` is
+the fourth statement of MAIN; ``MAIN/3.else.1`` the second statement of its ELSE
+arm. Suffixes distinguish the several nodes one statement can lower to:
+``#test.0``, ``#join``, ``#end``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from itertools import pairwise
+
+from cobble.dataflow.depgraph.flows import (
+    ProgramContext,
+    blocks_of,
+    operand_names,
+    verb_of,
+)
+from cobble.dataflow.srccfg.cfg import (
+    EMPTY_FRAGMENT,
+    Atom,
+    Edge,
+    EdgeKind,
+    Exit,
+    Fragment,
+    Node,
+    NodeKind,
+    seq,
+)
+from cobble.dataflow.srccfg.conditions import (
+    And,
+    EightyEight,
+    Not,
+    Or,
+    read_condition,
+    read_when_condition,
+    resolve_atom,
+)
+from cobble.dataflow.srccfg.synthetic import (
+    HANDLER_ANY,
+    IGNORED,
+    RAISED,
+    SYSTEM_DEFAULT,
+    handler_field,
+    io_status_field,
+)
+
+GOTO_TRANSFER = "GO TO"
+DISPATCH_TRANSFER = "GO TO DEPENDING"
+PERFORM_TRANSFER = "PERFORM"
+RANGE_SEPARATOR = "|"
+TIMES_OP = "TIMES"
+
+ARM_CLAUSES = (
+    ("at_end", "not_at_end", "AT END"),
+    ("invalid_key", "not_invalid_key", "INVALID KEY"),
+    ("on_size_error", "not_on_size_error", "ON SIZE ERROR"),
+)
+
+ARMING_VERBS = ("HANDLE CONDITION", "IGNORE CONDITION", "HANDLE AID")
+SUPPRESSING_OPTIONS = ("NOHANDLE", "RESP", "RESP2")
+DISPATCH_TRANSFER_CICS = "HANDLE DISPATCH"
+
+LINK_TRANSFER = "LINK"
+XCTL_TRANSFER = "XCTL"
+CALL_TRANSFER = "CALL"
+CALL_TRANSFERS = {
+    "CICS_LINK": LINK_TRANSFER,
+    "CICS_XCTL": XCTL_TRANSFER,
+    CALL_TRANSFER: CALL_TRANSFER,
+}
+PROGRAM_OPTION = "PROGRAM"
+COMMAREA_OPTION = "COMMAREA"
+
+WRITES_ONLY_KINDS = ("InitializeStatement",)
+# A verb whose sink is outside the program still reads its operands.
+READS_ONLY_KINDS = ("DisplayStatement",)
+# A verb whose source is outside the program still writes its target.
+EXTERNAL_SOURCE_WRITES = ("AcceptStatement",)
+
+# Kinds this module knows touch data items. A statement in this set is always
+# ASSIGN even when extraction yields nothing: an ASSIGN with empty writes and
+# reads is a parse gap made visible, not a no-op.
+_GAP_FILL_KINDS = WRITES_ONLY_KINDS + READS_ONLY_KINDS + EXTERNAL_SOURCE_WRITES
+
+
+@dataclass(frozen=True)
+class Ctx:
+    """What lowering needs about the program and the paragraph being lowered."""
+
+    program: str
+    paragraph: str
+    flows: ProgramContext
+    index: Mapping[str, EightyEight]
+
+
+@dataclass(frozen=True)
+class CondFragment:
+    """A lowered condition: the tests, and the two sets of exits it leaves.
+
+    A chain of ANDed atoms leaves one true exit and one false exit per atom; a
+    chain of ORed atoms leaves the mirror image. NOT is applied by swapping the
+    two sets, which is why no node is emitted for it and why the negation of a
+    chain comes out as a set of paths rather than a formula.
+    """
+
+    nodes: tuple[Node, ...]
+    edges: tuple[Edge, ...]
+    entry: str
+    true_exits: tuple[Exit, ...]
+    false_exits: tuple[Exit, ...]
+
+
+def node_id(ctx: Ctx, path: str, suffix: str = "") -> str:
+    return f"{ctx.paragraph}/{path}{suffix}"
+
+
+def lower_statements(statements: Sequence, ctx: Ctx, path: str) -> Fragment:
+    prefix = f"{path}." if path else ""
+    return seq(
+        tuple(
+            lower_statement(statement, ctx, f"{prefix}{position}")
+            for position, statement in enumerate(statements)
+        ),
+        nop_id=node_id(ctx, f"{prefix}empty"),
+    )
+
+
+def lower_statement(statement, ctx: Ctx, path: str) -> Fragment:
+    handler = _HANDLERS.get(type(statement).__name__)
+    return handler(statement, ctx, path) if handler else _plain(statement, ctx, path)
+
+
+def _plain(statement, ctx: Ctx, path: str) -> Fragment:
+    kind = type(statement).__name__
+    writes, reads = _writes_reads(statement, ctx, kind)
+    node = Node(
+        id=node_id(ctx, path),
+        kind=(
+            NodeKind.ASSIGN
+            if kind in _GAP_FILL_KINDS or writes or reads
+            else NodeKind.NOP
+        ),
+        paragraph=ctx.paragraph,
+        writes=writes,
+        reads=reads,
+        transfer=verb_of(statement) or _fallback_verb(kind),
+    )
+    return _with_arms(statement, ctx, path, _one(node))
+
+
+def _writes_reads(statement, ctx: Ctx, kind: str) -> tuple[tuple[str, ...], ...]:
+    if kind in WRITES_ONLY_KINDS:
+        return (operand_names(getattr(statement, "operands", ())), ())
+    if kind in READS_ONLY_KINDS:
+        return ((), operand_names(getattr(statement, "operands", ())))
+    if kind in EXTERNAL_SOURCE_WRITES:
+        target = getattr(statement, "target", "")
+        return ((target,) if target else (), ())
+    blocks = blocks_of(statement, ctx.flows)
+    return (
+        _dedupe(target for _, targets in blocks for target in targets),
+        _dedupe(source for sources, _ in blocks for source in sources),
+    )
+
+
+def _dedupe(names) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(name for name in names if name))
+
+
+def _fallback_verb(kind: str) -> str:
+    """A kind flows has no label for still shows something a reader recognises:
+    ``DisplayStatement`` reads as DISPLAY."""
+    return kind.removesuffix("Statement").upper()
+
+
+def _one(node: Node) -> Fragment:
+    return Fragment(
+        nodes=(node,),
+        edges=(),
+        entry=node.id,
+        exits=(Exit(node_id=node.id, kind=EdgeKind.FLOW),),
+    )
+
+
+def _with_arms(statement, ctx: Ctx, path: str, body: Fragment) -> Fragment:
+    present = _present_arms(statement)
+    if not present:
+        return body
+    return _chain_arms(statement, ctx, path, body, present, 0)
+
+
+def _present_arms(statement) -> tuple:
+    return tuple(
+        clause
+        for clause in ARM_CLAUSES
+        if getattr(statement, clause[0], ()) or getattr(statement, clause[1], ())
+    )
+
+
+def _chain_arms(
+    statement, ctx: Ctx, path: str, body: Fragment, present, pos: int
+) -> Fragment:
+    if pos >= len(present):
+        return body
+    true_attr, false_attr, label = present[pos]
+    suffix = "#arm" if pos == 0 else f"#arm.{true_attr}"
+    join_suffix = "#arm.join" if pos == 0 else f"#arm.{true_attr}.join"
+    cond = _arm_test(statement, ctx, path, label, suffix)
+    arms = _wire_arms(
+        cond,
+        lower_statements(getattr(statement, true_attr, ()), ctx, f"{path}.{true_attr}"),
+        lower_statements(
+            getattr(statement, false_attr, ()), ctx, f"{path}.{false_attr}"
+        ),
+    )
+    wrapped = seq((body, arms), nop_id=node_id(ctx, path, join_suffix))
+    return _chain_arms(statement, ctx, path, wrapped, present, pos + 1)
+
+
+def _arm_test(
+    statement, ctx: Ctx, path: str, label: str, suffix: str = "#arm"
+) -> CondFragment:
+    subject = _arm_subject(statement)
+    resolved = bool(subject)
+    node = Node(
+        id=node_id(ctx, path, suffix),
+        kind=NodeKind.TEST,
+        paragraph=ctx.paragraph,
+        atom=Atom(
+            text=f"{label} {subject}",
+            left=io_status_field(subject),
+            op="==",
+            right=label,
+            resolved=resolved,
+        ),
+    )
+    return _exits_of(node)
+
+
+def _arm_subject(statement) -> str:
+    """A file when there is one, otherwise the first target -- a size error is about
+    the arithmetic, not about a file."""
+    named = str(getattr(statement, "file_name", "") or "").upper()
+    if named:
+        return named
+    targets = operand_names(
+        (
+            *getattr(statement, "targets", ()),
+            *getattr(statement, "giving", ()),
+            getattr(statement, "target", ""),
+        )
+    )
+    return (
+        targets[0]
+        if targets
+        else str(getattr(statement, "record_name", "") or "").upper()
+    )
+
+
+def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
+    kind = type(statement).__name__
+    writes, reads = _writes_reads(statement, ctx, kind)
+    return _one(
+        Node(
+            id=node_id(ctx, path),
+            kind=(
+                NodeKind.ASSIGN
+                if kind in _GAP_FILL_KINDS or writes or reads
+                else NodeKind.NOP
+            ),
+            paragraph=ctx.paragraph,
+            writes=writes,
+            reads=reads,
+            transfer=verb_of(statement) or _fallback_verb(kind),
+        )
+    )
+
+
+def lower_condition(cond, ctx: Ctx, path: str, slot: str = "") -> CondFragment:
+    if isinstance(cond, Not):
+        return _swap(lower_condition(cond.inner, ctx, path, slot))
+    if isinstance(cond, And):
+        return _chain(cond, ctx, path, slot, EdgeKind.TRUE)
+    if isinstance(cond, Or):
+        return _chain(cond, ctx, path, slot, EdgeKind.FALSE)
+    return _test(cond, ctx, path, slot)
+
+
+def _test(atom, ctx: Ctx, path: str, slot: str) -> CondFragment:
+    suffix = f"#test.{slot}" if slot else "#test"
+    node = Node(
+        id=node_id(ctx, path, suffix),
+        kind=NodeKind.TEST,
+        paragraph=ctx.paragraph,
+        atom=resolve_atom(atom, ctx.index),
+    )
+    return _exits_of(node)
+
+
+def _swap(inner: CondFragment) -> CondFragment:
+    return CondFragment(
+        nodes=inner.nodes,
+        edges=inner.edges,
+        entry=inner.entry,
+        true_exits=inner.false_exits,
+        false_exits=inner.true_exits,
+    )
+
+
+def _chain(cond, ctx: Ctx, path: str, slot: str, through: EdgeKind) -> CondFragment:
+    """Short-circuit: the right side is only reached along ``through`` from the
+    left, and the other side's exits from BOTH halves escape the chain."""
+    left = lower_condition(cond.left, ctx, path, f"{slot}L")
+    right = lower_condition(cond.right, ctx, path, f"{slot}R")
+    taken = left.true_exits if through is EdgeKind.TRUE else left.false_exits
+    kept = left.false_exits if through is EdgeKind.TRUE else left.true_exits
+    joined = CondFragment(
+        nodes=(*left.nodes, *right.nodes),
+        edges=(
+            *left.edges,
+            *right.edges,
+            *(
+                Edge(source=exit_.node_id, target=right.entry, kind=exit_.kind)
+                for exit_ in taken
+            ),
+        ),
+        entry=left.entry,
+        true_exits=right.true_exits,
+        false_exits=(*kept, *right.false_exits),
+    )
+    return joined if through is EdgeKind.TRUE else _or_exits(joined, kept, right)
+
+
+def _or_exits(
+    joined: CondFragment, kept: tuple[Exit, ...], right: CondFragment
+) -> CondFragment:
+    return CondFragment(
+        nodes=joined.nodes,
+        edges=joined.edges,
+        entry=joined.entry,
+        true_exits=(*kept, *right.true_exits),
+        false_exits=right.false_exits,
+    )
+
+
+def as_fragment(cond: CondFragment) -> Fragment:
+    return Fragment(
+        nodes=cond.nodes,
+        edges=cond.edges,
+        entry=cond.entry,
+        exits=(*cond.true_exits, *cond.false_exits),
+    )
+
+
+def _if(statement, ctx: Ctx, path: str) -> Fragment:
+    cond = lower_condition(read_condition(_raw_condition(statement)), ctx, path)
+    then_arm = lower_statements(getattr(statement, "children", ()), ctx, f"{path}.then")
+    else_arm = lower_statements(
+        getattr(statement, "else_children", ()), ctx, f"{path}.else"
+    )
+    return _wire_arms(cond, then_arm, else_arm)
+
+
+def _wire_arms(cond: CondFragment, then_arm: Fragment, else_arm: Fragment) -> Fragment:
+    """An empty arm leaves the guard's own exit dangling, which is right: the
+    statement after END-IF is what that edge goes to."""
+    into_then = _attach(cond.true_exits, then_arm)
+    into_else = _attach(cond.false_exits, else_arm)
+    return Fragment(
+        nodes=(*cond.nodes, *then_arm.nodes, *else_arm.nodes),
+        edges=(*cond.edges, *then_arm.edges, *else_arm.edges, *into_then, *into_else),
+        entry=cond.entry,
+        exits=(
+            *(then_arm.exits if then_arm.nodes else cond.true_exits),
+            *(else_arm.exits if else_arm.nodes else cond.false_exits),
+        ),
+    )
+
+
+def _attach(exits: tuple[Exit, ...], arm: Fragment) -> tuple[Edge, ...]:
+    if not arm.nodes:
+        return ()
+    return tuple(
+        Edge(source=exit_.node_id, target=arm.entry, kind=exit_.kind) for exit_ in exits
+    )
+
+
+def _raw_condition(statement) -> object:
+    """The ASG hands conditions back as the same dicts it was built from, and the
+    statement dataclasses keep them under ``condition``."""
+    raw = getattr(statement, "condition", {}) or {}
+    return raw
+
+
+def _evaluate(statement, ctx: Ctx, path: str) -> Fragment:
+    """A guard chain. Each branch is tried only when every earlier one failed, so
+    branch N is reached along branch N-1's FALSE edges -- the same chaining OR
+    uses, which is why the negation of the branches above is already on the path.
+    """
+    branches = tuple(
+        _branch(child, ctx, f"{path}.when.{position}")
+        for position, child in enumerate(getattr(statement, "children", ()))
+    )
+    return _chain_branches(tuple(b for b in branches if b.nodes))
+
+
+@dataclass(frozen=True)
+class _Branch:
+    """One WHEN: its guard chain (possibly none, for WHEN OTHER) and its body."""
+
+    nodes: tuple[Node, ...]
+    edges: tuple[Edge, ...]
+    entry: str
+    body_exits: tuple[Exit, ...]
+    false_exits: tuple[Exit, ...]
+
+
+def _branch(child, ctx: Ctx, path: str) -> _Branch:
+    body = lower_statements(getattr(child, "children", ()), ctx, path)
+    if type(child).__name__ == "WhenOtherStatement":
+        return _Branch(
+            nodes=body.nodes,
+            edges=body.edges,
+            entry=body.entry,
+            body_exits=body.exits,
+            false_exits=(),
+        )
+    return _guarded_branch(child, ctx, path, body)
+
+
+def _guarded_branch(child, ctx: Ctx, path: str, body: Fragment) -> _Branch:
+    cond = _when_condition(child, ctx, path)
+    into_body = _attach(cond.true_exits, body)
+    return _Branch(
+        nodes=(*cond.nodes, *body.nodes),
+        edges=(*cond.edges, *body.edges, *into_body),
+        entry=cond.entry,
+        body_exits=body.exits if body.nodes else cond.true_exits,
+        false_exits=cond.false_exits,
+    )
+
+
+def _when_condition(child, ctx: Ctx, path: str) -> CondFragment:
+    """WHEN a ALSO b is a conjunction, so the ALSO conditions chain on TRUE."""
+    thru = str(getattr(child, "condition_thru", "") or "")
+    parts = (
+        read_when_condition(getattr(child, "condition", ""), thru),
+        *(read_when_condition(also) for also in getattr(child, "also_conditions", ())),
+    )
+    return _and_chain(parts, ctx, path, 0)
+
+
+def _and_chain(parts, ctx: Ctx, path: str, position: int) -> CondFragment:
+    head = lower_condition(parts[position], ctx, path, _ALSO_SLOTS[position])
+    if position + 1 >= len(parts):
+        return head
+    tail = _and_chain(parts, ctx, path, position + 1)
+    return CondFragment(
+        nodes=(*head.nodes, *tail.nodes),
+        edges=(
+            *head.edges,
+            *tail.edges,
+            *(
+                Edge(source=e.node_id, target=tail.entry, kind=e.kind)
+                for e in head.true_exits
+            ),
+        ),
+        entry=head.entry,
+        true_exits=tail.true_exits,
+        false_exits=(*head.false_exits, *tail.false_exits),
+    )
+
+
+_ALSO_SLOTS = ("", "A1", "A2", "A3", "A4", "A5", "A6", "A7")
+
+
+def _chain_branches(branches: tuple[_Branch, ...]) -> Fragment:
+    if not branches:
+        return EMPTY_FRAGMENT
+    return Fragment(
+        nodes=tuple(node for b in branches for node in b.nodes),
+        edges=(
+            *(edge for b in branches for edge in b.edges),
+            *_between(branches),
+        ),
+        entry=branches[0].entry,
+        exits=(
+            *(e for b in branches for e in b.body_exits),
+            *branches[-1].false_exits,
+        ),
+    )
+
+
+def _between(branches: tuple[_Branch, ...]) -> tuple[Edge, ...]:
+    return tuple(
+        Edge(source=exit_.node_id, target=nxt.entry, kind=exit_.kind)
+        for current, nxt in pairwise(branches)
+        for exit_ in current.false_exits
+    )
+
+
+def _search(statement, ctx: Ctx, path: str) -> Fragment:
+    """The whens chain like EVALUATE's branches, and AT END is the last FALSE arm.
+
+    A WHEN's condition is opaque text in the ASG, so its atom is UNRESOLVED. The
+    fork is real and the node exists; inventing parts from the text would be a
+    guess no report could qualify.
+    """
+    head = _plain_without_arms(statement, ctx, path)
+    whens = getattr(statement, "whens", ())
+    at_end = lower_statements(getattr(statement, "at_end", ()), ctx, f"{path}.at_end")
+    tail = _search_tail(whens, at_end, ctx, path)
+    return seq((head, tail), nop_id=node_id(ctx, path, "#search"))
+
+
+def _search_tail(whens, at_end: Fragment, ctx: Ctx, path: str) -> Fragment:
+    if not whens and at_end.nodes:
+        return _search_missing_when(at_end, ctx, path)
+    branches = tuple(
+        _search_branch(when, ctx, f"{path}.when.{position}")
+        for position, when in enumerate(whens)
+    )
+    return _chain_branches((*branches, *_as_branch(at_end)))
+
+
+def _search_branch(when, ctx: Ctx, path: str) -> _Branch:
+    body = lower_statements(getattr(when, "children", ()), ctx, path)
+    node = Node(
+        id=node_id(ctx, path, "#test"),
+        kind=NodeKind.TEST,
+        paragraph=ctx.paragraph,
+        atom=Atom(text=str(getattr(when, "condition", "")), resolved=False),
+    )
+    cond = _exits_of(node)
+    return _Branch(
+        nodes=(node, *body.nodes),
+        edges=_attach(cond.true_exits, body),
+        entry=node.id,
+        body_exits=body.exits if body.nodes else cond.true_exits,
+        false_exits=cond.false_exits,
+    )
+
+
+def _search_missing_when(at_end: Fragment, ctx: Ctx, path: str) -> Fragment:
+    """When WHENs are missing but AT END is present, emit an unresolved test.
+
+    The search outcome is unknown, so the test is unresolved. AT END is on the
+    FALSE edge, and the TRUE edge falls through to the next statement.
+    """
+    node = Node(
+        id=node_id(ctx, path, "#test"),
+        kind=NodeKind.TEST,
+        paragraph=ctx.paragraph,
+        atom=Atom(text="SEARCH outcome unknown", resolved=False),
+    )
+    cond = _exits_of(node)
+    return Fragment(
+        nodes=(node, *at_end.nodes),
+        edges=(*at_end.edges, *_attach(cond.false_exits, at_end)),
+        entry=node.id,
+        exits=(*cond.true_exits, *at_end.exits),
+    )
+
+
+def _as_branch(arm: Fragment) -> tuple[_Branch, ...]:
+    if not arm.nodes:
+        return ()
+    return (
+        _Branch(
+            nodes=arm.nodes,
+            edges=arm.edges,
+            entry=arm.entry,
+            body_exits=arm.exits,
+            false_exits=(),
+        ),
+    )
+
+
+def _goto(statement, ctx: Ctx, path: str) -> Fragment:
+    form = getattr(statement, "form", "")
+    targets = getattr(form, "targets", ())
+    if targets:
+        return _computed_goto(form, targets, ctx, path)
+    return _transfer(ctx, path, "", _target_name(getattr(form, "target", "")))
+
+
+def _transfer(ctx: Ctx, path: str, suffix: str, target: str) -> Fragment:
+    """A node control leaves from: no exits, and a target build.py resolves."""
+    node = Node(
+        id=node_id(ctx, path, suffix),
+        kind=NodeKind.CALL,
+        paragraph=ctx.paragraph,
+        transfer=GOTO_TRANSFER,
+        target=target,
+    )
+    return Fragment(nodes=(node,), edges=(), entry=node.id, exits=())
+
+
+def _computed_goto(form, targets, ctx: Ctx, path: str) -> Fragment:
+    """One dispatch node reading the index, one branch node per target.
+
+    The dispatch keeps a FLOW exit: an index outside 1..N is not an error in COBOL,
+    control simply continues with the next statement.
+    """
+    dispatch = Node(
+        id=node_id(ctx, path),
+        kind=NodeKind.CALL,
+        paragraph=ctx.paragraph,
+        reads=operand_names((getattr(form, "index", ""),)),
+        transfer=DISPATCH_TRANSFER,
+    )
+    branches = tuple(
+        _transfer(ctx, path, f"#goto.{position}", _target_name(ref)).nodes[0]
+        for position, ref in enumerate(targets)
+    )
+    return Fragment(
+        nodes=(dispatch, *branches),
+        edges=tuple(
+            Edge(source=dispatch.id, target=branch.id, kind=EdgeKind.FLOW)
+            for branch in branches
+        ),
+        entry=dispatch.id,
+        exits=(Exit(node_id=dispatch.id, kind=EdgeKind.FLOW),),
+    )
+
+
+def _target_name(ref) -> str:
+    return str(getattr(ref, "paragraph", "") or "").upper()
+
+
+def _perform(statement, ctx: Ctx, path: str) -> Fragment:
+    """A call, a block, or either of those wrapped in a loop."""
+    inner = _perform_body(statement, ctx, path)
+    return _loop(getattr(statement, "spec", ""), inner, ctx, path)
+
+
+def _perform_body(statement, ctx: Ctx, path: str) -> Fragment:
+    target = str(getattr(statement, "target", "") or "").upper()
+    if not target:
+        return lower_statements(getattr(statement, "children", ()), ctx, f"{path}.body")
+    return _call(ctx, path, _range_target(target, getattr(statement, "thru", "")))
+
+
+def _range_target(target: str, thru: str) -> str:
+    last = str(thru or "").upper()
+    return f"{target}{RANGE_SEPARATOR}{last}" if last else target
+
+
+def _call(ctx: Ctx, path: str, target: str) -> Fragment:
+    node = Node(
+        id=node_id(ctx, path),
+        kind=NodeKind.CALL,
+        paragraph=ctx.paragraph,
+        transfer=PERFORM_TRANSFER,
+        target=target,
+    )
+    return Fragment(
+        nodes=(node,),
+        edges=(),
+        entry=node.id,
+        exits=(Exit(node_id=node.id, kind=EdgeKind.FLOW),),
+    )
+
+
+def _loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
+    kind = type(spec).__name__
+    if kind == "PerformTimesSpec":
+        return _tested_loop(_times_test(spec, ctx, path), body, before=True)
+    if kind == "PerformUntilSpec":
+        return _tested_loop(_until_test(spec, ctx, path), body, before=_before(spec))
+    if kind == "PerformVaryingSpec":
+        return _varying_loop(spec, body, ctx, path)
+    return body
+
+
+def _before(spec) -> bool:
+    return bool(getattr(spec, "test_before", True))
+
+
+def _times_test(spec, ctx: Ctx, path: str) -> CondFragment:
+    """The count is a field as often as a literal; when it is a field the loop
+    depends on it, so it is a read on the test."""
+    times = str(getattr(spec, "times", "") or "").upper()
+    node = Node(
+        id=node_id(ctx, path, "#loop"),
+        kind=NodeKind.TEST,
+        paragraph=ctx.paragraph,
+        atom=Atom(text=f"{times} TIMES", left=times, op=TIMES_OP),
+        reads=_dedupe((times,)),
+    )
+    return _exits_of(node)
+
+
+def _until_test(spec, ctx: Ctx, path: str) -> CondFragment:
+    return lower_condition(
+        read_condition(getattr(spec, "condition", {})), ctx, f"{path}#loop"
+    )
+
+
+def _exits_of(node: Node) -> CondFragment:
+    return CondFragment(
+        nodes=(node,),
+        edges=(),
+        entry=node.id,
+        true_exits=(Exit(node_id=node.id, kind=EdgeKind.TRUE),),
+        false_exits=(Exit(node_id=node.id, kind=EdgeKind.FALSE),),
+    )
+
+
+def _tested_loop(test: CondFragment, body: Fragment, before: bool) -> Fragment:
+    """UNTIL and TIMES both leave the loop on TRUE and enter the body on FALSE.
+
+    TEST BEFORE makes the body's execution conditional, which is what a query about
+    an assignment inside the body must see; TEST AFTER makes the first pass
+    unconditional, so the entry is the body.
+    """
+    back = tuple(
+        Edge(source=exit_.node_id, target=test.entry, kind=exit_.kind)
+        for exit_ in body.exits
+    )
+    into_body = _attach(test.false_exits, body)
+    return Fragment(
+        nodes=(*test.nodes, *body.nodes),
+        edges=(*test.edges, *body.edges, *into_body, *back),
+        entry=test.entry if before or not body.nodes else body.entry,
+        exits=test.true_exits,
+    )
+
+
+def _varying_loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
+    """FROM and BY are assignments to the loop variable, and both are definitions a
+    query for its writers has to find.
+
+    AFTER specs are nested loops whose innermost varies fastest, built inside-out.
+    """
+    inner_body = _nest_after_specs(getattr(spec, "after_specs", ()), body, ctx, path)
+    variable = str(getattr(spec, "varying_var", "") or "").upper()
+    init = _step_node(
+        ctx, path, "#init", variable, (_text(getattr(spec, "varying_from", "")),)
+    )
+    step = _step_node(
+        ctx, path, "#step", variable, (variable, _text(getattr(spec, "varying_by", "")))
+    )
+    loop = _tested_loop(
+        _until_test(spec, ctx, path),
+        _with_step(inner_body, step, ctx, path),
+        before=_before(spec),
+    )
+    return Fragment(
+        nodes=(init, *loop.nodes),
+        edges=(
+            *loop.edges,
+            Edge(source=init.id, target=loop.entry, kind=EdgeKind.FLOW),
+        ),
+        entry=init.id,
+        exits=loop.exits,
+    )
+
+
+def _nest_after_specs(
+    after_specs: tuple, body: Fragment, ctx: Ctx, path: str
+) -> Fragment:
+    """Build nested AFTER loops from innermost to outermost."""
+    if not after_specs:
+        return body
+    return _one_after_loop(after_specs, 0, body, ctx, path)
+
+
+def _one_after_loop(
+    specs: tuple, position: int, body: Fragment, ctx: Ctx, path: str
+) -> Fragment:
+    if position >= len(specs):
+        return body
+    inner = _one_after_loop(specs, position + 1, body, ctx, path)
+    spec = specs[position]
+    suffix = f".after.{position}"
+    variable = str(getattr(spec, "varying_var", "") or "").upper()
+    init = _step_node(
+        ctx,
+        path,
+        f"{suffix}#init",
+        variable,
+        (_text(getattr(spec, "varying_from", "")),),
+    )
+    step = _step_node(
+        ctx,
+        path,
+        f"{suffix}#step",
+        variable,
+        (variable, _text(getattr(spec, "varying_by", ""))),
+    )
+    loop = _tested_loop(
+        lower_condition(
+            read_condition(getattr(spec, "condition", {})), ctx, f"{path}{suffix}#loop"
+        ),
+        _with_step(inner, step, ctx, f"{path}{suffix}"),
+        before=_before(spec),
+    )
+    return Fragment(
+        nodes=(init, *loop.nodes),
+        edges=(
+            *loop.edges,
+            Edge(source=init.id, target=loop.entry, kind=EdgeKind.FLOW),
+        ),
+        entry=init.id,
+        exits=loop.exits,
+    )
+
+
+def _with_step(body: Fragment, step: Node, ctx: Ctx, path: str) -> Fragment:
+    stepped = Fragment(
+        nodes=(step,),
+        edges=(),
+        entry=step.id,
+        exits=(Exit(node_id=step.id, kind=EdgeKind.FLOW),),
+    )
+    return (
+        seq((body, stepped), nop_id=node_id(ctx, path, "#empty"))
+        if body.nodes
+        else stepped
+    )
+
+
+def _step_node(
+    ctx: Ctx, path: str, suffix: str, variable: str, reads: tuple[str, ...]
+) -> Node:
+    return Node(
+        id=node_id(ctx, path, suffix),
+        kind=NodeKind.ASSIGN,
+        paragraph=ctx.paragraph,
+        writes=_dedupe((variable,)),
+        reads=_dedupe(reads),
+        transfer="SET",
+    )
+
+
+def _text(value) -> str:
+    """varying_from is a structured expression dict in newer parses and text in
+    older ones; either way what is wanted is the name or the literal."""
+    if isinstance(value, Mapping):
+        return str(value.get("name", value.get("value", ""))).upper()
+    return str(value or "").upper()
+
+
+def _exec_cics(statement, ctx: Ctx, path: str) -> Fragment:
+    verb = str(getattr(statement, "verb", "") or "").upper()
+    if verb in ARMING_VERBS:
+        return _arm(statement, ctx, path, verb)
+    plain = _plain_without_arms(statement, ctx, path)
+    annotated = _called(statement, plain, verb) if verb in ("LINK", "XCTL") else plain
+    body = _with_arms(statement, ctx, path, annotated)
+    return body if _suppressed(statement) else _raisable(body, ctx, path)
+
+
+def _arm(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
+    options = _handler_options(statement)
+    return _one(
+        Node(
+            id=node_id(ctx, path),
+            kind=NodeKind.ASSIGN,
+            paragraph=ctx.paragraph,
+            writes=tuple(handler_field(name) for name, _ in options),
+            reads=_dedupe(_armed_value(value, verb) for _, value in options),
+            transfer=verb,
+        )
+    )
+
+
+def _handler_options(statement) -> tuple[tuple[str, object], ...]:
+    return tuple(
+        (name.upper(), value)
+        for name, value in getattr(statement, "options", {}).items()
+        if name.upper() not in SUPPRESSING_OPTIONS
+    )
+
+
+def _armed_value(value: object, verb: str) -> str:
+    """A paragraph name when one is given; otherwise the marker for what the
+    command means -- IGNORE CONDITION keeps control, a bare HANDLE CONDITION hands
+    the condition back to CICS.
+
+    ``value`` is a CicsOperand or None, so the text comes from the attribute. getattr
+    with a default stands in for the banned ``is None`` check.
+    """
+    text = str(getattr(value, "text", "") or "")
+    if text:
+        return text.upper()
+    return IGNORED if verb == "IGNORE CONDITION" else SYSTEM_DEFAULT
+
+
+def _suppressed(statement) -> bool:
+    names = tuple(name.upper() for name in getattr(statement, "options", {}))
+    return any(name in SUPPRESSING_OPTIONS for name in names)
+
+
+def commarea_field(node: Node) -> str:
+    """The caller field a call site shares with its callee, or "" for none.
+
+    Stored in `transfer_operand` rather than inferred from `reads`, because a LINK
+    reads its map name and its length too and picking the commarea back out of that
+    list is guesswork.
+    """
+    return node.transfer_operand
+
+
+def _with_call(statement, node: Node, verb: str) -> Node:
+    from cobble.dataflow.depgraph.graph import is_literal
+
+    transfer_map = {"LINK": LINK_TRANSFER, "XCTL": XCTL_TRANSFER}
+    transfer = transfer_map.get(verb, "")
+    program = _option_text(statement, PROGRAM_OPTION)
+    if not (transfer and program):
+        return node
+    return Node(
+        id=node.id,
+        kind=NodeKind.CALL,
+        paragraph=node.paragraph,
+        writes=node.writes,
+        reads=node.reads,
+        transfer=f"CICS_{transfer}",
+        target=program.strip("'\"") if is_literal(program) else program,
+        target_resolved=_option_is_literal(statement, PROGRAM_OPTION),
+        transfer_operand=_option_text(statement, COMMAREA_OPTION),
+    )
+
+
+def _option_text(statement, name: str) -> str:
+    options = getattr(statement, "options", {})
+    upper_name = name.upper()
+    matches = (
+        str(getattr(value, "text", "") or "")
+        for key, value in options.items()
+        if key.upper() == upper_name
+    )
+    return next(matches, "")
+
+
+def _option_is_literal(statement, name: str) -> bool:
+    options = getattr(statement, "options", {})
+    upper_name = name.upper()
+    matches = (
+        bool(getattr(value, "is_literal", False))
+        for key, value in options.items()
+        if key.upper() == upper_name
+    )
+    return next(matches, False)
+
+
+def _called(statement, fragment: Fragment, verb: str) -> Fragment:
+    return Fragment(
+        nodes=tuple(
+            _with_call(statement, node, verb) if node.id == fragment.entry else node
+            for node in fragment.nodes
+        ),
+        edges=fragment.edges,
+        entry=fragment.entry,
+        exits=fragment.exits,
+    )
+
+
+def _raisable(body: Fragment, ctx: Ctx, path: str) -> Fragment:
+    """A command with no NOHANDLE and no RESP can transfer control to whichever
+    handler is armed. The dispatch node's target is empty: filling it is a
+    reaching-definitions question, and answering it here would need a second,
+    order-dependent scan.
+    """
+    cond = _exits_of(
+        Node(
+            id=node_id(ctx, path, "#raise"),
+            kind=NodeKind.TEST,
+            paragraph=ctx.paragraph,
+            atom=Atom(
+                text=f"{HANDLER_ANY} {RAISED}", left=HANDLER_ANY, op="==", right=RAISED
+            ),
+        )
+    )
+    dispatch = Node(
+        id=node_id(ctx, path, "#dispatch"),
+        kind=NodeKind.CALL,
+        paragraph=ctx.paragraph,
+        reads=(HANDLER_ANY,),
+        transfer=DISPATCH_TRANSFER_CICS,
+    )
+    arms = _wire_arms(
+        cond,
+        Fragment(nodes=(dispatch,), edges=(), entry=dispatch.id, exits=()),
+        EMPTY_FRAGMENT,
+    )
+    return seq((body, arms), nop_id=node_id(ctx, path, "#raise.join"))
+
+
+def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
+    """CALL 'PROGB' USING A B. The parameters are the alias list, so they are kept in
+    order -- OMITTED included, since a parameter's position is its identity."""
+    from cobble.dataflow.depgraph.graph import is_literal
+
+    writes, reads = _writes_reads(statement, ctx, "CallStatement")
+    program = str(getattr(statement, "program", ""))
+    target = program.strip("'\"") if is_literal(program) else program
+    node = Node(
+        id=node_id(ctx, path),
+        kind=NodeKind.CALL,
+        paragraph=ctx.paragraph,
+        writes=writes,
+        reads=reads,
+        transfer=CALL_TRANSFER,
+        target=target,
+        target_resolved=is_literal(program),
+        using=tuple(
+            (
+                ""
+                if getattr(param, "omitted", False)
+                or getattr(param, "is_literal", False)
+                else getattr(param, "name", "")
+            )
+            for param in getattr(statement, "using", ())
+        ),
+    )
+    return _with_arms(statement, ctx, path, _one(node))
+
+
+_HANDLERS = {
+    "IfStatement": _if,
+    "EvaluateStatement": _evaluate,
+    "GotoStatement": _goto,
+    "PerformStatement": _perform,
+    "SearchStatement": _search,
+    "ExecCicsStatement": _exec_cics,
+    "CallStatement": _cobol_call,
+}
