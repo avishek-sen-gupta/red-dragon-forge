@@ -309,7 +309,7 @@ def test_the_built_artefact_has_its_handler_transfers_resolved(tmp_path) -> None
     import json
 
     from cobble.dataflow.srccfg.build_corpus import build_one, load_cfg
-    from cobble.dataflow.srccfg.render import writers_report
+    from cobble.dataflow.srccfg.query import writers_report
 
     (tmp_path / "MEMA.json").write_text(json.dumps(_handler_program()))
     result = build_one(tmp_path / "MEMA.json", tmp_path / "out")

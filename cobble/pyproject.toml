@@ -41,7 +41,8 @@ cobble-parse-corpus = "cobble.dataflow.depgraph.parse_corpus:main"
 cobble-depgraph = "cobble.dataflow.depgraph.build:main"
 cobble-depgraph-render = "cobble.dataflow.depgraph.render:main"
 cobble-srccfg-build = "cobble.dataflow.srccfg.closure:main"
-cobble-srccfg = "cobble.dataflow.srccfg.render:main"
+cobble-srccfg = "cobble.dataflow.srccfg.query:main"
+cobble-srccfg-dot = "cobble.dataflow.srccfg.dot:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,

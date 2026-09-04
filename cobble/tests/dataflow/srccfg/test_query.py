@@ -15,7 +15,7 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.build_corpus import cfg_to_dict
 from cobble.dataflow.srccfg.coassign import Tier
-from cobble.dataflow.srccfg.render import (
+from cobble.dataflow.srccfg.query import (
     coassign_report,
     derivation_report,
     guards_report,
@@ -449,7 +449,7 @@ def test_abandoned_node_says_walk_gave_up() -> None:
     # Manually construct a Reaching with this node in abandoned
     reaching = Reaching(guards={}, abandoned=frozenset([node_id]))
 
-    from cobble.dataflow.srccfg.render import _guard_lines
+    from cobble.dataflow.srccfg.query import _guard_lines
 
     lines = _guard_lines(cfg, reaching, node_id).texts
 
@@ -480,7 +480,7 @@ def test_overflowed_node_says_cap_hit() -> None:
 
     # Patch reaching_conditions in the render module
     with patch(
-        "cobble.dataflow.srccfg.render.reaching_conditions", return_value=test_reaching
+        "cobble.dataflow.srccfg.query.reaching_conditions", return_value=test_reaching
     ):
         lines = guards_report(cfg, node_id)
         assert any(
@@ -512,7 +512,7 @@ def test_truncated_node_says_subset() -> None:
 
     # Patch reaching_conditions in the render module
     with patch(
-        "cobble.dataflow.srccfg.render.reaching_conditions", return_value=test_reaching
+        "cobble.dataflow.srccfg.query.reaching_conditions", return_value=test_reaching
     ):
         lines = guards_report(cfg, node_id)
         assert any(
@@ -604,7 +604,7 @@ def test_the_writers_report_says_when_the_guard_cap_cut_the_list() -> None:
     node_id = next(n.id for n in cfg.nodes if "WS-OUT" in n.writes)
 
     with patch(
-        "cobble.dataflow.srccfg.render.reaching_conditions",
+        "cobble.dataflow.srccfg.query.reaching_conditions",
         return_value=_overflowed_at(cfg, node_id),
     ):
         lines = writers_report(cfg, "WS-OUT")
@@ -622,7 +622,7 @@ def test_the_derivation_report_says_when_the_guard_cap_cut_the_list() -> None:
     node_id = next(n.id for n in cfg.nodes if "WS-OUT" in n.writes)
 
     with patch(
-        "cobble.dataflow.srccfg.render.reaching_conditions",
+        "cobble.dataflow.srccfg.query.reaching_conditions",
         return_value=_overflowed_at(cfg, node_id),
     ):
         lines = derivation_report(cfg, "WS-OUT")
@@ -643,7 +643,7 @@ def test_the_coassign_report_says_when_a_writer_had_no_guards_to_compare() -> No
     node_id = next(n.id for n in cfg.nodes if "WS-OUT" in n.writes)
 
     with patch(
-        "cobble.dataflow.srccfg.render.reaching_conditions",
+        "cobble.dataflow.srccfg.query.reaching_conditions",
         return_value=Reaching(guards={}, abandoned=frozenset([node_id])),
     ):
         lines = coassign_report(cfg, "WS-OUT")

@@ -29,7 +29,7 @@ from cobble.dataflow.srccfg.dataflow import (
 )
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFERS
 from cobble.dataflow.srccfg.link import call_sites
-from cobble.dataflow.srccfg.render import writers_report
+from cobble.dataflow.srccfg.query import writers_report
 
 # Gap-fill verbs: these may have empty writes and reads by design.
 _GAP_FILL_TRANSFERS = ("INITIALIZE", "DISPLAY", "ACCEPT")
