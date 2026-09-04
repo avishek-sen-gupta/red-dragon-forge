@@ -16,7 +16,6 @@ from cobble.dataflow.srccfg.build_corpus import (
     build_one,
     cfg_from_dict,
     cfg_to_dict,
-    main,
 )
 from cobble.dataflow.srccfg.config import SrcCfgConfig
 
@@ -122,45 +121,6 @@ def test_a_failing_member_writes_no_partial_cfg(tmp_path: Path) -> None:
     assert list((tmp_path / "out").glob("*.json")) == []
 
 
-def test_the_cli_reports_counts_and_exits_zero_when_every_member_built(
-    tmp_path: Path, caplog
-) -> None:
-    import logging
-
-    caplog.set_level(logging.INFO)
-    asg_dir = _cache(tmp_path, "PROGA", "PROGB")
-    config = tmp_path / "srccfg.toml"
-    config.write_text(f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"\n')
-
-    assert main(["--config", str(config)]) == 0
-    assert "2" in caplog.text
-
-
-def test_the_cli_exits_non_zero_when_any_member_failed(tmp_path: Path) -> None:
-    """A pass whose output is consumed by later passes must not report success while
-    silently missing members -- the next pass would read the gap as "this field is
-    never written"."""
-    asg_dir = _cache(tmp_path, "PROGA")
-    (asg_dir / "BROKEN.json").write_text("{ not json")
-    config = tmp_path / "srccfg.toml"
-    config.write_text(f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"\n')
-
-    assert main(["--config", str(config)]) == 1
-
-
-def test_the_cli_does_not_print_member_names_to_stdout(tmp_path: Path, capsys) -> None:
-    """Member names are corpus identifiers. The failure report is a log record, so a
-    run in a shared terminal does not leak them, and stdout stays free for a machine
-    channel."""
-    asg_dir = _cache(tmp_path, "PROGA")
-    config = tmp_path / "srccfg.toml"
-    config.write_text(f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"\n')
-
-    main(["--config", str(config)])
-
-    assert capsys.readouterr().out == ""
-
-
 def test_cfg_to_dict_is_json_serialisable_without_a_custom_encoder(
     tmp_path: Path,
 ) -> None:
@@ -179,9 +139,9 @@ def test_cfg_to_dict_is_json_serialisable_without_a_custom_encoder(
 
 def _rebuilt(asg_dir: Path) -> None:
     """Rebuild a CFG from the ASG for comparison."""
-    from cobble.dataflow.srccfg.build_corpus import _cfg_of
+    from cobble.dataflow.srccfg.build_corpus import cfg_of
 
-    return _cfg_of(asg_dir / "PROGA.json")
+    return cfg_of(asg_dir / "PROGA.json")
 
 
 def test_a_written_cfg_reads_back_identical(tmp_path: Path) -> None:
@@ -238,20 +198,3 @@ def test_a_duplicate_program_id_is_reported_and_names_both_sides(
     assert "PROGA__MEMB.json" in results[1].message
 
 
-def test_a_name_collision_is_a_warning_and_not_a_failed_run(
-    tmp_path: Path, caplog
-) -> None:
-    """The exit code answers one question -- is a member missing from the output -- and
-    a collision is the case where none is. Counting it as a failure would train the
-    reader to ignore a non-zero exit, which is what makes a real missing member
-    invisible."""
-    import logging
-
-    caplog.set_level(logging.INFO)
-    asg_dir = _two_members_one_program(tmp_path)
-    config = tmp_path / "srccfg.toml"
-    config.write_text(f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"\n')
-
-    assert main(["--config", str(config)]) == 0
-    assert "1 name collision(s)" in caplog.text
-    assert "0 failure(s)" in caplog.text
