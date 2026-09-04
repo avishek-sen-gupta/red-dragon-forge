@@ -102,7 +102,14 @@ const DIMMED = "#e8e8e8";
 // re-sorts by zIndex and any edge drawn later paints over the bright one.
 // Hiding the rest for the duration of the hover is both correct and the only
 // way one arrow is legible in a mat this dense.
-const EMPHASIS_EDGE_SIZE = 4;
+//
+// Which is also why this is sigma's own minimum thickness rather than anything
+// larger: hiding the others is what makes the arrow findable, so extra
+// thickness buys nothing -- and it is not free, because the arrowhead below is
+// nine times the thickness long. At 4 the head was 36px against the 15px every
+// other arrow on the page draws, which reads as a different kind of object
+// rather than as the one being pointed at.
+const EMPHASIS_EDGE_SIZE = 1.7;
 
 const graph = new graphology.MultiDirectedGraph();
 NODES.forEach(([label, kind, x, y, size], index) => {{
@@ -380,6 +387,8 @@ def render_webgl_html(
     output_path: Path,
     *,
     title: str = "Knowledge Graph",
+    node_palette: Mapping[str, str] = NODE_COLORS,
+    edge_palette: Mapping[str, str] = EDGE_COLORS,
 ) -> None:
     """Render graph as one self-contained WebGL HTML file at output_path.
 
@@ -387,6 +396,12 @@ def render_webgl_html(
     :func:`cobble.knowledge_graph.layout.sfdp_positions` of this same graph.
     A node missing from it raises KeyError rather than being drawn at the
     origin, since a pile of nodes at one point reads as a broken layout.
+
+    The palettes default to the shared corpus-graph colours, and are arguments
+    because a graph whose kinds are not NodeKind/EdgeKind has none of those names
+    -- the variable dependency graph's kinds are declaring sections. Without
+    them every kind in such a graph falls back to DEFAULT_COLOR and the legend
+    is four identical grey swatches.
 
     Requires the vendored sigma.js and graphology builds under
     cobble/knowledge_graph/vendor/, and raises FileNotFoundError naming the
@@ -411,8 +426,8 @@ def render_webgl_html(
             sigma_js=sigma_js,
             node_kinds_json=json.dumps(node_kinds),
             edge_kinds_json=json.dumps(edge_kinds),
-            node_colors_json=json.dumps(_colors_for(node_kinds, NODE_COLORS)),
-            edge_colors_json=json.dumps(_colors_for(edge_kinds, EDGE_COLORS)),
+            node_colors_json=json.dumps(_colors_for(node_kinds, node_palette)),
+            edge_colors_json=json.dumps(_colors_for(edge_kinds, edge_palette)),
             nodes_json=json.dumps(node_rows),
             edges_json=json.dumps(edge_rows),
         )
