@@ -249,7 +249,9 @@ def emit_operand_value(
         # ref.offset_reg carries the resolved offset, including the element
         # offset for a subscripted operand (e.g. TBL(IDX)); pass it so the
         # decode reads the indexed element, not the base (element 1).
-        value_reg = ctx.emit_decode_field(region_reg, ref.fl, ref.offset_reg)
+        value_reg = ctx.emit_decode_field(
+            region_reg, ref.fl, ref.offset_reg, extent=ref.extent
+        )
         # Reference modification (e.g. WS-MSG(1:8)) byte-slices the decoded value.
         if operand.ref_mod_start is not None:
             return _emit_ref_mod_slice(ctx, operand, value_reg, materialised)
@@ -283,7 +285,9 @@ def emit_copy_back_str(
         return
     # write-back targets are plain data-names (RESP/APPLID/...), never subscripted; no subscripts to thread
     ref, region_reg = ctx.resolve_field_ref(name, materialised)
-    ctx.emit_encode_and_write(region_reg, ref.fl, value_str_reg, ref.offset_reg)
+    ctx.emit_encode_and_write(
+        region_reg, ref.fl, value_str_reg, ref.offset_reg, extent=ref.extent
+    )
 
 
 def condition_slot(verb: str, condition: str) -> int:
@@ -321,7 +325,9 @@ def emit_indexed_write(
     ref, region_reg = ctx.resolve_field_ref(
         name, materialised, subscripts=(LiteralNode(str(index)),)
     )
-    ctx.emit_encode_and_write(region_reg, ref.fl, value_str_reg, ref.offset_reg)
+    ctx.emit_encode_and_write(
+        region_reg, ref.fl, value_str_reg, ref.offset_reg, extent=ref.extent
+    )
 
 
 def emit_resp_writeback(
@@ -372,7 +378,9 @@ def emit_raise_tail(
         materialised,
         subscripts=(BinOpNode("+", FieldRefNode("EIBRESP"), LiteralNode("1")),),
     )
-    flag_reg = ctx.emit_decode_field(region_reg, ref.fl, ref.offset_reg)
+    flag_reg = ctx.emit_decode_field(
+        region_reg, ref.fl, ref.offset_reg, extent=ref.extent
+    )
     y_reg = ctx.const_to_reg("Y")
     cmp_reg = ctx.fresh_reg()
     ctx.emit_inst(
@@ -1274,11 +1282,13 @@ class CicsLoweringStrategy:
             "CicsLoweringStrategy: unimplemented verb %r — no IR emitted", verb
         )
 
-    def _eibresp_ref(
+    def _emit_decode_eibresp(
         self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
-    ) -> tuple["Register", object, "Register"]:
+    ) -> "Register":
         ref, region_reg = ctx.resolve_field_ref("EIBRESP", materialised)
-        return region_reg, ref.fl, ref.offset_reg
+        return ctx.emit_decode_field(
+            region_reg, ref.fl, ref.offset_reg, extent=ref.extent
+        )
 
     def _emit_dispatcher(
         self, ctx: "EmitContext", materialised: "MaterialisedSectionedLayout"
@@ -1291,7 +1301,9 @@ class CicsLoweringStrategy:
             materialised,
             subscripts=(BinOpNode("+", FieldRefNode("EIBRESP"), LiteralNode("1")),),
         )
-        idx_reg = ctx.emit_decode_field(region_reg, ref.fl, ref.offset_reg)
+        idx_reg = ctx.emit_decode_field(
+            region_reg, ref.fl, ref.offset_reg, extent=ref.extent
+        )
         for name, index in self._handler_labels.indices.items():
             k_reg = ctx.const_to_reg(index)
             cmp_reg = ctx.fresh_reg()
@@ -1311,7 +1323,7 @@ class CicsLoweringStrategy:
             ctx.emit_inst(Label_(label=match_lbl))
             ctx.emit_inst(Branch(label=CodeLabel(f"para_{name}")))
             ctx.emit_inst(Label_(label=next_lbl))
-        r_resp = ctx.emit_decode_field(*self._eibresp_ref(ctx, materialised))
+        r_resp = self._emit_decode_eibresp(ctx, materialised)
         ctx.emit_inst(
             CallFunction(
                 result_reg=ctx.fresh_reg(),
