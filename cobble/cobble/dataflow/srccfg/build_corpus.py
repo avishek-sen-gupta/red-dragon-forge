@@ -7,10 +7,9 @@ missing from this output", and a run that aborts answers that for one member onl
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from functools import reduce
 from pathlib import Path
@@ -20,7 +19,7 @@ from cobol_asg.asg_types import CobolASG
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
-from cobble.dataflow.srccfg.config import SrcCfgConfig, load_srccfg_config
+from cobble.dataflow.srccfg.config import SrcCfgConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
 
 logger = logging.getLogger(__name__)
@@ -81,7 +80,7 @@ def build_one(
     """
     member = path.stem
     try:
-        cfg = _cfg_of(path)
+        cfg = cfg_of(path)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=member, message=f"{member}: {error!r}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -118,7 +117,7 @@ def _collision(member: str, program: str, written: Path) -> str:
     )
 
 
-def _cfg_of(path: Path) -> Cfg:
+def cfg_of(path: Path) -> Cfg:
     """One member's CFG, with its CICS handler transfers resolved.
 
     with_handler_edges belongs here rather than in each query because the artefact is
@@ -193,21 +192,3 @@ def _extended(progress: _Progress, result: MemberResult) -> _Progress:
     )
 
 
-def main(argv: Sequence[str] = ()) -> int:
-    parser = argparse.ArgumentParser(description="Build a source CFG per cached ASG.")
-    parser.add_argument("--config", required=True, type=Path)
-    arguments = parser.parse_args(tuple(argv) or None)
-    results = build_corpus(load_srccfg_config(arguments.config))
-    failures = tuple(r.message for r in results if not built(r))
-    collisions = tuple(r.message for r in results if r.message and built(r))
-    logger.info(
-        "Built %d CFG(s), %d failure(s), %d name collision(s)",
-        len(results) - len(failures),
-        len(failures),
-        len(collisions),
-    )
-    for collision in collisions:
-        logger.warning("  - %s", collision)
-    for failure in failures:
-        logger.error("  - %s", failure)
-    return 1 if failures else 0
