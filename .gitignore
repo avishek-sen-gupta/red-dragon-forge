@@ -19,3 +19,6 @@ tests/integration/output/
 
 # macOS
 .DS_Store
+
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/
