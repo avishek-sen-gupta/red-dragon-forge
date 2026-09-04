@@ -166,6 +166,23 @@ def load_cfg(path: Path) -> Cfg:
     return cfg_from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _cfgs_of(document) -> tuple[Cfg, ...]:
+    if isinstance(document, list):
+        return tuple(cfg_from_dict(entry) for entry in document)
+    return (cfg_from_dict(document),)
+
+
+def load_cfgs(path: Path) -> tuple[Cfg, ...]:
+    """Read either shape a CFG file comes in, as a tuple either way.
+
+    build_one writes one program per file as a bare object; the closure CLI writes a
+    seed and its callees as a list. Every consumer of a CFG file has to read both, or
+    it cannot be pointed at the output of the other build stage -- so the branch lives
+    here once rather than in each caller.
+    """
+    return _cfgs_of(json.loads(path.read_text(encoding="utf-8")))
+
+
 @dataclass(frozen=True)
 class _Progress:
     """The results so far and the output paths they have used."""
@@ -190,5 +207,3 @@ def _extended(progress: _Progress, result: MemberResult) -> _Progress:
         results=(*progress.results, result),
         taken=progress.taken | {result.cfg_path},
     )
-
-

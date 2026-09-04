@@ -197,6 +197,60 @@ def test_the_coassign_report_honours_min_tier() -> None:
     )
 
 
+def _written_pair(tmp_path: Path) -> Path:
+    """The shape cobble-srccfg-build writes: a seed and its callees in one file."""
+    from dataclasses import replace
+
+    seed = _guarded_cfg()
+    path = tmp_path / "closure.json"
+    path.write_text(
+        json.dumps([cfg_to_dict(seed), cfg_to_dict(replace(seed, program="PROGB"))])
+    )
+    return path
+
+
+def test_a_file_holding_several_programs_is_queried_across_every_one(
+    tmp_path: Path, capsys
+) -> None:
+    """cobble-srccfg-build writes the seed and its callees as one document, and a
+    query CLI that can only read a single-program file cannot be pointed at its own
+    build stage's output."""
+    exit_code = main(["writers", "WS-OUT", "--cfg", str(_written_pair(tmp_path))])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "PROGA" in output
+    assert "PROGB" in output
+
+
+def test_a_program_that_does_not_write_the_field_is_still_reported_on(
+    tmp_path: Path, capsys
+) -> None:
+    """A program dropped from the output reads as one that was never searched, which
+    is the opposite of what a "written nowhere" answer is for."""
+    from dataclasses import replace
+
+    seed = _guarded_cfg()
+    other = replace(seed, program="PROGB", nodes=(), edges=())
+    path = tmp_path / "closure.json"
+    path.write_text(json.dumps([cfg_to_dict(seed), cfg_to_dict(other)]))
+
+    main(["writers", "WS-OUT", "--cfg", str(path)])
+
+    assert "written nowhere in PROGB" in capsys.readouterr().out
+
+
+def test_a_single_program_file_prints_exactly_what_the_report_returns(
+    tmp_path: Path, capsys
+) -> None:
+    """The per-member files build_one writes stay readable, unchanged, with no
+    heading added around the one report."""
+    main(["writers", "WS-OUT", "--cfg", str(_written(tmp_path))])
+
+    expected = writers_report(_guarded_cfg(), "WS-OUT")
+    assert capsys.readouterr().out == "".join(f"{line}\n" for line in expected)
+
+
 def test_the_cli_prints_the_writers_report_to_stdout(tmp_path: Path, capsys) -> None:
     exit_code = main(["writers", "WS-OUT", "--cfg", str(_written(tmp_path))])
 
