@@ -251,4 +251,6 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: cicada/tests/integration/cics/test_interval_control.py
   ignore_detectors: [filecontent]
+- filename: docs/superpowers/specs/2026-09-05-field-level-byte-dataflow-design.md
+  ignore_detectors: [filecontent]
 version: "1.0"
