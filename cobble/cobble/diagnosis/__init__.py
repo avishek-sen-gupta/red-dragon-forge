@@ -15,4 +15,7 @@ They share a shape, and new ones should keep it:
   - the human summary is LOGGED, so it goes to stderr and carries shape only --
     counts, concentration, which fix applies -- never a corpus name;
   - the exit status is 0 whatever is found. These report; they do not gate.
+    Exception: a diagnosis existing to check a precondition (e.g. whether a
+    cache satisfies a downstream stage's requirements) exits non-zero on
+    failure, so the gate need not parse its output.
 """

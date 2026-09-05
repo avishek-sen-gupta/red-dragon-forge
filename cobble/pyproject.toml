@@ -24,6 +24,7 @@ squall = { workspace = true }
 diagnose-copybooks = "cobble.diagnosis.copybooks:cli"
 diagnose-jcl = "cobble.diagnosis.jcl:cli"
 diagnose-cobol = "cobble.diagnosis.cobol:cli"
+diagnose-asg-operands = "cobble.diagnosis.asg_operands:cli"
 # The pipeline stages, in the order a corpus goes through them. Prefixed because
 # these land in the workspace's one venv alongside cicada's, jackal's and
 # squall's -- `build` and `render` are not names to claim there.
