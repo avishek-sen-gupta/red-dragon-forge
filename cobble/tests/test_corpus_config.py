@@ -173,33 +173,60 @@ def test_bms_config_from_dict_missing_required_key_raises() -> None:
         _bms_config_from_dict({})
 
 
-def test_load_corpus_config_reads_yaml_file(tmp_path: Path) -> None:
-    config_path = tmp_path / "test.yaml"
+def test_load_corpus_config_reads_toml_file(tmp_path: Path) -> None:
+    config_path = tmp_path / "test.toml"
     config_path.write_text(
-        "corpus:\n"
-        "  cobol_dir: cbl\n"
-        '  cobol_globs: ["*.cbl"]\n'
-        "  jcl_dir: jcl\n"
-        '  jcl_globs: ["*.jcl"]\n'
-        '  copybook_dirs: ["cpy"]\n'
-        "  out_dir: out\n"
+        "[corpus]\n"
+        'cobol_dir = "cbl"\n'
+        'cobol_globs = ["*.cbl"]\n'
+        'jcl_dir = "jcl"\n'
+        'jcl_globs = ["*.jcl"]\n'
+        'copybook_dirs = ["cpy"]\n'
+        'out_dir = "out"\n'
     )
     config = load_corpus_config(config_path)
     assert config.cobol_dir == Path("cbl")
     assert config.csd_files == ()
 
 
-def test_load_bms_config_reads_yaml_file(tmp_path: Path) -> None:
-    config_path = tmp_path / "test.yaml"
+def test_load_bms_config_reads_toml_file(tmp_path: Path) -> None:
+    config_path = tmp_path / "test.toml"
     config_path.write_text(
-        "bms:\n" "  bms_dir: app/bms\n" "  macros_dir: bms-macros\n" "  sym_dir: sym\n"
+        "[bms]\n"
+        'bms_dir = "app/bms"\n'
+        'macros_dir = "bms-macros"\n'
+        'sym_dir = "sym"\n'
     )
     config = load_bms_config(config_path)
     assert config.bms_dir == Path("app/bms")
 
 
 def test_load_corpus_config_missing_corpus_section_raises(tmp_path: Path) -> None:
-    config_path = tmp_path / "test.yaml"
-    config_path.write_text("bms:\n  bms_dir: x\n  macros_dir: y\n  sym_dir: z\n")
+    config_path = tmp_path / "test.toml"
+    config_path.write_text('[bms]\nbms_dir = "x"\nmacros_dir = "y"\nsym_dir = "z"\n')
     with pytest.raises(KeyError, match="corpus"):
         load_corpus_config(config_path)
+
+
+def test_a_corpus_config_with_transid_rules_reads_them_as_a_table_array(
+    tmp_path: Path,
+) -> None:
+    """TOML spells a list of mappings as [[corpus.transid_rules]], and the CSD a
+    site never exported is reconstructed from these -- so an empty tuple here is a
+    corpus whose every transaction resolves to UNRESOLVED."""
+    config_path = tmp_path / "test.toml"
+    config_path.write_text(
+        "[corpus]\n"
+        'cobol_dir = "cbl"\n'
+        'cobol_globs = ["*.cbl"]\n'
+        'jcl_dir = "jcl"\n'
+        'jcl_globs = ["*.jcl"]\n'
+        'copybook_dirs = ["cpy"]\n'
+        'out_dir = "out"\n'
+        "\n"
+        "[[corpus.transid_rules]]\n"
+        'member_pattern = "ACCT*"\n'
+        'transid_template = "T{suffix}"\n'
+    )
+    config = load_corpus_config(config_path)
+    assert [r.member_pattern for r in config.transid_rules] == ["ACCT*"]

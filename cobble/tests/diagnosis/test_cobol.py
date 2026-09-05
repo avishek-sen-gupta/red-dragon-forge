@@ -50,18 +50,18 @@ def _touch(path: Path, text: str) -> Path:
     return path
 
 
-def _write_config_yaml(tmp_path: Path) -> Path:
+def _write_config_toml(tmp_path: Path) -> Path:
     return _touch(
-        tmp_path / "corpus.yaml",
+        tmp_path / "corpus.toml",
         f"""
-corpus:
-  cobol_dir: {tmp_path}/cbl
-  cobol_globs: ["*.cbl"]
-  jcl_dir: {tmp_path}/jcl
-  jcl_globs: ["*.jcl"]
-  copybook_dirs: [{tmp_path}/cpy]
-  copybook_extensions: ["", "cpy"]
-  out_dir: {tmp_path}/out
+[corpus]
+cobol_dir = "{tmp_path}/cbl"
+cobol_globs = ["*.cbl"]
+jcl_dir = "{tmp_path}/jcl"
+jcl_globs = ["*.jcl"]
+copybook_dirs = ["{tmp_path}/cpy"]
+copybook_extensions = ["", "cpy"]
+out_dir = "{tmp_path}/out"
 """,
     )
 
@@ -206,7 +206,7 @@ def test_the_json_goes_to_stdout_when_no_output_is_given(
     tmp_path: Path, capsys
 ) -> None:
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path))], check=_fake_check(tmp_path)
+        ["--config", str(_write_config_toml(tmp_path))], check=_fake_check(tmp_path)
     )
     assert exit_code == 0
     assert sorted(json.loads(capsys.readouterr().out)) == [
@@ -220,7 +220,7 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
 ) -> None:
     out = tmp_path / "reports" / "unparseable.json"
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path)), "--output", str(out)],
+        ["--config", str(_write_config_toml(tmp_path)), "--output", str(out)],
         check=_fake_check(tmp_path),
     )
     assert exit_code == 0
@@ -230,7 +230,7 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
 
 def test_the_summary_carries_the_counts(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
-    main(["--config", str(_write_config_yaml(tmp_path))], check=_fake_check(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], check=_fake_check(tmp_path))
     assert "1 of 3 program(s) parsed" in caplog.text
     assert "2 failed" in caplog.text
 
@@ -239,7 +239,7 @@ def test_the_summary_groups_the_failures_by_signature(tmp_path: Path, caplog) ->
     """Two programs, one way of failing, one line saying so with a count of 2 --
     that is the difference between one fix and a survey."""
     caplog.set_level(logging.INFO)
-    main(["--config", str(_write_config_yaml(tmp_path))], check=_fake_check(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], check=_fake_check(tmp_path))
     assert "mismatched input ?" in caplog.text
     assert "2  io.proleap" in caplog.text
 
@@ -250,7 +250,7 @@ def test_the_summary_names_no_program_and_quotes_no_source(
     """A program name is a corpus identifier and a ProLeap message quotes the
     program's own bytes, so the log gets counts and stripped signatures only."""
     caplog.set_level(logging.INFO)
-    main(["--config", str(_write_config_yaml(tmp_path))], check=_fake_check(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], check=_fake_check(tmp_path))
     assert "BADPROG" not in caplog.text
     assert "OTHERBAD" not in caplog.text
     assert "'S'" not in caplog.text
@@ -265,7 +265,7 @@ def test_the_check_is_handed_the_worker_count_from_the_flag(tmp_path: Path) -> N
 
     with pytest.raises(AssertionError, match="workers=9"):
         main(
-            ["--config", str(_write_config_yaml(tmp_path)), "--max-workers", "9"],
+            ["--config", str(_write_config_toml(tmp_path)), "--max-workers", "9"],
             check=check,
         )
 
@@ -275,7 +275,7 @@ def test_the_exit_status_is_zero_even_when_programs_fail(tmp_path: Path) -> None
     first rejection."""
     assert (
         main(
-            ["--config", str(_write_config_yaml(tmp_path))], check=_fake_check(tmp_path)
+            ["--config", str(_write_config_toml(tmp_path))], check=_fake_check(tmp_path)
         )
         == 0
     )

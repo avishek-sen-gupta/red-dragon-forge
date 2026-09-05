@@ -7,7 +7,7 @@ import-rewrite port of the production extractors, with ONE seam: VM-free CICS
 verb sourcing in cobble/cics/verb_source_asg.py). No VM, no compile/lower
 pipeline.
 
-Corpus location and layout come from a YAML config file (see
+Corpus location and layout come from a TOML config file (see
 cobble/corpus_config.py) passed via --config -- nothing about the corpus is
 hardcoded here. Writes <out_dir>/{nodes,edges}.jsonl and prints per-extractor
 + merged counts.
@@ -735,7 +735,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py / config/carddemo.toml)",
     )
     return parser.parse_args()
 

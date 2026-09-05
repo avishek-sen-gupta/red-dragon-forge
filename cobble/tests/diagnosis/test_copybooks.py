@@ -336,18 +336,18 @@ def test_a_target_spelled_a_different_way_than_the_config_is_still_configured(
     assert (tmp_path / "cpy" / "CUSTREC.cpy").exists()
 
 
-def _write_config_yaml(tmp_path: Path) -> Path:
+def _write_config_toml(tmp_path: Path) -> Path:
     return _touch(
-        tmp_path / "corpus.yaml",
+        tmp_path / "corpus.toml",
         f"""
-corpus:
-  cobol_dir: {tmp_path}/cbl
-  cobol_globs: ["*.cbl"]
-  jcl_dir: {tmp_path}/jcl
-  jcl_globs: ["*.jcl"]
-  copybook_dirs: [{tmp_path}/cpy]
-  copybook_extensions: ["", "cpy"]
-  out_dir: {tmp_path}/out
+[corpus]
+cobol_dir = "{tmp_path}/cbl"
+cobol_globs = ["*.cbl"]
+jcl_dir = "{tmp_path}/jcl"
+jcl_globs = ["*.jcl"]
+copybook_dirs = ["{tmp_path}/cpy"]
+copybook_extensions = ["", "cpy"]
+out_dir = "{tmp_path}/out"
 """,
     )
 
@@ -369,7 +369,7 @@ def test_the_json_goes_to_stdout_when_no_output_is_given(
     (tmp_path / "jcl").mkdir()
 
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path))], scan=_fake_scan(tmp_path)
+        ["--config", str(_write_config_toml(tmp_path))], scan=_fake_scan(tmp_path)
     )
 
     assert exit_code == 0
@@ -387,7 +387,7 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
     out = tmp_path / "missing.json"
 
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path)), "--output", str(out)],
+        ["--config", str(_write_config_toml(tmp_path)), "--output", str(out)],
         scan=_fake_scan(tmp_path),
     )
 
@@ -411,7 +411,7 @@ def test_fix_through_the_cli_writes_the_stubs_and_logs_what_it_did(
     exit_code = main(
         [
             "--config",
-            str(_write_config_yaml(tmp_path)),
+            str(_write_config_toml(tmp_path)),
             "--fix",
             str(tmp_path / "cpy"),
         ],
@@ -432,7 +432,7 @@ def _fix_into_an_unlisted_dir(tmp_path: Path) -> tuple[int, Path]:
     (tmp_path / "jcl").mkdir()
     target = tmp_path / "out" / "synthetic.csd"
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path)), "--fix", str(target)],
+        ["--config", str(_write_config_toml(tmp_path)), "--fix", str(target)],
         scan=_fake_scan(tmp_path),
     )
     return exit_code, target
@@ -477,7 +477,7 @@ def test_the_summary_is_logged_rather_than_printed(
     (tmp_path / "cpy").mkdir()
     (tmp_path / "jcl").mkdir()
 
-    main(["--config", str(_write_config_yaml(tmp_path))], scan=_fake_scan(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], scan=_fake_scan(tmp_path))
 
     assert json.loads(capsys.readouterr().out) == {"CUSTREC": {"PROGA": [1]}}
     assert "will not resolve" in caplog.text
@@ -495,7 +495,7 @@ def test_the_output_path_is_logged_and_the_names_are_not(
     out = tmp_path / "missing.json"
 
     main(
-        ["--config", str(_write_config_yaml(tmp_path)), "--output", str(out)],
+        ["--config", str(_write_config_toml(tmp_path)), "--output", str(out)],
         scan=_fake_scan(tmp_path),
     )
 
@@ -510,6 +510,6 @@ def test_without_fix_nothing_is_written(tmp_path: Path) -> None:
     (tmp_path / "cpy").mkdir()
     (tmp_path / "jcl").mkdir()
 
-    main(["--config", str(_write_config_yaml(tmp_path))], scan=_fake_scan(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], scan=_fake_scan(tmp_path))
 
     assert list((tmp_path / "cpy").iterdir()) == []

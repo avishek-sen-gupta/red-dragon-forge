@@ -3,7 +3,7 @@
 sources.
 
 A port of cics.bms.generate.generate_symbolic_copybooks. For each map source
-in <bms_dir> matching <bms_globs> (both come from the --config YAML's `bms:`
+in <bms_dir> matching <bms_globs> (both come from the --config TOML's `[bms]`
 section; bms_globs defaults to ["*.bms"]), runs
 
     hlasm_export <map>.bms --syslib <macros_dir>/ | python -m bms_copybook_gen
@@ -62,7 +62,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py / config/carddemo.toml)",
     )
     return parser.parse_args()
 

@@ -5,7 +5,7 @@ programs to read, which copybook directories resolve their COPY statements, whic
 bridge JAR parses them, where the ASG cache and the graph go, and which names the
 collapse is allowed to route through all come from here.
 
-Own file rather than a section of the corpus YAML, because the pass-through set is
+Own file rather than a section of the corpus TOML, because the pass-through set is
 not a fact about the corpus. It is a JUDGMENT, revised once per round of the loop
 (build, read the CONDUIT CANDIDATES table, add the names that are conduits,
 build again), so it changes on a different clock from cobol_dir.

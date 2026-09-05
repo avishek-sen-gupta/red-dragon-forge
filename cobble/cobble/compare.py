@@ -94,7 +94,7 @@ def main() -> int:
     if absent:
         logger.error(
             "nothing to compare — absent: %s\n"
-            "  out/ is produced by:  make build CONFIG=config/carddemo.yaml\n"
+            "  out/ is produced by:  make build CONFIG=config/carddemo.toml\n"
             "  reference/ is committed — if it is absent, the checkout is incomplete.",
             ", ".join(str(p.relative_to(_REPO_ROOT)) for p in absent),
         )

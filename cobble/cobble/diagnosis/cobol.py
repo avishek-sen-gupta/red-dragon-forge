@@ -280,7 +280,7 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a corpus YAML config (see cobble/corpus_config.py)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py)",
     )
     parser.add_argument(
         "--output",
