@@ -102,8 +102,7 @@ def _operand_shapes_guarded(path: Path) -> OperandShapes:
     """
     try:
         return operand_shapes(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("could not read %s: %s", path.name, exc)
+    except (OSError, json.JSONDecodeError):
         return OperandShapes(unreadable=1)
 
 
