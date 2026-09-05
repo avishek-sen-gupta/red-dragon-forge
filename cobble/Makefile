@@ -45,7 +45,17 @@ csd:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make csd CONFIG=config/carddemo.toml" >&2; exit 1; }
 	uv run --no-sync cobble-csd --config $(CONFIG)
 
+## Stage-1: PARSE the corpus -> one JSON ASG per member in the parse config's
+## asg_dir. Every stage after this reads that cache and starts no JVM, so this is
+## the only target that costs 4-7 seconds of JVM per member. Resumable: a member
+## with a cached ASG (or a recorded failure) is skipped.
+## Requires CONFIG=<path-to-parse-toml>, e.g. make parse CONFIG=config/parse-carddemo.toml
+parse:
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make parse CONFIG=config/parse-carddemo.toml" >&2; exit 1; }
+	$(BRIDGE_ENV) uv run --no-sync cobble-parse-corpus --config $(CONFIG)
+
 ## Run the four ported extractors over the corpus -> out/{nodes,edges}.jsonl
+## Needs `make parse` to have populated the corpus config's asg_dir first.
 ## Requires CONFIG=<path-to-corpus-toml>, e.g. make build CONFIG=config/carddemo.toml
 build:
 	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make build CONFIG=config/carddemo.toml" >&2; exit 1; }
@@ -55,6 +65,7 @@ build:
 compare:
 	uv run --no-sync cobble-compare
 
+## Assumes CardDemo's ASG cache exists: make parse CONFIG=config/parse-carddemo.toml
 verify: build compare
 
 ## Render <out_dir>/{nodes,edges}.jsonl as a self-contained interactive HTML graph.

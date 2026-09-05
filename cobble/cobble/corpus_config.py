@@ -55,6 +55,10 @@ class CorpusConfig:
     csd_files: tuple[Path, ...]
     copybook_dirs: tuple[Path, ...]
     copybook_extensions: tuple[str, ...]
+    # The directory cobble-parse-corpus wrote: one JSON ASG per member. An INPUT to
+    # this stage, like cobol_dir -- cobble-build reads ASGs and never makes them,
+    # because a parse is 4-7 seconds of JVM per member and has been paid already.
+    asg_dir: Path
     out_dir: Path
     # How this corpus's member names encode the transaction each one serves, for
     # `python -m cobble.generate_csd` to reconstruct a CSD the site never
@@ -95,6 +99,7 @@ def _corpus_config_from_dict(data: Mapping) -> CorpusConfig:
         copybook_extensions=tuple(
             data.get("copybook_extensions", DEFAULT_COPYBOOK_EXTENSIONS)
         ),
+        asg_dir=Path(_require(data, "asg_dir")),
         out_dir=Path(_require(data, "out_dir")),
         transid_rules=tuple(
             _transid_rule(rule) for rule in data.get("transid_rules", ())

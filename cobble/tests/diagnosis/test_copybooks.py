@@ -46,6 +46,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         csd_files=(),
         copybook_dirs=(tmp_path / "cpy",),
         copybook_extensions=("", "cpy"),
+        asg_dir=tmp_path / "parsed",
         out_dir=tmp_path / "out",
     )
     return CorpusConfig(**{**defaults, **overrides})
@@ -347,6 +348,7 @@ jcl_dir = "{tmp_path}/jcl"
 jcl_globs = ["*.jcl"]
 copybook_dirs = ["{tmp_path}/cpy"]
 copybook_extensions = ["", "cpy"]
+asg_dir = "{tmp_path}/parsed"
 out_dir = "{tmp_path}/out"
 """,
     )

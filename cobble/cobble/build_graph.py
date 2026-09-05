@@ -12,6 +12,11 @@ cobble/corpus_config.py) passed via --config -- nothing about the corpus is
 hardcoded here. Writes <out_dir>/{nodes,edges}.jsonl and prints per-extractor
 + merged counts.
 
+Needs a cobble-parse-corpus run first: the FILE-CONTROL extractor reads the ASGs
+from the config's asg_dir rather than parsing them, because a parse is 4-7 seconds
+of JVM per member and every other stage needs the same ASGs. A member absent from
+that cache is reported as one skipped member, not silently reparsed.
+
 Every extractor RETURNS what it skipped rather than appending to a shared list,
 so a failure is part of a stage's result instead of an effect it had on its
 caller's state, and the run's report is one fold over those results. The
@@ -50,7 +55,7 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
-from cobol_asg.ast_store import AstStore, temp_ast_store
+from cobble.parsing.asg_cache import asg_of
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.source_text import decode_source
 from cobol_asg.subprocess_runner import RealSubprocessRunner
@@ -644,13 +649,13 @@ def _cics_flow_or_skip(
 
 def _file_control_failures(
     path: Path,
-    store: AstStore,
+    asg_dir: Path,
     corpus_index: FileLocationResolver,
     writer: GraphWriter,
 ) -> tuple[str, ...]:
     try:
         with asg_dialect_parsers_registered():
-            asg = store.get(path)
+            asg = asg_of(asg_dir, path)
         nodes, edges = extract_cobol_file_graph(asg, corpus_index)
     except Exception as exc:
         logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
@@ -670,16 +675,15 @@ def _build_batch_file_graph(
         for path in matching_files(config.cobol_dir, config.cobol_globs)
         if path.stem.upper() not in cics_program_names
     )
-    with temp_ast_store() as store:
-        store.parse_all(
-            {path: path.read_bytes() for path in cbl_files}, _make_parser(config)
+    # One ASG at a time, out of the cache cobble-parse-corpus wrote. The stage used
+    # to parse these itself into a temporary store, which meant every member's
+    # source in RAM at once and 4-7 seconds of JVM per member re-paid on every run.
+    failures = tuple(
+        chain.from_iterable(
+            _file_control_failures(path, config.asg_dir, corpus_index, writer)
+            for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program")
         )
-        failures = tuple(
-            chain.from_iterable(
-                _file_control_failures(path, store, corpus_index, writer)
-                for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program")
-            )
-        )
+    )
     logger.info("FILE-CONTROL: %d batch programs", len(cbl_files))
     return failures
 

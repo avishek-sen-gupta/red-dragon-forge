@@ -42,6 +42,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         csd_files=(),
         copybook_dirs=(tmp_path / "cpy",),
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
+        asg_dir=tmp_path / "parsed",
         out_dir=tmp_path / "out",
     )
     return CorpusConfig(**{**defaults, **overrides})
@@ -305,16 +306,6 @@ def test_a_recovered_transaction_reaches_the_graph_unchanged() -> None:
 # ── the FILE-CONTROL stage's own ASG construction ────────────────
 
 
-class _CannedBridge:
-    """An AsgJsonParser that writes one canned ASG, so no JVM is needed."""
-
-    def __init__(self, asg: Mapping) -> None:
-        self._asg = asg
-
-    def parse_to_file(self, source: bytes, out: Path) -> None:
-        out.write_text(json.dumps(self._asg), encoding="utf-8")
-
-
 class _NoFilePaths(FileLocationResolver):
     """The one thing the file-graph extractor asks of the corpus index.
 
@@ -360,11 +351,32 @@ def _asg_with(coprocessor_statement: Mapping) -> dict:
 def _run_file_control(
     tmp_path: Path, asg: Mapping
 ) -> tuple[tuple[str, ...], _CollectingWriter]:
-    store = AstStore(tmp_path / "cache")
-    path = tmp_path / "cbl" / "SOMEPROG.cbl"
-    store.parse_all({path: b""}, _CannedBridge(asg))
+    """The stage as it runs: one cached ASG on disk, no JVM anywhere near it."""
+    asg_dir = tmp_path / "parsed"
+    asg_dir.mkdir()
+    (asg_dir / "SOMEPROG.json").write_text(json.dumps(asg), encoding="utf-8")
     writer = _CollectingWriter()
-    return _file_control_failures(path, store, _NoFilePaths(), writer), writer
+    path = tmp_path / "cbl" / "SOMEPROG.cbl"
+    return _file_control_failures(path, asg_dir, _NoFilePaths(), writer), writer
+
+
+def test_a_member_missing_from_the_asg_cache_is_reported_not_parsed(
+    tmp_path: Path,
+) -> None:
+    """This stage reads the cache cobble-parse-corpus wrote and starts no JVM. A
+    member absent from it is one skipped member, named in the run's failure list --
+    not a silent 5-second reparse, and not an aborted run."""
+    asg_dir = tmp_path / "parsed"
+    asg_dir.mkdir()
+    writer = _CollectingWriter()
+
+    failures = _file_control_failures(
+        tmp_path / "cbl" / "GONE.cbl", asg_dir, _NoFilePaths(), writer
+    )
+
+    assert len(failures) == 1
+    assert "GONE.cbl" in failures[0]
+    assert writer.nodes == ()
 
 
 def test_file_control_reads_a_member_containing_exec_cics(tmp_path: Path) -> None:

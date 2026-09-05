@@ -31,6 +31,7 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         csd_files=(),
         copybook_dirs=(tmp_path / "cpy",),
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
+        asg_dir=tmp_path / "parsed",
         out_dir=tmp_path / "out",
         transid_rules=(_RULE,),
     )
