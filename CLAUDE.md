@@ -97,7 +97,9 @@ RedDragon interpreter (`vendor/red-dragon`, never modified here):
 - `red_dragon_forge/` — composition layer; assembles multiple coprocessor extensions into one
   compiled COBOL program via a generic `CoprocessorSpec` seam.
 - `cobble/` — corpus onboarding and whole-system knowledge-graph extraction (analysis only);
-  runs its pipeline from `cobble/` via `make build CONFIG=…` or the `cobble-*` entry points.
+  runs its pipeline from `cobble/` via `make parse CONFIG=…` then `make build CONFIG=…`, or the
+  `cobble-*` entry points. The parse is the only stage that starts a JVM; every stage after it
+  reads the one ASG cache it wrote. Configs are TOML.
 
 Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved) and stay
 independently buildable — they must not import each other.
