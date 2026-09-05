@@ -92,8 +92,8 @@ forbidden_modules =
 #
 # Import-linter enforces prohibitions, not permissions, so only the forbidden
 # lists below are machine-checked. The allowed surface -- cobol_asg.*,
-# cics.{cics_parser,cics_visitor,cics_grammar,csd_parse,statements,bms},
-# bms_copybook_gen, jackal.{model,dsn,value_parts,tso,jcl.*} and
+# cobol_memory, cics.{cics_parser,cics_visitor,cics_grammar,csd_parse,statements,
+# bms}, bms_copybook_gen, jackal.{model,dsn,value_parts,tso,jcl.*} and
 # squall.statements -- is stated here because it is what a future extraction of a
 # lean core would have to contain. Keeping the two in step is a review
 # obligation, not an automated one.
