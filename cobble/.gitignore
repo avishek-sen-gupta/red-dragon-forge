@@ -27,8 +27,9 @@ config/*.toml
 # ...but an .example.toml carries no absolute paths and no corpus identifiers: it is
 # the only documentation of a config's shape, so it has to be in the repo.
 !config/*.example.toml
-# CardDemo is a public sample corpus, so its config identifies nothing.
+# CardDemo is a public sample corpus, so its configs identify nothing.
 !config/carddemo.toml
+!config/parse-carddemo.toml
 
 # Local tool builds (hlasm_export and friends, when built from here)
 tools/

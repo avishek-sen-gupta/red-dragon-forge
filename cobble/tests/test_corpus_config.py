@@ -25,6 +25,7 @@ def test_corpus_config_from_dict_full() -> None:
         "csd_files": ["vendor/carddemo/app/csd/CARDDEMO.CSD"],
         "copybook_dirs": ["sym", "vendor/carddemo/app/cpy"],
         "copybook_extensions": ["cpy", "txt"],
+        "asg_dir": "parsed",
         "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
@@ -37,6 +38,7 @@ def test_corpus_config_from_dict_full() -> None:
         csd_files=(Path("vendor/carddemo/app/csd/CARDDEMO.CSD"),),
         copybook_dirs=(Path("sym"), Path("vendor/carddemo/app/cpy")),
         copybook_extensions=("cpy", "txt"),
+        asg_dir=Path("parsed"),
         out_dir=Path("out"),
     )
 
@@ -52,6 +54,7 @@ def test_corpus_config_omitting_copybook_extensions_keeps_the_shipped_defaults()
         "jcl_dir": "jcl",
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
+        "asg_dir": "parsed",
         "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
@@ -76,6 +79,7 @@ def test_corpus_config_from_dict_missing_optional_fields_default_to_empty_tuple(
         "jcl_dir": "jcl",
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
+        "asg_dir": "parsed",
         "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
@@ -90,6 +94,7 @@ def test_corpus_config_from_dict_empty_csd_files_is_valid() -> None:
         "jcl_dir": "jcl",
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
+        "asg_dir": "parsed",
         "out_dir": "out",
         "csd_files": [],
     }
@@ -108,9 +113,28 @@ def _minimal(**overrides) -> dict:
         "jcl_dir": "jcl",
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
+        "asg_dir": "parsed",
         "out_dir": "out",
         **overrides,
     }
+
+
+def test_a_corpus_config_names_the_parsed_asg_cache() -> None:
+    """cobble-build reads ASGs, it does not make them: a parse is 4-7 seconds of JVM
+    per member, and cobble-parse-corpus has already paid it. The cache directory is
+    an input to this stage exactly like cobol_dir is."""
+    assert _corpus_config_from_dict(_minimal(asg_dir="out-parsed")).asg_dir == Path(
+        "out-parsed"
+    )
+
+
+def test_a_corpus_config_missing_its_asg_dir_raises() -> None:
+    """Required, not defaulted. A guessed path here is a build that finds no ASGs and
+    reports an empty graph as a successful one."""
+    data = {k: v for k, v in _minimal().items() if k != "asg_dir"}
+
+    with pytest.raises(KeyError, match="asg_dir"):
+        _corpus_config_from_dict(data)
 
 
 def test_corpus_config_reads_the_transid_naming_conventions() -> None:
@@ -182,6 +206,7 @@ def test_load_corpus_config_reads_toml_file(tmp_path: Path) -> None:
         'jcl_dir = "jcl"\n'
         'jcl_globs = ["*.jcl"]\n'
         'copybook_dirs = ["cpy"]\n'
+        'asg_dir = "parsed"\n'
         'out_dir = "out"\n'
     )
     config = load_corpus_config(config_path)
@@ -222,6 +247,7 @@ def test_a_corpus_config_with_transid_rules_reads_them_as_a_table_array(
         'jcl_dir = "jcl"\n'
         'jcl_globs = ["*.jcl"]\n'
         'copybook_dirs = ["cpy"]\n'
+        'asg_dir = "parsed"\n'
         'out_dir = "out"\n'
         "\n"
         "[[corpus.transid_rules]]\n"
