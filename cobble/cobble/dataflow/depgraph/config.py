@@ -1,26 +1,24 @@
-"""config.py — the depgraph targets' configuration, from a TOML file.
+"""config.py — the depgraph target's configuration, from a TOML file.
 
-Nothing about a corpus is hardcoded in parse_corpus.py or build.py: which
-programs to read, which copybook directories resolve their COPY statements, which
-bridge JAR parses them, where the ASG cache and the graph go, and which names the
-collapse is allowed to route through all come from here.
+Nothing about a corpus is hardcoded in build.py: which ASG cache to read, where
+the graph goes, and which names the collapse is allowed to route through all come
+from here.
 
 Own file rather than a section of the corpus TOML, because the pass-through set is
 not a fact about the corpus. It is a JUDGMENT, revised once per round of the loop
 (build, read the CONDUIT CANDIDATES table, add the names that are conduits,
 build again), so it changes on a different clock from cobol_dir.
 
-Shape -- see config/depgraph.example.toml:
+No [source] section, and deliberately: which programs were parsed, which copybook
+directories resolved their COPY statements and which bridge JAR did the work are
+facts about the PARSE, and they live in parsing/config.py where the parse reads
+them. Repeating them here would let two configs disagree about which corpus this
+asg_dir holds, and the graph would then describe members nobody parsed.
 
-    [source]
-    cobol_dir = "/path/to/corpus"
-    cobol_globs = ["cobol/*.cbl"]
-    copybook_dirs = ["sym", "layouts/"]
-    copybook_extensions = ["cpy", "txt"]
-    bridge_jar = "../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
+Shape:
 
     [output]
-    asg_dir = "out-parsed"
+    asg_dir = "out-parsed"       # the directory cobble-parse-corpus wrote
     graph_dir = "out-depgraph"
 
     [collapse]
@@ -48,11 +46,6 @@ DEFAULT_COLLAPSE_WINDOW = 1
 
 @dataclass(frozen=True)
 class DepgraphConfig:
-    cobol_dir: Path
-    cobol_globs: tuple[str, ...]
-    copybook_dirs: tuple[Path, ...]
-    copybook_extensions: tuple[str, ...]
-    bridge_jar: Path
     asg_dir: Path
     graph_dir: Path
     passthrough_names: tuple[str, ...] = ()
@@ -68,17 +61,11 @@ def _require(data: Mapping, key: str) -> object:
 
 def depgraph_config_from_dict(data: Mapping) -> DepgraphConfig:
     """The pure half: parsed TOML -> DepgraphConfig, no I/O."""
-    source = _require(data, "source")
     output = _require(data, "output")
     # An absent [collapse] is round 1 of the loop: literal connectivity, nothing
     # collapsed. That is a legitimate way to run this, so it is not an error.
     collapse: Mapping = data.get("collapse", {})
     return DepgraphConfig(
-        cobol_dir=Path(_require(source, "cobol_dir")),
-        cobol_globs=tuple(_require(source, "cobol_globs")),
-        copybook_dirs=tuple(Path(p) for p in _require(source, "copybook_dirs")),
-        copybook_extensions=tuple(_require(source, "copybook_extensions")),
-        bridge_jar=Path(_require(source, "bridge_jar")),
         asg_dir=Path(_require(output, "asg_dir")),
         graph_dir=Path(_require(output, "graph_dir")),
         passthrough_names=tuple(collapse.get("passthrough_names", ())),

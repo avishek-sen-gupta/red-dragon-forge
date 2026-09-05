@@ -1,8 +1,9 @@
 """depgraph — the coarse variable dependency graph, built from the raw AST.
 
+The input is the ASG cache cobble.parsing wrote; nothing here parses COBOL.
+
 Modules, in the order a corpus goes through them:
 
-    parse_corpus  every program in the corpus -> a cached ASG JSON per program
     cics_cache    EXEC CICS read back out of that cache, which cicada's own
                   dialect parser cannot do (it wants the bridge's raw text)
     flows         the verb table: one statement -> the names it reads and writes

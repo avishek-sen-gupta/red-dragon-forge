@@ -2,7 +2,7 @@
 
 ``cics.statements.CicsDialectParser`` reconstructs an ``ExecCicsStatement`` from
 ``data["exec_cics_text"]`` -- the raw source text the ProLeap bridge emits. Our
-cache (parse_corpus.py) stores ``CobolASG.to_dict()``, and ExecCicsStatement's
+cache (cobble.parsing.parse_corpus) stores ``CobolASG.to_dict()``, and ExecCicsStatement's
 to_dict writes the ALREADY PARSED form instead:
 
     {"type": "EXEC_CICS", "verb": "READ",

@@ -1,0 +1,22 @@
+# Copy to config/parse.local.toml and point at a corpus. Every key is required.
+#
+#   uv run cobble-parse-corpus --config config/parse.local.toml --jobs 10
+#
+# Run once per corpus change. Every stage after it -- cobble-build,
+# cobble-depgraph, cobble-srccfg-build -- reads the asg_dir this writes and starts
+# no JVM of its own, so this is the only config that names the bridge JAR.
+[parse]
+# One directory. Where a corpus splits its programs across siblings, the globs
+# below carry the subdirectory rather than this key carrying several paths.
+cobol_dir = "/abs/path/to/corpus"
+# Narrow enough to exclude the non-COBOL members a real source library holds
+# (JCL, job cards, printer definitions). Each is otherwise a parse failure.
+cobol_globs = ["cobol/*.cbl"]
+# Searched in order, so a generated copybook directory goes first.
+copybook_dirs = ["sym", "/abs/path/to/corpus/layouts"]
+# How COPY X resolves to a file: X, then X.cpy, then X.txt. "" for a bare name.
+copybook_extensions = ["", "cpy", "txt"]
+bridge_jar = "../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
+# One JSON ASG per member, named for the member: MYPROG01.txt -> MYPROG01.json.
+# A member that will not parse gets a .fail beside it instead, and is not retried.
+asg_dir = "out-parsed"

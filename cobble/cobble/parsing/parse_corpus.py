@@ -1,14 +1,17 @@
 """parse_corpus.py — parse every program in a corpus to a cached ASG JSON.
 
-The dependency graph is built over raw ASTs, so the ASTs have to exist first, and
-a parse is 4-7 seconds of JVM. Caching them turns a four-hour corpus walk into a
-one-minute one for every subsequent round of the pass-through judgment loop. One
+Every stage after this one is built over ASGs, so the ASGs have to exist first,
+and a parse is 4-7 seconds of JVM. Caching them turns a four-hour corpus walk into
+a one-minute one for every subsequent round of every judgment loop -- the
+dependency graph's pass-through set, the source CFGs, the knowledge graph. One
 corpus is 3779 programs and 557 MB of cache.
 
-    uv run cobble-parse-corpus --config config/depgraph.local.toml --jobs 10
+    uv run cobble-parse-corpus --config config/parse.local.toml --jobs 10
 
 Which programs, which copybook directories, which extensions and which bridge JAR
-all come from that TOML -- see dataflow/depgraph/config.py.
+all come from that TOML -- see parsing/config.py. Where each ASG lands comes from
+parsing/asg_cache.py, which is also what every reader uses, so writer and readers
+cannot drift.
 
 Resumable: a program with an existing .json or .fail is skipped, so an
 interrupted run costs nothing. Each parse is its own JVM subprocess, so the work
@@ -33,8 +36,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.depgraph.config import DepgraphConfig, load_depgraph_config
 from cobble.matching_files import matching_files
+from cobble.parsing.asg_cache import cache_path, failure_path, is_cached
+from cobble.parsing.config import ParseConfig, load_parse_config
 
 logger = logging.getLogger(__name__)
 
@@ -97,18 +101,17 @@ def parse_one(
         return Result(job.stem, True, time.perf_counter() - t0, "")
     except Exception as exc:  # a corpus member that will not parse is data, not a bug
         detail = f"{type(exc).__name__}: {exc}"
-        job.dest.with_suffix(".fail").write_text(detail[:2000])
+        failure_path(job.dest.parent, job.source).write_text(detail[:2000])
         return Result(job.stem, False, time.perf_counter() - t0, detail[:120])
 
 
-def pending(config: DepgraphConfig) -> tuple[list[Job], int]:
+def pending(config: ParseConfig) -> tuple[list[Job], int]:
     """The programs still to parse, and how many the cache already holds."""
     sources = matching_files(config.cobol_dir, config.cobol_globs)
     todo = [
-        Job(p, config.asg_dir / f"{p.stem}.json")
-        for p in sources
-        if not (config.asg_dir / f"{p.stem}.json").exists()
-        and not (config.asg_dir / f"{p.stem}.fail").exists()
+        Job(source, cache_path(config.asg_dir, source))
+        for source in sources
+        if not is_cached(config.asg_dir, source)
     ]
     return todo, len(sources) - len(todo)
 
@@ -119,7 +122,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a depgraph TOML config (see cobble/dataflow/depgraph/config.py)",
+        help="Path to a parse TOML config (see cobble/parsing/config.py)",
     )
     parser.add_argument(
         "--jobs",
@@ -133,7 +136,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     configure_cli_logging()
     args = _parse_args()
-    config = load_depgraph_config(args.config)
+    config = load_parse_config(args.config)
     config.asg_dir.mkdir(parents=True, exist_ok=True)
 
     jar = str(config.bridge_jar)

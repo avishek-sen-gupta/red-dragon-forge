@@ -33,10 +33,11 @@ cobble-build = "cobble.build_graph:main"
 cobble-compare = "cobble.compare:main"
 cobble-render = "cobble.render_graph:main"
 cobble-render-webgl = "cobble.render_graph_webgl:main"
-# The coarse variable dependency graph, which runs off its own ASG cache rather
-# than the knowledge-graph pipeline's: parse once, then one round of the
-# pass-through judgment loop per cobble-depgraph run.
-cobble-parse-corpus = "cobble.dataflow.depgraph.parse_corpus:main"
+# The parse every other stage reads: one JSON ASG per member, named for the
+# member. Run it once per corpus change; nothing downstream starts a JVM.
+cobble-parse-corpus = "cobble.parsing.parse_corpus:main"
+# The coarse variable dependency graph: one round of the pass-through judgment
+# loop per cobble-depgraph run, all of them over the one cache above.
 cobble-depgraph = "cobble.dataflow.depgraph.build:main"
 cobble-depgraph-render = "cobble.dataflow.depgraph.render:main"
 cobble-srccfg-build = "cobble.dataflow.srccfg.closure:main"

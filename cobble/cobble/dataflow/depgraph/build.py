@@ -3,7 +3,7 @@
     uv run cobble-depgraph --config config/depgraph.local.toml   # --limit 40 for a
                                                                 # fast round
 
-Reads the ASG cache parse_corpus.py wrote, so it needs no JVM and no corpus
+Reads the ASG cache cobble-parse-corpus wrote, so it needs no JVM and no corpus
 source. One round of the judgment loop is this command, then a read of the CONDUIT
 CANDIDATES table it prints, then an edit to [collapse] passthrough_names in the
 config.
