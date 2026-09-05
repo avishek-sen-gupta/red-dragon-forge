@@ -5,6 +5,11 @@ was a cache generated before the bridge emitted structured subscripts. Nothing
 downstream can tell a stale cache from a corpus property by reading it, so this
 counts the distinction directly and the field analysis refuses a cache that
 fails it.
+
+Exit status contract:
+  0 — all files read successfully, at least one subscripted MOVE operand found
+  1 — precondition failed (no subscripted MOVEs or unreadable files present)
+  2 — ASG directory not found
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ class OperandShapes:
     subscripted: int = 0
     ref_modified: int = 0
     total: int = 0
+    unreadable: int = 0
 
     def plus(self, other: OperandShapes) -> OperandShapes:
         return OperandShapes(
@@ -35,6 +41,7 @@ class OperandShapes:
             subscripted=self.subscripted + other.subscripted,
             ref_modified=self.ref_modified + other.ref_modified,
             total=self.total + other.total,
+            unreadable=self.unreadable + other.unreadable,
         )
 
 
@@ -85,10 +92,24 @@ def _summed(shapes: Iterator[OperandShapes]) -> OperandShapes:
     return reduce(OperandShapes.plus, shapes, OperandShapes())
 
 
+def _operand_shapes_guarded(path: Path) -> OperandShapes:
+    """Read and count operands from one ASG file, guarded against I/O and parse errors.
+
+    Returns an OperandShapes with unreadable=1 if the file cannot be read or
+    parsed, and OperandShapes() (all zeros) otherwise. Like every other corpus
+    read in cobble, guard each file so one corrupted member does not take the
+    whole diagnostic down.
+    """
+    try:
+        return operand_shapes(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("could not read %s: %s", path.name, exc)
+        return OperandShapes(unreadable=1)
+
+
 def cache_shapes(asg_dir: Path) -> OperandShapes:
     return _summed(
-        operand_shapes(json.loads(path.read_text(encoding="utf-8")))
-        for path in sorted(asg_dir.glob("*.json"))
+        _operand_shapes_guarded(path) for path in sorted(asg_dir.glob("*.json"))
     )
 
 
@@ -104,13 +125,14 @@ def cli(argv: Sequence[str] = ()) -> int:
     shapes = cache_shapes(arguments.asg_dir)
 
     logger.info(
-        "MOVE operands: %d (bare: %d, subscripted: %d, ref-modified: %d)",
+        "MOVE operands: %d (bare: %d, subscripted: %d, ref-modified: %d, unreadable: %d)",
         shapes.total,
         shapes.bare,
         shapes.subscripted,
         shapes.ref_modified,
+        shapes.unreadable,
     )
     json.dump(asdict(shapes), sys.stdout)
     sys.stdout.write("\n")
 
-    return 0 if shapes.subscripted else 1
+    return 0 if shapes.subscripted and not shapes.unreadable else 1

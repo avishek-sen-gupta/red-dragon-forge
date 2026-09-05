@@ -1,4 +1,12 @@
-from cobble.diagnosis.asg_operands import OperandShapes, operand_shapes
+import json
+from pathlib import Path
+
+from cobble.diagnosis.asg_operands import (
+    OperandShapes,
+    cache_shapes,
+    cli,
+    operand_shapes,
+)
 
 
 def _asg(*statements: dict) -> dict:
@@ -172,3 +180,39 @@ def test_top_level_statements_are_walked():
     assert operand_shapes(asg) == OperandShapes(
         bare=2, subscripted=0, ref_modified=0, total=2
     )
+
+
+def test_cache_shapes_guards_against_malformed_json(tmp_path: Path):
+    """One malformed file should not crash the diagnostic.
+
+    Good files are still counted, unreadable count tracks bad ones.
+    """
+    good_asg = _asg(
+        {"type": "MOVE", "operands": [{"name": "FLD-A"}, {"name": "FLD-B"}]}
+    )
+    (tmp_path / "good.json").write_text(json.dumps(good_asg), encoding="utf-8")
+    (tmp_path / "bad.json").write_text("{ invalid json", encoding="utf-8")
+
+    shapes = cache_shapes(tmp_path)
+
+    assert shapes.bare == 2
+    assert shapes.total == 2
+    assert shapes.unreadable == 1
+
+
+def test_cli_exits_nonzero_when_files_unreadable(tmp_path: Path):
+    """CLI exits 1 when unreadable files present, even with subscripted MOVEs."""
+    good_asg = _asg(
+        {
+            "type": "MOVE",
+            "operands": [
+                {"name": "TBL-ROW", "subscripts": [{"kind": "ref", "name": "IDX-A"}]},
+            ],
+        }
+    )
+    (tmp_path / "good.json").write_text(json.dumps(good_asg), encoding="utf-8")
+    (tmp_path / "bad.json").write_text("{ invalid json", encoding="utf-8")
+
+    exit_code = cli([str(tmp_path)])
+
+    assert exit_code == 1
