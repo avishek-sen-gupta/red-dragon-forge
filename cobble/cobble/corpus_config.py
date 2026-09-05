@@ -1,9 +1,14 @@
-"""corpus_config.py — YAML-driven corpus configuration for build_graph.py and
+"""corpus_config.py — TOML-driven corpus configuration for build_graph.py and
 generate_sym.py, so cobble can extract a knowledge graph / generate BMS
 copybooks from any COBOL/CICS/JCL corpus without editing Python source.
 
+TOML rather than YAML because every other config this pipeline reads is TOML --
+the parse, depgraph and srccfg stages all are -- and one corpus described in two
+markup languages is a corpus described twice. tomllib is stdlib, so the switch
+also drops a dependency.
+
 Split into a pure core (dict -> dataclass, no I/O) and an imperative shell
-(reads the YAML file off disk). Every required field is read without a
+(reads the TOML file off disk). Every required field is read without a
 fallback default -- a missing key raises rather than silently guessing a
 path. List-shaped fields are never None; an absent/empty key means an empty
 tuple, except for the two that describe how files are NAMED rather than where
@@ -16,11 +21,10 @@ implicit behavior of running scripts from the repo root).
 
 from __future__ import annotations
 
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-
-import yaml
 
 from cobble.cics.synth_csd import TransidRule
 
@@ -108,10 +112,10 @@ def _bms_config_from_dict(data: Mapping) -> BmsConfig:
 
 
 def load_corpus_config(path: Path) -> CorpusConfig:
-    data = yaml.safe_load(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     return _corpus_config_from_dict(_require(data, "corpus"))
 
 
 def load_bms_config(path: Path) -> BmsConfig:
-    data = yaml.safe_load(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     return _bms_config_from_dict(_require(data, "bms"))

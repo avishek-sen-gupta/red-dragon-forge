@@ -34,18 +34,18 @@ def _touch(path: Path, text: str) -> Path:
     return path
 
 
-def _write_config_yaml(tmp_path: Path) -> Path:
+def _write_config_toml(tmp_path: Path) -> Path:
     return _touch(
-        tmp_path / "corpus.yaml",
+        tmp_path / "corpus.toml",
         f"""
-corpus:
-  cobol_dir: {tmp_path}/cbl
-  cobol_globs: ["*.cbl"]
-  jcl_dir: {tmp_path}/jcl
-  jcl_globs: ["*.jcl"]
-  copybook_dirs: [{tmp_path}/cpy]
-  copybook_extensions: ["", "cpy"]
-  out_dir: {tmp_path}/out
+[corpus]
+cobol_dir = "{tmp_path}/cbl"
+cobol_globs = ["*.cbl"]
+jcl_dir = "{tmp_path}/jcl"
+jcl_globs = ["*.jcl"]
+copybook_dirs = ["{tmp_path}/cpy"]
+copybook_extensions = ["", "cpy"]
+out_dir = "{tmp_path}/out"
 """,
     )
 
@@ -149,7 +149,7 @@ def test_the_json_goes_to_stdout_when_no_output_is_given(
     tmp_path: Path, capsys
 ) -> None:
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path))], sweep=_fake_sweep(tmp_path)
+        ["--config", str(_write_config_toml(tmp_path))], sweep=_fake_sweep(tmp_path)
     )
     assert exit_code == 0
     assert json.loads(capsys.readouterr().out) == {
@@ -165,7 +165,7 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
 ) -> None:
     out = tmp_path / "reports" / "unparseable.json"
     exit_code = main(
-        ["--config", str(_write_config_yaml(tmp_path)), "--output", str(out)],
+        ["--config", str(_write_config_toml(tmp_path)), "--output", str(out)],
         sweep=_fake_sweep(tmp_path),
     )
     assert exit_code == 0
@@ -175,7 +175,7 @@ def test_an_output_path_receives_the_json_and_stdout_stays_clean(
 
 def test_the_summary_carries_the_four_columns(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
-    main(["--config", str(_write_config_yaml(tmp_path))], sweep=_fake_sweep(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], sweep=_fake_sweep(tmp_path))
     for expected in ("parsed", "failed", "steps", "DDs"):
         assert expected in caplog.text
 
@@ -184,7 +184,7 @@ def test_the_summary_counts_failures_by_error_type(tmp_path: Path, caplog) -> No
     """Which failures share a cause is the whole question a grammar fix asks, and
     the type is the part of an error that carries no corpus text."""
     caplog.set_level(logging.INFO)
-    main(["--config", str(_write_config_yaml(tmp_path))], sweep=_fake_sweep(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], sweep=_fake_sweep(tmp_path))
     assert "JclParseError" in caplog.text
 
 
@@ -195,7 +195,7 @@ def test_the_summary_names_no_member_and_quotes_no_message(
     message quotes corpus source, so neither may reach a log anyone tails -- they
     go only to the JSON, whose destination the caller chose."""
     caplog.set_level(logging.INFO)
-    main(["--config", str(_write_config_yaml(tmp_path))], sweep=_fake_sweep(tmp_path))
+    main(["--config", str(_write_config_toml(tmp_path))], sweep=_fake_sweep(tmp_path))
     assert "BADJOB" not in caplog.text
     assert "//STEP1 EXEC" not in caplog.text
 
@@ -206,7 +206,7 @@ def test_the_output_path_is_logged_and_the_member_names_are_not(
     caplog.set_level(logging.INFO)
     out = tmp_path / "unparseable.json"
     main(
-        ["--config", str(_write_config_yaml(tmp_path)), "--output", str(out)],
+        ["--config", str(_write_config_toml(tmp_path)), "--output", str(out)],
         sweep=_fake_sweep(tmp_path),
     )
     assert f"Wrote {out}" in caplog.text
@@ -222,7 +222,7 @@ def test_the_sweep_is_handed_the_worker_count_from_the_flag(tmp_path: Path) -> N
 
     with pytest.raises(AssertionError, match="workers=9"):
         main(
-            ["--config", str(_write_config_yaml(tmp_path)), "--max-workers", "9"],
+            ["--config", str(_write_config_toml(tmp_path)), "--max-workers", "9"],
             sweep=sweep,
         )
 
@@ -232,7 +232,7 @@ def test_the_exit_status_is_zero_even_when_members_fail(tmp_path: Path) -> None:
     not parse, and a non-zero exit would make that state unscriptable."""
     assert (
         main(
-            ["--config", str(_write_config_yaml(tmp_path))], sweep=_fake_sweep(tmp_path)
+            ["--config", str(_write_config_toml(tmp_path))], sweep=_fake_sweep(tmp_path)
         )
         == 0
     )

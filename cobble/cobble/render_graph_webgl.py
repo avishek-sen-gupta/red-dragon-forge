@@ -12,7 +12,7 @@ The layout is computed here rather than in the browser, by graphviz's sfdp, so
 graphviz has to be installed for this target (and only for this target). It is
 the slow part: about a minute for a graph of tens of thousands of nodes.
 
-out_dir comes from the same --config YAML build_graph.py/generate_sym.py use
+out_dir comes from the same --config TOML build_graph.py/generate_sym.py use
 (its `corpus.out_dir` field) -- nothing about a specific corpus is hardcoded
 here.
 
@@ -61,7 +61,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py / config/carddemo.toml)",
     )
     return parser.parse_args()
 

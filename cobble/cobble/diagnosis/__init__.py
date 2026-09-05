@@ -8,7 +8,7 @@ first.
 
 They share a shape, and new ones should keep it:
 
-  - ``--config`` names a corpus YAML, so a diagnosis runs against exactly the
+  - ``--config`` names a corpus TOML, so a diagnosis runs against exactly the
     directories and globs the build will use;
   - stdout (or ``--output``) is JSON and nothing else, because the names in it
     are the corpus's own identifiers and the caller chooses where they land;

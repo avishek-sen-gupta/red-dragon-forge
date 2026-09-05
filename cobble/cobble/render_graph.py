@@ -4,7 +4,7 @@ visualization at <out_dir>/graph.html. No server, no CDN: vis-network is
 vendored under cobble/knowledge_graph/vendor/ and inlined into the
 generated file.
 
-out_dir comes from the same --config YAML build_graph.py/generate_sym.py
+out_dir comes from the same --config TOML build_graph.py/generate_sym.py
 use (its `corpus.out_dir` field) -- nothing about a specific corpus is
 hardcoded here.
 
@@ -33,7 +33,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py / config/carddemo.toml)",
     )
     return parser.parse_args()
 

@@ -31,24 +31,24 @@ codegen: sym
 
 ## Stage-0: GENERATE the BMS symbolic copybooks from the corpus's .bms sources
 ## (hlasm_export | bms_copybook_gen -> sym/*.cpy). Nothing pre-generated is shipped.
-## Requires CONFIG=<path-to-corpus-yaml>, e.g. make sym CONFIG=config/carddemo.yaml
+## Requires CONFIG=<path-to-corpus-toml>, e.g. make sym CONFIG=config/carddemo.toml
 sym:
-	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make sym CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make sym CONFIG=config/carddemo.toml" >&2; exit 1; }
 	uv run --no-sync cobble-sym --config $(CONFIG)
 
 ## Stage-0: GENERATE a synthetic CSD for a corpus that arrived without one, from
 ## literal transaction ids plus the corpus's own naming convention
 ## (`transid_rules:` in the config) -> <out_dir>/synthetic.csd. Point the config's
 ## csd_files at it afterwards; without a CSD the whole CICS flow stage is skipped.
-## Requires CONFIG=<path-to-corpus-yaml>, e.g. make csd CONFIG=config/carddemo.yaml
+## Requires CONFIG=<path-to-corpus-toml>, e.g. make csd CONFIG=config/carddemo.toml
 csd:
-	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make csd CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make csd CONFIG=config/carddemo.toml" >&2; exit 1; }
 	uv run --no-sync cobble-csd --config $(CONFIG)
 
 ## Run the four ported extractors over the corpus -> out/{nodes,edges}.jsonl
-## Requires CONFIG=<path-to-corpus-yaml>, e.g. make build CONFIG=config/carddemo.yaml
+## Requires CONFIG=<path-to-corpus-toml>, e.g. make build CONFIG=config/carddemo.toml
 build:
-	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make build CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make build CONFIG=config/carddemo.toml" >&2; exit 1; }
 	$(BRIDGE_ENV) uv run --no-sync cobble-build --config $(CONFIG)
 
 ## Identity-diff out/ against reference/ (must be an empty diff: 449 nodes / 803 edges).
@@ -58,18 +58,18 @@ compare:
 verify: build compare
 
 ## Render <out_dir>/{nodes,edges}.jsonl as a self-contained interactive HTML graph.
-## Requires CONFIG=<path-to-corpus-yaml>, e.g. make render CONFIG=config/carddemo.yaml
+## Requires CONFIG=<path-to-corpus-toml>, e.g. make render CONFIG=config/carddemo.toml
 render:
-	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render CONFIG=config/carddemo.toml" >&2; exit 1; }
 	uv run --no-sync cobble-render --config $(CONFIG)
 
 ## Render the same pair as a WebGL view built for showing a whole corpus-sized
 ## graph at once (sibling of `render`, which is for navigating one). Lays the
 ## graph out up front with graphviz's sfdp, so graphviz must be installed and
 ## the layout takes about a minute at corpus scale.
-## Requires CONFIG=<path-to-corpus-yaml>, e.g. make render-webgl CONFIG=config/carddemo.yaml
+## Requires CONFIG=<path-to-corpus-toml>, e.g. make render-webgl CONFIG=config/carddemo.toml
 render-webgl:
-	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render-webgl CONFIG=config/carddemo.yaml" >&2; exit 1; }
+	@test -n "$(CONFIG)" || { echo "error: CONFIG is required, e.g. make render-webgl CONFIG=config/carddemo.toml" >&2; exit 1; }
 	uv run --no-sync cobble-render-webgl --config $(CONFIG)
 
 ## Run the pytest unit suite (pure modules only — no JARs/corpus needed).

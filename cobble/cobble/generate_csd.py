@@ -74,7 +74,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a corpus YAML config (see cobble/corpus_config.py / config/carddemo.yaml)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py / config/carddemo.toml)",
     )
     parser.add_argument(
         "--out",
