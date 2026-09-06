@@ -57,6 +57,11 @@ class NodeKind(Enum):
     # DATASET: a program only ever knows its DD name; the physical dataset
     # is a JCL-level identity a job's DD statement assigns independently.
     COBOL_FILE = "COBOL_FILE"
+    # A COBOL data field, or a synthetic origin a field's bytes came from
+    # (LITERAL, FILE:<name>, %CICS-STATE, %CALL:<target>). id is
+    # "<program>.<field>" because a field name is only unique within a program
+    # — two copybooks routinely give one piece of storage two names.
+    FIELD = "FIELD"
 
 
 class EdgeKind(Enum):
@@ -87,6 +92,12 @@ class EdgeKind(Enum):
     ENDS_BROWSE = "ENDS_BROWSE"
     # CICS_FILE -> DATASET, from a CSD's DEFINE FILE(name) ... DSNAME(...).
     DEFINES_DATASET = "DEFINES_DATASET"
+    # FIELD -> FIELD, from field-level byte dataflow: the source's bytes reach
+    # the target's. attrs carry both extents and the CFG node id that wrote
+    # them, but deliberately NOT the guard condition — a reader asks srccfg
+    # for that node's guards on demand, which keeps conditions out of the
+    # lattice they would otherwise multiply.
+    FLOWS_TO = "FLOWS_TO"
 
 
 @dataclass(frozen=True)

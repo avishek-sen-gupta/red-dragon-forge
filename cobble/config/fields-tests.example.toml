@@ -1,0 +1,24 @@
+# Copy to config/fields-tests.toml to run the acceptance tests against a parsed
+# corpus. Without it they skip -- there is no corpus in this repo and there must
+# never be one, which is why no member, field or dataset name from a corpus under
+# analysis appears in any tracked file here.
+cache_dir = "/abs/path/to/out-parsed"
+
+# Members to analyse for the coverage floor. Choose ones with structured LINKAGE
+# and OCCURS, not just flat records: a floor met only by flat storage measures
+# nothing the analysis was written for.
+members = ["MEMBERONE", "MEMBERTWO"]
+
+# The end-to-end oracle: one derivation known by hand, asserted end to end. A
+# coverage ratio says how much was explained; this says the explanation is right.
+[oracle]
+member = "MEMBERONE"
+source_field = "SCR-COUNT"
+target_field = "MST-COUNT"
+cfg_node = "PARA-UPDATE/57"
+
+# The slowest member measured, and the bound its analysis must stay under.
+# Optional; the test skips without it.
+[performance]
+member = "MEMBERWORST"
+seconds = 60.0

@@ -196,5 +196,3 @@ def test_a_duplicate_program_id_is_reported_and_names_both_sides(
     assert results[0].message == ""
     assert results[1].message.startswith("MEMB: PROGRAM-ID PROGA is already built")
     assert "PROGA__MEMB.json" in results[1].message
-
-
