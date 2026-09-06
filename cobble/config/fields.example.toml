@@ -1,0 +1,6 @@
+# Copy to config/fields.toml and point at a parsed corpus. Both keys are required.
+[fields]
+# The directory cobble-parse-corpus wrote: one JSON ASG per member.
+asg_dir = "/abs/path/to/out-parsed"
+# Where nodes.jsonl and edges.jsonl go, for the whole corpus rather than per member.
+out_dir = "/abs/path/to/out-fields"
