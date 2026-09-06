@@ -257,4 +257,8 @@ fileignoreconfig:
   checksum: 3901407a31bfdfad401779a57f63203e70921a384cefffdb5f38e4b61725378b
 - filename: cobble/cobble/dataflow/fields/extent.py
   checksum: f805c8fb7b7c81c9d0cb023a8895704891668cf67f40c45fb0e42e4e066a1a47
+- filename: cobble/cobble/dataflow/fields/state.py
+  checksum: 411eb695e9fd5a9f8b8cb4e2d0bafe35a934831d6282e03e763ed141fde8d3b6
+- filename: cobble/cobble/dataflow/fields/transfer.py
+  checksum: 1986064de69236513ad474adff24ba3aba2f694bf41305aa2aa3c330d54da7f0
 version: "1.0"
