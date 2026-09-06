@@ -24,6 +24,7 @@ from functools import reduce
 from itertools import chain
 from pathlib import Path
 
+from cobble.asg_walk import descend
 from cobble.cli_logging import configure_cli_logging
 
 logger = logging.getLogger(__name__)
@@ -55,28 +56,13 @@ def _is_move_statement(node: Mapping) -> bool:
     return node.get("type") == "MOVE"
 
 
-def _walk_mapping(node: Mapping) -> Iterator[Mapping]:
-    if _is_move_statement(node):
-        yield from node.get("operands") or ()
-    yield from chain.from_iterable(_move_operands(v) for v in node.values())
-
-
-def _walk_sequence(seq: Sequence) -> Iterator[Mapping]:
-    yield from chain.from_iterable(_move_operands(item) for item in seq)
-
-
-def _move_operands(node: Mapping | Sequence) -> Iterator[Mapping]:
-    """Yield all MOVE operands from anywhere in the ASG.
-
-    Statements nest through multiple dict keys and compose to arbitrary depth
-    (29+ levels observed). Do not enumerate nesting keys — that is how the
-    one-level walk missed 2/3 of the MOVEs, and the next statement form the
-    bridge learns would silently reopen the hole. Walk the whole document.
-    """
-    if isinstance(node, Mapping):
-        yield from _walk_mapping(node)
-    elif isinstance(node, Sequence) and not isinstance(node, str):
-        yield from _walk_sequence(node)
+def _move_operands(asg: Mapping) -> Iterator[Mapping]:
+    """Every MOVE operand anywhere in the ASG document."""
+    return chain.from_iterable(
+        node.get("operands") or ()
+        for node in descend(asg)
+        if isinstance(node, Mapping) and _is_move_statement(node)
+    )
 
 
 def _shape(operand: Mapping) -> OperandShapes:
@@ -98,7 +84,7 @@ def _operand_shapes_guarded(path: Path) -> OperandShapes:
     """Guard each file so one corrupted member does not take the whole diagnostic down."""
     try:
         return operand_shapes(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError, TypeError, AttributeError, RecursionError):
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError):
         return OperandShapes(unreadable=1)
 
 
