@@ -3,13 +3,13 @@
 Bead 8y0 was filed as a P0 bridge defect and closed as retracted: the evidence
 was a cache generated before the bridge emitted structured subscripts. Nothing
 downstream can tell a stale cache from a corpus property by reading it, so this
-counts the distinction directly and the field analysis refuses a cache that
-fails it.
+counts the distinction directly and exits non-zero when a cache fails the gate.
 
 Exit status contract:
   0 — all files read successfully, at least one subscripted MOVE operand found
-  1 — precondition failed (no subscripted MOVEs or unreadable files present)
+  1 — precondition failed (no subscripted MOVEs found)
   2 — ASG directory not found
+  3 — some files were unreadable
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from dataclasses import asdict, dataclass
 from functools import reduce
 from itertools import chain
 from pathlib import Path
+
+from cobble.cli_logging import configure_cli_logging
 
 logger = logging.getLogger(__name__)
 
@@ -93,16 +95,10 @@ def _summed(shapes: Iterator[OperandShapes]) -> OperandShapes:
 
 
 def _operand_shapes_guarded(path: Path) -> OperandShapes:
-    """Read and count operands from one ASG file, guarded against I/O and parse errors.
-
-    Returns an OperandShapes with unreadable=1 if the file cannot be read or
-    parsed, and OperandShapes() (all zeros) otherwise. Like every other corpus
-    read in cobble, guard each file so one corrupted member does not take the
-    whole diagnostic down.
-    """
+    """Guard each file so one corrupted member does not take the whole diagnostic down."""
     try:
         return operand_shapes(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError, RecursionError):
         return OperandShapes(unreadable=1)
 
 
@@ -112,19 +108,10 @@ def cache_shapes(asg_dir: Path) -> OperandShapes:
     )
 
 
-def cli(argv: Sequence[str] = ()) -> int:
-    parser = argparse.ArgumentParser(
-        description="Count MOVE operand shapes across a cached ASG directory."
-    )
-    parser.add_argument("asg_dir", type=Path)
-    arguments = parser.parse_args(tuple(argv) if argv else None)
-    if not arguments.asg_dir.is_dir():
-        sys.stderr.write(f"No ASG cache at {arguments.asg_dir}\n")
-        return 2
-    shapes = cache_shapes(arguments.asg_dir)
-
+def _emit_results(shapes: OperandShapes) -> None:
     logger.info(
-        "MOVE operands: %d (bare: %d, subscripted: %d, ref-modified: %d, unreadable: %d)",
+        "MOVE operands: %d "
+        "(bare: %d, subscripted: %d, ref-modified: %d, unreadable: %d)",
         shapes.total,
         shapes.bare,
         shapes.subscripted,
@@ -134,4 +121,23 @@ def cli(argv: Sequence[str] = ()) -> int:
     json.dump(asdict(shapes), sys.stdout)
     sys.stdout.write("\n")
 
-    return 0 if shapes.subscripted and not shapes.unreadable else 1
+
+def _exit_code(shapes: OperandShapes) -> int:
+    if shapes.unreadable:
+        return 3
+    return 0 if shapes.subscripted else 1
+
+
+def cli(argv: Sequence[str] = ()) -> int:
+    configure_cli_logging()
+    parser = argparse.ArgumentParser(
+        description="Count MOVE operand shapes across a cached ASG directory."
+    )
+    parser.add_argument("asg_dir", type=Path)
+    arguments = parser.parse_args(tuple(argv) if argv else None)
+    if not arguments.asg_dir.is_dir():
+        sys.stderr.write(f"No ASG cache at {arguments.asg_dir}\n")
+        return 2
+    shapes = cache_shapes(arguments.asg_dir)
+    _emit_results(shapes)
+    return _exit_code(shapes)

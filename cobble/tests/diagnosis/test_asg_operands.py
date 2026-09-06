@@ -92,6 +92,26 @@ def test_only_move_operands_are_counted():
     assert operand_shapes(asg).total == 1
 
 
+def test_non_move_statement_with_subscripts_is_not_counted():
+    """The type == MOVE filter prevents false positives from non-MOVE subscripts.
+
+    The old cache holds 2,440 subscripts keys on ADD and COMPUTE operands but
+    zero subscripted MOVE operands. An unfiltered diagnostic would pass its own
+    gate on a cache that fails the real precondition.
+    """
+    asg = _asg(
+        {
+            "type": "ADD",
+            "operands": [
+                {"name": "TBL-ROW", "subscripts": [{"kind": "ref", "name": "IDX-A"}]},
+                {"name": "FLD-B"},
+            ],
+        }
+    )
+    assert operand_shapes(asg).subscripted == 0
+    assert operand_shapes(asg).total == 0
+
+
 def test_nested_move_in_if_else_children_is_counted():
     """Regression test for depth-agnostic walk (Override 1).
 
@@ -182,26 +202,30 @@ def test_top_level_statements_are_walked():
     )
 
 
-def test_cache_shapes_guards_against_malformed_json(tmp_path: Path):
+def test_cache_shapes_guards_against_malformed_json(tmp_path: Path, caplog):
     """One malformed file should not crash the diagnostic.
 
-    Good files are still counted, unreadable count tracks bad ones.
+    Good files are still counted, unreadable count tracks bad ones. The
+    filename must not appear in logs (channel discipline).
     """
     good_asg = _asg(
         {"type": "MOVE", "operands": [{"name": "FLD-A"}, {"name": "FLD-B"}]}
     )
     (tmp_path / "good.json").write_text(json.dumps(good_asg), encoding="utf-8")
-    (tmp_path / "bad.json").write_text("{ invalid json", encoding="utf-8")
+    (tmp_path / "bad-corpus-identifier.json").write_text(
+        "{ invalid json", encoding="utf-8"
+    )
 
     shapes = cache_shapes(tmp_path)
 
     assert shapes.bare == 2
     assert shapes.total == 2
     assert shapes.unreadable == 1
+    assert "bad-corpus-identifier" not in caplog.text
 
 
-def test_cli_exits_nonzero_when_files_unreadable(tmp_path: Path):
-    """CLI exits 1 when unreadable files present, even with subscripted MOVEs."""
+def test_cli_exits_three_when_files_unreadable(tmp_path: Path):
+    """CLI exits 3 when unreadable files present, even with subscripted MOVEs."""
     good_asg = _asg(
         {
             "type": "MOVE",
@@ -215,4 +239,4 @@ def test_cli_exits_nonzero_when_files_unreadable(tmp_path: Path):
 
     exit_code = cli([str(tmp_path)])
 
-    assert exit_code == 1
+    assert exit_code == 3

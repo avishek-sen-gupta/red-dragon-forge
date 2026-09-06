@@ -185,6 +185,8 @@ number of distinct guard paths and would depend on the path-enumeration walk tha
 - Program absent from the ASG cache, or a dynamic call target — synthetic record.
 - Commarea size mismatch at a seam — bind `min`, surface the mismatch.
 - A cycle in the call graph — none exists today; assert and report rather than hang.
+- Duplicate `program_id` values — the corpus holds nine collisions across 3,779 members.
+  A `program_id`-keyed map must detect rather than overwrite.
 
 ## Relationship to the open srccfg beads
 
@@ -204,9 +206,12 @@ This was recorded as bead `red-dragon-forge-8y0`, closed 2026-09-03 as retracted
 *"My evidence was a stale ASG cache, not the current bridge."* Upstream commit
 `1a99c445` ("emit structured subscripts (bare name + all subscripts), retire
 flattening") makes the bridge emit them, and `57cf80e9` retired the Python-side
-`_SUBSCRIPT_RE` because subscripts became fully structural. 8y0's close note left a
-standing instruction — *"Rebuild the cache with the current jar and re-run before quoting
-any of them"* — and the figures below discharge it.
+`_SUBSCRIPT_RE` because subscripts became fully structural. However, those fixed the
+parser; the cache still lacked subscripted operands because `d07c3581` fixed the ASG
+serialiser — `MoveStatement._operand_dict` was dropping `subscripts` and three other
+keys on the way out to JSON. 8y0's close note left a standing instruction — *"Rebuild
+the cache with the current jar and re-run before quoting any of them"* — and the
+figures below discharge it.
 
 The current cache is `cobble/out-<corpus>-parsed-2/`, written by the current JAR: 3,779
 files, no failures. The parse is skip-if-cached and its own config comment records the
