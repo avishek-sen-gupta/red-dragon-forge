@@ -277,6 +277,6 @@ fileignoreconfig:
   checksum: 4ad76224ff937519efb34cd77011260f9af052b60647e613f311cc3b5c38bdb7
 - filename: cobble/cobble/dataflow/fields/build_corpus.py
   checksum: ab09f9f9845cbf24ff881ad2a5091d588955005428bb91da52ce80cd9d468039
-- filename: cobble/tests/dataflow/fields/test_acceptance.py
+- filename: cobble/tests/dataflow/fields/test_fields_acceptance.py
   checksum: d6c24b2a048ee62fa7e77c20cc2bca65082c78cbe31dc731d48977561d564d01
 version: "1.0"
