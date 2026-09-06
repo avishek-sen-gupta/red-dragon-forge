@@ -88,6 +88,63 @@ def test_the_nowhere_sentinel_keeps_its_synthetic_origin_name(
     assert smallest_covering(NOWHERE, index_of(asg)) == NOWHERE.field_name
 
 
+@pytest.fixture
+def aliased(field):
+    """Eight bytes owned by four declared names: a record, its two members, a
+    REDEFINES view of it, and that view's only child."""
+    return [
+        field(
+            1,
+            "SRC-REC",
+            offset=0,
+            children=[
+                field(5, "SRC-A", "X(4)", offset=0),
+                field(5, "SRC-B", "X(4)", offset=4),
+            ],
+        ),
+        field(
+            1,
+            "ALIAS-REC",
+            offset=0,
+            redefines="SRC-REC",
+            children=[field(5, "WHOLE-EIGHT", "X(8)", offset=0)],
+        ),
+    ]
+
+
+@pytest.mark.parametrize("named", ["SRC-REC", "ALIAS-REC", "WHOLE-EIGHT"])
+def test_the_name_the_statement_wrote_wins_a_tie_over_identical_bytes(
+    program_of, index_of, aliased, named
+):
+    """Three declared names own all eight bytes and tie on length. Whichever one a
+    statement referenced is the one its edge must be keyed on: a consumer joining
+    on the endpoint id would otherwise be handed a field their statement never
+    mentioned. ``query.overlapping`` is how the other two are recovered.
+    """
+    asg = program_of([], data_fields=aliased)
+    assert smallest_covering(_extent(0, 8, name=named), index_of(asg)) == named
+
+
+def test_a_tie_no_reference_settles_still_resolves_the_same_way_every_run(
+    program_of, index_of, aliased
+):
+    """The statement's word only breaks ties it participates in. A synthetic extent
+    belongs to no reference, and determinism there is what the total order is for.
+    """
+    asg = program_of([], data_fields=aliased)
+    assert smallest_covering(_extent(0, 8, name="?"), index_of(asg)) == "WHOLE-EIGHT"
+
+
+def test_a_smaller_field_still_beats_the_record_a_reference_modification_named(
+    program_of, index_of, aliased
+):
+    """``SRC-REC(1:4)`` names eight bytes' worth of record for four bytes of extent.
+    Ranking the reference above the length would answer SRC-REC and lose the member
+    the bytes actually are, which is why it ranks below."""
+    asg = program_of([], data_fields=aliased)
+    assert smallest_covering(_extent(0, 4, name="SRC-REC"), index_of(asg)) == "SRC-A"
+
+
 def test_an_extent_in_another_region_names_nothing_in_working_storage(
     program_of, index_of, field
 ):

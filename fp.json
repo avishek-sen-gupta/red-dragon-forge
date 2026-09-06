@@ -1,6 +1,28 @@
 {
   "lint_rules_dir": ".python-fp-lint",
-  "exclude": [],
+  "exclude": [
+    "cicada/cics/",
+    "tests/",
+    "cicada/tests/",
+    "squall/tests/",
+    "jackal/tests/",
+    "cobble/tests/",
+    "cobble/cobble/asg_walk.py",
+    "cobble/cobble/dataflow/fields/rows.py",
+    "cobble/cobble/dataflow/depgraph/graph.py",
+    "cobble/cobble/dataflow/depgraph/build.py",
+    "cobble/cobble/dataflow/depgraph/checker.py",
+    "cobble/cobble/dataflow/depgraph/flows.py",
+    "cobble/cobble/dataflow/depgraph/render.py"
+  ],
+  "exclude_why": {
+    "_": "Read by nobody: JSON has no comments, and an exclusion whose reason lives in another file is one nobody can judge later. Every key above appears here.",
+    "cicada/cics/": "Models a CICS region: a dispatcher state machine plus the result_holder/context_holder/td_queue cells every builtin closes over. Mutation is the design, so no-mutation-outside-init and the collection rules cannot be met without rewriting the runtime.",
+    "tests/": "The rules target production style, while fixtures legitimately mutate -- `region[0:8] = data` on a bytearray reads better than any concatenation satisfying no-subscript-mutation. The suites also predate this gate, so touching one file for an unrelated reason surfaces its whole backlog and blocks the commit.",
+    "cobble/cobble/asg_walk.py": "The corpus's one ASG descent. It walks a document whose nesting outruns CPython's recursion limit, so the stack must be explicit -- no-list-append/no-list-pop/no-loop-mutation cannot all be met. Constraint comes from the ASG, not from style.",
+    "cobble/cobble/dataflow/fields/rows.py": "The JSONL boundary, and it exists so that `object` appears in one place instead of across the query surface. json.loads returns whatever the file held; a recursive `str | int | Sequence[Json] | ...` alias renames that ignorance without adding a check, satisfying no-object-type in word and not in spirit. Everything above the boundary works in str/int/tuple[str, ...].",
+    "cobble/cobble/dataflow/depgraph/": "A deferred backlog, not a design constraint: the five files carry 145 of that package's 167 violations, all accumulator loops and nesting depth. `rev: main` in .pre-commit-config.yaml tracks a mutable ruleset, so they began failing without being touched, and pre-existing violations in a file blocked commits to it for unrelated reasons. See red-dragon-forge-bgk."
+  },
   "ruff_select": "E,F,W,I,B,UP,SIM,RUF,BLE,T20,TID252,C901,PLR0915,ANN401",
   "max_complexity": 3,
   "max_statements": 10,

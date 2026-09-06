@@ -469,7 +469,7 @@ would silently merge into one namespace.
 over-approximates, `must_cover` under-approximates), the extent wire form and its
 round trip, the per-statement transfer functions, the node-keyed fixpoint,
 extent-to-name resolution, what each of the four files carries, the query
-surface's four primitives, and the corpus pass's exit codes.
+surface's five primitives, and the corpus pass's exit codes.
 
 ### Querying the field dataflow
 
@@ -481,8 +481,9 @@ uv run cobble-fields-query contains   SOME-REC --out out/fields
 ```
 
 Joins the four files and answers in bytes. The queries are `extents`, `writers`,
-`readers`, `reaches`, `reached-by`, `contains`, and `within`; the subject is a
-field name, or `PROGRAM.FIELD` to disambiguate one declared in several members.
+`readers`, `reaches`, `reached-by`, `contains`, `within`, and `overlapping`; the
+subject is a field name, or `PROGRAM.FIELD` to disambiguate one declared in
+several members.
 
 **Every predicate intersects byte ranges rather than matching ids**, and that is
 not an optimisation — it is the only way to get the right answer. Because an edge
@@ -491,6 +492,15 @@ leaves every child it filled out of the graph entirely. Measured on one corpus
 field: three writers by byte overlap against one by id, and twenty-one readers
 against **zero**. A consumer joining these files on node ids will silently miss
 most of what it asks for.
+
+Because 30% of ranges are owned by more than one declared name, an endpoint id is
+a **label, not a claim**: where a record, a `REDEFINES` view of it and that view's
+children all own the same bytes, the id is whichever of them the tie-break settled
+on — the name the statement itself wrote, where a statement made the reference.
+`overlapping` recovers the others. It is the only predicate that reports partial
+overlap and the only one with no level comparison, which is what lets it answer the
+two cases containment cannot: an equal-level alias, reported by neither `contains`
+nor `within`, and a range straddling two records, contained by neither.
 
 Ranges compare only within a program: a byte offset is a coordinate in one
 member's region, so a walk that dropped the program would leak into members

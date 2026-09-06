@@ -236,6 +236,57 @@ def test_a_child_names_the_records_holding_it(store):
     ]
 
 
+def test_every_name_over_a_range_is_recoverable_including_the_equal_level_alias(store):
+    """What neither direction of containment answers.
+
+    ALIAS ties with REC on both bytes and level, so ``contains`` and ``containers``
+    report it from neither end -- see the two tests above. An endpoint id names one
+    of these five; this is how a reader gets the other four, which is what makes
+    that id a label rather than a claim about which name the bytes are.
+    """
+    found = store()
+    assert [field.id for field in found.overlapping(_one(found, "REC").ranges)] == [
+        "PROGA.ALIAS",
+        "PROGA.REC",
+        "PROGA.WHOLE",
+        "PROGA.WS-A",
+        "PROGA.WS-B",
+    ]
+
+
+def test_a_range_straddling_two_records_names_both_and_the_members_it_clips(store):
+    """Bytes 6-10 lie inside no single declared field, so containment answers
+    nothing about them in either direction, and ``smallest_covering`` has no
+    covering name to pick. Partial overlap is the only relation that holds."""
+    found = store()
+    assert [
+        field.id
+        for field in found.overlapping((byte_range(_range("?", 6, 10), "PROGA"),))
+    ] == [
+        "PROGA.ALIAS",
+        "PROGA.REC",
+        "PROGA.WHOLE",
+        "PROGA.WS-B",
+        "PROGA.REC-B",
+        "PROGA.WS-C",
+    ]
+
+
+def test_a_range_from_another_program_matches_none_of_this_ones_declarations(store):
+    """Offsets are region coordinates, so two members' working_storage[0:8] name
+    different bytes. Scanning by program is an optimisation; ``overlaps`` rejecting
+    a foreign program is what makes it correct."""
+    found = store()
+    assert not found.overlapping((byte_range(_range("REC", 0, 8), "PROGB"),))
+
+
+def test_a_range_that_is_not_storage_at_all_owns_no_declared_name(store):
+    """A literal or a callee parses to NO_RANGE, which is not comparable to
+    anything -- including another NO_RANGE."""
+    found = store()
+    assert not found.overlapping((NO_RANGE,))
+
+
 def test_a_group_holding_only_some_occurrences_of_a_table_entry_does_not_contain_it():
     """One range per occurrence, and every one of them has to be inside.
 
