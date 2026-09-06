@@ -35,9 +35,7 @@ _DUPLICATE_NAMES = _field(
     "",
     0,
     children=[
-        _group(
-            "RECE-NUM-DATA-FLAT", 0, _field("RECE-NUM-APP-UNIT", 10, "X(4)", 0)
-        ),
+        _group("RECE-NUM-DATA-FLAT", 0, _field("RECE-NUM-APP-UNIT", 10, "X(4)", 0)),
         _group("RECE-NUM-DATA-BLK", 4, _field("RECE-NUM-DATA-MAIN", 10, "X(6)", 0)),
         _group("RECE-NUM-DATA-FLAT", 10, _field("RECE-NUM-DATA-LEVEL", 10, "X(2)", 0)),
     ],

@@ -27,7 +27,10 @@ from cobble.dataflow.srccfg.link import (
 def _asg(program: str, statements: list[dict]) -> CobolASG:
     with cached_asg_dialect_parsers_registered():
         return CobolASG.from_dict(
-            {"program_id": program, "paragraphs": [{"name": "MAIN", "statements": statements}]}
+            {
+                "program_id": program,
+                "paragraphs": [{"name": "MAIN", "statements": statements}],
+            }
         )
 
 
@@ -66,7 +69,12 @@ def test_the_program_name_loses_its_quotes() -> None:
 def test_an_xctl_is_a_call_site_of_its_own_kind() -> None:
     """XCTL does not return, so a walk must not continue past it the way a LINK does
     -- and a caller asking "what runs after this" needs the two distinguished."""
-    (site,) = call_sites(_cfg("PROGA", [_cics("XCTL", {"PROGRAM": {"text": "'PROGB'", "is_literal": True}})]))
+    (site,) = call_sites(
+        _cfg(
+            "PROGA",
+            [_cics("XCTL", {"PROGRAM": {"text": "'PROGB'", "is_literal": True}})],
+        )
+    )
 
     assert site.transfer == "XCTL"
 
@@ -74,7 +82,12 @@ def test_an_xctl_is_a_call_site_of_its_own_kind() -> None:
 def test_a_static_cobol_call_is_a_call_site() -> None:
     """1,231 of them on the corpus, and they carry USING parameters rather than a
     commarea -- a batch program's whole interface."""
-    (site,) = call_sites(_cfg("PROGA", [{"type": "CALL", "program": "'PROGB'", "using": [{"name": "WS-AREA"}]}]))
+    (site,) = call_sites(
+        _cfg(
+            "PROGA",
+            [{"type": "CALL", "program": "'PROGB'", "using": [{"name": "WS-AREA"}]}],
+        )
+    )
 
     assert (site.transfer, site.program, site.resolved) == ("CALL", "PROGB", True)
 
@@ -95,7 +108,12 @@ def test_a_call_with_no_program_option_is_not_a_call_site() -> None:
 
 def test_a_commarea_is_an_alias_between_the_caller_field_and_dfhcommarea() -> None:
     assert aliases(_cfg("PROGA", [_link("'PROGB'", commarea="WS-AREA")])) == (
-        Alias(caller="PROGA", caller_field="WS-AREA", callee="PROGB", callee_field=COMMAREA_RECORD),
+        Alias(
+            caller="PROGA",
+            caller_field="WS-AREA",
+            callee="PROGB",
+            callee_field=COMMAREA_RECORD,
+        ),
     )
 
 
@@ -106,7 +124,10 @@ def test_a_link_with_no_commarea_produces_no_alias() -> None:
 def test_a_dynamic_target_produces_no_alias_because_the_callee_is_unknown() -> None:
     """An alias to an unresolved program would name the FIELD as the callee, and a
     query joining on program id would then match nothing while looking like data."""
-    assert aliases(_cfg("PROGA", [_link("WS-TARGET", literal=False, commarea="WS-AREA")])) == ()
+    assert (
+        aliases(_cfg("PROGA", [_link("WS-TARGET", literal=False, commarea="WS-AREA")]))
+        == ()
+    )
 
 
 def test_a_call_using_aliases_every_parameter_positionally() -> None:
@@ -115,7 +136,13 @@ def test_a_call_using_aliases_every_parameter_positionally() -> None:
     found = aliases(
         _cfg(
             "PROGA",
-            [{"type": "CALL", "program": "'PROGB'", "using": [{"name": "WS-ONE"}, {"name": "WS-TWO"}]}],
+            [
+                {
+                    "type": "CALL",
+                    "program": "'PROGB'",
+                    "using": [{"name": "WS-ONE"}, {"name": "WS-TWO"}],
+                }
+            ],
         )
     )
 
@@ -128,7 +155,16 @@ def test_a_call_using_aliases_every_parameter_positionally() -> None:
 def test_a_literal_using_parameter_is_not_an_alias() -> None:
     """BY CONTENT of a literal shares no storage back."""
     found = aliases(
-        _cfg("PROGA", [{"type": "CALL", "program": "'PROGB'", "using": [{"name": "'X'", "is_literal": True}]}])
+        _cfg(
+            "PROGA",
+            [
+                {
+                    "type": "CALL",
+                    "program": "'PROGB'",
+                    "using": [{"name": "'X'", "is_literal": True}],
+                }
+            ],
+        )
     )
 
     assert found == ()
@@ -144,7 +180,11 @@ def test_an_omitted_parameter_takes_its_position_without_an_alias() -> None:
                 {
                     "type": "CALL",
                     "program": "'PROGB'",
-                    "using": [{"name": "WS-ONE"}, {"name": "", "omitted": True}, {"name": "WS-THREE"}],
+                    "using": [
+                        {"name": "WS-ONE"},
+                        {"name": "", "omitted": True},
+                        {"name": "WS-THREE"},
+                    ],
                 }
             ],
         )
@@ -157,7 +197,9 @@ def test_an_omitted_parameter_takes_its_position_without_an_alias() -> None:
 
 
 def test_the_call_graph_joins_two_members() -> None:
-    graph = call_graph([_cfg("PROGA", [_link("'PROGB'")]), _cfg("PROGB", [_link("'PROGC'")])])
+    graph = call_graph(
+        [_cfg("PROGA", [_link("'PROGB'")]), _cfg("PROGB", [_link("'PROGC'")])]
+    )
 
     assert callees_of(graph, "PROGA") == ("PROGB",)
     assert callers_of(graph, "PROGB") == ("PROGA",)
@@ -165,7 +207,9 @@ def test_the_call_graph_joins_two_members() -> None:
 
 def test_callers_and_callees_are_sorted_and_deduplicated() -> None:
     """A member that LINKs the same program from eleven places is one edge."""
-    graph = call_graph([_cfg("PROGA", [_link("'PROGC'"), _link("'PROGB'"), _link("'PROGB'")])])
+    graph = call_graph(
+        [_cfg("PROGA", [_link("'PROGC'"), _link("'PROGB'"), _link("'PROGB'")])]
+    )
 
     assert callees_of(graph, "PROGA") == ("PROGB", "PROGC")
 
