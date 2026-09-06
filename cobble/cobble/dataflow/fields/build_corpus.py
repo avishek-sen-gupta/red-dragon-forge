@@ -5,12 +5,18 @@ run continues, because the answer wanted from a corpus pass is "which members ar
 missing from this output", and a run that aborts answers that for one member only.
 
 Intra-program only: a CALL or LINK contributes a synthetic %CALL:<target> source
-and no callee summary. Cross-program flow is a separate stage.
+and no callee summary. Cross-program flow is a separate stage, so naming several
+members analyses each one independently -- no edge crosses a program.
+
+Exactly one of --member and --all is required. The usual question is about the
+fields of one program, so a whole-cache pass is asked for rather than defaulted
+into: a run nobody meant to start is minutes of fixpoint per member.
 
 Exit status contract:
   0 - every member analysed, coverage at or above the floor
   1 - coverage below the floor
-  2 - ASG directory not found, or config missing its table
+  2 - ASG directory not found, config missing its table, or a --member the
+      cache does not hold
   3 - one or more members skipped, unreadable, or colliding on program_id
 """
 
@@ -219,7 +225,24 @@ def _writer(config: FieldsConfig, locations: CorpusIndex) -> GraphWriter:
     )
 
 
-def _completed(config: FieldsConfig, arguments: argparse.Namespace) -> int:
+def _selected(config: FieldsConfig, members: Sequence[str]) -> tuple[Path, ...]:
+    """The named members' cache files, or every one the cache holds.
+
+    Named members keep their given order rather than being sorted: a caller
+    naming a program and its callees reads the report in the order they asked.
+    """
+    if not members:
+        return tuple(sorted(config.asg_dir.glob("*.json")))
+    return tuple(config.asg_dir / f"{member}.json" for member in members)
+
+
+def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
+    return tuple(path for path in paths if not path.is_file())
+
+
+def _analysed_run(
+    config: FieldsConfig, paths: Sequence[Path], arguments: argparse.Namespace
+) -> int:
     """One index for both halves: the nodes emit builds and the ones the writer
     synthesises from an edge must carry the same location for the same id.
 
@@ -228,12 +251,28 @@ def _completed(config: FieldsConfig, arguments: argparse.Namespace) -> int:
     resolves NOT_INDEXED whatever the index holds; see corpus_index's table.
     """
     config.out_dir.mkdir(parents=True, exist_ok=True)
-    paths = tuple(sorted(config.asg_dir.glob("*.json")))
     locations = CorpusIndex()
     with cached_asg_dialect_parsers_registered(), _writer(config, locations) as writer:
         totals = _run(writer, paths, arguments.expand, locations)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
+
+
+def _completed(config: FieldsConfig, arguments: argparse.Namespace) -> int:
+    """A named member the cache does not hold ends the run before it starts.
+
+    Analysing the rest would report a coverage figure over a member set the
+    caller did not ask for, and exit 0 while their program went unexamined.
+    """
+    paths = _selected(config, arguments.member)
+    absent = _absent(paths)
+    if absent:
+        logger.error(
+            "fields: !! not in the ASG cache: %s",
+            ", ".join(path.stem for path in absent),
+        )
+        return 2
+    return _analysed_run(config, paths, arguments)
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
@@ -243,6 +282,9 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
     parser.add_argument("--expand", action="store_true")
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--member", nargs="+", default=(), metavar="NAME")
+    selection.add_argument("--all", action="store_true")
     return parser.parse_args(tuple(argv) if argv else None)
 
 
