@@ -64,6 +64,7 @@ from cobol_memory.field_extent import FieldExtent
 logger = logging.getLogger(__name__)
 
 ITERATION_FACTOR = 50
+HEARTBEAT = 2000
 
 NO_INDEX = cell_index(())
 
@@ -168,17 +169,38 @@ def _grown(
     }
 
 
+def _heartbeat(cfg: Cfg, run: _Pass) -> None:
+    """A pass that runs for minutes has to say so while it runs.
+
+    Reach against the node count is the number worth watching: a walk that stops
+    growing it is churning state over a fraction of the program (the 3ao failure),
+    and one that never stops is heading for the cap.
+    """
+    if run.dequeues % HEARTBEAT != 0:
+        return
+    logger.info(
+        "fields:   %s %d dequeues, %d/%d nodes reached, %d queued",
+        cfg.program,
+        run.dequeues,
+        len(run.states),
+        len(cfg.nodes),
+        len(run.queue),
+    )
+
+
 def _step(
     cfg: Cfg, statements: Mapping[str, Statement], index: CellIndex, run: _Pass
 ) -> _Pass:
     node_id, *rest = run.queue
     after = _after(statements, node_id, run.states[node_id], index)
     grown = _grown(cfg, node_id, after, run.states)
-    return _Pass(
+    stepped = _Pass(
         states=MappingProxyType({**run.states, **grown}),
         queue=(*rest, *(target for target in grown if target not in rest)),
         dequeues=run.dequeues + 1,
     )
+    _heartbeat(cfg, stepped)
+    return stepped
 
 
 def _done(run: _Pass, cap: int) -> bool:
