@@ -12,6 +12,7 @@ resolve, and a duplicate basename anywhere in the tree breaks collection.
 from __future__ import annotations
 
 import json
+import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -22,6 +23,18 @@ from cobble.dataflow.layout import program_records
 from cobol_asg.asg_types import CobolASG
 
 CORPUS_CONFIG = Path(__file__).resolve().parents[3] / "config" / "fields-tests.toml"
+
+
+@pytest.fixture
+def corpus_config() -> Mapping:
+    """A gitignored config naming real members, or a skip.
+
+    Shape: see config/fields-tests.example.toml. The names stay out of the
+    repository; the assertions do not depend on what they are.
+    """
+    if not CORPUS_CONFIG.is_file():
+        pytest.skip(f"no {CORPUS_CONFIG.name}; acceptance needs a parsed cache")
+    return tomllib.loads(CORPUS_CONFIG.read_text(encoding="utf-8"))
 
 
 @pytest.fixture
