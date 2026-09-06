@@ -21,9 +21,11 @@ in the in-state on the second visit, so the diff comes back empty.
 
 What the settled state contributes is the defining node. A write stores, under
 the target extent, the node that wrote it; so a later read of that extent
-recovers where its value was last defined, and an edge carries def-use rather
-than a bare field-to-field pair. A read nothing reaches is credited to the node
-reading it: an uninitialised read is still a read.
+recovers where its value was last defined. That relation comes out as its own
+stream -- keyed by (node, extent), one row per read -- rather than on the edges,
+because a source extent commonly has several reaching definers and putting them
+on the edge made one edge per definer, all stating the same flow. A read nothing
+reaches is credited to the node reading it: an uninitialised read is still a read.
 
 Termination does not rest on the cap: every extent a transfer can construct is
 fixed by the statement set before iteration begins, so the lattice has finite
@@ -54,14 +56,14 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import accumulate, repeat
 from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.options import DEFAULT_OPTIONS, AnalysisOptions
-from cobble.dataflow.fields.state import EMPTY, Source, State, join, reaching
+from cobble.dataflow.fields.state import EMPTY, State, join, reaching
 from cobble.dataflow.fields.transfer import (
     HANDLED,
     Statement,
@@ -87,11 +89,42 @@ NO_STATES: Mapping[str, State] = MappingProxyType({})
 
 @dataclass(frozen=True)
 class FlowEdge:
-    """One value reaching one extent: ``source.node`` defined it, ``node`` moved it."""
+    """One value reaching one extent at one statement.
 
-    source: Source
+    ``origin`` names a value that is not storage -- a literal, a file, a callee --
+    and is empty exactly when ``source`` is a real range.
+
+    Where the value was last defined is deliberately absent. One source extent at
+    one node can have many reaching definers, so carrying the definer here made
+    each of those one edge per definer; ``ReachingDef`` holds the relation instead,
+    keyed by the pair this edge already names.
+    """
+
+    origin: str
+    source: FieldExtent
     target: FieldExtent
     node: str
+
+
+@dataclass(frozen=True)
+class ReachingDef:
+    """Which statements could have written ``extent`` by the time ``node`` runs."""
+
+    node: str
+    extent: FieldExtent
+    definers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _Extracted:
+    """Both streams one pass over the statements produces.
+
+    One pass rather than two, because ``writes_of`` is where the transfer
+    functions run and the edges and the definitions read the same writes.
+    """
+
+    edges: tuple[FlowEdge, ...] = ()
+    defs: tuple[ReachingDef, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -109,6 +142,7 @@ class ProgramFlow:
 
     program: str
     edges: tuple[FlowEdge, ...] = ()
+    defs: tuple[ReachingDef, ...] = ()
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
@@ -462,44 +496,74 @@ def _definers(state: State, extent: FieldExtent, node: str) -> frozenset[str]:
     return found or frozenset({node})
 
 
-def _edges_at(
+def _at(
     statement: Statement, node_id: str, state: State, index: CellIndex
-) -> Iterator[FlowEdge]:
-    return (
-        FlowEdge(
-            source=replace(source, node=definer), target=write.target, node=node_id
-        )
+) -> _Extracted:
+    """One statement's flows and the definitions reaching what it read.
+
+    A synthetic source contributes no definition row: the value came from outside
+    storage, so the statement holding it is the only statement that could have
+    produced it, and ``node`` already names that one.
+    """
+    moved = tuple(
+        (write.target, source)
         for write in writes_of(statement, node_id, index)
         for source in write.sources
-        for definer in _definers(state, source.extent, node_id)
+    )
+    return _Extracted(
+        edges=tuple(
+            FlowEdge(
+                origin=source.origin,
+                source=source.extent,
+                target=target,
+                node=node_id,
+            )
+            for target, source in moved
+        ),
+        defs=tuple(
+            ReachingDef(
+                node=node_id,
+                extent=source.extent,
+                definers=tuple(sorted(_definers(state, source.extent, node_id))),
+            )
+            for _, source in moved
+            if not source.origin
+        ),
     )
 
 
-def _edges(
+def _extracted(
     found: tuple[tuple[str, Statement], ...],
     states: Mapping[str, State],
     index: CellIndex,
-) -> tuple[FlowEdge, ...]:
+) -> _Extracted:
     """Every statement the CFG can reach, read once at its settled entry state.
 
     Statement order outside, sorted within each statement. The sources at an
     extent are a frozenset and the definers of one source are another, so the
-    order ``_edges_at`` yields varies with the per-process hash seed: two runs of
-    the same walk over the same member would emit the same facts in a different
+    order ``_at`` yields varies with the per-process hash seed: two runs of the
+    same walk over the same member would emit the same facts in a different
     order, and an artefact that differs between identical runs cannot be diffed
     across a corpus, which is how a regression in this pipeline gets caught.
     Sorting the whole stream instead would fix that too, at the cost of the source
     order a reader compares against the listing.
     """
-    return tuple(
-        dict.fromkeys(
-            edge
-            for node_id, statement in found
-            if node_id in states
-            for edge in sorted(
-                _edges_at(statement, node_id, states[node_id], index), key=repr
+    parts = tuple(
+        _at(statement, node_id, states[node_id], index)
+        for node_id, statement in found
+        if node_id in states
+    )
+    return _Extracted(
+        edges=tuple(
+            dict.fromkeys(
+                edge for part in parts for edge in sorted(part.edges, key=repr)
             )
-        )
+        ),
+        defs=tuple(
+            dict.fromkeys(
+                entry for part in parts for entry in sorted(part.defs, key=repr)
+            )
+        ),
     )
 
 
@@ -528,9 +592,11 @@ def analyse(
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
     walk = _walked(cfg, statements, index, _entry_node(asg), options)
+    extracted = _extracted(found, walk.states, index)
     return ProgramFlow(
         program=cfg.program,
-        edges=_edges(found, walk.states, index),
+        edges=extracted.edges,
+        defs=extracted.defs,
         writes=tally.writes,
         covered=tally.covered,
         unhandled=tally.unhandled,

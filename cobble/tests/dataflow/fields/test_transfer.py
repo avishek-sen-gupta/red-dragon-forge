@@ -87,10 +87,17 @@ def test_a_move_distributes_to_every_receiving_field(
     assert names_reaching(state, index, "WS-C") == {"WS-A"}
 
 
-def test_a_group_move_lands_on_each_covered_member_at_its_own_offset(
+def test_a_group_move_is_one_write_at_the_group_and_every_child_aliases_into_it(
     program_of, field, after, names_reaching
 ):
-    """The case names cannot express: two copybook layouts over one shape."""
+    """The case names cannot express: two copybook layouts over one shape.
+
+    Which of the source's bytes each child took is offset arithmetic over the two
+    extents -- byte k from byte k, because a group operand makes the MOVE an
+    alphanumeric copy -- so a write per child restated the declared layout once
+    per flow. The children still reach the source, by aliasing into the range the
+    group write covered; the offsets are the query's to recover.
+    """
     asg = program_of(
         [_move("REC-SRC", "REC-DST")],
         data_fields=[
@@ -113,13 +120,20 @@ def test_a_group_move_lands_on_each_covered_member_at_its_own_offset(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "DST-ONE") == {"SRC-ONE"}
-    assert names_reaching(state, index, "DST-TWO") == {"SRC-TWO"}
+    assert names_reaching(state, index, "REC-DST") == {"REC-SRC"}
+    assert names_reaching(state, index, "DST-ONE") == {"REC-SRC"}
+    assert names_reaching(state, index, "DST-TWO") == {"REC-SRC"}
 
 
-def test_a_group_move_into_a_longer_target_pads_the_tail_with_a_literal(
+def test_a_group_move_shorter_than_its_target_still_writes_the_whole_target(
     program_of, field, after, names_reaching
 ):
+    """The tail past the source's end is spaces, and that is not a flow fact.
+
+    A LITERAL SPACES source per padded child was a per-child restatement of one
+    subtraction: the target's length less the source's. The write covers the whole
+    target because the whole target was written.
+    """
     asg = program_of(
         [_move("REC-SRC", "REC-DST")],
         data_fields=[
@@ -135,8 +149,8 @@ def test_a_group_move_into_a_longer_target_pads_the_tail_with_a_literal(
         ],
     )
     state, index = after(asg)
-    assert names_reaching(state, index, "DST-ONE") == {"SRC-ONE"}
-    assert names_reaching(state, index, "DST-TAIL") == {"LITERAL SPACES"}
+    assert names_reaching(state, index, "REC-DST") == {"REC-SRC"}
+    assert names_reaching(state, index, "DST-TAIL") == {"REC-SRC"}
 
 
 def test_a_comp_operand_gets_whole_to_whole_with_no_byte_split(

@@ -20,11 +20,35 @@ from pathlib import Path
 import pytest
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.fields.emit import graph_records
+from cobble.dataflow.fields.emit import ProgramRecords, graph_records
 from cobble.dataflow.fields.fixpoint import analysed
+from cobble.dataflow.fields.query import FieldStore, Side, store_of
+from cobble.dataflow.fields.side_tables import defs_row, extent_row
 from cobol_asg.asg_types import CobolASG
 
 COVERAGE_FLOOR = 0.60
+
+
+def _rows(pairs) -> tuple[dict, ...]:
+    """The side tables as they reach disk: the writer's own row producers."""
+    return tuple(json.loads(row) for _, row in pairs)
+
+
+def _store(records: ProgramRecords) -> FieldStore:
+    return store_of(
+        _rows(map(extent_row, records.extents)),
+        tuple(_edge_row(edge) for edge in records.edges),
+        _rows(map(defs_row, records.defs)),
+    )
+
+
+def _edge_row(edge) -> dict:
+    return {
+        "source": edge.source,
+        "target": edge.target,
+        "kind": edge.kind.value,
+        "attrs": dict(edge.attrs),
+    }
 
 
 def _asg(cache: Path, member: str) -> CobolASG:
@@ -64,20 +88,28 @@ def test_no_analysed_member_is_silently_skipped(corpus_config):
 
 
 def test_the_pinned_derivation_holds_end_to_end(corpus_config):
-    """A ratio says how much was explained; this says the explanation is right."""
+    """A ratio says how much was explained; this says the explanation is right.
+
+    Resolved by byte overlap, not by endpoint name. The pinned flow writes a
+    group and the field it is pinned on is one of that group's children, so the
+    edge names the group -- matching on ids finds nothing, which is the whole
+    reason the queries intersect ranges instead.
+    """
     oracle = corpus_config["oracle"]
     flow, index = _analysed(Path(corpus_config["cache_dir"]), oracle["member"])
-    _, edges = graph_records(flow, index, True, CorpusIndex())
-    matching = [
-        edge
-        for edge in edges
-        if edge.source.endswith(f".{oracle['source_field']}")
-        and edge.target.endswith(f".{oracle['target_field']}")
+    store = _store(graph_records(flow, index, CorpusIndex()))
+    (source,) = store.field(oracle["source_field"])
+    (target,) = store.field(oracle["target_field"])
+
+    carried = [
+        one
+        for one in store.touching(target.ranges, Side.TARGET)
+        if any(one.source_range.overlaps(part) for part in source.ranges)
     ]
 
-    assert matching, f"no edge {oracle['source_field']} -> {oracle['target_field']}"
-    assert any(edge.attrs["node"] == oracle["cfg_node"] for edge in matching), [
-        edge.attrs["node"] for edge in matching
+    assert carried, f"no flow {oracle['source_field']} -> {oracle['target_field']}"
+    assert any(one.node == oracle["cfg_node"] for one in carried), [
+        one.node for one in carried
     ]
 
 

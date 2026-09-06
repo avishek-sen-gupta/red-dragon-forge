@@ -264,7 +264,7 @@ fileignoreconfig:
 - filename: cobble/tests/dataflow/fields/test_fixpoint.py
   checksum: f40a187db5635624e2dd30d8340e6fd23e6a2913684ec5d23ab9ab6299ce97a5
 - filename: cobble/cobble/dataflow/fields/fixpoint.py
-  checksum: 43fb9989528ab86e3cf61a8a7b603a2dad8ae6548f3f895e0dd6b185a0623b38
+  checksum: eb9f2e00612e5b8cc4cc760aa55d1d65fea2dff4edf7f5c368649982266cb01d
 - filename: cobble/cobble/dataflow/fields/naming.py
   checksum: 6e3f64e0a87b86b0da5d94204b9f39109ff99f4556acf796ea1c67eb27ce0d90
 - filename: cobble/tests/dataflow/fields/test_naming.py
@@ -279,4 +279,10 @@ fileignoreconfig:
   checksum: ab09f9f9845cbf24ff881ad2a5091d588955005428bb91da52ce80cd9d468039
 - filename: cobble/tests/dataflow/fields/test_fields_acceptance.py
   checksum: d6c24b2a048ee62fa7e77c20cc2bca65082c78cbe31dc731d48977561d564d01
+- filename: cobble/cobble/dataflow/fields/side_tables.py
+  checksum: bbba8baf46404ae5467a01c832daaec6b3ca1c59761fa8f45a0285b808709eac
+- filename: cobble/cobble/dataflow/fields/query.py
+  checksum: 7e85a1ea18fc0b35fe382c4b39de1767d2cf39d56589370766ecd86b6bf83c20
+- filename: cobble/tests/dataflow/fields/test_fields_synthetic.py
+  checksum: ac334a88abcd9c8ce8d105554216d508834231a26cdad5239e27859b0808ac6f
 version: "1.0"

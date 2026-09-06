@@ -349,15 +349,55 @@ whole-cache pass is minutes of fixpoint per member, so it is asked for rather
 than defaulted into.
 
 Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
-writes `FIELD` nodes and `FLOWS_TO` edges to `<out_dir>/{nodes,edges}.jsonl`. A
-`FIELD` id is `<program>.<field>`, because a field name is only unique within a
-program: two copybooks routinely give one piece of storage two names. Each edge
-carries both byte extents and two CFG node ids — `node`, the statement that
-moved the bytes, and `source_node`, the statement that defined the value it
-moved, which differ whenever a group-level write fills a child the mover then
-carries on — and deliberately not the guard condition — a reader asks `cobble-srccfg-query guards` for that node's
-guards instead, which keeps conditions out of the lattice they would otherwise
-multiply.
+writes four files to `<out_dir>`:
+
+| file | one row per | holds |
+| ---- | ----------- | ----- |
+| `nodes.jsonl` | `FIELD` endpoint | nothing but the id — every attribute it once carried now has a table |
+| `edges.jsonl` | `(node, source extent, target extent)` | the `FLOWS_TO` relation and `node`, the statement that moved the bytes |
+| `extents.jsonl` | *declared* name | its `level`, its `usage`, and the byte ranges it owns |
+| `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
+
+A `FIELD` id is `<program>.<field>`, because a field name is only unique within a
+program: two copybooks routinely give one piece of storage two names. An edge
+deliberately does not carry the guard condition — a reader asks
+`cobble-srccfg-query guards` for that node's guards instead, which keeps
+conditions out of the lattice they would otherwise multiply.
+
+The split is the point: **the graph holds only what nothing outside it could
+state.** Both side tables are many-to-one against a flow, so neither survives as
+an edge attribute. One read has as many reaching definitions as it has paths
+(measured on the corpus: 862 flows with more than one, one with a hundred), and
+one byte range as many declared names as it has groups and redefinitions over it
+(30% of ranges are owned by more than one name). Pinned to the edge they were
+duplicated per path and then deduplicated by endpoint, which kept one and dropped
+the rest — nondeterministically. As relations of their own each is stated once
+and all of it survives.
+
+`extents.jsonl` is one row per name against the ranges it owns —
+`{"id": "PROGA.WS-B", "level": 5, "usage": "DISPLAY", "extents":
+["WS-B@working_storage[4:8]"]}`. Its own file because where a field *is* is true
+whether or not a value ever moved through it. *Declared*, because an edge names
+the smallest field covering the bytes it moved, so a group-level write puts the
+group in the graph and leaves every child it filled out of it — and the child is
+what a reader is asking about. One entry per range rather than a single span,
+because `OCCURS` gives a name an occurrence per subscript and a span from the
+first to the last would swallow the siblings between them. `level` is there
+because a group with one child and a `REDEFINES` pair each own identical bytes,
+so only the level says which contains which; `usage` because a partial overlap of
+a `COMP-3` field is not a partial read of its value. A synthetic origin
+(`<program>.LITERAL`, `FILE:<name>`, `%CICS-STATE`, `%CALL:<target>`) is not
+storage and has no row at all.
+
+An extent reads `NAME@region[start:end]`, with a trailing `~` when the range is
+clamped rather than exact — a computed subscript lands somewhere inside it and
+nothing knows where. The mark matters because the byte-for-byte correspondence
+between a MOVE's two operands holds only for an exact target.
+
+A group write is one edge naming the group, not one per child: which bytes each
+child received follows from the two extents and the declared layout, so storing
+it per child stated the same fact 7842 times over. `fields.query.contributed()`
+is that derivation, and the artefact is lossless because of it.
 
 The config is its own table, holding only what this stage reads:
 
@@ -368,11 +408,8 @@ out_dir = "out/fields"
 ```
 
 `--min-coverage` (default 0.60) is the floor for the fraction of writes the
-analysis resolved to storage; `--expand` adds `source_fields`/`target_fields` to
-each edge, naming every field that aliases the extent. Expansion is opt-in
-because a record and its `REDEFINES` views multiply the names of one byte range
-without adding a fact about flow. The human report goes to stderr, a JSON
-summary to stdout.
+analysis resolved to storage. The human report goes to stderr, a JSON summary to
+stdout.
 
 Two walks reach the answer, and `--iteration-factor` and `--sweeps` are their
 budgets — mutually exclusive, because each binds only its own walk.
@@ -429,9 +466,45 @@ one shared `edges.jsonl` has no filename to qualify — both members' field ids
 would silently merge into one namespace.
 
 `tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
-over-approximates, `must_cover` under-approximates), the per-statement transfer
-functions, the node-keyed fixpoint, extent-to-name resolution, what an edge
-carries, and the corpus pass's exit codes.
+over-approximates, `must_cover` under-approximates), the extent wire form and its
+round trip, the per-statement transfer functions, the node-keyed fixpoint,
+extent-to-name resolution, what each of the four files carries, the query
+surface's four primitives, and the corpus pass's exit codes.
+
+### Querying the field dataflow
+
+```bash
+uv run cobble-fields-query writers    WS-TOTAL --out out/fields
+uv run cobble-fields-query readers    PROGA.WS-TOTAL --out out/fields
+uv run cobble-fields-query reaches    WS-TOTAL --out out/fields --depth 4
+uv run cobble-fields-query contains   SOME-REC --out out/fields
+```
+
+Joins the four files and answers in bytes. The queries are `extents`, `writers`,
+`readers`, `reaches`, `reached-by`, `contains`, and `within`; the subject is a
+field name, or `PROGRAM.FIELD` to disambiguate one declared in several members.
+
+**Every predicate intersects byte ranges rather than matching ids**, and that is
+not an optimisation — it is the only way to get the right answer. Because an edge
+names the smallest declared field covering the bytes it moved, a group-level write
+leaves every child it filled out of the graph entirely. Measured on one corpus
+field: three writers by byte overlap against one by id, and twenty-one readers
+against **zero**. A consumer joining these files on node ids will silently miss
+most of what it asks for.
+
+Ranges compare only within a program: a byte offset is a coordinate in one
+member's region, so a walk that dropped the program would leak into members
+nobody asked about. `reaches` and `reached-by` walk the closure of that
+intersection to `--depth` (default 6), stopping on a field already visited over
+overlapping bytes — both parts, because bytes alone prune a sibling inside a group
+already reached, and an id alone prunes a second occurrence of a table entry.
+
+Field names go to stdout and nowhere else, so the log stays safe to tail.
+
+`load()` reads a directory and `store_of()` takes the rows directly, off one
+assembly — an in-process caller and a reader of the published artefact cannot
+answer differently. A missing table loads as empty rather than as an error, so a
+directory an older build wrote is still worth querying.
 
 ### Render the HTML visualization
 
