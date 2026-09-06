@@ -46,3 +46,13 @@ testpaths = ["tests"]
 [tool.black]
 line-length = 88
 target-version = ["py311"]
+
+# The blocking python-fp-lint hook runs ruff from its own pinned environment,
+# where `cobble`/`cics`/`squall`/`jackal` are third-party: no directory here is
+# an importable package, so isort's same-package detection is the only thing
+# that could classify them first-party. Leaving it on makes a local `ruff check`
+# demand the opposite import order from the hook that gates the commit, and the
+# hook always wins. Off, they agree — and the existing tree already follows the
+# one-block order that agreement produces.
+[tool.ruff.lint.isort]
+detect-same-package = false
