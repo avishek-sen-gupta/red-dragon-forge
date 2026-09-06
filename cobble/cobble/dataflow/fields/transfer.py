@@ -26,6 +26,7 @@ from types import MappingProxyType
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
+from cobble.dataflow.fields.naming import smallest_covering
 from cobble.dataflow.fields.state import (
     CICS_STATE,
     LITERAL,
@@ -34,7 +35,6 @@ from cobble.dataflow.fields.state import (
     State,
     write,
 )
-from cobble.dataflow.layout import Cell
 from cobble.dataflow.srccfg.literals import is_literal
 from cobol_asg.cobol_expression import ExprNode, FieldRefNode, RefModNode
 from cobol_asg.cobol_statements import (
@@ -88,21 +88,13 @@ def _synthetic(origin: str, node: str) -> frozenset[Source]:
     return frozenset({Source(origin=origin, extent=NOWHERE, node=node)})
 
 
-def _narrowness(cell: Cell) -> tuple[int, bool]:
-    """A group and its only child span the same bytes; the child is the owner."""
-    return (cell.length, cell.is_group)
-
-
 def _named(extent: FieldExtent, index: CellIndex) -> FieldExtent:
     """A byte range labelled by the smallest declared field containing it.
 
     A slice of a group's extent belongs to whichever member owns those bytes,
     and that member's name is the only useful thing to report about it.
     """
-    cells = index.containing(extent)
-    if not cells:
-        return extent
-    return replace(extent, field_name=min(cells, key=_narrowness).name)
+    return replace(extent, field_name=smallest_covering(extent, index))
 
 
 def _sliced(source: FieldExtent, offset: int, wanted: int) -> FieldExtent:

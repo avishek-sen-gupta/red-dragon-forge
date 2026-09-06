@@ -265,4 +265,8 @@ fileignoreconfig:
   checksum: f40a187db5635624e2dd30d8340e6fd23e6a2913684ec5d23ab9ab6299ce97a5
 - filename: cobble/cobble/dataflow/fields/fixpoint.py
   checksum: 43fb9989528ab86e3cf61a8a7b603a2dad8ae6548f3f895e0dd6b185a0623b38
+- filename: cobble/cobble/dataflow/fields/naming.py
+  checksum: 6e3f64e0a87b86b0da5d94204b9f39109ff99f4556acf796ea1c67eb27ce0d90
+- filename: cobble/tests/dataflow/fields/test_naming.py
+  checksum: 70f2b6bc5f655ed320a2a925d7c29b41705a58b6307583e8342baa38c803cf15
 version: "1.0"
