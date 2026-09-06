@@ -370,6 +370,14 @@ because a record and its `REDEFINES` views multiply the names of one byte range
 without adding a fact about flow. The human report goes to stderr, a JSON
 summary to stdout.
 
+`--iteration-factor` (default 50) is the dequeues allowed per CFG node before a
+member is given up on with `dequeue cap N reached`. No constant is right for
+every program: the honest bound is nodes × the lattice height at each node, and
+height grows with the number of extents whose source sets are still being
+refined, so a large member can need a factor in the hundreds. The progress log
+is how you tell which problem you have — once `nodes reached` stops climbing,
+further dequeues are refining provenance, not discovering the program.
+
 Exit status is the gate:
 
 | exit | meaning |

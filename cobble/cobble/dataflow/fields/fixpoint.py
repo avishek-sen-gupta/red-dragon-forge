@@ -273,14 +273,20 @@ def _skip_reason(run: _Pass, cap: int, program: str, nodes: int) -> str:
     return f"dequeue cap {cap} reached"
 
 
-def analyse(asg, index: CellIndex) -> ProgramFlow:
-    """Every flow in one program, given an index its fields can be laid out into."""
+def analyse(asg, index: CellIndex, factor: int = ITERATION_FACTOR) -> ProgramFlow:
+    """Every flow in one program, given an index its fields can be laid out into.
+
+    ``factor`` is dequeues allowed per CFG node. The honest bound is nodes times
+    the lattice height at each node -- the distinct extents with distinct source
+    sets that reach it -- so no constant is right for every program, and a member
+    that trips the default gets a raised factor rather than a silent truncation.
+    """
     cfg = build_program(asg)
     statements = statement_index(asg)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
     entry = _entry_node(asg)
-    cap = ITERATION_FACTOR * max(len(cfg.nodes), 1)
+    cap = factor * max(len(cfg.nodes), 1)
     reachable = (
         _settled(cfg, statements, index, entry, cap)
         if entry in cfg.node_ids
@@ -298,7 +304,7 @@ def analyse(asg, index: CellIndex) -> ProgramFlow:
     )
 
 
-def analysed(asg) -> tuple[ProgramFlow, CellIndex]:
+def analysed(asg, factor: int = ITERATION_FACTOR) -> tuple[ProgramFlow, CellIndex]:
     """analyse, with the index built here so an unsizeable field is a skip.
 
     layout raises while computing extents, which is before any statement has been
@@ -310,4 +316,4 @@ def analysed(asg) -> tuple[ProgramFlow, CellIndex]:
         index = cell_index(program_records(asg))
     except UnsizeableFieldError as error:
         return ProgramFlow(program=asg.program_id, skipped=str(error)), NO_INDEX
-    return analyse(asg, index), index
+    return analyse(asg, index, factor), index

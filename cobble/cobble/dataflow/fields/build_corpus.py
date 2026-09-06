@@ -39,7 +39,7 @@ from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
-from cobble.dataflow.fields.fixpoint import analysed
+from cobble.dataflow.fields.fixpoint import ITERATION_FACTOR, analysed
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobol_asg.asg_types import CobolASG
@@ -49,6 +49,19 @@ logger = logging.getLogger(__name__)
 NODES_FILE = "nodes.jsonl"
 EDGES_FILE = "edges.jsonl"
 DEFAULT_FLOOR = 0.60
+
+
+@dataclass(frozen=True)
+class AnalysisOptions:
+    """What the caller chose about how each member is analysed.
+
+    One value object rather than two parameters threaded through four call
+    layers: the next knob belongs here, not in every signature between the CLI
+    and the fixpoint.
+    """
+
+    expand: bool = False
+    factor: int = ITERATION_FACTOR
 
 
 @dataclass(frozen=True)
@@ -108,15 +121,15 @@ def _duplicates(totals: RunTotals) -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 
 def _analysed_member(
-    path: Path, expand: bool, locations: FileLocationResolver
+    path: Path, options: AnalysisOptions, locations: FileLocationResolver
 ) -> MemberResult:
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    flow, index = analysed(asg)
+    flow, index = analysed(asg, options.factor)
     if flow.skipped:
         return MemberResult(
             member=path.stem, program=flow.program, skipped=flow.skipped
         )
-    nodes, edges = graph_records(flow, index, expand, locations)
+    nodes, edges = graph_records(flow, index, options.expand, locations)
     return MemberResult(
         member=path.stem,
         program=flow.program,
@@ -129,7 +142,7 @@ def _analysed_member(
 
 
 def _member_result(
-    path: Path, expand: bool, locations: FileLocationResolver
+    path: Path, options: AnalysisOptions, locations: FileLocationResolver
 ) -> MemberResult:
     """Every failure one member can have, as a reason rather than an abort.
 
@@ -137,7 +150,7 @@ def _member_result(
     halfway through leaves no partial rows behind it.
     """
     try:
-        return _analysed_member(path, expand, locations)
+        return _analysed_member(path, options, locations)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=path.stem, skipped=f"unreadable: {error!r}")
 
@@ -189,7 +202,7 @@ def _log_result(result: MemberResult, seconds: float) -> None:
 def _logged_member(
     numbered: tuple[int, Path],
     total: int,
-    expand: bool,
+    options: AnalysisOptions,
     locations: FileLocationResolver,
 ) -> MemberResult:
     """One member's analysis, announced before it starts and measured after.
@@ -200,7 +213,7 @@ def _logged_member(
     position, path = numbered
     logger.info("fields: [%d/%d] %s", position, total, path.stem)
     started = time.monotonic()
-    result = _member_result(path, expand, locations)
+    result = _member_result(path, options, locations)
     _log_result(result, time.monotonic() - started)
     return result
 
@@ -208,13 +221,13 @@ def _logged_member(
 def _run(
     writer: GraphWriter,
     paths: Sequence[Path],
-    expand: bool,
+    options: AnalysisOptions,
     locations: FileLocationResolver,
 ) -> RunTotals:
     return reduce(
         lambda totals, numbered: _folded(
             totals,
-            _written(writer, _logged_member(numbered, len(paths), expand, locations)),
+            _written(writer, _logged_member(numbered, len(paths), options, locations)),
         ),
         enumerate(paths, start=1),
         RunTotals(),
@@ -281,6 +294,10 @@ def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(path for path in paths if not path.is_file())
 
 
+def _options(arguments: argparse.Namespace) -> AnalysisOptions:
+    return AnalysisOptions(expand=arguments.expand, factor=arguments.iteration_factor)
+
+
 def _analysed_run(
     config: FieldsConfig, paths: Sequence[Path], arguments: argparse.Namespace
 ) -> int:
@@ -294,7 +311,7 @@ def _analysed_run(
     config.out_dir.mkdir(parents=True, exist_ok=True)
     locations = CorpusIndex()
     with cached_asg_dialect_parsers_registered(), _writer(config, locations) as writer:
-        totals = _run(writer, paths, arguments.expand, locations)
+        totals = _run(writer, paths, _options(arguments), locations)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
 
@@ -323,6 +340,12 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
     parser.add_argument("--expand", action="store_true")
+    parser.add_argument(
+        "--iteration-factor",
+        type=int,
+        default=ITERATION_FACTOR,
+        help="dequeues allowed per CFG node before a member is given up on",
+    )
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--member", nargs="+", default=(), metavar="NAME")
     selection.add_argument("--all", action="store_true")
