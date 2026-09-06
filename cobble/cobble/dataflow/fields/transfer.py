@@ -67,14 +67,14 @@ _CICS_RECEIVERS = ("INTO", "SET")
 
 
 @dataclass(frozen=True)
-class _Write:
+class Write:
     """One extent, and everything reaching it after this statement."""
 
     target: FieldExtent
     sources: frozenset[Source]
 
 
-def _applied(state: State, writes: Iterator[_Write]) -> State:
+def _applied(state: State, writes: Iterator[Write]) -> State:
     return reduce(
         lambda held, entry: write(held, entry.target, entry.sources), writes, state
     )
@@ -120,7 +120,7 @@ def _cell_write(
     cell_extent: FieldExtent,
     node: str,
     index: CellIndex,
-) -> _Write:
+) -> Write:
     """One receiving cell's share of a group move.
 
     The offset is the difference of two region coordinates. ``Cell.start`` is
@@ -129,9 +129,9 @@ def _cell_write(
     """
     offset = cell_extent.start - target.start
     if offset >= source.length:
-        return _Write(cell_extent, _synthetic(LITERAL_SPACES, node))
+        return Write(cell_extent, _synthetic(LITERAL_SPACES, node))
     taken = _sliced(source, offset, cell_extent.length)
-    return _Write(cell_extent, _from_extents((_named(taken, index),), node))
+    return Write(cell_extent, _from_extents((_named(taken, index),), node))
 
 
 def _distributed(
@@ -139,11 +139,11 @@ def _distributed(
     target: FieldExtent,
     node: str,
     index: CellIndex,
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     """Left-aligned at matching relative offset; the tail past the source is spaces."""
     covered = index.elementary_within(target)
     if not covered:
-        return iter((_Write(target, _from_extents((source,), node)),))
+        return iter((Write(target, _from_extents((source,), node)),))
     return (
         _cell_write(source, target, index.extent_of(cell), node, index)
         for cell in covered
@@ -178,13 +178,13 @@ def _one_move(
     target: FieldExtent,
     node: str,
     index: CellIndex,
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     if not sources.extents:
         origin = _unresolved_origin(operand, sources.reason)
-        return iter((_Write(target, _synthetic(origin, node)),))
+        return iter((Write(target, _synthetic(origin, node)),))
     if _distributes(sources, target, index):
         return _distributed(sources.extents[0], target, node, index)
-    return iter((_Write(target, _from_extents(sources.extents, node)),))
+    return iter((Write(target, _from_extents(sources.extents, node)),))
 
 
 def _source_operand(statement: MoveStatement) -> RefModOperand:
@@ -193,26 +193,34 @@ def _source_operand(statement: MoveStatement) -> RefModOperand:
     return source if isinstance(source, RefModOperand) else RefModOperand(name="")
 
 
+def _move_targets(statement: MoveStatement) -> tuple[RefModOperand, ...]:
+    return tuple(statement.targets)
+
+
 def _move_writes(
     statement: MoveStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     sources = operand_extents(statement.source, index)
     operand = _source_operand(statement)
     return (
         entry
-        for target_operand in statement.targets
+        for target_operand in _move_targets(statement)
         for target in operand_extents(target_operand, index).extents
         for entry in _one_move(operand, sources, target, node, index)
     )
 
 
+def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, ...]:
+    return tuple(RefModOperand(name=name) for name in statement.operands)
+
+
 def _initialize_writes(
     statement: InitializeStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     return (
-        _Write(index.extent_of(cell), _synthetic(LITERAL, node))
-        for name in statement.operands
-        for group in operand_extents(RefModOperand(name=name), index).extents
+        Write(index.extent_of(cell), _synthetic(LITERAL, node))
+        for operand in _initialize_targets(statement)
+        for group in operand_extents(operand, index).extents
         for cell in index.elementary_within(group) or index.containing(group)[-1:]
     )
 
@@ -222,7 +230,7 @@ def _union_writes(
     targets: tuple[RefModOperand, ...],
     node: str,
     index: CellIndex,
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     """Every target takes every operand: no digit-level correspondence to model."""
     every = tuple(
         extent
@@ -230,7 +238,7 @@ def _union_writes(
         for extent in operand_extents(operand, index).extents
     )
     return (
-        _Write(target, _from_extents(every, node))
+        Write(target, _from_extents(every, node))
         for operand in targets
         for target in operand_extents(operand, index).extents
     )
@@ -252,7 +260,7 @@ def _arithmetic_targets(statement: ArithmeticStatement) -> tuple[RefModOperand, 
 
 def _arithmetic_writes(
     statement: ArithmeticStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     return _union_writes(
         (statement.source, statement.target),
         _arithmetic_targets(statement),
@@ -278,50 +286,62 @@ def _compute_target(target: ComputeTarget) -> RefModOperand:
     return RefModOperand(name=target.name, subscripts=target.subscripts)
 
 
+def _compute_targets(statement: ComputeStatement) -> tuple[RefModOperand, ...]:
+    return tuple(_compute_target(target) for target in statement.targets)
+
+
 def _compute_writes(
     statement: ComputeStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     return _union_writes(
         _expression_reads(statement.expression),
-        tuple(_compute_target(target) for target in statement.targets),
+        _compute_targets(statement),
         node,
         index,
     )
 
 
+def _string_targets(statement: StringStatement) -> tuple[RefModOperand, ...]:
+    return (statement.into,)
+
+
 def _string_writes(
     statement: StringStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     return _union_writes(
         tuple(sending.value for sending in statement.sendings),
-        (statement.into,),
+        _string_targets(statement),
         node,
         index,
     )
 
 
 def _origin_writes(
-    names: tuple[str, ...], origin: str, node: str, index: CellIndex
-) -> Iterator[_Write]:
+    operands: tuple[RefModOperand, ...], origin: str, node: str, index: CellIndex
+) -> Iterator[Write]:
     return (
-        _Write(target, _synthetic(origin, node))
-        for name in names
-        for target in operand_extents(RefModOperand(name=name), index).extents
+        Write(target, _synthetic(origin, node))
+        for operand in operands
+        for target in operand_extents(operand, index).extents
     )
+
+
+def _read_targets(statement: ReadStatement) -> tuple[RefModOperand, ...]:
+    return (RefModOperand(name=statement.into),) if statement.into else ()
 
 
 def _read_writes(
     statement: ReadStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     return _origin_writes(
-        (statement.into,) if statement.into else (),
+        _read_targets(statement),
         f"FILE:{statement.file_name}",
         node,
         index,
     )
 
 
-def _call_names(statement: CallStatement) -> tuple[str, ...]:
+def _call_targets(statement: CallStatement) -> tuple[RefModOperand, ...]:
     """BY REFERENCE is the only linkage the callee can write back through."""
     passed = tuple(
         param.name
@@ -330,14 +350,15 @@ def _call_names(statement: CallStatement) -> tuple[str, ...]:
         and not param.omitted
         and not param.is_literal
     )
-    return (*passed, *((statement.giving,) if statement.giving else ()))
+    given = (statement.giving,) if statement.giving else ()
+    return tuple(RefModOperand(name=name) for name in (*passed, *given))
 
 
 def _call_writes(
     statement: CallStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
+) -> Iterator[Write]:
     return _origin_writes(
-        _call_names(statement), f"%CALL:{statement.program}", node, index
+        _call_targets(statement), f"%CALL:{statement.program}", node, index
     )
 
 
@@ -359,22 +380,34 @@ def _cics_origin(statement: ExecCicsStatement) -> str:
     return CICS_STATE
 
 
+def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
+    """LINK and XCTL write through the COMMAREA; everything else through a receiver."""
+    if statement.verb.upper() in _CICS_CALL_VERBS:
+        return (RefModOperand(name=_option(statement, "COMMAREA")),)
+    return tuple(RefModOperand(name=text) for text in _receiver(statement))
+
+
 def _cics_writes(
     statement: ExecCicsStatement, node: str, index: CellIndex
-) -> Iterator[_Write]:
-    verb = statement.verb.upper()
-    if verb in _CICS_CALL_VERBS:
+) -> Iterator[Write]:
+    if statement.verb.upper() in _CICS_CALL_VERBS:
         return _origin_writes(
-            (_option(statement, "COMMAREA"),),
+            _cics_targets(statement),
             f"%CALL:{_option(statement, 'PROGRAM')}",
             node,
             index,
         )
-    return _origin_writes(_receiver(statement), _cics_origin(statement), node, index)
+    return _origin_writes(
+        _cics_targets(statement), _cics_origin(statement), node, index
+    )
 
 
-def _no_writes(statement: Statement, node: str, index: CellIndex) -> Iterator[_Write]:
+def _no_writes(statement: Statement, node: str, index: CellIndex) -> Iterator[Write]:
     return iter(())
+
+
+def _no_targets(statement: Statement) -> tuple[RefModOperand, ...]:
+    return ()
 
 
 HANDLED: tuple[type, ...] = (
@@ -388,7 +421,7 @@ HANDLED: tuple[type, ...] = (
     ExecCicsStatement,
 )
 
-_WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[_Write]]] = MappingProxyType(
+_WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType(
     {
         "MoveStatement": _move_writes,
         "InitializeStatement": _initialize_writes,
@@ -402,6 +435,35 @@ _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[_Write]]] = MappingProxyTyp
 )
 
 
+_TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
+    MappingProxyType(
+        {
+            "MoveStatement": _move_targets,
+            "InitializeStatement": _initialize_targets,
+            "ArithmeticStatement": _arithmetic_targets,
+            "ComputeStatement": _compute_targets,
+            "StringStatement": _string_targets,
+            "ReadStatement": _read_targets,
+            "CallStatement": _call_targets,
+            "ExecCicsStatement": _cics_targets,
+        }
+    )
+)
+
+
+def writes_of(statement: Statement, node: str, index: CellIndex) -> tuple[Write, ...]:
+    """Every extent ``statement`` writes and what reaches each one.
+
+    Public because an edge has to come from the writes themselves and not from
+    diffing the state around them: a loop-carried definition is already in the
+    in-state when the statement runs again, so the diff would be empty and the
+    edge would vanish -- silently, which is the failure mode this whole module is
+    arranged against.
+    """
+    handler = _WRITES_BY_KIND.get(type(statement).__name__, _no_writes)
+    return tuple(handler(statement, node, index))
+
+
 def transfer(statement: Statement, node: str, state: State, index: CellIndex) -> State:
     """The state after ``statement``, given the state before it.
 
@@ -409,5 +471,17 @@ def transfer(statement: Statement, node: str, state: State, index: CellIndex) ->
     what this does dispatch on, so a coverage measurement can subtract the rest
     rather than credit it as analysed.
     """
-    handler = _WRITES_BY_KIND.get(type(statement).__name__, _no_writes)
-    return _applied(state, handler(statement, node, index))
+    return _applied(state, iter(writes_of(statement, node, index)))
+
+
+def write_operands(statement: Statement) -> tuple[RefModOperand, ...]:
+    """Every operand this statement writes, whether or not it denotes storage.
+
+    This is the coverage denominator: a target counted here whose extents do not
+    resolve is a write the analysis failed to reach, and the 3ao post-mortem is
+    what a denominator derived from the answer instead of the source costs -- an
+    acceptance suite passed while its walk reached 18% of nodes, because nothing
+    measured what it had missed.
+    """
+    targets = _TARGETS_BY_KIND.get(type(statement).__name__, _no_targets)
+    return targets(statement)

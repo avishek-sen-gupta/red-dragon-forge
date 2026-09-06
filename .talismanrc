@@ -260,5 +260,9 @@ fileignoreconfig:
 - filename: cobble/cobble/dataflow/fields/state.py
   checksum: 411eb695e9fd5a9f8b8cb4e2d0bafe35a934831d6282e03e763ed141fde8d3b6
 - filename: cobble/cobble/dataflow/fields/transfer.py
-  checksum: 1986064de69236513ad474adff24ba3aba2f694bf41305aa2aa3c330d54da7f0
+  checksum: 41138077bea65219aa79f3c763514d8c17471728cd5b5999a4229b8d1699a2de
+- filename: cobble/tests/dataflow/fields/test_fixpoint.py
+  checksum: f40a187db5635624e2dd30d8340e6fd23e6a2913684ec5d23ab9ab6299ce97a5
+- filename: cobble/cobble/dataflow/fields/fixpoint.py
+  checksum: 43fb9989528ab86e3cf61a8a7b603a2dad8ae6548f3f895e0dd6b185a0623b38
 version: "1.0"
