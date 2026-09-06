@@ -113,9 +113,9 @@ def test_non_move_statement_with_subscripts_is_not_counted():
 
 
 def test_nested_move_in_if_else_children_is_counted():
-    """Regression test for depth-agnostic walk (Override 1).
+    """MOVEs nest to arbitrary depth, so the walk must not be one-level.
 
-    The brief's one-level walk would miss this MOVE nested inside
+    A walk over paragraphs[*].statements[*] misses this MOVE, nested inside
     an IF's else_children inside another IF's children.
     """
     asg = {
