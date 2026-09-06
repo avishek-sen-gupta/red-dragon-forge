@@ -208,6 +208,16 @@ def test_a_named_member_the_cache_does_not_hold_exits_two(corpus):
     assert not (out_dir / "edges.jsonl").exists()
 
 
+def test_the_iteration_factor_reaches_the_fixpoint(corpus):
+    """A member given up on at the default factor is re-runnable with more room,
+    so the cap has to be settable from the command line."""
+    argv, _ = corpus(
+        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--iteration-factor", "0")
+    )
+
+    assert cli(argv) == 3
+
+
 def test_no_selection_is_a_usage_error(corpus):
     """A whole-corpus pass is asked for, never defaulted into."""
     argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--expand",))

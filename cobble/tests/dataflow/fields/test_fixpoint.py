@@ -30,9 +30,9 @@ def fields(field):
 
 @pytest.fixture
 def flow_of(program_of, index_of, fields):
-    def build(paragraphs: list[dict]):
+    def build(paragraphs: list[dict], factor: int = fixpoint.ITERATION_FACTOR):
         asg = program_of([], paragraphs=paragraphs, data_fields=fields)
-        return analyse(asg, index_of(asg))
+        return analyse(asg, index_of(asg), factor)
 
     return build
 
@@ -199,17 +199,25 @@ def test_an_unhandled_statement_class_is_counted_not_ignored(flow_of):
     assert flow.unhandled == 1
 
 
-def test_reaching_the_dequeue_cap_records_a_reason(flow_of, monkeypatch):
+def test_reaching_the_dequeue_cap_records_a_reason(flow_of):
     """The cap is a defect backstop, so a truncated answer must never look complete.
 
     Termination rests on monotone join over a finite lattice, not on the cap, so a
     program that trips it is beyond what this pass can claim -- and the factor is
-    forced to zero here because no correct program reaches it.
+    zero here because no correct program of this size reaches the default.
     """
-    monkeypatch.setattr(fixpoint, "ITERATION_FACTOR", 0)
-    flow = flow_of([{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}])
+    flow = flow_of([{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}], factor=0)
     assert "cap" in flow.skipped
     assert flow.writes == 1
+
+
+def test_a_raised_factor_lifts_the_cap_for_a_member_that_tripped_it(flow_of):
+    """The honest bound is nodes times lattice height, which no constant captures,
+    so a member given up on can be re-run with more room rather than reworked."""
+    paragraphs = [{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}]
+
+    assert flow_of(paragraphs, factor=0).skipped
+    assert not flow_of(paragraphs, factor=1).skipped
 
 
 def test_an_unsizeable_program_is_recorded_not_dropped(program_of, field, monkeypatch):
