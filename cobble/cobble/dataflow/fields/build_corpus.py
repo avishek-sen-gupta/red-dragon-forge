@@ -26,6 +26,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import reduce
@@ -165,6 +166,45 @@ def _written(writer: GraphWriter, result: MemberResult) -> MemberResult:
     return result
 
 
+def _log_result(result: MemberResult, seconds: float) -> None:
+    if result.skipped:
+        logger.warning(
+            "fields:   %s skipped after %.1fs: %s",
+            result.member,
+            seconds,
+            result.skipped,
+        )
+        return
+    logger.info(
+        "fields:   %s %d/%d writes covered, %d unhandled, %d edges, %.1fs",
+        result.program,
+        result.covered,
+        result.writes,
+        result.unhandled,
+        len(result.edges),
+        seconds,
+    )
+
+
+def _logged_member(
+    numbered: tuple[int, Path],
+    total: int,
+    expand: bool,
+    locations: FileLocationResolver,
+) -> MemberResult:
+    """One member's analysis, announced before it starts and measured after.
+
+    Before, because a member can take minutes: a run that says nothing until it
+    finishes is indistinguishable from a hung one.
+    """
+    position, path = numbered
+    logger.info("fields: [%d/%d] %s", position, total, path.stem)
+    started = time.monotonic()
+    result = _member_result(path, expand, locations)
+    _log_result(result, time.monotonic() - started)
+    return result
+
+
 def _run(
     writer: GraphWriter,
     paths: Sequence[Path],
@@ -172,10 +212,11 @@ def _run(
     locations: FileLocationResolver,
 ) -> RunTotals:
     return reduce(
-        lambda totals, path: _folded(
-            totals, _written(writer, _member_result(path, expand, locations))
+        lambda totals, numbered: _folded(
+            totals,
+            _written(writer, _logged_member(numbered, len(paths), expand, locations)),
         ),
-        paths,
+        enumerate(paths, start=1),
         RunTotals(),
     )
 
