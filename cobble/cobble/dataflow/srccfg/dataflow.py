@@ -9,27 +9,32 @@ is the condition.
 
 Four things keep the walk finite and honest:
 
-- **No node repeats on a path.** A loop body is walked once, so ``PERFORM UNTIL``
-  yields the guard for entering the body and the guard for skipping it rather than
-  an unbounded family of iterations. The price is paid on code that legitimately
-  runs a node twice: a paragraph performed from inside the range of an active
-  PERFORM of that same range -- overlapping ranges, which the standard leaves
-  undefined -- reaches its own range end only on a second visit, so the tail of
-  such a range comes out with no guards at all. Those nodes are named in
-  ``Reaching.abandoned``, because "no guards" would otherwise read as dead code
-  and dead code is the one thing they are not.
-- **PERFORM returns are matched.** A ``PERFORM`` edge pushes the performing node; a
-  ``RETURN`` edge is followed only back to a continuation of that node. Without it,
-  a paragraph performed from a dozen places hands every one of its return edges to
-  every call site and the guard sets stop meaning anything.
-- **A PERFORM goes through the paragraph and comes back.** The CALL node's FLOW edge
-  to the next statement is the node the paragraph's RETURN edge lands on, and a
-  performed paragraph returns at its end rather than falling through to the next
-  one, so each of those generic edges is walked only while the specific edge that
-  duplicates it can still fire on this path. Walking both unconditionally would
-  report everything after a call twice under one guard, and the duplicates would
-  fill the cap and evict real paths; refusing both unconditionally would report
-  reachable code as unreachable, which is the worse failure.
+- **No node repeats within an ACTIVATION.** An activation is one entry into a
+  paragraph: the frame a PERFORM opens, or the straight-line run that fell into it.
+  Inside one, a loop body is walked once, so ``PERFORM UNTIL`` yields the guard for
+  entering the body and the guard for skipping it rather than an unbounded family of
+  iterations. Across activations the rule does not apply, because a paragraph
+  performed on its own and then fallen through inside a ``PERFORM A THRU C`` range
+  genuinely runs twice, and barring the second run stranded the tail of the range --
+  measured at 94% of a synthetic program's nodes reporting no guards at all. What
+  bounds the stack instead is that a paragraph may not be performed from inside
+  itself, which is also what the standard leaves undefined.
+- **PERFORM returns are matched.** A ``PERFORM`` edge pushes a frame holding the
+  performing node; a ``RETURN`` edge is followed only back to a continuation of that
+  frame's node. Without it, a paragraph performed from a dozen places hands every one
+  of its return edges to every call site and the guard sets stop meaning anything.
+- **A PERFORM goes through the paragraph and comes back -- and where it did not, the
+  walk resumes.** The CALL node's FLOW edge to the next statement is the node the
+  paragraph's RETURN edge lands on, and a performed paragraph returns at its end
+  rather than falling through to the next one, so each of those generic edges is
+  walked only while the specific edge that duplicates it can still fire on this path.
+  Walking both unconditionally would report everything after a call twice under one
+  guard, and the duplicates would fill the cap and evict real paths. But refusing the
+  generic edge PREDICTS the specific one, and the cap can falsify that prediction
+  silently: the walk runs out of room inside the paragraph, never reaches its end, no
+  RETURN fires, and the refused edge was the only way past the call. So a second pass
+  takes those edges after all, from the frames that reached the call, and names the
+  nodes it recovered in ``resumed``.
 - **The cap is reported, and the report is closed forward.** ``MAX_PATHS`` bounds the
   guards kept per node; every node whose own arrivals were cut short is named in
   ``overflowed``, and ``truncated`` is that set closed forward over reachability,
@@ -38,10 +43,11 @@ Four things keep the walk finite and honest:
   truncation reads as "this field is written under exactly these conditions", which
   is a claim the walk did not establish.
 
-Guards are recorded one per path, not deduplicated: two paths that happen to test
-the same things in the same order are two paths, and collapsing walks would lose
-the distinct perform stacks they carry. Callers that want the set of distinct
-conditions can map ``guard_set`` over the tuple.
+Guards are deduplicated per node, in first-seen order: a guard is a condition, and the
+same condition arriving twice is one fact about the program, not two. What the cap
+rations is arrivals, counted separately -- because several activations of one paragraph
+reach a node under one condition, and rationing recorded guards instead would let a
+paragraph performed from everywhere be walked without limit.
 """
 
 from __future__ import annotations
@@ -82,30 +88,48 @@ NO_GUARDS: Mapping[str, tuple[Guard, ...]] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
+class _Frame:
+    """One PERFORM taken and not yet returned from: the call, the paragraph, the caller.
+
+    ``seen`` is the caller's own ``seen`` at the moment of the call, put aside so the
+    RETURN can restore it. ``target`` is what the recursion guard compares against.
+    """
+
+    call: str
+    target: str
+    seen: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
 class Walk:
     """One partial path: where it is, the guard it carries, and what it may not redo.
 
-    ``stack`` holds the performing nodes of the PERFORM edges taken and not yet
-    returned from; ``seen`` holds the nodes already on this path.
+    ``stack`` holds a frame per PERFORM edge taken and not yet returned from; ``seen``
+    holds the nodes already walked IN THE CURRENT ACTIVATION -- the innermost frame's,
+    not the path's. That distinction is the walk's execution model. A paragraph runs
+    once per activation, and two activations of it are two runs: ``PERFORM PB`` and a
+    later ``PERFORM PA THRU PC`` whose range covers PB both execute PB, and a set
+    shared across the whole path would bar the second and strand the range.
     """
 
     node: str
     guard: Guard = ()
-    stack: tuple[str, ...] = ()
+    stack: tuple[_Frame, ...] = ()
     seen: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
 class Reaching:
-    """Per-node guards, and three different statements about what is missing.
+    """Per-node guards, and four different statements about how far to trust them.
 
-    ``guards`` maps a node id to one guard per path that reached it. A node with one
-    EMPTY guard is reached unconditionally; a node absent from the mapping was not
-    reached by any path the walk took, which is NOT the same as unreachable -- see
-    ``abandoned``.
+    ``guards`` maps a node id to the DISTINCT guards of the paths that reached it, in the
+    order they were first seen. A node with one EMPTY guard is reached unconditionally; a
+    node absent from the mapping was not reached by any path the walk took, which is NOT
+    the same as unreachable -- see ``abandoned``.
 
-    The three sets answer three different questions and none of them substitutes for
-    another:
+    The four sets answer four different questions and none of them substitutes for
+    another. The first three say a guard list may be too SMALL; the last says one node's
+    may be too large:
 
     - ``overflowed`` -- the nodes whose OWN arrivals hit ``max_paths``. This is where
       the cap, rather than the program, is rationing the answer, so it is what to
@@ -117,10 +141,20 @@ class Reaching:
       emphatically not "skip this node": on a branch-heavy program it reaches nearly
       every node (measured 920 of 922 where ``overflowed`` was 234), which is a true
       statement about that program rather than a defect in the flag.
-    - ``abandoned`` -- nodes with NO guards that nonetheless have a predecessor that
-      HAS guards. The walk arrived next door and then gave up: the no-repeat rule
-      consumed the only route on, which happens on overlapping PERFORM ranges. Their
-      answer is empty because of the walk, not because of the program.
+    - ``abandoned`` -- nodes with NO guards that a guarded node leads to, closed
+      forward through the unguarded ones. The walk arrived next door and then gave up:
+      the no-repeat rule consumed the only route on, which happens on overlapping
+      PERFORM ranges. Their answer is empty because of the walk, not because of the
+      program. Closing forward is what makes the set usable -- the nodes with a guarded
+      neighbour are only the boundary of the region the walk lost, and naming the
+      boundary alone reported the rest of the region as dead code.
+    - ``resumed`` -- the call continuations the walk reached only by taking a PERFORM's
+      FLOW edge after no RETURN ever arrived; see ``_resumed_to_fixpoint``. Each carries
+      the guard of the call, which is what a paragraph that returns hands back, and a
+      guess for a paragraph that never returns at all. The imprecision travels downstream
+      from these nodes without being named there: naming the closure would flag most of a
+      program, which tells a reader nothing, whereas the seeds are few and each one is a
+      question a reader can settle by looking at one paragraph.
 
     So genuine dead code is **zero guards AND not in ``abandoned``**, and the two must
     not be collapsed in either direction. Reading ``abandoned`` as dead code reports
@@ -133,15 +167,30 @@ class Reaching:
     truncated: frozenset[str] = frozenset()
     overflowed: frozenset[str] = frozenset()
     abandoned: frozenset[str] = frozenset()
+    resumed: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
 class _Sweep:
-    """The state of the search between two levels of the breadth-first walk."""
+    """The state of the search between two levels of the breadth-first walk.
+
+    ``arrivals`` counts walks admitted per node, which is what the cap rations. It is
+    not ``len(guards[node])``: several activations of one paragraph reach it under the
+    same condition and record ONE guard between them, so counting the recorded guards
+    instead would let a shared paragraph be walked without limit.
+
+    ``deferred`` holds the call continuations the walk refused on the prediction that a
+    RETURN would reach them, and ``resumed`` the nodes a later pass seeded from that list
+    because none did. Both survive across sweeps, because the prediction can only be
+    judged once a whole sweep has come to nothing.
+    """
 
     guards: Mapping[str, tuple[Guard, ...]] = NO_GUARDS
+    arrivals: Mapping[str, int] = MappingProxyType({})
     truncated: frozenset[str] = frozenset()
     frontier: tuple[Walk, ...] = ()
+    deferred: tuple[Walk, ...] = ()
+    resumed: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -169,30 +218,130 @@ def reaching_conditions(cfg: Cfg, max_paths: int = MAX_PATHS) -> Reaching:
     Breadth-first is load-bearing under the cap: the guards that survive it are the
     short ones, which are the ones a reader can check against the source.
     """
-    final = _sweep_to_empty(cfg, max_paths, _Sweep(frontier=_start(cfg)))
+    final = _resumed_to_fixpoint(
+        cfg, max_paths, _sweep_to_empty(cfg, max_paths, _Sweep(frontier=_start(cfg)))
+    )
     return Reaching(
         guards=MappingProxyType(dict(final.guards)),
         truncated=_closed_forward(cfg, final.truncated),
         overflowed=final.truncated,
         abandoned=_abandoned(cfg, final.guards),
+        resumed=final.resumed,
+    )
+
+
+def _resumed_to_fixpoint(cfg: Cfg, max_paths: int, swept: _Sweep) -> _Sweep:
+    """Sweep again from every call continuation the search left unreached, until none is.
+
+    Refusing a call's FLOW edge predicts that the paragraph's RETURN will reach the
+    continuation instead. The cap can falsify that prediction without saying so: enough
+    paths inside the paragraph and the walk never gets to its end, no RETURN fires, and
+    the one edge that led past the call was refused on the strength of a return that
+    never came. The loss is not local. Everything after the call is zeroed, including
+    the returns of the calls that CONTAIN this one, so a partial answer inside a
+    paragraph becomes a total answer of nothing for the rest of the program -- measured
+    on a real 1692-node member as 55 of 114 paragraphs reporting no guards at all,
+    cascading from one call whose paragraph hit the cap.
+
+    So each round takes the continuations still unreached and walks on from them, with
+    the frames and guard of the walk that reached the call. A resumed continuation's
+    guard is the call's, which is the right answer whenever the paragraph would have
+    returned -- and a guess whenever it genuinely never returns, which is why the seeds
+    are named in ``resumed`` rather than folded in silently.
+
+    Each round either strands nothing and stops, or seeds at least one node it has never
+    seeded before, so the number of rounds is bounded by the node count. Seeding a node
+    only once is what guarantees that: a node the cap has no room left for stays
+    unreached however often it is offered, and without the ``resumed`` set it would be
+    offered forever.
+    """
+    states = accumulate(
+        repeat(None), lambda state, _: _resumed(cfg, max_paths, state), initial=swept
+    )
+    return next(state for state in states if not _stranded(state))
+
+
+def _stranded(state: _Sweep) -> tuple[Walk, ...]:
+    """The deferred walks whose continuation is still unreached and never yet seeded."""
+    return tuple(
+        walk
+        for walk in state.deferred
+        if not state.guards.get(walk.node) and walk.node not in state.resumed
+    )
+
+
+def _resumed(cfg: Cfg, max_paths: int, state: _Sweep) -> _Sweep:
+    stranded = _stranded(state)
+    return _sweep_to_empty(
+        cfg,
+        max_paths,
+        replace(
+            state,
+            frontier=stranded,
+            resumed=state.resumed | frozenset(walk.node for walk in stranded),
+        ),
     )
 
 
 def _abandoned(cfg: Cfg, guards: Mapping[str, tuple[Guard, ...]]) -> frozenset[str]:
-    """The nodes with no guards that a guarded node leads to.
+    """Every node with no guards that a guarded node leads to, however far downstream.
 
     The walk got next door and stopped, so "no path reaches this" is a claim about the
     walk and not about the program. Naming those nodes is what keeps the walk's known
     losses -- the no-repeat rule on an overlapping PERFORM range, most of all -- from
     reading as a confident report of dead code. What is left, zero guards with no
-    guarded predecessor, is the dead code, and that is a finding rather than a gap.
+    guarded node leading to them at all, is the dead code, and that is a finding
+    rather than a gap.
+
+    Closing forward is what makes that split sound. The nodes where a guarded
+    predecessor sits next door are only the BOUNDARY of the region the walk lost;
+    everything the boundary leads on to has no guards for exactly the same reason and
+    no guarded neighbour to say so. Naming the boundary alone reported the rest as
+    dead: on a synthetic program whose range end the walk could not reach, one of the
+    paragraph's three nodes was named and the other two were called unreachable.
     """
-    return frozenset(
-        node.id
-        for node in cfg.nodes
-        if not guards.get(node.id)
-        and any(guards.get(edge.source) for edge in cfg.predecessors(node.id))
+    return _closed_forward_through(
+        cfg,
+        guards,
+        frozenset(
+            node.id
+            for node in cfg.nodes
+            if not guards.get(node.id)
+            and any(guards.get(edge.source) for edge in cfg.predecessors(node.id))
+        ),
     )
+
+
+def _closed_forward_through(
+    cfg: Cfg, guards: Mapping[str, tuple[Guard, ...]], boundary: frozenset[str]
+) -> frozenset[str]:
+    """``boundary`` plus what it reaches WITHOUT passing through a guarded node.
+
+    Stopping at guarded nodes is the point: a guarded node's own successors were
+    walked, so their emptiness is not this region's doing and would be a different
+    claim about a different failure.
+    """
+    states = accumulate(
+        repeat(None),
+        lambda state, _: _spread_unguarded(cfg, guards, state),
+        initial=_Spread(marked=boundary, frontier=boundary),
+    )
+    return next(state for state in states if not state.frontier).marked
+
+
+def _spread_unguarded(
+    cfg: Cfg, guards: Mapping[str, tuple[Guard, ...]], state: _Spread
+) -> _Spread:
+    reached = (
+        frozenset(
+            edge.target
+            for node_id in state.frontier
+            for edge in cfg.successors(node_id)
+            if not guards.get(edge.target)
+        )
+        - state.marked
+    )
+    return _Spread(marked=state.marked | reached, frontier=reached)
 
 
 def _closed_forward(cfg: Cfg, cut: frozenset[str]) -> frozenset[str]:
@@ -247,19 +396,31 @@ def _swept(cfg: Cfg, max_paths: int, state: _Sweep) -> _Sweep:
     """One level: admit what the cap has room for, name what it did not, step on."""
     arrivals = _by_node(state.frontier)
     admitted = {
-        node_id: walks[: _room(state.guards, node_id, max_paths)]
+        node_id: walks[: _room(state.arrivals, node_id, max_paths)]
         for node_id, walks in arrivals.items()
     }
-    return _Sweep(
+    walked = tuple(chain.from_iterable(admitted.values()))
+    return replace(
+        state,
         guards={**state.guards, **_recorded(state.guards, admitted)},
+        arrivals=_counted(state.arrivals, admitted),
         truncated=state.truncated | _overflowed(arrivals, admitted),
-        frontier=tuple(
-            chain.from_iterable(
-                _next_walks(cfg, walk)
-                for walk in chain.from_iterable(admitted.values())
-            )
+        frontier=tuple(chain.from_iterable(_next_walks(cfg, walk) for walk in walked)),
+        deferred=_kept(
+            state.deferred,
+            tuple(chain.from_iterable(_deferred_walks(cfg, walk) for walk in walked)),
         ),
     )
+
+
+def _kept(deferred: tuple[Walk, ...], refused: tuple[Walk, ...]) -> tuple[Walk, ...]:
+    """The deferral list after this level, without duplicates.
+
+    The same call reached under the same guard by two activations defers the same walk
+    twice, and the list lives for the whole search -- so deduplicating here is what keeps
+    it from growing with the walk rather than with the program.
+    """
+    return tuple(dict.fromkeys((*deferred, *refused)))
 
 
 def _by_node(walks: tuple[Walk, ...]) -> Mapping[str, tuple[Walk, ...]]:
@@ -271,19 +432,49 @@ def _by_node(walks: tuple[Walk, ...]) -> Mapping[str, tuple[Walk, ...]]:
     }
 
 
-def _room(guards: Mapping[str, tuple[Guard, ...]], node_id: str, max_paths: int) -> int:
-    return max(max_paths - len(guards.get(node_id, ())), 0)
+def _room(arrivals: Mapping[str, int], node_id: str, max_paths: int) -> int:
+    return max(max_paths - arrivals.get(node_id, 0), 0)
+
+
+def _counted(
+    arrivals: Mapping[str, int], admitted: Mapping[str, tuple[Walk, ...]]
+) -> Mapping[str, int]:
+    return {
+        **arrivals,
+        **{
+            node_id: arrivals.get(node_id, 0) + len(walks)
+            for node_id, walks in admitted.items()
+            if walks
+        },
+    }
 
 
 def _recorded(
     guards: Mapping[str, tuple[Guard, ...]],
     admitted: Mapping[str, tuple[Walk, ...]],
 ) -> Mapping[str, tuple[Guard, ...]]:
+    """The guard lists after this level, each holding every DISTINCT guard recorded so
+    far in the order it was first seen.
+
+    A guard is a condition, and a condition repeated says nothing the first one did
+    not. Deduping matters most where it is least visible: a paragraph performed from
+    forty sites is reached unconditionally by all forty, and forty copies of the empty
+    guard is what a reader has to wade through to learn one fact.
+    """
     return {
-        node_id: (*guards.get(node_id, ()), *(walk.guard for walk in walks))
+        node_id: _distinct(guards.get(node_id, ()), tuple(walk.guard for walk in walks))
         for node_id, walks in admitted.items()
         if walks
     }
+
+
+def _distinct(
+    recorded: tuple[Guard, ...], arriving: tuple[Guard, ...]
+) -> tuple[Guard, ...]:
+    return (
+        *recorded,
+        *dict.fromkeys(guard for guard in arriving if guard not in recorded),
+    )
 
 
 def _overflowed(
@@ -299,12 +490,43 @@ def _overflowed(
 
 
 def _next_walks(cfg: Cfg, walk: Walk) -> tuple[Walk, ...]:
+    """Every edge this path may take from here, with the activation's no-repeat rule.
+
+    A PERFORM edge is exempt from that rule and answers to the recursion guard instead.
+    It opens a new activation, so what the caller has already walked says nothing about
+    whether the paragraph runs: ``PERFORM PB`` twice in a row runs PB twice.
+    """
     seen = walk.seen | {walk.node}
     return tuple(
         _advance(walk, edge, seen)
         for edge in cfg.successors(walk.node)
-        if edge.target not in seen and _passable(cfg, walk, edge, seen)
+        if _repeatable(walk, edge, seen) and _passable(cfg, walk, edge, seen)
     )
+
+
+def _deferred_walks(cfg: Cfg, walk: Walk) -> tuple[Walk, ...]:
+    """The continuations this walk was refused because a RETURN was predicted to reach
+    them: the same walks ``_next_walks`` would have yielded had the prediction not been
+    made, kept aside in case it turns out no RETURN ever arrives.
+
+    Keeping the WALK and not just the node id is the whole point. A resumed walk has to
+    carry the frames that reached the call, or it lands in the caller with an empty stack
+    and the walk goes wrong in both directions at once -- the caller's own paragraph end
+    falls through to the next paragraph instead of returning, and the return it should
+    have taken is refused for belonging to no frame.
+    """
+    seen = walk.seen | {walk.node}
+    return tuple(
+        _advance(walk, edge, seen)
+        for edge in cfg.successors(walk.node)
+        if _duplicates_a_return(cfg, walk, edge) and _repeatable(walk, edge, seen)
+    )
+
+
+def _repeatable(walk: Walk, edge: Edge, seen: frozenset[str]) -> bool:
+    if edge.kind is EdgeKind.PERFORM:
+        return _not_already_active(walk, edge)
+    return edge.target not in seen
 
 
 def _passable(cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]) -> bool:
@@ -321,7 +543,7 @@ def _passable(cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]) -> bool:
     """
     return (
         _returns_to_its_own_call_site(cfg, walk, edge)
-        and _not_a_second_route_past_a_call(cfg, walk, edge, seen)
+        and not _duplicates_a_return(cfg, walk, edge)
         and _not_a_fallthrough_a_return_will_take(cfg, walk, edge, seen)
     )
 
@@ -336,23 +558,31 @@ def _returns_to_its_own_call_site(cfg: Cfg, walk: Walk, edge: Edge) -> bool:
     """
     if edge.kind is not EdgeKind.RETURN:
         return True
-    return bool(walk.stack) and edge.target in _continuations(cfg, walk.stack[-1])
+    return bool(walk.stack) and edge.target in _continuations(cfg, walk.stack[-1].call)
 
 
-def _not_a_second_route_past_a_call(
-    cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]
-) -> bool:
-    """A CALL node's FLOW edge duplicates the path its paragraph's RETURN already takes.
+def _duplicates_a_return(cfg: Cfg, walk: Walk, edge: Edge) -> bool:
+    """Whether this FLOW edge out of a CALL node goes where the paragraph's RETURN will.
 
     A CALL node keeps a FLOW edge to the statement after it AND a PERFORM edge into the
     paragraph, and the paragraph's RETURN edge lands on that same FLOW target. Walking
     both reaches everything after the call twice under one guard, and ten calls in a row
-    would report 2^10 duplicate paths. So FLOW out of a CALL node is refused while a
-    RETURN onto its target is still pending; see ``_return_pending``.
+    would report 2^10 duplicate paths. So FLOW out of a CALL node is refused wherever
+    this path takes the PERFORM instead.
+
+    That refusal is a PREDICTION -- "the activation the PERFORM opens will run the
+    paragraph to its end and the RETURN will land here" -- and predictions can be wrong.
+    The two the graph can rule out up front are checked here: the path may be barred from
+    entering at all by the recursion guard, and the paragraph may be unable to reach its
+    own end at all, so the RETURN hanging off it can never fire for anyone
+    (``_can_return``). What neither can rule out is the cap silently falsifying the
+    prediction, which is what ``_resumed_to_fixpoint`` exists to repair.
     """
-    if edge.kind is not EdgeKind.FLOW:
-        return True
-    return not _performs(cfg, walk.node, seen) or not _return_pending(cfg, edge, seen)
+    return (
+        edge.kind is EdgeKind.FLOW
+        and _performs(cfg, walk, walk.node)
+        and _can_return(cfg, edge)
+    )
 
 
 def _not_a_fallthrough_a_return_will_take(
@@ -373,7 +603,7 @@ def _not_a_fallthrough_a_return_will_take(
     """
     if edge.kind is not EdgeKind.FALLTHRU:
         return True
-    return not _returns_from(cfg, walk, seen)
+    return not _returns_from(cfg, walk)
 
 
 def _continuations(cfg: Cfg, call_id: str) -> frozenset[str]:
@@ -382,49 +612,61 @@ def _continuations(cfg: Cfg, call_id: str) -> frozenset[str]:
     )
 
 
-def _performs(cfg: Cfg, node_id: str, seen: frozenset[str]) -> bool:
-    """Whether this node has a PERFORM edge this path can still follow."""
+def _performs(cfg: Cfg, walk: Walk, node_id: str) -> bool:
+    """Whether this node has a PERFORM edge this path may follow.
+
+    What bars a PERFORM is the stack, not the activation: a paragraph performed twice
+    from the same caller runs twice, so ``seen`` has no say here.
+    """
     return any(
-        edge.kind is EdgeKind.PERFORM and edge.target not in seen
+        edge.kind is EdgeKind.PERFORM and _not_already_active(walk, edge)
         for edge in cfg.successors(node_id)
     )
 
 
-def _return_pending(cfg: Cfg, edge: Edge, seen: frozenset[str]) -> bool:
-    """Whether a RETURN onto this edge's target can still fire on this path.
+def _not_already_active(walk: Walk, edge: Edge) -> bool:
+    """The recursion guard: a paragraph may not be performed from inside itself.
 
-    A RETURN is spent when the range end it leaves from is already on the path: the
-    no-repeat rule bars that node, so this walk will never take that return, and the
-    CALL node's FLOW edge is the only way past the call. That is not a corner case.
-    ``PERFORM PB. PERFORM PA THRU PB.`` returns to the second call site from PB#end;
-    the second call then enters PA, whose end has no return edge of its own and whose
-    fall-through to PB is barred because PB is already on the path. Refusing FLOW
-    there loses every statement after the second call.
+    This is what bounds the stack, and it is also what COBOL says -- the standard
+    leaves a PERFORM of an already-active paragraph undefined. Without it, ``PERFORM A``
+    inside A would push frames until the interpreter ran out of them.
+    """
+    if edge.kind is not EdgeKind.PERFORM:
+        return True
+    return edge.target not in tuple(frame.target for frame in walk.stack)
 
-    The second clause is a graph-level dead-end test, and only that: a node with no
-    in-edges at all is a node nothing in the graph reaches, so a performed paragraph
-    whose only statement is a GO TO never arrives at its own end and the return
-    hanging off that end can never fire. It is not a general guarantee that the return
-    is live. A return whose source has predecessors but which THIS walk can no longer
-    get to -- because ``seen`` blocks the only route to it -- still counts as pending,
-    and the FLOW edge is still refused. That is where the walk's remaining loss lives:
-    it is the overlapping-PERFORM-range case named under the no-repeat rule in the
-    module docstring, it cannot be decided here (at the call, the range end is still
-    graph-reachable; the blockage only appears later, once the interior has been
-    consumed), and it is reported through ``Reaching.abandoned`` rather than fixed.
+
+def _can_return(cfg: Cfg, edge: Edge) -> bool:
+    """Whether any RETURN onto this edge's target can ever fire.
+
+    A graph-level dead-end test, and only that. A node with no in-edges at all is a
+    node nothing in the graph reaches, so a performed paragraph whose only statement is
+    a GO TO never arrives at its own end, and the return hanging off that end can never
+    fire for anyone. Nothing here is path-sensitive: under the frame model a path that
+    enters a paragraph walks it in a fresh activation and reaches the end unless the
+    graph itself stops it, so the question of whether THIS path can still get to the
+    return no longer arises. Asking it was the defect -- the answer was graph-level
+    while the blockage was path-level, and the FLOW edge it refused was the only way
+    past the call.
     """
     return any(
-        back.source not in seen and bool(cfg.predecessors(back.source))
+        bool(cfg.predecessors(back.source))
         for back in cfg.predecessors(edge.target)
         if back.kind is EdgeKind.RETURN
     )
 
 
-def _returns_from(cfg: Cfg, walk: Walk, seen: frozenset[str]) -> bool:
-    """Whether the frame on top of the stack can return from this node."""
+def _returns_from(cfg: Cfg, walk: Walk) -> bool:
+    """Whether the frame on top of the stack can return from this node.
+
+    The frame's own ``seen`` is what the continuations are measured against, not the
+    current activation's: the continuation is a statement in the CALLER, and whether
+    the caller has already walked it is the caller's business.
+    """
     if not walk.stack:
         return False
-    continuations = _continuations(cfg, walk.stack[-1]) - seen
+    frame = walk.stack[-1]
+    continuations = _continuations(cfg, frame.call) - frame.seen
     return any(
         edge.kind is EdgeKind.RETURN and edge.target in continuations
         for edge in cfg.successors(walk.node)
@@ -432,10 +674,34 @@ def _returns_from(cfg: Cfg, walk: Walk, seen: frozenset[str]) -> bool:
 
 
 def _advance(walk: Walk, edge: Edge, seen: frozenset[str]) -> Walk:
+    """The walk after taking this edge, with the activation opened or closed.
+
+    A PERFORM opens one: the caller's ``seen`` goes into the frame and the callee
+    starts with an empty one, which is what lets a paragraph run once per activation
+    rather than once per path. A RETURN closes it and restores what the caller had
+    walked, discarding the callee's -- the returning node belongs to the activation
+    being left, not to the caller it lands in.
+    """
+    if edge.kind is EdgeKind.PERFORM:
+        return Walk(
+            node=edge.target,
+            guard=_extended(walk, edge),
+            stack=(
+                *walk.stack,
+                _Frame(call=edge.source, target=edge.target, seen=seen),
+            ),
+        )
+    if edge.kind is EdgeKind.RETURN and walk.stack:
+        return Walk(
+            node=edge.target,
+            guard=_extended(walk, edge),
+            stack=walk.stack[:-1],
+            seen=walk.stack[-1].seen,
+        )
     return Walk(
         node=edge.target,
         guard=_extended(walk, edge),
-        stack=_stack(walk, edge),
+        stack=walk.stack,
         seen=seen,
     )
 
@@ -444,15 +710,6 @@ def _extended(walk: Walk, edge: Edge) -> Guard:
     if edge.kind in POLARITIES:
         return (*walk.guard, (edge.source, edge.kind))
     return walk.guard
-
-
-def _stack(walk: Walk, edge: Edge) -> tuple[str, ...]:
-    """A PERFORM pushes the node that performed; a RETURN pops the frame it matched."""
-    if edge.kind is EdgeKind.PERFORM:
-        return (*walk.stack, edge.source)
-    if edge.kind is EdgeKind.RETURN:
-        return walk.stack[:-1]
-    return walk.stack
 
 
 def guards_of(reaching: Reaching, node_id: str) -> tuple[Guard, ...]:

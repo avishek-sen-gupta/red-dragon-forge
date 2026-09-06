@@ -39,6 +39,7 @@ UNCONDITIONAL = "unconditional"
 
 CAP_NOTE = "(guard cap hit: this list is incomplete)"
 SUBSET_NOTE = "(subset: paths upstream were also truncated)"
+RESUMED_NOTE = "(resumed past a PERFORM whose return the walk never reached)"
 
 BACKWARD_HEADING = "backward -- what its value is derived from:"
 FORWARD_HEADING = "forward -- what its value reaches:"
@@ -70,10 +71,18 @@ def _guard_lines(cfg: Cfg, reaching: Reaching, node_id: str) -> GuardLines:
     The cap note rides along, on ``overflowed`` and not on ``truncated`` (R77):
     ``truncated`` is ``overflowed`` closed forward, so on branch-heavy code it holds
     nearly every node and a note on every line is a note nobody reads. ``overflowed``
-    is the set that says the cap, rather than the program, rationed the answer."""
+    is the set that says the cap, rather than the program, rationed the answer.
+
+    ``resumed`` earns its own note because it is the one caveat that points the other
+    way. Every other note here says the list may be short; this one says this node's
+    guard is present only because the walk assumed a PERFORM came back, which is right
+    for a paragraph that returns and a guess for one that never does."""
     return GuardLines(
         texts=_guard_texts(cfg, reaching, node_id),
-        notes=(CAP_NOTE,) if node_id in reaching.overflowed else (),
+        notes=(
+            *((CAP_NOTE,) if node_id in reaching.overflowed else ()),
+            *((RESUMED_NOTE,) if node_id in reaching.resumed else ()),
+        ),
     )
 
 

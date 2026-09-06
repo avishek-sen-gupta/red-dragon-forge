@@ -634,6 +634,34 @@ def test_truncated_node_says_subset() -> None:
         ), "Should report subset due to upstream truncation"
 
 
+def test_resumed_node_says_its_guard_assumes_the_perform_came_back() -> None:
+    """The one caveat that points the other way: every other note warns the list may be
+    short, this one warns the guard is there at all only because the walk assumed a
+    PERFORM returned. A reader given the guard and not the assumption cannot tell."""
+    from unittest.mock import patch
+
+    from cobble.dataflow.srccfg.dataflow import Reaching, reaching_conditions
+
+    cfg = build_program(_asg([_move("WS-A", "WS-B")]))
+    node_id = next(n.id for n in cfg.nodes if "WS-B" in n.writes)
+
+    real = reaching_conditions(cfg)
+    test_reaching = Reaching(
+        guards=real.guards,
+        truncated=real.truncated,
+        overflowed=real.overflowed,
+        abandoned=real.abandoned,
+        resumed=frozenset([node_id]),
+    )
+
+    with patch(
+        "cobble.dataflow.srccfg.query.reaching_conditions", return_value=test_reaching
+    ):
+        lines = guards_report(cfg, node_id)
+
+    assert any("resumed past a PERFORM" in line for line in lines)
+
+
 # F5: Identity operand tests
 
 
