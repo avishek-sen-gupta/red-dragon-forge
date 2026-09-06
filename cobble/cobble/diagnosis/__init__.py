@@ -9,7 +9,9 @@ first.
 They share a shape, and new ones should keep it:
 
   - ``--config`` names a corpus TOML, so a diagnosis runs against exactly the
-    directories and globs the build will use;
+    directories and globs the build will use. Exception: a diagnosis that
+    compares two caches takes the ASG directory as a positional argument,
+    since a config names only one ``asg_dir``;
   - stdout (or ``--output``) is JSON and nothing else, because the names in it
     are the corpus's own identifiers and the caller chooses where they land;
   - the human summary is LOGGED, so it goes to stderr and carries shape only --
