@@ -16,6 +16,7 @@ from cobble.dataflow.srccfg.build import (
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.dataflow import (
     MAX_PATHS,
+    Reaching,
     entry_of,
     guard_set,
     guard_text,
@@ -71,6 +72,12 @@ def _writer_of(cfg: Cfg, field: str) -> str:
 
 def _kinds(guard) -> list[EdgeKind]:
     return [kind for _, kind in guard]
+
+
+def _kinds_of_each(reaching: Reaching, node_id: str) -> list[list[str]]:
+    return sorted(
+        [kind.value for kind in _kinds(guard)] for guard in guards_of(reaching, node_id)
+    )
 
 
 def test_an_unguarded_assignment_has_one_empty_guard(program_of) -> None:
@@ -247,11 +254,11 @@ def test_a_performed_paragraph_does_not_fall_through_to_the_next_one(asg_of) -> 
     evict the returns the driver's own later statements are reachable only by --
     measured as 39 nodes with no guards at all on a 922-node synthetic program.
 
-    TAIL is not dead code, though: control reaches MAIN's own end, and the source
-    would fall through from there into MIDDLE and on into TAIL. That path is lost to
-    the no-repeat rule -- MIDDLE is already on this path -- not to this rule. So the
-    zero here is the cost of walking each node once, and it is the loss the module
-    docstring names rather than a claim that nothing runs TAIL.
+    TAIL is reached all the same, by the other route: control runs off MAIN's end into
+    MIDDLE and on into TAIL, unconditionally, because the builder models no STOP RUN.
+    Both routes into MIDDLE carry the empty guard, and a guard is a condition -- so it
+    is recorded once. What is under test is that TAIL is reached WITHOUT the PERFORM
+    lending it a frame: the caller's guard never travels down the fall-through.
     """
     cfg = build_program(
         asg_of(
@@ -266,8 +273,8 @@ def test_a_performed_paragraph_does_not_fall_through_to_the_next_one(asg_of) -> 
     reaching = reaching_conditions(cfg)
 
     assert guards_of(reaching, _writer_of(cfg, "WS-MIDDLE")) == ((),)
-    assert guards_of(reaching, _writer_of(cfg, "WS-TAIL")) == ()
-    assert label_id("TAIL") in reaching.abandoned
+    assert guards_of(reaching, _writer_of(cfg, "WS-TAIL")) == ((),)
+    assert reaching.abandoned == frozenset()
 
 
 def test_a_perform_thru_still_falls_through_inside_the_range(asg_of) -> None:
@@ -299,17 +306,20 @@ def test_a_perform_thru_still_falls_through_inside_the_range(asg_of) -> None:
 
 
 def test_a_call_whose_return_is_spent_still_reaches_the_next_statement(asg_of) -> None:
-    """The regression that says why the FLOW rule is conditional and not blanket.
+    """One paragraph's end carrying two calls' return edges, with the overlap at the
+    range's LAST paragraph.
 
-    PB is performed on its own and is also the last paragraph of the second call's
-    THRU range, so PB#end carries the return edges of both calls. The first call
-    spends PB#end getting back to the second call; the second call then enters PA,
-    whose own end has no return edge and whose fall-through to PB is barred because
-    PB is already on this path. If the CALL node's FLOW edge were refused merely
-    because a PERFORM edge exists, the walk would die at the second call and every
-    statement after it would read as unreachable -- silence, which is the worst
-    failure this pass can produce. So FLOW is refused only while a return onto it can
-    still fire.
+    PB is performed on its own and is also where the second call's THRU range ends, so
+    PB#end has a RETURN edge for each of them. The first call spends its own getting back
+    to the second call. The second call then enters PA, falls through into PB -- a second
+    activation of a paragraph this path has already walked -- and returns from PB#end to
+    the statement after itself, not back to the call site it already left.
+
+    Two rules have to hold together for that. Frames make the second activation possible,
+    and matching returns to their own frame is what sends this one to MAIN/2 rather than
+    MAIN/1. Get either wrong and the walk either dies at the second call or loops back
+    through it; both report the tail of the program as unreachable, which is the worst
+    answer this pass can give.
     """
     cfg = build_program(
         asg_of(
@@ -331,6 +341,250 @@ def test_a_call_whose_return_is_spent_still_reaches_the_next_statement(asg_of) -
     reaching = reaching_conditions(cfg)
 
     assert guards_of(reaching, _writer_of(cfg, "WS-AFTER")) == ((),)
+
+
+def test_a_call_whose_return_never_fires_does_not_zero_the_rest_of_the_program(
+    asg_of,
+) -> None:
+    """The shape that cost a real member 82% of its guards, at its smallest.
+
+    PB is performed on its own and lies STRICTLY INSIDE the later PERFORM of PA THRU PC --
+    not its start, not its end. So the second call's return leaves from PC#end, and the
+    only route there runs PA, PB, PC in order. While ``seen`` was scoped to the whole path
+    rather than to the activation, PB was already on it: the fall-through into PB was
+    barred, PC was never reached, no return fired, and the FLOW edge past the second call
+    had been refused on the prediction that one would. Every statement after the call read
+    as unreachable -- measured at 94% of a synthetic program's nodes.
+
+    The three statements after the call stand in for that tail. What is under test is that
+    the second activation of PB runs, so the range completes and the return arrives on its
+    own: no node is stranded, and ``resumed`` is empty because nothing needed repairing.
+    """
+    cfg = build_program(
+        asg_of(
+            _program(
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _perform("PB"),
+                        {"type": "PERFORM", "operands": ["PA"], "thru": "PC"},
+                        _perform("Q1"),
+                        _perform("Q2"),
+                        _move("'Z'", "WS-AFTER"),
+                    ],
+                },
+                {"name": "PA", "statements": [_move("'A'", "WS-A")]},
+                {"name": "PB", "statements": [_move("'B'", "WS-B")]},
+                {"name": "PC", "statements": [_move("'C'", "WS-C")]},
+                {"name": "Q1", "statements": [_move("'1'", "WS-Q1")]},
+                {"name": "Q2", "statements": [_move("'2'", "WS-Q2")]},
+            )
+        )
+    )
+
+    reaching = reaching_conditions(cfg)
+
+    assert guards_of(reaching, _writer_of(cfg, "WS-Q1")) == ((),)
+    assert guards_of(reaching, _writer_of(cfg, "WS-Q2")) == ((),)
+    assert guards_of(reaching, _writer_of(cfg, "WS-AFTER")) == ((),)
+    assert reaching.abandoned == frozenset()
+    assert reaching.resumed == frozenset()
+
+
+def test_the_walk_resumes_past_a_call_whose_return_the_cap_swallowed(asg_of) -> None:
+    """The cap can falsify the prediction that a call's RETURN will fire. Then the walk
+    has to take the FLOW edge it refused on the strength of that prediction.
+
+    Two PERFORMs of one paragraph, walked with room for a single arrival per node, is
+    the whole pathology in eight nodes:
+
+        MAIN.     PERFORM HANDLER.   <- MAIN/0
+                  PERFORM HANDLER.   <- MAIN/1
+                  MOVE 'A' TO WS-AFTER.
+        HANDLER.  MOVE 'H' TO WS-H.
+
+    ``MAIN/0`` takes its PERFORM, so its FLOW edge to ``MAIN/1`` is refused -- the
+    paragraph's RETURN goes there. That return fires, and ``MAIN/1`` is reached. But the
+    single arrival HANDLER was allowed is now spent, so ``MAIN/1``'s own PERFORM finds no
+    room, the second activation never happens, and no second RETURN ever lands on
+    ``MAIN/2``. ``MAIN/1``'s FLOW edge to ``MAIN/2`` was refused on the strength of
+    exactly that return.
+
+    So the loss is not the one arrival the cap declined. It is ``WS-AFTER`` and MAIN's
+    end and everything the fall-through cascade reaches after them -- a partial answer
+    inside HANDLER turned into no answer at all for the rest of the program. That is the
+    shape measured on a real member as 55 of 114 paragraphs reporting nothing, cascading
+    up through the returns of the calls that contained the one that hit the cap.
+
+    ``resumed`` naming ``MAIN/2`` is what proves the repair rather than merely observing
+    the recovery: a node is named there only if the sweep left it unreached and the
+    resume seeded it. Its guard is the call's own, which is what a returning paragraph
+    hands back.
+    """
+    cfg = build_program(
+        asg_of(
+            _program(
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _perform("HANDLER"),
+                        _perform("HANDLER"),
+                        _move("'A'", "WS-AFTER"),
+                    ],
+                },
+                {"name": "HANDLER", "statements": [_move("'H'", "WS-H")]},
+            )
+        )
+    )
+
+    reaching = reaching_conditions(cfg, max_paths=1)
+
+    after = _writer_of(cfg, "WS-AFTER")
+    assert reaching.resumed == frozenset({after})
+    assert guards_of(reaching, after) == ((),)
+    assert guards_of(reaching, end_id("MAIN")) == ((),)
+    assert label_id("HANDLER") in reaching.overflowed
+
+
+def test_nothing_is_resumed_when_every_predicted_return_fires(asg_of) -> None:
+    """The same program with room to walk it: the resume is a repair for a cap that ran
+    out, not a second opinion on the graph. Left on unconditionally it would report the
+    statement after every call twice, once per route, and the duplicates would fill the
+    cap -- which is the loss it exists to undo."""
+    cfg = build_program(
+        asg_of(
+            _program(
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _perform("HANDLER"),
+                        _perform("HANDLER"),
+                        _move("'A'", "WS-AFTER"),
+                    ],
+                },
+                {"name": "HANDLER", "statements": [_move("'H'", "WS-H")]},
+            )
+        )
+    )
+
+    reaching = reaching_conditions(cfg)
+
+    assert reaching.resumed == frozenset()
+    assert reaching.overflowed == frozenset()
+    assert guards_of(reaching, _writer_of(cfg, "WS-AFTER")) == ((),)
+
+
+def test_a_resumed_walk_returns_to_the_call_that_reached_it(asg_of) -> None:
+    """A resumed walk carries the frames of the walk that was refused, not none.
+
+    The stranded continuation is now INSIDE a performed paragraph, one level down::
+
+        MAIN.     IF WS-FLAG = 'Y'
+                      PERFORM OUTER
+                  END-IF.
+                  MOVE 'M' TO WS-MAIN-TAIL.
+        OUTER.    PERFORM HANDLER.  PERFORM HANDLER.  PERFORM HANDLER.
+                  MOVE 'O' TO WS-OUTER-TAIL.
+        HANDLER.  MOVE 'H' TO WS-H.
+
+    With room for two arrivals, HANDLER is entered by the first two calls and the third
+    finds none, so ``WS-OUTER-TAIL`` is the stranded continuation and gets resumed.
+
+    ``WS-MAIN-TAIL`` is the witness, and it is a witness because its two guards arrive by
+    two different routes. The FALSE guard comes down the branch that skipped the call.
+    The TRUE guard can ONLY arrive by returning out of ``OUTER#end``, since the call's own
+    FLOW edge is refused -- and ``OUTER#end`` is only reached at all because the resume
+    restarted the walk at ``WS-OUTER-TAIL``. Seed that walk with no frames and it lands in
+    OUTER as if control had fallen in from above: OUTER's end takes its FALLTHRU to
+    HANDLER instead of its RETURN, the return is refused for belonging to no frame, and
+    ``WS-MAIN-TAIL`` reads as running only when the call was skipped. Carrying both
+    polarities is proof the frames came along.
+    """
+    cfg = build_program(
+        asg_of(
+            _program(
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _if(_rel("WS-FLAG", "'Y'"), [_perform("OUTER")]),
+                        _move("'M'", "WS-MAIN-TAIL"),
+                    ],
+                },
+                {
+                    "name": "OUTER",
+                    "statements": [
+                        _perform("HANDLER"),
+                        _perform("HANDLER"),
+                        _perform("HANDLER"),
+                        _move("'O'", "WS-OUTER-TAIL"),
+                    ],
+                },
+                {"name": "HANDLER", "statements": [_move("'H'", "WS-H")]},
+            )
+        )
+    )
+
+    reaching = reaching_conditions(cfg, max_paths=2)
+
+    assert _writer_of(cfg, "WS-OUTER-TAIL") in reaching.resumed
+    assert _kinds_of_each(reaching, _writer_of(cfg, "WS-MAIN-TAIL")) == [
+        [EdgeKind.FALSE.value],
+        [EdgeKind.TRUE.value],
+    ]
+
+
+def test_a_performed_paragraph_ends_by_returning_and_not_by_falling_through(
+    asg_of,
+) -> None:
+    """The two edges leaving a performed paragraph's end are not interchangeable.
+
+    The RETURN is what executes when control arrived through a PERFORM; the FALLTHRU
+    into the next paragraph executes when control arrived in a straight line. Which one
+    it is depends on the frames the path is inside, so the walk decides from its own
+    stack rather than from the graph -- deciding it from the graph is what made the call
+    at MAIN/0 refuse its FLOW edge and zero everything after it.
+
+    The PERFORM sits under an IF, and the statement after the IF is the witness. Its
+    FALSE guard arrives down the branch that skipped the call; its TRUE guard can ONLY
+    arrive by returning out of DRIVER's end, because the call's own FLOW edge is refused
+    while a return onto it can still fire. Carrying both is therefore proof the return
+    fired. Fall through inside the frame instead and the walk leaves DRIVER for the next
+    paragraph, never comes back, and the statement after the IF reads as running only
+    when the call was skipped.
+    """
+    cfg = build_program(
+        asg_of(
+            _program(
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _if(_rel("WS-FLAG", "'Y'"), [_perform("DRIVER")]),
+                        _move("'S'", "WS-STOP"),
+                    ],
+                },
+                {
+                    "name": "DRIVER",
+                    "statements": [
+                        _perform("PB"),
+                        {"type": "PERFORM", "operands": ["PA"], "thru": "PC"},
+                        _move("'D'", "WS-D"),
+                    ],
+                },
+                {"name": "AFTER", "statements": [_move("'N'", "WS-AFTER")]},
+                {"name": "PA", "statements": [_move("'a'", "WS-A")]},
+                {"name": "PB", "statements": [_move("'b'", "WS-B")]},
+                {"name": "PC", "statements": [_move("'c'", "WS-C")]},
+            )
+        )
+    )
+
+    reaching = reaching_conditions(cfg)
+
+    assert _kinds_of_each(reaching, _writer_of(cfg, "WS-STOP")) == [
+        [EdgeKind.FALSE.value],
+        [EdgeKind.TRUE.value],
+    ]
+    assert reaching.abandoned == frozenset()
 
 
 def test_a_perform_that_can_never_return_still_reaches_the_next_statement(
@@ -463,16 +717,20 @@ def test_real_dead_code_is_not_named_abandoned(asg_of) -> None:
     assert reaching.abandoned == frozenset()
 
 
-def test_a_node_the_walk_gave_up_on_is_named_abandoned_rather_than_dead(asg_of) -> None:
-    """The walk's known loss, made visible.
+def test_a_paragraph_performed_from_inside_its_own_range_still_reaches_the_range_end(
+    asg_of,
+) -> None:
+    """The loss that motivated ``abandoned``, now recovered by walking activations.
 
     PB is performed from inside the range of the PERFORM of PA THRU PC, so control
-    really does reach PC -- by returning to PA's end, falling through PB a second time
-    and on into PC. The no-repeat rule walks PB once, so that route is lost and the
-    tail of the range comes out with no guards. Nothing about the cap is involved, so
-    ``truncated`` is empty and silence would present the loss as dead code: exactly the
-    confident wrong answer this pass exists to avoid. ``abandoned`` names the nodes the
-    walk stopped next to instead.
+    reaches PC by returning to PA's end, falling through PB a SECOND time and on into
+    PC. A path-wide no-repeat rule walks PB once and loses that route: PC came out with
+    no guards, the cap uninvolved, and silence presents a live paragraph as dead code.
+
+    Scoping the no-repeat rule to the activation is what recovers it -- the fall-through
+    entry into PB is a different activation from the PERFORM's, so it is not a repeat.
+    Nothing is given up on, so ``abandoned`` is empty, which is the answer that says the
+    walk lost nothing rather than the answer that says the program is dead.
     """
     cfg = build_program(
         asg_of(
@@ -493,10 +751,11 @@ def test_a_node_the_walk_gave_up_on_is_named_abandoned_rather_than_dead(asg_of) 
 
     reaching = reaching_conditions(cfg)
 
-    assert guards_of(reaching, _writer_of(cfg, "WS-AFTER")) == ()
     assert reaching.truncated == frozenset()
-    assert _writer_of(cfg, "WS-AFTER") in reaching.abandoned
-    assert label_id("PC") in reaching.abandoned
+    assert reaching.abandoned == frozenset()
+    assert guards_of(reaching, _writer_of(cfg, "WS-B")) == ((),)
+    assert guards_of(reaching, _writer_of(cfg, "WS-C")) == ((),)
+    assert guards_of(reaching, _writer_of(cfg, "WS-AFTER")) == ((),)
 
 
 def test_a_node_that_hit_the_path_cap_is_named_as_truncated(program_of) -> None:
