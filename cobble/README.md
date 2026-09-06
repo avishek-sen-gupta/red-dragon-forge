@@ -338,8 +338,14 @@ unreadable. The human summary goes to stderr.
 ### Field-level byte dataflow
 
 ```bash
-uv run cobble-fields --config config/fields.toml   # copy config/fields.example.toml
+uv run cobble-fields --config config/fields.toml --member PROGA PROGB   # one program and its neighbours
+uv run cobble-fields --config config/fields.toml --all                  # the whole cache
 ```
+
+Exactly one of `--member` and `--all` is required; both together, or neither, is
+a usage error. The usual question is about the fields of one program, and a
+whole-cache pass is minutes of fixpoint per member, so it is asked for rather
+than defaulted into.
 
 Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
 writes `FIELD` nodes and `FLOWS_TO` edges to `<out_dir>/{nodes,edges}.jsonl`. A
@@ -370,12 +376,17 @@ Exit status is the gate:
 | ---- | ------- |
 | 0 | every member analysed, coverage at or above the floor |
 | 1 | coverage below the floor |
-| 2 | ASG directory not found, or config missing its `[fields]` table |
+| 2 | ASG directory not found, config missing its `[fields]` table, or a `--member` the cache does not hold |
 | 3 | one or more members skipped, unreadable, or colliding on program_id |
+
+A named member absent from the cache ends the run before it starts: analysing
+the rest would report coverage over a member set nobody asked for and exit 0
+while the program in question went unexamined.
 
 **Intra-program only.** A `CALL` or `LINK` contributes a synthetic
 `%CALL:<target>` source and no callee summary; cross-program flow is a separate
-stage. A program_id two members declare is exit 3 rather than a rename, since
+stage — naming several members analyses each independently, so no edge crosses a
+program. A program_id two members declare is exit 3 rather than a rename, since
 one shared `edges.jsonl` has no filename to qualify — both members' field ids
 would silently merge into one namespace.
 
