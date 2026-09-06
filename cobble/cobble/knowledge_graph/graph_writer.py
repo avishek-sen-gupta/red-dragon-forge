@@ -1,7 +1,10 @@
 """GraphWriter — streaming sink for the knowledge graph.
 
 Both nodes and edges stream to their .jsonl file deduped keep-first, on
-first sighting, with no buffering. This is only correct because a node's
+first sighting, with no buffering. What counts as the same edge depends on
+its kind -- see ATTRS_ARE_IDENTITY -- because for most kinds the endpoints
+are the whole claim, while a byte-level dataflow edge says something
+different for each extent pair it carries. This is only correct because a node's
 location is resolved once, up front, by a CorpusIndex passed in at
 construction — every occurrence of a given (kind, id), whether from an
 extractor's explicit add_node or add_edge's own defensive endpoint-stub
@@ -21,11 +24,34 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cobble.file_location import to_json_fields
-from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
+from cobble.knowledge_graph.graph_types import (
+    ATTRS_ARE_IDENTITY,
+    GraphEdge,
+    GraphNode,
+)
 from cobble.sink_state import FirstSighting
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
+
+
+def _edge_key(edge: GraphEdge) -> tuple:
+    """What makes this edge a distinct fact, per ATTRS_ARE_IDENTITY.
+
+    Attrs reach the key as canonical JSON because AttrValue admits sequences and
+    mappings, so the dict itself is not reliably hashable and its own key order
+    is a property of how the producer built it rather than of the fact.
+    """
+    endpoints = (
+        edge.source,
+        edge.source_kind,
+        edge.target,
+        edge.target_kind,
+        edge.kind,
+    )
+    if edge.kind not in ATTRS_ARE_IDENTITY:
+        return endpoints
+    return (*endpoints, json.dumps(edge.attrs, sort_keys=True))
 
 
 class GraphWriter:
@@ -84,8 +110,7 @@ class GraphWriter:
                 ),
             )
         )
-        key = (edge.source, edge.source_kind, edge.target, edge.target_kind, edge.kind)
-        if not self._edges_written.first_time(key):
+        if not self._edges_written.first_time(_edge_key(edge)):
             return
         self._ef.write(
             json.dumps(

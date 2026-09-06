@@ -1,5 +1,6 @@
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import MagicMock
@@ -127,6 +128,77 @@ def test_edges_still_dedup_keep_first(tmp_path: Path) -> None:
     with GraphWriter(nodes_path, edges_path, corpus_index) as writer:
         writer.add_edge(edge)
         writer.add_edge(edge)
+
+    assert len(_read_jsonl(edges_path)) == 1
+
+
+def test_two_flows_between_one_field_pair_are_two_edges(tmp_path: Path) -> None:
+    """A FLOWS_TO's attrs are the fact, not provenance about it.
+
+    Endpoint-only dedup kept one of these and dropped the other, so a field
+    assembled from two byte ranges of the same source reported one flow -- and
+    which of the two survived depended on the producer's iteration order."""
+    corpus_index = _corpus_index_stub()
+    nodes_path, edges_path = tmp_path / "nodes.jsonl", tmp_path / "edges.jsonl"
+    flow = GraphEdge(
+        source="PROGA.WS-SRC",
+        source_kind=NodeKind.FIELD,
+        target="PROGA.WS-DST",
+        target_kind=NodeKind.FIELD,
+        kind=EdgeKind.FLOWS_TO,
+    )
+    with GraphWriter(nodes_path, edges_path, corpus_index) as writer:
+        writer.add_edge(replace(flow, attrs={"source_extent": "0:4"}))
+        writer.add_edge(replace(flow, attrs={"source_extent": "4:4"}))
+        writer.add_edge(replace(flow, attrs={"source_extent": "0:4"}))
+
+    assert [edge["attrs"]["source_extent"] for edge in _read_jsonl(edges_path)] == [
+        "0:4",
+        "4:4",
+    ]
+
+
+def test_an_endpoint_level_kind_still_dedups_across_differing_attrs(
+    tmp_path: Path,
+) -> None:
+    """The other kinds keep the collapse they were built on. A copybook COPYed on
+    forty lines is one fact, and attrs-level identity would turn the corpus graph
+    into one edge per occurrence."""
+    corpus_index = _corpus_index_stub()
+    nodes_path, edges_path = tmp_path / "nodes.jsonl", tmp_path / "edges.jsonl"
+    copy = GraphEdge(
+        source="A",
+        source_kind=NodeKind.PROGRAM,
+        target="B",
+        target_kind=NodeKind.COPYBOOK,
+        kind=EdgeKind.COPY,
+    )
+    with GraphWriter(nodes_path, edges_path, corpus_index) as writer:
+        writer.add_edge(replace(copy, attrs={"line": 12}))
+        writer.add_edge(replace(copy, attrs={"line": 40}))
+
+    assert [edge["attrs"] for edge in _read_jsonl(edges_path)] == [{"line": 12}]
+
+
+def test_attrs_written_in_a_different_order_are_one_edge(tmp_path: Path) -> None:
+    """Identity is the attrs, not the dict's insertion order -- which belongs to
+    whichever producer built it, not to the fact."""
+    corpus_index = _corpus_index_stub()
+    nodes_path, edges_path = tmp_path / "nodes.jsonl", tmp_path / "edges.jsonl"
+    flow = GraphEdge(
+        source="PROGA.WS-SRC",
+        source_kind=NodeKind.FIELD,
+        target="PROGA.WS-DST",
+        target_kind=NodeKind.FIELD,
+        kind=EdgeKind.FLOWS_TO,
+    )
+    with GraphWriter(nodes_path, edges_path, corpus_index) as writer:
+        writer.add_edge(
+            replace(flow, attrs={"node": "MAIN/0", "source_node": "MAIN/1"})
+        )
+        writer.add_edge(
+            replace(flow, attrs={"source_node": "MAIN/1", "node": "MAIN/0"})
+        )
 
     assert len(_read_jsonl(edges_path)) == 1
 

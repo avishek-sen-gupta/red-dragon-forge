@@ -87,6 +87,29 @@ def test_an_edge_carries_both_extents_and_the_cfg_node(moved):
     assert edge.attrs["target_extent"].endswith("[4:8]")
 
 
+def test_an_edge_names_the_statement_that_defined_its_source(records_of, two_fields):
+    """``node`` moved the value; ``source_node`` is where the value came from.
+
+    Without the second, an edge can only say which statement moved the bytes --
+    so a child field filled by a group-level write reports the mover and nothing
+    about the group write, which is the case a reader is asking about. Here the
+    INITIALIZE covers WS-A and the MOVE carries it on, and only source_node
+    distinguishes them."""
+    _, edges = records_of(
+        [
+            {"type": "INITIALIZE", "operands": ["REC"]},
+            {"type": "MOVE", "operands": [{"name": "WS-A"}, {"name": "WS-B"}]},
+        ],
+        two_fields,
+    )
+    (moved_on,) = tuple(edge for edge in _flows(edges) if edge.source == "PROGA.WS-A")
+
+    assert (moved_on.attrs["node"], moved_on.attrs["source_node"]) == (
+        "MAIN/1",
+        "MAIN/0",
+    )
+
+
 def test_an_edge_does_not_carry_a_guard_condition(moved):
     """Conditions stay out of the lattice; a reader asks srccfg for the node's."""
     _, edges = moved()

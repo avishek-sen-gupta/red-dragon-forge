@@ -340,6 +340,7 @@ unreadable. The human summary goes to stderr.
 ```bash
 uv run cobble-fields --config config/fields.toml --member PROGA PROGB   # one program and its neighbours
 uv run cobble-fields --config config/fields.toml --all                  # the whole cache
+uv run cobble-fields --config config/fields.toml --member PROGA --sweeps 3
 ```
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
@@ -351,9 +352,12 @@ Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — a
 writes `FIELD` nodes and `FLOWS_TO` edges to `<out_dir>/{nodes,edges}.jsonl`. A
 `FIELD` id is `<program>.<field>`, because a field name is only unique within a
 program: two copybooks routinely give one piece of storage two names. Each edge
-carries both byte extents and the CFG node id that wrote them, and deliberately
-not the guard condition — a reader asks `cobble-srccfg` for that node's guards
-instead, which keeps conditions out of the lattice they would otherwise multiply.
+carries both byte extents and two CFG node ids — `node`, the statement that
+moved the bytes, and `source_node`, the statement that defined the value it
+moved, which differ whenever a group-level write fills a child the mover then
+carries on — and deliberately not the guard condition — a reader asks `cobble-srccfg-query guards` for that node's
+guards instead, which keeps conditions out of the lattice they would otherwise
+multiply.
 
 The config is its own table, holding only what this stage reads:
 
@@ -370,13 +374,39 @@ because a record and its `REDEFINES` views multiply the names of one byte range
 without adding a fact about flow. The human report goes to stderr, a JSON
 summary to stdout.
 
-`--iteration-factor` (default 50) is the dequeues allowed per CFG node before a
-member is given up on with `dequeue cap N reached`. No constant is right for
-every program: the honest bound is nodes × the lattice height at each node, and
-height grows with the number of extents whose source sets are still being
-refined, so a large member can need a factor in the hundreds. The progress log
-is how you tell which problem you have — once `nodes reached` stops climbing,
-further dequeues are refining provenance, not discovering the program.
+Two walks reach the answer, and `--iteration-factor` and `--sweeps` are their
+budgets — mutually exclusive, because each binds only its own walk.
+
+`--iteration-factor` (default 50) drives the worklist walk: dequeues allowed per
+CFG node before a member is given up on with `dequeue cap N reached`. No constant
+is right for every program. The bound is nodes × the lattice height at each node,
+height is the distinct sources held at each extent, so a large member can need a
+factor in the hundreds. The heartbeat carries an estimate from the queue's drain
+rate; when it reads `past the N cap`, waiting buys nothing and the factor is what
+to raise. Once `nodes reached` stops climbing, the remaining dequeues are
+refining provenance rather than discovering the program.
+
+`--sweeps N` runs the cheaper walk instead: at most N passes in reverse
+postorder, stopping early on a pass that changes nothing. Reverse postorder is
+what makes it cheap — every predecessor a node is reached through, back edges
+aside, is already processed, so one pass carries a forward chain of any length,
+where the worklist's FIFO order re-visits a node long before its predecessors
+have settled. A member reported as **settled in k sweeps** is exactly as
+complete as the worklist's answer; one still growing when the budget runs out is
+an under-approximation — a subset of that program's flows, warned about by name
+and counted as `unsettled` in the JSON summary. Nothing is invented either way,
+because join and the transfer are monotone: a smaller entry state yields fewer
+sources, never a wrong one. Two is the useful floor, since detecting settlement
+across a back edge takes the pass that changes nothing; with no back edges at all
+one pass is provably the fixpoint and reports settled immediately. What a single
+sweep drops is narrow — a read whose feeding write sits later in the same loop
+body.
+
+The two walks report progress differently because only one of them can. A sweep
+knows how many nodes it will visit before it starts, so it logs a true fraction
+(`sweep 2, 2000/3919 nodes visited (51%)`) and a line per pass saying `settled` or
+`still growing`; the worklist has a queue with no bound to compare against, so it
+estimates from the drain rate instead.
 
 Exit status is the gate:
 

@@ -1,8 +1,11 @@
 """FIELD nodes and FLOWS_TO edges from one program's flow.
 
-An edge carries its two extents and the CFG node id that wrote them, and not
-the guard condition -- a reader wanting the condition asks srccfg for that
-node's guards. Carrying it would multiply the lattice by the number of distinct
+An edge carries its two extents and two CFG node ids -- ``node`` moved the value,
+``source_node`` defined it -- and not the guard condition; a reader wanting the
+condition asks srccfg for either node's guards. The two differ whenever the value
+was written somewhere other than where it flowed from, which is the ordinary case
+for a group write feeding a child field, so an edge naming only the mover cannot
+say where the value came from. Carrying it would multiply the lattice by the number of distinct
 guard paths and would depend on the path-enumeration walk bead
 red-dragon-forge-3ao found broken.
 
@@ -59,6 +62,7 @@ def _expansion(edge: FlowEdge, index: CellIndex, expand: bool) -> dict[str, Attr
 def _attrs(edge: FlowEdge, index: CellIndex, expand: bool) -> dict[str, AttrValue]:
     return {
         "node": edge.node,
+        "source_node": edge.source.node,
         "source_extent": _source_extent(edge),
         "target_extent": str(edge.target),
         **_expansion(edge, index, expand),

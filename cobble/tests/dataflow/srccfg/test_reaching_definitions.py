@@ -11,11 +11,15 @@ from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
+from cobble.dataflow.srccfg.cfg import Atom
+from cobble.dataflow.srccfg.conditions import CLASS, IN
 from cobble.dataflow.srccfg.dataflow import (
     Definition,
+    condition_operands,
     def_use,
     definitions_of,
     reaching_definitions,
+    readers_of,
     writers_of,
 )
 
@@ -39,7 +43,14 @@ def _if(condition: dict, then: list[dict], otherwise: list[dict]) -> dict:
 
 
 def _rel(left: str, op: str, right: str) -> dict:
-    return {"kind": "relation", "left": left, "operator": op, "right": right}
+    return {
+        "not": False,
+        "relation": {
+            "left": {"kind": "ref", "name": left},
+            "op": op,
+            "right": {"kind": "lit", "value": right},
+        },
+    }
 
 
 def _fields_of(uses, field: str):
@@ -308,6 +319,87 @@ def test_writers_of_lists_every_node_that_writes_a_field_in_source_order() -> No
     )
 
     assert writers_of(cfg, "WS-FLAG-A") == ("MAIN/0", "MAIN/1")
+
+
+def test_readers_of_lists_every_node_that_reads_a_field_in_source_order() -> None:
+    """The mirror of writers_of, and the forward half of a provenance report rests
+    on it: a field read twice must report both, in the order the listing shows."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _move("WS-SRC", "WS-ONE"),
+                        _move("WS-SRC", "WS-TWO"),
+                    ],
+                }
+            ]
+        )
+    )
+
+    assert readers_of(cfg, "WS-SRC") == ("MAIN/0", "MAIN/1")
+
+
+def test_a_field_that_only_decides_a_branch_is_still_a_reader() -> None:
+    """A TEST keeps its operands in the atom, not in node.reads. Searching reads
+    alone reports a field that guards every write in the member as read nowhere --
+    the opposite of true, and worst for exactly the flags worth asking about."""
+    cfg = build_program(
+        _asg(
+            [
+                {
+                    "name": "MAIN",
+                    "statements": [
+                        _if(
+                            _rel("WS-FLAG-A", "=", "'Y'"),
+                            [_move("'B'", "WS-RESULT")],
+                            [],
+                        )
+                    ],
+                }
+            ]
+        )
+    )
+
+    assert readers_of(cfg, "WS-FLAG-A") == ("MAIN/0#test",)
+
+
+def test_a_subscripted_read_answers_a_query_for_the_base_name() -> None:
+    """Base-name matched like writers_of, so the two halves of a report agree on
+    what counts as the same field."""
+    cfg = build_program(
+        _asg([{"name": "MAIN", "statements": [_move("WS-TAB(1)", "WS-RESULT")]}])
+    )
+
+    assert readers_of(cfg, "WS-TAB") == ("MAIN/0",)
+
+
+def test_condition_operands_reports_both_sides_of_a_relation() -> None:
+    cfg_atom = Atom(text="WS-A = WS-B", left="WS-A", op="=", right="WS-B")
+
+    assert condition_operands(cfg_atom) == ("WS-A", "WS-B")
+
+
+def test_condition_operands_drops_the_right_of_a_value_operator() -> None:
+    """IS NUMERIC puts a class name on the right, and an 88 its list of VALUEs.
+    Harvesting those reports NUMERIC as a field the member never wrote, which
+    spends the credibility of that line where it is genuinely true."""
+    assert condition_operands(
+        Atom(text="WS-A IS NUMERIC", left="WS-A", op=CLASS, right="NUMERIC")
+    ) == ("WS-A",)
+    assert condition_operands(
+        Atom(text="WS-A IN ('Y')", left="WS-A", op=IN, right="'Y'")
+    ) == ("WS-A",)
+
+
+def test_condition_operands_drops_the_right_of_a_synthetic_left() -> None:
+    """The right of %HANDLER[ANY] RAISED is the state being tested for, not a
+    field. The left is kept -- whatever the test guards does depend on it -- and
+    the caller labels it rather than claiming the member never wrote it."""
+    assert condition_operands(
+        Atom(text="%HANDLER[ANY] RAISED", left="%HANDLER[ANY]", op="", right="RAISED")
+    ) == ("%HANDLER[ANY]",)
 
 
 def test_a_long_straight_line_reaches_fixpoint_without_exhausting_time() -> None:

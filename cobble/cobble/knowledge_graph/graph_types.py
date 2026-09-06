@@ -100,6 +100,22 @@ class EdgeKind(Enum):
     FLOWS_TO = "FLOWS_TO"
 
 
+ATTRS_ARE_IDENTITY: frozenset[EdgeKind] = frozenset({EdgeKind.FLOWS_TO})
+"""The kinds whose attrs are part of the fact, not provenance about it.
+
+For most kinds the endpoints are the whole claim: "this program COPYs that
+copybook" is one fact however many lines assert it, and attrs record which one
+was seen first. FLOWS_TO is not that shape -- "these bytes reach those bytes,
+written here" names a different flow for every extent pair and defining
+statement, so a sink deduping it on endpoints alone keeps one of N facts and
+silently discards the rest.
+
+A kind belongs here when two of its edges can share endpoints and still say
+different things. Adding one grows the artefact by exactly the facts it was
+losing.
+"""
+
+
 @dataclass(frozen=True)
 class GraphNode:
     id: str

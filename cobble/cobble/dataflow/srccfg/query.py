@@ -1,8 +1,14 @@
-"""Four queries over one member's CFG, printed for a person.
+"""Three queries over one member's CFG, printed for a person.
 
 Names go to stdout and nowhere else: they are corpus identifiers, and the pattern the
 copybook diagnostic settled on is that the machine channel carries the answer while
 the log stays safe to tail.
+
+``provenance`` is the field query and the other two answer around it: ``guards`` takes
+a node id rather than a field, and ``coassign`` asks which OTHER fields move with this
+one. What ``provenance`` reports is one field's two directions in the same walk --
+what its value is derived from, and where that value goes on to -- because a review
+that has only the backward half cannot tell whether a field being wrong matters.
 """
 
 from __future__ import annotations
@@ -14,14 +20,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.dataflow.srccfg.build_corpus import load_cfgs
-from cobble.dataflow.srccfg.cfg import Atom, Cfg
+from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
 from cobble.dataflow.srccfg.coassign import Tier, caveats, co_assigned
-from cobble.dataflow.srccfg.conditions import VALUE_OPS
 from cobble.dataflow.srccfg.dataflow import (
     Reaching,
+    condition_operands,
     guard_text,
     guards_of,
     reaching_conditions,
+    readers_of,
     writers_of,
 )
 from cobble.dataflow.srccfg.literals import is_literal
@@ -32,6 +39,9 @@ UNCONDITIONAL = "unconditional"
 
 CAP_NOTE = "(guard cap hit: this list is incomplete)"
 SUBSET_NOTE = "(subset: paths upstream were also truncated)"
+
+BACKWARD_HEADING = "backward -- what its value is derived from:"
+FORWARD_HEADING = "forward -- what its value reaches:"
 
 
 @dataclass(frozen=True)
@@ -48,35 +58,6 @@ class GuardLines:
 
     texts: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
-
-
-def writers_report(cfg: Cfg, field: str) -> tuple[str, ...]:
-    """List every node that writes a field, with guards for each write.
-
-    F6: Shows verbatim operands (including literals like SPACES) because a writers
-    listing describes what the statement actually reads. The derivation report filters
-    literals because it chases dependencies, and a literal is not a dependency."""
-    nodes = writers_of(cfg, field)
-    if not nodes:
-        return (f"{field}: written nowhere in {cfg.program}",)
-    reaching = reaching_conditions(cfg)
-    return (
-        f"{field}: {len(nodes)} writer(s) in {cfg.program}",
-        *tuple(
-            line for node_id in nodes for line in _writer_lines(cfg, reaching, node_id)
-        ),
-    )
-
-
-def _writer_lines(cfg: Cfg, reaching: Reaching, node_id: str) -> tuple[str, ...]:
-    node = cfg.node(node_id)
-    head = f"  {node_id}  {node.transfer or 'ASSIGN'}  reads {', '.join(node.reads) or '(none)'}"
-    guards = _guard_lines(cfg, reaching, node_id)
-    return (
-        head,
-        *tuple(f"    when {text}" for text in guards.texts),
-        *tuple(f"    {note}" for note in guards.notes),
-    )
 
 
 def _guard_lines(cfg: Cfg, reaching: Reaching, node_id: str) -> GuardLines:
@@ -120,14 +101,49 @@ def guards_report(cfg: Cfg, node_id: str) -> tuple[str, ...]:
     )
 
 
-def derivation_report(
+def provenance_report(
     cfg: Cfg, field: str, max_depth: int = MAX_DEPTH
 ) -> tuple[str, ...]:
+    """One field's two directions, walked from the same reaching conditions.
+
+    Both halves are guarded, and that is the point of pairing them: a field derived
+    under one condition and consumed under an incompatible one is not the flow the
+    two halves separately appear to describe. Reading them from one ``Reaching`` is
+    what lets a reader compare the guard text on a backward line against a forward
+    one, rather than against a second walk's numbering.
+    """
     reaching = reaching_conditions(cfg)
     return (
         f"{field} in {cfg.program}:",
+        BACKWARD_HEADING,
         *_chain(cfg, reaching, field, 1, max_depth, frozenset()),
+        FORWARD_HEADING,
+        *_uses(cfg, reaching, field, 1, max_depth, frozenset()),
     )
+
+
+def _halt(
+    field: str, depth: int, max_depth: int, seen: frozenset[str], arrow: str
+) -> str:
+    """The line that ends the walk at this field, or "" to keep walking.
+
+    Three ways a chase stops before it reaches a node, in this order because a field
+    already shown is not also a depth truncation, and a name this pass invented (F5)
+    has no writers to look for -- it is not a field the member failed to write. Both
+    directions read their wordings from here so the arrow is the only difference
+    between them; the guards themselves are the same guards either way round.
+    """
+    pad = "  " * depth
+    synthetic = is_synthetic(field)
+    reasons = (
+        (field in seen, f"{pad}{field} (already shown)"),
+        (depth > max_depth, f"{pad}{field} (truncated at depth {max_depth})"),
+        (
+            bool(synthetic),
+            f"{pad}{field} {arrow} {describe(synthetic) if synthetic else ''}",
+        ),
+    )
+    return next((line for applies, line in reasons if applies), "")
 
 
 def _chain(
@@ -139,14 +155,9 @@ def _chain(
     seen: frozenset[str],
 ) -> tuple[str, ...]:
     pad = "  " * depth
-    if field in seen:
-        return (f"{pad}{field} (already shown)",)
-    if depth > max_depth:
-        return (f"{pad}{field} (truncated at depth {max_depth})",)
-    # F5: A name this pass invented is not a field the member failed to write
-    synthetic = is_synthetic(field)
-    if synthetic:
-        return (f"{pad}{field} <- {describe(synthetic)}",)
+    halt = _halt(field, depth, max_depth, seen, "<-")
+    if halt:
+        return (halt,)
     nodes = writers_of(cfg, field)
     if not nodes:
         return (f"{pad}{field} <- source (written nowhere in this member)",)
@@ -181,7 +192,7 @@ def _from_node(
     node = cfg.node(node_id)
     pad = "  " * depth
     guards = _guard_lines(cfg, reaching, node_id)
-    head = f"{pad}{node_id} {node.transfer or 'ASSIGN'} when {'; '.join(guards.texts)}"
+    head = f"{pad}{node_id} {_verb(node)} when {'; '.join(guards.texts)}"
     notes = tuple(f"{pad}  {note}" for note in guards.notes)
 
     # Data dependencies: fields the node reads
@@ -211,6 +222,100 @@ def _from_node(
     )
 
 
+def _uses(
+    cfg: Cfg,
+    reaching: Reaching,
+    field: str,
+    depth: int,
+    max_depth: int,
+    seen: frozenset[str],
+) -> tuple[str, ...]:
+    """The forward half: every reader of the field, then what those readers write.
+
+    Symmetric to ``_chain`` in every control it needs -- the same cycle cut, the same
+    depth cap, the same synthetic label -- because the shapes that make a backward
+    chase diverge are the same shapes forward. ``COMPUTE WS-A = WS-A + 1`` reads and
+    writes one field, and ``seen`` is what stops it either way round -- see ``_halt``,
+    which both directions share.
+    """
+    pad = "  " * depth
+    halt = _halt(field, depth, max_depth, seen, "->")
+    if halt:
+        return (halt,)
+    nodes = readers_of(cfg, field)
+    if not nodes:
+        return (f"{pad}{field} -> sink (read nowhere in this member)",)
+    return (
+        f"{pad}{field} ->",
+        *tuple(
+            line
+            for node_id in nodes
+            for line in _into_node(
+                cfg, reaching, node_id, field, depth, max_depth, seen | {field}
+            )
+        ),
+    )
+
+
+def _into_node(
+    cfg: Cfg,
+    reaching: Reaching,
+    node_id: str,
+    field: str,
+    depth: int,
+    max_depth: int,
+    seen: frozenset[str],
+) -> tuple[str, ...]:
+    """Chase the flow onward through one reader.
+
+    A value that reached a node leaves it one of two ways: written on into the node's
+    targets, or -- at a TEST -- spent deciding which arm runs, with no target field to
+    follow. Both are places the value matters, so a reader with no writes is a terminus
+    that says which of the two it is rather than a line the report omits.
+    """
+    node = cfg.node(node_id)
+    pad = "  " * depth
+    guards = _guard_lines(cfg, reaching, node_id)
+    head = f"{pad}{node_id} {_verb(node)} when {'; '.join(guards.texts)}"
+    notes = tuple(f"{pad}  {note}" for note in guards.notes)
+
+    if not node.writes:
+        return (head, *notes, f"{pad}  {field} -> {_sink(node)}")
+
+    return (
+        head,
+        *notes,
+        *tuple(
+            line
+            for name in node.writes
+            for line in _uses(cfg, reaching, name, depth + 1, max_depth, seen)
+        ),
+    )
+
+
+def _verb(node: Node) -> str:
+    """The verb that moved the data, or the node's kind where there is no verb.
+
+    The forward walk reaches TEST nodes, which the backward one never does -- a TEST
+    writes nothing, so ``writers_of`` cannot return it. Printing those as ASSIGN would
+    say a predicate assigned something.
+    """
+    return node.transfer or node.kind.value
+
+
+def _sink(node: Node) -> str:
+    """Why the forward chain stopped at this reader.
+
+    Two terminal states, two wordings, for the same reason ``_terminus`` has two: a
+    TEST consuming the value is not the same finding as a statement that reads it and
+    writes nothing, and one wording for both would make the reader check the source to
+    tell which they were looking at.
+    """
+    if node.kind is NodeKind.TEST:
+        return "decides this branch (no target field)"
+    return "read here, written on to nothing"
+
+
 def _terminus(cfg: Cfg, reaching: Reaching, node_id: str) -> str:
     """Why the chain stopped here, which is not always what stopped it.
 
@@ -237,35 +342,18 @@ def _guard_operands(cfg: Cfg, reaching: Reaching, node_id: str) -> list[str]:
 
     F1 (R54): Control dependencies. A field that appears only in a guard, never in a
     read, is still a dependency of the write. TEST nodes store operands in atom.left
-    and atom.right, not in node.reads."""
+    and atom.right, not in node.reads -- ``condition_operands`` is the same rule
+    ``readers_of`` applies, so a field reported here as a control dependency is one
+    the forward walk will also find reaching this test."""
     all_operands = (
         operand
         for guard in guards_of(reaching, node_id)
         for step_id, _kind in guard
-        for operand in _operands(cfg.node(step_id).atom)
+        for operand in condition_operands(cfg.node(step_id).atom)
         if operand and not is_literal(operand)
     )
     # Remove duplicates while preserving order
     return list(dict.fromkeys(all_operands))
-
-
-def _operands(atom: Atom) -> tuple[str, ...]:
-    """The operands of one guard step, and only the operands.
-
-    F5: ``atom.right`` is a second operand for a relation between two things and a
-    VALUE for everything else -- a class name for IS NUMERIC, an 88's list of values
-    for IN, the keyword RAISED for the handler test. Harvesting those printed
-    ``NUMERIC`` and ``RAISED`` as fields written nowhere in the member, which spends
-    the credibility of that line where it is genuinely true, as it is for a commarea
-    or a file-read source.
-
-    A synthetic left-hand side is the same case reached differently: the right of
-    ``%HANDLER[ANY] RAISED`` or ``%IOSTATUS[F] == AT END`` is the state being tested
-    for, not a field. The left IS kept -- the write does depend on it -- and the
-    chain then labels it rather than claiming the member never wrote it."""
-    if atom.op in VALUE_OPS or is_synthetic(atom.left):
-        return (atom.left,)
-    return (atom.left, atom.right)
 
 
 def coassign_report(
@@ -292,12 +380,23 @@ def coassign_report(
     )
 
 
-_QUERIES = ("writers", "guards", "derivation", "coassign")
+_QUERIES = ("provenance", "guards", "coassign")
 
 
 def main(argv: Sequence[str] = ()) -> int:
+    """No arguments means take the command line, which is what the console script does.
+
+    argparse spells that as ``parse_args()`` against ``parse_args(argv)``, so the two
+    are separate calls: passing an empty sequence through would ask it to parse nothing
+    and fail on the required arguments.
+    """
     parser = _parser()
-    arguments = parser.parse_args(tuple(argv) or None)
+    if argv:
+        return _run(parser.parse_args(tuple(argv)))
+    return _run(parser.parse_args())
+
+
+def _run(arguments: argparse.Namespace) -> int:
     if not arguments.cfg.is_file():
         # F10: Use sys.stderr.write() instead of print() to avoid RUF100
         sys.stderr.write(f"No CFG at {arguments.cfg}\n")
@@ -330,17 +429,20 @@ def _parser() -> argparse.ArgumentParser:
         choices=[t.name for t in Tier if t is not Tier.UNRELATED],
         default=Tier.SAME_PARAGRAPH.name,
     )
-    parser.add_argument("--max-depth", type=int, default=MAX_DEPTH)
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=MAX_DEPTH,
+        help="how far `provenance` chases each direction",
+    )
     return parser
 
 
 def _lines(cfg: Cfg, arguments) -> tuple[str, ...]:
     if arguments.query == "guards":
         return guards_report(cfg, arguments.subject)
-    if arguments.query == "derivation":
-        return derivation_report(cfg, arguments.subject, max_depth=arguments.max_depth)
     if arguments.query == "coassign":
         return coassign_report(
             cfg, arguments.subject, min_tier=Tier[arguments.min_tier]
         )
-    return writers_report(cfg, arguments.subject)
+    return provenance_report(cfg, arguments.subject, max_depth=arguments.max_depth)
