@@ -327,7 +327,7 @@ Exit status is the gate:
 
 | exit | meaning |
 | ---- | ------- |
-| 0 | cache usable, every file readable |
+| 0 | precondition met, subscripted MOVEs present |
 | 1 | precondition failed, no subscripted MOVEs |
 | 2 | directory not found |
 | 3 | some files unreadable |
