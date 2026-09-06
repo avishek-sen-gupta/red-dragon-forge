@@ -206,18 +206,49 @@ def test_a_transitive_walk_crosses_the_group_the_edge_named(store):
 
 
 def test_the_walk_backwards_from_the_sink_reaches_the_record_it_came_from(store):
-    """WHOLE-EIGHT and not SRC-REC, which is worth stating because the statement
-    the walk crossed reads SRC-REC. Three declared names own those eight bytes and
-    ``naming`` breaks the tie towards the deepest, so the edge's endpoint id is the
-    redefinition. The extent it carries still spells SRC-REC, and every predicate
-    here reads the range rather than the id, so no answer depends on which name won
-    -- but a reader of the id alone is told a name their program never moved.
+    """SRC-REC, the record the statement the walk crossed actually reads.
+
+    Three declared names own those eight bytes and tie on length, so which one the
+    endpoint id spells is a tie-break rather than a fact about the bytes. Ranking
+    the reference the statement made above the rest is what keeps a consumer joining
+    on ids from being handed ALIAS-REC's child, a name this program never moves.
     """
     assert reaches(store, _one(store, "SINK").ranges, Side.TARGET, 6) == {
         "SYNTHQ.DST-A": 1,
-        "SYNTHQ.WHOLE-EIGHT": 2,
+        "SYNTHQ.SRC-REC": 2,
     }
     assert _flow(store, GROUP_MOVE).source_text.startswith("SRC-REC@")
+
+
+def test_every_name_over_the_redefined_record_is_recoverable_from_the_artefact(store):
+    """The id the tie-break settled on is one of five owners of those bytes, and a
+    reader tracing it gets the rest -- including ALIAS-REC, which ties with SRC-REC
+    on level as well as bytes and so is reported by neither direction of
+    containment. Asserted against a real parse: the level and the ranges these
+    turn on are the bridge's."""
+    assert [one.id for one in store.overlapping(_one(store, "SRC-REC").ranges)] == [
+        "SYNTHQ.ALIAS-REC",
+        "SYNTHQ.SRC-REC",
+        "SYNTHQ.SRC-A",
+        "SYNTHQ.WHOLE-EIGHT",
+        "SYNTHQ.SRC-B",
+    ]
+
+
+def test_a_range_straddling_the_two_records_names_both(store):
+    """Bytes 6-10 cross from SRC-REC into DST-REC, so no declared field covers them
+    and containment answers nothing in either direction."""
+    assert [
+        one.id
+        for one in store.overlapping((byte_range("?@working_storage[6:10]", PROGRAM),))
+    ] == [
+        "SYNTHQ.ALIAS-REC",
+        "SYNTHQ.SRC-REC",
+        "SYNTHQ.WHOLE-EIGHT",
+        "SYNTHQ.SRC-B",
+        "SYNTHQ.DST-REC",
+        "SYNTHQ.DST-A",
+    ]
 
 
 def test_a_record_contains_the_fields_declared_inside_it(store):

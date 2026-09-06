@@ -11,11 +11,12 @@ entirely -- on the member measured, one field had three writers by byte overlap
 against one by id, and twenty-one readers against none. Every predicate here
 therefore starts from a field's declared ranges and intersects.
 
-Four primitives; the named questions are compositions of them:
+Five primitives; the named questions are compositions of them:
 
   ``field``                   a bare name to every program's field of that name
   ``touching``                the flows one end of which overlaps given ranges
   ``contains``/``containers`` the declared fields inside a field, or holding it
+  ``overlapping``             every declared name sharing bytes with given ranges
   ``reaches``                 the transitive closure of ``touching``, over ranges
 
 ``contributed`` is what makes the collapsed edge lossless: given a flow at group
@@ -31,7 +32,6 @@ view, so ranges alone cannot say which of such a pair holds the other.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -39,16 +39,41 @@ from enum import Enum, auto
 from pathlib import Path
 from types import MappingProxyType
 
+from cobble.dataflow.fields import rows
 from cobble.dataflow.fields.build_corpus import (
     DEFS_FILE,
     EDGES_FILE,
     EXTENTS_FILE,
 )
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
+from cobble.dataflow.fields.rows import Row
 
 MAX_DEPTH = 6
 
 FLOWS_TO = "FLOWS_TO"
+
+
+class Query(Enum):
+    """The named questions, spelled as the command line takes them.
+
+    Members rather than the bare strings the dispatch used to match on, so that a
+    question added here without an arm to answer it is a type error rather than a
+    silent fall through to whatever the wildcard case was.
+    """
+
+    EXTENTS = "extents"
+    WRITERS = "writers"
+    READERS = "readers"
+    REACHES = "reaches"
+    REACHED_BY = "reached-by"
+    CONTAINS = "contains"
+    WITHIN = "within"
+    OVERLAPPING = "overlapping"
+
+    def __str__(self) -> str:
+        """argparse renders choices and usage through ``str``, so this is what makes
+        the help read as the words rather than as repr'd members."""
+        return self.value
 
 
 class Side(Enum):
@@ -122,6 +147,41 @@ class FieldStore:
             if any(_end(flow, side).overlaps(one) for one in ranges)
         )
 
+    def overlapping(self, ranges: Sequence[ByteRange]) -> tuple[Field, ...]:
+        """Every declared name owning any of ``ranges``' bytes, whole or in part.
+
+        No level comparison and no total containment, which is what separates this
+        from ``contains``/``containers``: it makes no claim about which name holds
+        which, only that the bytes are shared. Both cases the other two miss are
+        real. A record and its REDEFINES view own identical bytes at the same level,
+        so neither direction of containment reports the other. An extent straddling
+        two members is contained by neither of them.
+
+        This is what makes an endpoint id a label rather than a claim: whichever of
+        several names over one range the artefact keyed on, a reader gets the rest.
+        """
+        return tuple(
+            sorted(
+                (
+                    field
+                    for field in self._in_programs(ranges)
+                    if any(
+                        one.overlaps(part) for one in field.ranges for part in ranges
+                    )
+                ),
+                key=_declaration_order,
+            )
+        )
+
+    def _in_programs(self, ranges: Sequence[ByteRange]) -> tuple[Field, ...]:
+        """Only the programs ``ranges`` name. ``overlaps`` rejects the rest anyway;
+        this is so one question does not scan a whole corpus's declarations."""
+        return tuple(
+            field
+            for program in dict.fromkeys(one.program for one in ranges if one.known)
+            for field in self.by_program.get(program, ())
+        )
+
     def contains(self, holder: Field) -> tuple[Field, ...]:
         """Every declared field whose bytes lie inside ``holder``'s.
 
@@ -193,6 +253,12 @@ def _layout_order(field: Field) -> tuple[int, int, str]:
     return (first.start, field.level, field.id)
 
 
+def _declaration_order(field: Field) -> tuple[str, int, int, str]:
+    """Layout order, program first: a range query may span members, and offsets
+    are region coordinates, so two programs' would otherwise interleave."""
+    return (field.program, *_layout_order(field))
+
+
 def contributed(flow: Flow, wanted: ByteRange) -> ByteRange:
     """The source bytes that reached ``wanted``, given a flow that covered it.
 
@@ -240,23 +306,44 @@ def reaches(
     reached, and an id alone would prune a second occurrence of a table entry.
     """
     landings = tuple(("", one) for one in start)
-    seen = landings
-    frontier = landings
-    found: Mapping[str, int] = MappingProxyType({})
-    level = 0
-    while frontier and level < depth:
-        level = level + 1
-        landed = tuple(
-            (_far_id(flow, side), _far_end(flow, side))
-            for flow in store.touching(tuple(one for _, one in frontier), side)
-            if _unseen(flow, side, seen)
-        )
-        found = MappingProxyType(
-            {**found, **{at: level for at, _ in landed if at not in found}}
-        )
-        seen = (*seen, *landed)
-        frontier = landed
-    return found
+    return _walk(store, side, depth, _Walk(landings, landings, MappingProxyType({}), 0))
+
+
+@dataclass(frozen=True)
+class _Walk:
+    """One level of the transitive walk: what has been landed on, and where next."""
+
+    seen: tuple[tuple[str, ByteRange], ...]
+    frontier: tuple[tuple[str, ByteRange], ...]
+    found: Mapping[str, int]
+    level: int
+
+
+def _walk(store: FieldStore, side: Side, depth: int, walk: _Walk) -> Mapping[str, int]:
+    if not walk.frontier or walk.level >= depth:
+        return walk.found
+    level = walk.level + 1
+    landed = tuple(
+        (_far_id(flow, side), _far_end(flow, side))
+        for flow in store.touching(tuple(one for _, one in walk.frontier), side)
+        if _unseen(flow, side, walk.seen)
+    )
+    return _walk(
+        store,
+        side,
+        depth,
+        _Walk(
+            seen=(*walk.seen, *landed),
+            frontier=landed,
+            found=MappingProxyType(
+                {
+                    **walk.found,
+                    **{at: level for at, _ in landed if at not in walk.found},
+                }
+            ),
+            level=level,
+        ),
+    )
 
 
 def _unseen(flow: Flow, side: Side, seen: Sequence[tuple[str, ByteRange]]) -> bool:
@@ -270,54 +357,27 @@ def _program_of(field_id: str) -> str:
     return field_id.split(".", 1)[0]
 
 
-def _rows(path: Path) -> tuple[Mapping[str, object], ...]:
-    if not path.is_file():
-        return ()
-    return tuple(
-        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
-    )
-
-
-def _attrs(row: Mapping[str, object]) -> Mapping[str, object]:
-    """A row's attrs, narrowed. ``json.loads`` yields ``object``, and a row without
-    them -- or with something else there -- reads as a flow with no extents rather
-    than aborting a whole corpus's worth of query."""
-    value = row.get("attrs")
-    return value if isinstance(value, Mapping) else {}
-
-
-def _strings(value: object) -> tuple[str, ...]:
-    """A row's list of strings, narrowed. ``str`` is excluded deliberately: it is
-    itself a Sequence, so a scalar written where a list belongs would otherwise
-    read back as one range per character."""
-    if isinstance(value, str) or not isinstance(value, Sequence):
-        return ()
-    return tuple(str(one) for one in value)
-
-
-def _field(row: Mapping[str, object]) -> Field:
-    field_id = str(row["id"])
+def _field(row: Row) -> Field:
+    field_id = rows.text(row, "id")
     program = _program_of(field_id)
     return Field(
         id=field_id,
         program=program,
-        level=int(str(row.get("level", 0))),
-        usage=str(row.get("usage", "")),
-        ranges=tuple(
-            byte_range(text, program) for text in _strings(row.get("extents"))
-        ),
+        level=rows.number(row, "level"),
+        usage=rows.text(row, "usage"),
+        ranges=tuple(byte_range(one, program) for one in rows.strings(row, "extents")),
     )
 
 
-def _flow(row: Mapping[str, object]) -> Flow:
-    attrs = _attrs(row)
-    source, target = str(row["source"]), str(row["target"])
-    source_text = str(attrs.get("source_extent", ""))
-    target_text = str(attrs.get("target_extent", ""))
+def _flow(row: Row) -> Flow:
+    attrs = rows.nested(row, "attrs")
+    source, target = rows.text(row, "source"), rows.text(row, "target")
+    source_text = rows.text(attrs, "source_extent")
+    target_text = rows.text(attrs, "target_extent")
     return Flow(
         source=source,
         target=target,
-        node=str(attrs.get("node", "")),
+        node=rows.text(attrs, "node"),
         source_text=source_text,
         target_text=target_text,
         source_range=byte_range(source_text, _program_of(source)),
@@ -346,9 +406,9 @@ def _program_key(field: Field) -> str:
 
 
 def store_of(
-    declared: Sequence[Mapping[str, object]],
-    edges: Sequence[Mapping[str, object]],
-    defs: Sequence[Mapping[str, object]],
+    declared: Sequence[Row],
+    edges: Sequence[Row],
+    defs: Sequence[Row],
 ) -> FieldStore:
     """The three tables' rows, indexed. Rows rather than a directory, so that a
     caller holding the records in memory asks its questions of the same store a
@@ -359,12 +419,12 @@ def store_of(
         fields=MappingProxyType({field.id: field for field in fields}),
         by_name=_grouped(fields, _name_of),
         by_program=_grouped(fields, _program_key),
-        flows=tuple(
-            _flow(row) for row in edges if str(row.get("kind", "")) == FLOWS_TO
-        ),
+        flows=tuple(_flow(row) for row in edges if rows.text(row, "kind") == FLOWS_TO),
         definers=MappingProxyType(
             {
-                (str(row["node"]), str(row["extent"])): _strings(row.get("definers"))
+                (rows.text(row, "node"), rows.text(row, "extent")): rows.strings(
+                    row, "definers"
+                )
                 for row in defs
             }
         ),
@@ -378,9 +438,9 @@ def load(out_dir: Path) -> FieldStore:
     other question about it is more use than one that refuses the directory.
     """
     return store_of(
-        _rows(out_dir / EXTENTS_FILE),
-        _rows(out_dir / EDGES_FILE),
-        _rows(out_dir / DEFS_FILE),
+        rows.read(out_dir / EXTENTS_FILE),
+        rows.read(out_dir / EDGES_FILE),
+        rows.read(out_dir / DEFS_FILE),
     )
 
 
@@ -465,33 +525,50 @@ def _nested_report(found: tuple[Field, ...], label: str) -> tuple[str, ...]:
     )
 
 
-def _answer(store: FieldStore, query: str, field: Field, depth: int) -> tuple[str, ...]:
-    match query:
-        case "extents":
-            return ()
-        case "writers":
-            return _flow_report(store, field, Side.TARGET, "writers")
-        case "readers":
-            return _flow_report(store, field, Side.SOURCE, "readers")
-        case "reaches":
-            return _reach_report(store, field, Side.SOURCE, depth, "flows into")
-        case "reached-by":
-            return _reach_report(store, field, Side.TARGET, depth, "flows from")
-        case "contains":
-            return _nested_report(store.contains(field), "contains")
-        case _:
-            return _nested_report(store.containers(field), "contained by")
-
-
-_QUERIES = (
-    "extents",
-    "writers",
-    "readers",
-    "reaches",
-    "reached-by",
-    "contains",
-    "within",
+_ANSWERS: Mapping[Query, Callable[[FieldStore, Field, int], tuple[str, ...]]] = (
+    MappingProxyType(
+        {
+            Query.EXTENTS: lambda store, field, depth: (),
+            Query.WRITERS: lambda store, field, depth: _flow_report(
+                store, field, Side.TARGET, "writers"
+            ),
+            Query.READERS: lambda store, field, depth: _flow_report(
+                store, field, Side.SOURCE, "readers"
+            ),
+            Query.REACHES: lambda store, field, depth: _reach_report(
+                store, field, Side.SOURCE, depth, "flows into"
+            ),
+            Query.REACHED_BY: lambda store, field, depth: _reach_report(
+                store, field, Side.TARGET, depth, "flows from"
+            ),
+            Query.CONTAINS: lambda store, field, depth: _nested_report(
+                store.contains(field), "contains"
+            ),
+            Query.WITHIN: lambda store, field, depth: _nested_report(
+                store.containers(field), "contained by"
+            ),
+            Query.OVERLAPPING: lambda store, field, depth: _nested_report(
+                _others(store.overlapping(field.ranges), field), "shares bytes with"
+            ),
+        }
+    )
 )
+"""One arm per named question. A table rather than a match: every member of Query
+is a key here, so a question added without an answer is a missing key at the one
+place both are written down."""
+
+
+def _answer(
+    store: FieldStore, query: Query, field: Field, depth: int
+) -> tuple[str, ...]:
+    return _ANSWERS[query](store, field, depth)
+
+
+def _others(found: tuple[Field, ...], field: Field) -> tuple[Field, ...]:
+    """``overlapping`` reports every owner of the bytes, this field included, since
+    a range query has no subject to exclude. A report does, and the heading above
+    already named it."""
+    return tuple(one for one in found if one.id != field.id)
 
 
 def _report(store: FieldStore, arguments: argparse.Namespace) -> int:
@@ -511,7 +588,7 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Byte-interval queries over the field dataflow artefact."
     )
-    parser.add_argument("query", choices=_QUERIES)
+    parser.add_argument("query", type=Query, choices=tuple(Query))
     parser.add_argument("subject", help="a field name, or PROGRAM.FIELD to qualify it")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument(
