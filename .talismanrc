@@ -140,7 +140,7 @@ fileignoreconfig:
 - filename: cobble/.python-fp-lint/rules/no-subscript-tuple-mutation.yml
   checksum: 349f5b174d36b9a7e45a02bf1359aae738ffb5bd4dd562983f7956d177c507ba
 - filename: cobble/README.md
-  checksum: 092fd5d2c5502d40b9340335cc53a2aef87b3be7cebc4acc87c210194162814a
+  checksum: f7601466b2559a2eed6721992b224aa912ba80c5c53648ed660004c1df43f5d3
 - filename: cobble/cobble/build_graph.py
   checksum: 17b97e112097e3ff9a6b4704abeec662d1a2c8d8e82394bf418c845fec7a2b20
 - filename: cobble/cobble/cics/flow_map.py
@@ -152,7 +152,7 @@ fileignoreconfig:
 - filename: cobble/cobble/corpus_config.py
   checksum: 879566701c34b3e7c717f50b9c68098ddac0c4a9155a44f703daecc0182170f2
 - filename: cobble/cobble/corpus_index.py
-  checksum: 092a4dc44e6e9aefb6a03b695b0261907e2bc7302f704c57de6c4798d9e7bd64
+  checksum: 66a20f71af92d48edb57c6acf45ac6803219c56e92cde8f89600a4ee80c24003
 - filename: cobble/cobble/corpus_index_builder.py
   checksum: 11bb10aad1eb4aeb8b9ca66c3deafbcf06bb14ad962b937e49691950ce06e94c
 - filename: cobble/cobble/diagnosis/copybooks.py
@@ -253,4 +253,30 @@ fileignoreconfig:
   ignore_detectors: [filecontent]
 - filename: docs/superpowers/plans/2026-09-05-field-level-byte-dataflow-prerequisites.md
   checksum: 7d95aa1876ba37d4bcea07992a3ca3fc18ac8ac2092398c50b63f667000be4f0
+- filename: docs/superpowers/plans/2026-09-06-field-level-byte-dataflow-intraprogram.md
+  checksum: 3901407a31bfdfad401779a57f63203e70921a384cefffdb5f38e4b61725378b
+- filename: cobble/cobble/dataflow/fields/extent.py
+  checksum: f805c8fb7b7c81c9d0cb023a8895704891668cf67f40c45fb0e42e4e066a1a47
+- filename: cobble/cobble/dataflow/fields/state.py
+  checksum: 411eb695e9fd5a9f8b8cb4e2d0bafe35a934831d6282e03e763ed141fde8d3b6
+- filename: cobble/cobble/dataflow/fields/transfer.py
+  checksum: 41138077bea65219aa79f3c763514d8c17471728cd5b5999a4229b8d1699a2de
+- filename: cobble/tests/dataflow/fields/test_fixpoint.py
+  checksum: f40a187db5635624e2dd30d8340e6fd23e6a2913684ec5d23ab9ab6299ce97a5
+- filename: cobble/cobble/dataflow/fields/fixpoint.py
+  checksum: 43fb9989528ab86e3cf61a8a7b603a2dad8ae6548f3f895e0dd6b185a0623b38
+- filename: cobble/cobble/dataflow/fields/naming.py
+  checksum: 6e3f64e0a87b86b0da5d94204b9f39109ff99f4556acf796ea1c67eb27ce0d90
+- filename: cobble/tests/dataflow/fields/test_naming.py
+  checksum: 70f2b6bc5f655ed320a2a925d7c29b41705a58b6307583e8342baa38c803cf15
+- filename: cobble/cobble/dataflow/fields/config.py
+  checksum: ea3595e3d5a42506d164b707efee5a26de982110fa00f0215a9b46ae9ff6eb51
+- filename: cobble/tests/dataflow/fields/test_fields_config.py
+  checksum: bf84ff4478fc4511da1fc3d23ec65487d144e22e76dbb51c43d77d8ffe31bc00
+- filename: cobble/tests/dataflow/fields/test_fields_build_corpus.py
+  checksum: 4ad76224ff937519efb34cd77011260f9af052b60647e613f311cc3b5c38bdb7
+- filename: cobble/cobble/dataflow/fields/build_corpus.py
+  checksum: ab09f9f9845cbf24ff881ad2a5091d588955005428bb91da52ce80cd9d468039
+- filename: cobble/tests/dataflow/fields/test_fields_acceptance.py
+  checksum: d6c24b2a048ee62fa7e77c20cc2bca65082c78cbe31dc731d48977561d564d01
 version: "1.0"

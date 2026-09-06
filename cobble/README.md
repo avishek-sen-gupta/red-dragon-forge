@@ -335,6 +335,66 @@ Exit status is the gate:
 The JSON on stdout reports five counts: bare, subscripted, ref-modified, total,
 unreadable. The human summary goes to stderr.
 
+### Field-level byte dataflow
+
+```bash
+uv run cobble-fields --config config/fields.toml --member PROGA PROGB   # one program and its neighbours
+uv run cobble-fields --config config/fields.toml --all                  # the whole cache
+```
+
+Exactly one of `--member` and `--all` is required; both together, or neither, is
+a usage error. The usual question is about the fields of one program, and a
+whole-cache pass is minutes of fixpoint per member, so it is asked for rather
+than defaulted into.
+
+Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
+writes `FIELD` nodes and `FLOWS_TO` edges to `<out_dir>/{nodes,edges}.jsonl`. A
+`FIELD` id is `<program>.<field>`, because a field name is only unique within a
+program: two copybooks routinely give one piece of storage two names. Each edge
+carries both byte extents and the CFG node id that wrote them, and deliberately
+not the guard condition — a reader asks `cobble-srccfg` for that node's guards
+instead, which keeps conditions out of the lattice they would otherwise multiply.
+
+The config is its own table, holding only what this stage reads:
+
+```toml
+[fields]
+asg_dir = "out/asg"
+out_dir = "out/fields"
+```
+
+`--min-coverage` (default 0.60) is the floor for the fraction of writes the
+analysis resolved to storage; `--expand` adds `source_fields`/`target_fields` to
+each edge, naming every field that aliases the extent. Expansion is opt-in
+because a record and its `REDEFINES` views multiply the names of one byte range
+without adding a fact about flow. The human report goes to stderr, a JSON
+summary to stdout.
+
+Exit status is the gate:
+
+| exit | meaning |
+| ---- | ------- |
+| 0 | every member analysed, coverage at or above the floor |
+| 1 | coverage below the floor |
+| 2 | ASG directory not found, config missing its `[fields]` table, or a `--member` the cache does not hold |
+| 3 | one or more members skipped, unreadable, or colliding on program_id |
+
+A named member absent from the cache ends the run before it starts: analysing
+the rest would report coverage over a member set nobody asked for and exit 0
+while the program in question went unexamined.
+
+**Intra-program only.** A `CALL` or `LINK` contributes a synthetic
+`%CALL:<target>` source and no callee summary; cross-program flow is a separate
+stage — naming several members analyses each independently, so no edge crosses a
+program. A program_id two members declare is exit 3 rather than a rename, since
+one shared `edges.jsonl` has no filename to qualify — both members' field ids
+would silently merge into one namespace.
+
+`tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
+over-approximates, `must_cover` under-approximates), the per-statement transfer
+functions, the node-keyed fixpoint, extent-to-name resolution, what an edge
+carries, and the corpus pass's exit codes.
+
 ### Render the HTML visualization
 
 ```bash
