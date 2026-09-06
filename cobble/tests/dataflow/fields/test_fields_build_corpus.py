@@ -14,7 +14,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from cobble.dataflow.fields.build_corpus import cli
+from cobble.dataflow.fields.build_corpus import (
+    DEFS_FILE,
+    EDGES_FILE,
+    EXTENTS_FILE,
+    NODES_FILE,
+    cli,
+)
 
 
 def _program(program_id: str, target: str = "WS-B") -> dict:
@@ -50,9 +56,9 @@ def _program(program_id: str, target: str = "WS-B") -> dict:
 def _branched(program_id: str) -> dict:
     """WS-A written on four paths, then read once.
 
-    Four writes rather than two so the read has four defining statements to
-    distinguish: one flow per definer, all four sharing endpoints and extents, so
-    ``source_node`` is the only thing that tells them apart.
+    Four writes rather than two so the read has four defining statements: one
+    flow, whose defs row has to keep all four, and four is enough that a dedup
+    keeping one of them is unmistakable.
     """
     return {
         **_program(program_id),
@@ -97,6 +103,11 @@ def _selector(extra: tuple[str, ...]) -> tuple[str, ...]:
     return () if chosen else ("--all",)
 
 
+def _rows(path: Path) -> tuple[dict, ...]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return tuple(json.loads(line) for line in lines)
+
+
 @pytest.fixture
 def corpus(tmp_path: Path):
     """An ASG directory, an output directory, and a config naming both."""
@@ -126,30 +137,32 @@ def test_a_run_writes_nodes_and_edges_and_exits_zero(corpus):
     assert edge["kind"] == "FLOWS_TO"
 
 
-def test_four_flows_differing_only_in_their_definer_all_reach_the_artefact(corpus):
-    """The whole point of the pass, end to end: which statement defined the value.
+def test_one_flow_written_on_four_paths_is_one_edge_and_one_defs_row(corpus):
+    """The whole point of the split, end to end: four definers, one flow.
 
-    The unit tests cover the two halves separately -- emit puts source_node in
-    attrs, GraphWriter keys FLOWS_TO on attrs -- and this is the only assertion
-    that the artefact a consumer reads carries all four. Endpoint-level dedup
-    wrote one of these rows and dropped three, and which one survived varied
-    between runs."""
+    Pinned to the edge, these were four rows saying the same thing about the same
+    bytes, and endpoint-level dedup wrote one of them and dropped three -- which
+    one varying between runs. As a relation of its own the flow is stated once and
+    every definer survives, keyed by the node that moved the value and the range
+    it read."""
     argv, out_dir = corpus({"MEMBERA": json.dumps(_branched("PROGA"))})
 
     assert cli(argv) == 0
 
-    rows = [
-        json.loads(row)
-        for row in (out_dir / "edges.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
     read = [
         row
-        for row in rows
+        for row in _rows(out_dir / "edges.jsonl")
         if (row["source"], row["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
         and row["attrs"]["node"] == "MAIN/1"
     ]
+    (flow,) = read
+    (defs,) = [
+        row
+        for row in _rows(out_dir / "defs.jsonl")
+        if (row["node"], row["extent"]) == ("MAIN/1", flow["attrs"]["source_extent"])
+    ]
 
-    assert sorted(row["attrs"]["source_node"] for row in read) == [
+    assert defs["definers"] == [
         "MAIN/0.else.0.else.0",
         "MAIN/0.else.0.then.0",
         "MAIN/0.then.0.else.0",
@@ -157,14 +170,14 @@ def test_four_flows_differing_only_in_their_definer_all_reach_the_artefact(corpu
     ]
 
 
-def test_two_runs_of_one_member_write_byte_identical_edges(corpus):
+def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
     """An artefact that differs between identical runs cannot be diffed.
 
-    The order of the four rows above comes out of frozensets -- the sources at an
-    extent, the definers of one source -- so it varies with the per-process hash
-    seed, which is why this runs the build in subprocesses rather than in-process
-    where the seed is fixed. Four definers give twenty-four orders, so distinct
-    seeds agreeing by chance is not what a pass here means."""
+    Both streams come out of frozensets -- the sources at an extent, the definers
+    of one source -- so their order varies with the per-process hash seed, which
+    is why this runs the build in subprocesses rather than in-process where the
+    seed is fixed. Four definers give twenty-four orders, so distinct seeds
+    agreeing by chance is not what a pass here means."""
     argv, out_dir = corpus({"MEMBERA": json.dumps(_branched("PROGA"))})
     script = "import sys; from cobble.dataflow.fields.build_corpus import cli; sys.exit(cli(sys.argv[1:]))"
 
@@ -176,7 +189,12 @@ def test_two_runs_of_one_member_write_byte_identical_edges(corpus):
             capture_output=True,
         )
         assert run.returncode == 0, run.stderr.decode()
-        written.append((out_dir / "edges.jsonl").read_bytes())
+        written.append(
+            tuple(
+                (out_dir / name).read_bytes()
+                for name in (EDGES_FILE, EXTENTS_FILE, DEFS_FILE)
+            )
+        )
 
     assert len(set(written)) == 1
 
@@ -254,15 +272,26 @@ def test_a_lowered_floor_accepts_the_same_run(corpus):
     assert cli(argv) == 0
 
 
-def test_expansion_adds_the_aliasing_views_to_each_edge(corpus):
-    argv, out_dir = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--expand",)
-    )
+def test_the_declared_extents_go_to_their_own_file_not_into_the_nodes(corpus):
+    """Geometry a consumer can intersect, beside the graph rather than in it.
+
+    REC is in the extents file and not in the graph: no value moves through a
+    group whose child was the target, so it is a declaration and not a flow
+    fact -- and a reader intersecting the group write against it is exactly what
+    the file is for."""
+    argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
 
     assert cli(argv) == 0
 
-    edge = json.loads((out_dir / "edges.jsonl").read_text(encoding="utf-8"))
-    assert edge["attrs"]["target_fields"] == "WS-B,REC"
+    declared = {field["id"]: field for field in _rows(out_dir / EXTENTS_FILE)}
+    assert declared["PROGA.WS-B"]["extents"] == ["WS-B@working_storage[4:8]"]
+    assert declared["PROGA.REC"]["extents"] == ["REC@working_storage[0:8]"]
+    assert (declared["PROGA.WS-B"]["level"], declared["PROGA.WS-B"]["usage"]) == (
+        5,
+        "DISPLAY",
+    )
+    assert declared["PROGA.REC"]["level"] == 1
+    assert [node["attrs"] for node in _rows(out_dir / NODES_FILE)] == [{}, {}]
 
 
 def test_a_named_member_is_the_only_one_analysed(corpus):
@@ -359,7 +388,7 @@ def test_a_sweep_budget_and_an_iteration_factor_at_once_are_a_usage_error(corpus
 
 def test_no_selection_is_a_usage_error(corpus):
     """A whole-corpus pass is asked for, never defaulted into."""
-    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--expand",))
+    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
     without_selector = [argument for argument in argv if argument != "--all"]
 
     with pytest.raises(SystemExit) as failure:

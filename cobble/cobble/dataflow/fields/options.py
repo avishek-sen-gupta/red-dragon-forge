@@ -22,7 +22,6 @@ class AnalysisOptions:
     one.
     """
 
-    expand: bool = False
     sweeps: int = 0
     factor: int = ITERATION_FACTOR
 

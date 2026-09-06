@@ -8,7 +8,7 @@ extent gets two names across runs.
 from __future__ import annotations
 
 import pytest
-from cobble.dataflow.fields.naming import covering_fields, smallest_covering
+from cobble.dataflow.fields.naming import smallest_covering
 from cobble.dataflow.fields.state import NOWHERE
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -86,44 +86,6 @@ def test_the_nowhere_sentinel_keeps_its_synthetic_origin_name(
     """
     asg = program_of([], data_fields=nested)
     assert smallest_covering(NOWHERE, index_of(asg)) == NOWHERE.field_name
-    assert covering_fields(NOWHERE, index_of(asg)) == ()
-
-
-def test_covering_fields_expands_to_every_field_touched_smallest_first(
-    program_of, index_of, nested
-):
-    asg = program_of([], data_fields=nested)
-    assert covering_fields(_extent(8, 4), index_of(asg)) == (
-        "MST-COUNT",
-        "MST-BODY",
-        "REC-MASTER",
-    )
-
-
-def test_covering_fields_includes_a_field_the_extent_only_partly_touches(
-    program_of, index_of, nested
-):
-    """Expansion is overlap, not containment: a straddling extent touches both."""
-    asg = program_of([], data_fields=nested)
-    touched = covering_fields(_extent(6, 4), index_of(asg))
-    assert {"MST-KEY", "MST-COUNT"} <= set(touched)
-
-
-def test_a_redefines_view_appears_in_the_expansion(program_of, index_of, field):
-    asg = program_of(
-        [],
-        data_fields=[
-            field(1, "REC-A", offset=0, children=[field(5, "WS-A", "X(4)", offset=0)]),
-            field(
-                1,
-                "REC-B",
-                offset=0,
-                redefines="REC-A",
-                children=[field(5, "WS-ALT", "X(4)", offset=0)],
-            ),
-        ],
-    )
-    assert "WS-ALT" in covering_fields(_extent(0, 4), index_of(asg))
 
 
 def test_an_extent_in_another_region_names_nothing_in_working_storage(
@@ -145,7 +107,6 @@ def test_an_extent_in_another_region_names_nothing_in_working_storage(
         field_name="?",
     )
     assert smallest_covering(linkage, index_of(asg)) == "LK-A"
-    assert covering_fields(linkage, index_of(asg)) == ("LK-A", "REC-L")
 
 
 def test_a_clamped_extent_still_names_the_table_it_spans(program_of, index_of, field):
@@ -169,4 +130,3 @@ def test_a_clamped_extent_still_names_the_table_it_spans(program_of, index_of, f
         field_name="WS-T",
     )
     assert smallest_covering(clamped, index_of(asg)) == "REC-T"
-    assert "WS-T" in covering_fields(clamped, index_of(asg))

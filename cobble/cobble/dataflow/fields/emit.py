@@ -1,25 +1,34 @@
-"""FIELD nodes and FLOWS_TO edges from one program's flow.
+"""FIELD nodes, FLOWS_TO edges, and the two side tables, from one program's flow.
 
-An edge carries its two extents and two CFG node ids -- ``node`` moved the value,
-``source_node`` defined it -- and not the guard condition; a reader wanting the
-condition asks srccfg for either node's guards. The two differ whenever the value
-was written somewhere other than where it flowed from, which is the ordinary case
-for a group write feeding a child field, so an edge naming only the mover cannot
-say where the value came from. Carrying it would multiply the lattice by the number of distinct
-guard paths and would depend on the path-enumeration walk bead
-red-dragon-forge-3ao found broken.
+An edge carries its two byte ranges and the CFG node that moved them, and nothing
+else. Not the guard condition: carrying it would multiply the lattice by the
+number of distinct guard paths and would depend on the path-enumeration walk bead
+red-dragon-forge-3ao found broken, so a reader wanting the condition asks srccfg
+for the node's guards. Not the defining node either -- one source range at one
+node commonly has several reaching definers, so that relation is a table of its
+own and an edge that wants it joins on (node, source_extent).
 
-Expansion -- one attribute naming every aliasing view of an extent -- is opt-in
-for the same reason naming lives outside the lattice: a record and its REDEFINES
-views multiply the names of one byte range without adding a fact about flow.
+What an edge cannot avoid restating is its endpoints' names. The graph model needs
+node ids, and the id of a range is the smallest declared field covering it, so the
+two ids are derived from the two ranges and the layout rather than being facts of
+their own. That is the one denormalisation the model imposes; everything else
+derivable was removed. Which OTHER fields a moved range touches, which children a
+group write filled, whether byte k of the target came from byte k of the source --
+all of it follows from the ranges plus the declared extents, published once per
+field in their own artefact because where a field *is* is true whether or not a
+value ever moved through it. See side_tables.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from cobble.corpus_index import FileLocationResolver
 from cobble.dataflow.fields.extent import CellIndex
+from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.fixpoint import FlowEdge, ProgramFlow
-from cobble.dataflow.fields.naming import covering_fields, smallest_covering
+from cobble.dataflow.fields.naming import smallest_covering
+from cobble.dataflow.fields.side_tables import FieldExtents, ReachingDefs
 from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,
@@ -27,6 +36,21 @@ from cobble.knowledge_graph.graph_types import (
     GraphNode,
     NodeKind,
 )
+
+
+@dataclass(frozen=True)
+class ProgramRecords:
+    """Everything one member contributes, split by the artefact it belongs in.
+
+    Named fields rather than a tuple the caller unpacks positionally: the graph
+    halves go to one sink and each side table to its own, and which is which
+    should not depend on the reader remembering an order.
+    """
+
+    nodes: tuple[GraphNode, ...]
+    edges: tuple[GraphEdge, ...]
+    extents: tuple[FieldExtents, ...]
+    defs: tuple[ReachingDefs, ...]
 
 
 def field_id(program: str, name: str) -> str:
@@ -41,57 +65,51 @@ def _source_name(edge: FlowEdge, index: CellIndex) -> str:
     ``field_name`` is empty -- so this branch is what stops a synthetic source
     from being emitted as ``<program>.``.
     """
-    if edge.source.origin:
-        return edge.source.origin
-    return smallest_covering(edge.source.extent, index)
+    if edge.origin:
+        return edge.origin
+    return smallest_covering(edge.source, index)
 
 
 def _source_extent(edge: FlowEdge) -> str:
-    return "" if edge.source.origin else str(edge.source.extent)
+    return "" if edge.origin else extent_text(edge.source)
 
 
-def _expansion(edge: FlowEdge, index: CellIndex, expand: bool) -> dict[str, AttrValue]:
-    if not expand:
-        return {}
-    return {
-        "target_fields": ",".join(covering_fields(edge.target, index)),
-        "source_fields": ",".join(covering_fields(edge.source.extent, index)),
-    }
-
-
-def _attrs(edge: FlowEdge, index: CellIndex, expand: bool) -> dict[str, AttrValue]:
+def _attrs(edge: FlowEdge) -> dict[str, AttrValue]:
     return {
         "node": edge.node,
-        "source_node": edge.source.node,
         "source_extent": _source_extent(edge),
-        "target_extent": str(edge.target),
-        **_expansion(edge, index, expand),
+        "target_extent": extent_text(edge.target),
     }
 
 
-def _edge(edge: FlowEdge, program: str, index: CellIndex, expand: bool) -> GraphEdge:
+def _edge(edge: FlowEdge, program: str, index: CellIndex) -> GraphEdge:
     return GraphEdge(
         source=field_id(program, _source_name(edge, index)),
         source_kind=NodeKind.FIELD,
         target=field_id(program, smallest_covering(edge.target, index)),
         target_kind=NodeKind.FIELD,
         kind=EdgeKind.FLOWS_TO,
-        attrs=_attrs(edge, index, expand),
+        attrs=_attrs(edge),
     )
 
 
 def graph_records(
     flow: ProgramFlow,
     index: CellIndex,
-    expand: bool,
     locations: FileLocationResolver,
-) -> tuple[tuple[GraphNode, ...], tuple[GraphEdge, ...]]:
-    """Every FLOWS_TO edge of one program, with a FIELD node per endpoint.
+) -> ProgramRecords:
+    """One program's FLOWS_TO edges, a FIELD node per endpoint, every field's extents.
 
-    The nodes are derived from the edges rather than from the program's fields:
-    a field no value ever reaches and none ever leaves is a declaration, not a
-    dataflow fact, and emitting one node per declared field would put the
-    corpus's whole 5.6M-cell expansion into the graph.
+    The nodes stay derived from the edges: a field no value ever reaches and none
+    ever leaves is a declaration, not a dataflow fact, and a node per declared
+    field would put the whole of a member's storage into the graph -- roughly
+    half again as many nodes as it has endpoints, on the member measured.
+
+    The declarations still have to be published, because an edge names the
+    smallest field covering the bytes it moved: a group-level write puts the
+    group in the graph and leaves every child it filled out, and the child is
+    what a reader is asking about. ``extents`` is how that reader gets it back,
+    from its own file rather than from the graph.
 
     ``locations`` is asked even though every FIELD answer is the same constant.
     A node's location must come from the one resolver table or the reason it
@@ -99,13 +117,53 @@ def graph_records(
     and a node built without asking is NOT_ATTEMPTED -- which would claim no
     index was in reach when one was.
     """
-    edges = tuple(_edge(edge, flow.program, index, expand) for edge in flow.edges)
+    edges = tuple(_edge(edge, flow.program, index) for edge in flow.edges)
     ids = tuple(
         dict.fromkeys(
             node_id for edge in edges for node_id in (edge.source, edge.target)
         )
     )
-    return tuple(_node(node_id, locations) for node_id in ids), edges
+    return ProgramRecords(
+        nodes=tuple(_node(node_id, locations) for node_id in ids),
+        edges=edges,
+        extents=_declared_extents(index, flow.program),
+        defs=_reaching_defs(flow),
+    )
+
+
+def _declared_extents(index: CellIndex, program: str) -> tuple[FieldExtents, ...]:
+    """Every declared name in the program, with how and where it was declared.
+
+    Declared, not reached: the point of the file is the fields the graph does
+    NOT mention, so a consumer can intersect a group write's extent against them
+    and name the children it covered.
+
+    Level and usage come off the first cell because every occurrence of one
+    declaration shares both. A name two records declare at different levels keeps
+    the first, which is the same tie ``smallest_covering`` already resolves one
+    way for the ids in the graph.
+    """
+    return tuple(
+        FieldExtents(
+            id=field_id(program, name),
+            level=cells[0].level,
+            usage=cells[0].usage,
+            extents=tuple(extent_text(index.extent_of(cell)) for cell in cells),
+        )
+        for name, cells in index.by_name.items()
+    )
+
+
+def _reaching_defs(flow: ProgramFlow) -> tuple[ReachingDefs, ...]:
+    """The definitions reaching each read, in the wire form of their extents."""
+    return tuple(
+        ReachingDefs(
+            node=entry.node,
+            extent=extent_text(entry.extent),
+            definers=entry.definers,
+        )
+        for entry in flow.defs
+    )
 
 
 def _node(node_id: str, locations: FileLocationResolver) -> GraphNode:

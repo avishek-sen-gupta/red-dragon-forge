@@ -44,9 +44,11 @@ cobble-depgraph-render = "cobble.dataflow.depgraph.render:main"
 cobble-srccfg-build = "cobble.dataflow.srccfg.closure:main"
 cobble-srccfg-query = "cobble.dataflow.srccfg.query:main"
 cobble-srccfg-dot = "cobble.dataflow.srccfg.dot:main"
-# Field-level byte dataflow over the one ASG cache: FIELD nodes and FLOWS_TO
-# edges, intra-program. No JVM.
+# Field-level byte dataflow over the one ASG cache, intra-program, no JVM: the
+# graph halves plus the two side tables the queries join against -- every field's
+# declared extents, and the definitions reaching each read.
 cobble-fields = "cobble.dataflow.fields.build_corpus:main"
+cobble-fields-query = "cobble.dataflow.fields.query:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,

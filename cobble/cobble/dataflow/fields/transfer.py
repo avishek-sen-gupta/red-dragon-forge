@@ -10,23 +10,28 @@ A handler yields writes rather than threading a state through a loop, so the
 order writes land in is the handler's business and the lattice's rules are
 state.write's alone.
 
-Byte-wise distribution applies only where both operands are DISPLAY and the
-target extent is EXACT. A COMP operand has no digit-to-byte correspondence to
-distribute along, and a CLAMPED target does not know which occurrence it lands
-in, so both take the whole source into the whole target instead.
+No handler splits a write across the children of a group. Which of a target's
+bytes came from which of the source's is fixed by the two extents and the
+declared layout: whenever either operand is a group the MOVE is an alphanumeric
+byte copy, so byte k of an EXACT target comes from byte k of the source and the
+tail past the source's end is spaces. That is derivable from the declared
+extents, which publish every field's level and ranges, so a write per child cell
+restated the layout once per flow -- and on a corpus member it was five rows in
+six. A CLAMPED target has no such correspondence, because nothing knows which
+occurrence it lands in, and the artefact marks it so a consumer does not assume
+one.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import reduce
 from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
-from cobble.dataflow.fields.naming import smallest_covering
 from cobble.dataflow.fields.state import (
     CICS_STATE,
     LITERAL,
@@ -49,17 +54,11 @@ from cobol_asg.cobol_statements import (
     StringStatement,
 )
 from cobol_asg.ref_mod import RefModOperand
-from cobol_memory.field_extent import FieldExtent, Precision
+from cobol_memory.field_extent import FieldExtent
 
 # cobol_asg has no statement base class, and its own union leaves out the
 # dialect-parsed EXEC CICS form, so the two have to be spelled together here.
 Statement = CobolStatementType | ExecCicsStatement
-
-LITERAL_SPACES = "LITERAL SPACES"
-
-# A group carries no PICTURE and so no usage of its own; the bridge leaves it
-# empty, which is not the same thing as a non-DISPLAY item.
-_DISPLAY_USAGES = frozenset({"", "DISPLAY"})
 
 _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
 _CICS_CALL_VERBS = frozenset({"LINK", "XCTL"})
@@ -88,77 +87,6 @@ def _synthetic(origin: str, node: str) -> frozenset[Source]:
     return frozenset({Source(origin=origin, extent=NOWHERE, node=node)})
 
 
-def _named(extent: FieldExtent, index: CellIndex) -> FieldExtent:
-    """A byte range labelled by the smallest declared field containing it.
-
-    A slice of a group's extent belongs to whichever member owns those bytes,
-    and that member's name is the only useful thing to report about it.
-    """
-    return replace(extent, field_name=smallest_covering(extent, index))
-
-
-def _sliced(source: FieldExtent, offset: int, wanted: int) -> FieldExtent:
-    """The source bytes one receiving cell takes, clipped to what the source has."""
-    return replace(
-        source,
-        start=source.start + offset,
-        length=min(wanted, source.length - offset),
-    )
-
-
-def _cell_write(
-    source: FieldExtent,
-    target: FieldExtent,
-    cell_extent: FieldExtent,
-    node: str,
-    index: CellIndex,
-) -> Write:
-    """One receiving cell's share of a group move.
-
-    The offset is the difference of two region coordinates. ``Cell.start`` is
-    record-relative and belongs to neither, which is why this reads the cell's
-    extent instead.
-    """
-    offset = cell_extent.start - target.start
-    if offset >= source.length:
-        return Write(cell_extent, _synthetic(LITERAL_SPACES, node))
-    taken = _sliced(source, offset, cell_extent.length)
-    return Write(cell_extent, _from_extents((_named(taken, index),), node))
-
-
-def _distributed(
-    source: FieldExtent,
-    target: FieldExtent,
-    node: str,
-    index: CellIndex,
-) -> Iterator[Write]:
-    """Left-aligned at matching relative offset; the tail past the source is spaces."""
-    covered = index.elementary_within(target)
-    if not covered:
-        return iter((Write(target, _from_extents((source,), node)),))
-    return (
-        _cell_write(source, target, index.extent_of(cell), node, index)
-        for cell in covered
-    )
-
-
-def _is_display(extent: FieldExtent, index: CellIndex) -> bool:
-    return all(
-        cell.usage.upper() in _DISPLAY_USAGES for cell in index.containing(extent)
-    )
-
-
-def _distributes(
-    sources: OperandExtents, target: FieldExtent, index: CellIndex
-) -> bool:
-    return (
-        len(sources.extents) == 1
-        and target.precision is Precision.EXACT
-        and _is_display(target, index)
-        and _is_display(sources.extents[0], index)
-    )
-
-
 def _unresolved_origin(operand: RefModOperand, reason: str) -> str:
     """A literal reads no storage, and neither does LENGTH OF or a FUNCTION."""
     return LITERAL if is_literal(operand.name) else reason.upper()
@@ -169,13 +97,17 @@ def _one_move(
     sources: OperandExtents,
     target: FieldExtent,
     node: str,
-    index: CellIndex,
 ) -> Iterator[Write]:
+    """The whole target from the whole source, or from a named origin.
+
+    One write however deep the target's record is. Which of the target's children
+    took which of the source's bytes is offset arithmetic over the declared
+    extents; see this module's docstring for the rule and side_tables for the
+    layout it runs on.
+    """
     if not sources.extents:
         origin = _unresolved_origin(operand, sources.reason)
         return iter((Write(target, _synthetic(origin, node)),))
-    if _distributes(sources, target, index):
-        return _distributed(sources.extents[0], target, node, index)
     return iter((Write(target, _from_extents(sources.extents, node)),))
 
 
@@ -198,7 +130,7 @@ def _move_writes(
         entry
         for target_operand in _move_targets(statement)
         for target in operand_extents(target_operand, index).extents
-        for entry in _one_move(operand, sources, target, node, index)
+        for entry in _one_move(operand, sources, target, node)
     )
 
 
@@ -209,12 +141,15 @@ def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, 
 def _initialize_writes(
     statement: InitializeStatement, node: str, index: CellIndex
 ) -> Iterator[Write]:
-    return (
-        Write(index.extent_of(cell), _synthetic(LITERAL, node))
-        for operand in _initialize_targets(statement)
-        for group in operand_extents(operand, index).extents
-        for cell in index.elementary_within(group) or index.containing(group)[-1:]
-    )
+    """The group's whole extent, from LITERAL -- not one write per child cell.
+
+    Every child was written, and every child's write said the identical thing:
+    same origin, same defining node, differing only in a target extent the
+    group's own extent already contains. Which children those are is in the
+    declared extents, which a consumer intersects against this one, so the
+    fan-out was a per-edge restatement of the layout.
+    """
+    return _origin_writes(_initialize_targets(statement), LITERAL, node, index)
 
 
 def _union_writes(

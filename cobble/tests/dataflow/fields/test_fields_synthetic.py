@@ -1,0 +1,308 @@
+"""The query surface over a program that was actually compiled from COBOL text.
+
+Everywhere else in this directory the input is an ASG dict or an artefact row,
+which keeps the suite fast but leaves one claim untested: that the byte offsets
+the queries intersect are the ones a real front end produces. A hand-built extent
+agrees with the query by construction. These do not -- the layout here is the
+bridge's arithmetic over a source file, so an offset this suite gets wrong is a
+failure rather than a fixture.
+
+One JVM parse for the module, because that is the cost being amortised: the whole
+pipeline runs once and every test asks a question of the one artefact it wrote.
+
+The layout the source below declares, as the bridge lays it out:
+
+    01 SRC-REC   [0:8]    01 DST-REC  [8:20]    01 SINK   [20:24]
+       05 SRC-A  [0:4]       05 DST-A  [8:12]
+       05 SRC-B  [4:8]       05 DST-B  [12:16]
+    01 ALIAS-REC [0:8]        05 DST-TAIL [16:20]
+       05 WHOLE-EIGHT [0:8]
+
+    01 TAB-REC [24:39]                          01 IDX [39:41] COMP
+       05 TAB-ENTRY OCCURS 3  [24:29] [29:34] [34:39]
+          10 TAB-KEY          [24:26] [29:31] [34:36]
+          10 TAB-VAL  COMP-3  [26:29] [31:34] [36:39]
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+from cobble.dataflow.fields.build_corpus import cli
+from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
+from cobble.dataflow.fields.query import FieldStore, Side, contributed, load, reaches
+
+FORGE = Path(__file__).resolve().parents[4]
+BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
+
+PROGRAM = "SYNTHQ"
+
+SOURCE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. SYNTHQ.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  SRC-REC.
+           05  SRC-A            PIC X(4).
+           05  SRC-B            PIC X(4).
+       01  ALIAS-REC REDEFINES SRC-REC.
+           05  WHOLE-EIGHT      PIC X(8).
+       01  DST-REC.
+           05  DST-A            PIC X(4).
+           05  DST-B            PIC X(4).
+           05  DST-TAIL         PIC X(4).
+       01  SINK                 PIC X(4).
+       01  TAB-REC.
+           05  TAB-ENTRY OCCURS 3 TIMES.
+               10  TAB-KEY      PIC X(2).
+               10  TAB-VAL      PIC S9(5) COMP-3.
+       01  IDX                  PIC 9(4) COMP.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'AAAA' TO SRC-A.
+           MOVE 'BBBB' TO SRC-B.
+           MOVE SRC-REC TO DST-REC.
+           MOVE DST-A TO SINK.
+           MOVE SRC-A TO TAB-KEY (IDX).
+           STOP RUN.
+"""
+
+GROUP_MOVE = "MAIN-PARA/2"
+SINK_MOVE = "MAIN-PARA/3"
+SUBSCRIPT_MOVE = "MAIN-PARA/4"
+
+
+def _bridge_jar() -> Path:
+    """The parse is the only stage that needs a JVM, so it is the only thing that
+    can make this module unrunnable. A missing JAR is an unbuilt workspace, not a
+    failing analysis: ``make jar`` at the root builds it."""
+    found = sorted(FORGE.glob(BRIDGE_GLOB))
+    if not found:
+        pytest.skip(f"no bridge JAR at {BRIDGE_GLOB}; run `make jar`")
+    return found[-1]
+
+
+def _parsed(workspace: Path) -> Path:
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    source = workspace / "src" / f"{PROGRAM}.cbl"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(SOURCE, encoding="utf-8")
+
+    cache = workspace / "parsed"
+    cache.mkdir(parents=True, exist_ok=True)
+    result = parse_one(
+        Job(source, cache / f"{PROGRAM}.json"), str(_bridge_jar()), (), ("cpy",)
+    )
+
+    assert result.ok, result.error
+    return cache
+
+
+def _built(workspace: Path, cache: Path) -> Path:
+    out = workspace / "out"
+    config = workspace / "fields.toml"
+    config.write_text(
+        f'[fields]\nasg_dir = "{cache}"\nout_dir = "{out}"\n', encoding="utf-8"
+    )
+
+    assert cli(["--config", str(config), "--member", PROGRAM]) == 0
+    return out
+
+
+@pytest.fixture(scope="module")
+def artefact(tmp_path_factory) -> Path:
+    workspace = tmp_path_factory.mktemp("synthetic")
+    return _built(workspace, _parsed(workspace))
+
+
+@pytest.fixture(scope="module")
+def store(artefact: Path) -> FieldStore:
+    return load(artefact)
+
+
+def _one(store: FieldStore, name: str):
+    (found,) = store.field(f"{PROGRAM}.{name}")
+    return found
+
+
+def _flow(store: FieldStore, node: str):
+    (found,) = [one for one in store.flows if one.node == node]
+    return found
+
+
+def _range(name: str, low: int, high: int):
+    return byte_range(f"{name}@working_storage[{low}:{high}]", PROGRAM)
+
+
+def test_every_move_in_the_source_produced_an_edge(store):
+    """Five MOVEs, five flows. A statement class the transfer layer stops handling
+    shows up here as a missing flow rather than as a coverage percentage."""
+    assert sorted(one.node for one in store.flows) == [
+        "MAIN-PARA/0",
+        "MAIN-PARA/1",
+        GROUP_MOVE,
+        SINK_MOVE,
+        SUBSCRIPT_MOVE,
+    ]
+
+
+def test_the_bridges_own_offsets_are_what_the_extents_table_holds(store):
+    """The one thing no hand-built fixture can assert: that these are the offsets a
+    front end computes, not the ones a test wrote down."""
+    assert _one(store, "SRC-REC").ranges == (_range("SRC-REC", 0, 8),)
+    assert _one(store, "DST-REC").ranges == (_range("DST-REC", 8, 20),)
+    assert _one(store, "DST-B").ranges == (_range("DST-B", 12, 16),)
+    assert _one(store, "SINK").ranges == (_range("SINK", 20, 24),)
+
+
+def test_a_child_written_only_by_a_group_move_still_has_a_writer(store):
+    """`MOVE SRC-REC TO DST-REC` names neither DST-A nor DST-B anywhere, so a
+    consumer joining on node ids finds no writer for either. This is the reason the
+    surface intersects ranges, asserted against a real parse rather than a fixture.
+    """
+    assert [
+        one.node for one in store.touching(_one(store, "DST-A").ranges, Side.TARGET)
+    ] == [GROUP_MOVE]
+    assert [
+        one.node for one in store.touching(_one(store, "DST-B").ranges, Side.TARGET)
+    ] == [GROUP_MOVE]
+    assert not [one for one in store.flows if one.target.endswith(".DST-A")]
+
+
+def test_which_bytes_each_child_of_the_group_received_is_recovered(store):
+    """The per-child fan-out the emitter no longer writes. DST-A takes SRC-REC's
+    first four bytes and DST-B the next four, derived from the two ranges."""
+    flow = _flow(store, GROUP_MOVE)
+
+    assert contributed(flow, _one(store, "DST-A").ranges[0]) == _range("SRC-REC", 0, 4)
+    assert contributed(flow, _one(store, "DST-B").ranges[0]) == _range("SRC-REC", 4, 8)
+
+
+def test_the_child_past_the_sources_end_received_spaces_and_not_a_flow(store):
+    """DST-REC is twelve bytes and SRC-REC eight, so DST-TAIL is padding. A range
+    here would claim source bytes that do not exist."""
+    assert contributed(_flow(store, GROUP_MOVE), _one(store, "DST-TAIL").ranges[0]) == (
+        NO_RANGE
+    )
+
+
+def test_a_reader_of_the_group_reads_every_field_inside_it(store):
+    assert [
+        one.node for one in store.touching(_one(store, "SRC-A").ranges, Side.SOURCE)
+    ] == [GROUP_MOVE, SUBSCRIPT_MOVE]
+
+
+def test_a_transitive_walk_crosses_the_group_the_edge_named(store):
+    """SRC-A reaches SINK in two hops, and the middle of that path is a field no
+    edge names: DST-A is written as part of DST-REC and read on its own."""
+    assert reaches(store, _one(store, "SRC-A").ranges, Side.SOURCE, 6) == {
+        "SYNTHQ.DST-REC": 1,
+        "SYNTHQ.TAB-REC": 1,
+        "SYNTHQ.SINK": 2,
+    }
+
+
+def test_the_walk_backwards_from_the_sink_reaches_the_record_it_came_from(store):
+    """WHOLE-EIGHT and not SRC-REC, which is worth stating because the statement
+    the walk crossed reads SRC-REC. Three declared names own those eight bytes and
+    ``naming`` breaks the tie towards the deepest, so the edge's endpoint id is the
+    redefinition. The extent it carries still spells SRC-REC, and every predicate
+    here reads the range rather than the id, so no answer depends on which name won
+    -- but a reader of the id alone is told a name their program never moved.
+    """
+    assert reaches(store, _one(store, "SINK").ranges, Side.TARGET, 6) == {
+        "SYNTHQ.DST-A": 1,
+        "SYNTHQ.WHOLE-EIGHT": 2,
+    }
+    assert _flow(store, GROUP_MOVE).source_text.startswith("SRC-REC@")
+
+
+def test_a_record_contains_the_fields_declared_inside_it(store):
+    assert [one.id for one in store.contains(_one(store, "DST-REC"))] == [
+        "SYNTHQ.DST-A",
+        "SYNTHQ.DST-B",
+        "SYNTHQ.DST-TAIL",
+    ]
+
+
+def test_a_redefinition_of_a_record_reports_inside_it_and_its_own_level_does_not(store):
+    """WHOLE-EIGHT owns bytes SRC-REC owns, at a deeper level, so it is inside it.
+    ALIAS-REC owns the same bytes at the same level, and the level is the only
+    thing separating a redefining record from the one it redefines."""
+    assert [one.id for one in store.contains(_one(store, "SRC-REC"))] == [
+        "SYNTHQ.SRC-A",
+        "SYNTHQ.WHOLE-EIGHT",
+        "SYNTHQ.SRC-B",
+    ]
+
+
+def test_a_table_entrys_field_owns_one_range_per_occurrence(store):
+    """OCCURS 3, so three ranges -- and the group holding all three contains it
+    while nothing holding only one of them would."""
+    assert _one(store, "TAB-KEY").ranges == (
+        _range("TAB-KEY", 24, 26),
+        _range("TAB-KEY", 29, 31),
+        _range("TAB-KEY", 34, 36),
+    )
+    assert [one.id for one in store.containers(_one(store, "TAB-KEY"))] == [
+        "SYNTHQ.TAB-REC",
+        "SYNTHQ.TAB-ENTRY",
+    ]
+
+
+def test_a_packed_field_is_published_with_the_usage_that_makes_its_bytes_readable(
+    store,
+):
+    """A partial overlap of a COMP-3 field is not a partial read of its value, so
+    the usage has to reach a consumer -- who cannot recompute it from a range."""
+    assert _one(store, "TAB-VAL").usage == "COMP-3"
+    assert _one(store, "IDX").usage == "COMP"
+    assert _one(store, "TAB-KEY").usage == "DISPLAY"
+
+
+def test_a_computed_subscript_lands_somewhere_in_the_table_and_says_so(store):
+    """IDX is not a literal, so the write covers all three occurrences and is
+    marked clamped. A consumer reading it as exact would report two occurrences
+    overwritten that may not have been."""
+    flow = _flow(store, SUBSCRIPT_MOVE)
+
+    assert not flow.target_range.exact
+    assert (flow.target_range.start, flow.target_range.end) == (24, 36)
+    assert flow.target_text.endswith("~")
+
+
+def test_a_clamped_target_gives_the_whole_source_rather_than_an_offset(store):
+    """Nothing knows which occurrence was written, so nothing can say which of the
+    source's bytes a given occurrence received."""
+    flow = _flow(store, SUBSCRIPT_MOVE)
+
+    assert contributed(flow, _one(store, "TAB-KEY").ranges[0]) == flow.source_range
+
+
+def test_the_definers_of_a_group_read_are_the_writes_that_filled_its_children(store):
+    """Both literal moves reach the group read, and neither of them names SRC-REC:
+    the join is on the range the read covers, so a write to any part of it counts.
+    """
+    assert store.definers_of(_flow(store, GROUP_MOVE)) == ("MAIN-PARA/0", "MAIN-PARA/1")
+
+
+def test_the_definer_of_a_child_read_is_the_group_write_that_filled_it(store):
+    assert store.definers_of(_flow(store, SINK_MOVE)) == (GROUP_MOVE,)
+
+
+def test_the_run_settled_and_explained_every_write_it_found(artefact: Path):
+    """A synthetic program with no loops has no reason not to settle, and no
+    statement class here is one the transfer layer may skip. Either changing is a
+    regression this suite should name before a corpus run has to."""
+    rows = tuple(
+        json.loads(line)
+        for line in (artefact / "extents.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+
+    assert len(rows) == 15
+    assert {row["id"] for row in rows} >= {"SYNTHQ.TAB-VAL", "SYNTHQ.ALIAS-REC"}

@@ -39,16 +39,3 @@ def smallest_covering(extent: FieldExtent, index: CellIndex) -> str:
     if not covering:
         return extent.field_name
     return min(covering, key=_rank).name
-
-
-def covering_fields(extent: FieldExtent, index: CellIndex) -> tuple[str, ...]:
-    """Every field the extent touches, smallest first, REDEFINES views included.
-
-    Overlap, not containment: a partial touch is still a touch, which is what
-    makes this the answer when alias information is the question rather than a
-    single label. Opt-in, because it is one name per aliasing view.
-    """
-    touched = tuple(
-        cell for cell in index.ordered if index.extent_of(cell).may_alias(extent)
-    )
-    return tuple(dict.fromkeys(cell.name for cell in sorted(touched, key=_rank)))

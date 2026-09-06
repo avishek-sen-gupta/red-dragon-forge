@@ -4,6 +4,20 @@ No JVM: the ASG cache is the whole input. A member that raises is reported and t
 run continues, because the answer wanted from a corpus pass is "which members are
 missing from this output", and a run that aborts answers that for one member only.
 
+Four files, so that the graph holds only what nothing outside it could state:
+
+  nodes.jsonl    the FIELD endpoints, no attributes
+  edges.jsonl    one FLOWS_TO per (node, source extent, target extent)
+  extents.jsonl  every declared name's level, usage, and byte ranges
+  defs.jsonl     the definitions reaching each (node, source extent)
+
+The two side tables are relations of their own rather than edge attributes
+because both are many-to-one against a flow: one read has as many reaching
+definitions as it has paths, and one byte range as many declared names as it has
+groups and redefinitions over it. Held on the edge they were duplicated per path
+and deduplicated by endpoint, which dropped all but one. ``fields.query`` joins
+them back; nothing about a flow is recoverable only from a fan-out.
+
 Intra-program only: a CALL or LINK contributes a synthetic %CALL:<target> source
 and no callee summary. Cross-program flow is a separate stage, so naming several
 members analyses each one independently -- no edge crosses a program.
@@ -46,6 +60,13 @@ from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.fixpoint import analysed
 from cobble.dataflow.fields.options import ITERATION_FACTOR, AnalysisOptions
+from cobble.dataflow.fields.side_tables import (
+    FieldExtents,
+    JsonlWriter,
+    ReachingDefs,
+    defs_row,
+    extent_row,
+)
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobol_asg.asg_types import CobolASG
@@ -54,6 +75,8 @@ logger = logging.getLogger(__name__)
 
 NODES_FILE = "nodes.jsonl"
 EDGES_FILE = "edges.jsonl"
+EXTENTS_FILE = "extents.jsonl"
+DEFS_FILE = "defs.jsonl"
 DEFAULT_FLOOR = 0.60
 
 
@@ -71,6 +94,8 @@ class MemberResult:
     program: str = ""
     nodes: tuple[GraphNode, ...] = ()
     edges: tuple[GraphEdge, ...] = ()
+    extents: tuple[FieldExtents, ...] = ()
+    defs: tuple[ReachingDefs, ...] = ()
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
@@ -132,12 +157,14 @@ def _analysed_member(
         return MemberResult(
             member=path.stem, program=flow.program, skipped=flow.skipped
         )
-    nodes, edges = graph_records(flow, index, options.expand, locations)
+    records = graph_records(flow, index, locations)
     return MemberResult(
         member=path.stem,
         program=flow.program,
-        nodes=nodes,
-        edges=edges,
+        nodes=records.nodes,
+        edges=records.edges,
+        extents=records.extents,
+        defs=records.defs,
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
@@ -184,8 +211,27 @@ def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
     )
 
 
-def _written(writer: GraphWriter, result: MemberResult) -> MemberResult:
-    writer.add_all(result.nodes, result.edges)
+@dataclass(frozen=True)
+class _Sinks:
+    """All four artefacts of one run.
+
+    Separate files because only two of them are graph facts: where a field is
+    declared, and which statements could have last written a range, are both true
+    of a program whether or not anything flowed. See side_tables.
+    """
+
+    graph: GraphWriter
+    extents: JsonlWriter
+    defs: JsonlWriter
+
+    def add_result(self, result: MemberResult) -> None:
+        self.graph.add_all(result.nodes, result.edges)
+        self.extents.add_rows(map(extent_row, result.extents))
+        self.defs.add_rows(map(defs_row, result.defs))
+
+
+def _written(sinks: _Sinks, result: MemberResult) -> MemberResult:
+    sinks.add_result(result)
     return result
 
 
@@ -239,7 +285,7 @@ def _logged_member(
 
 
 def _run(
-    writer: GraphWriter,
+    sinks: _Sinks,
     paths: Sequence[Path],
     options: AnalysisOptions,
     locations: FileLocationResolver,
@@ -247,7 +293,7 @@ def _run(
     return reduce(
         lambda totals, numbered: _folded(
             totals,
-            _written(writer, _logged_member(numbered, len(paths), options, locations)),
+            _written(sinks, _logged_member(numbered, len(paths), options, locations)),
         ),
         enumerate(paths, start=1),
         RunTotals(),
@@ -306,6 +352,10 @@ def _writer(config: FieldsConfig, locations: CorpusIndex) -> GraphWriter:
     )
 
 
+def _side_writer(config: FieldsConfig, name: str) -> JsonlWriter:
+    return JsonlWriter(config.out_dir / name)
+
+
 def _selected(config: FieldsConfig, members: Sequence[str]) -> tuple[Path, ...]:
     """The named members' cache files, or every one the cache holds.
 
@@ -323,7 +373,6 @@ def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
 
 def _options(arguments: argparse.Namespace) -> AnalysisOptions:
     return AnalysisOptions(
-        expand=arguments.expand,
         sweeps=arguments.sweeps,
         factor=arguments.iteration_factor,
     )
@@ -341,8 +390,15 @@ def _analysed_run(
     """
     config.out_dir.mkdir(parents=True, exist_ok=True)
     locations = CorpusIndex()
-    with cached_asg_dialect_parsers_registered(), _writer(config, locations) as writer:
-        totals = _run(writer, paths, _options(arguments), locations)
+    with (
+        cached_asg_dialect_parsers_registered(),
+        _writer(config, locations) as graph,
+        _side_writer(config, EXTENTS_FILE) as extents,
+        _side_writer(config, DEFS_FILE) as defs,
+    ):
+        totals = _run(
+            _Sinks(graph, extents, defs), paths, _options(arguments), locations
+        )
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
 
@@ -378,7 +434,6 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
-    parser.add_argument("--expand", action="store_true")
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
         "--iteration-factor",

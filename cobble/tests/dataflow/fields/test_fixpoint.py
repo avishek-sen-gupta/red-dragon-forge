@@ -76,8 +76,28 @@ def _move(source: str, target: str) -> dict:
 
 def _pairs(flow) -> set[tuple[str, str]]:
     return {
-        (edge.source.origin or edge.source.extent.field_name, edge.target.field_name)
+        (edge.origin or edge.source.field_name, edge.target.field_name)
         for edge in flow.edges
+    }
+
+
+def _definers(flow, name: str) -> set[str]:
+    """Who could have written what the reads of ``name`` consumed.
+
+    The join the artefact's consumers make: an edge says which node moved the
+    bytes, and the defs table keyed by that node and the source range says which
+    nodes could have put them there.
+    """
+    reads = {
+        (edge.node, edge.source)
+        for edge in flow.edges
+        if edge.target.field_name == name
+    }
+    return {
+        definer
+        for entry in flow.defs
+        if (entry.node, entry.extent) in reads
+        for definer in entry.definers
     }
 
 
@@ -97,18 +117,18 @@ def _if(condition: str, then: list[dict], otherwise: list[dict]) -> dict:
     }
 
 
-def test_the_edges_of_one_statement_come_back_in_a_stable_order(flow_of):
-    """The order the walk emits must not depend on the per-process hash seed.
+def test_a_read_of_a_field_written_on_four_paths_is_one_edge_and_four_definers(
+    flow_of,
+):
+    """Four arms wrote WS-A; the read of it moved one range, so it is one flow.
 
-    The sources at an extent are a frozenset and the definers of one source are
-    another, so a read of a field written on four paths yields four edges in
-    whichever order those sets happen to iterate. Two runs of the same walk over
-    the same member then wrote the same facts in a different order, and an
-    artefact that differs between identical runs cannot be diffed across a corpus
-    -- which is how a regression in this pipeline gets caught.
-
-    Four arms rather than two so the assertion is not one coin flip: an unsorted
-    walk agrees with this only when all four happen to iterate in order.
+    The definers are the four arms, and they belong to the defs table because
+    they say nothing about the bytes that moved -- the same flow four times over.
+    Order matters as much as content: the sources at an extent are a frozenset
+    and so are the definers of one, so an unsorted walk writes the same facts in
+    a different order on every process, and an artefact that differs between
+    identical runs cannot be diffed across a corpus. Four arms rather than two so
+    the assertion is not one coin flip.
     """
     flow = flow_of(
         [
@@ -127,8 +147,12 @@ def test_the_edges_of_one_statement_come_back_in_a_stable_order(flow_of):
     )
     read = tuple(edge for edge in flow.edges if edge.target.field_name == "WS-B")
 
-    assert len({edge.source.node for edge in read}) == 4
-    assert list(read) == sorted(read, key=repr)
+    assert len(read) == 1
+    assert len(_definers(flow, "WS-B")) == 4
+    assert all(list(entry.definers) == sorted(entry.definers) for entry in flow.defs)
+    for node in {edge.node for edge in flow.edges}:
+        at_node = [edge for edge in flow.edges if edge.node == node]
+        assert at_node == sorted(at_node, key=repr)
 
 
 def test_a_chain_within_one_paragraph_yields_both_edges(flow_of):
@@ -194,8 +218,7 @@ def test_a_loop_carried_definition_reaches_the_read_above_it(flow_of):
             },
         ]
     )
-    reads = tuple(edge for edge in flow.edges if edge.target.field_name == "WS-C")
-    assert {edge.source.node for edge in reads} == {"LOOP-PARA/1"}
+    assert _definers(flow, "WS-C") == {"LOOP-PARA/1"}
 
 
 def test_a_paragraph_performed_from_two_sites_is_not_analysed_per_call_path(flow_of):
@@ -219,9 +242,10 @@ def test_a_paragraph_performed_from_two_sites_is_not_analysed_per_call_path(flow
 def test_a_read_after_a_branch_carries_both_arms_as_definers(flow_of):
     """A node reached down two paths is one node joined, and the join is visible.
 
-    The merge reads WS-C, which either arm may have written, so it yields one
-    edge per defining node -- not one edge per path through the program, and not
-    a single edge that has forgotten where the value came from.
+    The merge reads WS-C, which either arm may have written. One flow, because
+    one range moved; both arms named, because the defs table is where a reader
+    asks -- not one edge per path through the program, and not an artefact that
+    has forgotten where the value came from.
     """
     flow = flow_of(
         [
@@ -241,8 +265,8 @@ def test_a_read_after_a_branch_carries_both_arms_as_definers(flow_of):
     )
     assert {("WS-A", "WS-C"), ("WS-B", "WS-C"), ("WS-C", "WS-A")} <= _pairs(flow)
     merged = tuple(edge for edge in flow.edges if edge.node == "MAIN/1")
-    assert len(merged) == 2
-    assert len({edge.source.node for edge in merged}) == 2
+    assert len(merged) == 1
+    assert len(_definers(flow, "WS-A")) == 2
 
 
 def test_every_resolvable_write_is_covered_in_a_program_with_no_unknown_names(flow_of):
@@ -410,13 +434,10 @@ def test_one_sweep_loses_a_definition_the_loop_carries_backwards(flow_of):
         },
     ]
 
-    def definers(flow) -> set[str]:
-        return {
-            edge.source.node for edge in flow.edges if edge.target.field_name == "WS-C"
-        }
-
-    assert definers(flow_of(paragraphs)) == {"LOOP-PARA/1"}
-    assert definers(flow_of(paragraphs, AnalysisOptions(sweeps=1))) == {"LOOP-PARA/0"}
+    assert _definers(flow_of(paragraphs), "WS-C") == {"LOOP-PARA/1"}
+    assert _definers(flow_of(paragraphs, AnalysisOptions(sweeps=1)), "WS-C") == {
+        "LOOP-PARA/0"
+    }
 
 
 def test_a_sweep_walk_that_runs_out_of_budget_says_so(loop_paragraphs, flow_of):
