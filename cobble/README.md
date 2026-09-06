@@ -335,6 +335,55 @@ Exit status is the gate:
 The JSON on stdout reports five counts: bare, subscripted, ref-modified, total,
 unreadable. The human summary goes to stderr.
 
+### Field-level byte dataflow
+
+```bash
+uv run cobble-fields --config config/fields.toml   # copy config/fields.example.toml
+```
+
+Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
+writes `FIELD` nodes and `FLOWS_TO` edges to `<out_dir>/{nodes,edges}.jsonl`. A
+`FIELD` id is `<program>.<field>`, because a field name is only unique within a
+program: two copybooks routinely give one piece of storage two names. Each edge
+carries both byte extents and the CFG node id that wrote them, and deliberately
+not the guard condition — a reader asks `cobble-srccfg` for that node's guards
+instead, which keeps conditions out of the lattice they would otherwise multiply.
+
+The config is its own table, holding only what this stage reads:
+
+```toml
+[fields]
+asg_dir = "out/asg"
+out_dir = "out/fields"
+```
+
+`--min-coverage` (default 0.60) is the floor for the fraction of writes the
+analysis resolved to storage; `--expand` adds `source_fields`/`target_fields` to
+each edge, naming every field that aliases the extent. Expansion is opt-in
+because a record and its `REDEFINES` views multiply the names of one byte range
+without adding a fact about flow. The human report goes to stderr, a JSON
+summary to stdout.
+
+Exit status is the gate:
+
+| exit | meaning |
+| ---- | ------- |
+| 0 | every member analysed, coverage at or above the floor |
+| 1 | coverage below the floor |
+| 2 | ASG directory not found, or config missing its `[fields]` table |
+| 3 | one or more members skipped, unreadable, or colliding on program_id |
+
+**Intra-program only.** A `CALL` or `LINK` contributes a synthetic
+`%CALL:<target>` source and no callee summary; cross-program flow is a separate
+stage. A program_id two members declare is exit 3 rather than a rename, since
+one shared `edges.jsonl` has no filename to qualify — both members' field ids
+would silently merge into one namespace.
+
+`tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
+over-approximates, `must_cover` under-approximates), the per-statement transfer
+functions, the node-keyed fixpoint, extent-to-name resolution, what an edge
+carries, and the corpus pass's exit codes.
+
 ### Render the HTML visualization
 
 ```bash

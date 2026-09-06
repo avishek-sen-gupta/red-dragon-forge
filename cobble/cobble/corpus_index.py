@@ -18,12 +18,15 @@ that was a genuine import cycle (jackal.jcl_graph -> corpus_index ->
 jackal.jcl_graph), held apart only by the consumers' TYPE_CHECKING guards. The
 lookup half imports leaves only, so the cycle is gone rather than deferred.
 
-Node kinds fall into three groups:
-  - Genuinely file-based (PROGRAM, COPYBOOK, JOB, STEP, INSTREAM_DATA,
-    BMS_MAP): resolved by matching against the corpus's own naming
+Node kinds fall into four groups:
+  - Genuinely file-based (PROGRAM, COPYBOOK, JOB, STEP, INSTREAM_DATA):
+    resolved by matching against the corpus's own naming
     conventions (filename stem == program-id, JCL step ownership, proclib
     .prc files, ...). A miss is UNRESOLVED — worth logging, since the corpus
     should have the file.
+  - File-based in principle but unindexed here (BMS_MAP, FIELD): cobble keeps
+    no index for the kind, so no lookup is attempted and the answer is
+    NOT_INDEXED — a statement about cobble, not about the corpus.
   - CSD-defined (TRANSACTION, CICS_FILE): resolved against config.csd_files
     when present; NO_DEFINITION_SOURCE when there's no CSD entry (or no CSD
     configured at all) for this corpus.
@@ -159,6 +162,14 @@ _RESOLVERS: Mapping[NodeKind, Callable[[CorpusIndex, NodeKind, str], FileLocatio
             # no single owning program's file to attribute it to either.
             NodeKind.DATASET: lambda index, kind, key: _NOT_FILE_BASED,
             NodeKind.COBOL_FILE: lambda index, kind, key: _NOT_FILE_BASED,
+            # FIELD: declared in a program or a copybook, but cobble keeps no
+            # field-level index, so no lookup is possible -- NOT_INDEXED, on
+            # the same grounds as BMS_MAP. A reader who wants the declaring
+            # file takes the program half of the "<program>.<field>" id and
+            # resolves the PROGRAM node instead. A row here is not optional:
+            # GraphWriter.add_edge resolves both endpoints of every edge, so a
+            # kind absent from this table is a KeyError on the first edge.
+            NodeKind.FIELD: lambda index, kind, key: _NOT_INDEXED,
         }
     )
 )

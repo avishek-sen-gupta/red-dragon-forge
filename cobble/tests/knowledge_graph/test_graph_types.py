@@ -85,6 +85,7 @@ def test_node_kind_values() -> None:
         "CICS_FILE",
         "INSTREAM_DATA",
         "COBOL_FILE",
+        "FIELD",
     }
 
 
@@ -107,4 +108,5 @@ def test_edge_kind_values() -> None:
         "DELETES",
         "ENDS_BROWSE",
         "DEFINES_DATASET",
+        "FLOWS_TO",
     }
