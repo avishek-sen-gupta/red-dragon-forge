@@ -53,13 +53,23 @@ from operator import attrgetter
 from types import MappingProxyType
 
 from cobble.dataflow.srccfg.build import label_id
-from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom, Cfg, Edge, EdgeKind
+from cobble.dataflow.srccfg.cfg import (
+    UNRESOLVED,
+    Atom,
+    Cfg,
+    Edge,
+    EdgeKind,
+    Node,
+    NodeKind,
+)
+from cobble.dataflow.srccfg.conditions import VALUE_OPS
 from cobble.dataflow.srccfg.desugar import DISPATCH_TRANSFER_CICS
 from cobble.dataflow.srccfg.synthetic import (
     HANDLER_PREFIX,
     IGNORED,
     IMPLICIT_FIRST,
     SYSTEM_DEFAULT,
+    is_synthetic,
 )
 
 Guard = tuple[tuple[str, EdgeKind], ...]
@@ -298,47 +308,72 @@ def _next_walks(cfg: Cfg, walk: Walk) -> tuple[Walk, ...]:
 
 
 def _passable(cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]) -> bool:
-    """Whether this path may take this edge.
+    """Whether this path may take this edge: every rule that governs its kind agrees.
 
-    A RETURN edge belongs to one call site. Taking another call site's return joins
-    that site's guard onto this path, and a paragraph performed from a dozen places
-    would turn every guard set into the union of all of them. The legitimate targets
-    are the FLOW successors of the node on top of the stack, because that is what
-    build.py attached the return edges to.
+    Each rule below governs one edge kind and passes every other kind through, so the
+    conjunction is the whole policy and an edge kind no rule names is passable.
 
-    The other two rules share one invariant: where the graph offers both a specific
-    edge and a generic one to the same place, the generic edge is refused only while
-    the specific one can still fire on THIS path. Not while it merely exists -- a
-    specific edge that can never fire again would leave the walk with no way out, and
-    a walk that dies reports live code as unreachable.
-
-    - A CALL node keeps a FLOW edge to the statement after it AND a PERFORM edge into
-      the paragraph, and the paragraph's RETURN edge lands on that same FLOW target.
-      Walking both reaches everything after the call twice under one guard, and ten
-      calls in a row would report 2^10 duplicate paths. So FLOW out of a CALL node is
-      refused while a RETURN onto its target is still pending; see
-      ``_return_pending``.
-    - A performed paragraph returns at its end; it does not fall through to the next
-      paragraph. So a FALLTHRU edge is refused where the frame on top of the stack
-      can still return from here. It is kept where the frame cannot -- a paragraph in
-      the middle of a PERFORM A THRU B range reaches the next one by falling through,
-      and control arriving with no frame at all falls through as written.
-
-    Refusing that FALLTHRU is not cosmetic. Measured on a synthetic 922-node program
-    of one driver paragraph performing forty others, following it left 39 nodes with
-    no guards at all: the fall-through paths filled the cap and evicted the returns
-    the driver's later statements are only reachable by. Over-approximating is the
-    safe direction only while the cap is not the thing rationing the answer.
+    The last two share one invariant: where the graph offers both a specific edge and
+    a generic one to the same place, the generic edge is refused only while the
+    specific one can still fire on THIS path. Not while it merely exists -- a specific
+    edge that can never fire again would leave the walk with no way out, and a walk
+    that dies reports live code as unreachable.
     """
-    if edge.kind is EdgeKind.RETURN:
-        return bool(walk.stack) and edge.target in _continuations(cfg, walk.stack[-1])
-    if edge.kind is EdgeKind.FLOW:
-        return not _performs(cfg, walk.node, seen) or not _return_pending(
-            cfg, edge, seen
-        )
-    if edge.kind is EdgeKind.FALLTHRU:
-        return not _returns_from(cfg, walk, seen)
-    return True
+    return (
+        _returns_to_its_own_call_site(cfg, walk, edge)
+        and _not_a_second_route_past_a_call(cfg, walk, edge, seen)
+        and _not_a_fallthrough_a_return_will_take(cfg, walk, edge, seen)
+    )
+
+
+def _returns_to_its_own_call_site(cfg: Cfg, walk: Walk, edge: Edge) -> bool:
+    """A RETURN edge belongs to one call site.
+
+    Taking another call site's return joins that site's guard onto this path, and a
+    paragraph performed from a dozen places would turn every guard set into the union
+    of all of them. The legitimate targets are the FLOW successors of the node on top
+    of the stack, because that is what build.py attached the return edges to.
+    """
+    if edge.kind is not EdgeKind.RETURN:
+        return True
+    return bool(walk.stack) and edge.target in _continuations(cfg, walk.stack[-1])
+
+
+def _not_a_second_route_past_a_call(
+    cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]
+) -> bool:
+    """A CALL node's FLOW edge duplicates the path its paragraph's RETURN already takes.
+
+    A CALL node keeps a FLOW edge to the statement after it AND a PERFORM edge into the
+    paragraph, and the paragraph's RETURN edge lands on that same FLOW target. Walking
+    both reaches everything after the call twice under one guard, and ten calls in a row
+    would report 2^10 duplicate paths. So FLOW out of a CALL node is refused while a
+    RETURN onto its target is still pending; see ``_return_pending``.
+    """
+    if edge.kind is not EdgeKind.FLOW:
+        return True
+    return not _performs(cfg, walk.node, seen) or not _return_pending(cfg, edge, seen)
+
+
+def _not_a_fallthrough_a_return_will_take(
+    cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]
+) -> bool:
+    """A performed paragraph returns at its end; it does not fall through to the next.
+
+    So a FALLTHRU edge is refused where the frame on top of the stack can still return
+    from here. It is kept where the frame cannot -- a paragraph in the middle of a
+    PERFORM A THRU B range reaches the next one by falling through, and control arriving
+    with no frame at all falls through as written.
+
+    Refusing that FALLTHRU is not cosmetic. Measured on a synthetic 922-node program of
+    one driver paragraph performing forty others, following it left 39 nodes with no
+    guards at all: the fall-through paths filled the cap and evicted the returns the
+    driver's later statements are only reachable by. Over-approximating is the safe
+    direction only while the cap is not the thing rationing the answer.
+    """
+    if edge.kind is not EdgeKind.FALLTHRU:
+        return True
+    return not _returns_from(cfg, walk, seen)
 
 
 def _continuations(cfg: Cfg, call_id: str) -> frozenset[str]:
@@ -595,6 +630,43 @@ def writers_of(cfg: Cfg, field: str) -> tuple[str, ...]:
         for node in cfg.nodes
         if any(base_field(name) == base for name in node.writes)
     )
+
+
+def condition_operands(atom: Atom) -> tuple[str, ...]:
+    """The fields one guard step examines, and only the fields.
+
+    ``atom.right`` is a second operand for a relation between two things and a VALUE
+    for everything else -- a class name for IS NUMERIC, an 88's list of values for IN,
+    the keyword RAISED for the handler test. Harvesting those reports ``NUMERIC`` and
+    ``RAISED`` as fields the member never wrote, which spends the credibility of that
+    line where it is genuinely true, as it is for a commarea or a file-read source.
+
+    A synthetic left-hand side is the same case reached differently: the right of
+    ``%HANDLER[ANY] RAISED`` or ``%IOSTATUS[F] == AT END`` is the state being tested
+    for, not a field. The left IS kept -- whatever the test guards does depend on it --
+    and the caller then labels it rather than claiming the member never wrote it.
+    """
+    if atom.op in VALUE_OPS or is_synthetic(atom.left):
+        return (atom.left,)
+    return (atom.left, atom.right)
+
+
+def readers_of(cfg: Cfg, field: str) -> tuple[str, ...]:
+    """Every node that reads this field, in source order.
+
+    The mirror of ``writers_of``, and it has to look in two places to be one. An
+    ASSIGN records its read operands in ``node.reads``, but a TEST holds the field it
+    examines in its atom -- so a field that only ever decides a branch reads as unused
+    when ``node.reads`` is the whole search, which is the opposite of true. Base-name
+    matched, like ``writers_of``: a read of ``WS-TAB(1)`` answers a query for ``WS-TAB``.
+    """
+    base = base_field(field)
+    return tuple(node.id for node in cfg.nodes if base in _read_bases(node))
+
+
+def _read_bases(node: Node) -> frozenset[str]:
+    examined = condition_operands(node.atom) if node.kind is NodeKind.TEST else ()
+    return frozenset(base_field(name) for name in (*node.reads, *examined) if name)
 
 
 def live_handlers(cfg: Cfg) -> Mapping[str, tuple[str, ...]]:

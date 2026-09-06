@@ -7,9 +7,13 @@ nothing measured reach.
 
 from __future__ import annotations
 
+import logging
+import time
+
 import pytest
 from cobble.dataflow.fields import fixpoint
 from cobble.dataflow.fields.fixpoint import analyse, analysed
+from cobble.dataflow.fields.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.layout import UnsizeableFieldError
 
 
@@ -30,11 +34,40 @@ def fields(field):
 
 @pytest.fixture
 def flow_of(program_of, index_of, fields):
-    def build(paragraphs: list[dict], factor: int = fixpoint.ITERATION_FACTOR):
+    def build(paragraphs: list[dict], options: AnalysisOptions = DEFAULT_OPTIONS):
         asg = program_of([], paragraphs=paragraphs, data_fields=fields)
-        return analyse(asg, index_of(asg), factor)
+        return analyse(asg, index_of(asg), options)
 
     return build
+
+
+@pytest.fixture
+def loop_paragraphs():
+    """A loop writing WS-B, and a read of WS-B after the loop.
+
+    The shape a sweep budget has to be measured against, and the one that
+    corrects an assumption: the read after the loop does NOT need the back edge.
+    One sweep carries the body's write to it, because reverse postorder puts the
+    body ahead of the loop's exit.
+    """
+    return [
+        {
+            "name": "MAIN",
+            "statements": [
+                {
+                    "type": "PERFORM",
+                    "operands": ["LOOP-PARA"],
+                    "perform_type": "UNTIL",
+                    "until": {"text": "WS-A = SPACES"},
+                },
+                _move("WS-B", "WS-C"),
+            ],
+        },
+        {
+            "name": "LOOP-PARA",
+            "statements": [_move("WS-A", "WS-B")],
+        },
+    ]
 
 
 def _move(source: str, target: str) -> dict:
@@ -46,6 +79,56 @@ def _pairs(flow) -> set[tuple[str, str]]:
         (edge.source.origin or edge.source.extent.field_name, edge.target.field_name)
         for edge in flow.edges
     }
+
+
+def _if(condition: str, then: list[dict], otherwise: list[dict]) -> dict:
+    return {
+        "type": "IF",
+        "condition": {
+            "not": False,
+            "relation": {
+                "left": {"kind": "ref", "name": condition},
+                "op": "==",
+                "right": {"kind": "lit", "value": "'Y'"},
+            },
+        },
+        "children": then,
+        "else_children": otherwise,
+    }
+
+
+def test_the_edges_of_one_statement_come_back_in_a_stable_order(flow_of):
+    """The order the walk emits must not depend on the per-process hash seed.
+
+    The sources at an extent are a frozenset and the definers of one source are
+    another, so a read of a field written on four paths yields four edges in
+    whichever order those sets happen to iterate. Two runs of the same walk over
+    the same member then wrote the same facts in a different order, and an
+    artefact that differs between identical runs cannot be diffed across a corpus
+    -- which is how a regression in this pipeline gets caught.
+
+    Four arms rather than two so the assertion is not one coin flip: an unsorted
+    walk agrees with this only when all four happen to iterate in order.
+    """
+    flow = flow_of(
+        [
+            {
+                "name": "MAIN",
+                "statements": [
+                    _if(
+                        "WS-C",
+                        [_if("WS-C", [_move("WS-B", "WS-A")], [_move("WS-C", "WS-A")])],
+                        [_if("WS-C", [_move("'X'", "WS-A")], [_move("'Y'", "WS-A")])],
+                    ),
+                    _move("WS-A", "WS-B"),
+                ],
+            }
+        ]
+    )
+    read = tuple(edge for edge in flow.edges if edge.target.field_name == "WS-B")
+
+    assert len({edge.source.node for edge in read}) == 4
+    assert list(read) == sorted(read, key=repr)
 
 
 def test_a_chain_within_one_paragraph_yields_both_edges(flow_of):
@@ -206,7 +289,10 @@ def test_reaching_the_dequeue_cap_records_a_reason(flow_of):
     program that trips it is beyond what this pass can claim -- and the factor is
     zero here because no correct program of this size reaches the default.
     """
-    flow = flow_of([{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}], factor=0)
+    flow = flow_of(
+        [{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}],
+        AnalysisOptions(factor=0),
+    )
     assert "cap" in flow.skipped
     assert flow.writes == 1
 
@@ -216,8 +302,169 @@ def test_a_raised_factor_lifts_the_cap_for_a_member_that_tripped_it(flow_of):
     so a member given up on can be re-run with more room rather than reworked."""
     paragraphs = [{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}]
 
-    assert flow_of(paragraphs, factor=0).skipped
-    assert not flow_of(paragraphs, factor=1).skipped
+    assert flow_of(paragraphs, AnalysisOptions(factor=0)).skipped
+    assert not flow_of(paragraphs, AnalysisOptions(factor=1)).skipped
+
+
+def test_the_first_heartbeat_has_no_rate_and_a_later_one_estimates_from_the_drain():
+    """Two samples make a rate; one makes nothing, and says so rather than zero."""
+    first = fixpoint._Pass(states={}, queue=("A",) * 40, dequeues=2000)
+    later = fixpoint._Pass(
+        states={},
+        queue=("A",) * 40,
+        dequeues=4000,
+        progress=fixpoint._Progress(
+            started=time.monotonic() - 10.0, dequeues=2000, queued=60
+        ),
+    )
+
+    assert fixpoint._eta(first, cap=100000) == "no rate yet"
+    assert "4,000 dequeues" in fixpoint._eta(later, cap=100000)
+
+
+def test_an_estimate_that_runs_past_the_cap_says_so_instead_of_a_time():
+    """The number worth acting on: waiting buys nothing if the cap arrives first."""
+    run = fixpoint._Pass(
+        states={},
+        queue=("A",) * 40,
+        dequeues=4000,
+        progress=fixpoint._Progress(
+            started=time.monotonic() - 10.0, dequeues=2000, queued=60
+        ),
+    )
+
+    assert "past the 5000 cap" in fixpoint._eta(run, cap=5000)
+
+
+def test_a_queue_that_is_not_draining_yields_no_estimate():
+    run = fixpoint._Pass(
+        states={},
+        queue=("A",) * 80,
+        dequeues=4000,
+        progress=fixpoint._Progress(
+            started=time.monotonic() - 10.0, dequeues=2000, queued=60
+        ),
+    )
+
+    assert fixpoint._eta(run, cap=100000) == "queue not draining"
+
+
+def test_a_sweep_walk_matches_the_worklist_on_acyclic_code(flow_of):
+    """No back edge means nothing to drop: one sweep is the whole answer."""
+    paragraphs = [
+        {
+            "name": "MAIN",
+            "statements": [
+                {
+                    "type": "IF",
+                    "condition": {"text": "WS-A = SPACES"},
+                    "children": [_move("WS-A", "WS-C")],
+                    "else_children": [_move("WS-B", "WS-C")],
+                },
+                _move("WS-C", "WS-A"),
+            ],
+        }
+    ]
+
+    swept = flow_of(paragraphs, AnalysisOptions(sweeps=1))
+
+    assert swept.back_edges == 0
+    assert swept.settled
+    assert _pairs(swept) == _pairs(flow_of(paragraphs))
+
+
+def test_a_sweep_walk_settles_a_loop_in_a_few_sweeps(loop_paragraphs, flow_of):
+    """Settled means the fixpoint was reached, so the answer is not an
+    approximation -- it is the worklist's answer, reached by a cheaper route."""
+    swept = flow_of(loop_paragraphs, AnalysisOptions(sweeps=10))
+
+    assert swept.settled
+    assert swept.back_edges > 0
+    assert swept.sweeps <= 4
+    assert _pairs(swept) == _pairs(flow_of(loop_paragraphs))
+
+
+def test_one_sweep_loses_a_definition_the_loop_carries_backwards(flow_of):
+    """A read whose feeding write comes later in the body needs the back edge.
+
+    The worklist credits the read to the write below it; one sweep has not seen
+    that write yet, so it credits the read to itself -- an uninitialised read.
+    That is the shape of what a single sweep drops, and nothing is invented in
+    its place.
+    """
+    paragraphs = [
+        {
+            "name": "MAIN",
+            "statements": [
+                {
+                    "type": "PERFORM",
+                    "operands": ["LOOP-PARA"],
+                    "perform_type": "UNTIL",
+                    "until": {"text": "WS-A = SPACES"},
+                }
+            ],
+        },
+        {
+            "name": "LOOP-PARA",
+            "statements": [_move("WS-B", "WS-C"), _move("WS-A", "WS-B")],
+        },
+    ]
+
+    def definers(flow) -> set[str]:
+        return {
+            edge.source.node for edge in flow.edges if edge.target.field_name == "WS-C"
+        }
+
+    assert definers(flow_of(paragraphs)) == {"LOOP-PARA/1"}
+    assert definers(flow_of(paragraphs, AnalysisOptions(sweeps=1))) == {"LOOP-PARA/0"}
+
+
+def test_a_sweep_walk_that_runs_out_of_budget_says_so(loop_paragraphs, flow_of):
+    """An unsettled walk is not a skip: its edges are a subset, none invented."""
+    one = flow_of(loop_paragraphs, AnalysisOptions(sweeps=1))
+
+    assert not one.settled
+    assert not one.skipped
+    assert one.sweeps == 1
+    assert set(_pairs(one)) <= set(_pairs(flow_of(loop_paragraphs)))
+    assert one.edges
+
+
+def test_a_sweep_walk_ignores_the_dequeue_cap(loop_paragraphs, flow_of):
+    """The cap counts visits to a node, which is not what a sweep budget spends."""
+    swept = flow_of(loop_paragraphs, AnalysisOptions(sweeps=10, factor=0))
+
+    assert not swept.skipped
+    assert swept.settled
+
+
+def test_each_sweep_says_it_finished_and_whether_the_state_is_still_growing(
+    loop_paragraphs, flow_of, caplog
+):
+    """The worklist heartbeat counts dequeues, which a sweep walk never spends.
+
+    Without a line of its own a sweep runs silent: one pass over a few thousand
+    nodes takes tens of seconds, and the run would print nothing between start and
+    the member's result.
+    """
+    with caplog.at_level(logging.INFO, logger=fixpoint.__name__):
+        flow_of(loop_paragraphs, AnalysisOptions(sweeps=10))
+
+    done = [line for line in caplog.messages if "sweep" in line and "done" in line]
+    assert done
+    assert "still growing" in done[0]
+    assert "settled" in done[-1]
+
+
+def test_a_sweep_visits_each_reachable_node_once(flow_of):
+    paragraphs = [
+        {"name": "MAIN", "statements": [_move("WS-A", "WS-B")]},
+        {"name": "NEXT-PARA", "statements": [_move("WS-B", "WS-C")]},
+    ]
+
+    flow = flow_of(paragraphs, AnalysisOptions(sweeps=1))
+
+    assert flow.dequeues <= flow.nodes
 
 
 def test_an_unsizeable_program_is_recorded_not_dropped(program_of, field, monkeypatch):

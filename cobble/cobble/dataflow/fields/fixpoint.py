@@ -27,8 +27,21 @@ reading it: an uninitialised read is still a read.
 
 Termination does not rest on the cap: every extent a transfer can construct is
 fixed by the statement set before iteration begins, so the lattice has finite
-height and join is monotone. The cap is a defence against a defect, not part of
-the argument, and it records a reason rather than silently truncating.
+height and join is monotone. What the cap does defend against is cost, not
+non-termination -- height lives in the per-extent source set, so the number of
+growth events is nodes x extents x distinct sources, and a large member can want
+hundreds of thousands of dequeues. It records a reason rather than truncating
+silently.
+
+The sweep walk is the cheap alternative. It visits in reverse postorder, where
+every predecessor a node is reached through -- back edges aside -- is already
+processed, so one sweep carries a forward chain of any length. A budget of
+sweeps is an under-approximation with a name: a state still growing when the
+budget runs out yields a subset of the true flows, never an invented one, and
+``settled`` says which happened. Two sweeps is the interesting floor, because one
+sweep loses everything a loop body wrote to every reader after the loop -- the
+exit hangs off the loop's test node, whose own state arrives through the back
+edge.
 
 The coverage counters are computed from the source, not from the answer. The 3ao
 post-mortem found an acceptance suite passing while its walk reached 18% of
@@ -40,12 +53,14 @@ whose extents resolved.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import accumulate, repeat
 from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
+from cobble.dataflow.fields.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fields.state import EMPTY, Source, State, join, reaching
 from cobble.dataflow.fields.transfer import (
     HANDLED,
@@ -57,16 +72,17 @@ from cobble.dataflow.fields.transfer import (
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import build_program, label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg
+from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
 logger = logging.getLogger(__name__)
 
-ITERATION_FACTOR = 50
 HEARTBEAT = 2000
 
 NO_INDEX = cell_index(())
+NO_STATES: Mapping[str, State] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -84,6 +100,11 @@ class ProgramFlow:
 
     ``skipped`` non-empty means the numbers describe an abandoned analysis and
     must not be counted towards a coverage floor.
+
+    ``settled`` False means the walk ran out of budget while the state was still
+    growing: the edges are a subset of the program's flows, and ``back_edges``
+    is how much cyclic structure it had left to resolve. Unlike ``skipped``, the
+    edges are still worth reading -- nothing here is invented, only missing.
     """
 
     program: str
@@ -93,6 +114,9 @@ class ProgramFlow:
     unhandled: int = 0
     nodes: int = 0
     dequeues: int = 0
+    sweeps: int = 0
+    back_edges: int = 0
+    settled: bool = True
     skipped: str = ""
 
 
@@ -106,12 +130,45 @@ class _Tally:
 
 
 @dataclass(frozen=True)
+class _Progress:
+    """The previous heartbeat's reading, which is what an estimate needs.
+
+    A worklist has nothing that counts down, so there is no progress to read off
+    one sample. What it does have is a queue that drains: two samples give a
+    rate, and the rate against the cap answers the question actually being asked
+    of a run that has been going for twenty minutes.
+    """
+
+    started: float = 0.0
+    dequeues: int = 0
+    queued: int = 0
+
+
+@dataclass(frozen=True)
 class _Pass:
     """One step of the worklist: entry states settled so far, and what to revisit."""
 
     states: Mapping[str, State]
     queue: tuple[str, ...]
     dequeues: int = 0
+    progress: _Progress = _Progress()
+
+
+@dataclass(frozen=True)
+class _Walk:
+    """What a traversal produced, whichever traversal ran.
+
+    The two walks answer to different budgets -- dequeues against a cap, sweeps
+    against a count -- so what they have in common is the settled states, how
+    much work it took, and whether the answer is complete.
+    """
+
+    states: Mapping[str, State] = NO_STATES
+    dequeues: int = 0
+    sweeps: int = 0
+    back_edges: int = 0
+    settled: bool = True
+    skipped: str = ""
 
 
 def _statements_at(
@@ -169,27 +226,52 @@ def _grown(
     }
 
 
-def _heartbeat(cfg: Cfg, run: _Pass) -> None:
+def _eta(run: _Pass, cap: int) -> str:
+    """What the drain rate says is left, or why it says nothing yet.
+
+    Two readings of the queue give dequeues per node drained, and the elapsed
+    time gives dequeues per second. Neither is a promise: a worklist can tail off
+    once few nodes remain re-enqueueable, or stall. The part worth acting on is
+    the comparison against the cap, because that decides whether waiting is worth
+    anything or the factor needs raising.
+    """
+    if not run.progress.dequeues:
+        return "no rate yet"
+    drained = run.progress.queued - len(run.queue)
+    spent = run.dequeues - run.progress.dequeues
+    elapsed = time.monotonic() - run.progress.started
+    if drained <= 0 or spent <= 0 or elapsed <= 0:
+        return "queue not draining"
+    left = len(run.queue) * spent / drained
+    if run.dequeues + left > cap:
+        return f"~{left:,.0f} dequeues left, past the {cap} cap"
+    return f"~{left * elapsed / run.dequeues / 60:.0f}m left, ~{left:,.0f} dequeues"
+
+
+def _heartbeat(cfg: Cfg, run: _Pass, cap: int) -> None:
     """A pass that runs for minutes has to say so while it runs.
 
     Reach against the node count is the number worth watching: a walk that stops
     growing it is churning state over a fraction of the program (the 3ao failure),
     and one that never stops is heading for the cap.
     """
-    if run.dequeues % HEARTBEAT != 0:
-        return
     logger.info(
-        "fields:   %s %d dequeues, %d/%d nodes reached, %d queued",
+        "fields:   %s %d dequeues, %d/%d nodes reached, %d queued, %s",
         cfg.program,
         run.dequeues,
         len(run.states),
         len(cfg.nodes),
         len(run.queue),
+        _eta(run, cap),
     )
 
 
 def _step(
-    cfg: Cfg, statements: Mapping[str, Statement], index: CellIndex, run: _Pass
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    cap: int,
+    run: _Pass,
 ) -> _Pass:
     node_id, *rest = run.queue
     after = _after(statements, node_id, run.states[node_id], index)
@@ -198,9 +280,17 @@ def _step(
         states=MappingProxyType({**run.states, **grown}),
         queue=(*rest, *(target for target in grown if target not in rest)),
         dequeues=run.dequeues + 1,
+        progress=run.progress,
     )
-    _heartbeat(cfg, stepped)
-    return stepped
+    if stepped.dequeues % HEARTBEAT:
+        return stepped
+    _heartbeat(cfg, stepped, cap)
+    return replace(
+        stepped,
+        progress=replace(
+            stepped.progress, dequeues=stepped.dequeues, queued=len(stepped.queue)
+        ),
+    )
 
 
 def _done(run: _Pass, cap: int) -> bool:
@@ -222,11 +312,148 @@ def _settled(
     whether or not the fixpoint was found. Which of the two happened is read back
     off ``queue``.
     """
-    start = _Pass(states=MappingProxyType({entry: EMPTY}), queue=(entry,))
+    start = _Pass(
+        states=MappingProxyType({entry: EMPTY}),
+        queue=(entry,),
+        progress=_Progress(started=time.monotonic()),
+    )
     passes = accumulate(
-        repeat(None), lambda run, _: _step(cfg, statements, index, run), initial=start
+        repeat(None),
+        lambda run, _: _step(cfg, statements, index, cap, run),
+        initial=start,
     )
     return next(run for run in passes if _done(run, cap))
+
+
+def _sweep_progress(cfg: Cfg, sweep: int, visited: int, total: int) -> None:
+    """A sweep knows its denominator, which the worklist never does.
+
+    Reverse postorder fixes the node count before the pass starts, so progress is
+    a fraction of a known whole rather than a queue length with nothing to compare
+    it against -- no estimate needed, and none of the drain-rate arithmetic the
+    worklist's heartbeat has to do to say anything at all.
+    """
+    logger.info(
+        "fields:   %s sweep %d, %d/%d nodes visited (%.0f%%)",
+        cfg.program,
+        sweep,
+        visited,
+        total,
+        100.0 * visited / total,
+    )
+
+
+def _sweep_done(
+    cfg: Cfg, sweep: int, budget: int, states: Mapping[str, State], settled: bool
+) -> None:
+    logger.info(
+        "fields:   %s sweep %d of %d done, %d nodes reached, %s",
+        cfg.program,
+        sweep,
+        budget,
+        len(states),
+        "settled" if settled else "still growing",
+    )
+
+
+def _propagated(
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    order: DepthFirstOrder,
+    states: Mapping[str, State],
+    sweep: int,
+) -> Mapping[str, State]:
+    """One reverse-postorder sweep, pushing each node's exit state to successors.
+
+    Back edges need no special case. Their source sits later in the order, so on
+    the first sweep it has nothing to contribute yet and on every later sweep it
+    contributes what the previous sweep left there -- which is how a second sweep
+    recovers the flow out of a loop that a single sweep cannot see.
+    """
+    grown = dict(states)
+    for visited, node_id in enumerate(order.ordered, start=1):
+        after = _after(statements, node_id, grown[node_id], index)
+        for edge in cfg.successors(node_id):
+            grown[edge.target] = join(grown.get(edge.target, EMPTY), after)
+        if not visited % HEARTBEAT:
+            _sweep_progress(cfg, sweep, visited, len(order.ordered))
+    return MappingProxyType(grown)
+
+
+def _swept(
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    entry: str,
+    budget: int,
+) -> _Walk:
+    """Sweep until nothing grows or the budget is spent, whichever comes first.
+
+    A sweep that changes nothing means the fixpoint was reached, and the answer
+    is as exact as the worklist's would have been for a fraction of the work. A
+    spent budget means an under-approximation: join and the transfer are
+    monotone, so a smaller entry state yields fewer sources and never a wrong
+    one, and every def-use pair reported is real.
+
+    With no back edge there is nothing to confirm: reverse postorder gives every
+    node its whole entry state on the first sweep, so one sweep is the fixpoint
+    and a second would only prove it at the cost of another pass. With back
+    edges it takes the sweep that changes nothing, which is why a budget of one
+    can never report a settled loop even when it found every flow in it.
+    """
+    order = depth_first_order(cfg, entry)
+    states: Mapping[str, State] = MappingProxyType({entry: EMPTY})
+    sweep, settled = 0, False
+    while sweep < budget and not settled:
+        grown = _propagated(cfg, statements, index, order, states, sweep + 1)
+        sweep, settled = sweep + 1, grown == states or not order.back_edges
+        states = grown
+        _sweep_done(cfg, sweep, budget, states, settled)
+    return _Walk(
+        states=states,
+        dequeues=sweep * len(order.ordered),
+        sweeps=sweep,
+        back_edges=len(order.back_edges),
+        settled=settled,
+    )
+
+
+def _worked(
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    entry: str,
+    factor: int,
+) -> _Walk:
+    cap = factor * max(len(cfg.nodes), 1)
+    run = _settled(cfg, statements, index, entry, cap)
+    return _Walk(
+        states=run.states,
+        dequeues=run.dequeues,
+        settled=not run.queue,
+        skipped=_skip_reason(run, cap, cfg.program, len(cfg.nodes)),
+    )
+
+
+def _walked(
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    entry: str,
+    options: AnalysisOptions,
+) -> _Walk:
+    """An entry the CFG does not hold reaches nothing, and is not a failure.
+
+    A program whose first paragraph never became a node has no walk to run; the
+    coverage counters still come from the statements, so the member is reported
+    as uncovered rather than as skipped.
+    """
+    if entry not in cfg.node_ids:
+        return _Walk()
+    if options.sweeps:
+        return _swept(cfg, statements, index, entry, options.sweeps)
+    return _worked(cfg, statements, index, entry, options.factor)
 
 
 def _definers(state: State, extent: FieldExtent, node: str) -> frozenset[str]:
@@ -253,13 +480,25 @@ def _edges(
     states: Mapping[str, State],
     index: CellIndex,
 ) -> tuple[FlowEdge, ...]:
-    """Every statement the CFG can reach, read once at its settled entry state."""
+    """Every statement the CFG can reach, read once at its settled entry state.
+
+    Statement order outside, sorted within each statement. The sources at an
+    extent are a frozenset and the definers of one source are another, so the
+    order ``_edges_at`` yields varies with the per-process hash seed: two runs of
+    the same walk over the same member would emit the same facts in a different
+    order, and an artefact that differs between identical runs cannot be diffed
+    across a corpus, which is how a regression in this pipeline gets caught.
+    Sorting the whole stream instead would fix that too, at the cost of the source
+    order a reader compares against the listing.
+    """
     return tuple(
         dict.fromkeys(
             edge
             for node_id, statement in found
             if node_id in states
-            for edge in _edges_at(statement, node_id, states[node_id], index)
+            for edge in sorted(
+                _edges_at(statement, node_id, states[node_id], index), key=repr
+            )
         )
     )
 
@@ -273,38 +512,40 @@ def _skip_reason(run: _Pass, cap: int, program: str, nodes: int) -> str:
     return f"dequeue cap {cap} reached"
 
 
-def analyse(asg, index: CellIndex, factor: int = ITERATION_FACTOR) -> ProgramFlow:
+def analyse(
+    asg, index: CellIndex, options: AnalysisOptions = DEFAULT_OPTIONS
+) -> ProgramFlow:
     """Every flow in one program, given an index its fields can be laid out into.
 
-    ``factor`` is dequeues allowed per CFG node. The honest bound is nodes times
-    the lattice height at each node -- the distinct extents with distinct source
-    sets that reach it -- so no constant is right for every program, and a member
-    that trips the default gets a raised factor rather than a silent truncation.
+    ``options.factor`` is dequeues allowed per CFG node before the worklist walk
+    gives up. No constant is right for every program: the bound is nodes times
+    the lattice height at each node, and the height is the distinct sources held
+    at each extent. ``options.sweeps`` runs the cheaper walk instead, whose
+    budget is passes over the program rather than visits to a node.
     """
     cfg = build_program(asg)
     statements = statement_index(asg)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
-    entry = _entry_node(asg)
-    cap = factor * max(len(cfg.nodes), 1)
-    reachable = (
-        _settled(cfg, statements, index, entry, cap)
-        if entry in cfg.node_ids
-        else _Pass(states=MappingProxyType({}), queue=())
-    )
+    walk = _walked(cfg, statements, index, _entry_node(asg), options)
     return ProgramFlow(
         program=cfg.program,
-        edges=_edges(found, reachable.states, index),
+        edges=_edges(found, walk.states, index),
         writes=tally.writes,
         covered=tally.covered,
         unhandled=tally.unhandled,
         nodes=len(cfg.nodes),
-        dequeues=reachable.dequeues,
-        skipped=_skip_reason(reachable, cap, cfg.program, len(cfg.nodes)),
+        dequeues=walk.dequeues,
+        sweeps=walk.sweeps,
+        back_edges=walk.back_edges,
+        settled=walk.settled,
+        skipped=walk.skipped,
     )
 
 
-def analysed(asg, factor: int = ITERATION_FACTOR) -> tuple[ProgramFlow, CellIndex]:
+def analysed(
+    asg, options: AnalysisOptions = DEFAULT_OPTIONS
+) -> tuple[ProgramFlow, CellIndex]:
     """analyse, with the index built here so an unsizeable field is a skip.
 
     layout raises while computing extents, which is before any statement has been
@@ -316,4 +557,4 @@ def analysed(asg, factor: int = ITERATION_FACTOR) -> tuple[ProgramFlow, CellInde
         index = cell_index(program_records(asg))
     except UnsizeableFieldError as error:
         return ProgramFlow(program=asg.program_id, skipped=str(error)), NO_INDEX
-    return analyse(asg, index, factor), index
+    return analyse(asg, index, options), index

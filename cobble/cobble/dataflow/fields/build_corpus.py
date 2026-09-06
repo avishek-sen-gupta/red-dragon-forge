@@ -12,6 +12,11 @@ Exactly one of --member and --all is required. The usual question is about the
 fields of one program, so a whole-cache pass is asked for rather than defaulted
 into: a run nobody meant to start is minutes of fixpoint per member.
 
+--sweeps trades completeness for cost, and says which it got. A member that
+settles inside its budget is exactly as complete as the worklist's answer; one
+that does not is a subset of its flows, reported as unsettled in the summary and
+warned about by name. Neither is a skip: nothing is invented either way.
+
 Exit status contract:
   0 - every member analysed, coverage at or above the floor
   1 - coverage below the floor
@@ -39,7 +44,8 @@ from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
-from cobble.dataflow.fields.fixpoint import ITERATION_FACTOR, analysed
+from cobble.dataflow.fields.fixpoint import analysed
+from cobble.dataflow.fields.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobol_asg.asg_types import CobolASG
@@ -52,21 +58,14 @@ DEFAULT_FLOOR = 0.60
 
 
 @dataclass(frozen=True)
-class AnalysisOptions:
-    """What the caller chose about how each member is analysed.
-
-    One value object rather than two parameters threaded through four call
-    layers: the next knob belongs here, not in every signature between the CLI
-    and the fixpoint.
-    """
-
-    expand: bool = False
-    factor: int = ITERATION_FACTOR
-
-
-@dataclass(frozen=True)
 class MemberResult:
-    """One member's records and counters, or the reason it produced none."""
+    """One member's records and counters, or the reason it produced none.
+
+    ``settled`` False means the walk's budget ran out while the state was still
+    growing: the records are a subset of the member's flows. Not a skip -- the
+    edges are real -- but it has to be visible, or a budgeted run reads as a
+    complete one.
+    """
 
     member: str
     program: str = ""
@@ -75,6 +74,8 @@ class MemberResult:
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
+    sweeps: int = 0
+    settled: bool = True
     skipped: str = ""
 
 
@@ -92,6 +93,7 @@ class RunTotals:
     covered: int = 0
     unhandled: int = 0
     skipped: tuple[tuple[str, str], ...] = ()
+    unsettled: tuple[str, ...] = ()
     programs: tuple[tuple[str, str], ...] = ()
 
     @property
@@ -107,6 +109,7 @@ def _summary(totals: RunTotals) -> dict[str, float | int]:
         "coverage": round(totals.coverage, 4),
         "unhandled": totals.unhandled,
         "skipped": len(totals.skipped),
+        "unsettled": len(totals.unsettled),
         "collisions": len(_duplicates(totals)),
     }
 
@@ -124,7 +127,7 @@ def _analysed_member(
     path: Path, options: AnalysisOptions, locations: FileLocationResolver
 ) -> MemberResult:
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    flow, index = analysed(asg, options.factor)
+    flow, index = analysed(asg, options)
     if flow.skipped:
         return MemberResult(
             member=path.stem, program=flow.program, skipped=flow.skipped
@@ -138,6 +141,8 @@ def _analysed_member(
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
+        sweeps=flow.sweeps,
+        settled=flow.settled,
     )
 
 
@@ -163,6 +168,10 @@ def _seen(result: MemberResult) -> tuple[tuple[str, str], ...]:
     return ((result.program, result.member),) if result.program else ()
 
 
+def _unsettled(result: MemberResult) -> tuple[str, ...]:
+    return () if result.skipped or result.settled else (result.member,)
+
+
 def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
     return RunTotals(
         analysed=totals.analysed + (0 if result.skipped else 1),
@@ -170,6 +179,7 @@ def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
         covered=totals.covered + result.covered,
         unhandled=totals.unhandled + result.unhandled,
         skipped=(*totals.skipped, *_skipped(result)),
+        unsettled=(*totals.unsettled, *_unsettled(result)),
         programs=(*totals.programs, *_seen(result)),
     )
 
@@ -177,6 +187,15 @@ def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
 def _written(writer: GraphWriter, result: MemberResult) -> MemberResult:
     writer.add_all(result.nodes, result.edges)
     return result
+
+
+def _walk_note(result: MemberResult) -> str:
+    """How the answer was reached, when that changes what it means."""
+    if not result.sweeps:
+        return ""
+    if result.settled:
+        return f", settled in {result.sweeps} sweeps"
+    return f", NOT SETTLED after {result.sweeps} sweeps -- edges are a subset"
 
 
 def _log_result(result: MemberResult, seconds: float) -> None:
@@ -189,13 +208,14 @@ def _log_result(result: MemberResult, seconds: float) -> None:
         )
         return
     logger.info(
-        "fields:   %s %d/%d writes covered, %d unhandled, %d edges, %.1fs",
+        "fields:   %s %d/%d writes covered, %d unhandled, %d edges, %.1fs%s",
         result.program,
         result.covered,
         result.writes,
         result.unhandled,
         len(result.edges),
         seconds,
+        _walk_note(result),
     )
 
 
@@ -252,6 +272,13 @@ def _report_members(totals: RunTotals) -> None:
     )
     for member, reason in sorted(totals.skipped):
         logger.warning("fields: !! skipped %s: %s", member, reason)
+    if totals.unsettled:
+        logger.warning(
+            "fields: !! %d members still growing when the sweep budget ran out "
+            "(%s); their edges are a subset of the flows those programs have",
+            len(totals.unsettled),
+            ", ".join(sorted(totals.unsettled)),
+        )
 
 
 def _report_collisions(totals: RunTotals) -> None:
@@ -295,7 +322,11 @@ def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def _options(arguments: argparse.Namespace) -> AnalysisOptions:
-    return AnalysisOptions(expand=arguments.expand, factor=arguments.iteration_factor)
+    return AnalysisOptions(
+        expand=arguments.expand,
+        sweeps=arguments.sweeps,
+        factor=arguments.iteration_factor,
+    )
 
 
 def _analysed_run(
@@ -333,6 +364,14 @@ def _completed(config: FieldsConfig, arguments: argparse.Namespace) -> int:
     return _analysed_run(config, paths, arguments)
 
 
+def _budget(given: str) -> int:
+    """A sweep count below one selects no walk at all, so it is a usage error."""
+    count = int(given)
+    if count < 1:
+        raise argparse.ArgumentTypeError(f"needs at least one sweep, got {count}")
+    return count
+
+
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Field-level byte dataflow over a cached ASG corpus."
@@ -340,11 +379,19 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
     parser.add_argument("--expand", action="store_true")
-    parser.add_argument(
+    walk = parser.add_mutually_exclusive_group()
+    walk.add_argument(
         "--iteration-factor",
         type=int,
         default=ITERATION_FACTOR,
         help="dequeues allowed per CFG node before a member is given up on",
+    )
+    walk.add_argument(
+        "--sweeps",
+        type=_budget,
+        default=0,
+        metavar="N",
+        help="reverse-postorder passes instead of the worklist; 2 is the useful floor",
     )
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--member", nargs="+", default=(), metavar="NAME")

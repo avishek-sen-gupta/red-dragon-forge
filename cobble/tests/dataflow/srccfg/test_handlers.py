@@ -309,17 +309,20 @@ def test_the_built_artefact_has_its_handler_transfers_resolved(tmp_path) -> None
     import json
 
     from cobble.dataflow.srccfg.build_corpus import build_one, load_cfg
-    from cobble.dataflow.srccfg.query import writers_report
+    from cobble.dataflow.srccfg.query import provenance_report
 
     (tmp_path / "MEMA.json").write_text(json.dumps(_handler_program()))
     result = build_one(tmp_path / "MEMA.json", tmp_path / "out")
 
     assert result.message == ""
-    assert writers_report(load_cfg(result.cfg_path), "WS-ERR") == (
-        "WS-ERR: 1 writer(s) in PROGA",
-        "  H-OOPS/0  MOVE  reads 'E'",
-        "    when NOT (%HANDLER[ANY] RAISED)",
-        "    when %HANDLER[ANY] RAISED",
+    assert provenance_report(load_cfg(result.cfg_path), "WS-ERR") == (
+        "WS-ERR in PROGA:",
+        "backward -- what its value is derived from:",
+        "  WS-ERR <-",
+        "  H-OOPS/0 MOVE when NOT (%HANDLER[ANY] RAISED); %HANDLER[ANY] RAISED",
+        "    %HANDLER[ANY] <- synthetic (the handler armed for ANY)",
+        "forward -- what its value reaches:",
+        "  WS-ERR -> sink (read nowhere in this member)",
     )
 
 

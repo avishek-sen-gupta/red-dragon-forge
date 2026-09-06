@@ -29,7 +29,7 @@ from cobble.dataflow.srccfg.dataflow import (
 )
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFERS
 from cobble.dataflow.srccfg.link import call_sites
-from cobble.dataflow.srccfg.query import writers_report
+from cobble.dataflow.srccfg.query import provenance_report
 
 # Gap-fill verbs: these may have empty writes and reads by design.
 _GAP_FILL_TRANSFERS = ("INITIALIZE", "DISPLAY", "ACCEPT")
@@ -200,4 +200,4 @@ def test_a_report_can_be_rendered_for_a_field_the_member_writes(
         )
         if not written:
             continue
-        assert writers_report(cfg, written)
+        assert provenance_report(cfg, written)

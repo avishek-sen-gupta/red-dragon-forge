@@ -42,7 +42,7 @@ cobble-parse-corpus = "cobble.parsing.parse_corpus:main"
 cobble-depgraph = "cobble.dataflow.depgraph.build:main"
 cobble-depgraph-render = "cobble.dataflow.depgraph.render:main"
 cobble-srccfg-build = "cobble.dataflow.srccfg.closure:main"
-cobble-srccfg = "cobble.dataflow.srccfg.query:main"
+cobble-srccfg-query = "cobble.dataflow.srccfg.query:main"
 cobble-srccfg-dot = "cobble.dataflow.srccfg.dot:main"
 # Field-level byte dataflow over the one ASG cache: FIELD nodes and FLOWS_TO
 # edges, intra-program. No JVM.

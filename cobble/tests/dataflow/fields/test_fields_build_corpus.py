@@ -8,6 +8,9 @@ basename breaks collection outright.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -44,6 +47,50 @@ def _program(program_id: str, target: str = "WS-B") -> dict:
     }
 
 
+def _branched(program_id: str) -> dict:
+    """WS-A written on four paths, then read once.
+
+    Four writes rather than two so the read has four defining statements to
+    distinguish: one flow per definer, all four sharing endpoints and extents, so
+    ``source_node`` is the only thing that tells them apart.
+    """
+    return {
+        **_program(program_id),
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    _if(
+                        [_if([_move("WS-B", "WS-A")], [_move("'1'", "WS-A")])],
+                        [_if([_move("'2'", "WS-A")], [_move("'3'", "WS-A")])],
+                    ),
+                    _move("WS-A", "WS-B"),
+                ],
+            }
+        ],
+    }
+
+
+def _move(source: str, target: str) -> dict:
+    return {"type": "MOVE", "operands": [{"name": source}, {"name": target}]}
+
+
+def _if(then: list[dict], otherwise: list[dict]) -> dict:
+    return {
+        "type": "IF",
+        "condition": {
+            "not": False,
+            "relation": {
+                "left": {"kind": "ref", "name": "WS-B"},
+                "op": "==",
+                "right": {"kind": "lit", "value": "'Y'"},
+            },
+        },
+        "children": then,
+        "else_children": otherwise,
+    }
+
+
 def _selector(extra: tuple[str, ...]) -> tuple[str, ...]:
     """``--all`` unless the test names its own selection: one is always required."""
     chosen = {"--all", "--member"} & set(extra)
@@ -77,6 +124,61 @@ def test_a_run_writes_nodes_and_edges_and_exits_zero(corpus):
     edge = json.loads((out_dir / "edges.jsonl").read_text(encoding="utf-8"))
     assert (edge["source"], edge["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
     assert edge["kind"] == "FLOWS_TO"
+
+
+def test_four_flows_differing_only_in_their_definer_all_reach_the_artefact(corpus):
+    """The whole point of the pass, end to end: which statement defined the value.
+
+    The unit tests cover the two halves separately -- emit puts source_node in
+    attrs, GraphWriter keys FLOWS_TO on attrs -- and this is the only assertion
+    that the artefact a consumer reads carries all four. Endpoint-level dedup
+    wrote one of these rows and dropped three, and which one survived varied
+    between runs."""
+    argv, out_dir = corpus({"MEMBERA": json.dumps(_branched("PROGA"))})
+
+    assert cli(argv) == 0
+
+    rows = [
+        json.loads(row)
+        for row in (out_dir / "edges.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    read = [
+        row
+        for row in rows
+        if (row["source"], row["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
+        and row["attrs"]["node"] == "MAIN/1"
+    ]
+
+    assert sorted(row["attrs"]["source_node"] for row in read) == [
+        "MAIN/0.else.0.else.0",
+        "MAIN/0.else.0.then.0",
+        "MAIN/0.then.0.else.0",
+        "MAIN/0.then.0.then.0",
+    ]
+
+
+def test_two_runs_of_one_member_write_byte_identical_edges(corpus):
+    """An artefact that differs between identical runs cannot be diffed.
+
+    The order of the four rows above comes out of frozensets -- the sources at an
+    extent, the definers of one source -- so it varies with the per-process hash
+    seed, which is why this runs the build in subprocesses rather than in-process
+    where the seed is fixed. Four definers give twenty-four orders, so distinct
+    seeds agreeing by chance is not what a pass here means."""
+    argv, out_dir = corpus({"MEMBERA": json.dumps(_branched("PROGA"))})
+    script = "import sys; from cobble.dataflow.fields.build_corpus import cli; sys.exit(cli(sys.argv[1:]))"
+
+    written = []
+    for seed in ("1", "5", "9"):
+        run = subprocess.run(
+            [sys.executable, "-c", script, *argv],
+            env={**os.environ, "PYTHONHASHSEED": seed},
+            capture_output=True,
+        )
+        assert run.returncode == 0, run.stderr.decode()
+        written.append((out_dir / "edges.jsonl").read_bytes())
+
+    assert len(set(written)) == 1
 
 
 def test_every_endpoint_node_states_why_it_has_no_file(corpus):
@@ -216,6 +318,43 @@ def test_the_iteration_factor_reaches_the_fixpoint(corpus):
     )
 
     assert cli(argv) == 3
+
+
+def test_a_sweep_budget_analyses_the_member_and_reports_that_it_settled(corpus, capsys):
+    argv, out_dir = corpus(
+        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--sweeps", "2")
+    )
+
+    assert cli(argv) == 0
+
+    assert json.loads(capsys.readouterr().out)["unsettled"] == 0
+    edge = json.loads((out_dir / "edges.jsonl").read_text(encoding="utf-8"))
+    assert (edge["source"], edge["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
+
+
+def test_a_sweep_budget_below_one_is_a_usage_error(corpus):
+    """Zero sweeps would select the worklist walk by the value that disables it."""
+    argv, _ = corpus(
+        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--sweeps", "0")
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        cli(argv)
+
+    assert failure.value.code == 2
+
+
+def test_a_sweep_budget_and_an_iteration_factor_at_once_are_a_usage_error(corpus):
+    """The two budgets belong to different walks; taking both would drop one."""
+    argv, _ = corpus(
+        {"MEMBERA": json.dumps(_program("PROGA"))},
+        extra=("--sweeps", "2", "--iteration-factor", "100"),
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        cli(argv)
+
+    assert failure.value.code == 2
 
 
 def test_no_selection_is_a_usage_error(corpus):
