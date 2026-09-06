@@ -48,6 +48,13 @@ repos:
         # That bundled a cicada test reformat into a docs commit here, and in
         # red-dragon mis-attributed a COBOL fix to a lint-config commit.
         # `files:` keeps the same scope the directory list had.
+        #
+        # require_serial because that `git add` takes .git/index.lock. pre-commit
+        # splits a hook's files across parallel processes, so staging more than one
+        # batch's worth ran two `git add`s at once and the loser died with
+        # "Unable to create index.lock" — a commit rejected for a race, with black
+        # itself reporting every file already formatted.
+        require_serial: true
         entry: bash -c 'uv run --no-sync python -m black "$@" && git add -- "$@"' --
         language: system
         types: [python]
