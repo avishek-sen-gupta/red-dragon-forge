@@ -312,6 +312,29 @@ one per core instead, because that one is the run you wait on). `diagnose-cobol`
 no cache: each ASG is written and unlinked at once, so peak disk is one ASG per
 worker rather than the gigabytes a full corpus of them would be.
 
+### Gate an ASG cache before field-level dataflow
+
+```bash
+uv run diagnose-asg-operands path/to/asg-cache-dir
+```
+
+Verifies a cached ASG directory carries structured subscripts on MOVE operands,
+which the field-level dataflow analysis requires. Takes the directory path
+directly, not `--config`, since checking a cache against another cache means
+comparing two directories and a config names only one `asg_dir`.
+
+Exit status is the gate:
+
+| exit | meaning |
+| ---- | ------- |
+| 0 | precondition met, subscripted MOVEs present |
+| 1 | precondition failed, no subscripted MOVEs |
+| 2 | directory not found |
+| 3 | some files unreadable |
+
+The JSON on stdout reports five counts: bare, subscripted, ref-modified, total,
+unreadable. The human summary goes to stderr.
+
 ### Render the HTML visualization
 
 ```bash
