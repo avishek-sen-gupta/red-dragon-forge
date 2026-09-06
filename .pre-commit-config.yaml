@@ -23,8 +23,17 @@ repos:
         # all be met — and it classifies no node it visits, so `object` is the
         # honest annotation for what it takes and yields, which no-object-type
         # forbids. Both constraints come from the ASG, not from style.
+        #
+        # The five cobble/cobble/dataflow/depgraph/ files below are a deferred
+        # backlog, not a design constraint: they carry 145 of that package's 167
+        # violations, all accumulator loops and nesting depth. `rev: main` above
+        # tracks a mutable ruleset, so they began failing without being touched,
+        # and pre-existing violations in a file blocked commits to it for
+        # unrelated reasons. Excluded to unblock; see red-dragon-forge-bgk for
+        # the investigation. Every one of them is still reported by the
+        # warnings-only hook below.
         exclude: >-
-          ^(cicada/cics/|tests/|(cicada|squall|jackal|cobble)/tests/|cobble/cobble/asg_walk\.py$)
+          ^(cicada/cics/|tests/|(cicada|squall|jackal|cobble)/tests/|cobble/cobble/asg_walk\.py$|cobble/cobble/dataflow/depgraph/(graph|build|checker|flows|render)\.py$)
   - repo: local
     hooks:
       - id: terminology-guard
