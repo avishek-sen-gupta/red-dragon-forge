@@ -151,6 +151,15 @@ def _enter(label: Node, body, end: Node) -> tuple[Edge, ...]:
 
 
 def _fallthru(order: Sequence[ParagraphRef]) -> tuple[Edge, ...]:
+    """Every consecutive pair, unconditionally -- the paragraph that stops is named
+    in ``desugar``, not here.
+
+    STOP RUN, GOBACK and EXIT PROGRAM lower to nodes with no exit, so the ``#end``
+    of a paragraph ending in one has nothing reaching it and the edge this adds to
+    the next label is dead where it should be. Deciding it here instead would mean
+    asking whether the LAST statement terminates, which is the wrong question: it
+    may sit in one arm of an IF with the other arm running on.
+    """
     return tuple(
         Edge(
             source=end_id(current.name),

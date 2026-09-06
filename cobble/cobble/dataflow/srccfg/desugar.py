@@ -19,7 +19,7 @@ arm. Suffixes distinguish the several nodes one statement can lower to:
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from cobble.dataflow.depgraph.flows import (
@@ -90,9 +90,10 @@ READS_ONLY_KINDS = ("DisplayStatement",)
 # A verb whose source is outside the program still writes its target.
 EXTERNAL_SOURCE_WRITES = ("AcceptStatement",)
 
-# Kinds this module knows touch data items. A statement in this set is always
-# ASSIGN even when extraction yields nothing: an ASSIGN with empty writes and
-# reads is a parse gap made visible, not a no-op.
+# Kinds this module knows touch data items, and reads locally rather than through
+# flows. A statement in this set is always ASSIGN even when extraction yields
+# nothing: an ASSIGN with empty writes and reads is a parse gap made visible, not a
+# no-op.
 _GAP_FILL_KINDS = WRITES_ONLY_KINDS + READS_ONLY_KINDS + EXTERNAL_SOURCE_WRITES
 
 
@@ -162,13 +163,29 @@ def _plain(statement, ctx: Ctx, path: str) -> Fragment:
 
 
 def _writes_reads(statement, ctx: Ctx, kind: str) -> tuple[tuple[str, ...], ...]:
-    if kind in WRITES_ONLY_KINDS:
-        return (operand_names(getattr(statement, "operands", ())), ())
-    if kind in READS_ONLY_KINDS:
-        return ((), operand_names(getattr(statement, "operands", ())))
+    if kind in _GAP_FILL_KINDS:
+        return _local_roles(statement, kind)
+    return _flow_roles(statement, ctx)
+
+
+def _local_roles(statement, kind: str) -> tuple[tuple[str, ...], ...]:
+    """The kinds flows has no rule for. What they touch is their own operand list --
+    or, where the source is outside the program, their target -- rather than the
+    source-to-target pairs every other verb is read as."""
     if kind in EXTERNAL_SOURCE_WRITES:
-        target = getattr(statement, "target", "")
-        return ((target,) if target else (), ())
+        return (_written_target(statement), ())
+    names = operand_names(getattr(statement, "operands", ()))
+    if kind in WRITES_ONLY_KINDS:
+        return (names, ())
+    return ((), names)
+
+
+def _written_target(statement) -> tuple[str, ...]:
+    target = getattr(statement, "target", "")
+    return (target,) if target else ()
+
+
+def _flow_roles(statement, ctx: Ctx) -> tuple[tuple[str, ...], ...]:
     blocks = blocks_of(statement, ctx.flows)
     return (
         _dedupe(target for _, targets in blocks for target in targets),
@@ -193,6 +210,29 @@ def _one(node: Node) -> Fragment:
         entry=node.id,
         exits=(Exit(node_id=node.id, kind=EdgeKind.FLOW),),
     )
+
+
+def _terminator(statement, ctx: Ctx, path: str) -> Fragment:
+    """STOP RUN, GOBACK, EXIT PROGRAM: the same node as any other, minus its exit.
+
+    Dropping the exit is the whole model, because two things downstream are already
+    driven by exits. ``seq`` gives each exit the next statement's entry, so a
+    terminator leaves the rest of its paragraph with no route in; and ``build.py``
+    gives a paragraph's exits its ``#end``, so a paragraph ending in one leaves that
+    ``#end`` unreachable -- which severs the fall-through to the NEXT paragraph and
+    the RETURN edge hanging off that same end together. Without this, control
+    cascades off the entry paragraph's end through every later paragraph in
+    declaration order, and no paragraph in a real member can be found dead.
+
+    All three verbs alike. GOBACK and EXIT PROGRAM in a subprogram return to
+    whatever CALLed the program, never to the PERFORM that reached the paragraph, so
+    a PERFORM of a paragraph ending in one does not come back either.
+
+    Plain EXIT is deliberately NOT here. It is the no-op sentinel conventionally
+    written at the end of a PERFORM THRU range and it falls through like anything
+    else; treating it as a terminator would cut most of a program in half.
+    """
+    return replace(_plain(statement, ctx, path), exits=())
 
 
 def _with_arms(statement, ctx: Ctx, path: str, body: Fragment) -> Fragment:
@@ -290,13 +330,20 @@ def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
 
 
 def lower_condition(cond, ctx: Ctx, path: str, slot: str = "") -> CondFragment:
-    if isinstance(cond, Not):
-        return _swap(lower_condition(cond.inner, ctx, path, slot))
-    if isinstance(cond, And):
-        return _chain(cond, ctx, path, slot, EdgeKind.TRUE)
-    if isinstance(cond, Or):
-        return _chain(cond, ctx, path, slot, EdgeKind.FALSE)
-    return _test(cond, ctx, path, slot)
+    compound = _COMPOUNDS.get(type(cond))
+    return compound(cond, ctx, path, slot) if compound else _test(cond, ctx, path, slot)
+
+
+def _negated(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
+    return _swap(lower_condition(cond.inner, ctx, path, slot))
+
+
+def _anded(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
+    return _chain(cond, ctx, path, slot, EdgeKind.TRUE)
+
+
+def _ored(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
+    return _chain(cond, ctx, path, slot, EdgeKind.FALSE)
 
 
 def _test(atom, ctx: Ctx, path: str, slot: str) -> CondFragment:
@@ -398,9 +445,13 @@ def _attach(exits: tuple[Exit, ...], arm: Fragment) -> tuple[Edge, ...]:
     )
 
 
-def _raw_condition(statement) -> object:
+def _raw_condition(statement) -> Mapping:
     """The ASG hands conditions back as the same dicts it was built from, and the
-    statement dataclasses keep them under ``condition``."""
+    statement dataclasses keep them under ``condition``.
+
+    Unparameterised, because the values are what nesting the reader walks: a
+    sub-condition mapping, an operand mapping, a name, a flag. ``read_condition``
+    owns that descent and is where the shapes are named."""
     raw = getattr(statement, "condition", {}) or {}
     return raw
 
@@ -695,14 +746,18 @@ def _call(ctx: Ctx, path: str, target: str) -> Fragment:
 
 
 def _loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
-    kind = type(spec).__name__
-    if kind == "PerformTimesSpec":
-        return _tested_loop(_times_test(spec, ctx, path), body, before=True)
-    if kind == "PerformUntilSpec":
-        return _tested_loop(_until_test(spec, ctx, path), body, before=_before(spec))
-    if kind == "PerformVaryingSpec":
-        return _varying_loop(spec, body, ctx, path)
-    return body
+    """A spec no form is known for leaves the body unwrapped: an inline PERFORM runs
+    its body once."""
+    form = _LOOP_FORMS.get(type(spec).__name__)
+    return form(spec, body, ctx, path) if form else body
+
+
+def _times_loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
+    return _tested_loop(_times_test(spec, ctx, path), body, before=True)
+
+
+def _until_loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
+    return _tested_loop(_until_test(spec, ctx, path), body, before=_before(spec))
 
 
 def _before(spec) -> bool:
@@ -898,23 +953,25 @@ def _arm(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
     )
 
 
-def _handler_options(statement) -> tuple[tuple[str, object], ...]:
+def _handler_options(statement) -> tuple[tuple[str, str], ...]:
+    """Each non-suppressing option as its name and its text.
+
+    The text is taken here rather than carried onwards, because an option written
+    without a value is None in the parse and an absent operand and an empty one mean
+    the same thing to lowering. getattr with a default keeps the whole of that at
+    this one boundary, and stands in for the banned ``is None`` check.
+    """
     return tuple(
-        (name.upper(), value)
+        (name.upper(), str(getattr(value, "text", "") or ""))
         for name, value in getattr(statement, "options", {}).items()
         if name.upper() not in SUPPRESSING_OPTIONS
     )
 
 
-def _armed_value(value: object, verb: str) -> str:
+def _armed_value(text: str, verb: str) -> str:
     """A paragraph name when one is given; otherwise the marker for what the
     command means -- IGNORE CONDITION keeps control, a bare HANDLE CONDITION hands
-    the condition back to CICS.
-
-    ``value`` is a CicsOperand or None, so the text comes from the attribute. getattr
-    with a default stands in for the banned ``is None`` check.
-    """
-    text = str(getattr(value, "text", "") or "")
+    the condition back to CICS."""
     if text:
         return text.upper()
     return IGNORED if verb == "IGNORE CONDITION" else SYSTEM_DEFAULT
@@ -1051,6 +1108,14 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
     return _with_arms(statement, ctx, path, _one(node))
 
 
+_COMPOUNDS = {Not: _negated, And: _anded, Or: _ored}
+
+_LOOP_FORMS = {
+    "PerformTimesSpec": _times_loop,
+    "PerformUntilSpec": _until_loop,
+    "PerformVaryingSpec": _varying_loop,
+}
+
 _HANDLERS = {
     "IfStatement": _if,
     "EvaluateStatement": _evaluate,
@@ -1059,4 +1124,7 @@ _HANDLERS = {
     "SearchStatement": _search,
     "ExecCicsStatement": _exec_cics,
     "CallStatement": _cobol_call,
+    "StopRunStatement": _terminator,
+    "GobackStatement": _terminator,
+    "ExitProgramStatement": _terminator,
 }
