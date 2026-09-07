@@ -4,14 +4,21 @@ No JVM: the ASG cache is the whole input. A member that raises is reported and t
 run continues, because the answer wanted from a corpus pass is "which members are
 missing from this output", and a run that aborts answers that for one member only.
 
-Four files, so that the graph holds only what nothing outside it could state:
+Five files, so that the graph holds only what nothing outside it could state:
 
   nodes.jsonl    the FIELD endpoints, no attributes
   edges.jsonl    one FLOWS_TO per (node, source extent, target extent)
   extents.jsonl  every declared name's level, usage, and byte ranges
   defs.jsonl     the definitions reaching each (node, source extent)
+  aliases.jsonl  per call site, the commarea window it shares with its callee
 
-The two side tables are relations of their own rather than edge attributes
+An aliases row is one LINK/XCTL/CALL site: the byte window the caller and the
+callee both address, or the named reason they share none. A skipped member
+contributes no rows, because the rows need the caller's layout and that layout is
+what the skip could not compute. How many sites reached a window, and what stopped
+the rest, are the summary's ``aliased`` and ``alias_dead_ends``.
+
+extents and defs are relations of their own rather than edge attributes
 because both are many-to-one against a flow: one read has as many reaching
 definitions as it has paths, and one byte range as many declared names as it has
 groups and redefinitions over it. Held on the edge they were duplicated per path
@@ -46,7 +53,7 @@ import json
 import logging
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import reduce
@@ -57,14 +64,17 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
+from cobble.dataflow.fields.aliases import UNREADABLE, commarea_aliases
 from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.fixpoint import analysed
 from cobble.dataflow.fields.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fields.side_tables import (
+    CommareaAlias,
     FieldExtents,
     JsonlWriter,
     ReachingDefs,
+    alias_row,
     defs_row,
     extent_row,
     jsonl_writer,
@@ -79,6 +89,7 @@ NODES_FILE = "nodes.jsonl"
 EDGES_FILE = "edges.jsonl"
 EXTENTS_FILE = "extents.jsonl"
 DEFS_FILE = "defs.jsonl"
+ALIASES_FILE = "aliases.jsonl"
 DEFAULT_FLOOR = 0.60
 
 
@@ -98,6 +109,7 @@ class MemberResult:
     edges: tuple[GraphEdge, ...] = ()
     extents: tuple[FieldExtents, ...] = ()
     defs: tuple[ReachingDefs, ...] = ()
+    aliases: tuple[CommareaAlias, ...] = ()
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
@@ -122,13 +134,15 @@ class RunTotals:
     skipped: tuple[tuple[str, str], ...] = ()
     unsettled: tuple[str, ...] = ()
     programs: tuple[tuple[str, str], ...] = ()
+    aliased: int = 0
+    dead_ends: tuple[str, ...] = ()
 
     @property
     def coverage(self) -> float:
         return self.covered / self.writes if self.writes else 0.0
 
 
-def _summary(totals: RunTotals) -> dict[str, float | int]:
+def _summary(totals: RunTotals) -> dict[str, float | int | Mapping[str, int]]:
     return {
         "analysed": totals.analysed,
         "writes": totals.writes,
@@ -138,7 +152,27 @@ def _summary(totals: RunTotals) -> dict[str, float | int]:
         "skipped": len(totals.skipped),
         "unsettled": len(totals.unsettled),
         "collisions": len(_duplicates(totals)),
+        "aliased": totals.aliased,
+        "alias_dead_ends": _tallied(totals.dead_ends),
     }
+
+
+def _bucket(reason: str) -> str:
+    """The key a dead end tallies under.
+
+    Every reason is a fixed string except ``unreadable: <error>``, which carries the
+    parse error's repr. Tallied verbatim that reason fragments into one key of count
+    one per distinct message, so it buckets under its prefix and the error text is
+    left to the rows.
+    """
+    return UNREADABLE if reason.startswith(UNREADABLE) else reason
+
+
+def _tallied(reasons: Sequence[str]) -> Mapping[str, int]:
+    """How many sites stopped for each reason, so the table's coverage is stated
+    rather than assumed."""
+    buckets = tuple(_bucket(reason) for reason in reasons)
+    return {bucket: buckets.count(bucket) for bucket in dict.fromkeys(buckets)}
 
 
 def _duplicates(totals: RunTotals) -> tuple[tuple[str, tuple[str, ...]], ...]:
@@ -167,6 +201,7 @@ def _analysed_member(
         edges=records.edges,
         extents=records.extents,
         defs=records.defs,
+        aliases=commarea_aliases(asg, index, path.parent),
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
@@ -201,6 +236,14 @@ def _unsettled(result: MemberResult) -> tuple[str, ...]:
     return () if result.skipped or result.settled else (result.member,)
 
 
+def _aliased(result: MemberResult) -> int:
+    return sum(1 for alias in result.aliases if not alias.reason)
+
+
+def _dead_ends(result: MemberResult) -> tuple[str, ...]:
+    return tuple(alias.reason for alias in result.aliases if alias.reason)
+
+
 def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
     return RunTotals(
         analysed=totals.analysed + (0 if result.skipped else 1),
@@ -210,26 +253,32 @@ def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
         skipped=(*totals.skipped, *_skipped(result)),
         unsettled=(*totals.unsettled, *_unsettled(result)),
         programs=(*totals.programs, *_seen(result)),
+        aliased=totals.aliased + _aliased(result),
+        dead_ends=(*totals.dead_ends, *_dead_ends(result)),
     )
 
 
 @dataclass(frozen=True)
 class _Sinks:
-    """All four artefacts of one run.
+    """All five artefacts of one run.
 
     Separate files because only two of them are graph facts: where a field is
-    declared, and which statements could have last written a range, are both true
-    of a program whether or not anything flowed. See side_tables.
+    declared, which statements could have last written a range, and which bytes a
+    call site hands to another program are all true whether or not anything flowed
+    -- and the last of the three is a fact about neither program's graph. See
+    side_tables.
     """
 
     graph: GraphWriter
     extents: JsonlWriter
     defs: JsonlWriter
+    aliases: JsonlWriter
 
     def add_result(self, result: MemberResult) -> None:
         self.graph.add_all(result.nodes, result.edges)
         self.extents.add_rows(map(extent_row, result.extents))
         self.defs.add_rows(map(defs_row, result.defs))
+        self.aliases.add_rows(map(alias_row, result.aliases))
 
 
 def _written(sinks: _Sinks, result: MemberResult) -> MemberResult:
@@ -340,9 +389,19 @@ def _report_collisions(totals: RunTotals) -> None:
         )
 
 
+def _report_aliases(totals: RunTotals) -> None:
+    logger.info(
+        "fields: %d call sites share a commarea window, %d do not: %s",
+        totals.aliased,
+        len(totals.dead_ends),
+        _tallied(totals.dead_ends),
+    )
+
+
 def _report(totals: RunTotals) -> None:
     """The human report on stderr, the machine one on stdout."""
     _report_members(totals)
+    _report_aliases(totals)
     _report_collisions(totals)
     json.dump(_summary(totals), sys.stdout)
     sys.stdout.write("\n")
@@ -399,9 +458,13 @@ def _analysed_run(
         _writer(config, locations) as graph,
         _side_writer(config, EXTENTS_FILE) as extents,
         _side_writer(config, DEFS_FILE) as defs,
+        _side_writer(config, ALIASES_FILE) as aliases,
     ):
         totals = _run(
-            _Sinks(graph, extents, defs), paths, _options(arguments), locations
+            _Sinks(graph, extents, defs, aliases),
+            paths,
+            _options(arguments),
+            locations,
         )
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
