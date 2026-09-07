@@ -5,24 +5,29 @@ nothing is summarised or filtered. The queries in render.py answer a question ab
 field; this answers "what does the flow through these programs look like", which has no
 textual form that fits on a screen.
 
-Two decisions carry the weight. Node ids are qualified with the program, because every
-member of a corpus has a MAIN/0 and an unqualified graph silently merges them into one
-wrong graph. And a CALL whose target is in the bundle gets an edge to that program's
-entry, because otherwise a closure renders as a row of disconnected islands -- and the
-one thing the closure establishes is that these programs are a single path.
+Two decisions carry the weight, and both live in presentation.py because webgl.py
+makes them the same way. Node ids are qualified with the program, because every member
+of a corpus has a MAIN/0 and an unqualified graph silently merges them into one wrong
+graph. And a CALL whose target is in the bundle gets an edge to that program's entry,
+because otherwise a closure renders as a row of disconnected islands -- and the one
+thing the closure establishes is that these programs are a single path.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from cobble.dataflow.srccfg.build_corpus import load_cfgs
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
-
-QUALIFIER = "::"
+from cobble.dataflow.srccfg.presentation import (
+    CrossCall,
+    label_of,
+    qualified,
+    resolved_calls,
+)
 
 SHAPES: Mapping[NodeKind, str] = {
     NodeKind.TEST: "diamond",
@@ -57,35 +62,6 @@ UNLABELLED = (EdgeKind.FLOW, EdgeKind.FALLTHRU)
 CALL_COLOUR = "#ef6c00"
 
 
-def _test_label(node: Node) -> str:
-    return node.atom.text
-
-
-def _assign_label(node: Node) -> str:
-    return " ".join(part for part in (node.transfer, *node.writes) if part)
-
-
-def _call_label(node: Node) -> str:
-    return " ".join(part for part in (node.transfer, node.target) if part)
-
-
-def _paragraph_label(node: Node) -> str:
-    return node.paragraph
-
-
-def _id_label(node: Node) -> str:
-    return node.id
-
-
-LABELS: Mapping[NodeKind, Callable[[Node], str]] = {
-    NodeKind.TEST: _test_label,
-    NodeKind.ASSIGN: _assign_label,
-    NodeKind.CALL: _call_label,
-    NodeKind.LABEL: _paragraph_label,
-    NodeKind.NOP: _id_label,
-}
-
-
 def _escaped(text: str) -> str:
     """Backslash first, or the escapes this adds get escaped again.
 
@@ -95,14 +71,10 @@ def _escaped(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _qualified(program: str, node_id: str) -> str:
-    return f"{program}{QUALIFIER}{node_id}"
-
-
 def _node_line(program: str, node: Node) -> str:
     return (
-        f'    "{_qualified(program, node.id)}" '
-        f'[label="{_escaped(LABELS[node.kind](node))}", '
+        f'    "{qualified(program, node.id)}" '
+        f'[label="{_escaped(label_of(node))}", '
         f'shape={SHAPES[node.kind]}, style=filled, fillcolor="{FILLS[node.kind]}"];'
     )
 
@@ -120,8 +92,8 @@ def _arrow(source: str, target: str, attributes: str) -> str:
 
 def _edge_line(program: str, edge: Edge) -> str:
     return _arrow(
-        _qualified(program, edge.source),
-        _qualified(program, edge.target),
+        qualified(program, edge.source),
+        qualified(program, edge.target),
         _edge_attributes(edge.kind),
     )
 
@@ -145,39 +117,16 @@ def _clusters(cfgs: Sequence[Cfg]) -> tuple[str, ...]:
     )
 
 
-def _entries(cfgs: Sequence[Cfg]) -> Mapping[str, str]:
-    """Each program's first node, which is the paragraph label the build starts at."""
-    return {cfg.program: cfg.nodes[0].id for cfg in cfgs if cfg.nodes}
-
-
-def _call_nodes(cfg: Cfg) -> tuple[Node, ...]:
-    return tuple(node for node in cfg.nodes if node.kind is NodeKind.CALL)
-
-
-def _call_arrow(program: str, node: Node, entry: str) -> str:
+def _call_arrow(call: CrossCall) -> str:
     return _arrow(
-        _qualified(program, node.id),
-        _qualified(node.target, entry),
-        f'color="{CALL_COLOUR}", style=dashed, label="{_escaped(node.transfer)}"',
-    )
-
-
-def _calls_of(cfg: Cfg, entries: Mapping[str, str]) -> tuple[str, ...]:
-    """A target absent from the bundle gets no edge.
-
-    Its ASG was not in the cache, so it has no nodes here, and an edge to a node that
-    does not exist makes graphviz invent an empty one -- a program that looks built.
-    """
-    return tuple(
-        _call_arrow(cfg.program, node, entries[node.target])
-        for node in _call_nodes(cfg)
-        if node.target in entries
+        call.source,
+        call.target,
+        f'color="{CALL_COLOUR}", style=dashed, label="{_escaped(call.transfer)}"',
     )
 
 
 def _call_edges(cfgs: Sequence[Cfg]) -> tuple[str, ...]:
-    entries = _entries(cfgs)
-    return tuple(line for cfg in cfgs for line in _calls_of(cfg, entries))
+    return tuple(_call_arrow(call) for call in resolved_calls(cfgs))
 
 
 def dot_of(cfgs: Sequence[Cfg]) -> str:
