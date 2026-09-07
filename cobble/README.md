@@ -610,6 +610,26 @@ assembly — an in-process caller and a reader of the published artefact cannot
 answer differently. A missing table loads as empty rather than as an error, so a
 directory an older build wrote is still worth querying.
 
+### Path sampling, across calls
+
+`cobble-fields-trace PROGRAM --asg-dir DIR --out FILE` answers a different
+question from the artefact tables. It interprets **one concrete path at a time**
+over the same byte-provenance model, threads a single store with no join, and
+steps into a `LINK`ed callee by binding the callee's `DFHCOMMAREA` onto the
+caller's commarea window — so a write-back needs no mechanism, because the two
+sides are the same storage. Because a path has a stack, it also takes only the
+`RETURN` edge back to the site that actually performed the paragraph.
+
+The report names, for every extent written on a sampled path, where its bytes
+came from and **which node in which member last wrote them**. That crossing
+chain is what the intra-program tables cannot carry.
+
+It under-approximates, deliberately: a flow it does not report was not sampled,
+never "does not exist", and a loop body runs once. `--paths` and `--coverage`
+bound the sampling and the branch-coverage figure is printed with the answer, as
+are those limits. The fixpoint behind `cobble-fields` keeps the other guarantee —
+over-approximate, every real flow present — and neither replaces the other.
+
 ### Render the HTML visualization
 
 ```bash
