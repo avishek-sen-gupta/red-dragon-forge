@@ -651,3 +651,80 @@ def test_a_member_absent_from_the_cache_is_refused_before_any_path_runs(parsed: 
     the corpus, so it never reaches the sampler."""
     assert loadable(parsed, "TPROGA") == ""
     assert "no ASG cache" in loadable(parsed, "TPROGZ")
+
+
+def test_the_report_groups_by_program_and_names_the_site_each_was_entered_through(
+    parsed: Path, tmp_path: Path
+):
+    from cobble.dataflow.fields.trace_report import cli
+
+    out = tmp_path / "trace.txt"
+    assert (
+        cli(
+            [
+                "TPROGA",
+                "--asg-dir",
+                str(parsed),
+                "--out",
+                str(out),
+                "--paths",
+                "8",
+            ]
+        )
+        == 0
+    )
+    written = out.read_text(encoding="utf-8")
+
+    assert "TPROGA\n" in written
+    assert "TPROGB   via TPROGA/LINK-PARA/" in written
+    assert "branch coverage:" in written
+    assert "programs entered" in written
+
+
+def test_the_report_states_its_limits_where_a_reader_will_see_them(
+    parsed: Path, tmp_path: Path
+):
+    """In the output, not only in the design doc. The query-time stop layer was
+    deleted for being unreadable, and a number a reader can act on is what replaced
+    it."""
+    from cobble.dataflow.fields.trace_report import cli
+
+    out = tmp_path / "trace.txt"
+    assert cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out)]) == 0
+    written = out.read_text(encoding="utf-8")
+
+    assert "limits:" in written
+    assert 'absence means "not sampled"' in written
+
+
+def test_a_definer_that_crossed_a_call_is_spelled_with_the_member_it_is_in(
+    parsed: Path, tmp_path: Path
+):
+    """The payload no existing artefact can carry: the caller's sink names a node
+    in the callee as the last writer of its bytes."""
+    from cobble.dataflow.fields.trace_report import cli
+
+    out = tmp_path / "trace.txt"
+    assert cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out)]) == 0
+    written = out.read_text(encoding="utf-8")
+
+    assert "defined at TPROGB/SUB-PARA/" in written
+
+
+def test_a_missing_cache_directory_is_refused_with_a_status_and_not_a_traceback(
+    tmp_path: Path,
+):
+    from cobble.dataflow.fields.trace_report import cli
+
+    assert (
+        cli(
+            [
+                "TPROGA",
+                "--asg-dir",
+                str(tmp_path / "absent"),
+                "--out",
+                str(tmp_path / "trace.txt"),
+            ]
+        )
+        == 2
+    )
