@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -41,6 +41,7 @@ from types import MappingProxyType
 
 from cobble.dataflow.fields import rows
 from cobble.dataflow.fields.build_corpus import (
+    ALIASES_FILE,
     DEFS_FILE,
     EDGES_FILE,
     EXTENTS_FILE,
@@ -119,6 +120,29 @@ class Flow:
 
 
 @dataclass(frozen=True)
+class Alias:
+    """One commarea's shared window, both sides parsed, or a named dead end.
+
+    A dead end has an empty ``callee`` and two absent ranges: it is the reason a
+    traversal stopped, which a consumer can name, rather than an edge that is
+    merely missing.
+    """
+
+    caller: str
+    node: str
+    transfer: str
+    callee: str
+    caller_range: ByteRange
+    callee_range: ByteRange
+    returns: bool
+    reason: str
+
+    @property
+    def site(self) -> str:
+        return f"{self.caller}:{self.node}"
+
+
+@dataclass(frozen=True)
 class FieldStore:
     """The three tables a question needs, indexed for the joins it makes.
 
@@ -131,6 +155,7 @@ class FieldStore:
     by_program: Mapping[str, tuple[Field, ...]]
     flows: tuple[Flow, ...]
     definers: Mapping[tuple[str, str], tuple[str, ...]]
+    aliases: tuple[Alias, ...] = ()
 
     def field(self, wanted: str) -> tuple[Field, ...]:
         """A qualified id, or every program's field of that bare name."""
@@ -221,6 +246,61 @@ class FieldStore:
     def definers_of(self, flow: Flow) -> tuple[str, ...]:
         """The statements that could have written what this flow moved."""
         return self.definers.get((flow.node, flow.source_text), ())
+
+    def across(
+        self, ranges: Sequence[ByteRange]
+    ) -> tuple[tuple[Alias, ByteRange], ...]:
+        """Every live alias whose window overlaps ``ranges``, with the rebase."""
+        return tuple(
+            (alias, landing)
+            for alias in self.aliases
+            if not alias.reason
+            for landing in _crossings(alias, ranges)
+        )
+
+    def dead_ends(self, program: str) -> tuple[Alias, ...]:
+        """``program``'s call sites that could not be aliased at all."""
+        return tuple(
+            alias for alias in self.aliases if alias.caller == program and alias.reason
+        )
+
+
+def _rebased(one: ByteRange, window: ByteRange, onto: ByteRange) -> ByteRange:
+    """``one``'s bytes as the other side of the alias addresses them.
+
+    The two windows are the same storage, so an offset from the start of one is
+    the same offset from the start of the other. Clipped to the window: past its
+    end the two areas are not both addressable and nothing may be claimed.
+    """
+    shift = onto.start - window.start
+    return ByteRange(
+        program=onto.program,
+        region=onto.region,
+        start=max(one.start, window.start) + shift,
+        end=min(one.end, window.end) + shift,
+        name=onto.name,
+        exact=one.exact and onto.exact,
+        known=True,
+    )
+
+
+def _one_way(
+    ranges: Sequence[ByteRange], window: ByteRange, onto: ByteRange
+) -> tuple[ByteRange, ...]:
+    return tuple(_rebased(one, window, onto) for one in ranges if window.overlaps(one))
+
+
+def _crossings(alias: Alias, ranges: Sequence[ByteRange]) -> tuple[ByteRange, ...]:
+    """Inbound always; outbound only where the transfer comes back.
+
+    ``LINK`` returns, so its caller can observe what the callee wrote and the
+    alias is symmetric. ``XCTL`` never returns, so no caller observes a
+    write-back and travelling that way would invent one.
+    """
+    inbound = _one_way(ranges, alias.caller_range, alias.callee_range)
+    if not alias.returns:
+        return inbound
+    return (*inbound, *_one_way(ranges, alias.callee_range, alias.caller_range))
 
 
 def _bare(wanted: str) -> str:
@@ -385,6 +465,20 @@ def _flow(row: Row) -> Flow:
     )
 
 
+def _alias(row: Row) -> Alias:
+    caller, callee = rows.text(row, "caller"), rows.text(row, "callee")
+    return Alias(
+        caller=caller,
+        node=rows.text(row, "node"),
+        transfer=rows.text(row, "transfer"),
+        callee=callee,
+        caller_range=byte_range(rows.text(row, "caller_extent"), caller),
+        callee_range=byte_range(rows.text(row, "callee_extent"), callee),
+        returns=rows.flag(row, "returns"),
+        reason=rows.text(row, "reason"),
+    )
+
+
 def _grouped(
     fields: tuple[Field, ...], key: Callable[[Field], str]
 ) -> Mapping[str, tuple[Field, ...]]:
@@ -409,6 +503,7 @@ def store_of(
     declared: Sequence[Row],
     edges: Sequence[Row],
     defs: Sequence[Row],
+    aliases: Iterable[Row] = (),
 ) -> FieldStore:
     """The three tables' rows, indexed. Rows rather than a directory, so that a
     caller holding the records in memory asks its questions of the same store a
@@ -428,6 +523,7 @@ def store_of(
                 for row in defs
             }
         ),
+        aliases=tuple(_alias(row) for row in aliases),
     )
 
 
@@ -441,6 +537,7 @@ def load(out_dir: Path) -> FieldStore:
         rows.read(out_dir / EXTENTS_FILE),
         rows.read(out_dir / EDGES_FILE),
         rows.read(out_dir / DEFS_FILE),
+        rows.read(out_dir / ALIASES_FILE),
     )
 
 

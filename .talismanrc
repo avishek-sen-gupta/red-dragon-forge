@@ -297,4 +297,6 @@ fileignoreconfig:
   checksum: d1641b14cf008903c96a7f3f1a541f4295efeb8de15152666c0368e6fb452fbe
 - filename: cobble/tests/dataflow/fields/test_fields_aliases.py
   checksum: 83c7ee29c017268a5a21bba5c43bd998e860da66be7057fbfac8ed9807e89891
+- filename: cobble/tests/dataflow/fields/test_fields_crossing.py
+  checksum: 27e3af477b701f2e236d12f0766fc21feedc010af0d8cace47fb5c4d1bf92d91
 version: "1.0"

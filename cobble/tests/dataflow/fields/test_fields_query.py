@@ -1,5 +1,7 @@
 """The query surface: byte-interval answers over the four artefacts.
 
+The four-way join is the graph with the extents, edges, defs, and aliases tables.
+
 Rows are written in the artefact's own shape rather than produced by a run, so
 these are assertions about what a consumer of the published files can recover --
 including the things the emitter deliberately stopped writing.

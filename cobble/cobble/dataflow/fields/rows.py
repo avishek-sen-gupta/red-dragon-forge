@@ -47,6 +47,12 @@ def nested(row: Row, key: str) -> Row:
     return value if isinstance(value, Mapping) else {}
 
 
+def flag(row: Row, field: str) -> bool:
+    """A row's boolean. Only JSON ``true`` reads as true, so a missing or
+    misspelled value is the conservative answer instead of a crash."""
+    return row.get(field) is True
+
+
 def strings(row: Row, key: str) -> tuple[str, ...]:
     """A row's list of strings. ``str`` is rejected deliberately: it is itself a
     Sequence, so a scalar written where a list belongs would otherwise read back as
