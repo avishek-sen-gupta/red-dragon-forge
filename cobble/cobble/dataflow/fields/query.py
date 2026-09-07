@@ -123,9 +123,9 @@ class Flow:
 class Alias:
     """One commarea's shared window, both sides parsed, or a named dead end.
 
-    A dead end has an empty ``callee`` and two absent ranges: it is the reason a
-    traversal stopped, which a consumer can name, rather than an edge that is
-    merely missing.
+    A dead end has two absent ranges and a non-empty ``reason``: it is the reason
+    a traversal stopped, which a consumer can name, rather than an edge that is
+    merely missing. Its ``callee`` is present whenever the target resolved.
     """
 
     caller: str
@@ -144,10 +144,11 @@ class Alias:
 
 @dataclass(frozen=True)
 class FieldStore:
-    """The three tables a question needs, indexed for the joins it makes.
+    """The four tables a question needs, indexed for the joins it makes.
 
     ``nodes.jsonl`` is not read: every FIELD node it holds is an endpoint of some
-    edge, so it adds no fact a query here asks for.
+    edge, so it adds no fact a query here asks for. ``aliases`` is not indexed:
+    ``across`` scans every alias row per call.
     """
 
     fields: Mapping[str, Field]
@@ -254,7 +255,7 @@ class FieldStore:
         return tuple(
             (alias, landing)
             for alias in self.aliases
-            if not alias.reason
+            if not alias.reason  # redundant (dead row ranges are NO_RANGE), kept as intent
             for landing in _crossings(alias, ranges)
         )
 
@@ -271,6 +272,10 @@ def _rebased(one: ByteRange, window: ByteRange, onto: ByteRange) -> ByteRange:
     The two windows are the same storage, so an offset from the start of one is
     the same offset from the start of the other. Clipped to the window: past its
     end the two areas are not both addressable and nothing may be claimed.
+    ``exact`` ignores ``window.exact`` because a clamped window would make the
+    shift itself unsound. ``known=True`` relies on ``_aliased`` always writing
+    both extents, ``_dead`` always setting a reason, and ``overlaps`` filtering
+    ``NO_RANGE`` on the source side.
     """
     shift = onto.start - window.start
     return ByteRange(
@@ -505,10 +510,10 @@ def store_of(
     defs: Sequence[Row],
     aliases: Iterable[Row] = (),
 ) -> FieldStore:
-    """The three tables' rows, indexed. Rows rather than a directory, so that a
-    caller holding the records in memory asks its questions of the same store a
-    reader of the artefact gets -- an in-process query and a published one cannot
-    then answer differently."""
+    """The four tables' rows, indexed where the joins need it. Rows rather than a
+    directory, so that a caller holding the records in memory asks its questions
+    of the same store a reader of the artefact gets -- an in-process query and a
+    published one cannot then answer differently."""
     fields = tuple(_field(row) for row in declared)
     return FieldStore(
         fields=MappingProxyType({field.id: field for field in fields}),
