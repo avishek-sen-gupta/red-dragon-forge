@@ -147,6 +147,10 @@ class _Cross:
     ``blocked`` is a candidate landing, not a landing: it is what a crossing from
     a frontier entry already at the cap would have produced. Whether the cap
     actually cost the answer anything is settled at assembly, against ``seen``.
+    Deduped as it accumulates, because it is retained for the whole walk and
+    rescanned at assembly while only distinct candidates can change that verdict:
+    one window several frontier ranges are clipped onto yields the same candidate
+    at every level it stands at the cap.
     """
 
     seen: tuple[tuple[str, ByteRange, int], ...]
@@ -574,7 +578,7 @@ def _stepped(store: FieldStore, side: Side, hops: int, walk: _Cross) -> _Cross:
         frontier=fresh,
         landings=(*walk.landings, *((walk.depth + 1, one) for one in fresh)),
         stops=(*walk.stops, *_gaps(store, walk)),
-        blocked=(*walk.blocked, *blocked),
+        blocked=tuple(dict.fromkeys((*walk.blocked, *blocked))),
         depth=walk.depth + 1,
     )
 
@@ -682,19 +686,39 @@ def _add_if_not_superseded(
     return kept if superseded else (*kept, candidate)
 
 
+def _uncovered(one: _At, seen: Sequence[tuple[str, ByteRange, int]]) -> bool:
+    """No entry reached at or below ``one``'s cost holds every one of its bytes.
+
+    ``covers`` where ``_fresh`` asks ``overlaps``, and the difference is the whole
+    predicate: an entry sharing only part of a blocked candidate's bytes reached
+    nothing from the rest, so those bytes were genuinely lost to the cap. Coverage
+    at no greater cost is what makes the silence sound -- everything onward from
+    covered bytes is reachable from the covering entry at no greater cost, flows
+    costing no hop.
+
+    ``_fresh``'s ``one.at.known`` is absent rather than dropped: every blocked
+    candidate comes from ``_crossings_from``, hence from ``_rebased``, which sets
+    ``known=True``.
+    """
+    return not any(
+        one.field_id == other and part.covers(one.at) and seen_hops <= one.hops
+        for other, part, seen_hops in seen
+    )
+
+
 def _limits(walk: _Cross, hops: int) -> tuple[str, ...]:
     """``hop limit N`` only where the cap cost the answer bytes nothing else reached.
 
-    Resolved here, on the finished walk, rather than per level: freshness at the
-    moment of the cut is provisional, because a cheaper route to the same bytes can
-    arrive at a later level and be admitted. A blocked candidate that turns up
-    anyway, at its would-be cost or lower, cut nothing -- and only the finished
-    ``seen`` settles which of the two happened.
+    Resolved here, on the finished walk, rather than per level: coverage at the
+    moment of the cut is provisional, because a route to the same bytes at no
+    greater cost can arrive at a later level. A blocked candidate whose bytes are
+    covered that cheaply anyway cut nothing -- and only the finished ``seen``
+    settles which of the two happened.
 
-    A landing dropped as already seen at equal or lower cost is deliberately not a
-    stop, which is what asking ``_fresh`` rather than membership carries.
+    A landing dropped as already covered at equal or lower cost is deliberately not
+    a stop, which is what asking ``_uncovered`` rather than membership carries.
     """
-    cut = any(_fresh(one, walk.seen) for one in walk.blocked)
+    cut = any(_uncovered(one, walk.seen) for one in walk.blocked)
     return (f"hop limit {hops}",) if cut else ()
 
 

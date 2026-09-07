@@ -887,6 +887,92 @@ def test_cut_crossing_still_reports_hop_limit():
     assert "hop limit 2" not in whole.stops
 
 
+def test_a_partly_covered_blocked_crossing_is_still_a_hop_limit():
+    """Sharing some of the refused candidate's bytes is not reaching them.
+
+    Two callers pass windows at different offsets into one callee's commarea: the
+    cheap route (``MAIN/9``, one hop) lands ``[0:4]``, the route the cap refuses would
+    have landed ``[2:6]``, and ``XPROGB``'s flow leaves ``[4:6]`` -- bytes only the
+    refused crossing reaches. So the one-hop budget really loses ``XPROGB.B-SINK``.
+
+    Whole-tuple assertions rather than membership, because the published order is
+    itself user-visible: the coarser budget first, then the hop cap.
+    """
+    declared = (
+        _declared("WS-AREA", 1, ((0, 12),), program="XPROGA"),
+        _declared("WS-MID", 1, ((16, 20),), program="XPROGA"),
+        _declared("WS-Q", 1, ((24, 28),), program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 12, program="XPROGC"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 14, program="XPROGB"),
+        _declared("B-SINK", 1, ((40, 44),), program="XPROGB"),
+    )
+    edges = (
+        _edge(
+            "WS-AREA",
+            "WS-MID",
+            "MAIN/5",
+            "WS-AREA@working_storage[0:4]",
+            "WS-MID@working_storage[16:20]",
+            program="XPROGA",
+        ),
+        _edge(
+            "WS-MID",
+            "WS-Q",
+            "MAIN/6",
+            "WS-MID@working_storage[16:20]",
+            "WS-Q@working_storage[24:28]",
+            program="XPROGA",
+        ),
+        _edge(
+            "DFHCOMMAREA",
+            "B-SINK",
+            "SUB/2",
+            "DFHCOMMAREA@linkage[4:6]",
+            "B-SINK@working_storage[40:44]",
+            program="XPROGB",
+        ),
+    )
+    aliases = (
+        _alias_row(
+            caller="XPROGA",
+            node="MAIN/2",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="WS-AREA@working_storage[0:12]",
+            callee_extent="DFHCOMMAREA@linkage[0:12]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGC",
+            node="CMAIN/1",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="DFHCOMMAREA@linkage[0:12]",
+            callee_extent="DFHCOMMAREA@linkage[2:14]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGA",
+            node="MAIN/9",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="WS-Q@working_storage[24:28]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+    )
+    store = store_of(declared, edges, (), aliases)
+    start = (byte_range("WS-AREA@working_storage[0:4]", "XPROGA"),)
+
+    cut = crossing(store, start, Side.SOURCE, depth=3, hops=1)
+    whole = crossing(store, start, Side.SOURCE, depth=3, hops=2)
+
+    assert "XPROGB.B-SINK" not in {one.field_id for one in cut.landings}
+    assert "XPROGB.B-SINK" in {one.field_id for one in whole.landings}
+    assert cut.stops == ("depth limit 3", "hop limit 1")
+    assert whole.stops == ("depth limit 3",)
+
+
 WITHHELD_STOPS = 10
 
 
