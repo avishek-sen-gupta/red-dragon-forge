@@ -102,24 +102,8 @@ def commarea_aliases(
     return tuple(
         row
         for site in call_sites(build_program(asg))
-        for row in _guarded_site_rows(site, index, asg_dir)
+        for row in _site_rows(site, index, asg_dir)
     )
-
-
-def _guarded_site_rows(
-    site: CallSite, index: CellIndex, asg_dir: Path
-) -> tuple[CommareaAlias, ...]:
-    """Per site, so one site that raises does not silence its siblings.
-
-    Every site's rows used to be built in one generator, where a raise on the third
-    of five discarded the other four -- four call sites became an absence for a
-    defect at a fifth. ``COMMAREA(OF)`` is the reachable route: the operand is all
-    qualifier and no name, so resolving it raises rather than returning nothing.
-    """
-    try:
-        return _site_rows(site, index, asg_dir)
-    except Exception as error:  # noqa: BLE001 - one site costs one row, not the rest
-        return (_dead(site, f"{UNREADABLE}: {error!r}"),)
 
 
 def _site_rows(
@@ -168,11 +152,12 @@ def _reference(operand: str) -> _Reference:
     the cell's path, so the order costs nothing there and stays readable here. A
     subscripted operand keeps its ``(...)`` in the name, matches no cell, and lands
     on ``CALLER_FIELD_UNKNOWN`` -- its arity would have to be read off the text.
+    ``COMMAREA(OF)`` is all qualifier and no name, and lands there the same way: an
+    empty name matches no cell either, which is the truthful reason for an operand
+    naming nothing.
     """
-    name, *qualifiers = (
-        word for word in operand.split() if word.upper() not in _QUALIFIERS
-    )
-    return _Reference(name=name, qualifiers=tuple(qualifiers))
+    named = tuple(word for word in operand.split() if word.upper() not in _QUALIFIERS)
+    return _Reference(name=next(iter(named), ""), qualifiers=named[1:])
 
 
 def _windows(
