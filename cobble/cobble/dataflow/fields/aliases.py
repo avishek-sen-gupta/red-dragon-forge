@@ -13,10 +13,14 @@ a variable, and a shorter runtime length does not make the alias wrong -- the
 bytes are still the same storage, bounded by the callee's own declaration, which
 is already one side of the ``min``.
 
-No fixpoint and no walk. Only the callee's LINKAGE is laid out, so the cost is
-one extra desugar per caller -- ``build_program`` is not memoised, and the
-fixpoint has already run it for the same member -- and one layout per distinct
-callee. A single-member run still emits that member's outbound aliases.
+No fixpoint and no walk, but not free either: one extra desugar per caller --
+``build_program`` is not memoised, and the fixpoint has already run it for the
+same member -- plus a full ``json.loads`` and ``CobolASG.from_dict`` of every
+distinct callee's cache file, of which only the LINKAGE is then laid out.
+``from_dict`` has no partial mode, so the whole member is parsed to reach one
+record; the read is memoised per cache directory, so a callee a hundred sites
+share is read once. A single-member run still emits that member's outbound
+aliases, because the cache directory is the callee lookup whatever was selected.
 """
 
 import json
@@ -184,11 +188,19 @@ def _callee_commarea(asg_dir: Path, callee: str) -> _Callee:
 
 
 def _read_commarea(path: Path) -> _Callee:
+    """Total in the callee: whatever one cache file does costs one site's alias.
+
+    Every exception type, not a list of them. A body that is valid JSON and not an
+    object raises ``AttributeError`` from ``from_dict``, a truncated one
+    ``JSONDecodeError``, and an unrecognised statement whatever its dialect parser
+    raises -- an enumeration here is a guess about a file this pass did not write,
+    and the cost of guessing short is the CALLER's records.
+    """
     try:
         return _linkage_commarea(_asg_at(path))
     except UnsizeableFieldError:
         return _Callee(reason=UNSIZEABLE)
-    except (OSError, ValueError, KeyError) as error:
+    except Exception as error:  # noqa: BLE001 - one callee costs one alias
         return _Callee(reason=f"{UNREADABLE}: {error!r}")
 
 

@@ -10,13 +10,18 @@ Five files, so that the graph holds only what nothing outside it could state:
   edges.jsonl    one FLOWS_TO per (node, source extent, target extent)
   extents.jsonl  every declared name's level, usage, and byte ranges
   defs.jsonl     the definitions reaching each (node, source extent)
-  aliases.jsonl  per call site, the commarea window it shares with its callee
+  aliases.jsonl  per call site and caller window, the bytes shared with a callee
 
-An aliases row is one LINK/XCTL/CALL site: the byte window the caller and the
-callee both address, or the named reason they share none. A skipped member
-contributes no rows, because the rows need the caller's layout and that layout is
-what the skip could not compute. How many sites reached a window, and what stopped
-the rest, are the summary's ``aliased`` and ``alias_dead_ends``.
+An aliases row is one LINK/XCTL/CALL site and one caller window: the bytes the
+caller and the callee both address, or the named reason they share none. The
+window is in the key because a commarea name declared in two records resolves to
+two caller cells on different bytes, so one site contributes a row per resolution
+-- ``aliased`` counts the sites, not the rows. A member the walk's budget gave up
+on still contributes its rows, since they need the caller's layout and not the
+walk; only a member whose layout never built, which is the unsizeable-field skip,
+contributes none. How many sites reached a window, and what stopped the rest, are
+the summary's ``aliased`` and ``alias_dead_ends``. The table's cost is a full
+parse of every distinct callee's cache file, once per run, for its LINKAGE alone.
 
 extents and defs are relations of their own rather than edge attributes
 because both are many-to-one against a flow: one read has as many reaching
@@ -25,9 +30,10 @@ groups and redefinitions over it. Held on the edge they were duplicated per path
 and deduplicated by endpoint, which dropped all but one. ``fields.query`` joins
 them back; nothing about a flow is recoverable only from a fan-out.
 
-Intra-program only: a CALL or LINK contributes a synthetic %CALL:<target> source
-and no callee summary. Cross-program flow is a separate stage, so naming several
-members analyses each one independently -- no edge crosses a program.
+The graph is intra-program: a CALL or LINK contributes a synthetic %CALL:<target>
+source and no callee summary. aliases.jsonl states which bytes that site shares
+with its callee, but it is not an edge -- naming several members analyses each one
+independently, so no edge crosses a program.
 
 Exactly one of --member and --all is required. The usual question is about the
 fields of one program, so a whole-cache pass is asked for rather than defaulted
@@ -55,7 +61,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import groupby
 from operator import itemgetter
@@ -67,7 +73,8 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.dataflow.fields.aliases import UNREADABLE, commarea_aliases
 from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
-from cobble.dataflow.fields.fixpoint import analysed
+from cobble.dataflow.fields.extent import CellIndex
+from cobble.dataflow.fields.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fields.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
@@ -184,30 +191,80 @@ def _duplicates(totals: RunTotals) -> tuple[tuple[str, tuple[str, ...]], ...]:
     return tuple((program, members) for program, members in named if len(members) > 1)
 
 
-def _analysed_member(
-    path: Path, options: AnalysisOptions, locations: FileLocationResolver
+def _tables(
+    member: str, flow: ProgramFlow, index: CellIndex, locations: FileLocationResolver
 ) -> MemberResult:
-    asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    flow, index = analysed(asg, options)
+    """The four graph tables, or the reason this member has none of them."""
     if flow.skipped:
-        return MemberResult(
-            member=path.stem, program=flow.program, skipped=flow.skipped
-        )
+        return MemberResult(member=member, program=flow.program, skipped=flow.skipped)
     records = graph_records(flow, index, locations)
     return MemberResult(
-        member=path.stem,
+        member=member,
         program=flow.program,
         nodes=records.nodes,
         edges=records.edges,
         extents=records.extents,
         defs=records.defs,
-        aliases=commarea_aliases(asg, index, path.parent),
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
         sweeps=flow.sweeps,
         settled=flow.settled,
     )
+
+
+def _alias_rows(
+    asg: CobolASG, index: CellIndex, asg_dir: Path
+) -> tuple[CommareaAlias, ...]:
+    """Walled off from the four tables the alias pass has nothing to do with.
+
+    ``aliases`` already turns a failure on one callee into that site's row. This is
+    the outer wall, for anything that reaches past it -- the alternative is an
+    alias nobody asked for costing this member its four tables and the run its
+    exit code, and blaming this member for another one's cache file.
+    """
+    try:
+        return commarea_aliases(asg, index, asg_dir)
+    except Exception as error:  # noqa: BLE001 - an alias costs one row, never a table
+        return (
+            CommareaAlias(
+                caller=asg.program_id,
+                node="",
+                transfer="",
+                reason=f"{UNREADABLE}: {error!r}",
+            ),
+        )
+
+
+def _aliased_member(
+    result: MemberResult, asg: CobolASG, index: CellIndex, asg_dir: Path
+) -> MemberResult:
+    """The alias rows added to a member whose records are already settled.
+
+    A member the walk gave up on keeps its rows: the alias table needs the
+    caller's layout and the dequeue cap is reached long after that layout is
+    built, so withholding them would report "this program calls nothing" for
+    exactly the members whose callees a reader is asking about. ``NO_INDEX`` is
+    the one silence -- ``analysed`` returns it for an unsizeable field, where no
+    layout was ever computed and there is no caller window to name.
+    """
+    if index is NO_INDEX:
+        return result
+    return replace(result, aliases=_alias_rows(asg, index, asg_dir))
+
+
+def _analysed_member(
+    path: Path, options: AnalysisOptions, locations: FileLocationResolver
+) -> MemberResult:
+    """The four tables first, then the aliases folded onto them.
+
+    In that order because the alias pass cannot discard what it never held -- the
+    four tables are already in the result it replaces by the time it runs.
+    """
+    asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    flow, index = analysed(asg, options)
+    tables = _tables(path.stem, flow, index, locations)
+    return _aliased_member(tables, asg, index, path.parent)
 
 
 def _member_result(
@@ -236,12 +293,26 @@ def _unsettled(result: MemberResult) -> tuple[str, ...]:
     return () if result.skipped or result.settled else (result.member,)
 
 
+def _site(alias: CommareaAlias) -> tuple[str, str]:
+    return (alias.caller, alias.node)
+
+
 def _aliased(result: MemberResult) -> int:
-    return sum(1 for alias in result.aliases if not alias.reason)
+    """Sites that reached a window, not rows. One commarea name declared in two
+    records resolves to two caller cells, so one site is legitimately two rows."""
+    return len({_site(alias) for alias in result.aliases if not alias.reason})
 
 
 def _dead_ends(result: MemberResult) -> tuple[str, ...]:
-    return tuple(alias.reason for alias in result.aliases if alias.reason)
+    """One reason per site that stopped for it, so the tally counts what
+    ``aliased`` counts. Keyed through a dict rather than a set because the tally's
+    key order is the summary's and a set's order is the hash seed's."""
+    stopped = {
+        (*_site(alias), alias.reason): alias.reason
+        for alias in result.aliases
+        if alias.reason
+    }
+    return tuple(stopped.values())
 
 
 def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
@@ -357,6 +428,27 @@ def _exit_code(totals: RunTotals, floor: float) -> int:
     return 0 if totals.coverage >= floor else 1
 
 
+def _dead_end_note(dead_ends: Sequence[str]) -> str:
+    counted = ", ".join(
+        f"{reason} {count}" for reason, count in _tallied(dead_ends).items()
+    )
+    return f", {len(dead_ends)} do not: {counted}" if dead_ends else ""
+
+
+def _report_aliases(totals: RunTotals) -> None:
+    """Nothing at all for a run with no call sites: a corpus of leaf programs has
+    no alias coverage to state, and a line of zeroes reads as a failure to find
+    one. The breakdown is spelled out rather than rendered as a Mapping, whose
+    ``%s`` is a Python repr in a report meant to be read."""
+    if not totals.aliased and not totals.dead_ends:
+        return
+    logger.info(
+        "fields: %d call sites share a commarea window%s",
+        totals.aliased,
+        _dead_end_note(totals.dead_ends),
+    )
+
+
 def _report_members(totals: RunTotals) -> None:
     logger.info(
         "fields: %d members, coverage %.1f%% (%d/%d writes), %d unhandled, %d skipped",
@@ -367,6 +459,7 @@ def _report_members(totals: RunTotals) -> None:
         totals.unhandled,
         len(totals.skipped),
     )
+    _report_aliases(totals)
     for member, reason in sorted(totals.skipped):
         logger.warning("fields: !! skipped %s: %s", member, reason)
     if totals.unsettled:
@@ -389,19 +482,9 @@ def _report_collisions(totals: RunTotals) -> None:
         )
 
 
-def _report_aliases(totals: RunTotals) -> None:
-    logger.info(
-        "fields: %d call sites share a commarea window, %d do not: %s",
-        totals.aliased,
-        len(totals.dead_ends),
-        _tallied(totals.dead_ends),
-    )
-
-
 def _report(totals: RunTotals) -> None:
     """The human report on stderr, the machine one on stdout."""
     _report_members(totals)
-    _report_aliases(totals)
     _report_collisions(totals)
     json.dump(_summary(totals), sys.stdout)
     sys.stdout.write("\n")
