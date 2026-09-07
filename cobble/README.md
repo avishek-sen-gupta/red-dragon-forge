@@ -349,7 +349,7 @@ whole-cache pass is minutes of fixpoint per member, so it is asked for rather
 than defaulted into.
 
 Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
-writes four files to `<out_dir>`:
+writes five files to `<out_dir>`:
 
 | file | one row per | holds |
 | ---- | ----------- | ----- |
@@ -357,6 +357,7 @@ writes four files to `<out_dir>`:
 | `edges.jsonl` | `(node, source extent, target extent)` | the `FLOWS_TO` relation and `node`, the statement that moved the bytes |
 | `extents.jsonl` | *declared* name | its `level`, its `usage`, and the byte ranges it owns |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
+| `aliases.jsonl` | `LINK`/`XCTL`/`CALL` site | the commarea window the caller and callee both address, or the reason they share none |
 
 A `FIELD` id is `<program>.<field>`, because a field name is only unique within a
 program: two copybooks routinely give one piece of storage two names. An edge
@@ -398,6 +399,18 @@ A group write is one edge naming the group, not one per child: which bytes each
 child received follows from the two extents and the declared layout, so storing
 it per child stated the same fact 7842 times over. `fields.query.contributed()`
 is that derivation, and the artefact is lossless because of it.
+
+`aliases.jsonl` is one row per call site, carrying both sides of the window a
+`COMMAREA` shares — `caller_extent` and `callee_extent`, equal in length because
+the window is the shorter of the two declared areas, and past it the two areas are
+not both addressable. Not an edge: the relation is byte identity across a call,
+rebased to the callee's offset 0, so the graph itself stays intra-program. A site
+that reaches no window is still a row, naming what stopped it (`dynamic-target`,
+`callee-not-in-cache`, `callee-declares-no-commarea`, `empty-window`, …) rather
+than going missing, and the JSON summary states `aliased` against the
+`alias_dead_ends` breakdown so the table's coverage is read off the run. A skipped
+member contributes no rows at all: they need the caller's layout, which is what
+the skip could not compute.
 
 The config is its own table, holding only what this stage reads:
 
@@ -458,17 +471,18 @@ A named member absent from the cache ends the run before it starts: analysing
 the rest would report coverage over a member set nobody asked for and exit 0
 while the program in question went unexamined.
 
-**Intra-program only.** A `CALL` or `LINK` contributes a synthetic
-`%CALL:<target>` source and no callee summary; cross-program flow is a separate
-stage — naming several members analyses each independently, so no edge crosses a
-program. A program_id two members declare is exit 3 rather than a rename, since
+**The graph is intra-program.** A `CALL` or `LINK` contributes a synthetic
+`%CALL:<target>` source and no callee summary; `aliases.jsonl` states which bytes
+that site shares with its callee, but it is not an edge — naming several members
+analyses each independently, so no edge crosses a program. A program_id
+two members declare is exit 3 rather than a rename, since
 one shared `edges.jsonl` has no filename to qualify — both members' field ids
 would silently merge into one namespace.
 
 `tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
 over-approximates, `must_cover` under-approximates), the extent wire form and its
 round trip, the per-statement transfer functions, the node-keyed fixpoint,
-extent-to-name resolution, what each of the four files carries, the query
+extent-to-name resolution, what each of the five files carries, the query
 surface's five primitives, and the corpus pass's exit codes.
 
 ### Querying the field dataflow

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.fields.build_corpus import (
+    ALIASES_FILE,
     DEFS_FILE,
     EDGES_FILE,
     EXTENTS_FILE,
@@ -417,3 +418,133 @@ def test_the_run_summary_reaches_stdout_for_a_pipeline(corpus, capsys):
     summary = json.loads(capsys.readouterr().out)
     assert summary["analysed"] == 1
     assert summary["coverage"] == 1.0
+
+
+def _link(target: str, area: str) -> dict:
+    return {
+        "type": "EXEC_CICS",
+        "verb": "LINK",
+        "options": {
+            "PROGRAM": {"text": f"'{target}'", "is_literal": True},
+            "COMMAREA": {"text": area, "is_literal": False},
+        },
+    }
+
+
+def _linking(*targets: str) -> dict:
+    """A member with one LINK per target, passing each of them the same WS-AREA.
+
+    Its own MOVE is there so the run clears the coverage floor: the alias table is
+    what is under test, and an exit 1 for coverage would hide it.
+    """
+    return {
+        "program_id": "XPROGA",
+        "data_fields": [
+            {
+                "level": 1,
+                "name": "WS-AREA",
+                "offset": 0,
+                "children": [
+                    {"level": 5, "name": "WS-HEAD", "pic": "X(4)", "offset": 0},
+                    {"level": 5, "name": "WS-REST", "pic": "X(8)", "offset": 4},
+                ],
+            }
+        ],
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    _move("WS-HEAD", "WS-REST"),
+                    *(_link(target, "WS-AREA") for target in targets),
+                ],
+            }
+        ],
+    }
+
+
+def _commarea_member(program_id: str, size: int) -> dict:
+    """A callee declaring nothing but the area a LINK passes it."""
+    return {
+        "program_id": program_id,
+        "paragraphs": [],
+        "linkage_fields": [{"level": 1, "name": "DFHCOMMAREA", "pic": f"X({size})"}],
+    }
+
+
+def test_the_run_emits_the_alias_table_and_counts_its_dead_ends(corpus, capsys):
+    """A fifth table beside the four, with the coverage of it as a stated number.
+
+    The callee is looked up by cache filename, so the members are named for the
+    programs they declare rather than MEMBERA/MEMBERB.
+    """
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        }
+    )
+
+    assert cli(argv) == 0
+
+    rows = _rows(out_dir / ALIASES_FILE)
+    assert {row["callee"] for row in rows} == {"XPROGB", ""}
+    assert [row["reason"] for row in rows if row["reason"]] == ["callee-not-in-cache"]
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert summary["aliased"] == 1
+    assert summary["alias_dead_ends"] == {"callee-not-in-cache": 1}
+
+
+def test_the_shared_window_is_the_shorter_of_the_two_declared_areas(corpus):
+    """A row a cross-program consumer can cross: both sides, rebased, same length."""
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 8)),
+        }
+    )
+
+    assert cli(argv) == 0
+
+    (shared,) = [row for row in _rows(out_dir / ALIASES_FILE) if not row["reason"]]
+    assert shared["caller_extent"] == "WS-AREA@working_storage[0:8]"
+    assert shared["callee_extent"] == "DFHCOMMAREA@linkage[0:8]"
+    assert (shared["transfer"], shared["returns"]) == ("LINK", True)
+
+
+def test_unreadable_callees_tally_under_one_dead_end_reason(corpus, capsys):
+    """Two callees, two different parse errors, one bucket.
+
+    That reason carries the error's repr, so tallied verbatim it would report a key
+    of count one per distinct message -- a breakdown nobody can read a coverage
+    figure off. The messages stay on the rows, which is where the parse problem is
+    diagnosed.
+    """
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(_linking("XPROGY", "XPROGZ")),
+            "XPROGY": "{not json",
+            "XPROGZ": '{"program_id": "XPROG',
+        }
+    )
+
+    assert cli(argv) == 3
+
+    assert len({row["reason"] for row in _rows(out_dir / ALIASES_FILE)}) == 2
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert summary["aliased"] == 0
+    assert summary["alias_dead_ends"] == {"unreadable": 2}
+
+
+def test_a_skipped_member_contributes_no_alias_rows(corpus):
+    """The rows need the caller's layout, which is what the skip could not build."""
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        },
+        extra=("--iteration-factor", "0"),
+    )
+
+    assert cli(argv) == 3
+
+    assert _rows(out_dir / ALIASES_FILE) == ()
