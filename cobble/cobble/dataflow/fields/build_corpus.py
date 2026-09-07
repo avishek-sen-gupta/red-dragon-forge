@@ -18,10 +18,17 @@ window is in the key because a commarea name declared in two records resolves to
 two caller cells on different bytes, so one site contributes a row per resolution
 -- ``aliased`` counts the sites, not the rows. A member the walk's budget gave up
 on still contributes its rows, since they need the caller's layout and not the
-walk; only a member whose layout never built, which is the unsizeable-field skip,
-contributes none. How many sites reached a window, and what stopped the rest, are
-the summary's ``aliased`` and ``alias_dead_ends``. The table's cost is a full
-parse of every distinct callee's cache file, once per run, for its LINKAGE alone.
+walk. Two members contribute none: one whose own cache file will not parse, which
+raises before the alias pass runs and is named in the skipped list instead, and
+one whose layout never built at all -- the unsizeable-field skip, which no input
+reaches today.
+
+How many sites reached a window, and what stopped the rest, are the summary's
+``aliased`` and ``alias_dead_ends``. They are not a partition of the site count:
+one of a twice-declared commarea name's two cells can share a window while the
+other is a zero-length range nothing can be crossed through, which puts that one
+site in both. The table's cost is a full parse of every distinct callee's cache
+file, once per run, for its LINKAGE alone.
 
 extents and defs are relations of their own rather than edge attributes
 because both are many-to-one against a flow: one read has as many reaching
@@ -70,7 +77,11 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.fields.aliases import UNREADABLE, commarea_aliases
+from cobble.dataflow.fields.aliases import (
+    ALIAS_PHASE_FAILED,
+    UNREADABLE,
+    commarea_aliases,
+)
 from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.extent import CellIndex
@@ -164,15 +175,20 @@ def _summary(totals: RunTotals) -> dict[str, float | int | Mapping[str, int]]:
     }
 
 
+_CARRY_AN_ERROR = (UNREADABLE, ALIAS_PHASE_FAILED)
+
+
 def _bucket(reason: str) -> str:
     """The key a dead end tallies under.
 
-    Every reason is a fixed string except ``unreadable: <error>``, which carries the
-    parse error's repr. Tallied verbatim that reason fragments into one key of count
-    one per distinct message, so it buckets under its prefix and the error text is
-    left to the rows.
+    Every reason is a fixed string except the two that carry an error's repr.
+    Tallied verbatim either of those fragments into one key of count one per
+    distinct message, so both bucket under their prefix and the error text is left
+    to the rows.
     """
-    return UNREADABLE if reason.startswith(UNREADABLE) else reason
+    return next(
+        (prefix for prefix in _CARRY_AN_ERROR if reason.startswith(prefix)), reason
+    )
 
 
 def _tallied(reasons: Sequence[str]) -> Mapping[str, int]:
@@ -218,10 +234,12 @@ def _alias_rows(
 ) -> tuple[CommareaAlias, ...]:
     """Walled off from the four tables the alias pass has nothing to do with.
 
-    ``aliases`` already turns a failure on one callee into that site's row. This is
-    the outer wall, for anything that reaches past it -- the alternative is an
-    alias nobody asked for costing this member its four tables and the run its
-    exit code, and blaming this member for another one's cache file.
+    ``aliases`` walls each site off already, so this is the last resort for a
+    failure before there are sites to wall -- the alternative is an alias nobody
+    asked for costing this member its four tables and the run its exit code. Its own
+    reason rather than ``unreadable``, which is a broken cache file the corpus owns:
+    this row says the alias phase itself gave up -- a bug nothing outside this repo
+    can fix. ``node`` and ``transfer`` are blank because no site was reached to name.
     """
     try:
         return commarea_aliases(asg, index, asg_dir)
@@ -231,7 +249,7 @@ def _alias_rows(
                 caller=asg.program_id,
                 node="",
                 transfer="",
-                reason=f"{UNREADABLE}: {error!r}",
+                reason=f"{ALIAS_PHASE_FAILED}: {error!r}",
             ),
         )
 
@@ -245,8 +263,11 @@ def _aliased_member(
     caller's layout and the dequeue cap is reached long after that layout is
     built, so withholding them would report "this program calls nothing" for
     exactly the members whose callees a reader is asking about. ``NO_INDEX`` is
-    the one silence -- ``analysed`` returns it for an unsizeable field, where no
-    layout was ever computed and there is no caller window to name.
+    the silence -- ``analysed`` returns it for an unsizeable field, where no layout
+    was ever computed and there is no caller window to name. No input reaches it
+    today: the error needs a COMP field over 31 digits and ``parse_pic`` rejects
+    anything over 18 first. Kept because the sentinel is ``analysed``'s stated
+    contract, and rows claiming a window here would claim one that never existed.
     """
     if index is NO_INDEX:
         return result
@@ -428,11 +449,24 @@ def _exit_code(totals: RunTotals, floor: float) -> int:
     return 0 if totals.coverage >= floor else 1
 
 
+_BOTH_BUCKETS = "(a site whose commarea name is declared more than once can be in both)"
+
+
 def _dead_end_note(dead_ends: Sequence[str]) -> str:
+    """The second number, and the warning that it is not the first one's complement.
+
+    Two declarations of one commarea name resolve to two caller cells, and a site
+    can share a window through one of them while the other is a zero-length range
+    nothing can be crossed through. Both facts are real and neither count is
+    distorted to make them sum, so the line says so rather than letting a consumer
+    infer a partition that is not there.
+    """
     counted = ", ".join(
         f"{reason} {count}" for reason, count in _tallied(dead_ends).items()
     )
-    return f", {len(dead_ends)} do not: {counted}" if dead_ends else ""
+    if not dead_ends:
+        return ""
+    return f", {len(dead_ends)} do not: {counted} {_BOTH_BUCKETS}"
 
 
 def _report_aliases(totals: RunTotals) -> None:

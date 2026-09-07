@@ -51,6 +51,7 @@ UNREADABLE = "unreadable"
 CALLER_FIELD_UNKNOWN = "caller-field-unknown"
 CALL_USING = "call-using-unsupported"
 EMPTY_WINDOW = "empty-window"
+ALIAS_PHASE_FAILED = "alias-phase-failed"
 
 COMMAREA_LEVEL = 1
 
@@ -101,8 +102,24 @@ def commarea_aliases(
     return tuple(
         row
         for site in call_sites(build_program(asg))
-        for row in _site_rows(site, index, asg_dir)
+        for row in _guarded_site_rows(site, index, asg_dir)
     )
+
+
+def _guarded_site_rows(
+    site: CallSite, index: CellIndex, asg_dir: Path
+) -> tuple[CommareaAlias, ...]:
+    """Per site, so one site that raises does not silence its siblings.
+
+    Every site's rows used to be built in one generator, where a raise on the third
+    of five discarded the other four -- four call sites became an absence for a
+    defect at a fifth. ``COMMAREA(OF)`` is the reachable route: the operand is all
+    qualifier and no name, so resolving it raises rather than returning nothing.
+    """
+    try:
+        return _site_rows(site, index, asg_dir)
+    except Exception as error:  # noqa: BLE001 - one site costs one row, not the rest
+        return (_dead(site, f"{UNREADABLE}: {error!r}"),)
 
 
 def _site_rows(
@@ -124,8 +141,23 @@ def _refused(site: CallSite) -> str:
 
 def _dead(site: CallSite, reason: str) -> CommareaAlias:
     return CommareaAlias(
-        caller=site.caller, node=site.node, transfer=site.transfer, reason=reason
+        caller=site.caller,
+        node=site.node,
+        transfer=site.transfer,
+        callee=_target(site),
+        reason=reason,
     )
+
+
+def _target(site: CallSite) -> str:
+    """The callee a dead-end row can still name, which is every resolved one.
+
+    ``unreadable: AttributeError(...)`` says nothing about *whose* cache file is
+    broken, so a consumer holding the site had to go back to the ASG to find out.
+    Blank now carries a fact of its own -- the target is a field, not a literal, so
+    nothing short of running the program knows it.
+    """
+    return site.program if site.resolved else ""
 
 
 def _reference(operand: str) -> _Reference:

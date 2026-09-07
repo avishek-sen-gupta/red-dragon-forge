@@ -411,14 +411,26 @@ bytes: that site contributes a row per resolution, so a consumer joining on
 identity across a call, rebased to the callee's offset 0, so the graph itself
 stays intra-program. A site that reaches no window is still a row, naming what
 stopped it (`dynamic-target`, `callee-not-in-cache`,
-`callee-declares-no-commarea`, `empty-window`, …) rather than going missing, and
-the JSON summary states `aliased` — distinct *sites*, not rows — against the
-`alias_dead_ends` breakdown so the table's coverage is read off the run. A member
-the walk's budget gave up on still contributes its rows: they need the caller's
-layout, and the dequeue cap is reached long after that layout is built. Only a
-member whose layout never built — the unsizeable-field skip — contributes none.
-The table costs a full parse of every distinct callee's cache file, once per run,
-to lay out its `LINKAGE` alone.
+`callee-declares-no-commarea`, `empty-window`, …) *and* naming the callee it
+stopped on, so a consumer learns whose cache file to look at without going back to
+the ASG. `callee` is blank only where the target is a field rather than a literal,
+which means "nothing short of running the program resolves this" rather than "the
+pass did not carry it". A raise while resolving one site costs that site one
+`unreadable:` row and nothing else; `alias-phase-failed` is the separate reason for
+the alias phase giving up on a member before it reached any site at all — a bug in
+this repo rather than in the corpus.
+
+The JSON summary states `aliased` — distinct *sites*, not rows — against the
+`alias_dead_ends` breakdown, so the table's coverage is read off the run. The two
+are not a partition of the site count: one of a twice-declared name's two cells can
+share a window while the other is zero-length and can never be crossed, which puts
+that one site in both buckets, and the run line says so. A member the walk's budget
+gave up on still contributes its rows: they need the caller's layout, and the
+dequeue cap is reached long after that layout is built. Two members contribute
+none — one whose own cache file will not parse, which is reported as a skip
+instead, and one whose layout never built, which is the unsizeable-field skip and
+is not reachable today. The table costs a full parse of every distinct callee's
+cache file, once per run, to lay out its `LINKAGE` alone.
 
 The config is its own table, holding only what this stage reads:
 
@@ -482,10 +494,12 @@ while the program in question went unexamined.
 **The graph is intra-program.** A `CALL` or `LINK` contributes a synthetic
 `%CALL:<target>` source and no callee summary; `aliases.jsonl` states which bytes
 that site shares with its callee, but it is not an edge — naming several members
-analyses each independently, so no edge crosses a program. A program_id
-two members declare is exit 3 rather than a rename, since
-one shared `edges.jsonl` has no filename to qualify — both members' field ids
-would silently merge into one namespace.
+analyses each independently, so no edge crosses a program. A non-empty program_id
+two members declare is exit 3 rather than a rename, since one shared `edges.jsonl`
+has no filename to qualify — both members' field ids would silently merge into one
+namespace. Two members that declare *no* program_id are not reported at all: the
+collision check skips a blank name, so their ids merge under one empty prefix and
+nothing in the run says exit 3.
 
 `tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
 over-approximates, `must_cover` under-approximates), the extent wire form and its
