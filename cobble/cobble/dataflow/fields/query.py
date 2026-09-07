@@ -41,6 +41,8 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import reduce
+from itertools import groupby
 from pathlib import Path
 from types import MappingProxyType
 
@@ -140,10 +142,18 @@ class _At:
 
 @dataclass(frozen=True)
 class _Cross:
+    """One level of the crossing walk, plus what the hop cap refused to take.
+
+    ``blocked`` is a candidate landing, not a landing: it is what a crossing from
+    a frontier entry already at the cap would have produced. Whether the cap
+    actually cost the answer anything is settled at assembly, against ``seen``.
+    """
+
     seen: tuple[tuple[str, ByteRange, int], ...]
     frontier: tuple[_At, ...]
     landings: tuple[tuple[int, _At], ...]
     stops: tuple[str, ...]
+    blocked: tuple[_At, ...]
     depth: int
 
 
@@ -510,7 +520,9 @@ def crossing(
     and what a crossing answer has to carry -- which site it went through, how
     many, and why it stopped -- is a different shape from a depth per field.
 
-    The seed names itself so a commarea round trip is not a new landing.
+    The seed names itself so a commarea round trip is not a new landing. ``hops``
+    is the minimum among routes found within the depth budget, not the global
+    minimum.
     """
     at = tuple(_At(field_id=_qualified(one), at=one, hops=0, via="") for one in start)
     return _crossed(
@@ -523,6 +535,7 @@ def crossing(
             frontier=at,
             landings=(),
             stops=(),
+            blocked=(),
             depth=0,
         ),
     )
@@ -532,11 +545,21 @@ def _crossed(
     store: FieldStore, side: Side, depth: int, hops: int, walk: _Cross
 ) -> Crossing:
     if not walk.frontier:
-        return Crossing(landings=_deduped(walk.landings), stops=_stops(walk.stops))
+        return Crossing(
+            landings=_deduped(walk.landings),
+            stops=_stops((*walk.stops, *_limits(walk, hops))),
+        )
     if walk.depth >= depth:
         return Crossing(
             landings=_deduped(walk.landings),
-            stops=_stops((*walk.stops, f"depth limit {depth}", *_gaps(store, walk))),
+            stops=_stops(
+                (
+                    *walk.stops,
+                    f"depth limit {depth}",
+                    *_gaps(store, walk),
+                    *_limits(walk, hops),
+                )
+            ),
         )
     return _crossed(store, side, depth, hops, _stepped(store, side, hops, walk))
 
@@ -544,13 +567,14 @@ def _crossed(
 def _stepped(store: FieldStore, side: Side, hops: int, walk: _Cross) -> _Cross:
     """One level: every flow the frontier touches, then every alias it can cross."""
     flowed = _flow_step(store, side, walk)
-    crossed, cut = _alias_step(store, hops, walk)
+    crossed, blocked = _alias_step(store, hops, walk)
     fresh = tuple(one for one in (*flowed, *crossed) if _fresh(one, walk.seen))
     return _Cross(
         seen=(*walk.seen, *((one.field_id, one.at, one.hops) for one in fresh)),
         frontier=fresh,
         landings=(*walk.landings, *((walk.depth + 1, one) for one in fresh)),
-        stops=(*walk.stops, *_limits(cut, hops), *_gaps(store, walk)),
+        stops=(*walk.stops, *_gaps(store, walk)),
+        blocked=(*walk.blocked, *blocked),
         depth=walk.depth + 1,
     )
 
@@ -595,14 +619,17 @@ def _crossings_from(store: FieldStore, one: _At) -> tuple[_At, ...]:
 
 def _alias_step(
     store: FieldStore, hops: int, walk: _Cross
-) -> tuple[tuple[_At, ...], bool]:
+) -> tuple[tuple[_At, ...], tuple[_At, ...]]:
+    """The crossings this level takes, and the ones the hop cap refused."""
     affordable = tuple(one for one in walk.frontier if one.hops < hops)
     truncated = tuple(one for one in walk.frontier if one.hops >= hops)
     crossed = tuple(
         landed for one in affordable for landed in _crossings_from(store, one)
     )
-    cut = any(_crossings_from(store, one) for one in truncated)
-    return crossed, cut
+    blocked = tuple(
+        landed for one in truncated for landed in _crossings_from(store, one)
+    )
+    return crossed, blocked
 
 
 def _qualified(one: ByteRange) -> str:
@@ -622,49 +649,52 @@ def _fresh(one: _At, seen: Sequence[tuple[str, ByteRange, int]]) -> bool:
     )
 
 
-def _named(fresh: Sequence[_At], depth: int) -> tuple[Landing, ...]:
-    return tuple(
-        Landing(field_id=one.field_id, depth=depth, hops=one.hops, via=one.via)
-        for one in fresh
-    )
-
-
 def _deduped(at_landings: tuple[tuple[int, _At], ...]) -> tuple[Landing, ...]:
-    """Best landing per field and overlapping bytes: minimum hops, then depth.
-
-    The minimum is among routes found within the depth budget, not the global
-    minimum.
-    """
-    sorted_pairs = sorted(
-        at_landings, key=lambda pair: (pair[1].hops, pair[0], pair[1].field_id)
+    """Best landing per field and overlapping bytes: minimum hops, then depth."""
+    by_field = groupby(
+        sorted(at_landings, key=lambda pair: pair[1].field_id),
+        key=lambda pair: pair[1].field_id,
+    )
+    kept = tuple(
+        (depth, at)
+        for _, group in by_field
+        for depth, at in _kept_from_group(tuple(group))
     )
     return tuple(
         Landing(field_id=at.field_id, depth=depth, hops=at.hops, via=at.via)
-        for depth, at in _kept_landings(sorted_pairs, ())
+        for depth, at in sorted(
+            kept, key=lambda pair: (pair[1].hops, pair[0], pair[1].field_id)
+        )
     )
 
 
-def _kept_landings(
-    candidates: Sequence[tuple[int, _At]],
-    kept: tuple[tuple[int, _At], ...],
+def _kept_from_group(group: tuple[tuple[int, _At], ...]) -> tuple[tuple[int, _At], ...]:
+    """Within one field_id group, keep entries not superseded by overlapping bytes."""
+    sorted_group = tuple(sorted(group, key=lambda pair: (pair[1].hops, pair[0])))
+    return reduce(_add_if_not_superseded, sorted_group, ())
+
+
+def _add_if_not_superseded(
+    kept: tuple[tuple[int, _At], ...], candidate: tuple[int, _At]
 ) -> tuple[tuple[int, _At], ...]:
-    if not candidates:
-        return kept
-    depth, candidate = candidates[0]
-    superseded = any(
-        prior_at.field_id == candidate.field_id
-        and prior_at.at.overlaps(candidate.at)
-        and (prior_at.hops, prior_depth) <= (candidate.hops, depth)
-        for prior_depth, prior_at in kept
-    )
-    return _kept_landings(
-        candidates[1:],
-        kept if superseded else (*kept, (depth, candidate)),
-    )
+    _, at = candidate
+    superseded = any(prior_at.at.overlaps(at.at) for _prior_depth, prior_at in kept)
+    return kept if superseded else (*kept, candidate)
 
 
-def _limits(cut: bool, hops: int) -> tuple[str, ...]:
-    """Why a crossing at the hop limit was not taken."""
+def _limits(walk: _Cross, hops: int) -> tuple[str, ...]:
+    """``hop limit N`` only where the cap cost the answer bytes nothing else reached.
+
+    Resolved here, on the finished walk, rather than per level: freshness at the
+    moment of the cut is provisional, because a cheaper route to the same bytes can
+    arrive at a later level and be admitted. A blocked candidate that turns up
+    anyway, at its would-be cost or lower, cut nothing -- and only the finished
+    ``seen`` settles which of the two happened.
+
+    A landing dropped as already seen at equal or lower cost is deliberately not a
+    stop, which is what asking ``_fresh`` rather than membership carries.
+    """
+    cut = any(_fresh(one, walk.seen) for one in walk.blocked)
     return (f"hop limit {hops}",) if cut else ()
 
 
@@ -673,7 +703,7 @@ def _programs(frontier: Sequence[_At]) -> tuple[str, ...]:
 
 
 def _gaps(store: FieldStore, walk: _Cross) -> tuple[str, ...]:
-    """Sites in the programs this level stands in where sharing could not be determined.
+    """Sites in the programs this level stands in that are dead ends.
 
     Some reasons state no bytes are shared at all, so a stop is not always a gap
     in the answer. A dead-end row's extents are NO_RANGE, so which bytes that
@@ -890,7 +920,7 @@ def _crossing_report(
     )
     return (
         heading,
-        *(_landing_line(one) for one in _ordered(found.landings)),
+        *(_landing_line(one) for one in found.landings),
         stops_heading,
         *(f"    {stop}" for stop in printed_stops),
         *((f"    ... and {overflow} more",) if overflow else ()),
@@ -900,10 +930,6 @@ def _crossing_report(
 def _landing_line(one: Landing) -> str:
     via = f"  via {one.via}" if one.via else ""
     return f"  hop {one.hops}  depth {one.depth}  {one.field_id}{via}"
-
-
-def _ordered(landings: Sequence[Landing]) -> tuple[Landing, ...]:
-    return tuple(sorted(landings, key=lambda one: (one.hops, one.depth, one.field_id)))
 
 
 def _nested_report(found: tuple[Field, ...], label: str) -> tuple[str, ...]:
