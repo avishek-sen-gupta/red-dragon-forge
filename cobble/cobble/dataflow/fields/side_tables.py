@@ -126,8 +126,12 @@ def defs_row(defs: ReachingDefs) -> _Row:
 def alias_row(alias: CommareaAlias) -> _Row:
     """One alias, keyed by the site and the caller window it shares.
 
-    A group commarea can resolve to more than one caller cell, so the window is
-    part of the key: two rows for one site are two windows, not a duplicate.
+    One commarea name can resolve to more than one caller cell -- not because a
+    group is several cells, it is one, but because the same name can be declared in
+    more than one record. The window is in the key so those cells stay apart where
+    they land on different bytes, and collapse where they do not. Two cells that
+    report one window produce a byte-identical row, which the keep-first dedupe
+    drops, rightly: there is one window there to report and not two.
     """
     return (
         f"{alias.caller}\x00{alias.node}\x00{alias.caller_extent}",
@@ -180,6 +184,13 @@ class JsonlWriter:
 
 @contextmanager
 def jsonl_writer(path: Path) -> Iterator[JsonlWriter]:
+    """The ``with`` form of ``JsonlWriter``, closing it however the block ends.
+
+    ``knowledge_graph/graph_writer.py``'s ``GraphWriter`` implements the protocol
+    directly, with the ``*exc: object`` annotation the same lint rules reject; it
+    passes only because the blocking hook lints staged files and nothing has staged
+    it since. Whoever does needs this seam, and this is the precedent.
+    """
     writer = JsonlWriter(path)
     try:
         yield writer
