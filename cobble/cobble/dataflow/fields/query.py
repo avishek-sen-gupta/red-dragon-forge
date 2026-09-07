@@ -60,8 +60,6 @@ MAX_DEPTH = 6
 
 DEFAULT_HOPS = 3
 
-MAX_STOPS_PRINTED = 50
-
 FLOWS_TO = "FLOWS_TO"
 
 
@@ -130,10 +128,9 @@ class Landing:
 
 @dataclass(frozen=True)
 class Crossing:
-    """What a crossing walk found, and every reason it stopped."""
+    """What a crossing walk found."""
 
     landings: tuple[Landing, ...]
-    stops: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -141,40 +138,22 @@ class _At:
     """One place the frontier stands, carrying the cost of reaching it.
 
     ``via`` is the last commarea site the route here crossed, which is provenance
-    for a landing. ``site`` is the statement that produced *this* arrival, which is
-    what a stop about a dropped arrival has to name; a flow's own node is not
-    ``via``, since a flow crosses nothing.
+    for a landing.
     """
 
     field_id: str
     at: ByteRange
     hops: int
     via: str
-    site: str = ""
 
 
 @dataclass(frozen=True)
 class _Cross:
-    """One level of the crossing walk, plus what the hop cap refused to take.
-
-    ``blocked`` is a candidate landing, not a landing: it is what a crossing from
-    a frontier entry already at the cap would have produced. Whether the cap
-    actually cost the answer anything is settled at assembly, against ``seen``.
-    Deduped as it accumulates, because it is retained for the whole walk and
-    rescanned at assembly while only distinct candidates can change that verdict:
-    one window several frontier ranges are clipped onto yields the same candidate
-    at every level it stands at the cap.
-
-    ``dropped`` is carried for the same reason and settled the same way: what
-    overlap pruning refused, whose bytes a later level may still answer.
-    """
+    """One level of the crossing walk."""
 
     seen: tuple[tuple[str, ByteRange, int], ...]
     frontier: tuple[_At, ...]
     landings: tuple[tuple[int, _At], ...]
-    stops: tuple[str, ...]
-    blocked: tuple[_At, ...]
-    dropped: tuple[_At, ...]
     depth: int
 
 
@@ -212,9 +191,10 @@ class Flow:
 class Alias:
     """One commarea's shared window, both sides parsed, or a named dead end.
 
-    A dead end has two absent ranges and a non-empty ``reason``: it is the reason
-    a traversal stopped, which a consumer can name, rather than an edge that is
-    merely missing. Its ``callee`` is present whenever the target resolved.
+    A dead end has two absent ranges and a non-empty ``reason``: a call site the
+    alias phase could not resolve, rather than an edge that is merely missing.
+    ``build_corpus``'s ``alias_dead_ends`` tally is what reports them. Its
+    ``callee`` is present whenever the target resolved.
     """
 
     caller: str
@@ -346,12 +326,6 @@ class FieldStore:
             for alias in self.aliases
             if not alias.reason  # redundant (dead row ranges are NO_RANGE), kept as intent
             for landing in _crossings(alias, ranges)
-        )
-
-    def dead_ends(self, program: str) -> tuple[Alias, ...]:
-        """``program``'s call sites that could not be aliased at all."""
-        return tuple(
-            alias for alias in self.aliases if alias.caller == program and alias.reason
         )
 
 
@@ -538,8 +512,8 @@ def crossing(
 
     Separate from ``reaches`` rather than a flag on it, for two reasons: the
     default answer stays byte-identical because it is still the same function,
-    and what a crossing answer has to carry -- which site it went through, how
-    many, and why it stopped -- is a different shape from a depth per field.
+    and what a crossing answer has to carry -- which site it went through, and
+    how many -- is a different shape from a depth per field.
 
     The seed names itself so a commarea round trip is not a new landing. ``hops``
     is the minimum among routes found within the depth budget, not the global
@@ -555,9 +529,6 @@ def crossing(
             seen=tuple((one.field_id, one.at, 0) for one in at),
             frontier=at,
             landings=(),
-            stops=(),
-            blocked=(),
-            dropped=(),
             depth=0,
         ),
     )
@@ -566,40 +537,19 @@ def crossing(
 def _crossed(
     store: FieldStore, side: Side, depth: int, hops: int, walk: _Cross
 ) -> Crossing:
-    if not walk.frontier:
-        return Crossing(
-            landings=_deduped(walk.landings),
-            stops=_stops((*walk.stops, *_pruned(walk), *_limits(walk, hops))),
-        )
-    if walk.depth >= depth:
-        return Crossing(
-            landings=_deduped(walk.landings),
-            stops=_stops(
-                (
-                    *walk.stops,
-                    f"depth limit {depth}",
-                    *_gaps(store, walk),
-                    *_pruned(walk),
-                    *_limits(walk, hops),
-                )
-            ),
-        )
+    if not walk.frontier or walk.depth >= depth:
+        return Crossing(landings=_deduped(walk.landings))
     return _crossed(store, side, depth, hops, _stepped(store, side, hops, walk))
 
 
 def _stepped(store: FieldStore, side: Side, hops: int, walk: _Cross) -> _Cross:
     """One level: every flow the frontier touches, then every alias it can cross."""
-    flowed = _flow_step(store, side, walk)
-    crossed, blocked = _alias_step(store, hops, walk)
-    reached = (*flowed, *crossed)
+    reached = (*_flow_step(store, side, walk), *_alias_step(store, hops, walk))
     fresh = _canonical(tuple(one for one in reached if _fresh(one, walk.seen)))
     return _Cross(
         seen=(*walk.seen, *((one.field_id, one.at, one.hops) for one in fresh)),
         frontier=fresh,
         landings=(*walk.landings, *((walk.depth + 1, one) for one in fresh)),
-        stops=(*walk.stops, *_gaps(store, walk)),
-        blocked=tuple(dict.fromkeys((*walk.blocked, *blocked))),
-        dropped=tuple(dict.fromkeys((*walk.dropped, *_dropped(reached, walk.seen)))),
         depth=walk.depth + 1,
     )
 
@@ -609,44 +559,13 @@ def _canonical(fresh: Sequence[_At]) -> tuple[_At, ...]:
 
     ``_fresh`` compares against the levels before this one, so two arrivals in the
     same level never see each other and a level can hold the same bytes at two
-    costs. Every flow leaving those bytes is then priced off whichever of the two
-    ``_from`` met, which makes a landing's reported cost depend on the order the
-    step happened to build. Deduping is the fix and reordering is not: reordering
-    only moves which of the two arrivals loses.
+    costs. ``_from`` and ``_deduped`` both take the minimum, so the dearer twin
+    changes no reported cost -- what it does is ride the frontier into the next
+    level and cross again, multiplying arrivals the answer will discard anyway.
     """
     return tuple(
         min((one for one in fresh if (one.field_id, one.at) == place), key=_cost)
         for place in dict.fromkeys((one.field_id, one.at) for one in fresh)
-    )
-
-
-def _dropped(
-    reached: Sequence[_At], seen: Sequence[tuple[str, ByteRange, int]]
-) -> tuple[_At, ...]:
-    """What overlap pruning refused this level, for the verdict at assembly."""
-    return tuple(one for one in reached if one.at.known and not _fresh(one, seen))
-
-
-def _pruned(walk: _Cross) -> tuple[str, ...]:
-    """Arrivals overlap pruning dropped while bytes were still owed an answer.
-
-    ``_fresh`` drops an arrival whose bytes were already stood on at no greater
-    cost, and where the earlier entry *covers* this one nothing is lost: flows cost
-    no hop, so everything onward is reachable from it as cheaply. Where it covers
-    only part -- a callee repacking a whole record over the window it read -- the
-    rest of the bytes reach nothing, and saying so is the difference between a
-    stated limit and an answer that looks complete. ``_uncovered`` is that
-    distinction and the reason this is not merely ``not _fresh``.
-
-    Judged here, on the finished walk, for the reason ``_limits`` is: coverage at
-    the moment of the drop is provisional, and an arrival at the same level or a
-    later one can hold the dropped bytes at no greater cost. Asked at the drop, this
-    reports a loss the finished answer disproves.
-    """
-    return tuple(
-        f"pruned by overlap at {one.site}"
-        for one in walk.dropped
-        if _uncovered(one, walk.seen)
     )
 
 
@@ -660,13 +579,11 @@ def _flow_step(store: FieldStore, side: Side, walk: _Cross) -> tuple[_At, ...]:
 
 def _stepped_from(came: _At, flow: Flow, side: Side) -> _At:
     """A flow costs no hop, so the cost of standing here carries forward."""
-    landed = _far_end(flow, side)
     return _At(
         field_id=_far_id(flow, side),
-        at=landed,
+        at=_far_end(flow, side),
         hops=came.hops,
         via=came.via,
-        site=f"{landed.program}:{flow.node}",
     )
 
 
@@ -693,25 +610,19 @@ def _crossings_from(store: FieldStore, one: _At) -> tuple[_At, ...]:
             at=landing,
             hops=one.hops + 1,
             via=alias.site,
-            site=alias.site,
         )
         for alias, landing in store.across((one.at,))
     )
 
 
-def _alias_step(
-    store: FieldStore, hops: int, walk: _Cross
-) -> tuple[tuple[_At, ...], tuple[_At, ...]]:
-    """The crossings this level takes, and the ones the hop cap refused."""
-    affordable = tuple(one for one in walk.frontier if one.hops < hops)
-    truncated = tuple(one for one in walk.frontier if one.hops >= hops)
-    crossed = tuple(
-        landed for one in affordable for landed in _crossings_from(store, one)
+def _alias_step(store: FieldStore, hops: int, walk: _Cross) -> tuple[_At, ...]:
+    """The crossings this level takes, the hop cap refusing the rest."""
+    return tuple(
+        landed
+        for one in walk.frontier
+        if one.hops < hops
+        for landed in _crossings_from(store, one)
     )
-    blocked = tuple(
-        landed for one in truncated for landed in _crossings_from(store, one)
-    )
-    return crossed, blocked
 
 
 def _qualified(one: ByteRange) -> str:
@@ -762,75 +673,6 @@ def _add_if_not_superseded(
     _, at = candidate
     superseded = any(prior_at.at.overlaps(at.at) for _prior_depth, prior_at in kept)
     return kept if superseded else (*kept, candidate)
-
-
-def _uncovered(one: _At, seen: Sequence[tuple[str, ByteRange, int]]) -> bool:
-    """No entry reached at or below ``one``'s cost holds every one of its bytes.
-
-    ``covers`` where ``_fresh`` asks ``overlaps``, and the difference is the whole
-    predicate: an entry sharing only part of a blocked candidate's bytes reached
-    nothing from the rest, so those bytes were genuinely lost to the cap. Coverage
-    at no greater cost is what makes the silence sound -- everything onward from
-    covered bytes is reachable from the covering entry at no greater cost, flows
-    costing no hop.
-
-    ``_fresh``'s ``one.at.known`` is absent rather than dropped: every blocked
-    candidate comes from ``_crossings_from``, hence from ``_rebased``, which sets
-    ``known=True``.
-    """
-    return not any(
-        one.field_id == other and part.covers(one.at) and seen_hops <= one.hops
-        for other, part, seen_hops in seen
-    )
-
-
-def _limits(walk: _Cross, hops: int) -> tuple[str, ...]:
-    """``hop limit N`` only where the cap cost the answer bytes nothing else reached.
-
-    Resolved here, on the finished walk, rather than per level: coverage at the
-    moment of the cut is provisional, because a route to the same bytes at no
-    greater cost can arrive at a later level. A blocked candidate whose bytes are
-    covered that cheaply anyway cut nothing -- and only the finished ``seen``
-    settles which of the two happened.
-
-    A landing dropped as already covered at equal or lower cost is deliberately not
-    a stop, which is what asking ``_uncovered`` rather than membership carries.
-    """
-    cut = any(_uncovered(one, walk.seen) for one in walk.blocked)
-    return (f"hop limit {hops}",) if cut else ()
-
-
-def _programs(frontier: Sequence[_At]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(one.at.program for one in frontier if one.at.known))
-
-
-def _gaps(store: FieldStore, walk: _Cross) -> tuple[str, ...]:
-    """Sites in the programs this level stands in that are dead ends.
-
-    Some reasons state no bytes are shared at all, so a stop is not always a gap
-    in the answer. A dead-end row's extents are NO_RANGE, so which bytes that
-    site would have shared is precisely what the analysis could not determine.
-
-    The site and not the program alone: ``_stops`` dedupes on the whole string, so
-    without it twenty dead call sites in one program print as one line and a reader
-    can neither find the statement nor tell how much was lost.
-    """
-    return tuple(
-        f"{alias.reason} at {_site_of(alias)}"
-        for program in _programs(walk.frontier)
-        for alias in store.dead_ends(program)
-    )
-
-
-def _site_of(alias: Alias) -> str:
-    """``alias-phase-failed`` has no node to name: the phase gave up on the member
-    before it reached any site, so the program is all there is."""
-    return alias.site if alias.node else alias.caller
-
-
-def _stops(reasons: Sequence[str]) -> tuple[str, ...]:
-    """Deduped, in the order met: one gap met at three levels is one fact."""
-    return tuple(dict.fromkeys(reasons))
 
 
 def _program_of(field_id: str) -> str:
@@ -1023,19 +865,12 @@ def _crossing_report(
     store: FieldStore, field: Field, side: Side, limits: Limits, label: str
 ) -> tuple[str, ...]:
     found = crossing(store, field.ranges, side, limits.depth, limits.hops)
-    stops_heading = "  stopped:" if found.stops else "  stopped: frontier exhausted"
-    printed_stops = found.stops[:MAX_STOPS_PRINTED]
-    overflow = len(found.stops) - len(printed_stops)
-    heading = (
-        f"{label} across calls (depth {limits.depth}, max {limits.hops} hops, "
-        f"{len(found.landings)} landings):"
-    )
     return (
-        heading,
+        (
+            f"{label} across calls (depth {limits.depth}, max {limits.hops} hops, "
+            f"{len(found.landings)} landings):"
+        ),
         *(_landing_line(one) for one in found.landings),
-        stops_heading,
-        *(f"    {stop}" for stop in printed_stops),
-        *((f"    ... and {overflow} more",) if overflow else ()),
     )
 
 

@@ -581,26 +581,27 @@ identity rebased to the other side's offsets. `LINK` returns, so its window is
 symmetric and the callee's write-back comes home; `XCTL` does not, so it is inbound
 only. Each landing prints the bytes it landed on, its `hops` — the cheapest route
 the walk found within the depth budget — and `via`, the last site that route
-crossed. Every answer ends in `stopped:`, which names the hop limit, the depth
-limit, each dead-end site met (`reason at PROGRAM:node`), each arrival dropped by
-overlap pruning that still owed bytes an answer (`pruned by overlap at
-PROGRAM:node`), or `frontier exhausted`.
+crossed. Landings are the whole answer: the walk reports what it reached and says
+nothing about why it ended, so a short answer does not distinguish "nothing flows
+here" from "the analysis stopped here". Where the analysis gave up is a build-time
+fact instead — `aliases.jsonl`'s dead-end rows and the run summary's
+`alias_dead_ends` breakdown name every site that could not be resolved. A
+query-time verdict naming the hop limit, the depth limit, each dead-end site met
+and each pruned arrival was built and then deliberately removed: it cost more to
+read than the distinction was worth.
 
-Three limits are worth knowing, all of them open beads:
+Three limits follow from that, all of them open beads:
 
 - **Overlap pruning drops a covering write-back** (`nsv`). A callee that repacks the
   whole record it read — `MOVE CALLEE-REC TO DFHCOMMAREA` — lands on bytes the
-  inbound hop already stood on, and the walk drops it, losing the return direction.
-  It is reported as `pruned by overlap at …` rather than silently, but it is a lost
-  answer, not a fact about the two programs.
+  inbound hop already stood on, and the walk drops it silently, losing the return
+  direction. A lost answer, not a fact about the two programs.
 - **`hops` is minimal only within `--depth`** (`u3v`). A cheaper route needing more
   flow steps than the depth budget allows is never found, so the cost reported is
   the cheapest of the routes seen.
-- **No stop names an external origin.** A walk that runs out of flows prints
-  `frontier exhausted`, which is the walk's state and not the answer's provenance: a
-  range whose only writer is a `READ INTO` from a file reads the same as a range
-  nothing writes at all. Naming the synthetic `FILE:`/literal/`%CALL:` source it
-  ended on is a deliberate deviation, deferred rather than done.
+- **An external origin reads like an absence** (`bm7`). A range whose only writer is
+  a `READ INTO` from a file reads the same as a range nothing writes at all: the
+  synthetic `FILE:`/literal/`%CALL:` source the walk ended on is never named.
 
 Field names go to stdout and nowhere else, so the log stays safe to tail.
 
