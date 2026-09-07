@@ -293,4 +293,10 @@ fileignoreconfig:
   checksum: cd923026dfc3a3c1f962597a4f60b3977c7a0f31f3f2b77646b9f6fd3a3474b9
 - filename: docs/superpowers/plans/2026-09-07-cross-program-commarea-dataflow.md
   checksum: 88aa47b5309c263111a6e262b1ddb1772a2e7c6dbffb8fe78ffdf6f5aabe8352
+- filename: cobble/cobble/dataflow/fields/aliases.py
+  checksum: a6f02dc9ecc02d56fc981d377dd11909321a6ff0579788f3c7e1cbaf5467d883
+- filename: cobble/cobble/dataflow/fields/side_tables.py
+  checksum: 790785c5d68f34df7d01e662a9f99d015945261fecfbcc9c64190e62115490ca
+- filename: cobble/tests/dataflow/fields/test_fields_aliases.py
+  checksum: b80540e366cab5199080d56700e753a85b81bbbe7e8fab6ebce853871b94e7d6
 version: "1.0"

@@ -1,6 +1,6 @@
-"""The two tables beside the graph, and the one sink that streams either.
+"""The tables beside the graph, and the one sink that streams any of them.
 
-Neither is a graph fact, so neither is in the graph.
+None of them is a graph fact, so none of them is in the graph.
 
 ``extents.jsonl`` says where every *declared* field is, whether a value ever
 moved through it or not, plus the level and usage it was declared with. Level is
@@ -21,6 +21,10 @@ target) triples had more than one. Pinned onto the edge, each of those became on
 edge per definer, all stating the same flow. Here it is one row, and an edge that
 wants the definers joins on the pair it already names.
 
+``aliases.jsonl`` says which bytes a call site shares between two programs. Its
+own table because a row belongs to neither program's flow graph -- it is the
+relation between them.
+
 Same temp-and-rename discipline as GraphWriter, so a crashed run leaves no
 truncated file, and the same keep-first dedupe: two members declaring one
 program_id is normal on a real corpus, and the first one analysed is the one
@@ -30,7 +34,8 @@ whose layout the ids in the graph were named from.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,6 +72,25 @@ class ReachingDefs:
     definers: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class CommareaAlias:
+    """One call site's shared commarea window, or a named reason there is none.
+
+    ``caller``/``node``/``transfer`` are always present, so a site that could not
+    be aliased is a row a consumer can read rather than an absence it has to
+    interpret. ``returns`` is false for XCTL, which never comes back.
+    """
+
+    caller: str
+    node: str
+    transfer: str
+    callee: str = ""
+    caller_extent: str = ""
+    callee_extent: str = ""
+    returns: bool = False
+    reason: str = ""
+
+
 _Row = tuple[str, str]
 
 
@@ -99,11 +123,39 @@ def defs_row(defs: ReachingDefs) -> _Row:
     )
 
 
+def alias_row(alias: CommareaAlias) -> _Row:
+    """One alias, keyed by the site and the caller window it shares.
+
+    A group commarea can resolve to more than one caller cell, so the window is
+    part of the key: two rows for one site are two windows, not a duplicate.
+    """
+    return (
+        f"{alias.caller}\x00{alias.node}\x00{alias.caller_extent}",
+        json.dumps(
+            {
+                "caller": alias.caller,
+                "node": alias.node,
+                "transfer": alias.transfer,
+                "callee": alias.callee,
+                "caller_extent": alias.caller_extent,
+                "callee_extent": alias.callee_extent,
+                "returns": alias.returns,
+                "reason": alias.reason,
+            }
+        ),
+    )
+
+
 class JsonlWriter:
     """One JSON object per line, deduped keep-first on a caller-chosen key.
 
-    Rows arrive already serialised because the two tables have unrelated shapes
-    and a signature wide enough for both would be a blob with extra steps.
+    Rows arrive already serialised because the tables have unrelated shapes and a
+    signature wide enough for all of them would be a blob with extra steps.
+
+    Opened and closed through ``jsonl_writer`` rather than by implementing the
+    context-manager protocol itself: ``__exit__`` takes an exception type, an
+    exception and a traceback, each of which may be absent, and the repo's lint
+    rules admit neither ``object`` nor a ``| None`` union to say so.
     """
 
     def __init__(self, path: Path) -> None:
@@ -125,8 +177,11 @@ class JsonlWriter:
         self._file.close()
         self._tmp.rename(self._path)
 
-    def __enter__(self) -> JsonlWriter:
-        return self
 
-    def __exit__(self, *exc: object) -> None:
-        self.close()
+@contextmanager
+def jsonl_writer(path: Path) -> Iterator[JsonlWriter]:
+    writer = JsonlWriter(path)
+    try:
+        yield writer
+    finally:
+        writer.close()

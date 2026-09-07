@@ -47,6 +47,7 @@ import logging
 import sys
 import time
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import reduce
 from itertools import groupby
@@ -66,6 +67,7 @@ from cobble.dataflow.fields.side_tables import (
     ReachingDefs,
     defs_row,
     extent_row,
+    jsonl_writer,
 )
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
@@ -352,8 +354,10 @@ def _writer(config: FieldsConfig, locations: CorpusIndex) -> GraphWriter:
     )
 
 
-def _side_writer(config: FieldsConfig, name: str) -> JsonlWriter:
-    return JsonlWriter(config.out_dir / name)
+def _side_writer(
+    config: FieldsConfig, name: str
+) -> AbstractContextManager[JsonlWriter]:
+    return jsonl_writer(config.out_dir / name)
 
 
 def _selected(config: FieldsConfig, members: Sequence[str]) -> tuple[Path, ...]:
