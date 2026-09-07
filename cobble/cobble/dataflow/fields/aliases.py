@@ -13,9 +13,10 @@ a variable, and a shorter runtime length does not make the alias wrong -- the
 bytes are still the same storage, bounded by the callee's own declaration, which
 is already one side of the ``min``.
 
-No fixpoint and no walk. The callee is read for its LINKAGE layout only, so the
-cost is one layout per distinct callee, and a single-member run still emits that
-member's outbound aliases.
+No fixpoint and no walk. Only the callee's LINKAGE is laid out, so the cost is
+one extra desugar per caller -- ``build_program`` is not memoised, and the
+fixpoint has already run it for the same member -- and one layout per distinct
+callee. A single-member run still emits that member's outbound aliases.
 """
 
 import json
@@ -45,6 +46,11 @@ UNSIZEABLE = "unsizeable"
 UNREADABLE = "unreadable"
 CALLER_FIELD_UNKNOWN = "caller-field-unknown"
 CALL_USING = "call-using-unsupported"
+EMPTY_WINDOW = "empty-window"
+
+COMMAREA_LEVEL = 1
+
+_QUALIFIERS = frozenset({"OF", "IN"})
 
 NO_EXTENT = FieldExtent(
     region=RegionId.LINKAGE,
@@ -63,10 +69,18 @@ class _Callee:
     reason: str = ""
 
 
+@dataclass(frozen=True)
+class _Reference:
+    """A commarea operand's own name, and the groups its chain qualifies it by."""
+
+    name: str
+    qualifiers: tuple[str, ...] = ()
+
+
 _REFUSALS = (
     (lambda site: site.transfer == CALL_TRANSFER, CALL_USING),
     (lambda site: not site.resolved, DYNAMIC_TARGET),
-    (lambda site: not site.commarea, NO_COMMAREA_OPERAND),
+    (lambda site: not site.commarea.split(), NO_COMMAREA_OPERAND),
 )
 
 
@@ -110,17 +124,41 @@ def _dead(site: CallSite, reason: str) -> CommareaAlias:
     )
 
 
+def _reference(operand: str) -> _Reference:
+    """``WS-AREA OF WS-BLOCK`` as the name and the qualifiers ``cells_named`` wants.
+
+    Qualifiers keep the operand's order, outermost last, which is the order the
+    text writes them in; ``cells_named`` asks only that each one name some group on
+    the cell's path, so the order costs nothing there and stays readable here. A
+    subscripted operand keeps its ``(...)`` in the name, matches no cell, and lands
+    on ``CALLER_FIELD_UNKNOWN`` -- its arity would have to be read off the text.
+    """
+    name, *qualifiers = (
+        word for word in operand.split() if word.upper() not in _QUALIFIERS
+    )
+    return _Reference(name=name, qualifiers=tuple(qualifiers))
+
+
 def _windows(
     site: CallSite, index: CellIndex, callee: FieldExtent
 ) -> tuple[CommareaAlias, ...]:
-    cells = index.cells_named(site.commarea, (), 0)
+    reference = _reference(site.commarea)
+    cells = index.cells_named(reference.name, reference.qualifiers, 0)
     if not cells:
         return (_dead(site, CALLER_FIELD_UNKNOWN),)
     return tuple(_aliased(site, index.extent_of(cell), callee) for cell in cells)
 
 
 def _aliased(site: CallSite, caller: FieldExtent, callee: FieldExtent) -> CommareaAlias:
+    """The shared window, or a dead end when one side lays out at nothing.
+
+    A zero-length window is not a narrow alias, it is no alias: ``ByteRange``
+    overlap needs ``start < other.end``, so nothing can ever be crossed through
+    ``[n:n]`` and a blank reason there would claim a success no consumer can use.
+    """
     shared = min(caller.length, callee.length)
+    if not shared:
+        return _dead(site, EMPTY_WINDOW)
     return CommareaAlias(
         caller=site.caller,
         node=site.node,
@@ -155,14 +193,30 @@ def _read_commarea(path: Path) -> _Callee:
 
 
 def _asg_at(path: Path) -> CobolASG:
+    """The whole member, because ``from_dict`` has no partial mode to ask for.
+
+    It is eager and raises on any statement type no dialect parser claims, so one
+    unrecognised statement in a PROCEDURE DIVISION nothing here reads costs the
+    alias under ``UNREADABLE`` even when the LINKAGE this pass wants is intact.
+    """
     with cached_asg_dialect_parsers_registered():
         return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
 def _linkage_commarea(asg: CobolASG) -> _Callee:
-    """Only LINKAGE is laid out: no row here uses the callee's other sections."""
+    """The callee's ``DFHCOMMAREA`` record, laid out from its LINKAGE alone.
+
+    Only the level-01 entry counts: ``cells_named`` does not filter on level, and a
+    field named ``DFHCOMMAREA`` under some other record is not the area a LINK
+    passes. First declared wins among those, which is deterministic and is all a
+    duplicate 01 of that name could ever justify.
+    """
     index = cell_index(section_records(LINKAGE_ORIGIN, tuple(asg.linkage_fields)))
-    cells = index.cells_named(COMMAREA_RECORD, (), 0)
-    if not cells:
+    records = tuple(
+        cell
+        for cell in index.cells_named(COMMAREA_RECORD, (), 0)
+        if cell.level == COMMAREA_LEVEL
+    )
+    if not records:
         return _Callee(reason=CALLEE_HAS_NO_COMMAREA)
-    return _Callee(extent=index.extent_of(cells[0]))
+    return _Callee(extent=index.extent_of(records[0]))
