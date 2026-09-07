@@ -23,25 +23,38 @@ change to ``cobol_memory``, which is vendored.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from functools import reduce
+from functools import cache, reduce
 from itertools import repeat
+from pathlib import Path
 from types import MappingProxyType
 
-from cobble.dataflow.fields.aliases import NO_EXTENT
+from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
+from cobble.dataflow.fields.aliases import NO_EXTENT, UNSIZEABLE, commarea_aliases
 from cobble.dataflow.fields.extent import CellIndex, cell_index
 from cobble.dataflow.fields.extent_text import byte_range
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.fields.state import EMPTY, Source, State, reaching, write
 from cobble.dataflow.fields.transfer import Statement, Write, writes_of
+from cobble.dataflow.layout import UnsizeableFieldError, program_records
+from cobble.dataflow.srccfg.build import build_program, label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, NodeKind
+from cobble.dataflow.srccfg.desugar import LINK_TRANSFER, XCTL_TRANSFER
+from cobble.dataflow.srccfg.statements import statement_index
+from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
 
 DEFAULT_PATHS = 200
 DEFAULT_COVERAGE = 1.0
 DEFAULT_MAX_DEPTH = 5000
+
+CROSSING_VERBS = (LINK_TRANSFER, XCTL_TRANSFER)
+
+NO_PROCEDURE = "callee-has-no-procedure"
+RE_ENTRY = "re-entry"
 
 
 @dataclass(frozen=True)
@@ -511,9 +524,42 @@ def _returned(walk: _Walk, edge: Edge) -> _Walk:
     return replace(walk, node=edge.target, stack=walk.stack[:-1])
 
 
+def _restored(caller: State, callee: State, window: Window) -> State:
+    """The caller's slice with the shared window written back from the callee's.
+
+    ``state.write`` rather than a union: the callee's write to those bytes really
+    did kill what the caller held there, and ``must_cover`` is what says so. Not
+    ``state.join``, which is the fixpoint's operation and is never called here.
+    """
+    back = _seeded(callee, window.callee_extent, window.caller_extent)
+    return reduce(
+        lambda held, pair: write(held, pair[0], pair[1]), tuple(back.items()), caller
+    )
+
+
 def _ended(walk: _Walk) -> _Walk:
-    """Nowhere left to go, unless a crossing frame owes its caller a return."""
-    return replace(walk, running=False)
+    """Nowhere left to go, unless a crossing frame owes its caller a return.
+
+    Seeding the caller's window back needs no conversion and no flow edge: the two
+    sides were the same bytes all along. An empty resume point is a call that was
+    the last thing its caller did, so there is nothing to come back to.
+    """
+    frame = walk.frame
+    if not (frame.crossing and frame.returns and frame.resume):
+        return replace(walk, running=False)
+    return replace(
+        walk,
+        node=frame.resume,
+        stack=walk.stack[:-1],
+        store={
+            **walk.store,
+            frame.window.caller: _restored(
+                walk.store.get(frame.window.caller, EMPTY),
+                walk.store.get(frame.program, EMPTY),
+                frame.window,
+            ),
+        },
+    )
 
 
 def _followed(walk: _Walk, loaded: Loaded) -> _Walk:
@@ -534,9 +580,117 @@ def _followed(walk: _Walk, loaded: Loaded) -> _Walk:
     return _sampled(walk, loaded, _admissible(walk, edges))
 
 
+def _dead_end(walk: _Walk, row: CommareaAlias, reason: str) -> _Walk:
+    return replace(
+        walk,
+        dead_ends=walk.dead_ends
+        | {
+            DeadEnd(
+                program=walk.program,
+                node=walk.node,
+                transfer=row.transfer,
+                callee=row.callee,
+                reason=reason,
+            )
+        },
+    )
+
+
+def _entered(
+    walk: _Walk,
+    loaded: Loaded,
+    row: CommareaAlias,
+    window: Window,
+    callee: Loaded,
+) -> _Walk:
+    """Step into the callee with the shared window bound, and nothing else.
+
+    The callee's slice starts empty because CICS gives a LINKed program fresh
+    WORKING-STORAGE, so a program entered twice on one path does not inherit its
+    own earlier run's memory. The resume point is read off the CALLER's graph:
+    that is where the path comes back to.
+    """
+    return replace(
+        walk,
+        node=callee.entry,
+        stack=(
+            *walk.stack,
+            Frame(
+                program=row.callee,
+                site=walk.node,
+                resume=_sequel(loaded.cfg, walk.node),
+                crossing=True,
+                returns=row.returns,
+                window=window,
+            ),
+        ),
+        store={
+            **walk.store,
+            row.callee: _seeded(
+                walk.store.get(walk.program, EMPTY),
+                window.caller_extent,
+                window.callee_extent,
+            ),
+        },
+    )
+
+
+def _transfer_uncrossable(row: CommareaAlias, window: Window) -> str:
+    if row.transfer not in CROSSING_VERBS or not window.known:
+        return row.reason or f"transfer-not-crossable: {row.transfer}"
+    return ""
+
+
+def _callee_unenterable(callee: Loaded) -> str:
+    if callee.reason:
+        return callee.reason
+    if not callee.entry:
+        return NO_PROCEDURE
+    return ""
+
+
+def _refusal(walk: _Walk, row: CommareaAlias, window: Window, callee: Loaded) -> str:
+    """Why this site cannot be crossed, or empty. First reason wins.
+
+    A CALL ... USING row is refused by its transfer: the caller's parameters bind
+    positionally onto the callee's PROCEDURE DIVISION USING, which is a different
+    relation from a commarea window and is deliberately out of scope. Its own row
+    already carries ``call-using-unsupported``, so nothing here has to invent a
+    reason for it.
+    """
+    return (
+        _transfer_uncrossable(row, window)
+        or _callee_unenterable(callee)
+        or (RE_ENTRY if _open(walk.stack, row.callee, callee.entry) else "")
+    )
+
+
+def _called(walk: _Walk, loaded: Loaded, loader: Loader, row: CommareaAlias) -> _Walk:
+    """A LINK or an XCTL: bind the shared window and step in, or say why not.
+
+    A refusal does not end the caller's path. ``transfer`` has already credited the
+    commarea to ``%CALL:<program>`` exactly as the fixpoint does, so stopping here
+    would lose the caller's remaining statements and gain nothing.
+    """
+    window = _window(row, row.callee)
+    callee = loader(row.callee) if row.callee else Loaded(program="")
+    refused = _refusal(walk, row, window, callee)
+    if refused:
+        return _followed(_dead_end(walk, row, refused), loaded)
+    return _entered(walk, loaded, row, window, callee)
+
+
 def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
-    """Where the path goes from here. Task 3 puts call crossing in front of this."""
-    return _followed(walk, loaded)
+    """Where the path goes from here: into a callee, or along an edge.
+
+    A crossing site is one the alias table has a row for, rather than one this
+    module re-recognises by verb. Deriving it from the rows is what makes it
+    impossible for the two to disagree about which nodes are call sites.
+    """
+    rows = loaded.aliases.get(walk.node, ())
+    if not rows:
+        return _followed(walk, loaded)
+    return _called(walk, loaded, loader, rows[0])
 
 
 def _stepped(walk: _Walk, loader: Loader) -> _Walk:
@@ -557,7 +711,9 @@ def _walked(start: _Walk, limit: int, loader: Loader) -> _Walk:
     return reduce(lambda walk, _: _stepped(walk, loader), repeat(None, limit), start)
 
 
-def _started(program: str, loader: Loader, cursors) -> _Walk:
+def _started(
+    program: str, loader: Loader, cursors: Mapping[tuple[str, str], int]
+) -> _Walk:
     return _Walk(
         node=loader(program).entry,
         stack=(Frame(program=program),),
@@ -622,3 +778,83 @@ def visited_order(
     return _walked(
         _started(program, loader, NO_CURSORS), budget.max_depth, loader
     ).order
+
+
+@cache
+def _loaded(asg_dir: Path, program: str) -> Loaded:
+    """Everything a path needs from one member, built once per process.
+
+    Memoised on the directory as well as the name, so a run against a different
+    parse never reads another one's answer -- the same reason ``aliases.py`` keys
+    its callee reads that way.
+
+    A member whose storage cannot be laid out cannot be entered even when its
+    LINKAGE laid out fine, which is what let its call site be aliased in the first
+    place: the window says the bytes are shared, not that the callee is analysable.
+    """
+    asg = _asg_at(asg_dir / f"{program}.json")
+    try:
+        index = cell_index(program_records(asg))
+    except UnsizeableFieldError as error:
+        return Loaded(program=program, reason=f"{UNSIZEABLE}: {error}")
+    return Loaded(
+        program=program,
+        cfg=build_program(asg),
+        statements=statement_index(asg),
+        index=index,
+        entry=_entry_node(asg),
+        aliases=_by_node(commarea_aliases(asg, index, asg_dir)),
+    )
+
+
+def _asg_at(path: Path) -> CobolASG:
+    """Spelled out here rather than reused: ``aliases.py``'s own reader is private
+    to it, and this design's one hard constraint is that nothing existing changes.
+    """
+    with cached_asg_dialect_parsers_registered():
+        return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _entry_node(asg: CobolASG) -> str:
+    order = paragraph_order(asg)
+    return label_id(order[0].name) if order else ""
+
+
+def _by_node(
+    rows: Sequence[CommareaAlias],
+) -> Mapping[str, tuple[CommareaAlias, ...]]:
+    """``commarea_aliases`` returns a whole member's sites at once; a path wants one."""
+    keys = tuple(dict.fromkeys(row.node for row in rows))
+    return {key: tuple(row for row in rows if row.node == key) for key in keys}
+
+
+def _loaded_unrunnable(loaded: Loaded) -> str:
+    if loaded.reason:
+        return loaded.reason
+    if not loaded.entry:
+        return NO_PROCEDURE
+    return ""
+
+
+def loadable(asg_dir: Path, program: str) -> str:
+    """Empty when ``program`` can be traced, or the reason it cannot.
+
+    The CLI's check, not the walk's: a wrong ``--asg-dir`` is a mistake about the
+    invocation rather than a finding about the corpus, and a member with no
+    PROCEDURE DIVISION has no path to sample.
+    """
+    path = asg_dir / f"{program}.json"
+    if not path.is_file():
+        return f"no ASG cache at {path}"
+    loaded = _loaded(asg_dir, program)
+    return _loaded_unrunnable(loaded)
+
+
+def sampled(program: str, asg_dir: Path, budget: Budget = DEFAULT_BUDGET) -> Trace:
+    """``traced`` against the one ASG cache every other stage reads.
+
+    No artefact directory: reading the cache directly is what lets a path enter a
+    callee ``aliases.jsonl`` has no rows for, which is any member a single-member
+    build did not select.
+    """
+    return traced(program, lambda member: _loaded(asg_dir, member), budget)

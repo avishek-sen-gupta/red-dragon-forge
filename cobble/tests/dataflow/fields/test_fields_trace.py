@@ -10,16 +10,26 @@ rebase that is off by a byte agrees with a fixture and disagrees with COBOL.
 
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.fields.state import Source, write
 from cobble.dataflow.fields.trace import (
     NO_WINDOW,
+    RE_ENTRY,
     Budget,
+    DeadEnd,
     Loaded,
+    Trace,
     _extent_at,
+    _loaded,
     _rebased,
     _seeded,
     _window,
+    loadable,
+    sampled,
     traced,
     visited_order,
 )
@@ -204,6 +214,15 @@ def _only(program: str, nodes, edges, entry: str) -> Loaded:
     )
 
 
+def _branch_edges(cfg: Cfg) -> tuple[tuple[str, str, str], ...]:
+    tests = frozenset(node.id for node in cfg.nodes if node.kind is NodeKind.TEST)
+    return tuple(
+        (cfg.program, edge.source, edge.kind.value)
+        for edge in cfg.edges
+        if edge.source in tests
+    )
+
+
 LOOP = _only(
     "TPROGA",
     (
@@ -355,3 +374,280 @@ def test_coverage_counts_branch_edges_and_not_every_edge_walked():
 
     assert found.coverage.total == 0
     assert found.coverage.programs == {"TPROGA"}
+
+
+CALLER = _only(
+    "TPROGA",
+    (_node("M/0"), _node("M/1", NodeKind.CALL), _node("M/2")),
+    (_edge("M/0", "M/1"), _edge("M/1", "M/2")),
+    "M/0",
+)
+
+CALLEE = _only("TPROGB", (_node("S/0"),), (), "S/0")
+
+
+def _linked(reason: str = "", returns: bool = True) -> CommareaAlias:
+    if reason:
+        return CommareaAlias(
+            caller="TPROGA", node="M/1", transfer="LINK", callee="TPROGB", reason=reason
+        )
+    return CommareaAlias(
+        caller="TPROGA",
+        node="M/1",
+        transfer="LINK",
+        callee="TPROGB",
+        caller_extent="WS-AREA@working_storage[0:8]",
+        callee_extent="DFHCOMMAREA@linkage[0:8]",
+        returns=returns,
+    )
+
+
+def _pair(row: CommareaAlias):
+    return _loader(replace(CALLER, aliases={"M/1": (row,)}), CALLEE)
+
+
+def test_a_link_with_a_window_is_a_step_into_the_callee_and_back():
+    """Not a wall. The callee's entry runs, then the caller resumes at the call
+    node's own sequel, because ``returns`` is true for LINK."""
+    assert visited_order("TPROGA", _pair(_linked()), Budget(paths=1)) == (
+        "M/0",
+        "M/1",
+        "S/0",
+        "M/2",
+    )
+
+
+def test_an_xctl_does_not_come_back_so_the_path_ends_in_the_callee():
+    assert visited_order("TPROGA", _pair(_linked(returns=False)), Budget(paths=1)) == (
+        "M/0",
+        "M/1",
+        "S/0",
+    )
+
+
+def test_a_site_with_no_window_is_a_dead_end_and_the_callers_path_goes_on():
+    """The caller's own path is not over. ``transfer`` has already credited the
+    commarea to ``%CALL:<program>`` exactly as the fixpoint does, so ending the
+    path here would lose the caller's remaining statements for nothing."""
+    found = traced("TPROGA", _pair(_linked(reason="dynamic-target")), Budget(paths=1))
+
+    assert found.dead_ends == {
+        DeadEnd(
+            program="TPROGA",
+            node="M/1",
+            transfer="LINK",
+            callee="TPROGB",
+            reason="dynamic-target",
+        )
+    }
+    assert visited_order(
+        "TPROGA", _pair(_linked(reason="dynamic-target")), Budget(paths=1)
+    ) == ("M/0", "M/1", "M/2")
+
+
+def test_a_program_already_on_the_stack_is_not_re_entered():
+    """A LINK cycle is the re-entry rule's third case, with no extra machinery: the
+    callee's entry node is one an open frame has already run."""
+    cyclic = _loader(
+        replace(CALLER, aliases={"M/1": (_linked(),)}),
+        replace(
+            _only(
+                "TPROGB",
+                (_node("S/0", NodeKind.CALL),),
+                (),
+                "S/0",
+            ),
+            aliases={
+                "S/0": (
+                    CommareaAlias(
+                        caller="TPROGB",
+                        node="S/0",
+                        transfer="LINK",
+                        callee="TPROGA",
+                        caller_extent="DFHCOMMAREA@linkage[0:8]",
+                        callee_extent="WS-AREA@working_storage[0:8]",
+                        returns=True,
+                    ),
+                )
+            },
+        ),
+    )
+    found = traced("TPROGA", cyclic, Budget(paths=1))
+
+    assert {one.reason for one in found.dead_ends} == {RE_ENTRY}
+    assert visited_order("TPROGA", cyclic, Budget(paths=1)) == (
+        "M/0",
+        "M/1",
+        "S/0",
+        "M/2",
+    )
+
+
+FORGE = Path(__file__).resolve().parents[4]
+BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
+
+TRACE_CALLER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TPROGA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-OUT-KEY           PIC X(4).
+           05  WS-IN-RESULT         PIC X(4).
+       01  WS-SEED                  PIC X(4).
+       01  WS-SINK                  PIC X(4).
+       01  WS-FLAG                  PIC X.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'KKKK' TO WS-SEED.
+           IF WS-FLAG = 'Y'
+               MOVE WS-SEED TO WS-OUT-KEY
+           ELSE
+               MOVE 'ZZZZ' TO WS-OUT-KEY
+           END-IF.
+           PERFORM LINK-PARA.
+           MOVE WS-IN-RESULT TO WS-SINK.
+           STOP RUN.
+       LINK-PARA.
+           EXEC CICS LINK PROGRAM('TPROGB')
+                          COMMAREA(WS-AREA)
+                          LENGTH(8)
+           END-EXEC.
+"""
+
+TRACE_CALLEE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TPROGB.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  SUB-REC.
+           05  SUB-KEY              PIC X(4).
+           05  SUB-RESULT           PIC X(4).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA              PIC X(8).
+       PROCEDURE DIVISION.
+       SUB-PARA.
+           MOVE DFHCOMMAREA TO SUB-REC.
+           MOVE SUB-KEY TO SUB-RESULT.
+           MOVE SUB-RESULT TO DFHCOMMAREA(5:4).
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+def _bridge_jar() -> Path:
+    """The parse is the only thing here that needs a JVM, so it is the only thing
+    that can make this half unrunnable. A missing JAR is an unbuilt workspace, not
+    a failing analysis: ``make jar`` at the root builds it."""
+    found = sorted(FORGE.glob(BRIDGE_GLOB))
+    if not found:
+        pytest.skip(f"no bridge JAR at {BRIDGE_GLOB}; run `make jar`")
+    return found[-1]
+
+
+@pytest.fixture(scope="module")
+def parsed(tmp_path_factory) -> Path:
+    """Both members parsed for real. One JVM start, because that is the cost being
+    amortised -- every test below asks a question of the same cache."""
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    root = tmp_path_factory.mktemp("trace")
+    cache = root / "asg"
+    cache.mkdir()
+    for program, source in (("TPROGA", TRACE_CALLER), ("TPROGB", TRACE_CALLEE)):
+        path = root / f"{program}.cbl"
+        path.write_text(source, encoding="utf-8")
+        result = parse_one(
+            Job(path, cache / f"{program}.json"), str(_bridge_jar()), (), ("cpy",)
+        )
+        assert result.ok, result.error
+    return cache
+
+
+@pytest.fixture(scope="module")
+def crossed(parsed: Path) -> Trace:
+    return sampled("TPROGA", parsed, Budget(paths=8))
+
+
+def test_the_walk_enters_the_callee_and_witnesses_writes_in_both_members(crossed):
+    assert {one.program for one in crossed.deps} == {"TPROGA", "TPROGB"}
+
+
+def test_the_callees_writes_are_credited_to_the_call_site_they_were_reached_through(
+    crossed,
+):
+    """``via`` is how a reader reconstructs the route without the walk printing
+    every node it passed through."""
+    inside = {one.via for one in crossed.deps if one.program == "TPROGB"}
+
+    assert len(inside) == 1
+    assert next(iter(inside)).startswith("TPROGA/LINK-PARA/")
+
+
+def test_the_callee_reads_bytes_the_caller_defined(crossed):
+    """The inbound direction, and the whole point. SUB-REC is written from
+    DFHCOMMAREA, whose bytes the caller's own MOVE put there -- so the definer is
+    a node in a different member, which no intra-program walk can name."""
+    (dep,) = [
+        one
+        for one in crossed.deps
+        if one.program == "TPROGB" and one.target.field_name == "SUB-REC"
+    ]
+
+    assert str(dep.source).startswith("DFHCOMMAREA@linkage[0:8]")
+    assert [one for one in dep.definers if one.startswith("TPROGA/")]
+
+
+def test_the_callers_sink_reads_bytes_the_callee_defined(crossed):
+    """The return direction, which needs no mechanism at all: the callee's write
+    through DFHCOMMAREA(5:4) landed on the caller's own WS-IN-RESULT, because in a
+    byte-addressable model the two were never separate storage."""
+    (dep,) = [
+        one
+        for one in crossed.deps
+        if one.program == "TPROGA" and one.target.field_name == "WS-SINK"
+    ]
+
+    assert str(dep.source) == "WS-IN-RESULT@working_storage[4:8]"
+    assert [one for one in dep.definers if one.startswith("TPROGB/")]
+
+
+def test_both_arms_of_the_branch_are_witnessed_across_the_sampled_paths(crossed):
+    """One path sees one arm. Sampling is what gets the other, and it is why a
+    single path's answer would be a narrower claim than this tool makes."""
+    origins = {
+        one.origin
+        for one in crossed.deps
+        if one.program == "TPROGA" and one.target.field_name == "WS-OUT-KEY"
+    }
+    sources = {
+        str(one.source)
+        for one in crossed.deps
+        if one.program == "TPROGA" and one.target.field_name == "WS-OUT-KEY"
+    }
+
+    assert "LITERAL" in origins
+    assert any(text.startswith("WS-SEED@") for text in sources)
+
+
+def test_the_coverage_denominator_comes_from_the_graphs_and_not_from_the_answer(
+    crossed, parsed: Path
+):
+    """The 3ao post-mortem's lesson: a denominator taken from the walk's own output
+    makes every suite pass at 100%. Recomputed here from the parsed graphs instead,
+    never written down as a constant -- ``desugar`` gives every ``EXEC CICS`` command
+    with no NOHANDLE and no RESP a ``#raise`` test, so the real count is well above
+    the one ``IF`` a reader of the fixture source can see.
+    """
+    graphs = tuple(_loaded(parsed, one).cfg for one in ("TPROGA", "TPROGB"))
+    edges = tuple(one for cfg in graphs for one in _branch_edges(cfg))
+
+    assert crossed.coverage.programs == {"TPROGA", "TPROGB"}
+    assert crossed.coverage.total == len(edges)
+    assert crossed.coverage.taken <= frozenset(edges)
+
+
+def test_a_member_absent_from_the_cache_is_refused_before_any_path_runs(parsed: Path):
+    """A wrong ``--asg-dir`` is a mistake about the invocation, not a finding about
+    the corpus, so it never reaches the sampler."""
+    assert loadable(parsed, "TPROGA") == ""
+    assert "no ASG cache" in loadable(parsed, "TPROGZ")

@@ -300,7 +300,7 @@ fileignoreconfig:
 - filename: cobble/tests/dataflow/fields/test_fields_crossing.py
   checksum: 85f4ed750e4cd31fb2d485ec9fbbad19b4b785b67b36255eed753bc446a70c89
 - filename: cobble/cobble/dataflow/fields/trace.py
-  checksum: 2843e7a3a34a083287b4f2259596000ec9555ea1db0e1828468e79be765100e5
+  checksum: 0bad222ea8df35fc1c531c068035f568e57be7d33ed43e0697405571e7019ffc
 - filename: docs/superpowers/specs/2026-09-07-path-sampling-trace-design.md
   checksum: 053c317e40ad4e70e7bccca1b175ed2e8f2414428fb57bdbad80a6935d3eecb3
 - filename: docs/superpowers/plans/2026-09-07-path-sampling-trace.md
