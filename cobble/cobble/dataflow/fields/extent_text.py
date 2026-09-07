@@ -87,7 +87,7 @@ class ByteRange:
     def __str__(self) -> str:
         if not self.known:
             return "(not storage)"
-        mark = "~" if not self.exact else ""
+        mark = CLAMPED_MARK if not self.exact else ""
         return f"{self.name}@{self.region}[{self.start}:{self.end}]{mark}"
 
 
