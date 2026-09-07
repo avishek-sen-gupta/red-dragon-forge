@@ -289,4 +289,6 @@ fileignoreconfig:
   checksum: adfffca388573fce310006bdaf3c21141c2b7faf97113eaedb20d01aa8c37f9c
 - filename: cobble/cobble/dataflow/srccfg/dataflow.py
   checksum: 12461885a6326eea22e739c89ba3dd5fd890ef92708dec50e09ba88e9c63cb5a
+- filename: docs/superpowers/specs/2026-09-07-cross-program-commarea-dataflow-design.md
+  checksum: cd923026dfc3a3c1f962597a4f60b3977c7a0f31f3f2b77646b9f6fd3a3474b9
 version: "1.0"
