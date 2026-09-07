@@ -164,6 +164,9 @@ class _Cross:
     rescanned at assembly while only distinct candidates can change that verdict:
     one window several frontier ranges are clipped onto yields the same candidate
     at every level it stands at the cap.
+
+    ``dropped`` is carried for the same reason and settled the same way: what
+    overlap pruning refused, whose bytes a later level may still answer.
     """
 
     seen: tuple[tuple[str, ByteRange, int], ...]
@@ -171,6 +174,7 @@ class _Cross:
     landings: tuple[tuple[int, _At], ...]
     stops: tuple[str, ...]
     blocked: tuple[_At, ...]
+    dropped: tuple[_At, ...]
     depth: int
 
 
@@ -553,6 +557,7 @@ def crossing(
             landings=(),
             stops=(),
             blocked=(),
+            dropped=(),
             depth=0,
         ),
     )
@@ -564,7 +569,7 @@ def _crossed(
     if not walk.frontier:
         return Crossing(
             landings=_deduped(walk.landings),
-            stops=_stops((*walk.stops, *_limits(walk, hops))),
+            stops=_stops((*walk.stops, *_pruned(walk), *_limits(walk, hops))),
         )
     if walk.depth >= depth:
         return Crossing(
@@ -574,6 +579,7 @@ def _crossed(
                     *walk.stops,
                     f"depth limit {depth}",
                     *_gaps(store, walk),
+                    *_pruned(walk),
                     *_limits(walk, hops),
                 )
             ),
@@ -591,8 +597,9 @@ def _stepped(store: FieldStore, side: Side, hops: int, walk: _Cross) -> _Cross:
         seen=(*walk.seen, *((one.field_id, one.at, one.hops) for one in fresh)),
         frontier=fresh,
         landings=(*walk.landings, *((walk.depth + 1, one) for one in fresh)),
-        stops=(*walk.stops, *_gaps(store, walk), *_pruned(reached, walk.seen)),
+        stops=(*walk.stops, *_gaps(store, walk)),
         blocked=tuple(dict.fromkeys((*walk.blocked, *blocked))),
+        dropped=tuple(dict.fromkeys((*walk.dropped, *_dropped(reached, walk.seen)))),
         depth=walk.depth + 1,
     )
 
@@ -613,9 +620,14 @@ def _canonical(fresh: Sequence[_At]) -> tuple[_At, ...]:
     )
 
 
-def _pruned(
+def _dropped(
     reached: Sequence[_At], seen: Sequence[tuple[str, ByteRange, int]]
-) -> tuple[str, ...]:
+) -> tuple[_At, ...]:
+    """What overlap pruning refused this level, for the verdict at assembly."""
+    return tuple(one for one in reached if one.at.known and not _fresh(one, seen))
+
+
+def _pruned(walk: _Cross) -> tuple[str, ...]:
     """Arrivals overlap pruning dropped while bytes were still owed an answer.
 
     ``_fresh`` drops an arrival whose bytes were already stood on at no greater
@@ -625,11 +637,16 @@ def _pruned(
     rest of the bytes reach nothing, and saying so is the difference between a
     stated limit and an answer that looks complete. ``_uncovered`` is that
     distinction and the reason this is not merely ``not _fresh``.
+
+    Judged here, on the finished walk, for the reason ``_limits`` is: coverage at
+    the moment of the drop is provisional, and an arrival at the same level or a
+    later one can hold the dropped bytes at no greater cost. Asked at the drop, this
+    reports a loss the finished answer disproves.
     """
     return tuple(
         f"pruned by overlap at {one.site}"
-        for one in reached
-        if one.at.known and not _fresh(one, seen) and _uncovered(one, seen)
+        for one in walk.dropped
+        if _uncovered(one, walk.seen)
     )
 
 
