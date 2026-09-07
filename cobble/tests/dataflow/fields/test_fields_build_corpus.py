@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from cobble.dataflow.fields import build_corpus
+from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
 from cobble.dataflow.fields.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
@@ -443,11 +445,12 @@ def _link(target: str, area: str) -> dict:
     }
 
 
-def _linking(*targets: str) -> dict:
-    """A member with one LINK per target, passing each of them the same WS-AREA.
+def _caller_of(*statements: dict) -> dict:
+    """XPROGA, one 12-byte WS-AREA, and the given statements after a MOVE.
 
-    Its own MOVE is there so the run clears the coverage floor: the alias table is
-    what is under test, and an exit 1 for coverage would hide it.
+    The MOVE is there so the run clears the coverage floor: the alias table is what
+    is under test, and an exit 1 for coverage would hide it. It also puts the first
+    given statement at MAIN/1.
     """
     return {
         "program_id": "XPROGA",
@@ -465,13 +468,15 @@ def _linking(*targets: str) -> dict:
         "paragraphs": [
             {
                 "name": "MAIN",
-                "statements": [
-                    _move("WS-HEAD", "WS-REST"),
-                    *(_link(target, "WS-AREA") for target in targets),
-                ],
+                "statements": [_move("WS-HEAD", "WS-REST"), *statements],
             }
         ],
     }
+
+
+def _linking(*targets: str) -> dict:
+    """A member with one LINK per target, passing each of them the same WS-AREA."""
+    return _caller_of(*(_link(target, "WS-AREA") for target in targets))
 
 
 def _commarea_member(program_id: str, size: int) -> dict:
@@ -487,7 +492,9 @@ def test_the_run_emits_the_alias_table_and_counts_its_dead_ends(corpus, capsys):
     """A fifth table beside the four, with the coverage of it as a stated number.
 
     The callee is looked up by cache filename, so the members are named for the
-    programs they declare rather than MEMBERA/MEMBERB.
+    programs they declare rather than MEMBERA/MEMBERB. XPROGZ has no cache file and
+    still names itself on its dead-end row: which callee a consumer has to go and
+    parse next is exactly what that row is for.
     """
     argv, out_dir = corpus(
         {
@@ -499,7 +506,7 @@ def test_the_run_emits_the_alias_table_and_counts_its_dead_ends(corpus, capsys):
     assert cli(argv) == 0
 
     rows = _rows(out_dir / ALIASES_FILE)
-    assert {row["callee"] for row in rows} == {"XPROGB", ""}
+    assert {row["callee"] for row in rows} == {"XPROGB", "XPROGZ"}
     assert [row["reason"] for row in rows if row["reason"]] == ["callee-not-in-cache"]
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert summary["aliased"] == 1
@@ -709,3 +716,153 @@ def test_a_single_member_run_emits_that_members_outbound_aliases(corpus):
     rows = _rows(out_dir / ALIASES_FILE)
     assert {row["caller"] for row in rows} == {"XPROGA"}
     assert [row["callee"] for row in rows if not row["reason"]] == ["XPROGB"]
+
+
+def _dynamic_link(area: str) -> dict:
+    """A LINK whose PROGRAM is a field, so the target is known only at run time."""
+    return {
+        "type": "EXEC_CICS",
+        "verb": "LINK",
+        "options": {
+            "PROGRAM": {"text": "WS-TARGET", "is_literal": False},
+            "COMMAREA": {"text": area, "is_literal": False},
+        },
+    }
+
+
+def test_a_blank_callee_means_the_target_could_not_be_resolved(corpus):
+    """The blank carries a fact of its own now, so it has to mean only that one.
+
+    A dead end that knows its callee names it, so a reader seeing ``callee: ""``
+    can conclude the target is dynamic rather than wondering whether the pass
+    simply did not carry it.
+    """
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(
+                _caller_of(_dynamic_link("WS-AREA"), _link("XPROGZ", "WS-AREA"))
+            )
+        },
+        extra=("--member", "XPROGA"),
+    )
+
+    assert cli(argv) == 0
+
+    named = {row["node"]: row["callee"] for row in _rows(out_dir / ALIASES_FILE)}
+    assert named == {"MAIN/1": "", "MAIN/2": "XPROGZ"}
+
+
+def test_a_site_the_pass_cannot_read_costs_that_site_and_not_its_siblings(
+    corpus, capsys
+):
+    """One bad site is one row; the member's other sites keep theirs.
+
+    ``COMMAREA(OF)`` is the reachable route: the operand is all qualifier and no
+    name, so resolving it raises. Built in one generator that raise took every
+    other site in the member with it, which turns four sites into silence for a
+    defect at the fifth.
+    """
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(
+                _caller_of(_link("XPROGB", "OF"), _link("XPROGB", "WS-AREA"))
+            ),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        }
+    )
+
+    assert cli(argv) == 0
+
+    rows = {row["node"]: row for row in _rows(out_dir / ALIASES_FILE)}
+    assert rows["MAIN/2"]["caller_extent"] == "WS-AREA@working_storage[0:12]"
+    broken = rows["MAIN/1"]
+    assert (broken["caller"], broken["transfer"], broken["callee"]) == (
+        "XPROGA",
+        "LINK",
+        "XPROGB",
+    )
+    assert broken["reason"].startswith("unreadable: ")
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert (summary["aliased"], summary["alias_dead_ends"]) == (1, {"unreadable": 1})
+
+
+def _never_aliases(asg, index, asg_dir):
+    raise RuntimeError("the pass itself")
+
+
+def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
+    corpus, capsys, monkeypatch
+):
+    """The last resort, told apart from a callee whose cache file is broken.
+
+    Those are different bugs with different owners: one is the corpus's and one is
+    this repo's. Reached here by making the enumeration itself raise -- every route
+    that gets as far as a site is walled off per site.
+    """
+    argv, out_dir = corpus(
+        {"XPROGA": json.dumps(_linking("XPROGB"))}, extra=("--member", "XPROGA")
+    )
+    monkeypatch.setattr(
+        build_corpus,
+        "commarea_aliases",
+        _never_aliases,
+    )
+
+    assert cli(argv) == 0
+
+    for name in (NODES_FILE, EDGES_FILE, EXTENTS_FILE, DEFS_FILE):
+        assert _rows(out_dir / name), name
+    (row,) = _rows(out_dir / ALIASES_FILE)
+    assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "", "")
+    assert row["reason"].startswith(ALIAS_PHASE_FAILED)
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert summary["alias_dead_ends"] == {ALIAS_PHASE_FAILED: 1}
+
+
+def _ambiguous_area(target: str) -> dict:
+    """WS-AREA declared twice, once as a group holding no bytes at all.
+
+    One LINK, two resolutions: the 8-byte one shares a window and the empty one
+    never can, so this site belongs in both of the run's two buckets.
+    """
+    return {
+        "program_id": "XPROGA",
+        "data_fields": [
+            {"level": 1, "name": "WS-AREA", "offset": 0},
+            {
+                "level": 1,
+                "name": "WS-BLOCK",
+                "offset": 0,
+                "children": [
+                    {"level": 5, "name": "WS-AREA", "pic": "X(8)", "offset": 0},
+                    {"level": 5, "name": "WS-HEAD", "pic": "X(4)", "offset": 8},
+                ],
+            },
+        ],
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [_move("WS-HEAD", "WS-HEAD"), _link(target, "WS-AREA")],
+            }
+        ],
+    }
+
+
+def test_the_report_says_the_two_alias_buckets_can_hold_one_site(corpus, caplog):
+    """Neither count is distorted to make them partition the sites, so the line says
+    they do not: a consumer adding them and exceeding the site total is expected."""
+    argv, _ = corpus(
+        {
+            "XPROGA": json.dumps(_ambiguous_area("XPROGB")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        }
+    )
+
+    with caplog.at_level(logging.INFO):
+        assert cli(argv) == 0
+
+    assert (
+        "1 call sites share a commarea window, 1 do not: empty-window 1 "
+        "(a site whose commarea name is declared more than once can be in both)"
+        in caplog.text
+    )

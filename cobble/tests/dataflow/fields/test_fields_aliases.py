@@ -185,7 +185,8 @@ def test_an_absent_callee_is_a_named_dead_end(tmp_path, program_of, field, index
     (row,) = _rows(asg, tmp_path, index_of)
 
     assert row.reason == NOT_IN_CACHE
-    assert (row.callee, row.caller_extent, row.callee_extent) == ("", "", "")
+    assert row.callee == "XPROGZ"
+    assert (row.caller_extent, row.callee_extent) == ("", "")
 
 
 def test_a_dynamic_target_is_a_named_dead_end(tmp_path, program_of, field, index_of):
@@ -204,6 +205,7 @@ def test_a_dynamic_target_is_a_named_dead_end(tmp_path, program_of, field, index
     (row,) = _rows(asg, tmp_path, index_of)
 
     assert row.reason == DYNAMIC_TARGET
+    assert row.callee == ""
 
 
 def test_a_callee_without_a_commarea_is_a_named_dead_end(
@@ -230,6 +232,8 @@ def test_a_callee_without_a_commarea_is_a_named_dead_end(
 def test_a_link_without_a_commarea_shares_nothing(
     tmp_path, program_of, field, index_of
 ):
+    """Still names the callee: nothing is shared, and which program was handed
+    nothing is a fact the site states literally."""
     _callee_json(tmp_path, "XPROGB", 12, field)
     statement = {
         "type": "EXEC_CICS",
@@ -243,6 +247,7 @@ def test_a_link_without_a_commarea_shares_nothing(
     (row,) = _rows(asg, tmp_path, index_of)
 
     assert row.reason == NO_COMMAREA_OPERAND
+    assert row.callee == "XPROGB"
 
 
 def test_a_call_site_is_refused_rather_than_guessed():
@@ -291,7 +296,8 @@ def test_a_commarea_the_caller_never_declared_is_a_named_dead_end(
     (row,) = _rows(asg, tmp_path, index_of)
 
     assert row.reason == CALLER_FIELD_UNKNOWN
-    assert (row.callee, row.caller_extent, row.callee_extent) == ("", "", "")
+    assert row.callee == "XPROGB"
+    assert (row.caller_extent, row.callee_extent) == ("", "")
 
 
 def test_a_qualified_commarea_resolves_through_its_of_chain(
@@ -351,4 +357,5 @@ def test_a_callee_the_deserialiser_rejects_is_a_named_dead_end(
     (row,) = _rows(asg, tmp_path, index_of)
 
     assert row.reason.startswith(UNREADABLE)
-    assert (row.callee, row.caller_extent, row.callee_extent) == ("", "", "")
+    assert row.callee == "XPROGB"
+    assert (row.caller_extent, row.callee_extent) == ("", "")

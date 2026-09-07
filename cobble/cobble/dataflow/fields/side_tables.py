@@ -76,9 +76,13 @@ class ReachingDefs:
 class CommareaAlias:
     """One call site's shared commarea window, or a named reason there is none.
 
-    ``caller``/``node``/``transfer`` are always present, so a site that could not
-    be aliased is a row a consumer can read rather than an absence it has to
-    interpret. ``returns`` is false for XCTL, which never comes back.
+    ``caller`` is always present; ``node`` and ``transfer`` are present on every
+    per-site row, so a site that could not be aliased is a row a consumer can read
+    rather than an absence it has to interpret. Both are blank on the one row that
+    reports the alias pass failing before it could enumerate a member's sites, where
+    there is no site to name. ``callee`` is blank when the target is a field rather
+    than a literal and nothing short of running the program resolves it.
+    ``returns`` is false for XCTL, which never comes back.
     """
 
     caller: str
