@@ -162,13 +162,13 @@ class Trace:
     coverage: Coverage = Coverage()
 
 
-def _extent_at(text: str, program: str) -> FieldExtent:
+def _extent_at(text: str) -> FieldExtent:
     """The artefact's wire form back to an extent, or a length of nothing.
 
     ``FieldExtent.__str__`` spells the region as ``RegionId``'s own value, so the
     enum constructor is the way back and there is no mapping to keep in step.
     """
-    found = byte_range(text, program)
+    found = byte_range(text, "")
     if not found.known:
         return NO_EXTENT
     return FieldExtent(
@@ -186,8 +186,8 @@ def _window(row: CommareaAlias, callee: str) -> Window:
     A zero-length end is not a narrow window, it is no window: overlap needs
     ``start < other.end``, so nothing can ever be bound through ``[n:n]``.
     """
-    caller = _extent_at(row.caller_extent, row.caller)
-    landed = _extent_at(row.callee_extent, callee)
+    caller = _extent_at(row.caller_extent)
+    landed = _extent_at(row.callee_extent)
     if not caller.length or not landed.length:
         return NO_WINDOW
     return Window(
@@ -206,7 +206,7 @@ def _rebased(
     callee's region names a field that is not declared there.
     """
     start = max(extent.start, source.start)
-    end = min(extent.end, source.end)
+    end = min(extent.end, source.end, source.start + target.length)
     return replace(
         extent,
         region=target.region,
@@ -530,11 +530,36 @@ def _restored(caller: State, callee: State, window: Window) -> State:
     ``state.write`` rather than a union: the callee's write to those bytes really
     did kill what the caller held there, and ``must_cover`` is what says so. Not
     ``state.join``, which is the fixpoint's operation and is never called here.
+
+    The callee's slice can hold overlapping extents -- a group and its elementary
+    items both defined. Sequential ``write`` per extent has to pick an order, and
+    widest-first is chosen so the narrow, specific definitions are the ones that
+    survive ``must_cover``'s kills.
     """
     back = _seeded(callee, window.callee_extent, window.caller_extent)
     return reduce(
-        lambda held, pair: write(held, pair[0], pair[1]), tuple(back.items()), caller
+        lambda held, pair: write(held, pair[0], pair[1]),
+        sorted(
+            back.items(),
+            key=lambda pair: (
+                pair[0].region.value,
+                pair[0].start,
+                -pair[0].length,
+                pair[0].field_name,
+            ),
+        ),
+        caller,
     )
+
+
+def _unwound(stack: tuple[Frame, ...]) -> tuple[Frame, ...]:
+    """The stack cut back to its innermost crossing frame, empty when it has none.
+
+    A callee's path can end inside a PERFORMed paragraph, so the frame on top when
+    the path runs out is not necessarily the frame that owes a caller its bytes.
+    """
+    crossings = tuple(index for index, frame in enumerate(stack) if frame.crossing)
+    return stack[: crossings[-1] + 1] if crossings else ()
 
 
 def _ended(walk: _Walk) -> _Walk:
@@ -544,13 +569,16 @@ def _ended(walk: _Walk) -> _Walk:
     sides were the same bytes all along. An empty resume point is a call that was
     the last thing its caller did, so there is nothing to come back to.
     """
-    frame = walk.frame
-    if not (frame.crossing and frame.returns and frame.resume):
+    unwound = _unwound(walk.stack)
+    if not unwound:
+        return replace(walk, running=False)
+    frame = unwound[-1]
+    if not (frame.returns and frame.resume):
         return replace(walk, running=False)
     return replace(
         walk,
         node=frame.resume,
-        stack=walk.stack[:-1],
+        stack=unwound[:-1],
         store={
             **walk.store,
             frame.window.caller: _restored(
