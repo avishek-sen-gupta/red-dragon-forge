@@ -1,0 +1,108 @@
+"""What a CFG node is called, and which CALLs resolve inside a bundle.
+
+Shared by every renderer, and shared rather than copied for one reason: two pictures
+of the same program that label a node differently are two pictures of different
+programs. Colour and shape are not here -- those are each renderer's own, because a
+graphviz fill and a WebGL node colour answer to different backgrounds.
+
+The label of each kind is the thing a reader is looking for when they find that node
+on the page: a TEST's predicate, what an ASSIGN writes and the verb that wrote it, a
+CALL's target, a paragraph's name. A NOP has nothing to say about itself and falls
+back to its id, because a blank node reads as a bug in the drawing.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+
+from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
+
+QUALIFIER = "::"
+
+
+def qualified(program: str, node_id: str) -> str:
+    """The node id a picture can use: every member of a corpus has a MAIN/0."""
+    return f"{program}{QUALIFIER}{node_id}"
+
+
+def _test_label(node: Node) -> str:
+    return node.atom.text
+
+
+def _assign_label(node: Node) -> str:
+    return " ".join(part for part in (node.transfer, *node.writes) if part)
+
+
+def _call_label(node: Node) -> str:
+    return " ".join(part for part in (node.transfer, node.target) if part)
+
+
+def _paragraph_label(node: Node) -> str:
+    return node.paragraph
+
+
+def _id_label(node: Node) -> str:
+    return node.id
+
+
+LABELS: Mapping[NodeKind, Callable[[Node], str]] = {
+    NodeKind.TEST: _test_label,
+    NodeKind.ASSIGN: _assign_label,
+    NodeKind.CALL: _call_label,
+    NodeKind.LABEL: _paragraph_label,
+    NodeKind.NOP: _id_label,
+}
+
+
+def label_of(node: Node) -> str:
+    """The node's text, never empty: an unnamed paragraph still reads as its id."""
+    return LABELS[node.kind](node) or node.id
+
+
+@dataclass(frozen=True)
+class CrossCall:
+    """One CALL that lands inside the bundle: the edge a closure is drawn for.
+
+    Both ends are qualified ids, so a renderer joins them without knowing which
+    program either belongs to.
+    """
+
+    source: str
+    target: str
+    transfer: str
+
+
+def call_nodes(cfg: Cfg) -> tuple[Node, ...]:
+    return tuple(node for node in cfg.nodes if node.kind is NodeKind.CALL)
+
+
+def entry_nodes(cfgs: Sequence[Cfg]) -> Mapping[str, str]:
+    """Each program's first node, which is the paragraph label the build starts at.
+
+    A program with no nodes is absent rather than mapped to nothing: there is no
+    entry to point an edge at.
+    """
+    return {cfg.program: cfg.nodes[0].id for cfg in cfgs if cfg.nodes}
+
+
+def resolved_calls(cfgs: Sequence[Cfg]) -> tuple[CrossCall, ...]:
+    """Every CALL whose target is a program in this bundle.
+
+    A target absent from the bundle yields nothing. Its ASG was never in the cache,
+    so it has no nodes here, and an edge to a node that does not exist draws a
+    program that looks built and is not -- which is the one thing a closure's
+    picture must not do, because what the closure establishes is that these
+    programs are a single path.
+    """
+    entries = entry_nodes(cfgs)
+    return tuple(
+        CrossCall(
+            source=qualified(cfg.program, node.id),
+            target=qualified(node.target, entries[node.target]),
+            transfer=node.transfer,
+        )
+        for cfg in cfgs
+        for node in call_nodes(cfg)
+        if node.target in entries
+    )
