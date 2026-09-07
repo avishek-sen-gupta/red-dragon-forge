@@ -413,20 +413,24 @@ stays intra-program. A site that reaches no window is still a row, naming what
 stopped it (`dynamic-target`, `callee-not-in-cache`,
 `callee-declares-no-commarea`, `empty-window`, …) *and* naming the callee it
 stopped on, so a consumer learns whose cache file to look at without going back to
-the ASG. `callee` is blank only where the target is a field rather than a literal,
-which means "nothing short of running the program resolves this" rather than "the
-pass did not carry it". A raise while resolving one site costs that site one
-`unreadable:` row and nothing else; `alias-phase-failed` is the separate reason for
-the alias phase giving up on a member before it reached any site at all — a bug in
-this repo rather than in the corpus.
+the ASG. Some of those reasons state a fact about the two programs — no bytes are
+shared, and none would be at run time either — while the rest state a limit of this
+analysis: sharing very likely happens and we could not say which bytes. `callee` is
+blank where the target is a field rather than a literal, which means "nothing short
+of running the program resolves this" rather than "the pass did not carry it". The
+one exception is `alias-phase-failed` — the alias phase giving up on a member before
+it reached any site at all, so there is no target and no `node` to name. That is a
+bug in this repo rather than in the corpus, and it costs that member its alias rows
+and nothing else. There is no finer wall per site: filing our own defects as
+artefact rows would hide them.
 
 The JSON summary states `aliased` — distinct *sites*, not rows — against the
 `alias_dead_ends` breakdown, so the table's coverage is read off the run. The two
 are not a partition of the site count: one of a twice-declared name's two cells can
 share a window while the other is zero-length and can never be crossed, which puts
-that one site in both buckets, and the run line says so. A member the walk's budget
-gave up on still contributes its rows: they need the caller's layout, and the
-dequeue cap is reached long after that layout is built. Two members contribute
+that one site in both buckets, so the two can exceed the site total. A member the
+walk's budget gave up on still contributes its rows: they need the caller's layout,
+and the dequeue cap is reached long after that layout is built. Two members contribute
 none — one whose own cache file will not parse, which is reported as a skip
 instead, and one whose layout never built, which is the unsizeable-field skip and
 is not reachable today. The table costs a full parse of every distinct callee's

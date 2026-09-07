@@ -80,9 +80,10 @@ class CommareaAlias:
     per-site row, so a site that could not be aliased is a row a consumer can read
     rather than an absence it has to interpret. Both are blank on the one row that
     reports the alias pass failing before it could enumerate a member's sites, where
-    there is no site to name. ``callee`` is blank when the target is a field rather
-    than a literal and nothing short of running the program resolves it.
-    ``returns`` is false for XCTL, which never comes back.
+    there is no site to name, which is the one row whose blank ``callee`` says
+    nothing about the target either. On every other row ``callee`` is blank exactly
+    when the target is a field rather than a literal and nothing short of running the
+    program resolves it. ``returns`` is false for XCTL, which never comes back.
     """
 
     caller: str

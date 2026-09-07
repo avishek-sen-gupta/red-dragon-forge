@@ -234,12 +234,14 @@ def _alias_rows(
 ) -> tuple[CommareaAlias, ...]:
     """Walled off from the four tables the alias pass has nothing to do with.
 
-    ``aliases`` walls each site off already, so this is the last resort for a
-    failure before there are sites to wall -- the alternative is an alias nobody
-    asked for costing this member its four tables and the run its exit code. Its own
-    reason rather than ``unreadable``, which is a broken cache file the corpus owns:
-    this row says the alias phase itself gave up -- a bug nothing outside this repo
-    can fix. ``node`` and ``transfer`` are blank because no site was reached to name.
+    The one wall, and deliberately at member scope: the alternative is an alias
+    nobody asked for costing this member its four tables and the run its exit code.
+    A finer wall per call site would file our own bugs as artefact rows and hide
+    them, so an unknown defect here costs the whole member's alias rows and is
+    reported by name. Its own reason rather than ``unreadable``, which is a broken
+    cache file the corpus owns: this row says the alias phase itself gave up -- a bug
+    nothing outside this repo can fix. ``node`` and ``transfer`` are blank because no
+    site was reached to name.
     """
     try:
         return commarea_aliases(asg, index, asg_dir)
@@ -266,8 +268,10 @@ def _aliased_member(
     the silence -- ``analysed`` returns it for an unsizeable field, where no layout
     was ever computed and there is no caller window to name. No input reaches it
     today: the error needs a COMP field over 31 digits and ``parse_pic`` rejects
-    anything over 18 first. Kept because the sentinel is ``analysed``'s stated
-    contract, and rows claiming a window here would claim one that never existed.
+    anything over 18 first. That same root cause makes the ``unsizeable`` dead-end
+    reason unreachable, in a callee's LINKAGE rather than a caller's own layout.
+    Kept because the sentinel is ``analysed``'s stated contract, and rows claiming a
+    window here would claim one that never existed.
     """
     if index is NO_INDEX:
         return result
@@ -449,24 +453,21 @@ def _exit_code(totals: RunTotals, floor: float) -> int:
     return 0 if totals.coverage >= floor else 1
 
 
-_BOTH_BUCKETS = "(a site whose commarea name is declared more than once can be in both)"
-
-
 def _dead_end_note(dead_ends: Sequence[str]) -> str:
-    """The second number, and the warning that it is not the first one's complement.
+    """The second number, which is not the first one's complement.
 
     Two declarations of one commarea name resolve to two caller cells, and a site
     can share a window through one of them while the other is a zero-length range
-    nothing can be crossed through. Both facts are real and neither count is
-    distorted to make them sum, so the line says so rather than letting a consumer
-    infer a partition that is not there.
+    nothing can be crossed through, so the two counts can exceed the site total.
+    Neither is distorted to make them sum; the caveat is documented with the counts
+    rather than restated on every run that has a dead end.
     """
     counted = ", ".join(
         f"{reason} {count}" for reason, count in _tallied(dead_ends).items()
     )
     if not dead_ends:
         return ""
-    return f", {len(dead_ends)} do not: {counted} {_BOTH_BUCKETS}"
+    return f", {len(dead_ends)} do not: {counted}"
 
 
 def _report_aliases(totals: RunTotals) -> None:

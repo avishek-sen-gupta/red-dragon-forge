@@ -752,15 +752,12 @@ def test_a_blank_callee_means_the_target_could_not_be_resolved(corpus):
     assert named == {"MAIN/1": "", "MAIN/2": "XPROGZ"}
 
 
-def test_a_site_the_pass_cannot_read_costs_that_site_and_not_its_siblings(
-    corpus, capsys
-):
-    """One bad site is one row; the member's other sites keep theirs.
+def test_a_commarea_operand_naming_nothing_is_a_named_dead_end(corpus, capsys):
+    """``COMMAREA(OF)`` is all qualifier and no name, and says so on its own row.
 
-    ``COMMAREA(OF)`` is the reachable route: the operand is all qualifier and no
-    name, so resolving it raises. Built in one generator that raise took every
-    other site in the member with it, which turns four sites into silence for a
-    defect at the fifth.
+    An empty name matches no cell, which is what ``caller-field-unknown`` already
+    means, so the site is a dead end rather than an exception -- and its siblings
+    keep their windows because nothing raised in the first place.
     """
     argv, out_dir = corpus(
         {
@@ -775,15 +772,16 @@ def test_a_site_the_pass_cannot_read_costs_that_site_and_not_its_siblings(
 
     rows = {row["node"]: row for row in _rows(out_dir / ALIASES_FILE)}
     assert rows["MAIN/2"]["caller_extent"] == "WS-AREA@working_storage[0:12]"
-    broken = rows["MAIN/1"]
-    assert (broken["caller"], broken["transfer"], broken["callee"]) == (
-        "XPROGA",
-        "LINK",
-        "XPROGB",
-    )
-    assert broken["reason"].startswith("unreadable: ")
+    assert (
+        rows["MAIN/1"]["caller"],
+        rows["MAIN/1"]["callee"],
+        rows["MAIN/1"]["reason"],
+    ) == ("XPROGA", "XPROGB", "caller-field-unknown")
     summary = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert (summary["aliased"], summary["alias_dead_ends"]) == (1, {"unreadable": 1})
+    assert (summary["aliased"], summary["alias_dead_ends"]) == (
+        1,
+        {"caller-field-unknown": 1},
+    )
 
 
 def _never_aliases(asg, index, asg_dir):
@@ -793,11 +791,12 @@ def _never_aliases(asg, index, asg_dir):
 def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
     corpus, capsys, monkeypatch
 ):
-    """The last resort, told apart from a callee whose cache file is broken.
+    """The one wall, told apart from a callee whose cache file is broken.
 
     Those are different bugs with different owners: one is the corpus's and one is
-    this repo's. Reached here by making the enumeration itself raise -- every route
-    that gets as far as a site is walled off per site.
+    this repo's. It costs the member its alias rows, which is loud, and leaves the
+    four tables that have nothing to do with aliasing intact, which is the point.
+    Reached by making the alias phase raise, since no known route does.
     """
     argv, out_dir = corpus(
         {"XPROGA": json.dumps(_linking("XPROGB"))}, extra=("--member", "XPROGA")
@@ -848,9 +847,13 @@ def _ambiguous_area(target: str) -> dict:
     }
 
 
-def test_the_report_says_the_two_alias_buckets_can_hold_one_site(corpus, caplog):
-    """Neither count is distorted to make them partition the sites, so the line says
-    they do not: a consumer adding them and exceeding the site total is expected."""
+def test_the_two_alias_counts_can_both_hold_one_site(corpus, caplog):
+    """Neither count is distorted to make them partition the sites, so they exceed
+    the site total: one LINK here is both the run's aliased site and its dead end.
+
+    The run line reports both numbers and leaves the caveat to the docs, because it
+    is a standing property of the two counts rather than a fact about this run.
+    """
     argv, _ = corpus(
         {
             "XPROGA": json.dumps(_ambiguous_area("XPROGB")),
@@ -862,7 +865,5 @@ def test_the_report_says_the_two_alias_buckets_can_hold_one_site(corpus, caplog)
         assert cli(argv) == 0
 
     assert (
-        "1 call sites share a commarea window, 1 do not: empty-window 1 "
-        "(a site whose commarea name is declared more than once can be in both)"
-        in caplog.text
+        "1 call sites share a commarea window, 1 do not: empty-window 1" in caplog.text
     )
