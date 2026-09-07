@@ -592,8 +592,6 @@ KILL_CALLER = """\
        WORKING-STORAGE SECTION.
        01  WS-AREA.
            05  WS-FIRST             PIC X(4).
-           05  WS-SECOND            PIC X(4).
-       01  WS-SEED                  PIC X(4).
        01  WS-SINK                  PIC X(4).
        PROCEDURE DIVISION.
        MAIN-PARA.
@@ -604,7 +602,7 @@ KILL_CALLER = """\
        LINK-PARA.
            EXEC CICS LINK PROGRAM('TPROGF')
                           COMMAREA(WS-AREA)
-                          LENGTH(8)
+                          LENGTH(4)
            END-EXEC.
 """
 
@@ -615,12 +613,12 @@ KILL_CALLEE = """\
        WORKING-STORAGE SECTION.
        01  SUB-REC                  PIC X(4).
        LINKAGE SECTION.
-       01  DFHCOMMAREA              PIC X(8).
+       01  DFHCOMMAREA              PIC X(4).
        PROCEDURE DIVISION.
        SUB-PARA.
            MOVE 'BBBB' TO SUB-REC.
-           MOVE SUB-REC TO DFHCOMMAREA(1:4).
-           EXEC CICS RETURN END-EXEC.
+           MOVE SUB-REC TO DFHCOMMAREA.
+           GOBACK.
 """
 
 
@@ -684,7 +682,12 @@ def crossed_perform(parsed_perform: Path) -> Trace:
 
 @pytest.fixture(scope="module")
 def parsed_kill(tmp_path_factory) -> Path:
-    """A callee that kills bytes the caller held. Guards the state.write constraint."""
+    """A callee that kills bytes the caller held. Guards the state.write constraint.
+
+    The commarea is exactly as wide as the callee's write, and the write is a whole
+    move rather than a reference modification: ``must_cover`` under-approximates, so
+    a narrower or CLAMPED write kills nothing and ``join`` would look identical.
+    """
     from cobble.parsing.parse_corpus import Job, parse_one
 
     root = tmp_path_factory.mktemp("trace_kill")
@@ -706,21 +709,17 @@ def crossed_kill(parsed_kill: Path) -> Trace:
 
 
 def test_a_callee_write_kills_the_callers_old_definition(crossed_kill):
-    """I1: _restored uses state.write per extent, not state.join. When the callee
-    writes bytes the caller held, must_cover kills the caller's stale source."""
+    """I1: _restored uses state.write per extent, not state.join. No caller-side
+    source at those bytes survives the write-back -- the one the call site itself
+    left there included."""
     (dep,) = [
         one
         for one in crossed_kill.deps
         if one.program == "TPROGE" and one.target.field_name == "WS-SINK"
     ]
 
-    caller_definers = [
-        one for one in dep.definers if one.startswith("TPROGE/MAIN-PARA/0")
-    ]
-    callee_definers = [one for one in dep.definers if one.startswith("TPROGF/")]
-
-    assert not caller_definers
-    assert callee_definers
+    assert not [one for one in dep.definers if one.startswith("TPROGE/")]
+    assert [one for one in dep.definers if one.startswith("TPROGF/")]
 
 
 def test_a_callee_ending_in_a_performed_paragraph_seeds_the_caller_back(
