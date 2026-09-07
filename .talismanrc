@@ -282,7 +282,7 @@ fileignoreconfig:
 - filename: cobble/cobble/dataflow/fields/side_tables.py
   checksum: bbba8baf46404ae5467a01c832daaec6b3ca1c59761fa8f45a0285b808709eac
 - filename: cobble/cobble/dataflow/fields/query.py
-  checksum: f514a0d843ab4bdfb00734dc6cb9e33b3675904fe879be199d5f8a990d6deb51
+  checksum: 15af0cdb029e4e5f134eb7f67c2c28417099e99c10a4ea44628976a0eac08fff
 - filename: cobble/tests/dataflow/fields/test_fields_synthetic.py
   checksum: ac334a88abcd9c8ce8d105554216d508834231a26cdad5239e27859b0808ac6f
 - filename: cobble/cobble/dataflow/fields/rows.py
@@ -298,5 +298,5 @@ fileignoreconfig:
 - filename: cobble/tests/dataflow/fields/test_fields_aliases.py
   checksum: 83c7ee29c017268a5a21bba5c43bd998e860da66be7057fbfac8ed9807e89891
 - filename: cobble/tests/dataflow/fields/test_fields_crossing.py
-  checksum: 27e3af477b701f2e236d12f0766fc21feedc010af0d8cace47fb5c4d1bf92d91
+  checksum: 5b331635e6af44d7a4f96a8b77ab0324d9d95b15d728e6593184cde0739cb88f
 version: "1.0"
