@@ -27,6 +27,11 @@ two ranges and the declared layout instead of stored once per child.
 Containment needs the declared level and not the ranges alone. A group with a
 single child owns exactly its child's bytes, and so does a record's REDEFINES
 view, so ranges alone cannot say which of such a pair holds the other.
+
+``reaches``/``reached-by`` accept ``--across-calls`` with ``--max-hops N``
+(default 3), off by default because the corpus's call graph reaches most of
+itself within a few hops, so an unbounded provenance answer names half the system
+and tells a reader nothing.
 """
 
 from __future__ import annotations
@@ -50,6 +55,8 @@ from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fields.rows import Row
 
 MAX_DEPTH = 6
+
+DEFAULT_HOPS = 3
 
 FLOWS_TO = "FLOWS_TO"
 
@@ -87,6 +94,55 @@ class Side(Enum):
 
     SOURCE = auto()
     TARGET = auto()
+
+
+@dataclass(frozen=True)
+class Limits:
+    """How far a transitive question travels: flows, and commarea crossings.
+
+    ``hops`` of zero is not a bound of nothing -- it selects the plain walk, so
+    an answer nobody asked to cross is byte-identical to what it always was.
+    """
+
+    depth: int = MAX_DEPTH
+    hops: int = 0
+
+
+@dataclass(frozen=True)
+class Landing:
+    """One field a crossing walk reached, and what it cost to get there."""
+
+    field_id: str
+    depth: int
+    hops: int
+    via: str
+
+
+@dataclass(frozen=True)
+class Crossing:
+    """What a crossing walk found, and every reason it stopped."""
+
+    landings: tuple[Landing, ...]
+    stops: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _At:
+    """One place the frontier stands, carrying the cost of reaching it."""
+
+    field_id: str
+    at: ByteRange
+    hops: int
+    via: str
+
+
+@dataclass(frozen=True)
+class _Cross:
+    seen: tuple[tuple[str, ByteRange], ...]
+    frontier: tuple[_At, ...]
+    landings: tuple[Landing, ...]
+    stops: tuple[str, ...]
+    depth: int
 
 
 @dataclass(frozen=True)
@@ -438,6 +494,164 @@ def _unseen(flow: Flow, side: Side, seen: Sequence[tuple[str, ByteRange]]) -> bo
     )
 
 
+def crossing(
+    store: FieldStore,
+    start: Sequence[ByteRange],
+    side: Side,
+    depth: int,
+    hops: int,
+) -> Crossing:
+    """``reaches``, but a commarea window is a step the walk may take.
+
+    Separate from ``reaches`` rather than a flag on it, for two reasons: the
+    default answer stays byte-identical because it is still the same function,
+    and what a crossing answer has to carry -- which site it went through, how
+    many, and why it stopped -- is a different shape from a depth per field.
+    """
+    at = tuple(_At(field_id="", at=one, hops=0, via="") for one in start)
+    return _crossed(
+        store,
+        side,
+        depth,
+        hops,
+        _Cross(
+            seen=tuple((one.field_id, one.at) for one in at),
+            frontier=at,
+            landings=(),
+            stops=(),
+            depth=0,
+        ),
+    )
+
+
+def _crossed(
+    store: FieldStore, side: Side, depth: int, hops: int, walk: _Cross
+) -> Crossing:
+    if not walk.frontier:
+        return Crossing(landings=walk.landings, stops=_stops(walk.stops))
+    if walk.depth >= depth:
+        return Crossing(
+            landings=walk.landings,
+            stops=_stops((*walk.stops, f"depth limit {depth}")),
+        )
+    return _crossed(store, side, depth, hops, _stepped(store, side, hops, walk))
+
+
+def _stepped(store: FieldStore, side: Side, hops: int, walk: _Cross) -> _Cross:
+    """One level: every flow the frontier touches, then every alias it can cross."""
+    flowed = _flow_step(store, side, walk)
+    crossed = _alias_step(store, hops, walk)
+    fresh = tuple(one for one in (*flowed, *crossed) if _fresh(one, walk.seen))
+    return _Cross(
+        seen=(*walk.seen, *((one.field_id, one.at) for one in fresh)),
+        frontier=fresh,
+        landings=(*walk.landings, *_named(fresh, walk.depth + 1)),
+        stops=(*walk.stops, *_limits(walk, crossed, fresh, hops), *_gaps(store, walk)),
+        depth=walk.depth + 1,
+    )
+
+
+def _flow_step(store: FieldStore, side: Side, walk: _Cross) -> tuple[_At, ...]:
+    ranges = tuple(one.at for one in walk.frontier)
+    return tuple(
+        _stepped_from(_from(walk.frontier, _end(flow, side)), flow, side)
+        for flow in store.touching(ranges, side)
+        if _far_end(flow, side).known
+    )
+
+
+def _stepped_from(came: _At, flow: Flow, side: Side) -> _At:
+    """A flow costs no hop, so the cost of standing here carries forward."""
+    return _At(
+        field_id=_far_id(flow, side),
+        at=_far_end(flow, side),
+        hops=came.hops,
+        via=came.via,
+    )
+
+
+def _from(frontier: Sequence[_At], near: ByteRange) -> _At:
+    """The frontier entry a flow's near end matched, so its cost is known.
+
+    The entry is guaranteed to exist because ``touching`` was asked with these
+    very ranges."""
+    return next(one for one in frontier if one.at.overlaps(near))
+
+
+def _crossings_from(store: FieldStore, one: _At) -> tuple[_At, ...]:
+    return tuple(
+        _At(
+            field_id=_qualified(landing),
+            at=landing,
+            hops=one.hops + 1,
+            via=alias.site,
+        )
+        for alias, landing in store.across((one.at,))
+    )
+
+
+def _alias_step(store: FieldStore, hops: int, walk: _Cross) -> tuple[_At, ...]:
+    affordable = tuple(one for one in walk.frontier if one.hops < hops)
+    return tuple(landed for one in affordable for landed in _crossings_from(store, one))
+
+
+def _qualified(one: ByteRange) -> str:
+    return f"{one.program}.{one.name}".upper()
+
+
+def _fresh(one: _At, seen: Sequence[tuple[str, ByteRange]]) -> bool:
+    """Not already stood on over overlapping bytes, the same rule as ``_unseen``."""
+    return one.at.known and not any(
+        one.field_id == other and one.at.overlaps(part) for other, part in seen
+    )
+
+
+def _named(fresh: Sequence[_At], depth: int) -> tuple[Landing, ...]:
+    return tuple(
+        Landing(field_id=one.field_id, depth=depth, hops=one.hops, via=one.via)
+        for one in fresh
+    )
+
+
+def _limits(
+    walk: _Cross, crossed: Sequence[_At], fresh: Sequence[_At], hops: int
+) -> tuple[str, ...]:
+    """Why some of this level's steps were not taken.
+
+    A frontier entry already at the hop limit stopped there. A crossing dropped
+    as already seen is a cycle -- a different fact from running out of budget,
+    and a reader who cannot tell them apart cannot tell a bounded answer from a
+    complete one.
+    """
+    capped = any(one.hops >= hops for one in walk.frontier)
+    looped = tuple(one for one in crossed if one not in fresh)
+    return (
+        *((f"hop limit {hops}",) if capped else ()),
+        *(f"cycle at {_program_of(one.field_id)}" for one in looped),
+    )
+
+
+def _programs(frontier: Sequence[_At]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(one.at.program for one in frontier if one.at.known))
+
+
+def _gaps(store: FieldStore, walk: _Cross) -> tuple[str, ...]:
+    """Sites in the programs this level stands in that could not be aliased.
+
+    Some reasons state no bytes are shared at all, so a stop is not always a gap
+    in the answer."""
+    return tuple(
+        f"{alias.reason} at {alias.caller}"
+        for program in _programs(walk.frontier)
+        for alias in store.dead_ends(program)
+    )
+
+
+def _stops(reasons: Sequence[str]) -> tuple[str, ...]:
+    """Deduped, in the order met: one gap met at three levels is one fact."""
+    return tuple(dict.fromkeys(reasons))
+
+
 def _program_of(field_id: str) -> str:
     return field_id.split(".", 1)[0]
 
@@ -604,6 +818,14 @@ def _split(flow: Flow, field: Field, side: Side) -> str:
 
 
 def _reach_report(
+    store: FieldStore, field: Field, limits: Limits, label: str, side: Side
+) -> tuple[str, ...]:
+    if limits.hops:
+        return _crossing_report(store, field, side, limits, label)
+    return _plain_reach_report(store, field, side, limits.depth, label)
+
+
+def _plain_reach_report(
     store: FieldStore, field: Field, side: Side, depth: int, label: str
 ) -> tuple[str, ...]:
     found = reaches(store, field.ranges, side, depth)
@@ -614,6 +836,27 @@ def _reach_report(
             for field_id, at_depth in sorted(found.items(), key=lambda pair: pair[::-1])
         ),
     )
+
+
+def _crossing_report(
+    store: FieldStore, field: Field, side: Side, limits: Limits, label: str
+) -> tuple[str, ...]:
+    found = crossing(store, field.ranges, side, limits.depth, limits.hops)
+    return (
+        f"{label} across calls (depth {limits.depth}, max {limits.hops} hops, "
+        f"{len(found.landings)} landings):",
+        *(_landing_line(one) for one in _ordered(found.landings)),
+        f"  stopped: {', '.join(found.stops) or 'frontier exhausted'}",
+    )
+
+
+def _landing_line(one: Landing) -> str:
+    via = f"  via {one.via}" if one.via else ""
+    return f"  hop {one.hops}  depth {one.depth}  {one.field_id}{via}"
+
+
+def _ordered(landings: Sequence[Landing]) -> tuple[Landing, ...]:
+    return tuple(sorted(landings, key=lambda one: (one.hops, one.depth, one.field_id)))
 
 
 def _nested_report(found: tuple[Field, ...], label: str) -> tuple[str, ...]:
@@ -627,29 +870,29 @@ def _nested_report(found: tuple[Field, ...], label: str) -> tuple[str, ...]:
     )
 
 
-_ANSWERS: Mapping[Query, Callable[[FieldStore, Field, int], tuple[str, ...]]] = (
+_ANSWERS: Mapping[Query, Callable[[FieldStore, Field, Limits], tuple[str, ...]]] = (
     MappingProxyType(
         {
-            Query.EXTENTS: lambda store, field, depth: (),
-            Query.WRITERS: lambda store, field, depth: _flow_report(
+            Query.EXTENTS: lambda store, field, limits: (),
+            Query.WRITERS: lambda store, field, limits: _flow_report(
                 store, field, Side.TARGET, "writers"
             ),
-            Query.READERS: lambda store, field, depth: _flow_report(
+            Query.READERS: lambda store, field, limits: _flow_report(
                 store, field, Side.SOURCE, "readers"
             ),
-            Query.REACHES: lambda store, field, depth: _reach_report(
-                store, field, Side.SOURCE, depth, "flows into"
+            Query.REACHES: lambda store, field, limits: _reach_report(
+                store, field, limits, "flows into", Side.SOURCE
             ),
-            Query.REACHED_BY: lambda store, field, depth: _reach_report(
-                store, field, Side.TARGET, depth, "flows from"
+            Query.REACHED_BY: lambda store, field, limits: _reach_report(
+                store, field, limits, "flows from", Side.TARGET
             ),
-            Query.CONTAINS: lambda store, field, depth: _nested_report(
+            Query.CONTAINS: lambda store, field, limits: _nested_report(
                 store.contains(field), "contains"
             ),
-            Query.WITHIN: lambda store, field, depth: _nested_report(
+            Query.WITHIN: lambda store, field, limits: _nested_report(
                 store.containers(field), "contained by"
             ),
-            Query.OVERLAPPING: lambda store, field, depth: _nested_report(
+            Query.OVERLAPPING: lambda store, field, limits: _nested_report(
                 _others(store.overlapping(field.ranges), field), "shares bytes with"
             ),
         }
@@ -661,9 +904,9 @@ place both are written down."""
 
 
 def _answer(
-    store: FieldStore, query: Query, field: Field, depth: int
+    store: FieldStore, query: Query, field: Field, limits: Limits
 ) -> tuple[str, ...]:
-    return _ANSWERS[query](store, field, depth)
+    return _ANSWERS[query](store, field, limits)
 
 
 def _others(found: tuple[Field, ...], field: Field) -> tuple[Field, ...]:
@@ -678,12 +921,29 @@ def _report(store: FieldStore, arguments: argparse.Namespace) -> int:
     if not found:
         sys.stdout.write(f"no declared field named {arguments.subject}\n")
         return 1
+    limits = _limits_of(arguments)
     for field in found:
         sys.stdout.write("\n".join(_heading(field)) + "\n")
         sys.stdout.write(
-            "\n".join(_answer(store, arguments.query, field, arguments.depth)) + "\n\n"
+            "\n".join(_answer(store, arguments.query, field, limits)) + "\n\n"
         )
     return 0
+
+
+def _hop_budget(given: str) -> int:
+    """Zero hops is what the default already is, so asking for it while also
+    asking to cross calls is a contradiction rather than a setting."""
+    count = int(given)
+    if count < 1:
+        raise argparse.ArgumentTypeError(f"needs at least one hop, got {count}")
+    return count
+
+
+def _limits_of(arguments: argparse.Namespace) -> Limits:
+    return Limits(
+        depth=arguments.depth,
+        hops=arguments.max_hops if arguments.across_calls else 0,
+    )
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
@@ -698,6 +958,18 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         type=int,
         default=MAX_DEPTH,
         help="how many flows the transitive queries follow",
+    )
+    parser.add_argument(
+        "--across-calls",
+        action="store_true",
+        help="let reaches/reached-by cross a commarea window into the callee",
+    )
+    parser.add_argument(
+        "--max-hops",
+        type=_hop_budget,
+        default=DEFAULT_HOPS,
+        metavar="N",
+        help="commarea crossings allowed per path, with --across-calls",
     )
     return parser.parse_args(tuple(argv) if argv else None)
 
