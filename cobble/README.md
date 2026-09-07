@@ -410,12 +410,28 @@ bytes: that site contributes a row per resolution, so a consumer joining on
 `(caller, node)` must expect the fan-out. Not an edge: the relation is byte
 identity across a call, rebased to the callee's offset 0, so the graph itself
 stays intra-program. A site that reaches no window is still a row, naming what
-stopped it (`dynamic-target`, `callee-not-in-cache`,
-`callee-declares-no-commarea`, `empty-window`, …) *and* naming the callee it
+stopped it *and* naming the callee it
 stopped on, so a consumer learns whose cache file to look at without going back to
 the ASG. Some of those reasons state a fact about the two programs — no bytes are
 shared, and none would be at run time either — while the rest state a limit of this
-analysis: sharing very likely happens and we could not say which bytes. `callee` is
+analysis: sharing very likely happens and we could not say which bytes. All ten,
+labelled, because the row carries the bare string and a consumer has no way to
+discover the partition (`b7k` is the machine-readable field this is standing in for):
+
+| reason | | what it says |
+| --- | --- | --- |
+| `no-commarea-operand` | fact | the call passes no `COMMAREA` at all, so nothing is shared |
+| `callee-declares-no-commarea` | fact | the callee has no `DFHCOMMAREA` in `LINKAGE`, so it addresses none of it |
+| `empty-window` | fact | the shorter of the two areas is zero bytes long |
+| `dynamic-target` | limit | the target is a field: nothing short of running the program resolves it |
+| `callee-not-in-cache` | limit | the target resolved to a name the ASG cache has no file for |
+| `caller-field-unknown` | limit | the `COMMAREA` operand named nothing this member's layout holds |
+| `call-using-unsupported` | limit | a static `CALL … USING`, which this pass does not model |
+| `unreadable` | limit | the callee's cache file would not parse (the row carries the error) |
+| `unsizeable` | limit | the callee's `LINKAGE` layout never built |
+| `alias-phase-failed` | limit | the phase failed on this member before reaching any site |
+
+`callee` is
 blank where the target is a field rather than a literal, which means "nothing short
 of running the program resolves this" rather than "the pass did not carry it". The
 one exception is `alias-phase-failed` — the alias phase giving up on a member before
@@ -519,9 +535,10 @@ uv run cobble-fields-query writers    WS-TOTAL --out out/fields
 uv run cobble-fields-query readers    PROGA.WS-TOTAL --out out/fields
 uv run cobble-fields-query reaches    WS-TOTAL --out out/fields --depth 4
 uv run cobble-fields-query contains   SOME-REC --out out/fields
+uv run cobble-fields-query reaches    PROGA.WS-KEY --out out/fields --across-calls --max-hops 2
 ```
 
-Joins the graph with the extents and defs tables and answers in bytes. The
+Joins the graph with the extents, defs and aliases tables and answers in bytes. The
 queries are `extents`, `writers`, `readers`, `reaches`, `reached-by`, `contains`,
 `within`, and `overlapping`; the subject is a field name, or `PROGRAM.FIELD` to
 disambiguate one declared in several members.
@@ -549,6 +566,41 @@ nobody asked about. `reaches` and `reached-by` walk the closure of that
 intersection to `--depth` (default 6), stopping on a field already visited over
 overlapping bytes — both parts, because bytes alone prune a sibling inside a group
 already reached, and an id alone prunes a second occurrence of a table entry.
+
+#### Crossing a call: `--across-calls`
+
+`reaches` and `reached-by` take `--across-calls`, which lets the walk step through
+a `COMMAREA` window into the callee, and `--max-hops N` (default 3) bounds how many
+such steps one route may take. Off by default, because the call graph reaches most
+of itself within a few hops, so an unbounded provenance answer names half the system
+and tells a reader nothing. Refused rather than ignored on the other six questions,
+which this analysis does not answer across a call.
+
+A hop is not an edge: the two windows are the same storage, so a crossing is a byte
+identity rebased to the other side's offsets. `LINK` returns, so its window is
+symmetric and the callee's write-back comes home; `XCTL` does not, so it is inbound
+only. Each landing prints the bytes it landed on, its `hops` — the cheapest route
+the walk found within the depth budget — and `via`, the last site that route
+crossed. Every answer ends in `stopped:`, which names the hop limit, the depth
+limit, each dead-end site met (`reason at PROGRAM:node`), each arrival dropped by
+overlap pruning that still owed bytes an answer (`pruned by overlap at
+PROGRAM:node`), or `frontier exhausted`.
+
+Three limits are worth knowing, all of them open beads:
+
+- **Overlap pruning drops a covering write-back** (`nsv`). A callee that repacks the
+  whole record it read — `MOVE CALLEE-REC TO DFHCOMMAREA` — lands on bytes the
+  inbound hop already stood on, and the walk drops it, losing the return direction.
+  It is reported as `pruned by overlap at …` rather than silently, but it is a lost
+  answer, not a fact about the two programs.
+- **`hops` is minimal only within `--depth`** (`u3v`). A cheaper route needing more
+  flow steps than the depth budget allows is never found, so the cost reported is
+  the cheapest of the routes seen.
+- **No stop names an external origin.** A walk that runs out of flows prints
+  `frontier exhausted`, which is the walk's state and not the answer's provenance: a
+  range whose only writer is a `READ INTO` from a file reads the same as a range
+  nothing writes at all. Naming the synthetic `FILE:`/literal/`%CALL:` source it
+  ended on is a deliberate deviation, deferred rather than done.
 
 Field names go to stdout and nowhere else, so the log stays safe to tail.
 

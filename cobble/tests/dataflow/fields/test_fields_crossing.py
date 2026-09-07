@@ -1,6 +1,7 @@
 """Crossing a commarea: the rebase, its direction, and where it stops."""
 
 import json
+from itertools import pairwise
 
 import pytest
 from cobble.dataflow.fields.extent_text import byte_range
@@ -229,13 +230,15 @@ def test_a_crossing_walk_continues_into_the_callee():
 
 
 def test_without_a_hop_budget_the_walk_never_leaves_the_caller():
+    """``hops=0`` is the plain walk's setting, which no CLI invocation reaches:
+    ``_hop_budget`` rejects ``--max-hops 0``. Termination is what is worth pinning,
+    so whatever stop the internal call reports is not part of the contract."""
     store = _two_program_store()
     start = (byte_range("WS-AREA@working_storage[0:4]", "XPROGA"),)
 
     found = crossing(store, start, Side.SOURCE, depth=6, hops=0)
 
     assert _landings(found) == ()
-    assert "hop limit 0" in found.stops
 
 
 def _onward_from_the_callee():
@@ -300,7 +303,7 @@ def test_a_dead_end_in_a_program_the_walk_entered_is_a_named_stop():
 
     found = crossing(store, start, Side.SOURCE, depth=6, hops=3)
 
-    assert "callee-not-in-cache at XPROGB" in found.stops
+    assert "callee-not-in-cache at XPROGB:SUB/7" in found.stops
 
 
 def test_the_start_field_is_not_its_own_landing_after_a_symmetric_link():
@@ -377,6 +380,404 @@ def test_hops_is_minimal_among_routes_within_depth():
     assert len(z_landings) == 1
     assert z_landings[0].hops == 1
     assert z_landings[0].via == "XPROGA:MAIN/9"
+
+
+def _converging_routes():
+    """Two routes of different cost onto one range, **and a flow leaving it**.
+
+    ``XPROGA`` XCTLs ``XPROGB`` XCTLs ``XPROGC``, which is the dear way onto
+    ``XPROGC.DFHCOMMAREA`` (two hops) and from there to ``C-REC`` by a flow.
+    ``XPROGC`` also LINKs ``XPROGA``, so the same ``C-REC`` bytes are one symmetric
+    hop back from ``M1``. Both arrive in the same level, and ``C-REC`` flows on to
+    ``C-SINK``: without a cost-canonical level the flow is priced off whichever
+    arrival the step built first, so what the convergence costs is only observable
+    downstream of it.
+    """
+    declared = (
+        _declared("WS-A", 1, ((0, 4),), program="XPROGA"),
+        _declared("M0", 1, ((8, 12),), program="XPROGA"),
+        _linkage_declared("M1", 1, 0, 4, program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGB"),
+        _declared("B-REC", 1, ((0, 4),), program="XPROGB"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGC"),
+        _declared("C-REC", 1, ((0, 4),), program="XPROGC"),
+        _declared("C-SINK", 1, ((16, 20),), program="XPROGC"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGF"),
+    )
+    edges = (
+        _edge(
+            "WS-A",
+            "M0",
+            "AMAIN/1",
+            "WS-A@working_storage[0:4]",
+            "M0@working_storage[8:12]",
+            program="XPROGA",
+        ),
+        _edge(
+            "M0",
+            "M1",
+            "AMAIN/2",
+            "M0@working_storage[8:12]",
+            "M1@linkage[0:4]",
+            program="XPROGA",
+        ),
+        _edge(
+            "DFHCOMMAREA",
+            "B-REC",
+            "BMAIN/1",
+            "DFHCOMMAREA@linkage[0:4]",
+            "B-REC@working_storage[0:4]",
+            program="XPROGB",
+        ),
+        _edge(
+            "DFHCOMMAREA",
+            "C-REC",
+            "CMAIN/1",
+            "DFHCOMMAREA@linkage[0:4]",
+            "C-REC@working_storage[0:4]",
+            program="XPROGC",
+        ),
+        _edge(
+            "C-REC",
+            "C-SINK",
+            "CMAIN/2",
+            "C-REC@working_storage[0:4]",
+            "C-SINK@working_storage[16:20]",
+            program="XPROGC",
+        ),
+    )
+    aliases = (
+        _alias_row(
+            caller="XPROGA",
+            node="AMAIN/9",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="WS-A@working_storage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGB",
+            node="BMAIN/9",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="DFHCOMMAREA@linkage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGC",
+            node="CMAIN/5",
+            transfer="LINK",
+            callee="XPROGA",
+            caller_extent="C-REC@working_storage[0:4]",
+            callee_extent="M1@linkage[0:4]",
+            returns=True,
+        ),
+        _alias_row(
+            caller="XPROGC",
+            node="CMAIN/7",
+            transfer="XCTL",
+            callee="XPROGF",
+            caller_extent="C-SINK@working_storage[16:20]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+    )
+    return store_of(declared, edges, (), aliases)
+
+
+def _converging_walk(hops: int):
+    return crossing(
+        _converging_routes(),
+        (byte_range("WS-A@working_storage[0:4]", "XPROGA"),),
+        Side.SOURCE,
+        depth=6,
+        hops=hops,
+    )
+
+
+def test_a_flow_leaving_a_convergence_is_priced_off_the_cheap_route():
+    found = _converging_walk(3)
+
+    sink = [one for one in found.landings if one.field_id == "XPROGC.C-SINK"]
+    assert [(one.hops, one.via) for one in sink] == [(1, "XPROGC:CMAIN/5")]
+
+
+def test_raising_the_hop_budget_never_raises_a_landings_cost():
+    """Monotonicity, which the first-match cost broke outright: the same landing
+    reported one hop at a budget of one and two hops at a budget of two, so a
+    reader who widened the search was told the answer got further away."""
+    costs = tuple(
+        {one.field_id: one.hops for one in _converging_walk(hops).landings}
+        for hops in (1, 2, 3)
+    )
+
+    for tighter, wider in pairwise(costs):
+        assert all(wider[field] <= cost for field, cost in tighter.items())
+
+
+def test_the_whole_answer_at_two_budgets_neither_loses_a_landing_nor_blames_the_cap():
+    """Whole tuples, because each of the three defects was invisible to a
+    membership test: ``XPROGF`` is two hops away, a two-hop budget must find it,
+    and ``hop limit 2`` must not be said when nothing was cut."""
+    wide, tight = _converging_walk(3), _converging_walk(2)
+
+    assert _landings(tight) == _landings(wide)
+    assert _landings(wide) == (
+        (0, "XPROGA.M0", ""),
+        (0, "XPROGA.M1", ""),
+        (1, "XPROGB.DFHCOMMAREA", "XPROGA:AMAIN/9"),
+        (1, "XPROGB.B-REC", "XPROGA:AMAIN/9"),
+        (1, "XPROGC.C-REC", "XPROGC:CMAIN/5"),
+        (1, "XPROGC.C-SINK", "XPROGC:CMAIN/5"),
+        (2, "XPROGC.DFHCOMMAREA", "XPROGB:BMAIN/9"),
+        (2, "XPROGF.DFHCOMMAREA", "XPROGC:CMAIN/7"),
+    )
+    assert tight.stops == ()
+    assert wide.stops == ()
+
+
+def test_the_budget_that_really_cuts_the_last_crossing_says_so():
+    """The other direction of the same store: one hop does lose ``XPROGF``."""
+    found = _converging_walk(1)
+
+    assert "XPROGF.DFHCOMMAREA" not in {one.field_id for one in found.landings}
+    assert found.stops == ("hop limit 1",)
+
+
+def test_a_flow_off_two_frontier_entries_is_priced_off_the_cheaper_one():
+    """Two *different* names over shared bytes, at different costs, in one level.
+
+    Deduping the level cannot merge these -- ``XPROGC.C-WIDE[0:8]`` and
+    ``XPROGC.C-NARROW[4:8]`` are two entries, not one seen twice -- so which of them
+    a flow leaving the shared ``[4:8]`` is priced off is entirely ``_from``'s
+    choice. The dear one is built first, being flowed rather than crossed.
+    """
+    declared = (
+        _declared("WS-A", 1, ((0, 4),), program="XPROGA"),
+        _declared("M0", 1, ((8, 12),), program="XPROGA"),
+        _linkage_declared("M1", 1, 0, 4, program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGB"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGC"),
+        _declared("C-WIDE", 1, ((0, 8),), program="XPROGC"),
+        _declared("C-NARROW", 1, ((4, 8),), program="XPROGC"),
+        _declared("C-SINK", 1, ((16, 20),), program="XPROGC"),
+    )
+    edges = (
+        _edge(
+            "WS-A",
+            "M0",
+            "AMAIN/1",
+            "WS-A@working_storage[0:4]",
+            "M0@working_storage[8:12]",
+            program="XPROGA",
+        ),
+        _edge(
+            "M0",
+            "M1",
+            "AMAIN/2",
+            "M0@working_storage[8:12]",
+            "M1@linkage[0:4]",
+            program="XPROGA",
+        ),
+        _edge(
+            "DFHCOMMAREA",
+            "C-WIDE",
+            "CMAIN/1",
+            "DFHCOMMAREA@linkage[0:4]",
+            "C-WIDE@working_storage[0:8]",
+            program="XPROGC",
+        ),
+        _edge(
+            "C-WIDE",
+            "C-SINK",
+            "CMAIN/2",
+            "C-WIDE@working_storage[4:8]",
+            "C-SINK@working_storage[16:20]",
+            program="XPROGC",
+        ),
+    )
+    aliases = (
+        _alias_row(
+            caller="XPROGA",
+            node="AMAIN/9",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="WS-A@working_storage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGB",
+            node="BMAIN/9",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="DFHCOMMAREA@linkage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGC",
+            node="CMAIN/5",
+            transfer="LINK",
+            callee="XPROGA",
+            caller_extent="C-NARROW@working_storage[4:8]",
+            callee_extent="M1@linkage[0:4]",
+            returns=True,
+        ),
+    )
+    store = store_of(declared, edges, (), aliases)
+    start = (byte_range("WS-A@working_storage[0:4]", "XPROGA"),)
+
+    found = crossing(store, start, Side.SOURCE, depth=6, hops=3)
+
+    sink = [one for one in found.landings if one.field_id == "XPROGC.C-SINK"]
+    assert [(one.hops, one.via) for one in sink] == [(1, "XPROGC:CMAIN/5")]
+
+
+def _repack_store(write_back: str):
+    """The caller passes a key in and reads a result back out of the same window.
+
+    ``write_back`` picks the callee's last MOVE: ``whole`` repacks the record over
+    the entire window (``MOVE SUB-REC TO DFHCOMMAREA``, the shape the corpus
+    measurement found), ``part`` writes only the result bytes.
+    """
+    declared = (
+        _declared("WS-AREA", 1, ((0, 12),), program="XPROGA"),
+        _declared("WS-OUT-KEY", 5, ((0, 4),), program="XPROGA"),
+        _declared("WS-IN-RESULT", 5, ((8, 12),), program="XPROGA"),
+        _declared("WS-SINK", 1, ((16, 20),), program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 12, program="XPROGB"),
+        _declared("SUB-REC", 1, ((0, 12),), program="XPROGB"),
+        _declared("SUB-KEY", 5, ((0, 4),), program="XPROGB"),
+        _declared("SUB-RESULT", 5, ((8, 12),), program="XPROGB"),
+    )
+    whole = write_back == "whole"
+    edges = (
+        _edge(
+            "DFHCOMMAREA",
+            "SUB-REC",
+            "SUB/1",
+            "DFHCOMMAREA@linkage[0:12]",
+            "SUB-REC@working_storage[0:12]",
+            program="XPROGB",
+        ),
+        _edge(
+            "SUB-KEY",
+            "SUB-RESULT",
+            "SUB/2",
+            "SUB-KEY@working_storage[0:4]",
+            "SUB-RESULT@working_storage[8:12]",
+            program="XPROGB",
+        ),
+        _edge(
+            "SUB-REC" if whole else "SUB-RESULT",
+            "DFHCOMMAREA",
+            "SUB/3",
+            (
+                "SUB-REC@working_storage[0:12]"
+                if whole
+                else "SUB-RESULT@working_storage[8:12]"
+            ),
+            "DFHCOMMAREA@linkage[0:12]" if whole else "DFHCOMMAREA@linkage[8:12]",
+            program="XPROGB",
+        ),
+        _edge(
+            "WS-IN-RESULT",
+            "WS-SINK",
+            "MAIN/9",
+            "WS-IN-RESULT@working_storage[8:12]",
+            "WS-SINK@working_storage[16:20]",
+            program="XPROGA",
+        ),
+    )
+    return store_of(declared, edges, (), (_alias_row(node="MAIN/3"),))
+
+
+def _repack_walk(write_back: str):
+    return crossing(
+        _repack_store(write_back),
+        (byte_range("WS-OUT-KEY@working_storage[0:4]", "XPROGA"),),
+        Side.SOURCE,
+        depth=6,
+        hops=2,
+    )
+
+
+def test_a_partial_write_back_comes_all_the_way_home_saying_nothing():
+    found = _repack_walk("part")
+
+    assert ("XPROGA.WS-SINK", 2) in {(one.field_id, one.hops) for one in found.landings}
+    assert found.stops == ()
+
+
+def test_a_whole_record_write_back_names_the_statement_it_was_pruned_at():
+    """The measured corpus shape. The repack lands on bytes the inbound hop already
+    stood on, so overlap pruning drops it and the caller's sink is not reached --
+    which is a limitation of the pruning rule (bead ``nsv``), not a fact about the
+    two programs. What must never happen is that it is dropped in silence.
+    """
+    found = _repack_walk("whole")
+
+    assert "XPROGA.WS-SINK" not in {one.field_id for one in found.landings}
+    assert found.stops == ("pruned by overlap at XPROGB:SUB/3",)
+
+
+def test_a_reconvergence_the_pruning_costs_nothing_is_not_a_stop():
+    """The same drop where the earlier entry *covers* the candidate: everything
+    onward is reachable from it at no greater cost, flows costing no hop, so a stop
+    here would teach a reader to discount the whole line."""
+    declared = (
+        _declared("WS-A", 1, ((0, 4),), program="XPROGA"),
+        _declared("WS-B", 1, ((8, 12),), program="XPROGA"),
+        _declared("WS-C", 1, ((16, 20),), program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGB"),
+    )
+    edges = (
+        _edge(
+            "WS-A",
+            "WS-B",
+            "MAIN/5",
+            "WS-A@working_storage[0:4]",
+            "WS-B@working_storage[8:12]",
+            program="XPROGA",
+        ),
+        _edge(
+            "WS-A",
+            "WS-C",
+            "MAIN/6",
+            "WS-A@working_storage[0:4]",
+            "WS-C@working_storage[16:20]",
+            program="XPROGA",
+        ),
+        _edge(
+            "WS-C",
+            "WS-B",
+            "MAIN/7",
+            "WS-C@working_storage[16:20]",
+            "WS-B@working_storage[8:12]",
+            program="XPROGA",
+        ),
+    )
+    aliases = (
+        _alias_row(
+            caller="XPROGA",
+            node="MAIN/2",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="WS-B@working_storage[8:12]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+    )
+    store = store_of(declared, edges, (), aliases)
+    start = (byte_range("WS-A@working_storage[0:4]", "XPROGA"),)
+
+    found = crossing(store, start, Side.SOURCE, depth=6, hops=2)
+
+    assert "XPROGB.DFHCOMMAREA" in {one.field_id for one in found.landings}
+    assert found.stops == ()
 
 
 def test_the_walk_crosses_from_a_field_within_the_hop_budget():
@@ -470,10 +871,59 @@ def test_the_last_levels_dead_ends_are_named():
 
     found = crossing(store, start, Side.SOURCE, depth=1, hops=3)
 
-    assert "callee-not-in-cache at XPROGB" in found.stops
+    assert "callee-not-in-cache at XPROGB:SUB/7" in found.stops
+
+
+def test_a_dead_end_with_no_node_degrades_to_the_program():
+    """``alias-phase-failed`` is the phase giving up on a member before it reached
+    any site, so there is no statement to name and the program is the whole stop."""
+    failed = _alias_row(
+        caller="XPROGB",
+        node="",
+        callee="",
+        caller_extent="",
+        callee_extent="",
+        returns=False,
+        reason="alias-phase-failed",
+    )
+    store = _two_program_store(_alias_row(), failed)
+    start = (byte_range("WS-AREA@working_storage[0:4]", "XPROGA"),)
+
+    found = crossing(store, start, Side.SOURCE, depth=6, hops=3)
+
+    assert "alias-phase-failed at XPROGB" in found.stops
+
+
+def test_two_dead_ends_in_one_program_are_two_stops():
+    """The site and not the program alone: five dynamic call sites are five
+    statements a reader has to be able to find."""
+    blocked = tuple(
+        _alias_row(
+            caller="XPROGB",
+            node=f"SUB/{i}",
+            callee="",
+            caller_extent="",
+            callee_extent="",
+            returns=False,
+            reason="dynamic-target",
+        )
+        for i in (7, 8)
+    )
+    store = _two_program_store(_alias_row(), *blocked)
+    start = (byte_range("WS-AREA@working_storage[0:4]", "XPROGA"),)
+
+    found = crossing(store, start, Side.SOURCE, depth=6, hops=3)
+
+    assert [stop for stop in found.stops if stop.startswith("dynamic-target")] == [
+        "dynamic-target at XPROGB:SUB/7",
+        "dynamic-target at XPROGB:SUB/8",
+    ]
 
 
 def test_stops_are_deduped():
+    """One site met at every level the frontier stands in its program is one fact.
+    Two sites are two, which ``test_two_dead_ends_in_one_program_are_two_stops``
+    pins: the dedupe is on the whole string, so it turns on the node being there."""
     blocked1 = _alias_row(
         caller="XPROGB",
         node="SUB/7",
@@ -497,7 +947,9 @@ def test_stops_are_deduped():
 
     found = crossing(store, start, Side.SOURCE, depth=6, hops=3)
 
-    count = sum(1 for stop in found.stops if stop == "callee-not-in-cache at XPROGB")
+    count = sum(
+        1 for stop in found.stops if stop == "callee-not-in-cache at XPROGB:SUB/7"
+    )
     assert count == 1
 
 
@@ -665,6 +1117,35 @@ def test_the_flag_reports_the_hop_the_site_and_the_stop(tmp_path, capsys):
     assert "hop 1" in printed
     assert "via XPROGA:MAIN/2" in printed
     assert "stopped:" in printed
+
+
+def test_a_landing_line_names_the_bytes_it_landed_on(tmp_path, capsys):
+    """Two ranges of one field are two answers, and depth is not what tells them
+    apart: without the range the rows read as one row printed twice."""
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written(out, "edges.jsonl", _two_program_edge_rows())
+    _written(out, "aliases.jsonl", (_alias_row(),))
+
+    assert cli(["reaches", "XPROGA.WS-AREA", "--out", str(out), "--across-calls"]) == 0
+
+    printed = capsys.readouterr().out
+    assert "XPROGB.DFHCOMMAREA  DFHCOMMAREA@linkage[0:12]" in printed
+
+
+@pytest.mark.parametrize("query", ("writers", "readers", "contains", "extents"))
+def test_a_question_that_cannot_cross_a_call_refuses_the_flag(tmp_path, query):
+    """Refused rather than ignored: answering without the flag is indistinguishable
+    from a corpus in which no call site shares any bytes."""
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(out, "extents.jsonl", _two_program_extent_rows())
+
+    with pytest.raises(SystemExit) as refused:
+        cli([query, "XPROGA.WS-AREA", "--out", str(out), "--across-calls"])
+
+    assert refused.value.code == 2
 
 
 def test_asking_to_cross_zero_hops_is_rejected(tmp_path):
@@ -979,8 +1460,8 @@ WITHHELD_STOPS = 10
 def _one_dead_end_per_callee(count: int):
     """``count`` callees the walk lands in, each with a dead end of its own.
 
-    Distinct callers, because ``_stops`` dedups on the whole ``reason at caller``
-    string, so one caller repeated is one stop however many of its sites are dead.
+    Distinct callers, because ``_stops`` dedups on the whole ``reason at
+    caller:node`` string, and every one of these sites is ``SUB/1``.
     And live crossings into them, because a dead end is only reported for a program
     the frontier stands in.
     """
