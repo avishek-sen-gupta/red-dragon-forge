@@ -63,7 +63,7 @@ def _sourced(name: str, node: str) -> frozenset[Source]:
 def test_the_region_text_round_trips_through_the_enum_that_wrote_it():
     """``FieldExtent.__str__`` spells the region as the enum's own value, so
     ``RegionId(text)`` is the way back and no mapping table is needed."""
-    found = _extent_at("WS-AREA@working_storage[8:20]", "TPROGA")
+    found = _extent_at("WS-AREA@working_storage[8:20]")
 
     assert found.region is RegionId.WORKING_STORAGE
     assert (found.start, found.length) == (8, 12)
@@ -75,8 +75,8 @@ def test_a_text_that_is_not_an_extent_parses_to_a_length_of_nothing():
     """A dead-end alias row carries a reason where the extents would be. Zero
     length is what makes that safe to carry in an extent-shaped slot: may_alias
     and must_cover both reject a non-positive length."""
-    assert not _extent_at("", "TPROGA").length
-    assert not _extent_at("callee-not-in-cache", "TPROGA").length
+    assert not _extent_at("").length
+    assert not _extent_at("callee-not-in-cache").length
 
 
 def test_a_row_carrying_a_reason_yields_no_window():
@@ -252,6 +252,10 @@ def test_a_loop_body_runs_once_and_then_the_walk_leaves():
     assert found.paths == 1
     assert found.coverage.total == 2
 
+    order = visited_order("TPROGA", _loader(LOOP), Budget(paths=1))
+    assert order.count("P/2") == 1
+    assert order == ("P/0", "P/1", "P/2")
+
 
 def test_sampling_takes_a_different_arm_on_the_next_path_and_reaches_full_coverage():
     """The cursor is per (program, node) and global to the run, so path 1 takes a
@@ -314,6 +318,10 @@ def test_a_paragraph_performed_twice_in_one_path_runs_both_times():
     assert found.paths == 1
     assert not found.dead_ends
 
+    order = visited_order("TPROGA", _loader(TWICE), Budget(paths=1))
+    assert order.count("S/0") == 2
+    assert order.count("S/end") == 2
+
 
 def test_only_the_return_edge_back_to_your_own_caller_is_taken():
     """The precision the fixpoint cannot have. ``build.py`` calls two RETURN edges
@@ -373,6 +381,7 @@ def test_coverage_counts_branch_edges_and_not_every_edge_walked():
     found = traced("TPROGA", _loader(TWICE), Budget(paths=1))
 
     assert found.coverage.total == 0
+    assert not found.coverage.taken
     assert found.coverage.programs == {"TPROGA"}
 
 
@@ -533,6 +542,87 @@ TRACE_CALLEE = """\
            EXEC CICS RETURN END-EXEC.
 """
 
+PERFORM_CALLEE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TPROGC.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  SUB-REC.
+           05  SUB-KEY              PIC X(4).
+           05  SUB-RESULT           PIC X(4).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA              PIC X(8).
+       PROCEDURE DIVISION.
+       SUB-PARA.
+           MOVE DFHCOMMAREA TO SUB-REC.
+           PERFORM WORK-PARA.
+           GOBACK.
+       WORK-PARA.
+           MOVE SUB-KEY TO SUB-RESULT.
+           MOVE SUB-RESULT TO DFHCOMMAREA(5:4).
+           GOBACK.
+"""
+
+PERFORM_CALLER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TPROGD.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-OUT-KEY           PIC X(4).
+           05  WS-IN-RESULT         PIC X(4).
+       01  WS-SINK                  PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'KKKK' TO WS-OUT-KEY.
+           PERFORM LINK-PARA.
+           MOVE WS-IN-RESULT TO WS-SINK.
+           STOP RUN.
+       LINK-PARA.
+           EXEC CICS LINK PROGRAM('TPROGC')
+                          COMMAREA(WS-AREA)
+                          LENGTH(8)
+           END-EXEC.
+"""
+
+KILL_CALLER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TPROGE.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-FIRST             PIC X(4).
+           05  WS-SECOND            PIC X(4).
+       01  WS-SEED                  PIC X(4).
+       01  WS-SINK                  PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'AAAA' TO WS-FIRST.
+           PERFORM LINK-PARA.
+           MOVE WS-FIRST TO WS-SINK.
+           STOP RUN.
+       LINK-PARA.
+           EXEC CICS LINK PROGRAM('TPROGF')
+                          COMMAREA(WS-AREA)
+                          LENGTH(8)
+           END-EXEC.
+"""
+
+KILL_CALLEE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. TPROGF.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  SUB-REC                  PIC X(4).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA              PIC X(8).
+       PROCEDURE DIVISION.
+       SUB-PARA.
+           MOVE 'BBBB' TO SUB-REC.
+           MOVE SUB-REC TO DFHCOMMAREA(1:4).
+           EXEC CICS RETURN END-EXEC.
+"""
+
 
 def _bridge_jar() -> Path:
     """The parse is the only thing here that needs a JVM, so it is the only thing
@@ -566,6 +656,87 @@ def parsed(tmp_path_factory) -> Path:
 @pytest.fixture(scope="module")
 def crossed(parsed: Path) -> Trace:
     return sampled("TPROGA", parsed, Budget(paths=8))
+
+
+@pytest.fixture(scope="module")
+def parsed_perform(tmp_path_factory) -> Path:
+    """A callee whose GOBACK sits inside a PERFORMed paragraph. Regression for
+    C1: _ended must unwind to the crossing frame, not just look at stack[-1]."""
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    root = tmp_path_factory.mktemp("trace_perform")
+    cache = root / "asg"
+    cache.mkdir()
+    for program, source in (("TPROGD", PERFORM_CALLER), ("TPROGC", PERFORM_CALLEE)):
+        path = root / f"{program}.cbl"
+        path.write_text(source, encoding="utf-8")
+        result = parse_one(
+            Job(path, cache / f"{program}.json"), str(_bridge_jar()), (), ("cpy",)
+        )
+        assert result.ok, result.error
+    return cache
+
+
+@pytest.fixture(scope="module")
+def crossed_perform(parsed_perform: Path) -> Trace:
+    return sampled("TPROGD", parsed_perform, Budget(paths=8))
+
+
+@pytest.fixture(scope="module")
+def parsed_kill(tmp_path_factory) -> Path:
+    """A callee that kills bytes the caller held. Guards the state.write constraint."""
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    root = tmp_path_factory.mktemp("trace_kill")
+    cache = root / "asg"
+    cache.mkdir()
+    for program, source in (("TPROGE", KILL_CALLER), ("TPROGF", KILL_CALLEE)):
+        path = root / f"{program}.cbl"
+        path.write_text(source, encoding="utf-8")
+        result = parse_one(
+            Job(path, cache / f"{program}.json"), str(_bridge_jar()), (), ("cpy",)
+        )
+        assert result.ok, result.error
+    return cache
+
+
+@pytest.fixture(scope="module")
+def crossed_kill(parsed_kill: Path) -> Trace:
+    return sampled("TPROGE", parsed_kill, Budget(paths=8))
+
+
+def test_a_callee_write_kills_the_callers_old_definition(crossed_kill):
+    """I1: _restored uses state.write per extent, not state.join. When the callee
+    writes bytes the caller held, must_cover kills the caller's stale source."""
+    (dep,) = [
+        one
+        for one in crossed_kill.deps
+        if one.program == "TPROGE" and one.target.field_name == "WS-SINK"
+    ]
+
+    caller_definers = [
+        one for one in dep.definers if one.startswith("TPROGE/MAIN-PARA/0")
+    ]
+    callee_definers = [one for one in dep.definers if one.startswith("TPROGF/")]
+
+    assert not caller_definers
+    assert callee_definers
+
+
+def test_a_callee_ending_in_a_performed_paragraph_seeds_the_caller_back(
+    crossed_perform,
+):
+    """C1 regression: when a LINK callee's path ends inside a PERFORMed paragraph,
+    _ended must unwind to the crossing frame rather than stopping at stack[-1]. The
+    caller's sink must witness the callee's write through DFHCOMMAREA."""
+    (dep,) = [
+        one
+        for one in crossed_perform.deps
+        if one.program == "TPROGD" and one.target.field_name == "WS-SINK"
+    ]
+
+    assert str(dep.source) == "WS-IN-RESULT@working_storage[4:8]"
+    assert [one for one in dep.definers if one.startswith("TPROGC/")]
 
 
 def test_the_walk_enters_the_callee_and_witnesses_writes_in_both_members(crossed):
@@ -643,6 +814,7 @@ def test_the_coverage_denominator_comes_from_the_graphs_and_not_from_the_answer(
 
     assert crossed.coverage.programs == {"TPROGA", "TPROGB"}
     assert crossed.coverage.total == len(edges)
+    assert crossed.coverage.taken
     assert crossed.coverage.taken <= frozenset(edges)
 
 
@@ -728,3 +900,42 @@ def test_a_missing_cache_directory_is_refused_with_a_status_and_not_a_traceback(
         )
         == 2
     )
+
+
+def test_positive_validator_accepts_positive_integers():
+    from cobble.dataflow.fields.trace_report import _positive
+
+    assert _positive("1") == 1
+    assert _positive("100") == 100
+
+
+def test_positive_validator_rejects_zero_and_negative():
+    import argparse
+
+    from cobble.dataflow.fields.trace_report import _positive
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive("0")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive("-1")
+
+
+def test_fraction_validator_accepts_valid_fractions():
+    from cobble.dataflow.fields.trace_report import _fraction
+
+    assert _fraction("0.5") == 0.5
+    assert _fraction("1.0") == 1.0
+    assert _fraction("0.01") == 0.01
+
+
+def test_fraction_validator_rejects_out_of_range_fractions():
+    import argparse
+
+    from cobble.dataflow.fields.trace_report import _fraction
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        _fraction("0.0")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _fraction("1.1")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _fraction("-0.1")

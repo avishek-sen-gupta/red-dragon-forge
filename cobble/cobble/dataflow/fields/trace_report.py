@@ -59,7 +59,7 @@ def _dep_line(dep: Dep, width: int) -> str:
     """
     said = f"    <- {_came_from(dep).ljust(width)}   at {dep.program}/{dep.node}"
     if not dep.definers:
-        return said
+        return f"{said}   (read before write)" if not dep.origin else said
     return f"{said}   defined at {', '.join(dep.definers)}"
 
 
@@ -85,6 +85,8 @@ def _group_lines(group: tuple[str, str], deps: Sequence[Dep]) -> tuple[str, ...]
 
 
 def _dependency_lines(trace: Trace) -> tuple[str, ...]:
+    if not trace.deps:
+        return ("(nothing witnessed on any sampled path)", "")
     groups = tuple(dict.fromkeys(sorted(_group_of(one) for one in trace.deps)))
     return tuple(
         line
@@ -99,7 +101,7 @@ def _dead_end_lines(trace: Trace) -> tuple[str, ...]:
     """Their own section. A site the path could not cross is not a dependency, and
     mixing the two would make an absence read like a finding."""
     if not trace.dead_ends:
-        return ()
+        return ("dead ends:", "  (none)", "")
     return (
         "dead ends:",
         *sorted(
@@ -113,11 +115,13 @@ def _dead_end_lines(trace: Trace) -> tuple[str, ...]:
 
 def _summary_lines(trace: Trace) -> tuple[str, ...]:
     found = trace.coverage
+    path_word = "path" if trace.paths == 1 else "paths"
+    program_word = "program" if len(found.programs) == 1 else "programs"
     return (
         (
             f"branch coverage: {len(found.taken)}/{found.total} "
-            f"({round(100 * found.fraction)}%) over {trace.paths} paths, "
-            f"{len(found.programs)} programs entered"
+            f"({round(100 * found.fraction)}%) over {trace.paths} {path_word}, "
+            f"{len(found.programs)} {program_word} entered"
         ),
     )
 
@@ -162,7 +166,13 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="where to write the report; a whole-memory answer is a file, not a terminal",
     )
-    parser.add_argument("--paths", type=_positive, default=DEFAULT_PATHS, metavar="N")
+    parser.add_argument(
+        "--paths",
+        type=_positive,
+        default=DEFAULT_PATHS,
+        metavar="N",
+        help="paths to sample before stopping",
+    )
     parser.add_argument(
         "--coverage",
         type=_fraction,
