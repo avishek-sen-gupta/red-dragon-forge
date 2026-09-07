@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 
 from cobble.dataflow.fields.aliases import (
-    CALLEE_HAS_NO_COMMAREA,
     CALL_USING,
+    CALLEE_HAS_NO_COMMAREA,
     CALLER_FIELD_UNKNOWN,
     DYNAMIC_TARGET,
     EMPTY_WINDOW,
-    NOT_IN_CACHE,
     NO_COMMAREA_OPERAND,
+    NOT_IN_CACHE,
     UNREADABLE,
     commarea_aliases,
 )

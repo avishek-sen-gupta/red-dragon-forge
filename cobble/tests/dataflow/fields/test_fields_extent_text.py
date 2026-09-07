@@ -1,6 +1,6 @@
 """ByteRange.__str__ round-trip: the inverse of byte_range()."""
 
-from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
+from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
 
 
 def test_an_exact_range_round_trips_through_str():

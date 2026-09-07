@@ -140,7 +140,7 @@ fileignoreconfig:
 - filename: cobble/.python-fp-lint/rules/no-subscript-tuple-mutation.yml
   checksum: 349f5b174d36b9a7e45a02bf1359aae738ffb5bd4dd562983f7956d177c507ba
 - filename: cobble/README.md
-  checksum: f7601466b2559a2eed6721992b224aa912ba80c5c53648ed660004c1df43f5d3
+  checksum: 77f7b027d0943babbd7b42cf5552b779d80809bb888fdd8dfc236e7faced87f6
 - filename: cobble/cobble/build_graph.py
   checksum: 17b97e112097e3ff9a6b4704abeec662d1a2c8d8e82394bf418c845fec7a2b20
 - filename: cobble/cobble/cics/flow_map.py
@@ -282,7 +282,7 @@ fileignoreconfig:
 - filename: cobble/cobble/dataflow/fields/side_tables.py
   checksum: bbba8baf46404ae5467a01c832daaec6b3ca1c59761fa8f45a0285b808709eac
 - filename: cobble/cobble/dataflow/fields/query.py
-  checksum: f21e85cf71d172a5bfc7d4ff3e49151d66e32ce6bcc91fd8a22d33f885848bff
+  checksum: b7f0fc229084d8c2405d1361a72482efcf17a5d81bb49aa6142735af64513d0d
 - filename: cobble/tests/dataflow/fields/test_fields_synthetic.py
   checksum: ac334a88abcd9c8ce8d105554216d508834231a26cdad5239e27859b0808ac6f
 - filename: cobble/cobble/dataflow/fields/rows.py
@@ -298,5 +298,5 @@ fileignoreconfig:
 - filename: cobble/tests/dataflow/fields/test_fields_aliases.py
   checksum: 83c7ee29c017268a5a21bba5c43bd998e860da66be7057fbfac8ed9807e89891
 - filename: cobble/tests/dataflow/fields/test_fields_crossing.py
-  checksum: 9c1eb6811c8ace67f83250b30c9c8ede3e1cdbf1679291f0203c5edf09556711
+  checksum: 17f78e9c1edff48749bc674d4282f09f3430b6b1fa66fd30de5b3f2f816eee4f
 version: "1.0"

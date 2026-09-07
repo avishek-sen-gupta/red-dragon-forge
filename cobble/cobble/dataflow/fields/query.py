@@ -114,9 +114,15 @@ class Limits:
 
 @dataclass(frozen=True)
 class Landing:
-    """One field a crossing walk reached, and what it cost to get there."""
+    """One field a crossing walk reached, which bytes of it, and what it cost.
+
+    The range is carried because ``_deduped`` keeps one landing per field *and*
+    overlapping bytes, so two ranges of one field are two answers: without it a
+    reader sees two rows differing only in ``depth`` and reads them as a repeat.
+    """
 
     field_id: str
+    at: ByteRange
     depth: int
     hops: int
     via: str
@@ -132,12 +138,19 @@ class Crossing:
 
 @dataclass(frozen=True)
 class _At:
-    """One place the frontier stands, carrying the cost of reaching it."""
+    """One place the frontier stands, carrying the cost of reaching it.
+
+    ``via`` is the last commarea site the route here crossed, which is provenance
+    for a landing. ``site`` is the statement that produced *this* arrival, which is
+    what a stop about a dropped arrival has to name; a flow's own node is not
+    ``via``, since a flow crosses nothing.
+    """
 
     field_id: str
     at: ByteRange
     hops: int
     via: str
+    site: str = ""
 
 
 @dataclass(frozen=True)
@@ -572,14 +585,51 @@ def _stepped(store: FieldStore, side: Side, hops: int, walk: _Cross) -> _Cross:
     """One level: every flow the frontier touches, then every alias it can cross."""
     flowed = _flow_step(store, side, walk)
     crossed, blocked = _alias_step(store, hops, walk)
-    fresh = tuple(one for one in (*flowed, *crossed) if _fresh(one, walk.seen))
+    reached = (*flowed, *crossed)
+    fresh = _canonical(tuple(one for one in reached if _fresh(one, walk.seen)))
     return _Cross(
         seen=(*walk.seen, *((one.field_id, one.at, one.hops) for one in fresh)),
         frontier=fresh,
         landings=(*walk.landings, *((walk.depth + 1, one) for one in fresh)),
-        stops=(*walk.stops, *_gaps(store, walk)),
+        stops=(*walk.stops, *_gaps(store, walk), *_pruned(reached, walk.seen)),
         blocked=tuple(dict.fromkeys((*walk.blocked, *blocked))),
         depth=walk.depth + 1,
+    )
+
+
+def _canonical(fresh: Sequence[_At]) -> tuple[_At, ...]:
+    """One entry per field and bytes, at the cheapest cost this level admitted.
+
+    ``_fresh`` compares against the levels before this one, so two arrivals in the
+    same level never see each other and a level can hold the same bytes at two
+    costs. Every flow leaving those bytes is then priced off whichever of the two
+    ``_from`` met, which makes a landing's reported cost depend on the order the
+    step happened to build. Deduping is the fix and reordering is not: reordering
+    only moves which of the two arrivals loses.
+    """
+    return tuple(
+        min((one for one in fresh if (one.field_id, one.at) == place), key=_cost)
+        for place in dict.fromkeys((one.field_id, one.at) for one in fresh)
+    )
+
+
+def _pruned(
+    reached: Sequence[_At], seen: Sequence[tuple[str, ByteRange, int]]
+) -> tuple[str, ...]:
+    """Arrivals overlap pruning dropped while bytes were still owed an answer.
+
+    ``_fresh`` drops an arrival whose bytes were already stood on at no greater
+    cost, and where the earlier entry *covers* this one nothing is lost: flows cost
+    no hop, so everything onward is reachable from it as cheaply. Where it covers
+    only part -- a callee repacking a whole record over the window it read -- the
+    rest of the bytes reach nothing, and saying so is the difference between a
+    stated limit and an answer that looks complete. ``_uncovered`` is that
+    distinction and the reason this is not merely ``not _fresh``.
+    """
+    return tuple(
+        f"pruned by overlap at {one.site}"
+        for one in reached
+        if one.at.known and not _fresh(one, seen) and _uncovered(one, seen)
     )
 
 
@@ -593,20 +643,30 @@ def _flow_step(store: FieldStore, side: Side, walk: _Cross) -> tuple[_At, ...]:
 
 def _stepped_from(came: _At, flow: Flow, side: Side) -> _At:
     """A flow costs no hop, so the cost of standing here carries forward."""
+    landed = _far_end(flow, side)
     return _At(
         field_id=_far_id(flow, side),
-        at=_far_end(flow, side),
+        at=landed,
         hops=came.hops,
         via=came.via,
+        site=f"{landed.program}:{flow.node}",
     )
 
 
+def _cost(one: _At) -> int:
+    return one.hops
+
+
 def _from(frontier: Sequence[_At], near: ByteRange) -> _At:
-    """The frontier entry a flow's near end matched, so its cost is known.
+    """The cheapest frontier entry a flow's near end matched, so its cost is known.
+
+    Cheapest and not merely the first met: a flow costs no hop, so pricing it off a
+    dearer entry over the same bytes reports a route costlier than the one that
+    actually reached them, and every landing downstream inherits the inflation.
 
     The entry is guaranteed to exist because ``touching`` was asked with these
     very ranges."""
-    return next(one for one in frontier if one.at.overlaps(near))
+    return min((one for one in frontier if one.at.overlaps(near)), key=_cost)
 
 
 def _crossings_from(store: FieldStore, one: _At) -> tuple[_At, ...]:
@@ -616,6 +676,7 @@ def _crossings_from(store: FieldStore, one: _At) -> tuple[_At, ...]:
             at=landing,
             hops=one.hops + 1,
             via=alias.site,
+            site=alias.site,
         )
         for alias, landing in store.across((one.at,))
     )
@@ -665,7 +726,7 @@ def _deduped(at_landings: tuple[tuple[int, _At], ...]) -> tuple[Landing, ...]:
         for depth, at in _kept_from_group(tuple(group))
     )
     return tuple(
-        Landing(field_id=at.field_id, depth=depth, hops=at.hops, via=at.via)
+        Landing(field_id=at.field_id, at=at.at, depth=depth, hops=at.hops, via=at.via)
         for depth, at in sorted(
             kept, key=lambda pair: (pair[1].hops, pair[0], pair[1].field_id)
         )
@@ -732,12 +793,22 @@ def _gaps(store: FieldStore, walk: _Cross) -> tuple[str, ...]:
     Some reasons state no bytes are shared at all, so a stop is not always a gap
     in the answer. A dead-end row's extents are NO_RANGE, so which bytes that
     site would have shared is precisely what the analysis could not determine.
+
+    The site and not the program alone: ``_stops`` dedupes on the whole string, so
+    without it twenty dead call sites in one program print as one line and a reader
+    can neither find the statement nor tell how much was lost.
     """
     return tuple(
-        f"{alias.reason} at {alias.caller}"
+        f"{alias.reason} at {_site_of(alias)}"
         for program in _programs(walk.frontier)
         for alias in store.dead_ends(program)
     )
+
+
+def _site_of(alias: Alias) -> str:
+    """``alias-phase-failed`` has no node to name: the phase gave up on the member
+    before it reached any site, so the program is all there is."""
+    return alias.site if alias.node else alias.caller
 
 
 def _stops(reasons: Sequence[str]) -> tuple[str, ...]:
@@ -953,7 +1024,7 @@ def _crossing_report(
 
 def _landing_line(one: Landing) -> str:
     via = f"  via {one.via}" if one.via else ""
-    return f"  hop {one.hops}  depth {one.depth}  {one.field_id}{via}"
+    return f"  hop {one.hops}  depth {one.depth}  {one.field_id}  {one.at}{via}"
 
 
 def _nested_report(found: tuple[Field, ...], label: str) -> tuple[str, ...]:
@@ -1043,7 +1114,34 @@ def _limits_of(arguments: argparse.Namespace) -> Limits:
     )
 
 
+_CROSSABLE = (Query.REACHES, Query.REACHED_BY)
+"""The questions ``--across-calls`` means something for: the transitive two."""
+
+
+def _crossable(
+    parser: argparse.ArgumentParser, arguments: argparse.Namespace
+) -> argparse.Namespace:
+    """Refused rather than ignored where the question cannot cross a call.
+
+    A callee's write into the shared window genuinely is a writer of the caller's
+    bytes, so ``writers`` and ``readers`` are meaningful questions to ask across a
+    call and this analysis does not answer them. Accepting the flag and answering
+    without it would be indistinguishable from a corpus where no call shares any.
+    """
+    if arguments.across_calls and arguments.query not in _CROSSABLE:
+        parser.error(
+            f"--across-calls applies to {' and '.join(map(str, _CROSSABLE))}, "
+            f"not to {arguments.query}"
+        )
+    return arguments
+
+
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
+    parser = _parser()
+    return _crossable(parser, parser.parse_args(tuple(argv) if argv else None))
+
+
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Byte-interval queries over the field dataflow artefact."
     )
@@ -1068,7 +1166,7 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         metavar="N",
         help="commarea crossings allowed per path, with --across-calls",
     )
-    return parser.parse_args(tuple(argv) if argv else None)
+    return parser
 
 
 def cli(argv: Sequence[str] = ()) -> int:
