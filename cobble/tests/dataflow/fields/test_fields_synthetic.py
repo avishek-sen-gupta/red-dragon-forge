@@ -396,8 +396,7 @@ CALLEE_SOURCE = """\
 the whole record. A full ``MOVE SUB-REC TO DFHCOMMAREA`` lands on the bytes the
 inbound hop already stood on, which the walk's overlap pruning drops -- the same
 rule ``reaches`` has always used -- so the return direction would disappear behind
-a limitation that has nothing to do with aliases. That drop is reported as
-``pruned by overlap`` rather than left silent, and both shapes are pinned in
+a limitation that has nothing to do with aliases. Both shapes are pinned in
 ``test_fields_crossing.py``; bead ``nsv`` owns the pruning rule itself."""
 
 
