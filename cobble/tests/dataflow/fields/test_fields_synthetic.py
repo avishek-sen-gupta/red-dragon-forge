@@ -7,8 +7,10 @@ agrees with the query by construction. These do not -- the layout here is the
 bridge's arithmetic over a source file, so an offset this suite gets wrong is a
 failure rather than a fixture.
 
-One JVM parse for the module, because that is the cost being amortised: the whole
-pipeline runs once and every test asks a question of the one artefact it wrote.
+One JVM parse per artefact, because that is the cost being amortised: each
+pipeline runs once, module-scoped, and every test asks a question of the artefact
+it wrote. There are two -- one program for the single-member queries, and a caller
+and callee pair for the commarea crossing, which cannot be asked of one member.
 
 The layout the source below declares, as the bridge lays it out:
 
@@ -32,7 +34,14 @@ from pathlib import Path
 import pytest
 from cobble.dataflow.fields.build_corpus import cli
 from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
-from cobble.dataflow.fields.query import FieldStore, Side, contributed, load, reaches
+from cobble.dataflow.fields.query import (
+    FieldStore,
+    Side,
+    contributed,
+    crossing,
+    load,
+    reaches,
+)
 
 FORGE = Path(__file__).resolve().parents[4]
 BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
@@ -337,3 +346,119 @@ def test_the_run_settled_and_explained_every_write_it_found(artefact: Path):
 
     assert len(rows) == 15
     assert {row["id"] for row in rows} >= {"SYNTHQ.TAB-VAL", "SYNTHQ.ALIAS-REC"}
+
+
+CALLER = "XPROGA"
+CALLEE = "XPROGB"
+
+CALLER_SOURCE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. XPROGA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-OUT-KEY           PIC X(4).
+           05  WS-OUT-VAL           PIC X(4).
+           05  WS-IN-RESULT         PIC X(4).
+       01  WS-SEED                  PIC X(4).
+       01  WS-SINK                  PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'KKKK' TO WS-SEED.
+           MOVE WS-SEED TO WS-OUT-KEY.
+           EXEC CICS LINK PROGRAM('XPROGB')
+                          COMMAREA(WS-AREA)
+                          LENGTH(12)
+           END-EXEC.
+           MOVE WS-IN-RESULT TO WS-SINK.
+           STOP RUN.
+"""
+
+CALLEE_SOURCE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. XPROGB.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  SUB-REC.
+           05  SUB-KEY              PIC X(4).
+           05  SUB-VAL              PIC X(4).
+           05  SUB-RESULT           PIC X(4).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA              PIC X(12).
+       PROCEDURE DIVISION.
+       SUB-PARA.
+           MOVE DFHCOMMAREA TO SUB-REC.
+           MOVE SUB-KEY TO SUB-RESULT.
+           MOVE SUB-RESULT TO DFHCOMMAREA(9:4).
+           EXEC CICS RETURN END-EXEC.
+"""
+"""The callee writes back through a reference modification rather than repacking
+the whole record. A full ``MOVE SUB-REC TO DFHCOMMAREA`` lands on the bytes the
+inbound hop already stood on, which the walk's overlap pruning drops -- the same
+rule ``reaches`` has always used -- so the return direction would disappear behind
+a limitation that has nothing to do with aliases."""
+
+
+@pytest.fixture(scope="module")
+def two_program_artefact(tmp_path_factory) -> Path:
+    """Parse both members for real, then build all five tables from them."""
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    root = tmp_path_factory.mktemp("crossing")
+    cache, out = root / "asg", root / "out"
+    cache.mkdir()
+    for program, source in ((CALLER, CALLER_SOURCE), (CALLEE, CALLEE_SOURCE)):
+        path = root / f"{program}.cbl"
+        path.write_text(source, encoding="utf-8")
+        result = parse_one(
+            Job(path, cache / f"{program}.json"), str(_bridge_jar()), (), ("cpy",)
+        )
+        assert result.ok, result.error
+    config = root / "fields.toml"
+    config.write_text(
+        f'[fields]\nasg_dir = "{cache}"\nout_dir = "{out}"\n', encoding="utf-8"
+    )
+
+    assert cli(["--config", str(config), "--all"]) == 0
+    return out
+
+
+def test_the_alias_row_carries_both_real_layouts(two_program_artefact: Path):
+    rows = [
+        json.loads(line)
+        for line in (two_program_artefact / "aliases.jsonl").read_text().splitlines()
+    ]
+
+    (row,) = [one for one in rows if one["callee"] == CALLEE]
+    assert row["caller"] == CALLER
+    assert row["transfer"] == "LINK"
+    assert row["caller_extent"] == "WS-AREA@working_storage[0:12]"
+    assert row["callee_extent"] == "DFHCOMMAREA@linkage[0:12]"
+    assert row["returns"] is True
+
+
+def test_a_crossing_query_reaches_the_callee_write_and_comes_back(
+    two_program_artefact: Path,
+):
+    """The whole point: the caller's outbound field crosses in, the callee's write
+    crosses back, and the caller's own sink sees it."""
+    store = load(two_program_artefact)
+    (start,) = store.field(f"{CALLER}.WS-OUT-KEY")
+
+    found = crossing(store, start.ranges, Side.SOURCE, depth=6, hops=2)
+    landed = {one.field_id: one for one in found.landings}
+
+    assert landed[f"{CALLEE}.SUB-REC"].hops == 1
+    assert landed[f"{CALLEE}.SUB-RESULT"].hops == 1
+    assert landed[f"{CALLER}.WS-SINK"].hops == 2
+    assert landed[f"{CALLER}.WS-SINK"].via == landed[f"{CALLEE}.SUB-REC"].via
+
+
+def test_the_callee_bytes_are_the_rebased_caller_bytes(two_program_artefact: Path):
+    """A name match would get this wrong; a byte rebase does not."""
+    store = load(two_program_artefact)
+    (outbound,) = store.field(f"{CALLER}.WS-OUT-KEY")
+
+    ((_alias, landing),) = store.across(outbound.ranges)
+
+    assert str(landing) == "DFHCOMMAREA@linkage[0:4]"
