@@ -496,9 +496,10 @@ the rest would report coverage over a member set nobody asked for and exit 0
 while the program in question went unexamined.
 
 **The graph is intra-program.** A `CALL` or `LINK` contributes a synthetic
-`%CALL:<target>` source and no callee summary; `aliases.jsonl` states which bytes
-that site shares with its callee, but it is not an edge — naming several members
-analyses each independently, so no edge crosses a program. A non-empty program_id
+`%CALL:<target>` source and no callee summary; `aliases.jsonl` is the fourth table
+in the query join, stating which bytes that site shares with its callee, but it is
+not an edge — naming several members analyses each independently, so no edge
+crosses a program. A non-empty program_id
 two members declare is exit 3 rather than a rename, since one shared `edges.jsonl`
 has no filename to qualify — both members' field ids would silently merge into one
 namespace. Two members that declare *no* program_id are not reported at all: the
