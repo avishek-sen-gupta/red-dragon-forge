@@ -357,7 +357,7 @@ writes five files to `<out_dir>`:
 | `edges.jsonl` | `(node, source extent, target extent)` | the `FLOWS_TO` relation and `node`, the statement that moved the bytes |
 | `extents.jsonl` | *declared* name | its `level`, its `usage`, and the byte ranges it owns |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
-| `aliases.jsonl` | `LINK`/`XCTL`/`CALL` site | the commarea window the caller and callee both address, or the reason they share none |
+| `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
 
 A `FIELD` id is `<program>.<field>`, because a field name is only unique within a
 program: two copybooks routinely give one piece of storage two names. An edge
@@ -366,8 +366,8 @@ deliberately does not carry the guard condition — a reader asks
 conditions out of the lattice they would otherwise multiply.
 
 The split is the point: **the graph holds only what nothing outside it could
-state.** Both side tables are many-to-one against a flow, so neither survives as
-an edge attribute. One read has as many reaching definitions as it has paths
+state.** The extents and defs tables are many-to-one against a flow, so neither
+survives as an edge attribute. One read has as many reaching definitions as it has paths
 (measured on the corpus: 862 flows with more than one, one with a hundred), and
 one byte range as many declared names as it has groups and redefinitions over it
 (30% of ranges are owned by more than one name). Pinned to the edge they were
@@ -400,17 +400,25 @@ child received follows from the two extents and the declared layout, so storing
 it per child stated the same fact 7842 times over. `fields.query.contributed()`
 is that derivation, and the artefact is lossless because of it.
 
-`aliases.jsonl` is one row per call site, carrying both sides of the window a
-`COMMAREA` shares — `caller_extent` and `callee_extent`, equal in length because
-the window is the shorter of the two declared areas, and past it the two areas are
-not both addressable. Not an edge: the relation is byte identity across a call,
-rebased to the callee's offset 0, so the graph itself stays intra-program. A site
-that reaches no window is still a row, naming what stopped it (`dynamic-target`,
-`callee-not-in-cache`, `callee-declares-no-commarea`, `empty-window`, …) rather
-than going missing, and the JSON summary states `aliased` against the
-`alias_dead_ends` breakdown so the table's coverage is read off the run. A skipped
-member contributes no rows at all: they need the caller's layout, which is what
-the skip could not compute.
+`aliases.jsonl` is one row per call site **and shared caller window**, carrying
+both sides of the window a `COMMAREA` shares — `caller_extent` and
+`callee_extent`, equal in length because the window is the shorter of the two
+declared areas, and past it the two areas are not both addressable. A row is
+keyed by the site *and* the caller window rather than the site alone because a
+commarea name declared in two records resolves to two caller cells on different
+bytes: that site contributes a row per resolution, so a consumer joining on
+`(caller, node)` must expect the fan-out. Not an edge: the relation is byte
+identity across a call, rebased to the callee's offset 0, so the graph itself
+stays intra-program. A site that reaches no window is still a row, naming what
+stopped it (`dynamic-target`, `callee-not-in-cache`,
+`callee-declares-no-commarea`, `empty-window`, …) rather than going missing, and
+the JSON summary states `aliased` — distinct *sites*, not rows — against the
+`alias_dead_ends` breakdown so the table's coverage is read off the run. A member
+the walk's budget gave up on still contributes its rows: they need the caller's
+layout, and the dequeue cap is reached long after that layout is built. Only a
+member whose layout never built — the unsizeable-field skip — contributes none.
+The table costs a full parse of every distinct callee's cache file, once per run,
+to lay out its `LINKAGE` alone.
 
 The config is its own table, holding only what this stage reads:
 
@@ -494,10 +502,10 @@ uv run cobble-fields-query reaches    WS-TOTAL --out out/fields --depth 4
 uv run cobble-fields-query contains   SOME-REC --out out/fields
 ```
 
-Joins the four files and answers in bytes. The queries are `extents`, `writers`,
-`readers`, `reaches`, `reached-by`, `contains`, `within`, and `overlapping`; the
-subject is a field name, or `PROGRAM.FIELD` to disambiguate one declared in
-several members.
+Joins the graph with the extents and defs tables and answers in bytes. The
+queries are `extents`, `writers`, `readers`, `reaches`, `reached-by`, `contains`,
+`within`, and `overlapping`; the subject is a field name, or `PROGRAM.FIELD` to
+disambiguate one declared in several members.
 
 **Every predicate intersects byte ranges rather than matching ids**, and that is
 not an optimisation — it is the only way to get the right answer. Because an edge

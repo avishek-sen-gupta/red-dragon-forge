@@ -8,6 +8,7 @@ basename breaks collection outright.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -178,8 +179,19 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
     of one source -- so their order varies with the per-process hash seed, which
     is why this runs the build in subprocesses rather than in-process where the
     seed is fixed. Four definers give twenty-four orders, so distinct seeds
-    agreeing by chance is not what a pass here means."""
-    argv, out_dir = corpus({"MEMBERA": json.dumps(_branched("PROGA"))})
+    agreeing by chance is not what a pass here means.
+
+    The alias table is in here too, and needs a linking member to be worth
+    comparing: its rows come out of a ``Mapping`` keyed by name
+    and are emitted once per caller cell, so a commarea name declared in two
+    records makes that more than one row."""
+    argv, out_dir = corpus(
+        {
+            "MEMBERA": json.dumps(_branched("PROGA")),
+            "XPROGA": json.dumps(_twice_declared_area("XPROGB", "XPROGZ")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        }
+    )
     script = "import sys; from cobble.dataflow.fields.build_corpus import cli; sys.exit(cli(sys.argv[1:]))"
 
     written = []
@@ -193,7 +205,7 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
         written.append(
             tuple(
                 (out_dir / name).read_bytes()
-                for name in (EDGES_FILE, EXTENTS_FILE, DEFS_FILE)
+                for name in (EDGES_FILE, EXTENTS_FILE, DEFS_FILE, ALIASES_FILE)
             )
         )
 
@@ -535,8 +547,13 @@ def test_unreadable_callees_tally_under_one_dead_end_reason(corpus, capsys):
     assert summary["alias_dead_ends"] == {"unreadable": 2}
 
 
-def test_a_skipped_member_contributes_no_alias_rows(corpus):
-    """The rows need the caller's layout, which is what the skip could not build."""
+def test_a_budget_skipped_member_still_emits_its_alias_rows(corpus, capsys):
+    """A member the walk gave up on has its full layout, which is all a row needs.
+
+    The dequeue cap is reached after the index is built, so withholding the rows
+    would turn "we stopped early" into "this program calls nothing" -- and the
+    members a real corpus gives up on are the ones whose callees matter most.
+    """
     argv, out_dir = corpus(
         {
             "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
@@ -547,4 +564,148 @@ def test_a_skipped_member_contributes_no_alias_rows(corpus):
 
     assert cli(argv) == 3
 
-    assert _rows(out_dir / ALIASES_FILE) == ()
+    rows = _rows(out_dir / ALIASES_FILE)
+    assert [row["callee"] for row in rows if not row["reason"]] == ["XPROGB"]
+    assert [row["reason"] for row in rows if row["reason"]] == ["callee-not-in-cache"]
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert (summary["aliased"], summary["alias_dead_ends"]) == (
+        1,
+        {"callee-not-in-cache": 1},
+    )
+
+
+def test_a_callee_the_parse_cannot_read_costs_one_row_and_not_the_four_tables(
+    corpus, capsys
+):
+    """A defect in a callee's cache file must not delete the caller's records.
+
+    ``null`` is valid JSON and not an object, so laying the callee out raises where
+    a truncated file raises somewhere else entirely. Either way the caller's
+    nodes, edges, extents and defs are already computed, and the run that says
+    nothing flowed in XPROGA is a worse answer than one dead-end row.
+    """
+    argv, out_dir = corpus(
+        {"XPROGA": json.dumps(_linking("XPROGB")), "XPROGB": "null"},
+        extra=("--member", "XPROGA"),
+    )
+
+    assert cli(argv) == 0
+
+    for name in (NODES_FILE, EDGES_FILE, EXTENTS_FILE, DEFS_FILE):
+        assert _rows(out_dir / name), name
+    (row,) = _rows(out_dir / ALIASES_FILE)
+    assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "MAIN/1", "LINK")
+    assert row["reason"].startswith("unreadable: ")
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert (summary["skipped"], summary["alias_dead_ends"]) == (0, {"unreadable": 1})
+
+
+def _twice_declared_area(*targets: str) -> dict:
+    """WS-AREA declared in two records, so one commarea operand names two cells.
+
+    Two windows on different bytes, so both rows survive the key's dedupe -- which
+    is the case ``aliased`` has to count once, because there is one LINK here.
+    """
+    return {
+        "program_id": "XPROGA",
+        "data_fields": [
+            {
+                "level": 1,
+                "name": "WS-AREA",
+                "offset": 0,
+                "children": [
+                    {"level": 5, "name": "WS-HEAD", "pic": "X(4)", "offset": 0}
+                ],
+            },
+            {
+                "level": 1,
+                "name": "WS-BLOCK",
+                "offset": 0,
+                "children": [
+                    {"level": 5, "name": "WS-AREA", "pic": "X(8)", "offset": 0}
+                ],
+            },
+        ],
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    _move("WS-HEAD", "WS-HEAD"),
+                    *(_link(target, "WS-AREA") for target in targets),
+                ],
+            }
+        ],
+    }
+
+
+def test_one_site_resolving_to_two_caller_cells_counts_once(corpus, capsys):
+    """``aliased`` is a site count, so two rows at one node are one aliased site."""
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(_twice_declared_area("XPROGB")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        }
+    )
+
+    assert cli(argv) == 0
+
+    rows = _rows(out_dir / ALIASES_FILE)
+    assert {row["node"] for row in rows} == {"MAIN/1"}
+    assert {row["caller_extent"] for row in rows} == {
+        "WS-AREA@working_storage[0:4]",
+        "WS-AREA@working_storage[4:12]",
+    }
+    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert summary["aliased"] == 1
+
+
+def test_the_report_names_every_dead_end_reason_without_a_dict_repr(corpus, caplog):
+    """The run states its alias coverage where it states everything else.
+
+    A ``Mapping`` through ``%s`` is a Python repr in a report meant to be read,
+    and its JSON twin is already on stdout.
+    """
+    argv, _ = corpus(
+        {
+            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        }
+    )
+
+    with caplog.at_level(logging.INFO):
+        assert cli(argv) == 0
+
+    assert (
+        "1 call sites share a commarea window, 1 do not: callee-not-in-cache 1"
+        in caplog.text
+    )
+    assert "{" not in caplog.text
+
+
+def test_a_run_with_no_call_sites_says_nothing_about_aliases(corpus, caplog):
+    """Zeroes read as a failure to alias; a corpus of leaf programs has no
+    coverage to state."""
+    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+
+    with caplog.at_level(logging.INFO):
+        assert cli(argv) == 0
+
+    assert "commarea" not in caplog.text
+
+
+def test_a_single_member_run_emits_that_members_outbound_aliases(corpus):
+    """The callee cache is the whole ASG directory, not the selection: a run about
+    one program still says which bytes it hands to the programs it calls."""
+    argv, out_dir = corpus(
+        {
+            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+        },
+        extra=("--member", "XPROGA"),
+    )
+
+    assert cli(argv) == 0
+
+    rows = _rows(out_dir / ALIASES_FILE)
+    assert {row["caller"] for row in rows} == {"XPROGA"}
+    assert [row["callee"] for row in rows if not row["reason"]] == ["XPROGB"]
