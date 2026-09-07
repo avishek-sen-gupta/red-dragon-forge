@@ -507,14 +507,21 @@ def test_a_flow_leaving_a_convergence_is_priced_off_the_cheap_route():
 def test_raising_the_hop_budget_never_raises_a_landings_cost():
     """Monotonicity, which the first-match cost broke outright: the same landing
     reported one hop at a budget of one and two hops at a budget of two, so a
-    reader who widened the search was told the answer got further away."""
+    reader who widened the search was told the answer got further away.
+
+    Keyed by field and bytes, because the walk publishes one landing per field
+    *and* non-overlapping range -- the reason ``Landing.at`` exists. Keying on the
+    field alone keeps whichever landing came last and compares two different
+    answers, which can pass while monotonicity is broken. A landing the wider
+    budget lost fails here too, by absence.
+    """
     costs = tuple(
-        {one.field_id: one.hops for one in _converging_walk(hops).landings}
+        {(one.field_id, one.at): one.hops for one in _converging_walk(hops).landings}
         for hops in (1, 2, 3)
     )
 
     for tighter, wider in pairwise(costs):
-        assert all(wider[field] <= cost for field, cost in tighter.items())
+        assert all(wider[place] <= cost for place, cost in tighter.items())
 
 
 def test_the_whole_answer_at_two_budgets_neither_loses_a_landing_nor_blames_the_cap():
@@ -778,6 +785,190 @@ def test_a_reconvergence_the_pruning_costs_nothing_is_not_a_stop():
 
     assert "XPROGB.DFHCOMMAREA" in {one.field_id for one in found.landings}
     assert found.stops == ()
+
+
+def test_a_drop_a_later_level_covers_anyway_is_not_a_stop():
+    """The cover arrives *after* the drop, which is why the verdict waits.
+
+    ``XPROGC.DFHCOMMAREA[0:8]`` is dropped at the level ``XPROGB:BMAIN/9`` crosses,
+    and only later does the caller's own crossing land the whole
+    ``DFHCOMMAREA@linkage[0:12]`` on it at the same cost and carry on to
+    ``XPROGC.C-SINK``. Judged at the drop, the walk names a loss its own answer
+    disproves -- the failure ruling R deleted the spec's cycle stop for, because a
+    stop that fires when nothing was lost costs us the stops that are true.
+    """
+    declared = (
+        _declared("WS-A", 1, ((0, 4),), program="XPROGA"),
+        _declared("WS-M", 1, ((8, 12),), program="XPROGA"),
+        _declared("WS-N", 1, ((16, 28),), program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 12, program="XPROGB"),
+        _declared("B-REC", 1, ((0, 8),), program="XPROGB"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 12, program="XPROGC"),
+        _declared("C-SINK", 1, ((16, 20),), program="XPROGC"),
+    )
+    edges = (
+        _edge(
+            "WS-A",
+            "WS-M",
+            "AMAIN/1",
+            "WS-A@working_storage[0:4]",
+            "WS-M@working_storage[8:12]",
+            program="XPROGA",
+        ),
+        _edge(
+            "WS-M",
+            "WS-N",
+            "AMAIN/2",
+            "WS-M@working_storage[8:12]",
+            "WS-N@working_storage[16:28]",
+            program="XPROGA",
+        ),
+        _edge(
+            "DFHCOMMAREA",
+            "B-REC",
+            "BMAIN/1",
+            "DFHCOMMAREA@linkage[0:4]",
+            "B-REC@working_storage[0:8]",
+            program="XPROGB",
+        ),
+        _edge(
+            "DFHCOMMAREA",
+            "C-SINK",
+            "CMAIN/4",
+            "DFHCOMMAREA@linkage[4:8]",
+            "C-SINK@working_storage[16:20]",
+            program="XPROGC",
+        ),
+    )
+    aliases = (
+        _alias_row(
+            caller="XPROGA",
+            node="AMAIN/8",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="WS-A@working_storage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGB",
+            node="BMAIN/8",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="DFHCOMMAREA@linkage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[4:8]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGB",
+            node="BMAIN/9",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="B-REC@working_storage[0:8]",
+            callee_extent="DFHCOMMAREA@linkage[0:8]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGA",
+            node="AMAIN/9",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="WS-N@working_storage[16:28]",
+            callee_extent="DFHCOMMAREA@linkage[0:12]",
+            returns=False,
+        ),
+    )
+    store = store_of(declared, edges, (), aliases)
+    start = (byte_range("WS-A@working_storage[0:4]", "XPROGA"),)
+
+    found = crossing(store, start, Side.SOURCE, depth=6, hops=3)
+    reached = {(one.field_id, str(one.at)): one.hops for one in found.landings}
+
+    assert reached["XPROGC.DFHCOMMAREA", "DFHCOMMAREA@linkage[0:12]"] == 1
+    assert reached["XPROGC.C-SINK", "C-SINK@working_storage[16:20]"] == 1
+    assert found.stops == ()
+
+
+def test_a_twin_the_dedupe_removes_is_never_blamed_on_the_hop_cap():
+    """Twins at costs one and two in one level, with the cap between them.
+
+    Only the dear twin is over the cap, so it is the only ``blocked`` candidate the
+    walk would have -- there is no cheap twin in that set to cover it, and
+    ``_limits`` then reports a cap that cut nothing. Deduping the level to the
+    cheapest cost is what keeps the dear twin out of ``blocked`` at all, so this
+    fails on the whole ``stops`` tuple rather than on the landings, which are the
+    same either way.
+    """
+    declared = (
+        _declared("WS-A", 1, ((0, 4),), program="XPROGA"),
+        _declared("WS-P", 1, ((8, 12),), program="XPROGA"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGB"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 4, program="XPROGC"),
+        _linkage_declared("DFHCOMMAREA", 1, 0, 8, program="XPROGD"),
+    )
+    edges = (
+        _edge(
+            "WS-A",
+            "WS-P",
+            "AMAIN/1",
+            "WS-A@working_storage[0:4]",
+            "WS-P@working_storage[8:12]",
+            program="XPROGA",
+        ),
+    )
+    aliases = (
+        _alias_row(
+            caller="XPROGA",
+            node="AMAIN/7",
+            transfer="XCTL",
+            callee="XPROGB",
+            caller_extent="WS-A@working_storage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGA",
+            node="AMAIN/8",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="WS-P@working_storage[8:12]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGB",
+            node="BMAIN/7",
+            transfer="XCTL",
+            callee="XPROGC",
+            caller_extent="DFHCOMMAREA@linkage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGB",
+            node="BMAIN/8",
+            transfer="XCTL",
+            callee="XPROGD",
+            caller_extent="DFHCOMMAREA@linkage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[2:6]",
+            returns=False,
+        ),
+        _alias_row(
+            caller="XPROGC",
+            node="CMAIN/7",
+            transfer="XCTL",
+            callee="XPROGD",
+            caller_extent="DFHCOMMAREA@linkage[0:4]",
+            callee_extent="DFHCOMMAREA@linkage[0:4]",
+            returns=False,
+        ),
+    )
+    store = store_of(declared, edges, (), aliases)
+    start = (byte_range("WS-A@working_storage[0:4]", "XPROGA"),)
+
+    found = crossing(store, start, Side.SOURCE, depth=6, hops=2)
+
+    assert found.stops == ("pruned by overlap at XPROGC:CMAIN/7",)
 
 
 def test_the_walk_crosses_from_a_field_within_the_hop_budget():
@@ -1134,7 +1325,9 @@ def test_a_landing_line_names_the_bytes_it_landed_on(tmp_path, capsys):
     assert "XPROGB.DFHCOMMAREA  DFHCOMMAREA@linkage[0:12]" in printed
 
 
-@pytest.mark.parametrize("query", ("writers", "readers", "contains", "extents"))
+@pytest.mark.parametrize(
+    "query", ("writers", "readers", "contains", "within", "overlapping", "extents")
+)
 def test_a_question_that_cannot_cross_a_call_refuses_the_flag(tmp_path, query):
     """Refused rather than ignored: answering without the flag is indistinguishable
     from a corpus in which no call site shares any bytes."""
