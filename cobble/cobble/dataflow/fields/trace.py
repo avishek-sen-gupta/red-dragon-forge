@@ -23,12 +23,19 @@ change to ``cobol_memory``, which is vendored.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from functools import reduce
+from itertools import repeat
+from types import MappingProxyType
 
 from cobble.dataflow.fields.aliases import NO_EXTENT
+from cobble.dataflow.fields.extent import CellIndex, cell_index
 from cobble.dataflow.fields.extent_text import byte_range
 from cobble.dataflow.fields.side_tables import CommareaAlias
-from cobble.dataflow.fields.state import State
+from cobble.dataflow.fields.state import EMPTY, Source, State, reaching, write
+from cobble.dataflow.fields.transfer import Statement, Write, writes_of
+from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, NodeKind
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
 
@@ -220,3 +227,398 @@ def _seeded(held: State, source: FieldExtent, target: FieldExtent) -> State:
         )
         for key in keys
     }
+
+
+NO_CFG = Cfg(program="", nodes=(), edges=())
+NO_INDEX = cell_index(())
+NO_STATEMENTS: Mapping[str, Statement] = MappingProxyType({})
+NO_ALIASES: Mapping[str, tuple[CommareaAlias, ...]] = MappingProxyType({})
+NO_STORE: Mapping[str, State] = MappingProxyType({})
+NO_CURSORS: Mapping[tuple[str, str], int] = MappingProxyType({})
+
+
+@dataclass(frozen=True)
+class Loaded:
+    """One program's compiled artefacts, or the reason it cannot be entered.
+
+    Built once per program per process and reused across every path, because a
+    parse and a layout cost far more than a walk over them.
+    """
+
+    program: str
+    cfg: Cfg = NO_CFG
+    statements: Mapping[str, Statement] = NO_STATEMENTS
+    index: CellIndex = NO_INDEX
+    entry: str = ""
+    aliases: Mapping[str, tuple[CommareaAlias, ...]] = NO_ALIASES
+    reason: str = ""
+
+
+Loader = Callable[[str], Loaded]
+
+
+@dataclass(frozen=True)
+class Frame:
+    """One open invocation: where it resumes, and which nodes it has already run.
+
+    Popped whole on return, which is what makes the re-entry rule right in all
+    three of its cases. A paragraph's visited nodes leave with its frame, so a
+    second PERFORM of the same paragraph starts clean; a frame still open still
+    forbids re-entry, which covers a loop's back edge, a recursive PERFORM and a
+    LINK cycle with one rule.
+    """
+
+    program: str
+    site: str = ""
+    resume: str = ""
+    crossing: bool = False
+    returns: bool = False
+    window: Window = NO_WINDOW
+    visited: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class _Walk:
+    """One path, mid-flight. Threaded, never mutated."""
+
+    node: str
+    stack: tuple[Frame, ...]
+    store: Mapping[str, State] = NO_STORE
+    cursors: Mapping[tuple[str, str], int] = NO_CURSORS
+    deps: frozenset[Dep] = frozenset()
+    dead_ends: frozenset[DeadEnd] = frozenset()
+    taken: frozenset[tuple[str, str, str]] = frozenset()
+    entered: frozenset[str] = frozenset()
+    order: tuple[str, ...] = ()
+    running: bool = True
+
+    @property
+    def frame(self) -> Frame:
+        """The innermost open invocation. The stack is never empty while running:
+        the root of a path is a frame like any other."""
+        return self.stack[-1]
+
+    @property
+    def program(self) -> str:
+        return self.frame.program
+
+    @property
+    def via(self) -> str:
+        """The call site this program was entered through, innermost when nested."""
+        crossings = tuple(one for one in self.stack if one.crossing)
+        if not crossings:
+            return ""
+        return f"{crossings[-1].window.caller}/{crossings[-1].site}"
+
+
+@dataclass(frozen=True)
+class _Run:
+    """The sampler's accumulator: the trace so far, and the cursors that make the
+    next path differ from the last one."""
+
+    trace: Trace = Trace()
+    cursors: Mapping[tuple[str, str], int] = NO_CURSORS
+
+
+def _open(stack: Sequence[Frame], program: str, node: str) -> bool:
+    """The re-entry rule: an edge back to a node an open frame has already run."""
+    return any(one.program == program and node in one.visited for one in stack)
+
+
+def _marked(stack: tuple[Frame, ...], node: str) -> tuple[Frame, ...]:
+    return (*stack[:-1], replace(stack[-1], visited=stack[-1].visited | {node}))
+
+
+def _qualified(writes: Sequence[Write], program: str) -> tuple[Write, ...]:
+    """``state.Source`` carries a bare node id, and a definer that crossed a call
+    is in another member -- so every id going into the store is program-qualified.
+    """
+    return tuple(
+        replace(
+            entry,
+            sources=frozenset(
+                replace(one, node=f"{program}/{one.node}") for one in entry.sources
+            ),
+        )
+        for entry in writes
+    )
+
+
+def _writes(walk: _Walk, loaded: Loaded) -> tuple[Write, ...]:
+    """Whatever this node's statement writes, or nothing where there is no statement.
+
+    Membership rather than a ``get`` that may come back empty-handed: a LABEL or a
+    NOP has no statement at all, which is not the same fact as a statement that
+    writes nothing.
+    """
+    if walk.node not in loaded.statements:
+        return ()
+    return _qualified(
+        writes_of(loaded.statements[walk.node], walk.node, loaded.index), walk.program
+    )
+
+
+def _definers(held: State, source: Source) -> tuple[str, ...]:
+    """Where the source's bytes were last written on this path.
+
+    Empty for a synthetic origin: nothing in any program wrote a literal or a file
+    record, and naming a definer for one would invent a flow.
+    """
+    if source.origin:
+        return ()
+    return tuple(sorted({one.node for one in reaching(held, source.extent)}))
+
+
+def _witnessed(walk: _Walk, held: State, writes: Sequence[Write]) -> frozenset[Dep]:
+    """One dependency per (target, source) pair, definers read out of the slice as
+    it stood BEFORE the statement.
+
+    ``reaching`` here is the whole reason the store exists. ``writes_of`` builds a
+    ``Source`` from the source operand's own extents and never consults the state,
+    so without this read the walk would only restate the statement it just ran.
+    """
+    return frozenset(
+        Dep(
+            program=walk.program,
+            node=walk.node,
+            target=entry.target,
+            origin=one.origin,
+            source=one.extent,
+            definers=_definers(held, one),
+            via=walk.via,
+        )
+        for entry in writes
+        for one in entry.sources
+    )
+
+
+def _applied(held: State, writes: Sequence[Write]) -> State:
+    return reduce(
+        lambda state, entry: write(state, entry.target, entry.sources), writes, held
+    )
+
+
+def _ran(walk: _Walk, loaded: Loaded) -> _Walk:
+    """This node's statement against this program's slice, and what it witnessed."""
+    held = walk.store.get(walk.program, EMPTY)
+    writes = _writes(walk, loaded)
+    return replace(
+        walk,
+        stack=_marked(walk.stack, walk.node),
+        store={**walk.store, walk.program: _applied(held, writes)},
+        deps=walk.deps | _witnessed(walk, held, writes),
+        entered=walk.entered | {walk.program},
+        order=(*walk.order, walk.node),
+    )
+
+
+def _sequel(cfg: Cfg, node: str) -> str:
+    """Where a call or a PERFORM continues once it comes back.
+
+    This node's own FLOW edge, which ``build.py`` keeps even on a PERFORM node --
+    purely so the paragraph's RETURN targets can be computed from it.
+    """
+    return next(
+        (edge.target for edge in cfg.successors(node) if edge.kind is EdgeKind.FLOW),
+        "",
+    )
+
+
+def _return_edge(walk: _Walk, edges: Sequence[Edge]) -> tuple[Edge, ...]:
+    """The one RETURN edge going back to the innermost frame's own resume point.
+
+    The first path-insensitivity cost paid off: ``build.py`` gives a paragraph one
+    RETURN edge per PERFORM site and the fixpoint takes them all, because only a
+    stack knows which site is yours. A crossing frame is excluded because a RETURN
+    edge belongs to a PERFORM, and matching one against a callee's resume point
+    would be a node-id coincidence rather than a return.
+    """
+    if walk.frame.crossing:
+        return ()
+    return tuple(
+        one
+        for one in edges
+        if one.kind is EdgeKind.RETURN and one.target == walk.frame.resume
+    )[:1]
+
+
+def _admissible(walk: _Walk, edges: Sequence[Edge]) -> tuple[Edge, ...]:
+    """Everything left once the stack has had its say.
+
+    PERFORM edges are gone because a refused one means the paragraph is skipped and
+    this node's own FLOW edge is the continuation. RETURN edges are gone because
+    the path reached this node without performing it -- by falling through -- and
+    its callers' resume points are none of its business.
+    """
+    return tuple(
+        one
+        for one in edges
+        if one.kind is not EdgeKind.PERFORM
+        and one.kind is not EdgeKind.RETURN
+        and not _open(walk.stack, walk.program, one.target)
+    )
+
+
+def _branch(loaded: Loaded, node: str, edge: Edge) -> frozenset[tuple[str, str, str]]:
+    """Coverage counts branch edges only.
+
+    A TEST has exactly two out-edges and everything else has one route through it,
+    so counting the rest would make the percentage a node count wearing a branch's
+    name.
+    """
+    if loaded.cfg.node(node).kind is not NodeKind.TEST:
+        return frozenset()
+    return frozenset({(loaded.program, node, edge.kind.value)})
+
+
+def _sampled(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> _Walk:
+    """One branch, chosen by this node's cursor, which advances across paths.
+
+    The cursor is per (program, node) and global to the run, so path 1 takes a
+    node's first arm and path 2 its second. Deterministic and reproducible, which
+    is why no random seed appears anywhere here.
+    """
+    if not edges:
+        return _ended(walk)
+    key = (walk.program, walk.node)
+    seen = walk.cursors.get(key, 0)
+    chosen = edges[seen % len(edges)]
+    return replace(
+        walk,
+        node=chosen.target,
+        cursors={**walk.cursors, key: seen + 1},
+        taken=walk.taken | _branch(loaded, walk.node, chosen),
+    )
+
+
+def _performed(walk: _Walk, loaded: Loaded, edge: Edge) -> _Walk:
+    return replace(
+        walk,
+        node=edge.target,
+        stack=(
+            *walk.stack,
+            Frame(
+                program=walk.program,
+                site=walk.node,
+                resume=_sequel(loaded.cfg, walk.node),
+            ),
+        ),
+    )
+
+
+def _returned(walk: _Walk, edge: Edge) -> _Walk:
+    """Pop the frame and continue at the resume point the edge just confirmed."""
+    return replace(walk, node=edge.target, stack=walk.stack[:-1])
+
+
+def _ended(walk: _Walk) -> _Walk:
+    """Nowhere left to go, unless a crossing frame owes its caller a return."""
+    return replace(walk, running=False)
+
+
+def _followed(walk: _Walk, loaded: Loaded) -> _Walk:
+    """Along an edge. PERFORM and RETURN are decided by the stack; the rest sampled.
+
+    A PERFORM edge is always taken rather than sampled: the FLOW edge beside it is
+    a bookkeeping artefact of ``build.py``, and taking it would skip the paragraph.
+    A refused PERFORM -- its target is on the stack -- falls through to the FLOW
+    edge, which skips the paragraph rather than abandoning the path.
+    """
+    edges = loaded.cfg.successors(walk.node)
+    performed = tuple(one for one in edges if one.kind is EdgeKind.PERFORM)
+    if performed and not _open(walk.stack, walk.program, performed[0].target):
+        return _performed(walk, loaded, performed[0])
+    returned = _return_edge(walk, edges)
+    if returned:
+        return _returned(walk, returned[0])
+    return _sampled(walk, loaded, _admissible(walk, edges))
+
+
+def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
+    """Where the path goes from here. Task 3 puts call crossing in front of this."""
+    return _followed(walk, loaded)
+
+
+def _stepped(walk: _Walk, loader: Loader) -> _Walk:
+    """Run the node the walk stands on, then choose where it goes next."""
+    if not walk.running:
+        return walk
+    loaded = loader(walk.program)
+    return _moved(_ran(walk, loaded), loaded, loader)
+
+
+def _walked(start: _Walk, limit: int, loader: Loader) -> _Walk:
+    """Steps until the path ends or ``limit`` nodes have run.
+
+    ``reduce`` over a fixed count rather than a loop with a reassigned accumulator:
+    the walk is threaded, and ``_stepped`` returns a finished walk unchanged, so
+    the remaining iterations cost one comparison each.
+    """
+    return reduce(lambda walk, _: _stepped(walk, loader), repeat(None, limit), start)
+
+
+def _started(program: str, loader: Loader, cursors) -> _Walk:
+    return _Walk(
+        node=loader(program).entry,
+        stack=(Frame(program=program),),
+        cursors=cursors,
+    )
+
+
+def _branches(cfg: Cfg) -> int:
+    tests = frozenset(node.id for node in cfg.nodes if node.kind is NodeKind.TEST)
+    return sum(1 for edge in cfg.edges if edge.source in tests)
+
+
+def _coverage(before: Coverage, walk: _Walk, loader: Loader) -> Coverage:
+    """Taken accumulates; the denominator is recomputed over the programs entered
+    so far, so entering a new one raises it rather than flattering the percentage.
+    """
+    programs = before.programs | walk.entered
+    return Coverage(
+        taken=before.taken | walk.taken,
+        total=sum(_branches(loader(one).cfg) for one in sorted(programs)),
+        programs=programs,
+    )
+
+
+def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
+    """One path, unless the coverage target is already met."""
+    if run.trace.paths and run.trace.coverage.fraction >= budget.coverage:
+        return run
+    walk = _walked(_started(program, loader, run.cursors), budget.max_depth, loader)
+    return _Run(
+        trace=Trace(
+            deps=run.trace.deps | walk.deps,
+            dead_ends=run.trace.dead_ends | walk.dead_ends,
+            paths=run.trace.paths + 1,
+            coverage=_coverage(run.trace.coverage, walk, loader),
+        ),
+        cursors=walk.cursors,
+    )
+
+
+def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Trace:
+    """Sample paths from ``program``'s entry until the budget or the coverage target.
+
+    Under-approximate by construction: every dependency here was witnessed by an
+    actual path, and absence means "not sampled", never "does not exist".
+
+    Public, and taking a loader rather than a directory, so a caller can hand it
+    graphs it built itself. That is the seam the stack rules are asserted through.
+    """
+    return reduce(
+        lambda run, _: _round(run, program, loader, budget),
+        repeat(None, budget.paths),
+        _Run(),
+    ).trace
+
+
+def visited_order(
+    program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET
+) -> tuple[str, ...]:
+    """The nodes one path ran, in order. ``Trace`` cannot say: it is the union over
+    paths, so the route is exactly what it discards."""
+    return _walked(
+        _started(program, loader, NO_CURSORS), budget.max_depth, loader
+    ).order
