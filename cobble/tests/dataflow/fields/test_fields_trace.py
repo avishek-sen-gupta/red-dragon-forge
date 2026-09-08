@@ -559,6 +559,56 @@ def test_two_plans_flipping_one_branch_edge_do_not_both_run_before_a_third():
     assert found.coverage.fraction == 1.0
 
 
+STALE_ONLY = _only(
+    "TPROGA",
+    (
+        _node("M/0", NodeKind.CALL),
+        _node("M/1", NodeKind.CALL),
+        _node("M/2"),
+        _node("M/3", NodeKind.TEST),
+        _node("M/4"),
+        _node("M/5"),
+        _node("S/0", NodeKind.TEST),
+        _node("S/1"),
+        _node("S/2"),
+        _node("S/end"),
+        _node("X/0", NodeKind.TEST),
+        _node("X/1"),
+        _node("X/2"),
+    ),
+    (
+        _edge("M/0", "M/1"),
+        _edge("M/0", "S/0", EdgeKind.PERFORM),
+        _edge("M/1", "M/2"),
+        _edge("M/1", "S/0", EdgeKind.PERFORM),
+        _edge("M/2", "M/3"),
+        _edge("M/3", "M/4", EdgeKind.TRUE),
+        _edge("M/3", "M/5", EdgeKind.FALSE),
+        _edge("S/0", "S/1", EdgeKind.TRUE),
+        _edge("S/0", "S/2", EdgeKind.FALSE),
+        _edge("S/1", "S/end"),
+        _edge("S/2", "S/end"),
+        _edge("S/end", "M/1", EdgeKind.RETURN),
+        _edge("S/end", "M/2", EdgeKind.RETURN),
+        _edge("X/0", "X/1", EdgeKind.TRUE),
+        _edge("X/0", "X/2", EdgeKind.FALSE),
+    ),
+    "M/0",
+)
+"""REDUNDANT plus an unreachable test, so the fresh queue empties before 100%
+coverage is met and the stale queue still has entries."""
+
+
+def test_sampling_stops_when_only_stale_plans_remain():
+    """The fresh queue empties while coverage is below 100%. The stale queue
+    still has plans but every one flips an already-taken edge, so walking them
+    cannot raise coverage. The run stops early."""
+    found = traced("TPROGA", _loader(STALE_ONLY), Budget(paths=50, coverage=1.0))
+
+    assert found.paths < 50
+    assert found.coverage.fraction < 1.0
+
+
 UNREACHED = _only(
     "TPROGA",
     (
