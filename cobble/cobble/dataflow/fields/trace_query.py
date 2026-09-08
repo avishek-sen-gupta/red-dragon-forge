@@ -17,7 +17,11 @@ from functools import reduce
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.fields.extent_text import ByteRange, byte_range_from_dict
+from cobble.dataflow.fields.extent_text import (
+    ByteRange,
+    byte_range,
+    byte_range_from_dict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +111,46 @@ def _resolve(name: str, deps: Sequence[DepRow]) -> tuple[ByteRange, ...]:
         candidates,
         ((), frozenset()),
     )[0]
+
+
+def _resolve_from_extents(name: str, extents_path: Path) -> tuple[ByteRange, ...]:
+    """Resolve a field name to byte ranges via the declared extents table."""
+    program_filter, field = _parsed_name(name)
+    rows = tuple(
+        json.loads(line)
+        for line in extents_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
+    matches = tuple(
+        row for row in rows if _extents_field_matches(row, field, program_filter)
+    )
+    return tuple(
+        br
+        for row in matches
+        for extent_text in row.get("extents", ())
+        for br in (byte_range(extent_text, _extents_program(row)),)
+        if br.known
+    )
+
+
+def _extents_field_matches(
+    row: Mapping[str, str | int | bool | Sequence[str]],
+    field: str,
+    program_filter: str,
+) -> bool:
+    row_id = str(row.get("id", ""))
+    parts = row_id.rsplit(".", 1)
+    row_program = parts[0] if len(parts) == 2 else ""
+    row_field = parts[1] if len(parts) == 2 else row_id
+    return row_field == field and (not program_filter or row_program == program_filter)
+
+
+def _extents_program(
+    row: Mapping[str, str | int | bool | Sequence[str]],
+) -> str:
+    row_id = str(row.get("id", ""))
+    parts = row_id.rsplit(".", 1)
+    return parts[0] if len(parts) == 2 else ""
 
 
 def _overlaps_any(extent: ByteRange, frontier: Sequence[ByteRange]) -> bool:
@@ -271,13 +315,26 @@ def _format_hits(
     return (*(str(r) for r in roots), *deduped)
 
 
+def _roots_of(
+    field: str, deps: Sequence[DepRow], extents_path: Path
+) -> tuple[ByteRange, ...]:
+    found = _resolve(field, deps)
+    if found:
+        return found
+    return _resolve_from_extents(field, extents_path) if extents_path.is_file() else ()
+
+
 def query(
-    path: Path, direction: str, field: str, max_depth: int = 5
+    path: Path,
+    direction: str,
+    field: str,
+    max_depth: int = 5,
+    extents_path: Path = Path(),
 ) -> tuple[str, ...]:
     deps = load(path)
-    roots = _resolve(field, deps)
+    roots = _roots_of(field, deps, extents_path)
     if not roots:
-        return (f"field {field!r} not found in trace",)
+        return (f"field {field!r} not found in trace or extents",)
     walk = _forward if direction == FORWARD else _backward
     hits = walk(deps, roots, max_depth)
     if not hits:
@@ -307,6 +364,12 @@ def _parser() -> argparse.ArgumentParser:
         default=5,
         help="max hops to follow (default 5)",
     )
+    parser.add_argument(
+        "--extents",
+        type=Path,
+        default=Path(),
+        help="extents.jsonl for resolving fields not named in any dep row",
+    )
     return parser
 
 
@@ -317,7 +380,11 @@ def cli(argv: Sequence[str] = ()) -> int:
         logger.error("trace-query: no trace file at %s", arguments.trace)
         return 2
     output = query(
-        arguments.trace, arguments.direction, arguments.field, arguments.depth
+        arguments.trace,
+        arguments.direction,
+        arguments.field,
+        arguments.depth,
+        arguments.extents,
     )
     sys.stdout.write("\n".join(output) + "\n")
     return 0

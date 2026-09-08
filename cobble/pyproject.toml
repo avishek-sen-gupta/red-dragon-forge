@@ -48,6 +48,7 @@ cobble-srccfg-webgl = "cobble.dataflow.srccfg.webgl:main"
 # Field-level byte dataflow over the one ASG cache, intra-program, no JVM: the
 # graph halves plus the two side tables the queries join against -- every field's
 # declared extents, and the definitions reaching each read.
+cobble-extents = "cobble.dataflow.fields.emit_extents:main"
 cobble-fields = "cobble.dataflow.fields.build_corpus:main"
 cobble-fields-query = "cobble.dataflow.fields.query:main"
 cobble-fields-trace = "cobble.dataflow.fields.trace_report:main"
