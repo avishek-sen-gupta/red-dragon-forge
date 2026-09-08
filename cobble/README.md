@@ -630,10 +630,21 @@ listed under `dead ends` with the reason the alias table gives it
 credited to `%CALL:<program>`, and the caller's path runs on past the call. Any
 corpus selection `LINK`s outside itself, so this is the common case.
 
+Arm choice at a branch is coverage-guided, and deterministic — no random seed. A
+path prefers an arm no earlier path has taken; failing that, an arm from which
+some untaken branch edge is still reachable, which keeps it out of a region it
+has already exhausted however far past the arm that region ends; only when both
+arms still lead somewhere unexplored does a per-node cursor alternate between
+them. Every desugared CICS condition raise is a branch whose raising arm ends the
+path immediately, so a round-robin lost half its paths at each one and a deep
+route needed 1-in-2^k luck.
+
 Progress goes to stderr, one line per sampled path carrying the nodes it ran, the
 cumulative branch coverage, the programs entered and the dead ends met, then a
-closing line naming why the run stopped. Watch the coverage figure: once it stops
-moving, more paths buy nothing and the ceiling is the graph's, not the budget's.
+closing line naming why the run stopped: the coverage target met, the path budget
+spent, or `nothing unexplored is reachable` — the entry can no longer reach an
+untaken branch edge, so the fraction reached is the whole truth and no budget
+will move it.
 
 It under-approximates, deliberately: a flow it does not report was not sampled,
 never "does not exist", and a loop body runs once. `--paths` and `--coverage`
