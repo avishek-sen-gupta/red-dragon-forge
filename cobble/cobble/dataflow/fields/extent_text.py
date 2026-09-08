@@ -18,6 +18,7 @@ program is how a transitive walk leaks into members it was never asked about.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from cobol_memory.field_extent import FieldExtent, Precision
@@ -92,6 +93,21 @@ class ByteRange:
 
 
 NO_RANGE = ByteRange()
+
+
+def byte_range_from_dict(
+    row: Mapping[str, str | int | bool], program: str
+) -> ByteRange:
+    """A JSONL extent object back to a comparable range."""
+    return ByteRange(
+        program=program,
+        region=str(row.get("region", "")),
+        start=int(str(row.get("start", 0))),
+        end=int(str(row.get("end", 0))),
+        name=str(row.get("field", "")),
+        exact=not row.get("clamped", False),
+        known=True,
+    )
 
 
 def byte_range(text: str, program: str) -> ByteRange:

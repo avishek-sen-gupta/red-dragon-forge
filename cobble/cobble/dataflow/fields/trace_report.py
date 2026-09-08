@@ -14,9 +14,11 @@ where someone reading an answer will actually meet them.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
-from collections.abc import Sequence
+import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
@@ -26,11 +28,13 @@ from cobble.dataflow.fields.trace import (
     DEFAULT_MAX_DEPTH,
     DEFAULT_PATHS,
     Budget,
+    DeadEnd,
     Dep,
     Trace,
     loadable,
     sampled,
 )
+from cobol_memory.field_extent import FieldExtent, Precision
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +143,92 @@ def lines(trace: Trace) -> tuple[str, ...]:
     )
 
 
+FORMAT_JSONL = "jsonl"
+FORMAT_TEXT = "text"
+
+
+def _extent_dict(extent: FieldExtent) -> Mapping[str, str | int | bool]:
+    return {
+        "field": extent.field_name,
+        "region": extent.region.value,
+        "start": extent.start,
+        "end": extent.start + extent.length,
+        "clamped": extent.precision is Precision.CLAMPED,
+    }
+
+
+def _dep_row(dep: Dep) -> str:
+    source = _extent_dict(dep.source) if not dep.origin else None
+    return json.dumps(
+        {
+            "kind": "dep",
+            "program": dep.program,
+            "via": dep.via,
+            "target": _extent_dict(dep.target),
+            "origin": dep.origin,
+            "source": source,
+            "site": f"{dep.program}/{dep.node}",
+            "definers": list(dep.definers),
+        },
+        separators=(",", ":"),
+    )
+
+
+def _dead_end_row(dead_end: DeadEnd) -> str:
+    return json.dumps(
+        {
+            "kind": "dead_end",
+            "program": dead_end.program,
+            "node": f"{dead_end.program}/{dead_end.node}",
+            "transfer": dead_end.transfer,
+            "callee": dead_end.callee,
+            "reason": dead_end.reason,
+        },
+        separators=(",", ":"),
+    )
+
+
+def _coverage_row(trace: Trace) -> str:
+    return json.dumps(
+        {
+            "kind": "coverage",
+            "taken": len(trace.coverage.taken),
+            "total": trace.coverage.total,
+            "paths": trace.paths,
+            "programs": len(trace.coverage.programs),
+        },
+        separators=(",", ":"),
+    )
+
+
+def _limits_row() -> str:
+    return json.dumps(
+        {
+            "kind": "limits",
+            "items": [
+                "unsampled paths' flows are missing;"
+                " the coverage percentage is the disclosure",
+                "a loop body runs once,"
+                " so a dependency needing a second iteration is missed",
+                "conditions are not evaluated,"
+                " so some sampled paths cannot happen at run time",
+                'sound one way only: absence means "not sampled",'
+                ' never "does not exist"',
+            ],
+        },
+        separators=(",", ":"),
+    )
+
+
+def jsonl_lines(trace: Trace) -> tuple[str, ...]:
+    return (
+        *(sorted(_dep_row(dep) for dep in trace.deps)),
+        *(sorted(_dead_end_row(de) for de in trace.dead_ends)),
+        _coverage_row(trace),
+        _limits_row(),
+    )
+
+
 def _positive(given: str) -> int:
     count = int(given)
     if count < 1:
@@ -191,7 +281,39 @@ def _parser() -> argparse.ArgumentParser:
         metavar="N",
         help="nodes one path may run before it is cut short",
     )
+    parser.add_argument(
+        "--format",
+        choices=(FORMAT_JSONL, FORMAT_TEXT),
+        default=FORMAT_JSONL,
+        dest="output_format",
+        help="jsonl for machine-readable, text for the human-readable rendering",
+    )
     return parser
+
+
+def _sampled_and_logged(program: str, asg_dir: Path, budget: Budget) -> Trace:
+    logger.info(
+        "trace: sampling %s  paths=%d  coverage=%.2f  max_depth=%d",
+        program,
+        budget.paths,
+        budget.coverage,
+        budget.max_depth,
+    )
+    started = time.monotonic()
+    trace = sampled(program, asg_dir, budget)
+    elapsed = time.monotonic() - started
+    logger.info(
+        "trace: %d deps, %d dead ends, %d/%d branches (%.0f%%) over %d paths"
+        " in %.1fs",
+        len(trace.deps),
+        len(trace.dead_ends),
+        len(trace.coverage.taken),
+        trace.coverage.total,
+        100 * trace.coverage.fraction,
+        trace.paths,
+        elapsed,
+    )
+    return trace
 
 
 def cli(argv: Sequence[str] = ()) -> int:
@@ -204,7 +326,7 @@ def cli(argv: Sequence[str] = ()) -> int:
     if refused:
         logger.error("trace: !! cannot trace %s: %s", arguments.program, refused)
         return 2
-    trace = sampled(
+    trace = _sampled_and_logged(
         arguments.program,
         arguments.asg_dir,
         Budget(
@@ -213,7 +335,8 @@ def cli(argv: Sequence[str] = ()) -> int:
             max_depth=arguments.max_depth,
         ),
     )
-    arguments.out.write_text("\n".join(lines(trace)) + "\n", encoding="utf-8")
+    chosen = jsonl_lines if arguments.output_format == FORMAT_JSONL else lines
+    arguments.out.write_text("\n".join(chosen(trace)) + "\n", encoding="utf-8")
     return 0
 
 
