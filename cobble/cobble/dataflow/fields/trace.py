@@ -314,6 +314,22 @@ class _Choice:
 
 
 @dataclass(frozen=True)
+class _Checkpoint:
+    """The walk state at a multi-arm decision, before the arm was taken.
+
+    Holds only what is needed to resume: the execution state (node, stack, store,
+    program) and the decisions made so far. Order, deps, dead_ends, taken are not
+    needed -- the resumed walk accumulates its own from the resume point onward.
+    """
+
+    node: str
+    stack: tuple[Frame, ...]
+    store: Mapping[str, State]
+    made: tuple[_Choice, ...]
+    entered: frozenset[str]
+
+
+@dataclass(frozen=True)
 class _Walk:
     """One path, mid-flight. Threaded, never mutated.
 
@@ -335,6 +351,7 @@ class _Walk:
     entered: frozenset[str] = frozenset()
     order: tuple[str, ...] = ()
     running: bool = True
+    checkpoints: tuple[_Checkpoint, ...] = ()
 
     @property
     def frame(self) -> Frame:
@@ -357,14 +374,20 @@ class _Walk:
 
 @dataclass(frozen=True)
 class _Next:
-    """A plan not yet walked, and the branch edge its own flip will take.
+    """A queued walk: either a plan from the entry (base route) or a checkpoint
+    to resume from with a flipped arm.
 
-    Knowing that edge before the walk is what lets the queue order plans by what they
-    would buy. Empty at a decision coverage does not count.
+    ``branch`` is the branch edge the flip will take, known before the walk runs,
+    which is what lets the queue order by what it would buy.
     """
 
     plan: tuple[int, ...] = ()
     branch: frozenset[tuple[str, str, str]] = frozenset()
+    checkpoint: _Checkpoint = _Checkpoint(
+        node="", stack=(), store=NO_STORE, made=(), entered=frozenset()
+    )
+    arm: int = 0
+    from_checkpoint: bool = False
 
 
 @dataclass(frozen=True)
@@ -630,6 +653,16 @@ def _index(walk: _Walk) -> int:
     return walk.plan[at] if at < len(walk.plan) else 0
 
 
+def _checkpoint_of(walk: _Walk) -> _Checkpoint:
+    return _Checkpoint(
+        node=walk.node,
+        stack=walk.stack,
+        store=walk.store,
+        made=walk.made,
+        entered=walk.entered,
+    )
+
+
 def _sampled(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> _Walk:
     """One step. A node with a single admissible arm is not a decision and is not
     recorded, so a plan stays as short as the choices it actually fixes."""
@@ -638,8 +671,9 @@ def _sampled(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> _Walk:
     if len(edges) == 1:
         return _advanced(walk, loaded, edges[0], walk.made)
     index = _index(walk)
+    saved = _checkpoint_of(walk)
     return _advanced(
-        walk,
+        replace(walk, checkpoints=(*walk.checkpoints, saved)),
         loaded,
         edges[index],
         (
@@ -663,20 +697,26 @@ def _advanced(
     )
 
 
-def _alternatives(plan: tuple[int, ...], made: Sequence[_Choice]) -> tuple[_Next, ...]:
-    """The plans one arm away from the path that just ran, shallowest first.
+def _alternatives(walk: _Walk, plan_len: int) -> tuple[_Next, ...]:
+    """One alternative per untried arm, from the plan's own flip point onward.
 
-    Only from the position this plan's own last flip fixed, and deeper. Anything
-    shallower belongs to an ancestor plan, which already generated it -- generating it
-    again would re-walk a route and the enumeration would stop being finite.
+    Each alternative carries the checkpoint at that decision, so resuming it
+    starts from the exact walk state where the decision was made — no replay.
+    Checkpoints are indexed from where the walk started making new decisions:
+    on a fresh walk that is 0; on a resumed walk it is len(checkpoint.made),
+    the prefix inherited from the checkpoint.
     """
+    prefix = len(walk.made) - len(walk.checkpoints)
     return tuple(
         _Next(
-            plan=(*(one.taken for one in made[:at]), made[at].taken + 1),
-            branch=made[at].arms[made[at].taken + 1],
+            plan=(*(one.taken for one in walk.made[:at]), walk.made[at].taken + 1),
+            branch=walk.made[at].arms[walk.made[at].taken + 1],
+            checkpoint=walk.checkpoints[at - prefix],
+            arm=walk.made[at].taken + 1,
+            from_checkpoint=True,
         )
-        for at in range(max(len(plan) - 1, 0), len(made))
-        if made[at].taken + 1 < len(made[at].arms)
+        for at in range(max(plan_len - 1, 0), len(walk.made))
+        if walk.made[at].taken + 1 < len(walk.made[at].arms) and at >= prefix
     )
 
 
@@ -942,6 +982,24 @@ def _walked(start: _Walk, limit: int, loader: Loader) -> _Walk:
     return reduce(lambda walk, _: _stepped(walk, loader), repeat(None, limit), start)
 
 
+def _resumed(checkpoint: _Checkpoint, arm: int, max_depth: int) -> _Walk:
+    """A walk resumed from a checkpoint with a flipped arm.
+
+    The plan is the prefix of decisions already made plus the flipped arm.
+    Past that, arm 0 is taken (the default). Deps, dead_ends, order, and taken
+    start empty — the resumed walk accumulates only from this point onward.
+    """
+    plan = (*(c.taken for c in checkpoint.made), arm)
+    return _Walk(
+        node=checkpoint.node,
+        stack=checkpoint.stack,
+        store=checkpoint.store,
+        plan=plan,
+        made=checkpoint.made,
+        entered=checkpoint.entered,
+    )
+
+
 def _started(program: str, loader: Loader, plan: tuple[int, ...]) -> _Walk:
     return _Walk(
         node=loader(program).entry,
@@ -1025,6 +1083,17 @@ class _Stepped:
     dead_ends: frozenset[DeadEnd]
 
 
+def _walk_of(head: _Next, program: str, loader: Loader, budget: Budget) -> _Walk:
+    """Start a walk from a plan or resume one from a checkpoint."""
+    if head.from_checkpoint:
+        return _walked(
+            _resumed(head.checkpoint, head.arm, budget.max_depth),
+            budget.max_depth,
+            loader,
+        )
+    return _walked(_started(program, loader, head.plan), budget.max_depth, loader)
+
+
 def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:
     """Walk one plan and return the new state plus this path's findings.
 
@@ -1032,7 +1101,7 @@ def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:
     without accumulating them in ``Trace.deps``.
     """
     head = _head(run.queue)
-    walk = _walked(_started(program, loader, head.plan), budget.max_depth, loader)
+    walk = _walk_of(head, program, loader, budget)
     coverage = _coverage(run.trace.coverage, walk, loader)
     next_run = _reported(
         _Run(
@@ -1044,7 +1113,7 @@ def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:
             queue=_extended(
                 _drained(run.queue),
                 coverage.taken,
-                _alternatives(head.plan, walk.made),
+                _alternatives(walk, len(head.plan)),
             ),
         ),
         walk,
