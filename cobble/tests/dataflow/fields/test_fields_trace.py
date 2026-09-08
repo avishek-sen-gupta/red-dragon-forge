@@ -1215,6 +1215,8 @@ def test_the_report_groups_by_program_and_names_the_site_each_was_entered_throug
                 str(out),
                 "--paths",
                 "8",
+                "--format",
+                "text",
             ]
         )
         == 0
@@ -1236,7 +1238,10 @@ def test_the_report_states_its_limits_where_a_reader_will_see_them(
     from cobble.dataflow.fields.trace_report import cli
 
     out = tmp_path / "trace.txt"
-    assert cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out)]) == 0
+    assert (
+        cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out), "--format", "text"])
+        == 0
+    )
     written = out.read_text(encoding="utf-8")
 
     assert "limits:" in written
@@ -1251,7 +1256,10 @@ def test_a_definer_that_crossed_a_call_is_spelled_with_the_member_it_is_in(
     from cobble.dataflow.fields.trace_report import cli
 
     out = tmp_path / "trace.txt"
-    assert cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out)]) == 0
+    assert (
+        cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out), "--format", "text"])
+        == 0
+    )
     written = out.read_text(encoding="utf-8")
 
     assert "defined at TPROGB/SUB-PARA/" in written
