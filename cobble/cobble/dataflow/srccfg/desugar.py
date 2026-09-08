@@ -105,6 +105,7 @@ class Ctx:
     paragraph: str
     flows: ProgramContext
     index: Mapping[str, EightyEight]
+    error_handlers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1047,11 +1048,67 @@ def _called(statement, fragment: Fragment, verb: str) -> Fragment:
     )
 
 
+def _handler_goto(ctx: Ctx, path: str, index: int, handler: str) -> Fragment:
+    goto = Node(
+        id=node_id(ctx, path, f"#dispatch.{index}"),
+        kind=NodeKind.CALL,
+        paragraph=ctx.paragraph,
+        transfer=GOTO_TRANSFER,
+        target=handler,
+    )
+    return Fragment(nodes=(goto,), edges=(), entry=goto.id, exits=())
+
+
+def _handler_chain(
+    ctx: Ctx, path: str, handlers: tuple[str, ...], index: int
+) -> Fragment:
+    """A chain of TEST nodes, one per handler. Each TRUE arm GOTOs the handler;
+    FALSE falls through to the next. The last FALSE is a dead end."""
+    if index >= len(handlers):
+        stub = Node(
+            id=node_id(ctx, path, "#dispatch.end"),
+            kind=NodeKind.CALL,
+            paragraph=ctx.paragraph,
+            reads=(HANDLER_ANY,),
+            transfer=DISPATCH_TRANSFER_CICS,
+        )
+        return Fragment(nodes=(stub,), edges=(), entry=stub.id, exits=())
+    cond = _exits_of(
+        Node(
+            id=node_id(ctx, path, f"#dispatch.{index}#test"),
+            kind=NodeKind.TEST,
+            paragraph=ctx.paragraph,
+            atom=Atom(
+                text=f"{HANDLER_ANY} {handlers[index]}",
+                left=HANDLER_ANY,
+                op="==",
+                right=handlers[index],
+            ),
+        )
+    )
+    goto = _handler_goto(ctx, path, index, handlers[index])
+    tail = _handler_chain(ctx, path, handlers, index + 1)
+    return _wire_arms(cond, goto, tail)
+
+
+def _dispatch_fragment(ctx: Ctx, path: str) -> Fragment:
+    """The raise arm's destination: a chain of handler tests, or a dead stub."""
+    if not ctx.error_handlers:
+        dispatch = Node(
+            id=node_id(ctx, path, "#dispatch"),
+            kind=NodeKind.CALL,
+            paragraph=ctx.paragraph,
+            reads=(HANDLER_ANY,),
+            transfer=DISPATCH_TRANSFER_CICS,
+        )
+        return Fragment(nodes=(dispatch,), edges=(), entry=dispatch.id, exits=())
+    return _handler_chain(ctx, path, ctx.error_handlers, 0)
+
+
 def _raisable(body: Fragment, ctx: Ctx, path: str) -> Fragment:
     """A command with no NOHANDLE and no RESP can transfer control to whichever
-    handler is armed. The dispatch node's target is empty: filling it is a
-    reaching-definitions question, and answering it here would need a second,
-    order-dependent scan.
+    handler is armed. When error handlers are known from a pre-scan, the raise
+    arm targets each of them directly; otherwise a dead stub stands in.
     """
     cond = _exits_of(
         Node(
@@ -1063,18 +1120,7 @@ def _raisable(body: Fragment, ctx: Ctx, path: str) -> Fragment:
             ),
         )
     )
-    dispatch = Node(
-        id=node_id(ctx, path, "#dispatch"),
-        kind=NodeKind.CALL,
-        paragraph=ctx.paragraph,
-        reads=(HANDLER_ANY,),
-        transfer=DISPATCH_TRANSFER_CICS,
-    )
-    arms = _wire_arms(
-        cond,
-        Fragment(nodes=(dispatch,), edges=(), entry=dispatch.id, exits=()),
-        EMPTY_FRAGMENT,
-    )
+    arms = _wire_arms(cond, _dispatch_fragment(ctx, path), EMPTY_FRAGMENT)
     return seq((body, arms), nop_id=node_id(ctx, path, "#raise.join"))
 
 

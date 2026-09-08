@@ -40,7 +40,12 @@ from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.fields.state import EMPTY, Source, State, reaching, write
 from cobble.dataflow.fields.transfer import Statement, Write, writes_of
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
-from cobble.dataflow.srccfg.build import build_program, label_id, paragraph_order
+from cobble.dataflow.srccfg.build import (
+    _error_handlers,
+    build_program,
+    label_id,
+    paragraph_order,
+)
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, NodeKind
 from cobble.dataflow.srccfg.desugar import LINK_TRANSFER, XCTL_TRANSFER
 from cobble.dataflow.srccfg.statements import statement_index
@@ -1197,7 +1202,7 @@ def _loaded(asg_dir: Path, program: str) -> Loaded:
         return Loaded(program=program, reason=f"{UNSIZEABLE}: {error}")
     return Loaded(
         program=program,
-        cfg=build_program(asg),
+        cfg=build_program(asg, _error_handlers(paragraph_order(asg))),
         statements=statement_index(asg),
         index=index,
         entry=_entry_node(asg),

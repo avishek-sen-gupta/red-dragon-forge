@@ -104,11 +104,30 @@ def _of_paragraph(paragraph, section: str) -> ParagraphRef:
     )
 
 
-def build_program(asg) -> Cfg:
+def _error_handlers(order: Sequence[ParagraphRef]) -> tuple[str, ...]:
+    """Every handler label registered by any HANDLE CONDITION in the program."""
+    return tuple(
+        dict.fromkeys(
+            label.upper()
+            for ref in order
+            for statement in ref.statements
+            if str(getattr(statement, "verb", "") or "").upper() == "HANDLE CONDITION"
+            for name, value in getattr(statement, "options", {}).items()
+            if name.upper() not in ("NOHANDLE", "RESP", "RESP2")
+            for label in (str(getattr(value, "text", "") or "").strip(),)
+            if label
+        )
+    )
+
+
+def build_program(asg, error_handlers: tuple[str, ...] = ()) -> Cfg:
     order = paragraph_order(asg)
     context = program_context(asg)
     index = condition_index(asg)
-    parts = tuple(_paragraph_cfg(ref, asg.program_id, context, index) for ref in order)
+    handlers = error_handlers if error_handlers else ()
+    parts = tuple(
+        _paragraph_cfg(ref, asg.program_id, context, index, handlers) for ref in order
+    )
     nodes = tuple(node for part in parts for node in part[0])
     body = (*(edge for part in parts for edge in part[1]), *_fallthru(order))
     known = frozenset(node.id for node in nodes)
@@ -124,9 +143,19 @@ def build_program(asg) -> Cfg:
 
 
 def _paragraph_cfg(
-    ref: ParagraphRef, program: str, context, index
+    ref: ParagraphRef,
+    program: str,
+    context,
+    index,
+    handlers: tuple[str, ...],
 ) -> tuple[tuple[Node, ...], tuple[Edge, ...]]:
-    ctx = Ctx(program=program, paragraph=ref.name, flows=context, index=index)
+    ctx = Ctx(
+        program=program,
+        paragraph=ref.name,
+        flows=context,
+        index=index,
+        error_handlers=handlers,
+    )
     body = lower_statements(ref.statements, ctx, "")
     label = Node(id=label_id(ref.name), kind=NodeKind.LABEL, paragraph=ref.name)
     end = Node(id=end_id(ref.name), kind=NodeKind.NOP, paragraph=ref.name)
