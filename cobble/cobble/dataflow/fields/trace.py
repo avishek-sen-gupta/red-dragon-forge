@@ -1072,7 +1072,7 @@ def _resolved_depth(budget: Budget, loader: Loader, program: str) -> Budget:
     """Fill in max_depth from the entry program's CFG when the caller left it at 0."""
     if budget.max_depth:
         return budget
-    return replace(budget, max_depth=len(loader(program).cfg.nodes) * 2)
+    return replace(budget, max_depth=len(loader(program).cfg.nodes) * 5)
 
 
 def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Trace:
