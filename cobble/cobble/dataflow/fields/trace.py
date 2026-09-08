@@ -251,8 +251,6 @@ NO_INDEX = cell_index(())
 NO_STATEMENTS: Mapping[str, Statement] = MappingProxyType({})
 NO_ALIASES: Mapping[str, tuple[CommareaAlias, ...]] = MappingProxyType({})
 NO_STORE: Mapping[str, State] = MappingProxyType({})
-NO_CURSORS: Mapping[tuple[str, str], int] = MappingProxyType({})
-NO_FRONTIERS: Mapping[str, frozenset[str]] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -296,21 +294,34 @@ class Frame:
 
 
 @dataclass(frozen=True)
+class _Choice:
+    """One decision a path made: the arm it took, and how many it had to pick from.
+
+    The arm count is what says whether an untried arm is left, so it is recorded
+    rather than looked up again -- the same node under a different stack can offer a
+    different number.
+    """
+
+    taken: int
+    arms: int
+
+
+@dataclass(frozen=True)
 class _Walk:
     """One path, mid-flight. Threaded, never mutated.
 
-    ``covered`` and ``frontiers`` are the run's, fixed for the whole path: what every
-    earlier path has taken, and per program the nodes from which some untaken branch
-    edge is still reachable. A path reads them to choose arms and never adds to them
-    -- its own additions are ``taken``, which the sampler folds in between paths.
+    A path is its ``plan``: the arm index to take at each decision, in the order the
+    decisions arise. The walk is a pure function of it, so a plan names a route
+    exactly and replaying one is not sampling but reproduction. Past the plan's end
+    the first arm is taken, and ``made`` records what every decision actually did --
+    which is where the next plans come from.
     """
 
     node: str
     stack: tuple[Frame, ...]
     store: Mapping[str, State] = NO_STORE
-    cursors: Mapping[tuple[str, str], int] = NO_CURSORS
-    covered: frozenset[tuple[str, str, str]] = frozenset()
-    frontiers: Mapping[str, frozenset[str]] = NO_FRONTIERS
+    plan: tuple[int, ...] = ()
+    made: tuple[_Choice, ...] = ()
     deps: frozenset[Dep] = frozenset()
     dead_ends: frozenset[DeadEnd] = frozenset()
     taken: frozenset[tuple[str, str, str]] = frozenset()
@@ -339,16 +350,22 @@ class _Walk:
 
 @dataclass(frozen=True)
 class _Run:
-    """The sampler's accumulator: the trace so far, and the cursors that make the
-    next path differ from the last one.
+    """The sampler's accumulator: the trace so far, and the plans not yet walked.
 
-    ``stopped`` is why sampling ended early when the budget and the coverage target
-    were not the reason -- a fact only the walk's own reachability can establish, so
-    it is carried out rather than re-derived by the reporter.
+    ``pending`` is a queue, taken from the front and extended at the back, so a plan
+    that flips a shallow decision runs before one that flips a deep one. A stack here
+    would be plain depth-first search, which spends thousands of paths permuting the
+    tail of one route before it ever revisits the entry's own branch.
+
+    It starts holding the empty plan -- the route where every decision takes its first
+    arm -- and an empty queue is exhaustion: every route has been walked.
+
+    ``stopped`` is why sampling ended when the budget and the coverage target were not
+    the reason, carried out rather than re-derived by the reporter.
     """
 
     trace: Trace = Trace()
-    cursors: Mapping[tuple[str, str], int] = NO_CURSORS
+    pending: tuple[tuple[int, ...], ...] = ((),)
     stopped: str = ""
 
 
@@ -503,92 +520,57 @@ def _branch(loaded: Loaded, node: str, edge: Edge) -> frozenset[tuple[str, str, 
     return frozenset({(loaded.program, node, edge.kind.value)})
 
 
-@dataclass(frozen=True)
-class _Reach:
-    """A backward sweep mid-flight: everything reached, and the level to expand next."""
+def _index(walk: _Walk) -> int:
+    """Which arm to take at this decision: the plan's, or the first arm past its end.
 
-    seen: frozenset[str] = frozenset()
-    edge: tuple[str, ...] = ()
-
-
-def _grown(cfg: Cfg, reach: _Reach) -> _Reach:
-    fresh = (
-        frozenset(edge.source for node in reach.edge for edge in cfg.predecessors(node))
-        - reach.seen
-    )
-    return _Reach(seen=reach.seen | fresh, edge=tuple(fresh))
-
-
-def _frontier(cfg: Cfg, covered: frozenset[tuple[str, str, str]]) -> frozenset[str]:
-    """The nodes from which some branch edge no path has taken is still reachable.
-
-    Backward from the untaken edges rather than forward from every node: the forward
-    form is a transitive closure, one reachable-edge set per node, which is quadratic
-    in a member's size and megabytes wide on a big one. Backward it is one linear
-    sweep and one bit per node, and it answers the only question a choice asks.
-
-    Level by level under ``reduce``, bounded by the node count because a sweep cannot
-    have more levels than nodes, and stable rounds after that cost one comparison --
-    the same shape, and for the same reason, as ``_walked``.
+    The plan is indexed by how many decisions this path has already made, not by node
+    id, so replaying a plan is exact even where a node is visited under two different
+    stacks with two different sets of admissible arms.
     """
-    seeds = frozenset(
-        edge.source
-        for edge in cfg.edges
-        if _is_test(cfg, edge.source)
-        and (cfg.program, edge.source, edge.kind.value) not in covered
-    )
-    return reduce(
-        lambda reach, _: _grown(cfg, reach),
-        repeat(None, len(cfg.nodes)),
-        _Reach(seen=seeds, edge=tuple(seeds)),
-    ).seen
-
-
-def _is_test(cfg: Cfg, node: str) -> bool:
-    return cfg.node(node).kind is NodeKind.TEST
-
-
-def _unexplored(walk: _Walk, loaded: Loaded, edge: Edge) -> bool:
-    return bool(_branch(loaded, walk.node, edge) - (walk.covered | walk.taken))
-
-
-def _chosen(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> Edge:
-    """Which arm this path takes, by three rules in order.
-
-    An arm no path has taken comes first, so every path that can reach new territory
-    spends itself on new territory. Failing that, an arm from which something untaken
-    is still reachable, which is what keeps a path out of a region it has already
-    exhausted -- however far past the arm that region ends. Only when both arms still
-    lead somewhere unexplored does the cursor decide, and it alternates as it always
-    did. All three are deterministic: no random seed appears anywhere here.
-    """
-    fresh = tuple(one for one in edges if _unexplored(walk, loaded, one))
-    if fresh:
-        return fresh[0]
-    ahead = tuple(
-        one
-        for one in edges
-        if one.target in walk.frontiers.get(loaded.program, frozenset())
-    )
-    pool = ahead if ahead else edges
-    return pool[walk.cursors.get((walk.program, walk.node), 0) % len(pool)]
+    at = len(walk.made)
+    return walk.plan[at] if at < len(walk.plan) else 0
 
 
 def _sampled(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> _Walk:
-    """One branch, chosen by ``_chosen``, with this node's cursor advanced either way.
-
-    The cursor is per (program, node) and global to the run, so it keeps alternating
-    for the nodes whose arms are all still worth taking.
-    """
+    """One step. A node with a single admissible arm is not a decision and is not
+    recorded, so a plan stays as short as the choices it actually fixes."""
     if not edges:
         return _ended(walk)
-    key = (walk.program, walk.node)
-    chosen = _chosen(walk, loaded, edges)
+    if len(edges) == 1:
+        return _advanced(walk, loaded, edges[0], walk.made)
+    index = _index(walk)
+    return _advanced(
+        walk,
+        loaded,
+        edges[index],
+        (*walk.made, _Choice(taken=index, arms=len(edges))),
+    )
+
+
+def _advanced(
+    walk: _Walk, loaded: Loaded, edge: Edge, made: tuple[_Choice, ...]
+) -> _Walk:
     return replace(
         walk,
-        node=chosen.target,
-        cursors={**walk.cursors, key: walk.cursors.get(key, 0) + 1},
-        taken=walk.taken | _branch(loaded, walk.node, chosen),
+        node=edge.target,
+        made=made,
+        taken=walk.taken | _branch(loaded, walk.node, edge),
+    )
+
+
+def _alternatives(
+    plan: tuple[int, ...], made: Sequence[_Choice]
+) -> tuple[tuple[int, ...], ...]:
+    """The plans one arm away from the path that just ran, shallowest first.
+
+    Only from the position this plan's own last flip fixed, and deeper. Anything
+    shallower belongs to an ancestor plan, which already generated it -- generating it
+    again would re-walk a route and the enumeration would stop being finite.
+    """
+    return tuple(
+        (*(one.taken for one in made[:at]), made[at].taken + 1)
+        for at in range(max(len(plan) - 1, 0), len(made))
+        if made[at].taken + 1 < made[at].arms
     )
 
 
@@ -748,22 +730,7 @@ def _entered(
                 window.callee_extent,
             ),
         },
-        frontiers=_with_frontier(walk, row.callee, callee),
     )
-
-
-def _with_frontier(
-    walk: _Walk, program: str, loaded: Loaded
-) -> Mapping[str, frozenset[str]]:
-    """A member's frontier, swept the first time this path enters it.
-
-    Per path rather than per run, because ``covered`` grows between paths; per entry
-    rather than per step, because a sweep costs a pass over the member's edges and a
-    crossing is rare where a step is not.
-    """
-    if program in walk.frontiers:
-        return walk.frontiers
-    return {**walk.frontiers, program: _frontier(loaded.cfg, walk.covered)}
 
 
 def _transfer_uncrossable(row: CommareaAlias, window: Window) -> str:
@@ -842,21 +809,11 @@ def _walked(start: _Walk, limit: int, loader: Loader) -> _Walk:
     return reduce(lambda walk, _: _stepped(walk, loader), repeat(None, limit), start)
 
 
-def _started(
-    program: str,
-    loader: Loader,
-    cursors: Mapping[tuple[str, str], int],
-    covered: frozenset[tuple[str, str, str]],
-    frontier: frozenset[str],
-) -> _Walk:
-    """The frontier is passed in rather than swept here: the sampler needs the root's
-    to decide whether to run this path at all, and one sweep answers both."""
+def _started(program: str, loader: Loader, plan: tuple[int, ...]) -> _Walk:
     return _Walk(
         node=loader(program).entry,
         stack=(Frame(program=program),),
-        cursors=cursors,
-        covered=covered,
-        frontiers={program: frontier},
+        plan=plan,
     )
 
 
@@ -904,24 +861,18 @@ EXHAUSTED = "nothing unexplored is reachable"
 
 
 def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
-    """One path, unless the coverage target is met or there is nothing left to find.
+    """One plan off the queue, unless the coverage target is met or the queue is empty.
 
-    The second stop is the one a budget cannot express: branch edges hanging off a
-    test no path can reach hold the fraction below any target forever, and without
-    asking what is reachable that is indistinguishable from a budget set too low.
+    The empty queue is the stop a budget cannot express: every route the re-entry rule
+    admits has been walked, so branch edges still untaken are edges no single path can
+    reach, and the fraction reached is the answer rather than a symptom of a small
+    budget. It is exact -- a plan exists for every untried arm of every route walked.
     """
-    found = run.trace.coverage
-    if run.stopped or (run.trace.paths and found.fraction >= budget.coverage):
+    if run.stopped or (run.trace.paths and _met(run, budget)):
         return run
-    root = loader(program)
-    frontier = _frontier(root.cfg, found.taken)
-    if run.trace.paths and root.entry not in frontier:
+    if not run.pending:
         return replace(run, stopped=EXHAUSTED)
-    walk = _walked(
-        _started(program, loader, run.cursors, found.taken, frontier),
-        budget.max_depth,
-        loader,
-    )
+    walk = _walked(_started(program, loader, run.pending[0]), budget.max_depth, loader)
     return _reported(
         _Run(
             trace=Trace(
@@ -930,11 +881,15 @@ def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
                 paths=run.trace.paths + 1,
                 coverage=_coverage(run.trace.coverage, walk, loader),
             ),
-            cursors=walk.cursors,
+            pending=(*run.pending[1:], *_alternatives(run.pending[0], walk.made)),
         ),
         walk,
         budget,
     )
+
+
+def _met(run: _Run, budget: Budget) -> bool:
+    return run.trace.coverage.fraction >= budget.coverage
 
 
 def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Trace:
@@ -988,18 +943,7 @@ def visited_order(
 ) -> tuple[str, ...]:
     """The nodes one path ran, in order. ``Trace`` cannot say: it is the union over
     paths, so the route is exactly what it discards."""
-    loaded = loader(program)
-    return _walked(
-        _started(
-            program,
-            loader,
-            NO_CURSORS,
-            frozenset(),
-            _frontier(loaded.cfg, frozenset()),
-        ),
-        budget.max_depth,
-        loader,
-    ).order
+    return _walked(_started(program, loader, ()), budget.max_depth, loader).order
 
 
 @cache

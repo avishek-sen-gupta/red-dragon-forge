@@ -293,8 +293,8 @@ def _raise_chain(depth: int) -> Loaded:
     carries on -- the shape a desugared CICS condition raise gives every member.
 
     Under a per-node round-robin this costs half the surviving paths at every step,
-    so full coverage needs 2**depth paths. Preferring an arm no path has taken makes
-    it depth + 1.
+    so full coverage needs 2**depth paths. Enumerating plans makes it depth + 1: each
+    path takes the raising arm one site deeper than the last.
     """
     return _only(
         "TPROGA",
@@ -361,19 +361,71 @@ STRAIGHT = _only(
 )
 """One arm into a straight line that ends three nodes later, one into a test.
 
-The straight line is the case a look-ahead at the arm's target cannot see: ``C/0``
-is an ordinary node with a successor, and only the whole chain beyond it says the
-arm has nothing left to offer."""
+The straight line has no decision in it, so it contributes no plan of its own: the
+only alternatives are the two tests' arms, and three paths exhaust them."""
 
 
-def test_an_arm_whose_whole_chain_is_covered_is_not_taken_again():
-    """Not a dead-end test: ``C/0`` has a successor, so nothing about the arm's
-    target says it is exhausted. What says so is that no branch edge anywhere beyond
-    it is still untaken, which is the frontier the walk carries."""
+def test_a_straight_line_arm_costs_one_path_and_is_never_retried():
+    """The three routes are Q/1 true, Q/1 false + B/0 true, Q/1 false + B/0 false.
+    No plan repeats a route, so full coverage costs exactly one path per route."""
     found = traced("TPROGA", _loader(STRAIGHT), Budget(paths=3, coverage=1.0))
 
     assert found.coverage.taken == frozenset(_branch_edges(STRAIGHT.cfg))
     assert found.paths == 3
+
+
+DEEP = _only(
+    "TPROGA",
+    (
+        _node("Q/0"),
+        _node("Q/1", NodeKind.TEST),
+        _node("D/0", NodeKind.TEST),
+        _node("D/1", NodeKind.TEST),
+        _node("D/2"),
+        _node("D/3"),
+        _node("D/4"),
+        _node("F/0", NodeKind.TEST),
+        _node("F/1"),
+        _node("F/2"),
+    ),
+    (
+        _edge("Q/0", "Q/1"),
+        _edge("Q/1", "D/0", EdgeKind.TRUE),
+        _edge("Q/1", "F/0", EdgeKind.FALSE),
+        _edge("D/0", "D/1", EdgeKind.TRUE),
+        _edge("D/0", "D/2", EdgeKind.FALSE),
+        _edge("D/1", "D/3", EdgeKind.TRUE),
+        _edge("D/1", "D/4", EdgeKind.FALSE),
+        _edge("F/0", "F/1", EdgeKind.TRUE),
+        _edge("F/0", "F/2", EdgeKind.FALSE),
+    ),
+    "Q/0",
+)
+"""A shallow branch whose true arm leads to two more branches and whose false arm
+leads to a third, so the first path makes three decisions in a row."""
+
+
+def test_the_second_path_flips_the_shallowest_decision_not_the_deepest():
+    """Which end of the queue the sampler takes plans from is the whole difference
+    between spreading over a member and permuting the tail of one route. Taking them
+    in the order they were found reaches the far side of the entry's branch on path
+    two; taking the newest first would spend path two on ``D/1``'s other arm and
+    leave everything past ``Q/1``'s false arm unvisited.
+    """
+    found = traced("TPROGA", _loader(DEEP), Budget(paths=2, coverage=1.0))
+
+    assert ("TPROGA", "Q/1", "FALSE") in found.coverage.taken
+    assert ("TPROGA", "D/1", "FALSE") not in found.coverage.taken
+
+
+def test_every_route_is_walked_once_and_then_the_run_stops():
+    """Five routes through DEEP -- true/true/true, true/true/false, true/false,
+    false/true, false/false -- and a budget of fifty spends five paths, because a
+    plan is generated for each untried arm exactly once and never twice."""
+    found = traced("TPROGA", _loader(DEEP), Budget(paths=50, coverage=1.0))
+
+    assert found.paths == 5
+    assert found.coverage.taken == frozenset(_branch_edges(DEEP.cfg))
 
 
 UNREACHED = _only(
@@ -401,9 +453,9 @@ UNREACHED = _only(
 
 def test_sampling_stops_once_nothing_unexplored_is_reachable_from_the_entry():
     """The coverage target can never be met here, because two of the four branch
-    edges hang off a test no path can reach. Without asking what is reachable that is
-    indistinguishable from a budget set too low, and the run burns all fifty paths
-    re-walking the one route it has.
+    edges hang off a test no path can reach. Two paths exhaust the routes that exist,
+    and the run says so rather than spending the other forty-eight re-walking them --
+    the distinction a budget alone cannot draw.
     """
     found = traced("TPROGA", _loader(UNREACHED), Budget(paths=50, coverage=1.0))
 
