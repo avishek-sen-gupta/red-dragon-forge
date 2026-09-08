@@ -971,14 +971,14 @@ def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
     stopped at path 2 of 200 would say so 198 times.
     """
     found = run.trace.coverage
-    depth_note = " (depth limit)" if walk.running else ""
-    logger.info(
-        "trace: [%d/%d] %d nodes%s, %d/%d branches (%d%%),"
+    log = logger.warning if walk.running else logger.info
+    log(
+        "trace: [%d/%d] %d/%d nodes, %d/%d branches (%d%%),"
         " %d programs, %d dead ends, fresh %d stale %d",
         run.trace.paths,
         budget.paths,
         len(walk.order),
-        depth_note,
+        budget.max_depth,
         len(found.taken),
         found.total,
         round(100 * found.fraction),
