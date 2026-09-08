@@ -288,6 +288,136 @@ def test_a_lower_coverage_target_stops_earlier_still():
     assert found.paths == 1
 
 
+def _raise_chain(depth: int) -> Loaded:
+    """``depth`` tests in a row, each with one arm into a dead end and one that
+    carries on -- the shape a desugared CICS condition raise gives every member.
+
+    Under a per-node round-robin this costs half the surviving paths at every step,
+    so full coverage needs 2**depth paths. Preferring an arm no path has taken makes
+    it depth + 1.
+    """
+    return _only(
+        "TPROGA",
+        (
+            _node("R/0"),
+            *(_node(f"R/{one}#raise", NodeKind.TEST) for one in range(depth)),
+            *(_node(f"R/{one}#dispatch", NodeKind.CALL) for one in range(depth)),
+            _node("R/end"),
+        ),
+        (
+            _edge("R/0", "R/0#raise"),
+            *(
+                _edge(f"R/{one}#raise", f"R/{one}#dispatch", EdgeKind.TRUE)
+                for one in range(depth)
+            ),
+            *(
+                _edge(
+                    f"R/{one}#raise",
+                    f"R/{one + 1}#raise" if one + 1 < depth else "R/end",
+                    EdgeKind.FALSE,
+                )
+                for one in range(depth)
+            ),
+        ),
+        "R/0",
+    )
+
+
+def test_a_chain_of_dead_arms_is_covered_in_one_path_per_arm():
+    """The measured defect: 200000 paths reached 4% of a real member's branches
+    because each raise site spent half of every path budget on an arm that ends the
+    path. Five sites needed 32 paths; they need six.
+    """
+    chain = _raise_chain(5)
+
+    found = traced("TPROGA", _loader(chain), Budget(paths=6, coverage=1.0))
+
+    assert found.coverage.taken == frozenset(_branch_edges(chain.cfg))
+    assert found.paths == 6
+
+
+STRAIGHT = _only(
+    "TPROGA",
+    (
+        _node("Q/0"),
+        _node("Q/1", NodeKind.TEST),
+        _node("C/0"),
+        _node("C/1"),
+        _node("C/2"),
+        _node("B/0", NodeKind.TEST),
+        _node("B/1"),
+        _node("B/2"),
+    ),
+    (
+        _edge("Q/0", "Q/1"),
+        _edge("Q/1", "C/0", EdgeKind.TRUE),
+        _edge("Q/1", "B/0", EdgeKind.FALSE),
+        _edge("C/0", "C/1"),
+        _edge("C/1", "C/2"),
+        _edge("B/0", "B/1", EdgeKind.TRUE),
+        _edge("B/0", "B/2", EdgeKind.FALSE),
+    ),
+    "Q/0",
+)
+"""One arm into a straight line that ends three nodes later, one into a test.
+
+The straight line is the case a look-ahead at the arm's target cannot see: ``C/0``
+is an ordinary node with a successor, and only the whole chain beyond it says the
+arm has nothing left to offer."""
+
+
+def test_an_arm_whose_whole_chain_is_covered_is_not_taken_again():
+    """Not a dead-end test: ``C/0`` has a successor, so nothing about the arm's
+    target says it is exhausted. What says so is that no branch edge anywhere beyond
+    it is still untaken, which is the frontier the walk carries."""
+    found = traced("TPROGA", _loader(STRAIGHT), Budget(paths=3, coverage=1.0))
+
+    assert found.coverage.taken == frozenset(_branch_edges(STRAIGHT.cfg))
+    assert found.paths == 3
+
+
+UNREACHED = _only(
+    "TPROGA",
+    (
+        _node("S/0"),
+        _node("S/1", NodeKind.TEST),
+        _node("S/2"),
+        _node("S/3"),
+        _node("U/0", NodeKind.TEST),
+        _node("U/1"),
+        _node("U/2"),
+    ),
+    (
+        _edge("S/0", "S/1"),
+        _edge("S/1", "S/2", EdgeKind.TRUE),
+        _edge("S/1", "S/3", EdgeKind.FALSE),
+        _edge("U/0", "U/1", EdgeKind.TRUE),
+        _edge("U/0", "U/2", EdgeKind.FALSE),
+    ),
+    "S/0",
+)
+"""A test the entry reaches and one it does not, so full coverage is unreachable."""
+
+
+def test_sampling_stops_once_nothing_unexplored_is_reachable_from_the_entry():
+    """The coverage target can never be met here, because two of the four branch
+    edges hang off a test no path can reach. Without asking what is reachable that is
+    indistinguishable from a budget set too low, and the run burns all fifty paths
+    re-walking the one route it has.
+    """
+    found = traced("TPROGA", _loader(UNREACHED), Budget(paths=50, coverage=1.0))
+
+    assert found.paths == 2
+    assert found.coverage.fraction == 0.5
+
+
+def test_the_closing_line_separates_an_exhausted_graph_from_a_spent_budget(caplog):
+    with caplog.at_level(logging.INFO, logger="cobble.dataflow.fields.trace"):
+        traced("TPROGA", _loader(UNREACHED), Budget(paths=50, coverage=1.0))
+
+    assert "nothing unexplored is reachable" in caplog.messages[-1]
+
+
 TWICE = _only(
     "TPROGA",
     (
