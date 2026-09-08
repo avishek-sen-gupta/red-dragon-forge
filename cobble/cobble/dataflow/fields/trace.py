@@ -491,20 +491,34 @@ def _return_edge(walk: _Walk, edges: Sequence[Edge]) -> tuple[Edge, ...]:
     )[:1]
 
 
-def _admissible(walk: _Walk, edges: Sequence[Edge]) -> tuple[Edge, ...]:
-    """Everything left once the stack has had its say.
+def _admissible(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> tuple[Edge, ...]:
+    """Everything left once the stack has had its say, arms that go nowhere last.
 
     PERFORM edges are gone because a refused one means the paragraph is skipped and
     this node's own FLOW edge is the continuation. RETURN edges are gone because
     the path reached this node without performing it -- by falling through -- and
     its callers' resume points are none of its business.
+
+    An arm whose target has no successors of its own ends the path there, and
+    ``desugar._raisable`` makes such an arm the FIRST one at every CICS command with
+    no NOHANDLE and no RESP: its raising arm is a ``#dispatch`` stub with no exits,
+    because naming the armed handler is a reaching-definitions question. Since a
+    plan continues with the first arm past its own end, leaving that arm first ends
+    every route at the first such command beyond its last flip -- measured at 663 of
+    9030 reachable nodes on a real member, whatever the path budget. The order is
+    stable, so a plan recorded under it still replays exactly.
     """
     return tuple(
-        one
-        for one in edges
-        if one.kind is not EdgeKind.PERFORM
-        and one.kind is not EdgeKind.RETURN
-        and not _open(walk.stack, walk.program, one.target)
+        sorted(
+            (
+                one
+                for one in edges
+                if one.kind is not EdgeKind.PERFORM
+                and one.kind is not EdgeKind.RETURN
+                and not _open(walk.stack, walk.program, one.target)
+            ),
+            key=lambda one: not loaded.cfg.successors(one.target),
+        )
     )
 
 
@@ -675,7 +689,7 @@ def _followed(walk: _Walk, loaded: Loaded) -> _Walk:
     returned = _return_edge(walk, edges)
     if returned:
         return _returned(walk, returned[0])
-    return _sampled(walk, loaded, _admissible(walk, edges))
+    return _sampled(walk, loaded, _admissible(walk, loaded, edges))
 
 
 def _dead_end(walk: _Walk, row: CommareaAlias, reason: str) -> _Walk:
