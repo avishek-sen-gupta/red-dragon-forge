@@ -1,0 +1,96 @@
+"""Declared extents for every member in an ASG cache, with no analysis.
+
+A field's byte ranges follow from its declaration alone — level, usage, OCCURS,
+REDEFINES — and need no fixpoint, no flow, no JVM. This is the layout table both
+the fixpoint artefact and the path-sampled trace query against.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+from cobble.cli_logging import configure_cli_logging
+from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
+from cobble.dataflow.fields.emit import _declared_extents
+from cobble.dataflow.fields.extent import cell_index
+from cobble.dataflow.fields.side_tables import JsonlWriter, extent_row, jsonl_writer
+from cobble.dataflow.layout import UnsizeableFieldError, program_records
+from cobol_asg.asg_types import CobolASG
+
+logger = logging.getLogger(__name__)
+
+
+def _asg_at(path: Path) -> CobolASG:
+    with cached_asg_dialect_parsers_registered():
+        return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _members(asg_dir: Path) -> tuple[str, ...]:
+    return tuple(sorted(p.stem for p in asg_dir.glob("*.json")))
+
+
+def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> str:
+    path = asg_dir / f"{member}.json"
+    asg = _asg_at(path)
+    try:
+        index = cell_index(program_records(asg))
+    except UnsizeableFieldError as error:
+        return f"unsizeable: {error}"
+    writer.add_rows(extent_row(ext) for ext in _declared_extents(index, member))
+    return ""
+
+
+def _emit_all(
+    asg_dir: Path, members: Sequence[str], writer: JsonlWriter
+) -> tuple[str, ...]:
+    return tuple(
+        member
+        for member in members
+        for reason in (_emit_one(asg_dir, member, writer),)
+        if reason and not logger.warning("extents: skipping %s: %s", member, reason)
+    )
+
+
+def emit(asg_dir: Path, out: Path, members: Sequence[str]) -> int:
+    chosen = members if members else _members(asg_dir)
+    logger.info("extents: %d members from %s", len(chosen), asg_dir)
+    with jsonl_writer(out) as writer:
+        skipped = _emit_all(asg_dir, chosen, writer)
+    logger.info("extents: wrote %s (%d skipped)", out, len(skipped))
+    return 3 if skipped else 0
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Write declared field extents from an ASG cache, no analysis needed."
+    )
+    parser.add_argument(
+        "--asg-dir", required=True, type=Path, help="the parsed ASG cache directory"
+    )
+    parser.add_argument(
+        "--out", required=True, type=Path, help="where to write extents.jsonl"
+    )
+    parser.add_argument(
+        "members",
+        nargs="*",
+        help="members to emit (default: all *.json in asg-dir)",
+    )
+    return parser
+
+
+def cli(argv: Sequence[str] = ()) -> int:
+    configure_cli_logging()
+    arguments = _parser().parse_args(tuple(argv) if argv else None)
+    if not arguments.asg_dir.is_dir():
+        logger.error("extents: no ASG cache at %s", arguments.asg_dir)
+        return 2
+    return emit(arguments.asg_dir, arguments.out, arguments.members)
+
+
+def main() -> int:
+    sys.exit(cli())
