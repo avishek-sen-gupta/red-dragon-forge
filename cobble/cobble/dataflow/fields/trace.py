@@ -986,20 +986,32 @@ def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
 
 
 EXHAUSTED = "nothing unexplored is reachable"
+FRESH_EXHAUSTED = "fresh queue exhausted; remaining edges are structurally unreachable"
+
+
+def _fresh_done(queue: _Queue) -> bool:
+    return not queue.fresh and bool(queue.stale)
+
+
+def _queue_stop(queue: _Queue) -> str:
+    """The structural stop the queue signals, or empty when it has more work."""
+    if _empty(queue):
+        return EXHAUSTED
+    if _fresh_done(queue):
+        return FRESH_EXHAUSTED
+    return ""
+
+
+def _done(run: _Run, budget: Budget) -> bool:
+    return run.stopped or (run.trace.paths and _met(run, budget))
 
 
 def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
-    """One plan off the queue, unless the coverage target is met or the queue is empty.
-
-    The empty queue is the stop a budget cannot express: every route the re-entry rule
-    admits has been walked, so branch edges still untaken are edges no single path can
-    reach, and the fraction reached is the answer rather than a symptom of a small
-    budget. It is exact -- a plan exists for every untried arm of every route walked.
-    """
-    if run.stopped or (run.trace.paths and _met(run, budget)):
+    if _done(run, budget):
         return run
-    if _empty(run.queue):
-        return replace(run, stopped=EXHAUSTED)
+    reason = _queue_stop(run.queue)
+    if reason:
+        return replace(run, stopped=reason)
     head = _head(run.queue)
     walk = _walked(_started(program, loader, head.plan), budget.max_depth, loader)
     coverage = _coverage(run.trace.coverage, walk, loader)
