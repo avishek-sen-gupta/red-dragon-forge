@@ -622,9 +622,10 @@ sides are the same storage. Because a path has a stack, it also takes only the
 performed paragraph has no exit the walk will admit, the stack still says where it
 came from, so the path resumes at the performer instead of ending there.
 
-The report names, for every extent written on a sampled path, where its bytes
-came from and **which node in which member last wrote them**. That crossing
-chain is what the intra-program tables cannot carry.
+The output is **JSONL, streamed to disk per path**: each path's deps are appended
+immediately, so a killed run still produces a queryable file. Footer rows (dead
+ends, coverage, limits) are written once at the end. The file may contain
+duplicate dep rows across paths; the query tool deduplicates on load.
 
 A callee the parse never covered is an opaque block, not an error: the site is
 listed under `dead ends` with the reason the alias table gives it
@@ -636,11 +637,12 @@ A path **is** a plan: the arm index to take at each branch, in the order the
 branches arise. The walk is a pure function of it, so a plan names a route
 exactly — deterministic, no random seed — and the sampler enumerates plans rather
 than guessing arms. After a path runs, every branch it met with an untried arm
-left yields one new plan (that prefix, one arm further along); those queue up, and
-the queue is drained front-first, so a plan flipping a shallow branch runs before
-one flipping a deep branch. No local per-node rule can do this: a deep edge needs
-a specific *combination* of twenty choices, and a chooser that decides each branch
-on its own cannot enumerate combinations.
+left yields one new plan (that prefix, one arm further along); those queue up in
+two lanes — **fresh** (plans whose flip takes a branch edge nothing has taken and
+no other queued plan already promises) and **stale** (the rest). The fresh lane is
+drained first, so every path raises coverage; once it empties the run stops,
+because the remaining stale plans flip already-taken edges and cannot reach any
+new branch.
 
 Past its own end a plan keeps taking the first arm, so which arm is first decides
 how far every route gets: arms whose target goes nowhere are ordered last. The CFG
@@ -650,17 +652,39 @@ question the lowering declines to answer, and leaving that arm first would end
 every route at the first such command past its last flip.
 
 Progress goes to stderr, one line per sampled path carrying the nodes it ran, the
-cumulative branch coverage, the programs entered and the dead ends met, then a
-closing line naming why the run stopped: the coverage target met, the path budget
-spent, or `nothing unexplored is reachable` — the queue is empty, so every route
-the walk admits has been walked exactly once, the untaken branch edges are edges
-no single path reaches, and no budget will move the fraction.
+cumulative branch coverage, the fresh and stale queue sizes, the programs entered
+and the dead ends met, then a closing line naming why the run stopped: the
+coverage target met, the path budget spent, the fresh queue exhausted, or
+`nothing unexplored is reachable` — the queue is empty, so every route the walk
+admits has been walked exactly once.
 
 It under-approximates, deliberately: a flow it does not report was not sampled,
 never "does not exist", and a loop body runs once. `--paths` and `--coverage`
 bound the sampling and the branch-coverage figure is printed with the answer, as
 are those limits. The fixpoint behind `cobble-fields` keeps the other guarantee —
 over-approximate, every real flow present — and neither replaces the other.
+
+### Querying provenance from a trace
+
+```bash
+uv run cobble-trace-query forward  DFHCOMMAREA  --trace /tmp/trace.jsonl
+uv run cobble-trace-query backward WS-TOTAL     --trace /tmp/trace.jsonl
+uv run cobble-trace-query forward  DFHCOMMAREA  --trace /tmp/trace.jsonl --depth 3
+```
+
+`cobble-trace-query` walks forward (what does a field affect?) or backward (what
+feeds it?) over a JSONL trace by **byte-extent containment**. The subject is a
+field name, or `PROGRAM.FIELD` to qualify it; `--depth` (default 5) bounds the
+number of hops.
+
+The backward walk **narrows the frontier** at each hop: when a dep's target is a
+group wider than the range being traced, the source is clipped to the
+corresponding sub-range via offset arithmetic. A 3-byte field inside a 1000-byte
+commarea follows only the 3 bytes that feed it, not all 1000.
+
+Output is an indented tree, one line per provenance edge, with terminal origins
+(`FILE:`, `LITERAL`, `%CALL:`) at the leaves. The file may be a partial (killed)
+trace with no footer — the query tool reads whatever dep rows are present.
 
 ### Render the HTML visualization
 
