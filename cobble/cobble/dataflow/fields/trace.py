@@ -972,7 +972,8 @@ def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
     """
     found = run.trace.coverage
     logger.info(
-        "trace: [%d/%d] %d nodes, %d/%d branches (%d%%), %d programs, %d dead ends",
+        "trace: [%d/%d] %d nodes, %d/%d branches (%d%%),"
+        " %d programs, %d dead ends, fresh %d stale %d",
         run.trace.paths,
         budget.paths,
         len(walk.order),
@@ -981,6 +982,8 @@ def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
         round(100 * found.fraction),
         len(found.programs),
         len(run.trace.dead_ends),
+        len(run.queue.fresh),
+        len(run.queue.stale),
     )
     return run
 
