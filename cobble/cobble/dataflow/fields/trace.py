@@ -1102,7 +1102,16 @@ def _resolved_depth(budget: Budget, loader: Loader, program: str) -> Budget:
     """Fill in max_depth from the reachable programs' total nodes when left at 0."""
     if budget.max_depth:
         return budget
-    return replace(budget, max_depth=_total_nodes(program, loader) * 2)
+    programs = sorted(_reachable_programs(program, loader, frozenset()))
+    total = sum(len(loader(p).cfg.nodes) for p in programs)
+    depth = total * 2
+    logger.info(
+        "trace: auto depth %d (%d nodes across %d programs)",
+        depth,
+        total,
+        len(programs),
+    )
+    return replace(budget, max_depth=depth)
 
 
 def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Trace:
@@ -1178,6 +1187,7 @@ def _loaded(asg_dir: Path, program: str) -> Loaded:
     control comes back, and the caller's path runs on -- rather than an exception
     that ends a run of hundreds of paths.
     """
+    logger.info("trace: loading %s", program)
     path = asg_dir / f"{program}.json"
     if not path.is_file():
         return Loaded(program=program, reason=f"{NOT_PARSED}: {path}")
