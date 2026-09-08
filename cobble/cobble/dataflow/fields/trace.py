@@ -57,6 +57,7 @@ DEFAULT_MAX_DEPTH = 5000
 CROSSING_VERBS = (LINK_TRANSFER, XCTL_TRANSFER)
 
 NO_PROCEDURE = "callee-has-no-procedure"
+NOT_PARSED = "callee-not-parsed"
 RE_ENTRY = "re-entry"
 
 
@@ -874,8 +875,17 @@ def _loaded(asg_dir: Path, program: str) -> Loaded:
     A member whose storage cannot be laid out cannot be entered even when its
     LINKAGE laid out fine, which is what let its call site be aliased in the first
     place: the window says the bytes are shared, not that the callee is analysable.
+
+    An absent cache is the same kind of fact, and the common one: a corpus selection
+    LINKs members outside itself, so the callee is a name with no member behind it.
+    Refusing it here makes it an opaque block -- the call site credits the commarea,
+    control comes back, and the caller's path runs on -- rather than an exception
+    that ends a run of hundreds of paths.
     """
-    asg = _asg_at(asg_dir / f"{program}.json")
+    path = asg_dir / f"{program}.json"
+    if not path.is_file():
+        return Loaded(program=program, reason=f"{NOT_PARSED}: {path}")
+    asg = _asg_at(path)
     try:
         index = cell_index(program_records(asg))
     except UnsizeableFieldError as error:
