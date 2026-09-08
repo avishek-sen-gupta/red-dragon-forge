@@ -60,13 +60,15 @@ def _dep_of(
 
 
 def load(path: Path) -> tuple[DepRow, ...]:
-    """Every dep row from a JSONL trace, ignoring footer rows."""
+    """Every dep row from a JSONL trace, deduplicated, ignoring footer rows."""
     return tuple(
-        _dep_of(parsed)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-        for parsed in (json.loads(line),)
-        if parsed.get("kind") == "dep"
+        dict.fromkeys(
+            _dep_of(parsed)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+            for parsed in (json.loads(line),)
+            if parsed.get("kind") == "dep"
+        )
     )
 
 

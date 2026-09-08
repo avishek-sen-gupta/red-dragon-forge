@@ -1,4 +1,4 @@
-"""JSONL and text serialisation of the trace report."""
+"""JSONL serialisation of the trace report."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ from cobble.dataflow.fields.trace import Coverage, DeadEnd, Dep, Trace
 from cobble.dataflow.fields.trace_report import (
     _dead_end_row,
     _dep_row,
-    jsonl_lines,
-    lines,
+    _footer_lines,
 )
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -114,9 +113,8 @@ def test_jsonl_round_trips_a_dead_end():
     assert parsed["reason"] == "callee-not-in-cache"
 
 
-def test_jsonl_lines_include_coverage_and_limits():
+def test_footer_includes_coverage_and_limits():
     trace = Trace(
-        deps=frozenset({_DEP}),
         dead_ends=frozenset({_DEAD_END}),
         paths=10,
         coverage=Coverage(
@@ -125,24 +123,6 @@ def test_jsonl_lines_include_coverage_and_limits():
             programs=frozenset({"PROG"}),
         ),
     )
-    found = jsonl_lines(trace)
+    found = _footer_lines(trace)
     kinds = {json.loads(line)["kind"] for line in found}
-    assert kinds == {"dep", "dead_end", "coverage", "limits"}
-
-
-def test_text_format_unchanged():
-    trace = Trace(
-        deps=frozenset({_DEP, _ORIGIN_DEP}),
-        dead_ends=frozenset({_DEAD_END}),
-        paths=10,
-        coverage=Coverage(
-            taken=frozenset({("PROG", "PARA/3", "TRUE")}),
-            total=2,
-            programs=frozenset({"PROG"}),
-        ),
-    )
-    text = lines(trace)
-    assert any("FIELD-A@working_storage[100:108]" in line for line in text)
-    assert any("dead ends:" in line for line in text)
-    assert any("branch coverage:" in line for line in text)
-    assert any("limits:" in line for line in text)
+    assert kinds == {"dead_end", "coverage", "limits"}

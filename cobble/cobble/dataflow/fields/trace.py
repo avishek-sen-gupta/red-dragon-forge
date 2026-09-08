@@ -1006,19 +1006,27 @@ def _done(run: _Run, budget: Budget) -> bool:
     return run.stopped or (run.trace.paths and _met(run, budget))
 
 
-def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
-    if _done(run, budget):
-        return run
-    reason = _queue_stop(run.queue)
-    if reason:
-        return replace(run, stopped=reason)
+@dataclass(frozen=True)
+class _Stepped:
+    """One path walked: the updated run state and the deps it witnessed."""
+
+    run: _Run
+    deps: frozenset[Dep]
+    dead_ends: frozenset[DeadEnd]
+
+
+def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:
+    """Walk one plan and return the new state plus this path's findings.
+
+    The findings are separate so a streaming caller can write them to disk
+    without accumulating them in ``Trace.deps``.
+    """
     head = _head(run.queue)
     walk = _walked(_started(program, loader, head.plan), budget.max_depth, loader)
     coverage = _coverage(run.trace.coverage, walk, loader)
-    return _reported(
+    next_run = _reported(
         _Run(
             trace=Trace(
-                deps=run.trace.deps | walk.deps,
                 dead_ends=run.trace.dead_ends | walk.dead_ends,
                 paths=run.trace.paths + 1,
                 coverage=coverage,
@@ -1031,6 +1039,23 @@ def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
         ),
         walk,
         budget,
+    )
+    return _Stepped(run=next_run, deps=walk.deps, dead_ends=walk.dead_ends)
+
+
+def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
+    if _done(run, budget):
+        return run
+    reason = _queue_stop(run.queue)
+    if reason:
+        return replace(run, stopped=reason)
+    stepped = _step(run, program, loader, budget)
+    return replace(
+        stepped.run,
+        trace=replace(
+            stepped.run.trace,
+            deps=run.trace.deps | stepped.deps,
+        ),
     )
 
 
@@ -1179,3 +1204,49 @@ def sampled(program: str, asg_dir: Path, budget: Budget = DEFAULT_BUDGET) -> Tra
     build did not select.
     """
     return traced(program, lambda member: _loaded(asg_dir, member), budget)
+
+
+Sink = Callable[[frozenset[Dep]], None]
+
+
+def _streamed_round(
+    run: _Run,
+    program: str,
+    loader: Loader,
+    budget: Budget,
+    sink: Sink,
+) -> _Run:
+    if _done(run, budget):
+        return run
+    reason = _queue_stop(run.queue)
+    if reason:
+        return replace(run, stopped=reason)
+    stepped = _step(run, program, loader, budget)
+    sink(stepped.deps)
+    return stepped.run
+
+
+def streamed(
+    program: str,
+    loader: Loader,
+    budget: Budget,
+    sink: Sink,
+) -> Trace:
+    """Like ``traced`` but writes each path's deps through ``sink`` immediately.
+
+    ``Trace.deps`` in the returned value is empty -- the deps are on disk, not
+    in memory. Everything else (coverage, dead_ends, paths) is populated.
+    """
+    return _closed(
+        reduce(
+            lambda run, _: _streamed_round(run, program, loader, budget, sink),
+            repeat(None, budget.paths),
+            _Run(),
+        ),
+        budget,
+    ).trace
+
+
+def sampled_streaming(program: str, asg_dir: Path, budget: Budget, sink: Sink) -> Trace:
+    """``streamed`` against the one ASG cache every other stage reads."""
+    return streamed(program, lambda member: _loaded(asg_dir, member), budget, sink)
