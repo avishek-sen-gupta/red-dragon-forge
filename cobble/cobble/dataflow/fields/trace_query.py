@@ -110,11 +110,7 @@ def _resolve(name: str, deps: Sequence[DepRow]) -> tuple[ByteRange, ...]:
 
 
 def _overlaps_any(extent: ByteRange, frontier: Sequence[ByteRange]) -> bool:
-    return any(extent.overlaps(f) or f.covers(extent) for f in frontier)
-
-
-def _covers_any(extent: ByteRange, frontier: Sequence[ByteRange]) -> bool:
-    return any(extent.covers(f) or f.covers(extent) for f in frontier)
+    return any(extent.overlaps(f) for f in frontier)
 
 
 @dataclass(frozen=True)
@@ -166,16 +162,45 @@ def _forward_step(deps: Sequence[DepRow], state: _State, depth: int) -> _State:
     )
 
 
+def _narrowed(source: ByteRange, target: ByteRange, wanted: ByteRange) -> ByteRange:
+    """The slice of ``source`` that corresponds to the ``wanted`` sub-range of
+    ``target``. When target and source are the same length (group move, commarea
+    binding), the offset relationship is 1:1. When they differ, the source is
+    returned as-is — narrowing a many-to-one conversion is not sound.
+    """
+    if target.length != source.length:
+        return source
+    offset = wanted.start - target.start
+    length = min(wanted.end, target.end) - max(wanted.start, target.start)
+    return ByteRange(
+        program=source.program,
+        region=source.region,
+        start=source.start + offset,
+        end=source.start + offset + length,
+        name=source.name,
+        exact=source.exact,
+        known=True,
+    )
+
+
+def _narrow_source(dep: DepRow, frontier: Sequence[ByteRange]) -> ByteRange:
+    """The source narrowed to the frontier bytes being traced."""
+    matched = tuple(f for f in frontier if dep.target.overlaps(f))
+    if not matched:
+        return dep.source
+    return _narrowed(dep.source, dep.target, matched[0])
+
+
 def _backward_step(deps: Sequence[DepRow], state: _State, depth: int) -> _State:
-    matched = tuple(dep for dep in deps if _covers_any(dep.target, state.frontier))
+    matched = tuple(dep for dep in deps if _overlaps_any(dep.target, state.frontier))
     new_hits = tuple(_hit_of(dep, depth) for dep in matched)
-    new_sources = tuple(
-        dep.source
+    narrowed = tuple(
+        _narrow_source(dep, state.frontier)
         for dep in matched
         if dep.source.known and _range_key(dep.source) not in state.seen
     )
-    new_keys = frozenset(_range_key(s) for s in new_sources)
-    deduped = tuple(dict((_range_key(s), s) for s in new_sources).values())
+    new_keys = frozenset(_range_key(s) for s in narrowed)
+    deduped = tuple(dict((_range_key(s), s) for s in narrowed).values())
     return _State(
         hits=(*state.hits, *new_hits),
         frontier=deduped,
