@@ -624,6 +624,11 @@ The report names, for every extent written on a sampled path, where its bytes
 came from and **which node in which member last wrote them**. That crossing
 chain is what the intra-program tables cannot carry.
 
+Progress goes to stderr, one line per sampled path carrying the nodes it ran, the
+cumulative branch coverage, the programs entered and the dead ends met, then a
+closing line naming why the run stopped. Watch the coverage figure: once it stops
+moving, more paths buy nothing and the ceiling is the graph's, not the budget's.
+
 It under-approximates, deliberately: a flow it does not report was not sampled,
 never "does not exist", and a loop body runs once. `--paths` and `--coverage`
 bound the sampling and the branch-coverage figure is printed with the answer, as

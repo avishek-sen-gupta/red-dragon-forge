@@ -24,6 +24,7 @@ change to ``cobol_memory``, which is vendored.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import cache, reduce
@@ -46,6 +47,8 @@ from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PATHS = 200
 DEFAULT_COVERAGE = 1.0
@@ -766,19 +769,46 @@ def _coverage(before: Coverage, walk: _Walk, loader: Loader) -> Coverage:
     )
 
 
+def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
+    """One line per sampled path, so a long run shows its coverage curve flattening
+    rather than showing nothing until the report is written.
+
+    Logged from here rather than from ``_round``'s early return: once the target is
+    met that return fires on every remaining path of the budget, and a run that
+    stopped at path 2 of 200 would say so 198 times.
+    """
+    found = run.trace.coverage
+    logger.info(
+        "trace: [%d/%d] %d nodes, %d/%d branches (%d%%), %d programs, %d dead ends",
+        run.trace.paths,
+        budget.paths,
+        len(walk.order),
+        len(found.taken),
+        found.total,
+        round(100 * found.fraction),
+        len(found.programs),
+        len(run.trace.dead_ends),
+    )
+    return run
+
+
 def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
     """One path, unless the coverage target is already met."""
     if run.trace.paths and run.trace.coverage.fraction >= budget.coverage:
         return run
     walk = _walked(_started(program, loader, run.cursors), budget.max_depth, loader)
-    return _Run(
-        trace=Trace(
-            deps=run.trace.deps | walk.deps,
-            dead_ends=run.trace.dead_ends | walk.dead_ends,
-            paths=run.trace.paths + 1,
-            coverage=_coverage(run.trace.coverage, walk, loader),
+    return _reported(
+        _Run(
+            trace=Trace(
+                deps=run.trace.deps | walk.deps,
+                dead_ends=run.trace.dead_ends | walk.dead_ends,
+                paths=run.trace.paths + 1,
+                coverage=_coverage(run.trace.coverage, walk, loader),
+            ),
+            cursors=walk.cursors,
         ),
-        cursors=walk.cursors,
+        walk,
+        budget,
     )
 
 
@@ -791,11 +821,36 @@ def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Tra
     Public, and taking a loader rather than a directory, so a caller can hand it
     graphs it built itself. That is the seam the stack rules are asserted through.
     """
-    return reduce(
-        lambda run, _: _round(run, program, loader, budget),
-        repeat(None, budget.paths),
-        _Run(),
+    return _closed(
+        reduce(
+            lambda run, _: _round(run, program, loader, budget),
+            repeat(None, budget.paths),
+            _Run(),
+        ),
+        budget,
     ).trace
+
+
+def _closed(run: _Run, budget: Budget) -> _Run:
+    """Why the run stopped, which the per-path lines cannot say. The two reasons ask
+    for opposite responses: a spent budget means raise ``--paths``, a met target
+    means this coverage is the ceiling.
+    """
+    found = run.trace.coverage
+    logger.info(
+        "trace: %d path%s, %d/%d branches (%d%%), %s",
+        run.trace.paths,
+        "" if run.trace.paths == 1 else "s",
+        len(found.taken),
+        found.total,
+        round(100 * found.fraction),
+        (
+            "coverage target met"
+            if found.fraction >= budget.coverage
+            else "path budget ran out"
+        ),
+    )
+    return run
 
 
 def visited_order(
