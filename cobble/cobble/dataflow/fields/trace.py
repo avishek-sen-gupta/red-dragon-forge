@@ -295,15 +295,17 @@ class Frame:
 
 @dataclass(frozen=True)
 class _Choice:
-    """One decision a path made: the arm it took, and how many it had to pick from.
+    """One decision a path made: the arm it took, and each arm's branch-coverage key.
 
-    The arm count is what says whether an untried arm is left, so it is recorded
-    rather than looked up again -- the same node under a different stack can offer a
-    different number.
+    The arms are recorded rather than looked up again -- the same node under a
+    different stack can offer a different set. Their count says whether an untried arm
+    is left, and their keys say which branch edge flipping to the next one would take,
+    which is what lets a queued plan be ordered before it runs. A decision at a node
+    coverage does not count carries empty keys.
     """
 
     taken: int
-    arms: int
+    arms: tuple[frozenset[tuple[str, str, str]], ...]
 
 
 @dataclass(frozen=True)
@@ -349,24 +351,102 @@ class _Walk:
 
 
 @dataclass(frozen=True)
-class _Run:
-    """The sampler's accumulator: the trace so far, and the plans not yet walked.
+class _Next:
+    """A plan not yet walked, and the branch edge its own flip will take.
 
-    ``pending`` is a queue, taken from the front and extended at the back, so a plan
-    that flips a shallow decision runs before one that flips a deep one. A stack here
-    would be plain depth-first search, which spends thousands of paths permuting the
-    tail of one route before it ever revisits the entry's own branch.
+    Knowing that edge before the walk is what lets the queue order plans by what they
+    would buy. Empty at a decision coverage does not count.
+    """
+
+    plan: tuple[int, ...] = ()
+    branch: frozenset[tuple[str, str, str]] = frozenset()
+
+
+@dataclass(frozen=True)
+class _Queue:
+    """The plans not yet walked, in two lanes, each taken from the front.
+
+    ``fresh`` holds the plans whose own flip takes a branch edge nothing has taken and
+    no other queued plan already promises to take; ``stale`` holds the rest, and is
+    drained once ``fresh`` empties. Nothing is ever dropped, so an empty queue still
+    means every route the re-entry rule admits was walked exactly once.
+
+    The lanes exist because insertion order is enormously redundant against coverage:
+    93083 plans pending on a real member flipped only 475 distinct branch edges, 202 of
+    them already taken, so path after path re-covered an arm some earlier path had
+    covered and the fraction froze between path 500 and path 2000. Within a lane the
+    order is still front-first, so a plan flipping a shallow decision runs before one
+    flipping a deep one; a stack instead of a queue would be plain depth-first search,
+    which permutes the tail of one route for thousands of paths before it revisits the
+    entry's own branch.
 
     It starts holding the empty plan -- the route where every decision takes its first
-    arm -- and an empty queue is exhaustion: every route has been walked.
+    arm.
+    """
+
+    fresh: tuple[_Next, ...] = (_Next(),)
+    stale: tuple[_Next, ...] = ()
+    promised: frozenset[tuple[str, str, str]] = frozenset()
+
+
+@dataclass(frozen=True)
+class _Run:
+    """The sampler's accumulator: the trace so far, and the plans not yet walked.
 
     ``stopped`` is why sampling ended when the budget and the coverage target were not
     the reason, carried out rather than re-derived by the reporter.
     """
 
     trace: Trace = Trace()
-    pending: tuple[tuple[int, ...], ...] = ((),)
+    queue: _Queue = _Queue()
     stopped: str = ""
+
+
+def _empty(queue: _Queue) -> bool:
+    return not queue.fresh and not queue.stale
+
+
+def _head(queue: _Queue) -> _Next:
+    """The next plan to walk. Only meaningful on a queue that is not empty."""
+    return queue.fresh[0] if queue.fresh else queue.stale[0]
+
+
+def _drained(queue: _Queue) -> _Queue:
+    if queue.fresh:
+        return replace(queue, fresh=queue.fresh[1:])
+    return replace(queue, stale=queue.stale[1:])
+
+
+def _filed(queue: _Queue, taken: frozenset[tuple[str, str, str]], one: _Next) -> _Queue:
+    """One generated plan into the lane its flip earns."""
+    if one.branch and not one.branch <= (taken | queue.promised):
+        return replace(
+            queue,
+            fresh=(*queue.fresh, one),
+            promised=queue.promised | one.branch,
+        )
+    return replace(queue, stale=(*queue.stale, one))
+
+
+def _extended(
+    queue: _Queue, taken: frozenset[tuple[str, str, str]], nexts: Sequence[_Next]
+) -> _Queue:
+    """The queue with one path's alternatives filed into their lanes.
+
+    The batch is sorted on its own and spliced once. Filing straight into the queue
+    would copy a hundred-thousand-entry tuple per generated plan, and a path generates
+    hundreds.
+    """
+    batch = reduce(
+        lambda held, one: _filed(held, taken, one),
+        nexts,
+        _Queue(fresh=(), promised=queue.promised),
+    )
+    return _Queue(
+        fresh=(*queue.fresh, *batch.fresh),
+        stale=(*queue.stale, *batch.stale),
+        promised=batch.promised,
+    )
 
 
 def _open(stack: Sequence[Frame], program: str, node: str) -> bool:
@@ -557,7 +637,13 @@ def _sampled(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> _Walk:
         walk,
         loaded,
         edges[index],
-        (*walk.made, _Choice(taken=index, arms=len(edges))),
+        (
+            *walk.made,
+            _Choice(
+                taken=index,
+                arms=tuple(_branch(loaded, walk.node, one) for one in edges),
+            ),
+        ),
     )
 
 
@@ -572,9 +658,7 @@ def _advanced(
     )
 
 
-def _alternatives(
-    plan: tuple[int, ...], made: Sequence[_Choice]
-) -> tuple[tuple[int, ...], ...]:
+def _alternatives(plan: tuple[int, ...], made: Sequence[_Choice]) -> tuple[_Next, ...]:
     """The plans one arm away from the path that just ran, shallowest first.
 
     Only from the position this plan's own last flip fixed, and deeper. Anything
@@ -582,9 +666,12 @@ def _alternatives(
     again would re-walk a route and the enumeration would stop being finite.
     """
     return tuple(
-        (*(one.taken for one in made[:at]), made[at].taken + 1)
+        _Next(
+            plan=(*(one.taken for one in made[:at]), made[at].taken + 1),
+            branch=made[at].arms[made[at].taken + 1],
+        )
         for at in range(max(len(plan) - 1, 0), len(made))
-        if made[at].taken + 1 < made[at].arms
+        if made[at].taken + 1 < len(made[at].arms)
     )
 
 
@@ -646,19 +733,46 @@ def _unwound(stack: tuple[Frame, ...]) -> tuple[Frame, ...]:
     return stack[: crossings[-1] + 1] if crossings else ()
 
 
+def _resumable(stack: tuple[Frame, ...]) -> tuple[Frame, ...]:
+    """The stack cut back to the innermost PERFORM frame that has a resume point.
+
+    Only frames above the innermost crossing one are candidates, so a crossing
+    frame's owed write-back is never skipped over.
+    """
+    crossings = tuple(index for index, frame in enumerate(stack) if frame.crossing)
+    floor = crossings[-1] + 1 if crossings else 0
+    performs = tuple(
+        index
+        for index in range(floor, len(stack))
+        if not stack[index].crossing and stack[index].resume
+    )
+    return stack[: performs[-1] + 1] if performs else ()
+
+
 def _ended(walk: _Walk) -> _Walk:
-    """Nowhere left to go, unless a crossing frame owes its caller a return.
+    """Nowhere left to go, unless an open frame owes somewhere a return.
+
+    A PERFORMed paragraph whose only exits the re-entry rule refuses is not the end
+    of the path: its performer's resume point is right there on the stack, and no
+    RETURN edge is needed to use it. Discarding the path instead loses every route
+    past the performer -- measured at 487 of 500 path deaths on a real member.
+    """
+    resumable = _resumable(walk.stack)
+    if resumable:
+        return replace(walk, node=resumable[-1].resume, stack=resumable[:-1])
+    return _handed_back(walk, _unwound(walk.stack))
+
+
+def _handed_back(walk: _Walk, unwound: tuple[Frame, ...]) -> _Walk:
+    """The path back in the caller that a crossing frame owes its bytes to.
 
     Seeding the caller's window back needs no conversion and no flow edge: the two
-    sides were the same bytes all along. An empty resume point is a call that was
-    the last thing its caller did, so there is nothing to come back to.
+    sides were the same bytes all along. An empty resume point is a call that was the
+    last thing its caller did, so there is nothing to come back to.
     """
-    unwound = _unwound(walk.stack)
-    if not unwound:
+    if not (unwound and unwound[-1].returns and unwound[-1].resume):
         return replace(walk, running=False)
     frame = unwound[-1]
-    if not (frame.returns and frame.resume):
-        return replace(walk, running=False)
     return replace(
         walk,
         node=frame.resume,
@@ -884,18 +998,24 @@ def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
     """
     if run.stopped or (run.trace.paths and _met(run, budget)):
         return run
-    if not run.pending:
+    if _empty(run.queue):
         return replace(run, stopped=EXHAUSTED)
-    walk = _walked(_started(program, loader, run.pending[0]), budget.max_depth, loader)
+    head = _head(run.queue)
+    walk = _walked(_started(program, loader, head.plan), budget.max_depth, loader)
+    coverage = _coverage(run.trace.coverage, walk, loader)
     return _reported(
         _Run(
             trace=Trace(
                 deps=run.trace.deps | walk.deps,
                 dead_ends=run.trace.dead_ends | walk.dead_ends,
                 paths=run.trace.paths + 1,
-                coverage=_coverage(run.trace.coverage, walk, loader),
+                coverage=coverage,
             ),
-            pending=(*run.pending[1:], *_alternatives(run.pending[0], walk.made)),
+            queue=_extended(
+                _drained(run.queue),
+                coverage.taken,
+                _alternatives(head.plan, walk.made),
+            ),
         ),
         walk,
         budget,
