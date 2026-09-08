@@ -1068,11 +1068,40 @@ def _met(run: _Run, budget: Budget) -> bool:
     return run.trace.coverage.fraction >= budget.coverage
 
 
+def _reachable_programs(
+    program: str, loader: Loader, visited: frozenset[str]
+) -> frozenset[str]:
+    """All programs reachable from ``program`` via alias chains."""
+    if program in visited:
+        return visited
+    loaded = loader(program)
+    if not loaded.cfg.nodes:
+        return visited
+    callees = frozenset(
+        alias.callee
+        for aliases in loaded.aliases.values()
+        for alias in aliases
+        if alias.callee and alias.callee not in visited
+    )
+    return reduce(
+        lambda seen, callee: _reachable_programs(callee, loader, seen),
+        callees,
+        visited | {program},
+    )
+
+
+def _total_nodes(program: str, loader: Loader) -> int:
+    return sum(
+        len(loader(p).cfg.nodes)
+        for p in sorted(_reachable_programs(program, loader, frozenset()))
+    )
+
+
 def _resolved_depth(budget: Budget, loader: Loader, program: str) -> Budget:
-    """Fill in max_depth from the entry program's CFG when the caller left it at 0."""
+    """Fill in max_depth from the reachable programs' total nodes when left at 0."""
     if budget.max_depth:
         return budget
-    return replace(budget, max_depth=len(loader(program).cfg.nodes) * 5)
+    return replace(budget, max_depth=_total_nodes(program, loader) * 2)
 
 
 def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Trace:
