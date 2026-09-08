@@ -9,7 +9,9 @@ them together.**
 
 Three independent coprocessor runtimes, each emulating one legacy COBOL execution
 environment on top of [RedDragon](https://github.com/avishek-sen-gupta/red-dragon) (a
-general-purpose multi-language interpreter, vendored separately, never modified by this repo):
+general-purpose multi-language interpreter, vendored separately, never modified by this repo),
+the composition layer that assembles them, and a static analyser that reads the same corpora
+without running them:
 
 - **[`cicada/`](cicada/)** — the CICS runtime: pseudo-conversational transaction dispatch,
   VSAM KSDS file control, BMS screen handling.
@@ -22,12 +24,19 @@ general-purpose multi-language interpreter, vendored separately, never modified 
   (`interpreter.project.coprocessor_compile`, contributed to RedDragon itself). See
   [`docs/design/2026-07-04-cics-sql-composition-design.md`](docs/design/2026-07-04-cics-sql-composition-design.md)
   for the composition design.
+- **[`cobble/`](cobble/)** — corpus onboarding and whole-system knowledge-graph extraction,
+  analysis only: it parses and walks the ASG, and never lowers to IR or executes. On top of the
+  program/file/transaction graph it builds field-level byte dataflow — a source-level CFG,
+  variable dependency graphs, and a byte-range trace that follows a commarea across LINK
+  boundaries. Its pipeline runs from `cobble/` as `make parse CONFIG=…` then
+  `make build CONFIG=…` (TOML configs), or via the `cobble-*` entry points; the parse is the
+  only stage that starts a JVM, and every stage after it reads the one ASG cache it wrote.
 
-Whole-system knowledge-graph extraction used to live here as a `knowledge_graph/` package,
-with per-runtime extractors inside Cicada and Jackal. It was deleted ahead of folding the
-standalone **cobble** repository into this workspace: cobble is a VM-free successor to that
-pipeline, not a lagging copy of it, so the graph stack arrives with cobble rather than being
-merged into its own ancestor. See
+Whole-system knowledge-graph extraction used to live here as a `knowledge_graph/` package, with
+per-runtime extractors inside Cicada and Jackal. It was deleted ahead of folding the standalone
+**cobble** repository into this workspace: cobble was a VM-free successor to that pipeline, not
+a lagging copy of it, so the graph stack arrived with cobble rather than being merged into its
+own ancestor — and has since grown the byte-level dataflow stack above. See
 [`docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md`](docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md).
 
 ## Repository structure
@@ -38,11 +47,11 @@ still walks back across the merge boundary). Each keeps its own `CLAUDE.md`, `Ma
 `pyproject.toml`, and test suite, and remains fully independently buildable and testable —
 merging them didn't couple their release cadences or make them depend on each other.
 Cross-package imports are enforced against by a shared root
-[`.importlinter`](.importlinter) contract; only `red_dragon_forge/` is allowed to import
-from more than one of them — `red_dragon_forge/` and `cobble/`. Cobble carries two contracts
-of its own: it is static analysis, so it must not import any runtime (cicada's dispatcher/VSAM/
-BMS/strategy, jackal's runner/catalog/IDCAMS, squall beyond `statements`), and nothing in the
-workspace may import it. See
+[`.importlinter`](.importlinter) contract; only `red_dragon_forge/` and `cobble/` may import
+from more than one of them. Cobble carries three contracts of its own: it is static analysis,
+so it must not import the interpreter, nor any runtime (cicada's dispatcher/VSAM/BMS/strategy,
+jackal's runner/catalog/IDCAMS, squall beyond `statements`), and nothing in the workspace may
+import it. See
 [`docs/superpowers/specs/2026-07-05-monorepo-migration-design.md`](docs/superpowers/specs/2026-07-05-monorepo-migration-design.md)
 for the full migration design and rationale.
 
@@ -82,6 +91,7 @@ Each package is independently testable from its own directory:
 cd cicada && make test    # unit + integration + CardDemo e2e
 cd squall && make test    # needs SQUALL_DB2_DSN + a running Db2 (make db2-up)
 cd jackal && make test
+cd cobble && make test    # no JVM, no Db2 — static analysis only
 ```
 
 Or run every package's suite in one pass from the repo root, building the shared ProLeap +
