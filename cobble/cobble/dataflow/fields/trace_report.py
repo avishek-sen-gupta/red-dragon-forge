@@ -20,7 +20,6 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.trace import (
     DEFAULT_COVERAGE,
-    DEFAULT_MAX_DEPTH,
     DEFAULT_PATHS,
     Budget,
     DeadEnd,
@@ -167,10 +166,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--max-depth",
-        type=_positive,
-        default=DEFAULT_MAX_DEPTH,
+        type=int,
+        default=0,
         metavar="N",
-        help="nodes one path may run before it is cut short",
+        help="nodes one path may visit (default: 2x the entry program's CFG nodes)",
     )
     return parser
 

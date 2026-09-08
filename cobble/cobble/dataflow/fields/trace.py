@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PATHS = 200
 DEFAULT_COVERAGE = 1.0
-DEFAULT_MAX_DEPTH = 5000
+DEFAULT_MAX_DEPTH = 50000
 
 CROSSING_VERBS = (LINK_TRANSFER, XCTL_TRANSFER)
 
@@ -1066,6 +1066,13 @@ def _met(run: _Run, budget: Budget) -> bool:
     return run.trace.coverage.fraction >= budget.coverage
 
 
+def _resolved_depth(budget: Budget, loader: Loader, program: str) -> Budget:
+    """Fill in max_depth from the entry program's CFG when the caller left it at 0."""
+    if budget.max_depth:
+        return budget
+    return replace(budget, max_depth=len(loader(program).cfg.nodes) * 2)
+
+
 def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Trace:
     """Sample paths from ``program``'s entry until the budget or the coverage target.
 
@@ -1075,10 +1082,11 @@ def traced(program: str, loader: Loader, budget: Budget = DEFAULT_BUDGET) -> Tra
     Public, and taking a loader rather than a directory, so a caller can hand it
     graphs it built itself. That is the seam the stack rules are asserted through.
     """
+    resolved = _resolved_depth(budget, loader, program)
     return _closed(
         reduce(
-            lambda run, _: _round(run, program, loader, budget),
-            repeat(None, budget.paths),
+            lambda run, _: _round(run, program, loader, resolved),
+            repeat(None, resolved.paths),
             _Run(),
         ),
         budget,
@@ -1240,13 +1248,14 @@ def streamed(
     ``Trace.deps`` in the returned value is empty -- the deps are on disk, not
     in memory. Everything else (coverage, dead_ends, paths) is populated.
     """
+    resolved = _resolved_depth(budget, loader, program)
     return _closed(
         reduce(
-            lambda run, _: _streamed_round(run, program, loader, budget, sink),
-            repeat(None, budget.paths),
+            lambda run, _: _streamed_round(run, program, loader, resolved, sink),
+            repeat(None, resolved.paths),
             _Run(),
         ),
-        budget,
+        resolved,
     ).trace
 
 
