@@ -618,7 +618,9 @@ over the same byte-provenance model, threads a single store with no join, and
 steps into a `LINK`ed callee by binding the callee's `DFHCOMMAREA` onto the
 caller's commarea window — so a write-back needs no mechanism, because the two
 sides are the same storage. Because a path has a stack, it also takes only the
-`RETURN` edge back to the site that actually performed the paragraph.
+`RETURN` edge back to the site that actually performed the paragraph — and when a
+performed paragraph has no exit the walk will admit, the stack still says where it
+came from, so the path resumes at the performer instead of ending there.
 
 The report names, for every extent written on a sampled path, where its bytes
 came from and **which node in which member last wrote them**. That crossing
@@ -639,6 +641,13 @@ the queue is drained front-first, so a plan flipping a shallow branch runs befor
 one flipping a deep branch. No local per-node rule can do this: a deep edge needs
 a specific *combination* of twenty choices, and a chooser that decides each branch
 on its own cannot enumerate combinations.
+
+Past its own end a plan keeps taking the first arm, so which arm is first decides
+how far every route gets: arms whose target goes nowhere are ordered last. The CFG
+gives every CICS command with no `NOHANDLE` and no `RESP` a raising arm that is
+such a dead stop, because naming the armed handler is a reaching-definitions
+question the lowering declines to answer, and leaving that arm first would end
+every route at the first such command past its last flip.
 
 Progress goes to stderr, one line per sampled path carrying the nodes it ran, the
 cumulative branch coverage, the programs entered and the dead ends met, then a

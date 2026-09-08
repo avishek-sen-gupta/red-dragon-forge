@@ -466,6 +466,99 @@ def test_an_arm_that_ends_the_path_is_taken_last_not_first():
     assert ("TPROGA", "R/1", "TRUE") not in found.coverage.taken
 
 
+STRANDED = _only(
+    "TPROGA",
+    (
+        _node("A/0"),
+        _node("A/1", NodeKind.TEST),
+        _node("A/2"),
+        _node("A/3"),
+        _node("B/0"),
+        _node("B/1", NodeKind.ASSIGN),
+    ),
+    (
+        _edge("A/0", "B/0", EdgeKind.PERFORM),
+        _edge("A/0", "A/1"),
+        _edge("A/1", "A/2", EdgeKind.TRUE),
+        _edge("A/1", "A/3", EdgeKind.FALSE),
+        _edge("B/0", "B/1"),
+        _edge("B/1", "A/0"),
+    ),
+    "A/0",
+)
+"""A performed paragraph whose exit falls through to a node the performer already
+ran, and which ``build.py`` gave no RETURN edge for this site. The re-entry rule
+refuses the only exit, so the paragraph has nowhere to go on its own."""
+
+
+def test_a_performed_paragraph_with_no_way_out_returns_to_its_performer():
+    """The performer's resume point is right there on the stack, so a paragraph that
+    runs out of admissible exits owes a return rather than ending the path.
+
+    Discarding it instead loses every route past the performer. On a real member 487
+    of 500 path deaths were exactly this: a PERFORM frame with a resume point, on a
+    node whose one fall-through the re-entry rule refused.
+    """
+    found = traced("TPROGA", _loader(STRANDED), Budget(paths=1, coverage=1.0))
+
+    assert ("TPROGA", "A/1", "TRUE") in found.coverage.taken
+
+    order = visited_order("TPROGA", _loader(STRANDED), Budget(paths=1))
+    assert order.index("B/1") < order.index("A/1")
+
+
+REDUNDANT = _only(
+    "TPROGA",
+    (
+        _node("M/0", NodeKind.CALL),
+        _node("M/1", NodeKind.CALL),
+        _node("M/2"),
+        _node("M/3", NodeKind.TEST),
+        _node("M/4"),
+        _node("M/5"),
+        _node("S/0", NodeKind.TEST),
+        _node("S/1"),
+        _node("S/2"),
+        _node("S/end"),
+    ),
+    (
+        _edge("M/0", "M/1"),
+        _edge("M/0", "S/0", EdgeKind.PERFORM),
+        _edge("M/1", "M/2"),
+        _edge("M/1", "S/0", EdgeKind.PERFORM),
+        _edge("M/2", "M/3"),
+        _edge("M/3", "M/4", EdgeKind.TRUE),
+        _edge("M/3", "M/5", EdgeKind.FALSE),
+        _edge("S/0", "S/1", EdgeKind.TRUE),
+        _edge("S/0", "S/2", EdgeKind.FALSE),
+        _edge("S/1", "S/end"),
+        _edge("S/2", "S/end"),
+        _edge("S/end", "M/1", EdgeKind.RETURN),
+        _edge("S/end", "M/2", EdgeKind.RETURN),
+    ),
+    "M/0",
+)
+"""One test inside a paragraph performed twice, and one after it. The base route
+meets ``S/0`` at two decisions, so two of its three alternatives flip the very same
+branch edge."""
+
+
+def test_two_plans_flipping_one_branch_edge_do_not_both_run_before_a_third():
+    """Both are kept -- the second is walked once the first lane empties -- but the
+    plan reaching an edge nothing has promised goes first, so coverage climbs on every
+    path instead of stalling on a route already covered.
+
+    In insertion order the duplicate runs second and buys nothing. That redundancy is
+    the whole plateau: on a real member 93083 pending plans flipped only 475 distinct
+    branch edges, 202 of them already taken, and coverage did not move between path
+    500 and path 2000.
+    """
+    found = traced("TPROGA", _loader(REDUNDANT), Budget(paths=3, coverage=1.0))
+
+    assert found.paths == 3
+    assert found.coverage.fraction == 1.0
+
+
 UNREACHED = _only(
     "TPROGA",
     (
