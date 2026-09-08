@@ -10,6 +10,7 @@ rebase that is off by a byte agrees with a fixture and disagrees with COBOL.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import replace
 from pathlib import Path
@@ -1254,7 +1255,7 @@ def test_the_report_groups_by_program_and_names_the_site_each_was_entered_throug
 ):
     from cobble.dataflow.fields.trace_report import cli
 
-    out = tmp_path / "trace.txt"
+    out = tmp_path / "trace.jsonl"
     assert (
         cli(
             [
@@ -1265,18 +1266,21 @@ def test_the_report_groups_by_program_and_names_the_site_each_was_entered_throug
                 str(out),
                 "--paths",
                 "8",
-                "--format",
-                "text",
             ]
         )
         == 0
     )
-    written = out.read_text(encoding="utf-8")
+    rows = [
+        json.loads(line)
+        for line in out.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    programs = {r["program"] for r in rows if r.get("kind") == "dep"}
+    vias = {r["via"] for r in rows if r.get("kind") == "dep" and r["via"]}
 
-    assert "TPROGA\n" in written
-    assert "TPROGB   via TPROGA/LINK-PARA/" in written
-    assert "branch coverage:" in written
-    assert "programs entered" in written
+    assert "TPROGA" in programs
+    assert any("TPROGA/LINK-PARA/" in v for v in vias)
+    assert any(r["kind"] == "coverage" for r in rows)
 
 
 def test_the_report_states_its_limits_where_a_reader_will_see_them(
@@ -1287,15 +1291,17 @@ def test_the_report_states_its_limits_where_a_reader_will_see_them(
     it."""
     from cobble.dataflow.fields.trace_report import cli
 
-    out = tmp_path / "trace.txt"
-    assert (
-        cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out), "--format", "text"])
-        == 0
-    )
-    written = out.read_text(encoding="utf-8")
+    out = tmp_path / "trace.jsonl"
+    assert cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out)]) == 0
+    rows = [
+        json.loads(line)
+        for line in out.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    limits = [r for r in rows if r.get("kind") == "limits"]
 
-    assert "limits:" in written
-    assert 'absence means "not sampled"' in written
+    assert limits
+    assert any("not sampled" in item for item in limits[0]["items"])
 
 
 def test_a_definer_that_crossed_a_call_is_spelled_with_the_member_it_is_in(
@@ -1305,14 +1311,18 @@ def test_a_definer_that_crossed_a_call_is_spelled_with_the_member_it_is_in(
     in the callee as the last writer of its bytes."""
     from cobble.dataflow.fields.trace_report import cli
 
-    out = tmp_path / "trace.txt"
-    assert (
-        cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out), "--format", "text"])
-        == 0
-    )
-    written = out.read_text(encoding="utf-8")
+    out = tmp_path / "trace.jsonl"
+    assert cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out)]) == 0
+    rows = [
+        json.loads(line)
+        for line in out.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    definers = [
+        d for r in rows if r.get("kind") == "dep" for d in r.get("definers", ())
+    ]
 
-    assert "defined at TPROGB/SUB-PARA/" in written
+    assert any("TPROGB/SUB-PARA/" in d for d in definers)
 
 
 def test_a_missing_cache_directory_is_refused_with_a_status_and_not_a_traceback(
