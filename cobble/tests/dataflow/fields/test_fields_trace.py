@@ -15,10 +15,12 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from cobble.dataflow.fields.aliases import NOT_IN_CACHE
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.fields.state import Source, write
 from cobble.dataflow.fields.trace import (
     NO_WINDOW,
+    NOT_PARSED,
     RE_ENTRY,
     Budget,
     DeadEnd,
@@ -707,6 +709,65 @@ def parsed_kill(tmp_path_factory) -> Path:
 @pytest.fixture(scope="module")
 def crossed_kill(parsed_kill: Path) -> Trace:
     return sampled("TPROGE", parsed_kill, Budget(paths=8))
+
+
+@pytest.fixture(scope="module")
+def parsed_without_callee(tmp_path_factory) -> Path:
+    """The caller alone. A real corpus selection routinely LINKs members outside it,
+    so a callee with no ASG cache is the common case, not a broken one."""
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    root = tmp_path_factory.mktemp("trace_unparsed")
+    cache = root / "asg"
+    cache.mkdir()
+    path = root / "TPROGA.cbl"
+    path.write_text(TRACE_CALLER, encoding="utf-8")
+    result = parse_one(
+        Job(path, cache / "TPROGA.json"), str(_bridge_jar()), (), ("cpy",)
+    )
+    assert result.ok, result.error
+    return cache
+
+
+@pytest.fixture(scope="module")
+def crossed_without_callee(parsed_without_callee: Path) -> Trace:
+    return sampled("TPROGA", parsed_without_callee, Budget(paths=8))
+
+
+def test_a_callee_that_was_never_parsed_is_a_dead_end_not_a_crash(
+    crossed_without_callee,
+):
+    """``_called`` asks the loader for the callee before it consults the refusal, so
+    a member with no cache file reaches the loader however the row is marked."""
+    (end,) = [one for one in crossed_without_callee.dead_ends if one.callee == "TPROGB"]
+
+    assert end.reason == NOT_IN_CACHE
+    assert end.program == "TPROGA"
+
+
+def test_the_loader_reports_an_absent_cache_file_rather_than_raising(tmp_path):
+    """The loader is total: every reason a member cannot be entered arrives as a
+    ``Loaded.reason`` that ``_refusal`` can rank, never as an exception that ends a
+    run of hundreds of paths on one unparsed callee."""
+    refused = _loaded(tmp_path, "TPROGZ")
+
+    assert refused.reason.startswith(NOT_PARSED)
+    assert not refused.entry
+
+
+def test_the_caller_runs_on_past_a_callee_that_was_never_parsed(
+    crossed_without_callee,
+):
+    """An opaque block: the call site credits the commarea to ``%CALL:<program>``
+    and control comes straight back, so the statements after it are still sampled."""
+    (dep,) = [
+        one
+        for one in crossed_without_callee.deps
+        if one.program == "TPROGA" and one.target.field_name == "WS-SINK"
+    ]
+
+    assert str(dep.source) == "WS-IN-RESULT@working_storage[4:8]"
+    assert [one for one in dep.definers if one.startswith("TPROGA/LINK-PARA/")]
 
 
 def test_a_callee_write_kills_the_callers_old_definition(crossed_kill):

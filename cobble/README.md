@@ -624,6 +624,12 @@ The report names, for every extent written on a sampled path, where its bytes
 came from and **which node in which member last wrote them**. That crossing
 chain is what the intra-program tables cannot carry.
 
+A callee the parse never covered is an opaque block, not an error: the site is
+listed under `dead ends` with the reason the alias table gives it
+(`callee-not-in-cache` for a member with no ASG file), the commarea it passed is
+credited to `%CALL:<program>`, and the caller's path runs on past the call. Any
+corpus selection `LINK`s outside itself, so this is the common case.
+
 Progress goes to stderr, one line per sampled path carrying the nodes it ran, the
 cumulative branch coverage, the programs entered and the dead ends met, then a
 closing line naming why the run stopped. Watch the coverage figure: once it stops
