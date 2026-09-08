@@ -220,20 +220,28 @@ def _hit_sort_key(hit: _Hit) -> tuple[int, str]:
     return (hit.depth, hit.target_text)
 
 
+def _display_text(hit: _Hit, direction: str) -> str:
+    """The extent or origin to show for the far end of this edge."""
+    if direction == FORWARD:
+        return hit.target_text
+    return hit.origin if hit.origin else hit.source_text
+
+
 def _format_hit(direction: str, hit: _Hit) -> str:
     arrow = "->" if direction == FORWARD else "<-"
-    text = hit.target_text if direction == FORWARD else hit.source_text
-    suffix = f"  [{hit.origin}]" if hit.origin else ""
+    text = _display_text(hit, direction)
+    suffix = f"  [{hit.origin}]" if hit.origin and direction == FORWARD else ""
     return f"{'  ' * hit.depth}{arrow} {text}  at {hit.site}{suffix}"
 
 
 def _format_hits(
     direction: str, roots: Sequence[ByteRange], hits: Sequence[_Hit]
 ) -> tuple[str, ...]:
-    return (
-        *(str(r) for r in roots),
-        *(_format_hit(direction, hit) for hit in sorted(hits, key=_hit_sort_key)),
+    formatted = tuple(
+        _format_hit(direction, hit) for hit in sorted(hits, key=_hit_sort_key)
     )
+    deduped = tuple(dict.fromkeys(formatted))
+    return (*(str(r) for r in roots), *deduped)
 
 
 def query(

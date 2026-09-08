@@ -306,5 +306,5 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-09-07-path-sampling-trace.md
   checksum: 7ae612136e2891267844041a618027c5e1089c0008f98b6a4a0cd37e0bfa46cd
 - filename: cobble/cobble/dataflow/fields/trace_query.py
-  checksum: 22047b3de6069c489bb2371aa023941a3ef205a3558220e7db3f0e83a90181d2
+  checksum: 6e370e319381394bbc70cb5e48c395b235ef0e8a5ba4a417ca29a539939df02c
 version: "1.0"
