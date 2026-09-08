@@ -428,6 +428,44 @@ def test_every_route_is_walked_once_and_then_the_run_stops():
     assert found.coverage.taken == frozenset(_branch_edges(DEEP.cfg))
 
 
+RAISING = _only(
+    "TPROGA",
+    (
+        _node("R/0"),
+        _node("R/1", NodeKind.TEST),
+        _node("R/dispatch", NodeKind.CALL),
+        _node("R/2", NodeKind.TEST),
+        _node("R/3"),
+        _node("R/4"),
+    ),
+    (
+        _edge("R/0", "R/1"),
+        _edge("R/1", "R/dispatch", EdgeKind.TRUE),
+        _edge("R/1", "R/2", EdgeKind.FALSE),
+        _edge("R/2", "R/3", EdgeKind.TRUE),
+        _edge("R/2", "R/4", EdgeKind.FALSE),
+    ),
+    "R/0",
+)
+"""``desugar._raisable``'s shape: a CICS command with no NOHANDLE and no RESP is a
+two-arm test whose FIRST arm is a ``#dispatch`` stub with no exits, because naming
+the armed handler is a reaching-definitions question desugar declines to answer."""
+
+
+def test_an_arm_that_ends_the_path_is_taken_last_not_first():
+    """The default arm past a plan's end must not be one that ends the path at once.
+
+    Edge order puts the raising arm first, so defaulting to it would end every path
+    at the first CICS command past its last flip -- and since every plan continues
+    with defaults, no route would ever reach what lies beyond. On a real member that
+    bounded the walk to 663 of 9030 reachable nodes.
+    """
+    found = traced("TPROGA", _loader(RAISING), Budget(paths=1, coverage=1.0))
+
+    assert ("TPROGA", "R/2", "TRUE") in found.coverage.taken
+    assert ("TPROGA", "R/1", "TRUE") not in found.coverage.taken
+
+
 UNREACHED = _only(
     "TPROGA",
     (
