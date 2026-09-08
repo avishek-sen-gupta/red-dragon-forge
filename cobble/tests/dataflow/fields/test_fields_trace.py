@@ -10,6 +10,7 @@ rebase that is off by a byte agrees with a fixture and disagrees with COBOL.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -938,3 +939,33 @@ def test_fraction_validator_rejects_out_of_range_fractions():
         _fraction("1.1")
     with pytest.raises(argparse.ArgumentTypeError):
         _fraction("-0.1")
+
+
+def test_each_sampled_path_logs_a_progress_line(caplog):
+    """A run of any size is otherwise silent until the report is written, so the
+    coverage figure a reader needs to judge --paths arrives only after the run it
+    would have changed."""
+    caplog.set_level(logging.INFO, logger="cobble.dataflow.fields.trace")
+
+    traced("TPROGA", _loader(LOOP), Budget(paths=50, coverage=1.0))
+
+    paths = [one for one in caplog.messages if one.startswith("trace: [")]
+    assert len(paths) == 2
+    assert paths[0].startswith("trace: [1/50]")
+    assert paths[1].startswith("trace: [2/50]")
+    assert "2/2 branches (100%)" in paths[1]
+
+
+def test_the_closing_line_separates_a_met_target_from_a_spent_budget(caplog):
+    """The per-path lines cannot say why the run stopped, and the two reasons call
+    for opposite responses: raise --paths, or accept the coverage as the ceiling."""
+    caplog.set_level(logging.INFO, logger="cobble.dataflow.fields.trace")
+
+    traced("TPROGA", _loader(LOOP), Budget(paths=50, coverage=1.0))
+    (met,) = [one for one in caplog.messages if one.startswith("trace: 2 paths")]
+    assert "coverage target met" in met
+
+    caplog.clear()
+    traced("TPROGA", _loader(LOOP), Budget(paths=1, coverage=1.0))
+    (spent,) = [one for one in caplog.messages if one.startswith("trace: 1 path")]
+    assert "path budget ran out" in spent

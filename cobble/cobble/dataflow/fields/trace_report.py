@@ -14,10 +14,12 @@ where someone reading an answer will actually meet them.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.trace import (
     DEFAULT_COVERAGE,
@@ -29,6 +31,8 @@ from cobble.dataflow.fields.trace import (
     loadable,
     sampled,
 )
+
+logger = logging.getLogger(__name__)
 
 LIMITS = (
     "",
@@ -191,13 +195,14 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def cli(argv: Sequence[str] = ()) -> int:
+    configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
     if not arguments.asg_dir.is_dir():
-        sys.stderr.write(f"trace: !! no ASG cache at {arguments.asg_dir}\n")
+        logger.error("trace: !! no ASG cache at %s", arguments.asg_dir)
         return 2
     refused = loadable(arguments.asg_dir, arguments.program)
     if refused:
-        sys.stderr.write(f"trace: !! cannot trace {arguments.program}: {refused}\n")
+        logger.error("trace: !! cannot trace %s: %s", arguments.program, refused)
         return 2
     trace = sampled(
         arguments.program,
