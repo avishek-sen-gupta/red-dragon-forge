@@ -52,6 +52,7 @@ cobble-fields = "cobble.dataflow.fields.build_corpus:main"
 cobble-fields-query = "cobble.dataflow.fields.query:main"
 cobble-fields-trace = "cobble.dataflow.fields.trace_report:main"
 cobble-trace-query = "cobble.dataflow.fields.trace_query:main"
+cobble-bms-metadata = "cobble.bms_metadata:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
 # exists at all -- `uv run diagnose-copybooks` needs an installed entry point,
