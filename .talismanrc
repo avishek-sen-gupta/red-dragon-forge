@@ -309,4 +309,6 @@ fileignoreconfig:
   checksum: 6108bd7683fd3967ba20868327b0a67c34b8deb56bbdd4a79608ec8bcf3442bf
 - filename: cobble/cobble/dataflow/fields/trace_report.py
   checksum: 0580c688d0e812601327c0feab01be95c5fed5060ccc290e631724e5deffb9db
+- filename: cobble/cobble/dataflow/fields/targeted.py
+  checksum: 0fa86bc73ed2ae0c839d2825ded0cf702dc9a3b3ee14a96c9fc4215335643eee
 version: "1.0"
