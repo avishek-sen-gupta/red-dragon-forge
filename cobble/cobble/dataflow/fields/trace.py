@@ -278,15 +278,19 @@ class Loaded:
 Loader = Callable[[str], Loaded]
 
 
+LOOP_ITERATIONS = 2
+
+
 @dataclass(frozen=True)
 class Frame:
-    """One open invocation: where it resumes, and which nodes it has already run.
+    """One open invocation: where it resumes, and how many times each node has run.
 
     Popped whole on return, which is what makes the re-entry rule right in all
     three of its cases. A paragraph's visited nodes leave with its frame, so a
     second PERFORM of the same paragraph starts clean; a frame still open still
     forbids re-entry, which covers a loop's back edge, a recursive PERFORM and a
-    LINK cycle with one rule.
+    LINK cycle with one rule. The count allows a configurable number of loop
+    iterations before the re-entry rule fires.
     """
 
     program: str
@@ -295,7 +299,7 @@ class Frame:
     crossing: bool = False
     returns: bool = False
     window: Window = NO_WINDOW
-    visited: frozenset[str] = frozenset()
+    visits: MappingProxyType[str, int] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -477,13 +481,26 @@ def _extended(
     )
 
 
+def _max_visits(node: str) -> int:
+    """Loop headers (containing #loop) are allowed LOOP_ITERATIONS visits; everything else once."""
+    return LOOP_ITERATIONS if "#loop" in node else 1
+
+
 def _open(stack: Sequence[Frame], program: str, node: str) -> bool:
-    """The re-entry rule: an edge back to a node an open frame has already run."""
-    return any(one.program == program and node in one.visited for one in stack)
+    """The re-entry rule: an edge back to a node an open frame has run too many times."""
+    return any(
+        one.program == program and one.visits.get(node, 0) >= _max_visits(node)
+        for one in stack
+    )
 
 
 def _marked(stack: tuple[Frame, ...], node: str) -> tuple[Frame, ...]:
-    return (*stack[:-1], replace(stack[-1], visited=stack[-1].visited | {node}))
+    frame = stack[-1]
+    count = frame.visits.get(node, 0) + 1
+    return (
+        *stack[:-1],
+        replace(frame, visits=MappingProxyType({**frame.visits, node: count})),
+    )
 
 
 def _qualified(writes: Sequence[Write], program: str) -> tuple[Write, ...]:
@@ -1177,7 +1194,7 @@ def _resolved_depth(budget: Budget, loader: Loader, program: str) -> Budget:
         return budget
     programs = sorted(_reachable_programs(program, loader, frozenset()))
     total = sum(len(loader(p).cfg.nodes) for p in programs)
-    depth = total * 2
+    depth = total * (LOOP_ITERATIONS + 1)
     logger.info(
         "trace: auto depth %d (%d nodes across %d programs)",
         depth,

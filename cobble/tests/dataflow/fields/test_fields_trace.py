@@ -247,9 +247,8 @@ LOOP = _only(
 
 
 def test_a_loop_body_runs_once_and_then_the_walk_leaves():
-    """The back edge targets a node the open frame has already run, so it is
-    refused: the body runs once and the exit edge is taken. That is the
-    unroll-once decision, and it is the same rule that stops a recursive PERFORM.
+    """A hand-built loop (no #loop in the node id) runs once under the re-entry
+    rule. Real PERFORM VARYING loops use #loop nodes and get LOOP_ITERATIONS.
     """
     found = traced("TPROGA", _loader(LOOP), Budget(paths=1, coverage=1.0))
 
