@@ -14,7 +14,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-
+from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import load_srccfg_config
@@ -83,6 +83,7 @@ def main(argv: Sequence[str] = ()) -> int:
     nothing", and the reader has no way to tell it from "the cache never held the
     program you named".
     """
+    configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) or None)
     config = load_srccfg_config(arguments.config)
     if not (config.asg_dir / f"{arguments.program}.json").is_file():
