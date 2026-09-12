@@ -69,6 +69,7 @@ class SourceSpan:
     col_start: int = 0
     line_end: int = 0
     col_end: int = 0
+    source_file: str = ""
 
 
 NO_SPAN = SourceSpan()

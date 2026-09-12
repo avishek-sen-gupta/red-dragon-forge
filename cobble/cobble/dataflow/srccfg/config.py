@@ -18,9 +18,10 @@ TABLE = "srccfg"
 class SrcCfgConfig:
     asg_dir: Path
     out_dir: Path
+    source_dir: Path = Path()
 
 
-def _require(table: Mapping[str, object], key: str, source: Path) -> str:
+def _require(table: Mapping, key: str, source: Path) -> str:
     value = str(table.get(key, ""))
     if value:
         return value
@@ -34,9 +35,13 @@ def load_srccfg_config(path: Path) -> SrcCfgConfig:
         raise KeyError(f"{path}: [{TABLE}] must be a table")
     if not table:
         raise KeyError(f"{path}: no [{TABLE}] table")
+    source_dir = (
+        _path_of(str(table["source_dir"])) if table.get("source_dir") else Path()
+    )
     return SrcCfgConfig(
         asg_dir=_path_of(_require(table, "asg_dir", path)),
         out_dir=_path_of(_require(table, "out_dir", path)),
+        source_dir=source_dir,
     )
 
 
