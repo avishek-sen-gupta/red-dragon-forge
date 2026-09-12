@@ -55,9 +55,7 @@ def _expand(
 
 def bundle_to_json(bundle: Bundle) -> str:
     """The seed first, then its callees: a list, because the order is the answer's."""
-    logger.info("srccfg: serialising %d programs", len(bundle.cfgs))
     result = json.dumps([cfg_to_dict(cfg) for cfg in bundle.cfgs])
-    logger.info("srccfg: serialisation done  bytes=%d", len(result))
     return result
 
 
