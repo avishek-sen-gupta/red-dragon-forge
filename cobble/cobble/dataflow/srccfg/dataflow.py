@@ -791,47 +791,67 @@ def definitions_of(cfg: Cfg) -> Mapping[str, Defs]:
     }
 
 
-def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
-    """A gen/kill fixpoint using a worklist algorithm.
-
-    The previous full-sweep approach recomputed all nodes every iteration,
-    causing quadratic cost on large CFGs as frozensets grew. The worklist
-    only reprocesses nodes whose predecessor OUT sets changed, giving
-    O(edges × depth) cost in practice instead of O(nodes × iterations²).
-    """
-    generated = definitions_of(cfg)
-    in_sets: dict[str, Defs] = {node.id: frozenset() for node in cfg.nodes}
-    out_sets: dict[str, Defs] = {
-        node.id: generated.get(node.id, frozenset())
+def _def_index(cfg: Cfg) -> tuple[Definition, ...]:
+    """All definitions in declaration order — the bitmask's bit layout."""
+    return tuple(
+        Definition(node=node.id, field=name)
         for node in cfg.nodes
+        for name in node.writes
+    )
+
+
+def _gen_mask(defs: frozenset[Definition], index: Mapping[Definition, int]) -> int:
+    return sum(1 << index[d] for d in defs if d in index)
+
+
+def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
+    """A gen/kill fixpoint using integer bitmasks.
+
+    Each Defs set is represented as a Python int where bit k is set when
+    Definition k is present.  Union becomes ``|``, comparison becomes ``==``,
+    and gen/kill becomes ``(in_mask & ~kill_mask) | gen_mask`` — word
+    operations instead of Python object allocations per element.
+    """
+    from functools import reduce  # noqa: PLC0415
+    from operator import or_  # noqa: PLC0415
+    generated = definitions_of(cfg)
+    all_defs = _def_index(cfg)
+    idx: dict[Definition, int] = {d: i for i, d in enumerate(all_defs)}
+    gen_masks: dict[str, int] = {
+        node_id: reduce(or_, (1 << idx[d] for d in defs), 0)
+        for node_id, defs in generated.items()
+    }
+    field_to_mask: dict[str, int] = {
+        field: reduce(or_, (1 << idx[d] for d in all_defs if d.field == field), 0)
+        for field in {d.field for d in all_defs}
+    }
+    kill_masks: dict[str, int] = {
+        node_id: reduce(or_, (field_to_mask.get(d.field, 0) for d in defs), 0)
+        for node_id, defs in generated.items()
+    }
+    out_masks: dict[str, int] = {
+        node.id: gen_masks.get(node.id, 0) for node in cfg.nodes
     }
     worklist: set[str] = set(cfg.node_ids)
     processed = 0
     while worklist:
         node_id = worklist.pop()
         processed += 1
-        new_in = frozenset(
-            chain.from_iterable(
-                out_sets[edge.source]
-                for edge in cfg.predecessors(node_id)
-            )
-        )
-        written = {d.field for d in generated.get(node_id, frozenset())}
-        new_out = (
-            frozenset(d for d in new_in if d.field not in written)
-            | generated.get(node_id, frozenset())
-        )
-        if new_out != out_sets[node_id]:
-            in_sets[node_id] = new_in
-            out_sets[node_id] = new_out
+        new_in = reduce(or_, (out_masks[e.source] for e in cfg.predecessors(node_id)), 0)
+        new_out = (new_in & ~kill_masks.get(node_id, 0)) | gen_masks.get(node_id, 0)
+        if new_out != out_masks[node_id]:
+            out_masks[node_id] = new_out
             for edge in cfg.successors(node_id):
                 worklist.add(edge.target)
-    _log.info(
-        "reaching_defs: %s  done  processed=%d",
-        cfg.program, processed,
-    )
-    return in_sets
-
+    _log.info("reaching_defs: %s  done  processed=%d", cfg.program, processed)
+    in_masks = {
+        node.id: reduce(or_, (out_masks[e.source] for e in cfg.predecessors(node.id)), 0)
+        for node in cfg.nodes
+    }
+    return {
+        node_id: frozenset(all_defs[i] for i in range(len(all_defs)) if mask >> i & 1)
+        for node_id, mask in in_masks.items()
+    }
 
 def _out_of(
     node_id: str, incoming: Mapping[str, Defs], generated: Mapping[str, Defs]
