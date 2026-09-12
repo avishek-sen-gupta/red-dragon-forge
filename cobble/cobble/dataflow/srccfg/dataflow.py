@@ -55,8 +55,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from functools import reduce
 from itertools import accumulate, chain, groupby, pairwise, repeat
-from operator import attrgetter
+from operator import attrgetter, or_
 from types import MappingProxyType
 
 _log = logging.getLogger(__name__)
@@ -810,10 +811,11 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
     Each Defs set is represented as a Python int where bit k is set when
     Definition k is present.  Union becomes ``|``, comparison becomes ``==``,
     and gen/kill becomes ``(in_mask & ~kill_mask) | gen_mask`` — word
-    operations instead of Python object allocations per element.
+    operations rather than per-element Python object allocations.
+
+    ``field_to_mask`` is built in O(D log D) via groupby rather than O(D²)
+    by filtering all_defs per field.
     """
-    from functools import reduce  # noqa: PLC0415
-    from operator import or_  # noqa: PLC0415
     generated = definitions_of(cfg)
     all_defs = _def_index(cfg)
     idx: dict[Definition, int] = {d: i for i, d in enumerate(all_defs)}
@@ -822,8 +824,10 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
         for node_id, defs in generated.items()
     }
     field_to_mask: dict[str, int] = {
-        field: reduce(or_, (1 << idx[d] for d in all_defs if d.field == field), 0)
-        for field in {d.field for d in all_defs}
+        field: reduce(or_, (1 << idx[d] for d in group), 0)
+        for field, group in groupby(
+            sorted(all_defs, key=lambda d: d.field), key=lambda d: d.field
+        )
     }
     kill_masks: dict[str, int] = {
         node_id: reduce(or_, (field_to_mask.get(d.field, 0) for d in defs), 0)
@@ -853,17 +857,6 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
         for node_id, mask in in_masks.items()
     }
 
-def _out_of(
-    node_id: str, incoming: Mapping[str, Defs], generated: Mapping[str, Defs]
-) -> Defs:
-    """Gen/kill: definitions reaching this node, minus what it kills, plus what it generates."""
-    written = {definition.field for definition in generated.get(node_id, frozenset())}
-    survived = frozenset(
-        definition
-        for definition in incoming.get(node_id, frozenset())
-        if definition.field not in written
-    )
-    return survived | generated.get(node_id, frozenset())
 
 @dataclass(frozen=True)
 class Use:
