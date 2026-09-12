@@ -37,6 +37,7 @@ from cobble.dataflow.srccfg.cfg import (
     Fragment,
     Node,
     NodeKind,
+    SourceSpan,
     seq,
 )
 from cobble.dataflow.srccfg.conditions import (
@@ -145,7 +146,20 @@ def lower_statement(statement, ctx: Ctx, path: str) -> Fragment:
     return handler(statement, ctx, path) if handler else _plain(statement, ctx, path)
 
 
-def _plain(statement, ctx: Ctx, path: str) -> Fragment:
+def _span(statement: object) -> SourceSpan:
+    """Source location from the ASG statement's own ``span`` attribute."""
+    s = getattr(statement, "span", None)
+    if s is None:
+        return SourceSpan()
+    return SourceSpan(
+        line_start=int(getattr(s, "line_start", 0) or 0),
+        col_start=int(getattr(s, "col_start", 0) or 0),
+        line_end=int(getattr(s, "line_end", 0) or 0),
+        col_end=int(getattr(s, "col_end", 0) or 0),
+    )
+
+
+def _plain(statement: object, ctx: Ctx, path: str) -> Fragment:
     kind = type(statement).__name__
     writes, reads = _writes_reads(statement, ctx, kind)
     node = Node(
@@ -159,6 +173,7 @@ def _plain(statement, ctx: Ctx, path: str) -> Fragment:
         writes=writes,
         reads=reads,
         transfer=verb_of(statement) or _fallback_verb(kind),
+        span=_span(statement),
     )
     return _with_arms(statement, ctx, path, _one(node))
 
@@ -311,7 +326,7 @@ def _arm_subject(statement) -> str:
     )
 
 
-def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
+def _plain_without_arms(statement: object, ctx: Ctx, path: str) -> Fragment:
     kind = type(statement).__name__
     writes, reads = _writes_reads(statement, ctx, kind)
     return _one(
@@ -326,6 +341,7 @@ def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
             writes=writes,
             reads=reads,
             transfer=verb_of(statement) or _fallback_verb(kind),
+            span=_span(statement),
         )
     )
 

@@ -62,6 +62,19 @@ UNRESOLVED = Atom(text="UNRESOLVED", resolved=False)
 
 
 @dataclass(frozen=True)
+class SourceSpan:
+    """Source location of one CFG node: lines and columns from the ASG statement."""
+
+    line_start: int = 0
+    col_start: int = 0
+    line_end: int = 0
+    col_end: int = 0
+
+
+NO_SPAN = SourceSpan()
+
+
+@dataclass(frozen=True)
 class Node:
     id: str
     kind: NodeKind
@@ -74,6 +87,7 @@ class Node:
     target_resolved: bool = True
     transfer_operand: str = ""
     using: tuple[str, ...] = ()
+    span: SourceSpan = NO_SPAN
 
 
 @dataclass(frozen=True)
