@@ -36,12 +36,7 @@ def build_closure(asg_dir: Path, seed: str) -> Bundle:
 def _expand(
     asg_dir: Path, pending: tuple[str, ...], built: tuple[Cfg, ...]
 ) -> tuple[Cfg, ...]:
-    """Breadth-first from the seed, one program built once.
-
-    A program already built is skipped rather than rebuilt: mutual calls between two
-    members are ordinary on a real corpus, and a walk with no memory of what it has
-    built does not terminate on them.
-    """
+    """Breadth-first from the seed, one program built once."""
     if not pending:
         return built
     head, *rest = pending
@@ -51,14 +46,19 @@ def _expand(
     if not path.is_file():
         logger.warning("%s: called but not in the ASG cache; not built", head)
         return _expand(asg_dir, tuple(rest), built)
+    logger.info("srccfg: building %s  (built=%d pending=%d)", head, len(built), len(rest))
     cfg = cfg_of(path)
+    logger.info("srccfg: %s done  nodes=%d", head, len(cfg.nodes))
     callees = callees_of(call_graph((cfg,)), cfg.program)
     return _expand(asg_dir, (*rest, *callees), (*built, cfg))
 
 
 def bundle_to_json(bundle: Bundle) -> str:
     """The seed first, then its callees: a list, because the order is the answer's."""
-    return json.dumps([cfg_to_dict(cfg) for cfg in bundle.cfgs])
+    logger.info("srccfg: serialising %d programs", len(bundle.cfgs))
+    result = json.dumps([cfg_to_dict(cfg) for cfg in bundle.cfgs])
+    logger.info("srccfg: serialisation done  bytes=%d", len(result))
+    return result
 
 
 def _parser() -> argparse.ArgumentParser:
