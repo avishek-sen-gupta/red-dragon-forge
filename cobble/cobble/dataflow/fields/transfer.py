@@ -88,8 +88,18 @@ def _synthetic(origin: str, node: str) -> frozenset[Source]:
 
 
 def _unresolved_origin(operand: RefModOperand, reason: str) -> str:
-    """A literal reads no storage, and neither does LENGTH OF or a FUNCTION."""
-    return LITERAL if is_literal(operand.name) else reason.upper()
+    """A literal reads no storage, and neither does LENGTH OF or a FUNCTION.
+
+    For a field name that simply has no declared extent (e.g. a SQL host
+    variable from an unparsed DCLGEN struct), embed the name so backward
+    provenance queries say ``UNKNOWN:FIELD-NAME`` rather than the opaque
+    ``UNKNOWN-NAME``.
+    """
+    if is_literal(operand.name):
+        return LITERAL
+    if reason == "unknown-name" and operand.name:
+        return f"UNKNOWN:{operand.name}"
+    return reason.upper()
 
 
 def _one_move(
