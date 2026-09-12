@@ -98,15 +98,18 @@ def _rows_for_node(
 
 def _rows_for_program(entry: _JsonRow, asg_dir: Path) -> tuple[AccessRow, ...]:
     program = str(entry["program"])
+    logger.info("access: %s", program)
     indices = _try_index(program, asg_dir)
     if not indices:
         return ()
     idx = indices[0]
-    return tuple(
+    rows = tuple(
         row
         for node in entry["nodes"]  # type: ignore[union-attr]
         for row in _rows_for_node(program, node, idx)
     )
+    logger.info("access: %s — %d rows", program, len(rows))
+    return rows
 
 
 def accesses(cfg_path: Path, asg_dir: Path) -> tuple[AccessRow, ...]:
