@@ -52,6 +52,12 @@ def _extent_dict(extent: FieldExtent) -> Mapping[str, str | int | bool]:
 
 
 def _dep_row(dep: Dep) -> str:
+    """``source_program`` rides beside ``source`` and appears exactly when it does.
+
+    An extent is addressed by a program, and the two ends of a bridge dep are not
+    in the same one, so a single ``program`` cannot address both. A row with an
+    origin has no source to address.
+    """
     source = _extent_dict(dep.source) if not dep.origin else None
     return json.dumps(
         {
@@ -61,6 +67,7 @@ def _dep_row(dep: Dep) -> str:
             "target": _extent_dict(dep.target),
             "origin": dep.origin,
             "source": source,
+            **({} if dep.origin else {"source_program": dep.source_program}),
             "site": f"{dep.program}/{dep.node}",
             "definers": list(dep.definers),
         },

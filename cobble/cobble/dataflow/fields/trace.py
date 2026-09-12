@@ -111,6 +111,13 @@ class Dep:
     definer that crossed a call name the member it is in. ``via`` is the call site
     this program was entered through, innermost when nested, and empty in the
     program the trace started from.
+
+    ``program`` addresses ``target``; ``source_program`` addresses ``source``. They
+    differ only at a LINK return, where the caller's window is credited to bytes
+    that are still named in the callee's own address space -- and an extent is only
+    comparable to another in the same program, so collapsing the two would both
+    hide the callee's writes and let the caller's bytes at those offsets stand in
+    for them.
     """
 
     program: str
@@ -120,6 +127,7 @@ class Dep:
     source: FieldExtent
     definers: tuple[str, ...]
     via: str
+    source_program: str
 
 
 @dataclass(frozen=True)
@@ -333,6 +341,20 @@ class _Checkpoint:
     entered: frozenset[str]
 
 
+def _via(stack: tuple[Frame, ...]) -> str:
+    """The call site the program on top of ``stack`` was entered through.
+
+    A function of the stack rather than of the walk, because a dep is not always
+    attributed to the frame the walk is standing in: a bridge row belongs to the
+    caller and is built while the callee's frame is still on the stack, so it asks
+    for the via of the stack it is about, not the one the walk is on.
+    """
+    crossings = tuple(one for one in stack if one.crossing)
+    if not crossings:
+        return ""
+    return f"{crossings[-1].window.caller}/{crossings[-1].site}"
+
+
 @dataclass(frozen=True)
 class _Walk:
     """One path, mid-flight. Threaded, never mutated.
@@ -370,10 +392,7 @@ class _Walk:
     @property
     def via(self) -> str:
         """The call site this program was entered through, innermost when nested."""
-        crossings = tuple(one for one in self.stack if one.crossing)
-        if not crossings:
-            return ""
-        return f"{crossings[-1].window.caller}/{crossings[-1].site}"
+        return _via(self.stack)
 
 
 @dataclass(frozen=True)
@@ -560,6 +579,7 @@ def _witnessed(walk: _Walk, held: State, writes: Sequence[Write]) -> frozenset[D
             source=one.extent,
             definers=_definers(held, one),
             via=walk.via,
+            source_program=walk.program,
         )
         for entry in writes
         for one in entry.sources
@@ -785,7 +805,10 @@ def _restored(caller: State, back: State) -> State:
 
 
 def _bridge(
-    walk: _Walk, frame: Frame, callee_state: State, back: State
+    frame: Frame,
+    resumed: tuple[Frame, ...],
+    callee_state: State,
+    back: State,
 ) -> frozenset[Dep]:
     """Dep rows recording the byte transfer from callee back to caller.
 
@@ -794,6 +817,13 @@ def _bridge(
     to follow.  These rows close that gap: for every callee extent that flows
     back, one dep row per source maps the rebased caller extent to the original
     callee extent, letting the query cross the LINK boundary.
+
+    The row belongs to the caller, so it is addressed from the caller's stack --
+    ``resumed``, the one the walk is about to stand on -- and not from the callee's
+    frame, which is still on top while these rows are built. Only ``source`` stays
+    the callee's: those bytes are named in its address space, and saying so is what
+    lets the query find the callee's own writes rather than the caller's bytes at
+    the same offsets.
     """
     return frozenset(
         Dep(
@@ -803,7 +833,8 @@ def _bridge(
             origin=source.origin,
             source=source.extent,
             definers=_definers(callee_state, source),
-            via=walk.via,
+            via=_via(resumed),
+            source_program=frame.program,
         )
         for caller_ext, sources in back.items()
         for source in sources
@@ -860,13 +891,14 @@ def _handed_back(walk: _Walk, unwound: tuple[Frame, ...]) -> _Walk:
     if not (unwound and unwound[-1].returns and unwound[-1].resume):
         return replace(walk, running=False)
     frame = unwound[-1]
+    resumed = unwound[:-1]
     callee_state = walk.store.get(frame.program, EMPTY)
     back = _seeded(callee_state, frame.window.callee_extent, frame.window.caller_extent)
     return replace(
         walk,
         node=frame.resume,
-        stack=unwound[:-1],
-        deps=walk.deps | _bridge(walk, frame, callee_state, back),
+        stack=resumed,
+        deps=walk.deps | _bridge(frame, resumed, callee_state, back),
         store={
             **walk.store,
             frame.window.caller: _restored(

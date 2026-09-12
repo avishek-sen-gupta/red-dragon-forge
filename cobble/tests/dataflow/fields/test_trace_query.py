@@ -5,15 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from cobble.dataflow.fields.extent_text import ByteRange
 from cobble.dataflow.fields.trace_query import (
     BACKWARD,
     FORWARD,
     DepRow,
+    _narrow_sources,
+    _narrowed,
+    _resolve,
     load,
     query,
-    _resolve,
 )
-from cobble.dataflow.fields.extent_text import ByteRange
 
 
 def _jsonl(rows: list[dict], tmp_path: Path) -> Path:
@@ -38,6 +40,7 @@ def _dep(
     definers: list[str] | None = None,
     via: str = "",
     region: str = "working_storage",
+    source_program: str = "",
 ) -> dict:
     source = (
         {
@@ -63,6 +66,7 @@ def _dep(
         },
         "origin": origin,
         "source": source,
+        **({} if origin else {"source_program": source_program or program}),
         "site": site or f"{program}/PARA/0",
         "definers": definers or [],
     }
@@ -175,3 +179,85 @@ def test_load_skips_non_dep_rows(tmp_path: Path):
     trace = _jsonl(rows, tmp_path)
     deps = load(trace)
     assert len(deps) == 1
+
+
+def _range(program: str, name: str, start: int, end: int) -> ByteRange:
+    return ByteRange(
+        program=program,
+        region="working_storage",
+        start=start,
+        end=end,
+        name=name,
+        exact=True,
+        known=True,
+    )
+
+
+def test_a_source_in_another_program_is_addressed_by_that_program(tmp_path: Path):
+    """A bridge dep's two ends live in different programs. Reading the source with
+    the row's own program would make it uncomparable to the callee's rows and
+    comparable to the caller's bytes at the same offsets -- a miss and a lie at
+    once."""
+    trace = _jsonl(
+        [_dep("CALLER", "WS-AREA", 4, 8, "SUB-RESULT", 4, 8, source_program="CALLEE")],
+        tmp_path,
+    )
+
+    (dep,) = load(trace)
+
+    assert dep.target.program == "CALLER"
+    assert dep.source.program == "CALLEE"
+
+
+def test_backward_crosses_into_the_program_the_source_names(tmp_path: Path):
+    trace = _jsonl(
+        [
+            _dep(
+                "CALLER",
+                "WS-AREA",
+                4,
+                8,
+                "SUB-RESULT",
+                4,
+                8,
+                source_program="CALLEE",
+                site="CALLER/LINK/0",
+            ),
+            _dep("CALLEE", "SUB-RESULT", 4, 8, "SUB-KEY", 0, 4, site="CALLEE/CALC/0"),
+        ],
+        tmp_path,
+    )
+
+    answer = "\n".join(query(trace, BACKWARD, "CALLER.WS-AREA"))
+
+    assert "CALLEE/CALC/0" in answer
+
+
+def test_a_frontier_range_wider_than_the_target_narrows_to_their_overlap():
+    """Tracing a group and one of its members at once puts both on the frontier.
+    Offsetting the source by the wider one's start slides it off the front."""
+    source = _range("CALLEE", "SUB-RESULT", 4, 8)
+    target = _range("CALLER", "WS-AREA", 4, 8)
+
+    assert _narrowed(source, target, _range("CALLER", "WS-AREA", 0, 8)) == source
+
+
+def test_every_overlapping_frontier_range_yields_its_own_slice():
+    """One slice per overlap, not the first of them: the frontier is built from a
+    set, so "the first" is whatever order it happened to come out in."""
+    source = _range("CALLEE", "SUB-REC", 0, 8)
+    dep = DepRow(
+        program="CALLER",
+        via="",
+        target=_range("CALLER", "WS-AREA", 0, 8),
+        origin="",
+        source=source,
+        site="CALLER/LINK/0",
+        definers=(),
+    )
+    frontier = (_range("CALLER", "WS-KEY", 0, 4), _range("CALLER", "WS-VAL", 4, 8))
+
+    assert _narrow_sources(dep, frontier) == (
+        _range("CALLEE", "SUB-REC", 0, 4),
+        _range("CALLEE", "SUB-REC", 4, 8),
+    )

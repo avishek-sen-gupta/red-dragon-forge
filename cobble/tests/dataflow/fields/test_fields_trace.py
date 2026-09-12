@@ -37,6 +37,8 @@ from cobble.dataflow.fields.trace import (
     traced,
     visited_order,
 )
+from cobble.dataflow.fields.trace_query import BACKWARD, query
+from cobble.dataflow.fields.trace_report import _footer_lines, _make_sink
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -1231,6 +1233,36 @@ def test_bridge_deps_are_emitted_at_the_link_site_for_callee_write_back(crossed)
     assert bridge, "no bridge dep row emitted at LINK site for callee write-back"
     (dep,) = bridge
     assert str(dep.source).startswith("SUB-RESULT@working_storage")
+
+
+def test_backward_provenance_crosses_the_link_into_the_callees_own_writes(
+    crossed, tmp_path
+):
+    """The whole path: walk, JSONL, query. The only test that runs all three.
+
+    The bridge rows are written by the walk and read by the query, and each side's
+    own tests pass while the pair disagrees: the walk emits a callee-space source,
+    the row carries one program for both ends of a dep, so the query stamps the
+    caller's name on the callee's bytes and the frontier never matches the callee's
+    rows. Backward from the caller's window must arrive at the statement in TPROGB
+    that wrote those bytes, not stop one hop short at the bridge row itself.
+    """
+    report = tmp_path / "trace.jsonl"
+    with report.open("w", encoding="utf-8") as handle:
+        _make_sink(handle)(crossed.deps)
+        handle.write("\n".join(_footer_lines(crossed)) + "\n")
+
+    answer = "\n".join(query(report, BACKWARD, "TPROGA.WS-AREA", max_depth=6))
+
+    assert "TPROGB/SUB-PARA/1" in answer
+
+
+def test_no_dep_in_the_start_program_claims_it_was_entered_through_a_call(crossed):
+    """``via`` names the call site this program was entered through, so it is empty
+    in the program the trace started from. A bridge row is written as the caller
+    resumes but computed while the callee's frame is still on the stack, which is
+    the one place that invariant can be lost."""
+    assert not [one for one in crossed.deps if one.program == "TPROGA" and one.via]
 
 
 def test_both_arms_of_the_branch_are_witnessed_across_the_sampled_paths(crossed):
