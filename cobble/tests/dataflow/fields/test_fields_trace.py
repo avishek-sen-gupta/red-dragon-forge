@@ -1206,6 +1206,33 @@ def test_the_callers_sink_reads_bytes_the_callee_defined(crossed):
     assert [one for one in dep.definers if one.startswith("TPROGB/")]
 
 
+def test_bridge_deps_are_emitted_at_the_link_site_for_callee_write_back(crossed):
+    """_handed_back must emit dep rows mapping callee extents back to caller space.
+
+    Without these rows ``cobble-trace-query backward`` stops at ``%CALL:<callee>``
+    because the only dep targeting the caller's commarea bytes carries
+    ``source=None``.  The bridge rows give it a callee-space extent to follow,
+    so backward provenance can cross the LINK boundary into the callee's own writes.
+
+    TPROGB writes ``SUB-RESULT`` into ``DFHCOMMAREA(5:4)`` -- bytes 4-8 of the
+    shared window -- which maps back onto ``WS-AREA[4:8]`` (WS-IN-RESULT) in
+    TPROGA.  A bridge dep row must exist at the LINK site with that caller target
+    and a callee-space source.
+    """
+    bridge = [
+        one
+        for one in crossed.deps
+        if one.program == "TPROGA"
+        and "LINK-PARA" in one.node
+        and not one.origin
+        and one.target.start == 4
+    ]
+
+    assert bridge, "no bridge dep row emitted at LINK site for callee write-back"
+    (dep,) = bridge
+    assert str(dep.source).startswith("SUB-RESULT@working_storage")
+
+
 def test_both_arms_of_the_branch_are_witnessed_across_the_sampled_paths(crossed):
     """One path sees one arm. Sampling is what gets the other, and it is why a
     single path's answer would be a narrower claim than this tool makes."""

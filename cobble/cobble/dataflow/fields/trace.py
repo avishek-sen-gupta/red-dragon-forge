@@ -757,7 +757,7 @@ def _returned(walk: _Walk, edge: Edge) -> _Walk:
     return replace(walk, node=edge.target, stack=walk.stack[:-1])
 
 
-def _restored(caller: State, callee: State, window: Window) -> State:
+def _restored(caller: State, back: State) -> State:
     """The caller's slice with the shared window written back from the callee's.
 
     ``state.write`` rather than a union: the callee's write to those bytes really
@@ -769,7 +769,6 @@ def _restored(caller: State, callee: State, window: Window) -> State:
     widest-first is chosen so the narrow, specific definitions are the ones that
     survive ``must_cover``'s kills.
     """
-    back = _seeded(callee, window.callee_extent, window.caller_extent)
     return reduce(
         lambda held, pair: write(held, pair[0], pair[1]),
         sorted(
@@ -782,6 +781,32 @@ def _restored(caller: State, callee: State, window: Window) -> State:
             ),
         ),
         caller,
+    )
+
+
+def _bridge(
+    walk: _Walk, frame: Frame, callee_state: State, back: State
+) -> frozenset[Dep]:
+    """Dep rows recording the byte transfer from callee back to caller.
+
+    ``_restored`` seeds the caller's state from ``back`` but emits nothing,
+    so backward provenance queries stop at ``%CALL:<callee>`` with no source
+    to follow.  These rows close that gap: for every callee extent that flows
+    back, one dep row per source maps the rebased caller extent to the original
+    callee extent, letting the query cross the LINK boundary.
+    """
+    return frozenset(
+        Dep(
+            program=frame.window.caller,
+            node=frame.site,
+            target=caller_ext,
+            origin=source.origin,
+            source=source.extent,
+            definers=_definers(callee_state, source),
+            via=walk.via,
+        )
+        for caller_ext, sources in back.items()
+        for source in sources
     )
 
 
@@ -835,16 +860,18 @@ def _handed_back(walk: _Walk, unwound: tuple[Frame, ...]) -> _Walk:
     if not (unwound and unwound[-1].returns and unwound[-1].resume):
         return replace(walk, running=False)
     frame = unwound[-1]
+    callee_state = walk.store.get(frame.program, EMPTY)
+    back = _seeded(callee_state, frame.window.callee_extent, frame.window.caller_extent)
     return replace(
         walk,
         node=frame.resume,
         stack=unwound[:-1],
+        deps=walk.deps | _bridge(walk, frame, callee_state, back),
         store={
             **walk.store,
             frame.window.caller: _restored(
                 walk.store.get(frame.window.caller, EMPTY),
-                walk.store.get(frame.program, EMPTY),
-                frame.window,
+                back,
             ),
         },
     )
