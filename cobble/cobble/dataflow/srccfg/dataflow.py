@@ -52,11 +52,15 @@ paragraph performed from everywhere be walked without limit.
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from itertools import accumulate, chain, groupby, pairwise, repeat
 from operator import attrgetter
 from types import MappingProxyType
+
+_log = logging.getLogger(__name__)
 
 from cobble.dataflow.srccfg.build import label_id
 from cobble.dataflow.srccfg.cfg import (
@@ -789,11 +793,8 @@ def definitions_of(cfg: Cfg) -> Mapping[str, Defs]:
 
 
 def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
-    """A gen/kill fixpoint. Not the path walk: one definition reached by four paths
-    is one definition, and a per-path answer would report it four times.
-
-    Field matching is by exact literal text: a write to WS-TAB(1) generates a definition
-    with field='WS-TAB(1)', not field='WS-TAB'. Use base_field to match by base name."""
+    """A gen/kill fixpoint."""
+    t0 = time.monotonic()
     generated = definitions_of(cfg)
     start = {node.id: frozenset() for node in cfg.nodes}
     states = accumulate(
@@ -801,7 +802,15 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
         lambda incoming, _: _stepped(cfg, incoming, generated),
         initial=start,
     )
-    return next(later for earlier, later in pairwise(states) if earlier == later)
+    n = 0
+    for earlier, later in pairwise(states):
+        n += 1
+        if n % 50 == 0:
+            _log.info("reaching_defs: %s  iter=%d  t=%.1fs", cfg.program, n, time.monotonic() - t0)
+        if earlier == later:
+            _log.info("reaching_defs: %s  converged  iter=%d  t=%.1fs", cfg.program, n, time.monotonic() - t0)
+            return later
+    return start
 
 
 def _stepped(
