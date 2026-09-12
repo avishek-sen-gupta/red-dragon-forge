@@ -18,7 +18,7 @@ from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind, SourceSpan
 from cobble.dataflow.srccfg.config import SrcCfgConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
 
@@ -146,15 +146,17 @@ def cfg_from_dict(document: Mapping) -> Cfg:
 
 def _node_of(entry: Mapping) -> Node:
     atom = entry.get("atom", {})
+    span = entry.get("span", {})
     return Node(
         **{
             **{
                 k: v
                 for k, v in entry.items()
-                if k not in ("kind", "atom", "writes", "reads", "using")
+                if k not in ("kind", "atom", "span", "writes", "reads", "using")
             },
             "kind": NodeKind[entry["kind"]],
             "atom": Atom(**atom),
+            "span": SourceSpan(**span) if span else SourceSpan(),
             "writes": tuple(entry.get("writes", ())),
             "reads": tuple(entry.get("reads", ())),
             "using": tuple(entry.get("using", ())),
