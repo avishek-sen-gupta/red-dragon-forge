@@ -52,6 +52,8 @@ cobble-dataflow-fixpoint = "cobble.dataflow.fixpoint.build_corpus:main"
 cobble-dataflow-fixpoint-query = "cobble.dataflow.fixpoint.query:main"
 cobble-fields-trace = "cobble.dataflow.fields.trace_report:main"
 cobble-trace-query = "cobble.dataflow.fields.trace_query:main"
+cobble-fields-access = "cobble.dataflow.fields.access_report:main"
+cobble-access-query = "cobble.dataflow.fields.access_query:main"
 cobble-bms-metadata = "cobble.bms_metadata:main"
 
 # The project is installed (editable) into the venv so that [project.scripts]
