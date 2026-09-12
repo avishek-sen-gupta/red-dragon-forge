@@ -468,3 +468,58 @@ def test_an_unhandled_statement_leaves_the_state_untouched(program_of, field, af
     )
     state, _ = after(asg)
     assert state == EMPTY
+
+
+def test_compute_with_stub_source_tags_it_by_name(
+    program_of, field, after, names_reaching
+):
+    """A COMPUTE source with no declared layout (stub copybook) yields FIELD:<name>
+    so backward provenance is not opaque.  WS-PRICE is declared; EXTERN-PRICE is not."""
+    asg = program_of(
+        [
+            {
+                "type": "COMPUTE",
+                "expression": {"kind": "ref", "name": "EXTERN-PRICE"},
+                "targets": [{"name": "WS-PRICE"}],
+            }
+        ],
+        data_fields=[
+            field(1, "REC", children=[field(5, "WS-PRICE", "9(8)", offset=0)])
+        ],
+    )
+    state, index = after(asg)
+    assert names_reaching(state, index, "WS-PRICE") == {"FIELD:EXTERN-PRICE"}
+
+
+def test_compute_with_mixed_sources_includes_stub_names(
+    program_of, field, after, names_reaching
+):
+    """When some COMPUTE operands resolve and some don't, both are recorded."""
+    asg = program_of(
+        [
+            {
+                "type": "COMPUTE",
+                "expression": {
+                    "kind": "binop",
+                    "op": "+",
+                    "left": {"kind": "ref", "name": "WS-A"},
+                    "right": {"kind": "ref", "name": "EXTERN-DISCOUNT"},
+                },
+                "targets": [{"name": "WS-PRICE"}],
+            }
+        ],
+        data_fields=[
+            field(
+                1,
+                "REC",
+                children=[
+                    field(5, "WS-A", "9(4)", offset=0),
+                    field(5, "WS-PRICE", "9(4)", offset=4),
+                ],
+            )
+        ],
+    )
+    state, index = after(asg)
+    result = names_reaching(state, index, "WS-PRICE")
+    assert "WS-A" in result
+    assert "FIELD:EXTERN-DISCOUNT" in result
