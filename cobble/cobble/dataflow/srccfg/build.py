@@ -12,8 +12,6 @@ PERFORM THRU range. It is never sorted.
 
 from __future__ import annotations
 
-import logging
-import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
@@ -30,8 +28,6 @@ from cobble.dataflow.srccfg.desugar import (
     lower_statements,
 )
 from cobble.dataflow.srccfg.synthetic import IMPLICIT_FIRST
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -127,22 +123,18 @@ def _error_handlers(order: Sequence[ParagraphRef]) -> tuple[str, ...]:
 def build_program(
     asg, error_handlers: tuple[str, ...] = (), source_file: str = ""
 ) -> Cfg:
-    t0 = time.monotonic()
     order = paragraph_order(asg)
     context = program_context(asg)
     index = condition_index(asg)
-    logger.info("build: %s  paragraphs=%d  t=%.2fs", asg.program_id, len(order), time.monotonic() - t0)
     handlers = error_handlers if error_handlers else ()
     parts = tuple(
         _paragraph_cfg(ref, asg.program_id, context, index, handlers, source_file)
         for ref in order
     )
     nodes = tuple(node for part in parts for node in part[0])
-    logger.info("build: %s  lower done  nodes=%d  t=%.2fs", asg.program_id, len(nodes), time.monotonic() - t0)
     body = (*(edge for part in parts for edge in part[1]), *_fallthru(order))
     known = frozenset(node.id for node in nodes)
     perform_edges = _perform_edges(nodes, body, order)
-    logger.info("build: %s  perform_edges=%d  t=%.2fs", asg.program_id, len(perform_edges), time.monotonic() - t0)
     return Cfg(
         program=asg.program_id,
         nodes=nodes,

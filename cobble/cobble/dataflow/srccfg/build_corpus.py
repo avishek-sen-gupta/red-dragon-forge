@@ -8,7 +8,6 @@ missing from this output", and a run that aborts answers that for one member onl
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from functools import reduce
@@ -28,8 +27,6 @@ from cobble.dataflow.srccfg.cfg import (
 from cobble.dataflow.srccfg.config import SrcCfgConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
 from cobol_asg.asg_types import CobolASG
-
-logger = logging.getLogger(__name__)
 
 
 COLLISION_SEPARATOR = "__"
@@ -135,20 +132,9 @@ def _collision(member: str, program: str, written: Path) -> str:
 
 def cfg_of(path: Path, source_file: str = "") -> Cfg:
     """One member's CFG, with its CICS handler transfers resolved."""
-    import logging, time  # noqa: PLC0415
-    log = logging.getLogger(__name__)
-    t0 = time.monotonic()
     with cached_asg_dialect_parsers_registered():
         asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    t1 = time.monotonic()
-    log.info("cfg_of: %s  asg_load=%.2fs", asg.program_id, t1 - t0)
-    cfg = build_program(asg, source_file=source_file)
-    t2 = time.monotonic()
-    log.info("cfg_of: %s  build=%.2fs", asg.program_id, t2 - t1)
-    result = with_handler_edges(cfg)
-    t3 = time.monotonic()
-    log.info("cfg_of: %s  handler_edges=%.2fs  total=%.2fs", asg.program_id, t3 - t2, t3 - t0)
-    return result
+    return with_handler_edges(build_program(asg, source_file=source_file))
 
 
 def cfg_from_dict(document: Mapping) -> Cfg:

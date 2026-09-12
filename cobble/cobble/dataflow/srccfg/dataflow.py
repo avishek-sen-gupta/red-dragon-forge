@@ -53,7 +53,6 @@ paragraph performed from everywhere be walked without limit.
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from itertools import accumulate, chain, groupby, pairwise, repeat
@@ -800,7 +799,6 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
     only reprocesses nodes whose predecessor OUT sets changed, giving
     O(edges × depth) cost in practice instead of O(nodes × iterations²).
     """
-    t0 = time.monotonic()
     generated = definitions_of(cfg)
     in_sets: dict[str, Defs] = {node.id: frozenset() for node in cfg.nodes}
     out_sets: dict[str, Defs] = {
@@ -812,11 +810,6 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
     while worklist:
         node_id = worklist.pop()
         processed += 1
-        if processed % 100_000 == 0:
-            _log.info(
-                "reaching_defs: %s  processed=%d  worklist=%d  t=%.1fs",
-                cfg.program, processed, len(worklist), time.monotonic() - t0,
-            )
         new_in = frozenset(
             chain.from_iterable(
                 out_sets[edge.source]
@@ -834,8 +827,8 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
             for edge in cfg.successors(node_id):
                 worklist.add(edge.target)
     _log.info(
-        "reaching_defs: %s  done  processed=%d  t=%.2fs",
-        cfg.program, processed, time.monotonic() - t0,
+        "reaching_defs: %s  done  processed=%d",
+        cfg.program, processed,
     )
     return in_sets
 
