@@ -52,12 +52,15 @@ def _dep_of(
     row: Mapping[str, str | int | bool | Mapping[str, str | int | bool]],
 ) -> DepRow:
     program = str(row.get("program", ""))
+    source_program = str(row.get("source_program", "")) or program
     return DepRow(
         program=program,
         via=str(row.get("via", "")),
         target=byte_range_from_dict(_extent_or_empty(row.get("target", "")), program),
         origin=str(row.get("origin", "")),
-        source=byte_range_from_dict(_extent_or_empty(row.get("source", "")), program),
+        source=byte_range_from_dict(
+            _extent_or_empty(row.get("source", "")), source_program
+        ),
         site=str(row.get("site", "")),
         definers=tuple(str(d) for d in row.get("definers", ())),
     )
@@ -211,37 +214,50 @@ def _narrowed(source: ByteRange, target: ByteRange, wanted: ByteRange) -> ByteRa
     ``target``. When target and source are the same length (group move, commarea
     binding), the offset relationship is 1:1. When they differ, the source is
     returned as-is — narrowing a many-to-one conversion is not sound.
+
+    It is the overlap of ``wanted`` and ``target`` that is 1:1, not ``wanted``
+    itself: a frontier range wider than the target is the ordinary case once a
+    group and one of its members are both being traced, and offsetting by its
+    start would slide the slice off the front of the source.
     """
     if target.length != source.length:
         return source
-    offset = wanted.start - target.start
-    length = min(wanted.end, target.end) - max(wanted.start, target.start)
+    start = max(wanted.start, target.start)
+    length = min(wanted.end, target.end) - start
     return ByteRange(
         program=source.program,
         region=source.region,
-        start=source.start + offset,
-        end=source.start + offset + length,
+        start=source.start + start - target.start,
+        end=source.start + start - target.start + length,
         name=source.name,
         exact=source.exact,
         known=True,
     )
 
 
-def _narrow_source(dep: DepRow, frontier: Sequence[ByteRange]) -> ByteRange:
-    """The source narrowed to the frontier bytes being traced."""
+def _narrow_sources(
+    dep: DepRow, frontier: Sequence[ByteRange]
+) -> tuple[ByteRange, ...]:
+    """The source narrowed to each frontier range the target overlaps.
+
+    One slice per overlap rather than one for the first of them: the frontier is a
+    set, so "the first" is whatever order it was built in, and picking from it both
+    drops the other overlaps and makes the answer depend on iteration order.
+    """
     matched = tuple(f for f in frontier if dep.target.overlaps(f))
     if not matched:
-        return dep.source
-    return _narrowed(dep.source, dep.target, matched[0])
+        return (dep.source,)
+    return tuple(_narrowed(dep.source, dep.target, one) for one in matched)
 
 
 def _backward_step(deps: Sequence[DepRow], state: _State, depth: int) -> _State:
     matched = tuple(dep for dep in deps if _overlaps_any(dep.target, state.frontier))
     new_hits = tuple(_hit_of(dep, depth) for dep in matched)
     narrowed = tuple(
-        _narrow_source(dep, state.frontier)
+        one
         for dep in matched
         if dep.source.known and _range_key(dep.source) not in state.seen
+        for one in _narrow_sources(dep, state.frontier)
     )
     new_keys = frozenset(_range_key(s) for s in narrowed)
     deduped = tuple(dict((_range_key(s), s) for s in narrowed).values())

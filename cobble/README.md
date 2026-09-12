@@ -658,7 +658,17 @@ number of hops.
 The backward walk **narrows the frontier** at each hop: when a dep's target is a
 group wider than the range being traced, the source is clipped to the
 corresponding sub-range via offset arithmetic. A 3-byte field inside a 1000-byte
-commarea follows only the 3 bytes that feed it, not all 1000.
+commarea follows only the 3 bytes that feed it, not all 1000. It is the overlap
+of the two that is clipped, and every overlapping frontier range yields its own
+slice — the frontier is a set, so narrowing to the first of them would make the
+answer depend on the order it came out in.
+
+Extents are compared within a program, so a dep row carries `source_program`
+beside `source`: at a `LINK` return the caller is credited with bytes still named
+in the callee's address space, and collapsing the two onto the row's one
+`program` would both hide the callee's own writes and let the caller's bytes at
+those offsets stand in for them. It is absent on rows with an `origin`, which
+have no source to address, and defaults to `program` when a trace predates it.
 
 Output is an indented tree, one line per provenance edge, with terminal origins
 (`FILE:`, `LITERAL`, `%CALL:`) at the leaves. The file may be a partial (killed)

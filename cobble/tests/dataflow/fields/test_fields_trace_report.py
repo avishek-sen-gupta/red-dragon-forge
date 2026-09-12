@@ -47,6 +47,7 @@ _DEP = Dep(
     source=_EXTENT_B,
     definers=("PROG/PARA/1",),
     via="",
+    source_program="PROG",
 )
 
 _ORIGIN_DEP = Dep(
@@ -59,6 +60,7 @@ _ORIGIN_DEP = Dep(
     ),
     definers=(),
     via="",
+    source_program="PROG",
 )
 
 _DEAD_END = DeadEnd(
@@ -100,6 +102,7 @@ def test_jsonl_clamped_extent():
         source=_EXTENT_B,
         definers=(),
         via="",
+        source_program="PROG",
     )
     parsed = json.loads(_dep_row(dep))
     assert parsed["target"]["clamped"] is True
