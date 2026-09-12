@@ -120,13 +120,16 @@ def _error_handlers(order: Sequence[ParagraphRef]) -> tuple[str, ...]:
     )
 
 
-def build_program(asg, error_handlers: tuple[str, ...] = ()) -> Cfg:
+def build_program(
+    asg, error_handlers: tuple[str, ...] = (), source_file: str = ""
+) -> Cfg:
     order = paragraph_order(asg)
     context = program_context(asg)
     index = condition_index(asg)
     handlers = error_handlers if error_handlers else ()
     parts = tuple(
-        _paragraph_cfg(ref, asg.program_id, context, index, handlers) for ref in order
+        _paragraph_cfg(ref, asg.program_id, context, index, handlers, source_file)
+        for ref in order
     )
     nodes = tuple(node for part in parts for node in part[0])
     body = (*(edge for part in parts for edge in part[1]), *_fallthru(order))
@@ -148,6 +151,7 @@ def _paragraph_cfg(
     context,
     index,
     handlers: tuple[str, ...],
+    source_file: str = "",
 ) -> tuple[tuple[Node, ...], tuple[Edge, ...]]:
     ctx = Ctx(
         program=program,
@@ -155,6 +159,7 @@ def _paragraph_cfg(
         flows=context,
         index=index,
         error_handlers=handlers,
+        source_file=source_file,
     )
     body = lower_statements(ref.statements, ctx, "")
     label = Node(id=label_id(ref.name), kind=NodeKind.LABEL, paragraph=ref.name)

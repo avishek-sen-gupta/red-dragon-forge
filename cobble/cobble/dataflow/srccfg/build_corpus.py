@@ -14,13 +14,20 @@ from dataclasses import asdict, dataclass
 from functools import reduce
 from pathlib import Path
 
-from cobol_asg.asg_types import CobolASG
-
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind, SourceSpan
+from cobble.dataflow.srccfg.cfg import (
+    Atom,
+    Cfg,
+    Edge,
+    EdgeKind,
+    Node,
+    NodeKind,
+    SourceSpan,
+)
 from cobble.dataflow.srccfg.config import SrcCfgConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
+from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +75,10 @@ def _node_dict(node) -> dict:
 
 
 def build_one(
-    path: Path, out_dir: Path, taken: frozenset[Path] = frozenset()
+    path: Path,
+    out_dir: Path,
+    taken: frozenset[Path] = frozenset(),
+    source_dir: Path = Path(),
 ) -> MemberResult:
     """One member's CFG, written to a file named for its PROGRAM-ID.
 
@@ -80,7 +90,13 @@ def build_one(
     """
     member = path.stem
     try:
-        cfg = cfg_of(path)
+        program_id = json.loads(path.read_text(encoding="utf-8")).get("program_id", "")
+        source_file = (
+            str((source_dir / f"{program_id}.txt").relative_to(source_dir.parent))
+            if source_dir != Path()
+            else ""
+        )
+        cfg = cfg_of(path, source_file=source_file)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=member, message=f"{member}: {error!r}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -117,7 +133,7 @@ def _collision(member: str, program: str, written: Path) -> str:
     )
 
 
-def cfg_of(path: Path) -> Cfg:
+def cfg_of(path: Path, source_file: str = "") -> Cfg:
     """One member's CFG, with its CICS handler transfers resolved.
 
     with_handler_edges belongs here rather than in each query because the artefact is
@@ -130,7 +146,7 @@ def cfg_of(path: Path) -> Cfg:
     """
     with cached_asg_dialect_parsers_registered():
         asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    return with_handler_edges(build_program(asg))
+    return with_handler_edges(build_program(asg, source_file=source_file))
 
 
 def cfg_from_dict(document: Mapping) -> Cfg:
@@ -197,7 +213,7 @@ def build_corpus(config: SrcCfgConfig) -> tuple[MemberResult, ...]:
     """Every member, in cache order, no member's output overwriting another's."""
     return reduce(
         lambda progress, path: _extended(
-            progress, build_one(path, config.out_dir, progress.taken)
+            progress, build_one(path, config.out_dir, progress.taken, config.source_dir)
         ),
         asg_paths(config.asg_dir),
         _Progress(),
