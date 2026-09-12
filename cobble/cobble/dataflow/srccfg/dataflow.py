@@ -793,56 +793,52 @@ def definitions_of(cfg: Cfg) -> Mapping[str, Defs]:
 
 
 def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
-    """A gen/kill fixpoint."""
+    """A gen/kill fixpoint using a worklist algorithm.
+
+    The previous full-sweep approach recomputed all nodes every iteration,
+    causing quadratic cost on large CFGs as frozensets grew. The worklist
+    only reprocesses nodes whose predecessor OUT sets changed, giving
+    O(edges × depth) cost in practice instead of O(nodes × iterations²).
+    """
     t0 = time.monotonic()
     generated = definitions_of(cfg)
-    start = {node.id: frozenset() for node in cfg.nodes}
-    states = accumulate(
-        repeat(None),
-        lambda incoming, _: _stepped(cfg, incoming, generated),
-        initial=start,
-    )
-    n = 0
-    for earlier, later in pairwise(states):
-        n += 1
-        if n % 50 == 0:
-            _log.info("reaching_defs: %s  iter=%d  t=%.1fs", cfg.program, n, time.monotonic() - t0)
-        if earlier == later:
-            _log.info("reaching_defs: %s  converged  iter=%d  t=%.1fs", cfg.program, n, time.monotonic() - t0)
-            return later
-    return start
-
-
-def _stepped(
-    cfg: Cfg, incoming: Mapping[str, Defs], generated: Mapping[str, Defs]
-) -> Mapping[str, Defs]:
-    """One sweep: recompute every node's in-set from its predecessors' out-sets."""
-    return {node_id: _joined(cfg, node_id, incoming, generated) for node_id in incoming}
-
-
-def _joined(
-    cfg: Cfg,
-    node_id: str,
-    incoming: Mapping[str, Defs],
-    generated: Mapping[str, Defs],
-) -> Defs:
-    """Union the out-sets of all predecessors."""
-    return frozenset(
-        chain.from_iterable(
-            _out_of(edge.source, incoming, generated)
-            for edge in cfg.predecessors(node_id)
+    in_sets: dict[str, Defs] = {node.id: frozenset() for node in cfg.nodes}
+    out_sets: dict[str, Defs] = {
+        node.id: generated.get(node.id, frozenset())
+        for node in cfg.nodes
+    }
+    worklist: set[str] = set(cfg.node_ids)
+    processed = 0
+    while worklist:
+        node_id = worklist.pop()
+        processed += 1
+        new_in = frozenset(
+            chain.from_iterable(
+                out_sets[edge.source]
+                for edge in cfg.predecessors(node_id)
+            )
         )
+        written = {d.field for d in generated.get(node_id, frozenset())}
+        new_out = (
+            frozenset(d for d in new_in if d.field not in written)
+            | generated.get(node_id, frozenset())
+        )
+        if new_out != out_sets[node_id]:
+            in_sets[node_id] = new_in
+            out_sets[node_id] = new_out
+            for edge in cfg.successors(node_id):
+                worklist.add(edge.target)
+    _log.info(
+        "reaching_defs: %s  done  processed=%d  t=%.2fs",
+        cfg.program, processed, time.monotonic() - t0,
     )
+    return in_sets
 
 
 def _out_of(
     node_id: str, incoming: Mapping[str, Defs], generated: Mapping[str, Defs]
 ) -> Defs:
-    """Gen/kill: definitions reaching this node, minus what it kills, plus what it generates.
-
-    A subscripted or reference-modified write (WS-TAB(1), WS-FIELD(1:4)) kills only
-    itself, not the base name or other subscripts. Over-approximate on gen, never on kill.
-    """
+    """Gen/kill: definitions reaching this node, minus what it kills, plus what it generates."""
     written = {definition.field for definition in generated.get(node_id, frozenset())}
     survived = frozenset(
         definition
@@ -850,7 +846,6 @@ def _out_of(
         if definition.field not in written
     )
     return survived | generated.get(node_id, frozenset())
-
 
 @dataclass(frozen=True)
 class Use:
