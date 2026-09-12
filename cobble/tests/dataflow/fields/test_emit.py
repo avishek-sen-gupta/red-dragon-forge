@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.emit import field_id, graph_records
-from cobble.dataflow.fields.fixpoint import analyse
+from cobble.dataflow.fixpoint.fixpoint import analyse
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 

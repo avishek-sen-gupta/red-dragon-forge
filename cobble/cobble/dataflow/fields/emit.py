@@ -26,9 +26,9 @@ from dataclasses import dataclass
 from cobble.corpus_index import FileLocationResolver
 from cobble.dataflow.fields.extent import CellIndex
 from cobble.dataflow.fields.extent_text import extent_text
-from cobble.dataflow.fields.fixpoint import FlowEdge, ProgramFlow
 from cobble.dataflow.fields.naming import smallest_covering
 from cobble.dataflow.fields.side_tables import FieldExtents, ReachingDefs
+from cobble.dataflow.fixpoint.fixpoint import FlowEdge, ProgramFlow
 from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,

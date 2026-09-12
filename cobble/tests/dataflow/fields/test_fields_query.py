@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
-from cobble.dataflow.fields.query import Side, contributed, reaches, store_of
+from cobble.dataflow.fixpoint.query import Side, contributed, reaches, store_of
 
 GROUP_MOVE = "MAIN/0"
 CHILD_MOVE = "MAIN/1"
@@ -401,7 +401,7 @@ def test_an_artefact_without_the_defs_table_still_answers_every_other_question(
     tmp_path,
 ):
     """A directory written by an older build is worth querying, not refusing."""
-    from cobble.dataflow.fields.query import load
+    from cobble.dataflow.fixpoint.query import load
 
     (tmp_path / "extents.jsonl").write_text(
         '{"id": "PROGA.WS-A", "level": 5, "usage": "DISPLAY", '

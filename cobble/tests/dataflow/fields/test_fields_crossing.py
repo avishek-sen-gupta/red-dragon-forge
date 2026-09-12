@@ -5,7 +5,7 @@ from itertools import pairwise
 
 import pytest
 from cobble.dataflow.fields.extent_text import byte_range
-from cobble.dataflow.fields.query import Side, cli, crossing, store_of
+from cobble.dataflow.fixpoint.query import Side, cli, crossing, store_of
 from test_fields_query import _declared, _edge
 
 

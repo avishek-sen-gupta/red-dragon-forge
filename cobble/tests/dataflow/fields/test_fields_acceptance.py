@@ -21,9 +21,9 @@ import pytest
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit import ProgramRecords, graph_records
-from cobble.dataflow.fields.fixpoint import analysed
-from cobble.dataflow.fields.query import FieldStore, Side, store_of
 from cobble.dataflow.fields.side_tables import defs_row, extent_row
+from cobble.dataflow.fixpoint.fixpoint import analysed
+from cobble.dataflow.fixpoint.query import FieldStore, Side, store_of
 from cobol_asg.asg_types import CobolASG
 
 COVERAGE_FLOOR = 0.60

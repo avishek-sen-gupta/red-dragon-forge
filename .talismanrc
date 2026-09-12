@@ -263,29 +263,29 @@ fileignoreconfig:
   checksum: 41138077bea65219aa79f3c763514d8c17471728cd5b5999a4229b8d1699a2de
 - filename: cobble/tests/dataflow/fields/test_fixpoint.py
   checksum: f40a187db5635624e2dd30d8340e6fd23e6a2913684ec5d23ab9ab6299ce97a5
-- filename: cobble/cobble/dataflow/fields/fixpoint.py
+- filename: cobble/cobble/dataflow/fixpoint/fixpoint.py
   checksum: eb9f2e00612e5b8cc4cc760aa55d1d65fea2dff4edf7f5c368649982266cb01d
 - filename: cobble/cobble/dataflow/fields/naming.py
   checksum: 7c8fb0b6f7fdee215d9f8e0501e6716fdec469183456e0ad4e1db9f30d59aa71
 - filename: cobble/tests/dataflow/fields/test_naming.py
   checksum: 26938d28bcc510eae09e3c6802eb6fed1e653ebf11b7cf0d42cbf0a7ced10cab
-- filename: cobble/cobble/dataflow/fields/config.py
+- filename: cobble/cobble/dataflow/fixpoint/config.py
   checksum: ea3595e3d5a42506d164b707efee5a26de982110fa00f0215a9b46ae9ff6eb51
 - filename: cobble/tests/dataflow/fields/test_fields_config.py
   checksum: bf84ff4478fc4511da1fc3d23ec65487d144e22e76dbb51c43d77d8ffe31bc00
 - filename: cobble/tests/dataflow/fields/test_fields_build_corpus.py
   checksum: 4ad76224ff937519efb34cd77011260f9af052b60647e613f311cc3b5c38bdb7
-- filename: cobble/cobble/dataflow/fields/build_corpus.py
+- filename: cobble/cobble/dataflow/fixpoint/build_corpus.py
   checksum: ab09f9f9845cbf24ff881ad2a5091d588955005428bb91da52ce80cd9d468039
 - filename: cobble/tests/dataflow/fields/test_fields_acceptance.py
   checksum: d6c24b2a048ee62fa7e77c20cc2bca65082c78cbe31dc731d48977561d564d01
 - filename: cobble/cobble/dataflow/fields/side_tables.py
   checksum: bbba8baf46404ae5467a01c832daaec6b3ca1c59761fa8f45a0285b808709eac
-- filename: cobble/cobble/dataflow/fields/query.py
+- filename: cobble/cobble/dataflow/fixpoint/query.py
   checksum: 23f6397221486740df616bd013619ec318efc5173af825ffcaa7db54a1915b16
 - filename: cobble/tests/dataflow/fields/test_fields_synthetic.py
   checksum: ac334a88abcd9c8ce8d105554216d508834231a26cdad5239e27859b0808ac6f
-- filename: cobble/cobble/dataflow/fields/rows.py
+- filename: cobble/cobble/dataflow/fixpoint/rows.py
   checksum: adfffca388573fce310006bdaf3c21141c2b7faf97113eaedb20d01aa8c37f9c
 - filename: cobble/cobble/dataflow/srccfg/dataflow.py
   checksum: 12461885a6326eea22e739c89ba3dd5fd890ef92708dec50e09ba88e9c63cb5a
@@ -311,4 +311,6 @@ fileignoreconfig:
   checksum: 0580c688d0e812601327c0feab01be95c5fed5060ccc290e631724e5deffb9db
 - filename: cobble/cobble/dataflow/fields/targeted.py
   checksum: 0fa86bc73ed2ae0c839d2825ded0cf702dc9a3b3ee14a96c9fc4215335643eee
+- filename: .pre-commit-config.yaml
+  checksum: 96cf625f500b6ddc8113762f5f2b7b3960bf61bf99a18d419851fb09bf05efd3
 version: "1.0"

@@ -177,7 +177,7 @@ the traversal carries a `visited` set of `(program, range)` and reports a cycle
 as a stop reason distinct from the hop limit.
 
 ```
-$ cobble-fields-query origin --member PROGA --field WS-X --across-calls --max-hops 3
+$ cobble-dataflow-fixpoint-query origin --member PROGA --field WS-X --across-calls --max-hops 3
 
 WS-X@working_storage[40:60]
   hop 0  PROGA  MOVE at 2000-BUILD/4
