@@ -152,20 +152,44 @@ def _initialize_writes(
     return _origin_writes(_initialize_targets(statement), LITERAL, node, index)
 
 
+def _named_stubs(reads: tuple[RefModOperand, ...], index: CellIndex) -> tuple[str, ...]:
+    """Names of read operands that have no resolvable extents and are not literals.
+
+    Used to emit a ``FIELD:<name>`` synthetic source so backward provenance
+    queries name the unresolvable input rather than reporting nothing.  Fields
+    from unstaged copybooks are the common case.
+    """
+    return tuple(
+        op.name
+        for op in reads
+        if op.name
+        and not is_literal(op.name)
+        and not operand_extents(op, index).extents
+    )
+
+
 def _union_writes(
     reads: tuple[RefModOperand, ...],
     targets: tuple[RefModOperand, ...],
     node: str,
     index: CellIndex,
 ) -> Iterator[Write]:
-    """Every target takes every operand: no digit-level correspondence to model."""
+    """Every target takes every operand: no digit-level correspondence to model.
+
+    When a read operand has no resolvable extents but carries a name that is not
+    a literal, a synthetic ``FIELD:<name>`` source is emitted so backward
+    provenance queries name the unresolvable input rather than reporting nothing.
+    """
     every = tuple(
         extent
         for operand in reads
         for extent in operand_extents(operand, index).extents
     )
+    stubs = _named_stubs(reads, index)
+    stub_src = _synthetic(f"FIELD:{','.join(stubs)}", node) if stubs else frozenset()
+    sources = _from_extents(every, node) | stub_src
     return (
-        Write(target, _from_extents(every, node))
+        Write(target, sources)
         for operand in targets
         for target in operand_extents(operand, index).extents
     )
@@ -246,10 +270,22 @@ def _string_writes(
 def _origin_writes(
     operands: tuple[RefModOperand, ...], origin: str, node: str, index: CellIndex
 ) -> Iterator[Write]:
-    return (
+    """Write ``origin`` to every target extent.
+
+    When the target operand has no resolvable extents (unstaged copybook field),
+    emit a single write to ``NOWHERE`` so the origin is at least recorded in the
+    trace rather than silently dropped.
+    """
+    resolved = tuple(
         Write(target, _synthetic(origin, node))
         for operand in operands
         for target in operand_extents(operand, index).extents
+    )
+    if resolved:
+        return iter(resolved)
+    stub_targets = tuple(op for op in operands if op.name and not is_literal(op.name))
+    return iter(
+        Write(NOWHERE, _synthetic(f"{origin}→{op.name}", node)) for op in stub_targets
     )
 
 
