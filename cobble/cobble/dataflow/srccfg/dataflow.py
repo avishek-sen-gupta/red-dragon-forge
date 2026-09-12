@@ -812,6 +812,11 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
     while worklist:
         node_id = worklist.pop()
         processed += 1
+        if processed % 100_000 == 0:
+            _log.info(
+                "reaching_defs: %s  processed=%d  worklist=%d  t=%.1fs",
+                cfg.program, processed, len(worklist), time.monotonic() - t0,
+            )
         new_in = frozenset(
             chain.from_iterable(
                 out_sets[edge.source]
