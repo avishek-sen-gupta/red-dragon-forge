@@ -32,9 +32,9 @@ import json
 from pathlib import Path
 
 import pytest
-from cobble.dataflow.fields.build_corpus import cli
 from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
-from cobble.dataflow.fields.query import (
+from cobble.dataflow.fixpoint.build_corpus import cli
+from cobble.dataflow.fixpoint.query import (
     FieldStore,
     Side,
     contributed,

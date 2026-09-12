@@ -15,9 +15,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from cobble.dataflow.fields import build_corpus
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
-from cobble.dataflow.fields.build_corpus import (
+from cobble.dataflow.fixpoint import build_corpus
+from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
     EDGES_FILE,
@@ -194,7 +194,7 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
             "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
         }
     )
-    script = "import sys; from cobble.dataflow.fields.build_corpus import cli; sys.exit(cli(sys.argv[1:]))"
+    script = "import sys; from cobble.dataflow.fixpoint.build_corpus import cli; sys.exit(cli(sys.argv[1:]))"
 
     written = []
     for seed in ("1", "5", "9"):

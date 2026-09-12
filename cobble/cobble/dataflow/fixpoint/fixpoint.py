@@ -62,7 +62,6 @@ from itertools import accumulate, repeat
 from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
-from cobble.dataflow.fields.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fields.state import EMPTY, State, join, reaching
 from cobble.dataflow.fields.transfer import (
     HANDLED,
@@ -71,6 +70,7 @@ from cobble.dataflow.fields.transfer import (
     write_operands,
     writes_of,
 )
+from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import build_program, label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg

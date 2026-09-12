@@ -46,15 +46,15 @@ from itertools import groupby
 from pathlib import Path
 from types import MappingProxyType
 
-from cobble.dataflow.fields import rows
-from cobble.dataflow.fields.build_corpus import (
+from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
+from cobble.dataflow.fixpoint import rows
+from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
     EDGES_FILE,
     EXTENTS_FILE,
 )
-from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
-from cobble.dataflow.fields.rows import Row
+from cobble.dataflow.fixpoint.rows import Row
 
 MAX_DEPTH = 6
 

@@ -11,9 +11,9 @@ import logging
 import time
 
 import pytest
-from cobble.dataflow.fields import fixpoint
-from cobble.dataflow.fields.fixpoint import analyse, analysed
-from cobble.dataflow.fields.options import DEFAULT_OPTIONS, AnalysisOptions
+from cobble.dataflow.fixpoint import fixpoint
+from cobble.dataflow.fixpoint.fixpoint import analyse, analysed
+from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.layout import UnsizeableFieldError
 
 

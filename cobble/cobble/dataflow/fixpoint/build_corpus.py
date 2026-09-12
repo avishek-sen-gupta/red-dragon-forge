@@ -82,11 +82,8 @@ from cobble.dataflow.fields.aliases import (
     UNREADABLE,
     commarea_aliases,
 )
-from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.extent import CellIndex
-from cobble.dataflow.fields.fixpoint import NO_INDEX, ProgramFlow, analysed
-from cobble.dataflow.fields.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
     FieldExtents,
@@ -97,6 +94,9 @@ from cobble.dataflow.fields.side_tables import (
     extent_row,
     jsonl_writer,
 )
+from cobble.dataflow.fixpoint.config import FieldsConfig, load_fields_config
+from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
+from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobol_asg.asg_types import CobolASG

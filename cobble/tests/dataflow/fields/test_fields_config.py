@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from cobble.dataflow.fields.config import FieldsConfig, load_fields_config
+from cobble.dataflow.fixpoint.config import FieldsConfig, load_fields_config
 
 
 def _write(path: Path, text: str) -> Path:

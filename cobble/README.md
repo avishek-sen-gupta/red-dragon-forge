@@ -316,9 +316,9 @@ worker rather than the gigabytes a full corpus of them would be.
 ### Field-level byte dataflow
 
 ```bash
-uv run cobble-fields --config config/fields.toml --member PROGA PROGB   # one program and its neighbours
-uv run cobble-fields --config config/fields.toml --all                  # the whole cache
-uv run cobble-fields --config config/fields.toml --member PROGA --sweeps 3
+uv run cobble-dataflow-fixpoint --config config/fields.toml --member PROGA PROGB   # one program and its neighbours
+uv run cobble-dataflow-fixpoint --config config/fields.toml --all                  # the whole cache
+uv run cobble-dataflow-fixpoint --config config/fields.toml --member PROGA --sweeps 3
 ```
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
@@ -509,11 +509,11 @@ surface's five primitives, and the corpus pass's exit codes.
 ### Querying the field dataflow
 
 ```bash
-uv run cobble-fields-query writers    WS-TOTAL --out out/fields
-uv run cobble-fields-query readers    PROGA.WS-TOTAL --out out/fields
-uv run cobble-fields-query reaches    WS-TOTAL --out out/fields --depth 4
-uv run cobble-fields-query contains   SOME-REC --out out/fields
-uv run cobble-fields-query reaches    PROGA.WS-KEY --out out/fields --across-calls --max-hops 2
+uv run cobble-dataflow-fixpoint-query writers    WS-TOTAL --out out/fields
+uv run cobble-dataflow-fixpoint-query readers    PROGA.WS-TOTAL --out out/fields
+uv run cobble-dataflow-fixpoint-query reaches    WS-TOTAL --out out/fields --depth 4
+uv run cobble-dataflow-fixpoint-query contains   SOME-REC --out out/fields
+uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --out out/fields --across-calls --max-hops 2
 ```
 
 Joins the graph with the extents, defs and aliases tables and answers in bytes. The
@@ -639,7 +639,7 @@ admits has been walked exactly once.
 It under-approximates, deliberately: a flow it does not report was not sampled,
 never "does not exist", and a loop body runs once. `--paths` and `--coverage`
 bound the sampling and the branch-coverage figure is printed with the answer, as
-are those limits. The fixpoint behind `cobble-fields` keeps the other guarantee —
+are those limits. The fixpoint behind `cobble-dataflow-fixpoint` keeps the other guarantee —
 over-approximate, every real flow present — and neither replaces the other.
 
 ### Querying provenance from a trace
