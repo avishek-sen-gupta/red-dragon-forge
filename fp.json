@@ -14,7 +14,8 @@
     "cobble/cobble/dataflow/depgraph/build.py",
     "cobble/cobble/dataflow/depgraph/checker.py",
     "cobble/cobble/dataflow/depgraph/flows.py",
-    "cobble/cobble/dataflow/depgraph/render.py"
+    "cobble/cobble/dataflow/depgraph/render.py",
+    "cobble/cobble/viz/render_cmd.py"
   ],
   "exclude_why": {
     "_": "Read by nobody: JSON has no comments, and an exclusion whose reason lives in another file is one nobody can judge later. Every key above appears here.",
@@ -23,7 +24,8 @@
     "cobble/cobble/asg_walk.py": "The corpus's one ASG descent. It walks a document whose nesting outruns CPython's recursion limit, so the stack must be explicit -- no-list-append/no-list-pop/no-loop-mutation cannot all be met. Constraint comes from the ASG, not from style.",
     "cobble/cobble/dataflow/fixpoint/rows.py": "The JSONL boundary, and it exists so that `object` appears in one place instead of across the query surface. json.loads returns whatever the file held; a recursive `str | int | Sequence[Json] | ...` alias renames that ignorance without adding a check, satisfying no-object-type in word and not in spirit. Everything above the boundary works in str/int/tuple[str, ...].",
     "cobble/cobble/dataflow/fixpoint/fixpoint.py": "A deferred backlog, not a design constraint: the sweep in `_propagated` and the loop in `_swept` carry all nine, and `_eta`/`_propagated` trip C901 at 4 > 3. Pinning python-fp-lint to a concrete rev turned the previously inert ruleset on, so the file began failing without being touched and blocked a rename that changed one import line in it. Whether a worklist fixpoint earns the mutation the way asg_walk.py's explicit stack does is the open question. See forge-uar.",
-    "cobble/cobble/dataflow/depgraph/": "A deferred backlog, not a design constraint: the five files carry 145 of that package's 167 violations, all accumulator loops and nesting depth. `rev: main` in .pre-commit-config.yaml tracks a mutable ruleset, so they began failing without being touched, and pre-existing violations in a file blocked commits to it for unrelated reasons. See red-dragon-forge-bgk."
+    "cobble/cobble/dataflow/depgraph/": "A deferred backlog, not a design constraint: the five files carry 145 of that package's 167 violations, all accumulator loops and nesting depth. `rev: main` in .pre-commit-config.yaml tracks a mutable ruleset, so they began failing without being touched, and pre-existing violations in a file blocked commits to it for unrelated reasons. See red-dragon-forge-bgk.",
+    "cobble/cobble/viz/render_cmd.py": "HTML string assembly. The renderer builds Mermaid and vis.js payloads by accumulating lines and node/edge dicts; every alternative (nested list comprehensions over a recursive step tree, reduce over a mutable JS template) is less readable and no more correct. The rendering logic carries no domain logic and no state that outlives a single render call."
   },
   "ruff_select": "E,F,W,I,B,UP,SIM,RUF,BLE,T20,TID252,C901,PLR0915,ANN401",
   "max_complexity": 3,

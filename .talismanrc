@@ -319,4 +319,10 @@ fileignoreconfig:
   checksum: 2242ee81af5ea1cbe73f83b44303bae8e0aa5c95fce237a35cc896d782bbef68
 - filename: cobble/tests/dataflow/fields/test_trace_query.py
   checksum: c6c0c435333e6f849910438d828d1dadd61e4dc80d8e07838ef38233676335cb
+- filename: cobble/cobble/viz/callgraph_cmd.py
+  checksum: 02a19d3e2127e64a1ee0c6e2b7b386551cfdc75c74e92e20e1136d77a1c24780
+- filename: cobble/cobble/viz/dataflow_cmd.py
+  checksum: c83be5ff99f6a7523d02e36dc78e6da62e6bd86146040d8b322cca60b6b6918a
+- filename: cobble/cobble/viz/render_cmd.py
+  checksum: 3b8df378139cc07fd028b53610e1dcd2fcab41f81ea530c4760113d5d06e0df0
 version: "1.0"
