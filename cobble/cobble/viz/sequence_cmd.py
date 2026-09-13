@@ -114,18 +114,54 @@ def _add_node_link_decision(acc: _LinksDecisions, node: CfgNode) -> _LinksDecisi
     return _LinksDecisions(para_link=para_link, para_has_decision=has_decision)
 
 
+_CALL_TYPE: Mapping[tuple[bool, bool], str] = {
+    (True, True): "conditional_loop",
+    (True, False): "loop",
+    (False, True): "conditional",
+    (False, False): "simple",
+}
+
+
+def _determine_call_type(src_id: str, all_node_ids: frozenset[str]) -> str:
+    is_loop = (src_id + "#loop#test") in all_node_ids or (
+        src_id + "#loop#test.L"
+    ) in all_node_ids
+    is_cond = ".then." in src_id or ".else." in src_id
+    return _CALL_TYPE[(is_loop, is_cond)]
+
+
+def _collect_call_types(
+    edges: Sequence[CfgEdge],
+    nodes_by_id: Mapping[str, CfgNode],
+) -> Mapping[str, str]:
+    """Map tgt_paragraph -> call_type based on the PERFORM CALL node context."""
+    all_ids = frozenset(nodes_by_id)
+    return {
+        tgt_para: _determine_call_type(src_id, all_ids)
+        for edge in edges
+        if edge.get("kind") == "PERFORM"
+        for src_id in (nodes_by_id.get(edge.get("source", ""), {}).get("id", ""),)
+        for tgt_para in (
+            (edge.get("target") or "").replace("#label", "").replace("#end", ""),
+        )
+        if tgt_para
+    }
+
+
 def _index_cfg(
     cfg: CfgDict,
 ) -> tuple[
     dict[str, tuple[str, ...]],  # para -> ordered PERFORM targets
-    dict[str, str],  # para -> callee program (first CICS LINK in para)
+    dict[str, str],  # para -> callee program (first CICS LINK)
     dict[str, bool],  # para -> has any TEST node
+    Mapping[str, str],  # para -> call_type
 ]:
     nodes = cfg.get("nodes", [])
     nodes_by_id: dict[str, CfgNode] = {n["id"]: n for n in nodes}
     para_performs = _collect_performs(cfg.get("edges", []), nodes_by_id)
     ld = reduce(_add_node_link_decision, nodes, _LinksDecisions({}, {}))
-    return para_performs, ld.para_link, ld.para_has_decision
+    call_types = _collect_call_types(cfg.get("edges", []), nodes_by_id)
+    return para_performs, ld.para_link, ld.para_has_decision, call_types
 
 
 # ── Per-program intra-program tree ───────────────────────────────────────────
@@ -136,6 +172,7 @@ def _walk_intra(
     para_performs: Mapping[str, tuple[str, ...]],
     para_link: Mapping[str, str],
     para_has_decision: Mapping[str, bool],
+    call_types: Mapping[str, str],
     visited: frozenset[str],
     depth: int,
 ) -> tuple[SequenceStep, ...]:
@@ -153,6 +190,7 @@ def _walk_intra(
             para_performs,
             para_link,
             para_has_decision,
+            call_types,
             visited | {para},
             depth + 1,
         )
@@ -163,6 +201,7 @@ def _walk_intra(
             paragraph=para,
             callee_program=callee,
             has_decision=para_has_decision.get(para, False),
+            call_type=call_types.get(para, "simple"),
             children=children,
         ),
     )
@@ -173,7 +212,7 @@ def extract_per_program(cfg: CfgDict) -> ProgramSequence:
     entry = _entry_paragraph(cfg)
     if not entry:
         return ProgramSequence(program=program, entry_paragraph="", steps=())
-    para_performs, para_link, para_has_decision = _index_cfg(cfg)
+    para_performs, para_link, para_has_decision, call_types = _index_cfg(cfg)
     steps = tuple(
         step
         for child_para in para_performs.get(entry, ())
@@ -182,6 +221,7 @@ def extract_per_program(cfg: CfgDict) -> ProgramSequence:
             para_performs,
             para_link,
             para_has_decision,
+            call_types,
             frozenset({entry}),
             depth=1,
         )
@@ -241,7 +281,7 @@ def _walk_cross(
     if depth > _MAX_DEPTH or f"{program}/{para}" in state.visited:
         return state
     after_mark = _CrossState(state.calls, state.visited | {f"{program}/{para}"})
-    para_performs, para_link, _ = cfg_indices[program]
+    para_performs, para_link, _, _call_types = cfg_indices[program]
     after_children = reduce(
         lambda st, child_para: _walk_cross(
             program,
