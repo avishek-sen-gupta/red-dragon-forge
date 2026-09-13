@@ -164,6 +164,54 @@ for it, and it refuses to start when that path is not a file.
 `cobble.compare`'s golden-file check stays CardDemo-specific: it's not
 meaningful against a different corpus's output.
 
+### Visualise pipeline outputs
+
+`cobble.viz` turns the JSON outputs of the pipeline stages into self-contained
+HTML files — open in any browser, no server required.  Four commands, each
+reading one pipeline artifact:
+
+```bash
+# Call dependency graph — which programs CICS-LINK to which
+uv run cobble-viz-callgraph \
+  --edges  <out_dir>/edges.jsonl \
+  --cfg    <srccfg_dir>/cfg-<ENTRY>.json \
+  --out    out-viz/call-dep.json
+
+# Sequence diagrams — cross-program call order + per-program PERFORM trees
+uv run cobble-viz-sequence \
+  --cfg    <srccfg_dir>/cfg-<ENTRY>.json \
+  --entry  <ENTRY_PROGRAM> \
+  --out    out-viz/sequences.json
+
+# Data flow — commarea fields traced to VSAM record writes
+uv run cobble-viz-dataflow \
+  --trace            <fields_dir>/trace.jsonl \
+  --commarea-prefix  <PREFIX>- \
+  --out              out-viz/dataflow.json
+
+# Render any of the above as HTML
+uv run cobble-viz-render --input out-viz/call-dep.json   --mode callgraph --out call-dep.html
+uv run cobble-viz-render --input out-viz/sequences.json  --mode top       --out sequence-top.html
+uv run cobble-viz-render --input out-viz/sequences.json  --mode program   --program <PROG> --out sequence-prog.html
+uv run cobble-viz-render --input out-viz/dataflow.json   --mode dataflow  --out dataflow.html
+```
+
+`--cfg` is the JSON produced by `cobble-srccfg-build`; the program list and
+entry point are both derived from it automatically.  `--entry` is optional —
+omitted, it picks the program with no callers within the subgraph.
+
+Render modes:
+
+| Mode | Input | Renderer | Output |
+|---|---|---|---|
+| `callgraph` | `call-dep.json` | vis.js force-directed | Interactive node graph |
+| `top` | `sequences.json` | Mermaid sequenceDiagram | Cross-program call sequence |
+| `program` | `sequences.json` | Mermaid sequenceDiagram | Per-program PERFORM tree |
+| `dataflow` | `dataflow.json` | vis.js static bipartite | Commarea → WS var → record field |
+
+Program labels are shortened by stripping the longest common uppercase prefix
+across all programs in the subgraph (e.g. `MYENTRY` → `ENTRY`).
+
 ### Recover a CSD your corpus never shipped
 
 A CSD is an export of a running CICS region, and plenty of handovers don't

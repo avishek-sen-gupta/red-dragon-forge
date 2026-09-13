@@ -8,6 +8,7 @@ dependencies = [
     "networkx>=3.0",
     "antlr4-python3-runtime>=4.13,<4.14",
     "tqdm>=4.68.4",
+    "pydantic>=2.0",
     "red-dragon",
     "cicada",
     "jackal",
@@ -51,6 +52,10 @@ cobble-extents = "cobble.dataflow.fields.emit_extents:main"
 cobble-dataflow-fixpoint = "cobble.dataflow.fixpoint.build_corpus:main"
 cobble-dataflow-fixpoint-query = "cobble.dataflow.fixpoint.query:main"
 cobble-fields-trace = "cobble.dataflow.fields.trace_report:main"
+cobble-viz-callgraph = "cobble.viz.callgraph_cmd:main"
+cobble-viz-sequence = "cobble.viz.sequence_cmd:main"
+cobble-viz-dataflow = "cobble.viz.dataflow_cmd:main"
+cobble-viz-render = "cobble.viz.render_cmd:main"
 cobble-trace-query = "cobble.dataflow.fields.trace_query:main"
 cobble-fields-access = "cobble.dataflow.fields.access_report:main"
 cobble-access-query = "cobble.dataflow.fields.access_query:main"

@@ -1,0 +1,107 @@
+"""Shared types for cobble.viz pipeline artifacts."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+# ── Call Dependency ──────────────────────────────────────────────────────────
+
+
+class CallEdge(BaseModel, frozen=True):
+    from_program: str
+    to_program: str
+    paragraph: str
+    commarea: str = ""
+
+
+class ProgramNode(BaseModel, frozen=True):
+    program: str
+    heading: str = ""  # filled by cobol-viz-summarize
+    summary: str = ""  # filled by cobol-viz-summarize
+    calls: tuple[str, ...] = ()
+    called_by: tuple[str, ...] = ()
+
+
+class CallDepGraph(BaseModel, frozen=True):
+    entry: str
+    nodes: tuple[ProgramNode, ...]
+    edges: tuple[CallEdge, ...]
+
+
+# ── Sequence ─────────────────────────────────────────────────────────────────
+
+
+class CrossProgramCall(BaseModel, frozen=True):
+    """One inter-program call in execution order."""
+
+    from_program: str
+    to_program: str
+    via_paragraph: str  # paragraph in from_program that issues the LINK
+
+
+class CrossProgramSequence(BaseModel, frozen=True):
+    """Top-level: ordered list of all cross-program LINK calls from entry."""
+
+    entry: str
+    calls: tuple[CrossProgramCall, ...]
+
+
+class SequenceStep(BaseModel, frozen=True):
+    """One step in a single program's internal PERFORM tree."""
+
+    type: str  # "perform" | "link"
+    paragraph: str
+    callee_program: str = ""  # set when type=="link"; no recursion
+    has_decision: bool = False
+    summary: str = ""  # filled by cobol-viz-summarize
+    children: tuple[SequenceStep, ...] = ()
+
+
+SequenceStep.model_rebuild()
+
+
+class ProgramSequence(BaseModel, frozen=True):
+    """Per-program: intra-program PERFORM tree; LINK calls are leaf markers."""
+
+    program: str
+    entry_paragraph: str = ""
+    heading: str = ""  # filled by cobol-viz-summarize
+    summary: str = ""  # filled by cobol-viz-summarize
+    steps: tuple[SequenceStep, ...]
+
+
+class SequenceOutput(BaseModel, frozen=True):
+    """Combined output of cobol-viz-sequence."""
+
+    cross_program: CrossProgramSequence
+    per_program: dict[str, ProgramSequence]
+
+
+# ── Data Flow ────────────────────────────────────────────────────────────────
+
+
+class RecordWrite(BaseModel, frozen=True):
+    record: str  # e.g. "ACCTDAT"
+    fields: tuple[str, ...]  # e.g. ("<RECORD>-<FIELD>",)
+    via_paragraph: str = ""  # paragraph where the write occurs (from site)
+
+
+class IntermediateVar(BaseModel, frozen=True):
+    variable: str  # e.g. "WS-AMT-WHOLE-BAL"
+    record_fields: tuple[str, ...]  # record fields this var flows to from this commarea field
+
+
+class FieldFlow(BaseModel, frozen=True):
+    commarea_field: str  # commarea field name, e.g. "PREFIX-FIELD-NAME"
+    java_source: str = ""  # Java expression from label-provenance
+    record_writes: tuple[RecordWrite, ...]
+    via_programs: tuple[str, ...]
+    via_variables: tuple[
+        IntermediateVar, ...
+    ] = ()  # intermediate WS fields on commarea→K path
+
+
+class DataFlowGraph(BaseModel, frozen=True):
+    entry: str
+    commarea_layout: str
+    flows: tuple[FieldFlow, ...]
