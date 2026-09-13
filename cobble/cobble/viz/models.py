@@ -53,6 +53,7 @@ class SequenceStep(BaseModel, frozen=True):
     paragraph: str
     callee_program: str = ""  # set when type=="link"; no recursion
     has_decision: bool = False
+    call_type: str = "simple"  # "simple" | "loop" | "conditional" | "conditional_loop"
     summary: str = ""  # filled by cobol-viz-summarize
     children: tuple[SequenceStep, ...] = ()
 
