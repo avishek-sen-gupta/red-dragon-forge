@@ -336,7 +336,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/cobble/screens/COUSR2A.html
   checksum: 16b659c283be7a514b0dd183ac6c79fd7ded305a3269b3e40214f811f402fc32
 - filename: docs/presentation/artifacts/srccfg/FACTS.md
-  checksum: aaa8117a1e03733e18258c1d4a92d5e86acc122d89ee71c2efbf495cb083aded
+  checksum: dae6618bc04db1634c57091bea9d5c8130962e47d5b56578b1b7ba2617c9f22f
 - filename: docs/presentation/artifacts/sql/cursor-sqb-run.txt
   checksum: ece6d7c2424da7f11c137a806c49d53ab3bd20639da504491d9cb74ac1cdb8d1
 - filename: docs/presentation/artifacts/jcl/FACTS.md
@@ -354,15 +354,15 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/jcl/job-survey.json
   checksum: 9bf3c0f597a940afc909c0e5510e48cfed84a6633fe5790d3d5707daa3d4ae56
 - filename: docs/presentation/artifacts/srccfg/guards-COSGN00C-xctl.txt
-  checksum: 66312568dfc68f3609350af0ea9888d22c556c5154d63772a895ae694f1c2206
+  checksum: 69944a5247de73d40b7099e6123e5334a685b583cd098b0c8d50d51d47b352cb
 - filename: docs/presentation/index.html
-  checksum: e2f846d3b53d7f20da9d09f95ceffadbb0d5381f33fc975237b58f988432da0c
+  checksum: acb4cc348c5693fa660da5651374bae5fa9acb2fe37dd0ef932d4715a3516c90
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.dot
   checksum: edb53b37e0e35a97767c44ff74d0f941a8c255e295140ab231f50c62ef3879d7
 - filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
-  checksum: b747e136f651db53e4bda1e4a84094f2487dbb6842e16de8664d5b69fce305fc
+  checksum: 3608b69945b2626a3954e03431b566e0623c01e57ea8b66cb61abe02a0634703
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.json
-  checksum: 0a0435337948d79c3e5c0a8982625f356aaff11ff5384cc52c30b6afc1e6f508
+  checksum: e6bdc7aba90df79714c785af73b437cc97e52d6aa64257784c0b5fb5e23643d7
 - filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.json
-  checksum: e64c87351fc7dc98dc278eec69ace55f4031fa1ac9d9fbf3e6b2062c9c7cec70
+  checksum: b4c0e3ff661ad0c35e79c15dbb83094fff4644692872715ea4218a9508ea53f4
 version: "1.0"

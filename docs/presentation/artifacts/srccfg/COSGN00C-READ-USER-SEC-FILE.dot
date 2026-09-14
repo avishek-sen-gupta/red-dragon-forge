@@ -4,7 +4,7 @@ digraph srccfg {
   edge [fontname="Helvetica", fontsize=10];
     "COSGN00C::READ-USER-SEC-FILE#label" [label="READ-USER-SEC-FILE", shape=ellipse, style=filled, fillcolor="#dae8fc"];
     "COSGN00C::READ-USER-SEC-FILE/0" [label="READ-USER-SEC-FILE/0", shape=point, style=filled, fillcolor="#eeeeee"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.0#test" [label="0", shape=diamond, style=filled, fillcolor="#fff2cc"];
+    "COSGN00C::READ-USER-SEC-FILE/1.when.0#test" [label="WS-RESP-CD == 0", shape=diamond, style=filled, fillcolor="#fff2cc"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.0.0#test" [label="SEC-USR-PWD == WS-USER-PWD", shape=diamond, style=filled, fillcolor="#fff2cc"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.then.0" [label="MOVE CDEMO-FROM-TRANID", shape=box, style=filled, fillcolor="#ffffff"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.then.1" [label="MOVE CDEMO-FROM-PROGRAM", shape=box, style=filled, fillcolor="#ffffff"];
@@ -21,7 +21,7 @@ digraph srccfg {
     "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.else.0" [label="MOVE WS-MESSAGE", shape=box, style=filled, fillcolor="#ffffff"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.else.1" [label="MOVE PASSWDL", shape=box, style=filled, fillcolor="#ffffff"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.else.2" [label="PERFORM SEND-SIGNON-SCREEN", shape=box3d, style=filled, fillcolor="#d5e8d4"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.1#test" [label="13", shape=diamond, style=filled, fillcolor="#fff2cc"];
+    "COSGN00C::READ-USER-SEC-FILE/1.when.1#test" [label="WS-RESP-CD == 13", shape=diamond, style=filled, fillcolor="#fff2cc"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.1.0" [label="MOVE WS-ERR-FLG", shape=box, style=filled, fillcolor="#ffffff"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.1.1" [label="MOVE WS-MESSAGE", shape=box, style=filled, fillcolor="#ffffff"];
     "COSGN00C::READ-USER-SEC-FILE/1.when.1.2" [label="MOVE USERIDL", shape=box, style=filled, fillcolor="#ffffff"];

@@ -1,6 +1,6 @@
 srccfg: building COACTVWC  (built=0 pending=0)
-reaching_defs: COACTVWC  done  processed=10512
+reaching_defs: COACTVWC  done  processed=10847
 srccfg: COACTVWC done  nodes=411
-real 1.44
-user 1.37
-sys 0.05
+real 1.39
+user 1.34
+sys 0.04
