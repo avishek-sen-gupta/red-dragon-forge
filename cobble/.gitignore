@@ -45,3 +45,6 @@ tools/
 dependency-reduced-pom.xml
 tmux-client-*
 tmux-server-*
+*.dot
+*.svg
+out-chain*
