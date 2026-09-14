@@ -94,6 +94,9 @@ def make_vsam_read_builtin(engine: VsamEngine) -> object:
             _write_into_ws(vm, record, into_off, into_len)
         return BuiltinResult(value=resp)
 
+    return __cics_read
+
+
 def make_vsam_write_builtin(engine: VsamEngine) -> object:
     """WRITE: args (file, key_bytes, key_len, record_bytes); returns resp."""
 

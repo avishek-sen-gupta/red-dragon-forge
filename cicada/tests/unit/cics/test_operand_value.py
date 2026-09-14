@@ -14,7 +14,7 @@ from interpreter.cobol.field_resolution import (
     ResolvedFieldRef,
     whole_field_extent,
 )
-from interpreter.cobol.region_id import RegionId
+from cobol_memory.region_id import RegionId
 from cobol_asg.ref_mod import RefModLiteral
 from interpreter.cobol.cobol_constants import BuiltinName
 from interpreter.func_name import FuncName
