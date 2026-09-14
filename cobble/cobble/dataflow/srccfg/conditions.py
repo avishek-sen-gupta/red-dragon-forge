@@ -44,12 +44,19 @@ class Not:
 Cond = Atom | And | Or | Not
 
 
-def read_condition(raw: object) -> Cond:
-    if isinstance(raw, str):
-        return _named(raw)
-    if not isinstance(raw, Mapping):
-        return UNRESOLVED
-    return _wrap(raw, _body(raw))
+ConditionData = Mapping | str | None
+"""What the ASG hands over for a condition or an operand: ``WhenStatement`` and
+``IfStatement`` type it ``dict | str``, and a missing key reads as None."""
+
+
+def read_condition(raw: ConditionData) -> Cond:
+    match raw:
+        case str():
+            return _named(raw)
+        case Mapping():
+            return _wrap(raw, _body(raw))
+        case _:
+            return UNRESOLVED
 
 
 def _wrap(raw: Mapping, inner: Cond) -> Cond:
@@ -57,29 +64,39 @@ def _wrap(raw: Mapping, inner: Cond) -> Cond:
 
 
 def _body(raw: Mapping) -> Cond:
-    if "op" in raw and "left" in raw:
-        return _combine(str(raw["op"]), raw["left"], raw["right"])
-    if "relation" in raw:
-        return _relation(raw["relation"])
-    if "condition" in raw:
-        return read_condition(raw["condition"])
-    if "condition_name" in raw:
-        return _named(str(raw["condition_name"]))
-    if "class" in raw:
-        return _class_test(raw)
-    return UNRESOLVED
+    """The first shape the dict carries, in the order the bridge can nest them."""
+    return next(
+        (read(raw) for applies, read in _BODY_SHAPES if applies(raw)), UNRESOLVED
+    )
 
 
-def _combine(op: str, left: object, right: object) -> Cond:
-    read = (read_condition(left), read_condition(right))
-    if op == "AND":
-        return And(left=read[0], right=read[1])
-    if op == "OR":
-        return Or(left=read[0], right=read[1])
-    return UNRESOLVED
+def _is_combination(raw: Mapping) -> bool:
+    return "op" in raw and "left" in raw
 
 
-def _relation(raw: object) -> Cond:
+_BODY_SHAPES = (
+    (_is_combination, lambda raw: _combine(str(raw["op"]), raw["left"], raw["right"])),
+    (lambda raw: "relation" in raw, lambda raw: _relation(raw["relation"])),
+    (lambda raw: "condition" in raw, lambda raw: read_condition(raw["condition"])),
+    (
+        lambda raw: "condition_name" in raw,
+        lambda raw: _named(str(raw["condition_name"])),
+    ),
+    (lambda raw: "class" in raw, lambda raw: _class_test(raw)),
+)
+
+
+_COMBINATIONS = {"AND": And, "OR": Or}
+
+
+def _combine(op: str, left: ConditionData, right: ConditionData) -> Cond:
+    combination = _COMBINATIONS.get(op)
+    if not combination:
+        return UNRESOLVED
+    return combination(left=read_condition(left), right=read_condition(right))
+
+
+def _relation(raw: ConditionData) -> Cond:
     if not isinstance(raw, Mapping):
         return UNRESOLVED
     left = _operand(raw.get("left"))
@@ -90,23 +107,31 @@ def _relation(raw: object) -> Cond:
     return Atom(text=f"{left} {op} {right}", left=left, op=op, right=right)
 
 
-def _operand(raw: object) -> str:
-    if isinstance(raw, str):
-        return raw
-    if not isinstance(raw, Mapping):
-        return ""
-    kind = raw.get("kind")
-    if kind == "ref":
-        return str(raw.get("name", ""))
-    if kind in ("lit", "figurative"):
-        # A figurative constant is a literal that happens to have a name. Reading it
-        # as one keeps `IF X = SPACES OR LOW-VALUES` two distinguishable predicates
-        # rather than two copies of "X == "; is_literal already covers these names,
-        # so nothing downstream mistakes SPACES for a field.
-        return str(raw.get("value", ""))
-    if kind == "dfhresp":
-        return dfhresp_operand(str(raw.get("condition", "")))
-    return ""
+def _operand(raw: ConditionData) -> str:
+    match raw:
+        case str():
+            return raw
+        case Mapping():
+            return _operand_of_kind(raw)
+        case _:
+            return ""
+
+
+def _operand_of_kind(raw: Mapping) -> str:
+    read = _OPERAND_KINDS.get(str(raw.get("kind", "")))
+    return read(raw) if read else ""
+
+
+# A figurative constant is a literal that happens to have a name. Reading it as one
+# keeps `IF X = SPACES OR LOW-VALUES` two distinguishable predicates rather than two
+# copies of "X == "; is_literal already covers these names, so nothing downstream
+# mistakes SPACES for a field.
+_OPERAND_KINDS = {
+    "ref": lambda raw: str(raw.get("name", "")),
+    "lit": lambda raw: str(raw.get("value", "")),
+    "figurative": lambda raw: str(raw.get("value", "")),
+    "dfhresp": lambda raw: dfhresp_operand(str(raw.get("condition", ""))),
+}
 
 
 def _named(name: str) -> Cond:
@@ -262,17 +287,27 @@ def _from_entry(name: str, entry: EightyEight) -> Atom:
 
 
 def _op_and_right(entry: EightyEight) -> tuple[str, str]:
-    if entry.ranges and entry.values:
-        # A mixed 88 has no single operator; list every alternative as IN members.
-        alternatives = (*entry.values, *_render_ranges(entry.ranges))
-        return (IN, " ".join(alternatives))
-    if entry.ranges:
-        return (RANGE, " ".join(_render_ranges(entry.ranges)))
-    if len(entry.values) == 1:
-        return ("==", entry.values[0])
-    if entry.values:
-        return (IN, " ".join(entry.values))
-    return ("", "")
+    """A mixed 88 has no single operator, so every alternative is an IN member."""
+    alternatives = (*entry.values, *_render_ranges(entry.ranges))
+    return next(
+        (
+            shape
+            for applies, shape in _eighty_eight_shapes(entry, alternatives)
+            if applies
+        ),
+        ("", ""),
+    )
+
+
+def _eighty_eight_shapes(
+    entry: EightyEight, alternatives: tuple[str, ...]
+) -> tuple[tuple[bool, tuple[str, str]], ...]:
+    return (
+        (bool(entry.ranges and entry.values), (IN, " ".join(alternatives))),
+        (bool(entry.ranges), (RANGE, " ".join(alternatives))),
+        (len(entry.values) == 1, ("==", alternatives[0] if alternatives else "")),
+        (bool(entry.values), (IN, " ".join(alternatives))),
+    )
 
 
 def _render_ranges(ranges: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
@@ -283,26 +318,47 @@ ALWAYS = Atom(text="ANY", left="", op="", right="")
 _WHEN_ANY = ("ANY", "OTHER", "")
 
 
-def read_when_condition(raw: object, thru: str = "") -> Cond:
-    """A WHEN branch's condition.
+_CONDITION_SUBJECTS = frozenset({"", "TRUE", "FALSE"})
 
-    EVALUATE TRUE gives a structured dict, and that path is read_condition's. The
-    other form arrives as text the ASG has already prefixed with the subject --
-    "WS-X = 'A'" -- and the parts have to be recovered from it, because without
-    them the subject is not a dependency of anything in the branch.
+
+def read_when_condition(raw: ConditionData, subject: str, thru: str = "") -> Cond:
+    """A WHEN branch's condition, compared with the EVALUATE subject it answers.
+
+    Under EVALUATE TRUE the WHEN is itself a condition: a structured dict, or a
+    level-88 name. Under a real subject the parse cache holds only the value --
+    "0", "DFHENTER", a DFHRESP -- because RedDragon joins subject and value when
+    it lowers for execution, not when it parses. Reading that value as a condition
+    name drops the subject, so nothing in the branch depends on it.
     """
+    if subject.strip().upper() in _CONDITION_SUBJECTS:
+        return _condition_when(raw)
+    return _subject_when(raw, subject.strip(), thru)
+
+
+def _condition_when(raw: ConditionData) -> Cond:
     if not isinstance(raw, str):
         return read_condition(raw)
     text = raw.strip()
+    return ALWAYS if text.upper() in _WHEN_ANY else _named(text)
+
+
+def _subject_when(raw: ConditionData, subject: str, thru: str) -> Cond:
+    match raw:
+        case str():
+            return _subject_value(raw.strip(), subject, thru)
+        case {"kind": "dfhresp"}:
+            return _compared(subject, _operand(raw), thru)
+        case _:
+            return read_condition(raw)
+
+
+def _subject_value(text: str, subject: str, thru: str) -> Cond:
     if text.upper() in _WHEN_ANY:
         return ALWAYS
-    return _from_when_text(text, thru)
+    return _compared(subject, text.removeprefix(f"{subject} = "), thru)
 
 
-def _from_when_text(text: str, thru: str) -> Cond:
-    subject, _, value = text.partition(" = ")
-    if not value:
-        return _named(text)
+def _compared(subject: str, value: str, thru: str) -> Atom:
     if thru:
         return Atom(
             text=f"{subject} = {value} THRU {thru}",

@@ -36,10 +36,134 @@ def _evaluate(*branches: dict, subject: str = "WS-TYPE-B") -> dict:
     return {"type": "EVALUATE", "subject": subject, "children": list(branches)}
 
 
+def _parts(cfg: Cfg) -> list[tuple[str, str, str]]:
+    return [
+        (n.atom.left, n.atom.op, n.atom.right)
+        for n in cfg.nodes
+        if n.kind == NodeKind.TEST
+    ]
+
+
 def test_a_when_value_becomes_an_equality_on_the_subject(program_of) -> None:
-    """The ASG hands EVALUATE <subject> WHEN <value> over already prefixed as the
-    string "<subject> = <value>", so the parts have to be recovered from text --
-    without that, the subject is not a dependency of anything in the branch."""
+    """The parse cache holds EVALUATE <subject> WHEN <value> as the bare value
+    under the statement's subject -- the subject is joined to it only when
+    RedDragon lowers for execution. Without the subject the branch depends on
+    nothing, and a value like 0 reads as a condition name."""
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                {
+                    "type": "WHEN",
+                    "condition": "0",
+                    "children": [_move("'F'", "WS-RESULT")],
+                },
+                subject="WS-RESP-CD",
+            )
+        ],
+    )
+
+    assert _parts(cfg) == [("WS-RESP-CD", "==", "0")]
+
+
+def test_a_when_constant_name_is_compared_with_the_subject(program_of) -> None:
+    """EVALUATE EIBAID WHEN DFHENTER compares two names; DFHENTER is the value,
+    not a level-88 condition."""
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                {
+                    "type": "WHEN",
+                    "condition": "DFHENTER",
+                    "children": [_move("'F'", "WS-RESULT")],
+                },
+                subject="EIBAID",
+            )
+        ],
+    )
+
+    assert _parts(cfg) == [("EIBAID", "==", "DFHENTER")]
+
+
+def test_a_when_dfhresp_value_is_compared_with_the_subject(program_of) -> None:
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                {
+                    "type": "WHEN",
+                    "condition": {"kind": "dfhresp", "condition": "NORMAL"},
+                    "children": [_move("'F'", "WS-RESULT")],
+                },
+                subject="WS-RESP-CD",
+            )
+        ],
+    )
+
+    assert _parts(cfg) == [("WS-RESP-CD", "==", "DFHRESP(NORMAL)")]
+
+
+def test_a_bare_when_value_with_thru_is_a_range_on_the_subject(program_of) -> None:
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                {
+                    "type": "WHEN",
+                    "condition": "'A'",
+                    "condition_thru": "'M'",
+                    "children": [_move("'F'", "WS-RESULT")],
+                }
+            )
+        ],
+    )
+
+    assert _parts(cfg) == [("WS-TYPE-B", "RANGE", "'A' THRU 'M'")]
+
+
+def test_each_also_value_is_compared_with_its_own_subject(program_of) -> None:
+    cfg = _cfg(
+        program_of,
+        [
+            {
+                "type": "EVALUATE",
+                "subject": "WS-TYPE-B",
+                "also_subjects": ["WS-FLAG-A"],
+                "children": [
+                    {
+                        "type": "WHEN",
+                        "condition": "'G'",
+                        "also_conditions": ["'Y'"],
+                        "children": [_move("'F'", "WS-RESULT")],
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert _parts(cfg) == [("WS-TYPE-B", "==", "'G'"), ("WS-FLAG-A", "==", "'Y'")]
+
+
+def test_under_evaluate_true_a_when_name_stays_a_condition_name(program_of) -> None:
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                {
+                    "type": "WHEN",
+                    "condition": "INPUT-ERROR",
+                    "children": [_move("'F'", "WS-RESULT")],
+                },
+                subject="TRUE",
+            )
+        ],
+    )
+
+    assert _parts(cfg) == [("INPUT-ERROR", "88", "")]
+
+
+def test_a_when_already_joined_to_its_subject_is_not_joined_twice(program_of) -> None:
     cfg = _cfg(
         program_of,
         [
@@ -53,12 +177,7 @@ def test_a_when_value_becomes_an_equality_on_the_subject(program_of) -> None:
         ],
     )
 
-    test_node = next(n for n in cfg.nodes if n.kind == NodeKind.TEST)
-    assert (test_node.atom.left, test_node.atom.op, test_node.atom.right) == (
-        "WS-TYPE-B",
-        "==",
-        "'G'",
-    )
+    assert _parts(cfg) == [("WS-TYPE-B", "==", "'G'")]
 
 
 def test_a_second_when_is_reached_only_by_the_first_ones_false_edge(program_of) -> None:
