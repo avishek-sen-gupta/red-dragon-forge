@@ -284,3 +284,29 @@ def make_inquire_builtin(program_cache: dict) -> object:  # type: ignore[type-ar
         return BuiltinResult(value=resp)
 
     return __cics_inquire
+
+
+def make_bif_deedit_builtin() -> object:
+    """EXEC CICS BIF DEEDIT — strip non-digit characters from a field in-place.
+
+    Receives the raw field bytes (EBCDIC) and the declared length. Returns a
+    Python str of digit characters (ASCII '0'–'9'), left-justified and
+    right-padded with '0' to ``length`` characters. The caller writes this back
+    into the field via ``emit_copy_back_str``, which re-encodes to EBCDIC.
+
+    EBCDIC digit bytes are 0xF0–0xF9; any other byte is treated as a
+    non-digit editing character and discarded.
+    """
+
+    def __cics_bif_deedit(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+        raw = args[0].value if args else b""
+        length = int(args[1].value) if len(args) > 1 else len(raw)
+        if isinstance(raw, (bytes, bytearray)):
+            digits = "".join(str(b & 0x0F) for b in raw if 0xF0 <= b <= 0xF9)
+        else:
+            # Already a string (e.g. from a prior encode step)
+            digits = "".join(c for c in str(raw) if c.isdigit())
+        result = digits[:length].ljust(length, "0")
+        return BuiltinResult(value=result)
+
+    return __cics_bif_deedit
