@@ -330,8 +330,9 @@ class _Checkpoint:
     """The walk state at a multi-arm decision: its node has run, no arm is taken yet.
 
     Holds only what is needed to resume: the execution state (node, stack, store,
-    program) and the decisions made so far. Order, deps, dead_ends, taken are not
-    needed -- the resumed walk accumulates its own from the resume point onward.
+    program) and the decisions made so far.  ``order`` carries the node sequence
+    accumulated before the checkpoint so that a resumed walk can present a complete
+    path to a ``PathListener`` rather than only the suffix from the flip point.
     """
 
     node: str
@@ -339,6 +340,7 @@ class _Checkpoint:
     store: Mapping[str, State]
     made: tuple[_Choice, ...]
     entered: frozenset[str]
+    order: tuple[str, ...] = ()
 
 
 def _via(stack: tuple[Frame, ...]) -> str:
@@ -708,6 +710,7 @@ def _checkpoint_of(walk: _Walk) -> _Checkpoint:
         store=walk.store,
         made=walk.made,
         entered=walk.entered,
+        order=walk.order,
     )
 
 
@@ -1080,8 +1083,10 @@ def _resumed(checkpoint: _Checkpoint, arm: int, max_depth: int) -> _Walk:
     """A walk resumed from a checkpoint with a flipped arm.
 
     The plan is the prefix of decisions already made plus the flipped arm.
-    Past that, arm 0 is taken (the default). Deps, dead_ends, order, and taken
-    start empty — the resumed walk accumulates only from this point onward.
+    Past that, arm 0 is taken (the default). Deps, dead_ends, and taken
+    start empty -- the resumed walk accumulates only from this point onward.
+    ``order`` is seeded from the checkpoint so a PathListener receives the
+    complete node sequence from the original path entry, not just the suffix.
     """
     plan = (*(c.taken for c in checkpoint.made), arm)
     return _Walk(
@@ -1091,6 +1096,7 @@ def _resumed(checkpoint: _Checkpoint, arm: int, max_depth: int) -> _Walk:
         plan=plan,
         made=checkpoint.made,
         entered=checkpoint.entered,
+        order=checkpoint.order,
     )
 
 
