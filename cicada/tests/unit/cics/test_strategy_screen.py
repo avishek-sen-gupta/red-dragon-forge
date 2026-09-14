@@ -342,7 +342,7 @@ def test_writeq_td_lowers_with_resp_writeback():
         ResolvedFieldRef,
         whole_field_extent,
     )
-    from interpreter.cobol.region_id import RegionId
+    from cobol_memory.region_id import RegionId
     from interpreter.register import Register
 
     class _RespCtx:
