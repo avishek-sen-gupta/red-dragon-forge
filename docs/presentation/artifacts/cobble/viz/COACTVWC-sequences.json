@@ -16,6 +16,7 @@
           "callee_program": "",
           "has_decision": true,
           "call_type": "simple",
+          "arms": [],
           "summary": "",
           "children": []
         },
@@ -25,6 +26,13 @@
           "callee_program": "",
           "has_decision": false,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/9",
+              "arm": "when.1",
+              "label": "WHEN CDEMO-PGM-ENTER (CDEMO-PGM-CONTEXT == 0)"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -33,6 +41,7 @@
               "callee_program": "",
               "has_decision": false,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -42,6 +51,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -51,6 +61,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -60,6 +71,7 @@
               "callee_program": "",
               "has_decision": false,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             }
@@ -70,7 +82,14 @@
           "paragraph": "2000-PROCESS-INPUTS",
           "callee_program": "",
           "has_decision": false,
-          "call_type": "simple",
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/9",
+              "arm": "when.2",
+              "label": "WHEN CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -79,6 +98,7 @@
               "callee_program": "",
               "has_decision": false,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -88,6 +108,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": [
                 {
@@ -96,6 +117,7 @@
                   "callee_program": "",
                   "has_decision": true,
                   "call_type": "simple",
+                  "arms": [],
                   "summary": "",
                   "children": []
                 }
@@ -105,10 +127,84 @@
         },
         {
           "type": "perform",
+          "paragraph": "1000-SEND-MAP",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/9",
+              "arm": "when.2",
+              "label": "WHEN CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "0000-MAIN/9.when.2.1",
+              "arm": "then",
+              "label": "IF INPUT-ERROR (WS-INPUT-FLAG == 1)"
+            }
+          ],
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "1100-SCREEN-INIT",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1200-SETUP-SCREEN-VARS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1300-SETUP-SCREEN-ATTRS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1400-SEND-SCREEN",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
           "paragraph": "9000-READ-ACCT",
           "callee_program": "",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/9",
+              "arm": "when.2",
+              "label": "WHEN CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "0000-MAIN/9.when.2.1",
+              "arm": "else",
+              "label": "NOT INPUT-ERROR (WS-INPUT-FLAG == 1)"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -117,6 +213,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -126,6 +223,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -135,6 +233,69 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "1000-SEND-MAP",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/9",
+              "arm": "when.2",
+              "label": "WHEN CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "0000-MAIN/9.when.2.1",
+              "arm": "else",
+              "label": "NOT INPUT-ERROR (WS-INPUT-FLAG == 1)"
+            }
+          ],
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "1100-SCREEN-INIT",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1200-SETUP-SCREEN-VARS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1300-SETUP-SCREEN-ATTRS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1400-SEND-SCREEN",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             }
@@ -145,9 +306,73 @@
           "paragraph": "SEND-PLAIN-TEXT",
           "callee_program": "",
           "has_decision": true,
-          "call_type": "simple",
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/9",
+              "arm": "when.3",
+              "label": "WHEN OTHER"
+            }
+          ],
           "summary": "",
           "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "1000-SEND-MAP",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "0000-MAIN/10",
+              "arm": "then",
+              "label": "IF INPUT-ERROR (WS-INPUT-FLAG == 1)"
+            }
+          ],
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "1100-SCREEN-INIT",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1200-SETUP-SCREEN-VARS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1300-SETUP-SCREEN-ATTRS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1400-SEND-SCREEN",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            }
+          ]
         }
       ]
     }

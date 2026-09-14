@@ -24,6 +24,7 @@ from functools import reduce
 from pathlib import Path
 
 from cobble.viz.models import (
+    Arm,
     CrossProgramCall,
     CrossProgramSequence,
     ProgramSequence,
@@ -56,7 +57,15 @@ def _entry_paragraph(cfg: CfgDict) -> str:
     )
 
 
-PerformsAcc = Mapping[str, tuple[str, ...]]
+@dataclass(frozen=True)
+class _Site:
+    """One PERFORM statement: the CALL node issuing it and the paragraph it runs."""
+
+    node: str
+    target: str
+
+
+PerformsAcc = Mapping[str, tuple[_Site, ...]]
 
 
 def _perform_paras(
@@ -76,16 +85,14 @@ def _add_perform(
     src_para, tgt_para = _perform_paras(edge, nodes_by_id)
     if not src_para or not tgt_para or src_para == tgt_para:
         return acc
-    existing = acc.get(src_para, ())
-    if tgt_para in existing:
-        return acc
-    return {**acc, src_para: (*existing, tgt_para)}
+    site = _Site(node=str(edge.get("source", "")), target=tgt_para)
+    return {**acc, src_para: (*acc.get(src_para, ()), site)}
 
 
 def _collect_performs(
     edges: Sequence[CfgEdge],
     nodes_by_id: Mapping[str, CfgNode],
-) -> dict[str, tuple[str, ...]]:
+) -> dict[str, tuple[_Site, ...]]:
     return reduce(lambda acc, e: _add_perform(acc, e, nodes_by_id), edges, {})
 
 
@@ -122,88 +129,128 @@ _CALL_TYPE: Mapping[tuple[bool, bool], str] = {
 }
 
 
-def _determine_call_type(src_id: str, all_node_ids: frozenset[str]) -> str:
-    is_loop = (src_id + "#loop#test") in all_node_ids or (
-        src_id + "#loop#test.L"
-    ) in all_node_ids
-    is_cond = ".then." in src_id or ".else." in src_id
-    return _CALL_TYPE[(is_loop, is_cond)]
+@dataclass(frozen=True)
+class _Index:
+    """What the tree walks read from one program's CFG."""
+
+    performs: Mapping[str, tuple[_Site, ...]]  # paragraph -> PERFORM sites, in order
+    links: Mapping[str, str]  # paragraph -> first CICS call target
+    has_decision: Mapping[str, bool]  # paragraph -> has any TEST node
+    node_ids: frozenset[str]
+    tests: Mapping[str, str]  # TEST node id -> condition text
 
 
-def _collect_call_types(
-    edges: Sequence[CfgEdge],
-    nodes_by_id: Mapping[str, CfgNode],
-) -> Mapping[str, str]:
-    """Map tgt_paragraph -> call_type based on the PERFORM CALL node context."""
-    all_ids = frozenset(nodes_by_id)
-    return {
-        tgt_para: _determine_call_type(src_id, all_ids)
-        for edge in edges
-        if edge.get("kind") == "PERFORM"
-        for src_id in (nodes_by_id.get(edge.get("source", ""), {}).get("id", ""),)
-        for tgt_para in (
-            (edge.get("target") or "").replace("#label", "").replace("#end", ""),
-        )
-        if tgt_para
-    }
+_ARM_SEGMENTS = frozenset({"then", "else", "when"})
 
 
-def _index_cfg(
-    cfg: CfgDict,
-) -> tuple[
-    dict[str, tuple[str, ...]],  # para -> ordered PERFORM targets
-    dict[str, str],  # para -> callee program (first CICS LINK)
-    dict[str, bool],  # para -> has any TEST node
-    Mapping[str, str],  # para -> call_type
-]:
+def _arms(site: str, tests: Mapping[str, str]) -> tuple[Arm, ...]:
+    """The arms enclosing a site, outermost first, read off its statement path.
+
+    srccfg names a node by its route from its paragraph: ``9.when.2.1.else.0`` is
+    statement 0 of the ELSE of statement 1, inside WHEN 2 of statement 9.
+    """
+    paragraph, _, path = site.partition("#")[0].partition("/")
+    segments = tuple(path.split("."))
+    return tuple(
+        _arm(f"{paragraph}/{'.'.join(segments[:at])}", segments, at, tests)
+        for at, segment in enumerate(segments)
+        if segment in _ARM_SEGMENTS and at + (segment == "when") < len(segments)
+    )
+
+
+def _arm(
+    decision: str, segments: tuple[str, ...], at: int, tests: Mapping[str, str]
+) -> Arm:
+    if segments[at] == "when":
+        branch = f"when.{segments[at + 1]}"
+        text = _test_text(f"{decision}.{branch}", tests)
+        return Arm(decision=decision, arm=branch, label=f"WHEN {text or 'OTHER'}")
+    prefix = "IF" if segments[at] == "then" else "NOT"
+    return Arm(
+        decision=decision,
+        arm=segments[at],
+        label=f"{prefix} {_test_text(decision, tests)}",
+    )
+
+
+def _test_text(statement: str, tests: Mapping[str, str]) -> str:
+    """The condition tested for ``statement``: its one TEST node, or a compound
+    condition's halves (``#test.L``, ``#test.R``) side by side."""
+    whole = tests.get(f"{statement}#test", "")
+    if whole:
+        return whole
+    halves = sorted(
+        (node, text)
+        for node, text in tests.items()
+        if node.startswith(f"{statement}#test.")
+    )
+    return " / ".join(text for _, text in halves)
+
+
+def _call_type(site: str, arms: tuple[Arm, ...], index: _Index) -> str:
+    is_loop = (
+        f"{site}#loop#test" in index.node_ids or f"{site}#loop#test.L" in index.node_ids
+    )
+    return _CALL_TYPE[(is_loop, bool(arms))]
+
+
+def _index_cfg(cfg: CfgDict) -> _Index:
     nodes = cfg.get("nodes", [])
     nodes_by_id: dict[str, CfgNode] = {n["id"]: n for n in nodes}
-    para_performs = _collect_performs(cfg.get("edges", []), nodes_by_id)
     ld = reduce(_add_node_link_decision, nodes, _LinksDecisions({}, {}))
-    call_types = _collect_call_types(cfg.get("edges", []), nodes_by_id)
-    return para_performs, ld.para_link, ld.para_has_decision, call_types
+    return _Index(
+        performs=_collect_performs(cfg.get("edges", []), nodes_by_id),
+        links=ld.para_link,
+        has_decision=ld.para_has_decision,
+        node_ids=frozenset(nodes_by_id),
+        tests={
+            n["id"]: (n.get("atom") or {}).get("text", "")
+            for n in nodes
+            if n.get("kind") == "TEST"
+        },
+    )
 
 
 # ── Per-program intra-program tree ───────────────────────────────────────────
 
 
 def _walk_intra(
-    para: str,
-    para_performs: Mapping[str, tuple[str, ...]],
-    para_link: Mapping[str, str],
-    para_has_decision: Mapping[str, bool],
-    call_types: Mapping[str, str],
+    site: _Site,
+    index: _Index,
     visited: frozenset[str],
     depth: int,
 ) -> tuple[SequenceStep, ...]:
-    """Recursively build the PERFORM tree for a single program.
+    """One step for one PERFORM site, with the sites its target performs beneath it.
+
+    A step per site rather than per target paragraph: a paragraph PERFORMed from
+    three arms is three calls, each with its own arms and call type.
     CICS LINK calls become leaf "link" steps — no cross-program recursion.
     """
+    para = site.target
     if depth > _MAX_DEPTH or para in visited:
         return ()
-    callee = para_link.get(para, "")
-    children = tuple(
-        step
-        for child_para in para_performs.get(para, ())
-        for step in _walk_intra(
-            child_para,
-            para_performs,
-            para_link,
-            para_has_decision,
-            call_types,
-            visited | {para},
-            depth + 1,
-        )
-    )
+    callee = index.links.get(para, "")
+    arms = _arms(site.node, index.tests)
     return (
         SequenceStep(
             type="link" if callee else "perform",
             paragraph=para,
             callee_program=callee,
-            has_decision=para_has_decision.get(para, False),
-            call_type=call_types.get(para, "simple"),
-            children=children,
+            has_decision=index.has_decision.get(para, False),
+            call_type=_call_type(site.node, arms, index),
+            arms=arms,
+            children=_steps_of(para, index, visited | {para}, depth + 1),
         ),
+    )
+
+
+def _steps_of(
+    para: str, index: _Index, visited: frozenset[str], depth: int
+) -> tuple[SequenceStep, ...]:
+    return tuple(
+        step
+        for site in index.performs.get(para, ())
+        for step in _walk_intra(site, index, visited, depth)
     )
 
 
@@ -212,20 +259,7 @@ def extract_per_program(cfg: CfgDict) -> ProgramSequence:
     entry = _entry_paragraph(cfg)
     if not entry:
         return ProgramSequence(program=program, entry_paragraph="", steps=())
-    para_performs, para_link, para_has_decision, call_types = _index_cfg(cfg)
-    steps = tuple(
-        step
-        for child_para in para_performs.get(entry, ())
-        for step in _walk_intra(
-            child_para,
-            para_performs,
-            para_link,
-            para_has_decision,
-            call_types,
-            frozenset({entry}),
-            depth=1,
-        )
-    )
+    steps = _steps_of(entry, _index_cfg(cfg), frozenset({entry}), depth=1)
     return ProgramSequence(program=program, entry_paragraph=entry, steps=steps)
 
 
@@ -244,7 +278,7 @@ def _emit_callee(
     para: str,
     program: str,
     cfg_by_prog: Mapping[str, CfgDict],
-    cfg_indices: Mapping[str, tuple],
+    cfg_indices: Mapping[str, _Index],
     target_programs: frozenset[str],
     depth: int,
 ) -> _CrossState:
@@ -272,7 +306,7 @@ def _walk_cross(
     program: str,
     para: str,
     cfg_by_prog: Mapping[str, CfgDict],
-    cfg_indices: Mapping[str, tuple],
+    cfg_indices: Mapping[str, _Index],
     target_programs: frozenset[str],
     state: _CrossState,
     depth: int,
@@ -281,23 +315,23 @@ def _walk_cross(
     if depth > _MAX_DEPTH or f"{program}/{para}" in state.visited:
         return state
     after_mark = _CrossState(state.calls, state.visited | {f"{program}/{para}"})
-    para_performs, para_link, _, _call_types = cfg_indices[program]
+    index = cfg_indices[program]
     after_children = reduce(
-        lambda st, child_para: _walk_cross(
+        lambda st, site: _walk_cross(
             program,
-            child_para,
+            site.target,
             cfg_by_prog,
             cfg_indices,
             target_programs,
             st,
             depth + 1,
         ),
-        para_performs.get(para, ()),
+        index.performs.get(para, ()),
         after_mark,
     )
     return _emit_callee(
         after_children,
-        para_link.get(para, ""),
+        index.links.get(para, ""),
         para,
         program,
         cfg_by_prog,
@@ -311,7 +345,7 @@ def extract_cross_program(
     entry_program: str,
     cfg_by_prog: Mapping[str, CfgDict],
     target_programs: frozenset[str],
-    cfg_indices: Mapping[str, tuple],
+    cfg_indices: Mapping[str, _Index],
 ) -> CrossProgramSequence:
     entry_cfg = cfg_by_prog.get(entry_program)
     if not entry_cfg:

@@ -200,7 +200,7 @@ CC-ACCT-ID: 3 candidate(s)
       <h2 style="font-size:1.3em">Inside one transaction</h2>
       <ul style="font-size:0.66em">
         <li>Control-flow graph per program and everything it reaches</li>
-        <li>PERFORM tree as a sequence: screen setup → input edit → the three reads the CICS run showed</li>
+        <li>PERFORM sequence with EVALUATE arms as alternatives: first entry sends the screen; re-entry edits input → the three reads the CICS run showed → sends it</li>
         <li>Path sampling on COACTVWC: <strong>87 paths cover 172 / 172 branches</strong> in 0.6s</li>
         <li>Queries: where a value comes from, which conditions guard a statement, which fields move together</li>
       </ul>

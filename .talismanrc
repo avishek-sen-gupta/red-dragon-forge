@@ -363,4 +363,8 @@ fileignoreconfig:
   checksum: e6bdc7aba90df79714c785af73b437cc97e52d6aa64257784c0b5fb5e23643d7
 - filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.json
   checksum: b4c0e3ff661ad0c35e79c15dbb83094fff4644692872715ea4218a9508ea53f4
+- filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequence-program.html
+  checksum: e5cc3f24822c63276009ae4976fc9a87f3a535f5e7453930e16e8b47673b57b5
+- filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequences.json
+  checksum: b59ec1ab1062b5d499356ad0f9ff5e1bc2c4134a3645e89bf97feca1a8496fdc
 version: "1.0"
