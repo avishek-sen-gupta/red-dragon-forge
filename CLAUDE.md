@@ -128,3 +128,8 @@ independently buildable — they must not import each other.
   records, not living claims, and are exempt.)
 - **Issue tracking**: Beads with the manual-export model described above — regenerate and stage
   `issues/issues.jsonl` before committing anything that touches issues.
+- **`--no-verify` is never used** unless explicitly instructed by the user. Pre-commit hooks
+  exist to catch real problems (terminology leaks, broken tests, talisman violations). When
+  hooks fail: fix the code, fix the test, or rewrite the commit message — never bypass the
+  hooks. A timeout in an e2e suite is an infrastructure problem to report, not a reason to
+  skip all gates including the terminology and talisman checks.
