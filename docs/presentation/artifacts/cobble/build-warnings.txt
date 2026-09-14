@@ -1,0 +1,8 @@
+!!  1 FAILURE(S) -- THIS GRAPH IS INCOMPLETE
+!!  The members below were SKIPPED. Everything in them is absent from
+!!  nodes.jsonl/edges.jsonl and every reference to it is UNRESOLVED.
+==============================================================================
+      1  CICS program
+==============================================================================
+  - CICS program COCRDSEC: not found in cobol_globs matches
+==============================================================================

@@ -1,0 +1,72 @@
+CICS + SQL in ONE compiled program (tests/integration/test_cics_sql_composition.py)
+The pytest versions run against in-memory SQLite. This capture runs the SAME two COBOL
+programs (verbatim from the test module) against BOTH SQLite (as the test does) and live Db2
+(Db2Backend, database MOJO) -- only the backend object differs.
+
+=== COMBINED: EXEC SQL CONNECT + SELECT INTO, then EXEC CICS ASSIGN APPLID + RETURN ===
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. COMBINED.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-ID       PIC 9(4) VALUE 42.
+       01 WS-BAL      PIC 9(9).
+       01 SQLCODE     PIC S9(9).
+       01 WS-APPLID   PIC X(8).
+       PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
+           EXEC SQL
+               SELECT ACCT_BAL
+               INTO :WS-BAL
+               FROM ACCOUNT
+               WHERE ACCT_ID = :WS-ID
+           END-EXEC.
+           EXEC CICS ASSIGN APPLID(WS-APPLID)
+           END-EXEC.
+           EXEC CICS RETURN
+           END-EXEC.
+--- backend: SQLite (as in the test) ---
+Dispatch: RETURN   elapsed 0.00s
+  EXECUTE  sql=SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?
+         params=[42]
+         -> sqlcode=0 rowcount=1 rows=[(777,)]
+  COMMIT
+Open cursors left in backend after RETURN: []
+--- backend: Db2 MOJO (capture substitution) ---
+Dispatch: RETURN   elapsed 0.02s
+  EXECUTE  sql=SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?
+         params=[42]
+         -> sqlcode=0 rowcount=1 rows=[(777,)]
+  COMMIT
+Open cursors left in backend after RETURN: []
+
+=== CURSORPGM: DECLARE/OPEN/FETCH cursor, then EXEC CICS RETURN (task-end hook must close it) ===
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CURSORPGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-NAME     PIC X(9).
+       01 WS-DEPT     PIC 9(4).
+       01 SQLCODE     PIC S9(9).
+       PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
+           EXEC SQL DECLARE C1 CURSOR FOR
+               SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr'
+           END-EXEC
+           EXEC SQL OPEN C1 END-EXEC
+           EXEC SQL FETCH C1 INTO :WS-NAME, :WS-DEPT END-EXEC
+           EXEC CICS RETURN
+           END-EXEC.
+--- backend: SQLite (as in the test) ---
+Dispatch: RETURN   elapsed 0.00s
+  OPEN     cursor=C1 sql=SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' params=[]
+  FETCH    cursor=C1 -> sqlcode=0 rows=[('SANDERS', 20)]
+  COMMIT
+  CLOSE    cursor=C1
+Open cursors left in backend after RETURN: []
+--- backend: Db2 MOJO (capture substitution) ---
+Dispatch: RETURN   elapsed 0.02s
+  OPEN     cursor=C1 sql=SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' params=[]
+  FETCH    cursor=C1 -> sqlcode=0 rows=[('SANDERS', 20)]
+  COMMIT
+  CLOSE    cursor=C1
+Open cursors left in backend after RETURN: []

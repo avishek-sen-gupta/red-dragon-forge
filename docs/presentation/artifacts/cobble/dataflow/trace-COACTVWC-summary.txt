@@ -1,0 +1,2 @@
+trace: 87 paths, 172/172 branches (100%), coverage target met
+trace: 1 dead ends, 172/172 branches (100%) over 87 paths in 0.6s

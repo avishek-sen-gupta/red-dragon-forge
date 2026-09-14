@@ -1,0 +1,7 @@
+$ cobble-srccfg-query coassign CC-ACCT-ID --cfg cfg-COACTVWC.json
+CC-ACCT-ID: 3 candidate(s)
+  SAME_PARAGRAPH  FLG-ACCTFILTER-ISVALID  (2200-EDIT-MAP-INPUTS/2.else.0 / 2200-EDIT-MAP-INPUTS/1)
+  SAME_PARAGRAPH  INPUT-OK  (2200-EDIT-MAP-INPUTS/2.else.0 / 2200-EDIT-MAP-INPUTS/0)
+  SAME_PARAGRAPH  NO-SEARCH-CRITERIA-RECEIVED  (2200-EDIT-MAP-INPUTS/2.else.0 / 2200-EDIT-MAP-INPUTS/4.then.0)
+  (2200-EDIT-MAP-INPUTS/2.then.0: guards are a subset of the real ones, so a tier-3 match is not established)
+  (2200-EDIT-MAP-INPUTS/2.else.0: guards are a subset of the real ones, so a tier-3 match is not established)

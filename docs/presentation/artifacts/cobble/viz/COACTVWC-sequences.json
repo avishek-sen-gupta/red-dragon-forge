@@ -1,0 +1,155 @@
+{
+  "cross_program": {
+    "entry": "COACTVWC",
+    "calls": []
+  },
+  "per_program": {
+    "COACTVWC": {
+      "program": "COACTVWC",
+      "entry_paragraph": "0000-MAIN",
+      "heading": "",
+      "summary": "",
+      "steps": [
+        {
+          "type": "perform",
+          "paragraph": "YYYY-STORE-PFKEY",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "simple",
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "1000-SEND-MAP",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "conditional",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "1100-SCREEN-INIT",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1200-SETUP-SCREEN-VARS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1300-SETUP-SCREEN-ATTRS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "1400-SEND-SCREEN",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "2000-PROCESS-INPUTS",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "simple",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "2100-RECEIVE-MAP",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "2200-EDIT-MAP-INPUTS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "2210-EDIT-ACCOUNT",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "9000-READ-ACCT",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "9200-GETCARDXREF-BYACCT",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "9300-GETACCTDATA-BYACCT",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "9400-GETCUSTDATA-BYCUST",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-PLAIN-TEXT",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "simple",
+          "summary": "",
+          "children": []
+        }
+      ]
+    }
+  }
+}

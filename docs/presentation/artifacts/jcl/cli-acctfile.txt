@@ -1,0 +1,5 @@
+$ uv run --no-sync jackal run vendor/carddemo/app/jcl/ACCTFILE.jcl --source-dir ... --data-dir ... --copybook-dir ...
+STEP05: RC=0 ran=True
+STEP10: RC=0 ran=True
+STEP15: RC=0 ran=True
+exit=0

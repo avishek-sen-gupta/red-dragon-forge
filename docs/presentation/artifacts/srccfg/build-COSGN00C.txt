@@ -1,0 +1,12 @@
+srccfg: building COSGN00C  (built=0 pending=0)
+reaching_defs: COSGN00C  done  processed=1109
+srccfg: COSGN00C done  nodes=104
+srccfg: building COADM01C  (built=1 pending=1)
+reaching_defs: COADM01C  done  processed=1435
+srccfg: COADM01C done  nodes=124
+srccfg: building COMEN01C  (built=2 pending=0)
+reaching_defs: COMEN01C  done  processed=1325
+srccfg: COMEN01C done  nodes=137
+real 2.21
+user 1.79
+sys 0.07

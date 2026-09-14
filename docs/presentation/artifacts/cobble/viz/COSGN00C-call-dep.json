@@ -1,0 +1,27 @@
+{
+  "entry": "COADM01C",
+  "nodes": [
+    {
+      "program": "COADM01C",
+      "heading": "",
+      "summary": "",
+      "calls": [],
+      "called_by": []
+    },
+    {
+      "program": "COMEN01C",
+      "heading": "",
+      "summary": "",
+      "calls": [],
+      "called_by": []
+    },
+    {
+      "program": "COSGN00C",
+      "heading": "",
+      "summary": "",
+      "calls": [],
+      "called_by": []
+    }
+  ],
+  "edges": []
+}

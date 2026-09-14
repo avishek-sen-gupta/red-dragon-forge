@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Internal sequence: COSGN00C</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: sans-serif; padding: 2em; background: #fafafa; }
+  h1 { font-size: 1.1em; color: #444; margin-bottom: 1em; }
+  .mermaid { background: white; border: 1px solid #ddd; padding: 1.5em; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Internal sequence: COSGN00C</h1>
+<div class="mermaid">
+sequenceDiagram
+    participant SGN00C as COSGN00C
+    participant ADM01C as COADM01C
+    Note over SGN00C: MAIN-PARA
+    rect rgb(235,240,255)
+        Note over SGN00C: SEND-SIGNON-SCREEN ⬡
+        Note over SGN00C: POPULATE-HEADER-INFO ⬡
+    end
+    rect rgb(235,240,255)
+        Note over SGN00C: PROCESS-ENTER-KEY ⬡
+        rect rgb(235,240,255)
+            Note over SGN00C: SEND-SIGNON-SCREEN ⬡
+            Note over SGN00C: POPULATE-HEADER-INFO ⬡
+        end
+        SGN00C->>ADM01C: READ-USER-SEC-FILE
+        ADM01C-->>SGN00C: 
+    end
+    Note over SGN00C: SEND-PLAIN-TEXT ⬡
+</div>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+</body>
+</html>

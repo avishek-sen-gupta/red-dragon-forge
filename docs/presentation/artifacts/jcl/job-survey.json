@@ -1,0 +1,1488 @@
+{
+  "generated_by": "docs/presentation/capture/jcl.sh",
+  "timeout_seconds_per_job": 120,
+  "jcl_dir": "vendor/carddemo/app/jcl",
+  "modes": {
+    "standalone": "fresh catalog; only app/data/EBCDIC flat files resolvable",
+    "after_loaders": "fresh catalog pre-populated by running the loader jobs ACCTFILE, CARDFILE, CUSTFILE, XREFFILE, TRANFILE, TRANTYPE, TRANCATG, DISCGRP, TCATBALF best-effort first"
+  },
+  "summary": {
+    "standalone": {
+      "jobs": 38,
+      "ran_rc0": 5,
+      "ran_nonzero_rc": 1,
+      "failed": 32,
+      "by_category": {
+        "idcams_sysin_not_instream": 3,
+        "idcams_unsupported": 9,
+        "missing_input_dataset": 8,
+        "nonzero_rc": 1,
+        "ok": 5,
+        "runtime_error:TypeError": 1,
+        "unsupported_program:DFHCSDUP": 1,
+        "unsupported_program:FTP": 1,
+        "unsupported_program:IEBGENER": 2,
+        "unsupported_program:IKJEFT1B": 1,
+        "unsupported_program:SDSF": 5,
+        "unsupported_program:SORT": 1
+      }
+    },
+    "after_loaders": {
+      "jobs": 38,
+      "ran_rc0": 6,
+      "ran_nonzero_rc": 1,
+      "failed": 31,
+      "by_category": {
+        "idcams_sysin_not_instream": 3,
+        "idcams_unsupported": 9,
+        "missing_input_dataset": 7,
+        "nonzero_rc": 1,
+        "ok": 6,
+        "runtime_error:TypeError": 1,
+        "unsupported_program:DFHCSDUP": 1,
+        "unsupported_program:FTP": 1,
+        "unsupported_program:IEBGENER": 2,
+        "unsupported_program:IKJEFT1B": 1,
+        "unsupported_program:SDSF": 5,
+        "unsupported_program:SORT": 1
+      }
+    }
+  },
+  "jobs": [
+    {
+      "job": "ACCTFILE",
+      "mode": "standalone",
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 0.42
+    },
+    {
+      "job": "CARDFILE",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.37
+    },
+    {
+      "job": "CBADMCDJ",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:DFHCSDUP",
+      "failed_step": "STEP1",
+      "failed_pgm": "DFHCSDUP",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/DFHCSDUP.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.37
+    },
+    {
+      "job": "CBEXPORT",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP02",
+      "failed_pgm": "CBEXPORT",
+      "steps_completed": [
+        [
+          "STEP01",
+          0
+        ]
+      ],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.28
+    },
+    {
+      "job": "CBIMPORT",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP01",
+      "failed_pgm": "CBIMPORT",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.EXPORT.DATA'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.28
+    },
+    {
+      "job": "CLOSEFIL",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.35
+    },
+    {
+      "job": "COMBTRAN",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SORT",
+      "failed_step": "STEP05R",
+      "failed_pgm": "SORT",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SORT.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.27
+    },
+    {
+      "job": "CREASTMT",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "DELDEF01",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'C' in the current parser context, at line 14 col 23\n\n                      CISZ(4096))                             \n                      ^\nExpected one of: \n\t* RPAR\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.34
+    },
+    {
+      "job": "CUSTFILE",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.32
+    },
+    {
+      "job": "DALYREJS",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -                   \n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.25
+    },
+    {
+      "job": "DEFCUST",
+      "mode": "standalone",
+      "outcome": "ran",
+      "max_rc": 8,
+      "category": "nonzero_rc",
+      "steps": [
+        [
+          "STEP05",
+          8,
+          "EXECUTED"
+        ],
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 0.25
+    },
+    {
+      "job": "DEFGDGB",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -                   \n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.35
+    },
+    {
+      "job": "DEFGDGD",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP10",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -\n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.3
+    },
+    {
+      "job": "DISCGRP",
+      "mode": "standalone",
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 0.32
+    },
+    {
+      "job": "DUSRSECJ",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "unsupported_program:IEBGENER",
+      "failed_step": "STEP01",
+      "failed_pgm": "IEBGENER",
+      "steps_completed": [
+        [
+          "PREDEL",
+          0
+        ]
+      ],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/IEBGENER.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.34
+    },
+    {
+      "job": "ESDSRRDS",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "unsupported_program:IEBGENER",
+      "failed_step": "STEP01",
+      "failed_pgm": "IEBGENER",
+      "steps_completed": [
+        [
+          "PREDEL",
+          0
+        ]
+      ],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/IEBGENER.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.37
+    },
+    {
+      "job": "FTPJCL",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:FTP",
+      "failed_step": "STEP1",
+      "failed_pgm": "FTP",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/FTP.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.22
+    },
+    {
+      "job": "INTCALC",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP15",
+      "failed_pgm": "CBACT04C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.28
+    },
+    {
+      "job": "INTRDRJ1",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "IDCAMS",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'I' in the current parser context, at line 1 col 9\n\n  REPRO IFILE(IN) OFILE(OUT)\n        ^\nExpected one of: \n\t* INFILE\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.29
+    },
+    {
+      "job": "INTRDRJ2",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "IDCAMS",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'I' in the current parser context, at line 1 col 9\n\n  REPRO IFILE(IN) OFILE(OUT)\n        ^\nExpected one of: \n\t* INFILE\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.22
+    },
+    {
+      "job": "OPENFIL",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "OPCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.27
+    },
+    {
+      "job": "POSTTRAN",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP15",
+      "failed_pgm": "CBTRN02C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.27
+    },
+    {
+      "job": "PRTCATBL",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "idcams_sysin_not_instream",
+      "failed_step": "STEP05R.PRC001",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [
+        [
+          "DELDEF",
+          0
+        ]
+      ],
+      "error": "UnexpectedEOF: Unexpected end-of-input. Expected one of: \n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DEFINE\n\t* DEFINE\n\t* REPRO\n\t* IF\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/earley.py",
+      "seconds": 0.51
+    },
+    {
+      "job": "READACCT",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBACT01C",
+      "steps_completed": [
+        [
+          "PREDEL",
+          0
+        ]
+      ],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.31
+    },
+    {
+      "job": "READCARD",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBACT02C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.23
+    },
+    {
+      "job": "READCUST",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBCUS01C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.25
+    },
+    {
+      "job": "READXREF",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBACT03C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.23
+    },
+    {
+      "job": "REPTFILE",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -                   \n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.25
+    },
+    {
+      "job": "TCATBALF",
+      "mode": "standalone",
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 0.33
+    },
+    {
+      "job": "TRANBKP",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_sysin_not_instream",
+      "failed_step": "STEP05R.PRC001",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedEOF: Unexpected end-of-input. Expected one of: \n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DEFINE\n\t* DEFINE\n\t* REPRO\n\t* IF\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/earley.py",
+      "seconds": 0.57
+    },
+    {
+      "job": "TRANCATG",
+      "mode": "standalone",
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 0.3
+    },
+    {
+      "job": "TRANFILE",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.38
+    },
+    {
+      "job": "TRANIDX",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP20",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'A' in the current parser context, at line 1 col 11\n\n   DEFINE ALTERNATEINDEX (NAME(AWS.M2.CARDDEMO.TRA\n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.29
+    },
+    {
+      "job": "TRANREPT",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_sysin_not_instream",
+      "failed_step": "STEP05R.PRC001",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedEOF: Unexpected end-of-input. Expected one of: \n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DEFINE\n\t* DEFINE\n\t* REPRO\n\t* IF\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/earley.py",
+      "seconds": 0.52
+    },
+    {
+      "job": "TRANTYPE",
+      "mode": "standalone",
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 0.29
+    },
+    {
+      "job": "TXT2PDF1",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:IKJEFT1B",
+      "failed_step": "TXT2PDF",
+      "failed_pgm": "IKJEFT1B",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/IKJEFT1B.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 0.25
+    },
+    {
+      "job": "WAITSTEP",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "runtime_error:TypeError",
+      "failed_step": "WAIT",
+      "failed_pgm": "COBSWAIT",
+      "steps_completed": [],
+      "error": "TypeError: Unhandled DSN type: InStreamDSN()",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 0.27
+    },
+    {
+      "job": "XREFFILE",
+      "mode": "standalone",
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'A' in the current parser context, at line 5 col 11\n\n          ALTERNATEINDEX                          \n          ^\nExpected one of: \n\t* SET\n\t* PURGE\n\t* CLUSTER\n\t* DELETE\n\t* IF\n\t* REPRO\n\t* DEFINE\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 0.37
+    },
+    {
+      "job": "ACCTFILE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 2.87
+    },
+    {
+      "job": "CARDFILE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.02
+    },
+    {
+      "job": "CBADMCDJ",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:DFHCSDUP",
+      "failed_step": "STEP1",
+      "failed_pgm": "DFHCSDUP",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/DFHCSDUP.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.13
+    },
+    {
+      "job": "CBEXPORT",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP02",
+      "failed_pgm": "CBEXPORT",
+      "steps_completed": [
+        [
+          "STEP01",
+          0
+        ]
+      ],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 4.04
+    },
+    {
+      "job": "CBIMPORT",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP01",
+      "failed_pgm": "CBIMPORT",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.EXPORT.DATA'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 3.73
+    },
+    {
+      "job": "CLOSEFIL",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.12
+    },
+    {
+      "job": "COMBTRAN",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SORT",
+      "failed_step": "STEP05R",
+      "failed_pgm": "SORT",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SORT.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.43
+    },
+    {
+      "job": "CREASTMT",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "DELDEF01",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'C' in the current parser context, at line 14 col 23\n\n                      CISZ(4096))                             \n                      ^\nExpected one of: \n\t* RPAR\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.29
+    },
+    {
+      "job": "CUSTFILE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 2.89
+    },
+    {
+      "job": "DALYREJS",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -                   \n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.05
+    },
+    {
+      "job": "DEFCUST",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "ran",
+      "max_rc": 8,
+      "category": "nonzero_rc",
+      "steps": [
+        [
+          "STEP05",
+          8,
+          "EXECUTED"
+        ],
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 3.29
+    },
+    {
+      "job": "DEFGDGB",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -                   \n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.23
+    },
+    {
+      "job": "DEFGDGD",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP10",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -\n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.38
+    },
+    {
+      "job": "DISCGRP",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "TCATBALF"
+      ],
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 2.89
+    },
+    {
+      "job": "DUSRSECJ",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "unsupported_program:IEBGENER",
+      "failed_step": "STEP01",
+      "failed_pgm": "IEBGENER",
+      "steps_completed": [
+        [
+          "PREDEL",
+          0
+        ]
+      ],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/IEBGENER.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.35
+    },
+    {
+      "job": "ESDSRRDS",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "unsupported_program:IEBGENER",
+      "failed_step": "STEP01",
+      "failed_pgm": "IEBGENER",
+      "steps_completed": [
+        [
+          "PREDEL",
+          0
+        ]
+      ],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/IEBGENER.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.15
+    },
+    {
+      "job": "FTPJCL",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:FTP",
+      "failed_step": "STEP1",
+      "failed_pgm": "FTP",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/FTP.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.55
+    },
+    {
+      "job": "INTCALC",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP15",
+      "failed_pgm": "CBACT04C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 4.07
+    },
+    {
+      "job": "INTRDRJ1",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "IDCAMS",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'I' in the current parser context, at line 1 col 9\n\n  REPRO IFILE(IN) OFILE(OUT)\n        ^\nExpected one of: \n\t* INFILE\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.06
+    },
+    {
+      "job": "INTRDRJ2",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "IDCAMS",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'I' in the current parser context, at line 1 col 9\n\n  REPRO IFILE(IN) OFILE(OUT)\n        ^\nExpected one of: \n\t* INFILE\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.08
+    },
+    {
+      "job": "OPENFIL",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "OPCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.17
+    },
+    {
+      "job": "POSTTRAN",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP15",
+      "failed_pgm": "CBTRN02C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 3.05
+    },
+    {
+      "job": "PRTCATBL",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": 0,
+      "category": "idcams_sysin_not_instream",
+      "failed_step": "STEP05R.PRC001",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [
+        [
+          "DELDEF",
+          0
+        ]
+      ],
+      "error": "UnexpectedEOF: Unexpected end-of-input. Expected one of: \n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DEFINE\n\t* DEFINE\n\t* REPRO\n\t* IF\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/earley.py",
+      "seconds": 3.97
+    },
+    {
+      "job": "READACCT",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "PREDEL",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 9.43
+    },
+    {
+      "job": "READCARD",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBACT02C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 3.04
+    },
+    {
+      "job": "READCUST",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBCUS01C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 3.12
+    },
+    {
+      "job": "READXREF",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "missing_input_dataset",
+      "failed_step": "STEP05",
+      "failed_pgm": "CBACT03C",
+      "steps_completed": [],
+      "error": "KeyError: 'AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS'",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 3.17
+    },
+    {
+      "job": "REPTFILE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'G' in the current parser context, at line 1 col 11\n\n   DEFINE GENERATIONDATAGROUP -                   \n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.37
+    },
+    {
+      "job": "TCATBALF",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP"
+      ],
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 2.92
+    },
+    {
+      "job": "TRANBKP",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_sysin_not_instream",
+      "failed_step": "STEP05R.PRC001",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedEOF: Unexpected end-of-input. Expected one of: \n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DEFINE\n\t* DEFINE\n\t* REPRO\n\t* IF\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/earley.py",
+      "seconds": 3.47
+    },
+    {
+      "job": "TRANCATG",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 3.14
+    },
+    {
+      "job": "TRANFILE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:SDSF",
+      "failed_step": "CLCIFIL",
+      "failed_pgm": "SDSF",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/SDSF.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.15
+    },
+    {
+      "job": "TRANIDX",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP20",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'A' in the current parser context, at line 1 col 11\n\n   DEFINE ALTERNATEINDEX (NAME(AWS.M2.CARDDEMO.TRA\n          ^\nExpected one of: \n\t* CLUSTER\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 3.72
+    },
+    {
+      "job": "TRANREPT",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_sysin_not_instream",
+      "failed_step": "STEP05R.PRC001",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedEOF: Unexpected end-of-input. Expected one of: \n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DELETE\n\t* DEFINE\n\t* DEFINE\n\t* REPRO\n\t* IF\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/earley.py",
+      "seconds": 3.76
+    },
+    {
+      "job": "TRANTYPE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "ran",
+      "max_rc": 0,
+      "category": "ok",
+      "steps": [
+        [
+          "STEP05",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP10",
+          0,
+          "EXECUTED"
+        ],
+        [
+          "STEP15",
+          0,
+          "EXECUTED"
+        ]
+      ],
+      "seconds": 2.86
+    },
+    {
+      "job": "TXT2PDF1",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "unsupported_program:IKJEFT1B",
+      "failed_step": "TXT2PDF",
+      "failed_pgm": "IKJEFT1B",
+      "steps_completed": [],
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '~/code/red-dragon-forge/vendor/carddemo/app/cbl/IKJEFT1B.cbl'",
+      "error_site": "~/.local/share/uv/python/cpython-3.13.1-macos-aarch64-none/lib/python3.13/pathlib/_local.py",
+      "seconds": 3.07
+    },
+    {
+      "job": "WAITSTEP",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "runtime_error:TypeError",
+      "failed_step": "WAIT",
+      "failed_pgm": "COBSWAIT",
+      "steps_completed": [],
+      "error": "TypeError: Unhandled DSN type: InStreamDSN()",
+      "error_site": "jackal/jackal/catalog.py",
+      "seconds": 3.12
+    },
+    {
+      "job": "XREFFILE",
+      "mode": "after_loaders",
+      "preloaded": [
+        "ACCTFILE",
+        "TRANTYPE",
+        "TRANCATG",
+        "DISCGRP",
+        "TCATBALF"
+      ],
+      "outcome": "failed",
+      "max_rc": null,
+      "category": "idcams_unsupported",
+      "failed_step": "STEP05",
+      "failed_pgm": "IDCAMS",
+      "steps_completed": [],
+      "error": "UnexpectedCharacters: No terminal matches 'A' in the current parser context, at line 5 col 11\n\n          ALTERNATEINDEX                          \n          ^\nExpected one of: \n\t* DEFINE\n\t* CLUSTER\n\t* DELETE\n\t* PURGE\n\t* IF\n\t* REPRO\n\t* SET\n",
+      "error_site": ".venv/lib/python3.13/site-packages/lark/parsers/xearley.py",
+      "seconds": 2.88
+    }
+  ]
+}

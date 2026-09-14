@@ -1,0 +1,54 @@
+{
+  "COSGN00C": [
+    {
+      "program": "COSGN00C",
+      "nodes": 104,
+      "edges": 137,
+      "node_kinds": {
+        "ASSIGN": 43,
+        "CALL": 21,
+        "TEST": 20,
+        "NOP": 14,
+        "LABEL": 6
+      }
+    },
+    {
+      "program": "COADM01C",
+      "nodes": 124,
+      "edges": 174,
+      "node_kinds": {
+        "ASSIGN": 56,
+        "TEST": 29,
+        "CALL": 18,
+        "NOP": 13,
+        "LABEL": 8
+      }
+    },
+    {
+      "program": "COMEN01C",
+      "nodes": 137,
+      "edges": 188,
+      "node_kinds": {
+        "ASSIGN": 64,
+        "TEST": 35,
+        "CALL": 19,
+        "NOP": 12,
+        "LABEL": 7
+      }
+    }
+  ],
+  "COACTVWC": [
+    {
+      "program": "COACTVWC",
+      "nodes": 411,
+      "edges": 523,
+      "node_kinds": {
+        "ASSIGN": 180,
+        "TEST": 86,
+        "NOP": 71,
+        "LABEL": 37,
+        "CALL": 37
+      }
+    }
+  ]
+}

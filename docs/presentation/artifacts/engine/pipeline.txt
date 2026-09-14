@@ -1,0 +1,127 @@
+RedDragon pipeline capture — COBOL source -> IR -> CFG -> VM
+Captured 2026-09-14 from vendor/red-dragon (ProLeap bridge JAR
+proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar).
+
+How it was produced
+-------------------
+  cd vendor/red-dragon
+  export PROLEAP_BRIDGE_JAR=$PWD/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+  # program output only (CLI)
+  uv run --no-sync python interpreter.py <artifacts>/engine/pipeline-demo.cbl -l cobol -n 20000
+  # IR + CFG + stats: a short script calling the public API
+  #   compile_cobol(source, parser=make_cobol_parser())  -> linked.merged_ir / merged_cfg
+  #   run(source, language="cobol", max_steps=50000, verbose=True)
+Note: `interpreter.py -l cobol --ir-only` fails ("Unsupported language for deterministic
+frontend: cobol"). The --ir-only/--cfg-only CLI paths skip the COBOL branch that
+run() uses, so the IR below was taken from compile_cobol directly.
+
+1. COBOL source (pipeline-demo.cbl)
+-----------------------------------
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PIPEDEMO.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-BALANCE     PIC S9(7)V99 COMP-3 VALUE 1000.00.
+       01  WS-RATE        PIC S9V9(4)  COMP-3 VALUE 0.0125.
+       01  WS-INTEREST    PIC S9(7)V99 COMP-3 VALUE 0.
+       01  WS-MONTH       PIC 9(2)     VALUE 0.
+       01  WS-EDITED      PIC $$$,$$9.99-.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           PERFORM ACCRUE-PARA VARYING WS-MONTH FROM 1 BY 1
+               UNTIL WS-MONTH > 3.
+           MOVE WS-BALANCE TO WS-EDITED.
+           DISPLAY 'FINAL BALANCE ' WS-EDITED.
+           STOP RUN.
+       ACCRUE-PARA.
+           COMPUTE WS-INTEREST ROUNDED = WS-BALANCE * WS-RATE.
+           ADD WS-INTEREST TO WS-BALANCE.
+           MOVE WS-BALANCE TO WS-EDITED.
+           DISPLAY 'MONTH ' WS-MONTH ' BALANCE ' WS-EDITED.
+
+2. Front end -> IR (sizes)
+--------------------------
+IR instructions: 985
+CFG blocks:      11
+Registry:        2 functions, 0 classes
+Working-storage region: 26 bytes = 5 (S9(7)V99 COMP-3) + 3 (S9V9(4) COMP-3)
+                                   + 5 (COMP-3) + 2 (PIC 9(2) zoned) + 11 (edited)
+
+Instruction classes used (17 of the 37 opcodes):
+  Const                  471
+  CallFunction           303    (byte/nibble/string builtins: packed-decimal codec, edit picture)
+  Binop                  158
+  LoadRegion             11
+  Label_                 10
+  WriteRegion            10
+  StoreField             4
+  Branch                 4
+  LoadVar                3
+  AllocRegion            2
+  StoreVar               2
+  ResumeContinuation     2
+  NewObject              1
+  LoadField              1
+  BranchIf               1
+  SetContinuation        1
+  Halt_                  1
+
+3. IR excerpts (verbatim)
+-------------------------
+-- data division: allocate the working-storage region
+entry:
+%0 = new_object
+%1 = const 26
+%2 = alloc_region %1
+...
+-- PERFORM VARYING: loop test, then call the paragraph via a named continuation
+%274 = const 3
+%275 = binop > %273 %274
+branch_if %275 perform_varying_exit_2,perform_varying_body_1
+perform_varying_body_1:
+set_continuation para_ACCRUE-PARA_end perform_return_3
+branch para_ACCRUE-PARA
+perform_return_3:
+%276 = const 13
+%277 = load_region %210 %276 2          ; WS-MONTH: offset 13, 2 bytes
+...
+-- MOVE to the edit picture, then DISPLAY (EBCDIC decode), then STOP RUN
+write_region %210 %405 11 %417          ; WS-EDITED: 11 bytes
+%418 = const 'FINAL BALANCE '
+%419 = const 15
+%420 = load_region %210 %419 11
+%421 = const ebcdic
+%422 = call_function __bytes_to_string %420 %421
+%423 = call_function str %422
+%424 = call_function __string_concat_pair %418 %423
+%425 = call_function print %424
+halt
+resume_continuation para_MAIN-PARA_end
+para_ACCRUE-PARA:
+%426 = const 0
+%427 = load_region %210 %426 5          ; WS-BALANCE: offset 0, 5 packed bytes
+...
+%949 = call_function print %948
+resume_continuation para_ACCRUE-PARA_end   ; return to perform_return_3
+
+4. VM execution — program output
+--------------------------------
+'MONTH '1' BALANCE ' $1,012.50 'MONTH '2' BALANCE ' $1,025.16 'MONTH '3' BALANCE ' $1,037.97 'FINAL BALANCE ' $1,037.97
+
+(The quote marks come from the VM's print builtin rendering each DISPLAY operand. The
+values match a hand check: 1000.00*0.0125=12.50; 1012.50*0.0125=12.656 -> 12.66;
+1025.16*0.0125=12.8145 -> 12.81.)
+
+5. Pipeline stats report (verbatim, verbose=True)
+------------------------------------------------
+  Source: 21 lines, 857 bytes (cobol, deterministic frontend)
+  Lower (frontend)          985 IR instructions
+  Build CFG                 11 basic blocks
+  Build registry            2 functions, 0 classes
+  Execute (VM)   83.6ms     0 steps, 0 LLM calls
+  Total          570.0ms
+CAVEAT: run() does not fill in execution_steps or llm_calls on the COBOL path
+(interpreter/run.py:1290-1301 sets only the IR/CFG/registry counts), so "0 steps,
+0 LLM calls" is a default, not a measurement. Do not quote it. The determinism claim rests
+on the default UnresolvedCallStrategy.SYMBOLIC (interpreter/run_types.py:27).
+Timings are from one local run and are illustrative only.

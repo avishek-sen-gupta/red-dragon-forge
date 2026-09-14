@@ -1,0 +1,86 @@
+INQCUST end-to-end capture (CICS LINK -> unmodified Bank-of-Z INQCUST -> EXEC SQL -> live Db2)
+Captured by: docs/presentation/capture/db2_inqcust_capture.py (mirrors tests/integration/test_inqcust_e2e.py)
+Backend:     squall.backends.db2.Db2Backend over ibm_db; server DB2/LINUXX8664 11.05.0900, database MOJO
+Program:     vendor/bank-of-z/src/base/cics/cobol/INQCUST.cbl (compiled with CICS + SQL CoprocessorSpecs)
+Driver:      synthetic WRAPPER (CICS only) does EXEC CICS LINK PROGRAM('INQCUST') COMMAREA(WS-CA),
+             then RETURN TRANSID('WRAP') COMMAREA(WS-CA) so the mutated COMMAREA is observable.
+DB2 thread:  NamedDbConnector('SAMPLE') models the CICS Db2 attachment; INQCUST issues no CONNECT.
+
+Seeded CUSTOMER row (test fixture): sortcode=123456 number=0000000001 TITLE=MR FIRST=TESTFIRST LAST=TESTLAST DOB=19800101 CITY=CITY CREDIT_SCORE=750
+Compile (ProLeap parse + lower, INQCUST + WRAPPER): 3.45s
+
+=== Case: FOUND ===
+COMMAREA in  (403 bytes, cp037): INQCUST-SCODE='123456' INQCUST-CUSTNO='0000000001'; rest NUL
+Dispatch:    RETURN_TRANSID   elapsed 0.11s
+SQL reaching Db2 (recorded at the SqlBackend boundary):
+  EXECUTE  sql=SELECT CUSTOMER_EYECATCHER, CUSTOMER_SORTCODE, CUSTOMER_NUMBER, CUSTOMER_TITLE, CUSTOMER_FIRST_NAME, CUSTOMER_LAST_NAME, CUSTOMER_DATE_OF_BIRTH, CUSTOMER_PHONE, CUSTOMER_ADDR_LINE1, CUSTOMER_ADDR_LINE2, CUSTOMER_CITY, CUSTOMER_POSTCODE, CUSTOMER_COUNTRY, CUSTOMER_STATUS, CUSTOMER_CREATED_DATE, CUSTOMER_CREDIT_SCORE, CUSTOMER_CS_REVIEW_DATE FROM CUSTOMER WHERE CUSTOMER_SORTCODE = ? AND CUSTOMER_NUMBER = ?
+         params=['123456', '0000000001']
+         -> sqlcode=0 rowcount=1 rows=[('CUST', '123456', '0000000001', 'MR', 'TESTFIRST', 'TESTLAST', 19800101, '01234567890', 'LINE1', 'LINE2', 'CITY', 'PC1', 'COUNTRY', 'ACTIVE', 20200101, 750, 20210101)]
+  COMMIT
+  COMMIT
+COMMAREA out (INQCUSTZ leaf fields, decoded cp037):
+  INQCUST-EYE                +0    len 4   = 'CUST'
+  INQCUST-SCODE              +4    len 6   = '123456'
+  INQCUST-CUSTNO             +10   len 10  = '0000000001'
+  INQCUST-TITLE              +20   len 10  = 'MR'
+  INQCUST-FIRST-NAME         +30   len 50  = 'TESTFIRST'
+  INQCUST-LAST-NAME          +80   len 50  = 'TESTLAST'
+  INQCUST-DOB-DD             +130  len 2   = '01'
+  INQCUST-DOB-MM             +132  len 2   = '01'
+  INQCUST-DOB-YYYY           +134  len 4   = '1980'
+  INQCUST-PHONE              +138  len 20  = '01234567890'
+  INQCUST-ADDR-LINE1         +158  len 50  = 'LINE1'
+  INQCUST-ADDR-LINE2         +208  len 50  = 'LINE2'
+  INQCUST-CITY               +258  len 50  = 'CITY'
+  INQCUST-POSTCODE           +308  len 10  = 'PC1'
+  INQCUST-COUNTRY            +318  len 50  = 'COUNTRY'
+  INQCUST-STATUS             +368  len 10  = 'ACTIVE'
+  INQCUST-CREATED-DD         +378  len 2   = '01'
+  INQCUST-CREATED-MM         +380  len 2   = '01'
+  INQCUST-CREATED-YYYY       +382  len 4   = '2020'
+  INQCUST-CREDIT-SCORE       +386  len 3   = '750'
+  INQCUST-CS-REVIEW-DD       +389  len 2   = '01'
+  INQCUST-CS-REVIEW-MM       +391  len 2   = '01'
+  INQCUST-CS-REVIEW-YYYY     +393  len 4   = '2021'
+  INQCUST-INQ-SUCCESS        +397  len 1   = 'Y'
+  INQCUST-INQ-FAIL-CD        +398  len 1   = '0'
+  INQCUST-PCB-POINTER        +399  len 4   = '<4 x NUL bytes>'
+Check:       INQCUST-INQ-SUCCESS = 'Y' (expected 'Y') OK
+
+=== Case: NOT FOUND ===
+COMMAREA in  (403 bytes, cp037): INQCUST-SCODE='123456' INQCUST-CUSTNO='0000009999'; rest NUL
+Dispatch:    RETURN_TRANSID   elapsed 0.09s
+SQL reaching Db2 (recorded at the SqlBackend boundary):
+  EXECUTE  sql=SELECT CUSTOMER_EYECATCHER, CUSTOMER_SORTCODE, CUSTOMER_NUMBER, CUSTOMER_TITLE, CUSTOMER_FIRST_NAME, CUSTOMER_LAST_NAME, CUSTOMER_DATE_OF_BIRTH, CUSTOMER_PHONE, CUSTOMER_ADDR_LINE1, CUSTOMER_ADDR_LINE2, CUSTOMER_CITY, CUSTOMER_POSTCODE, CUSTOMER_COUNTRY, CUSTOMER_STATUS, CUSTOMER_CREATED_DATE, CUSTOMER_CREDIT_SCORE, CUSTOMER_CS_REVIEW_DATE FROM CUSTOMER WHERE CUSTOMER_SORTCODE = ? AND CUSTOMER_NUMBER = ?
+         params=['123456', '0000009999']
+         -> sqlcode=100 rowcount=0 rows=[]
+  COMMIT
+  COMMIT
+COMMAREA out (INQCUSTZ leaf fields, decoded cp037):
+  INQCUST-EYE                +0    len 4   = ''
+  INQCUST-SCODE              +4    len 6   = '123456'
+  INQCUST-CUSTNO             +10   len 10  = '0000009999'
+  INQCUST-TITLE              +20   len 10  = ''
+  INQCUST-FIRST-NAME         +30   len 50  = ''
+  INQCUST-LAST-NAME          +80   len 50  = ''
+  INQCUST-DOB-DD             +130  len 2   = '<2 x NUL bytes>'
+  INQCUST-DOB-MM             +132  len 2   = '<2 x NUL bytes>'
+  INQCUST-DOB-YYYY           +134  len 4   = '<4 x NUL bytes>'
+  INQCUST-PHONE              +138  len 20  = ''
+  INQCUST-ADDR-LINE1         +158  len 50  = ''
+  INQCUST-ADDR-LINE2         +208  len 50  = ''
+  INQCUST-CITY               +258  len 50  = ''
+  INQCUST-POSTCODE           +308  len 10  = ''
+  INQCUST-COUNTRY            +318  len 50  = ''
+  INQCUST-STATUS             +368  len 10  = ''
+  INQCUST-CREATED-DD         +378  len 2   = '<2 x NUL bytes>'
+  INQCUST-CREATED-MM         +380  len 2   = '<2 x NUL bytes>'
+  INQCUST-CREATED-YYYY       +382  len 4   = '<4 x NUL bytes>'
+  INQCUST-CREDIT-SCORE       +386  len 3   = '<3 x NUL bytes>'
+  INQCUST-CS-REVIEW-DD       +389  len 2   = '<2 x NUL bytes>'
+  INQCUST-CS-REVIEW-MM       +391  len 2   = '<2 x NUL bytes>'
+  INQCUST-CS-REVIEW-YYYY     +393  len 4   = '<4 x NUL bytes>'
+  INQCUST-INQ-SUCCESS        +397  len 1   = 'N'
+  INQCUST-INQ-FAIL-CD        +398  len 1   = '1'
+  INQCUST-PCB-POINTER        +399  len 4   = '<4 x NUL bytes>'
+Check:       INQCUST-INQ-SUCCESS = 'N' (expected 'N') OK

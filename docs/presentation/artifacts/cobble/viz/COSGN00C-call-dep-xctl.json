@@ -1,0 +1,47 @@
+{
+  "entry": "COSGN00C",
+  "nodes": [
+    {
+      "program": "COADM01C",
+      "heading": "",
+      "summary": "",
+      "calls": [],
+      "called_by": [
+        "COSGN00C"
+      ]
+    },
+    {
+      "program": "COMEN01C",
+      "heading": "",
+      "summary": "",
+      "calls": [],
+      "called_by": [
+        "COSGN00C"
+      ]
+    },
+    {
+      "program": "COSGN00C",
+      "heading": "",
+      "summary": "",
+      "calls": [
+        "COADM01C",
+        "COMEN01C"
+      ],
+      "called_by": []
+    }
+  ],
+  "edges": [
+    {
+      "from_program": "COSGN00C",
+      "to_program": "COADM01C",
+      "paragraph": "",
+      "commarea": ""
+    },
+    {
+      "from_program": "COSGN00C",
+      "to_program": "COMEN01C",
+      "paragraph": "",
+      "commarea": ""
+    }
+  ]
+}

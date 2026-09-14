@@ -1,0 +1,16 @@
+JCL chain: ACCTFILE.jcl -> READACCT.jcl (one job-scoped DatasetCatalog)
+
+JOB ACCTFILE  (app/jcl/ACCTFILE.jcl)  wall 0.32s  MAXRC 0
+  STEP                 RC  DISPOSITION
+  STEP05                0  EXECUTED
+  STEP10                0  EXECUTED
+  STEP15                0  EXECUTED
+
+JOB READACCT  (app/jcl/READACCT.jcl)  wall 5.53s  MAXRC 0
+  STEP                 RC  DISPOSITION
+  PREDEL                0  EXECUTED
+  STEP05                0  EXECUTED
+
+Datasets after the chain:
+  AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS  15000 bytes (RECORDSIZE 300, KEYS(11 0)) = 50 records
+  AWS.M2.CARDDEMO.ACCTDATA.PSCOMP     5350 bytes (LRECL 107) = 50 records

@@ -1,0 +1,45 @@
+squall standalone (no CICS): unmodified IBM db2-samples cursor.sqb against live Db2 MOJO
+Program: squall/testbed/db2-samples/cobol_mf/cursor.sqb  (mirrors squall/tests/integration/test_db2_cursor_e2e.py)
+Seeded STAFF: [(10, 'SANDERS', 20, 'Mgr'), (30, 'MARENGHI', 38, 'Mgr'), (40, 'NGAN', 15, 'Clerk')]
+Compile + run elapsed: 0.71s
+
+SQL reaching Db2 (recorded at the SqlBackend boundary):
+  OPEN     cursor=c1 sql=SELECT name, dept FROM staff WHERE job='Mgr' params=[]
+  FETCH    cursor=c1 -> sqlcode=0 rows=[('SANDERS', 20)]
+  FETCH    cursor=c1 -> sqlcode=0 rows=[('MARENGHI', 38)]
+  FETCH    cursor=c1 -> sqlcode=100 rows=[]
+  CLOSE    cursor=c1
+
+Program DISPLAY output (captured stdout):
+"Sample COBOL program: CURSOR""Enter your user id (default none): ""Enter your password : "SANDERS   " in dept. "20" is a manager"MARENGHI  " in dept. "38" is a manager"
+
+EXEC SQL blocks in the program:
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:63 ---
+           EXEC SQL BEGIN DECLARE SECTION END-EXEC.
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:70 ---
+           EXEC SQL END DECLARE SECTION END-EXEC.
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:83 ---
+             EXEC SQL CONNECT TO sample END-EXEC
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:93 ---
+           EXEC SQL CONNECT TO sample USER :userid USING :passwd
+              END-EXEC.
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:98 ---
+           EXEC SQL DECLARE c1 CURSOR FOR                               1
+                    SELECT name, dept FROM staff
+                    WHERE job='Mgr' END-EXEC.
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:102 ---
+           EXEC SQL OPEN c1 END-EXEC.                                   2
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:109 ---
+           EXEC SQL CLOSE c1 END-EXEC.                                  4
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:113 ---
+           EXEC SQL CONNECT RESET END-EXEC.
+
+--- squall/testbed/db2-samples/cobol_mf/cursor.sqb:120 ---
+           EXEC SQL FETCH c1 INTO :PNAME, :DEPT END-EXEC.               3

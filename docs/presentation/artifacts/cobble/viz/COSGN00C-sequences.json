@@ -1,0 +1,292 @@
+{
+  "cross_program": {
+    "entry": "COSGN00C",
+    "calls": [
+      {
+        "from_program": "COSGN00C",
+        "to_program": "COADM01C",
+        "via_paragraph": "READ-USER-SEC-FILE"
+      }
+    ]
+  },
+  "per_program": {
+    "COADM01C": {
+      "program": "COADM01C",
+      "entry_paragraph": "MAIN-PARA",
+      "heading": "",
+      "summary": "",
+      "steps": [
+        {
+          "type": "link",
+          "paragraph": "RETURN-TO-SIGNON-SCREEN",
+          "callee_program": "CDEMO-TO-PROGRAM",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-MENU-SCREEN",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "simple",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "POPULATE-HEADER-INFO",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "BUILD-MENU-OPTIONS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "RECEIVE-MENU-SCREEN",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "conditional",
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "link",
+          "paragraph": "PROCESS-ENTER-KEY",
+          "callee_program": "CDEMO-ADMIN-OPT-PGMNAME",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "SEND-MENU-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": false,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": []
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "BUILD-MENU-OPTIONS",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "COMEN01C": {
+      "program": "COMEN01C",
+      "entry_paragraph": "MAIN-PARA",
+      "heading": "",
+      "summary": "",
+      "steps": [
+        {
+          "type": "link",
+          "paragraph": "RETURN-TO-SIGNON-SCREEN",
+          "callee_program": "CDEMO-TO-PROGRAM",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-MENU-SCREEN",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "POPULATE-HEADER-INFO",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "BUILD-MENU-OPTIONS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "RECEIVE-MENU-SCREEN",
+          "callee_program": "",
+          "has_decision": false,
+          "call_type": "conditional",
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "link",
+          "paragraph": "PROCESS-ENTER-KEY",
+          "callee_program": "CDEMO-MENU-OPT-PGMNAME",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "SEND-MENU-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "conditional",
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": false,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": []
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "BUILD-MENU-OPTIONS",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "COSGN00C": {
+      "program": "COSGN00C",
+      "entry_paragraph": "MAIN-PARA",
+      "heading": "",
+      "summary": "",
+      "steps": [
+        {
+          "type": "perform",
+          "paragraph": "SEND-SIGNON-SCREEN",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "simple",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "POPULATE-HEADER-INFO",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": []
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "PROCESS-ENTER-KEY",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "SEND-SIGNON-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "type": "link",
+              "paragraph": "READ-USER-SEC-FILE",
+              "callee_program": "COADM01C",
+              "has_decision": true,
+              "call_type": "conditional",
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "SEND-SIGNON-SCREEN",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "summary": "",
+                  "children": [
+                    {
+                      "type": "perform",
+                      "paragraph": "POPULATE-HEADER-INFO",
+                      "callee_program": "",
+                      "has_decision": true,
+                      "call_type": "simple",
+                      "summary": "",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-PLAIN-TEXT",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "summary": "",
+          "children": []
+        }
+      ]
+    }
+  }
+}

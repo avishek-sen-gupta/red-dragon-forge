@@ -1,0 +1,61 @@
+<!doctype html><html><head><meta charset="utf-8"><title>CardDemo field dataflow</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;margin:24px;background:#fff}pre.src{background:#f5f5f5;padding:12px;font-size:12px;overflow:auto}h2{margin-top:32px}</style>
+</head><body>
+<h1>Field-level dataflow in CardDemo (derived from cobble query output)</h1>
+<h2>1. Sign-on user id crosses XCTL into the menu programs (cobble-dataflow-fixpoint-query reaches --across-calls)</h2>
+<pre class="mermaid">flowchart LR
+  n0["COSGN00C.WS-USER-ID"]
+  n1["COSGN00C.CDEMO-USER-ID"]
+  n2["COADM01C.DFHCOMMAREA"]
+  n3["COMEN01C.DFHCOMMAREA"]
+  n4["COADM01C.CARDDEMO-COMMAREA"]
+  n5["COMEN01C.CARDDEMO-COMMAREA"]
+  n0 -->|MOVE| n1
+  n1 -->|XCTL COMMAREA| n2
+  n1 -->|XCTL COMMAREA| n3
+  n2 -->|MOVE| n4
+  n3 -->|MOVE| n5</pre>
+<pre class="src">COSGN00C.WS-USER-ID  level 05  usage DISPLAY
+  declared at WS-USER-ID@working_storage[109:117]
+flows into across calls (depth 6, max 2 hops, 5 landings):
+  hop 0  depth 1  COSGN00C.CDEMO-USER-ID  CDEMO-USER-ID@working_storage[149:157]
+  hop 1  depth 2  COADM01C.DFHCOMMAREA  DFHCOMMAREA@linkage[24:32]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.then.0
+  hop 1  depth 2  COMEN01C.DFHCOMMAREA  DFHCOMMAREA@linkage[24:32]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.else.0
+  hop 1  depth 3  COADM01C.CARDDEMO-COMMAREA  CARDDEMO-COMMAREA@working_storage[155:315]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.then.0
+  hop 1  depth 3  COMEN01C.CARDDEMO-COMMAREA  CARDDEMO-COMMAREA@working_storage[155:315]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.else.0
+
+</pre>
+<h2>2. What feeds the account-file read key in COACTVWC (cobble-trace-query backward)</h2>
+<pre class="mermaid">flowchart LR
+  n0["%CALL:CDEMO-TO-PROGRAM"]
+  n1["WS-CARD-RID-ACCT-ID"]
+  n2["ACCTSIDI"]
+  n3["CC-ACCT-ID"]
+  n4["CDEMO-ACCT-ID"]
+  n5["DFHCOMMAREA"]
+  n0 --> n1
+  n2 --> n3
+  n3 --> n1
+  n4 --> n1
+  n5 --> n1</pre>
+<pre class="src">WS-CARD-RID-ACCT-ID@working_storage[41:52]
+  &lt;- CDEMO-ACCT-ID@working_storage[1408:1419]  at COACTVWC/9000-READ-ACCT/1
+  &lt;- LITERAL  at COACTVWC/0000-MAIN/1
+    &lt;- LITERAL  at COACTVWC/0000-MAIN/4.then.0
+    &lt;- %CALL:CDEMO-TO-PROGRAM  at COACTVWC/0000-MAIN/9.when.0.8
+    &lt;- DFHCOMMAREA@linkage[0:32767]~  at COACTVWC/0000-MAIN/4.else.0
+    &lt;- LITERAL  at COACTVWC/2210-EDIT-ACCOUNT/1.then.3
+    &lt;- LITERAL  at COACTVWC/2210-EDIT-ACCOUNT/2.then.3
+    &lt;- CC-ACCT-ID@working_storage[1254:1265]  at COACTVWC/2210-EDIT-ACCOUNT/2.else.0
+      &lt;- LITERAL  at COACTVWC/2200-EDIT-MAP-INPUTS/2.then.0
+      &lt;- ACCTSIDI@working_storage[3797:3808]  at COACTVWC/2200-EDIT-MAP-INPUTS/2.else.0
+      &lt;- LITERAL  at COACTVWC/0000-MAIN/1
+        &lt;- LITERAL  at COACTVWC/1300-SETUP-SCREEN-ATTRS/4.then.0
+        &lt;- LITERAL  at COACTVWC/1200-SETUP-SCREEN-VARS/0.else.0.then.0
+        &lt;- CC-ACCT-ID@working_storage[1254:1265]  at COACTVWC/1200-SETUP-SCREEN-VARS/0.else.0.else.0
+        &lt;- %CICS-STATE  at COACTVWC/2100-RECEIVE-MAP/0
+        &lt;- LITERAL  at COACTVWC/1100-SCREEN-INIT/0
+</pre>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

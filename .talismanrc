@@ -325,4 +325,44 @@ fileignoreconfig:
   checksum: c83be5ff99f6a7523d02e36dc78e6da62e6bd86146040d8b322cca60b6b6918a
 - filename: cobble/cobble/viz/render_cmd.py
   checksum: 3b8df378139cc07fd028b53610e1dcd2fcab41f81ea530c4760113d5d06e0df0
+- filename: docs/presentation/artifacts/jcl/readacct-sysout-excerpt.txt
+  checksum: 642839a12926cb223ec29ed1950904657b28c8c4c1bd5ec26d113678c4a1717a
+- filename: docs/presentation/artifacts/cics/01-COSGN0A.json
+  checksum: 93192dd7d16507d19f75742f6c848b08d2eede81fc1195f5b0f8089f078eeeff
+- filename: docs/presentation/artifacts/cics/FACTS.md
+  checksum: 695083aa1c06a10e4c0122cb71d695bd37e1e8002c961282969594fad9e35e39
+- filename: docs/presentation/artifacts/cobble/screens/COSGN0A.html
+  checksum: 65930ff6892053fbe25adbb08b799c71df01a3ac663c4982225686a2d2a67b26
+- filename: docs/presentation/artifacts/cobble/screens/COUSR2A.html
+  checksum: 16b659c283be7a514b0dd183ac6c79fd7ded305a3269b3e40214f811f402fc32
+- filename: docs/presentation/artifacts/srccfg/FACTS.md
+  checksum: aaa8117a1e03733e18258c1d4a92d5e86acc122d89ee71c2efbf495cb083aded
+- filename: docs/presentation/artifacts/sql/cursor-sqb-run.txt
+  checksum: ece6d7c2424da7f11c137a806c49d53ab3bd20639da504491d9cb74ac1cdb8d1
+- filename: docs/presentation/artifacts/jcl/FACTS.md
+  checksum: c84edee2f45a93c0acc30339ffe6e528c5181d9a4db5f7e0748686c80ba324c6
+- filename: docs/presentation/artifacts/cics/turns.jsonl
+  checksum: e88eb2c1fa10a57c28a68cc3ecc2c753c3de612f02d63eefbc6406563285651a
+- filename: docs/presentation/artifacts/jcl/acctfile-readacct.log.txt
+  checksum: ce5c13e01d72723540879dae253bdee97435b6e0c02a381c72d8de093ddd1e72
+- filename: docs/presentation/artifacts/cobble/dataflow/aliases.jsonl
+  checksum: 8a266c35b349bb0671f0aaca1b0a967b2680602147c2d965a536650c0f4bcf53
+- filename: docs/presentation/artifacts/cobble/screens/COUSR1A.html
+  checksum: 357ebc11fc18ef665a86e2ffa57a2f3e77a671cd0ee98a8224e38401ba82df70
+- filename: docs/presentation/artifacts/srccfg/COSGN00C-READ-USER-SEC-FILE.dot
+  checksum: 40008c4eb4ebff5e88eab98f7a67cf5a812938b7fd6200f1d38e9ecb5b8aa163
+- filename: docs/presentation/artifacts/jcl/job-survey.json
+  checksum: 9bf3c0f597a940afc909c0e5510e48cfed84a6633fe5790d3d5707daa3d4ae56
+- filename: docs/presentation/artifacts/srccfg/guards-COSGN00C-xctl.txt
+  checksum: 66312568dfc68f3609350af0ea9888d22c556c5154d63772a895ae694f1c2206
+- filename: docs/presentation/index.html
+  checksum: e2f846d3b53d7f20da9d09f95ceffadbb0d5381f33fc975237b58f988432da0c
+- filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.dot
+  checksum: edb53b37e0e35a97767c44ff74d0f941a8c255e295140ab231f50c62ef3879d7
+- filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
+  checksum: b747e136f651db53e4bda1e4a84094f2487dbb6842e16de8664d5b69fce305fc
+- filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.json
+  checksum: 0a0435337948d79c3e5c0a8982625f356aaff11ff5384cc52c30b6afc1e6f508
+- filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.json
+  checksum: e64c87351fc7dc98dc278eec69ace55f4031fa1ac9d9fbf3e6b2062c9c7cec70
 version: "1.0"
