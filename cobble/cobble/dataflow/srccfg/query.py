@@ -23,6 +23,7 @@ from cobble.dataflow.srccfg.build_corpus import load_cfgs
 from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
 from cobble.dataflow.srccfg.coassign import Tier, caveats, co_assigned
 from cobble.dataflow.srccfg.dataflow import (
+    MAX_PATHS,
     Reaching,
     condition_operands,
     guard_text,
@@ -97,10 +98,9 @@ def _guard_texts(cfg: Cfg, reaching: Reaching, node_id: str) -> tuple[str, ...]:
     return (f"unreachable from {cfg.program} entry",)
 
 
-def guards_report(cfg: Cfg, node_id: str) -> tuple[str, ...]:
-    reaching = reaching_conditions(cfg)
+def guards_report(cfg: Cfg, node_id: str, max_paths: int = MAX_PATHS) -> tuple[str, ...]:
+    reaching = reaching_conditions(cfg, max_paths=max_paths)
     guards = _guard_lines(cfg, reaching, node_id)
-    # R77: the subset warning belongs on the detailed report, paired with the cap note
     truncated_note = (f"  {SUBSET_NOTE}",) if node_id in reaching.truncated else ()
     return (
         f"{node_id}: {len(guards_of(reaching, node_id))} path(s)",
@@ -444,12 +444,18 @@ def _parser() -> argparse.ArgumentParser:
         default=MAX_DEPTH,
         help="how far `provenance` chases each direction",
     )
+    parser.add_argument(
+        "--max-paths",
+        type=int,
+        default=MAX_PATHS,
+        help="path cap for reaching conditions (default: %(default)s)",
+    )
     return parser
 
 
 def _lines(cfg: Cfg, arguments) -> tuple[str, ...]:
     if arguments.query == "guards":
-        return guards_report(cfg, arguments.subject)
+        return guards_report(cfg, arguments.subject, max_paths=arguments.max_paths)
     if arguments.query == "coassign":
         return coassign_report(
             cfg, arguments.subject, min_tier=Tier[arguments.min_tier]
