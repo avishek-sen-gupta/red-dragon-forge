@@ -101,6 +101,7 @@ class _Ctx:
     conn: _ConnState
     cursors: dict[str, ParsedSql]
     field_meta: Mapping[str, FieldMeta]
+    tolerant: bool = False
 
 
 def _current(ctx: _Ctx, vm) -> SqlBackend | None:
@@ -198,7 +199,10 @@ def _h_open(ctx: _Ctx, parsed, vm) -> None:
     # Host vars are captured at OPEN: OPEN ... USING overrides, else the cursor
     # SELECT's own host vars.
     params = read_params(
-        vm, _host_names(parsed.in_vars or decl.in_vars), ctx.field_meta
+        vm,
+        _host_names(parsed.in_vars or decl.in_vars),
+        ctx.field_meta,
+        tolerant=ctx.tolerant,
     )
     backend.open_cursor(_cursor_name(parsed.cursor), decl.query, params)
     write_sqlcode(vm, 0)
@@ -257,7 +261,9 @@ def _h_query(ctx: _Ctx, parsed, vm) -> None:
     backend = _current(ctx, vm)
     if backend is None:
         return
-    params = read_params(vm, _host_names(parsed.in_vars), ctx.field_meta)
+    params = read_params(
+        vm, _host_names(parsed.in_vars), ctx.field_meta, tolerant=ctx.tolerant
+    )
     result = backend.execute(parsed.query, params)
     code = (
         _bind_row(vm, parsed.out_vars, result, ctx.field_meta)
@@ -288,6 +294,8 @@ def make_exec_sql_builtin(
     plans: list,
     field_meta: Mapping[str, FieldMeta],
     initial_connector: DbConnector = NullDbConnector(),
+    *,
+    tolerant: bool = False,
 ) -> tuple[Callable, Callable]:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
     (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
@@ -323,6 +331,7 @@ def make_exec_sql_builtin(
         conn=_ConnState(current=initial_connector.connect(connections)),
         cursors={},
         field_meta=field_meta,
+        tolerant=tolerant,
     )
 
     def __exec_sql(args: list, vm) -> BuiltinResult:
@@ -332,7 +341,7 @@ def make_exec_sql_builtin(
         # Stateless: validate_field_meta is a pure check over the (fixed) layout
         # and field_meta — cheap dict lookups, re-run per call rather than cached
         # behind a mutable "already validated" flag.
-        validate_field_meta(vm.data_layout, field_meta)
+        validate_field_meta(vm.data_layout, field_meta, tolerant=tolerant)
 
         parsed = plans[int(args[0].value)]
         _HANDLERS.get(parsed.kind, _h_query)(ctx, parsed, vm)
