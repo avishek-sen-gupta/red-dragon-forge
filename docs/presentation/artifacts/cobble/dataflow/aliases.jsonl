@@ -1,0 +1,8 @@
+{"caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0", "transfer": "XCTL", "callee": "COADM01C", "caller_extent": "CARDDEMO-COMMAREA@working_storage[125:285]", "callee_extent": "DFHCOMMAREA@linkage[0:160]", "returns": false, "reason": ""}
+{"caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0", "transfer": "XCTL", "callee": "COMEN01C", "caller_extent": "CARDDEMO-COMMAREA@working_storage[125:285]", "callee_extent": "DFHCOMMAREA@linkage[0:160]", "returns": false, "reason": ""}
+{"caller": "COMEN01C", "node": "PROCESS-ENTER-KEY/7.then.0.when.0.1.then.3", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}
+{"caller": "COMEN01C", "node": "PROCESS-ENTER-KEY/7.then.0.when.2.4", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}
+{"caller": "COMEN01C", "node": "RETURN-TO-SIGNON-SCREEN/1", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}
+{"caller": "COADM01C", "node": "PROCESS-ENTER-KEY/6.then.0.then.3", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}
+{"caller": "COADM01C", "node": "RETURN-TO-SIGNON-SCREEN/1", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}
+{"caller": "COACTVWC", "node": "0000-MAIN/9.when.0.8", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}

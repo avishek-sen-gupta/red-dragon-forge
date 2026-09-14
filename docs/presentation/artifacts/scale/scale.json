@@ -1,0 +1,100 @@
+{
+  "label": "a production estate (anonymised)",
+  "captured": "2026-09-14",
+  "online": {
+    "source": "docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md",
+    "online_programs": 2137,
+    "compile_run_outcome": {
+      "scope_note": "Only the programs in one target flow are reported as compiling; no estate-wide compile rate is given. One program was executed end to end.",
+      "target_flow_all_compile": true,
+      "programs_executed": 1,
+      "executed_program_shape": "two-turn pseudo-conversational, real BMS maps, real VSAM file control, terminated on RETURN",
+      "silent_defects_found_by_that_run": 6,
+      "defects": [
+        {"id": "A", "class": "INDEXED BY index items never allocated", "severity": "wrong answer, silent", "status": "fixed"},
+        {"id": "B", "class": "unknown data-name lowered as a string literal", "severity": "wrong answer, silent", "status": "fixed"},
+        {"id": "C1-C3", "class": "SEARCH ignored the table (no implicit index, fixed 256 bound, out-of-bounds walk)", "severity": "wrong answer, silent", "status": "fixed"},
+        {"id": "C4", "class": "SEARCH ALL indistinguishable from SEARCH (linear scan)", "severity": "low", "status": "open", "issue": "forge-39r"},
+        {"id": "D", "class": "SET target TO data-item wrote the item's name", "severity": "wrong answer, silent", "status": "fixed"},
+        {"id": "E", "class": "unimplemented EXEC CICS verbs emitted no IR", "severity": "missing behaviour, silent", "status": "fixed: START/RETRIEVE implemented; unsupported verbs now abend (forge-p9t closed)"},
+        {"id": "F", "class": "HANDLE CONDITION no-op; no condition ever raised", "severity": "wrong control flow, silent", "status": "fixed (step 8); follow-ups forge-43l, forge-bxh open"}
+      ]
+    },
+    "blast_radius": {
+      "programs_declaring_indexed_by": 122,
+      "copybooks_declaring_indexed_by": 53,
+      "search_statements_min": 620,
+      "programs_with_search_min": 489,
+      "occurs_clauses_over_256": 45,
+      "largest_occurs": 357,
+      "search_all_occurrences": 0,
+      "handle_condition_occurrences": 2679,
+      "programs_with_handle_condition": 1599,
+      "programs_with_handle_condition_pct": 75
+    },
+    "cics_verb_frequency": {
+      "implemented_at_analysis_time": {
+        "READ": 9534, "RETURN": 5607, "LINK": 4050, "FORMATTIME": 2814, "HANDLE": 2810,
+        "ASKTIME": 2714, "READNEXT": 2434, "STARTBR": 2414, "ENDBR": 2233, "REWRITE": 1806,
+        "ASSIGN": 1387, "WRITE": 1372, "SEND": 1372, "RECEIVE": 1046, "DELETE": 605,
+        "READPREV": 425, "XCTL": 5, "INQUIRE": 4
+      },
+      "missing_at_analysis_time": {
+        "START": 3021, "BIF DEEDIT": 992, "RETRIEVE": 920, "IGNORE CONDITION": 820,
+        "UNLOCK": 457, "DELETEQ TS": 144, "SPOOLOPEN/WRITE/CLOSE": 116, "READQ TS": 98,
+        "WRITEQ TS": 88, "ROUTE": 25, "DELAY": 25, "SYNCPOINT": 20, "RESETBR": 8,
+        "GETMAIN": 7, "ENQ": 3, "DEQ": 3
+      },
+      "status_2026_09_14": {
+        "START": "implemented", "RETRIEVE": "implemented", "IGNORE CONDITION": "implemented",
+        "UNLOCK": "no-op by design (single-task emulation; cicada-lkx.3 open)",
+        "BIF DEEDIT": "open forge-00t", "TS queues": "open forge-o94",
+        "SYNCPOINT": "open forge-urh / forge-s10", "RESETBR": "open forge-t12",
+        "SPOOL/ROUTE/DELAY/GETMAIN/ENQ/DEQ": "open forge-cfb"
+      }
+    }
+  },
+  "batch": {
+    "source": "docs/analysis/2026-09-02-jcl-utility-and-argument-frequency.md",
+    "jcl_members": 860,
+    "live_steps": 12267,
+    "dd_statements": 67354,
+    "application_load_module_steps": 2650,
+    "application_load_module_steps_pct": 21.6,
+    "distinct_application_programs_in_steps": 1373,
+    "top_utilities_by_steps": [
+      {"rank": 1, "utility": "SORT (cataloged PROC, EXEC SORT)", "steps": 4039, "pct": 32.9},
+      {"rank": 2, "utility": "IDCAMS", "steps": 1848, "pct": 15.1},
+      {"rank": 3, "utility": "IEBGENER", "steps": 885, "pct": 7.2},
+      {"rank": 4, "utility": "SAS (PROC)", "steps": 767, "pct": 6.3, "pct_derived": true},
+      {"rank": 5, "utility": "IKJEFT01 (TSO batch / Db2 DSN RUN)", "steps": 478, "pct": 3.9},
+      {"rank": 6, "utility": "MQ batch (PROC)", "steps": 448, "pct": 3.7, "pct_derived": true},
+      {"rank": 7, "utility": "FTP (PROC)", "steps": 304, "pct": 2.5, "pct_derived": true},
+      {"rank": 8, "utility": "mail (PROC)", "steps": 219, "pct": 1.8, "pct_derived": true},
+      {"rank": 9, "utility": "SORT (PGM=SORT)", "steps": 177, "pct": 1.4},
+      {"rank": 10, "utility": "IEFBR14", "steps": 123, "pct": 1.0}
+    ],
+    "tail": [
+      {"utility": "PKZIP (PROC)", "steps": 114, "pct": 0.9, "pct_derived": true},
+      {"utility": "ICETOOL", "steps": 78, "pct": 0.6},
+      {"utility": "ICEGENER", "steps": 71, "pct": 0.6, "pct_derived": true},
+      {"utility": "IRXJCL", "steps": 27, "pct": 0.2}
+    ],
+    "sort_all_forms_steps": 4216,
+    "iebgener_plus_icegener_steps": 956,
+    "iebgener_steps_with_sysin_dummy": 956,
+    "sort_steps_needing_only_fields_and_include_omit_pct": 67,
+    "sort_fields_cards": 4195,
+    "sort_fields_cards_format_ch": 3817,
+    "sort_single_key_cards": 3074,
+    "include_omit_cards": 2351,
+    "idcams_sysin_verbs": {"REPRO": 2147, "DELETE": 822, "VERIFY": 759, "DEFINE": 609, "IF MAXCC": 576, "SET MAXCC": 122, "PRINT": 75},
+    "ikjeft01_dsn_run_program_steps": 446,
+    "cond_0_ne_uses": 9767,
+    "gdg_relative_refs": {"+1": 964, "0": 172, "-1": 9},
+    "dd_concatenation_continuations": 1209,
+    "proc_definitions_in_corpus": "none (one PROC-like member)",
+    "target_flow": {"jobs": 2, "live_steps": [10, 49]},
+    "suggested_top3_unlock_steps": 5650
+  }
+}

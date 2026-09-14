@@ -1,0 +1,16 @@
+COND= / RC gating / referback demo (conddemo.jcl; presentation-authored job over real CardDemo datasets and CBACT01C)
+
+wall 5.51s
+  STEP                 RC  DISPOSITION
+  DELMISS               8  EXECUTED
+  SKIPPED               0  BYPASSED
+  DEFINE                0  EXECUTED
+  LOAD                  0  EXECUTED
+  READ                  0  EXECUTED
+
+Expected by IBM COND semantics (bypass when `code op RC` is true):
+  DELMISS  DELETE of an absent cluster, no IF MAXCC reset -> RC 8
+  SKIPPED  COND=(0,NE): 0 NE 8 true -> bypassed
+  DEFINE   COND=(8,LT): 8 LT 8 false -> runs
+  LOAD     COND=(8,LT) -> runs
+  READ     COND=((8,LT,DELMISS),(0,NE,LOAD)) -> runs; ACCTFILE=*.LOAD.ACCTVSAM

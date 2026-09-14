@@ -1,0 +1,24 @@
+PROC expansion: real CardDemo TRANREPT.jcl against app/proc (REPROC.prc)
+
+Before expand_procs:
+  STEP05R            PGM=REPROC
+  STEP05R            PGM=SORT
+  STEP10R            PGM=CBTRN03C
+
+After expand_procs (proclib = app/proc):
+  STEP05R.PRC001     PGM=IDCAMS    FILEIN=AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS, FILEOUT=AWS.M2.CARDDEMO.TRANSACT.BKUP(+1), SYSIN=AWS.M2.CARDDEMO.CNTL(REPROCT)
+  STEP05R            PGM=SORT      SYSIN=(in-stream)
+  STEP10R            PGM=CBTRN03C  
+
+Executing TRANREPT through JobRunner(proclib_dirs=[app/proc]):
+  stopped in step STEP05R.PRC001 (PGM=IDCAMS): UnexpectedEOF: Unexpected end-of-input. Expected one of: 
+	* DELETE
+	* DELETE
+	* DELETE
+	* DELETE
+	* DEFINE
+	* DEFINE
+	* REPRO
+	* IF
+	* SET
+

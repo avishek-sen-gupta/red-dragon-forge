@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RedDragon Forge — Mainframe Workloads Without the Mainframe</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="vendor/reveal.js/reset.css">
+<link rel="stylesheet" href="vendor/reveal.js/reveal.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============ 1. THE PROBLEM ============ -->
+
+<section>
+  <div class="kicker">RedDragon · Forge · Cobble</div>
+  <h1>Mainframe workloads,<br>without the mainframe.</h1>
+  <p class="lede">Understand, run and test COBOL, CICS, JCL and Db2 applications on a laptop — unmodified source, real data, deterministic execution.</p>
+  <aside class="notes">Framing: this is a capability tour, not a pitch deck. Every screen, log and number that follows was captured from a real run in this repository.</aside>
+</section>
+
+<section>
+  <div class="kicker">The problem</div>
+  <h2>The logic that runs the business is the hardest to touch</h2>
+  <div class="cols three" style="margin-top:1em">
+    <div class="card gap"><h3>Opaque</h3>Decades of COBOL, CICS transactions, JCL job streams and Db2 access — spread across thousands of members, documented mostly in people's heads.</div>
+    <div class="card warn"><h3>Untestable off-host</h3>Running anything means a mainframe region, datasets and a test window. Feedback loops are measured in days.</div>
+    <div class="card gap"><h3>Risky to move</h3>Migrations fail on behaviour nobody wrote down: packed decimals, edit pictures, condition codes, pseudo-conversational state.</div>
+  </div>
+  <aside class="notes">Three pains stakeholders recognise: can't see it, can't run it cheaply, can't prove a replacement behaves the same.</aside>
+</section>
+
+<section>
+  <div class="kicker">The approach</div>
+  <h2>See it. Run it. Prove it.</h2>
+  <div class="pipeline" style="margin-top:1.2em">
+    <div class="stage"><b>Cobble</b><span>Static analysis — whole-system knowledge graph, call graphs, field-level dataflow, screens from source</span></div>
+    <div class="arrow">→</div>
+    <div class="stage"><b>RedDragon</b><span>Deterministic interpreter — COBOL lowered to a universal IR and executed byte-faithfully</span></div>
+    <div class="arrow">→</div>
+    <div class="stage"><b>Forge runtimes</b><span>CICS online, JCL batch and EXEC SQL / Db2 — plugged into the engine, never patched into it</span></div>
+  </div>
+  <p class="small">One application runs through the whole talk: <strong>AWS CardDemo</strong>, an open-source mainframe credit-card system.</p>
+  <aside class="notes">Roadmap of the talk. Understand (Cobble) → engine (RedDragon) → run online, batch, database (Cicada, Jackal, Squall) → scale evidence → honest gaps.</aside>
+</section>
+
+<!-- ============ 2. MEET CARDDEMO ============ -->
+
+<section>
+  <div class="kicker">The application</div>
+  <h2>AWS CardDemo — a complete mainframe credit-card system</h2>
+  <div class="cols wide-right">
+    <div>
+      <div class="screen-frame"><img src="artifacts/cics/01-COSGN0A.png" alt="CardDemo sign-on screen"></div>
+      <div class="caption">Sign-on screen, captured from a real run later in this talk</div>
+    </div>
+    <div>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat"><div class="n">30</div><div class="l">COBOL programs, online and batch</div></div>
+        <div class="stat"><div class="n">45</div><div class="l">Copybooks</div></div>
+        <div class="stat"><div class="n">18</div><div class="l">CICS transactions</div></div>
+        <div class="stat"><div class="n">17</div><div class="l">BMS screen maps</div></div>
+        <div class="stat"><div class="n">38</div><div class="l">JCL jobs · 100 steps</div></div>
+        <div class="stat"><div class="n">62</div><div class="l">Datasets, VSAM and sequential</div></div>
+      </div>
+      <p class="small" style="margin-top:1em">Sign-on, menus, accounts, cards, transactions, bill pay, reports, user admin — CICS + VSAM online, JCL batch, EBCDIC data files. We use it exactly as shipped.</p>
+    </div>
+  </div>
+  <div class="source">artifacts/cobble/stats.json · vendor/carddemo</div>
+  <aside class="notes">Counts come from Cobble's graph of the corpus (29 of 30 programs parsed — one file uses an upper-case .CBL extension the corpus glob skips). CardDemo is open source, so everything shown here is reproducible by anyone.</aside>
+</section>
+
+<!-- ============ 3. COBBLE ============ -->
+
+<section class="divider">
+  <div class="num">03</div>
+  <h1>Understand it<br>without running it.</h1>
+  <p class="lede">Cobble reads COBOL, CICS, JCL and BMS source and builds a queryable model of the whole system — down to individual fields.</p>
+  <aside class="notes">One JVM parse pass writes a cache; every analysis after it is pure Python over that cache.</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · whole-system graph</div>
+  <h2>Every program, job, screen and dataset — and how they connect</h2>
+  <div class="cols wide-left">
+    <div>
+      <div style="background:#fff; border-radius:10px; overflow:hidden; height:560px; position:relative; box-shadow:0 18px 50px rgba(0,0,0,.55)">
+        <img src="artifacts/cobble/graph.png" alt="CardDemo knowledge graph" style="position:absolute; width:1900px; max-width:none; left:-620px; top:-340px">
+      </div>
+      <div class="caption">Interactive in the browser: filter by kind, search, highlight neighbours — artifacts/cobble/graph.html (built by make artifacts)</div>
+    </div>
+    <div>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat"><div class="n">449</div><div class="l">Nodes</div></div>
+        <div class="stat"><div class="n">803</div><div class="l">Edges — exact match against the golden reference</div></div>
+      </div>
+      <table style="margin-top:18px">
+        <tr><th>Relationship</th><th class="num">Edges</th></tr>
+        <tr><td>Program reads dataset / file</td><td class="num">217</td></tr>
+        <tr><td>Program copies copybook</td><td class="num">205</td></tr>
+        <tr><td>JCL step runs program</td><td class="num">200</td></tr>
+        <tr><td>Program writes / updates / deletes</td><td class="num">63</td></tr>
+        <tr><td>XCTL · CALL</td><td class="num">36</td></tr>
+        <tr><td>Transaction starts program · sends / receives map</td><td class="num">52</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="source">artifacts/cobble/stats.json · artifacts/cobble/compare.txt · cobble/knowledge_graph/graph_types.py</div>
+  <aside class="notes">Parse of 29 programs took about 0.4 minutes. Honest limits: 18 program nodes are unresolved (system utilities, assembler modules, one program named in the CSD with no source, and 4 XCTL targets held in variables), so the menu's dynamic fan-out is not in the graph.</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · field-level dataflow</div>
+  <h2>Follow a single field across programs</h2>
+  <div class="whiteboard" style="height:690px">
+    <img src="artifacts/cobble/dataflow/dataflow.png" alt="Field-level dataflow in CardDemo" style="height:690px">
+  </div>
+  <div class="source">artifacts/cobble/dataflow/COSGN00C-user-id-across-calls.txt · COACTVWC-acct-rid-backward.txt</div>
+  <aside class="notes">Top: the sign-on user id flows into CDEMO-USER-ID and then crosses XCTL into both menu programs, landing at bytes 24–32 of the COMMAREA they receive. Bottom: everything that can feed the key used to read the account file in COACTVWC — screen input, the COMMAREA from the caller, and literals. Byte offsets are exact. Fixpoint across 4 programs resolved 95.8% of writes.</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · source CFG with reaching conditions</div>
+  <h2>Under what conditions does sign-on hand over control?</h2>
+  <div class="cols wide-right">
+    <div class="whiteboard" style="height:680px; position:relative">
+      <img src="artifacts/srccfg/COSGN00C-READ-USER-SEC-FILE.png" alt="CFG of COSGN00C READ-USER-SEC-FILE" style="height:680px">
+    </div>
+    <div>
+<pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query guards &lt;XCTL COADM01C node&gt;
+<span class="hl">33 path(s)</span>
+path 0: NOT (EIBCALEN == 0) AND DFHENTER
+  AND NOT (USERIDI == SPACES) AND NOT (USERIDI == LOW-VALUES)
+  AND NOT (PASSWDI == SPACES) AND NOT (PASSWDI == LOW-VALUES)
+  AND NOT (ERR-FLG-ON (WS-ERR-FLG == Y)) AND 0
+  AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
+  AND <span class="ok">CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A)</span>
+
+$ cobble-srccfg-query guards &lt;XCTL COMEN01C node&gt;
+<span class="hl">33 path(s)</span>
+path 0: … AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
+  AND <span class="warn">NOT (CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A))</span></pre>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr); margin-top:16px">
+        <div class="stat"><div class="n">3</div><div class="l">programs in the sign-on closure, expanded through XCTL</div></div>
+        <div class="stat"><div class="n">365</div><div class="l">CFG nodes across the closure</div></div>
+        <div class="stat"><div class="n">&lt;2s</div><div class="l">to build, from the parse cache — no compile</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="source">artifacts/srccfg/guards-COSGN00C-xctl.txt · COSGN00C-READ-USER-SEC-FILE.png · summary.json · capture/srccfg.sh</div>
+  <aside class="notes">Every node carries the conditions — with their literals — that must hold to reach it. That is what a business-rule review needs: "admin menu only when the stored password matches and the user type is A" is read straight off the guards, and can be checked against a stated rule. Known defect, shown honestly: EVALUATE WS-RESP-CD WHEN 0 renders as a bare "0" (the subject is dropped) — tracked as forge-dhz. Guard lists are capped and say so when truncated.</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · source CFG queries</div>
+  <h2>Where a value comes from, where it goes, what moves with it</h2>
+  <div class="cols">
+    <div>
+<pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query provenance CDEMO-USER-ID --max-depth 2
+CDEMO-USER-ID in COSGN00C:
+backward -- what its value is derived from:
+  CDEMO-USER-ID &lt;-
+  PROCESS-ENTER-KEY/2 MOVE when NOT (EIBCALEN == 0) AND DFHENTER
+    AND NOT (USERIDI == SPACES) AND NOT (PASSWDI == SPACES) …
+    <span class="warn">(guard cap hit: this list is incomplete)</span>
+    USERIDI  &lt;- source (written nowhere in this member)
+    EIBCALEN &lt;- source (written nowhere in this member)
+    PASSWDI  &lt;- source (written nowhere in this member)
+    %HANDLER[ANY] &lt;- synthetic (the handler armed for ANY)
+    WS-ERR-FLG &lt;- …
+forward -- what its value reaches: …</pre>
+      <div class="caption">One walk, both directions; conditions travel with every step; truncation is stated, never silent</div>
+    </div>
+    <div>
+<pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query coassign CC-ACCT-ID   # COACTVWC
+CC-ACCT-ID: 3 candidate(s)
+  SAME_PARAGRAPH  FLG-ACCTFILTER-ISVALID
+  SAME_PARAGRAPH  INPUT-OK
+  SAME_PARAGRAPH  NO-SEARCH-CRITERIA-RECEIVED
+  <span class="warn">(guards are a subset of the real ones,
+   so a tier-3 match is not established)</span></pre>
+      <div class="caption">Fields assigned together, ranked by how tightly: same statement → same source → same guard → same paragraph</div>
+      <div class="whiteboard" style="height:300px; margin-top:18px; position:relative">
+        <img src="artifacts/srccfg/cfg-COSGN00C-webgl.png" alt="WebGL view of the sign-on CFG closure" style="position:absolute; height:360px; left:50%; top:-20px; transform:translateX(-50%)">
+      </div>
+      <div class="caption">The whole sign-on closure (365 nodes, 501 edges) as a self-contained WebGL page — also exported as Graphviz DOT, and the source for the sequence views</div>
+    </div>
+  </div>
+  <div class="source">artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt (excerpt) · coassign-COACTVWC-CC-ACCT-ID.txt · cobble/cobble/dataflow/srccfg/query.py</div>
+  <aside class="notes">Why this exists: the older MOVE-only dependency graph has no control dependence — on a production corpus a backward closure over one hub field reached 24,459 nodes, and fields that only appear in guards were missing entirely. Conditions are what make a closure small enough to read. Limits: dynamic XCTL targets are not expanded; reaching conditions don't yet finish on the very largest production members.</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · program structure</div>
+  <div class="cols wide-right">
+    <div>
+      <h2 style="font-size:1.3em">Inside one transaction</h2>
+      <ul style="font-size:0.66em">
+        <li>Control-flow graph per program and everything it reaches</li>
+        <li>PERFORM tree as a sequence: screen setup → input edit → the three reads the CICS run showed</li>
+        <li>Path sampling on COACTVWC: <strong>87 paths cover 172 / 172 branches</strong> in 0.6s</li>
+        <li>Queries: where a value comes from, which conditions guard a statement, which fields move together</li>
+      </ul>
+      <div class="stats" style="grid-template-columns:1fr 1fr; margin-top:18px">
+        <div class="stat"><div class="n">100%</div><div class="l">Branch coverage from sampled paths</div></div>
+        <div class="stat"><div class="n">95.8%</div><div class="l">Writes resolved by the dataflow fixpoint</div></div>
+      </div>
+    </div>
+    <div class="whiteboard" style="height:720px; overflow:hidden; position:relative">
+      <img src="artifacts/cobble/viz/COACTVWC-sequence-program.png" alt="COACTVWC internal sequence" style="position:absolute; height:820px; left:-30px; top:-20px">
+    </div>
+  </div>
+  <div class="source">artifacts/cobble/viz/COACTVWC-sequence-program.png · artifacts/cobble/dataflow/trace-COACTVWC-summary.txt · fixpoint-report.txt</div>
+  <aside class="notes">9000-READ-ACCT → 9200 card xref → 9300 account → 9400 customer is exactly the CXACAIX → ACCTDAT → CUSTDAT chain observed at runtime in the CICS section — static and dynamic views agree.</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · screens from source</div>
+  <h2>All 17 screens, rendered straight from BMS</h2>
+  <div class="cols" style="gap:24px">
+    <div><div class="crop-screen"><img src="artifacts/cobble/screens/COMEN1A.png" alt="Main menu"></div><div class="caption">COMEN1A · main menu — options are filled in by the program at runtime</div></div>
+    <div><div class="crop-screen"><img src="artifacts/cobble/screens/COTRN0A.png" alt="Transaction list"></div><div class="caption">COTRN0A · transaction list</div></div>
+  </div>
+  <p class="small" style="margin-top:0.8em">No terminal, no region: the layout comes from the map source. Feed it a captured runtime payload and the same renderer shows the data a program sent — as in the CICS section. Rendering is output-only.</p>
+  <div class="source">cobble/cobble/bms_render.py · artifacts/cobble/screens/</div>
+  <aside class="notes">Rendered with cobble-bms-render. Known limit: cursor position and attribute overrides set by programs at runtime are not shown.</aside>
+</section>
+
+<!-- ============ 4. ENGINE ============ -->
+
+<section class="divider">
+  <div class="num">04</div>
+  <h1>The engine.</h1>
+  <p class="lede">RedDragon compiles COBOL to a small universal IR and executes it on a deterministic VM — byte-faithful memory, packed decimals and EBCDIC included.</p>
+  <aside class="notes">Everything online, batch and SQL runs on this one engine. No LLM is involved when source is complete.</aside>
+</section>
+
+<section>
+  <div class="kicker">Engine · pipeline</div>
+  <h2>Source to execution in four deterministic stages</h2>
+  <div class="pipeline">
+    <div class="stage"><b>Parse</b><span>ProLeap COBOL parser via a Java bridge → typed syntax tree; 15 other languages via tree-sitter</span></div>
+    <div class="arrow">→</div>
+    <div class="stage"><b>Lower</b><span>DATA DIVISION → byte-addressed memory regions; PROCEDURE DIVISION → three-address IR</span></div>
+    <div class="arrow">→</div>
+    <div class="stage"><b>Graph</b><span>Control-flow graph + function registry; PERFORM as named continuations</span></div>
+    <div class="arrow">→</div>
+    <div class="stage"><b>Execute</b><span>Deterministic VM; unresolved externals become symbolic values, not guesses</span></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="n">37</div><div class="l">IR opcodes — the entire instruction set every language lowers to</div></div>
+    <div class="stat"><div class="n">131</div><div class="l">Enumerated COBOL features in the frontend</div></div>
+    <div class="stat"><div class="n">16</div><div class="l">Deterministic frontends: COBOL + 15 tree-sitter languages</div></div>
+    <div class="stat amber"><div class="n">0</div><div class="l">LLM calls required — the default for unresolved calls is symbolic</div></div>
+  </div>
+  <div class="source">vendor/red-dragon/interpreter/ir.py · interpreter/cobol/features.py · interpreter/run_types.py · artifacts/engine/FACTS.md</div>
+  <aside class="notes">37 counted in the Opcode enum; 131 counted in the CobolFeature enum (the README's 114 is stale). An enumerated feature is not a certificate of full coverage — gaps come later. LLM frontends exist as opt-in for incomplete or unsupported code; the COBOL path never uses them.</aside>
+</section>
+
+<section>
+  <div class="kicker">Engine · one program, all the way down</div>
+  <div class="cols">
+    <div>
+<pre class="log">01  WS-BALANCE  PIC S9(7)V99 COMP-3 VALUE 1000.00.
+01  WS-RATE     PIC S9V9(4)  COMP-3 VALUE 0.0125.
+01  WS-INTEREST PIC S9(7)V99 COMP-3 VALUE 0.
+01  WS-MONTH    PIC 9(2)     VALUE 0.
+01  WS-EDITED   PIC $$$,$$9.99-.
+...
+    PERFORM ACCRUE-PARA VARYING WS-MONTH
+        FROM 1 BY 1 UNTIL WS-MONTH > 3.
+...
+ACCRUE-PARA.
+    COMPUTE WS-INTEREST ROUNDED = WS-BALANCE * WS-RATE.
+    ADD WS-INTEREST TO WS-BALANCE.
+    MOVE WS-BALANCE TO WS-EDITED.</pre>
+      <div class="caption">COBOL — packed decimals, ROUNDED, a floating-$ edit picture</div>
+<pre class="log" style="margin-top:14px"><span class="ok">MONTH 1  BALANCE  $1,012.50
+MONTH 2  BALANCE  $1,025.16
+MONTH 3  BALANCE  $1,037.97</span></pre>
+      <div class="caption">VM output — matches a hand calculation</div>
+    </div>
+    <div>
+<pre class="log">%2   = alloc_region 26            <span class="hl">; 5+3+5 packed, 2 zoned, 11 edited</span>
+branch_if %275 perform_varying_exit_2,perform_varying_body_1
+perform_varying_body_1:
+set_continuation para_ACCRUE-PARA_end perform_return_3
+branch para_ACCRUE-PARA
+...
+para_ACCRUE-PARA:
+%427 = load_region %210 0 5       <span class="hl">; WS-BALANCE: 5 packed bytes</span>
+...
+write_region %210 %405 11 %417    <span class="hl">; WS-EDITED: 11 bytes</span>
+%422 = call_function __bytes_to_string %420 ebcdic
+%425 = call_function print %424
+resume_continuation para_ACCRUE-PARA_end</pre>
+      <div class="caption">IR excerpt — memory is bytes, exactly as on the host</div>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr); margin-top:18px">
+        <div class="stat"><div class="n">985</div><div class="l">IR instructions</div></div>
+        <div class="stat"><div class="n">11</div><div class="l">CFG blocks</div></div>
+        <div class="stat"><div class="n">26</div><div class="l">bytes of working storage</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="source">artifacts/engine/pipeline-demo.cbl · artifacts/engine/pipeline.txt</div>
+  <aside class="notes">1000.00 × 0.0125 = 12.50; 1012.50 × 0.0125 = 12.656 → 12.66; 1025.16 × 0.0125 = 12.8145 → 12.81. The raw VM print wraps each DISPLAY operand in quotes; the output here is shown without them. Honest caveat: arithmetic currently routes through Python float rather than true fixed-point — tracked as the top engine correctness item.</aside>
+</section>
+
+<section>
+  <div class="kicker">Engine · COBOL coverage</div>
+  <h2>The language as real programs use it</h2>
+  <div class="cols three">
+    <div class="card ok"><h3>Data</h3>PICTURE incl. numeric- and alphanumeric-edited · DISPLAY zoned, COMP, <strong>COMP-3</strong>, COMP-1/2 · <strong>EBCDIC</strong> · REDEFINES · RENAMES · OCCURS … DEPENDING ON · 88-levels · SIGN · JUSTIFIED · BLANK WHEN ZERO</div>
+    <div class="card ok"><h3>Control &amp; arithmetic</h3>PERFORM (THRU, TIMES, UNTIL, VARYING … AFTER, inline) · EVALUATE · GO TO DEPENDING · ALTER · DECLARATIVES · COMPUTE · ROUNDED · ON SIZE ERROR</div>
+    <div class="card ok"><h3>Strings, calls, files</h3>STRING · UNSTRING · INSPECT · reference modification · CALL BY REFERENCE / CONTENT / VALUE · CANCEL · ENTRY · OPEN · READ · WRITE · REWRITE · START · DELETE over sequential, indexed and relative files</div>
+  </div>
+  <p class="small" style="margin-top:1em"><span class="tag warn">not yet</span> SORT / MERGE verbs · true fixed-point arithmetic · SEARCH ALL runs as a linear scan (same answer, not a binary search)</p>
+  <div class="source">vendor/red-dragon/interpreter/cobol/features.py · docs/frontend-design/cobol.md · interpreter/cobol/lower_search.py</div>
+  <aside class="notes">SEARCH ALL verified in code: the parsed statement carries no ALL flag and lowering emits a linear loop bounded by OCCURS. The production estate analysed has zero SEARCH ALL, so impact there is nil.</aside>
+</section>
+
+<section>
+  <div class="kicker">Engine · extension, not modification</div>
+  <h2>CICS, SQL and JCL plug in through seams</h2>
+  <div class="cols wide-right">
+    <div>
+      <div class="pipeline" style="flex-direction:column; gap:10px; margin:0">
+        <div class="stage"><b>DialectParser</b><span>Claims EXEC CICS / EXEC SQL blocks at parse time</span></div>
+        <div class="stage"><b>Extension lowering strategy</b><span>Turns each EXEC statement into ordinary IR calls to registered builtins</span></div>
+        <div class="stage"><b>CoprocessorSpec</b><span>Bundles parser + strategy + prepass; several compose into one program</span></div>
+      </div>
+    </div>
+    <div>
+      <table>
+        <tr><th>Runtime</th><th>How it attaches</th></tr>
+        <tr><td><strong>Cicada</strong> · CICS</td><td>CoprocessorSpec that owns execution — pseudo-conversational region around the VM</td></tr>
+        <tr><td><strong>Squall</strong> · SQL</td><td>CoprocessorSpec that composes with CICS; DCLGEN prepass; pluggable Db2 / SQLite backends</td></tr>
+        <tr><td><strong>Jackal</strong> · JCL</td><td>Driver around the VM — compiles each COBOL step, wires DDs through the file I/O seam, reads back the return code</td></tr>
+      </table>
+      <p class="small" style="margin-top:1em">The three runtimes never import each other — enforced by an import contract in CI. The core engine carries no CICS- or SQL-specific code.</p>
+    </div>
+  </div>
+  <div class="source">interpreter/project/coprocessor_compile.py · cicada/cics/coprocessor.py · squall/squall/coprocessor.py · jackal/jackal/cobol_step.py · .importlinter</div>
+  <aside class="notes">Nuance if asked: the core IR did grow a few language-neutral primitives extensions rely on (SUSPEND for conversational CICS, CALL_WITH_MEMORY). They are generic opcodes, not CICS code.</aside>
+</section>
+
+<!-- ============ 5. CICS ONLINE ============ -->
+
+<section class="divider">
+  <div class="num">05</div>
+  <h1>Run it online.</h1>
+  <p class="lede">Cicada runs CardDemo's CICS transactions unmodified: pseudo-conversational dispatch, BMS map I/O, and VSAM files loaded from the application's own EBCDIC data — driven headlessly, with screens rendered from what the programs send.</p>
+  <aside class="notes">Everything in this section was captured in one scripted, headless session: 10 turns, 4 programs, no ABEND. Be explicit: nobody types into these screens. A script supplies the attention key and field values for each turn; the screens are rendered afterwards from the SEND MAP payloads. An interactive terminal is not built yet.</aside>
+</section>
+
+<section>
+  <div class="kicker">CICS · a scripted, headless session</div>
+  <h2>Sign on, pick a menu option</h2>
+  <p class="small" style="margin:-0.6em 0 0.8em">Inputs are supplied by a script, not typed; each screen is rendered from the map the program sent.</p>
+  <div class="cols">
+    <div>
+      <div class="screen-frame"><img src="artifacts/cics/01-COSGN0A.png" alt="CardDemo sign-on screen"></div>
+      <div class="caption">Turn 1 · CC00 → COSGN00C · SEND MAP COSGN0A<br>Turn 2 · ENTER USER0001 → READ USRSEC → XCTL COMEN01C</div>
+    </div>
+    <div>
+      <div class="screen-frame"><img src="artifacts/cics/02-COMEN1A.png" alt="CardDemo main menu"></div>
+      <div class="caption">Turn 3 · COMEN01C · SEND MAP COMEN1A · RETURN TRANSID CM00<br>Turn 4 · ENTER option 01 → XCTL COACTVWC</div>
+    </div>
+  </div>
+  <div class="source">artifacts/cics/turns.jsonl · capture/cics_flow.py</div>
+  <aside class="notes">Credentials are the shipped USRSEC record for USER0001. Routing — XCTL versus RETURN TRANSID — is decided by the programs themselves; the script only supplies each turn's attention key and field values, directly — there is no interactive terminal. Screens are the runtime SEND MAP payloads laid onto the BMS map by Cobble's renderer.</aside>
+</section>
+
+<section>
+  <div class="kicker">CICS · account view</div>
+  <div class="cols wide-left">
+    <div><div class="screen-frame"><img src="artifacts/cics/04-CACTVWA.png" alt="CardDemo account view with data"></div></div>
+    <div>
+      <h2 style="font-size:1.3em">One scripted ENTER, three chained VSAM reads</h2>
+<pre class="log">READ CXACAIX  key 00000000001  <span class="ok">NORMAL</span>   alt index
+READ ACCTDAT  key 00000000001  <span class="ok">NORMAL</span>   account
+READ CUSTDAT  key 000000001    <span class="ok">NORMAL</span>   customer
+turn 6 · 0.106s</pre>
+      <ul style="font-size:0.62em; margin-top:0.8em">
+        <li>Balance <code>00000001940{</code> — signed zoned decimal — edited to <strong>+194.00</strong></li>
+        <li>Credit limit <code>00000020200{</code> → <strong>+2,020.00</strong></li>
+        <li>Names, address and FICO straight from CardDemo's shipped customer file</li>
+      </ul>
+      <p class="small" style="margin-top:0.8em"><span class="tag warn">known defect</span> SSN shows 209-73-888; correct is 020-97-3888 — reference modification on a numeric field drops the leading zero. Found by this capture, now tracked.</p>
+    </div>
+  </div>
+  <div class="source">artifacts/cics/04-CACTVWA.json · turns.jsonl · vendor/carddemo/app/cbl/COACTVWC.cbl</div>
+  <aside class="notes">The alternate index hop (CXACAIX) is the real CardDemo access path: account id → card xref → account → customer. The SSN defect is worth showing openly — this is exactly how capture-based testing finds byte-level divergences.</aside>
+</section>
+
+<section>
+  <div class="kicker">CICS · browsing a file</div>
+  <div class="cols wide-left">
+    <div><div class="screen-frame"><img src="artifacts/cics/06-CCRDLIA.png" alt="CardDemo credit card list"></div></div>
+    <div>
+      <h2 style="font-size:1.3em">PF3 back, option 03: card list</h2>
+<pre class="log">turn 7   PF3            → XCTL COMEN01C
+turn 9   ENTER option 03 → XCTL COCRDLIC
+turn 10  STARTBR  CARDDAT       <span class="ok">NORMAL</span>
+         READNEXT ×8            <span class="ok">NORMAL</span>
+         ENDBR    CARDDAT       <span class="ok">NORMAL</span>
+         SEND MAP CCRDLIA · 0.159s</pre>
+      <p class="small" style="margin-top:0.8em">Seven rows in key order; the eighth READNEXT is the program's own look-ahead for a next page.</p>
+    </div>
+  </div>
+  <div class="source">artifacts/cics/06-CCRDLIA.json · turns.jsonl</div>
+  <aside class="notes">Browse cursors over a key-sequenced file, with the same drivers JCL's IDCAMS uses.</aside>
+</section>
+
+<section>
+  <div class="kicker">CICS · the whole session</div>
+  <h2>10 turns · 4 programs · 0 abends</h2>
+  <table>
+    <tr><th>#</th><th>Transid · program</th><th>Input</th><th>Outcome</th><th>VSAM</th><th class="num">sec</th></tr>
+    <tr><td>1</td><td>CC00 · COSGN00C</td><td>—</td><td>SEND COSGN0A, RETURN TRANSID CC00</td><td>—</td><td class="num">0.027</td></tr>
+    <tr><td>2</td><td>CC00 · COSGN00C</td><td>ENTER user/password</td><td>XCTL COMEN01C</td><td>READ USRSEC</td><td class="num">0.020</td></tr>
+    <tr><td>3</td><td>CC00 · COMEN01C</td><td>—</td><td>SEND COMEN1A, RETURN TRANSID CM00</td><td>—</td><td class="num">0.297</td></tr>
+    <tr><td>4–5</td><td>CM00 · COMEN01C → COACTVWC</td><td>ENTER 01</td><td>XCTL, SEND CACTVWA</td><td>—</td><td class="num">0.117</td></tr>
+    <tr><td>6</td><td>CAVW · COACTVWC</td><td>ENTER account</td><td>SEND CACTVWA (data)</td><td>3 × READ</td><td class="num">0.106</td></tr>
+    <tr><td>7–8</td><td>CAVW · COACTVWC → COMEN01C</td><td>PF3</td><td>XCTL, SEND COMEN1A</td><td>—</td><td class="num">0.131</td></tr>
+    <tr><td>9–10</td><td>CM00 · COMEN01C → COCRDLIC</td><td>ENTER 03</td><td>XCTL, SEND CCRDLIA</td><td>browse</td><td class="num">0.200</td></tr>
+  </table>
+  <p class="small" style="margin-top:0.8em">Compile (parse + lower), once per program: 1.5 – 4.8 s. Turns run in milliseconds on a laptop.</p>
+  <div class="source">artifacts/cics/turns.jsonl · artifacts/cics/FACTS.md</div>
+  <aside class="notes">Timings are the interpreted VM on a dev laptop, excluding compile — illustrative, not benchmarks. One terminal, one task at a time; input arrives as attention key + field map, not a raw 3270 datastream.</aside>
+</section>
+
+<section>
+  <div class="kicker">CICS · surface</div>
+  <h2>The command surface CardDemo needs — and a loud failure for the rest</h2>
+  <div class="cols three">
+    <div class="card ok"><h3>Program control</h3>RETURN (TRANSID, COMMAREA) · XCTL · LINK · ABEND · START · RETRIEVE · HANDLE ABEND / CONDITION</div>
+    <div class="card ok"><h3>Screens &amp; files</h3>SEND MAP · RECEIVE MAP · SEND TEXT<br>READ · WRITE · REWRITE · DELETE · STARTBR · READNEXT · READPREV · ENDBR — KSDS with alternate indexes</div>
+    <div class="card ok"><h3>System</h3>ASSIGN · ASKTIME · FORMATTIME · INQUIRE · WRITEQ TD · RESP / NOHANDLE → EIBRESP</div>
+  </div>
+  <div class="cols" style="margin-top:28px">
+    <div class="card warn"><h3>Not yet</h3>Driving transactions from the screens themselves — today they run headlessly and screens are render-only · cursor position and attribute overrides on rendered screens · multiple concurrent terminals · raw 3270 datastream</div>
+    <div class="card"><h3>By design</h3>Any unsupported verb raises an explicit ABEND — never a silent skip. Every CICS behaviour reaches the engine as a registered builtin; the core VM is untouched.</div>
+  </div>
+  <div class="source">cicada/cics/strategy.py · cicada/cics/builtins/ · artifacts/cics/FACTS.md</div>
+  <aside class="notes">Also in the repo but not in this capture: account update (REWRITE) and transaction add (WRITE) flows, tested with synthetic seed records.</aside>
+</section>
+
+<!-- ============ 6. JCL BATCH ============ -->
+
+<section class="divider">
+  <div class="num">06</div>
+  <h1>Run it in batch.</h1>
+  <p class="lede">Jackal executes CardDemo's JCL: step sequencing, datasets and return codes, IDCAMS, and COBOL steps on the RedDragon VM.</p>
+  <aside class="notes">Online and batch share the same file drivers — the VSAM file IDCAMS builds here is the same kind of file CICS reads.</aside>
+</section>
+
+<section>
+  <div class="kicker">JCL · a real job chain</div>
+  <h2>Build a VSAM file, then read it with COBOL</h2>
+  <div class="cols">
+    <div>
+<pre class="log"><span class="hl">JOB ACCTFILE</span>                      wall 0.32s  MAXRC <span class="ok">0</span>
+  STEP05  IDCAMS DELETE           RC <span class="ok">0</span>  EXECUTED
+  STEP10  IDCAMS DEFINE CLUSTER   RC <span class="ok">0</span>  EXECUTED
+  STEP15  IDCAMS REPRO            RC <span class="ok">0</span>  EXECUTED
+
+<span class="hl">JOB READACCT</span>                      wall 5.53s  MAXRC <span class="ok">0</span>
+  PREDEL  IEFBR14                 RC <span class="ok">0</span>  EXECUTED
+  STEP05  CBACT01C (COBOL, VM)    RC <span class="ok">0</span>  EXECUTED
+
+Datasets after the chain
+  ACCTDATA.VSAM.KSDS   KEYS(11 0)  RECSZ 300   50 records
+  ACCTDATA.PSCOMP      LRECL 107               50 records</pre>
+      <div class="caption">One dataset catalog across both jobs</div>
+    </div>
+    <div>
+<pre class="log">ACCT-ID      ST  CURR-BAL  CREDIT-LIM  OPEN-DATE   CYC-DEBIT
+00000000001  Y     194.00    2,020.00  2014-11-20   2,525.00
+00000000002  Y     158.00    6,130.00  2013-06-19   2,525.00
+00000000003  Y     147.00    4,909.00  2013-08-23   2,525.00
+00000000004  Y      40.00    3,503.00  2012-11-17   2,525.00
+00000000005  Y     345.00    3,819.00  2012-10-03   2,525.00
+00000000006  Y     218.00    3,584.00  2017-12-23   2,525.00
+00000000007  Y     193.00    2,065.00  2012-10-12   2,525.00
+00000000008  Y     605.00    6,104.00  2012-01-04   2,525.00</pre>
+      <div class="caption">CBACT01C output, decoded from EBCDIC zoned decimal + COMP-3</div>
+      <p class="small" style="margin-top:0.8em">Account 1's balance of <strong>194.00</strong> is the same record the CICS account view showed. CYC-DEBIT 2,525.00 is the program's own default for zero input.</p>
+    </div>
+  </div>
+  <div class="source">artifacts/jcl/acctfile-readacct.log.txt · artifacts/jcl/readacct-pscomp-excerpt.txt · capture/jcl.sh</div>
+  <aside class="notes">Unmodified CardDemo JCL and COBOL. The reissue date column is blank because CBACT01C gets it from an assembler routine (COBDATFT) that isn't executed — shown honestly in the artifact.</aside>
+</section>
+
+<section>
+  <div class="kicker">JCL · control flow</div>
+  <h2>Condition codes, bypassed steps and referbacks</h2>
+  <div class="cols wide-right">
+    <div>
+<pre class="log">//DELMISS  EXEC PGM=IDCAMS
+//SKIPPED  EXEC PGM=IEFBR14,COND=(0,NE)
+//DEFINE   EXEC PGM=IDCAMS,COND=(8,LT)
+//LOAD     EXEC PGM=IDCAMS,COND=(8,LT)
+//READ     EXEC PGM=CBACT01C,
+//     COND=((8,LT,DELMISS),(0,NE,LOAD))
+//ACCTFILE DD DSN=*.LOAD.ACCTVSAM,DISP=SHR</pre>
+      <div class="caption">Presentation-authored job over real CardDemo datasets and CBACT01C</div>
+    </div>
+    <div>
+<pre class="log">STEP        RC   DISPOSITION   WHY
+DELMISS      <span class="warn">8</span>   EXECUTED      DELETE of an absent cluster
+SKIPPED      0   <span class="warn">BYPASSED</span>      0 NE 8 is true
+DEFINE       <span class="ok">0</span>   EXECUTED      8 LT 8 is false
+LOAD         <span class="ok">0</span>   EXECUTED
+READ         <span class="ok">0</span>   EXECUTED      reads *.LOAD.ACCTVSAM</pre>
+      <div class="cols" style="gap:16px; margin-top:18px">
+        <div class="card ok"><h3>Executes</h3>Step sequencing · DD / DSN / DISP · COND= · RC and MAXCC · referbacks · temp datasets · PARM= · PROC expansion with symbolics and overrides · IDCAMS DELETE, DEFINE CLUSTER, REPRO, IF MAXCC</div>
+        <div class="card warn"><h3>Parses only</h3>IF / THEN / ELSE · INCLUDE · GDG · DCB · DD concatenation · DUMMY · most IDCAMS verbs</div>
+      </div>
+    </div>
+  </div>
+  <div class="source">artifacts/jcl/conddemo.jcl · artifacts/jcl/conddemo.log.txt · artifacts/jcl/tranrept-proc-expansion.txt</div>
+  <aside class="notes">No CardDemo job that uses COND= gets far enough to show it, so this job was written for the talk — it is labelled as such, and the capture script fails if any disposition differs from IBM's COND rules. PROC expansion was shown on CardDemo's TRANREPT: the REPROC call expands with overrides and symbol substitution, then stops because its IDCAMS input is a library member.</aside>
+</section>
+
+<section>
+  <div class="kicker">JCL · honest coverage</div>
+  <h2>All 38 CardDemo jobs, attempted</h2>
+  <div class="cols wide-left">
+    <div>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat"><div class="n">38/38</div><div class="l">Jobs parse</div></div>
+        <div class="stat"><div class="n">6</div><div class="l">Run to RC 0 once loader jobs have run</div></div>
+        <div class="stat amber"><div class="n">1</div><div class="l">Completes with the correct RC 8 (DEFCUST)</div></div>
+      </div>
+      <p class="small" style="margin-top:1em">In July, 1 of 33 jobs ran without setup. The first blocker for each job that still fails is new work, not a crash:</p>
+    </div>
+    <div class="bars">
+      <div class="bar gap"><span class="label">IDCAMS verbs</span><div class="track"><div class="fill" style="width:100%"></div></div><span class="val">9</span></div>
+      <div class="bar warn"><span class="label">Missing input</span><div class="track"><div class="fill" style="width:77.8%"></div></div><span class="val">7</span></div>
+      <div class="bar gap"><span class="label">SDSF</span><div class="track"><div class="fill" style="width:55.6%"></div></div><span class="val">5</span></div>
+      <div class="bar gap"><span class="label">SYSIN member</span><div class="track"><div class="fill" style="width:33.3%"></div></div><span class="val">3</span></div>
+      <div class="bar gap"><span class="label">IEBGENER</span><div class="track"><div class="fill" style="width:22.2%"></div></div><span class="val">2</span></div>
+      <div class="bar gap"><span class="label">SORT, FTP, …</span><div class="track"><div class="fill" style="width:44.4%"></div></div><span class="val">4</span></div>
+      <div class="bar gap"><span class="label">Runtime error</span><div class="track"><div class="fill" style="width:11.1%"></div></div><span class="val">1</span></div>
+    </div>
+  </div>
+  <div class="source">artifacts/jcl/job-survey.json · artifacts/jcl/FACTS.md · jackal/docs/jcl-execution-roadmap.md</div>
+  <aside class="notes">Blocker counts are after running the loader jobs first (31 failing jobs). Missing input datasets mostly cascade from loader jobs that stop at SDSF or alternate-index definitions — fixing a handful of utilities unlocks the chain. IDCAMS blockers: 4 GDG defines, 2 alternate indexes, 3 keyword abbreviations.</aside>
+</section>
+
+<!-- ============ 7. SQL / DB2 ============ -->
+
+<section class="divider">
+  <div class="num">07</div>
+  <h1>Talk to Db2.</h1>
+  <p class="lede">Squall runs embedded <code>EXEC SQL</code> against a live IBM Db2 — alone, or inside a CICS transaction.</p>
+  <aside class="notes">CardDemo's base app is VSAM-only, so for Db2 we use IBM's own Bank-of-Z sample, unmodified.</aside>
+</section>
+
+<section>
+  <div class="kicker">SQL · CICS + Db2 in one task</div>
+  <h2>IBM's unmodified <code>INQCUST</code>, against live Db2</h2>
+  <div class="cols wide-right">
+    <div>
+      <div class="pipeline" style="flex-direction:column; gap:10px; margin:0">
+        <div class="stage"><b>EXEC CICS LINK</b><span>COMMAREA in: sort code + customer number</span></div>
+        <div class="stage"><b>INQCUST (Bank-of-Z)</b><span>Compiled with the CICS <em>and</em> SQL coprocessors together</span></div>
+        <div class="stage"><b>EXEC SQL SELECT … INTO</b><span>17 columns, 2 bound host variables → IBM Db2 11.5</span></div>
+        <div class="stage"><b>COMMAREA out</b><span>403 bytes EBCDIC, every output field populated</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat"><div class="n">0.11s</div><div class="l">Transaction run, customer found</div></div>
+        <div class="stat"><div class="n">0.09s</div><div class="l">Not-found path: SQLCODE 100 handled by the program's own logic</div></div>
+        <div class="stat amber"><div class="n">0</div><div class="l">Lines of IBM source changed</div></div>
+        <div class="stat"><div class="n">2</div><div class="l">Coprocessors composed in one compile — neither imports the other</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="source">artifacts/sql/inqcust-run.txt · tests/integration/test_inqcust_e2e.py</div>
+  <aside class="notes">Found case: one SELECT, 2 params, 1 row of 17 columns; INQ-SUCCESS=Y. Not found: SQLCODE 100 flows back, program sets INQ-SUCCESS=N, FAIL-CD=1. Timings on a laptop with emulated Db2. The CUSTOMER table is seeded by the test fixture; INQCUST issues no CONNECT, so a named connector stands in for the CICS-Db2 attachment. Only the primary SELECT path was exercised.</aside>
+</section>
+
+<section>
+  <div class="kicker">SQL · what actually reached Db2</div>
+  <h2>Recorded at the database boundary</h2>
+<pre class="log">SQL reaching Db2 — case FOUND
+  EXECUTE  SELECT CUSTOMER_EYECATCHER, CUSTOMER_SORTCODE, CUSTOMER_NUMBER, … CUSTOMER_CS_REVIEW_DATE
+           FROM CUSTOMER WHERE CUSTOMER_SORTCODE = ? AND CUSTOMER_NUMBER = ?
+           params=['123456', '0000000001']
+           <span class="ok">-> sqlcode=0 rowcount=1</span>
+  COMMIT
+
+COMMAREA out (decoded from EBCDIC)
+  INQCUST-SCODE          +4    len 6   = '123456'
+  INQCUST-FIRST-NAME     +30   len 50  = 'TESTFIRST'
+  INQCUST-LAST-NAME      +80   len 50  = 'TESTLAST'
+  INQCUST-DOB-DD/MM/YYYY +130  len 8   = '01' '01' '1980'     <span class="hl">← INQCUST's own date arithmetic</span>
+  INQCUST-CREDIT-SCORE   +386  len 3   = '750'
+  INQCUST-INQ-SUCCESS    +397  len 1   = <span class="ok">'Y'</span>
+
+SQL reaching Db2 — case NOT FOUND
+  EXECUTE  … params=['123456', '0000009999']   <span class="warn">-> sqlcode=100 rowcount=0</span>
+  INQCUST-INQ-SUCCESS = <span class="warn">'N'</span>   INQCUST-INQ-FAIL-CD = '1'</pre>
+  <div class="source">artifacts/sql/inqcust-run.txt (excerpt)</div>
+  <aside class="notes">The SQL is recorded by a wrapper at the backend boundary, so this is literally what Db2 received. Two COMMITs per task in the full log (INQCUST's RETURN and the wrapper's RETURN) come from the task-end hook.</aside>
+</section>
+
+<section>
+  <div class="kicker">SQL · surface</div>
+  <h2>What executes today — and what only parses</h2>
+  <div class="cols">
+    <div class="card ok">
+      <h3>Executes end-to-end</h3>
+      <ul>
+        <li><strong>SELECT … INTO</strong> with bound host variables — live Db2</li>
+        <li><strong>Cursors</strong>: DECLARE / OPEN / FETCH loop / CLOSE — IBM <code>cursor.sqb</code> on Db2</li>
+        <li><strong>COMMIT / ROLLBACK</strong> — IBM <code>updat.sqb</code> on Db2</li>
+        <li><strong>CONNECT</strong> routing across two databases; real negative SQLCODEs</li>
+        <li><strong>WHENEVER SQLERROR GO TO</strong> — branches on Db2's −204</li>
+        <li><strong>INCLUDE SQLCA / DCLGEN</strong>; INSERT / UPDATE / DELETE (SQLite)</li>
+      </ul>
+    </div>
+    <div class="card warn">
+      <h3>Parses, not yet executed</h3>
+      <ul>
+        <li>Dynamic SQL: PREPARE, EXECUTE IMMEDIATE, DESCRIBE</li>
+        <li>CALL, MERGE, SAVEPOINT, LOCK, GET DIAGNOSTICS</li>
+        <li>Indicator variables (NULL → −305 today)</li>
+        <li>SQLCA beyond SQLCODE (SQLSTATE, SQLERRD, SQLWARN)</li>
+        <li>WHENEVER SQLWARNING</li>
+      </ul>
+    </div>
+  </div>
+  <div class="source">artifacts/sql/FACTS.md · squall/squall/parser/grammar.lark · squall/tests/integration/</div>
+  <aside class="notes">Be explicit: the grammar is broad, execution is narrower. CRUD, VARCHAR and COMP-3 host variables are proven on SQLite only. No real CICS-Db2 syncpoint coordination — task end commits and closes cursors.</aside>
+</section>
+
+<!-- ============ 8. SCALE (ANONYMISED) ============ -->
+
+<section class="divider">
+  <div class="num">08</div>
+  <h1>Beyond the demo.</h1>
+  <p class="lede">The same tools pointed at a production estate: what it contains, and what running one real program taught us.</p>
+  <aside class="notes">Anonymised: no names, programs or datasets from the estate appear anywhere in this deck.</aside>
+</section>
+
+<section>
+  <div class="kicker">Scale · online estate</div>
+  <h2>One real program, six silent wrong answers — found and fixed</h2>
+  <div class="cols wide-left">
+    <div>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat"><div class="n">2,137</div><div class="l">Online COBOL/CICS programs inventoried</div></div>
+        <div class="stat"><div class="n">75%</div><div class="l">of them use HANDLE CONDITION — 1,599 programs, 2,679 uses</div></div>
+        <div class="stat"><div class="n">620+</div><div class="l">SEARCH statements across 489+ programs</div></div>
+        <div class="stat amber"><div class="n">6 → 1</div><div class="l">Silent defects found by one end-to-end run → still open (low severity)</div></div>
+      </div>
+    </div>
+    <div>
+      <table>
+        <tr><th>Defect class</th><th>Status</th></tr>
+        <tr><td>INDEXED BY index items never allocated</td><td><span class="tag ok">fixed</span></td></tr>
+        <tr><td>Unknown data-name lowered as a literal</td><td><span class="tag ok">fixed</span></td></tr>
+        <tr><td>SEARCH ignored its table bounds</td><td><span class="tag ok">fixed</span></td></tr>
+        <tr><td>SET x TO item wrote the item's name</td><td><span class="tag ok">fixed</span></td></tr>
+        <tr><td>Unsupported CICS verbs skipped silently</td><td><span class="tag ok">now abend</span></td></tr>
+        <tr><td>HANDLE CONDITION never raised</td><td><span class="tag ok">fixed</span></td></tr>
+        <tr><td>SEARCH ALL as linear scan</td><td><span class="tag warn">open · low</span></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="source">docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md · artifacts/scale/FACTS.md</div>
+  <aside class="notes">Precise claim: every program in the target flow compiled, and one two-turn pseudo-conversational program with real BMS maps and VSAM ran end to end. There is no estate-wide compile rate — don't let the 2,137 figure be read as "2,137 programs run". The point: running real code is what surfaces silent defects that static checks and unit tests missed.</aside>
+</section>
+
+<section>
+  <div class="kicker">Scale · what the estate actually calls</div>
+  <h2>CICS commands by use across 2,137 programs</h2>
+  <div class="bars">
+    <div class="bar"><span class="label">READ</span><div class="track"><div class="fill" style="width:100%"></div></div><span class="val">9,534</span></div>
+    <div class="bar"><span class="label">RETURN</span><div class="track"><div class="fill" style="width:58.8%"></div></div><span class="val">5,607</span></div>
+    <div class="bar"><span class="label">LINK</span><div class="track"><div class="fill" style="width:42.5%"></div></div><span class="val">4,050</span></div>
+    <div class="bar"><span class="label">START</span><div class="track"><div class="fill" style="width:31.7%"></div></div><span class="val">3,021</span></div>
+    <div class="bar"><span class="label">FORMATTIME</span><div class="track"><div class="fill" style="width:29.5%"></div></div><span class="val">2,814</span></div>
+    <div class="bar"><span class="label">HANDLE</span><div class="track"><div class="fill" style="width:29.5%"></div></div><span class="val">2,810</span></div>
+    <div class="bar"><span class="label">ASKTIME</span><div class="track"><div class="fill" style="width:28.5%"></div></div><span class="val">2,714</span></div>
+    <div class="bar"><span class="label">READNEXT</span><div class="track"><div class="fill" style="width:25.5%"></div></div><span class="val">2,434</span></div>
+    <div class="bar"><span class="label">STARTBR</span><div class="track"><div class="fill" style="width:25.3%"></div></div><span class="val">2,414</span></div>
+    <div class="bar"><span class="label">REWRITE</span><div class="track"><div class="fill" style="width:18.9%"></div></div><span class="val">1,806</span></div>
+    <div class="bar gap"><span class="label">BIF DEEDIT</span><div class="track"><div class="fill" style="width:10.4%"></div></div><span class="val">992</span></div>
+    <div class="bar"><span class="label">RETRIEVE</span><div class="track"><div class="fill" style="width:9.6%"></div></div><span class="val">920</span></div>
+    <div class="bar"><span class="label">IGNORE COND.</span><div class="track"><div class="fill" style="width:8.6%"></div></div><span class="val">820</span></div>
+    <div class="bar gap"><span class="label">TS queues</span><div class="track"><div class="fill" style="width:3.5%"></div></div><span class="val">330</span></div>
+  </div>
+  <div class="legend"><i style="background:var(--phosphor)"></i>implemented <i style="background:var(--red)"></i>open work</div>
+  <div class="source">docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md (Defect E) · artifacts/scale/scale.json</div>
+  <aside class="notes">START, RETRIEVE and IGNORE CONDITION were missing when first analysed and are now implemented — frequency data drives the order of work. Remaining open by volume: BIF DEEDIT (992), temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, SYNCPOINT, RESETBR).</aside>
+</section>
+
+<section>
+  <div class="kicker">Scale · batch estate</div>
+  <h2>860 JCL members · 12,267 steps · where the work is</h2>
+  <div class="cols wide-left">
+    <div class="bars">
+      <div class="bar gap"><span class="label">SORT (proc)</span><div class="track"><div class="fill" style="width:100%"></div></div><span class="val">4,039</span></div>
+      <div class="bar warn"><span class="label">IDCAMS</span><div class="track"><div class="fill" style="width:45.8%"></div></div><span class="val">1,848</span></div>
+      <div class="bar gap"><span class="label">IEBGENER</span><div class="track"><div class="fill" style="width:21.9%"></div></div><span class="val">885</span></div>
+      <div class="bar muted"><span class="label">SAS *</span><div class="track"><div class="fill" style="width:19%"></div></div><span class="val">767</span></div>
+      <div class="bar gap"><span class="label">IKJEFT01</span><div class="track"><div class="fill" style="width:11.8%"></div></div><span class="val">478</span></div>
+      <div class="bar muted"><span class="label">MQ batch *</span><div class="track"><div class="fill" style="width:11.1%"></div></div><span class="val">448</span></div>
+      <div class="bar muted"><span class="label">FTP *</span><div class="track"><div class="fill" style="width:7.5%"></div></div><span class="val">304</span></div>
+      <div class="bar gap"><span class="label">PGM=SORT</span><div class="track"><div class="fill" style="width:4.4%"></div></div><span class="val">177</span></div>
+      <div class="bar"><span class="label">IEFBR14</span><div class="track"><div class="fill" style="width:3%"></div></div><span class="val">123</span></div>
+      <div class="legend"><i style="background:var(--phosphor)"></i>executes <i style="background:var(--amber)"></i>core verbs execute <i style="background:var(--red)"></i>open work <i style="background:#3a4556"></i>* non-COBOL, out of scope</div>
+    </div>
+    <div>
+      <div class="card"><h3>Simpler than it looks</h3>
+        <ul>
+          <li><strong>67%</strong> of SORT steps need only FIELDS + INCLUDE/OMIT</li>
+          <li><strong>All 956</strong> IEBGENER/ICEGENER steps are plain copies (SYSIN DUMMY)</li>
+          <li><strong>446 of 478</strong> IKJEFT01 steps are COBOL + SQL under TSO</li>
+          <li>Step control is COND=: <strong>9,767</strong> uses vs 48 IF/THEN</li>
+        </ul>
+      </div>
+      <p class="small" style="margin-top:0.8em">Three work items — synthetic SORT, IEBGENER copy, TSO → SQL — unlock <strong>5,650 steps</strong>.</p>
+    </div>
+  </div>
+  <div class="source">docs/analysis/2026-09-02-jcl-utility-and-argument-frequency.md · jackal/jackal/utilities.py · artifacts/scale/FACTS.md</div>
+  <aside class="notes">Do not convert these into "the estate runs X%" — nothing measured that. IDCAMS executes DELETE, DEFINE CLUSTER, REPRO and MAXCC logic; VERIFY (759 uses in the estate) is not yet executed. The estate contains no PROC definitions, so SORT must be a built-in step form.</aside>
+</section>
+
+<!-- ============ 9. GAPS & ROADMAP ============ -->
+
+<section>
+  <div class="kicker">Honest gaps</div>
+  <h2>What doesn't work yet</h2>
+  <div class="cols">
+    <div class="card gap"><h3>Engine</h3>
+      <ul>
+        <li>SORT / MERGE verbs not lowered</li>
+        <li>Arithmetic via floating point, not true fixed-point</li>
+        <li>SEARCH ALL is a linear scan</li>
+        <li>Some unhandled statements warn instead of failing</li>
+      </ul></div>
+    <div class="card gap"><h3>Batch (JCL)</h3>
+      <ul>
+        <li>Executes IEFBR14 and IDCAMS only — no SORT, IEBGENER, IEBCOPY, ICETOOL</li>
+        <li>IDCAMS: no VERIFY, LISTCAT, PRINT, DEFINE GDG</li>
+        <li>GDG generations, PDS members, DD concatenation, DCB, IF/THEN/ELSE</li>
+      </ul></div>
+    <div class="card warn"><h3>Online (CICS)</h3>
+      <ul>
+        <li>BIF DEEDIT, temporary storage queues, SYNCPOINT, RESETBR</li>
+        <li>SEND MAP options: CURSOR, ERASE, FREEKB</li>
+        <li>Headless only: screens render but can't yet be used to drive a transaction</li>
+        <li>One task at a time</li>
+      </ul></div>
+    <div class="card warn"><h3>SQL &amp; analysis</h3>
+      <ul>
+        <li>Dynamic SQL, CALL, indicator variables, full SQLCA</li>
+        <li>No CICS–Db2 syncpoint coordination; no dialect translation</li>
+        <li>Cobble: a few expression kinds or unresolved JCL symbols can drop a whole program or job from the graph</li>
+      </ul></div>
+  </div>
+  <div class="source">artifacts/gaps/FACTS.md · jackal/docs/jcl-execution-roadmap.md · squall/docs/design/2026-06-13-exec-sql-support-design.md</div>
+  <aside class="notes">Every item here is an open, tracked issue. The principle throughout: unsupported behaviour should fail loudly — the CICS verb policy already does; the engine's statement-level warning is being tightened.</aside>
+</section>
+
+<section>
+  <div class="kicker">Roadmap</div>
+  <h2>Ordered by what real estates use</h2>
+  <table>
+    <tr><th>Track</th><th>Next</th><th>Why first</th></tr>
+    <tr><td><strong>Batch breadth</strong></td><td>GDG → SORT subset + IEBGENER → DD concatenation → IDCAMS breadth → DCB → PDS</td><td>SORT + IEBGENER + IDCAMS: over half of all estate steps</td></tr>
+    <tr><td><strong>CICS surface</strong></td><td>BIF DEEDIT → TS queues → BMS map options → time formats → SYNCPOINT</td><td>DEEDIT alone: 992 uses</td></tr>
+    <tr><td><strong>Engine correctness</strong></td><td>Fixed-point decimal arithmetic → SORT/MERGE verbs → fail loud on anything unhandled</td><td>Byte-exact results are the whole value proposition</td></tr>
+    <tr><td><strong>SQL</strong></td><td>Syncpoint at task end → indicators + tolerant coercion → dynamic SQL / CALL</td><td>Unblocks the next Db2 programs</td></tr>
+    <tr><td><strong>Estate onboarding</strong></td><td>Robust ingest → dataflow at scale → source positions → screen text</td><td>First contact with any new estate</td></tr>
+  </table>
+  <div class="source">artifacts/gaps/FACTS.md (grouped from open issues) · artifacts/scale/FACTS.md</div>
+  <aside class="notes">The ordering is evidence-driven: the frequency tables from the estate decide what gets built next, and a failing capture — like the SSN defect on the account view — becomes a tracked issue immediately.</aside>
+</section>
+
+<!-- ============ 10. CLOSE ============ -->
+
+<section>
+  <div class="kicker">What this unlocks</div>
+  <h2>From "don't touch it" to evidence on demand</h2>
+  <div class="cols three" style="margin-top:1em">
+    <div class="card ok"><h3>Document the estate</h3>A queryable graph of programs, transactions, jobs, datasets and screens — generated, not interviewed.</div>
+    <div class="card ok"><h3>Test off-host</h3>Script transactions and batch jobs headlessly on a laptop or in CI, with real record layouts and deterministic results.</div>
+    <div class="card ok"><h3>Prove migrations</h3>Run the original and the replacement on the same inputs and compare screens, datasets and return codes.</div>
+  </div>
+  <aside class="notes">Close on outcomes. Invite them to pick a transaction or job from their own estate for the next session.</aside>
+</section>
+
+</div>
+</div>
+<script src="vendor/reveal.js/reveal.js"></script>
+<script src="vendor/reveal.js/plugin/notes.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1600,
+    height: 900,
+    margin: 0.05,
+    center: false,
+    hash: true,
+    slideNumber: "c/t",
+    transition: "fade",
+    transitionSpeed: "fast",
+    plugins: [RevealNotes],
+  });
+</script>
+</body>
+</html>

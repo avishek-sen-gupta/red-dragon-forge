@@ -1,0 +1,24 @@
+ Tran: CAVW                AWS Mainframe Modernization           Date: 09/14/26 
+ Prog: COACTVWC                    CardDemo                      Time: 15:31:53 
+                                                                                
+                                 View Account                                   
+                   Account Number :   00000000001        Active Y/N:  Y         
+        Opened:  2014-11-20            Credit Limit        : +      2,020.00    
+        Expiry:  2025-05-20            Cash credit Limit   : +      1,020.00    
+        Reissue: 2025-05-20            Current Balance     : +        194.00    
+                                       Current Cycle Credit: +           .00    
+        Account Group:                 Current Cycle Debit : +           .00    
+                                Customer Details                                
+        Customer id  : 000000001                 SSN: 209-73-888                
+        Date of birth: 1961-06-08                FICO Score: 274                
+ First Name                 Middle Name:               Last Name :              
+ Immanuel                   Madeline                   Kessler                  
+ Address: 618 Deshaun Route                                    State     NC     
+          Apt. 802                                             Zip       12546  
+ City     Altenwerthshire                                      Country   USA    
+ Phone 1: (908)119-8310 Government Issued Id Ref    :     00000000000049368437  
+ Phone 2: (373)693-8684 EFT Account Id:  0053581756  Primary Card Holder Y/N: Y 
+                                                                                
+                       Enter or update id of account to display                 
+                                                                                
+   F3=Exit                                                                      

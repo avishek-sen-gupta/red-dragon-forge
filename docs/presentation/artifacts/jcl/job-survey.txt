@@ -1,0 +1,118 @@
+standalone     ACCTFILE   ran     ok
+standalone     CARDFILE   failed  unsupported_program:SDSF
+standalone     CBADMCDJ   failed  unsupported_program:DFHCSDUP
+standalone     CBEXPORT   failed  missing_input_dataset
+standalone     CBIMPORT   failed  missing_input_dataset
+standalone     CLOSEFIL   failed  unsupported_program:SDSF
+standalone     COMBTRAN   failed  unsupported_program:SORT
+standalone     CREASTMT   failed  idcams_unsupported
+standalone     CUSTFILE   failed  unsupported_program:SDSF
+standalone     DALYREJS   failed  idcams_unsupported
+standalone     DEFCUST    ran     nonzero_rc
+standalone     DEFGDGB    failed  idcams_unsupported
+standalone     DEFGDGD    failed  idcams_unsupported
+standalone     DISCGRP    ran     ok
+standalone     DUSRSECJ   failed  unsupported_program:IEBGENER
+standalone     ESDSRRDS   failed  unsupported_program:IEBGENER
+standalone     FTPJCL     failed  unsupported_program:FTP
+standalone     INTCALC    failed  missing_input_dataset
+standalone     INTRDRJ1   failed  idcams_unsupported
+standalone     INTRDRJ2   failed  idcams_unsupported
+standalone     OPENFIL    failed  unsupported_program:SDSF
+standalone     POSTTRAN   failed  missing_input_dataset
+standalone     PRTCATBL   failed  idcams_sysin_not_instream
+standalone     READACCT   failed  missing_input_dataset
+standalone     READCARD   failed  missing_input_dataset
+standalone     READCUST   failed  missing_input_dataset
+standalone     READXREF   failed  missing_input_dataset
+standalone     REPTFILE   failed  idcams_unsupported
+standalone     TCATBALF   ran     ok
+standalone     TRANBKP    failed  idcams_sysin_not_instream
+standalone     TRANCATG   ran     ok
+standalone     TRANFILE   failed  unsupported_program:SDSF
+standalone     TRANIDX    failed  idcams_unsupported
+standalone     TRANREPT   failed  idcams_sysin_not_instream
+standalone     TRANTYPE   ran     ok
+standalone     TXT2PDF1   failed  unsupported_program:IKJEFT1B
+standalone     WAITSTEP   failed  runtime_error:TypeError
+standalone     XREFFILE   failed  idcams_unsupported
+after_loaders  ACCTFILE   ran     ok
+after_loaders  CARDFILE   failed  unsupported_program:SDSF
+after_loaders  CBADMCDJ   failed  unsupported_program:DFHCSDUP
+after_loaders  CBEXPORT   failed  missing_input_dataset
+after_loaders  CBIMPORT   failed  missing_input_dataset
+after_loaders  CLOSEFIL   failed  unsupported_program:SDSF
+after_loaders  COMBTRAN   failed  unsupported_program:SORT
+after_loaders  CREASTMT   failed  idcams_unsupported
+after_loaders  CUSTFILE   failed  unsupported_program:SDSF
+after_loaders  DALYREJS   failed  idcams_unsupported
+after_loaders  DEFCUST    ran     nonzero_rc
+after_loaders  DEFGDGB    failed  idcams_unsupported
+after_loaders  DEFGDGD    failed  idcams_unsupported
+after_loaders  DISCGRP    ran     ok
+after_loaders  DUSRSECJ   failed  unsupported_program:IEBGENER
+after_loaders  ESDSRRDS   failed  unsupported_program:IEBGENER
+after_loaders  FTPJCL     failed  unsupported_program:FTP
+after_loaders  INTCALC    failed  missing_input_dataset
+after_loaders  INTRDRJ1   failed  idcams_unsupported
+after_loaders  INTRDRJ2   failed  idcams_unsupported
+after_loaders  OPENFIL    failed  unsupported_program:SDSF
+after_loaders  POSTTRAN   failed  missing_input_dataset
+after_loaders  PRTCATBL   failed  idcams_sysin_not_instream
+after_loaders  READACCT   ran     ok
+after_loaders  READCARD   failed  missing_input_dataset
+after_loaders  READCUST   failed  missing_input_dataset
+after_loaders  READXREF   failed  missing_input_dataset
+after_loaders  REPTFILE   failed  idcams_unsupported
+after_loaders  TCATBALF   ran     ok
+after_loaders  TRANBKP    failed  idcams_sysin_not_instream
+after_loaders  TRANCATG   ran     ok
+after_loaders  TRANFILE   failed  unsupported_program:SDSF
+after_loaders  TRANIDX    failed  idcams_unsupported
+after_loaders  TRANREPT   failed  idcams_sysin_not_instream
+after_loaders  TRANTYPE   ran     ok
+after_loaders  TXT2PDF1   failed  unsupported_program:IKJEFT1B
+after_loaders  WAITSTEP   failed  runtime_error:TypeError
+after_loaders  XREFFILE   failed  idcams_unsupported
+{
+  "standalone": {
+    "jobs": 38,
+    "ran_rc0": 5,
+    "ran_nonzero_rc": 1,
+    "failed": 32,
+    "by_category": {
+      "idcams_sysin_not_instream": 3,
+      "idcams_unsupported": 9,
+      "missing_input_dataset": 8,
+      "nonzero_rc": 1,
+      "ok": 5,
+      "runtime_error:TypeError": 1,
+      "unsupported_program:DFHCSDUP": 1,
+      "unsupported_program:FTP": 1,
+      "unsupported_program:IEBGENER": 2,
+      "unsupported_program:IKJEFT1B": 1,
+      "unsupported_program:SDSF": 5,
+      "unsupported_program:SORT": 1
+    }
+  },
+  "after_loaders": {
+    "jobs": 38,
+    "ran_rc0": 6,
+    "ran_nonzero_rc": 1,
+    "failed": 31,
+    "by_category": {
+      "idcams_sysin_not_instream": 3,
+      "idcams_unsupported": 9,
+      "missing_input_dataset": 7,
+      "nonzero_rc": 1,
+      "ok": 6,
+      "runtime_error:TypeError": 1,
+      "unsupported_program:DFHCSDUP": 1,
+      "unsupported_program:FTP": 1,
+      "unsupported_program:IEBGENER": 2,
+      "unsupported_program:IKJEFT1B": 1,
+      "unsupported_program:SDSF": 5,
+      "unsupported_program:SORT": 1
+    }
+  }
+}

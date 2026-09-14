@@ -1,0 +1,116 @@
+EXEC SQL blocks in the unmodified IBM Bank-of-Z sources (vendor/bank-of-z, not edited).
+INCLUDE CUSTDB2 / INCLUDE SQLCA are rewritten to COPY by squall's prepass.
+
+--- vendor/bank-of-z/src/base/cics/cobol/INQCUST.cbl:43 ---
+          EXEC SQL
+             INCLUDE CUSTDB2
+          END-EXEC.
+
+--- vendor/bank-of-z/src/base/cics/cobol/INQCUST.cbl:68 ---
+       EXEC SQL
+          INCLUDE SQLCA
+       END-EXEC.
+
+--- vendor/bank-of-z/src/base/cics/cobol/INQCUST.cbl:310 ---
+           EXEC SQL
+              SELECT CUSTOMER_EYECATCHER,
+                     CUSTOMER_SORTCODE,
+                     CUSTOMER_NUMBER,
+                     CUSTOMER_TITLE,
+                     CUSTOMER_FIRST_NAME,
+                     CUSTOMER_LAST_NAME,
+                     CUSTOMER_DATE_OF_BIRTH,
+                     CUSTOMER_PHONE,
+                     CUSTOMER_ADDR_LINE1,
+                     CUSTOMER_ADDR_LINE2,
+                     CUSTOMER_CITY,
+                     CUSTOMER_POSTCODE,
+                     CUSTOMER_COUNTRY,
+                     CUSTOMER_STATUS,
+                     CUSTOMER_CREATED_DATE,
+                     CUSTOMER_CREDIT_SCORE,
+                     CUSTOMER_CS_REVIEW_DATE
+                INTO :HV-CUSTOMER-EYECATCHER,
+                     :HV-CUSTOMER-SORTCODE,
+                     :HV-CUSTOMER-NUMBER,
+                     :HV-CUSTOMER-TITLE,
+                     :HV-CUSTOMER-FIRST-NAME,
+                     :HV-CUSTOMER-LAST-NAME,
+                     :HV-CUSTOMER-DOB,
+                     :HV-CUSTOMER-PHONE,
+                     :HV-CUSTOMER-ADDR-LINE1,
+                     :HV-CUSTOMER-ADDR-LINE2,
+                     :HV-CUSTOMER-CITY,
+                     :HV-CUSTOMER-POSTCODE,
+                     :HV-CUSTOMER-COUNTRY,
+                     :HV-CUSTOMER-STATUS,
+                     :HV-CUSTOMER-CREATE-DATE,
+                     :HV-CUSTOMER-CREDIT-SCORE,
+                     :HV-CUSTOMER-CS-REVIEW-DATE
+                FROM CUSTOMER
+               WHERE CUSTOMER_SORTCODE = :HV-CUSTOMER-SORTCODE
+                 AND CUSTOMER_NUMBER = :HV-CUSTOMER-NUMBER
+           END-EXEC.
+
+--- vendor/bank-of-z/src/base/cics/cobol/INQCUST.cbl:675 ---
+           EXEC SQL
+              SELECT CUSTOMER_EYECATCHER,
+                     CUSTOMER_SORTCODE,
+                     CUSTOMER_NUMBER,
+                     CUSTOMER_TITLE,
+                     CUSTOMER_FIRST_NAME,
+                     CUSTOMER_LAST_NAME,
+                     CUSTOMER_DATE_OF_BIRTH,
+                     CUSTOMER_PHONE,
+                     CUSTOMER_ADDR_LINE1,
+                     CUSTOMER_ADDR_LINE2,
+                     CUSTOMER_CITY,
+                     CUSTOMER_POSTCODE,
+                     CUSTOMER_COUNTRY,
+                     CUSTOMER_STATUS,
+                     CUSTOMER_CREATED_DATE,
+                     CUSTOMER_CREDIT_SCORE,
+                     CUSTOMER_CS_REVIEW_DATE
+                INTO :HV-CUSTOMER-EYECATCHER,
+                     :HV-CUSTOMER-SORTCODE,
+                     :HV-CUSTOMER-NUMBER,
+                     :HV-CUSTOMER-TITLE,
+                     :HV-CUSTOMER-FIRST-NAME,
+                     :HV-CUSTOMER-LAST-NAME,
+                     :HV-CUSTOMER-DOB,
+                     :HV-CUSTOMER-PHONE,
+                     :HV-CUSTOMER-ADDR-LINE1,
+                     :HV-CUSTOMER-ADDR-LINE2,
+                     :HV-CUSTOMER-CITY,
+                     :HV-CUSTOMER-POSTCODE,
+                     :HV-CUSTOMER-COUNTRY,
+                     :HV-CUSTOMER-STATUS,
+                     :HV-CUSTOMER-CREATE-DATE,
+                     :HV-CUSTOMER-CREDIT-SCORE,
+                     :HV-CUSTOMER-CS-REVIEW-DATE
+                FROM CUSTOMER
+               WHERE CUSTOMER_SORTCODE = :HV-CUSTOMER-SORTCODE
+               ORDER BY CUSTOMER_NUMBER DESC
+               FETCH FIRST 1 ROW ONLY
+           END-EXEC.
+
+--- vendor/bank-of-z/src/base/cics/copy/CUSTDB2.cpy:8 ---
+           EXEC SQL DECLARE CUSTOMER TABLE
+              ( CUSTOMER_EYECATCHER            CHAR(4),
+                CUSTOMER_SORTCODE              CHAR(6) NOT NULL,
+                CUSTOMER_NUMBER                CHAR(10) NOT NULL,
+                CUSTOMER_TITLE                 CHAR(10),
+                CUSTOMER_FIRST_NAME            CHAR(50),
+                CUSTOMER_LAST_NAME             CHAR(50),
+                CUSTOMER_DATE_OF_BIRTH         INTEGER,
+                CUSTOMER_PHONE                 CHAR(20),
+                CUSTOMER_ADDR_LINE1            CHAR(50),
+                CUSTOMER_ADDR_LINE2            CHAR(50),
+                CUSTOMER_CITY                  CHAR(50),
+                CUSTOMER_POSTCODE              CHAR(10),
+                CUSTOMER_COUNTRY               CHAR(50),
+                CUSTOMER_STATUS                CHAR(10),
+                CUSTOMER_CREATED_DATE          INTEGER,
+                CUSTOMER_CREDIT_SCORE          SMALLINT,
+                CUSTOMER_CS_REVIEW_DATE        INTEGER )
+           END-EXEC.

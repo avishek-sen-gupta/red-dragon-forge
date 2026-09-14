@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Internal sequence: COACTVWC</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: sans-serif; padding: 2em; background: #fafafa; }
+  h1 { font-size: 1.1em; color: #444; margin-bottom: 1em; }
+  .mermaid { background: white; border: 1px solid #ddd; padding: 1.5em; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Internal sequence: COACTVWC</h1>
+<div class="mermaid">
+sequenceDiagram
+    participant COACTVWC as COACTVWC
+    Note over COACTVWC: 0000-MAIN
+    Note over COACTVWC: YYYY-STORE-PFKEY ⬡
+    rect rgb(235,240,255)
+        Note over COACTVWC: 1000-SEND-MAP
+        Note over COACTVWC: 1100-SCREEN-INIT
+        Note over COACTVWC: 1200-SETUP-SCREEN-VARS ⬡
+        Note over COACTVWC: 1300-SETUP-SCREEN-ATTRS ⬡
+        Note over COACTVWC: 1400-SEND-SCREEN
+    end
+    rect rgb(235,240,255)
+        Note over COACTVWC: 2000-PROCESS-INPUTS
+        Note over COACTVWC: 2100-RECEIVE-MAP
+        rect rgb(235,240,255)
+            Note over COACTVWC: 2200-EDIT-MAP-INPUTS ⬡
+            Note over COACTVWC: 2210-EDIT-ACCOUNT ⬡
+        end
+    end
+    rect rgb(235,240,255)
+        Note over COACTVWC: 9000-READ-ACCT ⬡
+        Note over COACTVWC: 9200-GETCARDXREF-BYACCT ⬡
+        Note over COACTVWC: 9300-GETACCTDATA-BYACCT ⬡
+        Note over COACTVWC: 9400-GETCUSTDATA-BYCUST ⬡
+    end
+    Note over COACTVWC: SEND-PLAIN-TEXT ⬡
+</div>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+</body>
+</html>

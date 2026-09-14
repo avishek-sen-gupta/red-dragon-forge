@@ -1,0 +1,10 @@
+fields: [1/4] COSGN00C
+fields:   COSGN00C 40/46 writes covered, 13 unhandled, 40 edges, 10.9s
+fields: [2/4] COMEN01C
+fields:   COMEN01C 60/61 writes covered, 16 unhandled, 61 edges, 5.6s
+fields: [3/4] COADM01C
+fields:   COADM01C 51/52 writes covered, 15 unhandled, 50 edges, 5.1s
+fields: [4/4] COACTVWC
+fields:   COACTVWC 124/128 writes covered, 107 unhandled, 132 edges, 9.8s
+fields: 4 members, coverage 95.8% (275/287 writes), 151 unhandled, 0 skipped
+fields: 2 call sites share a commarea window, 6 do not: dynamic-target 6

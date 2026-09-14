@@ -1,0 +1,9 @@
+COSGN00C.WS-USER-ID  level 05  usage DISPLAY
+  declared at WS-USER-ID@working_storage[109:117]
+flows into across calls (depth 6, max 2 hops, 5 landings):
+  hop 0  depth 1  COSGN00C.CDEMO-USER-ID  CDEMO-USER-ID@working_storage[149:157]
+  hop 1  depth 2  COADM01C.DFHCOMMAREA  DFHCOMMAREA@linkage[24:32]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.then.0
+  hop 1  depth 2  COMEN01C.DFHCOMMAREA  DFHCOMMAREA@linkage[24:32]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.else.0
+  hop 1  depth 3  COADM01C.CARDDEMO-COMMAREA  CARDDEMO-COMMAREA@working_storage[155:315]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.then.0
+  hop 1  depth 3  COMEN01C.CARDDEMO-COMMAREA  CARDDEMO-COMMAREA@working_storage[155:315]  via COSGN00C:READ-USER-SEC-FILE/1.when.0.0.then.5.else.0
+

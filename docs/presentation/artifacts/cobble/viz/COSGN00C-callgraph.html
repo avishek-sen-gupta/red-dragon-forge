@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Call dependency: COADM01C</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  body { margin: 0; background: #fafafa; font-family: sans-serif; }
+  h1 { font-size: 1em; color: #444; padding: 0.8em 1em 0; margin: 0; }
+  #graph { width: 100%; height: calc(100vh - 3em); }
+</style>
+</head>
+<body>
+<h1>Call dependency: COADM01C</h1>
+<div id="graph"></div>
+<script>
+const nodes = new vis.DataSet([{"id": "COADM01C", "label": "ADM01C", "title": "COADM01C", "color": {"background": "#d4e6f1", "border": "#2980b9"}, "font": {"bold": true}}, {"id": "COMEN01C", "label": "MEN01C", "title": "COMEN01C", "color": null, "font": {"bold": false}}, {"id": "COSGN00C", "label": "SGN00C", "title": "COSGN00C", "color": null, "font": {"bold": false}}]);
+const edges = new vis.DataSet([]);
+const container = document.getElementById("graph");
+const options = {
+  nodes: {
+    shape: "box",
+    font: { size: 13, face: "monospace" },
+    color: { background: "#f0f4f8", border: "#7090b0", highlight: { background: "#d4e6f1", border: "#2980b9" } },
+    margin: 8,
+  },
+  edges: {
+    arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+    color: { color: "#aaa", highlight: "#555" },
+    smooth: { type: "continuous" },
+  },
+  physics: {
+    solver: "forceAtlas2Based",
+    forceAtlas2Based: { gravitationalConstant: -60, springLength: 120, springConstant: 0.08 },
+    stabilization: { iterations: 200 },
+  },
+  layout: { improvedLayout: true },
+};
+new vis.Network(container, { nodes, edges }, options);
+</script>
+</body>
+</html>

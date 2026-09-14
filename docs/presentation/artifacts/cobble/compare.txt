@@ -1,0 +1,7 @@
+uv run --no-sync cobble-compare
+=== NODES: 449 out / 449 reference ===
+  OK — identical (449)
+=== EDGES: 803 out / 803 reference ===
+  OK — identical (803)
+
+RESULT: EMPTY DIFF — out matches reference exactly.
