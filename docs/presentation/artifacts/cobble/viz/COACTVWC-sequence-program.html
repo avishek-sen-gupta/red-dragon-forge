@@ -17,28 +17,58 @@ sequenceDiagram
     participant COACTVWC as COACTVWC
     Note over COACTVWC: 0000-MAIN
     Note over COACTVWC: YYYY-STORE-PFKEY ⬡
-    rect rgb(235,240,255)
-        Note over COACTVWC: 1000-SEND-MAP
-        Note over COACTVWC: 1100-SCREEN-INIT
-        Note over COACTVWC: 1200-SETUP-SCREEN-VARS ⬡
-        Note over COACTVWC: 1300-SETUP-SCREEN-ATTRS ⬡
-        Note over COACTVWC: 1400-SEND-SCREEN
-    end
-    rect rgb(235,240,255)
-        Note over COACTVWC: 2000-PROCESS-INPUTS
-        Note over COACTVWC: 2100-RECEIVE-MAP
+    alt WHEN CDEMO-PGM-ENTER (CDEMO-PGM-CONTEXT == 0)
         rect rgb(235,240,255)
-            Note over COACTVWC: 2200-EDIT-MAP-INPUTS ⬡
-            Note over COACTVWC: 2210-EDIT-ACCOUNT ⬡
+            Note over COACTVWC: 1000-SEND-MAP
+            Note over COACTVWC: 1100-SCREEN-INIT
+            Note over COACTVWC: 1200-SETUP-SCREEN-VARS ⬡
+            Note over COACTVWC: 1300-SETUP-SCREEN-ATTRS ⬡
+            Note over COACTVWC: 1400-SEND-SCREEN
+        end
+    else WHEN CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)
+        rect rgb(235,240,255)
+            Note over COACTVWC: 2000-PROCESS-INPUTS
+            Note over COACTVWC: 2100-RECEIVE-MAP
+            rect rgb(235,240,255)
+                Note over COACTVWC: 2200-EDIT-MAP-INPUTS ⬡
+                Note over COACTVWC: 2210-EDIT-ACCOUNT ⬡
+            end
+        end
+        alt IF INPUT-ERROR (WS-INPUT-FLAG == 1)
+            rect rgb(235,240,255)
+                Note over COACTVWC: 1000-SEND-MAP
+                Note over COACTVWC: 1100-SCREEN-INIT
+                Note over COACTVWC: 1200-SETUP-SCREEN-VARS ⬡
+                Note over COACTVWC: 1300-SETUP-SCREEN-ATTRS ⬡
+                Note over COACTVWC: 1400-SEND-SCREEN
+            end
+        else NOT INPUT-ERROR (WS-INPUT-FLAG == 1)
+            rect rgb(235,240,255)
+                Note over COACTVWC: 9000-READ-ACCT ⬡
+                Note over COACTVWC: 9200-GETCARDXREF-BYACCT ⬡
+                Note over COACTVWC: 9300-GETACCTDATA-BYACCT ⬡
+                Note over COACTVWC: 9400-GETCUSTDATA-BYCUST ⬡
+            end
+            rect rgb(235,240,255)
+                Note over COACTVWC: 1000-SEND-MAP
+                Note over COACTVWC: 1100-SCREEN-INIT
+                Note over COACTVWC: 1200-SETUP-SCREEN-VARS ⬡
+                Note over COACTVWC: 1300-SETUP-SCREEN-ATTRS ⬡
+                Note over COACTVWC: 1400-SEND-SCREEN
+            end
+        end
+    else WHEN OTHER
+        Note over COACTVWC: SEND-PLAIN-TEXT ⬡
+    end
+    alt IF INPUT-ERROR (WS-INPUT-FLAG == 1)
+        rect rgb(235,240,255)
+            Note over COACTVWC: 1000-SEND-MAP
+            Note over COACTVWC: 1100-SCREEN-INIT
+            Note over COACTVWC: 1200-SETUP-SCREEN-VARS ⬡
+            Note over COACTVWC: 1300-SETUP-SCREEN-ATTRS ⬡
+            Note over COACTVWC: 1400-SEND-SCREEN
         end
     end
-    rect rgb(235,240,255)
-        Note over COACTVWC: 9000-READ-ACCT ⬡
-        Note over COACTVWC: 9200-GETCARDXREF-BYACCT ⬡
-        Note over COACTVWC: 9300-GETACCTDATA-BYACCT ⬡
-        Note over COACTVWC: 9400-GETCUSTDATA-BYCUST ⬡
-    end
-    Note over COACTVWC: SEND-PLAIN-TEXT ⬡
 </div>
 <script>mermaid.initialize({ startOnLoad: true });</script>
 </body>

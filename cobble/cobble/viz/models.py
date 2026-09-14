@@ -46,14 +46,28 @@ class CrossProgramSequence(BaseModel, frozen=True):
     calls: tuple[CrossProgramCall, ...]
 
 
+class Arm(BaseModel, frozen=True):
+    """One arm of a decision a step runs inside.
+
+    ``decision`` names the IF or EVALUATE statement, so steps sharing it are
+    alternatives of one choice; ``arm`` names which branch (``then``, ``else``,
+    ``when.<n>``) and ``label`` is how the diagram shows it.
+    """
+
+    decision: str
+    arm: str
+    label: str
+
+
 class SequenceStep(BaseModel, frozen=True):
-    """One step in a single program's internal PERFORM tree."""
+    """One PERFORM site in a single program's internal PERFORM tree."""
 
     type: str  # "perform" | "link"
     paragraph: str
     callee_program: str = ""  # set when type=="link"; no recursion
     has_decision: bool = False
     call_type: str = "simple"  # "simple" | "loop" | "conditional" | "conditional_loop"
+    arms: tuple[Arm, ...] = ()  # outermost first; empty when unconditional
     summary: str = ""  # filled by cobol-viz-summarize
     children: tuple[SequenceStep, ...] = ()
 

@@ -22,6 +22,13 @@
           "callee_program": "CDEMO-TO-PROGRAM",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/3",
+              "arm": "then",
+              "label": "IF EIBCALEN == 0"
+            }
+          ],
           "summary": "",
           "children": []
         },
@@ -30,7 +37,19 @@
           "paragraph": "SEND-MENU-SCREEN",
           "callee_program": "",
           "has_decision": true,
-          "call_type": "simple",
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/3",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1",
+              "arm": "then",
+              "label": "IF CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -39,6 +58,7 @@
               "callee_program": "",
               "has_decision": false,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -48,6 +68,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             }
@@ -59,6 +80,18 @@
           "callee_program": "",
           "has_decision": false,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/3",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            }
+          ],
           "summary": "",
           "children": []
         },
@@ -68,6 +101,23 @@
           "callee_program": "CDEMO-ADMIN-OPT-PGMNAME",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/3",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1.else.1",
+              "arm": "when.0",
+              "label": "WHEN DFHENTER"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -75,7 +125,14 @@
               "paragraph": "SEND-MENU-SCREEN",
               "callee_program": "",
               "has_decision": true,
-              "call_type": "simple",
+              "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/5",
+                  "arm": "then",
+                  "label": "IF WS-OPTION IS NUMERIC / WS-OPTION > CDEMO-ADMIN-OPT-COUNT / WS-OPTION == ZEROS"
+                }
+              ],
               "summary": "",
               "children": [
                 {
@@ -84,6 +141,7 @@
                   "callee_program": "",
                   "has_decision": false,
                   "call_type": "simple",
+                  "arms": [],
                   "summary": "",
                   "children": []
                 },
@@ -93,10 +151,121 @@
                   "callee_program": "",
                   "has_decision": true,
                   "call_type": "simple",
+                  "arms": [],
                   "summary": "",
                   "children": []
                 }
               ]
+            },
+            {
+              "type": "perform",
+              "paragraph": "SEND-MENU-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/6",
+                  "arm": "then",
+                  "label": "IF ERR-FLG-ON (WS-ERR-FLG == Y)"
+                }
+              ],
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": false,
+                  "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "BUILD-MENU-OPTIONS",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "link",
+          "paragraph": "RETURN-TO-SIGNON-SCREEN",
+          "callee_program": "CDEMO-TO-PROGRAM",
+          "has_decision": true,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/3",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1.else.1",
+              "arm": "when.1",
+              "label": "WHEN DFHPF3"
+            }
+          ],
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-MENU-SCREEN",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/3",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "MAIN-PARA/3.else.1.else.1",
+              "arm": "when.2",
+              "label": "WHEN OTHER"
+            }
+          ],
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "POPULATE-HEADER-INFO",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "BUILD-MENU-OPTIONS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
             }
           ]
         }
@@ -114,6 +283,13 @@
           "callee_program": "CDEMO-TO-PROGRAM",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "then",
+              "label": "IF EIBCALEN == 0"
+            }
+          ],
           "summary": "",
           "children": []
         },
@@ -123,6 +299,18 @@
           "callee_program": "",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1",
+              "arm": "then",
+              "label": "IF CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -131,6 +319,7 @@
               "callee_program": "",
               "has_decision": false,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             },
@@ -140,6 +329,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             }
@@ -151,6 +341,18 @@
           "callee_program": "",
           "has_decision": false,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            }
+          ],
           "summary": "",
           "children": []
         },
@@ -160,6 +362,23 @@
           "callee_program": "CDEMO-MENU-OPT-PGMNAME",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1.else.1",
+              "arm": "when.0",
+              "label": "WHEN DFHENTER"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -168,6 +387,13 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/5",
+                  "arm": "then",
+                  "label": "IF WS-OPTION IS NUMERIC / WS-OPTION > CDEMO-MENU-OPT-COUNT / WS-OPTION == ZEROS"
+                }
+              ],
               "summary": "",
               "children": [
                 {
@@ -176,6 +402,7 @@
                   "callee_program": "",
                   "has_decision": false,
                   "call_type": "simple",
+                  "arms": [],
                   "summary": "",
                   "children": []
                 },
@@ -185,10 +412,158 @@
                   "callee_program": "",
                   "has_decision": true,
                   "call_type": "simple",
+                  "arms": [],
                   "summary": "",
                   "children": []
                 }
               ]
+            },
+            {
+              "type": "perform",
+              "paragraph": "SEND-MENU-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/6",
+                  "arm": "then",
+                  "label": "IF CDEMO-USRTYP-USER (CDEMO-USER-TYPE == U) / CDEMO-MENU-OPT-USRTYPE == 'A'"
+                }
+              ],
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": false,
+                  "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "BUILD-MENU-OPTIONS",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "type": "perform",
+              "paragraph": "SEND-MENU-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/7",
+                  "arm": "then",
+                  "label": "IF ERR-FLG-ON (WS-ERR-FLG == Y)"
+                }
+              ],
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": false,
+                  "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "BUILD-MENU-OPTIONS",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "link",
+          "paragraph": "RETURN-TO-SIGNON-SCREEN",
+          "callee_program": "CDEMO-TO-PROGRAM",
+          "has_decision": true,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1.else.1",
+              "arm": "when.1",
+              "label": "WHEN DFHPF3"
+            }
+          ],
+          "summary": "",
+          "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-MENU-SCREEN",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1",
+              "arm": "else",
+              "label": "NOT CDEMO-PGM-REENTER (CDEMO-PGM-CONTEXT == 1)"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.1.else.1",
+              "arm": "when.2",
+              "label": "WHEN OTHER"
+            }
+          ],
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "POPULATE-HEADER-INFO",
+              "callee_program": "",
+              "has_decision": false,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            },
+            {
+              "type": "perform",
+              "paragraph": "BUILD-MENU-OPTIONS",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
             }
           ]
         }
@@ -205,7 +580,14 @@
           "paragraph": "SEND-SIGNON-SCREEN",
           "callee_program": "",
           "has_decision": true,
-          "call_type": "simple",
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "then",
+              "label": "IF EIBCALEN == 0"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -214,6 +596,7 @@
               "callee_program": "",
               "has_decision": true,
               "call_type": "simple",
+              "arms": [],
               "summary": "",
               "children": []
             }
@@ -225,6 +608,18 @@
           "callee_program": "",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.0",
+              "arm": "when.0",
+              "label": "WHEN DFHENTER"
+            }
+          ],
           "summary": "",
           "children": [
             {
@@ -232,7 +627,14 @@
               "paragraph": "SEND-SIGNON-SCREEN",
               "callee_program": "",
               "has_decision": true,
-              "call_type": "simple",
+              "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/1",
+                  "arm": "when.0",
+                  "label": "WHEN USERIDI == SPACES / USERIDI == LOW-VALUES"
+                }
+              ],
               "summary": "",
               "children": [
                 {
@@ -241,6 +643,34 @@
                   "callee_program": "",
                   "has_decision": true,
                   "call_type": "simple",
+                  "arms": [],
+                  "summary": "",
+                  "children": []
+                }
+              ]
+            },
+            {
+              "type": "perform",
+              "paragraph": "SEND-SIGNON-SCREEN",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/1",
+                  "arm": "when.1",
+                  "label": "WHEN PASSWDI == SPACES / PASSWDI == LOW-VALUES"
+                }
+              ],
+              "summary": "",
+              "children": [
+                {
+                  "type": "perform",
+                  "paragraph": "POPULATE-HEADER-INFO",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "simple",
+                  "arms": [],
                   "summary": "",
                   "children": []
                 }
@@ -252,6 +682,13 @@
               "callee_program": "COADM01C",
               "has_decision": true,
               "call_type": "conditional",
+              "arms": [
+                {
+                  "decision": "PROCESS-ENTER-KEY/4",
+                  "arm": "then",
+                  "label": "IF ERR-FLG-ON (WS-ERR-FLG == Y)"
+                }
+              ],
               "summary": "",
               "children": [
                 {
@@ -259,7 +696,19 @@
                   "paragraph": "SEND-SIGNON-SCREEN",
                   "callee_program": "",
                   "has_decision": true,
-                  "call_type": "simple",
+                  "call_type": "conditional",
+                  "arms": [
+                    {
+                      "decision": "READ-USER-SEC-FILE/1",
+                      "arm": "when.0",
+                      "label": "WHEN 0"
+                    },
+                    {
+                      "decision": "READ-USER-SEC-FILE/1.when.0.0",
+                      "arm": "else",
+                      "label": "NOT SEC-USR-PWD == WS-USER-PWD"
+                    }
+                  ],
                   "summary": "",
                   "children": [
                     {
@@ -268,6 +717,61 @@
                       "callee_program": "",
                       "has_decision": true,
                       "call_type": "simple",
+                      "arms": [],
+                      "summary": "",
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "SEND-SIGNON-SCREEN",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "conditional",
+                  "arms": [
+                    {
+                      "decision": "READ-USER-SEC-FILE/1",
+                      "arm": "when.1",
+                      "label": "WHEN 13"
+                    }
+                  ],
+                  "summary": "",
+                  "children": [
+                    {
+                      "type": "perform",
+                      "paragraph": "POPULATE-HEADER-INFO",
+                      "callee_program": "",
+                      "has_decision": true,
+                      "call_type": "simple",
+                      "arms": [],
+                      "summary": "",
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "type": "perform",
+                  "paragraph": "SEND-SIGNON-SCREEN",
+                  "callee_program": "",
+                  "has_decision": true,
+                  "call_type": "conditional",
+                  "arms": [
+                    {
+                      "decision": "READ-USER-SEC-FILE/1",
+                      "arm": "when.2",
+                      "label": "WHEN OTHER"
+                    }
+                  ],
+                  "summary": "",
+                  "children": [
+                    {
+                      "type": "perform",
+                      "paragraph": "POPULATE-HEADER-INFO",
+                      "callee_program": "",
+                      "has_decision": true,
+                      "call_type": "simple",
+                      "arms": [],
                       "summary": "",
                       "children": []
                     }
@@ -283,8 +787,52 @@
           "callee_program": "",
           "has_decision": true,
           "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.0",
+              "arm": "when.1",
+              "label": "WHEN DFHPF3"
+            }
+          ],
           "summary": "",
           "children": []
+        },
+        {
+          "type": "perform",
+          "paragraph": "SEND-SIGNON-SCREEN",
+          "callee_program": "",
+          "has_decision": true,
+          "call_type": "conditional",
+          "arms": [
+            {
+              "decision": "MAIN-PARA/2",
+              "arm": "else",
+              "label": "NOT EIBCALEN == 0"
+            },
+            {
+              "decision": "MAIN-PARA/2.else.0",
+              "arm": "when.2",
+              "label": "WHEN OTHER"
+            }
+          ],
+          "summary": "",
+          "children": [
+            {
+              "type": "perform",
+              "paragraph": "POPULATE-HEADER-INFO",
+              "callee_program": "",
+              "has_decision": true,
+              "call_type": "simple",
+              "arms": [],
+              "summary": "",
+              "children": []
+            }
+          ]
         }
       ]
     }

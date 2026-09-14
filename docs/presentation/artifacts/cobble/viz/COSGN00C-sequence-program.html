@@ -17,20 +17,40 @@ sequenceDiagram
     participant SGN00C as COSGN00C
     participant ADM01C as COADM01C
     Note over SGN00C: MAIN-PARA
-    rect rgb(235,240,255)
-        Note over SGN00C: SEND-SIGNON-SCREEN ⬡
-        Note over SGN00C: POPULATE-HEADER-INFO ⬡
-    end
-    rect rgb(235,240,255)
-        Note over SGN00C: PROCESS-ENTER-KEY ⬡
+    alt IF EIBCALEN == 0
         rect rgb(235,240,255)
             Note over SGN00C: SEND-SIGNON-SCREEN ⬡
             Note over SGN00C: POPULATE-HEADER-INFO ⬡
         end
-        SGN00C->>ADM01C: READ-USER-SEC-FILE
-        ADM01C-->>SGN00C: 
+    else NOT EIBCALEN == 0
+        alt WHEN DFHENTER
+            rect rgb(235,240,255)
+                Note over SGN00C: PROCESS-ENTER-KEY ⬡
+                alt WHEN USERIDI == SPACES / USERIDI == LOW-VALUES
+                    rect rgb(235,240,255)
+                        Note over SGN00C: SEND-SIGNON-SCREEN ⬡
+                        Note over SGN00C: POPULATE-HEADER-INFO ⬡
+                    end
+                else WHEN PASSWDI == SPACES / PASSWDI == LOW-VALUES
+                    rect rgb(235,240,255)
+                        Note over SGN00C: SEND-SIGNON-SCREEN ⬡
+                        Note over SGN00C: POPULATE-HEADER-INFO ⬡
+                    end
+                end
+                alt IF ERR-FLG-ON (WS-ERR-FLG == Y)
+                    SGN00C->>ADM01C: READ-USER-SEC-FILE
+                    ADM01C-->>SGN00C: 
+                end
+            end
+        else WHEN DFHPF3
+            Note over SGN00C: SEND-PLAIN-TEXT ⬡
+        else WHEN OTHER
+            rect rgb(235,240,255)
+                Note over SGN00C: SEND-SIGNON-SCREEN ⬡
+                Note over SGN00C: POPULATE-HEADER-INFO ⬡
+            end
+        end
     end
-    Note over SGN00C: SEND-PLAIN-TEXT ⬡
 </div>
 <script>mermaid.initialize({ startOnLoad: true });</script>
 </body>

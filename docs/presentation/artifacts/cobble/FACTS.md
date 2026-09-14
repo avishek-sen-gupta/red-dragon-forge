@@ -25,10 +25,13 @@ are relative to `docs/presentation/artifacts/cobble/`. Captured 2026-09-14.
 - `cobble-srccfg-build COSGN00C` closure = COSGN00C + COADM01C + COMEN01C (sign-on XCTLs to admin
   or user menu). COACTVWC's closure is itself only (its XCTL target is a variable).
 - `viz/COSGN00C-callgraph-xctl.html` / `.png`: sign-on → admin menu, sign-on → main menu.
-- `viz/COACTVWC-sequence-program.html` / `.png`: COACTVWC PERFORM tree 0000-MAIN → 1000-SEND-MAP
-  (1100/1200/1300/1400) → 2000-PROCESS-INPUTS (2100-RECEIVE-MAP, 2200-EDIT-MAP-INPUTS,
-  2210-EDIT-ACCOUNT) → 9000-READ-ACCT (9200 card xref, 9300 account, 9400 customer); ⬡ marks
-  paragraphs with a decision.
+- `viz/COACTVWC-sequence-program.html` / `.png`: COACTVWC 0000-MAIN as one PERFORM per call site,
+  with the EVALUATE's arms drawn as alternatives (`alt`): WHEN CDEMO-PGM-ENTER → 1000-SEND-MAP
+  (1100/1200/1300/1400); WHEN CDEMO-PGM-REENTER → 2000-PROCESS-INPUTS (2100-RECEIVE-MAP,
+  2200-EDIT-MAP-INPUTS, 2210-EDIT-ACCOUNT), then IF INPUT-ERROR → 1000-SEND-MAP, else
+  9000-READ-ACCT (9200 card xref, 9300 account, 9400 customer) → 1000-SEND-MAP; WHEN OTHER →
+  SEND-PLAIN-TEXT; a trailing IF INPUT-ERROR → 1000-SEND-MAP. ⬡ marks paragraphs with a
+  decision. The PF3 XCTL arm (target held in CDEMO-TO-PROGRAM) is not drawn.
 - `viz/COSGN00C-sequence-top.html` / `.png`, `viz/COSGN00C-sequence-program.html`: cross-program and
   intra-program views for sign-on.
 - Source CFG sizes: COSGN00C closure 3 programs; COMEN01C 137 CFG nodes; COACTVWC 411 CFG nodes.
