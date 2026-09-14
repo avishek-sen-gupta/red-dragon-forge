@@ -12,6 +12,7 @@ from cics.builtins.system import (
     make_init_eib_builtin,
     make_assign_builtin,
     make_asktime_builtin,
+    make_bif_deedit_builtin,
     make_formattime_builtin,
     make_inquire_builtin,
     make_writeq_td_builtin,
@@ -601,6 +602,7 @@ class CicsLoweringStrategy:
             Builtins.TABLE, "__cics_assign", make_assign_builtin(applid, sysid, userid)
         )
         _register(Builtins.TABLE, "__cics_asktime", make_asktime_builtin())
+        _register(Builtins.TABLE, "__cics_bif_deedit", make_bif_deedit_builtin())
         _register(Builtins.TABLE, "__cics_formattime", make_formattime_builtin())
         _register(Builtins.TABLE, "__cics_inquire", make_inquire_builtin(prog_cache))
         _register(Builtins.TABLE, "__cics_writeq_td", make_writeq_td_builtin(td))
@@ -1297,6 +1299,36 @@ class CicsLoweringStrategy:
             )
             emit_resp_writeback(ctx, r_res, opts, materialised)
             emit_raise_tail(ctx, opts, materialised)
+            return
+
+        # ── BIF DEEDIT ───────────────────────────────────────────────────────
+        # Strip non-digit editing characters from a field in-place.
+        # FIELD(name) LENGTH(n): read field bytes, keep only 0xF0–0xF9 (EBCDIC
+        # digits), left-justify, right-pad with '0' to LENGTH, write back.
+        if verb == "BIF DEEDIT":
+            field_op = opts.get("FIELD")
+            length_op = opts.get("LENGTH")
+            r_field = emit_copy_in(ctx, field_op, materialised)
+            if r_field is None:
+                r_field = ctx.fresh_reg()
+                ctx.emit_inst(Const(result_reg=r_field, value=b"", type_expr=UNKNOWN))
+            r_len = ctx.fresh_reg()
+            if length_op is not None and not length_op.is_literal:
+                # data-name length operand — resolve at runtime
+                r_len = emit_operand_value(ctx, length_op, materialised)
+            else:
+                length_val = int(length_op.text) if length_op is not None else 0
+                ctx.emit_inst(Const.int_(r_len, length_val))
+            r_res = ctx.fresh_reg()
+            ctx.emit_inst(
+                CallFunction(
+                    result_reg=r_res,
+                    func_name=FuncName("__cics_bif_deedit"),
+                    args=(r_field, r_len),
+                )
+            )
+            str_reg = ctx.emit_to_string(r_res)
+            emit_copy_back_str(ctx, field_op, str_reg, materialised)
             return
 
         self._unsupported_verbs.add(verb)
