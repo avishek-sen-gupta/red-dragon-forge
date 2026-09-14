@@ -327,7 +327,7 @@ class _Choice:
 
 @dataclass(frozen=True)
 class _Checkpoint:
-    """The walk state at a multi-arm decision, before the arm was taken.
+    """The walk state at a multi-arm decision: its node has run, no arm is taken yet.
 
     Holds only what is needed to resume: the execution state (node, stack, store,
     program) and the decisions made so far. Order, deps, dead_ends, taken are not
@@ -415,12 +415,15 @@ class _Next:
 
 @dataclass(frozen=True)
 class _Queue:
-    """The plans not yet walked, in two lanes, each taken from the front.
+    """The plans not yet walked, in three lanes, each taken from the front.
 
     ``fresh`` holds the plans whose own flip takes a branch edge nothing has taken and
-    no other queued plan already promises to take; ``stale`` holds the rest, and is
-    drained once ``fresh`` empties. Nothing is ever dropped, so an empty queue still
-    means every route the re-entry rule admits was walked exactly once.
+    no other queued plan already promises to take. ``uncounted`` holds the plans whose
+    flip is at a decision coverage does not count -- a CICS command's raise arm -- so
+    there is no branch edge to judge them by and only walking one says what it reaches.
+    ``stale`` holds the rest. The lanes drain in that order, and the run stops once
+    only ``stale`` is left; an empty queue means every route the re-entry rule admits
+    was walked exactly once.
 
     The lanes exist because insertion order is enormously redundant against coverage:
     93083 plans pending on a real member flipped only 475 distinct branch edges, 202 of
@@ -436,6 +439,7 @@ class _Queue:
     """
 
     fresh: tuple[_Next, ...] = (_Next(),)
+    uncounted: tuple[_Next, ...] = ()
     stale: tuple[_Next, ...] = ()
     promised: frozenset[tuple[str, str, str]] = frozenset()
 
@@ -454,23 +458,29 @@ class _Run:
 
 
 def _empty(queue: _Queue) -> bool:
-    return not queue.fresh and not queue.stale
+    return not queue.fresh and not queue.uncounted and not queue.stale
 
 
 def _head(queue: _Queue) -> _Next:
     """The next plan to walk. Only meaningful on a queue that is not empty."""
-    return queue.fresh[0] if queue.fresh else queue.stale[0]
+    if queue.fresh:
+        return queue.fresh[0]
+    return queue.uncounted[0] if queue.uncounted else queue.stale[0]
 
 
 def _drained(queue: _Queue) -> _Queue:
     if queue.fresh:
         return replace(queue, fresh=queue.fresh[1:])
+    if queue.uncounted:
+        return replace(queue, uncounted=queue.uncounted[1:])
     return replace(queue, stale=queue.stale[1:])
 
 
 def _filed(queue: _Queue, taken: frozenset[tuple[str, str, str]], one: _Next) -> _Queue:
     """One generated plan into the lane its flip earns."""
-    if one.branch and not one.branch <= (taken | queue.promised):
+    if not one.branch:
+        return replace(queue, uncounted=(*queue.uncounted, one))
+    if not one.branch <= (taken | queue.promised):
         return replace(
             queue,
             fresh=(*queue.fresh, one),
@@ -495,6 +505,7 @@ def _extended(
     )
     return _Queue(
         fresh=(*queue.fresh, *batch.fresh),
+        uncounted=(*queue.uncounted, *batch.uncounted),
         stale=(*queue.stale, *batch.stale),
         promised=batch.promised,
     )
@@ -807,7 +818,7 @@ def _restored(caller: State, back: State) -> State:
 def _bridge(
     frame: Frame,
     resumed: tuple[Frame, ...],
-    callee_state: State,
+    store: Mapping[str, State],
     back: State,
 ) -> frozenset[Dep]:
     """Dep rows recording the byte transfer from callee back to caller.
@@ -816,14 +827,15 @@ def _bridge(
     so backward provenance queries stop at ``%CALL:<callee>`` with no source
     to follow.  These rows close that gap: for every callee extent that flows
     back, one dep row per source maps the rebased caller extent to the original
-    callee extent, letting the query cross the LINK boundary.
+    source extent, letting the query cross the LINK boundary.
 
     The row belongs to the caller, so it is addressed from the caller's stack --
     ``resumed``, the one the walk is about to stand on -- and not from the callee's
-    frame, which is still on top while these rows are built. Only ``source`` stays
-    the callee's: those bytes are named in its address space, and saying so is what
-    lets the query find the callee's own writes rather than the caller's bytes at
-    the same offsets.
+    frame, which is still on top while these rows are built. ``source`` is named in
+    the address space of the program that read it, which is the callee only for
+    bytes the callee wrote: bytes it never touched still carry the source they were
+    seeded with. Naming the right program is what lets the query find the callee's
+    own writes rather than the caller's bytes at the same offsets, and the reverse.
     """
     return frozenset(
         Dep(
@@ -832,13 +844,19 @@ def _bridge(
             target=caller_ext,
             origin=source.origin,
             source=source.extent,
-            definers=_definers(callee_state, source),
+            definers=_definers(store.get(_reader(source), EMPTY), source),
             via=_via(resumed),
-            source_program=frame.program,
+            source_program=_reader(source),
         )
         for caller_ext, sources in back.items()
         for source in sources
     )
+
+
+def _reader(source: Source) -> str:
+    """The program whose statement read ``source``: every node id in the store is
+    program-qualified by ``_qualified``, and a PROGRAM-ID holds no slash."""
+    return source.node.partition("/")[0]
 
 
 def _unwound(stack: tuple[Frame, ...]) -> tuple[Frame, ...]:
@@ -898,7 +916,7 @@ def _handed_back(walk: _Walk, unwound: tuple[Frame, ...]) -> _Walk:
         walk,
         node=frame.resume,
         stack=resumed,
-        deps=walk.deps | _bridge(frame, resumed, callee_state, back),
+        deps=walk.deps | _bridge(frame, resumed, walk.store, back),
         store={
             **walk.store,
             frame.window.caller: _restored(
@@ -1113,7 +1131,7 @@ def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
     log = logger.warning if walk.running else logger.info
     log(
         "trace: [%d/%d] %d/%d nodes, %d/%d branches (%d%%),"
-        " %d programs, %d dead ends, fresh %d stale %d",
+        " %d programs, %d dead ends, fresh %d uncounted %d stale %d",
         run.trace.paths,
         budget.paths,
         len(walk.order),
@@ -1124,25 +1142,26 @@ def _reported(run: _Run, walk: _Walk, budget: Budget) -> _Run:
         len(found.programs),
         len(run.trace.dead_ends),
         len(run.queue.fresh),
+        len(run.queue.uncounted),
         len(run.queue.stale),
     )
     return run
 
 
 EXHAUSTED = "nothing unexplored is reachable"
-FRESH_EXHAUSTED = "fresh queue exhausted; remaining edges are structurally unreachable"
+ONLY_STALE = "every plan left re-flips a branch edge already taken"
 
 
-def _fresh_done(queue: _Queue) -> bool:
-    return not queue.fresh and bool(queue.stale)
+def _only_stale(queue: _Queue) -> bool:
+    return not queue.fresh and not queue.uncounted and bool(queue.stale)
 
 
 def _queue_stop(queue: _Queue) -> str:
     """The structural stop the queue signals, or empty when it has more work."""
     if _empty(queue):
         return EXHAUSTED
-    if _fresh_done(queue):
-        return FRESH_EXHAUSTED
+    if _only_stale(queue):
+        return ONLY_STALE
     return ""
 
 
@@ -1162,12 +1181,19 @@ class _Stepped:
 def _walk_of(head: _Next, program: str, loader: Loader, budget: Budget) -> _Walk:
     """Start a walk from a plan or resume one from a checkpoint."""
     if head.from_checkpoint:
-        return _walked(
-            _resumed(head.checkpoint, head.arm, budget.max_depth),
-            budget.max_depth,
-            loader,
-        )
+        return _walked(_flipped(head, loader), budget.max_depth, loader)
     return _walked(_started(program, loader, head.plan), budget.max_depth, loader)
+
+
+def _flipped(head: _Next, loader: Loader) -> _Walk:
+    """The resumed walk moved past its decision by the flipped arm.
+
+    Only the move is replayed: the decision node ran on the path that saved the
+    checkpoint, so its statement is already in the saved store, and running it again
+    would apply that statement twice.
+    """
+    walk = _resumed(head.checkpoint, head.arm, 0)
+    return _moved(walk, loader(walk.program), loader)
 
 
 def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:

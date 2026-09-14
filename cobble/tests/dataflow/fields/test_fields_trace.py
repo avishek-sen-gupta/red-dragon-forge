@@ -25,12 +25,17 @@ from cobble.dataflow.fields.trace import (
     RE_ENTRY,
     Budget,
     DeadEnd,
+    Frame,
     Loaded,
     Trace,
+    Window,
+    _bridge,
     _extent_at,
     _loaded,
+    _Next,
     _rebased,
     _seeded,
+    _walk_of,
     _window,
     loadable,
     sampled,
@@ -609,6 +614,77 @@ def test_sampling_stops_when_only_stale_plans_remain():
 
     assert found.paths < 50
     assert found.coverage.fraction < 1.0
+
+
+UNCOUNTED_FORK = _only(
+    "TPROGA",
+    (
+        _node("M/0"),
+        _node("A/0", NodeKind.TEST),
+        _node("A/1"),
+        _node("A/2"),
+        _node("R/0", NodeKind.TEST),
+        _node("R/1"),
+        _node("R/2"),
+        _node("Z/0"),
+    ),
+    (
+        _edge("M/0", "A/0"),
+        _edge("M/0", "R/0"),
+        _edge("A/0", "A/1", EdgeKind.TRUE),
+        _edge("A/0", "A/2", EdgeKind.FALSE),
+        _edge("R/0", "R/1", EdgeKind.TRUE),
+        _edge("R/0", "R/2", EdgeKind.FALSE),
+        _edge("A/1", "Z/0"),
+        _edge("A/2", "Z/0"),
+        _edge("R/1", "Z/0"),
+        _edge("R/2", "Z/0"),
+    ),
+    "M/0",
+)
+"""A two-armed decision that is not a TEST -- the shape of a CICS command's raise
+arm -- with a test behind each arm."""
+
+
+def test_a_flip_at_a_decision_coverage_does_not_count_is_walked_before_stopping():
+    """Flipping ``M/0`` takes no branch edge, so it cannot be judged already taken;
+    only walking it reveals the test behind its second arm. Treating it as stale ended
+    the run at half coverage and called the rest structurally unreachable."""
+    found = traced("TPROGA", _loader(UNCOUNTED_FORK), Budget(paths=50, coverage=1.0))
+
+    assert found.coverage.fraction == 1.0
+
+
+FORK = _only(
+    "TPROGA",
+    (_node("M/0"), _node("A/0"), _node("R/0"), _node("Z/0")),
+    (
+        _edge("M/0", "A/0"),
+        _edge("M/0", "R/0"),
+        _edge("A/0", "Z/0"),
+        _edge("R/0", "Z/0"),
+    ),
+    "M/0",
+)
+
+
+def test_a_path_resumed_at_a_decision_does_not_run_the_decision_node_again():
+    """A checkpoint is saved once the decision node has run, so its statement is
+    already in the saved store. Running it again on resume applies it twice, and a
+    statement that reads what it writes then names itself as its own definer."""
+    loader = _loader(FORK)
+    budget = Budget(paths=1)
+    base = _walk_of(_Next(), "TPROGA", loader, budget)
+    (checkpoint,) = base.checkpoints
+    resumed = _walk_of(
+        _Next(checkpoint=checkpoint, arm=1, from_checkpoint=True),
+        "TPROGA",
+        loader,
+        budget,
+    )
+
+    assert base.order == ("M/0", "A/0", "Z/0")
+    assert resumed.order == ("R/0", "Z/0")
 
 
 UNREACHED = _only(
@@ -1233,6 +1309,54 @@ def test_bridge_deps_are_emitted_at_the_link_site_for_callee_write_back(crossed)
     assert bridge, "no bridge dep row emitted at LINK site for callee write-back"
     (dep,) = bridge
     assert str(dep.source).startswith("SUB-RESULT@working_storage")
+
+
+def test_a_bridge_row_names_the_program_its_source_was_read_in(crossed):
+    """The callee never writes the first half of the window, so what comes back
+    there is what the LINK statement itself credited in the caller: ``%CALL:TPROGB``.
+    Labelling that source with the callee restates the caller's own row under another
+    program."""
+    labels = {
+        one.source_program
+        for one in crossed.deps
+        if one.program == "TPROGA"
+        and one.node == "LINK-PARA/0"
+        and one.origin == "%CALL:TPROGB"
+    }
+
+    assert labels == {"TPROGA"}
+
+
+def test_a_passed_through_sources_definers_are_read_in_its_own_programs_storage():
+    """A caller byte the callee never touched still carries the caller's source, whose
+    extent is caller storage. Reading its definers in the callee's slice finds
+    whatever the callee holds at those offsets -- here, nothing."""
+    ws_in = _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-IN")
+    ws_comm = _extent(RegionId.WORKING_STORAGE, 100, 4, "WS-COMM")
+    dfh = _extent(RegionId.LINKAGE, 0, 4, "DFHCOMMAREA")
+    caller = {
+        ws_in: _sourced("WS-SEED", "CALLER/M/0"),
+        ws_comm: frozenset({Source(origin="", extent=ws_in, node="CALLER/M/1")}),
+    }
+    callee = _seeded(caller, ws_comm, dfh)
+    frame = Frame(
+        program="CALLEE",
+        site="L/0",
+        resume="L/1",
+        crossing=True,
+        returns=True,
+        window=Window(
+            caller="CALLER", caller_extent=ws_comm, callee_extent=dfh, known=True
+        ),
+    )
+
+    rows = _bridge(
+        frame, (), {"CALLER": caller, "CALLEE": callee}, _seeded(callee, dfh, ws_comm)
+    )
+
+    assert {(one.source_program, one.definers) for one in rows} == {
+        ("CALLER", ("CALLER/M/0",))
+    }
 
 
 def test_backward_provenance_crosses_the_link_into_the_callees_own_writes(

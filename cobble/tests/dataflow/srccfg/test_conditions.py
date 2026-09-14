@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
 from cobble.dataflow.srccfg.conditions import (
+    ALWAYS,
     EIGHTY_EIGHT,
     And,
     Not,
     Or,
     negate_atom,
     read_condition,
+    read_when_condition,
 )
 
 
@@ -241,3 +243,15 @@ def test_a_figurative_constant_is_not_reported_as_a_field_dependency() -> None:
     atom = read_condition(_fig("IRRA-ERR-CDE", "==", "SPACES"))
 
     assert is_literal(atom.right)
+
+
+def test_under_evaluate_false_a_when_is_reached_when_its_condition_fails() -> None:
+    """EVALUATE FALSE selects the first WHEN whose condition is false, so the
+    branch guard is the negation of what EVALUATE TRUE would test."""
+    assert read_when_condition("INPUT-ERROR", "FALSE") == Not(
+        inner=read_when_condition("INPUT-ERROR", "TRUE")
+    )
+
+
+def test_under_evaluate_false_when_other_still_always_matches() -> None:
+    assert read_when_condition("OTHER", "FALSE") == ALWAYS
