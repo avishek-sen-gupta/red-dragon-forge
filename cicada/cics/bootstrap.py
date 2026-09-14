@@ -42,6 +42,7 @@ def compile_cics_program(
     spec: CoprocessorSpec,
     *,
     program_source_dirs: Sequence[Path] = (),
+    tolerant: bool = False,
 ) -> Any:
     """Raw (NOT pre-passed) CICS COBOL ``source`` -> ``LinkedProgram`` with
     ``spec`` composed.
@@ -50,11 +51,18 @@ def compile_cics_program(
     prepassing via its own ``source_prepass=apply_cics_prepass`` -- do NOT
     pre-pass ``source`` by hand before calling this function, or it will be
     prepassed twice.
+
+    ``tolerant=True`` skips statements that raise during lowering (e.g. fields
+    from missing or stub copybooks) rather than failing compilation.
     """
     from interpreter.project.coprocessor_compile import compile_program
 
     _frontend, linked = compile_program(
-        source, parser, [spec], program_source_dirs=program_source_dirs
+        source,
+        parser,
+        [spec],
+        program_source_dirs=program_source_dirs,
+        tolerant=tolerant,
     )
     return linked
 
