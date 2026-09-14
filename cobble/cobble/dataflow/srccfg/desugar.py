@@ -481,8 +481,12 @@ def _evaluate(statement, ctx: Ctx, path: str) -> Fragment:
     branch N is reached along branch N-1's FALSE edges -- the same chaining OR
     uses, which is why the negation of the branches above is already on the path.
     """
+    subjects = (
+        str(getattr(statement, "subject", "") or ""),
+        *getattr(statement, "also_subjects", ()),
+    )
     branches = tuple(
-        _branch(child, ctx, f"{path}.when.{position}")
+        _branch(child, subjects, ctx, f"{path}.when.{position}")
         for position, child in enumerate(getattr(statement, "children", ()))
     )
     return _chain_branches(tuple(b for b in branches if b.nodes))
@@ -499,7 +503,7 @@ class _Branch:
     false_exits: tuple[Exit, ...]
 
 
-def _branch(child, ctx: Ctx, path: str) -> _Branch:
+def _branch(child, subjects: tuple[str, ...], ctx: Ctx, path: str) -> _Branch:
     body = lower_statements(getattr(child, "children", ()), ctx, path)
     if type(child).__name__ == "WhenOtherStatement":
         return _Branch(
@@ -509,11 +513,13 @@ def _branch(child, ctx: Ctx, path: str) -> _Branch:
             body_exits=body.exits,
             false_exits=(),
         )
-    return _guarded_branch(child, ctx, path, body)
+    return _guarded_branch(child, subjects, ctx, path, body)
 
 
-def _guarded_branch(child, ctx: Ctx, path: str, body: Fragment) -> _Branch:
-    cond = _when_condition(child, ctx, path)
+def _guarded_branch(
+    child, subjects: tuple[str, ...], ctx: Ctx, path: str, body: Fragment
+) -> _Branch:
+    cond = _when_condition(child, subjects, ctx, path)
     into_body = _attach(cond.true_exits, body)
     return _Branch(
         nodes=(*cond.nodes, *body.nodes),
@@ -524,12 +530,23 @@ def _guarded_branch(child, ctx: Ctx, path: str, body: Fragment) -> _Branch:
     )
 
 
-def _when_condition(child, ctx: Ctx, path: str) -> CondFragment:
-    """WHEN a ALSO b is a conjunction, so the ALSO conditions chain on TRUE."""
+def _when_condition(
+    child, subjects: tuple[str, ...], ctx: Ctx, path: str
+) -> CondFragment:
+    """WHEN a ALSO b is a conjunction, so the ALSO conditions chain on TRUE. Each
+    value answers the subject in the same ALSO position; a value with no subject
+    to answer is read as a condition of its own."""
     thru = str(getattr(child, "condition_thru", "") or "")
+    also_values = tuple(getattr(child, "also_conditions", ()))
+    also_subjects = (*subjects[1:], *("",) * len(also_values))
     parts = (
-        read_when_condition(getattr(child, "condition", ""), thru),
-        *(read_when_condition(also) for also in getattr(child, "also_conditions", ())),
+        read_when_condition(getattr(child, "condition", ""), subjects[0], thru),
+        *(
+            read_when_condition(value, subject)
+            for value, subject in zip(
+                also_values, also_subjects[: len(also_values)], strict=True
+            )
+        ),
     )
     return _and_chain(parts, ctx, path, 0)
 
