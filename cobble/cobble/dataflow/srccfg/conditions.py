@@ -318,21 +318,30 @@ ALWAYS = Atom(text="ANY", left="", op="", right="")
 _WHEN_ANY = ("ANY", "OTHER", "")
 
 
-_CONDITION_SUBJECTS = frozenset({"", "TRUE", "FALSE"})
+_CONDITION_SUBJECTS = frozenset({"", "TRUE"})
+_NEGATED_CONDITION_SUBJECT = "FALSE"
 
 
 def read_when_condition(raw: ConditionData, subject: str, thru: str = "") -> Cond:
     """A WHEN branch's condition, compared with the EVALUATE subject it answers.
 
     Under EVALUATE TRUE the WHEN is itself a condition: a structured dict, or a
-    level-88 name. Under a real subject the parse cache holds only the value --
-    "0", "DFHENTER", a DFHRESP -- because RedDragon joins subject and value when
-    it lowers for execution, not when it parses. Reading that value as a condition
-    name drops the subject, so nothing in the branch depends on it.
+    level-88 name. EVALUATE FALSE selects the WHEN whose condition fails, so its
+    guard is the negation. Under a real subject the parse cache holds only the
+    value -- "0", "DFHENTER", a DFHRESP -- because RedDragon joins subject and
+    value when it lowers for execution, not when it parses. Reading that value as
+    a condition name drops the subject, so nothing in the branch depends on it.
     """
-    if subject.strip().upper() in _CONDITION_SUBJECTS:
+    normalised = subject.strip().upper()
+    if normalised in _CONDITION_SUBJECTS:
         return _condition_when(raw)
+    if normalised == _NEGATED_CONDITION_SUBJECT:
+        return _negated(_condition_when(raw))
     return _subject_when(raw, subject.strip(), thru)
+
+
+def _negated(cond: Cond) -> Cond:
+    return cond if cond == ALWAYS else Not(inner=cond)
 
 
 def _condition_when(raw: ConditionData) -> Cond:
