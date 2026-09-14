@@ -131,10 +131,10 @@
     <div>
 <pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query guards &lt;XCTL COADM01C node&gt;
 <span class="hl">33 path(s)</span>
-path 0: NOT (EIBCALEN == 0) AND DFHENTER
+path 0: NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
   AND NOT (USERIDI == SPACES) AND NOT (USERIDI == LOW-VALUES)
   AND NOT (PASSWDI == SPACES) AND NOT (PASSWDI == LOW-VALUES)
-  AND NOT (ERR-FLG-ON (WS-ERR-FLG == Y)) AND 0
+  AND NOT (ERR-FLG-ON (WS-ERR-FLG == Y)) AND WS-RESP-CD == 0
   AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
   AND <span class="ok">CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A)</span>
 
@@ -150,7 +150,7 @@ path 0: … AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
     </div>
   </div>
   <div class="source">artifacts/srccfg/guards-COSGN00C-xctl.txt · COSGN00C-READ-USER-SEC-FILE.png · summary.json · capture/srccfg.sh</div>
-  <aside class="notes">Every node carries the conditions — with their literals — that must hold to reach it. That is what a business-rule review needs: "admin menu only when the stored password matches and the user type is A" is read straight off the guards, and can be checked against a stated rule. Known defect, shown honestly: EVALUATE WS-RESP-CD WHEN 0 renders as a bare "0" (the subject is dropped) — tracked as forge-dhz. Guard lists are capped and say so when truncated.</aside>
+  <aside class="notes">Every node carries the conditions — with their literals — that must hold to reach it. That is what a business-rule review needs: "admin menu only when the stored password matches and the user type is A" is read straight off the guards, and can be checked against a stated rule. Guard lists are capped and say so when truncated.</aside>
 </section>
 
 <section>
@@ -162,11 +162,12 @@ path 0: … AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
 CDEMO-USER-ID in COSGN00C:
 backward -- what its value is derived from:
   CDEMO-USER-ID &lt;-
-  PROCESS-ENTER-KEY/2 MOVE when NOT (EIBCALEN == 0) AND DFHENTER
+  PROCESS-ENTER-KEY/2 MOVE when NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
     AND NOT (USERIDI == SPACES) AND NOT (PASSWDI == SPACES) …
     <span class="warn">(guard cap hit: this list is incomplete)</span>
     USERIDI  &lt;- source (written nowhere in this member)
     EIBCALEN &lt;- source (written nowhere in this member)
+    EIBAID   &lt;- source (written nowhere in this member)
     PASSWDI  &lt;- source (written nowhere in this member)
     %HANDLER[ANY] &lt;- synthetic (the handler armed for ANY)
     WS-ERR-FLG &lt;- …

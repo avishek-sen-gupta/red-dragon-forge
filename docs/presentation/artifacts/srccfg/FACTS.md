@@ -17,11 +17,11 @@ Design: `cobble/docs/superpowers/specs/2026-09-04-src-cfg-reaching-conditions-de
 
 ## Queries
 - **guards** (`guards-COSGN00C-xctl.txt`): 33 reaching paths each for `XCTL COADM01C` and `XCTL COMEN01C`. Path 0 of each differs only in the last conjunct: `CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A)` vs its negation, after `SEC-USR-PWD == WS-USER-PWD` and the non-blank USERIDI/PASSWDI checks.
-- **provenance** (`provenance-COSGN00C-CDEMO-USER-ID.txt`, `--max-depth 2`): backward and forward in one walk. CDEMO-USER-ID is written at `PROCESS-ENTER-KEY/2` under the listed guards; USERIDI, PASSWDI, EIBCALEN, DFHENTER are reported as sources written nowhere in the member; `%HANDLER[ANY]` as a synthetic origin.
+- **provenance** (`provenance-COSGN00C-CDEMO-USER-ID.txt`, `--max-depth 2`): backward and forward in one walk. CDEMO-USER-ID is written at `PROCESS-ENTER-KEY/2` under the listed guards; USERIDI, PASSWDI, EIBCALEN, EIBAID, DFHENTER are reported as sources written nowhere in the member; `%HANDLER[ANY]` as a synthetic origin.
 - **coassign** (`coassign-COACTVWC-CC-ACCT-ID.txt`): 3 candidates at tier SAME_PARAGRAPH (FLG-ACCTFILTER-ISVALID, INPUT-OK, NO-SEARCH-CRITERIA-RECEIVED), with the caveat that guards at two nodes are a subset of the real ones so no tier-3 match is established.
 
 ## Honest limitations
-- **EVALUATE subject lost in guard text**: `EVALUATE WS-RESP-CD WHEN 0` renders as a bare `0` (and `WHEN 13` as `13`) in guards and the DOT diamonds (`COSGN00C.cbl:221-222`). Filed as `forge-dhz`.
+- **Fixed before this capture**: `EVALUATE WS-RESP-CD WHEN 0` used to render as a bare `0` and `EVALUATE EIBAID WHEN DFHENTER` as `DFHENTER`, dropping the subject (`forge-dhz`, commit 7b347da1). The guards and DOT diamonds now read `WS-RESP-CD == 0`, `WS-RESP-CD == 13`, `EIBAID == DFHENTER`.
 - Guard lists are capped; the tool prints `(guard cap hit: this list is incomplete)` rather than presenting a partial list as complete (`query.py` `CAP_NOTE`).
 - Paths repeat `NOT (%HANDLER[ANY] RAISED)` conjuncts — the synthetic handler state is re-tested per CICS call; verbose but not wrong.
 - Dynamic XCTL targets (variables) are not expanded, so COACTVWC's and COMEN01C's fan-out is not in a closure.
