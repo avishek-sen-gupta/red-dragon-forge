@@ -514,46 +514,93 @@ def _require_category(data_layout, name: str, expected: str) -> None:
         raise FieldMetaMismatch(name, expected, actual)
 
 
-def validate_field_meta(data_layout, field_meta: Mapping[str, FieldMeta]) -> None:
-    """Fail loud if any dclgen field_meta category disagrees with data_layout.
+def validate_field_meta(
+    data_layout,
+    field_meta: Mapping[str, FieldMeta],
+    *,
+    tolerant: bool = False,
+) -> None:
+    """Check that dclgen field_meta categories agree with data_layout.
 
     Scalars: data_layout[name].category must equal the dclgen category. VARCHAR:
     the data_layout cannot mark the 49-group, so the children are checked instead
     (len_var is BINARY, text_var is ALPHANUMERIC). Empty field_meta is a no-op.
+
+    ``tolerant=True``: log a warning and skip rather than raising when a field is
+    absent or its category disagrees.  Use this when DCLGEN copybook names diverge
+    from the naming convention Squall derives from the SQL (e.g. a ``DCLEX-`` vs
+    ``DCL-`` prefix mismatch) — the program still executes with host variables
+    staying at their initialized values for any unresolvable field.
     """
+    import logging as _logging  # noqa: PLC0415
+
+    _logger = _logging.getLogger(__name__)
     for name, meta in field_meta.items():
         category = meta.get("category")
-        if category == "VARCHAR":
-            _require_category(data_layout, meta["len_var"], "BINARY")
-            _require_category(data_layout, meta["text_var"], "ALPHANUMERIC")
-        else:
-            _require_category(data_layout, name, category)
+        try:
+            if category == "VARCHAR":
+                _require_category(data_layout, meta["len_var"], "BINARY")
+                _require_category(data_layout, meta["text_var"], "ALPHANUMERIC")
+            else:
+                _require_category(data_layout, name, category)
+        except (KeyError, FieldMetaMismatch) as exc:
+            if tolerant:
+                _logger.warning("validate_field_meta skipped %r: %s", name, exc)
+            else:
+                raise
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
 def read_params(
-    vm, in_names: tuple[str, ...], field_meta: Mapping[str, FieldMeta]
+    vm,
+    in_names: tuple[str, ...],
+    field_meta: Mapping[str, FieldMeta],
+    *,
+    tolerant: bool = False,
 ) -> list:
     """Read host-variable fields from the WS region and return as a Python list.
 
     ZONED_DECIMAL fields are decoded to int; ALPHANUMERIC fields to str; COMP-3 to
     Decimal; BINARY to int. A host var carrying VARCHAR dclgen *field_meta* is
     decoded through its 49-group LEN/TEXT children instead of as a flat group.
+
+    ``tolerant=True``: return ``None`` for any host var whose field is not found in
+    data_layout rather than raising. The backend receives ``None`` for that
+    parameter position; mock backends that ignore params are unaffected.
     """
     _, region = _get_ws_region(vm)
-    return [_read_one(vm.data_layout, region, field_meta, name) for name in in_names]
+    return [
+        _read_one(vm.data_layout, region, field_meta, name, tolerant=tolerant)
+        for name in in_names
+    ]
 
 
 def _read_one(
-    data_layout: dict, region: bytearray, field_meta: Mapping[str, FieldMeta], name: str
+    data_layout: dict,
+    region: bytearray,
+    field_meta: Mapping[str, FieldMeta],
+    name: str,
+    *,
+    tolerant: bool = False,
 ):
     """Pure: decode one host var — VARCHAR via its 49-group, else its flat field."""
     meta = _meta_for(field_meta, name)
     if meta.get("category") == "VARCHAR":
         return _varchar_decode(data_layout, region, meta)
-    f = _require_field(data_layout, name)
+    f = (
+        _lookup_field(data_layout, name)
+        if tolerant
+        else _require_field(data_layout, name)
+    )
+    if f is None:
+        import logging as _logging  # noqa: PLC0415
+
+        _logging.getLogger(__name__).warning(
+            "read_params: field %r not in data_layout — returning None", name
+        )
+        return None
     off, length = f["offset"], f["length"]
     return _decode_field(bytes(region[off : off + length]), f)
 

@@ -1176,6 +1176,7 @@ class _Stepped:
     run: _Run
     deps: frozenset[Dep]
     dead_ends: frozenset[DeadEnd]
+    order: tuple[str, ...] = ()
 
 
 def _walk_of(head: _Next, program: str, loader: Loader, budget: Budget) -> _Walk:
@@ -1221,7 +1222,7 @@ def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:
         walk,
         budget,
     )
-    return _Stepped(run=next_run, deps=walk.deps, dead_ends=walk.dead_ends)
+    return _Stepped(run=next_run, deps=walk.deps, dead_ends=walk.dead_ends, order=walk.order)
 
 
 def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:
@@ -1436,6 +1437,18 @@ def sampled(program: str, asg_dir: Path, budget: Budget = DEFAULT_BUDGET) -> Tra
 
 Sink = Callable[[frozenset[Dep]], None]
 
+PathListener = Callable[[tuple[str, ...]], None]
+"""Called with the ordered node sequence of every completed path.
+
+The listener decides what to do -- filter by target node, write to disk,
+accumulate statistics.  Pass ``_ignore_path`` (the default) to preserve
+existing behaviour; every existing call site sees no change.
+"""
+
+
+def _ignore_path(_order: tuple[str, ...]) -> None:
+    """No-op PathListener used as the default sentinel."""
+
 
 def _streamed_round(
     run: _Run,
@@ -1443,6 +1456,7 @@ def _streamed_round(
     loader: Loader,
     budget: Budget,
     sink: Sink,
+    path_listener: PathListener = _ignore_path,
 ) -> _Run:
     if _done(run, budget):
         return run
@@ -1451,6 +1465,7 @@ def _streamed_round(
         return replace(run, stopped=reason)
     stepped = _step(run, program, loader, budget)
     sink(stepped.deps)
+    path_listener(stepped.order)
     return stepped.run
 
 
@@ -1459,16 +1474,23 @@ def streamed(
     loader: Loader,
     budget: Budget,
     sink: Sink,
+    path_listener: PathListener = _ignore_path,
 ) -> Trace:
     """Like ``traced`` but writes each path's deps through ``sink`` immediately.
 
     ``Trace.deps`` in the returned value is empty -- the deps are on disk, not
     in memory. Everything else (coverage, dead_ends, paths) is populated.
+
+    ``path_listener``, when given, is called with the ordered node sequence of
+    every completed path.  The listener decides what to record; the dep stream
+    is unaffected.  Omit it (or pass ``_ignore_path``) for the original behaviour.
     """
     resolved = _resolved_depth(budget, loader, program)
     return _closed(
         reduce(
-            lambda run, _: _streamed_round(run, program, loader, resolved, sink),
+            lambda run, _: _streamed_round(
+                run, program, loader, resolved, sink, path_listener
+            ),
             repeat(None, resolved.paths),
             _Run(),
         ),
@@ -1476,6 +1498,18 @@ def streamed(
     ).trace
 
 
-def sampled_streaming(program: str, asg_dir: Path, budget: Budget, sink: Sink) -> Trace:
+def sampled_streaming(
+    program: str,
+    asg_dir: Path,
+    budget: Budget,
+    sink: Sink,
+    path_listener: PathListener = _ignore_path,
+) -> Trace:
     """``streamed`` against the one ASG cache every other stage reads."""
-    return streamed(program, lambda member: _loaded(asg_dir, member), budget, sink)
+    return streamed(
+        program,
+        lambda member: _loaded(asg_dir, member),
+        budget,
+        sink,
+        path_listener,
+    )

@@ -20,6 +20,8 @@ def build_sql_spec(
     connections: Mapping[str, SqlBackend],
     copybook_dirs: Sequence[Path] = (),
     initial_connector: DbConnector = NullDbConnector(),
+    *,
+    tolerant: bool = False,
 ) -> CoprocessorSpec:
     """Build the EXEC SQL CoprocessorSpec.
 
@@ -37,6 +39,12 @@ def build_sql_spec(
     ``INQCUST``). The default ``NullDbConnector()`` preserves squall's faithful
     disconnected-start behaviour for programs that CONNECT themselves; pass a
     ``squall.connector.NamedDbConnector(name)`` to model the attachment facility.
+
+    ``tolerant=True`` skips DCLGEN field-name mismatches (``KeyError`` /
+    ``FieldMetaMismatch``) rather than raising, so programs whose DCLGEN
+    copybooks use non-standard naming conventions (e.g. ``DCLEX-`` instead of
+    the ``DCL-`` prefix Squall derives from the SQL) still execute — host
+    variables that can't be located stay at their initialized values.
     """
     field_meta_holder: list[Mapping[str, FieldMeta]] = [{}]
 
@@ -47,7 +55,10 @@ def build_sql_spec(
 
     def _make_strategy() -> SqlLoweringStrategy:
         return SqlLoweringStrategy(
-            connections, field_meta_holder[0], initial_connector=initial_connector
+            connections,
+            field_meta_holder[0],
+            initial_connector=initial_connector,
+            tolerant=tolerant,
         )
 
     return CoprocessorSpec(

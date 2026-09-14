@@ -68,6 +68,8 @@ class SqlLoweringStrategy:
         connections: Mapping[str, SqlBackend],
         field_meta: Mapping[str, FieldMeta],
         initial_connector: DbConnector = NullDbConnector(),
+        *,
+        tolerant: bool = False,
     ) -> None:
         from interpreter.vm.builtins import Builtins
 
@@ -96,6 +98,7 @@ class SqlLoweringStrategy:
             self._plans,
             field_meta,
             initial_connector=initial_connector,
+            tolerant=tolerant,
         )
         _register(Builtins.TABLE, _BUILTIN_NAME, exec_sql_fn)
         # A generic, CICS-owned extension point (see cicada's
