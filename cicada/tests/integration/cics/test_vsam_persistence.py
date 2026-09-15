@@ -210,7 +210,7 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
     # @48  ACCT-OPEN-DATE X(10)
     # @58  ACCT-EXPIRAION-DATE X(10)
     # @68  ACCT-REISSUE-DATE X(10)
-    # @102 ACCT-ADDR-ZIP X(10)  — not screen-editable; COACTUPC carries from old record
+    # @102 ACCT-ADDR-ZIP X(10)  — clobbered by the group id, see below
     # @112 ACCT-GROUP-ID X(10)
 
     status_after = record_after[_ACCT_STATUS_OFFSET : _ACCT_STATUS_OFFSET + 1].decode(
@@ -233,12 +233,18 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
         f"{_NEW_REISSUE_YEAR}-{_NEW_REISSUE_MON}-{_NEW_REISSUE_DAY}"
     ), f"ACCT-REISSUE-DATE not updated: got {reissue_date_after!r}"
 
+    # COACTUPC's own ACCT-UPDATE-RECORD (the structure it REWRITEs FROM) omits
+    # ACCT-ADDR-ZIP and pads with FILLER X(188), while CVACT01Y has ACCT-ADDR-ZIP
+    # @102, ACCT-GROUP-ID @112 and FILLER X(178). Its fields before the gap sum to
+    # 102, so ACCT-UPDATE-GROUP-ID writes over the ZIP and leaves @112 blank. That
+    # is CardDemo's own defect, reproduced here rather than papered over.
     addr_zip_after = record_after[102:112].decode("cp037").rstrip()
-    assert (
-        addr_zip_after == "12345"
-    ), f"ACCT-ADDR-ZIP should be carried from seeded record, got {addr_zip_after!r}"
+    assert addr_zip_after == _NEW_GROUP_ID, (
+        "ACCT-ADDR-ZIP should hold the group id COACTUPC misaligns into it, "
+        f"got {addr_zip_after!r}"
+    )
 
     group_id_after = record_after[112:122].decode("cp037").rstrip()
     assert (
-        group_id_after == _NEW_GROUP_ID
-    ), f"ACCT-GROUP-ID not updated: expected {_NEW_GROUP_ID!r}, got {group_id_after!r}"
+        group_id_after == ""
+    ), f"ACCT-GROUP-ID should be left blank by the same misalignment, got {group_id_after!r}"
