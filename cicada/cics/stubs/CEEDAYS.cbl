@@ -68,12 +68,9 @@
                    WHEN 11
                        MOVE 30 TO WS-MAX-DAY
                    WHEN 2
-                       COMPUTE WS-R4 =
-                           WS-YYYY - (WS-YYYY / 4 * 4)
-                       COMPUTE WS-R100 =
-                           WS-YYYY - (WS-YYYY / 100 * 100)
-                       COMPUTE WS-R400 =
-                           WS-YYYY - (WS-YYYY / 400 * 400)
+                       COMPUTE WS-R4 = FUNCTION MOD(WS-YYYY 4)
+                       COMPUTE WS-R100 = FUNCTION MOD(WS-YYYY 100)
+                       COMPUTE WS-R400 = FUNCTION MOD(WS-YYYY 400)
                        IF WS-R400 = 0
                            MOVE 29 TO WS-MAX-DAY
                        ELSE
