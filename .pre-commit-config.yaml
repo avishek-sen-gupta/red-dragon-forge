@@ -11,17 +11,6 @@ repos:
         # --config, so it still reports every excluded file.
   - repo: local
     hooks:
-      - id: terminology-guard
-        name: Terminology Guard
-        entry: precommit-scripts/check-terminology
-        language: script
-        types: [text]
-
-      - id: terminology-commit-msg
-        name: Terminology Guard (commit message)
-        entry: precommit-scripts/check-commit-msg
-        language: script
-        stages: [commit-msg]
 
       - id: black
         name: Black (auto-fix)
@@ -98,6 +87,19 @@ repos:
   # hook type from the name it is invoked under and rejects that one, so it
   # failed every commit without ever scanning. Run it as a hook here instead,
   # where pre-commit owns the ordering and the name.
+
+      - id: terminology-guard
+        name: Terminology Guard
+        entry: precommit-scripts/check-terminology
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      - id: terminology-commit-msg
+        name: Terminology Guard (commit message)
+        entry: precommit-scripts/check-commit-msg
+        language: script
+        stages: [commit-msg]
   - repo: https://github.com/thoughtworks/talisman
     rev: v1.37.0
     hooks:
