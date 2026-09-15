@@ -671,7 +671,10 @@ FORK = _only(
 def test_a_path_resumed_at_a_decision_does_not_run_the_decision_node_again():
     """A checkpoint is saved once the decision node has run, so its statement is
     already in the saved store. Running it again on resume applies it twice, and a
-    statement that reads what it writes then names itself as its own definer."""
+    statement that reads what it writes then names itself as its own definer.
+
+    The resumed order is seeded from the checkpoint, so the decision node appears
+    exactly once -- twice would mean it ran again."""
     loader = _loader(FORK)
     budget = Budget(paths=1)
     base = _walk_of(_Next(), "TPROGA", loader, budget)
@@ -684,7 +687,7 @@ def test_a_path_resumed_at_a_decision_does_not_run_the_decision_node_again():
     )
 
     assert base.order == ("M/0", "A/0", "Z/0")
-    assert resumed.order == ("R/0", "Z/0")
+    assert resumed.order == ("M/0", "R/0", "Z/0")
 
 
 UNREACHED = _only(
