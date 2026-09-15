@@ -91,32 +91,3 @@ class SequenceOutput(BaseModel, frozen=True):
     cross_program: CrossProgramSequence
     per_program: dict[str, ProgramSequence]
 
-
-# ── Data Flow ────────────────────────────────────────────────────────────────
-
-
-class RecordWrite(BaseModel, frozen=True):
-    record: str  # e.g. "ACCTDAT"
-    fields: tuple[str, ...]  # e.g. ("<RECORD>-<FIELD>",)
-    via_paragraph: str = ""  # paragraph where the write occurs (from site)
-
-
-class IntermediateVar(BaseModel, frozen=True):
-    variable: str  # e.g. "WS-AMT-WHOLE-BAL"
-    record_fields: tuple[str, ...]  # record fields this var flows to from this commarea field
-
-
-class FieldFlow(BaseModel, frozen=True):
-    commarea_field: str  # commarea field name, e.g. "PREFIX-FIELD-NAME"
-    java_source: str = ""  # Java expression from label-provenance
-    record_writes: tuple[RecordWrite, ...]
-    via_programs: tuple[str, ...]
-    via_variables: tuple[
-        IntermediateVar, ...
-    ] = ()  # intermediate WS fields on commarea→K path
-
-
-class DataFlowGraph(BaseModel, frozen=True):
-    entry: str
-    commarea_layout: str
-    flows: tuple[FieldFlow, ...]

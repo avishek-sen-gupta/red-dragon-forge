@@ -167,8 +167,7 @@ meaningful against a different corpus's output.
 ### Visualise pipeline outputs
 
 `cobble.viz` turns the JSON outputs of the pipeline stages into self-contained
-HTML files — open in any browser, no server required.  Four commands, each
-reading one pipeline artifact:
+HTML files — open in any browser, no server required.
 
 ```bash
 # Call dependency graph — which programs CICS-LINK to which
@@ -183,17 +182,10 @@ uv run cobble-viz-sequence \
   --entry  <ENTRY_PROGRAM> \
   --out    out-viz/sequences.json
 
-# Data flow — commarea fields traced to VSAM record writes
-uv run cobble-viz-dataflow \
-  --trace            <fields_dir>/trace.jsonl \
-  --commarea-prefix  <PREFIX>- \
-  --out              out-viz/dataflow.json
-
-# Render any of the above as HTML
+# Render either as HTML
 uv run cobble-viz-render --input out-viz/call-dep.json   --mode callgraph --out call-dep.html
 uv run cobble-viz-render --input out-viz/sequences.json  --mode top       --out sequence-top.html
 uv run cobble-viz-render --input out-viz/sequences.json  --mode program   --program <PROG> --out sequence-prog.html
-uv run cobble-viz-render --input out-viz/dataflow.json   --mode dataflow  --out dataflow.html
 ```
 
 `--cfg` is the JSON produced by `cobble-srccfg-build`; the program list and
@@ -207,10 +199,13 @@ Render modes:
 | `callgraph` | `call-dep.json` | vis.js force-directed | Interactive node graph |
 | `top` | `sequences.json` | Mermaid sequenceDiagram | Cross-program call sequence |
 | `program` | `sequences.json` | Mermaid sequenceDiagram | Per-program PERFORM tree |
-| `dataflow` | `dataflow.json` | vis.js static bipartite | Commarea → WS var → record field |
 
 Program labels are shortened by stripping the longest common uppercase prefix
-across all programs in the subgraph (e.g. `MYENTRY` → `ENTRY`).
+across all programs in the subgraph.
+
+The `corpus-viz-dataflow` and `corpus-viz-render --mode dataflow` commands that
+trace commarea fields to VSAM record writes are corpus-specific and live in
+the `corpus_viz` package in the analysis tooling, not here.
 
 ### Recover a CSD your corpus never shipped
 
