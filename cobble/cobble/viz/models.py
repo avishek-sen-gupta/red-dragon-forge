@@ -90,4 +90,3 @@ class SequenceOutput(BaseModel, frozen=True):
 
     cross_program: CrossProgramSequence
     per_program: dict[str, ProgramSequence]
-

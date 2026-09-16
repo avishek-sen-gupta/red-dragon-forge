@@ -14,6 +14,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict
 from cobble.dataflow.srccfg.cfg import Cfg
@@ -40,17 +41,32 @@ def _expand(
     if not pending:
         return built
     head, *rest = pending
-    path = asg_dir / f"{head}.json"
-    if head in tuple(cfg.program for cfg in built):
-        return _expand(asg_dir, tuple(rest), built)
+    visit = _visit(asg_dir, head, built, len(rest))
+    return _expand(asg_dir, (*rest, *visit.callees), (*built, *visit.cfgs))
+
+
+@dataclass(frozen=True)
+class _Visit:
+    """What building one pending program adds: its CFG and the programs it calls,
+    both empty when it was already built or is absent from the cache."""
+
+    cfgs: tuple[Cfg, ...] = ()
+    callees: tuple[str, ...] = ()
+
+
+def _visit(asg_dir: Path, program: str, built: tuple[Cfg, ...], pending: int) -> _Visit:
+    path = asg_dir / f"{program}.json"
+    if program in tuple(cfg.program for cfg in built):
+        return _Visit()
     if not path.is_file():
-        logger.warning("%s: called but not in the ASG cache; not built", head)
-        return _expand(asg_dir, tuple(rest), built)
-    logger.info("srccfg: building %s  (built=%d pending=%d)", head, len(built), len(rest))
+        logger.warning("%s: called but not in the ASG cache; not built", program)
+        return _Visit()
+    logger.info(
+        "srccfg: building %s  (built=%d pending=%d)", program, len(built), pending
+    )
     cfg = cfg_of(path)
-    logger.info("srccfg: %s done  nodes=%d", head, len(cfg.nodes))
-    callees = callees_of(call_graph((cfg,)), cfg.program)
-    return _expand(asg_dir, (*rest, *callees), (*built, cfg))
+    logger.info("srccfg: %s done  nodes=%d", program, len(cfg.nodes))
+    return _Visit(cfgs=(cfg,), callees=callees_of(call_graph((cfg,)), cfg.program))
 
 
 def bundle_to_json(bundle: Bundle) -> str:
@@ -82,7 +98,7 @@ def main(argv: Sequence[str] = ()) -> int:
     program you named".
     """
     configure_cli_logging()
-    arguments = _parser().parse_args(tuple(argv) or None)
+    arguments = _parser().parse_args(list(argv) if argv else sys.argv[1:])
     config = load_srccfg_config(arguments.config)
     if not (config.asg_dir / f"{arguments.program}.json").is_file():
         logger.error("%s: no ASG for this program in the cache", arguments.program)

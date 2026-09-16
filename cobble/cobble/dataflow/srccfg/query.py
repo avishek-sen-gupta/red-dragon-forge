@@ -98,7 +98,9 @@ def _guard_texts(cfg: Cfg, reaching: Reaching, node_id: str) -> tuple[str, ...]:
     return (f"unreachable from {cfg.program} entry",)
 
 
-def guards_report(cfg: Cfg, node_id: str, max_paths: int = MAX_PATHS) -> tuple[str, ...]:
+def guards_report(
+    cfg: Cfg, node_id: str, max_paths: int = MAX_PATHS
+) -> tuple[str, ...]:
     reaching = reaching_conditions(cfg, max_paths=max_paths)
     guards = _guard_lines(cfg, reaching, node_id)
     truncated_note = (f"  {SUBSET_NOTE}",) if node_id in reaching.truncated else ()
