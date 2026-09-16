@@ -75,7 +75,7 @@ def main() -> int:
     edges_jsonl = config.out_dir / "edges.jsonl"
     if not nodes_jsonl.is_file() or not edges_jsonl.is_file():
         logger.error(
-            "error: %s / %s not found — run `make build` first",
+            "error: %s / %s not found — run `cobble-build` first",
             nodes_jsonl,
             edges_jsonl,
         )

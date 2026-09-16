@@ -1,23 +1,29 @@
 from pathlib import Path
 
-from cobble.parsing.config import ParseConfig
-from cobble.parsing.parse_corpus import pending
+import pytest
+
+from cobble.corpus_config import CorpusConfig
+from cobble.parsing.parse_corpus import bridge_jar, pending
 
 
-def _config(tmp_path: Path) -> ParseConfig:
+def _config(tmp_path: Path) -> CorpusConfig:
     (tmp_path / "cbl").mkdir()
     (tmp_path / "asg").mkdir()
-    return ParseConfig(
+    return CorpusConfig(
         cobol_dir=tmp_path / "cbl",
         cobol_globs=("*.cbl",),
+        jcl_dir=tmp_path / "jcl",
+        jcl_globs=("*.jcl",),
+        proclib_dirs=(),
+        csd_files=(),
         copybook_dirs=(),
         copybook_extensions=("cpy",),
-        bridge_jar=tmp_path / "bridge.jar",
         asg_dir=tmp_path / "asg",
+        out_dir=tmp_path / "out",
     )
 
 
-def _members(config: ParseConfig, *names: str) -> None:
+def _members(config: CorpusConfig, *names: str) -> None:
     for name in names:
         (config.cobol_dir / name).write_text("       PROGRAM-ID. X.\n")
 
@@ -61,3 +67,20 @@ def test_each_pending_job_writes_where_the_cache_expects_it(tmp_path: Path) -> N
     _members(config, "A.cbl")
 
     assert pending(config)[0][0].dest == config.asg_dir / "A.json"
+
+
+def test_the_bridge_jar_comes_from_the_environment(tmp_path: Path) -> None:
+    jar = tmp_path / "bridge.jar"
+    jar.write_bytes(b"")
+
+    assert bridge_jar({"PROLEAP_BRIDGE_JAR": str(jar)}) == jar
+
+
+def test_an_unset_bridge_jar_names_the_script_that_exports_it() -> None:
+    with pytest.raises(SystemExit, match="bridge-env.sh"):
+        bridge_jar({})
+
+
+def test_an_unbuilt_bridge_jar_names_the_target_that_builds_it(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="make setup"):
+        bridge_jar({"PROLEAP_BRIDGE_JAR": str(tmp_path / "absent.jar")})

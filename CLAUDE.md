@@ -74,16 +74,16 @@ On a fresh clone, `bd import issues/issues.jsonl` rebuilds the local DB.
 The root `Makefile` orchestrates the whole workspace (see `README.md` for details):
 
 ```bash
-make setup     # init submodules + build the ProLeap + JCL bridge JARs + uv sync --all-packages
+make setup     # init submodules + build hlasm_export + the ProLeap + JCL bridge JARs + uv sync --all-packages
 make jar       # build both bridge JARs (ProLeap + JCL); skipped if already built
 make python    # uv sync --all-packages
 make test      # root composition-layer + integration suite (needs the JARs)
 make test-all  # build JARs once, then run every package's suite (cicada, squall, jackal, cobble, forge)
 ```
 
-Each package is also independently buildable/testable from its own directory (`cd cicada && make test`, etc.).
-The CICS e2e path also needs the native `hlasm_export` binary — build it via
-`cicada/third-party/che-che4z-lsp-for-hlasm-fork/build.sh --target hlasm_export` (cmake/ninja/clang).
+Each package is also independently buildable/testable from its own directory (`cd cicada && make test`,
+`cd cobble && uv run pytest`, etc.). `make setup` also builds the native `hlasm_export` binary
+(`make hlasm` alone; needs cmake/ninja/a C++ toolchain). `. ./bridge-env.sh` exports both bridge JAR paths.
 Db2-backed tests need `SQUALL_DB2_DSN` and a running Db2 (`cd squall && make db2-up`).
 
 ## Architecture Overview
@@ -97,9 +97,10 @@ RedDragon interpreter (`vendor/red-dragon`, never modified here):
 - `red_dragon_forge/` — composition layer; assembles multiple coprocessor extensions into one
   compiled COBOL program via a generic `CoprocessorSpec` seam.
 - `cobble/` — corpus onboarding and whole-system knowledge-graph extraction (analysis only);
-  runs its pipeline from `cobble/` via `make parse CONFIG=…` then `make build CONFIG=…`, or the
-  `cobble-*` entry points. The parse is the only stage that starts a JVM; every stage after it
-  reads the one ASG cache it wrote. Configs are TOML.
+  runs its pipeline from `cobble/` as `uv run cobble-parse-corpus --config …` then
+  `uv run cobble-build --config …` (after `. ../bridge-env.sh`); cobble has no Makefile. The
+  parse is the only stage that starts a JVM; every stage after it reads the one ASG cache it
+  wrote. Configs are TOML.
 
 Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved) and stay
 independently buildable — they must not import each other.

@@ -22,7 +22,7 @@ quotes the input it choked on, so a parse message carries corpus source text.
 Messages go in the JSON, whose destination the caller chooses; the logged summary
 carries counts and error types only.
 
-Invoke as: JCL_BRIDGE_JAR=<path> uv run diagnose-jcl --config <path>
+Invoke as (after `. ../bridge-env.sh`): uv run diagnose-jcl --config <path>
 """
 
 from __future__ import annotations

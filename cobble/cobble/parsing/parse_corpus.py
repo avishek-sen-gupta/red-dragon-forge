@@ -6,12 +6,14 @@ a one-minute one for every subsequent round of every judgment loop -- the
 dependency graph's pass-through set, the source CFGs, the knowledge graph. One
 corpus is 3779 programs and 557 MB of cache.
 
-    uv run cobble-parse-corpus --config config/parse.local.toml --jobs 10
+    . ../bridge-env.sh
+    uv run cobble-parse-corpus --config config/carddemo.toml --jobs 10
 
-Which programs, which copybook directories, which extensions and which bridge JAR
-all come from that TOML -- see parsing/config.py. Where each ASG lands comes from
-parsing/asg_cache.py, which is also what every reader uses, so writer and readers
-cannot drift.
+Which programs, which copybook directories and extensions, and where the cache goes
+come from the [corpus] table every other stage reads (corpus_config.py), so the
+parse and the build cannot disagree about them; the bridge JAR comes from
+PROLEAP_BRIDGE_JAR. Where each ASG lands comes from parsing/asg_cache.py, which is
+also what every reader uses, so writer and readers cannot drift.
 
 Resumable: a program with an existing .json or .fail is skipped, so an
 interrupted run costs nothing. Each parse is its own JVM subprocess, so the work
@@ -32,13 +34,14 @@ import logging
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
 from cobble.parsing.asg_cache import cache_path, failure_path, is_cached
-from cobble.parsing.config import ParseConfig, load_parse_config
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +108,21 @@ def parse_one(
         return Result(job.stem, False, time.perf_counter() - t0, detail[:120])
 
 
-def pending(config: ParseConfig) -> tuple[list[Job], int]:
+def bridge_jar(environ: Mapping[str, str]) -> Path:
+    """The ProLeap bridge JAR `make setup` built, as bridge-env.sh exports it."""
+    if "PROLEAP_BRIDGE_JAR" not in environ:
+        raise SystemExit(
+            "PROLEAP_BRIDGE_JAR not set (source bridge-env.sh at the forge root)"
+        )
+    jar = Path(environ["PROLEAP_BRIDGE_JAR"])
+    if not jar.is_file():
+        raise SystemExit(
+            f"bridge JAR not built: {jar} (run `make setup` at the forge root)"
+        )
+    return jar
+
+
+def pending(config: CorpusConfig) -> tuple[list[Job], int]:
     """The programs still to parse, and how many the cache already holds."""
     sources = matching_files(config.cobol_dir, config.cobol_globs)
     todo = [
@@ -122,7 +139,7 @@ def _parse_args() -> argparse.Namespace:
         "--config",
         required=True,
         type=Path,
-        help="Path to a parse TOML config (see cobble/parsing/config.py)",
+        help="Path to a corpus TOML config (see cobble/corpus_config.py)",
     )
     parser.add_argument(
         "--jobs",
@@ -136,12 +153,9 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     configure_cli_logging()
     args = _parse_args()
-    config = load_parse_config(args.config)
+    config = load_corpus_config(args.config)
+    jar = str(bridge_jar(os.environ))
     config.asg_dir.mkdir(parents=True, exist_ok=True)
-
-    jar = str(config.bridge_jar)
-    if not config.bridge_jar.is_file():
-        raise SystemExit(f"bridge_jar does not exist: {jar} (mvn package the bridge)")
     copybook_dirs = tuple(str(d) for d in config.copybook_dirs)
     exts = tuple(config.copybook_extensions)
 
