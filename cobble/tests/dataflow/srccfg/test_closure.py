@@ -45,9 +45,12 @@ def _cache(tmp_path: Path, members: dict[str, list[dict]]) -> Path:
     return asg_dir
 
 
-def _config(tmp_path: Path, asg_dir: Path) -> Path:
+def _config(tmp_path: Path, asg_dir: Path, source_dir: Path = Path()) -> Path:
     config = tmp_path / "srccfg.toml"
-    config.write_text(f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"\n')
+    source_line = f'\nsource_dir = "{source_dir}"' if source_dir != Path() else ""
+    config.write_text(
+        f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"{source_line}\n'
+    )
     return config
 
 
@@ -96,7 +99,7 @@ def test_a_seed_with_no_asg_in_the_cache_is_an_error_not_an_empty_answer(
 def test_a_program_that_calls_nothing_is_a_closure_of_one(tmp_path: Path) -> None:
     asg_dir = _cache(tmp_path, {"PROGA": [_move()], "PROGB": [_move()]})
 
-    bundle = build_closure(asg_dir, "PROGA")
+    bundle = build_closure(asg_dir, "PROGA", Path())
 
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA"]
 
@@ -104,7 +107,7 @@ def test_a_program_that_calls_nothing_is_a_closure_of_one(tmp_path: Path) -> Non
 def test_a_called_program_is_built_after_its_caller(tmp_path: Path) -> None:
     asg_dir = _cache(tmp_path, {"PROGA": [_link("'PROGB'")], "PROGB": [_move()]})
 
-    bundle = build_closure(asg_dir, "PROGA")
+    bundle = build_closure(asg_dir, "PROGA", Path())
 
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA", "PROGB"]
 
@@ -121,7 +124,7 @@ def test_a_callee_of_a_callee_is_in_the_closure(tmp_path: Path) -> None:
         },
     )
 
-    bundle = build_closure(asg_dir, "PROGA")
+    bundle = build_closure(asg_dir, "PROGA", Path())
 
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA", "PROGB", "PROGC"]
 
@@ -134,7 +137,7 @@ def test_a_callee_with_no_asg_in_the_cache_does_not_end_the_run(
     asg_dir = _cache(tmp_path, {"PROGA": [_link("'PROGB'")]})
 
     with caplog.at_level(logging.WARNING):
-        bundle = build_closure(asg_dir, "PROGA")
+        bundle = build_closure(asg_dir, "PROGA", Path())
 
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA"]
     assert "PROGB" in caplog.text
@@ -147,6 +150,40 @@ def test_two_programs_that_call_each_other_are_each_built_once(tmp_path: Path) -
         tmp_path, {"PROGA": [_link("'PROGB'")], "PROGB": [_link("'PROGA'")]}
     )
 
-    bundle = build_closure(asg_dir, "PROGA")
+    bundle = build_closure(asg_dir, "PROGA", Path())
 
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA", "PROGB"]
+
+
+def _move_with_span() -> dict:
+    return {
+        "type": "MOVE",
+        "operands": [{"name": "'A'"}, {"name": "WS-FLAG-A"}],
+        "line_start": 10,
+        "col_start": 12,
+        "line_end": 10,
+        "col_end": 50,
+    }
+
+
+def test_source_file_is_annotated_when_source_dir_is_given(tmp_path: Path) -> None:
+    """build_closure threads source_dir so every CFG node carries its source path."""
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    asg_dir = _cache(
+        tmp_path, {"PROGA": [_move_with_span()], "PROGB": [_move_with_span()]}
+    )
+
+    bundle = build_closure(asg_dir, "PROGA", source_dir)
+
+    spanned = [n for n in bundle.cfgs[0].nodes if n.span.source_file]
+    assert len(spanned) > 0
+    assert spanned[0].span.source_file == "src/PROGA.txt"
+
+
+def test_source_file_is_empty_when_source_dir_is_empty(tmp_path: Path) -> None:
+    asg_dir = _cache(tmp_path, {"PROGA": [_move()]})
+
+    bundle = build_closure(asg_dir, "PROGA", Path())
+
+    assert all(n.span.source_file == "" for n in bundle.cfgs[0].nodes)

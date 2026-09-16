@@ -31,19 +31,19 @@ class Bundle:
     cfgs: tuple[Cfg, ...] = ()
 
 
-def build_closure(asg_dir: Path, seed: str) -> Bundle:
-    return Bundle(seed=seed, cfgs=_expand(asg_dir, (seed,), ()))
+def build_closure(asg_dir: Path, seed: str, source_dir: Path) -> Bundle:
+    return Bundle(seed=seed, cfgs=_expand(asg_dir, source_dir, (seed,), ()))
 
 
 def _expand(
-    asg_dir: Path, pending: tuple[str, ...], built: tuple[Cfg, ...]
+    asg_dir: Path, source_dir: Path, pending: tuple[str, ...], built: tuple[Cfg, ...]
 ) -> tuple[Cfg, ...]:
     """Breadth-first from the seed, one program built once."""
     if not pending:
         return built
     head, *rest = pending
-    visit = _visit(asg_dir, head, built, len(rest))
-    return _expand(asg_dir, (*rest, *visit.callees), (*built, *visit.cfgs))
+    visit = _visit(asg_dir, source_dir, head, built, len(rest))
+    return _expand(asg_dir, source_dir, (*rest, *visit.callees), (*built, *visit.cfgs))
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,15 @@ class _Visit:
     callees: tuple[str, ...] = ()
 
 
-def _visit(asg_dir: Path, program: str, built: tuple[Cfg, ...], pending: int) -> _Visit:
+def _source_file(source_dir: Path, program_id: str) -> str:
+    if source_dir == Path():
+        return ""
+    return str((source_dir / f"{program_id}.txt").relative_to(source_dir.parent))
+
+
+def _visit(
+    asg_dir: Path, source_dir: Path, program: str, built: tuple[Cfg, ...], pending: int
+) -> _Visit:
     path = asg_dir / f"{program}.json"
     if program in tuple(cfg.program for cfg in built):
         return _Visit()
@@ -65,7 +73,7 @@ def _visit(asg_dir: Path, program: str, built: tuple[Cfg, ...], pending: int) ->
     logger.info(
         "srccfg: building %s  (built=%d pending=%d)", program, len(built), pending
     )
-    cfg = cfg_of(path)
+    cfg = cfg_of(path, source_file=_source_file(source_dir, program))
     logger.info("srccfg: %s done  nodes=%d", program, len(cfg.nodes))
     return _Visit(cfgs=(cfg,), callees=callees_of(call_graph((cfg,)), cfg.program))
 
@@ -104,7 +112,9 @@ def main(argv: Sequence[str] = ()) -> int:
     if not (config.asg_dir / f"{arguments.program}.json").is_file():
         logger.error("%s: no ASG for this program in the cache", arguments.program)
         return 1
-    document = bundle_to_json(build_closure(config.asg_dir, arguments.program))
+    document = bundle_to_json(
+        build_closure(config.asg_dir, arguments.program, config.source_dir)
+    )
     return _emitted(document, arguments.output)
 
 
