@@ -99,6 +99,7 @@ from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
+from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
@@ -569,7 +570,7 @@ def _analysed_run(
     ASG cache and never the corpus tree, so it has nothing to index. FIELD
     resolves NOT_INDEXED whatever the index holds; see corpus_index's table.
     """
-    config.out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(config.out_dir)
     locations = CorpusIndex()
     with (
         cached_asg_dialect_parsers_registered(),

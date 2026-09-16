@@ -25,6 +25,8 @@ from collections.abc import Callable, Mapping, Sequence
 from itertools import groupby
 from pathlib import Path
 
+from cobble.path_utils import ensure_parent
+
 _LOG = logging.getLogger(__name__)
 
 _HTML = """\
@@ -358,6 +360,5 @@ def main() -> None:
         diagram = _render_program(args.program, seq)
         html = _HTML.format(title=f"Internal sequence: {args.program}", diagram=diagram)
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(html)
+    ensure_parent(args.out).write_text(html)
     _LOG.info("Written: %s", args.out)

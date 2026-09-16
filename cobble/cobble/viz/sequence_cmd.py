@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
+from cobble.path_utils import ensure_parent
 from cobble.viz.models import (
     Arm,
     CrossProgramCall,
@@ -374,8 +375,7 @@ def _write_output(
     per_program: Mapping[str, ProgramSequence],
 ) -> None:
     output = SequenceOutput(cross_program=cross, per_program=per_program)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(output.model_dump_json(indent=2))
+    ensure_parent(args.out).write_text(output.model_dump_json(indent=2))
     _LOG.info(
         "sequences.json: %d cross-program calls, %d programs with intra-program trees",
         len(cross.calls),

@@ -20,6 +20,7 @@ from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import load_srccfg_config
 from cobble.dataflow.srccfg.link import call_graph, callees_of
+from cobble.path_utils import ensure_parent
 
 logger = logging.getLogger(__name__)
 
@@ -111,5 +112,5 @@ def _emitted(document: str, output: Path) -> int:
     if output == Path():
         sys.stdout.write(f"{document}\n")
         return 0
-    output.write_text(f"{document}\n", encoding="utf-8")
+    ensure_parent(output).write_text(f"{document}\n", encoding="utf-8")
     return 0

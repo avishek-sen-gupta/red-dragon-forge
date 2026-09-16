@@ -14,6 +14,8 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from cobble.path_utils import ensure_parent
+
 logger = logging.getLogger(__name__)
 
 RULE = "=" * 78
@@ -43,8 +45,7 @@ def emit_json(payload: str, args: argparse.Namespace) -> None:
     every caller's signatures.
     """
     if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(payload + "\n")
+        ensure_parent(args.output).write_text(payload + "\n")
         # Only the path, never the contents: those are the corpus's own identifiers.
         logger.info("Wrote %s", args.output)
     else:

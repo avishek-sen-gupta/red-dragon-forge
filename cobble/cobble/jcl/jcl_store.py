@@ -32,6 +32,7 @@ from typing import Protocol
 
 from tqdm import tqdm
 
+from cobble.path_utils import ensure_dir
 from cobol_asg.source_text import decode_source
 from jackal.jcl.bridge_parser import JclParseError, job_from_bridge_json
 from jackal.model import Job
@@ -89,7 +90,7 @@ class JclStore:
     """Parse-once, get-many store of Job, backed by bridge JSON on disk."""
 
     def __init__(self, cache_dir: Path, max_workers: int = 4) -> None:
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(cache_dir)
         self._dir = cache_dir
         self._max_workers = max_workers
         self._cached: dict[str, Path] = {}

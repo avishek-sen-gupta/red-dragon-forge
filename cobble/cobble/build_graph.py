@@ -44,8 +44,8 @@ from types import MappingProxyType
 import networkx as nx
 from tqdm import tqdm
 
-from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cics.csd_parse import CsdParseError, parse_csd
+from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.flow_map import extract_transaction_flow_graph
 from cobble.cics.graph_sink import GraphSink
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
@@ -53,26 +53,27 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
-from cobble.parsing.asg_cache import asg_of
-from cobol_asg.cobol_parser import ProLeapCobolParser
-from cobol_asg.source_text import decode_source
-from cobol_asg.subprocess_runner import RealSubprocessRunner
-from cobol_asg.cobol_imports import extract_cobol_imports
+from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
+from cobble.jcl.jcl_graph import jcl_graph_from_job
+from cobble.jcl.jcl_store import JclStore, temp_jcl_store
+from cobble.knowledge_graph.export import read_ndjson
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
-from cobol_asg.import_types import ImportKind, ImportRef
-from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
-from cobble.jcl.jcl_store import JclStore, temp_jcl_store
-from jackal.jcl.parser import bridge_parser
-from cobble.jcl.jcl_graph import jcl_graph_from_job
-from cobble.knowledge_graph.export import read_ndjson
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
+from cobble.parsing.asg_cache import asg_of
+from cobble.path_utils import ensure_dir
+from cobol_asg.cobol_imports import extract_cobol_imports
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.import_types import ImportKind, ImportRef
+from cobol_asg.source_text import decode_source
+from cobol_asg.subprocess_runner import RealSubprocessRunner
+from jackal.jcl.parser import bridge_parser
 
 logger = logging.getLogger(__name__)
 
@@ -694,7 +695,7 @@ def _extract_all(
 ) -> tuple[str, ...]:
     """Run the four extractors into one writer, returning everything they skipped."""
     cics_program_names = frozenset(csd.transid_to_program.values())
-    config.out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(config.out_dir)
     nodes_jsonl, edges_jsonl = _out_paths(config)
     with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
         return (

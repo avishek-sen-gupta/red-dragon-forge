@@ -36,6 +36,7 @@ from cobble.cics.synth_csd import (
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
+from cobble.path_utils import ensure_parent
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +64,7 @@ def csd_target(config: CorpusConfig) -> Path:
 
 
 def write_csd(csd: SynthesisedCsd, target: Path) -> Path:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_csd(csd), encoding="utf-8")
+    ensure_parent(target).write_text(render_csd(csd), encoding="utf-8")
     return target
 
 

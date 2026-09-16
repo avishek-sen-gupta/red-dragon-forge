@@ -13,6 +13,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from cobble.path_utils import ensure_parent
 from cobble.viz.models import CallDepGraph, CallEdge, ProgramNode
 
 _LOG = logging.getLogger(__name__)
@@ -97,8 +98,7 @@ def _run(args: argparse.Namespace) -> None:
     cfgs_raw: list[dict] = json.loads(args.cfg.read_text())
     targets = frozenset(c["program"] for c in cfgs_raw)
     graph = extract(args.edges, targets)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(graph.model_dump_json(indent=2))
+    ensure_parent(args.out).write_text(graph.model_dump_json(indent=2))
     _LOG.info("call-dep.json: %d nodes, %d edges", len(graph.nodes), len(graph.edges))
 
 
