@@ -71,6 +71,26 @@ def test_one_member_builds_to_one_json_named_for_the_program(tmp_path: Path) -> 
     assert json.loads(result.cfg_path.read_text())["program"] == "PROGA"
 
 
+def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) -> None:
+    """PROGRAM-ID is an identifier inside the source; the source is the member's file.
+    A member whose file name differs from its PROGRAM-ID must still point at itself."""
+    asg_dir = tmp_path / "parsed"
+    asg_dir.mkdir()
+    asg = _asg("PROGX")
+    asg["paragraphs"][0]["statements"][0].update(
+        line_start=10, col_start=12, line_end=10, col_end=50
+    )
+    (asg_dir / "MEMBERA.json").write_text(json.dumps(asg))
+
+    result = build_one(
+        asg_dir / "MEMBERA.json", tmp_path / "srccfg", source_dir=tmp_path / "src"
+    )
+
+    nodes = json.loads(result.cfg_path.read_text())["nodes"]
+    spanned = {n["span"]["source_file"] for n in nodes if n["span"]["line_start"]}
+    assert spanned == {"src/MEMBERA.txt"}
+
+
 def test_the_written_json_carries_every_node_and_edge(tmp_path: Path) -> None:
     """The consumers of this file are later passes, so the round trip has to keep
     the node ids and the edge kinds -- those ARE the reaching condition."""

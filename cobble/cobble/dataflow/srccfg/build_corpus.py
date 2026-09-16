@@ -71,6 +71,16 @@ def _node_dict(node) -> dict:
     return {**body, "kind": node.kind.name}
 
 
+def source_file_of(source_dir: Path, member: str) -> str:
+    """The member's source file, relative to source_dir's parent; "" without one.
+
+    Named for the member -- the file the ASG was parsed from -- never for its
+    PROGRAM-ID, which is an identifier inside the source that two members can share."""
+    if source_dir == Path():
+        return ""
+    return str((source_dir / f"{member}.txt").relative_to(source_dir.parent))
+
+
 def build_one(
     path: Path,
     out_dir: Path,
@@ -87,13 +97,7 @@ def build_one(
     """
     member = path.stem
     try:
-        program_id = json.loads(path.read_text(encoding="utf-8")).get("program_id", "")
-        source_file = (
-            str((source_dir / f"{program_id}.txt").relative_to(source_dir.parent))
-            if source_dir != Path()
-            else ""
-        )
-        cfg = cfg_of(path, source_file=source_file)
+        cfg = cfg_of(path, source_file=source_file_of(source_dir, member))
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=member, message=f"{member}: {error!r}")
     ensure_dir(out_dir)
