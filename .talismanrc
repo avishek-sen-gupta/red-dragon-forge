@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: cobble/cobble/dataflow/srccfg/config.py
-  checksum: 0df64a03c0bd5aa8ce4883b5e555f51c2ec97abbd7567e230b19ba754449aaa1
+  checksum: b24f6acf49c01b138e41747b3d78fe6576f417b6fc456a49b0201c392f75e33b
 - filename: docs/superpowers/specs/2026-07-07-knowledge-graph-config-driven-driver-design.md
   checksum: 261569048f4017914bd4cee19732a4ddad3bb05d565df599dbdc6ea72c670180
 - filename: docs/superpowers/plans/2026-07-07-cobol-knowledge-graph.md

@@ -24,7 +24,7 @@ from cobble.dataflow.srccfg.cfg import (
     NodeKind,
     SourceSpan,
 )
-from cobble.dataflow.srccfg.config import SrcCfgConfig
+from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
@@ -197,7 +197,7 @@ class _Progress:
     taken: frozenset[Path] = frozenset()
 
 
-def build_corpus(config: SrcCfgConfig) -> tuple[MemberResult, ...]:
+def build_corpus(config: SrcCfgCorpusConfig) -> tuple[MemberResult, ...]:
     """Every member, in cache order, no member's output overwriting another's."""
     return reduce(
         lambda progress, path: _extended(
