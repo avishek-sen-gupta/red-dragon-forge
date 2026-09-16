@@ -101,10 +101,6 @@ cp "$WORK/fields/aliases.jsonl" "$ART/dataflow/aliases.jsonl"
 uv run --no-sync cobble-dataflow-fixpoint-query reaches COSGN00C.WS-USER-ID --out "$WORK/fields" \
   --across-calls --max-hops 2 --depth 6 | tee "$ART/dataflow/COSGN00C-user-id-across-calls.txt"
 
-# viz-dataflow targets a commarea -> record-write convention CardDemo does not use;
-# the (empty) result is kept as evidence of that.
-viz dataflow_cmd --trace "$WORK/trace-COACTVWC.jsonl" --commarea-prefix CDEMO- --out "$ART/dataflow/viz-dataflow-COACTVWC.json"
-
 uv run --no-sync python - "$ART/dataflow" <<'PY'
 import html, pathlib, re, sys
 out = pathlib.Path(sys.argv[1])

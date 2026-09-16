@@ -49,12 +49,12 @@ These are non-negotiable, alongside the invariants below.
 
 ## Setup
 
+Built only from the forge root; squall has no Makefile.
+
 ```bash
-git clone --recurse-submodules <repo>
-cd squall
-uv sync
-# All Java artefacts — ProLeap parser + bridge (JDK 17+ and Maven required):
-make jar      # or `make jar-force` after a red-dragon bump
+make setup      # at the forge root: both bridge JARs + hlasm_export + uv sync
+make jar-force  # at the forge root, after a red-dragon bump
+. ./bridge-env.sh && cd squall
 ```
 
 ## Db2 test harness
@@ -66,7 +66,7 @@ reachable Db2 they **fail loud**. Stand one up locally with the Docker harness:
 
 ```bash
 cp .env.example .env          # then edit .env: set DB2_PASSWORD (e.g. squalltest123)
-make db2-up                   # docker compose up -d db2; waits until healthy
+make -C .. db2-up             # forge root target: docker compose up -d db2; waits until healthy
                               #   (first init is slow — minutes, much slower under
                               #    Apple-Silicon emulation; the container is reused after)
 ```
@@ -85,14 +85,16 @@ The DSN shape (password comes from `.env`/CI secret, never committed):
 DATABASE=MOJO;HOSTNAME=localhost;PORT=50000;PROTOCOL=TCPIP;UID=db2inst1;PWD=<DB2_PASSWORD>
 ```
 
-`make test` sources `db2/dsn-env.sh` for you before running the suite. (The forge root also
-carries a sibling `tests/integration/db2_env.sh` for composed Cicada+Squall runs.) Harness
-lifecycle: `make db2-up` (idempotent), `make db2-restart` (rebind the TCP listener without
-re-init), `make db2-stop` (keep container), `make db2-clean` (full reset, drops the volume).
+The forge root's `make test-all` sources it for squall's suite. (The forge root also carries a
+sibling `tests/integration/db2_env.sh` for composed Cicada+Squall runs.) Harness lifecycle, all
+forge root targets: `make db2-up` (idempotent), `make db2-restart` (rebind the TCP listener
+without re-init), `make db2-stop` (keep container), `make db2-clean` (full reset, drops the
+volume).
 
 ## Tests
 
 ```bash
+uv run --no-sync python -m pytest                          # full suite (after . ../bridge-env.sh && . db2/dsn-env.sh)
 uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests; mostly a fake backend, but test_backend.py needs live Db2
 uv run --no-sync python -m pytest tests/integration/ -x -q # integration (real VM); test_db2_* need live Db2, all need the ProLeap JAR
 ```

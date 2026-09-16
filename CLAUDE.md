@@ -81,10 +81,11 @@ make test      # root composition-layer + integration suite (needs the JARs)
 make test-all  # build JARs once, then run every package's suite (cicada, squall, jackal, cobble, forge)
 ```
 
-Each package is also independently buildable/testable from its own directory (`cd cicada && make test`,
-`cd cobble && uv run pytest`, etc.). `make setup` also builds the native `hlasm_export` binary
-(`make hlasm` alone; needs cmake/ninja/a C++ toolchain). `. ./bridge-env.sh` exports both bridge JAR paths.
-Db2-backed tests need `SQUALL_DB2_DSN` and a running Db2 (`cd squall && make db2-up`).
+Only the root has a Makefile. Each package is tested from its own directory with
+`uv run --no-sync python -m pytest` after `. ./bridge-env.sh` (exports both bridge JAR paths).
+`make setup` also builds the native `hlasm_export` binary (`make hlasm` alone; needs
+cmake/ninja/a C++ toolchain). Db2-backed tests need a running Db2 (`make db2-up`) and squall's
+`db2/dsn-env.sh` sourced for `SQUALL_DB2_DSN`.
 
 ## Architecture Overview
 
@@ -102,8 +103,9 @@ RedDragon interpreter (`vendor/red-dragon`, never modified here):
   parse is the only stage that starts a JVM; every stage after it reads the one ASG cache it
   wrote. Configs are TOML.
 
-Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved) and stay
-independently buildable — they must not import each other.
+Cicada, Squall, and Jackal were merged in via `git subtree` (history preserved). They stay
+independent at the import level — they must not import each other — and are built and set up
+only from the forge root.
 
 ## Conventions & Patterns
 
@@ -111,7 +113,7 @@ independently buildable — they must not import each other.
   must not import each other, and only `red_dragon_forge/` and `cobble/` may import more than
   one. Cobble is further held to the static surface — it must not reach into any runtime, and
   nothing may import it. Run `uv run lint-imports` to check.
-- **Formatting**: Black (line length 88); `make fmt` at the root, or per package.
+- **Formatting**: Black (line length 88); `make fmt` at the root.
 - **Comments are a smell.** Reaching for a comment means the code did not say it — rename,
   extract, or restructure until it does. Comments that survive earn it by carrying what code
   cannot: an external constraint, a non-obvious "why", a reference to an issue or standard.

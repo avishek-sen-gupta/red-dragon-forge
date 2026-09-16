@@ -6,13 +6,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT"
 
-export PROLEAP_BRIDGE_JAR="${PROLEAP_BRIDGE_JAR:-$ROOT/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar}"
-export JCL_BRIDGE_JAR="${JCL_BRIDGE_JAR:-$ROOT/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar}"
+. "$ROOT/bridge-env.sh"
 export CARDDEMO_HOME="${CARDDEMO_HOME:-$ROOT/vendor/carddemo/app}"
 SURVEY_TIMEOUT="${SURVEY_TIMEOUT:-120}"
 
 for jar in "$PROLEAP_BRIDGE_JAR" "$JCL_BRIDGE_JAR"; do
-  [[ -f "$jar" ]] || { echo "missing bridge JAR: $jar (run make jar)" >&2; exit 1; }
+  [[ -f "$jar" ]] || { echo "missing bridge JAR: $jar (run `make setup` at the forge root)" >&2; exit 1; }
 done
 [[ -d "$CARDDEMO_HOME/jcl" ]] || { echo "CARDDEMO_HOME has no jcl/: $CARDDEMO_HOME" >&2; exit 1; }
 

@@ -56,7 +56,7 @@ repos:
 
       - id: tests-cicada
         name: Cicada full test suite (incl. mandatory CardDemo e2e)
-        entry: make -C cicada test PYTEST_ARGS="-x -q"
+        entry: bash -c '. ./bridge-env.sh && cd cicada && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
         files: ^(cicada|vendor/red-dragon)/
@@ -70,7 +70,7 @@ repos:
 
       - id: tests-jackal
         name: Jackal full test suite (jackal + COBOL e2e via red-dragon)
-        entry: bash -c 'PROLEAP_BRIDGE_JAR="$(git rev-parse --show-toplevel)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar" JCL_BRIDGE_JAR="$(git rev-parse --show-toplevel)/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar" uv run --no-sync pytest jackal/tests -x -q'
+        entry: bash -c '. ./bridge-env.sh && uv run --no-sync pytest jackal/tests -x -q'
         language: system
         pass_filenames: false
         files: ^(jackal|vendor/red-dragon)/

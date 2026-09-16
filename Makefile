@@ -5,8 +5,13 @@ HLASM_FORK         := $(CURDIR)/cicada/third-party/che-che4z-lsp-for-hlasm-fork
 HLASM_EXPORT       := $(HLASM_FORK)/build/bin/hlasm_export
 
 PYTEST = uv run --no-sync python -m pytest
+# Make's /bin/sh is dash on Linux, which bridge-env.sh cannot locate itself from.
+BRIDGE_ENV = FORGE_ROOT=$(CURDIR) . ./bridge-env.sh
+BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squall/tests \
+  jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
+DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
-.PHONY: help setup hlasm jar jar-force python test test-all fmt
+.PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup     - init submodules + build hlasm_export + bridge JARs + uv sync"
@@ -17,6 +22,10 @@ help:
 	@echo "make test      - full test suite (needs jar)"
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
+	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
+	@echo "make db2-restart - rebind Db2's TCP listener without re-initialising"
+	@echo "make db2-stop  - stop Db2, keeping container and volume"
+	@echo "make db2-clean - remove Db2 container and volume (next up re-inits)"
 
 setup:
 	git submodule update --init --recursive
@@ -51,15 +60,52 @@ python:
 	uv sync --all-packages
 
 test: jar
-	export PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) SQUALL_DIR=squall; \
-	  . squall/db2/dsn-env.sh && $(PYTEST) tests/ $(PYTEST_ARGS)
+	$(BRIDGE_ENV) && export SQUALL_DIR=squall && . squall/db2/dsn-env.sh && $(PYTEST) tests/ $(PYTEST_ARGS)
 
-test-all: jar
-	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C cicada test
-	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C squall test
-	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) $(MAKE) -C jackal test
+test-all: jar hlasm
+	$(BRIDGE_ENV) && cd cicada && $(PYTEST)
+	$(BRIDGE_ENV) && cd squall && . db2/dsn-env.sh && $(PYTEST)
+	$(BRIDGE_ENV) && cd jackal && $(PYTEST)
 	cd cobble && $(PYTEST)
 	$(MAKE) test
 
 fmt:
-	uv run --no-sync python -m black red_dragon_forge tests
+	uv run --no-sync python -m black $(BLACK_PATHS)
+
+# squall's Db2 test database (official icr.io image). The compose project stays
+# squall/, so the squall-db2 container and its named volume are the same ones.
+#
+# IMPORTANT: keep the container RUNNING between test runs. The full first init
+# is slow (minutes; much slower under amd64 emulation on Apple Silicon), so you
+# pay it ONCE. `db2-up` is idempotent: it returns immediately if the container is
+# already healthy. Do NOT `compose down` between runs — that removes the
+# container (and the db2inst1 user in its filesystem), forcing a full re-init on
+# the next up even though the named volume persists the data. Use `db2-stop`
+# only when you actually want it off; `db2-clean` for a full reset.
+db2-up:
+	$(DB2_COMPOSE) up -d db2
+	@echo "Waiting for DB2 healthy (first init can take several minutes; fast if already up)..."
+	@for i in $$(seq 1 160); do \
+	  status=$$(docker inspect -f '{{.State.Health.Status}}' squall-db2 2>/dev/null); \
+	  if [ "$$status" = "healthy" ]; then echo "DB2 healthy."; exit 0; fi; \
+	  if [ "$$status" = "unhealthy" ]; then echo "DB2 unhealthy:"; docker logs --tail 80 squall-db2; exit 1; fi; \
+	  sleep 10; \
+	done; \
+	echo "DB2 did not become healthy in time:"; docker logs --tail 80 squall-db2; exit 1
+
+# Rebind DB2's TCP listener without re-initialising. Under emulation the listener
+# can occasionally drop (port 50000 stops accepting inside the container) while a
+# local connect still works — tests then fail with SQL30081N. This rebinds it.
+db2-restart:
+	docker exec squall-db2 bash -lc "su - db2inst1 -c 'db2 force applications all >/dev/null 2>&1; db2stop force; db2start'"
+	@echo "DB2 restarted; verifying TCP listener..."
+	@docker exec squall-db2 bash -c '(exec 3<>/dev/tcp/localhost/50000)' && echo "TCP listener up." || { echo "TCP still down"; exit 1; }
+
+# Stop but KEEP the container + volume (re-up still re-runs DB2's configure phase,
+# so prefer leaving it up). Removes nothing.
+db2-stop:
+	$(DB2_COMPOSE) stop db2
+
+# Full reset: remove the container AND the named volume (next up re-inits).
+db2-clean:
+	$(DB2_COMPOSE) down -v

@@ -17,29 +17,27 @@ read and modified in place.
 **Prerequisites:** Python ≥ 3.10, [uv](https://docs.astral.sh/uv/), JDK 17+ and Maven (for
 the ProLeap COBOL bridge).
 
+Cicada has no Makefile or build script: everything is built from the forge root.
+
 ```bash
-git clone --recurse-submodules <repo>
+git clone --recurse-submodules <forge-repo>
+cd red-dragon-forge
+make setup      # hlasm_export + both bridge JARs + uv sync (JDK 17+, Maven, CMake, Ninja, C++)
+                # `make jar-force` after a red-dragon bump; delete the fork's build/ to rebuild hlasm_export
+. ./bridge-env.sh
 cd cicada
-
-# Python dependencies (installs red-dragon from vendor/ in editable mode)
-uv sync
-
-# Java + native artefacts (JDK 17+ and Maven required)
-make jar        # ProLeap COBOL bridge JAR (required for COBOL compilation and integration tests)
-# or `make jar-force` after a red-dragon bump.
-# Produces: ../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
-
-# Optional — only for BMS symbolic-copybook generation from raw .bms maps (see §7):
-make hlasm      # builds hlasm_export from third-party/che-che4z-lsp-for-hlasm-fork (OS-agnostic build.sh)
-# or `make hlasm-force` to force a rebuild.
 ```
 
 ## Tests
 
 ```bash
+uv run --no-sync python -m pytest                          # full suite incl. CardDemo e2e (needs the JAR)
 uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests (no JAR required)
 uv run --no-sync python -m pytest tests/integration/ -x -q # integration tests (needs ProLeap JAR)
+uv run --no-sync python -m pytest -p no:xdist --override-ini=addopts= <path>  # one test, live stdout
 ```
+
+`CARDDEMO_HOME` defaults to forge's `vendor/carddemo/app`; set it only to point elsewhere.
 
 Always invoke `uv run` with `--no-sync`: red-dragon is an editable path dependency
 (`vendor/red-dragon`), and a plain `uv run` re-checks the lockfile and rebuilds the large
@@ -474,7 +472,7 @@ knowledge-graph `GraphWriter` satisfies it without a hard import).
 BMS symbolic copybooks are generated from raw `.bms` map sources by an out-of-process HLASM
 assembler front end:
 
-- `make hlasm` / `make hlasm-force` build the `hlasm_export` binary from
+- `make hlasm` at the forge root (part of `make setup`) builds the `hlasm_export` binary from
   `cicada/third-party/che-che4z-lsp-for-hlasm-fork` via its OS-agnostic `build.sh`
   (output: `third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export`).
 - `cics/bms/generate.py` (`generate_symbolic_copybooks`) runs, per `.bms` file,

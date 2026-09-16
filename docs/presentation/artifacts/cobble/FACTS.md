@@ -76,7 +76,7 @@ uv run --no-sync cobble-compare
 uv run --no-sync cobble-render --config config/carddemo.toml
 uv run --no-sync cobble-srccfg-build --config <work>/srccfg.toml --output <work>/cfg-COSGN00C.json COSGN00C
 uv run --no-sync cobble-srccfg-build --config <work>/srccfg.toml --output <work>/cfg-COACTVWC.json COACTVWC
-# cobble.viz.{callgraph_cmd,sequence_cmd,dataflow_cmd,render_cmd}.main() invoked via python -c (see limitations)
+# cobble.viz.{callgraph_cmd,sequence_cmd,render_cmd}.main() invoked via python -c (see limitations)
 uv run --no-sync cobble-fields-trace COACTVWC --asg-dir out-parsed --out <work>/trace-COACTVWC.jsonl
 uv run --no-sync cobble-trace-query backward WS-CARD-RID-ACCT-ID --trace <work>/trace-COACTVWC.jsonl --depth 5
 uv run --no-sync cobble-dataflow-fixpoint --config <work>/fields.toml --member COSGN00C COMEN01C COADM01C COACTVWC

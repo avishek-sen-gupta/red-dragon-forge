@@ -12,19 +12,18 @@ The top-level package is `cics/`.
 
 ## Setup
 
+Built only from the forge root; cicada has no Makefile.
+
 ```bash
-git clone --recurse-submodules <repo>
-cd cicada
-uv sync
-# All Java artefacts — ProLeap parser + bridge (JDK 17+ and Maven required):
-make jar      # or `make jar-force` after a red-dragon bump
-# Native HLASM front end (only needed for BMS symbolic-copybook generation):
-make hlasm    # or `make hlasm-force`; builds hlasm_export from third-party/che-che4z-lsp-for-hlasm-fork
+make setup      # at the forge root: hlasm_export + both bridge JARs + uv sync
+make jar-force  # at the forge root, after a red-dragon bump
+. ./bridge-env.sh && cd cicada
 ```
 
 ## Tests
 
 ```bash
+uv run --no-sync python -m pytest                          # full suite (after . ../bridge-env.sh)
 uv run --no-sync python -m pytest tests/unit/ -x -q        # unit tests (no JAR required)
 uv run --no-sync python -m pytest tests/integration/ -x -q # integration tests (needs ProLeap JAR)
 ```
