@@ -20,10 +20,16 @@ def jcl_bridge_jar() -> str:
     return jar
 
 
+_SUBMODULE_CARDDEMO = (
+    Path(__file__).resolve().parents[2] / "vendor" / "carddemo" / "app"
+)
+
+
 @pytest.fixture
 def carddemo_home() -> Path:
-    """Root of the CardDemo checkout; skip if CARDDEMO_HOME is unset."""
-    home = os.environ.get("CARDDEMO_HOME")
-    if not home:
-        pytest.skip("CARDDEMO_HOME not set")
-    return Path(home)
+    """CardDemo's app/ directory: CARDDEMO_HOME if set, else forge's vendor/carddemo
+    submodule; skip only when neither exists."""
+    home = Path(os.environ.get("CARDDEMO_HOME", _SUBMODULE_CARDDEMO))
+    if not home.is_dir():
+        pytest.skip(f"no CardDemo checkout at {home}")
+    return home

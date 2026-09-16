@@ -3,6 +3,6 @@ set -e
 # db2/dsn-env.sh is the single source of the DSN shape (and of the `set -a`
 # handling squall/.env needs); SQUALL_DIR points it at .env from the repo root.
 export SQUALL_DIR=squall
-export PROLEAP_BRIDGE_JAR="${PROLEAP_BRIDGE_JAR:-$(git rev-parse --show-toplevel)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar}"
+. "$(git rev-parse --show-toplevel)/bridge-env.sh"
 . squall/db2/dsn-env.sh
 cd squall && uv run --no-sync python -m pytest tests/unit -x -q

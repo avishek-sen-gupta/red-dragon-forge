@@ -1,7 +1,7 @@
 # The Db2 container needs a VM with at least 6 GiB
 
 Squall's Db2 backend and `red-dragon-forge`'s one live-Db2 end-to-end test run against the
-`squall-db2` container (`cd squall && make db2-up`). On a memory-starved VM it fails in a way
+`squall-db2` container (`make db2-up` at the forge root). On a memory-starved VM it fails in a way
 that does not look like a memory problem — this is that failure and what to do about it.
 
 `icr.io/db2_community/db2` is amd64-only, so on Apple Silicon it runs under emulation, and
@@ -34,7 +34,7 @@ into it over a session's worth of connections: a 2 GiB VM died within minutes, a
 colima stop && colima start --cpu 4 --memory 6   # colima; Docker Desktop: Settings -> Resources
 docker exec squall-db2 bash -lc \
   "su - db2inst1 -c 'db2 update dbm cfg using INSTANCE_MEMORY 262144'"
-cd squall && make db2-restart
+make db2-restart
 ```
 
 262144 pages is 1 GiB, ample for these test databases. The setting lives in the
@@ -47,5 +47,5 @@ resident / ~9 GiB mapped after 23 hours, with the container still reporting
 `(healthy)`. Treat the cap as reducing the frequency, not eliminating the failure;
 see bead forge-zka.
 
-`cd squall && make db2-restart` revives a killed instance in about fifteen seconds without a
+`make db2-restart` revives a killed instance in about fifteen seconds without a
 re-init, which is the fast way out when it happens mid-run.

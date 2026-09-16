@@ -59,9 +59,10 @@ hand.
 Each package is independently testable from its own directory:
 
 ```bash
-cd cicada && make test    # unit + integration + CardDemo e2e
-cd squall && make test    # needs SQUALL_DB2_DSN + a running Db2 (make db2-up)
-cd jackal && make test
+. ./bridge-env.sh
+(cd cicada && uv run --no-sync python -m pytest)   # unit + integration + CardDemo e2e
+(cd squall && . db2/dsn-env.sh && uv run --no-sync python -m pytest)   # needs a running Db2 (make db2-up)
+(cd jackal && uv run --no-sync python -m pytest)
 cd cobble && uv run pytest    # no JVM, no Db2 — static analysis only
 ```
 

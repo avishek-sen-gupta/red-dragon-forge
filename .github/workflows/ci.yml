@@ -43,9 +43,9 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - name: Build ProLeap bridge JAR
-        working-directory: vendor/red-dragon/proleap-bridge
-        run: ./build.sh
+      - name: Build the bridge JARs (ProLeap + JCL)
+        working-directory: ${{ github.workspace }}
+        run: make jar
       - name: Install build dependencies for hlasm_export
         run: sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev
       - name: Build hlasm_export
@@ -55,9 +55,10 @@ jobs:
           CXX: clang++
         run: make hlasm
       - name: Install Python dependencies
-        run: uv sync
+        working-directory: ${{ github.workspace }}
+        run: make python
       - name: Run tests
-        run: make test
+        run: . ../bridge-env.sh && uv run --no-sync python -m pytest
 
   squall:
     runs-on: ubuntu-latest
@@ -66,7 +67,6 @@ jobs:
         working-directory: squall
     env:
       DB2_PASSWORD: ${{ secrets.DB2_PASSWORD }}
-      PROLEAP_BRIDGE_JAR: ${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
     steps:
       - uses: actions/checkout@v5
         with:
@@ -79,14 +79,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - name: Build the ProLeap bridge JAR
+      - name: Build the bridge JARs (ProLeap + JCL)
+        working-directory: ${{ github.workspace }}
         run: make jar
       - name: Install Python dependencies
+        working-directory: ${{ github.workspace }}
         run: make python
       - name: Start DB2
+        working-directory: ${{ github.workspace }}
         run: make db2-up
       - name: Run the full test suite
-        run: make test
+        run: . ../bridge-env.sh && . db2/dsn-env.sh && uv run --no-sync python -m pytest
 
   jackal:
     runs-on: ubuntu-latest
@@ -106,11 +109,13 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: Build the bridge JARs (ProLeap + JCL)
+        working-directory: ${{ github.workspace }}
         run: make jar
       - name: Install Python dependencies
+        working-directory: ${{ github.workspace }}
         run: make python
       - name: Run the full test suite
-        run: make test
+        run: . ../bridge-env.sh && uv run --no-sync python -m pytest
 
   cobble:
     runs-on: ubuntu-latest
@@ -155,12 +160,10 @@ jobs:
         run: make jar
       - name: Install Python dependencies
         run: make python
-      - name: Start DB2 (reuses Squall's own compose stack)
-        working-directory: squall
+      - name: Start DB2 (squall's compose stack)
         run: make db2-up
       - name: Run the full test suite
         run: |
-          export PROLEAP_BRIDGE_JAR="${{ github.workspace }}/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
-          export JCL_BRIDGE_JAR="${{ github.workspace }}/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
+          . ./bridge-env.sh
           . tests/integration/db2_env.sh
           make test

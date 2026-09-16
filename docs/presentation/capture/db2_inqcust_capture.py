@@ -2,7 +2,8 @@
 live Db2, the CICS+SQL composition programs, and squall's standalone cursor.sqb.
 
 Run from the repo root:
-    export PROLEAP_BRIDGE_JAR=vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
+    make db2-up
+    . ./bridge-env.sh
     SQUALL_DIR=squall . squall/db2/dsn-env.sh
     uv run --no-sync python docs/presentation/capture/db2_inqcust_capture.py
 

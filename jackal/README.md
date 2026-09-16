@@ -20,22 +20,20 @@ source can be read and modified in place.
 **Prerequisites:** Python ≥ 3.10, [uv](https://docs.astral.sh/uv/), JDK 17+ and Maven (for the
 ProLeap COBOL and JCL bridges).
 
+Jackal has no Makefile or build script: everything is built from the forge root.
+
 ```bash
-git clone --recurse-submodules <repo>
+git clone --recurse-submodules <forge-repo>
+cd red-dragon-forge
+make setup        # both Java bridges (ProLeap COBOL + ANTLR jcl-bridge) + hlasm_export + uv sync
+                  # `make jar-force` after a red-dragon bump or grammar change
+. ./bridge-env.sh # exports PROLEAP_BRIDGE_JAR and JCL_BRIDGE_JAR, the runner and suite need both
 cd jackal
-
-make jar        # builds both Java bridges: the ProLeap COBOL bridge + the ANTLR jcl-bridge
-                # (mtime-gated — use `make jar-force` after a red-dragon bump or grammar change)
-uv sync         # Python deps (installs red-dragon from vendor/ in editable mode)
+uv run --no-sync python -m pytest
 ```
 
-Export the environment variables the runner and test suite expect:
-
-```bash
-export PROLEAP_BRIDGE_JAR="$(pwd)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar"
-export JCL_BRIDGE_JAR="$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar"
-export CARDDEMO_HOME="$HOME/code/aws-mainframe-carddemo/app"
-```
+The CardDemo e2e tests read forge's `vendor/carddemo/app`; set `CARDDEMO_HOME` only to point
+elsewhere.
 
 Always invoke `uv run` with `--no-sync` — red-dragon is an editable path dependency, and a
 plain `uv run` rebuilds its large editable wheel whenever the submodule changed. Run a bare
