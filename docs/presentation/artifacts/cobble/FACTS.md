@@ -5,10 +5,10 @@ are relative to `docs/presentation/artifacts/cobble/`. Captured 2026-09-14.
 
 ## Corpus and graph (section 2 + 3)
 
-- 29 COBOL members parsed, 0 failures; `make parse` took 0.4 min wall with 10 JVM workers
+- 29 COBOL members parsed, 0 failures; `cobble-parse-corpus` took 0.4 min wall with 10 JVM workers
   (slowest member COACTUPC, 19.1s). Source: capture log / `stats.json` `cobol_members_parsed`.
 - Whole-system graph: **449 nodes, 803 edges**. `stats.json`.
-- `make compare` is an empty identity diff vs the golden reference (449/803). `compare.txt`.
+- `cobble-compare` is an empty identity diff vs the golden reference (449/803). `compare.txt`.
 - Nodes by kind: 100 STEP, 81 INSTREAM_DATA, 62 DATASET, 47 PROGRAM, 45 COPYBOOK, 38 JOB,
   25 COBOL_FILE, 18 TRANSACTION, 18 BMS_MAP, 15 CICS_FILE. `stats.json`.
 - Edges by kind: 217 READS, 205 COPY, 200 JCL_STEP_RUNS, 50 WRITES, 21 XCTL, 18 STARTS,
@@ -18,7 +18,7 @@ are relative to `docs/presentation/artifacts/cobble/`. Captured 2026-09-14.
   maps/files) and COBOL (copybooks, CALL/XCTL). `graph.html`, `graph.png`.
 - 18 TRANSACTION ids come from the shipped CSD (CA00, CAUP, CAVW, CB00, CC00, CCDL, CCLI, CCUP,
   CDV1, CM00, CR00, CT00–CT02, CU00–CU03). `cobble/out/nodes.jsonl`.
-- `make build` wall time ≈ 58s (no JVM; reads the ASG cache).
+- `cobble-build` wall time ≈ 58s (no JVM; reads the ASG cache).
 
 ## Call graph and sequence (section 3)
 
@@ -69,10 +69,11 @@ are relative to `docs/presentation/artifacts/cobble/`. Captured 2026-09-14.
 ## Commands (from `cobble/`, as run by the capture script)
 
 ```bash
-make parse CONFIG=config/parse-carddemo.toml
-make build CONFIG=config/carddemo.toml
-make compare
-make render CONFIG=config/carddemo.toml
+. ../bridge-env.sh
+uv run --no-sync cobble-parse-corpus --config config/carddemo.toml
+uv run --no-sync cobble-build --config config/carddemo.toml
+uv run --no-sync cobble-compare
+uv run --no-sync cobble-render --config config/carddemo.toml
 uv run --no-sync cobble-srccfg-build --config <work>/srccfg.toml --output <work>/cfg-COSGN00C.json COSGN00C
 uv run --no-sync cobble-srccfg-build --config <work>/srccfg.toml --output <work>/cfg-COACTVWC.json COACTVWC
 # cobble.viz.{callgraph_cmd,sequence_cmd,dataflow_cmd,render_cmd}.main() invoked via python -c (see limitations)
@@ -86,7 +87,7 @@ uv run --no-sync python -m cobble.bms_render --config config/carddemo.toml --for
 
 ## Honest limitations observed
 
-- **Incomplete by one member**: the CSD names program COCRDSEC but no source exists; `make build`
+- **Incomplete by one member**: the CSD names program COCRDSEC but no source exists; `cobble-build`
   prints "1 FAILURE — THIS GRAPH IS INCOMPLETE". `build-warnings.txt`. The golden reference
   includes this state, so compare still passes.
 - **18 PROGRAM nodes are unresolved**: system utilities (IDCAMS, SORT, IEBGENER, IEFBR14,

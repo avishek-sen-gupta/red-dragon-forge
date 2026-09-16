@@ -1,6 +1,6 @@
 {
   "corpus": "CardDemo (vendor/carddemo)",
-  "source": "cobble/out/nodes.jsonl, cobble/out/edges.jsonl after make build CONFIG=config/carddemo.toml",
+  "source": "cobble/out/nodes.jsonl, cobble/out/edges.jsonl after cobble-build --config config/carddemo.toml",
   "total_nodes": 449,
   "total_edges": 803,
   "nodes_by_kind": {

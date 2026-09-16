@@ -1,7 +1,7 @@
 # cobble: Consolidate Build Dependencies into Forge
 
 **Date:** 2026-09-16
-**Status:** planned
+**Status:** implemented
 
 ---
 
