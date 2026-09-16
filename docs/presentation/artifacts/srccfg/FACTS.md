@@ -1,6 +1,6 @@
 # Source CFG (cobble srccfg) — facts (captured 2026-09-14)
 
-Regenerate: `bash docs/presentation/capture/srccfg.sh` (repo root; needs `cobble/out-parsed` from `make parse`).
+Regenerate: `bash docs/presentation/capture/srccfg.sh` (repo root; needs `cobble/out-parsed` from `cobble-parse-corpus`).
 Design: `cobble/docs/superpowers/specs/2026-09-04-src-cfg-reaching-conditions-design.md`.
 
 ## What it is

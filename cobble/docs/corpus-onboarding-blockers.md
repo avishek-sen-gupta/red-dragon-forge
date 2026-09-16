@@ -168,12 +168,12 @@ is not this blocker. Before the fix, a single one of them inside
 `_build_batch_file_graph` aborted the entire 3779-member run — the
 `UnicodeDecodeError` was raised in a worker thread and re-raised by `fut.result()`
 inside `parse_all` (blocker #3). Probed individually with the batch parser now:
-5 parse, 44 raise `Copybook not found` (they need `make sym` first — a separate
+5 parse, 44 raise `Copybook not found` (they need `cobble-sym` first — a separate
 open item), 3 raise `Unknown COBOL statement type: 'EXEC_CICS'` because the probe
 handed CICS members to the batch parser, which is a harness artifact rather than a
 cobble defect.
 
-CardDemo is unaffected: `make compare` is still an empty diff at 449 nodes / 803
+CardDemo is unaffected: `cobble-compare` is still an empty diff at 449 nodes / 803
 edges.
 
 **Caveat to keep in mind.** This is a decode choice, not a codepage claim. A
@@ -360,7 +360,7 @@ non-zero exit would break callers that legitimately tolerate a partial corpus.
 time — the same failures as #6, every one of them a `mismatched input ... expecting JOB`
 signature, with no `OSError` and no `CsdParseError` among them. That number was
 previously absent from the run's summary entirely. CardDemo is unaffected:
-`make compare` is an empty diff at 449 nodes / 803 edges, and its report still
+`cobble-compare` is an empty diff at 449 nodes / 803 edges, and its report still
 shows the one pre-existing `CICS program COCRDSEC: not found` failure.
 
 ---
@@ -610,7 +610,7 @@ exactly the two recovered members' own counts (37 + 19, 168 + 73), which is the
 zero-regression check for that row: nothing that already parsed moved. Every fix
 is one or two lines and all five are upstreamable to mapa.
 
-CardDemo is unaffected throughout: `make compare` is an empty diff at 449 nodes /
+CardDemo is unaffected throughout: `cobble-compare` is an empty diff at 449 nodes /
 803 edges. 39 jcl-bridge Java tests and 241 pytest tests pass.
 
 ---
@@ -695,12 +695,12 @@ must never be hardcoded in the extractor.
   `listFiles()` returns null: `NullPointerException: Cannot read the array length
   because "<local4>" is null` in `org.reddragon.bridge.Main.resolveInputFile`.
   cobble should reject or drop nonexistent directories before invoking the bridge.
-- **`clean` does not remove per-corpus output directories.** `make clean` names
-  `out cache sym` literally, so a corpus configured with `out_dir: out-<name>` or
-  `sym_dir: sym-<name>` leaves both behind. `.gitignore` half of this is done —
-  it now carries `out-*/` and `sym-*/`, so per-corpus output cannot be committed
-  by accident — but the `clean` target still only knows the defaults.
-- **The online members need `make sym CONFIG=<corpus>` first**, otherwise every
+- **`clean` did not remove per-corpus output directories — MOOT.** `make clean`
+  named `out cache sym` literally, so a corpus configured with `out_dir: out-<name>`
+  or `sym_dir: sym-<name>` left both behind. Cobble no longer has a Makefile: a
+  corpus's `out_dir`, `asg_dir` and `sym_dir` are removed directly. `.gitignore`
+  carries `out-*/` and `sym-*/`, so per-corpus output cannot be committed by accident.
+- **The online members need `cobble-sym --config <corpus>` first**, otherwise every
   one of them fails with `Copybook not found`.
 - **Empty-copybook synthesis** to get past `Copybook not found` for copybooks
   absent from the corpus entirely. Deferred by decision, not by oversight.
