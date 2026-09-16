@@ -18,7 +18,7 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict
 from cobble.dataflow.srccfg.cfg import Cfg
-from cobble.dataflow.srccfg.config import load_srccfg_config
+from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.link import call_graph, callees_of
 from cobble.path_utils import ensure_parent
 
@@ -108,7 +108,7 @@ def main(argv: Sequence[str] = ()) -> int:
     """
     configure_cli_logging()
     arguments = _parser().parse_args(list(argv) if argv else sys.argv[1:])
-    config = load_srccfg_config(arguments.config)
+    config = load_srccfg_build_config(arguments.config)
     if not (config.asg_dir / f"{arguments.program}.json").is_file():
         logger.error("%s: no ASG for this program in the cache", arguments.program)
         return 1

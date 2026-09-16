@@ -17,7 +17,7 @@ from cobble.dataflow.srccfg.build_corpus import (
     cfg_from_dict,
     cfg_to_dict,
 )
-from cobble.dataflow.srccfg.config import SrcCfgConfig
+from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
 
 
 def _asg(program: str) -> dict:
@@ -92,7 +92,9 @@ def test_a_member_that_does_not_parse_is_a_reported_failure(tmp_path: Path) -> N
     asg_dir = _cache(tmp_path, "PROGA")
     (asg_dir / "BROKEN.json").write_text("{ not json")
 
-    results = build_corpus(SrcCfgConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
+    results = build_corpus(
+        SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out")
+    )
 
     failed = [r for r in results if r.message]
     assert [r.member for r in failed] == ["BROKEN"]
@@ -105,7 +107,9 @@ def test_the_failure_message_names_the_member_and_says_what_happened(
     asg_dir = _cache(tmp_path)
     (asg_dir / "BROKEN.json").write_text("{ not json")
 
-    results = build_corpus(SrcCfgConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
+    results = build_corpus(
+        SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out")
+    )
 
     assert results[0].message.startswith("BROKEN: ")
 
@@ -116,7 +120,7 @@ def test_a_failing_member_writes_no_partial_cfg(tmp_path: Path) -> None:
     asg_dir = _cache(tmp_path)
     (asg_dir / "BROKEN.json").write_text("{ not json")
 
-    build_corpus(SrcCfgConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
+    build_corpus(SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
 
     assert list((tmp_path / "out").glob("*.json")) == []
 
@@ -175,7 +179,9 @@ def test_a_duplicate_program_id_does_not_overwrite_the_first_members_cfg(
     a query about the overwritten member gets a confident answer from other code."""
     asg_dir = _two_members_one_program(tmp_path)
 
-    results = build_corpus(SrcCfgConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
+    results = build_corpus(
+        SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out")
+    )
 
     assert sorted(p.name for p in (tmp_path / "out").glob("*.json")) == [
         "PROGA.json",
@@ -191,7 +197,9 @@ def test_a_duplicate_program_id_is_reported_and_names_both_sides(
     looks up PROGA.json, so the reader has to learn that a second member exists."""
     asg_dir = _two_members_one_program(tmp_path)
 
-    results = build_corpus(SrcCfgConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
+    results = build_corpus(
+        SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out")
+    )
 
     assert results[0].message == ""
     assert results[1].message.startswith("MEMB: PROGRAM-ID PROGA is already built")

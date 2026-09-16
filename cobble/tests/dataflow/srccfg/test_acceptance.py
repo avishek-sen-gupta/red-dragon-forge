@@ -24,7 +24,7 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.build_corpus import cfg_from_dict, cfg_to_dict
 from cobble.dataflow.srccfg.closure import build_closure
-from cobble.dataflow.srccfg.config import load_srccfg_config
+from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
 from cobble.dataflow.srccfg.dataflow import (
     reaching_conditions,
@@ -221,7 +221,7 @@ def test_closure_annotates_source_file_on_real_corpus() -> None:
     if not _CLOSURE_CONFIG.is_file():
         pytest.skip(f"no {_CLOSURE_CONFIG.name}; needs a closure-tests config")
     raw = tomllib.loads(_CLOSURE_CONFIG.read_text())
-    config = load_srccfg_config(Path(raw["srccfg"]))
+    config = load_srccfg_build_config(Path(raw["srccfg"]))
     seed = raw["seed"]
     if not config.asg_dir.is_dir():
         pytest.skip(f"no parsed cache at {config.asg_dir}")

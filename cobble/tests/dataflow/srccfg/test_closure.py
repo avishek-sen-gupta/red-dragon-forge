@@ -48,9 +48,7 @@ def _cache(tmp_path: Path, members: dict[str, list[dict]]) -> Path:
 def _config(tmp_path: Path, asg_dir: Path, source_dir: Path = Path()) -> Path:
     config = tmp_path / "srccfg.toml"
     source_line = f'\nsource_dir = "{source_dir}"' if source_dir != Path() else ""
-    config.write_text(
-        f'[srccfg]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path}/out"{source_line}\n'
-    )
+    config.write_text(f'[srccfg]\nasg_dir = "{asg_dir}"{source_line}\n')
     return config
 
 

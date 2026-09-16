@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from cobble.dataflow.srccfg.config import SrcCfgConfig, load_srccfg_config
+from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig, load_srccfg_corpus_config
 
 
 def _write(path: Path, text: str) -> Path:
@@ -19,7 +19,7 @@ def _write(path: Path, text: str) -> Path:
 
 
 def test_a_complete_config_loads_both_paths(tmp_path: Path) -> None:
-    config = load_srccfg_config(
+    config = load_srccfg_corpus_config(
         _write(
             tmp_path / "srccfg.toml",
             f"""
@@ -30,7 +30,7 @@ out_dir = "{tmp_path}/srccfg"
         )
     )
 
-    assert config == SrcCfgConfig(
+    assert config == SrcCfgCorpusConfig(
         asg_dir=tmp_path / "parsed", out_dir=tmp_path / "srccfg"
     )
 
@@ -42,7 +42,7 @@ def test_a_missing_key_raises_and_names_the_key_and_the_file(tmp_path: Path) -> 
     path = _write(tmp_path / "srccfg.toml", '[srccfg]\nasg_dir = "/x"\n')
 
     with pytest.raises(KeyError) as caught:
-        load_srccfg_config(path)
+        load_srccfg_corpus_config(path)
 
     assert "out_dir" in str(caught.value)
     assert str(path) in str(caught.value)
@@ -54,14 +54,14 @@ def test_an_empty_value_is_missing_rather_than_a_relative_path(tmp_path: Path) -
     path = _write(tmp_path / "srccfg.toml", '[srccfg]\nasg_dir = "/x"\nout_dir = ""\n')
 
     with pytest.raises(KeyError):
-        load_srccfg_config(path)
+        load_srccfg_corpus_config(path)
 
 
 def test_a_config_with_no_srccfg_table_raises(tmp_path: Path) -> None:
     path = _write(tmp_path / "srccfg.toml", '[other]\nasg_dir = "/x"\n')
 
     with pytest.raises(KeyError) as caught:
-        load_srccfg_config(path)
+        load_srccfg_corpus_config(path)
 
     assert "srccfg" in str(caught.value)
 
@@ -71,7 +71,7 @@ def test_a_path_is_expanded_so_a_tilde_config_is_not_a_literal_directory(
 ) -> None:
     """~ in a hand-written TOML is the commonest way to create a directory called
     "~" in the repo."""
-    config = load_srccfg_config(
+    config = load_srccfg_corpus_config(
         _write(
             tmp_path / "srccfg.toml",
             '[srccfg]\nasg_dir = "~/parsed"\nout_dir = "~/srccfg"\n',
