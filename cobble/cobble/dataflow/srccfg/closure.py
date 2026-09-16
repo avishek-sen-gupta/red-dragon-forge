@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict
+from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict, source_file_of
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.link import call_graph, callees_of
@@ -55,12 +55,6 @@ class _Visit:
     callees: tuple[str, ...] = ()
 
 
-def _source_file(source_dir: Path, program_id: str) -> str:
-    if source_dir == Path():
-        return ""
-    return str((source_dir / f"{program_id}.txt").relative_to(source_dir.parent))
-
-
 def _visit(
     asg_dir: Path, source_dir: Path, program: str, built: tuple[Cfg, ...], pending: int
 ) -> _Visit:
@@ -73,7 +67,7 @@ def _visit(
     logger.info(
         "srccfg: building %s  (built=%d pending=%d)", program, len(built), pending
     )
-    cfg = cfg_of(path, source_file=_source_file(source_dir, program))
+    cfg = cfg_of(path, source_file=source_file_of(source_dir, program))
     logger.info("srccfg: %s done  nodes=%d", program, len(cfg.nodes))
     return _Visit(cfgs=(cfg,), callees=callees_of(call_graph((cfg,)), cfg.program))
 
