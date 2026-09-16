@@ -28,7 +28,6 @@ from cobble.dataflow.srccfg.config import SrcCfgConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
 from cobol_asg.asg_types import CobolASG
 
-
 COLLISION_SEPARATOR = "__"
 
 

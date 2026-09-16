@@ -1228,7 +1228,9 @@ def _step(run: _Run, program: str, loader: Loader, budget: Budget) -> _Stepped:
         walk,
         budget,
     )
-    return _Stepped(run=next_run, deps=walk.deps, dead_ends=walk.dead_ends, order=walk.order)
+    return _Stepped(
+        run=next_run, deps=walk.deps, dead_ends=walk.dead_ends, order=walk.order
+    )
 
 
 def _round(run: _Run, program: str, loader: Loader, budget: Budget) -> _Run:

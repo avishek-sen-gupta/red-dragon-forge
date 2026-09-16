@@ -52,15 +52,12 @@ paragraph performed from everywhere be walked without limit.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import accumulate, chain, groupby, pairwise, repeat
+from itertools import accumulate, chain, groupby, repeat
 from operator import attrgetter, or_
 from types import MappingProxyType
-
-_log = logging.getLogger(__name__)
 
 from cobble.dataflow.srccfg.build import label_id
 from cobble.dataflow.srccfg.cfg import (
@@ -81,6 +78,7 @@ from cobble.dataflow.srccfg.synthetic import (
     SYSTEM_DEFAULT,
     is_synthetic,
 )
+from cobble.dataflow.srccfg.worklist import out_masks
 
 Guard = tuple[tuple[str, EdgeKind], ...]
 
@@ -833,23 +831,9 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
         node_id: reduce(or_, (field_to_mask.get(d.field, 0) for d in defs), 0)
         for node_id, defs in generated.items()
     }
-    out_masks: dict[str, int] = {
-        node.id: gen_masks.get(node.id, 0) for node in cfg.nodes
-    }
-    worklist: set[str] = set(cfg.node_ids)
-    processed = 0
-    while worklist:
-        node_id = worklist.pop()
-        processed += 1
-        new_in = reduce(or_, (out_masks[e.source] for e in cfg.predecessors(node_id)), 0)
-        new_out = (new_in & ~kill_masks.get(node_id, 0)) | gen_masks.get(node_id, 0)
-        if new_out != out_masks[node_id]:
-            out_masks[node_id] = new_out
-            for edge in cfg.successors(node_id):
-                worklist.add(edge.target)
-    _log.info("reaching_defs: %s  done  processed=%d", cfg.program, processed)
+    outs = out_masks(cfg, gen_masks, kill_masks)
     in_masks = {
-        node.id: reduce(or_, (out_masks[e.source] for e in cfg.predecessors(node.id)), 0)
+        node.id: reduce(or_, (outs[e.source] for e in cfg.predecessors(node.id)), 0)
         for node in cfg.nodes
     }
     return {

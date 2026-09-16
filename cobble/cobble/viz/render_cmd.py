@@ -333,9 +333,7 @@ def main() -> None:
     p.add_argument(
         "--input", required=True, type=Path, help="call-dep.json or sequences.json"
     )
-    p.add_argument(
-        "--mode", required=True, choices=["callgraph", "top", "program"]
-    )
+    p.add_argument("--mode", required=True, choices=["callgraph", "top", "program"])
     p.add_argument("--program", default=None, help="program name for --mode program")
     p.add_argument("--out", required=True, type=Path, help="output .html file")
     args = p.parse_args()
