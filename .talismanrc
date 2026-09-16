@@ -366,7 +366,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequences.json
   checksum: b59ec1ab1062b5d499356ad0f9ff5e1bc2c4134a3645e89bf97feca1a8496fdc
 - filename: cobble/cobble/dataflow/depgraph/config.py
-  checksum: 76883a84ab3c4f368497d6ed991b38559e35a2eb30e0b405b6adf983497c64bc
+  checksum: ae5acb3e0514203600619a39592fb698915cac3cb22d0516c0e75390b6fbd847
 - filename: cobble/cobble/corpus_config.py
-  checksum: 25b2a622b0603fc2298574c946fd3d637f8f136bbddd6ec58c018f4750a59ec7
+  checksum: e3b2df9dad5c6571e11b7cadaf2f10b116eb73ed0004c890976d091e153ae0b9
 version: "1.0"
