@@ -5,170 +5,101 @@
 
 ---
 
-## Problem
+## Goal
 
-cobble maintains its own copies of three build-time dependencies that forge already owns:
+`make setup` at the forge root is the only build step. It builds every tool cobble uses — both
+bridge JARs and `hlasm_export` — and never delegates to cobble's Makefile. Cobble's Makefile is
+reduced to operations over a corpus (`sym`, `csd`, `parse`, `build`, `compare`, `render`, …) and
+builds nothing.
 
-| Dependency | cobble's copy | forge's copy |
-|---|---|---|
-| `proleap-bridge` JAR | `cobble/proleap-bridge/` + submodule `proleap-bridge/proleap-cobol-parser` | `vendor/red-dragon/proleap-bridge/` |
-| `jcl-bridge` JAR | `cobble/jcl-bridge/` (vendored source, not a submodule) | `jackal/jcl-bridge/` |
-| `hlasm_export` binary | built from submodule `vendor/che-che4z-lsp-for-hlasm` | built from `cicada/third-party/che-che4z-lsp-for-hlasm-fork` |
+## Already done (`b0139eed`)
 
-All three point at the same upstream source at the same pin, but because cobble builds its own
-copies, a fresh cobble setup requires running `make tools` inside `~/code/cobble` separately from
-the normal forge `make setup`. The goal of this change is to make `make setup` at the forge root
-the only setup step needed — after it, `make sym` and `make build` in cobble just work.
+Cobble's copies of the proleap bridge, JCL bridge, CardDemo corpus and HLASM fork, and
+`cobble/.gitmodules`, are deleted. Cobble's `PROLEAP_BRIDGE_JAR` / `JCL_BRIDGE_JAR` and
+`generate_sym.py`'s `_HLASM` point at forge's copies; the HLASM fork is already the forge
+submodule `cicada/third-party/che-che4z-lsp-for-hlasm-fork` (branch `krakatoa-1.22.1`). The graph
+was verified unchanged (449/803, empty `make compare` diff). The proleap drift noted in earlier
+drafts is moot: cobble already consumes forge's JAR.
 
-There is also a known drift: forge's `proleap-bridge` is ahead of cobble's on two files:
-
-- `AsgSerializer.java` — adds `line_start`/`col_start`/`line_end`/`col_end` source positions to
-  paragraph objects.
-- `StatementSerializer.java` — adds source positions on statement objects; handles level-88
-  condition subscripts (`ConditionNameSubscriptReference`, red-dragon-8u47); serializes
-  exponentiation (`**`) as a proper `binop` chain instead of a `getText()` fallback; refactors
-  subscript serialization into `serializeSubscripts`; fixes STORE call serialization to use
-  `serializeRef`.
-
-All changes are additions. No existing field is removed or renamed, so cobble switching to
-forge's JAR is a pure upgrade with no risk of breaking existing graph output.
+What remains is that `hlasm_export` is built only by cobble's `make hlasm` or by CI directly, and
+cobble still carries build targets, a standalone `build.sh`, and README text for the old layout.
 
 ---
 
-## Phase 1 — Consolidate `jcl-bridge`
+## 1 — Root `Makefile` builds `hlasm_export`
 
-No source drift. cobble's copy is vendored source (not a submodule); `diff -rq` produces only a
-stray `.claude/` directory difference.
+```makefile
+HLASM_FORK   := $(CURDIR)/cicada/third-party/che-che4z-lsp-for-hlasm-fork
+HLASM_EXPORT := $(HLASM_FORK)/build/bin/hlasm_export
 
-1. Delete `cobble/jcl-bridge/` entirely.
-2. In `cobble/Makefile`, change:
-   ```makefile
-   JCL_BRIDGE_JAR := $(CURDIR)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
-   ```
-   to:
-   ```makefile
-   JCL_BRIDGE_JAR := $(CURDIR)/../jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
-   ```
-3. Remove the jcl-bridge build step from cobble's `jars` Makefile target.
+$(HLASM_EXPORT):
+	@for tool in cmake ninja $${CXX:-c++}; do \
+	  command -v $$tool >/dev/null || { echo "error: hlasm_export needs $$tool (CMake + Ninja + a C++ toolchain, e.g. LLVM@18)" >&2; exit 1; }; \
+	done
+	cd $(HLASM_FORK) && BUILD_TYPE=Release ./build.sh --target hlasm_export
 
----
-
-## Phase 2 — Consolidate `proleap-bridge`
-
-Forge's copy is ahead; see drift summary above. cobble's submodule becomes dead weight.
-
-1. Remove the `proleap-bridge/proleap-cobol-parser` submodule from cobble:
-   ```bash
-   git submodule deinit cobble/proleap-bridge/proleap-cobol-parser
-   git rm cobble/proleap-bridge/proleap-cobol-parser
-   ```
-   Remove the corresponding entry from `cobble/.gitmodules`.
-2. Delete `cobble/proleap-bridge/` entirely (source + any generated JAR).
-3. In `cobble/Makefile`, change:
-   ```makefile
-   PROLEAP_BRIDGE_JAR := $(CURDIR)/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
-   ```
-   to:
-   ```makefile
-   PROLEAP_BRIDGE_JAR := $(CURDIR)/../vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
-   ```
-4. Remove the proleap build steps from cobble's `jars` Makefile target. With both JAR steps gone,
-   `jars` and `tools` are now vacuous — remove both targets and their `.PHONY` entries. Update
-   cobble's `README.md` `make` target table accordingly.
-
----
-
-## Phase 3 — Consolidate `hlasm_export`
-
-Same submodule (`avishek-sen-gupta/che-che4z-lsp-for-hlasm`) at the same branch (`krakatoa-1.22.1`)
-in both repos. Forge's binary is already built at:
-`cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export`.
-
-`cobble/cobble/generate_sym.py` hardcodes the binary path relative to `_REPO_ROOT`
-(`Path(__file__).resolve().parent.parent`, i.e. the cobble package root):
-
-```python
-_HLASM = (
-    _REPO_ROOT / "vendor" / "che-che4z-lsp-for-hlasm" / "build" / "bin" / "hlasm_export"
-)
+hlasm: $(HLASM_EXPORT)
 ```
 
-Since cobble lives at `forge/cobble/`, `_REPO_ROOT.parent` is the forge root.
+- A file target, like `$(PROLEAP_BRIDGE_JAR)`: `setup` skips it once built.
+- The toolchain check fails fast with a named missing tool, before the CMake configure (decision:
+  hard requirement with a clear message, not a silent skip).
+- `setup` becomes: submodules → `hlasm` → `jar` → `python`.
+- Add `hlasm` to `.PHONY` and `help`. `jar-force` is unchanged; no `hlasm-force` (delete
+  `build/` to rebuild).
 
-1. In `generate_sym.py`, change `_HLASM` to:
-   ```python
-   _HLASM = (
-       _REPO_ROOT.parent
-       / "cicada" / "third-party" / "che-che4z-lsp-for-hlasm-fork"
-       / "build" / "bin" / "hlasm_export"
-   )
-   ```
-2. Remove the `vendor/che-che4z-lsp-for-hlasm` submodule from cobble:
-   ```bash
-   git submodule deinit cobble/vendor/che-che4z-lsp-for-hlasm
-   git rm cobble/vendor/che-che4z-lsp-for-hlasm
-   ```
-   Remove the corresponding entry from `cobble/.gitmodules`. If `cobble/vendor/` is then empty,
-   remove it too.
-3. Remove cobble's `hlasm` Makefile target and its `.PHONY` entry.
+## 2 — CI uses the root target
 
----
+In `.github/workflows/ci.yml`, the "Build hlasm_export" step calls `make hlasm` from the repo root
+(keeping `CC=clang`, `CXX=clang++`) instead of invoking the fork's `build.sh` directly. The apt
+install step stays.
 
-## Phase 4 — Add `hlasm` build to forge's `make setup`
+## 3 — Cobble's `Makefile` builds nothing
 
-forge's `make setup` currently: submodules → `make jar` (proleap + jcl bridges) → `uv sync`.
-It does not build `hlasm_export`. After Phase 3, cobble depends on forge's binary being present.
+- Remove `all`, `tools`, `hlasm`, `jars` and the `HLASM_FORK` variable, plus their `.PHONY`
+  entries. Add the missing `parse` to `.PHONY`.
+- Keep `FORGE`, `PROLEAP_BRIDGE_JAR`, `JCL_BRIDGE_JAR`, `BRIDGE_ENV` — `parse`/`build` still pass
+  the JAR paths to the stages.
+- `generate_sym.py`'s missing-binary error names the root target:
+  `run \`make setup\` (or \`make hlasm\`) at the forge root`.
 
-1. Add an `hlasm` target to forge's `Makefile`:
-   ```makefile
-   hlasm:
-       cd cicada/third-party/che-che4z-lsp-for-hlasm-fork && BUILD_TYPE=Release bash build.sh --target hlasm_export
-   ```
-2. Wire it into `setup`:
-   ```makefile
-   setup:
-       git submodule update --init --recursive
-       $(MAKE) hlasm
-       $(MAKE) jar
-       $(MAKE) python
-   ```
-3. Add `hlasm` to forge's `.PHONY` line.
-4. Add it to the `help` target output:
-   ```makefile
-   @echo "make hlasm     - build hlasm_export from the che-che4z-lsp-for-hlasm submodule"
-   ```
+## 4 — Delete `cobble/build.sh`
+
+It fetched cobble-local submodules and ran `make tools`. The end-to-end sequence it scripted
+(`sym` → `parse` → `build` → `compare` → `render`) moves into the README as a command list after
+root `make setup`.
+
+## 5 — `cobble/README.md`
+
+Rewrite every section describing the standalone layout:
+
+- Intro / prerequisites / quick start (~L14–53): prerequisite is root `make setup`; drop
+  `./build.sh`, `make tools`, the `tools` row of the target table and the cobble submodule fetch.
+- Manual bridge invocation (~L321–324): JAR paths become forge's.
+- Layout tables (~L780–796): drop `proleap-bridge/`, `jcl-bridge/`, `vendor/carddemo/`,
+  `vendor/che-che4z-lsp-for-hlasm/` and the submodule table; state which forge paths provide them.
+- JCL grammar provenance (~L817–831): point at `jackal/jcl-bridge/PROVENANCE.md` and `LICENSE`.
+
+## 6 — Local cleanup
+
+Remove the empty, untracked `cobble/vendor/` directory.
 
 ---
 
 ## Verification
 
-After all four phases:
-
 ```bash
-# From a clean forge checkout:
-make setup
-# Expected: submodules fetched, hlasm_export built, both bridge JARs built, uv sync done.
-# No separate cd cobble && make tools required.
-
-# BMS symbolic copybook generation for a corpus:
+rm -rf cicada/third-party/che-che4z-lsp-for-hlasm-fork/build
+make setup                              # builds hlasm_export, both JARs, uv sync
+make setup                              # second run: hlasm and ProLeap JAR skipped
+PATH=/usr/bin:/bin make hlasm           # with the binary removed: fails naming cmake/ninja
 cd cobble
-make sym CONFIG=config/prod.local.yaml
-# Expected: sym/*.cpy written, no "hlasm_export not built" error.
-
-# Full graph extraction for a corpus:
-make build CONFIG=config/prod.local.yaml
-# Expected: out/nodes.jsonl + edges.jsonl written cleanly.
-
-# cobble's own test suite:
-make test
-# Expected: all pass (proleap upgrade is additive; no existing serialized field removed).
+make sym CONFIG=config/carddemo.toml
+make parse CONFIG=config/parse-carddemo.toml
+make build CONFIG=config/carddemo.toml
+make compare                            # empty diff
+make test lint
+grep -rn "build\.sh\|make tools\|make jars" cobble   # no hits
 ```
 
----
-
-## What stays in cobble's Makefile
-
-After consolidation, cobble's `Makefile` retains: `codegen`, `parser`, `sym`, `csd`, `build`,
-`compare`, `verify`, `render`, `render-webgl`, `canonical`, `test`, `fmt`, `lint`, `clean`.
-The `tools`, `hlasm`, `jars` targets are removed. `PROLEAP_BRIDGE_JAR` and `JCL_BRIDGE_JAR` at
-the top of the file point at forge's paths. `BRIDGE_ENV` is unchanged.
+CI's workflow must stay green with the `make hlasm` step.
