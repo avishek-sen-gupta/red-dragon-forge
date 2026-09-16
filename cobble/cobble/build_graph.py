@@ -25,9 +25,7 @@ job is to stream to disk.
 
 Invoke as: uv run python -m cobble.build_graph --config <path>
 
-Env:
-    PROLEAP_BRIDGE_JAR=$(pwd)/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
-    JCL_BRIDGE_JAR=$(pwd)/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
+Env: PROLEAP_BRIDGE_JAR and JCL_BRIDGE_JAR -- `. ../bridge-env.sh` exports both.
 """
 
 from __future__ import annotations
@@ -159,7 +157,7 @@ def _unusable_csd_message(unusable: Sequence[Path]) -> str:
             *(f"  - {path}" for path in unusable),
             "The whole CICS flow stage reads these, so the graph would have no",
             "TRANSACTION nodes and no CICS member parsed at all. Regenerate a",
-            "synthetic CSD (`make csd CONFIG=<config>`), or correct csd_files.",
+            "synthetic CSD (`cobble-csd --config <config>`), or correct csd_files.",
         )
     )
 

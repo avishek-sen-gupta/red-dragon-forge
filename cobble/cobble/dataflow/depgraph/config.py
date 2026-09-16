@@ -11,8 +11,7 @@ build again), so it changes on a different clock from cobol_dir.
 
 No [source] section, and deliberately: which programs were parsed, which copybook
 directories resolved their COPY statements and which bridge JAR did the work are
-facts about the PARSE, and they live in parsing/config.py where the parse reads
-them. Repeating them here would let two configs disagree about which corpus this
+facts about the PARSE, and they live in the corpus config the parse reads. Repeating them here would let two configs disagree about which corpus this
 asg_dir holds, and the graph would then describe members nobody parsed.
 
 Shape:

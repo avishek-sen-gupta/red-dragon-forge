@@ -17,7 +17,7 @@ with the quoted source text and the line and column numbers stripped -- which is
 also what makes grouping safe to log, because a ProLeap message quotes the bytes it
 choked on. The full messages stay in the JSON, whose destination the caller picks.
 
-Invoke as: PROLEAP_BRIDGE_JAR=<path> uv run diagnose-cobol --config <path>
+Invoke as (after `. ../bridge-env.sh`): uv run diagnose-cobol --config <path>
 """
 
 from __future__ import annotations

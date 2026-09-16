@@ -1,13 +1,16 @@
 # red-dragon-forge local development tasks.
 PROLEAP_BRIDGE_JAR ?= $(CURDIR)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar
 JCL_BRIDGE_JAR     ?= $(CURDIR)/jackal/jcl-bridge/target/jcl-bridge-0.1.0-shaded.jar
+HLASM_FORK         := $(CURDIR)/cicada/third-party/che-che4z-lsp-for-hlasm-fork
+HLASM_EXPORT       := $(HLASM_FORK)/build/bin/hlasm_export
 
 PYTEST = uv run --no-sync python -m pytest
 
-.PHONY: help setup jar jar-force python test test-all fmt
+.PHONY: help setup hlasm jar jar-force python test test-all fmt
 
 help:
-	@echo "make setup     - init submodules + build bridge JARs + uv sync"
+	@echo "make setup     - init submodules + build hlasm_export + bridge JARs + uv sync"
+	@echo "make hlasm     - build hlasm_export from the HLASM fork (skipped if already built)"
 	@echo "make jar       - build ProLeap + JCL bridge JARs (skipped if already built)"
 	@echo "make jar-force - force-rebuild both bridge JARs"
 	@echo "make python    - uv sync (all workspace members)"
@@ -17,8 +20,17 @@ help:
 
 setup:
 	git submodule update --init --recursive
+	$(MAKE) hlasm
 	$(MAKE) jar
 	$(MAKE) python
+
+$(HLASM_EXPORT):
+	@for tool in cmake ninja $${CXX:-c++}; do \
+	  command -v $$tool >/dev/null || { echo "error: hlasm_export needs $$tool (CMake + Ninja + a C++ toolchain, e.g. LLVM@18)" >&2; exit 1; }; \
+	done
+	cd $(HLASM_FORK) && BUILD_TYPE=Release ./build.sh --target hlasm_export
+
+hlasm: $(HLASM_EXPORT)
 
 $(PROLEAP_BRIDGE_JAR):
 	cd vendor/red-dragon/proleap-bridge && ./build.sh
@@ -46,7 +58,7 @@ test-all: jar
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C cicada test
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) $(MAKE) -C squall test
 	PROLEAP_BRIDGE_JAR=$(PROLEAP_BRIDGE_JAR) JCL_BRIDGE_JAR=$(JCL_BRIDGE_JAR) $(MAKE) -C jackal test
-	$(MAKE) -C cobble test
+	cd cobble && $(PYTEST)
 	$(MAKE) test
 
 fmt:

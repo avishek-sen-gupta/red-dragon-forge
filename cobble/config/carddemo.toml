@@ -11,7 +11,7 @@ copybook_dirs = [
   "../vendor/carddemo/app/cpy-bms",
   "cics-copybooks",
 ]
-# Written by: uv run cobble-parse-corpus --config config/parse-carddemo.toml
+# Written by: uv run cobble-parse-corpus --config config/carddemo.toml
 # cobble-build reads this cache; it does not parse.
 asg_dir = "out-parsed"
 out_dir = "out"

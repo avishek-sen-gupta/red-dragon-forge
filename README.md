@@ -28,9 +28,9 @@ itself). See
 **Cobble** parses and walks the ASG, and never lowers to IR or executes. On top of the
 program/file/transaction graph it builds field-level byte dataflow: a source-level CFG,
 variable dependency graphs, and a byte-range trace that follows a commarea across LINK
-boundaries. Its pipeline runs from `cobble/` as `make parse CONFIG=…` then
-`make build CONFIG=…` (TOML configs), or via the `cobble-*` entry points; the parse is the only
-stage that starts a JVM, and every stage after it reads the one ASG cache it wrote.
+boundaries. Its pipeline runs from `cobble/` as the `cobble-*` entry points
+(`uv run cobble-parse-corpus --config …` then `uv run cobble-build --config …`, TOML configs,
+after `. ../bridge-env.sh`); the parse is the only stage that starts a JVM, and every stage after it reads the one ASG cache it wrote.
 
 Each package was originally its own repository, merged in via `git subtree` with full history,
 and each stays independently buildable and testable. What may import what is enforced by a root
@@ -42,17 +42,17 @@ and each stays independently buildable and testable. What may import what is enf
 ```bash
 git clone --recurse-submodules git@github.com:avishek-sen-gupta/red-dragon-forge.git
 cd red-dragon-forge
-make setup      # init submodules + build the ProLeap + JCL bridge JARs + uv sync --all-packages
+make setup      # init submodules + build hlasm_export + the ProLeap + JCL bridge JARs + uv sync --all-packages
 make test-all   # every package's suite, building the shared JARs exactly once
 ```
 
 `make test-all` expects a running Db2 for the two suites that talk to one — see
 [Tests](#tests).
 
-The CICS end-to-end and fitness-golden paths additionally require the native `hlasm_export`
-binary (BMS symbolic-map generation). Build it with a native toolchain (cmake / ninja / clang)
-via [`cicada/third-party/che-che4z-lsp-for-hlasm-fork/build.sh`](cicada/third-party/che-che4z-lsp-for-hlasm-fork/build.sh)
-(`./build.sh --target hlasm_export`); CI builds it in the `cicada` and `forge` jobs.
+`make setup` builds the native `hlasm_export` binary (BMS symbolic-map generation) too, so it
+needs CMake, Ninja and a C++ toolchain, and names whichever is missing; `make hlasm` builds it
+alone. `. ./bridge-env.sh` exports `PROLEAP_BRIDGE_JAR`/`JCL_BRIDGE_JAR` for running a tool by
+hand.
 
 ## Tests
 
@@ -62,7 +62,7 @@ Each package is independently testable from its own directory:
 cd cicada && make test    # unit + integration + CardDemo e2e
 cd squall && make test    # needs SQUALL_DB2_DSN + a running Db2 (make db2-up)
 cd jackal && make test
-cd cobble && make test    # no JVM, no Db2 — static analysis only
+cd cobble && uv run pytest    # no JVM, no Db2 — static analysis only
 ```
 
 `make test-all` from the repo root runs every one of those plus `red-dragon-forge`'s own

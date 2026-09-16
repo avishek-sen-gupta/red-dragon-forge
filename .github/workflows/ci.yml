@@ -48,13 +48,12 @@ jobs:
         run: ./build.sh
       - name: Install build dependencies for hlasm_export
         run: sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev
-      - name: Build hlasm_export (via the fork's OS-agnostic build.sh)
-        working-directory: cicada/third-party/che-che4z-lsp-for-hlasm-fork
+      - name: Build hlasm_export
+        working-directory: ${{ github.workspace }}
         env:
           CC: clang
           CXX: clang++
-          BUILD_TYPE: Release
-        run: ./build.sh --target hlasm_export
+        run: make hlasm
       - name: Install Python dependencies
         run: uv sync
       - name: Run tests
@@ -134,7 +133,7 @@ jobs:
       - name: Install Python dependencies
         run: make -C .. python
       - name: Run the full test suite
-        run: make test
+        run: uv run --no-sync python -m pytest
 
   forge:
     runs-on: ubuntu-latest

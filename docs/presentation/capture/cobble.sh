@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Capture Cobble static-analysis evidence for CardDemo into docs/presentation/artifacts/cobble/.
-# Run from the repo root. Needs the ProLeap + JCL bridge JARs (make jar) and the BMS
-# symbolic copybooks (cd cobble && make sym CONFIG=config/carddemo.toml).
+# Run from the repo root. Needs `make setup` (bridge JARs + hlasm_export) and the BMS
+# symbolic copybooks (cd cobble && uv run cobble-sym --config config/carddemo.toml).
 # Work caches go to cobble/out-parsed, cobble/out and cobble/out-presentation (gitignored).
 set -euo pipefail
 
@@ -11,6 +11,7 @@ ART="$ROOT/docs/presentation/artifacts/cobble"
 WORK="$ROOT/cobble/out-presentation"
 mkdir -p "$ART/viz" "$ART/dataflow" "$ART/screens" "$WORK/viz"
 cd "$ROOT/cobble"
+. "$ROOT/bridge-env.sh"
 
 # cobble.viz modules are invoked by import: their console scripts are declared in
 # cobble/pyproject.toml but absent from the synced venv, and the modules have no __main__.
@@ -20,12 +21,12 @@ viz() {
 }
 
 echo "== parse + build + compare + render (whole-system graph)"
-make parse CONFIG=config/parse-carddemo.toml 2>&1 | tail -3
-make build CONFIG=config/carddemo.toml > "$WORK/build.log" 2>&1
+uv run --no-sync cobble-parse-corpus --config config/carddemo.toml 2>&1 | tail -3
+uv run --no-sync cobble-build --config config/carddemo.toml > "$WORK/build.log" 2>&1
 grep -A12 "FAILURE" "$WORK/build.log" > "$ART/build-warnings.txt" || true
-make compare 2>&1 | tee "$ART/compare.txt"
+uv run --no-sync cobble-compare 2>&1 | tee "$ART/compare.txt"
 grep -q "EMPTY DIFF" "$ART/compare.txt"
-make render CONFIG=config/carddemo.toml
+uv run --no-sync cobble-render --config config/carddemo.toml
 cp out/graph.html "$ART/graph.html"
 
 uv run --no-sync python - "$ART/stats.json" <<'PY'
@@ -37,7 +38,7 @@ unresolved = collections.Counter(
 )
 stats = {
     "corpus": "CardDemo (vendor/carddemo)",
-    "source": "cobble/out/nodes.jsonl, cobble/out/edges.jsonl after make build CONFIG=config/carddemo.toml",
+    "source": "cobble/out/nodes.jsonl, cobble/out/edges.jsonl after cobble-build --config config/carddemo.toml",
     "total_nodes": len(nodes),
     "total_edges": len(edges),
     "nodes_by_kind": dict(collections.Counter(n["kind"] for n in nodes).most_common()),

@@ -8,9 +8,8 @@
 ## Goal
 
 `make setup` at the forge root is the only build step. It builds every tool cobble uses — both
-bridge JARs and `hlasm_export` — and never delegates to cobble's Makefile. Cobble's Makefile is
-reduced to operations over a corpus (`sym`, `csd`, `parse`, `build`, `compare`, `render`, …) and
-builds nothing.
+bridge JARs and `hlasm_export`. Cobble has no Makefile: its stages are `uv run cobble-*` entry
+points, and the root `bridge-env.sh` exports the two JAR paths they read.
 
 ## Already done (`b0139eed`)
 
@@ -54,24 +53,33 @@ In `.github/workflows/ci.yml`, the "Build hlasm_export" step calls `make hlasm` 
 (keeping `CC=clang`, `CXX=clang++`) instead of invoking the fork's `build.sh` directly. The apt
 install step stays.
 
-## 3 — Cobble's `Makefile` builds nothing
+## 3 — Delete cobble's `Makefile`
 
-- Remove `all`, `tools`, `hlasm`, `jars` and the `HLASM_FORK` variable, plus their `.PHONY`
-  entries. Add the missing `parse` to `.PHONY`.
-- Keep `FORGE`, `PROLEAP_BRIDGE_JAR`, `JCL_BRIDGE_JAR`, `BRIDGE_ENV` — `parse`/`build` still pass
-  the JAR paths to the stages.
-- `generate_sym.py`'s missing-binary error names the root target:
-  `run \`make setup\` (or \`make hlasm\`) at the forge root`.
+Once it builds nothing, its only real work is exporting `PROLEAP_BRIDGE_JAR`/`JCL_BRIDGE_JAR` for
+`cobble-build` (the ProLeap parser, and JCL + PROC parsing through jackal, which reads the
+variable itself); every other target is a `uv run` wrapper, and `--config` is already required
+by argparse.
 
-## 4 — Delete `cobble/build.sh`
+- Add `bridge-env.sh` at the forge root, sourced like `squall/db2/dsn-env.sh`: exports both
+  JAR paths as absolute paths resolved from the script's own location (bash and zsh; other
+  shells set `FORGE_ROOT`), and warns naming `make setup` for a JAR not yet built.
+- Delete `cobble/Makefile`. Root `test-all` and CI's cobble job run
+  `uv run --no-sync python -m pytest` in `cobble/`.
+- User-facing messages that name a make target (`generate_sym`, `build_graph`, `compare`,
+  `render_graph*`, `diagnose-*` docstrings) name the entry point instead; tests asserting them
+  follow. Root `README.md` and `CLAUDE.md` follow.
+- No code change to jackal or cobble's JAR resolution.
 
-It fetched cobble-local submodules and ran `make tools`. The end-to-end sequence it scripted
-(`sym` → `parse` → `build` → `compare` → `render`) moves into the README as a command list after
-root `make setup`.
+## 4 — Delete `cobble/build.sh` and `cobble/.github/`
+
+`build.sh` fetched cobble-local submodules and ran `make tools`; its sequence
+(`sym` → `parse` → `build` → `compare` → `render`) moves into the README as `uv run` commands.
+`cobble/.github/workflows/reproduce.yml` scripted the same flow and never ran: GitHub reads
+workflows only from the repository root.
 
 ## 5 — `cobble/README.md`
 
-Rewrite every section describing the standalone layout:
+Rewrite every section describing the standalone layout, and every `make` target as its `uv run` command:
 
 - Intro / prerequisites / quick start (~L14–53): prerequisite is root `make setup`; drop
   `./build.sh`, `make tools`, the `tools` row of the target table and the cobble submodule fetch.
@@ -93,13 +101,13 @@ rm -rf cicada/third-party/che-che4z-lsp-for-hlasm-fork/build
 make setup                              # builds hlasm_export, both JARs, uv sync
 make setup                              # second run: hlasm and ProLeap JAR skipped
 PATH=/usr/bin:/bin make hlasm           # with the binary removed: fails naming cmake/ninja
-cd cobble
-make sym CONFIG=config/carddemo.toml
-make parse CONFIG=config/parse-carddemo.toml
-make build CONFIG=config/carddemo.toml
-make compare                            # empty diff
-make test lint
-grep -rn "build\.sh\|make tools\|make jars" cobble   # no hits
+cd cobble && . ../bridge-env.sh
+uv run cobble-sym --config config/carddemo.toml
+uv run cobble-parse-corpus --config config/carddemo.toml
+uv run cobble-build --config config/carddemo.toml
+uv run cobble-compare                   # empty diff
+uv run python -m pytest
+grep -rn "build\.sh\|make tools\|make jars\|CONFIG=" README.md   # no hits
 ```
 
 CI's workflow must stay green with the `make hlasm` step.

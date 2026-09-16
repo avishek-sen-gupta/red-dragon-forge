@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Source-CFG evidence: per-program CFGs with reaching conditions, expanded across XCTL/LINK/CALL.
-# Reads cobble's ASG cache (cobble/out-parsed, written by `make parse`); no JVM.
+# Reads cobble's ASG cache (cobble/out-parsed, written by `cobble-parse-corpus`); no JVM.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -9,7 +9,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/srccfg-capture.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$ART"
 cd "$ROOT/cobble"
-[[ -d out-parsed ]] || { echo "cobble/out-parsed missing: run make parse CONFIG=config/parse-carddemo.toml" >&2; exit 1; }
+[[ -d out-parsed ]] || { echo "cobble/out-parsed missing: run uv run cobble-parse-corpus --config config/carddemo.toml" >&2; exit 1; }
 
 cat > "$WORK/srccfg.toml" <<EOF
 [srccfg]

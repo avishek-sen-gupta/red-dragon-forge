@@ -45,7 +45,7 @@ def test_missing_and_extra_are_summed_into_one_count(caplog) -> None:
 
 
 def test_the_report_is_logged_rather_than_printed(capsys, caplog) -> None:
-    """Nothing on stdout: `make compare`'s output is a human report, and keeping it
+    """Nothing on stdout: `cobble-compare`'s output is a human report, and keeping it
     on one stream (stderr, via logging) means it cannot interleave with itself."""
     caplog.set_level(logging.INFO)
 
@@ -58,7 +58,7 @@ def test_the_report_is_logged_rather_than_printed(capsys, caplog) -> None:
 def test_an_unextracted_tree_names_the_command_that_extracts(
     tmp_path, monkeypatch, caplog
 ) -> None:
-    """`make compare` on a clean checkout used to raise FileNotFoundError from
+    """`cobble-compare` on a clean checkout used to raise FileNotFoundError from
     _load, which tells the reader nothing about what to run first."""
     caplog.set_level(logging.ERROR)
     (tmp_path / "reference").mkdir()
@@ -68,7 +68,7 @@ def test_an_unextracted_tree_names_the_command_that_extracts(
 
     assert cobble.compare.main() == 1
     assert "out/nodes.jsonl" in caplog.text
-    assert "make build CONFIG=" in caplog.text
+    assert "cobble-build --config" in caplog.text
 
 
 def test_absent_inputs_names_both_sides(tmp_path) -> None:

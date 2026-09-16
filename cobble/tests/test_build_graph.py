@@ -128,7 +128,7 @@ def test_the_message_names_every_bad_path_and_how_to_regenerate(tmp_path: Path) 
 
     assert str(absent) in message
     assert "csd_files" in message
-    assert "make csd" in message
+    assert "cobble-csd --config" in message
 
 
 def test_the_failure_report_says_the_output_is_incomplete() -> None:
