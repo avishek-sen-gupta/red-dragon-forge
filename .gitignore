@@ -22,3 +22,4 @@ tests/integration/output/
 
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+.idea/
