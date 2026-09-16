@@ -14,6 +14,8 @@ anywhere its output is published.
 from __future__ import annotations
 
 import json
+import tomllib
+from pathlib import Path
 
 import pytest
 from cobol_asg.asg_types import CobolASG
@@ -21,6 +23,8 @@ from cobol_asg.asg_types import CobolASG
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.build_corpus import cfg_from_dict, cfg_to_dict
+from cobble.dataflow.srccfg.closure import build_closure
+from cobble.dataflow.srccfg.config import load_srccfg_config
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
 from cobble.dataflow.srccfg.dataflow import (
     reaching_conditions,
@@ -201,3 +205,42 @@ def test_a_report_can_be_rendered_for_a_field_the_member_writes(
         if not written:
             continue
         assert provenance_report(cfg, written)
+
+
+_CLOSURE_CONFIG = Path(__file__).resolve().parents[3] / "config" / "closure-tests.toml"
+
+
+def test_closure_annotates_source_file_on_real_corpus() -> None:
+    """build_closure with source_dir populates source_file on every spanned node.
+
+    Reads seed and config path from config/closure-tests.toml (gitignored):
+
+        srccfg = "/abs/path/to/cobble-srccfg.toml"
+        seed   = "ENTRY_PROGRAM"
+    """
+    if not _CLOSURE_CONFIG.is_file():
+        pytest.skip(f"no {_CLOSURE_CONFIG.name}; needs a closure-tests config")
+    raw = tomllib.loads(_CLOSURE_CONFIG.read_text())
+    config = load_srccfg_config(Path(raw["srccfg"]))
+    seed = raw["seed"]
+    if not config.asg_dir.is_dir():
+        pytest.skip(f"no parsed cache at {config.asg_dir}")
+    if not (config.asg_dir / f"{seed}.json").is_file():
+        pytest.skip(f"{seed} not in parsed cache")
+
+    bundle = build_closure(config.asg_dir, seed, config.source_dir)
+
+    source_files_by_program = {
+        cfg.program: {n.span.source_file for n in cfg.nodes if n.span.source_file}
+        for cfg in bundle.cfgs
+    }
+    annotated = {p: sf for p, sf in source_files_by_program.items() if sf}
+    assert len(annotated) > 1, "need at least two programs with source_file set"
+    all_files = {f for files in annotated.values() for f in files}
+    assert len(all_files) > 1, f"all programs share one source_file: {all_files}"
+    for program, files in annotated.items():
+        assert len(files) == 1, f"{program} has multiple source_files: {files}"
+        (source_file,) = files
+        assert (
+            program in source_file
+        ), f"{program} source_file should contain its name: {source_file}"
