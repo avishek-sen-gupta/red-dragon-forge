@@ -60,7 +60,9 @@ def _require(data: Mapping, key: str) -> str:
 
 def depgraph_config_from_dict(data: Mapping) -> DepgraphConfig:
     """The pure half: parsed TOML -> DepgraphConfig, no I/O."""
-    output = _require(data, "output")
+    if "output" not in data:
+        raise KeyError("depgraph config missing required key: 'output'")
+    output: Mapping = data["output"]
     # An absent [collapse] is round 1 of the loop: literal connectivity, nothing
     # collapsed. That is a legitimate way to run this, so it is not an error.
     collapse: Mapping = data.get("collapse", {})

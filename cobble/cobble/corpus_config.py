@@ -74,10 +74,10 @@ class BmsConfig:
     sym_dir: Path
 
 
-def _require(data: Mapping, key: str) -> str:
+def _require(data: Mapping, key: str) -> str | list[str]:
     if key not in data:
         raise KeyError(f"config missing required key: {key!r}")
-    return str(data[key])
+    return data[key]
 
 
 def _path(text: str) -> Path:
@@ -122,9 +122,13 @@ def _bms_config_from_dict(data: Mapping) -> BmsConfig:
 
 def load_corpus_config(path: Path) -> CorpusConfig:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    return _corpus_config_from_dict(_require(data, "corpus"))
+    if "corpus" not in data:
+        raise KeyError("config missing required key: 'corpus'")
+    return _corpus_config_from_dict(data["corpus"])
 
 
 def load_bms_config(path: Path) -> BmsConfig:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    return _bms_config_from_dict(_require(data, "bms"))
+    if "bms" not in data:
+        raise KeyError("config missing required key: 'bms'")
+    return _bms_config_from_dict(data["bms"])
