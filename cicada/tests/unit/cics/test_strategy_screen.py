@@ -53,7 +53,7 @@ def test_send_map_lowers_to_call_function():
             self._n += 1
             return Register(f"%r{self._n}")
 
-        def emit_inst(self, inst):
+        def emit_inst(self, inst, *, span=None):
             self.emitted.append(inst)
 
         def group_leaf_names(self, group_name, materialised):
@@ -62,7 +62,7 @@ def test_send_map_lowers_to_call_function():
         def has_field(self, name, materialised):
             return False
 
-        def emit_to_string(self, value_reg):
+        def emit_to_string(self, value_reg, *, span=None):
             out = self.fresh_reg()
             self.emit_inst(("to_string", out, value_reg))
             return out
@@ -132,7 +132,7 @@ def test_send_map_lowering_passes_base_field_names():
             self._n += 1
             return Register(f"%r{self._n}")
 
-        def emit_inst(self, inst):
+        def emit_inst(self, inst, *, span=None):
             self.emitted.append(inst)
             return inst
 
@@ -142,7 +142,7 @@ def test_send_map_lowering_passes_base_field_names():
         def has_field(self, name, materialised):
             return False
 
-        def emit_to_string(self, value_reg):
+        def emit_to_string(self, value_reg, *, span=None):
             out = self.fresh_reg()
             self.emit_inst(("to_string", out, value_reg))
             return out
@@ -221,7 +221,7 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
             self._n += 1
             return Register(f"%r{self._n}")
 
-        def emit_inst(self, inst):
+        def emit_inst(self, inst, *, span=None):
             self.emitted.append(inst)
             return inst
 
@@ -231,7 +231,7 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
         def has_field(self, name, materialised):
             return False
 
-        def emit_to_string(self, value_reg):
+        def emit_to_string(self, value_reg, *, span=None):
             out = self.fresh_reg()
             self.emit_inst(("to_string", out, value_reg))
             return out
@@ -281,14 +281,14 @@ def test_writeq_td_lowers_with_real_args():
             self._n += 1
             return Register(f"%r{self._n}")
 
-        def emit_inst(self, inst):
+        def emit_inst(self, inst, *, span=None):
             self.emitted.append(inst)
             return inst
 
         def has_field(self, name, materialised):
             return False
 
-        def emit_to_string(self, value_reg):
+        def emit_to_string(self, value_reg, *, span=None):
             result = self.fresh_reg()
             self.emit_inst(
                 CallFunction(
@@ -359,14 +359,16 @@ def test_writeq_td_lowers_with_resp_writeback():
             self._n += 1
             return Register(f"%r{self._n}")
 
-        def emit_inst(self, inst):
+        def emit_inst(self, inst, *, span=None):
             self.emitted.append(inst)
             return inst
 
         def has_field(self, name, materialised):
             return name in self._fields
 
-        def resolve_field_ref(self, name, materialised, qualifiers=(), subscripts=()):
+        def resolve_field_ref(
+            self, name, materialised, qualifiers=(), subscripts=(), *, span=None
+        ):
             offset, byte_length = self._fields[name]
             fl = FieldLayout(
                 name=name,
@@ -386,11 +388,18 @@ def test_writeq_td_lowers_with_resp_writeback():
             ), Register("%region")
 
         def emit_encode_and_write(
-            self, region_reg, fl, value_str_reg, offset_reg=None, *, extent=None
+            self,
+            region_reg,
+            fl,
+            value_str_reg,
+            offset_reg=None,
+            *,
+            extent=None,
+            span=None,
         ):
             self.encode_writes.append((region_reg, fl, value_str_reg, offset_reg))
 
-        def emit_to_string(self, value_reg):
+        def emit_to_string(self, value_reg, *, span=None):
             out = self.fresh_reg()
             self.emit_inst(("to_string", out, value_reg))
             return out
