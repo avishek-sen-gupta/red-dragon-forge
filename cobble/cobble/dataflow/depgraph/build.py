@@ -50,6 +50,7 @@ from cobble.dataflow.depgraph.flows import (
     TRANSID_PREFIX,
 )
 from cobble.dataflow.depgraph.graph import Passthrough, declarations, pass1, pass2
+from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ def main() -> int:
     configure_cli_logging()
     args = _parse_args()
     config = load_depgraph_config(args.config)
-    config.graph_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(config.graph_dir)
     window = config.collapse_window
     passthrough = Passthrough(config.passthrough_names, config.passthrough_patterns)
     logger.info(

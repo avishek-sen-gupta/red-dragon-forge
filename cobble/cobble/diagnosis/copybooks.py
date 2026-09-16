@@ -55,9 +55,10 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json
+from cobble.matching_files import matching_files
+from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_imports import extract_cobol_imports
 from cobol_asg.import_types import ImportKind, ImportRef
-from cobble.matching_files import matching_files
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +270,7 @@ def write_stubs(
     configured = frozenset(directory.resolve() for directory in config.copybook_dirs)
     if target.resolve() not in configured:
         return StubWrite(shadowed=tuple(sorted(shadowed)), configured=False)
-    target.mkdir(parents=True, exist_ok=True)
+    ensure_dir(target)
     return StubWrite(
         written=tuple(
             _write_stub(target, config.copybook_extensions, name)

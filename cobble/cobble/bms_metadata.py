@@ -31,6 +31,7 @@ from bms_copybook_gen.parser import parse_mapsets
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import BmsConfig, load_bms_config
 from cobble.matching_files import matching_files
+from cobble.path_utils import ensure_parent
 
 logger = logging.getLogger(__name__)
 
@@ -281,8 +282,7 @@ def _try_extract(bms_path: Path, config: BmsConfig) -> tuple[Mapping, ...]:
 
 def _write_output(records: tuple[Mapping, ...], output_path: str) -> None:
     text = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(output_path).write_text(f"{text}\n" if text else "")
+    ensure_parent(Path(output_path)).write_text(f"{text}\n" if text else "")
 
 
 def _parse_cli() -> argparse.Namespace:

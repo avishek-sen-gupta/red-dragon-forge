@@ -30,6 +30,7 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import BmsConfig, load_bms_config
 from cobble.matching_files import matching_files
+from cobble.path_utils import ensure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def main() -> int:
         sys.exit(
             f"hlasm_export not built: {_HLASM} (run `make setup` or `make hlasm` at the forge root)"
         )
-    config.sym_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(config.sym_dir)
     env = _child_env()
     written = tuple(_generate_one(bms, config, env) for bms in _bms_sources(config))
     logger.info("generated %d symbolic copybooks -> %s", len(written), config.sym_dir)

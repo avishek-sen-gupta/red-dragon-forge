@@ -10,6 +10,7 @@ from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.access import AccessRow, accesses
+from cobble.path_utils import ensure_parent
 from cobol_memory.field_extent import FieldExtent, Precision
 
 logger = logging.getLogger(__name__)
@@ -47,8 +48,9 @@ def cli(argv: tuple[str, ...] = ()) -> int:
     args = parser.parse_args(argv if argv else None)
     rows = accesses(args.cfg, args.asg_dir)
     logger.info("access: %d rows from %s", len(rows), args.cfg)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("\n".join(_row(r) for r in rows) + "\n", encoding="utf-8")
+    ensure_parent(args.out).write_text(
+        "\n".join(_row(r) for r in rows) + "\n", encoding="utf-8"
+    )
     return 0
 
 

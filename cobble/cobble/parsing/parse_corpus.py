@@ -33,8 +33,8 @@ import json
 import logging
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections.abc import Mapping
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +42,7 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
 from cobble.parsing.asg_cache import cache_path, failure_path, is_cached
+from cobble.path_utils import ensure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ def main() -> int:
     args = _parse_args()
     config = load_corpus_config(args.config)
     jar = str(bridge_jar(os.environ))
-    config.asg_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(config.asg_dir)
     copybook_dirs = tuple(str(d) for d in config.copybook_dirs)
     exts = tuple(config.copybook_extensions)
 

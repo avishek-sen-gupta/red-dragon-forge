@@ -26,6 +26,7 @@ from cobble.dataflow.srccfg.cfg import (
 )
 from cobble.dataflow.srccfg.config import SrcCfgConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
+from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 
 COLLISION_SEPARATOR = "__"
@@ -95,7 +96,7 @@ def build_one(
         cfg = cfg_of(path, source_file=source_file)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=member, message=f"{member}: {error!r}")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(out_dir)
     return _write(cfg, member, out_dir / f"{cfg.program or member}.json", taken)
 
 

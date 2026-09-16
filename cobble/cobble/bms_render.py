@@ -28,6 +28,7 @@ from bms_copybook_gen.parser import _parse_attrb
 from cobble.bms_metadata import _resolve_config, _run_hlasm_export, _strip_quotes
 from cobble.cli_logging import configure_cli_logging
 from cobble.matching_files import matching_files
+from cobble.path_utils import ensure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,7 @@ def main() -> int:
     configure_cli_logging()
     args = _parse_cli()
     layouts = _all_layouts(args.config)
-    args.out_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir(args.out_dir)
     written = tuple(
         _write_job(job, layouts, args.format, args.out_dir)
         for job in _jobs(args, layouts)

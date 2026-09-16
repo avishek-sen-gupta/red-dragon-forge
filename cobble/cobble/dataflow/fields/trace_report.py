@@ -29,6 +29,7 @@ from cobble.dataflow.fields.trace import (
     loadable,
     sampled_streaming,
 )
+from cobble.path_utils import ensure_parent
 from cobol_memory.field_extent import FieldExtent, Precision
 
 logger = logging.getLogger(__name__)
@@ -196,6 +197,7 @@ def _run_trace(program: str, asg_dir: Path, budget: Budget, out: Path) -> Trace:
         budget.max_depth,
     )
     started = time.monotonic()
+    ensure_parent(out)
     with out.open("w", encoding="utf-8") as handle:
         trace = sampled_streaming(program, asg_dir, budget, _make_sink(handle))
         for line in _footer_lines(trace):

@@ -20,6 +20,7 @@ from cobble.dataflow.fields.emit import _declared_extents
 from cobble.dataflow.fields.extent import cell_index
 from cobble.dataflow.fields.side_tables import JsonlWriter, extent_row, jsonl_writer
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
+from cobble.path_utils import ensure_parent
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def _emit_all(
 def emit(asg_dir: Path, out: Path, members: Sequence[str]) -> int:
     chosen = members if members else _members(asg_dir)
     logger.info("extents: %d members from %s", len(chosen), asg_dir)
+    ensure_parent(out)
     with jsonl_writer(out) as writer:
         skipped = _emit_all(asg_dir, chosen, writer)
     logger.info("extents: wrote %s (%d skipped)", out, len(skipped))
