@@ -41,12 +41,12 @@ def _row(access: AccessRow) -> str:
 def cli(argv: tuple[str, ...] = ()) -> int:
     configure_cli_logging()
     parser = argparse.ArgumentParser(description="Emit field-access rows.")
-    parser.add_argument("--cfg", required=True, type=Path)
+    parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--asg-dir", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv if argv else None)
-    rows = accesses(args.cfg, args.asg_dir)
-    logger.info("access: %d rows from %s", len(rows), args.cfg)
+    rows = accesses(args.config, args.asg_dir)
+    logger.info("access: %d rows from %s", len(rows), args.config)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(_row(r) for r in rows) + "\n", encoding="utf-8")
     return 0
