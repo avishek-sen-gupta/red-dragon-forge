@@ -151,8 +151,6 @@ fileignoreconfig:
   checksum: bb3791aad555b9395f84d223903dab127dfa28a63329e08a5ecd602197b7547d
 - filename: cobble/cobble/compare.py
   checksum: 3bed4bd4a32a5d38ddd9d1ae62c6d1cc681a294997519e97f9796906f944d2d6
-- filename: cobble/cobble/corpus_config.py
-  checksum: 879566701c34b3e7c717f50b9c68098ddac0c4a9155a44f703daecc0182170f2
 - filename: cobble/cobble/corpus_index.py
   checksum: 66a20f71af92d48edb57c6acf45ac6803219c56e92cde8f89600a4ee80c24003
 - filename: cobble/cobble/corpus_index_builder.py
@@ -367,4 +365,8 @@ fileignoreconfig:
   checksum: e5cc3f24822c63276009ae4976fc9a87f3a535f5e7453930e16e8b47673b57b5
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequences.json
   checksum: b59ec1ab1062b5d499356ad0f9ff5e1bc2c4134a3645e89bf97feca1a8496fdc
+- filename: cobble/cobble/dataflow/depgraph/config.py
+  checksum: 76883a84ab3c4f368497d6ed991b38559e35a2eb30e0b405b6adf983497c64bc
+- filename: cobble/cobble/corpus_config.py
+  checksum: 25b2a622b0603fc2298574c946fd3d637f8f136bbddd6ec58c018f4750a59ec7
 version: "1.0"

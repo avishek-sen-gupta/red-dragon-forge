@@ -52,10 +52,10 @@ class DepgraphConfig:
     collapse_window: int = DEFAULT_COLLAPSE_WINDOW
 
 
-def _require(data: Mapping, key: str) -> object:
+def _require(data: Mapping, key: str) -> str:
     if key not in data:
         raise KeyError(f"depgraph config missing required key: {key!r}")
-    return data[key]
+    return str(data[key])
 
 
 def depgraph_config_from_dict(data: Mapping) -> DepgraphConfig:
@@ -65,8 +65,8 @@ def depgraph_config_from_dict(data: Mapping) -> DepgraphConfig:
     # collapsed. That is a legitimate way to run this, so it is not an error.
     collapse: Mapping = data.get("collapse", {})
     return DepgraphConfig(
-        asg_dir=Path(_require(output, "asg_dir")),
-        graph_dir=Path(_require(output, "graph_dir")),
+        asg_dir=Path(_require(output, "asg_dir")).expanduser(),
+        graph_dir=Path(_require(output, "graph_dir")).expanduser(),
         passthrough_names=tuple(collapse.get("passthrough_names", ())),
         passthrough_patterns=tuple(collapse.get("passthrough_patterns", ())),
         collapse_window=int(collapse.get("window", DEFAULT_COLLAPSE_WINDOW)),
