@@ -37,14 +37,14 @@ class FakeCtx:
         self._counter += 1
         return reg
 
-    def emit_inst(self, inst):  # type: ignore[no-untyped-def]
+    def emit_inst(self, inst, *, span=None):  # type: ignore[no-untyped-def]
         self.emitted.append(inst)
         return inst
 
     def has_field(self, name, materialised) -> bool:  # type: ignore[no-untyped-def]
         return name in self._fields
 
-    def resolve_field_ref(self, name, materialised, qualifiers=(), subscripts=()):  # type: ignore[no-untyped-def]
+    def resolve_field_ref(self, name, materialised, qualifiers=(), subscripts=(), *, span=None):  # type: ignore[no-untyped-def]
         offset, byte_length = self._fields[name]
         fl = FieldLayout(
             name=name,
@@ -62,12 +62,12 @@ class FakeCtx:
             extent=whole_field_extent(fl, RegionId.WORKING_STORAGE),
         ), Register("%region")
 
-    def emit_decode_field(self, region_reg, fl, offset_reg=None, *, extent=None):  # type: ignore[no-untyped-def]
+    def emit_decode_field(self, region_reg, fl, offset_reg=None, *, extent=None, span=None):  # type: ignore[no-untyped-def]
         out = self.fresh_reg()
         self.decoded.append((region_reg, fl, out))
         return out
 
-    def const_to_reg(self, value):  # type: ignore[no-untyped-def]
+    def const_to_reg(self, value, *, span=None):  # type: ignore[no-untyped-def]
         from interpreter.types.type_expr import UNKNOWN
 
         reg = self.fresh_reg()

@@ -39,14 +39,14 @@ class _FakeCtx:
         self._counter += 1
         return reg
 
-    def emit_inst(self, inst):  # type: ignore[no-untyped-def]
+    def emit_inst(self, inst, *, span=None):  # type: ignore[no-untyped-def]
         self.emitted.append(inst)
         return inst
 
     def has_field(self, name, materialised) -> bool:  # type: ignore[no-untyped-def]
         return name in self._fields
 
-    def const_to_reg(self, value):  # type: ignore[no-untyped-def]
+    def const_to_reg(self, value, *, span=None):  # type: ignore[no-untyped-def]
         from interpreter.types.type_expr import UNKNOWN
 
         reg = self.fresh_reg()

@@ -178,7 +178,7 @@ class _FakeCtx:
     def has_field(self, name, _mat) -> bool:
         return name in self._fields
 
-    def resolve_field_ref(self, name, _mat, subscripts=()):
+    def resolve_field_ref(self, name, _mat, subscripts=(), *, span=None):
         class _FL:
             byte_length = None
 

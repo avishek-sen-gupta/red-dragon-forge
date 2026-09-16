@@ -249,14 +249,14 @@ class FakeCtx:
         self._counter += 1
         return reg
 
-    def emit_inst(self, inst):  # type: ignore[no-untyped-def]
+    def emit_inst(self, inst, *, span=None):  # type: ignore[no-untyped-def]
         self.emitted.append(inst)
         return inst
 
     def has_field(self, name, materialised) -> bool:  # type: ignore[no-untyped-def]
         return name in self._fields
 
-    def resolve_field_ref(self, name, materialised, qualifiers=(), subscripts=()):  # type: ignore[no-untyped-def]
+    def resolve_field_ref(self, name, materialised, qualifiers=(), subscripts=(), *, span=None):  # type: ignore[no-untyped-def]
         offset, byte_length = self._fields[name]
         fl = FieldLayout(
             name=name,
@@ -276,11 +276,11 @@ class FakeCtx:
         ), Register("%region")
 
     def emit_encode_and_write(
-        self, region_reg, fl, value_str_reg, offset_reg=None, *, extent=None
+        self, region_reg, fl, value_str_reg, offset_reg=None, *, extent=None, span=None
     ):  # type: ignore[no-untyped-def]
         self.encode_writes.append((region_reg, fl, value_str_reg, offset_reg))
 
-    def emit_to_string(self, value_reg) -> Register:  # type: ignore[no-untyped-def]
+    def emit_to_string(self, value_reg, *, span=None) -> Register:  # type: ignore[no-untyped-def]
         out = self.fresh_reg()
         self.emit_inst(("to_string", out, value_reg))
         return out

@@ -56,7 +56,7 @@ class _FakeEmitContext:
         self._counter += 1
         return _FakeRegister(self._counter)
 
-    def emit_inst(self, inst: Any) -> None:
+    def emit_inst(self, inst: Any, *, span=None) -> None:
         self.emitted.append(inst)
 
 

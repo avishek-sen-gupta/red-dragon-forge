@@ -43,7 +43,7 @@ class _Ctx:
         self._n += 1
         return Register(f"%r{self._n}")
 
-    def emit_inst(self, inst):
+    def emit_inst(self, inst, *, span=None):
         self.emitted.append(inst)
 
     def group_leaf_names(self, group_name, materialised):
