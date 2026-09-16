@@ -14,6 +14,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from cobble.path_utils import config_path
+
 TABLE = "fields"
 
 
@@ -37,10 +39,6 @@ def load_fields_config(path: Path) -> FieldsConfig:
     if not table:
         raise KeyError(f"{path}: no [{TABLE}] table")
     return FieldsConfig(
-        asg_dir=_path_of(_require(str(table.get("asg_dir", "")), "asg_dir", path)),
-        out_dir=_path_of(_require(str(table.get("out_dir", "")), "out_dir", path)),
+        asg_dir=config_path(_require(str(table.get("asg_dir", "")), "asg_dir", path)),
+        out_dir=config_path(_require(str(table.get("out_dir", "")), "out_dir", path)),
     )
-
-
-def _path_of(text: str) -> Path:
-    return Path(text).expanduser()

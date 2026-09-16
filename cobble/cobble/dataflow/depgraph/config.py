@@ -37,6 +37,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from cobble.path_utils import config_path
+
 # How many MOVEs apart A -> B and B -> C may be and still collapse through a
 # pass-through B. 1 means immediately consecutive, which is what "right next to
 # each other" means and what stops the collapse from inventing pairings.
@@ -67,8 +69,8 @@ def depgraph_config_from_dict(data: Mapping) -> DepgraphConfig:
     # collapsed. That is a legitimate way to run this, so it is not an error.
     collapse: Mapping = data.get("collapse", {})
     return DepgraphConfig(
-        asg_dir=Path(_require(output, "asg_dir")).expanduser(),
-        graph_dir=Path(_require(output, "graph_dir")).expanduser(),
+        asg_dir=config_path(_require(output, "asg_dir")),
+        graph_dir=config_path(_require(output, "graph_dir")),
         passthrough_names=tuple(collapse.get("passthrough_names", ())),
         passthrough_patterns=tuple(collapse.get("passthrough_patterns", ())),
         collapse_window=int(collapse.get("window", DEFAULT_COLLAPSE_WINDOW)),
