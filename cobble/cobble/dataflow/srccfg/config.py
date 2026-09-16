@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from cobble.path_utils import config_path
+
 TABLE = "srccfg"
 
 
@@ -36,14 +38,10 @@ def load_srccfg_config(path: Path) -> SrcCfgConfig:
     if not table:
         raise KeyError(f"{path}: no [{TABLE}] table")
     source_dir = (
-        _path_of(str(table["source_dir"])) if table.get("source_dir") else Path()
+        config_path(str(table["source_dir"])) if table.get("source_dir") else Path()
     )
     return SrcCfgConfig(
-        asg_dir=_path_of(_require(table, "asg_dir", path)),
-        out_dir=_path_of(_require(table, "out_dir", path)),
+        asg_dir=config_path(_require(table, "asg_dir", path)),
+        out_dir=config_path(_require(table, "out_dir", path)),
         source_dir=source_dir,
     )
-
-
-def _path_of(text: str) -> Path:
-    return Path(text).expanduser()

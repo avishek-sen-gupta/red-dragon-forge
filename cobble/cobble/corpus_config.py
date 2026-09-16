@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.cics.synth_csd import TransidRule
+from cobble.path_utils import config_path
 
 # The extensions the ProLeap bridge has always searched (see
 # proleap-bridge/src/main/java/org/reddragon/bridge/Main.java). Kept as the
@@ -80,10 +81,6 @@ def _require(data: Mapping, key: str) -> str | list[str]:
     return data[key]
 
 
-def _path(text: str) -> Path:
-    return Path(text).expanduser()
-
-
 def _transid_rule(data: Mapping) -> TransidRule:
     return TransidRule(
         member_pattern=str(_require(data, "member_pattern")),
@@ -93,18 +90,18 @@ def _transid_rule(data: Mapping) -> TransidRule:
 
 def _corpus_config_from_dict(data: Mapping) -> CorpusConfig:
     return CorpusConfig(
-        cobol_dir=_path(_require(data, "cobol_dir")),
+        cobol_dir=config_path(_require(data, "cobol_dir")),
         cobol_globs=tuple(_require(data, "cobol_globs")),
-        jcl_dir=_path(_require(data, "jcl_dir")),
+        jcl_dir=config_path(_require(data, "jcl_dir")),
         jcl_globs=tuple(_require(data, "jcl_globs")),
-        proclib_dirs=tuple(_path(p) for p in data.get("proclib_dirs", ())),
-        csd_files=tuple(_path(p) for p in data.get("csd_files", ())),
-        copybook_dirs=tuple(_path(p) for p in _require(data, "copybook_dirs")),
+        proclib_dirs=tuple(config_path(p) for p in data.get("proclib_dirs", ())),
+        csd_files=tuple(config_path(p) for p in data.get("csd_files", ())),
+        copybook_dirs=tuple(config_path(p) for p in _require(data, "copybook_dirs")),
         copybook_extensions=tuple(
             data.get("copybook_extensions", DEFAULT_COPYBOOK_EXTENSIONS)
         ),
-        asg_dir=_path(_require(data, "asg_dir")),
-        out_dir=_path(_require(data, "out_dir")),
+        asg_dir=config_path(_require(data, "asg_dir")),
+        out_dir=config_path(_require(data, "out_dir")),
         transid_rules=tuple(
             _transid_rule(rule) for rule in data.get("transid_rules", ())
         ),
@@ -113,10 +110,10 @@ def _corpus_config_from_dict(data: Mapping) -> CorpusConfig:
 
 def _bms_config_from_dict(data: Mapping) -> BmsConfig:
     return BmsConfig(
-        bms_dir=_path(_require(data, "bms_dir")),
+        bms_dir=config_path(_require(data, "bms_dir")),
         bms_globs=tuple(data.get("bms_globs", DEFAULT_BMS_GLOBS)),
-        macros_dir=_path(_require(data, "macros_dir")),
-        sym_dir=_path(_require(data, "sym_dir")),
+        macros_dir=config_path(_require(data, "macros_dir")),
+        sym_dir=config_path(_require(data, "sym_dir")),
     )
 
 
