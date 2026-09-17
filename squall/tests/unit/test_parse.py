@@ -149,6 +149,34 @@ def test_values_into() -> None:
     assert p.query == "VALUES (?)"
 
 
+def test_fetch_with_qualified_host_vars() -> None:
+    """FETCH with DB2 qualified host vars (GROUP.FIELD) must parse as Kind.FETCH,
+    not fall through to Kind.GENERIC. Regression: dotted names broke HOST_VAR_TOK
+    causing the parser to miss the into_list, demoting FETCH to generic."""
+    p = parse_exec_sql(
+        "EXEC SQL FETCH CURSOR1 INTO "
+        ":DCLGRANT-ASMNT.NUM-RGSTRN, "
+        ":DCLGRANT-ASMNT.NUM-GRANT-TYPE, "
+        ":DCLGRANT-ASMNT.NUM-ELGBL-GRANT "
+        "END-EXEC"
+    )
+    assert p.kind is Kind.FETCH
+    assert p.cursor == NamedCursor("CURSOR1")
+    assert len(p.out_vars) == 3
+    assert p.out_vars[0].name == "DCLGRANT-ASMNT.NUM-RGSTRN"
+    assert p.query == ""
+
+
+def test_select_into_with_qualified_host_vars() -> None:
+    """SELECT INTO with qualified host vars parses correctly."""
+    p = parse_exec_sql(
+        "EXEC SQL SELECT COL1 INTO :DCL-TBL.FLD-ONE FROM T WHERE K = :DCL-TBL.FLD-KEY END-EXEC"
+    )
+    assert p.kind is Kind.SELECT_INTO
+    assert p.out_vars == (HostVar("DCL-TBL.FLD-ONE", None),)
+    assert p.in_vars == (HostVar("DCL-TBL.FLD-KEY", None),)
+
+
 def test_string_literal_whitespace_preserved() -> None:
     """The clean-query rewrite is span-keyed, not a body-wide regex: a string
     literal with internal double spaces survives verbatim, while INTO removal
