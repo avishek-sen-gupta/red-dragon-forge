@@ -197,9 +197,10 @@ CALL:        "CALL"i
 LOCK:        "LOCK"i
 
 // ── Tokens ───────────────────────────────────────────────────────────────────
-// HOST_VAR_TOK greedily captures :NAME or :NAME:IND (indicator variable) as
-// a single atomic token, preventing the Earley parser from splitting them.
-HOST_VAR_TOK: /:[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*(:[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*)?/
+// HOST_VAR_TOK greedily captures :NAME, :GROUP.FIELD (DB2 qualified host var),
+// or :NAME:IND (indicator variable) as a single atomic token, preventing the
+// Earley parser from splitting them.
+HOST_VAR_TOK: /:[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*(\.[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*)*(:[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*)?/
 COMMA:  ","
 LP:     "("
 RP:     ")"
