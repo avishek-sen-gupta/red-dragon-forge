@@ -112,7 +112,7 @@ First-blocker categories (standalone; after_loaders differs only in READACCT):
   (READCARD/READCUST/READXREF/POSTTRAN/INTCALC/CBEXPORT/CBIMPORT) remain unproven: all stop at
   missing VSAM inputs, whose loaders are themselves blocked.
 - **Levers from July, still open:** SDSF no-op (5 jobs), GDG define (`1o2.4`/`1o2.6` b), AIX
-  (`1o2.22`), SORT/IEBGENER (`1o2.3`). All are open in `jackal/beads/issues.jsonl`.
+  (`1o2.22`), SORT/IEBGENER (`1o2.3`). All are open in `issues/issues.jsonl`.
 - **New since July:** PROC expansion landed. It moves PRTCATBL/TRANBKP/TRANREPT past "unknown PGM
   REPROC" to a new blocker, PDS-member SYSIN (`1o2.16`). The IDCAMS keyword abbreviations
   (`CISZ`, `IFILE/OFILE`) were not in July's list.

@@ -22,6 +22,11 @@ CA00 = "COADM01C"
 CU01 = "COUSR01C"
 CU02 = "COUSR02C"
 CU03 = "COUSR03C"
+CCLI = "COCRDLIC"
+CCDL = "COCRDSLC"
+CT00 = "COTRN00C"
+CT01 = "COTRN01C"
+CU00 = "COUSR00C"
 
 [datasets.USRSEC]
 file = "AWS.M2.CARDDEMO.USRSEC.PS"
@@ -55,6 +60,12 @@ file = "AWS.M2.CARDDEMO.CARDXREF.PS"
 record_length = 50
 key_offset = 0
 key_length = 16
+
+[datasets.CARDAIX]
+file = "AWS.M2.CARDDEMO.CARDDATA.PS"
+record_length = 150
+key_offset = 16
+key_length = 11
 
 # COTRN02C (add transaction) needs a keyed TRANSACT dataset but CardDemo ships
 # no TRANSACT.PS; AWS.M2.CARDDEMO.DALYTRAN.PS is layout-compatible (350-byte

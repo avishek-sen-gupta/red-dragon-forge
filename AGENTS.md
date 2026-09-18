@@ -129,5 +129,5 @@ bd prime                # Refresh Beads context
 - Run `bd prime` when Beads context is missing or stale. Codex 0.129.0+ can load Beads context automatically through native hooks; use `/hooks` to inspect or toggle them.
 - Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line (manual-export model):** issues live in a local Dolt working DB under `.beads/`, which is **fully gitignored**; the tracked source of truth is `issues/issues.jsonl`. There is NO `bd dolt push` and no `refs/dolt/data` here — regenerate the snapshot with `bd export -o issues/issues.jsonl && git add issues/issues.jsonl` before committing any issue change.
 <!-- END BEADS CODEX SETUP -->

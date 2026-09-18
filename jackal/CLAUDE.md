@@ -1,4 +1,4 @@
-# RedDragon — Agent Instructions
+# Jackal — Agent Instructions
 
 #import .claude/core/project-context.md
 #import .claude/core/workflow.md
@@ -27,7 +27,7 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line:** this repo uses beads' **manual-export** model, NOT Dolt remote sync — `.beads/` (the local Dolt working DB) is fully gitignored, and the forge root's `issues/issues.jsonl` is the tracked git source of truth, regenerated with `bd export -o issues/issues.jsonl` and staged before committing (there is no `bd dolt push`). See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for the underlying sync concepts this repo deliberately opts out of.
 
 ## Agent Context Profiles
 
@@ -67,16 +67,15 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 These override the managed Beads block's defaults where they differ.
 
 ### Issue graph is version-controlled — export before committing issue changes
-This repo does **not** use Dolt remote sync or `.beads/issues.jsonl`. Instead:
-- `.beads/` (Dolt working DB) is **gitignored**.
-- `beads/issues.jsonl` (note: no leading dot) is the **tracked** snapshot — the git source of truth for the issue graph (issues + all dependency edges).
-
-**Whenever a change touches issues (create/update/close/dep edits), regenerate and stage the snapshot BEFORE committing** — this is a deliberate manual step, NOT a git hook:
+Issues live in the forge's one graph, not a per-package one. Jackal had its own beads DB as a
+standalone repo; since the subtree merge there is a single Dolt DB at the forge root, exported
+to the tracked `issues/issues.jsonl` there. See the root `CLAUDE.md` for the manual-export
+rules — in particular, regenerate and stage the snapshot **before** committing anything that
+touches issues:
 ```bash
-bd export -o beads/issues.jsonl && git add beads/issues.jsonl
+bd export -o issues/issues.jsonl && git add issues/issues.jsonl
 ```
-On a fresh clone, `bd import beads/issues.jsonl` rebuilds the local DB. See `beads/README.md`
-and the roadmap `docs/jcl-execution-roadmap.md`.
+Jackal's own roadmap is `docs/jcl-execution-roadmap.md`.
 
 ### Building the bridge JARs
 The forge root's **`make jar`** (part of `make setup`) builds all Java artefacts — the vendored
@@ -100,4 +99,4 @@ whenever that submodule changed — a multi-second-to-minute stall borne by the 
 live via its editable `.pth`. The pre-commit hooks already use `--no-sync`. **Caveat:** after
 changing dependencies (pyproject/uv.lock) or on a fresh clone, run `uv sync` (or `make python` at the forge root)
 once to refresh the env — the hooks no longer do it for you.
-Talisman runs in the hook: for generated/churning files use `.talismanrc` `ignore_detectors: [filecontent]` (like `uv.lock`, `beads/issues.jsonl`); for stable files append a by-checksum entry **before** the `version:` line (append-only — never modify existing entries).
+Talisman runs in the hook: for generated/churning files use `.talismanrc` `ignore_detectors: [filecontent]` (like `uv.lock`, the forge root's `issues/issues.jsonl`); for stable files append a by-checksum entry **before** the `version:` line (append-only — never modify existing entries).
