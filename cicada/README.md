@@ -553,12 +553,24 @@ Everything the programs write goes to a VSAM copy seeded into a temp directory (
 `_vsam_engine` reads `data_dir` and seeds into the server's work dir), so the vendored EBCDIC
 data is never touched and restarting the server resets the world.
 
-The remaining options genuinely cannot work in this snapshot, each for a different reason: main
-`09` (Transaction Reports) needs JCL job submission behind the JOBS TDQ, which this server does
-not drive; main `11` and admin `5`/`6` have no compiled program behind them here (`COPAUS0C`,
-`COTRTLIC`, `COTRTUPC`) — main `11` degrades gracefully because COMEN01C guards that one XCTL
-with `EXEC CICS INQUIRE PROGRAM` first ("This option ... is not installed..."), while admin
-`5`/`6` abend, because COADM01C XCTLs straight to the option's program with no such guard.
+The remaining options cannot work in this snapshot, each for a different reason. Main `09`
+(Transaction Reports) needs JCL job submission behind the JOBS TDQ, which this server does not
+drive. Main `11` has no `COPAUS0C` source here at all, and degrades gracefully because COMEN01C
+guards that one XCTL with `EXEC CICS INQUIRE PROGRAM` ("This option ... is not installed...").
+
+Admin `5`/`6` are the **Db2** options — "Transaction Type List/Update" (`COTRTLIC`) and
+"Transaction Type Maintenance" (`COTRTUPC`), bracketed in `COADM02Y.cpy` as added for the Db2
+release, which is also why that copybook raises `CDEMO-ADMIN-OPT-COUNT` from 4 to 6. Their
+source *does* ship, but in a separate tree (`vendor/carddemo/app/app-transaction-type-db2/`)
+that the shipped config does not point at, and neither compiles today: COTRTUPC parses but has
+no EXEC SQL lowering, because `build_region` composes only the CICS coprocessor
+(`ValueError: Unknown COBOL statement type: 'EXEC_SQL'`), and COTRTLIC does not get that far —
+ProLeap rejects its preprocessed form. Serving them needs the forge composition layer plus a
+live Db2, not just a config entry.
+
+Because COADM01C XCTLs straight to the option's program with no INQUIRE guard, selecting admin
+`5`/`6` today hits `forge-6jj`: the unknown-program XCTL abends PGMI internally but crashes the
+driver rather than painting a diagnostic.
 
 ---
 
