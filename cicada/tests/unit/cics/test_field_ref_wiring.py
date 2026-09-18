@@ -16,7 +16,7 @@ from interpreter.cobol.field_resolution import (
 )
 from cobol_memory.region_id import RegionId
 from interpreter.instructions import LoadRegion
-from interpreter.register import Register
+from interpreter.register import NO_REGISTER, Register
 from tests.covers import covers, NotLanguageFeature
 
 
@@ -171,18 +171,18 @@ def test_copy_in_ref_mod_data_name_length_raises_not_implemented() -> None:
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_copy_in_returns_none_for_literal() -> None:
+def test_copy_in_returns_no_register_for_literal() -> None:
     ctx = _ctx()
     out = emit_copy_in(ctx, CicsOperand("CC01", True), MATERIALISED)
-    assert out is None
+    assert out is NO_REGISTER
     assert not any(isinstance(i, LoadRegion) for i in ctx.emitted)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_copy_in_returns_none_for_none() -> None:
+def test_copy_in_returns_no_register_for_none() -> None:
     ctx = _ctx()
     out = emit_copy_in(ctx, None, MATERIALISED)
-    assert out is None
+    assert out is NO_REGISTER
     assert not any(isinstance(i, LoadRegion) for i in ctx.emitted)
 
 

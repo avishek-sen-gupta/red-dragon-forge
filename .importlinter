@@ -122,6 +122,8 @@ forbidden_modules =
     cics.terminal
     cics.le_stubs
     cics.vm_init
+    cics.tn3270
+    cics.screen
     jackal.runner
     jackal.cli
     jackal.cobol_step
@@ -151,3 +153,16 @@ source_modules =
     red_dragon_forge
 forbidden_modules =
     cobble
+
+[importlinter:contract:tn3270-is-an-adapter]
+name = The runtime and the screen model must not import the TN3270 adapter
+type = forbidden
+source_modules =
+    cics.screen
+    cics.builtins
+    cics.dispatcher
+    cics.strategy
+    cics.bms
+    cics.input_event
+forbidden_modules =
+    cics.tn3270

@@ -80,7 +80,7 @@ def test_field_attributes():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_field_attrb_single_value():
     f = parse_mapsets(SIMPLE_INVOCATIONS)[0].maps[0].fields[1]
-    assert f.attrb == ["UNPROT"]
+    assert f.attrb == ("UNPROT",)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

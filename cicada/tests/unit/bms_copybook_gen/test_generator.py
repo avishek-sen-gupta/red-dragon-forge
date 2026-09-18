@@ -8,16 +8,14 @@ def _mapset(maps, mode="INOUT", tioapfx=True):
 
 
 def _map(label, fields):
-    return BmsMap(label=label, fields=fields)
+    return BmsMap(label=label, elements=tuple(fields))
 
 
-def _field(
-    label, length, picout=None, picin=None, attrb=None, grpname=None, occurs=None
-):
+def _field(label, length, picout="", picin="", attrb=None, grpname="", occurs=0):
     return BmsField(
         label=label,
         length=length,
-        attrb=attrb or [],
+        attrb=tuple(attrb) if attrb else (),
         picout=picout,
         picin=picin,
         grpname=grpname,
@@ -178,7 +176,7 @@ def test_input_map_has_no_filler_redefines_filler():
 
 
 def _map_extatt(label, fields):
-    return BmsMap(label=label, extatt=True, fields=fields)
+    return BmsMap(label=label, extatt=True, elements=tuple(fields))
 
 
 def _mapset_extatt(maps, mode="INOUT", tioapfx=True):

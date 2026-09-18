@@ -7,8 +7,8 @@
 Without --values every map in the corpus renders with its INITIAL text only.
 Each --values file is one SEND MAP payload, ``{"map": NAME, "fields": {BASE:
 VALUE}}`` -- the shape cicada's screen channel carries -- and renders to a file
-named after it. Cursor position, attribute overrides and DATAONLY/MAPONLY sends
-are not in that payload, so they are not rendered.
+named after it. Cursor position, attribute overrides and DATAONLY/MAPONLY are
+carried by cicada's ``TerminalScreen``, not rendered here.
 """
 
 from __future__ import annotations
@@ -19,109 +19,40 @@ import itertools
 import json
 import logging
 import operator
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from bms_copybook_gen.parser import _parse_attrb
-from cobble.bms_metadata import _resolve_config, _run_hlasm_export, _strip_quotes
+from bms_copybook_gen.models import BmsField, BmsMap
+from bms_copybook_gen.parser import RawInvocation, parse_mapsets
+from cobble.bms_metadata import resolve_config, run_hlasm_export
 from cobble.cli_logging import configure_cli_logging
 from cobble.matching_files import matching_files
 from cobble.path_utils import ensure_dir
 
 logger = logging.getLogger(__name__)
 
-_PAIR = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
-_DEFAULT_SIZE = (24, 80)
 _BLANK = (" ", "")
 
 
-@dataclass(frozen=True)
-class ScreenField:
-    name: str
-    row: int
-    col: int
-    length: int
-    initial: str
-    attrb: tuple[str, ...]
-    color: str
+def map_layouts(invocations: Sequence[RawInvocation]) -> tuple[BmsMap, ...]:
+    return tuple(m for mapset in parse_mapsets(invocations) for m in mapset.maps)
 
 
-@dataclass(frozen=True)
-class ScreenMap:
-    name: str
-    rows: int
-    cols: int
-    fields: tuple[ScreenField, ...]
-
-
-def _size(raw: str) -> tuple[int, int]:
-    m = _PAIR.match(raw)
-    return (int(m.group(1)), int(m.group(2))) if m else _DEFAULT_SIZE
-
-
-def _position(raw: str, cols: int) -> tuple[int, int]:
-    """POS is (line,column), or a zero-based offset into the screen buffer."""
-    m = _PAIR.match(raw)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    offset = int(raw) if raw.strip().isdigit() else 0
-    return offset // cols + 1, offset % cols + 1
-
-
-def _screen_field(inv: Mapping, cols: int) -> ScreenField:
-    args = inv.get("args", {})
-    row, col = _position(args.get("POS", ""), cols)
-    return ScreenField(
-        name=inv.get("label") or "",
-        row=row,
-        col=col,
-        length=int(args.get("LENGTH", 0)),
-        initial=_strip_quotes(args["INITIAL"]) if "INITIAL" in args else "",
-        attrb=tuple(_parse_attrb(args["ATTRB"])) if "ATTRB" in args else (),
-        color=args.get("COLOR", ""),
-    )
-
-
-def _screen_map(mdi: Mapping, body: Sequence[Mapping]) -> ScreenMap:
-    rows, cols = _size(mdi.get("args", {}).get("SIZE", ""))
-    return ScreenMap(
-        name=mdi.get("label") or "",
-        rows=rows,
-        cols=cols,
-        fields=tuple(
-            _screen_field(inv, cols) for inv in body if inv.get("name") == "DFHMDF"
-        ),
-    )
-
-
-def map_layouts(invocations: Sequence[Mapping]) -> tuple[ScreenMap, ...]:
-    """One ScreenMap per DFHMDI, holding every DFHMDF up to the next DFHMDI."""
-    starts = tuple(
-        i for i, inv in enumerate(invocations) if inv.get("name") == "DFHMDI"
-    )
-    ends = (*starts[1:], len(invocations))
-    return tuple(
-        _screen_map(invocations[s], invocations[s + 1 : e])
-        for s, e in zip(starts, ends, strict=True)
-    )
-
-
-def layouts_from_bms(bms_path: Path, macros_dir: Path) -> tuple[ScreenMap, ...]:
-    data = _run_hlasm_export(bms_path, macros_dir)
+def layouts_from_bms(bms_path: Path, macros_dir: Path) -> tuple[BmsMap, ...]:
+    data = run_hlasm_export(bms_path, macros_dir)
     return map_layouts(data.get("macro_invocations", []))
 
 
-def _shown_text(field: ScreenField, values: Mapping[str, str]) -> str:
+def _shown_text(field: BmsField, values: Mapping[str, str]) -> str:
     """Only the characters BMS actually sends: a field with no data writes its
     attribute byte and nothing else, leaving whatever is already on screen."""
-    raw = values.get(field.name, field.initial) if field.name else field.initial
+    raw = values.get(field.label, field.initial) if field.label else field.initial
     visible = "" if "DRK" in field.attrb else raw
     return visible[: field.length]
 
 
-def _style(field: ScreenField) -> str:
+def _style(field: BmsField) -> str:
     colour = f"c-{field.color.lower() or 'default'}"
     flags = tuple(
         css
@@ -132,19 +63,20 @@ def _style(field: ScreenField) -> str:
 
 
 def _cells(
-    screen_map: ScreenMap, values: Mapping[str, str]
+    bms_map: BmsMap, values: Mapping[str, str]
 ) -> Mapping[tuple[int, int], tuple[str, str]]:
     """(row, col) -> (char, css class); later fields overwrite earlier ones, and
     each field's attribute byte blanks the cell before its data."""
     placements = (
         ((f.row - 1, f.col - 1 + i), (ch, _style(f) if i else ""))
-        for f in screen_map.fields
+        for f in bms_map.elements
         for i, ch in enumerate(" " + _shown_text(f, values))
     )
+    rows, cols = bms_map.size
     return {
         cell: content
         for cell, content in placements
-        if 0 <= cell[0] < screen_map.rows and 0 <= cell[1] < screen_map.cols
+        if 0 <= cell[0] < rows and 0 <= cell[1] < cols
     }
 
 
@@ -154,11 +86,11 @@ def _row(
     return tuple(cells.get((row, col), _BLANK) for col in range(cols))
 
 
-def render_text(screen_map: ScreenMap, values: Mapping[str, str]) -> str:
-    cells = _cells(screen_map, values)
+def render_text(bms_map: BmsMap, values: Mapping[str, str]) -> str:
+    cells = _cells(bms_map, values)
+    rows, cols = bms_map.size
     return "".join(
-        "".join(ch for ch, _ in _row(cells, r, screen_map.cols)) + "\n"
-        for r in range(screen_map.rows)
+        "".join(ch for ch, _ in _row(cells, r, cols)) + "\n" for r in range(rows)
     )
 
 
@@ -187,12 +119,11 @@ def _html_row(row: tuple[tuple[str, str], ...]) -> str:
     )
 
 
-def render_html(screen_map: ScreenMap, values: Mapping[str, str]) -> str:
-    cells = _cells(screen_map, values)
-    body = "\n".join(
-        _html_row(_row(cells, r, screen_map.cols)) for r in range(screen_map.rows)
-    )
-    title = html.escape(screen_map.name)
+def render_html(bms_map: BmsMap, values: Mapping[str, str]) -> str:
+    cells = _cells(bms_map, values)
+    rows, cols = bms_map.size
+    body = "\n".join(_html_row(_row(cells, r, cols)) for r in range(rows))
+    title = html.escape(bms_map.label)
     return (
         f"<!doctype html>\n<html><head><meta charset='utf-8'><title>{title}</title>"
         f"<style>{_SCREEN_CSS}</style></head>\n"
@@ -219,26 +150,22 @@ def _payload_job(path: Path, map_override: str) -> _Job:
     )
 
 
-def _jobs(
-    args: argparse.Namespace, layouts: Mapping[str, ScreenMap]
-) -> tuple[_Job, ...]:
+def _jobs(args: argparse.Namespace, layouts: Mapping[str, BmsMap]) -> tuple[_Job, ...]:
     if args.values:
         return tuple(_payload_job(Path(p), args.map) for p in args.values)
     names = (args.map,) if args.map else tuple(layouts)
     return tuple(_Job(map_name=n, values={}, stem=n) for n in names)
 
 
-def _all_layouts(config_path: Path) -> Mapping[str, ScreenMap]:
-    config = _resolve_config(config_path)
+def _all_layouts(config_path: Path) -> Mapping[str, BmsMap]:
+    config = resolve_config(config_path)
     sources = sorted(matching_files(config.bms_dir, config.bms_globs))
     return {
-        m.name: m for src in sources for m in layouts_from_bms(src, config.macros_dir)
+        m.label: m for src in sources for m in layouts_from_bms(src, config.macros_dir)
     }
 
 
-def _write_job(
-    job: _Job, layouts: Mapping[str, ScreenMap], fmt: str, out: Path
-) -> bool:
+def _write_job(job: _Job, layouts: Mapping[str, BmsMap], fmt: str, out: Path) -> bool:
     if job.map_name not in layouts:
         logger.error("error: no BMS map named %r", job.map_name)
         return False

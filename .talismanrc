@@ -1,4 +1,28 @@
 fileignoreconfig:
+- filename: fp.json
+  checksum: 2a82d4f775fce0e5e65773950d3715669af14508a25b22673682e4dfdf223293
+- filename: cicada/tests/integration/cics/test_tn3270_e2e.py
+  checksum: 28822e386ea59693751ae535d5d4108e04d500b7fa570ea7cac0fcd75ee74e27
+- filename: cicada/tests/integration/cics/test_tn3270_crud_e2e.py
+  checksum: d6b37b106e59b9944c3f5dc09e453ec1c3981abc678bad5bba1c6a948fab4e51
+- filename: cicada/tests/unit/cics/test_terminal_screen.py
+  checksum: 7f20eeb8f67f2244606f372d5c741c2e409205ab4fa1da33d1cffeae87b2eb12
+- filename: cicada/cics/tn3270/config.py
+  checksum: 2639df6abcebc046b745f286f22b99622ec8edcddd4767716787029bd0969fc1
+- filename: cicada/tests/unit/cics/test_tn3270_config.py
+  checksum: b3eaf074a8bcc0cc4f5a4a591aab9c655b784f9307bd2dba48bad5ae7ad7931c
+- filename: cicada/tests/integration/cics/test_carddemo_terminal_screen.py
+  checksum: 703679cf0b44fe9510f1fed3c2ff9408a7981d1e962fffe9e77bb0460fd23379
+- filename: cicada/tests/unit/cics/test_screen_builtins.py
+  checksum: afe0a653a2c45f21edde528ea182a66dbc3ae1f63c87627cea59048220bba306
+- filename: cicada/tests/unit/bms_copybook_gen/test_parser_layout.py
+  checksum: a9cc8f08f4aa4632f4406e1d1d46538e2069d9d2c08362755d2245f6f4e86700
+- filename: cicada/bms_copybook_gen/parser.py
+  checksum: 147a2d3622cd2616a1039f23bbede6ff70456e3e23a79d8127d4e4746b9b6a5a
+- filename: cicada/cics/bms/attributes.py
+  checksum: 6686cfdee9f7943c127a73c6bcd600edf02acf78a82140b4aa298ca466fe212b
+- filename: docs/superpowers/plans/2026-09-17-tn3270-terminal.md
+  checksum: 983c75068abf8c598be768bfea000271b5e5261917762dbf0b0f60d99f7af799
 - filename: cobble/cobble/dataflow/srccfg/config.py
   checksum: b24f6acf49c01b138e41747b3d78fe6576f417b6fc456a49b0201c392f75e33b
 - filename: docs/superpowers/specs/2026-07-07-knowledge-graph-config-driven-driver-design.md
@@ -12,7 +36,7 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_strategy.py
   checksum: 23a738dd050096c4209e232136f429b26e94d7317cc39126b900d948e01335a0
 - filename: cicada/cics/strategy.py
-  checksum: 787b0c75ccaf41dd66760852afb6e67240a2b2e293f7c1c2204083f77cc8470e
+  checksum: 0b237376e980ac8bb77e0f4ce2591014728e43f1c1edc9c23792f0f68be4910f
 - filename: cicada/cics/builtins/vsam.py
   checksum: 2f021cbbae55f41d8c34b6aecf38e02822a66e3ccc2a829bbdbe7c7a23a7b780
 - filename: cicada/cics/vsam/engine.py
@@ -369,4 +393,6 @@ fileignoreconfig:
   checksum: ae5acb3e0514203600619a39592fb698915cac3cb22d0516c0e75390b6fbd847
 - filename: cobble/cobble/corpus_config.py
   checksum: e3b2df9dad5c6571e11b7cadaf2f10b116eb73ed0004c890976d091e153ae0b9
+- filename: cicada/tests/unit/cics/test_tn3270_decoder.py
+  checksum: 8d7ca9568d789e1f0876d7d4219f6eeb004c7ab79fa81125a7cb4d925eadca83
 version: "1.0"

@@ -304,3 +304,45 @@ def test_writeq_td_writes_back_resp(cobol_parser):
         f"expected WS-RESP-CD written back to 0 (DFHRESP(NORMAL)), "
         f"got screen fields: {screens[0]['fields']!r}"
     )
+
+
+# SEND TEXT FROM(data-name) previously ignored FROM entirely and rendered a
+# blank screen (only a literal TEXT('...') worked). SYNCPOINT is exercised on
+# the same path to prove it no longer abends the task.
+SENDTEXT_PGM_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. STXTPGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-MESSAGE PIC X(20) VALUE 'HELLO FROM CARDDEMO'.
+       PROCEDURE DIVISION.
+           EXEC CICS SYNCPOINT END-EXEC.
+           EXEC CICS SEND TEXT FROM(WS-MESSAGE) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_send_text_from_puts_the_fields_value_on_the_screen_channel(cobol_parser):
+    """SEND TEXT FROM(WS-MESSAGE) must carry WS-MESSAGE's runtime text onto the
+    screen channel, and the preceding SYNCPOINT must not abend the task."""
+    screen_q: queue.Queue = queue.Queue()
+    input_q: queue.Queue = queue.Queue()
+
+    result = run_carddemo_region(
+        transid_to_program={"CC00": "STXTPGM"},
+        program_sources={"STXTPGM": SENDTEXT_PGM_SRC.encode()},
+        parser=cobol_parser,
+        entry_transid="CC00",
+        screen_queue=screen_q,
+        input_queue=input_q,
+    )
+
+    assert result.kind == DispatchKind.RETURN
+
+    screens = drain(screen_q)
+    assert len(screens) == 1
+    assert screens[0]["type"] == "text"
+    # WS-MESSAGE is PIC X(20); its decoded value is space-padded to that width.
+    assert screens[0]["text"].rstrip() == "HELLO FROM CARDDEMO"

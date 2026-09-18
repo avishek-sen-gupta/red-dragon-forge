@@ -207,7 +207,7 @@ def _extract_fields_for_map(
 # ---------------------------------------------------------------------------
 
 
-def _run_hlasm_export(bms_path: Path, macros_dir: Path) -> Mapping:
+def run_hlasm_export(bms_path: Path, macros_dir: Path) -> Mapping:
     result = subprocess.run(
         [str(_HLASM), str(bms_path), "--syslib", str(macros_dir)],
         capture_output=True,
@@ -228,7 +228,7 @@ def _map_record(invocations: Sequence[Mapping], bms_map) -> Mapping:
 
 def extract_one(bms_path: Path, macros_dir: Path) -> Mapping:
     """Extract metadata from one BMS map file."""
-    data = _run_hlasm_export(bms_path, macros_dir)
+    data = run_hlasm_export(bms_path, macros_dir)
     invocations = data.get("macro_invocations", [])
     mapsets = parse_mapsets(invocations)
 
@@ -249,7 +249,7 @@ def extract_one(bms_path: Path, macros_dir: Path) -> Mapping:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_config(config_path: Path) -> BmsConfig:
+def resolve_config(config_path: Path) -> BmsConfig:
     config = load_bms_config(config_path)
     if config.macros_dir.is_absolute():
         return config
@@ -324,7 +324,7 @@ def _emit(records: tuple[Mapping, ...], output: str, source_count: int) -> None:
 def main() -> int:
     configure_cli_logging()
     args = _parse_cli()
-    config = _resolve_config(args.config)
+    config = resolve_config(args.config)
     sources = sorted(matching_files(config.bms_dir, config.bms_globs))
     per_file = tuple(_try_extract(p, config) for p in sources)
     records = tuple(r for batch in per_file for r in batch)

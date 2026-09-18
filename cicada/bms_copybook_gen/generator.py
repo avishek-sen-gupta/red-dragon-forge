@@ -1,8 +1,20 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+
 from .models import BmsField, BmsMap, BmsMapSet
 
 # Column widths for COBOL alignment
 _NAME_COL = 47  # column at which PIC clause starts
 _PIC_LABEL = "PIC "
+_INDENT = 11
+_GROUP_INDENT = _INDENT + 4
+
+# Extended-attribute subfields emitted per field when EXTATT is active, in the
+# IBM symbolic-map order: Color, programmed-Symbol (PS), Highlight, Validation.
+_EXTATT_SUFFIXES = ("C", "P", "H", "V")
+
+FieldLines = Callable[[BmsField, int, bool], tuple[str, ...]]
 
 
 def _line(indent: int, name: str, pic: str) -> str:
@@ -12,87 +24,84 @@ def _line(indent: int, name: str, pic: str) -> str:
     return prefix + " " * padding + _PIC_LABEL + pic + "."
 
 
-# Extended-attribute subfields emitted per field when EXTATT is active, in the
-# IBM symbolic-map order: Color, programmed-Symbol (PS), Highlight, Validation.
-_EXTATT_SUFFIXES = ("C", "P", "H", "V")
+def _data_pic(pic: str, f: BmsField) -> str:
+    return pic if pic else f"X({f.length})"
 
 
-def _field_lines_output(f: BmsField, indent: int, extatt: bool = False) -> list[str]:
-    data_pic = f.picout if f.picout else f"X({f.length})"
-    lines = [
+def _field_lines_output(f: BmsField, indent: int, extatt: bool) -> tuple[str, ...]:
+    extended = (
+        tuple(_line(indent, f"02  {f.label}{s}", "X") for s in _EXTATT_SUFFIXES)
+        if extatt
+        else ()
+    )
+    return (
         _line(indent, f"02  {f.label}L", "S9(4) COMP"),
         _line(indent, f"02  {f.label}A", "X"),
         " " * indent + f"02  FILLER REDEFINES {f.label}A.",
         _line(indent + 4, f"03  {f.label}F", "X"),
-    ]
-    if extatt:
-        # One named byte per extended attribute (EXTATT=YES): <f>C/<f>P/<f>H/<f>V.
-        lines.extend(_line(indent, f"02  {f.label}{s}", "X") for s in _EXTATT_SUFFIXES)
-    lines.append(_line(indent, f"02  {f.label}O", data_pic))
-    return lines
+        *extended,
+        _line(indent, f"02  {f.label}O", _data_pic(f.picout, f)),
+    )
 
 
-def _field_lines_input(f: BmsField, indent: int, extatt: bool = False) -> list[str]:
-    data_pic = f.picin if f.picin else f"X({f.length})"
+def _field_lines_input(f: BmsField, indent: int, extatt: bool) -> tuple[str, ...]:
     # Mirror the output field's byte layout (length halfword + attribute byte +
     # [extended-attribute bytes when EXTATT] + data) with anonymous FILLER. The
     # output map's "FILLER REDEFINES <f>A / 03 <f>F" adds no bytes, so a single
     # FILLER X for the attribute byte keeps the input redefinition byte-aligned.
-    # (The previous "FILLER REDEFINES FILLER" was invalid COBOL — REDEFINES
-    # requires a data-name, not FILLER.)
-    lines = [
+    extended = (
+        (_line(indent, "02  FILLER", f"X({len(_EXTATT_SUFFIXES)})"),) if extatt else ()
+    )
+    return (
         _line(indent, "02  FILLER", "S9(4) COMP"),
         _line(indent, "02  FILLER", "X"),
-    ]
-    if extatt:
-        lines.append(_line(indent, "02  FILLER", f"X({len(_EXTATT_SUFFIXES)})"))
-    lines.append(_line(indent, f"02  {f.label}I", data_pic))
-    return lines
+        *extended,
+        _line(indent, f"02  {f.label}I", _data_pic(f.picin, f)),
+    )
 
 
-def _map_output_lines(bmsmap: BmsMap, tioapfx: bool) -> list[str]:
-    lines = [f"       01  {bmsmap.label}O."]
-    indent = 11
-    if tioapfx:
-        lines.append(_line(indent, "02  FILLER", "X(12)"))
-
-    seen_groups: set[str] = set()
-    for f in bmsmap.fields:
-        if f.grpname and f.occurs:
-            if f.grpname not in seen_groups:
-                seen_groups.add(f.grpname)
-                grp_prefix = " " * indent + f"02  {f.grpname} OCCURS {f.occurs} TIMES."
-                lines.append(grp_prefix)
-            lines.extend(_field_lines_output(f, indent + 4, bmsmap.extatt))
-        else:
-            lines.extend(_field_lines_output(f, indent, bmsmap.extatt))
-    return lines
+def _grouped(f: BmsField) -> bool:
+    return bool(f.grpname) and f.occurs > 0
 
 
-def _map_input_lines(bmsmap: BmsMap, output_name: str, tioapfx: bool) -> list[str]:
-    lines = [f"       01  {bmsmap.label}I REDEFINES {output_name}."]
-    indent = 11
-    if tioapfx:
-        lines.append(_line(indent, "02  FILLER", "X(12)"))
-
-    seen_groups: set[str] = set()
-    for f in bmsmap.fields:
-        if f.grpname and f.occurs:
-            if f.grpname not in seen_groups:
-                seen_groups.add(f.grpname)
-                lines.append(" " * indent + f"02  {f.grpname} OCCURS {f.occurs} TIMES.")
-            lines.extend(_field_lines_input(f, indent + 4, bmsmap.extatt))
-        else:
-            lines.extend(_field_lines_input(f, indent, bmsmap.extatt))
-    return lines
+def _group_header(fields: tuple[BmsField, ...], index: int) -> tuple[str, ...]:
+    f = fields[index]
+    first = _grouped(f) and all(p.grpname != f.grpname for p in fields[:index])
+    header = " " * _INDENT + f"02  {f.grpname} OCCURS {f.occurs} TIMES."
+    return (header,) if first else ()
 
 
-def generate_copybook(mapset: BmsMapSet) -> list[str]:
-    lines: list[str] = []
-    for bmsmap in mapset.maps:
-        if mapset.mode in ("OUT", "INOUT"):
-            lines.extend(_map_output_lines(bmsmap, mapset.tioapfx))
-        if mapset.mode in ("IN", "INOUT"):
-            output_name = f"{bmsmap.label}O"
-            lines.extend(_map_input_lines(bmsmap, output_name, mapset.tioapfx))
-    return lines
+def _map_lines(
+    bmsmap: BmsMap, header: str, tioapfx: bool, field_lines: FieldLines
+) -> tuple[str, ...]:
+    fields = bmsmap.fields
+    prefix = (_line(_INDENT, "02  FILLER", "X(12)"),) if tioapfx else ()
+    body = tuple(
+        line
+        for index, f in enumerate(fields)
+        for line in (
+            *_group_header(fields, index),
+            *field_lines(f, _GROUP_INDENT if _grouped(f) else _INDENT, bmsmap.extatt),
+        )
+    )
+    return (header, *prefix, *body)
+
+
+def _output_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
+    header = f"       01  {bmsmap.label}O."
+    return _map_lines(bmsmap, header, mapset.tioapfx, _field_lines_output)
+
+
+def _input_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
+    header = f"       01  {bmsmap.label}I REDEFINES {bmsmap.label}O."
+    return _map_lines(bmsmap, header, mapset.tioapfx, _field_lines_input)
+
+
+def _copybook_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
+    output = _output_lines(mapset, bmsmap) if mapset.mode in ("OUT", "INOUT") else ()
+    inputs = _input_lines(mapset, bmsmap) if mapset.mode in ("IN", "INOUT") else ()
+    return (*output, *inputs)
+
+
+def generate_copybook(mapset: BmsMapSet) -> tuple[str, ...]:
+    return tuple(line for m in mapset.maps for line in _copybook_lines(mapset, m))

@@ -1,12 +1,17 @@
       * DFHBMSCA - BMS Attribute and Color Constants
-      * Field attribute bytes
+      * Field attribute bytes: real IBM raw attribute-byte values (e.g.
+      * DFHBMPRO=X'60', DFHBMPRF=X'61'). cics.screen.terminal_screen masks
+      * a COBOL-supplied override with ATTRIBUTE_BITS (X'3F') before using
+      * it, recovering cicada's own PROTECTED/NUMERIC/MDT/intensity bits
+      * from cics/bms/attributes.py -- see tests/unit/cics/test_dfhbmsca.py,
+      * which pins every constant's decoded meaning.
        01 DFHBMSCA.
            02 DFHBMPEM   PIC X VALUE X'00'.
-           02 DFHBMPRO   PIC X VALUE X'F0'.
-           02 DFHBMPRF   PIC X VALUE X'F8'.
-           02 DFHBMASB   PIC X VALUE X'C0'.
-           02 DFHBMASK   PIC X VALUE X'04'.
-           02 DFHBMFSE   PIC X VALUE X'C0'.
+           02 DFHBMPRO   PIC X VALUE X'60'.
+           02 DFHBMPRF   PIC X VALUE X'61'.
+           02 DFHBMASB   PIC X VALUE X'F8'.
+           02 DFHBMASK   PIC X VALUE X'F0'.
+           02 DFHBMFSE   PIC X VALUE X'C1'.
            02 DFHBMDAR   PIC X VALUE X'0C'.
            02 DFHBMBRY   PIC X VALUE X'08'.
       * Color values (for extended attributes)

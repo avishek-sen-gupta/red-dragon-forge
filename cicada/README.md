@@ -467,6 +467,46 @@ knowledge-graph `GraphWriter` satisfies it without a hard import).
 
 ---
 
+## 6a. Green screen over TN3270
+
+`cicada-tn3270` serves a compiled CICS region to stock 3270 emulators over the TN3270 wire —
+the same `CicsRegion` / `RegionDriver` headless tests drive, adapted by `cics/tn3270/`
+(`codes.py`, `encoder.py`, `decoder.py`, `negotiation.py`, `session.py`, `config.py`,
+`region.py`, `cli.py`; `wire.py` is the one excluded socket module).
+
+```bash
+make setup            # or at least: make hlasm + the bridge JARs
+. ./bridge-env.sh
+uv run cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
+```
+
+Then connect with any stock 3270 client, e.g. `c3270 localhost:3270` or `x3270` (macOS:
+`brew install x3270`). Accepted terminal models are IBM-3278/3279 model 2–5, with or without
+`-E` — Erase/Write always selects the 24x80 default partition, so any of them works (x3270's
+default model 4 included).
+
+The TOML config (`RegionConfig`, `cics/tn3270/config.py`) has two tables:
+
+- `[paths]` — `source_dir`, `copybook_dirs` (list), `bms_dir`, `data_dir`, `hlasm_export`,
+  all `${VAR}`-expandable (`CARDDEMO_HOME`/`FORGE_ROOT` in the shipped config).
+- `[region]` — `initial_transid`, `min_commarea_len`, `programs` (extra programs beyond the
+  transaction table's values).
+- `[transactions]` — `TRANSID = "PROGRAM"` entries (the CSD's transid→program map).
+- `[datasets.NAME]` — `file`, `record_length`, optional `key_offset`/`key_length` (VSAM seed).
+
+`CARDDEMO_HOME` (or the vendored `vendor/carddemo` submodule) supplies the COBOL, BMS and
+EBCDIC seed data the shipped `cicada/config/carddemo-tn3270.toml` points at.
+
+One terminal and one task at a time: pseudo-conversational programs (CardDemo) are served;
+conversational programs (zBANK-style) are not yet served over the wire (a later epic). SEND
+CONTROL and a bare SEND FROM remain unsupported.
+
+Headless driving through `RegionDriver` + `TerminalScreen` remains the primary, permanent test
+path (`cics-headless-first-class`): every screen-fidelity feature is asserted headlessly first,
+and the wire is a thin adapter over the same driver, not a parallel code path.
+
+---
+
 ## 7. HLASM / BMS build path
 
 BMS symbolic copybooks are generated from raw `.bms` map sources by an out-of-process HLASM

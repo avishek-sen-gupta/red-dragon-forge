@@ -219,4 +219,27 @@ One epic, sequential beads. Steps 1–5 improve headless fidelity on their own.
 8. CLI, config, s3270 e2e.
 9. Docs and memory.
 
+## Refinements during planning
+
+Eight decisions that came out of drafting and verifying the implementation, folded back into
+this spec at Task 18:
+
+1. **Encoder always sends Erase/Write of the whole modelled screen**, with keyboard restore
+   always set. `TerminalScreen.with_input` mirrors operator input into the model, so repainting
+   loses nothing, and Erase/Write returns any 3278/3279 model to its 24x80 default partition.
+2. **Terminal types IBM-3278-2…5 and IBM-3279-2…5 (with or without `-E`) are accepted**, because
+   of (1). x3270's default model 4 therefore works.
+3. **`SendTextPayload`** is parsed alongside `SendMapPayload`; the session paints SEND TEXT as
+   an unformatted screen.
+4. **`BmsField.justify` and `BmsMap.cursloc` are not added**: nothing consumes them.
+5. **`BmsMap.elements`** holds every DFHMDF (captions included); `BmsMap.fields` is a derived
+   property returning only labelled ones, so the copybook generator and cobble consumers are
+   unchanged.
+6. **`InputEvent` moves to `cics/input_event.py`** (frozen, gains `cursor`), re-exported from
+   `cics.dispatcher`. `cics.builtins` may import it without breaking `builtins-no-dispatcher`.
+7. **RegionDriver gains `knows(transid)`**, so the session can reject an unknown typed transid
+   without catching a `KeyError` from the region.
+8. **After a task ends with a plain RETURN, the last screen stays up**; the next attention key
+   on it shows a blank unformatted screen for typing a transid (CLEAR does the same).
+
 Follow-up epic: `ConversationalDriver` for conversational programs.
