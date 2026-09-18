@@ -57,6 +57,10 @@ jobs:
       - name: Install Python dependencies
         working-directory: ${{ github.workspace }}
         run: make python
+      # The TN3270 wire tests drive a real emulator and fail (never skip) when
+      # it is missing, so CI has to have it.
+      - name: Install s3270 for the TN3270 wire tests
+        run: sudo apt-get install -y s3270
       - name: Run tests
         run: . ../bridge-env.sh && uv run --no-sync python -m pytest
 

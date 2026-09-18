@@ -18,8 +18,10 @@ the wire -- a plain ENTER drops each program back into its own "search again"
 prompt, and re-entering the same key re-fetches and re-renders the committed
 record -- to confirm the new value renders too. A PF3 back to the menu is
 exercised once (account update, after the redisplay) to prove SYNCPOINT's
-no-op does not hang or error post-commit; PF3-then-reselect is a separate,
-currently-broken path (forge-1zu.6) this module does not drive.
+no-op does not hang or error post-commit; PF3-then-reselect now works
+(forge-1zu.6, fixed) but this module still does not drive it -- see
+forge-1zu.6's follow-up bead for simplifying the "search again" workaround
+above in light of that fix.
 
 Admin user CRUD (COUSR01C/02C/03C, admin menu options 2/3/4) follows the same
 shape but through a different sign-on path: an ADMIN-type USRSEC row

@@ -1,10 +1,12 @@
 fileignoreconfig:
+- filename: carddemo-env.sh
+  checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
 - filename: fp.json
   checksum: 2a82d4f775fce0e5e65773950d3715669af14508a25b22673682e4dfdf223293
 - filename: cicada/tests/integration/cics/test_tn3270_e2e.py
   checksum: 28822e386ea59693751ae535d5d4108e04d500b7fa570ea7cac0fcd75ee74e27
 - filename: cicada/tests/integration/cics/test_tn3270_crud_e2e.py
-  checksum: d6b37b106e59b9944c3f5dc09e453ec1c3981abc678bad5bba1c6a948fab4e51
+  checksum: 6d4066194b10e01a4f8db2382d40bfb6e96a41d53ca5f2d739b3f322f10ccbe6
 - filename: cicada/tests/unit/cics/test_terminal_screen.py
   checksum: 7f20eeb8f67f2244606f372d5c741c2e409205ab4fa1da33d1cffeae87b2eb12
 - filename: cicada/cics/tn3270/config.py
@@ -12,7 +14,7 @@ fileignoreconfig:
 - filename: cicada/tests/unit/cics/test_tn3270_config.py
   checksum: b3eaf074a8bcc0cc4f5a4a591aab9c655b784f9307bd2dba48bad5ae7ad7931c
 - filename: cicada/tests/integration/cics/test_carddemo_terminal_screen.py
-  checksum: 703679cf0b44fe9510f1fed3c2ff9408a7981d1e962fffe9e77bb0460fd23379
+  checksum: 00b654ab4e4457e433ad01de77ec3234f22615d8bb4570a60b49200108787cb7
 - filename: cicada/tests/unit/cics/test_screen_builtins.py
   checksum: afe0a653a2c45f21edde528ea182a66dbc3ae1f63c87627cea59048220bba306
 - filename: cicada/tests/unit/bms_copybook_gen/test_parser_layout.py
