@@ -1,6 +1,7 @@
 """Unit tests for BMS screen builtins."""
 
 import queue
+import struct
 
 from tests.covers import covers, NotLanguageFeature
 from cics.builtins.screen import (
@@ -9,6 +10,8 @@ from cics.builtins.screen import (
     make_send_text_builtin,
 )
 from cics.dispatcher import InputEvent
+from cics.screen.cursor import NO_CURSOR, Cursor, SymbolicCursor
+from cics.screen.payload import FieldAttributes, SendMode, screen_payload
 from cics.types import NO_TERMINAL, CicsContext, DispatchKind
 from interpreter.types.typed_value import typed
 from interpreter.types.type_expr import UNKNOWN
@@ -35,6 +38,84 @@ class _FakeVM:
 
 def _tv(v):
     return typed(v, UNKNOWN)
+
+
+def _send(monkeypatch, layout, region, *args):
+    vm = _FakeVM(region, layout)
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    sq: queue.Queue = queue.Queue()
+    make_send_map_builtin(sq, _AT_TERMINAL)([_tv(a) for a in args], vm)
+    return screen_payload(sq.get(block=False))
+
+
+_LAYOUT = {
+    "USERIDL": {"offset": 0, "length": 2},
+    "USERIDA": {"offset": 2, "length": 1},
+    "USERIDC": {"offset": 3, "length": 1},
+    "USERIDH": {"offset": 4, "length": 1},
+    "USERIDO": {"offset": 5, "length": 8},
+}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_send_map_reports_mapset_and_options(monkeypatch):
+    payload = _send(
+        monkeypatch,
+        _LAYOUT,
+        bytearray(13),
+        "COSGN0A",
+        ["USERID"],
+        "COSGN00",
+        ["ERASE", "ALARM", "FREEKB"],
+        "",
+    )
+    assert (
+        payload.mapset,
+        payload.mode,
+        payload.erase,
+        payload.alarm,
+        payload.freekb,
+        payload.frset,
+    ) == ("COSGN00", SendMode.FULL, True, True, True, False)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_bare_cursor_uses_the_field_whose_length_is_minus_one(monkeypatch):
+    region = bytearray(13)
+    region[0:2] = struct.pack(">h", -1)
+    assert _send(
+        monkeypatch, _LAYOUT, region, "M", ["USERID"], "", ["CURSOR"], ""
+    ).cursor == SymbolicCursor("USERID")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cursor_value_and_no_cursor_option(monkeypatch):
+    assert _send(
+        monkeypatch, _LAYOUT, bytearray(13), "M", ["USERID"], "", ["CURSOR"], "245"
+    ).cursor == Cursor(245)
+    assert (
+        _send(
+            monkeypatch, _LAYOUT, bytearray(13), "M", ["USERID"], "", [], "245"
+        ).cursor
+        == NO_CURSOR
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_nonzero_attribute_bytes_become_overrides(monkeypatch):
+    region = bytearray(13)
+    region[2:5] = bytes((0xF8, 0xF2, 0x00))
+    assert _send(monkeypatch, _LAYOUT, region, "M", ["USERID"]).attrs == {
+        "USERID": FieldAttributes(0xF8, 0xF2, 0)
+    }
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_maponly_sends_no_symbolic_data(monkeypatch):
+    region = bytearray(13)
+    region[5:13] = "USER0001".encode("cp037")
+    payload = _send(monkeypatch, _LAYOUT, region, "M", ["USERID"], "", ["MAPONLY"], "")
+    assert (payload.mode, dict(payload.fields)) == (SendMode.MAPONLY, {})
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -153,6 +234,97 @@ def test_receive_map_numeric_field_is_de_edited(monkeypatch):
     assert struct.unpack(">h", bytes(region[20:22]))[0] == 3
     # Alphanumeric: "BOB" -> left-justified, space-padded.
     assert bytes(region[30:40]) == "BOB".ljust(10).encode("cp037")
+
+
+def _receive(monkeypatch, layout, event, bases):
+    region = bytearray(b"\x40" * 64)
+    vm = _FakeVM(region, layout)
+    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
+    iq: queue.Queue = queue.Queue()
+    iq.put(event)
+    make_receive_map_builtin(iq, _AT_TERMINAL, [None], timeout=1.0)(
+        [_tv("M"), _tv(bases)], vm
+    )
+    return region
+
+
+_RECEIVE_LAYOUT = {
+    "USERIDL": {"offset": 0, "length": 2},
+    "USERIDF": {"offset": 2, "length": 1},
+    "USERIDI": {"offset": 3, "length": 8},
+    "PASSWDL": {"offset": 11, "length": 2},
+    "PASSWDF": {"offset": 13, "length": 1},
+    "PASSWDI": {"offset": 14, "length": 8},
+    "EIBAID": {"offset": 40, "length": 1},
+    "EIBCPOSN": {"offset": 41, "length": 2},
+}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_unreceived_fields_are_low_values_with_zero_length(monkeypatch):
+    region = _receive(
+        monkeypatch,
+        _RECEIVE_LAYOUT,
+        InputEvent(fields={"USERID": "U1"}),
+        ["USERID", "PASSWD"],
+    )
+    assert region[14:22] == b"\x00" * 8
+    assert struct.unpack(">h", region[11:13])[0] == 0
+    assert region[13] == 0
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_received_empty_field_sets_the_cleared_flag(monkeypatch):
+    region = _receive(
+        monkeypatch, _RECEIVE_LAYOUT, InputEvent(fields={"USERID": ""}), ["USERID"]
+    )
+    assert (struct.unpack(">h", region[0:2])[0], region[2]) == (0, 0x80)
+
+
+_NUMERIC_RECEIVE_LAYOUT = {
+    "AMOUNTL": {"offset": 0, "length": 2},
+    "AMOUNTF": {"offset": 2, "length": 1},
+    "AMOUNTI": {"offset": 3, "length": 10, "category": "ZONED_DECIMAL"},
+    "EIBAID": {"offset": 40, "length": 1},
+    "EIBCPOSN": {"offset": 41, "length": 2},
+}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_received_empty_numeric_field_is_zero_filled_not_blank(monkeypatch):
+    """Pins CURRENT behaviour for a numeric (BMS PICIN='9(n)', category
+    ZONED_DECIMAL) field the terminal transmits with zero length — MDT set,
+    operator left it blank. <f>I is zero-filled across its whole declared
+    length (not left at low-values/spaces), <f>L is 0, and <f>F carries the
+    cleared flag, exactly as for a blank alphanumeric field. See
+    ``_received_writes`` in cics/builtins/screen.py: this is deliberate,
+    matching documented z/OS BMS numeric de-editing of an empty field."""
+    region = _receive(
+        monkeypatch,
+        _NUMERIC_RECEIVE_LAYOUT,
+        InputEvent(fields={"AMOUNT": ""}),
+        ["AMOUNT"],
+    )
+    assert bytes(region[3:13]) == "0000000000".encode("cp037")
+    assert struct.unpack(">h", region[0:2])[0] == 0
+    assert region[2] == 0x80
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_received_field_length_and_eibcposn(monkeypatch):
+    region = _receive(
+        monkeypatch,
+        _RECEIVE_LAYOUT,
+        InputEvent(fields={"USERID": "U1"}, cursor=Cursor(1483)),
+        ["USERID"],
+    )
+    assert (
+        struct.unpack(">h", region[0:2])[0],
+        region[2],
+        region[3:5].decode("cp037"),
+    ) == (2, 0, "U1")
+    assert struct.unpack(">h", region[41:43])[0] == 1483
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

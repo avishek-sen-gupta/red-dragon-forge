@@ -9,14 +9,9 @@ their INITIAL otherwise.
 from pathlib import Path
 
 import pytest
+from bms_copybook_gen.models import BmsField, BmsMap
 
-from cobble.bms_render import (
-    ScreenField,
-    ScreenMap,
-    map_layouts,
-    render_html,
-    render_text,
-)
+from cobble.bms_render import map_layouts, render_html, render_text
 
 
 def _mdf(label: str | None, pos: str, length: int, **args: str) -> dict:
@@ -36,29 +31,18 @@ def _invocations(*fields: dict, size: str = "(24,80)") -> list[dict]:
     ]
 
 
-def _single_map(*fields: dict, size: str = "(24,80)") -> ScreenMap:
-    (screen_map,) = map_layouts(_invocations(*fields, size=size))
-    return screen_map
+def _single_map(*fields: dict, size: str = "(24,80)") -> BmsMap:
+    (bms_map,) = map_layouts(_invocations(*fields, size=size))
+    return bms_map
 
 
 def test_layout_keeps_unlabelled_static_text_with_its_position() -> None:
     screen_map = _single_map(_mdf(None, "(1,1)", 6, INITIAL="'Tran :'"))
 
-    assert screen_map == ScreenMap(
-        name="MAP01",
-        rows=24,
-        cols=80,
-        fields=(
-            ScreenField(
-                name="",
-                row=1,
-                col=1,
-                length=6,
-                initial="Tran :",
-                attrb=(),
-                color="",
-            ),
-        ),
+    assert screen_map == BmsMap(
+        label="MAP01",
+        size=(24, 80),
+        elements=(BmsField(label="", length=6, row=1, col=1, initial="Tran :"),),
     )
 
 
@@ -67,28 +51,30 @@ def test_layout_reads_attributes_and_colour() -> None:
         _mdf("USERID", "(19,43)", 8, ATTRB="(FSET,IC,NORM,UNPROT)", COLOR="GREEN")
     )
 
-    (field,) = screen_map.fields
+    (field,) = screen_map.elements
     assert field.attrb == ("FSET", "IC", "NORM", "UNPROT")
     assert field.color == "GREEN"
 
 
 def test_layout_converts_a_linear_offset_position_to_row_and_column() -> None:
-    (field,) = _single_map(_mdf("X", "81", 3)).fields
+    (field,) = _single_map(_mdf("X", "81", 3)).elements
 
     assert (field.row, field.col) == (2, 2)
 
 
 def test_layout_separates_maps_in_one_mapset() -> None:
     invocations = [
+        {"name": "DFHMSD", "label": "SET01", "args": {"TYPE": "&&SYSPARM"}},
         {"name": "DFHMDI", "label": "MAPA", "args": {"SIZE": "(24,80)"}},
         _mdf("A", "(1,1)", 1),
         {"name": "DFHMDI", "label": "MAPB", "args": {"SIZE": "(24,80)"}},
         _mdf("B", "(2,1)", 1),
+        {"name": "DFHMSD", "label": None, "args": {"TYPE": "FINAL"}},
     ]
 
     layouts = map_layouts(invocations)
 
-    assert [(m.name, [f.name for f in m.fields]) for m in layouts] == [
+    assert [(m.label, [f.label for f in m.elements]) for m in layouts] == [
         ("MAPA", ["A"]),
         ("MAPB", ["B"]),
     ]
@@ -191,6 +177,6 @@ def test_carddemo_signon_screen_renders_labels_in_place() -> None:
 
     lines = render_text(signon, {"TRNNAME": "CC00"}).splitlines()
 
-    assert signon.name == "COSGN0A"
+    assert signon.label == "COSGN0A"
     assert lines[0][1:7] == "Tran :"
     assert lines[0][8:12] == "CC00"

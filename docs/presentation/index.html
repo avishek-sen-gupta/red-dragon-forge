@@ -430,7 +430,7 @@ turn 10  STARTBR  CARDDAT       <span class="ok">NORMAL</span>
   </table>
   <p class="small" style="margin-top:0.8em">Compile (parse + lower), once per program: 1.5 – 4.8 s. Turns run in milliseconds on a laptop.</p>
   <div class="source">artifacts/cics/turns.jsonl · artifacts/cics/FACTS.md</div>
-  <aside class="notes">Timings are the interpreted VM on a dev laptop, excluding compile — illustrative, not benchmarks. One terminal, one task at a time; input arrives as attention key + field map, not a raw 3270 datastream.</aside>
+  <aside class="notes">Timings are the interpreted VM on a dev laptop, excluding compile — illustrative, not benchmarks. This capture drove the region headlessly (attention id plus field map); <code>cicada-tn3270</code> now serves the same regions over a real 3270 datastream to stock emulators, still one terminal and one task at a time.</aside>
 </section>
 
 <section>
@@ -442,7 +442,7 @@ turn 10  STARTBR  CARDDAT       <span class="ok">NORMAL</span>
     <div class="card ok"><h3>System</h3>ASSIGN · ASKTIME · FORMATTIME · INQUIRE · WRITEQ TD · RESP / NOHANDLE → EIBRESP</div>
   </div>
   <div class="cols" style="margin-top:28px">
-    <div class="card warn"><h3>Not yet</h3>Driving transactions from the screens themselves — today they run headlessly and screens are render-only · cursor position and attribute overrides on rendered screens · multiple concurrent terminals · raw 3270 datastream</div>
+    <div class="card warn"><h3>Not yet</h3>Conversational (non-pseudo-conversational) programs over TN3270 · multiple concurrent terminals · per-character attributes (a caption under an overlapping field inherits that field's colour; a shorter field clips carried-over characters)</div>
     <div class="card"><h3>By design</h3>Any unsupported verb raises an explicit ABEND — never a silent skip. Every CICS behaviour reaches the engine as a registered builtin; the core VM is untouched.</div>
   </div>
   <div class="source">cicada/cics/strategy.py · cicada/cics/builtins/ · artifacts/cics/FACTS.md</div>

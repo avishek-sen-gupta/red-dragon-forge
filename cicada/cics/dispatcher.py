@@ -4,18 +4,27 @@ from __future__ import annotations
 
 import logging
 import queue
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, replace
+from itertools import accumulate, repeat
+from typing import TYPE_CHECKING, Generic, NamedTuple, TypeAlias, TypeVar
 
-from cics.csd_parse import parse_csd as parse_csd, parse_csd_files as parse_csd_files
+from cics.cell import Cell, Holder, held_or, hold
+from cics.csd_parse import parse_csd as parse_csd
+from cics.csd_parse import parse_csd_files as parse_csd_files
+from cics.input_event import DFHENTER
+from cics.input_event import InputEvent as InputEvent
 from cics.interval import StartQueue, StartRequest
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
 from cics.vm_init import make_cics_initial_vm, make_entry_point
 
+if TYPE_CHECKING:
+    from interpreter.project.types import LinkedProgram
+
 logger = logging.getLogger(__name__)
 
-_DFHENTER = "\x7d"
+P = TypeVar("P")
 
 # A transaction that STARTs its own transid never waits for terminal input, so
 # nothing in the region breaks the cycle. Mirrors red-dragon's _RUNAWAY_GUARD: a
@@ -25,79 +34,118 @@ _DFHENTER = "\x7d"
 # doing nothing but started tasks stops on its (cap + 1)-th such dispatch.
 _MAX_CONSECUTIVE_STARTS = 256
 _RUNAWAY_ABCODE = "ASTL"
+_USE_REGION_MAX_STEPS = -1
 
-_NO_OVERRIDE: "tuple[DispatchResult, ...]" = ()
-
-_NO_PENDING_NEXT: "tuple[str, Any, bytes]" = ("", (), b"")
+_NO_OVERRIDE: tuple[DispatchResult, ...] = ()
 
 
-@dataclass
-class InputEvent:
-    """Inbound terminal event — attention key + map field values."""
+@dataclass(frozen=True)
+class NoInput:
+    """No terminal input this turn, as after an XCTL. Distinct from
+    ``InputEvent()``, which is a real ENTER with no fields."""
 
-    eibaid: str = _DFHENTER
-    fields: dict[str, str] = field(default_factory=dict)
+
+NO_INPUT = NoInput()
+
+
+@dataclass(frozen=True)
+class NoProgram:
+    pass
+
+
+NO_PROGRAM = NoProgram()
+
+
+class NextTask(NamedTuple, Generic[P]):
+    transid: str
+    program: P
+    commarea: bytes
+
+
+@dataclass(frozen=True)
+class NoPendingTask:
+    pass
+
+
+NO_PENDING_TASK = NoPendingTask()
+
+PendingTask: TypeAlias = "NextTask[LinkedProgram] | NoPendingTask"
 
 
 def run_cics(
-    program: Any,  # LinkedProgram — avoid circular import
+    program: LinkedProgram,
     context: CicsContext,
     screen_queue: ScreenChannel,
     input_queue: InputChannel,
     *,
-    context_holder: list[CicsContext],
-    result_holder: list,
+    context_holder: Holder[CicsContext],
+    result_holder: Holder[DispatchResult],
     max_steps: int = 50_000,
 ) -> DispatchResult:
     """Execute one CICS program with the given context. Returns DispatchResult."""
-    from interpreter.run import run_linked  # noqa: PLC0415
+    from interpreter.run import run_linked
 
-    _prog_label = getattr(program, "entry_func_label", None)
     logger.info(
         "run_cics: program=%s transid=%s commarea=%d B",
-        _prog_label or "?",
+        getattr(program, "entry_func_label", None) or "?",
         context.transid,
         len(context.commarea),
     )
-
-    context_holder[0] = context
-    result_holder[0] = None
-
-    initial_vm = make_cics_initial_vm(context, context.commarea)
-
+    hold(context_holder, context)
+    hold(result_holder, None)
     run_linked(
         program,
         make_entry_point(program),
         max_steps=max_steps,
-        initial_vm=initial_vm,
+        initial_vm=make_cics_initial_vm(context, context.commarea),
     )
-
-    result = (
-        result_holder[0]
-        if result_holder[0] is not None
-        else DispatchResult(kind=DispatchKind.RETURN)
-    )
+    result = held_or(result_holder, DispatchResult(kind=DispatchKind.RETURN))
     logger.info("run_cics done: %s", result.kind.name)
     return result
 
 
 RunCicsFn = Callable[
-    [Any, CicsContext, ScreenChannel, InputChannel],
+    ["LinkedProgram", CicsContext, ScreenChannel, InputChannel],
     DispatchResult,
 ]
+
+
+def _route_return_transid(
+    result: DispatchResult,
+    program_cache: Mapping[str, P],
+    transid_to_program: Mapping[str, str],
+) -> NextTask[P] | DispatchResult:
+    next_transid = (result.transid or "").strip()
+    next_prog_name = transid_to_program.get(next_transid)
+    if not next_prog_name:
+        logger.error("Unknown transid %r from RETURN TRANSID", result.transid)
+        return DispatchResult(kind=DispatchKind.ABEND, abcode="TRNI")
+    return NextTask(next_transid, program_cache[next_prog_name], result.commarea or b"")
+
+
+def _route_xctl(
+    result: DispatchResult,
+    current_transid: str,
+    program_cache: Mapping[str, P],
+) -> NextTask[P] | DispatchResult:
+    prog_name = (result.program or "").strip()
+    if prog_name not in program_cache:
+        logger.error("XCTL to unknown program %r", prog_name)
+        return DispatchResult(kind=DispatchKind.ABEND, abcode="PGMI")
+    return NextTask(current_transid, program_cache[prog_name], result.commarea or b"")
 
 
 def _advance_routing(
     result: DispatchResult,
     current_transid: str,
-    program_cache: dict[str, Any],
-    transid_to_program: dict[str, str],
-) -> "tuple[str, Any, bytes] | DispatchResult":
+    program_cache: Mapping[str, P],
+    transid_to_program: Mapping[str, str],
+) -> NextTask[P] | DispatchResult:
     """The single copy of the "which program/transid runs next" rule.
 
     Given a program's DispatchResult and the current transid, decide how routing
-    proceeds. Returns either a ``(next_transid, next_program, next_commarea)``
-    tuple (continue) or a terminal ``DispatchResult`` (RETURN / ABEND — stop).
+    proceeds. Returns either a ``NextTask`` (continue) or a terminal
+    ``DispatchResult`` (RETURN / ABEND — stop).
 
       * RETURN_TRANSID: resolve the next program via ``transid_to_program``; the
         transid becomes the (stripped) returned transid. Unknown transid -> ABEND
@@ -107,24 +155,13 @@ def _advance_routing(
       * anything else (RETURN / ABEND): terminal — returned unchanged.
     """
     if result.kind == DispatchKind.RETURN_TRANSID:
-        next_transid = (result.transid or "").strip()
-        next_prog_name = transid_to_program.get(next_transid)
-        if not next_prog_name:
-            logger.error("Unknown transid %r from RETURN TRANSID", result.transid)
-            return DispatchResult(kind=DispatchKind.ABEND, abcode="TRNI")
-        return (next_transid, program_cache[next_prog_name], result.commarea or b"")
-
+        return _route_return_transid(result, program_cache, transid_to_program)
     if result.kind == DispatchKind.XCTL:
-        prog_name = (result.program or "").strip()
-        if prog_name not in program_cache:
-            logger.error("XCTL to unknown program %r", prog_name)
-            return DispatchResult(kind=DispatchKind.ABEND, abcode="PGMI")
-        return (current_transid, program_cache[prog_name], result.commarea or b"")
-
+        return _route_xctl(result, current_transid, program_cache)
     return result
 
 
-def _peek_input_event(input_queue: InputChannel, timeout: float = 30.0) -> Any:
+def _peek_input_event(input_queue: InputChannel, timeout: float = 30.0) -> InputEvent:
     """Read the next InputEvent without consuming it — a later RECEIVE MAP still
     does the one real consume. Implemented as get-then-put-back rather than a
     protocol-level peek() because InputChannel (cics/terminal.py) is deliberately
@@ -156,10 +193,133 @@ def _runaway_abend(req: StartRequest, consecutive_starts: int) -> DispatchResult
     return DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE)
 
 
+@dataclass(frozen=True)
+class _LoopTurn:
+    program: LinkedProgram
+    context: CicsContext
+    pending_next: PendingTask
+    consecutive_starts: int
+
+
+_LoopState = _LoopTurn | DispatchResult
+
+
+@dataclass(frozen=True)
+class _DispatchLoop:
+    run_fn: RunCicsFn
+    program_cache: Mapping[str, LinkedProgram]
+    transid_to_program: Mapping[str, str]
+    screen_queue: ScreenChannel
+    input_queue: InputChannel
+    start_queue: StartQueue
+    region_termid: str
+    max_consecutive_starts: int
+    terminal_termid: str
+
+    def advance(self, state: _LoopState, _tick: None) -> _LoopState:
+        return self.turn(state) if isinstance(state, _LoopTurn) else state
+
+    def turn(self, state: _LoopTurn) -> _LoopState:
+        result = self.run_fn(
+            state.program, state.context, self.screen_queue, self.input_queue
+        )
+        routing = _advance_routing(
+            result, state.context.transid, self.program_cache, self.transid_to_program
+        )
+        if isinstance(routing, DispatchResult):
+            return self._after_terminal(state, routing)
+        if result.kind == DispatchKind.XCTL:
+            return self._xctl(state, routing)
+        return self._after_task(state, routing)
+
+    def _after_terminal(self, state: _LoopTurn, routing: DispatchResult) -> _LoopState:
+        if routing.kind == DispatchKind.ABEND:
+            self.start_queue.discard_for_abend()
+            return routing
+        pending = state.pending_next
+        return self._after_task(
+            state, pending if isinstance(pending, NextTask) else routing
+        )
+
+    def _xctl(self, state: _LoopTurn, routing: NextTask[LinkedProgram]) -> _LoopState:
+        """XCTL transfers control WITHIN the same task: the task has not ended,
+        so no started task may run yet, and the task keeps its own terminal."""
+        return replace(
+            state,
+            program=routing.program,
+            context=CicsContext(
+                transid=routing.transid,
+                commarea=routing.commarea,
+                eibaid=state.context.eibaid,
+                termid=state.context.termid,
+            ),
+        )
+
+    def _after_task(
+        self, state: _LoopTurn, waiting: NextTask[LinkedProgram] | DispatchResult
+    ) -> _LoopState:
+        started = self.start_queue.pop_runnable(self.region_termid)
+        if started:
+            return self._start(state, waiting, started[0])
+        if isinstance(waiting, NextTask):
+            return self._resume(state, waiting)
+        return waiting
+
+    def _start(
+        self,
+        state: _LoopTurn,
+        waiting: NextTask[LinkedProgram] | DispatchResult,
+        req: StartRequest,
+    ) -> _LoopState:
+        """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
+        the terminal the START named — NO_TERMINAL for a non-terminal task."""
+        if state.consecutive_starts >= self.max_consecutive_starts:
+            self.start_queue.discard_for_abend()
+            return _runaway_abend(req, state.consecutive_starts)
+        self.start_queue.put_start_data(req.data)
+        return _LoopTurn(
+            program=self.program_cache[self.transid_to_program[req.transid]],
+            context=CicsContext(
+                transid=req.transid,
+                commarea=b"",
+                eibaid=state.context.eibaid,
+                termid=req.termid,
+            ),
+            pending_next=waiting if isinstance(waiting, NextTask) else NO_PENDING_TASK,
+            consecutive_starts=state.consecutive_starts + 1,
+        )
+
+    def _resume(self, state: _LoopTurn, pending: NextTask[LinkedProgram]) -> _LoopState:
+        """On a pseudo-conversational RETURN TRANSID, the next turn's terminal
+        input arrives here (blocks, up to a timeout). Its attention key seeds the
+        next EIBAID; the event itself is left on the queue for the resumed turn's
+        own RECEIVE MAP to consume (see _peek_input_event). No further input ever
+        arriving matches real CICS's AZCT abend (terminal read-time-out) rather
+        than hanging the region forever (red-dragon-pz9g.14). That wait is the
+        only thing that breaks a chain of started tasks, so it resets the
+        runaway count."""
+        try:
+            event = _peek_input_event(self.input_queue)
+        except queue.Empty:
+            return DispatchResult(kind=DispatchKind.ABEND, abcode="AZCT")
+        self.start_queue.clear_start_data()
+        return _LoopTurn(
+            program=pending.program,
+            context=CicsContext(
+                transid=pending.transid,
+                commarea=pending.commarea,
+                eibaid=event.eibaid,
+                termid=self.terminal_termid,
+            ),
+            pending_next=NO_PENDING_TASK,
+            consecutive_starts=0,
+        )
+
+
 def _run_dispatcher_with_runner(
     run_fn: RunCicsFn,
-    program_cache: dict[str, Any],
-    transid_to_program: dict[str, str],
+    program_cache: Mapping[str, LinkedProgram],
+    transid_to_program: Mapping[str, str],
     initial_context: CicsContext,
     screen_queue: ScreenChannel,
     input_queue: InputChannel,
@@ -177,86 +337,58 @@ def _run_dispatcher_with_runner(
     terminal, so dispatching it after the blocking ``_peek_input_event`` below
     would leave it waiting on input nobody sends until the AZCT timeout.
     """
-    context = initial_context
-    program = program_cache[transid_to_program[context.transid]]
-    # A RETURN TRANSID target parked because a started task, which needs no
-    # terminal input, runs before it. The terminal holds one such slot.
-    pending_next: "tuple[str, Any, bytes]" = _NO_PENDING_NEXT
-    consecutive_starts = 0
+    loop = _DispatchLoop(
+        run_fn=run_fn,
+        program_cache=program_cache,
+        transid_to_program=transid_to_program,
+        screen_queue=screen_queue,
+        input_queue=input_queue,
+        start_queue=start_queue,
+        region_termid=region_termid,
+        max_consecutive_starts=max_consecutive_starts,
+        terminal_termid=initial_context.termid,
+    )
+    first: _LoopState = _LoopTurn(
+        program=program_cache[transid_to_program[initial_context.transid]],
+        context=initial_context,
+        pending_next=NO_PENDING_TASK,
+        consecutive_starts=0,
+    )
+    states = accumulate(repeat(None), loop.advance, initial=first)
+    return next(state for state in states if isinstance(state, DispatchResult))
 
-    while True:
-        result = run_fn(program, context, screen_queue, input_queue)
-        routing = _advance_routing(
-            result, context.transid, program_cache, transid_to_program
-        )
 
-        if isinstance(routing, DispatchResult) and routing.kind == DispatchKind.ABEND:
-            start_queue.discard_for_abend()
-            return routing
+@dataclass(frozen=True)
+class RegionPosition:
+    """Where a region stands between turns. ``pending_next`` is a RETURN TRANSID
+    target parked because a started task, which needs no terminal input, runs
+    before it; the terminal holds one such slot."""
 
-        if result.kind == DispatchKind.XCTL:
-            # XCTL transfers control WITHIN the same task: the task has not
-            # ended, so no started task may run yet, and the task keeps its own
-            # terminal.
-            next_transid, program, next_commarea = routing
-            context = CicsContext(
-                transid=next_transid,
-                commarea=next_commarea,
-                eibaid=context.eibaid,
-                termid=context.termid,
-            )
-            continue
+    transid: str
+    program: LinkedProgram | NoProgram
+    commarea: bytes
+    task_termid: str
+    last_eibaid: str
+    done: bool
+    pending_next: PendingTask
+    consecutive_starts: int
 
-        if not isinstance(routing, DispatchResult):
-            pending_next = routing
 
-        started = start_queue.pop_runnable(region_termid)
-        if started and consecutive_starts >= max_consecutive_starts:
-            start_queue.discard_for_abend()
-            return _runaway_abend(started[0], consecutive_starts)
-        if started:
-            # A started task carries start data, no COMMAREA (so EIBCALEN is 0),
-            # and the terminal the START named — NO_TERMINAL for a non-terminal
-            # task.
-            consecutive_starts = consecutive_starts + 1
-            start_queue.put_start_data(started[0].data)
-            program = program_cache[transid_to_program[started[0].transid]]
-            context = CicsContext(
-                transid=started[0].transid,
-                commarea=b"",
-                eibaid=context.eibaid,
-                termid=started[0].termid,
-            )
-            continue
+@dataclass(frozen=True)
+class _TaskIo:
+    """What every task the region runs is wired to: the terminal channels and
+    the holder cells the builtins close over."""
 
-        if isinstance(routing, DispatchResult) and not pending_next[0]:
-            return routing
+    screen_queue: ScreenChannel
+    input_queue: InputChannel
+    context_holder: Holder[CicsContext]
+    result_holder: Holder[DispatchResult]
 
-        # On a pseudo-conversational RETURN TRANSID, the next turn's terminal
-        # input arrives here (blocks, up to a timeout). Its attention key seeds
-        # the next EIBAID; the event itself is left on the queue for the
-        # resumed turn's own RECEIVE MAP to consume (see _peek_input_event).
-        # CicsRegion doesn't need this — see CicsRegion.dispatch.
-        try:
-            event = _peek_input_event(input_queue)
-        except queue.Empty:
-            # No further terminal input ever arrived — matches real CICS's
-            # AZCT abend (terminal read-time-out condition) rather than
-            # hanging the region forever (red-dragon-pz9g.14).
-            return DispatchResult(kind=DispatchKind.ABEND, abcode="AZCT")
 
-        # That wait for terminal input is the only thing that breaks a chain of
-        # started tasks, so it is what resets the runaway count.
-        consecutive_starts = 0
-        start_queue.clear_start_data()
-        next_transid, program, next_commarea = pending_next
-        pending_next = _NO_PENDING_NEXT
-        context = CicsContext(
-            transid=next_transid,
-            commarea=next_commarea,
-            eibaid=event.eibaid,
-            termid=initial_context.termid,
-        )
+def _describe_input(input_event: InputEvent | NoInput) -> tuple[str, int]:
+    if isinstance(input_event, InputEvent):
+        return repr(input_event.eibaid), len(input_event.fields)
+    return "(none)", 0
 
 
 class CicsRegion:
@@ -278,17 +410,24 @@ class CicsRegion:
     Unlike ``_run_dispatcher_with_runner``, this does NOT do a separate
     ``input_queue.get()`` for the EIBAID: the supplied ``input_event`` is both put
     on the queue (for RECEIVE MAP) AND used directly to seed the context's eibaid.
+
+    ``min_commarea_len`` pads the commarea handed to each FOLLOW-ON turn (after
+    start). A program that XCTLs/RETURNs with a short commarea but whose successor
+    indexes a larger CARDDEMO-COMMAREA needs EIBCALEN to cover those fields. The
+    entry commarea passed to start() is used as-is (the entry program's own
+    EIBCALEN is authoritative). ``max_consecutive_starts`` is lowered by tests so
+    both halves of the runaway rule cost a couple of program runs.
     """
 
     def __init__(
         self,
-        program_cache: dict[str, Any],
-        transid_to_program: dict[str, str],
+        program_cache: Mapping[str, LinkedProgram],
+        transid_to_program: Mapping[str, str],
         screen_queue: ScreenChannel,
         input_queue: InputChannel,
         *,
-        context_holder: list,
-        result_holder: list,
+        context_holder: Holder[CicsContext],
+        result_holder: Holder[DispatchResult],
         max_steps: int = 50_000,
         min_commarea_len: int = 0,
         start_queue: StartQueue,
@@ -297,147 +436,145 @@ class CicsRegion:
     ) -> None:
         self._program_cache = program_cache
         self._transid_to_program = transid_to_program
-        self._screen_queue = screen_queue
-        self._input_queue = input_queue
-        self._context_holder = context_holder
-        self._result_holder = result_holder
+        self._io = _TaskIo(screen_queue, input_queue, context_holder, result_holder)
         self._max_steps = max_steps
-        # Optional minimum commarea length applied to the commarea handed to each
-        # FOLLOW-ON turn (after start). A program that XCTLs/RETURNs with a short
-        # commarea but whose successor indexes a larger CARDDEMO-COMMAREA needs
-        # EIBCALEN to cover those fields; pad to this length so the successor's
-        # field reads land in-bounds. The entry commarea passed to start() is
-        # used as-is (the entry program's own EIBCALEN is authoritative).
         self._min_commarea_len = min_commarea_len
-
         self._start_queue = start_queue
         self._region_termid = region_termid
-        # Lowered by tests so both halves of the runaway rule — it fires, and it
-        # does NOT fire when a next-transid turn breaks the chain — cost a couple
-        # of program runs instead of a couple of hundred.
         self._max_consecutive_starts = max_consecutive_starts
-
-        self._transid: str = ""
-        self._program: Any = None
-        self._commarea: bytes = b""
-        self._task_termid: str = region_termid
-        self._last_eibaid: str = _DFHENTER
-        self._done: bool = False
-        # A RETURN TRANSID target parked because a started task, which needs no
-        # terminal input, runs before it. The terminal holds one such slot.
-        self._pending_next: "tuple[str, Any, bytes]" = _NO_PENDING_NEXT
-        self._consecutive_starts: int = 0
+        self._position = Cell(
+            RegionPosition(
+                transid="",
+                program=NO_PROGRAM,
+                commarea=b"",
+                task_termid=region_termid,
+                last_eibaid=DFHENTER,
+                done=False,
+                pending_next=NO_PENDING_TASK,
+                consecutive_starts=0,
+            )
+        )
 
     @property
     def transid(self) -> str:
         """The current transid (for assertions if wanted)."""
-        return self._transid
+        return self._position.get().transid
 
     @property
     def done(self) -> bool:
         """True once a terminal (RETURN / ABEND) result has been produced."""
-        return self._done
+        return self._position.get().done
 
     def start(
         self,
         entry_transid: str,
         *,
         commarea: bytes = b"",
-        input_event: "InputEvent | None" = None,
-        max_steps: int | None = None,
+        input_event: InputEvent | NoInput = NO_INPUT,
+        max_steps: int = _USE_REGION_MAX_STEPS,
     ) -> DispatchResult:
         """Begin a task on ``entry_transid`` and dispatch its first program."""
         logger.info(
             "region.start: transid=%s commarea=%d B", entry_transid, len(commarea)
         )
-        self._transid = entry_transid
-        self._commarea = commarea
-        self._program = self._program_cache[self._transid_to_program[entry_transid]]
-        self._task_termid = self._region_termid
-        self._pending_next = _NO_PENDING_NEXT
-        self._consecutive_starts = 0
+        program = self._program_cache[self._transid_to_program[entry_transid]]
+        self._position.set(
+            replace(
+                self._position.get(),
+                transid=entry_transid,
+                commarea=commarea,
+                program=program,
+                task_termid=self._region_termid,
+                pending_next=NO_PENDING_TASK,
+                consecutive_starts=0,
+                done=False,
+            )
+        )
         self._start_queue.clear_start_data()
-        self._done = False
-        return self._dispatch(input_event=input_event, max_steps=max_steps)
+        return self._dispatch(input_event, max_steps)
 
     def step(
         self,
         *,
-        input_event: "InputEvent | None" = None,
-        max_steps: int | None = None,
+        input_event: InputEvent | NoInput = NO_INPUT,
+        max_steps: int = _USE_REGION_MAX_STEPS,
     ) -> DispatchResult:
         """Dispatch the CURRENT (program, transid, commarea). Requires not done."""
-        if self._done:
+        if self.done:
             raise RuntimeError("step() called on a region that has terminated")
-        _nfields = len(input_event.fields) if input_event is not None else 0
-        _eibaid = repr(input_event.eibaid) if input_event is not None else "(none)"
+        eibaid, nfields = _describe_input(input_event)
         logger.info(
             "region.step: transid=%s eibaid=%s fields=%d",
-            self._transid,
-            _eibaid,
-            _nfields,
+            self.transid,
+            eibaid,
+            nfields,
         )
-        return self._dispatch(input_event=input_event, max_steps=max_steps)
+        return self._dispatch(input_event, max_steps)
 
     def _dispatch(
-        self,
-        *,
-        input_event: "InputEvent | None",
-        max_steps: int | None,
+        self, input_event: InputEvent | NoInput, max_steps: int
     ) -> DispatchResult:
-        eibaid = input_event.eibaid if input_event is not None else self._last_eibaid
-        ctx = CicsContext(
-            transid=self._transid,
-            commarea=self._commarea,
-            eibaid=eibaid,
-            termid=self._task_termid,
+        position = self._position.get()
+        eibaid = (
+            input_event.eibaid
+            if isinstance(input_event, InputEvent)
+            else position.last_eibaid
         )
-        if input_event is not None:
-            # The program's RECEIVE MAP consumes this (fields + eibaid). We do NOT
-            # do a separate get() for eibaid — the context already carries it.
-            self._input_queue.put(input_event)
-        self._last_eibaid = eibaid
-
+        if isinstance(input_event, InputEvent):
+            self._io.input_queue.put(input_event)
+        self._position.set(replace(position, last_eibaid=eibaid))
         result = run_cics(
-            self._program,
-            ctx,
-            self._screen_queue,
-            self._input_queue,
-            context_holder=self._context_holder,
-            result_holder=self._result_holder,
-            max_steps=self._max_steps if max_steps is None else max_steps,
+            _started_program(position.program),
+            CicsContext(
+                transid=position.transid,
+                commarea=position.commarea,
+                eibaid=eibaid,
+                termid=position.task_termid,
+            ),
+            self._io.screen_queue,
+            self._io.input_queue,
+            context_holder=self._io.context_holder,
+            result_holder=self._io.result_holder,
+            max_steps=(
+                self._max_steps if max_steps == _USE_REGION_MAX_STEPS else max_steps
+            ),
         )
-
         routing = _advance_routing(
-            result, self._transid, self._program_cache, self._transid_to_program
+            result, position.transid, self._program_cache, self._transid_to_program
         )
         override = self._advance(result, routing)
         return override[0] if override else result
 
+    def _update(self, **changes: str | bytes | bool | int | PendingTask) -> None:
+        self._position.set(replace(self._position.get(), **changes))
+
     def _advance(
-        self,
-        result: DispatchResult,
-        routing: "tuple[str, Any, bytes] | DispatchResult",
-    ) -> "tuple[DispatchResult, ...]":
+        self, result: DispatchResult, routing: NextTask[LinkedProgram] | DispatchResult
+    ) -> tuple[DispatchResult, ...]:
         """Settle the finished task and adopt whatever runs next. Returns the
         result ``_dispatch`` must report INSTEAD of the finished task's own, or
-        empty when the finished task's result stands."""
+        empty when the finished task's result stands. XCTL transfers control
+        WITHIN the same task: the task has not ended, so no started task may run
+        yet, and the task keeps its own terminal."""
         if isinstance(routing, DispatchResult):
             return self._settle_terminal(routing)
         if result.kind == DispatchKind.XCTL:
-            # XCTL transfers control WITHIN the same task: the task has not ended,
-            # so no started task may run yet, and the task keeps its own terminal.
-            self._adopt(routing, self._task_termid)
+            self._adopt(routing, self._position.get().task_termid)
             return _NO_OVERRIDE
+        return self._settle_next_transid(routing)
+
+    def _settle_next_transid(
+        self, routing: NextTask[LinkedProgram]
+    ) -> tuple[DispatchResult, ...]:
         started = self._start_queue.pop_runnable(self._region_termid)
         if started:
-            self._pending_next = routing
+            self._update(pending_next=routing)
             return self._adopt_started(started[0])
-        self._pending_next = _NO_PENDING_NEXT
+        self._update(pending_next=NO_PENDING_TASK)
         self._adopt_next_transid(routing)
         return _NO_OVERRIDE
 
-    def _settle_terminal(self, routing: DispatchResult) -> "tuple[DispatchResult, ...]":
+    def _settle_terminal(self, routing: DispatchResult) -> tuple[DispatchResult, ...]:
         """A task ended. Run what is runnable before waiting on terminal input:
         a started task needs none, a next-transid task does.
 
@@ -445,60 +582,80 @@ class CicsRegion:
         task's own, or empty when the finished task's result stands."""
         if routing.kind == DispatchKind.ABEND:
             self._start_queue.discard_for_abend()
-            self._done = True
-            logger.info("dispatch → terminal %s", routing.kind.name)
-            return _NO_OVERRIDE
+            return self._terminate(routing)
         started = self._start_queue.pop_runnable(self._region_termid)
         if started:
             return self._adopt_started(started[0])
-        if self._pending_next[0]:
-            self._adopt_next_transid(self._pending_next)
-            self._pending_next = _NO_PENDING_NEXT
+        return self._resume_pending(routing)
+
+    def _resume_pending(self, routing: DispatchResult) -> tuple[DispatchResult, ...]:
+        pending = self._position.get().pending_next
+        if isinstance(pending, NextTask):
+            self._adopt_next_transid(pending)
+            self._update(pending_next=NO_PENDING_TASK)
             return _NO_OVERRIDE
-        self._done = True
+        return self._terminate(routing)
+
+    def _terminate(self, routing: DispatchResult) -> tuple[DispatchResult, ...]:
+        self._update(done=True)
         logger.info("dispatch → terminal %s", routing.kind.name)
         return _NO_OVERRIDE
 
-    def _adopt(self, routing: "tuple[str, Any, bytes]", task_termid: str) -> None:
+    def _adopt(self, routing: NextTask[LinkedProgram], task_termid: str) -> None:
         """``task_termid`` is the region's terminal for a fresh next-transid task,
         and the CURRENT task's terminal for an XCTL, which does not start a task."""
-        self._transid, self._program, next_commarea = routing
-        self._task_termid = task_termid
-        if len(next_commarea) < self._min_commarea_len:
-            next_commarea = next_commarea.ljust(self._min_commarea_len, b"\x00")
-        self._commarea = next_commarea
+        position = replace(
+            self._position.get(),
+            transid=routing.transid,
+            program=routing.program,
+            task_termid=task_termid,
+            commarea=routing.commarea.ljust(self._min_commarea_len, b"\x00"),
+        )
+        self._position.set(position)
         logger.info(
             "dispatch → transid=%s commarea=%d B",
-            self._transid,
-            len(self._commarea),
+            position.transid,
+            len(position.commarea),
         )
 
-    def _adopt_next_transid(self, routing: "tuple[str, Any, bytes]") -> None:
+    def _adopt_next_transid(self, routing: NextTask[LinkedProgram]) -> None:
         """A next-transid task is a NEW task the caller must supply input for, so
         it owns an empty start-data slot and it breaks a chain of started tasks —
         the region cannot block on the terminal, so adopting the turn is where
         that break happens. An XCTL is a transfer within the same task and breaks
         nothing, so it does not come here — a START/XCTL cycle must still reach
         the runaway guard, and the XCTL'd program may still RETRIEVE."""
-        self._consecutive_starts = 0
+        self._update(consecutive_starts=0)
         self._start_queue.clear_start_data()
         self._adopt(routing, self._region_termid)
 
-    def _adopt_started(self, req: StartRequest) -> "tuple[DispatchResult, ...]":
+    def _adopt_started(self, req: StartRequest) -> tuple[DispatchResult, ...]:
         """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
         the terminal the START named — NO_TERMINAL for a non-terminal task.
 
         Returns the runaway-guard abend when adopting this task would take the
         chain past the region's cap, or empty when the task was adopted."""
-        if self._consecutive_starts >= self._max_consecutive_starts:
+        position = self._position.get()
+        if position.consecutive_starts >= self._max_consecutive_starts:
             self._start_queue.discard_for_abend()
-            self._done = True
-            return (_runaway_abend(req, self._consecutive_starts),)
-        self._consecutive_starts = self._consecutive_starts + 1
-        self._transid = req.transid
-        self._program = self._program_cache[self._transid_to_program[req.transid]]
-        self._commarea = b""
-        self._task_termid = req.termid
+            self._update(done=True)
+            return (_runaway_abend(req, position.consecutive_starts),)
+        self._position.set(
+            replace(
+                position,
+                consecutive_starts=position.consecutive_starts + 1,
+                transid=req.transid,
+                program=self._program_cache[self._transid_to_program[req.transid]],
+                commarea=b"",
+                task_termid=req.termid,
+            )
+        )
         self._start_queue.put_start_data(req.data)
         logger.info("dispatch → started transid=%s termid=%r", req.transid, req.termid)
         return _NO_OVERRIDE
+
+
+def _started_program(program: LinkedProgram | NoProgram) -> LinkedProgram:
+    if isinstance(program, NoProgram):
+        raise RuntimeError("step() called on a region that has not started")
+    return program

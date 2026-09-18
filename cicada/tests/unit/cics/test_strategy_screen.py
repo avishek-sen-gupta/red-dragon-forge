@@ -4,7 +4,44 @@ import queue
 
 from tests.covers import covers, NotLanguageFeature
 from cics.strategy import CicsLoweringStrategy
+from cics.types import DispatchKind
 from interpreter.func_name import FuncName
+from interpreter.register import Register
+from interpreter.vm.builtins import Builtins
+from interpreter.vm.vm_types import BuiltinResult, VMState
+
+
+class _Ctx:
+    def __init__(self):
+        self.emitted = []
+        self._n = 0
+
+    def fresh_reg(self):
+        self._n += 1
+        return Register(f"%r{self._n}")
+
+    def emit_inst(self, inst, *, span=None):
+        self.emitted.append(inst)
+
+    def group_leaf_names(self, group_name, materialised):
+        return []
+
+    def has_field(self, name, materialised):
+        return False
+
+    def emit_to_string(self, value_reg, *, span=None):
+        out = self.fresh_reg()
+        self.emit_inst(("to_string", out, value_reg))
+        return out
+
+
+def _strategy():
+    return CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -42,30 +79,6 @@ def test_send_map_lowers_to_call_function():
     from interpreter.instructions import CallFunction
     from cics.statements import ExecCicsStatement
     from cics.statements import CicsOperand
-    from interpreter.register import Register
-
-    class _Ctx:
-        def __init__(self):
-            self.emitted = []
-            self._n = 0
-
-        def fresh_reg(self):
-            self._n += 1
-            return Register(f"%r{self._n}")
-
-        def emit_inst(self, inst, *, span=None):
-            self.emitted.append(inst)
-
-        def group_leaf_names(self, group_name, materialised):
-            return []
-
-        def has_field(self, name, materialised):
-            return False
-
-        def emit_to_string(self, value_reg, *, span=None):
-            out = self.fresh_reg()
-            self.emit_inst(("to_string", out, value_reg))
-            return out
 
     ctx = _Ctx()
     stmt = ExecCicsStatement(
@@ -75,15 +88,38 @@ def test_send_map_lowers_to_call_function():
             "MAPSET": CicsOperand("COSGN00", True),
         },
     )
-    strategy = CicsLoweringStrategy(
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
-    strategy.lower(ctx, stmt, materialised=None)
+    _strategy().lower(ctx, stmt, materialised=None)
     calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
     assert any(c.func_name == FuncName("__cics_send_map") for c in calls)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_send_map_lowering_passes_mapset_flags_and_cursor():
+    from interpreter.instructions import CallFunction, Const
+    from cics.statements import CicsOperand, ExecCicsStatement
+
+    ctx = _Ctx()
+    stmt = ExecCicsStatement(
+        verb="SEND MAP",
+        options={
+            "MAP": CicsOperand("COSGN0A", True),
+            "MAPSET": CicsOperand("COSGN00", True),
+            "ERASE": None,
+            "CURSOR": None,
+            "FREEKB": None,
+        },
+    )
+    _strategy().lower(ctx, stmt, materialised=None)
+    call = next(
+        i
+        for i in ctx.emitted
+        if isinstance(i, CallFunction) and i.func_name == FuncName("__cics_send_map")
+    )
+    consts = {i.result_reg: i.value for i in ctx.emitted if isinstance(i, Const)}
+    assert len(call.args) == 5
+    assert consts[call.args[2]] == "COSGN00"
+    assert set(consts[call.args[3]]) == {"ERASE", "CURSOR", "FREEKB"}
+    assert consts[call.args[4]] == ""
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -264,6 +300,151 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_syncpoint_lowers_to_a_noop_call():
+    """Plain SYNCPOINT is a deliberate no-op (writes already went through the
+    VSAM engine) -- it must not fall into the unsupported-verb abend path."""
+    from interpreter.instructions import CallFunction, Return_
+    from cics.statements import ExecCicsStatement
+
+    ctx = _Ctx()
+    stmt = ExecCicsStatement(verb="SYNCPOINT", options={})
+    _strategy().lower(ctx, stmt, materialised=None)
+
+    calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
+    assert any(c.func_name == FuncName("__cics_syncpoint") for c in calls)
+    assert not any(c.func_name == FuncName("__cics_abend_unsupported") for c in calls)
+    assert not any(isinstance(i, Return_) for i in ctx.emitted)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_syncpoint_rollback_is_loud_not_a_noop():
+    """SYNCPOINT ROLLBACK is a distinct verb string from plain SYNCPOINT and is
+    NOT registered as a no-op: this runtime already wrote committed changes
+    through, so pretending to roll them back would be a silent lie. It falls
+    through to the same abend path as any unimplemented verb."""
+    from interpreter.instructions import CallFunction, Return_
+    from cics.statements import ExecCicsStatement
+
+    unsupported: set = set()
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=unsupported,
+    )
+    ctx = _Ctx()
+    stmt = ExecCicsStatement(verb="SYNCPOINT ROLLBACK", options={})
+    strategy.lower(ctx, stmt, materialised=None)
+
+    calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
+    assert any(c.func_name == FuncName("__cics_abend_unsupported") for c in calls)
+    assert any(isinstance(i, Return_) for i in ctx.emitted)
+    assert unsupported == {"SYNCPOINT ROLLBACK"}
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_send_text_with_literal_text_still_works():
+    from interpreter.instructions import CallFunction, Const
+    from cics.statements import CicsOperand, ExecCicsStatement
+
+    ctx = _Ctx()
+    stmt = ExecCicsStatement(
+        verb="SEND TEXT", options={"TEXT": CicsOperand("HELLO WORLD", True)}
+    )
+    _strategy().lower(ctx, stmt, materialised=None)
+
+    call = next(
+        i
+        for i in ctx.emitted
+        if isinstance(i, CallFunction) and i.func_name == FuncName("__cics_send_text")
+    )
+    consts = {i.result_reg: i.value for i in ctx.emitted if isinstance(i, Const)}
+    assert len(call.args) == 1
+    assert consts[call.args[0]] == "HELLO WORLD"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_send_text_from_resolves_the_named_field():
+    """SEND TEXT FROM(WS-MESSAGE) must resolve WS-MESSAGE's runtime value, not
+    paint the field name itself onto the screen (the FROM operand was
+    previously dropped entirely, rendering a blank screen)."""
+    from interpreter.instructions import CallFunction
+    from cics.statements import CicsOperand, ExecCicsStatement
+    from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
+    from interpreter.cobol.data_layout import FieldLayout
+    from interpreter.cobol.field_resolution import (
+        ResolvedFieldRef,
+        whole_field_extent,
+    )
+    from cobol_memory.region_id import RegionId
+
+    class _FieldCtx:
+        def __init__(self, fields):
+            self._fields = fields
+            self.emitted = []
+            self._n = 0
+
+        def fresh_reg(self):
+            self._n += 1
+            return Register(f"%r{self._n}")
+
+        def emit_inst(self, inst, *, span=None):
+            self.emitted.append(inst)
+            return inst
+
+        def has_field(self, name, materialised):
+            return name in self._fields
+
+        def resolve_field_ref(
+            self, name, materialised, qualifiers=(), subscripts=(), *, span=None
+        ):
+            offset, byte_length = self._fields[name]
+            fl = FieldLayout(
+                name=name,
+                type_descriptor=CobolTypeDescriptor(
+                    category=CobolDataCategory.ALPHANUMERIC, total_digits=byte_length
+                ),
+                offset=offset,
+                byte_length=byte_length,
+            )
+            offset_reg = self.fresh_reg()
+            self.emit_inst(("const_offset", offset_reg, offset))
+            return ResolvedFieldRef(
+                fl=fl,
+                offset_reg=offset_reg,
+                extent=whole_field_extent(fl, RegionId.WORKING_STORAGE),
+            ), Register("%ws")
+
+        def emit_decode_field(
+            self, region_reg, fl, offset_reg, *, extent=None, span=None
+        ):
+            out = self.fresh_reg()
+            self.emit_inst(("decode", out, fl.name))
+            return out
+
+        def emit_to_string(self, value_reg, *, span=None):
+            out = self.fresh_reg()
+            self.emit_inst(("to_string", out, value_reg))
+            return out
+
+    ctx = _FieldCtx({"WS-MESSAGE": (0, 40)})
+    stmt = ExecCicsStatement(
+        verb="SEND TEXT", options={"FROM": CicsOperand("WS-MESSAGE", False)}
+    )
+    _strategy().lower(ctx, stmt, materialised=None)
+
+    call = next(
+        i
+        for i in ctx.emitted
+        if isinstance(i, CallFunction) and i.func_name == FuncName("__cics_send_text")
+    )
+    decode = next(i for i in ctx.emitted if isinstance(i, tuple) and i[0] == "decode")
+    assert len(call.args) == 1
+    assert call.args[0] == decode[1]
+    assert decode[2] == "WS-MESSAGE"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_writeq_td_lowers_with_real_args():
     """WRITEQ TD QUEUE('JOBS') FROM('SOME-DATA') passes both operands as real
     args to __cics_writeq_td — not args=() (cicada-vcq)."""
@@ -433,3 +614,65 @@ def test_writeq_td_lowers_with_resp_writeback():
     ), f"expected EIBRESP + RESP(WS-RC) writes, got {ctx.encode_writes!r}"
     written_names = {fl.name for (_, fl, _, _) in ctx.encode_writes}
     assert written_names == {"EIBRESP", "WS-RC"}
+
+
+class _MinimalHolder:
+    """A ``Holder`` (the ``_Slot`` protocol: ``__getitem__``/``__setitem__`` only)
+    that is type-legal for the ``result_holder`` parameter without being a
+    ``list`` or any ``MutableSequence``."""
+
+    def __init__(self, values):
+        self._values = list(values)
+
+    def __getitem__(self, index):
+        return self._values[index]
+
+    def __setitem__(self, index, value):
+        self._values[index] = value
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_non_list_result_holder_still_receives_dispatch_results():
+    holder = _MinimalHolder([None])
+    CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=holder,
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+
+    abend = Builtins.TABLE[FuncName("__cics_abend")]
+    abend([], VMState())
+
+    assert holder[0] is not None
+    assert holder[0].kind == DispatchKind.ABEND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_none_result_holder_falls_back_without_crashing():
+    """``result_holder=None`` is the legacy pre-fp-gate Absent value
+    (see ``Absent``'s docstring in strategy.py) — the same as omitting it.
+    A caller passing it must still get a working internal holder, not a
+    bare ``None`` the builtins try to subscript."""
+    CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=None,
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+
+    abend = Builtins.TABLE[FuncName("__cics_abend")]
+    result = abend([], VMState())
+    assert isinstance(result, BuiltinResult)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_build_cics_spec_default_result_holder_does_not_crash():
+    from cics.coprocessor import build_cics_spec
+
+    spec = build_cics_spec(context_holder=[None])
+    spec.make_strategy()
+
+    abend = Builtins.TABLE[FuncName("__cics_abend")]
+    result = abend([], VMState())
+    assert isinstance(result, BuiltinResult)

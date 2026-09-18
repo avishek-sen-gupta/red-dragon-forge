@@ -1,0 +1,68 @@
+"""The TOML that describes a region to serve over TN3270."""
+
+from __future__ import annotations
+
+import os
+import tomllib
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType
+
+from cics.vsam.fct import DatasetConfig
+
+TomlValue = str | int | list[str] | Mapping[str, str | int]
+
+
+class ConfigError(ValueError):
+    pass
+
+
+def _path(raw: str) -> Path:
+    expanded = os.path.expandvars(raw)
+    if "$" in expanded:
+        raise ConfigError(f"unset environment variable in path {raw!r}")
+    return Path(expanded).expanduser()
+
+
+def _dataset(raw: Mapping[str, str | int]) -> DatasetConfig:
+    return DatasetConfig(
+        record_length=int(raw["record_length"]),
+        file=str(raw["file"]),
+        key_offset=int(raw.get("key_offset", 0)),
+        key_length=int(raw.get("key_length", 0)),
+    )
+
+
+@dataclass(frozen=True)
+class RegionConfig:
+    source_dir: Path
+    copybook_dirs: tuple[Path, ...]
+    bms_dir: Path
+    data_dir: Path
+    hlasm_export: Path
+    initial_transid: str
+    min_commarea_len: int
+    transactions: Mapping[str, str]
+    programs: frozenset[str]
+    datasets: Mapping[str, DatasetConfig]
+
+
+def load_config(path: Path) -> RegionConfig:
+    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    paths, region = raw["paths"], raw["region"]
+    transactions = MappingProxyType(dict(raw["transactions"]))
+    return RegionConfig(
+        source_dir=_path(paths["source_dir"]),
+        copybook_dirs=tuple(_path(p) for p in paths["copybook_dirs"]),
+        bms_dir=_path(paths["bms_dir"]),
+        data_dir=_path(paths["data_dir"]),
+        hlasm_export=_path(paths["hlasm_export"]),
+        initial_transid=region.get("initial_transid", ""),
+        min_commarea_len=int(region.get("min_commarea_len", 0)),
+        transactions=transactions,
+        programs=frozenset((*transactions.values(), *region.get("programs", ()))),
+        datasets=MappingProxyType(
+            {name.upper(): _dataset(d) for name, d in raw["datasets"].items()}
+        ),
+    )

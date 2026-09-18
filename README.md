@@ -13,7 +13,7 @@ multi-language interpreter, vendored as a submodule and never modified by this r
 
 | Package | What it is |
 | --- | --- |
-| [`cicada/`](cicada/) | The **CICS runtime**: pseudo-conversational transaction dispatch, VSAM KSDS file control, BMS screen handling. |
+| [`cicada/`](cicada/) | The **CICS runtime**: pseudo-conversational transaction dispatch, VSAM KSDS file control, BMS screen handling, and a TN3270 server (`cicada-tn3270`) for stock 3270 emulators. |
 | [`squall/`](squall/) | The **EXEC SQL coprocessor runtime** for Db2-attached COBOL programs. |
 | [`jackal/`](jackal/) | The **JCL/batch execution engine**: job/step orchestration, IDCAMS, generation data groups. |
 | [`red_dragon_forge/`](red_dragon_forge/) | The **composition layer** — this repo's own code. |
