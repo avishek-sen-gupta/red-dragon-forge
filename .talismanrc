@@ -3,8 +3,6 @@ fileignoreconfig:
   checksum: a3a8c1ce7936bb77330861fd1847a5bcd266ad89f2c0d1d563f631f96b599c56
 - filename: carddemo-env.sh
   checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
-- filename: fp.json
-  checksum: 2a82d4f775fce0e5e65773950d3715669af14508a25b22673682e4dfdf223293
 - filename: cicada/tests/integration/cics/test_tn3270_e2e.py
   checksum: 28822e386ea59693751ae535d5d4108e04d500b7fa570ea7cac0fcd75ee74e27
 - filename: cicada/tests/integration/cics/test_tn3270_crud_e2e.py
@@ -397,4 +395,16 @@ fileignoreconfig:
   checksum: e3b2df9dad5c6571e11b7cadaf2f10b116eb73ed0004c890976d091e153ae0b9
 - filename: cicada/tests/unit/cics/test_tn3270_decoder.py
   checksum: 8d7ca9568d789e1f0876d7d4219f6eeb004c7ab79fa81125a7cb4d925eadca83
+- filename: docs/superpowers/specs/2026-09-18-carddemo-db2-tn3270-design.md
+  checksum: 0d548cd1ace87a5ab01c724f239bc92fdf71e9b6139a26829cb553fdaefc3f60
+- filename: docs/superpowers/plans/2026-09-18-carddemo-db2-tn3270.md
+  checksum: 5be5343c12e706d485e5fd73798bff29d50358298e15b52e6ffa6962526a72ef
+- filename: squall/tests/unit/test_preprocess.py
+  checksum: c43873e0ef32d85c0f4ddaca5a517229c77489c45c905705d11c08596c729823
+- filename: fp.json
+  checksum: f279eccb8873ce2bf6fd322b3ba502d00ff96363141bafe04376c1d3d45b8f70
+- filename: squall/squall/exec_sql_scan.py
+  checksum: c5450e80e3d187790db0777548cabc8d4c420f94b3e8c7940d3a4135bd83d851
+- filename: squall/tests/unit/test_exec_sql_scan.py
+  checksum: 284988d03d54c01792a48df17d54bb9171beef7bd80330151e75533cad2b475a
 version: "1.0"

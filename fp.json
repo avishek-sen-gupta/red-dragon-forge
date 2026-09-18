@@ -45,7 +45,8 @@
     "cobble/cobble/dataflow/depgraph/flows.py",
     "cobble/cobble/dataflow/depgraph/render.py",
     "cobble/cobble/viz/render_cmd.py",
-    "cicada/cics/tn3270/wire.py"
+    "cicada/cics/tn3270/wire.py",
+    "squall/squall/exec_sql_scan.py"
   ],
   "exclude_why": {
     "_": "Read by nobody: JSON has no comments, and an exclusion whose reason lives in another file is one nobody can judge later. Every key above appears here.",
@@ -85,7 +86,8 @@
     "cobble/cobble/dataflow/fixpoint/fixpoint.py": "A deferred backlog, not a design constraint: the sweep in `_propagated` and the loop in `_swept` carry all nine, and `_eta`/`_propagated` trip C901 at 4 > 3. Pinning python-fp-lint to a concrete rev turned the previously inert ruleset on, so the file began failing without being touched and blocked a rename that changed one import line in it. Whether a worklist fixpoint earns the mutation the way asg_walk.py's explicit stack does is the open question. See forge-uar.",
     "cobble/cobble/dataflow/depgraph/": "A deferred backlog, not a design constraint: the five files carry 145 of that package's 167 violations, all accumulator loops and nesting depth. `rev: main` in .pre-commit-config.yaml tracks a mutable ruleset, so they began failing without being touched, and pre-existing violations in a file blocked commits to it for unrelated reasons. See red-dragon-forge-bgk.",
     "cobble/cobble/viz/render_cmd.py": "HTML string assembly. The renderer builds Mermaid and vis.js payloads by accumulating lines and node/edge dicts; every alternative (nested list comprehensions over a recursive step tree, reduce over a mutable JS template) is less readable and no more correct. The rendering logic carries no domain logic and no state that outlives a single render call.",
-    "cicada/cics/tn3270/wire.py": "The telnet byte stream. A socket delivers unframed bytes; turning them into telnet events and EOR-delimited records needs read buffers filled in place, and the accept loop runs until the process stops. Negotiation and session logic over these events stay gated."
+    "cicada/cics/tn3270/wire.py": "The telnet byte stream. A socket delivers unframed bytes; turning them into telnet events and EOR-delimited records needs read buffers filled in place, and the accept loop runs until the process stops. Negotiation and session logic over these events stay gated.",
+    "squall/squall/exec_sql_scan.py": "The EXEC SQL / END-EXEC cursor-advancing scan. A functional recursive-unfold rewrite (in place of the accumulate-and-append while loop) passed every unit test but raised RecursionError at roughly 1000 EXEC SQL statements in one source file (verified: 900 passes, 1200 crashes) -- a real regression on a shared package, since the original loop had no such bound. This is a lexer over a cursor position by nature; the iterative loop here has no depth ceiling. Only the scan (Span, the span-finding loop, its match-to-span helper) lives here; classification and rewriting stay gated in preprocess.py."
   },
   "ruff_select": "E,F,W,I,B,UP,SIM,RUF,BLE,T20,TID252,C901,PLR0915,ANN401",
   "max_complexity": 3,

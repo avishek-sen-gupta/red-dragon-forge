@@ -123,3 +123,34 @@ def test_include_without_json_sidecar_yields_empty_meta(tmp_path) -> None:
 
     assert result.source == "       COPY SQLCA."
     assert dict(result.field_meta) == {}
+
+
+# ── fixed-format sequence numbers (columns 1-6) ─────────────────────────────────
+
+
+def test_exec_sql_include_is_rewritten_with_fixed_format_sequence_numbers() -> None:
+    """Columns 1-6 are the ignored sequence area in fixed-format COBOL.
+    CardDemo's Db2 programs carry them; EXEC SQL must still be detected."""
+    source = "028600      EXEC SQL INCLUDE DCLTRTYP END-EXEC\n"
+
+    result = apply_sql_prepass(source, copybook_dirs=[])
+
+    assert "COPY DCLTRTYP." in result.source
+    assert "EXEC SQL" not in result.source
+
+
+def test_sequence_numbers_are_preserved_so_copy_stays_in_area_b() -> None:
+    source = "028600      EXEC SQL INCLUDE DCLTRTYP END-EXEC\n"
+
+    result = apply_sql_prepass(source, copybook_dirs=[])
+
+    assert result.source.startswith("028600      COPY")
+
+
+def test_unnumbered_exec_sql_still_works() -> None:
+    """The existing form must be untouched by the fix."""
+    source = "           EXEC SQL INCLUDE SQLCA END-EXEC\n"
+
+    result = apply_sql_prepass(source, copybook_dirs=[])
+
+    assert "COPY SQLCA." in result.source
