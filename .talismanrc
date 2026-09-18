@@ -1,4 +1,6 @@
 fileignoreconfig:
+- filename: cicada/README.md
+  checksum: 94fc46080ab82ca20952108608bd0b41a0c36548a2df1644a079056a98a5817f
 - filename: carddemo-env.sh
   checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
 - filename: fp.json

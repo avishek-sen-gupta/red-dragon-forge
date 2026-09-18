@@ -510,6 +510,39 @@ Headless driving through `RegionDriver` + `TerminalScreen` remains the primary, 
 path (`cics-headless-first-class`): every screen-fidelity feature is asserted headlessly first,
 and the wire is a thin adapter over the same driver, not a parallel code path.
 
+### Driving CardDemo once connected
+
+Sign on as `USER0001` / `PASSWORD` for the main menu, or `ADMIN001` / `PASSWORD` for the admin
+menu — the vendored `USRSEC` holds `USER0001`-`USER0005` (type `U`) and `ADMIN001`-`ADMIN005`
+(type `A`), and COSGN00C routes on that type. A 3270 has no edit mode: the cursor starts in the
+first input field and you type straight into it. Tab and Shift+Tab move between fields; typing
+into a protected area locks the keyboard, which `Ctrl+R` (Reset) clears. Enter sends; function
+keys are PF1-PF24 (`F5` in c3270, or `PF(5)` at its `Ctrl+]` command line).
+
+These flows are covered by the wire tests in `tests/integration/cics/test_tn3270_crud_e2e.py`,
+so they are the ones known to work end to end:
+
+| Menu | Option | Flow | Commits with |
+|---|---|---|---|
+| Main | `01` | View account, then PF3 back | read-only |
+| Main | `02` | Update account: fetch, edit, ENTER validates, PF5 saves | PF5 → `REWRITE` |
+| Main | `05` | Update card: same two-turn shape | PF5 → `REWRITE` |
+| Main | `08` | Add transaction: fill the fields, ENTER, then `Y` in `CONFIRM` | ENTER → `WRITE` |
+| Main | `10` | Bill pay: account id, ENTER, then `Y` in `CONFIRM` | ENTER → `REWRITE` + `WRITE` |
+| Admin | `2` / `3` / `4` | Add / update / delete a user | `WRITE` / PF5 → `REWRITE` / PF5 → `DELETE` |
+
+The update programs only honour PF5 *after* an ENTER turn has validated the change ("Changes
+validated. Press F5 to save"), so the two turns are mandatory, not a convention. On the wire
+every `FSET` field is returned whether or not you retyped it, which is why COUSR02C's update
+screen needs every editable field re-entered — see `forge-1zu.8` for why that is faithful BMS
+behaviour rather than a runtime defect.
+
+Everything the programs write goes to a VSAM copy seeded into a temp directory (`region.py`'s
+`_vsam_engine` reads `data_dir` and seeds into the server's work dir), so the vendored EBCDIC
+data is never touched and restarting the server resets the world. The other menu options are
+reachable but untested; a program using an unsupported verb abends with a message on screen
+rather than hanging.
+
 ---
 
 ## 7. HLASM / BMS build path
