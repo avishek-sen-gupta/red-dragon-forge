@@ -13,8 +13,9 @@ at the same Area-A/B indentation as the original block.
 Design
 ------
 * Pure function — no global mutable state.
-* Block location uses fixed-keyword scanning only (``EXEC SQL`` / ``END-EXEC``
-  delimiters), exactly mirroring the approach in ``squall.parser.parse``.
+* Block location delegates to ``squall.exec_sql_scan`` (fixed-keyword
+  scanning of ``EXEC SQL`` / ``END-EXEC`` delimiters), exactly mirroring the
+  approach in ``squall.parser.parse``.
 * SQL content is classified by delegating to ``parse_exec_sql``, never by
   writing a regex that inspects SQL internals.
 """
@@ -22,14 +23,13 @@ Design
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
 
+from squall.exec_sql_scan import Span, find_exec_sql_spans
 from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import FieldMeta, IncludeName, Kind
 
@@ -50,78 +50,6 @@ class PrepassResult:
     field_meta: Mapping[str, FieldMeta]
 
 
-# ── Fixed-delimiter scanner ───────────────────────────────────────────────────
-
-# Matches the opening delimiter, capturing:
-#   group(1) = leading whitespace on the opening line
-#   group(2) = the "EXEC SQL" keyword sequence itself
-# This lets us recover the indentation even when the block starts at pos 0.
-_EXEC_SQL_OPEN: Final[re.Pattern[str]] = re.compile(
-    r"(?m)(^[^\S\n]*)(EXEC\s+SQL\b)",
-    re.IGNORECASE,
-)
-
-# Matches ``END-EXEC`` keyword only (no trailing chars) so we get a clean
-# parse boundary.  Group 0 end = position right after the ``C`` in END-EXEC.
-_END_EXEC_KW: Final[re.Pattern[str]] = re.compile(
-    r"\bEND-EXEC\b",
-    re.IGNORECASE,
-)
-
-# After END-EXEC we may have optional whitespace and a COBOL statement
-# terminator dot.  We consume those so the replacement span covers the whole
-# original statement (e.g. ``EXEC SQL INCLUDE SQLCA END-EXEC.``).
-_STMT_TERMINATOR: Final[re.Pattern[str]] = re.compile(r"[ \t]*\.")
-
-
-def _find_exec_sql_spans(
-    source: str,
-) -> list[tuple[int, int, str, str]]:
-    """Locate every ``EXEC SQL … END-EXEC`` block in *source*.
-
-    Returns a list of ``(replace_start, replace_end, parse_text, indent)``
-    tuples where:
-
-    - ``replace_start`` / ``replace_end`` delimit the full span to be replaced
-      (from the start of any leading whitespace through the optional trailing
-      statement-terminator dot on the same line).
-    - ``parse_text`` is passed to ``parse_exec_sql`` — it is the text from
-      ``EXEC SQL`` through ``END-EXEC`` (no trailing dot) so the grammar
-      recognises ``END-EXEC`` cleanly.
-    - ``indent`` is the leading whitespace on the opening line (captured from
-      the regex group so it is always correct even when the block starts at
-      position 0).
-
-    If a block has no matching ``END-EXEC`` it is skipped (malformed source).
-    """
-    results: list[tuple[int, int, str, str]] = []
-    search_from = 0
-    while True:
-        open_match = _EXEC_SQL_OPEN.search(source, search_from)
-        if open_match is None:
-            break
-        # group(1) is the leading whitespace; the EXEC keyword starts at
-        # open_match.start(2) [i.e. end of group(1)].
-        indent = open_match.group(1)
-        # replace_start covers the leading whitespace too.
-        replace_start = open_match.start()
-        # parse_text starts at EXEC (no leading whitespace).
-        exec_start = open_match.start(2)
-        close_match = _END_EXEC_KW.search(source, open_match.end())
-        if close_match is None:
-            # Malformed — skip.
-            search_from = open_match.end()
-            continue
-        parse_end = close_match.end()
-        parse_text = source[exec_start:parse_end]
-        # replace_end extends over an optional trailing ``  .`` on the same line.
-        dot_match = _STMT_TERMINATOR.match(source, parse_end)
-        replace_end = dot_match.end() if dot_match is not None else parse_end
-        results.append((replace_start, replace_end, parse_text, indent))
-        search_from = replace_end
-    return results
-
-
 def _rewrite_block(indent: str, include_name: str) -> str:
     """Return the COPY statement that replaces an INCLUDE block."""
     return f"{indent}COPY {include_name}."
@@ -129,7 +57,7 @@ def _rewrite_block(indent: str, include_name: str) -> str:
 
 def _load_field_meta(
     include_name: str, copybook_dirs: Sequence
-) -> dict[str, FieldMeta]:
+) -> Mapping[str, FieldMeta]:
     """Return ``{host_var: descriptor}`` from ``<include_name>.json``, or ``{}``.
 
     The dclgen sidecar lives beside the copybook ProLeap inlines. Not every
@@ -139,20 +67,20 @@ def _load_field_meta(
     candidates = (f"{include_name}.json", f"{include_name.upper()}.json")
     paths = (Path(d) / name for d in copybook_dirs for name in candidates)
     sidecar = next((p for p in paths if p.is_file()), None)
-    if sidecar is None:
+    if not sidecar:
         return {}
     data = json.loads(sidecar.read_text(encoding="utf-8"))
     return {field["host_var"]: field for field in data["fields"]}
 
 
-def _includes(
-    spans: list[tuple[int, int, str, str]],
-) -> Iterator[tuple[int, int, str, str]]:
-    """Yield ``(start, end, indent, include_name)`` for each INCLUDE span."""
-    for start, end, parse_text, indent in spans:
-        parsed = parse_exec_sql(parse_text)
-        if parsed.kind is Kind.INCLUDE and isinstance(parsed.include, IncludeName):
-            yield start, end, indent, parsed.include.name
+def _includes(spans: Sequence[Span]) -> Iterator[tuple[Span, str]]:
+    """Yield ``(span, include_name)`` for each INCLUDE span."""
+    parsed_spans = ((span, parse_exec_sql(span.parse_text)) for span in spans)
+    return (
+        (span, parsed.include.name)
+        for span, parsed in parsed_spans
+        if parsed.kind is Kind.INCLUDE and isinstance(parsed.include, IncludeName)
+    )
 
 
 def apply_sql_prepass(source: str, copybook_dirs: Sequence) -> PrepassResult:
@@ -164,11 +92,11 @@ def apply_sql_prepass(source: str, copybook_dirs: Sequence) -> PrepassResult:
     sidecars beside the copybooks ProLeap inlines; the gathered host-var metadata
     is returned in ``PrepassResult.field_meta`` (empty when none are present).
     """
-    includes = list(_includes(_find_exec_sql_spans(source)))
+    includes = list(_includes(find_exec_sql_spans(source)))
     field_meta = MappingProxyType(
         {
             host_var: descriptor
-            for _start, _end, _indent, include_name in includes
+            for _span, include_name in includes
             for host_var, descriptor in _load_field_meta(
                 include_name, copybook_dirs
             ).items()
@@ -181,8 +109,12 @@ def apply_sql_prepass(source: str, copybook_dirs: Sequence) -> PrepassResult:
     # valid; reduce folds them over the source without a reassigned accumulator.
     replacements = sorted(
         (
-            (start, end, _rewrite_block(indent, include_name.upper()))
-            for start, end, indent, include_name in includes
+            (
+                span.replace_start,
+                span.replace_end,
+                _rewrite_block(span.indent, include_name.upper()),
+            )
+            for span, include_name in includes
         ),
         key=lambda r: r[0],
         reverse=True,
