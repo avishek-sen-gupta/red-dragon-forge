@@ -1,6 +1,7 @@
 # Squall
 
-**EXEC SQL coprocessor runtime for the [RedDragon](https://github.com/) multi-language COBOL interpreter.**
+**EXEC SQL coprocessor runtime for the
+[RedDragon](https://github.com/avishek-sen-gupta/red-dragon) multi-language COBOL interpreter.**
 
 Squall runs real, unmodified COBOL programs that embed static SQL (`EXEC SQL … END-EXEC`,
 Db2-style) against a pluggable `SqlBackend` — `SELECT … INTO`, DML, cursors,
@@ -8,7 +9,7 @@ Db2-style) against a pluggable `SqlBackend` — `SELECT … INTO`, DML, cursors,
 VM. Two backends ship: a real IBM **`Db2Backend`** (`ibm-db`, the primary integration-test
 target) and a `SqliteBackend` for zero-dependency runs.
 
-It is a **peer of [Cicada](https://github.com/) (the CICS runtime)**, not a dependent of
+It is a **peer of [Cicada](../cicada/README.md) (the CICS runtime)**, not a dependent of
 it. EXEC SQL is a *coprocessor extension* — not part of the COBOL language and not a CICS
 facility — so Squall:
 

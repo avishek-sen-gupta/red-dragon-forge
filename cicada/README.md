@@ -20,7 +20,7 @@ the ProLeap COBOL bridge).
 Cicada has no Makefile or build script: everything is built from the forge root.
 
 ```bash
-git clone --recurse-submodules <forge-repo>
+git clone --recurse-submodules git@github.com:avishek-sen-gupta/red-dragon-forge.git
 cd red-dragon-forge
 make setup      # hlasm_export + both bridge JARs + uv sync (JDK 17+, Maven, CMake, Ninja, C++)
                 # `make jar-force` after a red-dragon bump; delete the fork's build/ to rebuild hlasm_export
@@ -537,11 +537,28 @@ every `FSET` field is returned whether or not you retyped it, which is why COUSR
 screen needs every editable field re-entered — see `forge-1zu.8` for why that is faithful BMS
 behaviour rather than a runtime defect.
 
+These five are also wired (transaction + program) but have no wire test — each is a read-only
+browse/view screen, so a CRUD-style wire test would add nothing a manual headless smoke check
+doesn't already cover:
+
+| Menu | Option | Flow |
+|---|---|---|
+| Main | `03` | Card list (browses `CARDDAT`) |
+| Main | `04` | Card view (reads `CARDDAT`, plus the `CARDAIX` alternate-index path) |
+| Main | `06` | Transaction list (browses `TRANSACT`) |
+| Main | `07` | Transaction view (reads `TRANSACT`) |
+| Admin | `1` | User list (browses `USRSEC`) |
+
 Everything the programs write goes to a VSAM copy seeded into a temp directory (`region.py`'s
 `_vsam_engine` reads `data_dir` and seeds into the server's work dir), so the vendored EBCDIC
-data is never touched and restarting the server resets the world. The other menu options are
-reachable but untested; a program using an unsupported verb abends with a message on screen
-rather than hanging.
+data is never touched and restarting the server resets the world.
+
+The remaining options genuinely cannot work in this snapshot, each for a different reason: main
+`09` (Transaction Reports) needs JCL job submission behind the JOBS TDQ, which this server does
+not drive; main `11` and admin `5`/`6` have no compiled program behind them here (`COPAUS0C`,
+`COTRTLIC`, `COTRTUPC`) — main `11` degrades gracefully because COMEN01C guards that one XCTL
+with `EXEC CICS INQUIRE PROGRAM` first ("This option ... is not installed..."), while admin
+`5`/`6` abend, because COADM01C XCTLs straight to the option's program with no such guard.
 
 ---
 

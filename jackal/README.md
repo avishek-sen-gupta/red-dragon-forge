@@ -23,7 +23,7 @@ ProLeap COBOL and JCL bridges).
 Jackal has no Makefile or build script: everything is built from the forge root.
 
 ```bash
-git clone --recurse-submodules <forge-repo>
+git clone --recurse-submodules git@github.com:avishek-sen-gupta/red-dragon-forge.git
 cd red-dragon-forge
 make setup        # both Java bridges (ProLeap COBOL + ANTLR jcl-bridge) + hlasm_export + uv sync
                   # `make jar-force` after a red-dragon bump or grammar change

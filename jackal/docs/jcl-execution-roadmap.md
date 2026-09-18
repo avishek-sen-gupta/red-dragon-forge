@@ -159,7 +159,8 @@ When a new gap is discovered (typically while trying to run a new real job), add
 right layer, file it under `jackal-1o2`, and link it here. The source of truth for status is
 Beads; this doc is the human-readable map over it.
 
-The Beads graph itself (issues + all dependency edges) is version-controlled at
-`beads/issues.jsonl` — regenerate it with `bd export -o beads/issues.jsonl` before committing issue
-changes (see `beads/README.md`). On a fresh clone, `bd import beads/issues.jsonl` rebuilds the
-local DB; then `bd list --parent jackal-1o2` / `bd dep tree` give the live view.
+The Beads graph itself (issues + all dependency edges) is version-controlled at the forge
+root's `issues/issues.jsonl`, which covers every package — regenerate it with
+`bd export -o issues/issues.jsonl` before committing issue changes. On a fresh clone,
+`bd import issues/issues.jsonl` rebuilds the local DB; then `bd list --parent jackal-1o2` /
+`bd dep tree` give the live view.

@@ -66,16 +66,14 @@ red-dragon's Python is still picked up live via its editable `.pth`. The pre-com
 already use `--no-sync`. **Caveat:** after changing dependencies or on a fresh clone, run
 `uv sync` (or the relevant `make` target) once — the hooks no longer do it for you.
 
-**Issue graph is version-controlled (manual-export model, not beads' Dolt sync).** `.beads/`
-(Dolt working DB) is **gitignored**; `beads/issues.jsonl` (no leading dot) is the **tracked**
-git source of truth. **Whenever a change touches issues, regenerate and stage the snapshot
-BEFORE committing** — a deliberate manual step, NOT a git hook:
+**Issues live in the forge's one graph, not a per-package one.** Cicada had its own beads DB
+as a standalone repo; since the subtree merge there is a single Dolt DB at the forge root,
+exported to the tracked `issues/issues.jsonl` there. See the root `CLAUDE.md` for the
+manual-export rules — in particular, regenerate and stage the snapshot **before** committing
+anything that touches issues:
 ```bash
-bd export -o beads/issues.jsonl && git add beads/issues.jsonl
+bd export -o issues/issues.jsonl && git add issues/issues.jsonl
 ```
-`core.hooksPath` is the default `.git/hooks` (the pre-commit framework + the globally-seeded
-Talisman `pre-commit.legacy` run there). On a fresh clone, `bd import beads/issues.jsonl`
-rebuilds the local DB. See `beads/README.md`.
 
 ## Package layout
 
@@ -133,7 +131,7 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture in one line:** this repo uses beads' **manual-export** model, NOT Dolt remote sync — `.beads/` (the local Dolt working DB) is fully gitignored, and the forge root's `issues/issues.jsonl` is the tracked git source of truth, regenerated with `bd export -o issues/issues.jsonl` and staged before committing (there is no `bd dolt push`). See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for the underlying sync concepts this repo deliberately opts out of.
 
 ## Agent Context Profiles
 

@@ -1,6 +1,6 @@
 fileignoreconfig:
 - filename: cicada/README.md
-  checksum: 94fc46080ab82ca20952108608bd0b41a0c36548a2df1644a079056a98a5817f
+  checksum: a3a8c1ce7936bb77330861fd1847a5bcd266ad89f2c0d1d563f631f96b599c56
 - filename: carddemo-env.sh
   checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
 - filename: fp.json
@@ -72,8 +72,6 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-07-05-monorepo-migration.md
   checksum: e4d3b88fe4d65ac05e971fdd094e6f500da43490a37fcf2b4c38fe479e7e14a2
 - filename: issues/issues.jsonl
-  ignore_detectors: [filecontent]
-- filename: beads/issues.jsonl
   ignore_detectors: [filecontent]
 - filename: CLAUDE.md
   checksum: a2f21ef67ecfc14b9850c7de2d11c6ac487d78e41859c1d9b66666312e45dc9a
