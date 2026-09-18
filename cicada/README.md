@@ -475,10 +475,15 @@ the same `CicsRegion` / `RegionDriver` headless tests drive, adapted by `cics/tn
 `region.py`, `cli.py`; `wire.py` is the one excluded socket module).
 
 ```bash
-make setup            # or at least: make hlasm + the bridge JARs
-. ./bridge-env.sh
+make setup             # or at least: make hlasm + the bridge JARs
+. ./carddemo-env.sh    # FORGE_ROOT + CARDDEMO_HOME, and bridge-env.sh's JARs
 uv run cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
 ```
+
+The server expands `${CARDDEMO_HOME}`/`${FORGE_ROOT}` from the config and reads
+`PROLEAP_BRIDGE_JAR` to compile, so all three must be exported in the shell it starts from —
+`carddemo-env.sh` is `bridge-env.sh` plus those two, with the CardDemo submodule as the
+default source tree.
 
 Then connect with any stock 3270 client, e.g. `c3270 localhost:3270` or `x3270` (macOS:
 `brew install x3270`). Accepted terminal models are IBM-3278/3279 model 2–5, with or without

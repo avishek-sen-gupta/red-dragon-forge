@@ -49,6 +49,12 @@ one caller that needs to inspect the next input event without removing it
 (``cics.dispatcher._peek_input_event``, reading EIBAID ahead of a resumed
 turn's own RECEIVE MAP) does a get-then-put-back instead — safe only because
 this channel is used synchronously with at most one pending item at a time.
+``cics.dispatcher._discard_pending_input`` (dropping terminal input the ending
+task never RECEIVEd, at task end — forge-1zu.6) leans on the same invariant: a
+loop of non-blocking ``get``s that stops at the first ``queue.Empty`` only
+drains the whole channel because at most one item is ever pending. A future
+transport that queues more than one input ahead of a RECEIVE would need both
+callers revisited, not just this one.
 
 Note: the input item is kept ``Any`` rather than importing ``InputEvent`` from
 ``cics.dispatcher`` — dispatcher imports these protocols, so naming

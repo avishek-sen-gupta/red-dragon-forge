@@ -178,6 +178,33 @@ def _peek_input_event(input_queue: InputChannel, timeout: float = 30.0) -> Input
     return event
 
 
+def _discard_pending_input(input_queue: InputChannel) -> None:
+    """Drop terminal input the ending task never RECEIVEd.
+
+    In CICS the terminal input area belongs to the task: a task that ends
+    without a RECEIVE leaves nothing behind, and the next task reads the
+    terminal afresh. CardDemo relies on it — COACTUPC's PF3 branch
+    (COACTUPC.cbl:927-959) decides on EIBAID alone and XCTLs to COMEN01C with
+    no RECEIVE MAP anywhere on that path, so the PF3 event would otherwise
+    still be queued when the NEXT task's RECEIVE MAP runs and would be read in
+    place of the operator's actual keystroke (forge-1zu.6).
+
+    Drains by ``get(block=False)`` until :class:`queue.Empty` because
+    ``InputChannel`` is deliberately limited to put/get (see cics/terminal.py):
+    there is no ``qsize`` or ``empty`` to consult. What it drops is logged —
+    silently swallowing a keystroke is exactly what made this defect hard to
+    see."""
+    for _ in repeat(None):
+        try:
+            dropped = input_queue.get(block=False)
+        except queue.Empty:
+            return
+        logger.info(
+            "task end: dropping unreceived terminal input aid=%r",
+            getattr(dropped, "eibaid", None),
+        )
+
+
 def _runaway_abend(req: StartRequest, consecutive_starts: int) -> DispatchResult:
     """The runaway guard's refusal. Both drivers implement the RULE separately —
     what breaks a chain of started tasks differs between them — but the refusal
@@ -555,12 +582,21 @@ class CicsRegion:
         result ``_dispatch`` must report INSTEAD of the finished task's own, or
         empty when the finished task's result stands. XCTL transfers control
         WITHIN the same task: the task has not ended, so no started task may run
-        yet, and the task keeps its own terminal."""
-        if isinstance(routing, DispatchResult):
-            return self._settle_terminal(routing)
-        if result.kind == DispatchKind.XCTL:
+        yet, the task keeps its own terminal, and terminal input it has not
+        RECEIVEd yet is still its own to read. Every other outcome ends the
+        task, which is where that unread input dies (see
+        ``_discard_pending_input``)."""
+        if result.kind == DispatchKind.XCTL and isinstance(routing, NextTask):
             self._adopt(routing, self._position.get().task_termid)
             return _NO_OVERRIDE
+        _discard_pending_input(self._io.input_queue)
+        return self._settle(routing)
+
+    def _settle(
+        self, routing: NextTask[LinkedProgram] | DispatchResult
+    ) -> tuple[DispatchResult, ...]:
+        if isinstance(routing, DispatchResult):
+            return self._settle_terminal(routing)
         return self._settle_next_transid(routing)
 
     def _settle_next_transid(

@@ -422,6 +422,56 @@ def test_region_input_event_is_put_on_queue_for_receive_map(monkeypatch):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_region_discards_unreceived_input_on_return_transid(monkeypatch):
+    """A task that ends via RETURN TRANSID without RECEIVEing its terminal
+    input must not leave that input for the NEXT task's RECEIVE MAP to steal
+    (forge-1zu.6): the ending task's unread event is drained at task end."""
+
+    def fake_run(program, ctx, sq, iq, **kw):
+        return DispatchResult(kind=DispatchKind.RETURN_TRANSID, transid="CM00")
+
+    monkeypatch.setattr(dispatcher_mod, "run_cics", fake_run)
+    input_queue = queue.Queue()
+    region = CicsRegion(
+        {"PROG1": object(), "PROG2": object()},
+        {"CC00": "PROG1", "CM00": "PROG2"},
+        queue.Queue(),
+        input_queue,
+        context_holder=[None],
+        result_holder=[None],
+        start_queue=StartQueue(),
+    )
+    region.start("CC00", input_event=InputEvent(eibaid="\xf3"))
+    with pytest.raises(queue.Empty):
+        input_queue.get(block=False)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_region_keeps_unreceived_input_on_xctl(monkeypatch):
+    """XCTL transfers control WITHIN the same task, so terminal input the
+    predecessor never RECEIVEd is still the successor's to read — the mirror
+    of the RETURN TRANSID discard above (forge-1zu.6)."""
+
+    def fake_run(program, ctx, sq, iq, **kw):
+        return DispatchResult(kind=DispatchKind.XCTL, program="PROG2")
+
+    monkeypatch.setattr(dispatcher_mod, "run_cics", fake_run)
+    input_queue = queue.Queue()
+    region = CicsRegion(
+        {"PROG1": object(), "PROG2": object()},
+        {"CC00": "PROG1"},
+        queue.Queue(),
+        input_queue,
+        context_holder=[None],
+        result_holder=[None],
+        start_queue=StartQueue(),
+    )
+    ev = InputEvent(eibaid="\xf3")
+    region.start("CC00", input_event=ev)
+    assert input_queue.get(block=False) is ev
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_region_step_raises_when_done(monkeypatch):
     def fake_run(program, ctx, sq, iq, **kw):
         return DispatchResult(kind=DispatchKind.RETURN)
