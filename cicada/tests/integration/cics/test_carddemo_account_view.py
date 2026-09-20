@@ -56,6 +56,12 @@ _FNAME = "JOHN"
 _MNAME = "Q"
 _LNAME = "PUBLIC"
 _DOB = "1980-01-15"
+# Leading zero on purpose: CUST-SSN is PIC 9(9) and COACTVWC renders it by
+# reference modification (COACTVWC.cbl:496-503). A short field slides every
+# slice left and the SSN renders 209-73-888 -- red-dragon-wlms, the defect
+# this value exists to catch.
+_SSN = "020973888"
+_SSN_SHOWN = "020-97-3888"
 _STATUS = "Y"
 
 
@@ -127,7 +133,7 @@ def _cust_record() -> bytes:
         + _ebcdic("62701", 10)
         + _ebcdic("555-0001", 15)
         + _ebcdic("", 15)
-        + _num("123456789", 9)  # SSN
+        + _num(_SSN, 9)  # SSN
         + _ebcdic("DL12345", 20)  # govt id
         + _ebcdic(_DOB, 10)  # DOB
         + _ebcdic("", 10)  # eft
@@ -305,6 +311,7 @@ def test_real_carddemo_account_view_detail(tmp_path, bridge_jar):
     assert got("ACSMNAM") == _MNAME, f"ACSMNAM: got {fields.get('ACSMNAM')!r}"
     assert got("ACSLNAM") == _LNAME, f"ACSLNAM: got {fields.get('ACSLNAM')!r}"
     assert got("ACSTDOB") == _DOB, f"ACSTDOB: got {fields.get('ACSTDOB')!r}"
+    assert got("ACSTSSN") == _SSN_SHOWN, f"ACSTSSN: got {fields.get('ACSTSSN')!r}"
 
     assert r5.kind == DispatchKind.RETURN_TRANSID
     assert (r5.transid or "").strip() == "CAVW"
