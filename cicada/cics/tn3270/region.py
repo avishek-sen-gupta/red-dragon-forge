@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import queue
 from collections import ChainMap
 from collections.abc import Callable, Mapping, Sequence
@@ -97,26 +98,46 @@ def _parser(config: RegionConfig, bridge_jar: str, sym_dir: Path) -> ProLeapCobo
     )
 
 
+logger = logging.getLogger(__name__)
+
+
+def _compile_one(
+    name: str,
+    ordinal: int,
+    total: int,
+    config: RegionConfig,
+    parser: ProLeapCobolParser,
+    specs: Sequence[CoprocessorSpec],
+) -> LinkedProgram:
+    """Compile one program, announcing which. Building a region is a minute of
+    silence otherwise -- the bridge's own progress bar names no program, so a
+    slow or wedged compile is indistinguishable from a finished one."""
+    from interpreter.project.coprocessor_compile import compile_program
+
+    logger.info("compiling %d/%d: %s", ordinal, total, name)
+    return compile_program(
+        resolve_program_source(config, name).read_bytes(),
+        parser,
+        specs,
+        source_search_dirs=config.source_dirs,
+    )[1]
+
+
 def _compiled(
     config: RegionConfig,
     parser: ProLeapCobolParser,
     cics_spec: CoprocessorSpec,
     extra_specs: Sequence[CoprocessorSpec],
 ) -> dict[str, LinkedProgram]:
-    from interpreter.project.coprocessor_compile import compile_program
-
     # source_search_dirs resolves plain COBOL subprograms a transaction
     # program CALLs (e.g. COTRN02C -> CSUTLDTC) from the same cbl directory;
     # without it such a CALL is unresolved and the caller's own RESP handling
     # takes the non-NORMAL branch, not a crash.
+    names = sorted(config.programs)
+    specs = [cics_spec, *extra_specs]
     return {
-        name: compile_program(
-            resolve_program_source(config, name).read_bytes(),
-            parser,
-            [cics_spec, *extra_specs],
-            source_search_dirs=config.source_dirs,
-        )[1]
-        for name in sorted(config.programs)
+        name: _compile_one(name, ordinal, len(names), config, parser, specs)
+        for ordinal, name in enumerate(names, 1)
     }
 
 

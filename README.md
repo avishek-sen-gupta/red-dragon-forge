@@ -54,6 +54,65 @@ needs CMake, Ninja and a C++ toolchain, and names whichever is missing; `make hl
 alone. `. ./bridge-env.sh` exports `PROLEAP_BRIDGE_JAR`/`JCL_BRIDGE_JAR` for running a tool by
 hand.
 
+## Running CardDemo
+
+Two servers, because CardDemo ships two source trees. Everything below is verified, not
+inferred — if a command here does not work, that is a bug in this section.
+
+### The plain server (VSAM options)
+
+```bash
+. ./carddemo-env.sh          # FORGE_ROOT + CARDDEMO_HOME + the bridge JARs
+uv run cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
+c3270 -model 3279-2-E localhost:3270
+```
+
+### The Db2 server (adds admin 5 and 6)
+
+Preparing the database and serving it are **separate commands**: `make db2-seed` is the only
+thing that ever issues `DROP TABLE`, so a routine server start can never destroy your tables.
+
+```bash
+make db2-status              # 0 = up, 1 = dead, 2 = DSN unset
+. ./carddemo-env.sh
+. tests/integration/db2_env.sh
+make db2-seed                # once — drops, recreates from the vendored DDL, reseeds
+uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
+c3270 -model 3279-2-E localhost:3271
+```
+
+Re-run `make db2-seed` whenever you want the world reset; the server never resets it for you.
+The VSAM options reset themselves on every start regardless — they seed a *copy* into a temp
+directory, so the vendored EBCDIC data is never touched.
+
+**Use a `3279` model with `-E`.** Colour is carried by the extended data stream, and the server
+only emits colour attributes when the terminal negotiates a name ending in `-E`
+(`cics/tn3270/negotiation.py`'s `TerminalType.extended`). A `3278` is a monochrome terminal, so
+`-model 3278-2` gives you correct — but entirely green — screens.
+
+Startup compiles every program in the config through the ProLeap bridge, which takes about a
+minute and names each program as it goes. The server is ready when it logs `serving … on …`.
+
+### Signing on
+
+`ADMIN001` / `PASSWORD` reaches the admin menu; any other user gets the main menu only.
+
+| Menu | Option | Program | Works? |
+|---|---|---|---|
+| Main | `01`–`08`, `10` | various | yes |
+| Main | `09` | `CORPT00C` | **no** — needs JCL job submission behind the JOBS TDQ, which no server here drives. Not in either config's `[transactions]`. |
+| Main | `11` | `COPAUS0C` | **no** — no source ships. Degrades gracefully: COMEN01C guards this one XCTL with `EXEC CICS INQUIRE PROGRAM`. |
+| Admin | `1`–`4` | `COUSR00C`/`01C`/`02C`/`03C` | yes — user list / add / update / delete, VSAM-backed |
+| Admin | `5` | `COTRTLIC` | Db2 server only — transaction type list/update |
+| Admin | `6` | `COTRTUPC` | Db2 server only — transaction type maintenance |
+
+**Selecting an unwired option drops the connection.** That is `forge-6jj` (open, P1): an XCTL to
+a program the region never compiled correctly abends `PGMI` internally, but the result still
+reaches the driver marked `XCTL`, so it steps a terminated region and raises
+`RuntimeError: step() called on a region that has terminated` instead of painting the abend.
+Option `09` is the reachable route on both servers; admin `5`/`6` is the route on the plain one.
+Option `11` is the only unwired option that fails gracefully, because it is the only one guarded.
+
 ## Tests
 
 Each package is independently testable from its own directory:

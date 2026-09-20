@@ -4,7 +4,7 @@
 . tests/integration/db2_env.sh
 uv run carddemo-db2-seed          # once, to create and seed the schema
 uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
-c3270 -model 3278-2 localhost:3271
+c3270 -model 3279-2-E localhost:3271   # 3279 + -E, or you get monochrome
 """
 
 from __future__ import annotations
@@ -86,14 +86,30 @@ def _require_schema(dsn: str) -> None:
         ibm_db.close(schema_conn)  # type: ignore[reportArgumentType]
 
 
+def _built(config, bridge_jar: str, work_dir: Path, dsn: str):
+    """Build the composed region, saying so first: compiling every program in
+    the config takes about a minute, and the bridge's own progress bar names no
+    program, so silence here reads as a hang."""
+    logger.info("compiling the region's programs (about a minute)")
+    return build_db2_region(config, bridge_jar, work_dir, dsn)
+
+
+def _bound(host: str, port: int):
+    """Bind, and only THEN say we are serving -- announcing it before the
+    region compiles is what made a working start look wedged."""
+    server = bind(host, port)
+    logger.info("serving on %s:%d -- ready for a 3270 to connect", host, port)
+    return server
+
+
 def _serve(
     config, bridge_jar: str, work_dir: Path, dsn: str, host: str, port: int
 ) -> None:
     """Build the composed region and serve it until interrupted, closing its
     Db2 connection on the way out even if serving raises."""
-    served, conn = build_db2_region(config, bridge_jar, work_dir, dsn)
+    served, conn = _built(config, bridge_jar, work_dir, dsn)
     try:
-        server = bind(host, port)
+        server = _bound(host, port)
         session = partial(
             run_session,
             driver=served.driver,
@@ -113,7 +129,6 @@ def main() -> int:
     dsn = _dsn()
     config = load_config(args.config)
     _require_schema(dsn)
-    logger.info("serving %s on %s:%d", args.config, args.host, args.port)
     with tempfile.TemporaryDirectory(prefix="carddemo-db2-tn3270-") as work_dir:
         _serve(
             config,

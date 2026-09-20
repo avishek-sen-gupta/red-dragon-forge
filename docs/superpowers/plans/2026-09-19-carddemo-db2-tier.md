@@ -785,7 +785,7 @@ bd export -o issues/issues.jsonl && git add issues/issues.jsonl
 
 **Task ordering is not arbitrary.** Tasks 1-3 make the column bug class unreachable; Task 4 proves it; Tasks 5-8 fix silent wrongness inside squall; Tasks 9-10 build the composition; Tasks 11-12 prove and document it. Task 4 is a gate — if it fails, stop.
 
-**`forge-6jj` is fixed** (an unknown-program XCTL used to crash the driver rather than abend), so a part-wired region now reports a PGMI abend on screen. If you see `RuntimeError: step() called on a region that has terminated`, that fix has regressed.
+**CORRECTION 2026-09-21: `forge-6jj` was never fixed and is still OPEN (P1).** This line originally claimed it was, which is wrong and misled a later session into reporting a known bug as a regression. An unknown-program XCTL still crashes the driver: `RuntimeError: step() called on a region that has terminated`, confirmed on the wire (it drops the connection and takes the server down with it). Main option `09` is the reachable route on both servers; admin `5`/`6` on the plain CICS-only one.
 
 **The Db2 harness.** `squall-db2` on host port **15000**, not `db2server` on 50000 — that one is unrelated and its `db2inst1` password expired 2026-09-12. `squall/.env` pins `DB2_PORT=15000`. `forge-zka` records that the instance dies while the container stays up; the remedy is `make db2-restart`.
 

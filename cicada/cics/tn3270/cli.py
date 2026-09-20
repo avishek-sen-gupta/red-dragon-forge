@@ -2,7 +2,7 @@
 
 . ./bridge-env.sh
 uv run cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
-c3270 -model 3278-2 localhost:3270
+c3270 -model 3279-2-E localhost:3270   # 3279 + -E, or you get monochrome
 """
 
 from __future__ import annotations
