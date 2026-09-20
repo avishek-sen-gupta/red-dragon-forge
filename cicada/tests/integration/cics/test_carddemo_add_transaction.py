@@ -208,7 +208,7 @@ def _drive_to_add_transaction(tmp_path: Path, bridge_jar):
         addtran_path.read_bytes(),
         parser,
         spec,
-        program_source_dirs=[app / "cbl"],
+        source_search_dirs=[app / "cbl"],
     )
 
     program_cache = {"COSGN00C": signon, "COMEN01C": menu, "COTRN02C": addtran}

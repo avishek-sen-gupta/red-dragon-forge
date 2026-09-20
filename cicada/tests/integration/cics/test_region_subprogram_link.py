@@ -7,7 +7,7 @@ left the result symbolic and wrote nothing back through the USING params.
 
 Here a tiny main program CALLs a tiny callee BY REFERENCE; the callee writes a
 known value into the LINKAGE field. We compile the main with
-``program_source_dirs`` pointing at a dir that also holds the callee source, then
+``source_search_dirs`` pointing at a dir that also holds the callee source, then
 drive it through a real CICS region and assert the value the callee wrote
 surfaces on the screen — proving the callee actually executed (region linking).
 """
@@ -96,7 +96,7 @@ def test_region_program_links_called_subprogram(tmp_path, bridge_jar):
         entry_transid="CC00",
         screen_queue=screen_q,
         input_queue=input_q,
-        program_source_dirs=[cbl_dir],
+        source_search_dirs=[cbl_dir],
     )
 
     assert result.kind == DispatchKind.RETURN

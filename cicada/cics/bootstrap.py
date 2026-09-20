@@ -47,7 +47,7 @@ def compile_cics_program(
     parser: Any,
     spec: CoprocessorSpec,
     *,
-    program_source_dirs: Sequence[Path] = (),
+    source_search_dirs: Sequence[Path] = (),
     tolerant: bool = False,
 ) -> Any:
     """Raw (NOT pre-passed) CICS COBOL ``source`` -> ``LinkedProgram`` with
@@ -67,7 +67,7 @@ def compile_cics_program(
         source,
         parser,
         [spec],
-        program_source_dirs=program_source_dirs,
+        source_search_dirs=source_search_dirs,
         tolerant=tolerant,
     )
     return linked
@@ -86,7 +86,7 @@ def run_carddemo_region(
     applid: str = "CARDDEMO",
     sysid: str = "SYS1",
     max_steps: int = 50_000,
-    program_source_dirs: Sequence[Path] = (),
+    source_search_dirs: Sequence[Path] = (),
     region_termid: str = DEFAULT_TERMID,
     on_abend: Callable[[], None] = _noop,
 ) -> DispatchResult:
@@ -101,7 +101,7 @@ def run_carddemo_region(
     single shared :class:`CicsLoweringStrategy`; a missing source raises a clear
     error before the dispatcher loop starts (fail-fast).
 
-    ``program_source_dirs`` (e.g. the CardDemo ``cbl/`` dir) are threaded into
+    ``source_search_dirs`` (e.g. the CardDemo ``cbl/`` dir) are threaded into
     :func:`compile_cics_program` so each region program links the subprograms
     it ``CALL``s.
 
@@ -155,7 +155,7 @@ def run_carddemo_region(
             source,
             parser,
             spec,
-            program_source_dirs=program_source_dirs,
+            source_search_dirs=source_search_dirs,
         )
 
     def run_fn(

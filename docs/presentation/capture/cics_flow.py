@@ -310,7 +310,7 @@ def compile_program(
         (APP / "cbl" / f"{program}.cbl").read_bytes(),
         parser,
         spec,
-        program_source_dirs=[APP / "cbl"],
+        source_search_dirs=[APP / "cbl"],
     )
     compiled = Compiled(linked, round(time.perf_counter() - began, 2))
     emit(f"compiled {program} in {compiled.seconds}s")

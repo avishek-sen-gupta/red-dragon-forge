@@ -161,7 +161,7 @@ def _drive_to_reports(tmp_path: Path, bridge_jar):
         reports_path.read_bytes(),
         parser,
         spec,
-        program_source_dirs=[app / "cbl"],
+        source_search_dirs=[app / "cbl"],
     )
 
     program_cache = {"COSGN00C": signon, "COMEN01C": menu, "CORPT00C": reports}

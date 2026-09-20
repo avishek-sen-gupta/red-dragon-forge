@@ -31,7 +31,7 @@ _CICS_ONLY_PROGRAM = b"""\
 # CALLs the IBM Language Environment service CEEDAYS, which has no CardDemo
 # application source (real z/OS supplies it at runtime) -- Cicada ships a
 # stub at cics/stubs/CEEDAYS.cbl. Proves the CICS CoprocessorSpec's
-# extra_program_source_dirs contribution (cics.le_stubs.LE_STUBS_DIR) resolves
+# source_search_dirs contribution (cics.le_stubs.LE_STUBS_DIR) resolves
 # the CALL without this test doing anything beyond building the spec --
 # without that wiring, compile_program would raise on the unresolved CALL.
 _CICS_CEEDAYS_PROGRAM = b"""\

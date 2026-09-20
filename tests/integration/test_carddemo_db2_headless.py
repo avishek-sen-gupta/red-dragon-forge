@@ -630,9 +630,18 @@ def test_admin_five_backward_fetch_exhaustion_misreports_end_of_data_as_a_db2_er
     # WRONG: a mid-list backward-fetch exhaustion (+100) is reported to the
     # operator as a Db2 error rather than being treated as reaching the top
     # of the available rows.
+    #
+    # Asserted whole, not by prefix, because the tail is the other half of the
+    # evidence. Everything up to 'SQLCODE:  100' is CardDemo's own STRING of
+    # WS-DISP-SQLCODE, and everything after it is the DSNTIAC stub's reading
+    # of the SQLCA the FETCH actually left behind. The two agree: Db2 really
+    # did return +100, which is end-of-data, and 8100-READ-BACKWARDS still
+    # routed it to WHEN OTHER. The stub's text is trailing-truncated by
+    # ERRMSG's own field width ('+10'), which is the screen's doing, not the
+    # stub's -- WS-LONG-MSG holds the full '+100'.
     assert terminal.value("PAGENO") == "2"
-    assert terminal.value("ERRMSG").startswith(
-        "Error on fetch Cursor C-TR-TYPE-BACKWARD SQLCODE:  100"
+    assert terminal.value("ERRMSG") == (
+        "Error on fetch Cursor C-TR-TYPE-BACKWARD SQLCODE:  100 " "DSNTIAC: SQLCODE=+10"
     )
 
 
@@ -776,8 +785,14 @@ def test_admin_five_delete_failure_after_an_update_selection(terminal, db2_probe
 
     terminal.press(_PF10, TRTSEL5="D")
 
-    assert terminal.value("ERRMSG").startswith(
-        "Delete failed with message: SQLCODE:  100"
+    # Asserted whole, not by prefix: the DSNTIAC tail is what proves the
+    # failure reaching the operator is the DELETE's own, freshly read from the
+    # SQLCA rather than inherited. 'SQLCODE:  100' is CardDemo's
+    # WS-DISP-SQLCODE and 'DSNTIAC: SQLCODE=+100' is the stub's independent
+    # reading of the same SQLCA -- they agree, so the +100 is genuinely this
+    # DELETE matching no rows.
+    assert terminal.value("ERRMSG") == (
+        "Delete failed with message: SQLCODE:  100 DSNTIAC: SQLCODE=+100"
     )
     assert not _shows_info_prompt(
         terminal, "HIGHLIGHTED row deleted.Hit Enter to continue"

@@ -150,7 +150,7 @@ certificate of full coverage. The gaps below still apply.
 |---|---|---|
 | `DialectParser` (parse time) | `cobol_asg/frontend_extension.py:19` | `applies(data)` / `parse(data)` claim a coprocessor statement's bridge JSON. `NullDialectParser` is the default |
 | `RedDragonExtensionLoweringStrategy` (lowering time) | `interpreter/frontend_extension_lowering.py:21` | `handles(stmt)`, `preprocess_program_dict`, `on_procedure_entry`, `lower(ctx, stmt, layout)` emit ordinary IR |
-| `CoprocessorSpec` + `compile_program` (composition) | `interpreter/project/coprocessor_compile.py:38` | `name`, `make_strategy`, a source pre-scan hook, `owns_execution`, `dialect_parser`, `extra_program_source_dirs`. All pre-scans run before any strategy is built. The module imports nothing CICS- or SQL-specific (its docstring says so) |
+| `CoprocessorSpec` + `compile_program` (composition) | `interpreter/project/coprocessor_compile.py:38` | `name`, `make_strategy`, a source pre-scan hook, `owns_execution`, `dialect_parser`, `source_search_dirs`. All pre-scans run before any strategy is built. The module imports nothing CICS- or SQL-specific (its docstring says so) |
 
 Implementations:
 - **CICS (cicada)**: `CicsDialectParser` `cicada/cics/statements.py:37`;

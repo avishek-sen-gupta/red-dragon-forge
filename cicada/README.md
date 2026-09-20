@@ -206,7 +206,7 @@ cicada builds its `CoprocessorSpec` in `cics/coprocessor.py::build_cics_spec`:
 - `make_strategy` → a fresh `CicsLoweringStrategy` over the shared region runtime state,
 - `dialect_parser` → `CicsDialectParser`,
 - `source_prepass` → `apply_cics_prepass`,
-- `owns_execution=True` and `extra_program_source_dirs` → the IBM LE stub dir.
+- `owns_execution=True` and `source_search_dirs` → the IBM LE stub dir.
 
 The generic single/multi-module compile + transitive `CALL` resolution + linking live in
 RedDragon. Callees that fail to compile are skipped with a warning. IBM LE services (`CEEDAYS`,
