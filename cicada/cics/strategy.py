@@ -121,16 +121,17 @@ _SYS_VERBS: Mapping[str, str] = MappingProxyType(
         # record lock has no other task to exclude. A real no-op, not a gap --
         # see cicada-lkx.3.
         "UNLOCK": "__cics_unlock",
-        # Nothing to commit: the VSAM engine writes through at the point of
-        # WRITE/REWRITE/DELETE, so there is no pending unit of work for a plain
-        # SYNCPOINT to flush. "SYNCPOINT ROLLBACK" is deliberately absent here —
-        # it is a distinct verb string (see cics_visitor.py's SyncpointRollback
-        # mapping) that is NOT registered as a no-op, so it falls through to
-        # _lower_unsupported's loud abend instead of silently pretending to
-        # undo writes this runtime already made durable.
-        "SYNCPOINT": "__cics_syncpoint",
     }
 )
+
+# SYNCPOINT and SYNCPOINT ROLLBACK are distinct verb strings (see
+# cics_visitor.py's Syncpoint/SyncpointRollback mapping) with their own
+# dedicated lowerers (_lower_syncpoint / _lower_syncpoint_rollback) rather
+# than a _SYS_VERBS entry: the VSAM engine writes through at the point of
+# WRITE/REWRITE/DELETE, so neither has anything to do for VSAM, but a
+# composed SQL runtime (squall) has a real pending unit of work — SYNCPOINT
+# commits it, SYNCPOINT ROLLBACK undoes it. Both reach squall through the
+# same name-convention hooks __cics_task_end_hook already uses.
 
 # Verbs whose builtin returns a CICS response code to be written into EIBRESP
 # (always) and the RESP(name) option's field (when present).
@@ -954,20 +955,24 @@ def _register_system_builtins(wiring: _Wiring, identity: tuple[str, str, str]) -
     register("__cics_handle_abend", make_handle_abend_builtin())
 
 
-def _register_flow_builtins(wiring: _Wiring) -> None:
+def _register_flow_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> None:
     from cics.builtins.flow import (
         make_link_builtin,
+        make_noop_hook_builtin,
         make_noop_task_end_hook_builtin,
         make_set_return_context_builtin,
         make_set_xctl_context_builtin,
     )
 
-    # Default for a generic task-end extension point another composed
+    # Defaults for three generic extension points another composed
     # coprocessor (e.g. squall) may independently claim — cicada always calls
-    # this at task end (see the RETURN lowering) with no idea what, if
-    # anything, is registered under it.
+    # these at task end / SYNCPOINT / SYNCPOINT ROLLBACK (see the RETURN,
+    # _lower_syncpoint and _lower_syncpoint_rollback lowerings) with no idea
+    # what, if anything, is registered under them.
     register_default("__cics_task_end_hook", make_noop_task_end_hook_builtin())
-    _register_abend_builtins(wiring)
+    register_default("__cics_syncpoint_hook", make_noop_hook_builtin())
+    register_default("__cics_rollback_hook", make_noop_hook_builtin())
+    _register_abend_builtins(wiring, on_abend)
     register(
         "__cics_set_return_context",
         make_set_return_context_builtin(wiring.result_holder),
@@ -986,7 +991,7 @@ def _register_flow_builtins(wiring: _Wiring) -> None:
     )
 
 
-def _register_abend_builtins(wiring: _Wiring) -> None:
+def _register_abend_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> None:
     register("__cics_handle_aid", make_handle_noop_builtin("HANDLE AID"))
     register(
         "__cics_unlock",
@@ -995,20 +1000,14 @@ def _register_abend_builtins(wiring: _Wiring) -> None:
             "single-task emulation holds no lock another task could see",
         ),
     )
+    register("__cics_abend", make_abend_builtin(wiring.result_holder, on_abend))
     register(
-        "__cics_syncpoint",
-        make_runtime_noop_builtin(
-            "EXEC CICS SYNCPOINT",
-            "the VSAM engine writes through, so there is no unit of work to commit",
-        ),
-    )
-    register("__cics_abend", make_abend_builtin(wiring.result_holder))
-    register(
-        "__cics_abend_unhandled", make_abend_unhandled_builtin(wiring.result_holder)
+        "__cics_abend_unhandled",
+        make_abend_unhandled_builtin(wiring.result_holder, on_abend),
     )
     register(
         "__cics_abend_unsupported",
-        make_abend_unsupported_builtin(wiring.result_holder),
+        make_abend_unsupported_builtin(wiring.result_holder, on_abend),
     )
 
 
@@ -1108,14 +1107,23 @@ _MULTIPLE_STRATEGIES = (
 )
 
 
-def _register_core_builtins(wiring: _Wiring, identity: tuple[str, str, str]) -> None:
+def _default_on_abend() -> None:
+    """Default on_abend: a CICS-only region has no composed SQL runtime, so
+    there is nothing to roll back when a task abends."""
+
+
+def _register_core_builtins(
+    wiring: _Wiring,
+    identity: tuple[str, str, str],
+    on_abend: Callable[[], None],
+) -> None:
     register(
         "__cics_init_eib",
         make_init_eib_builtin(wiring.context_holder),
         _MULTIPLE_STRATEGIES,
     )
     _register_system_builtins(wiring, identity)
-    _register_flow_builtins(wiring)
+    _register_flow_builtins(wiring, on_abend)
 
 
 def _wiring(
@@ -1177,6 +1185,7 @@ class CicsLoweringStrategy:
         start_queue: StartQueue = _OWN_START_QUEUE,
         transid_to_program: Mapping[str, str] = _NO_TRANSIDS,
         region_termid: str = DEFAULT_TERMID,
+        on_abend: Callable[[], None] = _default_on_abend,
         *,
         handler_source: MutableSequence[ExecCicsStatement],
         unsupported_verbs: set[str],
@@ -1194,7 +1203,7 @@ class CicsLoweringStrategy:
         self._conversational = conversational
         self._lowerers = self._verb_lowerers()
         wiring = _wiring(context_holder, result_holder, program_cache, td_queue)
-        _register_core_builtins(wiring, (applid, sysid, userid))
+        _register_core_builtins(wiring, (applid, sysid, userid), on_abend)
         _register_io_builtins(
             wiring, (screen_queue, input_queue), receive_timeout, vsam_engine
         )
@@ -1217,6 +1226,8 @@ class CicsLoweringStrategy:
                 "RETURN": self._lower_return,
                 "XCTL": self._lower_xctl,
                 "ABEND": self._lower_abend,
+                "SYNCPOINT": self._lower_syncpoint,
+                "SYNCPOINT ROLLBACK": self._lower_syncpoint_rollback,
                 "START": self._lower_start,
                 "RETRIEVE": self._lower_retrieve,
                 "ASSIGN": self._lower_assign,
@@ -1385,6 +1396,39 @@ class CicsLoweringStrategy:
         r_code = _emit_string(ctx, _operand_text(opts.get("ABCODE"), "UNKN"))
         _emit_call(ctx, "__cics_abend", r_code)
         ctx.emit_inst(Return_())
+
+    def _lower_syncpoint(
+        self,
+        ctx: EmitContext,
+        verb: str,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        """EXEC CICS SYNCPOINT: commit the pending unit of work.
+
+        Does NOT close cursors. Real CICS closes non-WITH-HOLD cursors at
+        syncpoint too, but every squall-composed program observed so far
+        (COTRTLIC) opens, fetches and closes each cursor within one
+        paragraph inside a single task, so no cursor is ever open across one
+        of its syncpoints — closing here would be more faithful and equally
+        harmless today, but not closing is simpler and cannot break the
+        observed programs. A future WITH HOLD program makes this a
+        deliberate revisit, not a surprise.
+        """
+        _emit_call(ctx, "__cics_syncpoint_hook")
+
+    def _lower_syncpoint_rollback(
+        self,
+        ctx: EmitContext,
+        verb: str,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        """EXEC CICS SYNCPOINT ROLLBACK: undo the pending unit of work and
+        close every cursor. Neither CardDemo program uses this verb today —
+        left unregistered it fell through to _lower_unsupported's loud abend
+        (forge-1zu.15)."""
+        _emit_call(ctx, "__cics_rollback_hook")
 
     def _lower_start(
         self,

@@ -93,7 +93,7 @@ def test_cursor_declare_open_fetch_close():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin, _reset = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def run(sql):
         plans.append(parse_exec_sql(sql))
@@ -138,13 +138,16 @@ def test_cursor_declare_open_fetch_close():
     assert sqlcode() == 0
 
 
-def test_fetch_on_unopened_cursor_is_end():
-    """FETCH on a cursor that was never opened reports end-of-cursor (100)."""
+def test_fetch_on_undeclared_cursor_is_not_open():
+    """FETCH on a cursor name that was never reached by DECLARE CURSOR is
+    Db2-faithful SQLCODE -501 (cursor not open) — not the +100 end-of-cursor
+    code, which means something else (a *declared* cursor with no more rows,
+    or one already CLOSEd)."""
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
     plans: list = []
-    builtin, _reset = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def run(sql):
         plans.append(parse_exec_sql(sql))
@@ -152,4 +155,159 @@ def test_fetch_on_unopened_cursor_is_end():
 
     run("EXEC SQL CONNECT TO SAMPLE END-EXEC")  # a run starts disconnected
     run("EXEC SQL FETCH nope INTO :PNAME, :DEPT END-EXEC")
-    assert _zoned_decode(bytes(region[13:22])) == 100
+    assert _zoned_decode(bytes(region[13:22])) == -501
+
+
+# ── squall-qhi: DECLARE CURSOR recovered from WORKING-STORAGE ────────────────
+
+
+def test_open_on_a_cursor_declared_via_data_division_exec_sql_returns_sqlcode_0():
+    """The load-bearing case (forge-qhi): COTRTLIC declares both its cursors
+    in WORKING-STORAGE, so no DECLARE CURSOR statement ever reaches
+    PROCEDURE DIVISION or lowers to a __exec_sql call. The bridge now
+    recovers it into the raw JSON's "data_division_exec_sql" key (a real
+    ProLeap bridge fix, not a squall-side re-parse of raw source);
+    squall.data_division_exec_sql.derive_cursors turns that into a
+    DECLARE_CURSOR plan, and it must reach ctx.cursors through the SAME
+    plumbing SqlLoweringStrategy.preprocess_program_dict uses for
+    field_meta -- OPEN must then succeed (SQLCODE 0), not fail with -1 as
+    it would if the cursor were never registered."""
+    from squall.data_division_exec_sql import derive_cursors
+
+    bridge_data = {
+        "data_division_exec_sql": [
+            {
+                "section": "WORKING-STORAGE",
+                "exec_sql_text": (
+                    "EXEC SQL DECLARE C-TR-TYPE-FORWARD CURSOR FOR "
+                    "SELECT NAME FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
+                ),
+            }
+        ]
+    }
+    recovered_cursors = dict(derive_cursors(bridge_data))
+    assert "C-TR-TYPE-FORWARD" in recovered_cursors  # sanity: the fixture matches
+
+    backend = _backend()
+    region = bytearray(_REGION_SIZE)
+    vm = _VM(region)
+    plans: list = []
+    builtin, *_ = make_exec_sql_builtin(
+        {"SAMPLE": backend}, plans, {}, cursors=recovered_cursors
+    )
+
+    def run(sql):
+        plans.append(parse_exec_sql(sql))
+        builtin([_TV(len(plans) - 1)], vm)
+
+    def sqlcode():
+        return _zoned_decode(bytes(region[13:22]))
+
+    def pname():
+        return _alpha_decode(bytes(region[0:9]))
+
+    run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    assert sqlcode() == 0
+
+    # No DECLARE statement runs here -- it never lowered at all -- yet OPEN
+    # must still find the cursor's plan and succeed.
+    run("EXEC SQL OPEN C-TR-TYPE-FORWARD END-EXEC")
+    assert sqlcode() == 0
+
+    run("EXEC SQL FETCH C-TR-TYPE-FORWARD INTO :PNAME END-EXEC")
+    assert sqlcode() == 0 and pname() == "SANDERS"
+
+
+# ── Db2-faithful -501: "not open" means DECLAREd-but-unopened or CLOSEd too ──
+
+
+def test_fetch_on_a_declared_but_never_opened_cursor_is_not_open():
+    """The canonical -501 case: a cursor DECLAREd but never OPENed. Before
+    this fix, a declared-but-unopened cursor fell through to backend.fetch()
+    and got the backend's own +100 (its internal _cursors dict has no entry
+    either, which is indistinguishable from genuine end-of-data) -- the
+    fetch-on-an-undeclared-name case was fixed, but this, the actually
+    common one, was not."""
+    backend = _backend()
+    region = bytearray(_REGION_SIZE)
+    vm = _VM(region)
+    plans: list = []
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+
+    def run(sql):
+        plans.append(parse_exec_sql(sql))
+        builtin([_TV(len(plans) - 1)], vm)
+
+    def sqlcode():
+        return _zoned_decode(bytes(region[13:22]))
+
+    run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    run(
+        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
+    )
+    # No OPEN c1 here.
+    run("EXEC SQL FETCH c1 INTO :PNAME, :DEPT END-EXEC")
+    assert sqlcode() == -501
+
+
+def test_fetch_after_close_is_not_open():
+    """FETCH on a cursor that was OPENed and then CLOSEd is also -501, not
+    the backend's own end-of-data +100 -- CLOSE removes the name from
+    ctx.open_cursors, which FETCH consults before ever reaching the backend."""
+    backend = _backend()
+    region = bytearray(_REGION_SIZE)
+    vm = _VM(region)
+    plans: list = []
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+
+    def run(sql):
+        plans.append(parse_exec_sql(sql))
+        builtin([_TV(len(plans) - 1)], vm)
+
+    def sqlcode():
+        return _zoned_decode(bytes(region[13:22]))
+
+    run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    run(
+        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
+    )
+    run("EXEC SQL OPEN c1 END-EXEC")
+    run("EXEC SQL CLOSE c1 END-EXEC")
+    assert sqlcode() == 0
+
+    run("EXEC SQL FETCH c1 INTO :PNAME, :DEPT END-EXEC")
+    assert sqlcode() == -501
+
+
+def test_close_on_a_cursor_that_is_not_open_is_not_open():
+    """CLOSE itself reports -501 for a cursor that is not currently open --
+    a declared-but-unopened cursor, or one already CLOSEd -- rather than the
+    unconditional SQLCODE 0 it used to write for any name at all."""
+    backend = _backend()
+    region = bytearray(_REGION_SIZE)
+    vm = _VM(region)
+    plans: list = []
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+
+    def run(sql):
+        plans.append(parse_exec_sql(sql))
+        builtin([_TV(len(plans) - 1)], vm)
+
+    def sqlcode():
+        return _zoned_decode(bytes(region[13:22]))
+
+    run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    run(
+        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
+    )
+    # Never OPENed.
+    run("EXEC SQL CLOSE c1 END-EXEC")
+    assert sqlcode() == -501
+
+    # OPEN, then CLOSE twice -- the second CLOSE finds it already not open.
+    run("EXEC SQL OPEN c1 END-EXEC")
+    assert sqlcode() == 0
+    run("EXEC SQL CLOSE c1 END-EXEC")
+    assert sqlcode() == 0
+    run("EXEC SQL CLOSE c1 END-EXEC")
+    assert sqlcode() == -501

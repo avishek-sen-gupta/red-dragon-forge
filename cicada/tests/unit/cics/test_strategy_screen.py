@@ -301,8 +301,9 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_syncpoint_lowers_to_a_noop_call():
-    """Plain SYNCPOINT is a deliberate no-op (writes already went through the
-    VSAM engine) -- it must not fall into the unsupported-verb abend path."""
+    """Plain SYNCPOINT no longer VSAM-only-no-ops: it must reach a composed
+    SQL runtime's commit via __cics_syncpoint_hook (task-6 brief) and must
+    not fall into the unsupported-verb abend path or end the task."""
     from interpreter.instructions import CallFunction, Return_
     from cics.statements import ExecCicsStatement
 
@@ -311,17 +312,17 @@ def test_syncpoint_lowers_to_a_noop_call():
     _strategy().lower(ctx, stmt, materialised=None)
 
     calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
-    assert any(c.func_name == FuncName("__cics_syncpoint") for c in calls)
+    assert any(c.func_name == FuncName("__cics_syncpoint_hook") for c in calls)
     assert not any(c.func_name == FuncName("__cics_abend_unsupported") for c in calls)
     assert not any(isinstance(i, Return_) for i in ctx.emitted)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_syncpoint_rollback_is_loud_not_a_noop():
-    """SYNCPOINT ROLLBACK is a distinct verb string from plain SYNCPOINT and is
-    NOT registered as a no-op: this runtime already wrote committed changes
-    through, so pretending to roll them back would be a silent lie. It falls
-    through to the same abend path as any unimplemented verb."""
+def test_syncpoint_rollback_lowers_to_the_rollback_hook():
+    """SYNCPOINT ROLLBACK is a distinct verb string from plain SYNCPOINT.
+    It used to fall through to the unsupported-verb abend path
+    (forge-1zu.15, unregistered); it must now lower to the dedicated
+    rollback hook instead, without abending or ending the task."""
     from interpreter.instructions import CallFunction, Return_
     from cics.statements import ExecCicsStatement
 
@@ -337,9 +338,10 @@ def test_syncpoint_rollback_is_loud_not_a_noop():
     strategy.lower(ctx, stmt, materialised=None)
 
     calls = [i for i in ctx.emitted if isinstance(i, CallFunction)]
-    assert any(c.func_name == FuncName("__cics_abend_unsupported") for c in calls)
-    assert any(isinstance(i, Return_) for i in ctx.emitted)
-    assert unsupported == {"SYNCPOINT ROLLBACK"}
+    assert any(c.func_name == FuncName("__cics_rollback_hook") for c in calls)
+    assert not any(c.func_name == FuncName("__cics_abend_unsupported") for c in calls)
+    assert not any(isinstance(i, Return_) for i in ctx.emitted)
+    assert unsupported == set()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

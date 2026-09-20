@@ -2,14 +2,22 @@
 tests/unit/test_exec_sql_scan.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Tests for squall.exec_sql_scan.find_exec_sql_spans — the cursor-advancing
-EXEC SQL / END-EXEC block scanner used by squall.preprocess.
+EXEC SQL / END-EXEC block scanner used by squall.preprocess, matched over
+parsed FixedLine code areas.
 """
 
 from __future__ import annotations
 
 from squall.exec_sql_scan import find_exec_sql_spans
+from squall.fixed_format import parse_line, render, replace_span
 from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import HostVar, Kind
+
+
+def _lines(source: str):
+    """Parse *source* into the FixedLine sequence find_exec_sql_spans expects."""
+    return tuple(parse_line(raw) for raw in source.split("\n"))
+
 
 # ── multi-line, fixed-format sequence numbers ───────────────────────────────
 
@@ -17,10 +25,9 @@ from squall.parser.sql_model import HostVar, Kind
 def test_multiline_sequence_numbered_select_into_strips_digits_from_every_line() -> (
     None
 ):
-    """The opening-line regex only strips columns 1-6 on the first line of a
-    block; a multi-line statement's continuation lines carry their own
-    sequence numbers, which must not leak into the text handed to the SQL
-    parser."""
+    """A multi-line statement's continuation lines carry their own sequence
+    numbers in columns 1-6; matching against code areas alone means those
+    digits never reach the text handed to the SQL parser."""
     source = (
         "028600  EXEC SQL SELECT TR_TYPE\n"
         "028700          INTO :DCL-TR-TYPE\n"
@@ -28,7 +35,7 @@ def test_multiline_sequence_numbered_select_into_strips_digits_from_every_line()
         "028900  END-EXEC.\n"
     )
 
-    (span,) = find_exec_sql_spans(source)
+    (span,) = find_exec_sql_spans(_lines(source))
 
     assert not any(ch.isdigit() for ch in span.parse_text)
 
@@ -43,7 +50,7 @@ def test_multiline_sequence_numbered_select_into_is_recognised_with_into() -> No
         "028900  END-EXEC.\n"
     )
 
-    (span,) = find_exec_sql_spans(source)
+    (span,) = find_exec_sql_spans(_lines(source))
     parsed = parse_exec_sql(span.parse_text)
 
     assert parsed.kind is Kind.SELECT_INTO
@@ -55,7 +62,7 @@ def test_non_include_sequence_numbered_statement_is_scanned() -> None:
     apply_sql_prepass's own INCLUDE-only tests can't exercise this branch."""
     source = "012300  EXEC SQL COMMIT END-EXEC.\n"
 
-    (span,) = find_exec_sql_spans(source)
+    (span,) = find_exec_sql_spans(_lines(source))
     parsed = parse_exec_sql(span.parse_text)
 
     assert parsed.kind is Kind.COMMIT
@@ -63,28 +70,31 @@ def test_non_include_sequence_numbered_statement_is_scanned() -> None:
 
 def test_sequence_numbered_end_exec_with_trailing_dot() -> None:
     """The trailing statement-terminator dot must still be consumed into the
-    replace span when END-EXEC's line also carries a sequence number."""
+    replaced span when END-EXEC's line also carries a sequence number — a
+    rewrite must leave nothing of the original statement in the code area."""
     source = "045600  EXEC SQL INCLUDE SQLCA END-EXEC.\n"
+    lines = _lines(source)
 
-    (span,) = find_exec_sql_spans(source)
+    (span,) = find_exec_sql_spans(lines)
+    rewritten = replace_span(lines, span.start, span.end, "")
 
-    assert source[span.replace_start : span.replace_end] == (
-        "045600  EXEC SQL INCLUDE SQLCA END-EXEC."
-    )
+    assert render(rewritten[span.start])[7:72].strip() == ""
+    assert rewritten[span.start].sequence == "045600"
 
 
 def test_mixed_numbered_and_unnumbered_source() -> None:
     """A source mixing sequence-numbered and unnumbered EXEC SQL blocks (as
-    real corpora do) must locate both, each keeping its own indent."""
+    real corpora do) must locate both, each keeping its own code-area indent
+    (the sequence area and indicator column are never part of it)."""
     source = (
         "028600      EXEC SQL INCLUDE DCLTRTYP END-EXEC\n"
         "       EXEC SQL INCLUDE SQLCA END-EXEC\n"
     )
 
-    first, second = find_exec_sql_spans(source)
+    first, second = find_exec_sql_spans(_lines(source))
 
-    assert first.indent == "028600      "
-    assert second.indent == "       "
+    assert first.indent == "     "
+    assert second.indent == ""
 
 
 # ── no recursion ceiling ─────────────────────────────────────────────────────
@@ -96,7 +106,7 @@ def test_many_statements_do_not_raise_recursion_error() -> None:
     passed, 1200 crashed). The iterative scan must handle well past that."""
     source = "       EXEC SQL INCLUDE SQLCA END-EXEC.\n" * 1500
 
-    spans = find_exec_sql_spans(source)
+    spans = find_exec_sql_spans(_lines(source))
 
     assert len(spans) == 1500
 
@@ -109,7 +119,7 @@ def test_exec_sql_without_end_exec_is_skipped() -> None:
     scanning continues past it rather than raising or looping."""
     source = "       EXEC SQL INCLUDE SQLCA\n       MOVE 1 TO WS-X.\n"
 
-    spans = find_exec_sql_spans(source)
+    spans = find_exec_sql_spans(_lines(source))
 
     assert spans == ()
 
@@ -120,7 +130,7 @@ def test_well_formed_block_found_before_a_later_malformed_one() -> None:
     occurrence must not disturb the first span already collected."""
     source = "       EXEC SQL INCLUDE SQLCA END-EXEC.\n       EXEC SQL INCLUDE BROKEN\n"
 
-    (span,) = find_exec_sql_spans(source)
+    (span,) = find_exec_sql_spans(_lines(source))
     parsed = parse_exec_sql(span.parse_text)
 
     assert parsed.include.name == "SQLCA"

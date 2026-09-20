@@ -78,6 +78,18 @@ def test_empty_field_meta_is_noop():
     validate_field_meta(_scalar_layout(), {})  # no raise
 
 
+def test_field_meta_entry_missing_category_is_noop():
+    """task-8 review round 2: a field_meta entry with no "category" key at
+    all (FieldMeta is total=False) means NOTHING to compare, not a mismatch
+    -- a linter-driven ``category or ""`` fix briefly turned this into a hard
+    FieldMetaMismatch by comparing the missing key's None against data_layout's
+    real category via an empty-string coercion. "absent" and "present but
+    empty" must stay distinguishable (see binding.py's _Category/_NoCategory).
+    """
+    field_meta = {"ACCT-ID": {}}  # no "category" key
+    validate_field_meta(_scalar_layout(), field_meta)  # no raise
+
+
 # ── One-shot validation through the __exec_sql builtin ────────────────────────
 
 from interpreter.address import Address
@@ -118,7 +130,7 @@ def _commit_builtin(field_meta):
     """A builtin over an empty registry; the plan is a COMMIT (no backend needed
     to reach the one-shot validation, which runs before dispatch)."""
     plans = [parse_exec_sql("EXEC SQL COMMIT END-EXEC")]
-    builtin, _reset = make_exec_sql_builtin({}, plans, field_meta)
+    builtin, *_ = make_exec_sql_builtin({}, plans, field_meta)
     return builtin, plans
 
 

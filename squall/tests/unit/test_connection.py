@@ -131,7 +131,7 @@ def _session(connections, vm, initial_connector=NullDbConnector()):
     """One builtin over *connections* + a shared plan pool, bound to *vm*.
     Returns issue(sql); connection/cursor state persists across calls."""
     plans: list = []
-    builtin, _reset = make_exec_sql_builtin(
+    builtin, *_ = make_exec_sql_builtin(
         connections, plans, {}, initial_connector=initial_connector
     )
 

@@ -47,7 +47,7 @@ COBOL_REACHES_UNSUPPORTED = """\
        WORKING-STORAGE SECTION.
        01  WS-CA  PIC X(8) VALUE 'RANAFTER'.
        PROCEDURE DIVISION.
-           EXEC CICS SYNCPOINT ROLLBACK END-EXEC.
+           EXEC CICS ENQ END-EXEC.
            EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
 """
 
@@ -61,7 +61,7 @@ COBOL_NEVER_REACHES_UNSUPPORTED = """\
        PROCEDURE DIVISION.
            EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
        PARA-NEVER-RUN.
-           EXEC CICS SYNCPOINT ROLLBACK END-EXEC.
+           EXEC CICS ENQ END-EXEC.
 """
 
 
@@ -88,7 +88,7 @@ def _run(source: bytes, cobol_parser, unsupported: set):
 def test_executing_an_unsupported_verb_abends(cobol_parser):
     """The RETURN after the unsupported statement must not run: its commarea is
     the evidence. Reaching it would mean the program carried on as though
-    SYNCPOINT ROLLBACK had committed."""
+    ENQ had succeeded."""
     collected: set = set()
     result = _run(COBOL_REACHES_UNSUPPORTED.encode(), cobol_parser, collected)
 
@@ -118,7 +118,7 @@ def test_the_compile_reports_which_verbs_it_dropped(cobol_parser):
     collected: set = set()
     _run(COBOL_NEVER_REACHES_UNSUPPORTED.encode(), cobol_parser, collected)
 
-    assert collected == {"SYNCPOINT ROLLBACK"}
+    assert collected == {"ENQ"}
 
 
 @covers(CobolFeature.EXEC_CICS)

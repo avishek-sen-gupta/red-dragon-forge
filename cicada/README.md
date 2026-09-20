@@ -492,8 +492,10 @@ default model 4 included).
 
 The TOML config (`RegionConfig`, `cics/tn3270/config.py`) has two tables:
 
-- `[paths]` — `source_dir`, `copybook_dirs` (list), `bms_dir`, `data_dir`, `hlasm_export`,
-  all `${VAR}`-expandable (`CARDDEMO_HOME`/`FORGE_ROOT` in the shipped config).
+- `[paths]` — `source_dirs` (list, first-hit-wins per program), `copybook_dirs` (list),
+  `bms_dirs` (list), `data_dir`, `hlasm_export`, optional `copybook_exts` (list; empty by
+  default so the bridge's own `-copybook-ext` defaults apply), all `${VAR}`-expandable
+  (`CARDDEMO_HOME`/`FORGE_ROOT` in the shipped config).
 - `[region]` — `initial_transid`, `min_commarea_len`, `programs` (extra programs beyond the
   transaction table's values).
 - `[transactions]` — `TRANSID = "PROGRAM"` entries (the CSD's transid→program map).
@@ -519,8 +521,10 @@ first input field and you type straight into it. Tab and Shift+Tab move between 
 into a protected area locks the keyboard, which `Ctrl+R` (Reset) clears. Enter sends; function
 keys are PF1-PF24 (`F5` in c3270, or `PF(5)` at its `Ctrl+]` command line).
 
-These flows are covered by the wire tests in `tests/integration/cics/test_tn3270_crud_e2e.py`,
-so they are the ones known to work end to end:
+These flows are the ones known to work end to end. Every row but the last two is covered by the
+wire tests in `tests/integration/cics/test_tn3270_crud_e2e.py`; admin `5`/`6` need a live Db2
+and are driven headlessly instead, by `tests/integration/test_carddemo_db2_headless.py` — see
+"Admin 5/6: the Db2 tier" below for why and for the verified command sequence.
 
 | Menu | Option | Flow | Commits with |
 |---|---|---|---|
@@ -530,6 +534,8 @@ so they are the ones known to work end to end:
 | Main | `08` | Add transaction: fill the fields, ENTER, then `Y` in `CONFIRM` | ENTER → `WRITE` |
 | Main | `10` | Bill pay: account id, ENTER, then `Y` in `CONFIRM` | ENTER → `REWRITE` + `WRITE` |
 | Admin | `2` / `3` / `4` | Add / update / delete a user | `WRITE` / PF5 → `REWRITE` / PF5 → `DELETE` |
+| Admin | `5` | Transaction type list/update (`COTRTLIC`) — **needs a live Db2** | ENTER validates, PF10 → `UPDATE`/`DELETE` |
+| Admin | `6` | Transaction type maintenance (`COTRTUPC`) — **needs a live Db2** | ENTER validates, PF5 → `UPDATE`/`INSERT`, PF4+PF4 → `DELETE` |
 
 The update programs only honour PF5 *after* an ENTER turn has validated the change ("Changes
 validated. Press F5 to save"), so the two turns are mandatory, not a convention. On the wire
@@ -561,16 +567,43 @@ guards that one XCTL with `EXEC CICS INQUIRE PROGRAM` ("This option ... is not i
 Admin `5`/`6` are the **Db2** options — "Transaction Type List/Update" (`COTRTLIC`) and
 "Transaction Type Maintenance" (`COTRTUPC`), bracketed in `COADM02Y.cpy` as added for the Db2
 release, which is also why that copybook raises `CDEMO-ADMIN-OPT-COUNT` from 4 to 6. Their
-source *does* ship, but in a separate tree (`vendor/carddemo/app/app-transaction-type-db2/`)
-that the shipped config does not point at, and neither compiles today: COTRTUPC parses but has
-no EXEC SQL lowering, because `build_region` composes only the CICS coprocessor
-(`ValueError: Unknown COBOL statement type: 'EXEC_SQL'`), and COTRTLIC does not get that far —
-ProLeap rejects its preprocessed form. Serving them needs the forge composition layer plus a
-live Db2, not just a config entry.
+source ships in a separate tree (`vendor/carddemo/app/app-transaction-type-db2/`) from the rest
+of CardDemo, which is why they are not on the plain `cicada-tn3270`/`carddemo-tn3270.toml` path
+above: they need `red_dragon_forge`'s composition layer (CICS + squall's SQL `CoprocessorSpec`
+composed into one region, `red_dragon_forge.carddemo_db2_region.build_db2_region`) and a live
+Db2, not just a CICS-only config entry.
+
+### Admin 5/6: the Db2 tier
+
+Both programs are wired, compiled, and run headlessly end to end against a real Db2 by
+`tests/integration/test_carddemo_db2_headless.py`, using
+`cicada/config/carddemo-db2-tn3270.toml` (a second, Db2-tree-inclusive config, not
+`carddemo-tn3270.toml`). The `CARDDEMO.TRANSACTION_TYPE` / `TRANSACTION_TYPE_CATEGORY` tables
+are dropped, recreated from the vendored DDL, and reseeded at the START of every test run
+(`red_dragon_forge.carddemo_db2_schema.apply_schema`, run by the `carddemo_db2_schema` fixture)
+— so a restart always resets the world, the same guarantee the VSAM-backed options above get
+from their own seeded temp directory.
+
+Verified end to end against the `squall-db2` container -- if it's up but the instance died
+(`SQL30081N`), use `make db2-restart`, not `make db2-up`:
+
+```bash
+make db2-up                              # or make db2-restart if already up but unhealthy
+cd red-dragon-forge
+. ./carddemo-env.sh                      # FORGE_ROOT + CARDDEMO_HOME + the bridge JARs
+. tests/integration/db2_env.sh           # SQUALL_DB2_DSN, from squall/.env's DB2_PORT
+uv run --no-sync python -m pytest tests/integration/test_carddemo_db2_headless.py -q
+```
+
+There is no live-3270-server CLI for this composed region yet (`cicada-tn3270` only builds the
+CICS-only region) -- driving it interactively over the wire would need a small CLI analogous to
+`cics/tn3270/cli.py` built on `build_db2_region` instead of `build_region`.
 
 Because COADM01C XCTLs straight to the option's program with no INQUIRE guard, selecting admin
-`5`/`6` today hits `forge-6jj`: the unknown-program XCTL abends PGMI internally but crashes the
-driver rather than painting a diagnostic.
+`5`/`6` from the plain CICS-only `cicada-tn3270` server (which has no SQL coprocessor composed
+in) still hits `forge-6jj`: the unknown-program XCTL abends PGMI internally but crashes the
+driver rather than painting a diagnostic. That failure mode does not apply to the composed Db2
+region above, which has both programs actually compiled in.
 
 ---
 

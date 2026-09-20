@@ -4,9 +4,9 @@ min_commarea_len = 2000
 programs = ["COACTVWC"]
 
 [paths]
-source_dir = "${CARDDEMO_HOME}/cbl"
+source_dirs = ["${CARDDEMO_HOME}/cbl"]
 copybook_dirs = ["${CARDDEMO_HOME}/cpy", "${CARDDEMO_HOME}/cpy-bms"]
-bms_dir = "${CARDDEMO_HOME}/bms"
+bms_dirs = ["${CARDDEMO_HOME}/bms"]
 data_dir = "${CARDDEMO_HOME}/data/EBCDIC"
 hlasm_export = "${FORGE_ROOT}/cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
 

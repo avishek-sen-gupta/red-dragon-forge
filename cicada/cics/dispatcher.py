@@ -39,6 +39,39 @@ _USE_REGION_MAX_STEPS = -1
 _NO_OVERRIDE: tuple[DispatchResult, ...] = ()
 
 
+def _no_rollback() -> None:
+    """Default on_abend: no composed SQL runtime supplied a rollback
+    callable, so a dispatcher-level abend has nothing to roll back."""
+
+
+def _abend(on_abend: Callable[[], None], abcode: str) -> DispatchResult:
+    """Build the terminal ABEND DispatchResult for a dispatcher-level abend
+    (PGMI: unknown XCTL target, TRNI: unknown RETURN TRANSID target, AZCT:
+    terminal read timeout, ASTL: the runaway-started-task guard) and run the
+    composed rollback callable on the way out.
+
+    These abends are raised in Python at the routing layer, not IR, so they
+    cannot emit a __cics_rollback_hook the way EXEC CICS SYNCPOINT ROLLBACK
+    does -- this is the same on_abend callable cics.strategy's _Wiring
+    already threads into the IR-raised abend builtins (build_cics_spec's
+    on_abend), so a forge composition supplies one rollback callable that
+    reaches every abend path, dispatcher included.
+
+    The DispatchResult is built and returned even if on_abend raises: a
+    raising rollback (a dropped Db2 connection, say) must not turn a clean
+    abend into a Python crash the driver has to propagate instead of
+    painting on screen -- the exact shape forge-6jj already fixed once on
+    this branch, and cics.builtins.system._run_on_abend guards the same way
+    for the IR-raised abend builtins.
+    """
+    result = DispatchResult(kind=DispatchKind.ABEND, abcode=abcode)
+    try:
+        on_abend()
+    except Exception:
+        logger.exception("on_abend callable raised; the abend still stands")
+    return result
+
+
 @dataclass(frozen=True)
 class NoInput:
     """No terminal input this turn, as after an XCTL. Distinct from
@@ -114,12 +147,13 @@ def _route_return_transid(
     result: DispatchResult,
     program_cache: Mapping[str, P],
     transid_to_program: Mapping[str, str],
+    on_abend: Callable[[], None],
 ) -> NextTask[P] | DispatchResult:
     next_transid = (result.transid or "").strip()
     next_prog_name = transid_to_program.get(next_transid)
     if not next_prog_name:
         logger.error("Unknown transid %r from RETURN TRANSID", result.transid)
-        return DispatchResult(kind=DispatchKind.ABEND, abcode="TRNI")
+        return _abend(on_abend, "TRNI")
     return NextTask(next_transid, program_cache[next_prog_name], result.commarea or b"")
 
 
@@ -127,11 +161,12 @@ def _route_xctl(
     result: DispatchResult,
     current_transid: str,
     program_cache: Mapping[str, P],
+    on_abend: Callable[[], None],
 ) -> NextTask[P] | DispatchResult:
     prog_name = (result.program or "").strip()
     if prog_name not in program_cache:
         logger.error("XCTL to unknown program %r", prog_name)
-        return DispatchResult(kind=DispatchKind.ABEND, abcode="PGMI")
+        return _abend(on_abend, "PGMI")
     return NextTask(current_transid, program_cache[prog_name], result.commarea or b"")
 
 
@@ -140,6 +175,7 @@ def _advance_routing(
     current_transid: str,
     program_cache: Mapping[str, P],
     transid_to_program: Mapping[str, str],
+    on_abend: Callable[[], None] = _no_rollback,
 ) -> NextTask[P] | DispatchResult:
     """The single copy of the "which program/transid runs next" rule.
 
@@ -153,11 +189,16 @@ def _advance_routing(
       * XCTL: switch to the named program; the transid CARRIES (same task).
         Unknown program -> ABEND PGMI.
       * anything else (RETURN / ABEND): terminal — returned unchanged.
+
+    ``on_abend`` (default a no-op) runs on the way out of a TRNI/PGMI abend
+    raised here — see ``_abend``.
     """
     if result.kind == DispatchKind.RETURN_TRANSID:
-        return _route_return_transid(result, program_cache, transid_to_program)
+        return _route_return_transid(
+            result, program_cache, transid_to_program, on_abend
+        )
     if result.kind == DispatchKind.XCTL:
-        return _route_xctl(result, current_transid, program_cache)
+        return _route_xctl(result, current_transid, program_cache, on_abend)
     return result
 
 
@@ -205,7 +246,11 @@ def _discard_pending_input(input_queue: InputChannel) -> None:
         )
 
 
-def _runaway_abend(req: StartRequest, consecutive_starts: int) -> DispatchResult:
+def _runaway_abend(
+    req: StartRequest,
+    consecutive_starts: int,
+    on_abend: Callable[[], None] = _no_rollback,
+) -> DispatchResult:
     """The runaway guard's refusal. Both drivers implement the RULE separately —
     what breaks a chain of started tasks differs between them — but the refusal
     itself is one thing, and the count plus the transid it refused are the only
@@ -217,7 +262,7 @@ def _runaway_abend(req: StartRequest, consecutive_starts: int) -> DispatchResult
         req.transid,
         _RUNAWAY_ABCODE,
     )
-    return DispatchResult(kind=DispatchKind.ABEND, abcode=_RUNAWAY_ABCODE)
+    return _abend(on_abend, _RUNAWAY_ABCODE)
 
 
 @dataclass(frozen=True)
@@ -242,6 +287,7 @@ class _DispatchLoop:
     region_termid: str
     max_consecutive_starts: int
     terminal_termid: str
+    on_abend: Callable[[], None] = _no_rollback
 
     def advance(self, state: _LoopState, _tick: None) -> _LoopState:
         return self.turn(state) if isinstance(state, _LoopTurn) else state
@@ -251,7 +297,11 @@ class _DispatchLoop:
             state.program, state.context, self.screen_queue, self.input_queue
         )
         routing = _advance_routing(
-            result, state.context.transid, self.program_cache, self.transid_to_program
+            result,
+            state.context.transid,
+            self.program_cache,
+            self.transid_to_program,
+            self.on_abend,
         )
         if isinstance(routing, DispatchResult):
             return self._after_terminal(state, routing)
@@ -302,7 +352,7 @@ class _DispatchLoop:
         the terminal the START named — NO_TERMINAL for a non-terminal task."""
         if state.consecutive_starts >= self.max_consecutive_starts:
             self.start_queue.discard_for_abend()
-            return _runaway_abend(req, state.consecutive_starts)
+            return _runaway_abend(req, state.consecutive_starts, self.on_abend)
         self.start_queue.put_start_data(req.data)
         return _LoopTurn(
             program=self.program_cache[self.transid_to_program[req.transid]],
@@ -328,7 +378,7 @@ class _DispatchLoop:
         try:
             event = _peek_input_event(self.input_queue)
         except queue.Empty:
-            return DispatchResult(kind=DispatchKind.ABEND, abcode="AZCT")
+            return _abend(self.on_abend, "AZCT")
         self.start_queue.clear_start_data()
         return _LoopTurn(
             program=pending.program,
@@ -354,6 +404,7 @@ def _run_dispatcher_with_runner(
     start_queue: StartQueue,
     region_termid: str = DEFAULT_TERMID,
     max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
+    on_abend: Callable[[], None] = _no_rollback,
 ) -> DispatchResult:
     """Core dispatcher loop — separated for testability.
 
@@ -363,6 +414,9 @@ def _run_dispatcher_with_runner(
     not cosmetic here — a started task's data comes from RETRIEVE, never the
     terminal, so dispatching it after the blocking ``_peek_input_event`` below
     would leave it waiting on input nobody sends until the AZCT timeout.
+
+    ``on_abend`` runs for every dispatcher-level abend this loop raises
+    (PGMI, TRNI, AZCT, the runaway guard's ASTL) — see ``_abend``.
     """
     loop = _DispatchLoop(
         run_fn=run_fn,
@@ -374,6 +428,7 @@ def _run_dispatcher_with_runner(
         region_termid=region_termid,
         max_consecutive_starts=max_consecutive_starts,
         terminal_termid=initial_context.termid,
+        on_abend=on_abend,
     )
     first: _LoopState = _LoopTurn(
         program=program_cache[transid_to_program[initial_context.transid]],
@@ -460,6 +515,7 @@ class CicsRegion:
         start_queue: StartQueue,
         region_termid: str = DEFAULT_TERMID,
         max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
+        on_abend: Callable[[], None] = _no_rollback,
     ) -> None:
         self._program_cache = program_cache
         self._transid_to_program = transid_to_program
@@ -469,6 +525,7 @@ class CicsRegion:
         self._start_queue = start_queue
         self._region_termid = region_termid
         self._max_consecutive_starts = max_consecutive_starts
+        self._on_abend = on_abend
         self._position = Cell(
             RegionPosition(
                 transid="",
@@ -567,7 +624,11 @@ class CicsRegion:
             ),
         )
         routing = _advance_routing(
-            result, position.transid, self._program_cache, self._transid_to_program
+            result,
+            position.transid,
+            self._program_cache,
+            self._transid_to_program,
+            self._on_abend,
         )
         override = self._advance(result, routing)
         return override[0] if override else result
@@ -675,7 +736,7 @@ class CicsRegion:
         if position.consecutive_starts >= self._max_consecutive_starts:
             self._start_queue.discard_for_abend()
             self._update(done=True)
-            return (_runaway_abend(req, position.consecutive_starts),)
+            return (_runaway_abend(req, position.consecutive_starts, self._on_abend),)
         self._position.set(
             replace(
                 position,

@@ -119,7 +119,7 @@ def _session(backend, vm):
     from squall.parser.parse import parse_exec_sql
 
     plans: list = []
-    builtin, _reset = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
 
     def issue(sql_text: str):
         plans.append(parse_exec_sql(sql_text))
@@ -194,12 +194,39 @@ def test_insert_dml(backend):
     assert row[0] == 999
 
 
-def test_fetch_on_unopened_cursor_reports_end(backend):
-    """FETCH on a cursor that was never DECLAREd/OPENed reports end-of-cursor.
+def test_update_zero_rows_reports_sqlcode_100(backend):
+    """task-8 / forge-pkw: a real Db2 zero-row UPDATE reports SQLCODE +100 --
+    the exact condition COTRTUPC:1558 branches ``WHEN SQLCODE = +100`` on to
+    fall through to 9700-INSERT-RECORD.
 
-    Cursors are implemented (see tests/unit/test_cursor.py for the full
-    DECLARE/OPEN/FETCH/CLOSE flow); a FETCH against an unknown cursor is not an
-    error — both backends return no row with SQLCODE 100.
+    This drives the ACTUAL ``__exec_sql`` dispatch end-to-end (_h_query ->
+    resolve_dml_sqlcode -> write_sqlcode), not a hand call to
+    resolve_dml_sqlcode over a manufactured SqlResult -- see test_binding.py
+    and test_backend.py for that unit-level coverage of the pure function in
+    isolation. Reverting exec_sql.py's two call sites back to
+    ``result.sqlcode``/``write_sqlcode(vm, code)`` (pre-task-8) makes this
+    test fail with SQLCODE 0, not 100 -- verified by execution, see the
+    task-8 report.
+    """
+    vm, region = _make_vm(ws_id=99999)  # no ACCOUNT row has this id
+
+    _call_builtin(
+        backend,
+        vm,
+        "EXEC SQL UPDATE ACCOUNT SET ACCT_BAL = :WS-BAL WHERE ACCT_ID = :WS-ID "
+        "END-EXEC",
+    )
+
+    sqlcode = _zoned_decode(bytes(region[13:22]))
+    assert sqlcode == 100
+
+
+def test_fetch_on_undeclared_cursor_reports_not_open(backend):
+    """FETCH against a cursor name never reached by DECLARE CURSOR is
+    Db2-faithful SQLCODE -501 (cursor not open) — see
+    tests/unit/test_cursor.py for the full DECLARE/OPEN/FETCH/CLOSE flow and
+    the +100 end-of-cursor case, which applies only to a *declared* cursor
+    with no more rows or one already CLOSEd.
     """
     vm, region = _make_vm()
 
@@ -209,7 +236,7 @@ def test_fetch_on_unopened_cursor_reports_end(backend):
         "EXEC SQL FETCH C1 INTO :WS-BAL END-EXEC",
     )
 
-    assert _zoned_decode(bytes(region[13:22])) == 100
+    assert _zoned_decode(bytes(region[13:22])) == -501
 
 
 def test_select_into_type_mismatch_fails_strict(backend):

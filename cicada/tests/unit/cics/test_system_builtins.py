@@ -9,6 +9,8 @@ from cics.builtins.system import (
     make_handle_abend_builtin,
     make_handle_noop_builtin,
     make_abend_builtin,
+    make_abend_unhandled_builtin,
+    make_abend_unsupported_builtin,
     make_inquire_builtin,
 )
 from cics.types import DispatchKind, DispatchResult
@@ -132,6 +134,106 @@ def test_abend_builtin_sets_dispatch_result():
     assert holder[0] is not None
     assert holder[0].kind == DispatchKind.ABEND
     assert holder[0].abcode == "CICS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_builtin_default_on_abend_is_a_noop():
+    """Forward regression guard: no composed SQL runtime supplied a rollback
+    callable -- must not raise. (This already held before on_abend existed;
+    it is not sensitive to the on_abend wiring itself.)"""
+    holder: list[DispatchResult | None] = [None]
+    builtin = make_abend_builtin(holder)
+
+    builtin([typed("CICS", UNKNOWN)], _vm())
+
+    assert holder[0].kind == DispatchKind.ABEND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_builtin_records_the_abend_even_when_on_abend_raises():
+    """forge-6jj's failure shape, reintroduced in the abend path itself: an
+    unknown-program XCTL once abended internally but crashed the driver
+    instead of painting the abend on screen. A raising rollback callable (a
+    dropped Db2 connection, say) must not do the same -- result_holder must
+    already carry the ABEND DispatchResult before on_abend runs, and a raise
+    from on_abend must not propagate past this builtin."""
+    holder: list[DispatchResult | None] = [None]
+
+    def _boom() -> None:
+        raise RuntimeError("db2 connection dropped")
+
+    builtin = make_abend_builtin(holder, on_abend=_boom)
+
+    builtin([typed("CICS", UNKNOWN)], _vm())  # must not raise
+
+    assert holder[0].kind == DispatchKind.ABEND
+    assert holder[0].abcode == "CICS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_unhandled_builtin_records_the_abend_even_when_on_abend_raises():
+    holder: list[DispatchResult | None] = [None]
+
+    def _boom() -> None:
+        raise RuntimeError("db2 connection dropped")
+
+    builtin = make_abend_unhandled_builtin(holder, on_abend=_boom)
+
+    builtin([typed(27, UNKNOWN)], _vm())  # must not raise
+
+    assert holder[0].kind == DispatchKind.ABEND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_unsupported_builtin_records_the_abend_even_when_on_abend_raises():
+    holder: list[DispatchResult | None] = [None]
+
+    def _boom() -> None:
+        raise RuntimeError("db2 connection dropped")
+
+    builtin = make_abend_unsupported_builtin(holder, on_abend=_boom)
+
+    builtin([typed("FOO", UNKNOWN)], _vm())  # must not raise
+
+    assert holder[0].kind == DispatchKind.ABEND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_builtin_calls_on_abend():
+    """A half-finished task's writes must not stay pending until some
+    unrelated later task's RETURN commits them -- EXEC CICS ABEND must run
+    the composed rollback callable (task-6 brief)."""
+    calls: list[int] = []
+    holder: list[DispatchResult | None] = [None]
+    builtin = make_abend_builtin(holder, on_abend=lambda: calls.append(1))
+
+    builtin([typed("CICS", UNKNOWN)], _vm())
+
+    assert calls == [1]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_unhandled_builtin_calls_on_abend():
+    calls: list[int] = []
+    holder: list[DispatchResult | None] = [None]
+    builtin = make_abend_unhandled_builtin(holder, on_abend=lambda: calls.append(1))
+
+    builtin([typed(27, UNKNOWN)], _vm())
+
+    assert calls == [1]
+    assert holder[0].kind == DispatchKind.ABEND
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_abend_unsupported_builtin_calls_on_abend():
+    calls: list[int] = []
+    holder: list[DispatchResult | None] = [None]
+    builtin = make_abend_unsupported_builtin(holder, on_abend=lambda: calls.append(1))
+
+    builtin([typed("FOO", UNKNOWN)], _vm())
+
+    assert calls == [1]
+    assert holder[0].kind == DispatchKind.ABEND
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

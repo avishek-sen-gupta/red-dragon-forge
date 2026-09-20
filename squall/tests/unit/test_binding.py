@@ -81,6 +81,7 @@ _REGION_SIZE = 32
 # against the real VMState (this is exactly the divergence the e2e would hit).
 from interpreter.var_name import VarName
 from interpreter.address import Address
+from interpreter.cobol.cobol_constants import ByteConstants
 
 
 class _FakeFrame:
@@ -375,3 +376,202 @@ def test_write_sqlcode_still_works_for_zoned():
     write_sqlcode(vm, -1)
     raw = bytes(region[13:22])
     assert _zoned_decode(raw) == -1
+
+
+# ── Test 11: write_sqlcode populates SQLERRM (task-8) ────────────────────────
+#
+# Real SQLCA shape for SQLERRM (see squall/copybooks/SQLCA.cpy):
+#   05  SQLERRM.
+#       49  SQLERRML   PIC S9(4) COMP.   (2-byte signed binary length)
+#       49  SQLERRMC   PIC X(70).        (message text)
+
+_SQLCA_LAYOUT = {
+    "SQLCODE": {
+        "offset": 0,
+        "length": 4,
+        "category": "BINARY",
+        "total_digits": 9,
+        "decimal_digits": 0,
+        "signed": True,
+    },
+    "SQLERRML": {
+        "offset": 4,
+        "length": 2,
+        "category": "BINARY",
+        "total_digits": 4,
+        "decimal_digits": 0,
+        "signed": True,
+    },
+    "SQLERRMC": {
+        "offset": 6,
+        "length": 70,
+        "category": "ALPHANUMERIC",
+        "total_digits": 70,
+        "decimal_digits": 0,
+        "signed": False,
+    },
+}
+_SQLCA_REGION_SIZE = 76
+
+
+def _make_sqlca_vm() -> tuple[_FakeVM, bytearray]:
+    region = bytearray(_SQLCA_REGION_SIZE)
+    return _FakeVM(region, _SQLCA_LAYOUT), region
+
+
+def test_write_sqlcode_populates_sqlerrm():
+    """A non-empty message writes SQLERRML (its length) and SQLERRMC (the
+    text, space-padded) -- the driver's own prose, deliberately, not Db2's
+    token-substitution format (see resolve_dml_sqlcode/write_sqlcode
+    docstrings for the ruling)."""
+    vm, region = _make_sqlca_vm()
+    write_sqlcode(vm, -204, "TABLE not found")
+
+    assert _binary_decode(bytes(region[4:6]), signed=True) == len("TABLE not found")
+    assert _alpha_decode(bytes(region[6:76])) == "TABLE not found"
+    assert _binary_decode(bytes(region[0:4]), signed=True) == -204
+
+
+def test_write_sqlcode_truncates_long_message_to_70_bytes():
+    """A message longer than SQLERRMC's PIC X(70) is truncated, never raises."""
+    vm, region = _make_sqlca_vm()
+    long_message = "x" * 100
+    write_sqlcode(vm, -204, long_message)
+
+    assert _binary_decode(bytes(region[4:6]), signed=True) == 70
+    assert _alpha_decode(bytes(region[6:76])) == "x" * 70
+
+
+def test_write_sqlcode_empty_message_clears_stale_sqlerrm():
+    """task-8 review round 1: real Db2 resets SQLCA on every statement. A
+    prior statement's error text (e.g. -911 'deadlock...') must not survive
+    into a later statement that fails with no driver text (or succeeds) --
+    an empty message BLANKS SQLERRM (LEN 0, TEXT all spaces), it does not
+    leave the previous statement's prose in place for COTRTUPC to STRING
+    into the operator's screen."""
+    vm, region = _make_sqlca_vm()
+    write_sqlcode(vm, -911, "deadlock detected")
+    assert _binary_decode(bytes(region[4:6]), signed=True) == len("deadlock detected")
+
+    write_sqlcode(vm, 0, "")
+
+    assert _binary_decode(bytes(region[4:6]), signed=True) == 0
+    assert bytes(region[6:76]) == bytes([ByteConstants.EBCDIC_SPACE]) * 70
+
+
+def test_write_sqlcode_message_is_a_noop_without_sqlca_fields():
+    """Most binding-test fixtures (and every earlier write_sqlcode caller)
+    lay out only SQLCODE, with no SQLERRML/SQLERRMC at all. Passing a
+    message must stay a silent no-op there, not raise KeyError -- backward
+    compatibility for every pre-task-8 write_sqlcode(vm, code) call site."""
+    vm, region = _make_vm()
+    write_sqlcode(vm, -1, "some driver error text")
+    raw = bytes(region[13:22])
+    assert _zoned_decode(raw) == -1  # SQLCODE still written correctly
+
+
+# ── Test 12: resolve_dml_sqlcode -- kind-keyed +100 zero-row mapping (task-8,
+# forge-pkw) ───────────────────────────────────────────────────────────────
+#
+# Live-verified against Db2 (see tests/unit/test_backend.py): a zero-row
+# UPDATE/DELETE/INSERT returns rowcount=0, sqlcode=0 from the backend --
+# Db2's own +100 convention is applied here, in the binding layer, keyed by
+# statement Kind so DDL (CREATE, lowered as Kind.GENERIC, which legitimately
+# reports rowcount=-1) is never mistaken for a zero-row DML statement.
+
+
+def test_resolve_dml_sqlcode_update_zero_rows_is_100():
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.UPDATE, result) == 100
+
+
+def test_resolve_dml_sqlcode_insert_zero_rows_is_100():
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.INSERT, result) == 100
+
+
+def test_resolve_dml_sqlcode_delete_zero_rows_is_100():
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.DELETE, result) == 100
+
+
+def test_resolve_dml_sqlcode_update_affecting_rows_stays_zero():
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=3, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.UPDATE, result) == 0
+
+
+def test_resolve_dml_sqlcode_merge_zero_rows_is_100():
+    """task-8 review round 1: real Db2 applies the same +100 zero-row
+    convention to MERGE, not only INSERT/UPDATE/DELETE."""
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.MERGE, result) == 100
+
+
+def test_resolve_dml_sqlcode_execute_zero_rows_is_100():
+    """task-8 review round 1: EXECUTE runs a previously-PREPAREd dynamic
+    statement whose underlying operation is an INSERT/UPDATE/DELETE/MERGE
+    (a plain dynamic SELECT has no EXECUTE form -- it needs a cursor or
+    EXECUTE...INTO, which never reaches this sqlcode==0/rowcount==0 guard
+    because the backend's result-set branch already sets sqlcode 100 for
+    zero rows). Same +100 convention applies."""
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.EXECUTE, result) == 100
+
+
+def test_resolve_dml_sqlcode_generic_ddl_rowcount_minus_one_not_caught():
+    """CREATE TABLE lowers to Kind.GENERIC and legitimately reports
+    rowcount=-1 (Db2-verified) -- the zero-row mapping must not fire for it,
+    or every CREATE would wrongly become SQLCODE +100."""
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=-1, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.GENERIC, result) == 0
+
+
+def test_resolve_dml_sqlcode_negative_sqlcode_passes_through_unchanged():
+    """A genuine driver error on an UPDATE/DELETE/INSERT is untouched -- the
+    +100 mapping only ever applies to a clean rowcount=0/sqlcode=0 result."""
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=-911)
+    assert resolve_dml_sqlcode(Kind.UPDATE, result) == -911
+
+
+def test_resolve_dml_sqlcode_select_into_kind_untouched():
+    """SELECT_INTO is bound separately (_bind_row in exec_sql.py) and never
+    reaches resolve_dml_sqlcode in practice, but the function itself must
+    not apply the DML zero-row rule to it either."""
+    from squall.backend import SqlResult
+    from squall.parser.sql_model import Kind
+    from squall.binding import resolve_dml_sqlcode
+
+    result = SqlResult(rows=(), rowcount=0, sqlcode=0)
+    assert resolve_dml_sqlcode(Kind.SELECT_INTO, result) == 0

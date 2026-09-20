@@ -3,6 +3,7 @@ interpreter.project.coprocessor_compile.compile_program composes."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from cics.le_stubs import LE_STUBS_DIR
@@ -15,6 +16,11 @@ from interpreter.project.coprocessor_compile import CoprocessorSpec
 _OWN_UNSUPPORTED: set[str] = set()
 
 
+def _noop() -> None:
+    """Default on_abend: a CICS-only region has no composed SQL runtime, so
+    there is nothing to roll back when a task abends."""
+
+
 def build_cics_spec(
     context_holder: list,
     result_holder: list | None = None,
@@ -23,6 +29,7 @@ def build_cics_spec(
     screen_queue: Any = None,
     input_queue: Any = None,
     unsupported_verbs: set[str] = _OWN_UNSUPPORTED,
+    on_abend: Callable[[], None] = _noop,
     **kwargs: Any,
 ) -> CoprocessorSpec:
     """Build the EXEC CICS CoprocessorSpec.
@@ -37,6 +44,16 @@ def build_cics_spec(
     assert on the set rather than scrape a log. Each such statement also
     lowers to an abend, so a program that reaches one fails there instead of
     running on as though it had executed (forge-p9t).
+
+    ``on_abend`` is the rollback callable for an abending task (EXEC CICS
+    ABEND, an unhandled condition, or an unsupported verb) -- a plain Python
+    callable rather than a named hook, because a *dispatcher*-level abend
+    (unknown XCTL/RETURN-TRANSID target, terminal read timeout: PGMI/TRNI/
+    AZCT) is raised in Python at the routing layer, not IR, so it cannot
+    emit a CallFunction hook the way SYNCPOINT does. A forge composition
+    supplies squall's rollback here so cicada never imports or names squall;
+    a CICS-only region keeps the default no-op, its current behaviour
+    exactly.
     """
     collected = set() if unsupported_verbs is _OWN_UNSUPPORTED else unsupported_verbs
     dialect_parser = CicsDialectParser()
@@ -55,6 +72,7 @@ def build_cics_spec(
             input_queue=input_queue,
             handler_source=dialect_parser.statements,
             unsupported_verbs=collected,
+            on_abend=on_abend,
             **kwargs,
         )
 

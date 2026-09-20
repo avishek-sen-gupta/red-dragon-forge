@@ -261,3 +261,81 @@ def test_sqlite_backend_satisfies_protocol(backend):
     from squall.backend import SqlBackend
 
     assert isinstance(backend, SqlBackend)
+
+
+# ── Task 8: zero-row DML backend behaviour (forge-pkw) ───────────────────────
+#
+# The backend's own contract is UNCHANGED by task 8: it must keep reporting
+# rowcount honestly (0 for a zero-row UPDATE/DELETE, -1 for DDL) and sqlcode=0
+# on success either way. The +100 Db2 convention is applied one layer up, in
+# squall.binding.resolve_dml_sqlcode, keyed by statement Kind -- these tests
+# pin the backend's raw rowcount/sqlcode, then verify resolve_dml_sqlcode's
+# mapping over that SAME real result. Parametrized over sqlite AND a live
+# Db2 (SQUALL_DB2_DSN) -- run with `-k db2` to verify against the real driver.
+
+
+def test_update_zero_rows_rowcount_and_sqlcode_then_resolves_to_100(backend):
+    from squall.binding import resolve_dml_sqlcode
+    from squall.parser.sql_model import Kind
+
+    result = backend.execute(
+        "UPDATE ACCOUNT SET ACCT_BAL = ? WHERE ACCT_ID = ?", [999, 99999]
+    )
+    # Backend-level fact (live-verified against Db2 in the task-8 brief):
+    # a zero-row UPDATE reports rowcount=0, sqlcode=0 -- NOT +100 on its own.
+    assert result.rowcount == 0
+    assert result.sqlcode == 0
+    # The Db2-faithful +100 is applied by the binding layer, kind-keyed.
+    assert resolve_dml_sqlcode(Kind.UPDATE, result) == 100
+
+
+def test_delete_zero_rows_rowcount_and_sqlcode_then_resolves_to_100(backend):
+    from squall.binding import resolve_dml_sqlcode
+    from squall.parser.sql_model import Kind
+
+    result = backend.execute("DELETE FROM ACCOUNT WHERE ACCT_ID = ?", [99999])
+    assert result.rowcount == 0
+    assert result.sqlcode == 0
+    assert resolve_dml_sqlcode(Kind.DELETE, result) == 100
+
+
+def test_insert_affecting_a_row_does_not_resolve_to_100(backend):
+    from squall.binding import resolve_dml_sqlcode
+    from squall.parser.sql_model import Kind
+
+    result = backend.execute("INSERT INTO ACCOUNT VALUES (?, ?)", [44, 1])
+    assert result.rowcount == 1
+    assert result.sqlcode == 0
+    assert resolve_dml_sqlcode(Kind.INSERT, result) == 0
+
+
+def test_ddl_rowcount_is_not_zero_and_generic_kind_unaffected(backend):
+    """CREATE TABLE reports a non-zero (Db2: -1) rowcount, not 0 -- so
+    Kind.GENERIC (what CREATE lowers to) is never mistaken for a zero-row
+    DML statement by resolve_dml_sqlcode."""
+    from squall.binding import resolve_dml_sqlcode
+    from squall.parser.sql_model import Kind
+
+    result = backend.execute("CREATE TABLE ZZ_TASK8_TMP (X INTEGER)", [])
+    try:
+        assert result.sqlcode == 0
+        assert result.rowcount != 0
+        assert resolve_dml_sqlcode(Kind.GENERIC, result) == result.sqlcode
+    finally:
+        backend.execute("DROP TABLE ZZ_TASK8_TMP", [])
+
+
+# ── Task 8: SQLERRM capture on a driver error ────────────────────────────────
+
+
+def test_bad_sql_populates_sqlerrm_with_driver_message(backend):
+    """A real backend failure carries the driver's own error text in
+    result.sqlerrm (task-8: this becomes COTRTUPC's SQLERRM OF SQLCA)."""
+    result = backend.execute("SELECT nope FROM nope", [])
+    assert result.sqlcode < 0
+    assert result.sqlerrm != ""
+
+
+def test_successful_statement_leaves_sqlerrm_empty(backend):
+    result = backend.execute("SELECT ACCT_BAL FROM ACCOUNT WHERE ACCT_ID = ?", [11])
+    assert result.sqlerrm == ""

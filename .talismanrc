@@ -1,6 +1,16 @@
 fileignoreconfig:
+- filename: cicada/tests/unit/cics/test_bms_generate_shared_out_dir.py
+  checksum: baefd886cf7448b4aa563a33247e3ea10441fcab1a87d88b31e0042c3006e06b
+- filename: cicada/tests/unit/cics/test_region_on_abend.py
+  checksum: a1dbddb37c039b62032302253eadf9e2ced928005eb0439ead0150525cce4943
+- filename: tests/integration/test_carddemo_db2_region.py
+  checksum: 238ef8309f1d7ac3fcf9efc62e9efa7a9ce08713d6c831b895064ef1fc0c4b2a
+- filename: tests/integration/test_carddemo_db2_schema.py
+  checksum: fc5b0547a94e20bd5bbc054a70f4cc65b07d08b7a1f97c3266cd3538e7387e61
+- filename: tests/unit/test_carddemo_db2_region_wiring.py
+  checksum: 12a3d64301102e96971767ae80e66f6ba5b5bd35f4335897537a135be3e978aa
 - filename: cicada/README.md
-  checksum: a3a8c1ce7936bb77330861fd1847a5bcd266ad89f2c0d1d563f631f96b599c56
+  checksum: ede015dc4d9e7deffee31e826019669f62148fe67b8f2eb4481173d94e9c4e90
 - filename: carddemo-env.sh
   checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
 - filename: cicada/tests/integration/cics/test_tn3270_e2e.py
@@ -12,7 +22,11 @@ fileignoreconfig:
 - filename: cicada/cics/tn3270/config.py
   checksum: 2639df6abcebc046b745f286f22b99622ec8edcddd4767716787029bd0969fc1
 - filename: cicada/tests/unit/cics/test_tn3270_config.py
-  checksum: b3eaf074a8bcc0cc4f5a4a591aab9c655b784f9307bd2dba48bad5ae7ad7931c
+  checksum: 684ef81ccdd10db56d696dc2eec69f22c0214a67167e1d442ddde6ced6ce3bec
+- filename: cicada/cics/tn3270/region.py
+  checksum: 0631e524c32423fa8a3155ab0b323411c9e72549072e000ceb28f0f4513506fa
+- filename: cicada/tests/integration/cics/test_tn3270_region.py
+  checksum: ebeb7d6067f8474356f3abca1b6b5be0ab203a75c3990738c4de3955450b35e8
 - filename: cicada/tests/integration/cics/test_carddemo_terminal_screen.py
   checksum: 00b654ab4e4457e433ad01de77ec3234f22615d8bb4570a60b49200108787cb7
 - filename: cicada/tests/unit/cics/test_screen_builtins.py
@@ -33,10 +47,14 @@ fileignoreconfig:
   checksum: d2cd33c177e8444bac414fe7003ac104e73c238349328189d10d7971d13c25ee
 - filename: docs/superpowers/specs/2026-07-07-cobol-knowledge-graph-design.md
   checksum: 6c4d59f40d43531d82afd4f18b52eb58d35eb3da05f509718500cb72dea0c74c
-- filename: squall/squall/builtins/exec_sql.py
-  checksum: aea12e9fef0be89b18187052e1b4ed88c2952fa607c94ad314825bdd95be5794
-- filename: squall/tests/unit/test_strategy.py
-  checksum: 23a738dd050096c4209e232136f429b26e94d7317cc39126b900d948e01335a0
+- filename: squall/squall/backends/sqlite.py
+  checksum: e6756d3ccfea412fe42f263aa54858a8148531a250c6de57d62fa95e46e44ae8
+- filename: fp.json
+  checksum: e3e2206a29551ce72fa153cbed327b53031df48c108951b67d31a1dec46e7576
+- filename: squall/squall/dclgen_meta.py
+  checksum: 01141c2f800f9c7fdcf79e12bd4fc57e27d1a073ad437eb898802978dae9ff15
+- filename: squall/tests/unit/test_varchar.py
+  checksum: 3558cdbd688db511f5a53990dcf7da7e1aaa7b6dd5a11802ec297a7f485926f2
 - filename: cicada/cics/strategy.py
   checksum: 0b237376e980ac8bb77e0f4ce2591014728e43f1c1edc9c23792f0f68be4910f
 - filename: cicada/cics/builtins/vsam.py
@@ -400,11 +418,25 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-09-18-carddemo-db2-tn3270.md
   checksum: 5be5343c12e706d485e5fd73798bff29d50358298e15b52e6ffa6962526a72ef
 - filename: squall/tests/unit/test_preprocess.py
-  checksum: c43873e0ef32d85c0f4ddaca5a517229c77489c45c905705d11c08596c729823
-- filename: fp.json
-  checksum: f279eccb8873ce2bf6fd322b3ba502d00ff96363141bafe04376c1d3d45b8f70
+  checksum: 9d7a995511586a61d7598de56e9a9589841f259cf4ae6b3791e39217a51d216b
+- filename: squall/squall/preprocess.py
+  checksum: bd301524ab302bd1005dc13d34f825b7a2de4a13103a383d5804ebfedaff30d8
 - filename: squall/squall/exec_sql_scan.py
   checksum: c5450e80e3d187790db0777548cabc8d4c420f94b3e8c7940d3a4135bd83d851
 - filename: squall/tests/unit/test_exec_sql_scan.py
   checksum: 284988d03d54c01792a48df17d54bb9171beef7bd80330151e75533cad2b475a
+- filename: docs/superpowers/plans/2026-09-19-carddemo-db2-tier.md
+  checksum: e9095ace48e6e93aa549e6497f23e4c5993ec5864971c76aded5aa18858832c8
+- filename: squall/squall/data_division_exec_sql.py
+  checksum: 709c5f628d1da46d2adfc0915590608722124a68b67b96eaa525e8908448936f
+- filename: squall/tests/unit/test_data_division_exec_sql.py
+  checksum: 472b438a39de30a697f8b0e8d2fccc10f1d81eac55ded589494905cb937f6567
+- filename: squall/squall/builtins/exec_sql.py
+  checksum: d7813ecd344fb53bd89058a67353d9af6714da1329a6a154176a9e7692fb2fda
+- filename: squall/tests/unit/test_strategy.py
+  checksum: b937f1f2a6cbc4a7ac3ce1c83ef25e62dad3ba5aa0f034b8bca2c5bcabf3e680
+- filename: squall/squall/binding.py
+  checksum: d19795b341ed47ff94ffd7796571f5b22e79199eb117b391cc5385b0fed68167
+- filename: tests/integration/test_carddemo_db2_headless.py
+  checksum: fcebaa0b2249bb87e5f419973d982a01e5c1fd54a20f685a68834b0239fb5a45
 version: "1.0"
