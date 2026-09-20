@@ -11,7 +11,7 @@ BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squ
   jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
 DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
-.PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-status db2-restart db2-stop db2-clean
+.PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-seed db2-status db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup     - init submodules + build hlasm_export + bridge JARs + uv sync"
@@ -23,6 +23,7 @@ help:
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
+	@echo "make db2-seed  - create and seed CardDemo's Db2 schema (the only DROP TABLE)"
 	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
 	@echo "make db2-restart - rebind Db2's TCP listener without re-initialising"
 	@echo "make db2-stop  - stop Db2, keeping container and volume"
@@ -93,6 +94,14 @@ db2-up:
 	  sleep 10; \
 	done; \
 	echo "DB2 did not become healthy in time:"; docker logs --tail 80 squall-db2; exit 1
+
+# Create and seed CardDemo's Db2 schema. Deliberately its OWN target, not a flag
+# on the server: this is the only thing that issues DROP TABLE, and a server does
+# not need that authority on every routine start. Calls the same apply_schema the
+# integration fixture calls, so the green screen cannot show data the tests never
+# exercised.
+db2-seed:
+	@FORGE_ROOT=$(CURDIR) SQUALL_DIR=squall sh -c '. ./carddemo-env.sh >/dev/null 2>&1; . tests/integration/db2_env.sh >/dev/null 2>&1; uv run --no-sync python -m red_dragon_forge.carddemo_db2_seed'
 
 # Connect-and-query, because `docker ps` reports the container healthy while the
 # instance inside is dead -- every Db2 test then fails SQL30081N with nothing

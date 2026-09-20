@@ -597,20 +597,26 @@ uv run --no-sync python -m pytest tests/integration/test_carddemo_db2_headless.p
 
 `red_dragon_forge.carddemo_db2_cli` (installed as `carddemo-db2-cli`) is the live-3270-server CLI
 for this composed region, analogous to `cics/tn3270/cli.py` but built on `build_db2_region`
-instead of `build_region`. The schema is assumed to exist by default -- pass `--reset-schema` to
-drop, recreate, and reseed `CARDDEMO.TRANSACTION_TYPE`/`TRANSACTION_TYPE_CATEGORY` via the same
-`apply_schema` the test fixture above uses; without it, a missing schema fails loudly at startup
-rather than abending the first screen:
+instead of `build_region`.
+
+Preparing the database and serving it are **separate commands**, deliberately. `carddemo-db2-seed`
+(`make db2-seed`) is the only thing that ever issues `DROP TABLE`; the server only ever reads, and
+fails loudly at startup if the schema is missing rather than abending the first screen a terminal
+paints. Both go through the same `apply_schema` the test fixture above uses, so the green screen
+cannot show data the tests never exercised.
 
 ```bash
-make db2-up                              # or make db2-restart if already up but unhealthy
+make db2-status                          # 0 up, 1 dead (-> make db2-restart), 2 DSN unset
 cd red-dragon-forge
 . ./carddemo-env.sh                      # FORGE_ROOT + CARDDEMO_HOME + the bridge JARs
 . tests/integration/db2_env.sh           # SQUALL_DB2_DSN, from squall/.env's DB2_PORT
-uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml \
-    --port 3271 --reset-schema
+make db2-seed                            # once -- drops, recreates and reseeds
+uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
 c3270 -model 3278-2 localhost:3271
 ```
+
+Sign on as `ADMIN001`/`PASSWORD` and select admin `5` or `6`. Re-run `make db2-seed` whenever you
+want the world reset; the server never resets it for you.
 
 Because COADM01C XCTLs straight to the option's program with no INQUIRE guard, selecting admin
 `5`/`6` from the plain CICS-only `cicada-tn3270` server (which has no SQL coprocessor composed
