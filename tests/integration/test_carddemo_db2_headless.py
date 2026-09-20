@@ -214,32 +214,17 @@ def _row_count(probe_conn) -> int:
 
 
 def _shows_info_prompt(terminal: _Terminal, message: str) -> bool:
-    """Whether INFOMSG is showing *message*, tolerating a truncated tail.
+    """Whether INFOMSG is showing exactly *message*.
 
-    Both programs centre the prompt before sending it
-    (``COTRTUPC.cbl:1249-1262``, ``COTRTLIC.cbl:1560-1577``), and RedDragon
-    miscomputes that centring: ``COMPUTE WS-STRING-MID = (FUNCTION
-    LENGTH(WS-INFO-MSG) - WS-STRING-LEN) / 2 + 1`` drops the subtraction when
-    the left operand is a parenthesised FUNCTION, so the text lands at offset
-    ``LENGTH(WS-INFO-MSG) / 2 + 1`` and everything past the item's end is
-    truncated (confirmed in isolation: LEN=34, MID=21). That is a RedDragon
-    arithmetic defect, not a CardDemo or Db2-tier one, and ``vendor/`` is
-    read-only here -- so this matches on the prefix actually rendered rather
-    than pinning the truncation, which keeps these assertions passing
-    unchanged once the submodule is fixed.
-
-    The defect formula depends only on WS-INFO-MSG's fixed length, not on the
-    message's own, so the survivor is a constant per program: COTRTUPC's
-    ``PIC X(40)`` (COTRTUPC.cbl:142) leaves ``40 - 21 + 1 == 20`` characters
-    and COTRTLIC's ``PIC X(45)`` (COTRTLIC.cbl:236) leaves ``45 - 23 + 1 ==
-    23``. Twenty is therefore the floor across both, and still tells the
-    WS-INFO-MSG prompts apart. A bare ``bool(shown)`` prefix check has no
-    floor at all: ``shown == "C"`` would satisfy
-    ``"Changes validated.Press F5 to save".startswith("C")``, so this also
-    requires today's actual survivor, not just a non-empty one.
+    Both programs centre the prompt before sending it (COTRTUPC.cbl:1249-1262,
+    COTRTLIC.cbl:1560-1577). That centring used to render truncated -- the
+    bridge discarded everything but the FUNCTION inside ``COMPUTE
+    WS-STRING-MID = (FUNCTION LENGTH(WS-INFO-MSG) - WS-STRING-LEN) / 2 + 1``,
+    so the text landed at ``LENGTH(WS-INFO-MSG) / 2 + 1`` and ran off the end
+    of the item. Fixed upstream in red-dragon 8f432872 (forge-84k); this
+    asserts the whole prompt rather than a surviving prefix.
     """
-    shown = terminal.value("INFOMSG")
-    return len(shown) >= 20 and message.startswith(shown)
+    return terminal.value("INFOMSG") == message
 
 
 @pytest.fixture(scope="module", autouse=True)
