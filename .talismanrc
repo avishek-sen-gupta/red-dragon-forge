@@ -398,7 +398,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/srccfg/guards-COSGN00C-xctl.txt
   checksum: 69944a5247de73d40b7099e6123e5334a685b583cd098b0c8d50d51d47b352cb
 - filename: docs/presentation/index.html
-  checksum: acb4cc348c5693fa660da5651374bae5fa9acb2fe37dd0ef932d4715a3516c90
+  checksum: 648b3da9b6e8a74eb3518550a893146331e80af8f1eebe1c2196233b4cf0b2f9
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.dot
   checksum: edb53b37e0e35a97767c44ff74d0f941a8c255e295140ab231f50c62ef3879d7
 - filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
