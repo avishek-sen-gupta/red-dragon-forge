@@ -11,7 +11,7 @@ BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squ
   jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
 DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
-.PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-restart db2-stop db2-clean
+.PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-status db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup     - init submodules + build hlasm_export + bridge JARs + uv sync"
@@ -23,6 +23,7 @@ help:
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
+	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
 	@echo "make db2-restart - rebind Db2's TCP listener without re-initialising"
 	@echo "make db2-stop  - stop Db2, keeping container and volume"
 	@echo "make db2-clean - remove Db2 container and volume (next up re-inits)"
@@ -92,6 +93,13 @@ db2-up:
 	  sleep 10; \
 	done; \
 	echo "DB2 did not become healthy in time:"; docker logs --tail 80 squall-db2; exit 1
+
+# Connect-and-query, because `docker ps` reports the container healthy while the
+# instance inside is dead -- every Db2 test then fails SQL30081N with nothing
+# obviously wrong (forge-zka). Also reports the seeded row count, which is what
+# you want before running carddemo-db2-cli without --reset-schema.
+db2-status:
+	@FORGE_ROOT=$(CURDIR) SQUALL_DIR=squall sh -c '. ./bridge-env.sh >/dev/null 2>&1; . squall/db2/dsn-env.sh >/dev/null 2>&1; uv run --no-sync python -m red_dragon_forge.db2_status'
 
 # Rebind DB2's TCP listener without re-initialising. Under emulation the listener
 # can occasionally drop (port 50000 stops accepting inside the container) while a
