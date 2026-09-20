@@ -15,6 +15,9 @@ dependencies = [
 [project.optional-dependencies]
 db2 = ["ibm-db>=3.2.0"]
 
+[project.scripts]
+carddemo-db2-cli = "red_dragon_forge.carddemo_db2_cli:main"
+
 [tool.uv.sources]
 red-dragon = { path = "vendor/red-dragon", editable = true }
 

@@ -1,4 +1,6 @@
 fileignoreconfig:
+- filename: tests/unit/test_carddemo_db2_cli.py
+  checksum: 017c490c3ba3289db232bcca913d7b70264941097735a7cffb1042caf9084851
 - filename: cicada/tests/unit/cics/test_bms_generate_shared_out_dir.py
   checksum: baefd886cf7448b4aa563a33247e3ea10441fcab1a87d88b31e0042c3006e06b
 - filename: cicada/tests/unit/cics/test_region_on_abend.py

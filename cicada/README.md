@@ -595,9 +595,22 @@ cd red-dragon-forge
 uv run --no-sync python -m pytest tests/integration/test_carddemo_db2_headless.py -q
 ```
 
-There is no live-3270-server CLI for this composed region yet (`cicada-tn3270` only builds the
-CICS-only region) -- driving it interactively over the wire would need a small CLI analogous to
-`cics/tn3270/cli.py` built on `build_db2_region` instead of `build_region`.
+`red_dragon_forge.carddemo_db2_cli` (installed as `carddemo-db2-cli`) is the live-3270-server CLI
+for this composed region, analogous to `cics/tn3270/cli.py` but built on `build_db2_region`
+instead of `build_region`. The schema is assumed to exist by default -- pass `--reset-schema` to
+drop, recreate, and reseed `CARDDEMO.TRANSACTION_TYPE`/`TRANSACTION_TYPE_CATEGORY` via the same
+`apply_schema` the test fixture above uses; without it, a missing schema fails loudly at startup
+rather than abending the first screen:
+
+```bash
+make db2-up                              # or make db2-restart if already up but unhealthy
+cd red-dragon-forge
+. ./carddemo-env.sh                      # FORGE_ROOT + CARDDEMO_HOME + the bridge JARs
+. tests/integration/db2_env.sh           # SQUALL_DB2_DSN, from squall/.env's DB2_PORT
+uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml \
+    --port 3271 --reset-schema
+c3270 -model 3278-2 localhost:3271
+```
 
 Because COADM01C XCTLs straight to the option's program with no INQUIRE guard, selecting admin
 `5`/`6` from the plain CICS-only `cicada-tn3270` server (which has no SQL coprocessor composed
