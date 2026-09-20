@@ -89,8 +89,37 @@ _DFHEIBLK_COPY = "       COPY DFHEIBLK."
 _DFHHANDLE_COPY = "       COPY DFHHANDLE."
 
 
+def _code_area(line: str) -> str:
+    """Return the line's code area — columns 8-72 (``line[7:72]``), always.
+
+    The ProLeap bridge is hard-wired to FIXED format, so this positional slice
+    is correct for every real program; a line has no sequence number, no
+    indicator, and no code area it did not already have, and Python slicing
+    on a short string never raises — a line shorter than 8 characters simply
+    yields an empty (or partial) code area.
+
+    Re-derives the same fixed-format zone model squall.fixed_format.py:33-36
+    names in one place; the import-linter contract forbids cicada importing
+    squall, so this constant cannot be shared, only kept in step by hand.
+    """
+    return line[7:72]
+
+
+def _is_comment_line(line: str) -> bool:
+    """True when col 7 (``line[6]``) is a comment indicator (``*`` or
+    ``/``).
+
+    Same fixed-format indicator column squall.fixed_format.py:33-36 names as
+    ``_INDICATOR_END``; see ``_code_area`` above for why it is re-derived
+    rather than imported.
+    """
+    return len(line) >= 7 and line[6] in ("*", "/")
+
+
 def _is_ws_section(line: str) -> bool:
-    tokens = line.strip().upper().split()
+    if _is_comment_line(line):
+        return False
+    tokens = _code_area(line).strip().upper().split()
     return (
         len(tokens) >= 2 and tokens[0] == "WORKING-STORAGE" and tokens[1] == "SECTION."
     )

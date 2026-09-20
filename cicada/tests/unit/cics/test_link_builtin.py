@@ -132,6 +132,105 @@ def test_link_restores_result_holder():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_link_suppresses_task_end_hook_during_inner_program():
+    """A LINKed program's own RETURN must not fire the caller's task-end
+    hook (e.g. squall's commit + cursor-close) -- that would end the
+    caller's still-open unit of work mid-task, not the LINK's."""
+    from interpreter.vm.builtins import Builtins
+
+    hook_name = FuncName("__cics_task_end_hook")
+    calls: list[str] = []
+
+    def _outer_hook(args, vm):
+        calls.append("outer")
+        return BuiltinResult(value=None)
+
+    previous = Builtins.TABLE.get(hook_name)
+    Builtins.TABLE[hook_name] = _outer_hook
+    try:
+        stub, _ = _make_stub_linked_program(ca_out=b"DONE")
+
+        def _fake_run_linked(linked, entry_point, *, max_steps, initial_vm):
+            # Simulate the inner program's own RETURN firing whatever is
+            # currently registered under the hook name.
+            Builtins.TABLE[hook_name]([], initial_vm)
+            addr = Address("rgn_commarea")
+            buf = bytearray(initial_vm.region_get(addr) or b"")
+            n = min(len(b"DONE"), len(buf))
+            buf[:n] = b"DONE"[:n]
+            initial_vm.region_set(addr, buf)
+            return initial_vm
+
+        program_cache = {"MUTATOR": stub}
+        result_holder = [None]
+        context_holder = [_make_context()]
+        builtin = make_link_builtin(
+            program_cache,
+            result_holder,
+            context_holder,
+            max_steps=10_000,
+            _run_fn=_fake_run_linked,
+        )
+        ws = bytearray(b"INIT")
+        vm, _ws_addr = _make_vm_with_ws(ws)
+
+        builtin(_args("MUTATOR", b"INIT", 0, 4), vm)
+
+        assert calls == []  # suppressed during the LINK
+        assert Builtins.TABLE[hook_name] is _outer_hook  # restored after
+    finally:
+        if previous is None:
+            Builtins.TABLE.pop(hook_name, None)
+        else:
+            Builtins.TABLE[hook_name] = previous
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_link_restores_task_end_hook_even_on_exception():
+    """The task-end-hook suppression must unwind even when run_linked raises,
+    mirroring result_holder's own exception-safe restore."""
+    from interpreter.vm.builtins import Builtins
+
+    hook_name = FuncName("__cics_task_end_hook")
+
+    def _outer_hook(args, vm):
+        return BuiltinResult(value=None)
+
+    previous = Builtins.TABLE.get(hook_name)
+    Builtins.TABLE[hook_name] = _outer_hook
+    try:
+
+        class _BadLinked:
+            data_layout = {}
+            entry_func_label = None
+
+        def _exploding_run(linked, ep, *, max_steps, initial_vm):
+            raise RuntimeError("boom")
+
+        result_holder = [None]
+        context_holder = [_make_context()]
+        builtin = make_link_builtin(
+            {"BAD": _BadLinked()},
+            result_holder,
+            context_holder,
+            max_steps=10_000,
+            _run_fn=_exploding_run,
+        )
+        ws = bytearray(b"INIT")
+        vm, _ = _make_vm_with_ws(ws)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            builtin(_args("BAD", b"INIT", 0, 4), vm)
+
+        assert Builtins.TABLE[hook_name] is _outer_hook
+    finally:
+        if previous is None:
+            Builtins.TABLE.pop(hook_name, None)
+        else:
+            Builtins.TABLE[hook_name] = previous
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_link_result_holder_restored_even_on_exception():
     """result_holder is restored even if run_linked raises."""
 

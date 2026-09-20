@@ -17,6 +17,9 @@ from interpreter.vm.builtins import Builtins
 from interpreter.vm.vm_types import BuiltinResult
 
 _HOOK_NAME = FuncName("__cics_task_end_hook")
+_SYNCPOINT_HOOK_NAME = FuncName("__cics_syncpoint_hook")
+_ROLLBACK_HOOK_NAME = FuncName("__cics_rollback_hook")
+_ALL_HOOK_NAMES = (_HOOK_NAME, _SYNCPOINT_HOOK_NAME, _ROLLBACK_HOOK_NAME)
 
 
 @pytest.fixture(autouse=True)
@@ -24,14 +27,16 @@ def _restore_hook_registration():
     """Builtins.TABLE is a shared global that outlives this test file (it's
     read by real CICS programs in other tests running in the same process,
     e.g. under pytest-xdist) — snapshot and restore whatever was registered
-    under _HOOK_NAME so a test mutating it can never leak into another test.
+    under each hook name so a test mutating one can never leak into another
+    test.
     """
-    previous = Builtins.TABLE.get(_HOOK_NAME)
+    previous = {name: Builtins.TABLE.get(name) for name in _ALL_HOOK_NAMES}
     yield
-    if previous is None:
-        Builtins.TABLE.pop(_HOOK_NAME, None)
-    else:
-        Builtins.TABLE[_HOOK_NAME] = previous
+    for name, value in previous.items():
+        if value is None:
+            Builtins.TABLE.pop(name, None)
+        else:
+            Builtins.TABLE[name] = value
 
 
 class _Ctx:
@@ -54,10 +59,12 @@ class _Ctx:
 
 
 def _task_end_hook_calls(ctx: _Ctx) -> list[CallFunction]:
+    return _hook_calls(ctx, _HOOK_NAME)
+
+
+def _hook_calls(ctx: _Ctx, name: FuncName) -> list[CallFunction]:
     return [
-        i
-        for i in ctx.emitted
-        if isinstance(i, CallFunction) and i.func_name == _HOOK_NAME
+        i for i in ctx.emitted if isinstance(i, CallFunction) and i.func_name == name
     ]
 
 
@@ -152,3 +159,95 @@ def test_default_hook_does_not_overwrite_an_existing_registration():
     )
 
     assert Builtins.TABLE[_HOOK_NAME] is _real_reset
+
+
+# ── SYNCPOINT / SYNCPOINT ROLLBACK ──────────────────────────────────────────
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_syncpoint_emits_the_syncpoint_hook():
+    """EXEC CICS SYNCPOINT used to be a pure no-op that never touched SQL —
+    it must now reach a composed SQL runtime's commit (task-6 brief)."""
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+    stmt = ExecCicsStatement(verb="SYNCPOINT", options={})
+    ctx = _Ctx()
+
+    strategy.lower(ctx, stmt, materialised=None)
+
+    assert len(_hook_calls(ctx, _SYNCPOINT_HOOK_NAME)) == 1
+    # SYNCPOINT is not a task boundary -- it must not also fire task end.
+    assert _task_end_hook_calls(ctx) == []
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_syncpoint_rollback_emits_the_rollback_hook():
+    """SYNCPOINT ROLLBACK was unregistered and fell through to
+    _lower_unsupported's loud abend (forge-1zu.15) -- it must lower to the
+    rollback hook instead, distinct from plain SYNCPOINT's commit hook."""
+    strategy = CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+    stmt = ExecCicsStatement(verb="SYNCPOINT ROLLBACK", options={})
+    ctx = _Ctx()
+
+    strategy.lower(ctx, stmt, materialised=None)
+
+    assert len(_hook_calls(ctx, _ROLLBACK_HOOK_NAME)) == 1
+    assert _hook_calls(ctx, _SYNCPOINT_HOOK_NAME) == []
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_default_syncpoint_hook_is_registered_and_is_a_noop():
+    Builtins.TABLE.pop(_SYNCPOINT_HOOK_NAME, None)
+
+    CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+
+    assert _SYNCPOINT_HOOK_NAME in Builtins.TABLE
+    result = Builtins.TABLE[_SYNCPOINT_HOOK_NAME]([], vm=None)
+    assert result.value is None
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_default_rollback_hook_is_registered_and_is_a_noop():
+    Builtins.TABLE.pop(_ROLLBACK_HOOK_NAME, None)
+
+    CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+
+    assert _ROLLBACK_HOOK_NAME in Builtins.TABLE
+    result = Builtins.TABLE[_ROLLBACK_HOOK_NAME]([], vm=None)
+    assert result.value is None
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_default_syncpoint_hook_does_not_overwrite_an_existing_registration():
+    def _real_syncpoint(args, vm):
+        return BuiltinResult(value="already-registered")
+
+    Builtins.TABLE[_SYNCPOINT_HOOK_NAME] = _real_syncpoint
+
+    CicsLoweringStrategy(
+        context_holder=[None],
+        result_holder=[None],
+        handler_source=[],
+        unsupported_verbs=set(),
+    )
+
+    assert Builtins.TABLE[_SYNCPOINT_HOOK_NAME] is _real_syncpoint

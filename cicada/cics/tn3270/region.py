@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import queue
-from collections.abc import Mapping
+from collections import ChainMap
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cics.bms.catalog import MapCatalog, load_catalog
 from cics.bms.generate import generate_symbolic_copybooks
-from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion
 from cics.interval import StartQueue
 from cics.screen.driver import PseudoConversationalDriver
-from cics.tn3270.config import RegionConfig
+from cics.tn3270.config import RegionConfig, resolve_program_source
 from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import FctConfig
 from cics.vsam.format import read_flat_file
@@ -64,36 +64,58 @@ def _wiring() -> _Wiring:
     return _Wiring(queue.Queue(), queue.Queue(), [None], [None], StartQueue())
 
 
+def _generate_symbolic_copybooks(config: RegionConfig, sym_dir: Path) -> None:
+    # Each of config.bms_dirs is generated into the same sym_dir in order; a
+    # region with only one bms_dirs entry (every config today) behaves exactly
+    # as before.
+    for bms_dir in config.bms_dirs:
+        generate_symbolic_copybooks(
+            bms_dir=bms_dir,
+            out_dir=sym_dir,
+            hlasm_export_bin=str(config.hlasm_export),
+        )
+
+
+def _catalog(config: RegionConfig) -> MapCatalog:
+    # ChainMap looks up each key in its mappings in order, so an earlier
+    # bms_dirs entry's mapset always wins over a later one's -- first-hit-wins,
+    # matching the resolution used for source_dirs.
+    catalogs = (load_catalog(d, str(config.hlasm_export)) for d in config.bms_dirs)
+    return MapCatalog(maps=dict(ChainMap(*(dict(c.maps) for c in catalogs))))
+
+
 def _parser(config: RegionConfig, bridge_jar: str, sym_dir: Path) -> ProLeapCobolParser:
     from cobol_asg.cobol_parser import ProLeapCobolParser
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
-    generate_symbolic_copybooks(
-        bms_dir=config.bms_dir,
-        out_dir=sym_dir,
-        hlasm_export_bin=str(config.hlasm_export),
-    )
+    _generate_symbolic_copybooks(config, sym_dir)
     return ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
         copybook_dirs=[sym_dir, *config.copybook_dirs, CICS_COPYBOOKS],
+        copybook_exts=list(config.copybook_exts),
     )
 
 
 def _compiled(
-    config: RegionConfig, parser: ProLeapCobolParser, spec: CoprocessorSpec
+    config: RegionConfig,
+    parser: ProLeapCobolParser,
+    cics_spec: CoprocessorSpec,
+    extra_specs: Sequence[CoprocessorSpec],
 ) -> dict[str, LinkedProgram]:
+    from interpreter.project.coprocessor_compile import compile_program
+
     # program_source_dirs resolves plain COBOL subprograms a transaction
     # program CALLs (e.g. COTRN02C -> CSUTLDTC) from the same cbl directory;
     # without it such a CALL is unresolved and the caller's own RESP handling
     # takes the non-NORMAL branch, not a crash.
     return {
-        name: compile_cics_program(
-            (config.source_dir / f"{name}.cbl").read_bytes(),
+        name: compile_program(
+            resolve_program_source(config, name).read_bytes(),
             parser,
-            spec,
-            program_source_dirs=(config.source_dir,),
-        )
+            [cics_spec, *extra_specs],
+            program_source_dirs=config.source_dirs,
+        )[1]
         for name in sorted(config.programs)
     }
 
@@ -114,7 +136,18 @@ def _region(
     )
 
 
-def build_region(config: RegionConfig, bridge_jar: str, work_dir: Path) -> ServedRegion:
+def _region_noop() -> None:
+    """Default on_abend: a CICS-only region has no composed SQL runtime to
+    roll back when a task abends -- mirrors build_cics_spec's own default."""
+
+
+def build_region(
+    config: RegionConfig,
+    bridge_jar: str,
+    work_dir: Path,
+    extra_specs: Sequence[CoprocessorSpec] = (),
+    on_abend: Callable[[], None] = _region_noop,
+) -> ServedRegion:
     wiring = _wiring()
     vsam_engine = _vsam_engine(config, work_dir / "vsam")
     spec = build_cics_spec(
@@ -124,12 +157,11 @@ def build_region(config: RegionConfig, bridge_jar: str, work_dir: Path) -> Serve
         vsam_engine=vsam_engine,
         screen_queue=wiring.screen_channel,
         input_queue=wiring.input_channel,
+        on_abend=on_abend,
     )
     parser = _parser(config, bridge_jar, work_dir / "sym")
-    region = _region(config, wiring, _compiled(config, parser, spec))
+    region = _region(config, wiring, _compiled(config, parser, spec, extra_specs))
     driver = PseudoConversationalDriver(
         region, wiring.screen_channel, frozenset(config.transactions)
     )
-    return ServedRegion(
-        driver, load_catalog(config.bms_dir, str(config.hlasm_export)), vsam_engine
-    )
+    return ServedRegion(driver, _catalog(config), vsam_engine)

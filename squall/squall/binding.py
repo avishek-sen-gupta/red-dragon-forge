@@ -16,19 +16,19 @@ Supported codec categories (slice 1 + 2):
 from __future__ import annotations
 
 import os
-import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Final
 
-from squall.parser.sql_model import FieldMeta
+from squall.backend import SqlResult
+from squall.binding_stores import apply_writes, bootstrap_vendor_path
+from squall.parser.sql_model import FieldMeta, Kind
 
 # Resolve vendor path so ByteConstants can be imported without installing red-dragon
 # as an editable package in every environment.
 _VENDOR = os.path.join(os.path.dirname(__file__), "..", "vendor", "red-dragon")
-if _VENDOR not in sys.path:
-    sys.path.insert(0, _VENDOR)
+bootstrap_vendor_path(_VENDOR)
 
 from interpreter.address import Address  # noqa: E402
 from interpreter.cobol.cobol_constants import ByteConstants  # noqa: E402
@@ -62,25 +62,21 @@ def _zoned_encode(n: int, length: int) -> bytes:
     zone nibble (0xF) except the last byte, which carries the sign zone:
       negative -> 0xD; non-negative -> 0xF (unsigned/positive).
     """
-    abs_digits = list(str(abs(n)).zfill(length)[-length:])  # right-justify, truncate
-    result = bytearray(length)
+    abs_digits = str(abs(n)).zfill(length)[-length:]  # right-justify, truncate
     unsigned_zone = (
         ByteConstants.SIGN_NIBBLE_UNSIGNED & ByteConstants.NIBBLE_MASK
     ) << 4  # 0xF0
     negative_zone = (
         ByteConstants.SIGN_NIBBLE_NEGATIVE & ByteConstants.NIBBLE_MASK
     ) << 4
-    for i, ch in enumerate(abs_digits):
-        digit = int(ch)
-        # Every byte uses the unsigned zone except the last, which carries the
-        # sign zone (0xD0 negative / 0xF0 non-negative).
-        zone = (
-            unsigned_zone
-            if i < length - 1
-            else (negative_zone if n < 0 else unsigned_zone)
-        )
-        result[i] = zone | digit
-    return bytes(result)
+    # Every byte uses the unsigned zone except the last, which carries the
+    # sign zone (0xD0 negative / 0xF0 non-negative).
+    sign_zone = negative_zone if n < 0 else unsigned_zone
+    last_index = length - 1
+    return bytes(
+        (sign_zone if i == last_index else unsigned_zone) | int(ch)
+        for i, ch in enumerate(abs_digits)
+    )
 
 
 def _alpha_decode(data: bytes) -> str:
@@ -98,6 +94,18 @@ def _alpha_encode(s: str, length: int) -> bytes:
 
 
 # ── COMP-3 (packed decimal) codec ────────────────────────────────────────────
+
+
+def _digit_nibbles(b: int, is_last_byte: bool) -> tuple[int, ...]:
+    """The digit nibbles carried by one COMP-3 byte.
+
+    Both nibbles are digits, except the low nibble of the LAST byte, which is
+    the sign (not a digit) and is dropped.
+    """
+    high = (b & ByteConstants.HIGH_NIBBLE_MASK) >> 4
+    if is_last_byte:
+        return (high,)
+    return (high, b & ByteConstants.NIBBLE_MASK)
 
 
 def _comp3_decode(data: bytes, decimal_digits: int) -> Decimal:
@@ -126,15 +134,8 @@ def _comp3_decode(data: bytes, decimal_digits: int) -> Decimal:
 
     # Extract all digit nibbles: high nibbles of all bytes + high nibble of last byte;
     # the low nibble of the last byte is the sign, not a digit.
-    digits: list[int] = []
-    for i, b in enumerate(data):
-        high = (b & ByteConstants.HIGH_NIBBLE_MASK) >> 4
-        digits.append(high)
-        if i < len(data) - 1:
-            # Not the last byte: low nibble is a digit
-            low = b & ByteConstants.NIBBLE_MASK
-            digits.append(low)
-        # Last byte: low nibble is the sign — skip it
+    last_index = len(data) - 1
+    digits = [d for i, b in enumerate(data) for d in _digit_nibbles(b, i == last_index)]
 
     digit_str = "".join(str(d) for d in digits)
     int_value = int(digit_str) if digit_str else 0
@@ -148,6 +149,43 @@ def _comp3_decode(data: bytes, decimal_digits: int) -> Decimal:
         else Decimal(int_value)
     )
     return -magnitude if (negative and int_value != 0) else magnitude
+
+
+def _comp3_sign_nibble(negative: bool, signed: bool) -> int:
+    """The COMP-3 sign nibble: 0x0D negative, 0x0C positive (signed), 0x0F
+    unsigned."""
+    if negative:
+        return ByteConstants.SIGN_NIBBLE_NEGATIVE
+    if signed:
+        return ByteConstants.SIGN_NIBBLE_POSITIVE
+    return ByteConstants.SIGN_NIBBLE_UNSIGNED
+
+
+def _comp3_digit_string(
+    dec_value: Decimal, total_digits: int, decimal_digits: int
+) -> str:
+    """The digit string (sign and decimal point removed), left-zero-padded/
+    truncated to *total_digits*. ``partition`` handles the no-"." case
+    (``frac == ""``); the fraction is padded/truncated to the field scale.
+    """
+    int_part, _, frac = str(abs(dec_value)).partition(".")
+    digits = int_part + (frac + "0" * decimal_digits)[:decimal_digits]
+    return digits.zfill(total_digits)[-total_digits:]
+
+
+def _comp3_pack(raw_digits: str, sign_nibble: int, total_digits: int) -> bytes:
+    """Pack digit nibbles + the sign nibble into COMP-3's right-aligned bytes.
+
+    Total nibble count = total_digits + 1. Byte count = (total_digits // 2) + 1,
+    which gives (total_digits + 1) nibbles when total_digits is odd (exact
+    fit), or (total_digits + 2) nibbles when even (one leading zero nibble is
+    prepended to right-align the sequence).
+    """
+    nibbles: list[int] = [int(ch) for ch in raw_digits] + [sign_nibble]
+    byte_count = (total_digits // 2) + 1
+    total_nibble_slots = byte_count * 2
+    padded = [0] * (total_nibble_slots - len(nibbles)) + nibbles
+    return bytes((padded[2 * i] << 4) | padded[2 * i + 1] for i in range(byte_count))
 
 
 def _comp3_encode(
@@ -174,43 +212,9 @@ def _comp3_encode(
         if decimal_digits > 0
         else raw_value
     )
-
-    # Digit string, sign and decimal point removed. partition handles the no-"."
-    # case (frac == ""); the fraction is padded/truncated to the field scale and
-    # the whole is left-zero-padded (or truncated) to total_digits.
-    int_part, _, frac = str(abs(dec_value)).partition(".")
-    digits = int_part + (frac + "0" * decimal_digits)[:decimal_digits]
-    raw_digits = digits.zfill(total_digits)[-total_digits:]
-
-    sign_nibble = (
-        ByteConstants.SIGN_NIBBLE_NEGATIVE  # 0x0D
-        if negative
-        else (
-            ByteConstants.SIGN_NIBBLE_POSITIVE  # 0x0C (signed)
-            if signed
-            else ByteConstants.SIGN_NIBBLE_UNSIGNED
-        )  # 0x0F
-    )
-
-    # Build a nibble sequence: all digit nibbles followed by the sign nibble.
-    # Total nibble count = total_digits + 1.
-    # Byte count = (total_digits // 2) + 1, which gives (total_digits + 1) nibbles
-    # when total_digits is odd (exact fit), or (total_digits + 2) nibbles when even
-    # (one leading zero nibble is prepended to right-align the sequence).
-    nibbles: list[int] = [int(ch) for ch in raw_digits]
-    nibbles.append(sign_nibble)
-
-    byte_count = (total_digits // 2) + 1
-    total_nibble_slots = byte_count * 2
-
-    # Right-align nibble sequence into the available slots (pad with 0 on the left)
-    padded = [0] * (total_nibble_slots - len(nibbles)) + nibbles
-
-    result = bytearray(byte_count)
-    for i in range(byte_count):
-        result[i] = (padded[2 * i] << 4) | padded[2 * i + 1]
-
-    return bytes(result)
+    raw_digits = _comp3_digit_string(dec_value, total_digits, decimal_digits)
+    sign_nibble = _comp3_sign_nibble(negative, signed)
+    return _comp3_pack(raw_digits, sign_nibble, total_digits)
 
 
 # ── BINARY (COMP/COMP-4) codec ───────────────────────────────────────────────
@@ -248,6 +252,22 @@ def _binary_encode(value: int, length: int, signed: bool) -> bytes:
 # ── WS region access ─────────────────────────────────────────────────────────
 
 
+def _resolve_ws_region(vm, frame, ws_var: VarName):
+    """One call-stack frame's WS region as ``(addr, region)``, or ``()`` if this
+    frame doesn't carry it (wrong frame) or the VM has no region at that
+    address (stale/freed) -- an empty-tuple sentinel, not ``None``, so the
+    return type carries no Optional union."""
+    local_vars = getattr(frame, "local_vars", {})
+    if ws_var not in local_vars:
+        return ()
+    addr = Address(str(local_vars[ws_var].value))
+    match vm.region_get(addr):
+        case None:
+            return ()
+        case region:
+            return (addr, region)
+
+
 def _get_ws_region(vm) -> tuple[Address, bytearray]:
     """Return (addr, region) for the WS region, failing loudly if it is absent.
 
@@ -258,17 +278,26 @@ def _get_ws_region(vm) -> tuple[Address, bytearray]:
     violation, so we raise rather than return a sentinel for callers to absorb.
     """
     ws_var = VarName("__ws_region")
-    for frame in reversed(vm.call_stack):
-        local_vars = getattr(frame, "local_vars", {})
-        if ws_var in local_vars:
-            addr = Address(str(local_vars[ws_var].value))
-            region = vm.region_get(addr)
-            if region is not None:
-                return addr, region
-    raise LookupError("no __ws_region present in the VM call stack")
+    resolved = (
+        _resolve_ws_region(vm, frame, ws_var) for frame in reversed(vm.call_stack)
+    )
+    match next((r for r in resolved if r), ()):
+        case ():
+            raise LookupError("no __ws_region present in the VM call stack")
+        case (addr, region):
+            return addr, region
 
 
-def _decode_field(data: bytes, f: dict):
+# Category -> decoder, dispatched by table rather than an if/elif cascade
+# (ALPHANUMERIC, and anything unrecognized, is the table's implicit default).
+_FIELD_DECODERS: Mapping[str, Callable[..., int | str | Decimal]] = {
+    "ZONED_DECIMAL": lambda data, f: _zoned_decode(data),
+    "COMP3": lambda data, f: _comp3_decode(data, f.get("decimal_digits", 0)),
+    "BINARY": lambda data, f: _binary_decode(data, f.get("signed", True)),
+}
+
+
+def _decode_field(data: bytes, f: Mapping):
     """Decode field bytes to a Python value based on the field's category.
 
     Supported categories:
@@ -278,17 +307,24 @@ def _decode_field(data: bytes, f: dict):
       BINARY        → int
     """
     category = f.get("category", "ALPHANUMERIC")
-    if category == "ZONED_DECIMAL":
-        return _zoned_decode(data)
-    if category == "COMP3":
-        return _comp3_decode(data, f.get("decimal_digits", 0))
-    if category == "BINARY":
-        return _binary_decode(data, f.get("signed", True))
-    # ALPHANUMERIC (and anything else)
-    return _alpha_decode(data)
+    decoder = _FIELD_DECODERS.get(category, lambda data, f: _alpha_decode(data))
+    return decoder(data, f)
 
 
-def _encode_field(value, f: dict, length: int) -> bytes:
+# Category -> encoder, dispatched by table rather than an if/elif cascade
+# (ALPHANUMERIC, and anything unrecognized, is the table's implicit default).
+_FIELD_ENCODERS: Mapping[str, Callable[..., bytes]] = {
+    "ZONED_DECIMAL": lambda value, f, length: _zoned_encode(int(value), length),
+    "COMP3": lambda value, f, length: _comp3_encode(
+        value, f["total_digits"], f["decimal_digits"], f.get("signed", True)
+    ),
+    "BINARY": lambda value, f, length: _binary_encode(
+        int(value), length, f.get("signed", True)
+    ),
+}
+
+
+def _encode_field(value, f: Mapping, length: int) -> bytes:
     """Encode a Python value to bytes based on the field's category.
 
     Supported categories:
@@ -298,18 +334,10 @@ def _encode_field(value, f: dict, length: int) -> bytes:
       BINARY        → _binary_encode
     """
     category = f.get("category", "ALPHANUMERIC")
-    if category == "ZONED_DECIMAL":
-        return _zoned_encode(int(value), length)
-    if category == "COMP3":
-        return _comp3_encode(
-            value,
-            f["total_digits"],
-            f["decimal_digits"],
-            f.get("signed", True),
-        )
-    if category == "BINARY":
-        return _binary_encode(int(value), length, f.get("signed", True))
-    return _alpha_encode(str(value), length)
+    encoder = _FIELD_ENCODERS.get(
+        category, lambda value, f, length: _alpha_encode(str(value), length)
+    )
+    return encoder(value, f, length)
 
 
 # ── VARCHAR (49-group) codec ──────────────────────────────────────────────────
@@ -328,33 +356,55 @@ def _meta_for(field_meta: Mapping[str, FieldMeta], name: str) -> FieldMeta:
     generated metadata preserves the host-var case. Returns an empty mapping
     rather than None so callers can ``.get("category")`` unconditionally.
     """
-    exact = field_meta.get(name)
-    if exact is not None:
-        return exact
-    upper = name.upper()
-    return next(
-        (entry for key, entry in field_meta.items() if key.upper() == upper),
-        {},
-    )
+    match field_meta.get(name):
+        case None:
+            upper = name.upper()
+            return next(
+                (entry for key, entry in field_meta.items() if key.upper() == upper),
+                {},
+            )
+        case exact:
+            return exact
 
 
-def _varchar_decode(data_layout: dict, region: bytearray, meta: dict) -> str:
+def _varchar_children(meta: FieldMeta) -> tuple[str, str]:
+    """The (len_var, text_var) host-var names for a VARCHAR ``field_meta`` entry.
+
+    ``FieldMeta`` is intentionally ``total=False`` -- ``len_var``/``text_var``
+    apply only to the VARCHAR category. This is the one narrowing point: every
+    caller here already knows ``category == "VARCHAR"``, which is exactly when
+    ``dclgen_meta.py`` (Task 5) guarantees both keys are present -- narrowing
+    locally keeps that contract out of ``FieldMeta``'s own shape.
+    """
+    match (meta.get("len_var"), meta.get("text_var")):
+        case (str() as len_var, str() as text_var):
+            return len_var, text_var
+        case _:
+            raise KeyError("VARCHAR field_meta entry missing len_var/text_var")
+
+
+def _varchar_decode(data_layout: Mapping, region: bytearray, meta: FieldMeta) -> str:
     """Pure: decode a VARCHAR host var to its first-LEN characters.
 
     Reads the binary LEN child and returns exactly that many decoded characters
     (no trailing-pad ambiguity). A well-formed VARCHAR has LEN within its TEXT
     capacity by contract; we do not defend against a corrupt LEN.
+
+    Decodes directly (NOT via ``_alpha_decode``, which rstrips): LEN already
+    delimits the value exactly, so a value that legitimately ends in a space
+    must keep it -- rstripping here would silently drop it.
     """
-    len_f = _require_field(data_layout, meta["len_var"])
-    text_f = _require_field(data_layout, meta["text_var"])
+    len_var, text_var = _varchar_children(meta)
+    len_f = _require_field(data_layout, len_var)
+    text_f = _require_field(data_layout, text_var)
     lo, ll = len_f["offset"], len_f["length"]
     n = _binary_decode(bytes(region[lo : lo + ll]), len_f.get("signed", True))
     to = text_f["offset"]
-    return _alpha_decode(bytes(region[to : to + n]))
+    return bytes(region[to : to + n]).decode("cp037")
 
 
 def _varchar_writes(
-    value: str, data_layout: dict, meta: dict
+    value: str, data_layout: Mapping, meta: FieldMeta
 ) -> tuple[tuple[int, bytes], ...]:
     """Pure: the ``(offset, bytes)`` writes that store *value* into a VARCHAR group.
 
@@ -362,8 +412,9 @@ def _varchar_writes(
     region mutation stays at the single boundary in ``write_outputs`` — mirroring
     how ``_encode_field`` returns bytes rather than touching the region itself.
     """
-    len_f = _require_field(data_layout, meta["len_var"])
-    text_f = _require_field(data_layout, meta["text_var"])
+    len_var, text_var = _varchar_children(meta)
+    len_f = _require_field(data_layout, len_var)
+    text_f = _require_field(data_layout, text_var)
     len_bytes = _binary_encode(len(value), len_f["length"], len_f.get("signed", True))
     text_bytes = _alpha_encode(value, text_f["length"])
     return (len_f["offset"], len_bytes), (text_f["offset"], text_bytes)
@@ -405,7 +456,54 @@ def _decimal_digit_counts(dec: Decimal) -> tuple[int, int]:
     return (int_digits if int_digits > 0 else 0), frac
 
 
-def _assignability(value, f: dict) -> int:
+def _numeric_type_ok(value) -> bool:
+    """Whether *value* is a numeric SQL value's Python shape.
+
+    bool is an int subclass but is never a valid numeric SQL value here.
+    """
+    return not isinstance(value, bool) and isinstance(value, (int, float, Decimal))
+
+
+def _numeric_range_ok(dec: Decimal, f: Mapping) -> bool:
+    """Whether *dec* fits field *f* without truncating a fractional digit or
+    overflowing the integer part."""
+    int_digits, frac_digits = _decimal_digit_counts(dec)
+    decimal_digits = f.get("decimal_digits", 0)
+    total_digits = f.get("total_digits", 0)
+    return frac_digits <= decimal_digits and int_digits <= total_digits - decimal_digits
+
+
+def _numeric_out_of_range(dec: Decimal, f: Mapping) -> bool:
+    """NaN/Infinity can't be represented; otherwise defer to the range check."""
+    if not dec.is_finite():
+        return True
+    return not _numeric_range_ok(dec, f)
+
+
+def _numeric_assignability(value, f: Mapping) -> int:
+    """Strict assignability for a ZONED_DECIMAL/COMP3/BINARY field."""
+    if not _numeric_type_ok(value):
+        return SQLCODE_INCOMPATIBLE_TYPE
+    dec = Decimal(str(value))
+    if _numeric_out_of_range(dec, f):
+        return SQLCODE_VALUE_OUT_OF_RANGE
+    return 0
+
+
+def _alphanumeric_assignability(value, f: Mapping) -> int:
+    """Strict assignability for an ALPHANUMERIC (character) field.
+
+    A numeric (or other) value into a character host var is not an allowed
+    assignment without an explicit cast.
+    """
+    if not isinstance(value, str):
+        return SQLCODE_INCOMPATIBLE_TYPE
+    if len(value) > f.get("length", len(value)):
+        return SQLCODE_VALUE_OUT_OF_RANGE  # would truncate the string
+    return 0
+
+
+def _assignability(value, f: Mapping) -> int:
     """Return 0 if *value* can be assigned into field *f* with no coercion or
     loss, else a genuine-failure SQLCODE.
 
@@ -414,51 +512,37 @@ def _assignability(value, f: dict) -> int:
     precision/be truncated fails with -304, and a NULL into a field with no
     indicator fails with -305.
     """
-    if value is None:
-        return SQLCODE_NULL_NO_INDICATOR
-
-    category = f.get("category", "ALPHANUMERIC")
-
-    if category in _NUMERIC_CATEGORIES:
-        # bool is an int subclass but is never a valid numeric SQL value here.
-        if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
-            return SQLCODE_INCOMPATIBLE_TYPE
-        dec = Decimal(str(value))
-        if not dec.is_finite():  # NaN / Infinity can't be represented
-            return SQLCODE_VALUE_OUT_OF_RANGE
-        int_digits, frac_digits = _decimal_digit_counts(dec)
-        decimal_digits = f.get("decimal_digits", 0)
-        total_digits = f.get("total_digits", 0)
-        if frac_digits > decimal_digits:
-            return SQLCODE_VALUE_OUT_OF_RANGE  # would truncate fractional digits
-        if int_digits > total_digits - decimal_digits:
-            return SQLCODE_VALUE_OUT_OF_RANGE  # integer part overflows the field
-        return 0
-
-    # ALPHANUMERIC (character) field.
-    if isinstance(value, str):
-        if len(value) > f.get("length", len(value)):
-            return SQLCODE_VALUE_OUT_OF_RANGE  # would truncate the string
-        return 0
-    # A numeric (or other) value into a character host var is not an allowed
-    # assignment without an explicit cast.
-    return SQLCODE_INCOMPATIBLE_TYPE
+    match value:
+        case None:
+            return SQLCODE_NULL_NO_INDICATOR
+        case _ if f.get("category", "ALPHANUMERIC") in _NUMERIC_CATEGORIES:
+            return _numeric_assignability(value, f)
+        case _:
+            return _alphanumeric_assignability(value, f)
 
 
-def _varchar_assignability(value, text_f: dict) -> int:
+def _varchar_string_assignability(value: str, text_f: Mapping) -> int:
+    """A string value's assignability (the ``case str()`` arm): truncation
+    only, since it's already known to be character data."""
+    if len(value) > text_f["length"]:
+        return SQLCODE_VALUE_OUT_OF_RANGE
+    return 0
+
+
+def _varchar_assignability(value, text_f: Mapping) -> int:
     """Strict assignability for a VARCHAR host var (its TEXT child capacity).
 
     A character value is required; a value longer than the declared capacity
     would truncate (-304); a non-string is cross-family (-301); NULL with no
     indicator is -305.
     """
-    if value is None:
-        return SQLCODE_NULL_NO_INDICATOR
-    if not isinstance(value, str):
-        return SQLCODE_INCOMPATIBLE_TYPE
-    if len(value) > text_f["length"]:
-        return SQLCODE_VALUE_OUT_OF_RANGE
-    return 0
+    match value:
+        case None:
+            return SQLCODE_NULL_NO_INDICATOR
+        case str():
+            return _varchar_string_assignability(value, text_f)
+        case _:
+            return SQLCODE_INCOMPATIBLE_TYPE
 
 
 def _lookup_field(data_layout, name: str):
@@ -469,14 +553,15 @@ def _lookup_field(data_layout, name: str):
     yet writes ``FETCH … INTO :PNAME`` must still resolve. Try the exact name
     first (fast path), then fall back to an upper-cased scan.
     """
-    f = data_layout.get(name)
-    if f is not None:
-        return f
-    upper = name.upper()
-    return next(
-        (entry for key, entry in data_layout.items() if key.upper() == upper),
-        None,
-    )
+    match data_layout.get(name):
+        case None:
+            upper = name.upper()
+            return next(
+                (entry for key, entry in data_layout.items() if key.upper() == upper),
+                None,
+            )
+        case f:
+            return f
 
 
 def _require_field(data_layout, name: str) -> dict:
@@ -486,10 +571,11 @@ def _require_field(data_layout, name: str) -> dict:
     of a dclgen-generated VARCHAR group. A miss is a generation/layout bug, not a
     runtime condition to absorb, so it fails rather than returning a sentinel.
     """
-    f = _lookup_field(data_layout, name)
-    if f is None:
-        raise KeyError(f"host-var field {name!r} not found in data_layout")
-    return f
+    match _lookup_field(data_layout, name):
+        case None:
+            raise KeyError(f"host-var field {name!r} not found in data_layout")
+        case f:
+            return f
 
 
 class FieldMetaMismatch(Exception):
@@ -514,6 +600,85 @@ def _require_category(data_layout, name: str, expected: str) -> None:
         raise FieldMetaMismatch(name, expected, actual)
 
 
+# FieldMeta's optional "category" key, as an explicit closed union rather
+# than Optional[str] -- mirrors squall.parser.sql_model's own style for an
+# absent-vs-present value (NamedCursor|NoCursor, IncludeName|NoInclude,
+# ConnectTo|ConnectReset|NoConnect). "absent" (_NoCategory) and "present"
+# (_Category, even Category("")) are different TYPES, not one Optional
+# collapsed by a None check -- a coercion between None and a string sentinel
+# can silently turn "no check performed" into a real comparison (task-8
+# review round 2: `category or ""` did exactly that, turning a missing
+# category into a hard FieldMetaMismatch under the default tolerant=False).
+@dataclass(frozen=True)
+class _Category:
+    value: str
+
+
+@dataclass(frozen=True)
+class _NoCategory:
+    pass
+
+
+def _category_of(meta: FieldMeta) -> _Category | _NoCategory:
+    """FieldMeta's ``category`` key as the ``_Category``/``_NoCategory`` union."""
+    match meta.get("category"):
+        case str() as value:
+            return _Category(value)
+        case _:
+            return _NoCategory()
+
+
+def _check_varchar_category(data_layout, meta: FieldMeta) -> None:
+    """The VARCHAR branch of ``_check_present_category``: check its LEN/TEXT
+    children instead of the (unmarkable) 49-group itself."""
+    len_var, text_var = _varchar_children(meta)
+    _require_category(data_layout, len_var, "BINARY")
+    _require_category(data_layout, text_var, "ALPHANUMERIC")
+
+
+def _check_present_category(
+    data_layout, name: str, meta: FieldMeta, value: str
+) -> None:
+    """A ``field_meta`` entry with a real category value (see ``_Category``)."""
+    if value == "VARCHAR":
+        _check_varchar_category(data_layout, meta)
+    else:
+        _require_category(data_layout, name, value)
+
+
+def _check_field_meta_category(data_layout, name: str, meta: FieldMeta) -> None:
+    """Assert one ``field_meta`` entry's category agrees with data_layout;
+    raise loud (KeyError / FieldMetaMismatch) otherwise. A missing
+    ``category`` (``_NoCategory``) is not a mismatch to check -- ``FieldMeta``
+    is ``total=False`` and an entry with no category carries nothing to
+    compare, so it is skipped (matches ``field_meta={}`` already being a
+    no-op).
+    """
+    match _category_of(meta):
+        case _NoCategory():
+            return
+        case _Category(value):
+            _check_present_category(data_layout, name, meta, value)
+
+
+def _validate_one_field_meta(
+    data_layout,
+    name: str,
+    meta: FieldMeta,
+    *,
+    tolerant: bool,
+    logger,
+) -> None:
+    """One ``field_meta`` entry's category check (see ``validate_field_meta``)."""
+    try:
+        _check_field_meta_category(data_layout, name, meta)
+    except (KeyError, FieldMetaMismatch) as exc:
+        if tolerant:
+            logger.warning("validate_field_meta skipped %r: %s", name, exc)
+        else:
+            raise
+
+
 def validate_field_meta(
     data_layout,
     field_meta: Mapping[str, FieldMeta],
@@ -532,22 +697,13 @@ def validate_field_meta(
     ``DCL-`` prefix mismatch) — the program still executes with host variables
     staying at their initialized values for any unresolvable field.
     """
-    import logging as _logging  # noqa: PLC0415
+    import logging as _logging
 
-    _logger = _logging.getLogger(__name__)
+    logger = _logging.getLogger(__name__)
     for name, meta in field_meta.items():
-        category = meta.get("category")
-        try:
-            if category == "VARCHAR":
-                _require_category(data_layout, meta["len_var"], "BINARY")
-                _require_category(data_layout, meta["text_var"], "ALPHANUMERIC")
-            else:
-                _require_category(data_layout, name, category)
-        except (KeyError, FieldMetaMismatch) as exc:
-            if tolerant:
-                _logger.warning("validate_field_meta skipped %r: %s", name, exc)
-            else:
-                raise
+        _validate_one_field_meta(
+            data_layout, name, meta, tolerant=tolerant, logger=logger
+        )
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -578,7 +734,7 @@ def read_params(
 
 
 def _read_one(
-    data_layout: dict,
+    data_layout: Mapping,
     region: bytearray,
     field_meta: Mapping[str, FieldMeta],
     name: str,
@@ -594,15 +750,17 @@ def _read_one(
         if tolerant
         else _require_field(data_layout, name)
     )
-    if f is None:
-        import logging as _logging  # noqa: PLC0415
+    match f:
+        case None:
+            import logging as _logging
 
-        _logging.getLogger(__name__).warning(
-            "read_params: field %r not in data_layout — returning None", name
-        )
-        return None
-    off, length = f["offset"], f["length"]
-    return _decode_field(bytes(region[off : off + length]), f)
+            _logging.getLogger(__name__).warning(
+                "read_params: field %r not in data_layout — returning None", name
+            )
+            return None
+        case _:
+            off, length = f["offset"], f["length"]
+            return _decode_field(bytes(region[off : off + length]), f)
 
 
 @dataclass(frozen=True)
@@ -617,21 +775,18 @@ class _Plan:
     writes: tuple[tuple[int, bytes], ...]
 
 
-def _plan_assignment(
-    data_layout: dict, field_meta: Mapping[str, FieldMeta], name: str, value
-) -> _Plan:
-    """Pure: plan one host-var assignment. VARCHAR host vars (carrying dclgen
-    metadata) plan through their 49-group LEN/TEXT children; all others through
-    their flat field.
-    """
-    meta = _meta_for(field_meta, name)
-    if meta.get("category") == "VARCHAR":
-        text_f = _require_field(data_layout, meta["text_var"])
-        varchar_code = _varchar_assignability(value, text_f)
-        if varchar_code != 0:
-            return _Plan(varchar_code, ())
-        return _Plan(0, _varchar_writes(value, data_layout, meta))
+def _plan_varchar_assignment(data_layout: Mapping, meta: FieldMeta, value) -> _Plan:
+    """Pure: plan a VARCHAR host-var assignment through its 49-group children."""
+    _, text_var = _varchar_children(meta)
+    text_f = _require_field(data_layout, text_var)
+    varchar_code = _varchar_assignability(value, text_f)
+    if varchar_code != 0:
+        return _Plan(varchar_code, ())
+    return _Plan(0, _varchar_writes(value, data_layout, meta))
 
+
+def _plan_scalar_assignment(data_layout: Mapping, name: str, value) -> _Plan:
+    """Pure: plan a non-VARCHAR host-var assignment through its flat field."""
     f = _require_field(data_layout, name)
     scalar_code = _assignability(value, f)
     if scalar_code != 0:
@@ -639,6 +794,21 @@ def _plan_assignment(
     return _Plan(
         0, ((f["offset"], _encode_field(value, f, f["length"])[: f["length"]]),)
     )
+
+
+def _plan_assignment(
+    data_layout: Mapping, field_meta: Mapping[str, FieldMeta], name: str, value
+) -> _Plan:
+    """Pure: plan one host-var assignment. VARCHAR host vars (carrying dclgen
+    metadata) plan through their 49-group LEN/TEXT children; all others through
+    their flat field.
+    """
+    meta = _meta_for(field_meta, name)
+    match meta.get("category"):
+        case "VARCHAR":
+            return _plan_varchar_assignment(data_layout, meta, value)
+        case _:
+            return _plan_scalar_assignment(data_layout, name, value)
 
 
 def write_outputs(
@@ -666,21 +836,115 @@ def write_outputs(
     if failure != 0:
         return failure
 
-    for offset, data in [write for p in plans for write in p.writes]:
-        region[offset : offset + len(data)] = data
+    apply_writes(region, tuple(write for p in plans for write in p.writes))
     return 0
 
 
-def write_sqlcode(vm, code: int) -> None:
-    """Write ``code`` into the SQLCODE field in the WS region.
+def write_sqlcode(vm, code: int, message: str = "") -> None:
+    """Write ``code`` into SQLCODE, and *message* into SQLERRM, in the WS region.
 
     Encoding is determined by the SQLCODE field's own ``category`` in
     data_layout.  In real SQLCA the field is BINARY (PIC S9(9) COMP);
     in test fixtures it may be ZONED_DECIMAL.  Both are handled via
     ``_encode_field`` so this function stays category-agnostic.
+
+    SQLERRM is written only when the WS region carries the standard SQLCA
+    SQLERRML/SQLERRMC 49-group (looked up, not required) -- most binding
+    test fixtures only lay out SQLCODE, and must keep working unchanged.
     """
     _, region = _get_ws_region(vm)
     f = _require_field(vm.data_layout, "SQLCODE")
     length = f["length"]
     off = f["offset"]
-    region[off : off + length] = _encode_field(code, f, length)[:length]
+    sqlcode_write = ((off, _encode_field(code, f, length)[:length]),)
+    apply_writes(region, sqlcode_write + _sqlerrm_writes(vm.data_layout, message))
+
+
+# Real DB2 fills SQLERRM with positional substitution tokens (table/object
+# names, etc.), not prose. These CardDemo programs only ever STRING SQLERRM
+# into an operator-facing message and branch on nothing inside it, so this
+# runtime deliberately writes the driver's own prose error text instead --
+# strictly more useful to a human than a token list would be here.
+def _sqlerrm_field_writes(
+    len_f: Mapping, text_f: Mapping, message: str
+) -> tuple[tuple[int, bytes], ...]:
+    """Pure: the LEN/TEXT writes for *message*, once both SQLCA fields are
+    known to be present."""
+    truncated = message[: text_f["length"]]
+    len_bytes = _binary_encode(
+        len(truncated), len_f["length"], len_f.get("signed", True)
+    )
+    text_bytes = _alpha_encode(truncated, text_f["length"])
+    return (len_f["offset"], len_bytes), (text_f["offset"], text_bytes)
+
+
+def _sqlca_errm_fields(data_layout: Mapping):
+    """Both SQLCA SQLERRM fields as ``(len_f, text_f)``, or ``()`` if either is
+    absent from *data_layout* (most unit-test fixtures lay out only SQLCODE)."""
+    match (
+        _lookup_field(data_layout, "SQLERRML"),
+        _lookup_field(data_layout, "SQLERRMC"),
+    ):
+        case (None, _) | (_, None):
+            return ()
+        case (len_f, text_f):
+            return (len_f, text_f)
+
+
+def _sqlerrm_writes(
+    data_layout: Mapping, message: str
+) -> tuple[tuple[int, bytes], ...]:
+    """Pure: the writes that store *message* into the SQLCA SQLERRM VARCHAR
+    group (SQLERRML/SQLERRMC).
+
+    Real Db2 resets SQLCA on every statement, so an EMPTY *message* still
+    writes -- it BLANKS SQLERRM (LEN 0, TEXT all spaces) rather than leaving
+    a previous statement's error text in place. Without this, a statement
+    that fails with driver text, followed by one that fails with none (or
+    succeeds), would still show the operator the earlier error's prose.
+    Returns ``()`` only when the WS region has no SQLCA at all (most
+    unit-test fixtures lay out only SQLCODE).
+    """
+    match _sqlca_errm_fields(data_layout):
+        case ():
+            return ()
+        case (len_f, text_f):
+            return _sqlerrm_field_writes(len_f, text_f, message)
+
+
+# Db2 reports SQLCODE +100 when an UPDATE/DELETE/INSERT (or a MERGE, or a
+# dynamic EXECUTE of one of those) affects zero rows. Restricted to these
+# kinds, not a blanket "rowcount == 0" check, because a backend cannot infer
+# "zero rows" from rowcount alone -- DDL (e.g. CREATE, lowered as
+# Kind.GENERIC) legitimately reports rowcount -1, "not applicable".
+#
+# MERGE and EXECUTE are included alongside INSERT/UPDATE/DELETE: real Db2
+# applies the same +100 convention to a zero-row MERGE, and EXECUTE runs a
+# previously-PREPAREd dynamic statement whose underlying operation is exactly
+# one of these (a plain SELECT has no EXECUTE form -- it needs a cursor, or
+# EXECUTE ... INTO, which already carries its own rows/sqlcode from the
+# backend's result-set branch and never reaches this rowcount==0/sqlcode==0
+# guard in the first place). The guard itself stays the real safety net for
+# every kind: it only ever fires when sqlcode is ALREADY 0, which the
+# backends set only on their non-result-set (DML) branch -- a result-set
+# statement with zero rows gets sqlcode 100 from the backend directly.
+_ZERO_ROW_SQLCODE_100_KINDS = frozenset(
+    {Kind.INSERT, Kind.UPDATE, Kind.DELETE, Kind.MERGE, Kind.EXECUTE}
+)
+
+
+def resolve_dml_sqlcode(kind: Kind, result: SqlResult) -> int:
+    """The SQLCODE to report for one executed DML statement.
+
+    Db2-faithful: a zero-row UPDATE/DELETE/INSERT/MERGE/EXECUTE is +100, not
+    0 -- the backend's own ``result.sqlcode`` is left untouched for every
+    other kind (SELECT_INTO is bound separately; GENERIC/DDL etc. pass
+    through).
+    """
+    if (
+        kind in _ZERO_ROW_SQLCODE_100_KINDS
+        and result.sqlcode == 0
+        and result.rowcount == 0
+    ):
+        return 100
+    return result.sqlcode

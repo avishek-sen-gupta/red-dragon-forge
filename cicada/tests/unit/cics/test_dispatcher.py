@@ -229,6 +229,42 @@ def test_dispatcher_return_transid_timeout_abends_azct(monkeypatch):
     assert result.abcode == "AZCT"
 
 
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_dispatcher_azct_timeout_calls_on_abend(monkeypatch):
+    """The AZCT terminal-read-timeout abend is raised in Python at the
+    routing layer too -- it must run the composed on_abend callable exactly
+    like PGMI/TRNI (task-6 follow-up review)."""
+    calls: list[int] = []
+
+    def mock_run(program, ctx, sq, iq):
+        return DispatchResult(
+            kind=DispatchKind.RETURN_TRANSID, transid="CC01", commarea=b""
+        )
+
+    def fake_peek(input_queue, timeout=30.0):
+        raise queue.Empty
+
+    monkeypatch.setattr(dispatcher_mod, "_peek_input_event", fake_peek)
+
+    program_cache = {"PROG1": MagicMock(), "PROG2": MagicMock()}
+    transid_to_program = {"CC00": "PROG1", "CC01": "PROG2"}
+    ctx = CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")
+    sq, iq = queue.Queue(), queue.Queue()
+
+    result = _run_dispatcher_with_runner(
+        mock_run,
+        program_cache,
+        transid_to_program,
+        ctx,
+        sq,
+        iq,
+        start_queue=StartQueue(),
+        on_abend=lambda: calls.append(1),
+    )
+    assert calls == [1]
+    assert result.abcode == "AZCT"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # _advance_routing — the single copy of the "which program/transid next" rule.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -287,6 +323,50 @@ def test_advance_routing_xctl_unknown_abends_pgmi():
     result = DispatchResult(kind=DispatchKind.XCTL, program="NOPE")
     out = _advance_routing(result, "CC00", {}, {})
     assert isinstance(out, DispatchResult)
+    assert out.kind == DispatchKind.ABEND
+    assert out.abcode == "PGMI"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_advance_routing_pgmi_calls_on_abend():
+    """The dispatcher-level PGMI abend is raised in Python, not IR, so it
+    cannot emit a __cics_rollback_hook -- it must instead run the on_abend
+    callable a forge composition supplies (task-6 follow-up review)."""
+    calls: list[int] = []
+    result = DispatchResult(kind=DispatchKind.XCTL, program="NOPE")
+
+    out = _advance_routing(result, "CC00", {}, {}, on_abend=lambda: calls.append(1))
+
+    assert calls == [1]
+    assert out.abcode == "PGMI"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_advance_routing_trni_calls_on_abend():
+    calls: list[int] = []
+    result = DispatchResult(kind=DispatchKind.RETURN_TRANSID, transid="ZZZZ")
+
+    out = _advance_routing(
+        result, "CC00", {}, {"CC00": "PROG1"}, on_abend=lambda: calls.append(1)
+    )
+
+    assert calls == [1]
+    assert out.abcode == "TRNI"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_advance_routing_pgmi_records_the_abend_even_when_on_abend_raises():
+    """forge-6jj's failure shape: a raising rollback callable must not turn
+    a clean PGMI abend into a Python crash -- the caller must still get the
+    ABEND DispatchResult."""
+
+    def _boom() -> None:
+        raise RuntimeError("db2 connection dropped")
+
+    result = DispatchResult(kind=DispatchKind.XCTL, program="NOPE")
+
+    out = _advance_routing(result, "CC00", {}, {}, on_abend=_boom)  # must not raise
+
     assert out.kind == DispatchKind.ABEND
     assert out.abcode == "PGMI"
 

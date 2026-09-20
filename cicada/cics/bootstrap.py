@@ -22,6 +22,7 @@ module stays cheap to import and side-steps any import-linter coupling concerns.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
@@ -34,6 +35,11 @@ from interpreter.project.coprocessor_compile import CoprocessorSpec
 
 if TYPE_CHECKING:
     from cics.terminal import InputChannel, ScreenChannel
+
+
+def _noop() -> None:
+    """Default on_abend: a CICS-only region has no composed SQL runtime, so
+    there is nothing to roll back when a task abends."""
 
 
 def compile_cics_program(
@@ -82,6 +88,7 @@ def run_carddemo_region(
     max_steps: int = 50_000,
     program_source_dirs: Sequence[Path] = (),
     region_termid: str = DEFAULT_TERMID,
+    on_abend: Callable[[], None] = _noop,
 ) -> DispatchResult:
     """Assemble and run a CICS region; return the terminal :class:`DispatchResult`.
 
@@ -97,6 +104,14 @@ def run_carddemo_region(
     ``program_source_dirs`` (e.g. the CardDemo ``cbl/`` dir) are threaded into
     :func:`compile_cics_program` so each region program links the subprograms
     it ``CALL``s.
+
+    ``on_abend`` (default a no-op) is the one rollback callable a composition
+    supplies for EVERY abend path -- both the IR-raised ones (EXEC CICS
+    ABEND, an unhandled condition, an unsupported verb; threaded via
+    ``build_cics_spec``) and the dispatcher-level ones raised in Python at
+    the routing layer (PGMI, TRNI, AZCT, the runaway guard's ASTL; threaded
+    via ``_run_dispatcher_with_runner``) -- so a caller never has to inspect
+    the terminal :class:`DispatchResult` itself to know whether to roll back.
     """
     if (transid_to_program is None) == (csd_path is None):
         raise ValueError(
@@ -123,6 +138,7 @@ def run_carddemo_region(
         start_queue=start_queue,
         transid_to_program=transid_to_program,
         region_termid=region_termid,
+        on_abend=on_abend,
     )
 
     program_cache: dict[str, Any] = {}
@@ -169,4 +185,5 @@ def run_carddemo_region(
         input_queue,
         start_queue=start_queue,
         region_termid=region_termid,
+        on_abend=on_abend,
     )

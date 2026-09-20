@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections.abc import Sequence
 from decimal import Decimal
 
 from squall.backend import SqlResult
+from squall.backends._stores import set_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -39,24 +41,26 @@ class SqliteBackend:
 
     # ── Core execute ──────────────────────────────────────────────────────────
 
-    def execute(self, sql: str, params: list) -> SqlResult:
+    def execute(self, sql: str, params: Sequence) -> SqlResult:
         try:
             cur = self._conn.execute(sql, params)
         except sqlite3.Error as exc:
             # SQLite has no DB2 SQLCODEs — report a generic failure (-1), but
             # never swallow the driver error silently.
             logger.warning("SQLite execute failed (sqlcode -1): %s | sql=%s", exc, sql)
-            return SqlResult(rows=(), rowcount=0, sqlcode=-1)
+            return SqlResult(rows=(), rowcount=0, sqlcode=-1, sqlerrm=str(exc))
 
-        if cur.description is not None:
-            # SELECT (or any statement that returns columns)
-            rows = tuple(tuple(row) for row in cur.fetchall())
-            sqlcode = 0 if rows else 100
-            return SqlResult(rows=rows, rowcount=len(rows), sqlcode=sqlcode)
-        else:
-            # DML — report affected rows. The transaction stays OPEN until an
-            # explicit EXEC SQL COMMIT / ROLLBACK; DML is not auto-committed.
-            return SqlResult(rows=(), rowcount=cur.rowcount, sqlcode=0)
+        match cur.description:
+            case None:
+                # DML — report affected rows. The transaction stays OPEN until
+                # an explicit EXEC SQL COMMIT / ROLLBACK; DML is not
+                # auto-committed.
+                return SqlResult(rows=(), rowcount=cur.rowcount, sqlcode=0)
+            case _:
+                # SELECT (or any statement that returns columns)
+                rows = tuple(tuple(row) for row in cur.fetchall())
+                sqlcode = 0 if rows else 100
+                return SqlResult(rows=rows, rowcount=len(rows), sqlcode=sqlcode)
 
     # ── Transaction control ──────────────────────────────────────────────────
 
@@ -68,23 +72,38 @@ class SqliteBackend:
 
     # ── Cursor API ────────────────────────────────────────────────────────────
 
-    def open_cursor(self, name: str, sql: str, params: list) -> None:
-        """Execute a SELECT and store the live cursor under *name*."""
-        cur = self._conn.execute(sql, params)
-        self._cursors[name] = cur
+    def open_cursor(self, name: str, sql: str, params: Sequence) -> int:
+        """Execute a SELECT and store the live cursor under *name*.
+
+        Same error boundary as ``execute``: a ``sqlite3.Error`` is reported as
+        SQLCODE -1, never raised.
+        """
+        try:
+            cur = self._conn.execute(sql, params)
+        except sqlite3.Error as exc:
+            logger.warning(
+                "SQLite open_cursor failed (sqlcode -1): %s | sql=%s", exc, sql
+            )
+            return -1
+        set_cursor(self._cursors, name, cur)
+        return 0
 
     def fetch(self, name: str) -> SqlResult:
         """Fetch one row from the named cursor."""
-        cur = self._cursors.get(name)
-        if cur is None:
-            return SqlResult(rows=(), rowcount=0, sqlcode=100)
-        row = cur.fetchone()
-        if row is None:
-            return SqlResult(rows=(), rowcount=0, sqlcode=100)
-        return SqlResult(rows=(tuple(row),), rowcount=1, sqlcode=0)
+        match self._cursors.get(name):
+            case None:
+                return SqlResult(rows=(), rowcount=0, sqlcode=100)
+            case cur:
+                match cur.fetchone():
+                    case None:
+                        return SqlResult(rows=(), rowcount=0, sqlcode=100)
+                    case row:
+                        return SqlResult(rows=(tuple(row),), rowcount=1, sqlcode=0)
 
     def close(self, name: str) -> None:
         """Close and drop the named cursor (no-op if absent)."""
-        cur = self._cursors.pop(name, None)
-        if cur is not None:
-            cur.close()
+        match self._cursors.pop(name, None):
+            case None:
+                return
+            case cur:
+                cur.close()

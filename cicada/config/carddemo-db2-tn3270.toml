@@ -1,0 +1,107 @@
+[region]
+initial_transid = "CC00"
+min_commarea_len = 2000
+programs = ["COACTVWC"]
+
+[paths]
+source_dirs = [
+    "${CARDDEMO_HOME}/cbl",
+    "${CARDDEMO_HOME}/app-transaction-type-db2/cbl",
+]
+copybook_dirs = [
+    "${CARDDEMO_HOME}/cpy",
+    "${CARDDEMO_HOME}/cpy-bms",
+    "${CARDDEMO_HOME}/app-transaction-type-db2/cpy",
+    "${CARDDEMO_HOME}/app-transaction-type-db2/cpy-bms",
+    "${CARDDEMO_HOME}/app-transaction-type-db2/dcl",
+    # Squall's bundled SQLCA.cpy -- cics.tn3270.region's parser (built once,
+    # before any spec compiles) has no idea a SQL spec is composed, so the
+    # copybook this region's EXEC SQL programs COPY (via the INCLUDE ->
+    # COPY prepass) must already be on this list; cicada must not import
+    # squall to discover it itself.
+    "${FORGE_ROOT}/squall/squall/copybooks",
+]
+bms_dirs = [
+    "${CARDDEMO_HOME}/bms",
+    "${CARDDEMO_HOME}/app-transaction-type-db2/bms",
+]
+data_dir = "${CARDDEMO_HOME}/data/EBCDIC"
+hlasm_export = "${FORGE_ROOT}/cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
+# Restates the ProLeap bridge's own default copybook_exts plus "dcl" -- see
+# tests/integration/test_carddemo_db2_compile.py's module docstring (task 4's
+# verified recipe): "-copybook-ext" REPLACES the bridge's defaults rather than
+# extending them, so every extension the corpus uses, including the DCLGEN
+# ".dcl" one CSDB2RPY/CSDB2RWY's hand-written DCLGEN copybooks need, must be
+# listed here explicitly.
+copybook_exts = ["", "cpy", "CPY", "cob", "cbl", "copy", "COPY", "dcl"]
+
+[transactions]
+CC00 = "COSGN00C"
+CM00 = "COMEN01C"
+CAVW = "COACTVWC"
+CAUP = "COACTUPC"
+CCUP = "COCRDUPC"
+CT02 = "COTRN02C"
+CB00 = "COBIL00C"
+CA00 = "COADM01C"
+CU01 = "COUSR01C"
+CU02 = "COUSR02C"
+CU03 = "COUSR03C"
+CCLI = "COCRDLIC"
+CCDL = "COCRDSLC"
+CT00 = "COTRN00C"
+CT01 = "COTRN01C"
+CU00 = "COUSR00C"
+# Db2 tier: verified against csd/CRDDEMOD.csd's own DEFINE TRANSACTION groups
+# and each program's LIT-THISTRANID literal (COTRTUPC: 'CTTU', COTRTLIC: 'CTLI').
+CTTU = "COTRTUPC"
+CTLI = "COTRTLIC"
+
+[datasets.USRSEC]
+file = "AWS.M2.CARDDEMO.USRSEC.PS"
+record_length = 80
+key_length = 8
+
+[datasets.ACCTDAT]
+file = "AWS.M2.CARDDEMO.ACCTDATA.PS"
+record_length = 300
+key_length = 11
+
+[datasets.CUSTDAT]
+file = "AWS.M2.CARDDEMO.CUSTDATA.PS"
+record_length = 500
+key_length = 9
+
+[datasets.CXACAIX]
+file = "AWS.M2.CARDDEMO.CARDXREF.PS"
+record_length = 50
+key_offset = 25
+key_length = 11
+
+[datasets.CARDDAT]
+file = "AWS.M2.CARDDEMO.CARDDATA.PS"
+record_length = 150
+key_offset = 0
+key_length = 16
+
+[datasets.CCXREF]
+file = "AWS.M2.CARDDEMO.CARDXREF.PS"
+record_length = 50
+key_offset = 0
+key_length = 16
+
+[datasets.CARDAIX]
+file = "AWS.M2.CARDDEMO.CARDDATA.PS"
+record_length = 150
+key_offset = 16
+key_length = 11
+
+# COTRN02C (add transaction) needs a keyed TRANSACT dataset but CardDemo ships
+# no TRANSACT.PS; AWS.M2.CARDDEMO.DALYTRAN.PS is layout-compatible (350-byte
+# records, 16-byte id at offset 0) and gives read/lookup flows real records to
+# find, while writes land in each test's tmp vsam dir untouched by re-seeding.
+[datasets.TRANSACT]
+file = "AWS.M2.CARDDEMO.DALYTRAN.PS"
+record_length = 350
+key_offset = 0
+key_length = 16

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import struct
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from interpreter.vm.vm_types import BuiltinResult, VMState
@@ -220,16 +221,49 @@ def make_handle_noop_builtin(verb: str) -> object:
     return __cics_handle_noop
 
 
-def make_abend_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
+def _no_rollback() -> None:
+    """Default on_abend: no composed SQL runtime supplied a rollback
+    callable, so there is nothing to roll back."""
+
+
+def _run_on_abend(on_abend: Callable[[], None]) -> None:
+    """Run the composed rollback callable without letting it destroy the
+    abend it is rolling back for.
+
+    The caller sets ``result_holder[0]`` to the ABEND DispatchResult BEFORE
+    calling this, and this never lets an exception from ``on_abend`` escape:
+    a raising rollback (a dropped Db2 connection, say) must not turn a clean
+    abend into a Python crash the driver has to propagate instead of
+    painting on screen -- the exact shape forge-6jj already fixed once on
+    this branch (an unknown-program XCTL abended internally but crashed the
+    driver), reintroduced here if this call is allowed to raise.
+    """
+    # on_abend is an arbitrary composed callable (Task 10 wires a live Db2
+    # rollback here); any failure in it must not out-run the abend it was
+    # trying to clean up after, so the catch is deliberately blind.
+    try:
+        on_abend()
+    except Exception:
+        logger.exception("on_abend callable raised; the abend still stands")
+
+
+def make_abend_builtin(
+    result_holder: list,  # type: ignore[type-arg]
+    on_abend: Callable[[], None] = _no_rollback,
+) -> object:
     def __cics_abend(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         abcode = str(args[0].value) if args else "UNKN"
         result_holder[0] = DispatchResult(kind=DispatchKind.ABEND, abcode=abcode)
+        _run_on_abend(on_abend)
         return BuiltinResult(value=None)
 
     return __cics_abend
 
 
-def make_abend_unhandled_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
+def make_abend_unhandled_builtin(
+    result_holder: list,  # type: ignore[type-arg]
+    on_abend: Callable[[], None] = _no_rollback,
+) -> object:
     """Abend for a raised condition with no handler registered.
 
     Real CICS assigns a distinct AEIx code per condition; that mapping is not
@@ -247,12 +281,16 @@ def make_abend_unhandled_builtin(result_holder: list) -> object:  # type: ignore
         result_holder[0] = DispatchResult(
             kind=DispatchKind.ABEND, abcode=UNHANDLED_ABCODE
         )
+        _run_on_abend(on_abend)
         return BuiltinResult(value=resp)
 
     return __cics_abend_unhandled
 
 
-def make_abend_unsupported_builtin(result_holder: list) -> object:  # type: ignore[type-arg]
+def make_abend_unsupported_builtin(
+    result_holder: list,  # type: ignore[type-arg]
+    on_abend: Callable[[], None] = _no_rollback,
+) -> object:
     """Abend for an EXEC CICS verb this runtime does not implement.
 
     Reached only if the program actually executes the statement. Lowering
@@ -272,6 +310,7 @@ def make_abend_unsupported_builtin(result_holder: list) -> object:  # type: igno
         result_holder[0] = DispatchResult(
             kind=DispatchKind.ABEND, abcode=UNSUPPORTED_VERB_ABCODE
         )
+        _run_on_abend(on_abend)
         return BuiltinResult(value=0)
 
     return __cics_abend_unsupported
