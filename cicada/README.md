@@ -612,7 +612,7 @@ cd red-dragon-forge
 . tests/integration/db2_env.sh           # SQUALL_DB2_DSN, from squall/.env's DB2_PORT
 make db2-seed                            # once -- drops, recreates and reseeds
 uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
-c3270 -model 3278-2 localhost:3271
+c3270 -model 3279-2-E localhost:3271   # 3279 + -E, or you get monochrome
 ```
 
 Sign on as `ADMIN001`/`PASSWORD` and select admin `5` or `6`. Re-run `make db2-seed` whenever you
