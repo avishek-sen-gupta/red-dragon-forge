@@ -427,7 +427,7 @@ def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
         HNDLINKA_SRC.encode(),
         cobol_parser,
         spec,
-        program_source_dirs=[cbl_dir],
+        source_search_dirs=[cbl_dir],
     )
 
     result = run_cics(

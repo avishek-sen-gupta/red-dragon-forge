@@ -9,6 +9,7 @@ from pathlib import Path
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from squall.backend import SqlBackend
 from squall.connector import DbConnector, NullDbConnector
+from squall.db2_stubs import read_db2_stub_sources
 from squall.preprocess import apply_sql_prepass
 from squall.statements import SqlDialectParser
 from squall.strategy import SqlLoweringStrategy
@@ -59,6 +60,13 @@ def build_sql_spec(
     (forge-2xy; see ``SharedSqlStores`` for what breaks without it). Mirrors
     ``build_cics_spec``'s spec-level ``context_holder``/``result_holder``/
     ``program_cache``.
+
+    ``linked_subprogram_sources`` links squall's Db2 stubs (``DSNTIAC``) into
+    every run unit this spec compiles. Linking them outright rather than
+    contributing a ``source_search_dirs`` entry is forced, not a preference:
+    the search path is walked from CALL edges a text scan found, and CardDemo
+    reaches DSNTIAC by data-name, which no scan can discover (red-dragon-t3kl).
+    See ``squall.db2_stubs`` for what each stub does and does not model.
     """
     stores = SharedSqlStores()
 
@@ -88,4 +96,5 @@ def build_sql_spec(
         source_prepass=_prepass,
         owns_execution=False,
         dialect_parser=SqlDialectParser(),
+        linked_subprogram_sources=read_db2_stub_sources,
     )

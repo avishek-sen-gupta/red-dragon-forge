@@ -82,5 +82,5 @@ def build_cics_spec(
         source_prepass=apply_cics_prepass,
         owns_execution=True,
         dialect_parser=dialect_parser,
-        extra_program_source_dirs=lambda: (LE_STUBS_DIR,),
+        source_search_dirs=lambda: (LE_STUBS_DIR,),
     )

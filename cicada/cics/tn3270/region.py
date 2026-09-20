@@ -105,7 +105,7 @@ def _compiled(
 ) -> dict[str, LinkedProgram]:
     from interpreter.project.coprocessor_compile import compile_program
 
-    # program_source_dirs resolves plain COBOL subprograms a transaction
+    # source_search_dirs resolves plain COBOL subprograms a transaction
     # program CALLs (e.g. COTRN02C -> CSUTLDTC) from the same cbl directory;
     # without it such a CALL is unresolved and the caller's own RESP handling
     # takes the non-NORMAL branch, not a crash.
@@ -114,7 +114,7 @@ def _compiled(
             resolve_program_source(config, name).read_bytes(),
             parser,
             [cics_spec, *extra_specs],
-            program_source_dirs=config.source_dirs,
+            source_search_dirs=config.source_dirs,
         )[1]
         for name in sorted(config.programs)
     }

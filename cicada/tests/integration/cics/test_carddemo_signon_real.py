@@ -921,7 +921,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, vsam_dir=None):
         tranadd_path.read_bytes(),
         parser,
         spec,
-        program_source_dirs=[app / "cbl"],
+        source_search_dirs=[app / "cbl"],
     )
 
     program_cache = {
