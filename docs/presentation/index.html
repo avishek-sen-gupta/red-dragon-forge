@@ -66,10 +66,11 @@
         <div class="stat"><div class="n">62</div><div class="l">Datasets, VSAM and sequential</div></div>
       </div>
       <p class="small" style="margin-top:1em">Sign-on, menus, accounts, cards, transactions, bill pay, reports, user admin — CICS + VSAM online, JCL batch, EBCDIC data files. We use it exactly as shipped.</p>
+      <p class="small">A <strong>separate Db2 tree</strong> ships alongside it — three more programs and four DDL files behind admin options 5 and 6, on Db2 rather than VSAM. Those are section 07.</p>
     </div>
   </div>
   <div class="source">artifacts/cobble/stats.json · vendor/carddemo</div>
-  <aside class="notes">Counts come from Cobble's graph of the corpus (29 of 30 programs parsed — one file uses an upper-case .CBL extension the corpus glob skips). CardDemo is open source, so everything shown here is reproducible by anyone.</aside>
+  <aside class="notes">Counts come from Cobble's graph of the base corpus (29 of 30 programs parsed — one file uses an upper-case .CBL extension the corpus glob skips), and exclude the Db2 tree: COTRTLIC, COTRTUPC and the batch COBTUPDT, plus two transactions CTLI and CTTU. CardDemo is open source, so everything shown here is reproducible by anyone.</aside>
 </section>
 
 <!-- ============ 3. COBBLE ============ -->
@@ -389,11 +390,11 @@ turn 6 · 0.106s</pre>
         <li>Credit limit <code>00000020200{</code> → <strong>+2,020.00</strong></li>
         <li>Names, address and FICO straight from CardDemo's shipped customer file</li>
       </ul>
-      <p class="small" style="margin-top:0.8em"><span class="tag warn">known defect</span> SSN shows 209-73-888; correct is 020-97-3888 — reference modification on a numeric field drops the leading zero. Found by this capture, now tracked.</p>
+      <p class="small" style="margin-top:0.8em"><span class="tag warn">known defect</span> SSN shows 209-73-888; correct is 020-97-3888 — a <code>PIC 9(9)</code> item holds only eight characters, so every slice after the missing leading zero shifts left. Found by this capture, tracked as <code>red-dragon-wlms</code>.</p>
     </div>
   </div>
   <div class="source">artifacts/cics/04-CACTVWA.json · turns.jsonl · vendor/carddemo/app/cbl/COACTVWC.cbl</div>
-  <aside class="notes">The alternate index hop (CXACAIX) is the real CardDemo access path: account id → card xref → account → customer. The SSN defect is worth showing openly — this is exactly how capture-based testing finds byte-level divergences.</aside>
+  <aside class="notes">The alternate index hop (CXACAIX) is the real CardDemo access path: account id → card xref → account → customer. The SSN defect is worth showing openly — this is exactly how capture-based testing finds byte-level divergences. Worth noting if asked: the first diagnosis blamed reference modification, and was wrong. The field is already short before anything slices it; refmod just makes a width error visible. Capture testing finds the divergence, but you still have to chase it to the right layer.</aside>
 </section>
 
 <section>
@@ -430,7 +431,36 @@ turn 10  STARTBR  CARDDAT       <span class="ok">NORMAL</span>
   </table>
   <p class="small" style="margin-top:0.8em">Compile (parse + lower), once per program: 1.5 – 4.8 s. Turns run in milliseconds on a laptop.</p>
   <div class="source">artifacts/cics/turns.jsonl · artifacts/cics/FACTS.md</div>
-  <aside class="notes">Timings are the interpreted VM on a dev laptop, excluding compile — illustrative, not benchmarks. This capture drove the region headlessly (attention id plus field map); <code>cicada-tn3270</code> now serves the same regions over a real 3270 datastream to stock emulators, still one terminal and one task at a time.</aside>
+  <aside class="notes">Timings are the interpreted VM on a dev laptop, excluding compile — illustrative, not benchmarks. This capture drove the region headlessly (attention id plus field map); the next slide is the same regions served to stock emulators over a real 3270 datastream.</aside>
+</section>
+
+<section>
+  <div class="kicker">CICS · over the wire</div>
+  <h2>Stock 3270 emulators, talking to a laptop</h2>
+  <div class="cols wide-right">
+    <div>
+      <div class="pipeline" style="flex-direction:column; gap:10px; margin:0">
+        <div class="stage"><b>c3270 / x3270 / s3270</b><span>Unmodified emulators — nothing about them knows this is not a mainframe</span></div>
+        <div class="stage"><b>TN3270 negotiation</b><span>IBM-3278/3279, models 2-5, with or without <code>-E</code>; binary + EOR</span></div>
+        <div class="stage"><b>3270 datastream</b><span>Real orders: SBA, SF/SFE, extended attributes for colour and highlighting</span></div>
+        <div class="stage"><b>The same region</b><span>Identical code path to the headless driver — the wire is an adapter, not a second implementation</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat"><div class="n">2</div><div class="l">Servers: VSAM CardDemo, and the composed CICS+Db2 region</div></div>
+        <div class="stat"><div class="n">18</div><div class="l">Programs compiled into the Db2 region at startup</div></div>
+        <div class="stat"><div class="n">17</div><div class="l">BMS screens, generated from the original map source</div></div>
+        <div class="stat amber"><div class="n">1</div><div class="l">Terminal at a time — a real limit, not a simplification</div></div>
+      </div>
+    </div>
+  </div>
+<pre class="log">uv run cicada-tn3270   --config cicada/config/carddemo-tn3270.toml     --port 3270
+uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
+
+c3270 -model <span class="hl">3279-2-E</span> localhost:3271     <span class="ok">← 3279 + -E, or the screens come back monochrome</span></pre>
+  <div class="source">cicada/cics/tn3270/ · red_dragon_forge/carddemo_db2_cli.py · README.md</div>
+  <aside class="notes">Headless stays first-class and always will: the wire path builds the same region and drives the same driver, so a screen-fidelity feature is asserted headlessly first and the emulator is a second opinion, never the only one. Colour rides the extended data stream — the encoder emits colour attributes only when the negotiated terminal name ends in -E, so a 3278 gives correct but entirely green screens. Sign on ADMIN001/PASSWORD for the admin menu, which is where options 5 and 6 live.</aside>
 </section>
 
 <section>
@@ -558,7 +588,7 @@ READ         <span class="ok">0</span>   EXECUTED      reads *.LOAD.ACCTVSAM</pr
   <div class="num">07</div>
   <h1>Talk to Db2.</h1>
   <p class="lede">Squall runs embedded <code>EXEC SQL</code> against a live IBM Db2 — alone, or inside a CICS transaction.</p>
-  <aside class="notes">CardDemo's base app is VSAM-only, so for Db2 we use IBM's own Bank-of-Z sample, unmodified.</aside>
+  <aside class="notes">Two unmodified IBM systems: Bank-of-Z's INQCUST for SQL inside a single CICS task, and CardDemo's own Db2 tier — admin options 5 and 6 — for full CRUD driven from a 3270.</aside>
 </section>
 
 <section>
@@ -612,6 +642,31 @@ SQL reaching Db2 — case NOT FOUND
 </section>
 
 <section>
+  <div class="kicker">SQL · CardDemo's own Db2 tier</div>
+  <h2>Admin 5 and 6, on a real 3270, against live Db2</h2>
+  <div class="cols wide-right">
+    <div>
+      <div class="pipeline" style="flex-direction:column; gap:10px; margin:0">
+        <div class="stage"><b>COTRTLIC / COTRTUPC</b><span>CardDemo's Db2 programs, unmodified — a second source tree the base app never used</span></div>
+        <div class="stage"><b>CICS + SQL composed</b><span>One region, two coprocessors; the import contract still forbids either runtime importing the other</span></div>
+        <div class="stage"><b>Full CRUD</b><span>SELECT, UPDATE, INSERT, DELETE on CARDDEMO.TRANSACTION_TYPE — cursors declared in WORKING-STORAGE</span></div>
+        <div class="stage"><b>Commit boundary</b><span>EXEC CICS SYNCPOINT mid-task, proven from a third connection</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="stats" style="grid-template-columns:1fr 1fr">
+        <div class="stat"><div class="n">6</div><div class="l">Interpreter defects found by running it, fixed upstream</div></div>
+        <div class="stat amber"><div class="n">0</div><div class="l">Lines of IBM source changed</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">Connections: the program's, the seeder's, and a probe that proves a commit really happened</div></div>
+        <div class="stat"><div class="n">8</div><div class="l">CardDemo's own defects, pinned as characterisation tests</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="source">tests/integration/test_carddemo_db2_headless.py · red_dragon_forge/carddemo_db2_region.py</div>
+  <aside class="notes">The point of this slide is the 6. Every one was a silent wrong answer in the interpreter that only a real IBM program exposed: INSPECT TALLYING and REPLACING reading their operand's NAME instead of its value; subscripts dropped on an intrinsic FUNCTION argument, so FUNCTION TRIM(TABLE(I)) always read occurrence 1; a parenthesised group containing a FUNCTION collapsing to just the FUNCTION, which silently broke IF and PERFORM UNTIL as well as COMPUTE; a FUNCTION in a reference-modifier bound replacing the whole operand; and CALL by data-name doing nothing at all. Five of the six were bridge defects that looked like interpreter defects. Assertions go through a third connection on purpose — reading back through the program's own connection cannot tell "committed" from "still pending on this session", which would make every unit-of-work proof vacuous.</aside>
+</section>
+
+<section>
   <div class="kicker">SQL · surface</div>
   <h2>What executes today — and what only parses</h2>
   <div class="cols">
@@ -623,7 +678,10 @@ SQL reaching Db2 — case NOT FOUND
         <li><strong>COMMIT / ROLLBACK</strong> — IBM <code>updat.sqb</code> on Db2</li>
         <li><strong>CONNECT</strong> routing across two databases; real negative SQLCODEs</li>
         <li><strong>WHENEVER SQLERROR GO TO</strong> — branches on Db2's −204</li>
-        <li><strong>INCLUDE SQLCA / DCLGEN</strong>; INSERT / UPDATE / DELETE (SQLite)</li>
+        <li><strong>INSERT / UPDATE / DELETE</strong> — live Db2, via CardDemo's own admin 5/6</li>
+        <li><strong>CICS commit boundaries</strong>: EXEC CICS SYNCPOINT / SYNCPOINT ROLLBACK, task end and abend all reach the SQL runtime</li>
+        <li><strong>VARCHAR host variables</strong> from hand-written IBM DCLGEN copybooks</li>
+        <li><strong>INCLUDE SQLCA / DCLGEN</strong></li>
       </ul>
     </div>
     <div class="card warn">
@@ -638,7 +696,7 @@ SQL reaching Db2 — case NOT FOUND
     </div>
   </div>
   <div class="source">artifacts/sql/FACTS.md · squall/squall/parser/grammar.lark · squall/tests/integration/</div>
-  <aside class="notes">Be explicit: the grammar is broad, execution is narrower. CRUD, VARCHAR and COMP-3 host variables are proven on SQLite only. No real CICS-Db2 syncpoint coordination — task end commits and closes cursors.</aside>
+  <aside class="notes">Be explicit: the grammar is broad, execution is narrower. CRUD and VARCHAR are now proven against live Db2 through CardDemo's own screens; COMP-3 host variables remain SQLite-only. CICS-Db2 commit coordination is real — SYNCPOINT, SYNCPOINT ROLLBACK, task end and abend all reach squall through name-convention hooks, so cicada never imports squall.</aside>
 </section>
 
 <!-- ============ 8. SCALE (ANONYMISED) ============ -->
@@ -700,7 +758,7 @@ SQL reaching Db2 — case NOT FOUND
   </div>
   <div class="legend"><i style="background:var(--phosphor)"></i>implemented <i style="background:var(--red)"></i>open work</div>
   <div class="source">docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md (Defect E) · artifacts/scale/scale.json</div>
-  <aside class="notes">START, RETRIEVE and IGNORE CONDITION were missing when first analysed and are now implemented — frequency data drives the order of work. Remaining open by volume: BIF DEEDIT (992), temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, SYNCPOINT, RESETBR).</aside>
+  <aside class="notes">START, RETRIEVE and IGNORE CONDITION were missing when first analysed and are now implemented — frequency data drives the order of work. Remaining open by volume: BIF DEEDIT (992), temporary storage queues (144 DELETEQ + 98 READQ + 88 WRITEQ), then a long tail (SPOOL, RESETBR). SYNCPOINT has since been implemented for the Db2 tier.</aside>
 </section>
 
 <section>
@@ -756,15 +814,15 @@ SQL reaching Db2 — case NOT FOUND
       </ul></div>
     <div class="card warn"><h3>Online (CICS)</h3>
       <ul>
-        <li>BIF DEEDIT, temporary storage queues, SYNCPOINT, RESETBR</li>
+        <li>BIF DEEDIT, temporary storage queues, RESETBR</li>
         <li>SEND MAP options: CURSOR, ERASE, FREEKB</li>
-        <li>Headless only: screens render but can't yet be used to drive a transaction</li>
+        <li>One terminal at a time; conversational (non-pseudo-conversational) programs</li>
         <li>One task at a time</li>
       </ul></div>
     <div class="card warn"><h3>SQL &amp; analysis</h3>
       <ul>
         <li>Dynamic SQL, CALL, indicator variables, full SQLCA</li>
-        <li>No CICS–Db2 syncpoint coordination; no dialect translation</li>
+        <li>No dialect translation</li>
         <li>Cobble: a few expression kinds or unresolved JCL symbols can drop a whole program or job from the graph</li>
       </ul></div>
   </div>
@@ -780,7 +838,7 @@ SQL reaching Db2 — case NOT FOUND
     <tr><td><strong>Batch breadth</strong></td><td>GDG → SORT subset + IEBGENER → DD concatenation → IDCAMS breadth → DCB → PDS</td><td>SORT + IEBGENER + IDCAMS: over half of all estate steps</td></tr>
     <tr><td><strong>CICS surface</strong></td><td>BIF DEEDIT → TS queues → BMS map options → time formats → SYNCPOINT</td><td>DEEDIT alone: 992 uses</td></tr>
     <tr><td><strong>Engine correctness</strong></td><td>Fixed-point decimal arithmetic → SORT/MERGE verbs → fail loud on anything unhandled</td><td>Byte-exact results are the whole value proposition</td></tr>
-    <tr><td><strong>SQL</strong></td><td>Syncpoint at task end → indicators + tolerant coercion → dynamic SQL / CALL</td><td>Unblocks the next Db2 programs</td></tr>
+    <tr><td><strong>SQL</strong></td><td>Indicators + tolerant coercion → dynamic SQL / CALL → full SQLCA</td><td>Syncpoint shipped; these are what the next Db2 programs hit</td></tr>
     <tr><td><strong>Estate onboarding</strong></td><td>Robust ingest → dataflow at scale → source positions → screen text</td><td>First contact with any new estate</td></tr>
   </table>
   <div class="source">artifacts/gaps/FACTS.md (grouped from open issues) · artifacts/scale/FACTS.md</div>
