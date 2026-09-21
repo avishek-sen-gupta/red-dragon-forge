@@ -46,23 +46,27 @@ def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> str:
     return ""
 
 
-def _emit_all(
-    asg_dir: Path, members: Sequence[str], writer: JsonlWriter
-) -> tuple[str, ...]:
-    return tuple(
-        member
-        for member in members
-        for reason in (_emit_one(asg_dir, member, writer),)
-        if reason and not logger.warning("extents: skipping %s: %s", member, reason)
-    )
+def _emit_tracked(
+    asg_dir: Path, n: int, total: int, member: str, writer: JsonlWriter
+) -> str:
+    reason = _emit_one(asg_dir, member, writer)
+    if n % 50 == 0 or n == total:
+        logger.info("extents: %d/%d", n, total)
+    return reason
 
 
 def emit(asg_dir: Path, out: Path, members: Sequence[str]) -> int:
     chosen = members if members else _members(asg_dir)
-    logger.info("extents: %d members from %s", len(chosen), asg_dir)
+    total = len(chosen)
+    logger.info("extents: %d members from %s", total, asg_dir)
     ensure_parent(out)
     with jsonl_writer(out) as writer:
-        skipped = _emit_all(asg_dir, chosen, writer)
+        skipped = tuple(
+            member
+            for n, member in enumerate(chosen, 1)
+            for reason in (_emit_tracked(asg_dir, n, total, member, writer),)
+            if reason and not logger.warning("extents: skipping %s: %s", member, reason)
+        )
     logger.info("extents: wrote %s (%d skipped)", out, len(skipped))
     return 3 if skipped else 0
 
