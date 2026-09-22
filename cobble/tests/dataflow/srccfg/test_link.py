@@ -300,3 +300,72 @@ def test_a_call_site_names_the_node_so_its_guard_can_be_looked_up() -> None:
     (site,) = call_sites(_cfg("PROGA", [_link("'PROGB'")]))
 
     assert site.node.startswith("MAIN/")
+
+
+def test_a_subscripted_cics_callee_names_the_table_entry_it_selects() -> None:
+    """EXEC CICS XCTL PROGRAM(TBL(WS-OPTION)) dispatches on a table entry chosen at
+    runtime. Recording the bare table name claims a scalar the program never
+    declared -- the analysis then resolves it at arity 0 against a field declared
+    OCCURS, matches no cell, and reports it as having no declared extent, which
+    reads like a layout gap and is not one (forge-zgn)."""
+    (site,) = call_sites(
+        _cfg(
+            "PROGA",
+            [
+                _cics(
+                    "XCTL",
+                    {
+                        "PROGRAM": {
+                            "text": "CDEMO-MENU-OPT-PGMNAME",
+                            "is_literal": False,
+                            "subscripts": [{"kind": "ref", "name": "WS-OPTION"}],
+                        }
+                    },
+                )
+            ],
+        )
+    )
+
+    assert site.program == "CDEMO-MENU-OPT-PGMNAME(WS-OPTION)"
+
+
+def test_a_subscripted_cics_callee_is_not_resolved_to_an_occurrence() -> None:
+    """Which entry runs is WS-OPTION's runtime value. Naming occurrence 1, or any
+    single program, would assert an edge the source does not support; resolving it
+    to the table's candidate set is a separate question (forge-tgr)."""
+    graph = call_graph(
+        [
+            _cfg(
+                "PROGA",
+                [
+                    _cics(
+                        "XCTL",
+                        {
+                            "PROGRAM": {
+                                "text": "WS-PROGS",
+                                "is_literal": False,
+                                "subscripts": [{"kind": "ref", "name": "WS-I"}],
+                            }
+                        },
+                    )
+                ],
+            )
+        ]
+    )
+
+    assert callees_of(graph, "PROGA") == ()
+    assert [s.resolved for s in unresolved_sites(graph)] == [False]
+
+
+def test_an_unsubscripted_cics_callee_still_names_the_field_alone() -> None:
+    """The 26 of CardDemo's 29 identifier-callee sites that carry no subscript have
+    to keep producing exactly what they produced before."""
+    (site,) = call_sites(_cfg("PROGA", [_link("WS-TARGET", literal=False)]))
+
+    assert (site.program, site.resolved) == ("WS-TARGET", False)
+
+
+def test_a_literal_cics_callee_still_loses_its_quotes_and_resolves() -> None:
+    (site,) = call_sites(_cfg("PROGA", [_link("'PROGB'")]))
+
+    assert (site.program, site.resolved) == ("PROGB", True)

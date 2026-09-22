@@ -31,6 +31,7 @@ from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.asg_walk import descend
+from cobble.cics.cics_operand import as_reference
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
 from cobble.dataflow.fields.state import (
     CICS_STATE,
@@ -354,15 +355,27 @@ def _call_writes(
     )
 
 
-def _option(statement: ExecCicsStatement, key: str) -> str:
-    value = statement.options.get(key)
+def _option(statement: ExecCicsStatement, option: str) -> str:
+    value = statement.options.get(option)
     return value.text if isinstance(value, CicsOperand) else ""
 
 
-def _receiver(statement: ExecCicsStatement) -> tuple[str, ...]:
-    named = tuple(
-        text for text in (_option(statement, key) for key in _CICS_RECEIVERS) if text
-    )
+def _option_reference(statement: ExecCicsStatement, option: str) -> RefModOperand:
+    """The named operand as storage: its indices and slice, not just its name.
+
+    A receiver or commarea written as ``WS-TBL(WS-IDX)`` selects one occurrence,
+    and reading the name alone resolves it at arity 0 against a field declared
+    OCCURS -- which matches no cell, so the write lands nowhere (forge-zgn).
+    """
+    value = statement.options.get(option)
+    if isinstance(value, CicsOperand):
+        return as_reference(value)
+    return RefModOperand(name="")
+
+
+def _receiver_options(statement: ExecCicsStatement) -> tuple[str, ...]:
+    """The one option this verb receives into, INTO winning over SET."""
+    named = tuple(name for name in _CICS_RECEIVERS if _option(statement, name))
     return named[:1]
 
 
@@ -375,8 +388,10 @@ def _cics_origin(statement: ExecCicsStatement) -> str:
 def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
     """LINK and XCTL write through the COMMAREA; everything else through a receiver."""
     if statement.verb.upper() in _CICS_CALL_VERBS:
-        return (RefModOperand(name=_option(statement, "COMMAREA")),)
-    return tuple(RefModOperand(name=text) for text in _receiver(statement))
+        return (_option_reference(statement, "COMMAREA"),)
+    return tuple(
+        _option_reference(statement, name) for name in _receiver_options(statement)
+    )
 
 
 def _cics_writes(
