@@ -19,10 +19,10 @@ still handles bridge JSON when a program is parsed fresh. ``parse_statement``
 takes the first parser whose ``applies`` is True, and this one requires "verb" to
 be present, so the two cannot collide.
 
-Subscripts and reference modification survive because cobble writes the cache with
-its own serializer -- cobble.cics.cics_operand, which is also the reader used here.
-The coarse graph still has one node per name regardless of subscript; the analyses
-that resolve an operand to a storage extent are the ones that need the index.
+Reading that form is ``ExecCicsStatement.from_dict``, cicada's own inverse of the
+to_dict that wrote it, so an operand's subscripts and slice arrive intact. The
+coarse graph still has one node per name regardless of subscript; the analyses that
+resolve an operand to a storage extent are the ones that need the index.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
 from cics.statements import CicsDialectParser, ExecCicsStatement
-from cobble.cics.cics_operand import operand_from_dict
 from cobol_asg import cobol_statements as _cobol_statements
 from squall.statements import SqlDialectParser
 
@@ -43,15 +42,7 @@ class SerializedCicsDialectParser:
         return data.get("type") == "EXEC_CICS" and "verb" in data
 
     def parse(self, data: Mapping) -> ExecCicsStatement:
-        """A bare flag serializes as null and stays a key with no operand."""
-        options = data.get("options") or {}
-        return ExecCicsStatement(
-            verb=str(data.get("verb", "")),
-            options={
-                option: operand_from_dict(value) if isinstance(value, Mapping) else None
-                for option, value in options.items()
-            },
-        )
+        return ExecCicsStatement.from_dict(dict(data))
 
 
 @contextmanager

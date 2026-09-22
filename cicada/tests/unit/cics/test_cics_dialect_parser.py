@@ -78,3 +78,69 @@ class TestExecCicsStatementRelocatedShape:
         assert operand.text == "X"
         assert operand.is_literal is True
         assert operand.subscripts == ()
+
+
+class TestExecCicsStatementRoundTrip:
+    """``to_dict`` is not informational here: cobble's parsed-ASG cache IS
+    ``CobolASG.to_dict()``, so a key dropped on the way out is one no consumer can
+    recover. It used to drop an operand's subscripts, and a subscripted callee then
+    read back as a scalar."""
+
+    def test_a_subscripted_operand_survives_the_round_trip(self):
+        statement = CicsDialectParser().parse(
+            {
+                "exec_cics_text": (
+                    "EXEC CICS XCTL PROGRAM(CDEMO-MENU-OPT-PGMNAME(WS-OPTION))"
+                    " COMMAREA(CARDDEMO-COMMAREA) END-EXEC"
+                ),
+                "type": "EXEC_CICS",
+            }
+        )
+
+        assert ExecCicsStatement.from_dict(statement.to_dict()) == statement
+
+    def test_a_reference_modified_operand_survives_the_round_trip(self):
+        statement = CicsDialectParser().parse(
+            {
+                "exec_cics_text": "EXEC CICS SEND FROM(WS-AREA(2:3)) END-EXEC",
+                "type": "EXEC_CICS",
+            }
+        )
+
+        assert ExecCicsStatement.from_dict(statement.to_dict()) == statement
+
+    def test_a_plain_operand_still_serializes_to_the_two_keys_it_always_did(self):
+        statement = ExecCicsStatement(
+            verb="XCTL",
+            options={"PROGRAM": CicsOperand(text="CDEMO-TO-PROGRAM", is_literal=False)},
+        )
+
+        assert statement.to_dict() == {
+            "type": "EXEC_CICS",
+            "verb": "XCTL",
+            "options": {"PROGRAM": {"text": "CDEMO-TO-PROGRAM", "is_literal": False}},
+        }
+
+    def test_a_bare_flag_stays_a_key_with_no_operand_behind_it(self):
+        statement = ExecCicsStatement(
+            verb="INQUIRE",
+            options={
+                "PROGRAM": CicsOperand(text="WS-PROG", is_literal=False),
+                "NOHANDLE": None,
+            },
+        )
+
+        assert ExecCicsStatement.from_dict(statement.to_dict()) == statement
+
+    def test_a_payload_written_before_the_structure_existed_still_reads(self):
+        statement = ExecCicsStatement.from_dict(
+            {
+                "type": "EXEC_CICS",
+                "verb": "LINK",
+                "options": {"PROGRAM": {"text": "WS-PROG", "is_literal": False}},
+            }
+        )
+
+        assert statement.options["PROGRAM"] == CicsOperand(
+            text="WS-PROG", is_literal=False
+        )

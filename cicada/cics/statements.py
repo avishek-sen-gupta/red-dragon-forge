@@ -6,10 +6,48 @@ CICS-specific type names.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from cics.cics_visitor import CicsOperand, parse_exec_cics_text
+from cobol_asg.ref_mod import RefModOperand
+
+_STRUCTURE = ("subscripts", "ref_mod_start", "ref_mod_length")
+
+
+def operand_to_dict(operand: CicsOperand) -> dict:
+    """One option operand as JSON, keeping everything CicsOperand carries.
+
+    ``text`` is the name alone, so an operand that dropped its ``subscripts`` here
+    came back a scalar: ``PROGRAM(TBL(WS-OPTION))`` read as ``TBL``, which then
+    resolves at arity 0 against a field declared OCCURS and matches nothing. Each
+    entry below appears only when the operand has it, so an operand with neither a
+    subscript nor a slice serializes to exactly the two entries it always did.
+    """
+    return {
+        "text": operand.text,
+        "is_literal": operand.is_literal,
+        **_structure(operand),
+    }
+
+
+def operand_from_dict(data: dict) -> CicsOperand:
+    """The inverse of ``operand_to_dict``, including a payload written before it.
+
+    An older payload carries ``text`` and ``is_literal`` alone and reads back as the
+    unsubscripted, unmodified operand it described.
+    """
+    read = RefModOperand.from_dict(
+        {"name": "", **{part: data[part] for part in _STRUCTURE if part in data}}
+    )
+    return _with_bounds(
+        CicsOperand(
+            text=str(data.get("text", "")),
+            is_literal=bool(data.get("is_literal", False)),
+            subscripts=read.subscripts,
+        ),
+        read,
+    )
 
 
 @dataclass(frozen=True)
@@ -20,18 +58,35 @@ class ExecCicsStatement:
     options: dict[str, "CicsOperand | None"]
 
     def to_dict(self) -> dict:
-        # Serialised for informational round-trip only (see RedDragon's
-        # to_dict() convention) — parity, not exercised by the AST cache path.
-        serialised: dict[str, Any] = {}
-        for key, operand in self.options.items():
-            if operand is None:
-                serialised[key] = None
-            else:
-                serialised[key] = {
-                    "text": operand.text,
-                    "is_literal": operand.is_literal,
-                }
+        """The statement as JSON, losslessly: ``from_dict`` reconstructs it.
+
+        RedDragon's to_dict() convention is an informational round-trip, but this
+        one is load-bearing — cobble's parsed-ASG cache IS ``CobolASG.to_dict()``,
+        and every stage after its parse reads the JSON rather than the source. A key
+        dropped here is a key no consumer can ever recover.
+        """
+        serialised: dict[str, Any] = {
+            name: operand_to_dict(operand) if isinstance(operand, CicsOperand) else None
+            for name, operand in self.options.items()
+        }
         return {"type": "EXEC_CICS", "verb": self.verb, "options": serialised}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ExecCicsStatement:
+        """Reconstruct from a ``to_dict`` payload.
+
+        A bare flag — NOHANDLE, RESP — carries no value and serializes as null. It
+        stays an option with no operand behind it, which is what parsing the source
+        text produces for it too.
+        """
+        options = data.get("options") or {}
+        return cls(
+            verb=str(data.get("verb", "")),
+            options={
+                name: operand_from_dict(value) if isinstance(value, dict) else None
+                for name, value in options.items()
+            },
+        )
 
 
 class CicsDialectParser:
@@ -57,3 +112,34 @@ class CicsDialectParser:
         stmt = ExecCicsStatement(verb=verb, options=options)
         self.statements.append(stmt)
         return stmt
+
+
+def _with_bounds(operand, source):
+    """Copy the slice bounds from one operand shape onto the other.
+
+    CicsOperand and RefModOperand carry identical bounds under non-identical
+    annotations: CicsOperand says ExprNode, while cics_visitor._build_refmod_side
+    builds RefModExpr and cics/strategy.py matches on RefModExpr. The values agree
+    and only the annotation does not -- forge-af6, which also lists why correcting it
+    is a change of its own. ``replace`` is what crosses that one seam.
+    """
+    return replace(
+        operand,
+        ref_mod_start=source.ref_mod_start,
+        ref_mod_length=source.ref_mod_length,
+    )
+
+
+def _structure(operand: CicsOperand) -> dict:
+    """The subscripts and slice bounds, each key present only when the operand has it.
+
+    A CICS operand is a COBOL operand reference wearing a different name: same
+    indices, same ``(start:length)``, same node types on both. RefModOperand already
+    serializes all three and omits each when absent, so it is borrowed as the codec
+    rather than copied into a second one that would drift from it.
+
+    """
+    written = _with_bounds(
+        RefModOperand(name=operand.text, subscripts=operand.subscripts), operand
+    ).to_dict()
+    return {part: written[part] for part in _STRUCTURE if part in written}

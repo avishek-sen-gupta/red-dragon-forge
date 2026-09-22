@@ -18,7 +18,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from cics.statements import CicsDialectParser
-from cobble.cics.cics_operand import StructuredCicsDialectParser
 from cobol_asg import cobol_statements as _cobol_statements
 from squall.statements import SqlDialectParser
 
@@ -31,16 +30,13 @@ def asg_dialect_parsers() -> tuple[CicsDialectParser, SqlDialectParser]:
     single ASG parse, so the composition lives here.
 
     Cicada's parser is what the graph actually reads — every edge comes from an
-    ``ExecCicsStatement``, and cobble takes it through the subclass that serializes
-    an operand's subscripts rather than dropping them (see cics_operand.py; this is
-    the parse that writes the ASG cache every later stage reads). Squall's is here
-    because a coprocessor statement type
+    ``ExecCicsStatement``. Squall's is here because a coprocessor statement type
     with no dialect parser is a hard error: ``parse_statement`` raises
     ``Unknown COBOL statement type: 'EXEC_SQL'`` and takes the whole program's
     verbs down with it. Registering it makes an EXEC SQL block parse to opaque
     text that the walk then ignores.
     """
-    return (StructuredCicsDialectParser(), SqlDialectParser())
+    return (CicsDialectParser(), SqlDialectParser())
 
 
 @contextmanager

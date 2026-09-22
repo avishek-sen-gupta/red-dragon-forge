@@ -23,7 +23,6 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from cics.statements import CicsOperand
-from cobble.cics.cics_operand import as_written
 from cobble.dataflow.depgraph.flows import (
     ProgramContext,
     blocks_of,
@@ -59,6 +58,7 @@ from cobble.dataflow.srccfg.synthetic import (
     handler_field,
     io_status_field,
 )
+from cobol_asg.cobol_expression import expr_to_dict
 
 GOTO_TRANSFER = "GO TO"
 DISPATCH_TRANSFER = "GO TO DEPENDING"
@@ -1060,7 +1060,17 @@ def _callee(statement) -> str:
     a runtime choice -- but it must not be recorded as the bare name, which claims
     a scalar the program never declared and resolves against no cell at all.
     """
-    return as_written(_option_operand(statement, PROGRAM_OPTION))
+    operand = _option_operand(statement, PROGRAM_OPTION)
+    if not operand.subscripts:
+        return operand.text
+    indices = ", ".join(_index_text(node) for node in operand.subscripts)
+    return f"{operand.text}({indices})"
+
+
+def _index_text(node) -> str:
+    """A CICS subscript is a bare data-name or an integer; cicada rejects the rest."""
+    written = expr_to_dict(node)
+    return str(written.get("name") or written.get("value") or "")
 
 
 def _option_operand(statement, name: str) -> CicsOperand:
