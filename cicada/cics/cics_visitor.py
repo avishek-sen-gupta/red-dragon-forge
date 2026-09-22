@@ -40,8 +40,8 @@ class CicsOperand:
     text: str
     is_literal: bool
     subscripts: tuple[ExprNode, ...] = ()
-    ref_mod_start: ExprNode | None = None
-    ref_mod_length: ExprNode | None = None
+    ref_mod_start: RefModExpr | None = None
+    ref_mod_length: RefModExpr | None = None
 
 
 class _FailFastErrorListener(ErrorListener):
@@ -384,7 +384,8 @@ def _extract_from_option(ctx) -> list[tuple[str, CicsOperand | None]]:
         return []
     first_child = ctx.getChild(0)
     if isinstance(first_child, TerminalNode):
-        keyword = first_child.getText().upper()
+        # antlr4's TerminalNode stub omits getText; it exists at runtime.
+        keyword = first_child.getText().upper()  # type: ignore[attr-defined]
         arg_ctx = None
         for i in range(ctx.getChildCount()):
             c = ctx.getChild(i)
@@ -482,10 +483,13 @@ def parse_exec_cics_text(text: str) -> tuple[str, dict[str, CicsOperand | None]]
     lexer = CICSzLexer(input_stream)
     # The @lexer::members block in CICSzLexer.g4 generates local vars in __init__,
     # not instance attrs, so sempred can't find them. Set them here for all modes.
-    lexer.pliCode = False
-    lexer.classicCOBOLCode = False
-    lexer.freeFormCOBOLCode = False
-    lexer.cCode = False
+    # CICSzLexer declares none of these four: the grammar's @lexer::members block
+    # generates them, so they exist on the instance but not on the class pyright
+    # sees. Assigning them is how the lexer is put into COBOL mode.
+    lexer.pliCode = False  # type: ignore[attr-defined]
+    lexer.classicCOBOLCode = False  # type: ignore[attr-defined]
+    lexer.freeFormCOBOLCode = False  # type: ignore[attr-defined]
+    lexer.cCode = False  # type: ignore[attr-defined]
     lexer.removeErrorListeners()
     lexer.addErrorListener(_FailFastErrorListener())
 

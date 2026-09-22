@@ -6,7 +6,7 @@ CICS-specific type names.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from cics.cics_visitor import CicsOperand, parse_exec_cics_text
@@ -39,8 +39,11 @@ def operand_reference(operand: CicsOperand) -> RefModOperand:
     ``text`` alone instead makes a subscripted operand a scalar, which then resolves
     at arity 0 against a field declared OCCURS and matches no cell.
     """
-    return _with_bounds(
-        RefModOperand(name=operand.text, subscripts=operand.subscripts), operand
+    return RefModOperand(
+        name=operand.text,
+        subscripts=operand.subscripts,
+        ref_mod_start=operand.ref_mod_start,
+        ref_mod_length=operand.ref_mod_length,
     )
 
 
@@ -53,13 +56,12 @@ def operand_from_dict(data: dict) -> CicsOperand:
     read = RefModOperand.from_dict(
         {"name": "", **{part: data[part] for part in _STRUCTURE if part in data}}
     )
-    return _with_bounds(
-        CicsOperand(
-            text=str(data.get("text", "")),
-            is_literal=bool(data.get("is_literal", False)),
-            subscripts=read.subscripts,
-        ),
-        read,
+    return CicsOperand(
+        text=str(data.get("text", "")),
+        is_literal=bool(data.get("is_literal", False)),
+        subscripts=read.subscripts,
+        ref_mod_start=read.ref_mod_start,
+        ref_mod_length=read.ref_mod_length,
     )
 
 
@@ -125,22 +127,6 @@ class CicsDialectParser:
         stmt = ExecCicsStatement(verb=verb, options=options)
         self.statements.append(stmt)
         return stmt
-
-
-def _with_bounds(operand, source):
-    """Copy the slice bounds from one operand shape onto the other.
-
-    CicsOperand and RefModOperand carry identical bounds under non-identical
-    annotations: CicsOperand says ExprNode, while cics_visitor._build_refmod_side
-    builds RefModExpr and cics/strategy.py matches on RefModExpr. The values agree
-    and only the annotation does not -- forge-af6, which also lists why correcting it
-    is a change of its own. ``replace`` is what crosses that one seam.
-    """
-    return replace(
-        operand,
-        ref_mod_start=source.ref_mod_start,
-        ref_mod_length=source.ref_mod_length,
-    )
 
 
 def _structure(operand: CicsOperand) -> dict:
