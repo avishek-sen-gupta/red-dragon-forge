@@ -40,12 +40,17 @@ def _assign(node_id: str, field: str, paragraph: str = "MAIN") -> Node:
     )
 
 
-def _call(node_id: str, program: str, paragraph: str = "MAIN") -> Node:
+def _call(
+    node_id: str,
+    program: str,
+    paragraph: str = "MAIN",
+    transfer: str = "CICS_LINK",
+) -> Node:
     return Node(
         id=node_id,
         kind=NodeKind.CALL,
         paragraph=paragraph,
-        transfer="CICS_LINK",
+        transfer=transfer,
         target=program,
     )
 
@@ -75,10 +80,10 @@ def _branching() -> Cfg:
     )
 
 
-def _caller(callee: str) -> Cfg:
+def _caller(callee: str, transfer: str = "CICS_LINK") -> Cfg:
     return Cfg(
         program="PROGA",
-        nodes=(_label("MAIN"), _call("MAIN/0", callee)),
+        nodes=(_label("MAIN"), _call("MAIN/0", callee, transfer=transfer)),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
     )
 
@@ -217,6 +222,26 @@ def test_a_call_node_is_labelled_with_its_target() -> None:
 
     assert "CICS_LINK" in text
     assert "PROGB" in text
+
+
+def test_each_kind_of_transfer_labels_its_edge_with_its_own_spelling() -> None:
+    """The label is the node's own word, not the normalised one a CallSite carries:
+    an XCTL drawn as a LINK says control comes back when it does not."""
+    edges = {
+        transfer: [
+            line
+            for line in dot_of(
+                (_caller("PROGB", transfer), _one_program("PROGB"))
+            ).splitlines()
+            if "dashed" in line
+        ]
+        for transfer in ("CICS_LINK", "CICS_XCTL", "CALL")
+    }
+
+    assert [
+        (transfer, len(lines), f'label="{transfer}"' in lines[0])
+        for transfer, lines in edges.items()
+    ] == [("CICS_LINK", 1, True), ("CICS_XCTL", 1, True), ("CALL", 1, True)]
 
 
 def _closure_file(tmp_path: Path, document) -> Path:
