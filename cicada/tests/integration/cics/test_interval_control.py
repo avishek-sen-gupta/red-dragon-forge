@@ -188,8 +188,17 @@ def test_start_lowering_emits_no_return(cobol_parser):
     # whole program because the condition dispatcher emitted at procedure entry
     # ends in its own Return_; it still catches any Return_ emitted further
     # down as the program grows.
+    #
+    # Implicit returns are excluded: red-dragon emits one at the end of every
+    # PROCEDURE DIVISION so a program that runs off the end returns to its
+    # caller instead of hanging (red-dragon-i0jd). It is the compiler's, not a
+    # statement's, and counting it would make this assertion fire for a reason
+    # it is not about. Filtering on the flag is also stricter than a count: an
+    # implicit return can never stand in for the one START must not emit.
     return_instructions = [
-        i for i in instructions[start_calls[0] :] if isinstance(i, Return_)
+        i
+        for i in instructions[start_calls[0] :]
+        if isinstance(i, Return_) and not i.implicit
     ]
     assert len(return_instructions) == 1, (
         f"expected exactly one Return_ (from the trailing RETURN), got "
