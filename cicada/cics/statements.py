@@ -31,6 +31,19 @@ def operand_to_dict(operand: CicsOperand) -> dict:
     }
 
 
+def operand_reference(operand: CicsOperand) -> RefModOperand:
+    """The operand as a COBOL operand reference: name, indices and slice.
+
+    A consumer resolving a CICS operand to storage needs the same three parts a
+    MOVE operand carries, and this is the same reference under another name. Reading
+    ``text`` alone instead makes a subscripted operand a scalar, which then resolves
+    at arity 0 against a field declared OCCURS and matches no cell.
+    """
+    return _with_bounds(
+        RefModOperand(name=operand.text, subscripts=operand.subscripts), operand
+    )
+
+
 def operand_from_dict(data: dict) -> CicsOperand:
     """The inverse of ``operand_to_dict``, including a payload written before it.
 
@@ -139,7 +152,5 @@ def _structure(operand: CicsOperand) -> dict:
     rather than copied into a second one that would drift from it.
 
     """
-    written = _with_bounds(
-        RefModOperand(name=operand.text, subscripts=operand.subscripts), operand
-    ).to_dict()
+    written = operand_reference(operand).to_dict()
     return {part: written[part] for part in _STRUCTURE if part in written}
