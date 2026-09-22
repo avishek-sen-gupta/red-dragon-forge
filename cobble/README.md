@@ -42,6 +42,9 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-build --config <corpus>` | Extract the graph to `out/` |
 | `cobble-compare` | Identity-diff vs `reference/` (449/803) |
 | `cobble-render` / `cobble-render-webgl --config <corpus>` | Render `out/` as an interactive HTML / WebGL graph |
+| `cobble-srccfg-build PROGRAM --config <corpus>` | Build one program's source CFG **and every program it transitively calls** |
+| `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <json> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
+| `cobble-srccfg-query <query> <subject> --cfg <json>` | Ask a built CFG for guards or a field's provenance |
 | `python -m pytest` | Run the pytest unit suite |
 
 ### Build the graph from CardDemo
@@ -54,6 +57,39 @@ uv run cobble-build --config config/carddemo.toml            # extract the graph
 uv run cobble-compare                                        # identity-diff out/ vs reference/ (must be empty: 449/803)
 uv run cobble-render --config config/carddemo.toml           # -> out/graph.html
 ```
+
+### Source CFGs, and drawing a call closure
+
+`cobble-srccfg-build` walks out from one program through its calls, building the CFG
+of everything it reaches. The result is a *bundle*: one CFG per program, plus the
+call graph linking them — not a single merged graph.
+
+```bash
+. ../bridge-env.sh
+uv run cobble-srccfg-build COSGN00C --config config/carddemo.toml --output closure.json
+uv run cobble-srccfg-webgl --cfg closure.json --output closure.html    # the whole closure
+uv run cobble-srccfg-dot   --cfg closure.json --output one.dot         # add --program COSGN00C
+```
+
+**`dot` for one program, `webgl` for a closure.** Graphviz gives the better picture —
+ranked top to bottom, edges labelled — but it is a layered layout with crossing
+minimisation and on a whole closure it does not finish: a 6,638-node / 9,468-edge
+bundle ran past twelve minutes and was killed, where `sfdp` lays the same graph out in
+about five seconds. Both targets take `--program MEMBER` to draw one member instead.
+
+The WebGL page is the only target that folds the bundle into one connected graph: every
+node is namespaced by its program, and resolved calls become cross-program edges.
+Positions are computed at build time, so the browser opens an arranged graph and
+simulates nothing.
+
+Two things that make a closure look smaller than the code is. A call the resolver could
+not pin contributes no edge, and a callee missing from the ASG cache is logged
+(`called but not in the ASG cache; not built`) and skipped — so run
+`cobble-parse-corpus` over everything you want reachable first.
+
+Note the analyses are **per program**: `cobble-srccfg-query`'s guards and provenance run
+over one CFG at a time, so a field crossing a COMMAREA stops at the caller's boundary.
+Cross-program field flow is a different system — `cobble/dataflow/fields/`.
 
 `--config` is required by every stage but `cobble-compare`; there's no default, so
 a bare `cobble-build` fails with a clear error instead of silently assuming CardDemo.
