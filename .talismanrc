@@ -447,4 +447,6 @@ fileignoreconfig:
   checksum: 51ee12844b4cc5f6a3612c3000d6dafb033edc439b1c0df96f40996f721943a8
 - filename: cobble/cobble/dataflow/srccfg/joined.py
   checksum: edb6943cba4ee88acc283e9ceb08f2edfea1b4a98c281b60bb85c8ff16cda0ea
+- filename: cicada/cics/cics_visitor.py
+  checksum: 2bb2151e87c46e9065533e7ae4b6b0404987d5909121b1e942fa3d778e96d35f
 version: "1.0"
