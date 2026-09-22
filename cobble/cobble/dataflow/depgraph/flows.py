@@ -311,6 +311,20 @@ def _search(s, ctx: ProgramContext) -> tuple[Block, ...]:
     return _block((operand_name(s.table),), (operand_name(s.varying),))
 
 
+def _callee_node(target) -> str:
+    """A CALL's callee as a graph node, or nothing when it is not statically known.
+
+    Same rule as ``_identity``: ``CALL 'PROGB'`` names a member and is an identity,
+    while ``CALL WS-PROG`` holds a name chosen at run time and is a selector. A node
+    named ``PROGRAM:WS-PROG`` would be an edge to a member no corpus ever contains,
+    and every dynamic call in the program would collapse onto it.
+    """
+    if target.resolved_at_runtime:
+        return ""
+    text = operand_name(target.literal)
+    return PROGRAM_PREFIX + text if text else ""
+
+
 def _call(s, ctx: ProgramContext) -> tuple[Block, ...]:
     """Parameters into the callee, and the callee back into its BY REFERENCE ones.
 
@@ -320,7 +334,7 @@ def _call(s, ctx: ProgramContext) -> tuple[Block, ...]:
     is not knowable from the call site, so the program node carries the whole
     relation rather than being resolved into it.
     """
-    program = PROGRAM_PREFIX + operand_name(s.program)
+    program = _callee_node(s.target)
     params = tuple(
         operand_name(p) for p in s.using if not getattr(p, "is_literal", False)
     )

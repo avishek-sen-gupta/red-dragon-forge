@@ -327,11 +327,30 @@ def _call_targets(statement: CallStatement) -> tuple[RefModOperand, ...]:
     return tuple(RefModOperand(name=name) for name in (*passed, *given))
 
 
+def _call_origin(statement: CallStatement) -> str:
+    """The cross-program sink a CALL's BY REFERENCE arguments are credited to.
+
+    The write itself is never dropped when the callee is dynamic -- the argument
+    really is written by somebody, and saying otherwise would claim it still holds
+    what the caller put there. What changes is the sink: ``%CALL:%DYNAMIC:WS-PROG``
+    rather than ``%CALL:WS-PROG``, because the bare form is indistinguishable from a
+    member actually named WS-PROG and would be joined to one. The ``%`` sigil marks
+    it synthetic the way ``%CICS-STATE`` does, and keeping the field name leaves the
+    reader a reaching-definitions query for the candidate callees.
+    """
+    target = statement.target
+    match target.identifier:
+        case None:
+            return f"%CALL:{target.literal}"
+        case identifier:
+            return f"%CALL:%DYNAMIC:{identifier.name.strip().upper()}"
+
+
 def _call_writes(
     statement: CallStatement, node: str, index: CellIndex
 ) -> Iterator[Write]:
     return _origin_writes(
-        _call_targets(statement), f"%CALL:{statement.program}", node, index
+        _call_targets(statement), _call_origin(statement), node, index
     )
 
 

@@ -1160,14 +1160,26 @@ def _raisable(body: Fragment, ctx: Ctx, path: str) -> Fragment:
     return seq((body, arms), nop_id=node_id(ctx, path, "#raise.join"))
 
 
+def _callee_name(target) -> str:
+    """What a CALL site records as its callee, on both arms of ``CallTarget``.
+
+    A literal loses its quotes because the call graph joins on program id and
+    ``'PROGB'`` never equals ``PROGB``. A data item keeps its own name and the site
+    is marked unresolved: that name is what "which programs can this reach" is a
+    reaching-definitions query over, exactly as for a dynamic CICS LINK.
+    """
+    match target.identifier:
+        case None:
+            return target.literal.strip().strip("'\"")
+        case identifier:
+            return identifier.name.strip().upper()
+
+
 def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
     """CALL 'PROGB' USING A B. The parameters are the alias list, so they are kept in
     order -- OMITTED included, since a parameter's position is its identity."""
-    from cobble.dataflow.depgraph.graph import is_literal
-
     writes, reads = _writes_reads(statement, ctx, "CallStatement")
-    program = str(getattr(statement, "program", ""))
-    target = program.strip("'\"") if is_literal(program) else program
+    callee = statement.target
     node = Node(
         id=node_id(ctx, path),
         kind=NodeKind.CALL,
@@ -1175,8 +1187,8 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
         writes=writes,
         reads=reads,
         transfer=CALL_TRANSFER,
-        target=target,
-        target_resolved=is_literal(program),
+        target=_callee_name(callee),
+        target_resolved=not callee.resolved_at_runtime,
         using=tuple(
             (
                 ""
