@@ -92,6 +92,70 @@ def test_a_static_cobol_call_is_a_call_site() -> None:
     assert (site.transfer, site.program, site.resolved) == ("CALL", "PROGB", True)
 
 
+def test_a_cobol_call_through_a_data_item_is_unresolved_and_keeps_the_field_name() -> (
+    None
+):
+    """CALL WS-PROG dispatches on the field's runtime contents, so the callee is not
+    statically known. Recording WS-PROG as a resolved callee would assert an edge to
+    a member of that name; dropping the site would lose the 38 the corpus has."""
+    (site,) = call_sites(
+        _cfg(
+            "PROGA",
+            [{"type": "CALL", "program_ref": {"name": "WS-PROG"}, "using": []}],
+        )
+    )
+
+    assert (site.transfer, site.program, site.resolved) == ("CALL", "WS-PROG", False)
+
+
+def test_a_subscripted_call_target_keeps_the_table_name() -> None:
+    """CALL WS-PROGS(I) is the same question one level down: the field to run
+    reaching definitions over is the table, not the occurrence."""
+    (site,) = call_sites(
+        _cfg(
+            "PROGA",
+            [
+                {
+                    "type": "CALL",
+                    "program_ref": {
+                        "name": "WS-PROGS",
+                        "subscripts": [{"kind": "ref", "name": "I"}],
+                    },
+                }
+            ],
+        )
+    )
+
+    assert (site.program, site.resolved) == ("WS-PROGS", False)
+
+
+def test_a_dynamic_cobol_call_is_not_a_callee_edge_but_is_reported() -> None:
+    graph = call_graph(
+        [_cfg("PROGA", [{"type": "CALL", "program_ref": {"name": "WS-PROG"}}])]
+    )
+
+    assert callees_of(graph, "PROGA") == ()
+    assert [s.program for s in unresolved_sites(graph)] == ["WS-PROG"]
+
+
+def test_a_dynamic_call_depends_on_no_program_node() -> None:
+    """The dependency graph's callee node is an identity, and WS-PROG is not one: a
+    PROGRAM:WS-PROG node would collapse every dynamic call onto one false member."""
+    cfg = _cfg(
+        "PROGA",
+        [
+            {
+                "type": "CALL",
+                "program_ref": {"name": "WS-PROG"},
+                "using": [{"name": "WS-AREA", "type": "REFERENCE"}],
+            }
+        ],
+    )
+    node = cfg.node("MAIN/0")
+
+    assert not [name for name in (*node.writes, *node.reads) if "PROGRAM:" in name]
+
+
 def test_a_dynamic_program_name_is_unresolved_and_keeps_the_field_name() -> None:
     """Keeping the field is what makes the follow-up possible: the answer to "which
     programs can this reach" is a reaching-definitions query over that field."""

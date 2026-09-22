@@ -401,6 +401,29 @@ def test_call_using_by_reference_marks_the_argument_as_written_by_the_callee(
     assert names_reaching(state, index, "WS-B") == set()
 
 
+def test_a_call_through_a_data_item_credits_a_sink_no_member_can_be(
+    program_of, field, after, names_reaching
+):
+    """CALL WS-PROG writes the argument as surely as CALL 'SUBPROG' does, so the
+    write stays. Only the sink changes: ``%CALL:WS-PROG`` would be joined to a member
+    of that name, while the marked form keeps the field for a follow-up query and
+    can never be mistaken for one."""
+    asg = program_of(
+        [
+            {
+                "type": "CALL",
+                "program_ref": {"name": "WS-PROG"},
+                "using": [{"name": "WS-A", "type": "REFERENCE"}],
+            }
+        ],
+        data_fields=[
+            field(1, "REC", children=[field(5, "WS-A", "X(4)", offset=0)]),
+        ],
+    )
+    state, index = after(asg)
+    assert names_reaching(state, index, "WS-A") == {"%CALL:%DYNAMIC:WS-PROG"}
+
+
 def test_exec_cics_read_into_marks_the_target_as_coming_from_the_file(
     program_of, field, after, names_reaching
 ):
