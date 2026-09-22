@@ -443,4 +443,8 @@ fileignoreconfig:
   checksum: d19795b341ed47ff94ffd7796571f5b22e79199eb117b391cc5385b0fed68167
 - filename: tests/integration/test_carddemo_db2_headless.py
   checksum: fcebaa0b2249bb87e5f419973d982a01e5c1fd54a20f685a68834b0239fb5a45
+- filename: cobble/cobble/dataflow/srccfg/webgl.py
+  checksum: 51ee12844b4cc5f6a3612c3000d6dafb033edc439b1c0df96f40996f721943a8
+- filename: cobble/cobble/dataflow/srccfg/joined.py
+  checksum: edb6943cba4ee88acc283e9ceb08f2edfea1b4a98c281b60bb85c8ff16cda0ea
 version: "1.0"

@@ -15,8 +15,9 @@ Reuses the corpus graph's renderer wholesale, sfdp for the layout and sigma.js f
 the page, exactly as depgraph/render.py does and for the same reason: the positions
 are computed once here, so the browser opens an arranged graph and simulates nothing.
 
-Node text and the cross-program CALL edge come from presentation.py, shared with
-dot.py so the two pictures cannot label a node differently. Colour does not: dot.py's
+The graph itself comes from joined.py and the node text from presentation.py, shared
+with dot.py so the two pictures cannot label a node differently, and so a traversal
+crosses a call exactly where the picture draws it. Colour does not: dot.py's
 fills are pale graphviz pastels chosen to hold black text inside a shape, and an
 #ffffff node is invisible on this page's white background.
 """
@@ -25,35 +26,23 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from collections.abc import Callable, Mapping, Sequence
-from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 
 import networkx as nx
-
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.srccfg.build_corpus import load_cfgs
+from cobble.dataflow.srccfg.bundle import load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, NodeKind
-from cobble.dataflow.srccfg.presentation import label_of, qualified, resolved_calls
+from cobble.dataflow.srccfg.joined import CallKind, NodeKey, graph_of
+from cobble.dataflow.srccfg.link import BundleCall
 from cobble.knowledge_graph.layout import sfdp_positions
 from cobble.knowledge_graph.render_webgl import render_webgl_html
 
 logger = logging.getLogger(__name__)
 
-NodeKey = tuple[Enum, str]
 Layout = Callable[[nx.MultiDiGraph], Mapping[NodeKey, tuple[float, float]]]
-
-
-class CallKind(Enum):
-    """The one edge that is not in any CFG: a CALL joined to its callee's entry.
-
-    Its own kind and not an EdgeKind, because it crosses a program boundary and
-    nothing inside one program's CFG does -- and because the legend has to be able
-    to name it.
-    """
-
-    CALL = "CALL"
 
 
 # Where the branches are is what a reader looks for first, so TEST takes the loudest
@@ -91,49 +80,12 @@ def selected(cfgs: Sequence[Cfg], program: str) -> tuple[Cfg, ...]:
     return tuple(cfg for cfg in cfgs if not program or cfg.program == program)
 
 
-def _keys_of(cfgs: Sequence[Cfg]) -> Mapping[str, NodeKey]:
-    """Every node's graph key, looked up by the qualified id an edge names it by."""
-    return {
-        qualified(cfg.program, node.id): (node.kind, qualified(cfg.program, node.id))
-        for cfg in cfgs
-        for node in cfg.nodes
-    }
-
-
-def graph_of(cfgs: Sequence[Cfg]) -> nx.MultiDiGraph:
-    """The bundle as the graph the renderer draws.
-
-    Keyed (kind, qualified id) like the corpus graph, so sfdp_positions and
-    render_webgl_html index it unchanged. The label carries the program because
-    "MOVE WS-FLAG-A" occurs in a dozen members of a closure and a page that does not
-    say which one leaves the reader nowhere.
-    """
-    keys = _keys_of(cfgs)
-    graph = nx.MultiDiGraph()
-    for cfg in cfgs:
-        for node in cfg.nodes:
-            graph.add_node(
-                keys[qualified(cfg.program, node.id)],
-                kind=node.kind,
-                id=f"{cfg.program} {label_of(node)}",
-            )
-    for cfg in cfgs:
-        for edge in cfg.edges:
-            graph.add_edge(
-                keys[qualified(cfg.program, edge.source)],
-                keys[qualified(cfg.program, edge.target)],
-                kind=edge.kind,
-            )
-    for call in resolved_calls(cfgs):
-        graph.add_edge(keys[call.source], keys[call.target], kind=CallKind.CALL)
-    return graph
-
-
 def render(
     cfgs: Sequence[Cfg],
     output: Path,
     *,
     title: str,
+    calls: Sequence[BundleCall] = (),
     layout: Layout = sfdp_positions,
 ) -> Path:
     """Lay the bundle out and write the page. ``layout`` is a seam for the tests.
@@ -142,7 +94,7 @@ def render(
     graph drawable at all -- but it needs graphviz on PATH, which a unit test asking
     "is the page self-contained" has no business needing.
     """
-    graph = graph_of(cfgs)
+    graph = graph_of(cfgs, calls)
     logger.info(
         "laying out %d nodes / %d edges -- this is the slow part",
         graph.number_of_nodes(),
@@ -182,8 +134,9 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
-    arguments = _parser().parse_args(tuple(argv) or None)
-    cfgs = selected(load_cfgs(arguments.cfg), arguments.program)
+    arguments = _parser().parse_args(list(argv) if argv else sys.argv[1:])
+    bundle = load_bundle(arguments.cfg)
+    cfgs = selected(bundle.cfgs, arguments.program)
     if not cfgs:
         logger.error(
             "%s holds no program %s -- nothing to draw",
@@ -191,7 +144,12 @@ def main(argv: Sequence[str] = ()) -> int:
             arguments.program,
         )
         return 1
-    render(cfgs, arguments.output, title=f"{arguments.cfg.stem} source CFG")
+    render(
+        cfgs,
+        arguments.output,
+        title=f"{arguments.cfg.stem} source CFG",
+        calls=bundle.calls,
+    )
     return 0
 
 

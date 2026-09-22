@@ -59,7 +59,7 @@ def test_the_cli_writes_the_closure_to_stdout(tmp_path: Path, capsys) -> None:
 
     assert main(["--config", str(_config(tmp_path, asg_dir)), "PROGA"]) == 0
     written = json.loads(capsys.readouterr().out)
-    assert [cfg["program"] for cfg in written] == ["PROGA", "PROGB"]
+    assert [cfg["program"] for cfg in written["cfgs"]] == ["PROGA", "PROGB"]
 
 
 def test_output_sends_the_closure_to_a_file_and_leaves_stdout_empty(
@@ -70,7 +70,7 @@ def test_output_sends_the_closure_to_a_file_and_leaves_stdout_empty(
 
     main(["--config", str(_config(tmp_path, asg_dir)), "PROGA", "--output", str(out)])
 
-    assert [cfg["program"] for cfg in json.loads(out.read_text())] == ["PROGA"]
+    assert [cfg["program"] for cfg in json.loads(out.read_text())["cfgs"]] == ["PROGA"]
     assert capsys.readouterr().out == ""
 
 

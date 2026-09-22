@@ -10,7 +10,9 @@ makes them the same way. Node ids are qualified with the program, because every 
 of a corpus has a MAIN/0 and an unqualified graph silently merges them into one wrong
 graph. And a CALL whose target is in the bundle gets an edge to that program's entry,
 because otherwise a closure renders as a row of disconnected islands -- and the one
-thing the closure establishes is that these programs are a single path.
+thing the closure establishes is that these programs are a single path. Those edges
+are the bundle's own ``calls`` when the file carries them, and derived from the CFGs
+when it does not -- a per-member CFG file never has any.
 """
 
 from __future__ import annotations
@@ -20,13 +22,14 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import load_cfgs
+from cobble.dataflow.srccfg.bundle import load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.link import BundleCall
 from cobble.dataflow.srccfg.presentation import (
     CrossCall,
+    cross_calls,
     label_of,
     qualified,
-    resolved_calls,
 )
 
 SHAPES: Mapping[NodeKind, str] = {
@@ -125,11 +128,11 @@ def _call_arrow(call: CrossCall) -> str:
     )
 
 
-def _call_edges(cfgs: Sequence[Cfg]) -> tuple[str, ...]:
-    return tuple(_call_arrow(call) for call in resolved_calls(cfgs))
+def _call_edges(cfgs: Sequence[Cfg], calls: Sequence[BundleCall]) -> tuple[str, ...]:
+    return tuple(_call_arrow(call) for call in cross_calls(cfgs, calls))
 
 
-def dot_of(cfgs: Sequence[Cfg]) -> str:
+def dot_of(cfgs: Sequence[Cfg], calls: Sequence[BundleCall] = ()) -> str:
     return "\n".join(
         (
             "digraph srccfg {",
@@ -138,7 +141,7 @@ def dot_of(cfgs: Sequence[Cfg]) -> str:
             '  node [fontname="Helvetica", fontsize=10];',
             '  edge [fontname="Helvetica", fontsize=9];',
             *_clusters(cfgs),
-            *_call_edges(cfgs),
+            *_call_edges(cfgs, calls),
             "}",
         )
     )
@@ -159,8 +162,9 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] = ()) -> int:
-    arguments = _parser().parse_args(tuple(argv) or None)
-    return _emitted(dot_of(load_cfgs(arguments.cfg)), arguments.output)
+    arguments = _parser().parse_args(list(argv) if argv else sys.argv[1:])
+    bundle = load_bundle(arguments.cfg)
+    return _emitted(dot_of(bundle.cfgs, bundle.calls), arguments.output)
 
 
 def _emitted(document: str, output: Path) -> int:
