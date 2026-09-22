@@ -22,6 +22,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import pairwise
 
+from cics.statements import CicsOperand
+from cobble.cics.cics_operand import as_written
 from cobble.dataflow.depgraph.flows import (
     ProgramContext,
     blocks_of,
@@ -82,6 +84,7 @@ CALL_TRANSFERS = {
     "CICS_XCTL": XCTL_TRANSFER,
     CALL_TRANSFER: CALL_TRANSFER,
 }
+NO_OPERAND = CicsOperand(text="", is_literal=False)
 PROGRAM_OPTION = "PROGRAM"
 COMMAREA_OPTION = "COMMAREA"
 
@@ -1034,7 +1037,7 @@ def _with_call(statement, node: Node, verb: str) -> Node:
 
     transfer_map = {"LINK": LINK_TRANSFER, "XCTL": XCTL_TRANSFER}
     transfer = transfer_map.get(verb, "")
-    program = _option_text(statement, PROGRAM_OPTION)
+    program = _callee(statement)
     if not (transfer and program):
         return node
     return Node(
@@ -1048,6 +1051,33 @@ def _with_call(statement, node: Node, verb: str) -> Node:
         target_resolved=_option_is_literal(statement, PROGRAM_OPTION),
         transfer_operand=_option_text(statement, COMMAREA_OPTION),
     )
+
+
+def _callee(statement) -> str:
+    """The PROGRAM operand as the source spells it, subscript and all.
+
+    A subscripted callee stays unresolved -- which occurrence of the table runs is
+    a runtime choice -- but it must not be recorded as the bare name, which claims
+    a scalar the program never declared and resolves against no cell at all.
+    """
+    return as_written(_option_operand(statement, PROGRAM_OPTION))
+
+
+def _option_operand(statement, name: str) -> CicsOperand:
+    """The named option's operand, or the empty one when it carries none.
+
+    An option written without a value and an option absent altogether mean the same
+    thing to lowering, and both spell as ``NO_OPERAND`` rather than as a None the
+    caller has to remember to test.
+    """
+    options = getattr(statement, "options", {})
+    upper_name = name.upper()
+    matches = (
+        value
+        for option, value in options.items()
+        if option.upper() == upper_name and isinstance(value, CicsOperand)
+    )
+    return next(matches, NO_OPERAND)
 
 
 def _option_text(statement, name: str) -> str:

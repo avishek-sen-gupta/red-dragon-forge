@@ -546,3 +546,55 @@ def test_compute_with_mixed_sources_includes_stub_names(
     result = names_reaching(state, index, "WS-PRICE")
     assert "WS-A" in result
     assert "FIELD:EXTERN-DISCOUNT" in result
+
+
+def test_a_subscripted_cics_commarea_is_written_at_its_own_occurrence(
+    program_of, field, after, names_reaching
+):
+    """LINK COMMAREA(WS-COMMS(2)) hands the callee one entry of a table. Read as the
+    bare name it resolves at arity 0 against a field declared OCCURS, matches no
+    cell, and the write lands nowhere at all (forge-zgn)."""
+    asg = program_of(
+        [
+            {
+                "type": "EXEC_CICS",
+                "verb": "LINK",
+                "options": {
+                    "PROGRAM": {"text": "'SUBPROG'", "is_literal": True},
+                    "COMMAREA": {
+                        "text": "WS-COMMS",
+                        "is_literal": False,
+                        "subscripts": [{"kind": "lit", "value": "2"}],
+                    },
+                },
+            }
+        ],
+        data_fields=[
+            field(1, "REC", children=[field(5, "WS-COMMS", "X(8)", offset=0, occurs=3)])
+        ],
+    )
+    state, index = after(asg)
+    reached = names_reaching(
+        state, index, "WS-COMMS", subscripts=(LiteralNode(value="2"),)
+    )
+    assert reached == {"%CALL:'SUBPROG'"}
+
+
+def test_an_unsubscripted_cics_commarea_is_written_exactly_as_before(
+    program_of, field, after, names_reaching
+):
+    asg = program_of(
+        [
+            {
+                "type": "EXEC_CICS",
+                "verb": "LINK",
+                "options": {
+                    "PROGRAM": {"text": "'SUBPROG'", "is_literal": True},
+                    "COMMAREA": {"text": "WS-COMM", "is_literal": False},
+                },
+            }
+        ],
+        data_fields=[field(1, "REC", children=[field(5, "WS-COMM", "X(8)", offset=0)])],
+    )
+    state, index = after(asg)
+    assert names_reaching(state, index, "WS-COMM") == {"%CALL:'SUBPROG'"}
