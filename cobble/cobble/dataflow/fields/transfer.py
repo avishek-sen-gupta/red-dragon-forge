@@ -31,7 +31,6 @@ from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.asg_walk import descend
-from cobble.cics.cics_operand import as_reference
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
 from cobble.dataflow.fields.state import (
     CICS_STATE,
@@ -369,7 +368,12 @@ def _option_reference(statement: ExecCicsStatement, option: str) -> RefModOperan
     """
     value = statement.options.get(option)
     if isinstance(value, CicsOperand):
-        return as_reference(value)
+        return RefModOperand(
+            name=value.text,
+            subscripts=value.subscripts,
+            ref_mod_start=value.ref_mod_start,
+            ref_mod_length=value.ref_mod_length,
+        )
     return RefModOperand(name="")
 
 
