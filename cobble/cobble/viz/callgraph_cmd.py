@@ -1,7 +1,7 @@
 """CLI: extract program-level call dependency graph from cobble edges.
 
 Input:  <out_dir>/edges.jsonl       (cobble dep graph)
-        <srccfg_dir>/cfg-*.json     (cobble CFG — program list derived from this)
+        <srccfg_dir>/cfg-*.json     (cobble CFG or closure bundle — the program list)
 Output: <out_dir>/call-dep.json     (CallDepGraph)
 """
 
@@ -13,6 +13,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of
 from cobble.path_utils import ensure_parent
 from cobble.viz.models import CallDepGraph, CallEdge, ProgramNode
 
@@ -95,7 +96,7 @@ def extract(edges_path: Path, target_programs: frozenset[str]) -> CallDepGraph:
 
 
 def _run(args: argparse.Namespace) -> None:
-    cfgs_raw: list[dict] = json.loads(args.cfg.read_text())
+    cfgs_raw = cfg_dicts_of(json.loads(args.cfg.read_text()))
     targets = frozenset(c["program"] for c in cfgs_raw)
     graph = extract(args.edges, targets)
     ensure_parent(args.out).write_text(graph.model_dump_json(indent=2))

@@ -1,6 +1,6 @@
 """CLI: extract two-level sequence artifacts from cobble CFG.
 
-Input:  <srccfg_dir>/cfg-<ENTRY>.json  (cobble CFG, list of program CFGs)
+Input:  <srccfg_dir>/cfg-<ENTRY>.json  (cobble CFG, or a closure bundle of them)
 Output: <out_dir>/sequences.json  (SequenceOutput)
 
 Produces two artifacts in one pass:
@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
+from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of
 from cobble.path_utils import ensure_parent
 from cobble.viz.models import (
     Arm,
@@ -384,7 +385,7 @@ def _write_output(
 
 
 def _run(args: argparse.Namespace) -> None:
-    cfgs_raw: list[dict] = json.loads(args.cfg.read_text())
+    cfgs_raw = cfg_dicts_of(json.loads(args.cfg.read_text()))
     cfg_by_prog: dict[str, CfgDict] = {c["program"]: c for c in cfgs_raw}
     targets = frozenset(cfg_by_prog.keys())
     entry = args.entry or next(iter(sorted(targets)))

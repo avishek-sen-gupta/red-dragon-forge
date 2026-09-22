@@ -14,7 +14,7 @@ an XCTL is unreachable when it may in fact be reached by a different path.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
 
@@ -72,10 +72,12 @@ def aliases(cfg: Cfg) -> tuple[Alias, ...]:
     )
 
 
+def _sites(cfg: Cfg) -> tuple[tuple[CallSite, Node], ...]:
+    return tuple((site, cfg.node(site.node)) for site in call_sites(cfg))
+
+
 def _resolved(cfg: Cfg) -> tuple[tuple[CallSite, Node], ...]:
-    return tuple(
-        (site, cfg.node(site.node)) for site in call_sites(cfg) if site.resolved
-    )
+    return tuple((site, node) for site, node in _sites(cfg) if site.resolved)
 
 
 def _aliases_of(cfg: Cfg, site: CallSite, node: Node) -> tuple[Alias, ...]:
@@ -107,6 +109,60 @@ def call_graph(cfgs: Iterable[Cfg]) -> CallGraph:
     return CallGraph(
         sites=tuple(chain.from_iterable(call_sites(cfg) for cfg in built)),
         aliases=tuple(chain.from_iterable(aliases(cfg) for cfg in built)),
+    )
+
+
+@dataclass(frozen=True)
+class BundleCall:
+    """A call site and the node in the callee it lands on: the one edge no CFG holds.
+
+    ``entry`` is empty when the callee is not in the bundle -- its ASG was never in
+    the cache -- and that is the whole difference between this and a ``CallSite``: a
+    reader with the entry can cross to the callee without re-deriving the join.
+
+    ``transfer`` is the node's own spelling, CICS_LINK and not CallSite's normalised
+    LINK, because the entry is a fact about two nodes and a reader joining this back
+    to the node it names finds the same word on it.
+    """
+
+    caller: str
+    node: str
+    transfer: str
+    program: str
+    entry: str = ""
+    resolved: bool = True
+    commarea: str = ""
+
+
+def entry_nodes(cfgs: Sequence[Cfg]) -> Mapping[str, str]:
+    """Each program's first node, which is the paragraph label the build starts at.
+
+    A program with no nodes is absent rather than mapped to nothing: there is no
+    entry to point an edge at.
+    """
+    return {cfg.program: cfg.nodes[0].id for cfg in cfgs if cfg.nodes}
+
+
+def bundle_calls(cfgs: Sequence[Cfg]) -> tuple[BundleCall, ...]:
+    """Every call out of the bundle's programs, joined to the callee's entry.
+
+    Unresolved sites and calls out of the bundle are kept and carry an empty entry,
+    because "this program calls something we did not build" is the answer a reader
+    of the closure most often wants and deriving it back from nothing is not possible.
+    """
+    entries = entry_nodes(cfgs)
+    return tuple(
+        BundleCall(
+            caller=site.caller,
+            node=node.id,
+            transfer=node.transfer,
+            program=site.program,
+            entry=entries.get(site.program, ""),
+            resolved=site.resolved,
+            commarea=site.commarea,
+        )
+        for cfg in cfgs
+        for site, node in _sites(cfg)
     )
 
 

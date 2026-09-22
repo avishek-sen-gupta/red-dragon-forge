@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
+from cobble.dataflow.srccfg.link import BundleCall, bundle_calls
 
 QUALIFIER = "::"
 
@@ -77,32 +78,41 @@ def call_nodes(cfg: Cfg) -> tuple[Node, ...]:
     return tuple(node for node in cfg.nodes if node.kind is NodeKind.CALL)
 
 
-def entry_nodes(cfgs: Sequence[Cfg]) -> Mapping[str, str]:
-    """Each program's first node, which is the paragraph label the build starts at.
+def cross_calls(
+    cfgs: Sequence[Cfg], calls: Sequence[BundleCall] = ()
+) -> tuple[CrossCall, ...]:
+    """The bundle's own calls when the file carried them, derived when it did not.
 
-    A program with no nodes is absent rather than mapped to nothing: there is no
-    entry to point an edge at.
+    A bundle written before the file grew its ``calls``, and a per-member CFG which
+    never has any, are both drawn from what their CFGs say -- the alternative is a
+    closure rendered as a row of disconnected islands, which is the one thing the
+    picture must not show.
     """
-    return {cfg.program: cfg.nodes[0].id for cfg in cfgs if cfg.nodes}
+    return _drawable(cfgs, calls) if calls else resolved_calls(cfgs)
 
 
 def resolved_calls(cfgs: Sequence[Cfg]) -> tuple[CrossCall, ...]:
-    """Every CALL whose target is a program in this bundle.
+    """Every CALL whose target is a program in this bundle, derived from the CFGs."""
+    return _drawable(cfgs, bundle_calls(cfgs))
 
-    A target absent from the bundle yields nothing. Its ASG was never in the cache,
-    so it has no nodes here, and an edge to a node that does not exist draws a
-    program that looks built and is not -- which is the one thing a closure's
-    picture must not do, because what the closure establishes is that these
-    programs are a single path.
+
+def _drawable(
+    cfgs: Sequence[Cfg], calls: Sequence[BundleCall]
+) -> tuple[CrossCall, ...]:
+    """The calls that join two programs drawn here, and only those.
+
+    A call the resolver could not pin, or one whose callee is not in this drawing,
+    yields nothing: an edge to a node that does not exist draws a program that looks
+    built and is not -- and what a closure establishes is that these programs are a
+    single path.
     """
-    entries = entry_nodes(cfgs)
+    drawn = {cfg.program for cfg in cfgs}
     return tuple(
         CrossCall(
-            source=qualified(cfg.program, node.id),
-            target=qualified(node.target, entries[node.target]),
-            transfer=node.transfer,
+            source=qualified(call.caller, call.node),
+            target=qualified(call.program, call.entry),
+            transfer=call.transfer,
         )
-        for cfg in cfgs
-        for node in call_nodes(cfg)
-        if node.target in entries
+        for call in calls
+        if call.resolved and call.entry and {call.caller, call.program} <= drawn
     )

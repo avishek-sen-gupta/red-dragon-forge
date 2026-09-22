@@ -11,8 +11,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from cobble.dataflow.srccfg.build_corpus import load_cfgs
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
-from cobble.dataflow.srccfg.dot import dot_of, load_cfgs, main
+from cobble.dataflow.srccfg.dot import dot_of, main
+from cobble.dataflow.srccfg.link import bundle_calls
 
 
 def _label(paragraph: str) -> Node:
@@ -273,3 +275,36 @@ def test_the_cfg_argument_is_required(tmp_path: Path) -> None:
         main(["--output", str(tmp_path / "cfg.dot")])
 
     assert exit_info.value.code == 2
+
+
+def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:
+    """A file written before the calls existed draws the same picture as one with
+    them: the fallback is the same join, not a second opinion."""
+    cfgs = (_caller("PROGB"), _one_program("PROGB"))
+
+    assert dot_of(cfgs, bundle_calls(cfgs)) == dot_of(cfgs)
+
+
+def test_the_cli_draws_the_call_edge_the_file_names(tmp_path: Path) -> None:
+    """The bundle is what the renderer reads -- it does not go back to the CFGs and
+    work the join out again, which is the whole reason the file carries it."""
+    path = _closure_file(
+        tmp_path,
+        {
+            "cfgs": [_as_dict(_caller("PROGB")), _as_dict(_one_program("PROGB"))],
+            "calls": [
+                {
+                    "caller": "PROGA",
+                    "node": "MAIN/0",
+                    "transfer": "CICS_LINK",
+                    "program": "PROGB",
+                    "entry": "MAIN/0",
+                }
+            ],
+        },
+    )
+
+    main(["--cfg", str(path), "--output", str(tmp_path / "cfg.dot")])
+
+    text = (tmp_path / "cfg.dot").read_text(encoding="utf-8")
+    assert '"PROGA::MAIN/0" -> "PROGB::MAIN/0"' in text

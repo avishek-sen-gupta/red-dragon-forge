@@ -3,12 +3,15 @@
 Built for the reader of a single program rather than for a corpus sweep. The seed
 comes first and the rest follow in call order, so the output of two runs over the
 same cache is diffable.
+
+What joins the CFGs travels with them: the bundle carries every call site and the
+entry node it lands on, so a reader crosses between programs by following a call
+rather than by rebuilding the call graph. bundle.py is the file that holds both.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from collections.abc import Sequence
@@ -16,23 +19,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
-from cobble.dataflow.srccfg.build_corpus import cfg_of, cfg_to_dict, source_file_of
+from cobble.dataflow.srccfg.build_corpus import cfg_of, source_file_of
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_to_json
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
-from cobble.dataflow.srccfg.link import call_graph, callees_of
+from cobble.dataflow.srccfg.link import bundle_calls, call_graph, callees_of
 from cobble.path_utils import ensure_parent
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class Bundle:
-    seed: str
-    cfgs: tuple[Cfg, ...] = ()
-
-
 def build_closure(asg_dir: Path, seed: str, source_dir: Path) -> Bundle:
-    return Bundle(seed=seed, cfgs=_expand(asg_dir, source_dir, (seed,), ()))
+    cfgs = _expand(asg_dir, source_dir, (seed,), ())
+    return Bundle(seed=seed, cfgs=cfgs, calls=bundle_calls(cfgs))
 
 
 def _expand(
@@ -72,12 +71,6 @@ def _visit(
     return _Visit(cfgs=(cfg,), callees=callees_of(call_graph((cfg,)), cfg.program))
 
 
-def bundle_to_json(bundle: Bundle) -> str:
-    """The seed first, then its callees: a list, because the order is the answer's."""
-    result = json.dumps([cfg_to_dict(cfg) for cfg in bundle.cfgs])
-    return result
-
-
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build the source CFG of one program and the programs it calls."
@@ -94,11 +87,11 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] = ()) -> int:
-    """A missing seed is an error, not an empty list.
+    """A missing seed is an error, not an empty bundle.
 
-    An empty list on stdout is a well-formed answer meaning "this program calls
-    nothing", and the reader has no way to tell it from "the cache never held the
-    program you named".
+    A bundle of no programs on stdout is a well-formed answer meaning "this program
+    calls nothing", and the reader has no way to tell it from "the cache never held
+    the program you named".
     """
     configure_cli_logging()
     arguments = _parser().parse_args(list(argv) if argv else sys.argv[1:])

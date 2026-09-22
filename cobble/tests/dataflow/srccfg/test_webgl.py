@@ -18,6 +18,7 @@ import pytest
 
 from cobble.dataflow.srccfg.build_corpus import cfg_to_dict
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.link import bundle_calls
 from cobble.dataflow.srccfg.webgl import (
     EDGE_PALETTE,
     NODE_PALETTE,
@@ -225,3 +226,16 @@ def test_the_cli_refuses_a_program_the_cfg_does_not_hold(tmp_path: Path) -> None
 
     assert main(("--cfg", str(cfg_path), "--output", str(output), "--program", "PROGZ"))
     assert not output.exists()
+
+
+def test_the_page_draws_the_call_edge_the_bundle_names(tmp_path: Path) -> None:
+    """render takes the bundle's calls, so the page and the DOT join the programs at
+    the same two nodes rather than each working the join out for itself."""
+    cfgs = (_caller("PROGB"), _one_program("PROGB"))
+
+    graph = graph_of(cfgs, bundle_calls(cfgs))
+
+    assert graph.has_edge(
+        (NodeKind.CALL, "PROGA::MAIN/0"), (NodeKind.LABEL, "PROGB::MAIN#label")
+    )
+    assert _edge_kinds(graph) == _edge_kinds(graph_of(cfgs))

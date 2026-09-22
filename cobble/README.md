@@ -62,25 +62,45 @@ uv run cobble-render --config config/carddemo.toml           # -> out/graph.html
 
 `cobble-srccfg-build` walks out from one program through its calls, building the CFG
 of everything it reaches. The result is a *bundle*: one CFG per program, plus the
-call graph linking them — not a single merged graph.
+calls linking them — not a single merged graph.
 
 ```bash
 . ../bridge-env.sh
-uv run cobble-srccfg-build COSGN00C --config config/carddemo.toml --output closure.json
+uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml --output closure.json
 uv run cobble-srccfg-webgl --cfg closure.json --output closure.html    # the whole closure
-uv run cobble-srccfg-dot   --cfg closure.json --output one.dot         # add --program COSGN00C
+uv run cobble-srccfg-dot   --cfg closure.json --output one.dot         # graphviz DOT
 ```
+
+The bundle is a JSON object, `{"cfgs": [...], "calls": [...]}`. A CFG is what the
+corpus build writes one of per member, unchanged. A call entry names the calling
+program and node, the callee and **the entry node in it the call lands on** — the one
+thing the call site itself does not know, and exactly what a reader crossing into the
+callee needs, so no consumer has to rebuild the join to walk the closure:
+
+```json
+{"caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0",
+ "transfer": "CICS_XCTL", "program": "COMEN01C", "entry": "MAIN-PARA#label",
+ "resolved": true, "commarea": "CARDDEMO-COMMAREA"}
+```
+
+Unresolved sites and callees outside the bundle are kept, with an empty `entry`,
+because "this program calls something we did not build" is an answer. Readers take
+all three shapes a CFG file comes in — this object, a bare list of CFGs from a
+closure built before `calls` existed, and one member's CFG from the corpus build —
+and derive the join for the two that carry none.
 
 **`dot` for one program, `webgl` for a closure.** Graphviz gives the better picture —
 ranked top to bottom, edges labelled — but it is a layered layout with crossing
 minimisation and on a whole closure it does not finish: a 6,638-node / 9,468-edge
 bundle ran past twelve minutes and was killed, where `sfdp` lays the same graph out in
-about five seconds. Both targets take `--program MEMBER` to draw one member instead.
+about five seconds. `webgl` takes `--program MEMBER` to draw one member instead.
 
 The WebGL page is the only target that folds the bundle into one connected graph: every
 node is namespaced by its program, and resolved calls become cross-program edges.
-Positions are computed at build time, so the browser opens an arranged graph and
-simulates nothing.
+That fold is `dataflow/srccfg/joined.py`, shared with anything else that walks a
+closure, so a traversal crosses a call exactly where the picture draws it. Positions
+are computed at build time, so the browser opens an arranged graph and simulates
+nothing.
 
 Two things that make a closure look smaller than the code is. A call the resolver could
 not pin contributes no edge, and a callee missing from the ASG cache is logged
