@@ -21,30 +21,55 @@ from cobble.dataflow.srccfg.bundle import (
 )
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.joined import CallKind, graph_of
-from cobble.dataflow.srccfg.link import BundleCall, bundle_calls
+from cobble.dataflow.srccfg.link import (
+    COMMAREA_RECORD,
+    BundleCall,
+    aliases,
+    bundle_calls,
+)
 from cobble.dataflow.srccfg.presentation import CrossCall, cross_calls
+from cobble.dataflow.srccfg.synthetic import using_field
 
 
 def _label(paragraph: str) -> Node:
     return Node(id=f"{paragraph}#label", kind=NodeKind.LABEL, paragraph=paragraph)
 
 
-def _call(node_id: str, program: str, resolved: bool = True) -> Node:
+def _call(
+    node_id: str,
+    program: str,
+    resolved: bool = True,
+    transfer: str = "CICS_LINK",
+    using: tuple[str, ...] = (),
+) -> Node:
+    """One call node of any of the three kinds CALL_TRANSFERS holds.
+
+    A static CALL carries its arguments in ``using`` and has no commarea; LINK and
+    XCTL carry the commarea and no arguments, which is the split the aliasing and the
+    edge label both turn on.
+    """
     return Node(
         id=node_id,
         kind=NodeKind.CALL,
         paragraph="MAIN",
-        transfer="CICS_LINK",
+        transfer=transfer,
         target=program,
         target_resolved=resolved,
-        transfer_operand="WS-COMMAREA",
+        transfer_operand="" if using else "WS-COMMAREA",
+        using=using,
     )
 
 
-def _caller(callee: str, program: str = "PROGA", resolved: bool = True) -> Cfg:
+def _caller(
+    callee: str,
+    program: str = "PROGA",
+    resolved: bool = True,
+    transfer: str = "CICS_LINK",
+    using: tuple[str, ...] = (),
+) -> Cfg:
     return Cfg(
         program=program,
-        nodes=(_label("MAIN"), _call("MAIN/0", callee, resolved)),
+        nodes=(_label("MAIN"), _call("MAIN/0", callee, resolved, transfer, using)),
         edges=(Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),),
     )
 
@@ -219,3 +244,91 @@ def test_a_reader_that_wants_the_json_sees_the_same_three_shapes() -> None:
     assert [
         [cfg["program"] for cfg in cfg_dicts_of(document)] for document in documents
     ] == [["PROGA", "PROGB"], ["PROGA", "PROGB"], ["PROGA"]]
+
+
+def _all_three() -> Cfg:
+    """One program that LINKs, XCTLs and CALLs, in that order, and flows on."""
+    return Cfg(
+        program="PROGA",
+        nodes=(
+            _label("MAIN"),
+            _call("MAIN/0", "PROGB", transfer="CICS_LINK"),
+            _call("MAIN/1", "PROGC", transfer="CICS_XCTL"),
+            _call("MAIN/2", "PROGD", transfer="CALL", using=("WS-ONE", "WS-TWO")),
+        ),
+        edges=(
+            Edge(source="MAIN#label", target="MAIN/0", kind=EdgeKind.FLOW),
+            Edge(source="MAIN/0", target="MAIN/1", kind=EdgeKind.FLOW),
+            Edge(source="MAIN/1", target="MAIN/2", kind=EdgeKind.FLOW),
+        ),
+    )
+
+
+def test_each_kind_of_transfer_is_carried_under_its_own_spelling() -> None:
+    """CALL_TRANSFERS holds three and the renderers label an edge with what the entry
+    says, so one spelling standing in for another mislabels the picture. Three calls
+    out of one program are three entries, none of them collapsed into another."""
+    cfgs = (_all_three(), _callee("PROGB"), _callee("PROGC"), _callee("PROGD"))
+
+    assert [
+        (call.node, call.transfer, call.program, call.entry)
+        for call in bundle_calls(cfgs)
+    ] == [
+        ("MAIN/0", "CICS_LINK", "PROGB", "MAIN#label"),
+        ("MAIN/1", "CICS_XCTL", "PROGC", "MAIN#label"),
+        ("MAIN/2", "CALL", "PROGD", "MAIN#label"),
+    ]
+
+
+def test_every_kind_of_transfer_draws_its_own_edge() -> None:
+    cfgs = (_all_three(), _callee("PROGB"), _callee("PROGC"), _callee("PROGD"))
+
+    assert cross_calls(cfgs, bundle_calls(cfgs)) == (
+        CrossCall(
+            source="PROGA::MAIN/0", target="PROGB::MAIN#label", transfer="CICS_LINK"
+        ),
+        CrossCall(
+            source="PROGA::MAIN/1", target="PROGC::MAIN#label", transfer="CICS_XCTL"
+        ),
+        CrossCall(source="PROGA::MAIN/2", target="PROGD::MAIN#label", transfer="CALL"),
+    )
+
+
+def test_an_xctl_gets_its_edge_and_keeps_the_flow_past_it() -> None:
+    """XCTL does not return, and link.py's docstring records why the node keeps a FLOW
+    exit anyway: cutting it would claim the code after an XCTL is unreachable when
+    another path may reach it. The over-approximation is deliberate -- pinned here so
+    that adding the cross edge is never read as licence to drop the flow one."""
+    cfgs = (_all_three(), _callee("PROGC"))
+
+    graph = graph_of(cfgs, bundle_calls(cfgs))
+
+    assert graph.has_edge(
+        (NodeKind.CALL, "PROGA::MAIN/1"), (NodeKind.LABEL, "PROGC::MAIN#label")
+    )
+    assert ("PROGA::MAIN/1", "PROGA::MAIN/2", EdgeKind.FLOW.value) in _edges(graph)
+
+
+def test_a_static_call_is_carried_with_its_arguments_and_no_commarea() -> None:
+    """A batch CALL ... USING has no commarea to name: the interface is positional,
+    and a commarea invented for it would alias the wrong storage."""
+    cfgs = (_caller("PROGB", transfer="CALL", using=("WS-ONE",)), _callee())
+
+    (call,) = bundle_calls(cfgs)
+
+    assert (call.transfer, call.commarea, call.entry) == ("CALL", "", "MAIN#label")
+
+
+def test_the_two_kinds_of_interface_alias_storage_differently() -> None:
+    """The one place the kinds part company in the analysis: USING binds argument by
+    position, a commarea binds one record onto DFHCOMMAREA."""
+    static = _caller("PROGB", transfer="CALL", using=("WS-ONE", "WS-TWO"))
+    transferred = _caller("PROGB", transfer="CICS_XCTL")
+
+    assert [(a.caller_field, a.callee_field) for a in aliases(static)] == [
+        ("WS-ONE", using_field(0)),
+        ("WS-TWO", using_field(1)),
+    ]
+    assert [(a.caller_field, a.callee_field) for a in aliases(transferred)] == [
+        ("WS-COMMAREA", COMMAREA_RECORD)
+    ]
