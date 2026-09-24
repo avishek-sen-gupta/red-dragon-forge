@@ -173,7 +173,10 @@ def _node_of(entry: Mapping) -> Node:
 
 
 def load_cfg(path: Path) -> Cfg:
-    return cfg_from_dict(json.loads(path.read_text(encoding="utf-8")))
+    cfgs = load_cfgs(path)
+    if len(cfgs) != 1:
+        raise ValueError(f"{path}: expected exactly one program, got {len(cfgs)}")
+    return cfgs[0]
 
 
 BUNDLE_CFGS = "cfgs"

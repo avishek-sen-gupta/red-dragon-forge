@@ -13,9 +13,10 @@ assignment at all.
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Mapping, Sequence
+
+from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of, load_document
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,9 +115,8 @@ def _rows_for_program(entry: _JsonRow, asg_dir: Path) -> tuple[AccessRow, ...]:
 
 def accesses(cfg_path: Path, asg_dir: Path) -> tuple[AccessRow, ...]:
     """All access rows across every program in ``cfg_path``."""
-    entries = json.loads(cfg_path.read_text(encoding="utf-8"))
     all_rows = tuple(
-        row for entry in entries for row in _rows_for_program(entry, asg_dir)
+        row for entry in cfg_dicts_of(load_document(cfg_path)) for row in _rows_for_program(entry, asg_dir)
     )
     keyed = {
         (row.site, row.extent.field_name, row.extent.start): row for row in all_rows
