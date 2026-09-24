@@ -403,10 +403,12 @@ fileignoreconfig:
   checksum: edb53b37e0e35a97767c44ff74d0f941a8c255e295140ab231f50c62ef3879d7
 - filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
   checksum: 3608b69945b2626a3954e03431b566e0623c01e57ea8b66cb61abe02a0634703
+- filename: cobble/cobble/dataflow/srccfg/bundle.py
+  checksum: def7cb525d9df1e5f9842dea9a8a3bf7f6005e082f5a6c6b5a1414eab7231d9a
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.json
-  checksum: e6bdc7aba90df79714c785af73b437cc97e52d6aa64257784c0b5fb5e23643d7
+  checksum: 29bd06b4ce7e7b056556877eb69f622d077563546d9775fa01e9ffcf708f1b0e
 - filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.json
-  checksum: b4c0e3ff661ad0c35e79c15dbb83094fff4644692872715ea4218a9508ea53f4
+  checksum: 8313ab10ce0c3629c9f3c7e27db5e62ff8f4545066883ef3e017722ca471bed0
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequence-program.html
   checksum: e5cc3f24822c63276009ae4976fc9a87f3a535f5e7453930e16e8b47673b57b5
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequences.json

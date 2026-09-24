@@ -22,7 +22,7 @@ from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.build_corpus import cfg_from_dict, cfg_to_dict
+from cobble.dataflow.srccfg.bundle import cfg_from_dict, cfg_to_dict
 from cobble.dataflow.srccfg.closure import build_closure
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind

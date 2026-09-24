@@ -24,11 +24,13 @@ done
 
 uv run --no-sync python - "$ART" <<'PY'
 import collections, json, pathlib, sys
+
+from cobble.dataflow.srccfg.bundle import load_cfg_dicts
+
 art = pathlib.Path(sys.argv[1])
 summary = {}
 for entry in ("COSGN00C", "COACTVWC"):
-    raw = json.loads((art / f"cfg-{entry}.json").read_text())
-    members = raw["cfgs"] if isinstance(raw, dict) and "cfgs" in raw else (raw if isinstance(raw, list) else [raw])
+    members = load_cfg_dicts(art / f"cfg-{entry}.json")
     summary[entry] = [
         {
             "program": m["program"],

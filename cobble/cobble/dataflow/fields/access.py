@@ -22,32 +22,29 @@ from pathlib import Path
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
-from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of, load_document
+from cobble.dataflow.srccfg.bundle import JsonValue, load_cfg_dicts
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
 logger = logging.getLogger(__name__)
 
-_JsonValue = (
-    str | int | float | bool | Sequence["_JsonValue"] | Mapping[str, "_JsonValue"]
-)
-_JsonRow = Mapping[str, _JsonValue]
+_JsonRow = Mapping[str, JsonValue]
 
 
-def _submapping(value: _JsonValue) -> _JsonRow:
+def _submapping(value: JsonValue) -> _JsonRow:
     """A nested JSON object, or an empty one where the key was absent or scalar."""
     return value if isinstance(value, Mapping) else {}
 
 
-def _subrows(value: _JsonValue) -> tuple[_JsonRow, ...]:
+def _subrows(value: JsonValue) -> tuple[_JsonRow, ...]:
     """A JSON array of objects, skipping anything in it that is not one."""
     if isinstance(value, str) or not isinstance(value, Sequence):
         return ()
     return tuple(item for item in value if isinstance(item, Mapping))
 
 
-def _strings(value: _JsonValue) -> tuple[str, ...]:
+def _strings(value: JsonValue) -> tuple[str, ...]:
     """A JSON array read as strings; a scalar or a missing key reads as none."""
     if isinstance(value, str) or not isinstance(value, Sequence):
         return ()
@@ -139,7 +136,7 @@ def accesses(cfg_path: Path, asg_dir: Path) -> tuple[AccessRow, ...]:
     """All access rows across every program in ``cfg_path``."""
     all_rows = tuple(
         row
-        for entry in cfg_dicts_of(load_document(cfg_path))
+        for entry in load_cfg_dicts(cfg_path)
         for row in _rows_for_program(entry, asg_dir)
     )
     keyed = {

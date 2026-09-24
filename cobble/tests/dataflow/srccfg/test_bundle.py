@@ -14,13 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from cobble.dataflow.srccfg.build_corpus import (
+from cobble.dataflow.srccfg.bundle import (
+    CfgDocumentError,
     cfg_dicts_of,
     cfg_to_dict,
-    load_cfg,
-    load_cfgs,
-)
-from cobble.dataflow.srccfg.bundle import (
+    load_cfg_dicts,
+    one_cfg_document,
     Bundle,
     bundle_of,
     bundle_to_json,
@@ -133,64 +132,58 @@ def test_a_bundle_document_loads_as_its_cfgs_and_its_calls(tmp_path: Path) -> No
     assert read.calls == bundle.calls
 
 
-def test_a_closure_list_loads_as_a_bundle_with_no_calls(tmp_path: Path) -> None:
-    """A closure built before the calls were written: the CFGs are all it has."""
-    path = _written(tmp_path, [cfg_to_dict(_caller("PROGB")), cfg_to_dict(_callee())])
+def test_a_one_program_file_is_the_same_shape_as_a_closure(tmp_path: Path) -> None:
+    """What build_one writes: one CFG in `cfgs`, and `calls` empty rather than absent."""
+    path = _written(tmp_path, json.loads(one_cfg_document(_callee())))
 
     read = load_bundle(path)
 
-    assert [cfg.program for cfg in read.cfgs] == ["PROGA", "PROGB"]
+    assert [cfg.program for cfg in read.cfgs] == ["PROGB"]
     assert read.calls == ()
 
 
-def test_a_single_cfg_document_loads_as_a_bundle_of_one(tmp_path: Path) -> None:
-    """What the corpus build writes, one member per file, and never a call between."""
-    path = _written(tmp_path, cfg_to_dict(_caller("PROGB")))
-
-    read = load_bundle(path)
-
-    assert [cfg.program for cfg in read.cfgs] == ["PROGA"]
-    assert read.calls == ()
-
-
-def test_every_shape_loads_as_cfgs_for_a_reader_that_wants_only_those(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("document", "why"),
+    (
+        (
+            [cfg_to_dict(_caller("PROGB")), cfg_to_dict(_callee())],
+            "a bare list of CFGs",
+        ),
+        (cfg_to_dict(_caller("PROGB")), "no 'cfgs' key"),
+    ),
+)
+def test_a_pre_bundle_file_is_refused_and_says_how_to_rebuild(
+    tmp_path: Path, document, why: str
 ) -> None:
-    """load_cfgs is the older door into the same file and stays open on all three."""
+    """The old shapes are not read at all.
+
+    Tolerating them is what let a one-program bundle be mistaken for a bare object,
+    silently dropping its calls; a reader that accepts three shapes also cannot tell
+    a stale file from a current one. So the file is rejected by name, and the message
+    says what to run.
+    """
+    path = _written(tmp_path, document)
+
+    with pytest.raises(CfgDocumentError, match=why):
+        load_bundle(path)
+
+    with pytest.raises(CfgDocumentError, match="cobble-srccfg-build"):
+        load_cfg_dicts(path)
+
+
+def test_a_reader_that_wants_the_json_sees_the_one_shape(tmp_path: Path) -> None:
+    """cobble.viz walks the CFG documents rather than building Cfgs out of them, and
+    it is pointed at the same files -- so it reads them through the same door."""
     bundle = _bundle(_caller("PROGB"), _callee())
-    documents = (
-        json.loads(bundle_to_json(bundle)),
-        [cfg_to_dict(_caller("PROGB")), cfg_to_dict(_callee())],
-        cfg_to_dict(_caller("PROGB")),
-    )
+    path = _written(tmp_path, json.loads(bundle_to_json(bundle)))
 
-    loaded = [
-        [cfg.program for cfg in load_cfgs(_written(tmp_path, document))]
-        for document in documents
+    assert [cfg["program"] for cfg in load_cfg_dicts(path)] == ["PROGA", "PROGB"]
+    assert [
+        cfg["program"] for cfg in cfg_dicts_of(json.loads(bundle_to_json(bundle)))
+    ] == [
+        "PROGA",
+        "PROGB",
     ]
-
-    assert loaded == [["PROGA", "PROGB"], ["PROGA", "PROGB"], ["PROGA"]]
-
-
-def test_load_cfg_reads_the_one_program_a_corpus_member_file_holds(
-    tmp_path: Path,
-) -> None:
-    """The single-program door: a bare object is what build_one writes per member."""
-    path = _written(tmp_path, cfg_to_dict(_callee()))
-
-    assert load_cfg(path).program == "PROGB"
-
-
-def test_load_cfg_refuses_a_file_holding_more_than_one_program(
-    tmp_path: Path,
-) -> None:
-    """A closure pointed at a single-program reader is an error, not cfgs[0] silently."""
-    path = _written(
-        tmp_path, json.loads(bundle_to_json(_bundle(_caller("PROGB"), _callee())))
-    )
-
-    with pytest.raises(ValueError, match="expected exactly one program, got 2"):
-        load_cfg(path)
 
 
 def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:
@@ -257,21 +250,6 @@ def test_a_call_out_of_a_program_not_being_drawn_draws_no_edge() -> None:
     cfgs = (_caller("PROGB"), _callee())
 
     assert cross_calls((_callee(),), bundle_calls(cfgs)) == ()
-
-
-def test_a_reader_that_wants_the_json_sees_the_same_three_shapes() -> None:
-    """cobble.viz reads the CFG documents rather than building Cfgs out of them, and
-    it is pointed at the same files -- so the branch it takes is this one."""
-    bundle = _bundle(_caller("PROGB"), _callee())
-    documents = (
-        json.loads(bundle_to_json(bundle)),
-        [cfg_to_dict(_caller("PROGB")), cfg_to_dict(_callee())],
-        cfg_to_dict(_caller("PROGB")),
-    )
-
-    assert [
-        [cfg["program"] for cfg in cfg_dicts_of(document)] for document in documents
-    ] == [["PROGA", "PROGB"], ["PROGA", "PROGB"], ["PROGA"]]
 
 
 def _all_three() -> Cfg:

@@ -13,6 +13,7 @@ from cobble.dataflow.fields.access import (
     accesses,
 )
 from cobble.dataflow.fields.access_query import _overlaps, query
+from cobble.dataflow.srccfg.bundle import CfgDocumentError
 from cobble.dataflow.fields.trace_query import ByteRange
 
 # ---------------------------------------------------------------------------
@@ -87,8 +88,12 @@ def test_synthetics_filtered_from_reads():
 # ---------------------------------------------------------------------------
 
 
-def _minimal_cfg(program: str, nodes: list[dict]) -> list[dict]:
-    return [{"program": program, "nodes": nodes, "edges": []}]
+def _minimal_cfg(program: str, nodes: list[dict]) -> dict:
+    """The one document shape: the CFGs in `cfgs`, and `calls` empty rather than absent."""
+    return {
+        "cfgs": [{"program": program, "nodes": nodes, "edges": []}],
+        "calls": [],
+    }
 
 
 def _minimal_asg(program: str, fields: list[dict]) -> dict:
@@ -213,7 +218,7 @@ def test_accesses_dedupes_same_site_field(tmp_path: Path) -> None:
     assert len(rows) == 1
 
 
-def _one_assign_program(tmp_path: Path) -> tuple[Path, list[dict]]:
+def _one_assign_program(tmp_path: Path) -> tuple[Path, dict]:
     """An ASG on disk for PROG, and the single CFG entry that reads WS-A."""
     asg = _minimal_asg(
         "PROG",
@@ -242,24 +247,9 @@ def _one_assign_program(tmp_path: Path) -> tuple[Path, list[dict]]:
     )
 
 
-@pytest.mark.parametrize(
-    "shape",
-    ("bare_list", "bundle", "bare_object"),
-)
-def test_accesses_reads_every_cfg_file_shape(tmp_path: Path, shape: str) -> None:
-    """A CFG file comes in three shapes and accesses has to read all of them.
-
-    build_one writes one program per file as a bare object; the closure CLI wrote a
-    bare list and now writes an object carrying the CFGs under `cfgs`. Reading only
-    the list shape made accesses return nothing for a corpus member and raise for a
-    bundle, because a dict iterates its keys.
-    """
-    asg_dir, entries = _one_assign_program(tmp_path)
-    document = {
-        "bare_list": entries,
-        "bundle": {"seed": "PROG", "cfgs": entries, "calls": []},
-        "bare_object": entries[0],
-    }[shape]
+def test_accesses_reads_the_one_document_shape(tmp_path: Path) -> None:
+    """A member file and a closure are the same shape, so accesses reads them alike."""
+    asg_dir, document = _one_assign_program(tmp_path)
     cfg_path = tmp_path / "cfg.json"
     cfg_path.write_text(json.dumps(document), encoding="utf-8")
 
@@ -268,17 +258,40 @@ def test_accesses_reads_every_cfg_file_shape(tmp_path: Path, shape: str) -> None
     assert [(row.program, row.extent.field_name) for row in rows] == [("PROG", "WS-A")]
 
 
+@pytest.mark.parametrize(
+    "document",
+    (
+        [{"program": "PROG", "nodes": [], "edges": []}],
+        {"program": "PROG", "nodes": [], "edges": []},
+    ),
+    ids=("bare_list", "bare_object"),
+)
+def test_accesses_refuses_a_pre_bundle_file(tmp_path: Path, document) -> None:
+    """The old shapes are rejected by name rather than half-read.
+
+    Reading a bare object here iterated its keys and crashed on `entry["program"]`;
+    a bare list read, but could not carry the calls a closure has. Neither is
+    tolerated now, so a stale file says so instead of answering with less.
+    """
+    asg_dir, _ = _one_assign_program(tmp_path)
+    cfg_path = tmp_path / "cfg.json"
+    cfg_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(CfgDocumentError, match="cobble-srccfg-build"):
+        accesses(cfg_path, asg_dir)
+
+
 def test_accesses_spans_every_program_a_bundle_carries(tmp_path: Path) -> None:
     """A closure holds more than one program; rows come back for each, not just the seed."""
-    asg_dir, entries = _one_assign_program(tmp_path)
-    second = {**entries[0], "program": "PROG2"}
+    asg_dir, document = _one_assign_program(tmp_path)
+    second = {**document["cfgs"][0], "program": "PROG2"}
     (asg_dir / "PROG2.json").write_text(
         (asg_dir / "PROG.json").read_text(encoding="utf-8").replace("PROG", "PROG2"),
         encoding="utf-8",
     )
     cfg_path = tmp_path / "cfg.json"
     cfg_path.write_text(
-        json.dumps({"seed": "PROG", "cfgs": [entries[0], second], "calls": []}),
+        json.dumps({"cfgs": [document["cfgs"][0], second], "calls": []}),
         encoding="utf-8",
     )
 

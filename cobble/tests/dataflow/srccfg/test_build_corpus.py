@@ -10,14 +10,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import (
-    asg_paths,
-    build_corpus,
-    build_one,
-    cfg_from_dict,
-    cfg_to_dict,
-)
+from cobble.dataflow.srccfg.build_corpus import asg_paths, build_corpus, build_one
+from cobble.dataflow.srccfg.bundle import cfg_from_dict, cfg_to_dict, load_bundle
+from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
+
+
+def _only_cfg(path: Path) -> dict:
+    """The one CFG in a member file, which is a one-element bundle like any other."""
+    document = json.loads(path.read_text())
+    assert [*document] == ["cfgs", "calls"]
+    return document["cfgs"][0]
 
 
 def _asg(program: str) -> dict:
@@ -68,7 +71,7 @@ def test_one_member_builds_to_one_json_named_for_the_program(tmp_path: Path) -> 
 
     assert result.message == ""
     assert result.cfg_path == out_dir / "PROGA.json"
-    assert json.loads(result.cfg_path.read_text())["program"] == "PROGA"
+    assert _only_cfg(result.cfg_path)["program"] == "PROGA"
 
 
 def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) -> None:
@@ -86,7 +89,7 @@ def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) ->
         asg_dir / "MEMBERA.json", tmp_path / "srccfg", source_dir=tmp_path / "src"
     )
 
-    nodes = json.loads(result.cfg_path.read_text())["nodes"]
+    nodes = _only_cfg(result.cfg_path)["nodes"]
     spanned = {n["span"]["source_file"] for n in nodes if n["span"]["line_start"]}
     assert spanned == {"src/MEMBERA.txt"}
 
@@ -96,9 +99,7 @@ def test_the_written_json_carries_every_node_and_edge(tmp_path: Path) -> None:
     the node ids and the edge kinds -- those ARE the reaching condition."""
     asg_dir = _cache(tmp_path, "PROGA")
 
-    written = json.loads(
-        build_one(asg_dir / "PROGA.json", tmp_path / "out").cfg_path.read_text()
-    )
+    written = _only_cfg(build_one(asg_dir / "PROGA.json", tmp_path / "out").cfg_path)
 
     assert [node["id"] for node in written["nodes"]] == [
         "MAIN#label",
@@ -161,7 +162,7 @@ def test_cfg_to_dict_is_json_serialisable_without_a_custom_encoder(
     assert json.loads(json.dumps(cfg_to_dict(cfg)))["edges"][0]["kind"] == "TRUE"
 
 
-def _rebuilt(asg_dir: Path) -> None:
+def _rebuilt(asg_dir: Path) -> Cfg:
     """Rebuild a CFG from the ASG for comparison."""
     from cobble.dataflow.srccfg.build_corpus import cfg_of
 
@@ -175,7 +176,23 @@ def test_a_written_cfg_reads_back_identical(tmp_path: Path) -> None:
     asg_dir = _cache(tmp_path, "PROGA")
     built = build_one(asg_dir / "PROGA.json", tmp_path / "out")
 
-    assert cfg_from_dict(json.loads(built.cfg_path.read_text())) == _rebuilt(asg_dir)
+    assert load_bundle(built.cfg_path).cfgs == (_rebuilt(asg_dir),)
+
+
+def test_a_corpus_member_is_written_in_the_one_document_shape(tmp_path: Path) -> None:
+    """One member is a one-element `cfgs` with an empty `calls`, not a bare CFG object.
+
+    A member has no cross-program calls to record, and it says so with [] rather than
+    by being a different shape -- so a reader never has to ask which kind of file it
+    was handed."""
+    asg_dir = _cache(tmp_path, "PROGA")
+    built = build_one(asg_dir / "PROGA.json", tmp_path / "out")
+
+    document = json.loads(built.cfg_path.read_text())
+
+    assert sorted(document) == ["calls", "cfgs"]
+    assert [entry["program"] for entry in document["cfgs"]] == ["PROGA"]
+    assert document["calls"] == []
 
 
 # F8: two members can declare one PROGRAM-ID, and the output is named for the program
