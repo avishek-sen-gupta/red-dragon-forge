@@ -27,7 +27,8 @@ import collections, json, pathlib, sys
 art = pathlib.Path(sys.argv[1])
 summary = {}
 for entry in ("COSGN00C", "COACTVWC"):
-    members = json.loads((art / f"cfg-{entry}.json").read_text())
+    raw = json.loads((art / f"cfg-{entry}.json").read_text())
+    members = raw["cfgs"] if isinstance(raw, dict) and "cfgs" in raw else (raw if isinstance(raw, list) else [raw])
     summary[entry] = [
         {
             "program": m["program"],
