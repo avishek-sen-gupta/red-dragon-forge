@@ -13,23 +13,45 @@ assignment at all.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Mapping, Sequence
-
-from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of, load_document
 from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
+from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of, load_document
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
 logger = logging.getLogger(__name__)
 
-_JsonRow = Mapping[str, str | int | bool]
+_JsonValue = (
+    str | int | float | bool | Sequence["_JsonValue"] | Mapping[str, "_JsonValue"]
+)
+_JsonRow = Mapping[str, _JsonValue]
+
+
+def _submapping(value: _JsonValue) -> _JsonRow:
+    """A nested JSON object, or an empty one where the key was absent or scalar."""
+    return value if isinstance(value, Mapping) else {}
+
+
+def _subrows(value: _JsonValue) -> tuple[_JsonRow, ...]:
+    """A JSON array of objects, skipping anything in it that is not one."""
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
+
+
+def _strings(value: _JsonValue) -> tuple[str, ...]:
+    """A JSON array read as strings; a scalar or a missing key reads as none."""
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        return ()
+    return tuple(str(item) for item in value)
 
 
 @dataclass(frozen=True)
@@ -59,8 +81,8 @@ def _real_names(names: Sequence[str]) -> tuple[str, ...]:
 
 def _names_from_node(node: _JsonRow) -> tuple[str, ...]:
     """Field names read at this node, deduped, synthetics removed."""
-    reads = _real_names(list(node.get("reads", [])))  # type: ignore[arg-type]
-    atom = node.get("atom") or {}
+    reads = _real_names(_strings(node.get("reads", ())))
+    atom = _submapping(node.get("atom", ()))
     if node.get("kind") == "TEST":
         extra = _real_names([str(atom.get("left", "")), str(atom.get("right", ""))])
         return tuple(dict.fromkeys((*reads, *extra)))
@@ -106,7 +128,7 @@ def _rows_for_program(entry: _JsonRow, asg_dir: Path) -> tuple[AccessRow, ...]:
     idx = indices[0]
     rows = tuple(
         row
-        for node in entry["nodes"]  # type: ignore[union-attr]
+        for node in _subrows(entry.get("nodes", ()))
         for row in _rows_for_node(program, node, idx)
     )
     logger.info("access: %s — %d rows", program, len(rows))
@@ -116,7 +138,9 @@ def _rows_for_program(entry: _JsonRow, asg_dir: Path) -> tuple[AccessRow, ...]:
 def accesses(cfg_path: Path, asg_dir: Path) -> tuple[AccessRow, ...]:
     """All access rows across every program in ``cfg_path``."""
     all_rows = tuple(
-        row for entry in cfg_dicts_of(load_document(cfg_path)) for row in _rows_for_program(entry, asg_dir)
+        row
+        for entry in cfg_dicts_of(load_document(cfg_path))
+        for row in _rows_for_program(entry, asg_dir)
     )
     keyed = {
         (row.site, row.extent.field_name, row.extent.start): row for row in all_rows
