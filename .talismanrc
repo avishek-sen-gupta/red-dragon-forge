@@ -356,7 +356,7 @@ fileignoreconfig:
 - filename: cobble/cobble/dataflow/fields/trace_report.py
   checksum: 0580c688d0e812601327c0feab01be95c5fed5060ccc290e631724e5deffb9db
 - filename: .pre-commit-config.yaml
-  checksum: 96cf625f500b6ddc8113762f5f2b7b3960bf61bf99a18d419851fb09bf05efd3
+  checksum: 3dc893149c9a28e6554aa423f30a4ea0bb9f84ce23a54821cb271568c6cdee7a
 - filename: cobble/tests/dataflow/fields/test_fields_trace.py
   checksum: 2242ee81af5ea1cbe73f83b44303bae8e0aa5c95fce237a35cc896d782bbef68
 - filename: cobble/tests/dataflow/fields/test_trace_query.py
