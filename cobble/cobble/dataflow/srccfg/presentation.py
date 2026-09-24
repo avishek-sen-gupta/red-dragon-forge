@@ -81,12 +81,11 @@ def call_nodes(cfg: Cfg) -> tuple[Node, ...]:
 def cross_calls(
     cfgs: Sequence[Cfg], calls: Sequence[BundleCall] = ()
 ) -> tuple[CrossCall, ...]:
-    """The bundle's own calls when the file carried them, derived when it did not.
+    """The file's own calls, derived from the CFGs when it carries none.
 
-    A bundle written before the file grew its ``calls``, and a per-member CFG which
-    never has any, are both drawn from what their CFGs say -- the alternative is a
-    closure rendered as a row of disconnected islands, which is the one thing the
-    picture must not show.
+    A single member has no cross-program calls to record and writes ``[]``, and a
+    drawing of it still has to show what its CALL sites reach -- the alternative is a
+    row of disconnected islands, which is the one thing the picture must not show.
     """
     return _drawable(cfgs, calls) if calls else resolved_calls(cfgs)
 

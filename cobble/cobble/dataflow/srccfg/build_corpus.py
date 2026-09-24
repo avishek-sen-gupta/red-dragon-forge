@@ -8,22 +8,14 @@ missing from this output", and a run that aborts answers that for one member onl
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.cfg import (
-    Atom,
-    Cfg,
-    Edge,
-    EdgeKind,
-    Node,
-    NodeKind,
-    SourceSpan,
-)
+from cobble.dataflow.srccfg.bundle import one_cfg_document
+from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
 from cobble.dataflow.srccfg.dataflow import with_handler_edges
 from cobble.path_utils import ensure_dir
@@ -51,24 +43,6 @@ def built(result: MemberResult) -> bool:
 
 def asg_paths(asg_dir: Path) -> tuple[Path, ...]:
     return tuple(sorted(asg_dir.glob("*.json")))
-
-
-def cfg_to_dict(cfg: Cfg) -> dict:
-    """Plain JSON: enum members become their names, so a reader needs no import of
-    this package to interpret an edge."""
-    return {
-        "program": cfg.program,
-        "nodes": [_node_dict(node) for node in cfg.nodes],
-        "edges": [
-            {"source": e.source, "target": e.target, "kind": e.kind.name}
-            for e in cfg.edges
-        ],
-    }
-
-
-def _node_dict(node) -> dict:
-    body = asdict(node)
-    return {**body, "kind": node.kind.name}
 
 
 def source_file_of(source_dir: Path, member: str) -> str:
@@ -114,7 +88,7 @@ def _write(
         if collided
         else preferred
     )
-    written.write_text(json.dumps(cfg_to_dict(cfg)), encoding="utf-8")
+    written.write_text(one_cfg_document(cfg), encoding="utf-8")
     return MemberResult(
         member=member,
         cfg_path=written,
@@ -139,80 +113,6 @@ def cfg_of(path: Path, source_file: str = "") -> Cfg:
     with cached_asg_dialect_parsers_registered():
         asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
     return with_handler_edges(build_program(asg, source_file=source_file))
-
-
-def cfg_from_dict(document: Mapping) -> Cfg:
-    return Cfg(
-        program=str(document.get("program", "")),
-        nodes=tuple(_node_of(entry) for entry in document.get("nodes", ())),
-        edges=tuple(
-            Edge(source=e["source"], target=e["target"], kind=EdgeKind[e["kind"]])
-            for e in document.get("edges", ())
-        ),
-    )
-
-
-def _node_of(entry: Mapping) -> Node:
-    atom = entry.get("atom", {})
-    span = entry.get("span", {})
-    return Node(
-        **{
-            **{
-                k: v
-                for k, v in entry.items()
-                if k not in ("kind", "atom", "span", "writes", "reads", "using")
-            },
-            "kind": NodeKind[entry["kind"]],
-            "atom": Atom(**atom),
-            "span": SourceSpan(**span) if span else SourceSpan(),
-            "writes": tuple(entry.get("writes", ())),
-            "reads": tuple(entry.get("reads", ())),
-            "using": tuple(entry.get("using", ())),
-        }
-    )
-
-
-def load_cfg(path: Path) -> Cfg:
-    cfgs = load_cfgs(path)
-    if len(cfgs) != 1:
-        raise ValueError(f"{path}: expected exactly one program, got {len(cfgs)}")
-    return cfgs[0]
-
-
-BUNDLE_CFGS = "cfgs"
-
-
-def cfg_dicts_of(document) -> tuple[Mapping, ...]:
-    """The CFG documents in a file, whichever of the three shapes it is in.
-
-    Where the branch lives, for the readers that want the JSON rather than a Cfg.
-    """
-    if isinstance(document, list):
-        return tuple(document)
-    if BUNDLE_CFGS in document:
-        return tuple(document[BUNDLE_CFGS])
-    return (document,)
-
-
-def cfgs_of(document) -> tuple[Cfg, ...]:
-    return tuple(cfg_from_dict(entry) for entry in cfg_dicts_of(document))
-
-
-def load_document(path: Path):
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def load_cfgs(path: Path) -> tuple[Cfg, ...]:
-    """Read any shape a CFG file comes in, as a tuple every time.
-
-    build_one writes one program per file as a bare object; the closure CLI writes a
-    bundle -- once a bare list of its CFGs, now an object carrying them under `cfgs`
-    beside the calls that join them. Every consumer of a CFG file has to read all
-    three, or it cannot be pointed at the output of the other build stage, or at a
-    closure a colleague built last month -- so the branch lives here once rather
-    than in each caller.
-    """
-    return cfgs_of(load_document(path))
 
 
 @dataclass(frozen=True)

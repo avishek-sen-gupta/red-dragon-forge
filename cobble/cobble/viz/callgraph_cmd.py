@@ -13,7 +13,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of
+from cobble.dataflow.srccfg.bundle import load_cfg_dicts
 from cobble.path_utils import ensure_parent
 from cobble.viz.models import CallDepGraph, CallEdge, ProgramNode
 
@@ -96,7 +96,7 @@ def extract(edges_path: Path, target_programs: frozenset[str]) -> CallDepGraph:
 
 
 def _run(args: argparse.Namespace) -> None:
-    cfgs_raw = cfg_dicts_of(json.loads(args.cfg.read_text()))
+    cfgs_raw = load_cfg_dicts(args.cfg)
     targets = frozenset(c["program"] for c in cfgs_raw)
     graph = extract(args.edges, targets)
     ensure_parent(args.out).write_text(graph.model_dump_json(indent=2))

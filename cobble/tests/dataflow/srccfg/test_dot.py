@@ -11,7 +11,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import load_cfgs
+from cobble.dataflow.srccfg.bundle import (
+    Bundle,
+    bundle_to_json,
+    cfg_to_dict,
+    load_bundle,
+)
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.dot import dot_of, main
 from cobble.dataflow.srccfg.link import bundle_calls
@@ -244,37 +249,34 @@ def test_each_kind_of_transfer_labels_its_edge_with_its_own_spelling() -> None:
     ] == [("CICS_LINK", 1, True), ("CICS_XCTL", 1, True), ("CALL", 1, True)]
 
 
-def _closure_file(tmp_path: Path, document) -> Path:
+def _closure_file(tmp_path: Path, *cfgs: Cfg) -> Path:
     path = tmp_path / "closure.json"
-    path.write_text(json.dumps(document), encoding="utf-8")
+    path.write_text(
+        bundle_to_json(Bundle(seed=cfgs[0].program if cfgs else "", cfgs=cfgs)),
+        encoding="utf-8",
+    )
     return path
 
 
-def _as_dict(cfg: Cfg) -> dict:
-    from cobble.dataflow.srccfg.build_corpus import cfg_to_dict
+def test_a_closure_loads_as_every_cfg_in_it(tmp_path: Path) -> None:
+    path = _closure_file(tmp_path, _one_program("PROGA"), _one_program("PROGB"))
 
-    return cfg_to_dict(cfg)
-
-
-def test_a_closure_list_loads_as_every_cfg_in_it(tmp_path: Path) -> None:
-    path = _closure_file(
-        tmp_path, [_as_dict(_one_program("PROGA")), _as_dict(_one_program("PROGB"))]
-    )
-
-    assert [cfg.program for cfg in load_cfgs(path)] == ["PROGA", "PROGB"]
+    assert [cfg.program for cfg in load_bundle(path).cfgs] == ["PROGA", "PROGB"]
 
 
-def test_a_single_cfg_document_loads_as_a_closure_of_one(tmp_path: Path) -> None:
-    """build_one writes one CFG per file and the closure writes a list; a reader who
-    has to know which shape they hold before drawing it will pass the wrong one."""
-    path = _closure_file(tmp_path, _as_dict(_one_program("PROGA")))
+def test_a_one_program_closure_is_the_same_shape_as_a_larger_one(
+    tmp_path: Path,
+) -> None:
+    """build_one and the closure CLI write one shape, so a reader never has to know
+    which of them produced the file before drawing it."""
+    path = _closure_file(tmp_path, _one_program("PROGA"))
 
-    assert [cfg.program for cfg in load_cfgs(path)] == ["PROGA"]
+    assert [cfg.program for cfg in load_bundle(path).cfgs] == ["PROGA"]
 
 
 def test_the_cli_writes_dot_to_stdout(tmp_path: Path, capsys) -> None:
     """stdout, so it pipes into `dot -Tsvg` without a temporary file."""
-    path = _closure_file(tmp_path, [_as_dict(_one_program("PROGA"))])
+    path = _closure_file(tmp_path, _one_program("PROGA"))
 
     assert main(["--cfg", str(path)]) == 0
     assert capsys.readouterr().out.startswith("digraph ")
@@ -283,7 +285,7 @@ def test_the_cli_writes_dot_to_stdout(tmp_path: Path, capsys) -> None:
 def test_output_sends_the_dot_to_a_file_and_leaves_stdout_empty(
     tmp_path: Path, capsys
 ) -> None:
-    path = _closure_file(tmp_path, [_as_dict(_one_program("PROGA"))])
+    path = _closure_file(tmp_path, _one_program("PROGA"))
     out = tmp_path / "cfg.dot"
 
     main(["--cfg", str(path), "--output", str(out)])
@@ -313,20 +315,26 @@ def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:
 def test_the_cli_draws_the_call_edge_the_file_names(tmp_path: Path) -> None:
     """The bundle is what the renderer reads -- it does not go back to the CFGs and
     work the join out again, which is the whole reason the file carries it."""
-    path = _closure_file(
-        tmp_path,
-        {
-            "cfgs": [_as_dict(_caller("PROGB")), _as_dict(_one_program("PROGB"))],
-            "calls": [
-                {
-                    "caller": "PROGA",
-                    "node": "MAIN/0",
-                    "transfer": "CICS_LINK",
-                    "program": "PROGB",
-                    "entry": "MAIN/0",
-                }
-            ],
-        },
+    path = tmp_path / "closure.json"
+    path.write_text(
+        json.dumps(
+            {
+                "cfgs": [
+                    cfg_to_dict(_caller("PROGB")),
+                    cfg_to_dict(_one_program("PROGB")),
+                ],
+                "calls": [
+                    {
+                        "caller": "PROGA",
+                        "node": "MAIN/0",
+                        "transfer": "CICS_LINK",
+                        "program": "PROGB",
+                        "entry": "MAIN/0",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
     )
 
     main(["--cfg", str(path), "--output", str(tmp_path / "cfg.dot")])

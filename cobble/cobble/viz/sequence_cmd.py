@@ -16,14 +16,13 @@ Produces two artifacts in one pass:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of
+from cobble.dataflow.srccfg.bundle import JsonValue, load_cfg_dicts
 from cobble.path_utils import ensure_parent
 from cobble.viz.models import (
     Arm,
@@ -39,9 +38,22 @@ _MAIN_PREFIXES = ("0000", "000", "MAIN", "CONTROL")
 _MAX_DEPTH = 20
 
 # Type aliases for CFG dicts (JSON-decoded, values are JSON scalars or lists/dicts)
-CfgNode = Mapping[str, str]
-CfgEdge = Mapping[str, str]
-CfgDict = Mapping[str, object]
+CfgNode = Mapping[str, JsonValue]
+CfgEdge = Mapping[str, JsonValue]
+CfgDict = Mapping[str, JsonValue]
+
+
+def _atom(node: CfgNode) -> Mapping[str, JsonValue]:
+    """A node's atom object, empty where the node has none."""
+    atom = node.get("atom", ())
+    return atom if isinstance(atom, Mapping) else {}
+
+
+def _rows(value: JsonValue) -> tuple[CfgNode, ...]:
+    """A CFG's nodes or edges: the JSON array of objects, never a scalar."""
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
 
 
 # ── CFG indexing ──────────────────────────────────────────────────────────────
@@ -50,10 +62,10 @@ CfgDict = Mapping[str, object]
 def _entry_paragraph(cfg: CfgDict) -> str:
     return next(
         (
-            n["paragraph"]
-            for n in cfg.get("nodes", [])
+            str(n["paragraph"])
+            for n in _rows(cfg.get("nodes", ()))
             if n.get("kind") == "LABEL"
-            and any(n["paragraph"].startswith(px) for px in _MAIN_PREFIXES)
+            and any(str(n["paragraph"]).startswith(px) for px in _MAIN_PREFIXES)
         ),
         "",
     )
@@ -76,8 +88,10 @@ def _perform_paras(
     """Return (src_para, tgt_para) for a PERFORM edge; either may be ''."""
     if edge.get("kind") != "PERFORM":
         return "", ""
-    src_para = nodes_by_id.get(edge.get("source", ""), {}).get("paragraph", "")
-    tgt_para = (edge.get("target") or "").replace("#label", "").replace("#end", "")
+    src_para = str(
+        nodes_by_id.get(str(edge.get("source", "")), {}).get("paragraph", "")
+    )
+    tgt_para = str(edge.get("target") or "").replace("#label", "").replace("#end", "")
     return src_para, tgt_para
 
 
@@ -94,7 +108,7 @@ def _add_perform(
 def _collect_performs(
     edges: Sequence[CfgEdge],
     nodes_by_id: Mapping[str, CfgNode],
-) -> dict[str, tuple[_Site, ...]]:
+) -> PerformsAcc:
     return reduce(lambda acc, e: _add_perform(acc, e, nodes_by_id), edges, {})
 
 
@@ -105,7 +119,7 @@ class _LinksDecisions:
 
 
 def _add_node_link_decision(acc: _LinksDecisions, node: CfgNode) -> _LinksDecisions:
-    para = node.get("paragraph", "")
+    para = str(node.get("paragraph", ""))
     if not para:
         return acc
     has_decision = (
@@ -113,8 +127,10 @@ def _add_node_link_decision(acc: _LinksDecisions, node: CfgNode) -> _LinksDecisi
         if node.get("kind") == "TEST"
         else acc.para_has_decision
     )
-    target = node.get("target", "")
-    is_cics_call = node.get("kind") == "CALL" and "CICS" in node.get("transfer", "")
+    target = str(node.get("target", ""))
+    is_cics_call = node.get("kind") == "CALL" and "CICS" in str(
+        node.get("transfer", "")
+    )
     para_link = (
         {**acc.para_link, para: target}
         if is_cics_call and para not in acc.para_link and target
@@ -197,16 +213,16 @@ def _call_type(site: str, arms: tuple[Arm, ...], index: _Index) -> str:
 
 
 def _index_cfg(cfg: CfgDict) -> _Index:
-    nodes = cfg.get("nodes", [])
-    nodes_by_id: dict[str, CfgNode] = {n["id"]: n for n in nodes}
+    nodes = _rows(cfg.get("nodes", ()))
+    nodes_by_id: dict[str, CfgNode] = {str(n["id"]): n for n in nodes}
     ld = reduce(_add_node_link_decision, nodes, _LinksDecisions({}, {}))
     return _Index(
-        performs=_collect_performs(cfg.get("edges", []), nodes_by_id),
+        performs=_collect_performs(_rows(cfg.get("edges", ())), nodes_by_id),
         links=ld.para_link,
         has_decision=ld.para_has_decision,
         node_ids=frozenset(nodes_by_id),
         tests={
-            n["id"]: (n.get("atom") or {}).get("text", "")
+            str(n["id"]): str(_atom(n).get("text", ""))
             for n in nodes
             if n.get("kind") == "TEST"
         },
@@ -375,7 +391,7 @@ def _write_output(
     cross: CrossProgramSequence,
     per_program: Mapping[str, ProgramSequence],
 ) -> None:
-    output = SequenceOutput(cross_program=cross, per_program=per_program)
+    output = SequenceOutput(cross_program=cross, per_program=dict(per_program))
     ensure_parent(args.out).write_text(output.model_dump_json(indent=2))
     _LOG.info(
         "sequences.json: %d cross-program calls, %d programs with intra-program trees",
@@ -385,7 +401,7 @@ def _write_output(
 
 
 def _run(args: argparse.Namespace) -> None:
-    cfgs_raw = cfg_dicts_of(json.loads(args.cfg.read_text()))
+    cfgs_raw = load_cfg_dicts(args.cfg)
     cfg_by_prog: dict[str, CfgDict] = {c["program"]: c for c in cfgs_raw}
     targets = frozenset(cfg_by_prog.keys())
     entry = args.entry or next(iter(sorted(targets)))

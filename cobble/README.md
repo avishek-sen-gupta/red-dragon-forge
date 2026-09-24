@@ -84,10 +84,13 @@ callee needs, so no consumer has to rebuild the join to walk the closure:
 ```
 
 Unresolved sites and callees outside the bundle are kept, with an empty `entry`,
-because "this program calls something we did not build" is an answer. Readers take
-all three shapes a CFG file comes in — this object, a bare list of CFGs from a
-closure built before `calls` existed, and one member's CFG from the corpus build —
-and derive the join for the two that carry none.
+because "this program calls something we did not build" is an answer.
+
+Every CFG file has one shape — `{"cfgs": [...], "calls": [...]}` — whether it holds a
+whole closure or the single program the corpus build writes. A member has no calls to
+record and says so with `[]`, so no reader has to work out which kind of file it was
+handed. Files written before this are refused by name rather than half-read;
+`cobble-srccfg-build` regenerates them.
 
 **`dot` for one program, `webgl` for a closure.** Graphviz gives the better picture —
 ranked top to bottom, edges labelled — but it is a layered layout with crossing

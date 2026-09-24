@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import load_cfgs
+from cobble.dataflow.srccfg.bundle import load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
 from cobble.dataflow.srccfg.coassign import Tier, caveats, co_assigned
 from cobble.dataflow.srccfg.dataflow import (
@@ -412,7 +412,7 @@ def _run(arguments: argparse.Namespace) -> int:
         # F10: Use sys.stderr.write() instead of print() to avoid RUF100
         sys.stderr.write(f"No CFG at {arguments.cfg}\n")
         return 2
-    for line in _all_lines(load_cfgs(arguments.cfg), arguments):
+    for line in _all_lines(load_bundle(arguments.cfg).cfgs, arguments):
         # F10: Use sys.stdout.write() instead of print()
         sys.stdout.write(f"{line}\n")
     return 0
