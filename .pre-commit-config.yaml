@@ -1,3 +1,10 @@
+# Without this, a hook with no `stages:` runs at EVERY installed stage. Both a
+# pre-commit and a commit-msg git hook are installed, so every hook ran twice
+# per commit: always_run hooks (import-linter, terminology-guard) in full, the
+# rest as "(no files to check)" noise. Only terminology-commit-msg belongs to
+# the commit-msg stage, and it opts in explicitly.
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/avishek-sen-gupta/python-fp-lint
     rev: 856da3e011caa0d5eb932078484792bd490be682
