@@ -12,7 +12,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cobble.dataflow.srccfg.build_corpus import cfg_dicts_of, cfg_to_dict, load_cfgs
+import pytest
+
+from cobble.dataflow.srccfg.build_corpus import (
+    cfg_dicts_of,
+    cfg_to_dict,
+    load_cfg,
+    load_cfgs,
+)
 from cobble.dataflow.srccfg.bundle import (
     Bundle,
     bundle_of,
@@ -163,6 +170,27 @@ def test_every_shape_loads_as_cfgs_for_a_reader_that_wants_only_those(
     ]
 
     assert loaded == [["PROGA", "PROGB"], ["PROGA", "PROGB"], ["PROGA"]]
+
+
+def test_load_cfg_reads_the_one_program_a_corpus_member_file_holds(
+    tmp_path: Path,
+) -> None:
+    """The single-program door: a bare object is what build_one writes per member."""
+    path = _written(tmp_path, cfg_to_dict(_callee()))
+
+    assert load_cfg(path).program == "PROGB"
+
+
+def test_load_cfg_refuses_a_file_holding_more_than_one_program(
+    tmp_path: Path,
+) -> None:
+    """A closure pointed at a single-program reader is an error, not cfgs[0] silently."""
+    path = _written(
+        tmp_path, json.loads(bundle_to_json(_bundle(_caller("PROGB"), _callee())))
+    )
+
+    with pytest.raises(ValueError, match="expected exactly one program, got 2"):
+        load_cfg(path)
 
 
 def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:

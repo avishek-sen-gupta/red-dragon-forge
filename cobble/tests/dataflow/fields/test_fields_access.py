@@ -213,6 +213,80 @@ def test_accesses_dedupes_same_site_field(tmp_path: Path) -> None:
     assert len(rows) == 1
 
 
+def _one_assign_program(tmp_path: Path) -> tuple[Path, list[dict]]:
+    """An ASG on disk for PROG, and the single CFG entry that reads WS-A."""
+    asg = _minimal_asg(
+        "PROG",
+        [_field(1, "REC", children=[_field(5, "WS-A", "X(4)", offset=0)])],
+    )
+    asg_dir = tmp_path / "asg"
+    asg_dir.mkdir()
+    (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
+    return asg_dir, _minimal_cfg(
+        "PROG",
+        [
+            {
+                "id": "MAIN/0",
+                "kind": "ASSIGN",
+                "paragraph": "MAIN",
+                "reads": ["WS-A"],
+                "writes": [],
+                "atom": {},
+                "transfer": "",
+                "target": "",
+                "target_resolved": True,
+                "transfer_operand": "",
+                "using": [],
+            }
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "shape",
+    ("bare_list", "bundle", "bare_object"),
+)
+def test_accesses_reads_every_cfg_file_shape(tmp_path: Path, shape: str) -> None:
+    """A CFG file comes in three shapes and accesses has to read all of them.
+
+    build_one writes one program per file as a bare object; the closure CLI wrote a
+    bare list and now writes an object carrying the CFGs under `cfgs`. Reading only
+    the list shape made accesses return nothing for a corpus member and raise for a
+    bundle, because a dict iterates its keys.
+    """
+    asg_dir, entries = _one_assign_program(tmp_path)
+    document = {
+        "bare_list": entries,
+        "bundle": {"seed": "PROG", "cfgs": entries, "calls": []},
+        "bare_object": entries[0],
+    }[shape]
+    cfg_path = tmp_path / "cfg.json"
+    cfg_path.write_text(json.dumps(document), encoding="utf-8")
+
+    rows = accesses(cfg_path, asg_dir)
+
+    assert [(row.program, row.extent.field_name) for row in rows] == [("PROG", "WS-A")]
+
+
+def test_accesses_spans_every_program_a_bundle_carries(tmp_path: Path) -> None:
+    """A closure holds more than one program; rows come back for each, not just the seed."""
+    asg_dir, entries = _one_assign_program(tmp_path)
+    second = {**entries[0], "program": "PROG2"}
+    (asg_dir / "PROG2.json").write_text(
+        (asg_dir / "PROG.json").read_text(encoding="utf-8").replace("PROG", "PROG2"),
+        encoding="utf-8",
+    )
+    cfg_path = tmp_path / "cfg.json"
+    cfg_path.write_text(
+        json.dumps({"seed": "PROG", "cfgs": [entries[0], second], "calls": []}),
+        encoding="utf-8",
+    )
+
+    rows = accesses(cfg_path, asg_dir)
+
+    assert sorted({row.program for row in rows}) == ["PROG", "PROG2"]
+
+
 # ---------------------------------------------------------------------------
 # _overlaps
 # ---------------------------------------------------------------------------
