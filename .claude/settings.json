@@ -10,16 +10,6 @@
         ],
         "matcher": ""
       }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/plugins/guvnah/hooks/bd-terminology-guard.sh"
-          }
-        ]
-      }
     ]
   }
 }
