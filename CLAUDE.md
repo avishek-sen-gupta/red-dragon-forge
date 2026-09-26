@@ -60,13 +60,28 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 **Issue graph is version-controlled (manual-export model, not beads' Dolt sync).** `.beads/`
 (Dolt working DB) is **fully gitignored** (not just partially, unlike some sibling packages'
 older convention — `config.yaml`/hooks/etc. are all local, per-machine state here);
-`issues/issues.jsonl` is the **tracked** git source of truth. **Whenever a change touches
-issues, regenerate and stage the snapshot BEFORE committing** — a deliberate manual step, NOT
-a git hook:
+`issues/issues.jsonl` is the **tracked** git source of truth.
+
+`bd` refreshes that file itself (`export.auto`, `export.path: ../issues/issues.jsonl`,
+throttled to 60s), so expect it to go dirty at unpredictable moments while you work — that is
+the exporter, not a bug. **Staging stays yours**: `export.git-add` is false, and this is a
+deliberate manual step, NOT a git hook — a hook regenerating a tracked file mid-commit fights
+pre-commit's stash/restore. Before committing anything that touches issues:
 ```bash
-bd export -o issues/issues.jsonl && git add issues/issues.jsonl
+bd export -o issues/issues.jsonl   # force a write, ignoring the throttle
+git add issues/issues.jsonl
 ```
-On a fresh clone, `bd import issues/issues.jsonl` rebuilds the local DB.
+On a fresh clone, rebuild the local DB with the opt-out flags — plain `bd init` repoints
+`core.hooksPath` at its own directory (silently orphaning `.git/hooks` and every pre-commit
+hook), rewrites `AGENTS.md`/`CLAUDE.md`, and adds `.agents/`, `.codex/`, `.cursor/`:
+```bash
+bd init --prefix red-dragon-forge --non-interactive --quiet --skip-hooks --skip-agents --role maintainer
+bd import issues/issues.jsonl
+bd config set export.auto true      # one at a time: batched bd calls contend on .beads.gate.lock
+bd config set export.path "../issues/issues.jsonl"
+bd config set export.git-add false
+bd config set import.auto false
+```
 
 
 ## Build & Test
