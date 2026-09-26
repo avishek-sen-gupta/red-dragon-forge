@@ -9,17 +9,17 @@ __pycache__/
 .ruff_cache/
 .superpowers/
 
-# Beads / Dolt files (added by bd init)
+# Beads / Dolt local state (all per-machine; issues/issues.jsonl is the tracked snapshot)
 .dolt/
 *.db
 .beads-credential-key
 .beads/
+*.gate.lock*
+
 tests/integration/output/
 .knowledge_graph_scratch/
 
 # macOS
 .DS_Store
 
-# Beads / Dolt files (added by bd init)
-.beads/proxieddb/
 .idea/

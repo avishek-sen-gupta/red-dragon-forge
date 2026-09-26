@@ -12,6 +12,7 @@
     "**/vendor",
     "**/__pycache__",
     "**/third-party",
-    "**/testbed"
+    "**/testbed",
+    "**/cics_grammar/**"
   ]
 }
