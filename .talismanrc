@@ -451,4 +451,20 @@ fileignoreconfig:
   checksum: edb6943cba4ee88acc283e9ceb08f2edfea1b4a98c281b60bb85c8ff16cda0ea
 - filename: cicada/cics/cics_visitor.py
   checksum: 2bb2151e87c46e9065533e7ae4b6b0404987d5909121b1e942fa3d778e96d35f
+- filename: guidelines/data-security.md
+  checksum: bcf5fb39b3deb8c93928e9f848807e097e296811e5eb52bc4a986eb153f28931
+- filename: guidelines/design-principles.md
+  checksum: 6b22c098590bfe006953bc1fb467dc36ab434df36011435570debabfcfe4f837
+- filename: guidelines/code-search-tools.md
+  checksum: 36bf1c2c62c6879b42b7e32dbcd9e036c8af395f1b702f8adb692960039973dd
+- filename: guidelines/lang/python/testing.md
+  checksum: b62087be3775094d4985e8bfc4f2b0ef0a836e013c9782f47d50eeae46cb3afa
+- filename: guidelines/project/workflow.md
+  checksum: e0256a53df9af2a5f5c1cddf58cb8df5d40adb3d15d9baa2253c8f4c7eb8b8d9
+- filename: guidelines/testing.md
+  checksum: e4094fa4c5d3f3f6f5a61865b11bc8628cc44fe4b25515d61617b7def8afdf94
+- filename: guidelines/refactoring.md
+  checksum: dffcd3d3e87c7a44ef63196db3216ebe9315a016b88319e7539cdaf6bf22f2f2
+- filename: guidelines/workflow.md
+  checksum: 74c361a0d40bcd77008845cfff59bba7843bf2761a0a252cb532b0d9bd4b386c
 version: "1.0"
