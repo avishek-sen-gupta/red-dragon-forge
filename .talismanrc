@@ -479,4 +479,6 @@ fileignoreconfig:
   checksum: 5bff435e279a61ee123e923938cd65f8b7e6351f1475abda4b7b9a335149162e
 - filename: cobble/cobble/viz/pathwalk_template.html
   checksum: 1e6cab5f8e3467404c50ed9bca0b169a4de9ad2ae02c3980873a3bc1420769ac
+- filename: cobble/tests/viz/test_pathwalk_viz.py
+  checksum: 5588530985e03cf0bdccbdce082648adb16ab0c0855de5d5f8bfa627a0156575
 version: "1.0"

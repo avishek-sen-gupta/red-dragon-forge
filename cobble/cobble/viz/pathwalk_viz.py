@@ -69,25 +69,46 @@ class AnimBundle(TypedDict):
 # ---------------------------------------------------------------------------
 
 
-def _para_of(node_id: str) -> str:
-    """Program-qualified paragraph key ("PROGRAM/PARAGRAPH") from a
-    statement-level node ID ("PROGRAM/PARAGRAPH/statement_index")."""
-    parts = node_id.split("/")
-    return f"{parts[0]}/{parts[1]}" if len(parts) >= 2 else node_id
+def node_paragraph_of(cfgs: Sequence[Cfg]) -> dict[str, str]:
+    """Every statement-level node.id -> its qualified "PROGRAM/PARAGRAPH" key.
+
+    The only correct way to resolve a node id to its paragraph: via the
+    structured ``(cfg.program, node.paragraph)`` fields every ``Cfg`` already
+    carries. Never by splitting the id string -- real ids are
+    ``"{paragraph}#label"``, ``"{paragraph}#end"``, or
+    ``"{paragraph}/{statement_index}"``, carrying no program prefix at all
+    (``PathListener`` in the sampler only ever emits the bare node id). A
+    split on ``"/"`` recovers the statement index, not the paragraph, for
+    the third shape, and does not split at all for the first two.
+    """
+    return {
+        node.id: f"{cfg.program}/{node.paragraph}" for cfg in cfgs for node in cfg.nodes
+    }
 
 
-def _collapse_step(acc: tuple[str, ...], node_id: str) -> tuple[str, ...]:
-    para = _para_of(node_id)
+def _collapse_step(
+    node_para: Mapping[str, str], acc: tuple[str, ...], node_id: str
+) -> tuple[str, ...]:
+    para = node_para.get(node_id, "")
+    if not para:
+        return acc
     return acc if (acc and acc[-1] == para) else (*acc, para)
 
 
-def collapse_path(nodes: tuple[str, ...]) -> tuple[str, ...]:
-    """Map statement-level node IDs to program-qualified paragraph keys,
-    dropping consecutive repeats.
+def collapse_path(
+    nodes: tuple[str, ...], node_para: Mapping[str, str]
+) -> tuple[str, ...]:
+    """Map statement-level node IDs to qualified paragraph keys via
+    ``node_para`` (see ``node_paragraph_of``), dropping consecutive repeats.
 
-    Each node ID has the shape ``PROGRAM/PARAGRAPH/statement_index``.
+    An id absent from ``node_para`` is dropped rather than injected as an
+    unresolved placeholder -- a trace path may visit a node outside the
+    loaded CFG bundle (e.g. a callee not included in ``--cfg``), and
+    dropping keeps the collapsed sequence contiguous.
     """
-    return reduce(_collapse_step, nodes, ())
+    return reduce(
+        lambda acc, node_id: _collapse_step(node_para, acc, node_id), nodes, ()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,45 +136,51 @@ def paragraphs_of(cfgs: Sequence[Cfg]) -> dict[str, set[str]]:
 # ---------------------------------------------------------------------------
 
 
-def _cross_para_pair(edge: Edge, program: str) -> tuple[str, str]:
-    """Return program-qualified (src_para, tgt_para), or ("", "") when same
-    paragraph or malformed. Edges live inside one ``Cfg``, hence are always
-    intra-program, so a single ``program`` qualifies both endpoints."""
-    src_parts = edge.source.split("/")
-    tgt_parts = edge.target.split("/")
-    if len(src_parts) < 2 or len(tgt_parts) < 2:
+def _cross_para_pair(edge: Edge, node_para: Mapping[str, str]) -> tuple[str, str]:
+    """Qualified (src_para, tgt_para) via ``node_para``, or ("", "") when
+    same paragraph or either endpoint is unresolvable.
+
+    Resolved via the same structured lookup ``node_paragraph_of`` builds --
+    never by splitting ``edge.source``/``edge.target``, which cannot recover
+    a paragraph from a "#label"/"#end" suffixed id (no "/" to split on) and
+    recovers the statement index, not the paragraph, from a "/"-suffixed one.
+    """
+    src_para = node_para.get(edge.source, "")
+    tgt_para = node_para.get(edge.target, "")
+    if not src_para or not tgt_para or src_para == tgt_para:
         return ("", "")
-    src_para, tgt_para = src_parts[1], tgt_parts[1]
-    if src_para == tgt_para:
-        return ("", "")
-    return (f"{program}/{src_para}", f"{program}/{tgt_para}")
+    return (src_para, tgt_para)
 
 
-def _first_matching_kind(cfg: Cfg, src_para: str, tgt_para: str) -> str:
+def _first_matching_kind(
+    cfg: Cfg, node_para: Mapping[str, str], src_para: str, tgt_para: str
+) -> str:
     matching = next(
         (
             e
             for e in cfg.edges
-            if _cross_para_pair(e, cfg.program) == (src_para, tgt_para)
+            if _cross_para_pair(e, node_para) == (src_para, tgt_para)
         ),
         Edge(source="", target="", kind=EdgeKind.FLOW),
     )
     return matching.kind.value
 
 
-def _cross_valid_edges(cfg: Cfg) -> tuple[tuple[str, str], ...]:
-    """All program-qualified cross-paragraph (src, tgt) pairs from a CFG's edges."""
+def _cross_valid_edges(
+    cfg: Cfg, node_para: Mapping[str, str]
+) -> tuple[tuple[str, str], ...]:
+    """All qualified cross-paragraph (src, tgt) pairs from a CFG's edges."""
     return tuple(
-        pair
-        for pair in (_cross_para_pair(e, cfg.program) for e in cfg.edges)
-        if pair[0]
+        pair for pair in (_cross_para_pair(e, node_para) for e in cfg.edges) if pair[0]
     )
 
 
-def _add_cfg_edges(g: nx.DiGraph, cfg: Cfg) -> nx.DiGraph:
-    for src_para, tgt_para in _cross_valid_edges(cfg):
+def _add_cfg_edges(g: nx.DiGraph, cfg: Cfg, node_para: Mapping[str, str]) -> nx.DiGraph:
+    for src_para, tgt_para in _cross_valid_edges(cfg, node_para):
         g.add_edge(
-            src_para, tgt_para, kind=_first_matching_kind(cfg, src_para, tgt_para)
+            src_para,
+            tgt_para,
+            kind=_first_matching_kind(cfg, node_para, src_para, tgt_para),
         )
     return g
 
@@ -164,8 +191,10 @@ def _add_cfg_nodes(g: nx.DiGraph, cfg: Cfg) -> nx.DiGraph:
     return g
 
 
-def _add_cfg_to_graph(g: nx.DiGraph, cfg: Cfg) -> nx.DiGraph:
-    return _add_cfg_edges(_add_cfg_nodes(g, cfg), cfg)
+def _add_cfg_to_graph(
+    g: nx.DiGraph, cfg: Cfg, node_para: Mapping[str, str]
+) -> nx.DiGraph:
+    return _add_cfg_edges(_add_cfg_nodes(g, cfg), cfg, node_para)
 
 
 def paragraph_graph(cfgs: Sequence[Cfg]) -> nx.DiGraph:
@@ -175,7 +204,10 @@ def paragraph_graph(cfgs: Sequence[Cfg]) -> nx.DiGraph:
     avoids collisions when different programs reuse the same paragraph name.
     Edges are cross-paragraph transitions within a program.
     """
-    return reduce(_add_cfg_to_graph, cfgs, nx.DiGraph())
+    node_para = node_paragraph_of(cfgs)
+    return reduce(
+        lambda g, cfg: _add_cfg_to_graph(g, cfg, node_para), cfgs, nx.DiGraph()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -406,9 +438,10 @@ def build_bundle(
         Milliseconds to pause at path boundaries.
     """
     g = paragraph_graph(cfgs)
+    node_para = node_paragraph_of(cfgs)
     positions = layered_positions(g)
     raw_paths = _parse_path_records(path_records)
-    collapsed = tuple(collapse_path(_raw_nodes(r)) for r in raw_paths)
+    collapsed = tuple(collapse_path(_raw_nodes(r), node_para) for r in raw_paths)
     new_edges = _derive_branch_edges_new(collapsed, g)
     return AnimBundle(
         nodes=[_node_entry(n, data, positions) for n, data in g.nodes(data=True)],

@@ -19,6 +19,7 @@ from cobble.viz.pathwalk_viz import (
     build_bundle,
     collapse_path,
     layered_positions,
+    node_paragraph_of,
     paragraph_graph,
     paragraphs_of,
     render_html,
@@ -44,16 +45,23 @@ def _edge(src: str, tgt: str, kind: EdgeKind = EdgeKind.FLOW) -> Edge:
 _CFG = Cfg(
     program="PROG",
     nodes=(
-        _node("PROG/MAIN/label", "MAIN", NodeKind.LABEL),
-        _node("PROG/MAIN/0", "MAIN"),
-        _node("PROG/SUB/label", "SUB", NodeKind.LABEL),
-        _node("PROG/SUB/0", "SUB"),
+        _node("MAIN#label", "MAIN", NodeKind.LABEL),
+        _node("MAIN/0", "MAIN"),
+        _node("SUB#label", "SUB", NodeKind.LABEL),
+        _node("SUB/0", "SUB"),
     ),
     edges=(
-        _edge("PROG/MAIN/0", "PROG/SUB/label", EdgeKind.PERFORM),
-        _edge("PROG/SUB/0", "PROG/MAIN/0", EdgeKind.RETURN),
+        _edge("MAIN/0", "SUB#label", EdgeKind.PERFORM),
+        _edge("SUB/0", "MAIN/0", EdgeKind.RETURN),
     ),
 )
+
+_NODE_PARA = {
+    "MAIN#label": "PROG/MAIN",
+    "MAIN/0": "PROG/MAIN",
+    "SUB#label": "PROG/SUB",
+    "SUB/0": "PROG/SUB",
+}
 
 # ---------------------------------------------------------------------------
 # collapse_path
@@ -61,35 +69,45 @@ _CFG = Cfg(
 
 
 def test_collapse_path_maps_to_paragraphs() -> None:
-    path = ("PROG/MAIN/label", "PROG/MAIN/0", "PROG/SUB/label", "PROG/SUB/0")
-    result = collapse_path(path)
+    path = ("MAIN#label", "MAIN/0", "SUB#label", "SUB/0")
+    result = collapse_path(path, _NODE_PARA)
     assert result == ("PROG/MAIN", "PROG/SUB")
 
 
 def test_collapse_path_removes_consecutive_duplicates() -> None:
-    path = ("PROG/MAIN/label", "PROG/MAIN/0", "PROG/MAIN/1")
-    result = collapse_path(path)
+    path = ("MAIN#label", "MAIN/0", "MAIN/1")
+    node_para = {**_NODE_PARA, "MAIN/1": "PROG/MAIN"}
+    result = collapse_path(path, node_para)
     assert result == ("PROG/MAIN",)
 
 
 def test_collapse_path_empty() -> None:
-    assert collapse_path(()) == ()
+    assert collapse_path((), _NODE_PARA) == ()
 
 
 def test_collapse_path_single_node() -> None:
-    assert collapse_path(("PROG/MAIN/0",)) == ("PROG/MAIN",)
+    assert collapse_path(("MAIN/0",), _NODE_PARA) == ("PROG/MAIN",)
 
 
 def test_collapse_path_qualifies_by_program() -> None:
     """Cross-program name collision: same bare paragraph name, different
     programs, must collapse to distinct qualified keys."""
-    path_a = ("PROGA/0000-MAIN/0",)
-    path_b = ("PROGB/0000-MAIN/0",)
-    result_a = collapse_path(path_a)
-    result_b = collapse_path(path_b)
+    node_para_a = {"0000-MAIN/0": "PROGA/0000-MAIN"}
+    node_para_b = {"0000-MAIN/0": "PROGB/0000-MAIN"}
+    result_a = collapse_path(("0000-MAIN/0",), node_para_a)
+    result_b = collapse_path(("0000-MAIN/0",), node_para_b)
     assert result_a == ("PROGA/0000-MAIN",)
     assert result_b == ("PROGB/0000-MAIN",)
     assert result_a != result_b
+
+
+def test_collapse_path_drops_unknown_node_ids() -> None:
+    """A trace-path may visit a node outside the loaded CFG bundle (e.g. a
+    callee not included in --cfg). Such ids are dropped rather than
+    injected as unresolved placeholders, so the animation stays contiguous."""
+    path = ("MAIN#label", "UNKNOWN/99", "MAIN/0")
+    result = collapse_path(path, _NODE_PARA)
+    assert result == ("PROG/MAIN",)
 
 
 # ---------------------------------------------------------------------------
@@ -101,9 +119,9 @@ def test_paragraphs_of_returns_node_ids() -> None:
     mapping = paragraphs_of((_CFG,))
     assert "PROG/MAIN" in mapping
     assert "PROG/SUB" in mapping
-    assert "PROG/MAIN/0" in mapping["PROG/MAIN"]
-    assert "PROG/MAIN/label" in mapping["PROG/MAIN"]
-    assert "PROG/SUB/0" in mapping["PROG/SUB"]
+    assert "MAIN/0" in mapping["PROG/MAIN"]
+    assert "MAIN#label" in mapping["PROG/MAIN"]
+    assert "SUB/0" in mapping["PROG/SUB"]
 
 
 # ---------------------------------------------------------------------------
@@ -127,32 +145,58 @@ def test_paragraph_graph_no_self_loops_for_intra_para_edges() -> None:
     cfg = Cfg(
         program="P",
         nodes=(
-            _node("P/A/0", "A"),
-            _node("P/A/1", "A"),
+            _node("A/0", "A"),
+            _node("A/1", "A"),
         ),
-        edges=(_edge("P/A/0", "P/A/1"),),
+        edges=(_edge("A/0", "A/1"),),
     )
     g = paragraph_graph((cfg,))
     assert not g.has_edge("P/A", "P/A")
 
 
 def test_paragraph_graph_qualifies_by_program_on_name_collision() -> None:
-    """Finding 1: two programs each declaring a paragraph named the same
-    ("0000-MAIN") must NOT collapse into one graph node."""
+    """Two programs each declaring a paragraph named the same
+    ("0000-MAIN") must NOT collapse into one graph node. Real node ids
+    never carry a program prefix, so this must be resolved via
+    (cfg.program, node.paragraph), never by splitting the id string."""
     cfg_a = Cfg(
         program="PROGA",
-        nodes=(_node("PROGA/0000-MAIN/0", "0000-MAIN"),),
+        nodes=(_node("0000-MAIN/0", "0000-MAIN"),),
         edges=(),
     )
     cfg_b = Cfg(
         program="PROGB",
-        nodes=(_node("PROGB/0000-MAIN/0", "0000-MAIN"),),
+        nodes=(_node("0000-MAIN/0", "0000-MAIN"),),
         edges=(),
     )
     g = paragraph_graph((cfg_a, cfg_b))
     assert "PROGA/0000-MAIN" in g.nodes
     assert "PROGB/0000-MAIN" in g.nodes
     assert g.number_of_nodes() == 2
+
+
+def test_paragraph_graph_captures_label_and_end_suffixed_edges() -> None:
+    """Regression: real cross-paragraph edges route through '#label'/'#end'
+    suffixed node ids that contain zero '/' characters -- a PERFORM target
+    is always a '#label' node; a RETURN source is always inside the
+    performed paragraph. A resolver that requires a '/' in both endpoints
+    (or extracts the segment after the first '/' as "the paragraph") drops
+    or mis-resolves every such edge. Must resolve via node.paragraph, not
+    by splitting the id."""
+    g = paragraph_graph((_CFG,))
+    assert g.has_edge("PROG/MAIN", "PROG/SUB")  # PERFORM: MAIN/0 -> SUB#label
+    assert g.has_edge("PROG/SUB", "PROG/MAIN")  # RETURN:  SUB/0  -> MAIN/0
+
+
+def test_node_paragraph_of_maps_real_shaped_ids() -> None:
+    """node_paragraph_of resolves every node.id to its qualified paragraph
+    key via structured fields, covering '#label', '#end', and '/index'
+    shapes uniformly."""
+    mapping = node_paragraph_of((_CFG,))
+    assert mapping["MAIN#label"] == "PROG/MAIN"
+    assert mapping["MAIN/0"] == "PROG/MAIN"
+    assert mapping["SUB#label"] == "PROG/SUB"
+    assert mapping["SUB/0"] == "PROG/SUB"
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +258,7 @@ def test_build_bundle_has_required_keys() -> None:
         {
             "kind": "path",
             "path_index": 0,
-            "nodes": ["PROG/MAIN/label", "PROG/SUB/0"],
+            "nodes": ["MAIN#label", "SUB/0"],
             "deps": [],
         }
     )
@@ -232,7 +276,7 @@ def test_build_bundle_path_has_paragraph_list() -> None:
         {
             "kind": "path",
             "path_index": 0,
-            "nodes": ["PROG/MAIN/label", "PROG/SUB/0"],
+            "nodes": ["MAIN#label", "SUB/0"],
             "deps": [],
         }
     )
@@ -244,13 +288,13 @@ def test_build_bundle_branch_edges_new_is_list() -> None:
     p0 = {
         "kind": "path",
         "path_index": 0,
-        "nodes": ["PROG/MAIN/label", "PROG/MAIN/0", "PROG/SUB/label"],
+        "nodes": ["MAIN#label", "MAIN/0", "SUB#label"],
         "deps": [],
     }
     p1 = {
         "kind": "path",
         "path_index": 1,
-        "nodes": ["PROG/MAIN/label", "PROG/SUB/label"],
+        "nodes": ["MAIN#label", "SUB#label"],
         "deps": [],
     }
     bundle = build_bundle((_CFG,), _make_path_jsonl(p0, p1), [], 50, 600)
@@ -263,13 +307,13 @@ def test_build_bundle_branch_edges_not_repeated_across_paths() -> None:
     p0 = {
         "kind": "path",
         "path_index": 0,
-        "nodes": ["PROG/MAIN/label", "PROG/MAIN/0", "PROG/SUB/label"],
+        "nodes": ["MAIN#label", "MAIN/0", "SUB#label"],
         "deps": [],
     }
     p1 = {
         "kind": "path",
         "path_index": 1,
-        "nodes": ["PROG/MAIN/label", "PROG/MAIN/0", "PROG/SUB/label"],
+        "nodes": ["MAIN#label", "MAIN/0", "SUB#label"],
         "deps": [],
     }
     bundle = build_bundle((_CFG,), _make_path_jsonl(p0, p1), [], 50, 600)
@@ -279,7 +323,7 @@ def test_build_bundle_branch_edges_not_repeated_across_paths() -> None:
 
 def test_build_bundle_vars_in_output() -> None:
     path_jsonl = _make_path_jsonl(
-        {"kind": "path", "path_index": 0, "nodes": ["PROG/MAIN/0"], "deps": []}
+        {"kind": "path", "path_index": 0, "nodes": ["MAIN/0"], "deps": []}
     )
     bundle = build_bundle((_CFG,), path_jsonl, ["FIELD-X", "FIELD-Y"], 100, 300)
     assert bundle["vars"] == ["FIELD-X", "FIELD-Y"]
@@ -289,9 +333,7 @@ def test_build_bundle_ignores_non_path_lines() -> None:
     jsonl = io.StringIO(
         json.dumps({"kind": "meta", "info": "ignored"})
         + "\n"
-        + json.dumps(
-            {"kind": "path", "path_index": 0, "nodes": ["PROG/MAIN/0"], "deps": []}
-        )
+        + json.dumps({"kind": "path", "path_index": 0, "nodes": ["MAIN/0"], "deps": []})
         + "\n"
     )
     bundle = build_bundle((_CFG,), jsonl, [], 50, 600)
@@ -300,7 +342,7 @@ def test_build_bundle_ignores_non_path_lines() -> None:
 
 def test_build_bundle_nodes_list_has_expected_shape() -> None:
     path_jsonl = _make_path_jsonl(
-        {"kind": "path", "path_index": 0, "nodes": ["PROG/MAIN/0"], "deps": []}
+        {"kind": "path", "path_index": 0, "nodes": ["MAIN/0"], "deps": []}
     )
     bundle = build_bundle((_CFG,), path_jsonl, [], 50, 600)
     for node in bundle["nodes"]:
@@ -315,7 +357,7 @@ def test_build_bundle_edges_list_has_expected_shape() -> None:
         {
             "kind": "path",
             "path_index": 0,
-            "nodes": ["PROG/MAIN/0", "PROG/SUB/0"],
+            "nodes": ["MAIN/0", "SUB/0"],
             "deps": [],
         }
     )
@@ -332,7 +374,7 @@ def test_build_bundle_scalar_dep_does_not_raise() -> None:
         {
             "kind": "path",
             "path_index": 0,
-            "nodes": ["PROG/MAIN/0"],
+            "nodes": ["MAIN/0"],
             "deps": ["not-a-dict", 42, {"target": {"field": "X"}, "source": {}}],
         }
     )
