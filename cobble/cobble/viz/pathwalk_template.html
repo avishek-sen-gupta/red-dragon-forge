@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>CFG Path Walk</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: ui-monospace, monospace; background: #0f172a; color: #e2e8f0;
@@ -104,8 +105,37 @@ function layout() {
 window.addEventListener("resize", () => { layout(); redraw(); });
 layout();
 
+// -- Organic layout via d3-force --
+// Settled once, synchronously, before any rendering: a force simulation
+// (nodes repel, edges act as springs) spreads the graph out naturally,
+// unlike a rigid depth-layered grid. This is a fundamentally different
+// algorithm from topological sorting -- always O(n^2 * iterations), never
+// exponential -- so it carries none of the cycle-detection risk a static
+// full-graph layout would.
+const simNodes = DATA.nodes.map(n => ({ id: n.id }));
+const simLinks = DATA.edges.map(e => ({ source: e.source, target: e.target }));
+const simulation = d3.forceSimulation(simNodes)
+  .force("link", d3.forceLink(simLinks).id(d => d.id).distance(55).strength(0.25))
+  .force("charge", d3.forceManyBody().strength(-180))
+  .force("center", d3.forceCenter(0, 0))
+  .force("collide", d3.forceCollide(20))
+  .stop();
+for (let i = 0; i < 300; i++) simulation.tick();
+
+let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+for (const n of simNodes) {
+  minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+  minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+}
+const spanX = (maxX - minX) || 1, spanY = (maxY - minY) || 1;
+const settled = {};
+for (const n of simNodes) {
+  settled[n.id] = { nx: (n.x - minX) / spanX, ny: (n.y - minY) / spanY };
+}
+
 function nodePos(n) {
-  return [60 + n.x * (W - 120), 40 + n.y * (H - 80)];
+  const p = settled[n.id] || { nx: 0.5, ny: 0.5 };
+  return [60 + p.nx * (W - 120), 40 + p.ny * (H - 80)];
 }
 
 const nodeEls = {}, edgeEls = {};

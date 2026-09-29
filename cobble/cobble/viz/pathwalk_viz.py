@@ -1,4 +1,18 @@
-"""cobble-viz-pathwalk: paragraph-level data layer for CFG path animation."""
+"""cobble-viz-pathwalk: paragraph-level data layer for CFG path animation.
+
+Every node and edge drawn comes from the sampled paths themselves
+(``--record-paths``). The sampler already walked the program and recorded
+exactly what it visited; this module extracts exactly that, nothing more.
+There is no static full-program graph construction, no topological sort,
+and no cycle detection anywhere in this module: a recorded walk has no
+cycles to detect, only revisits, and revisiting a node during animation is
+just stepping to it again.
+
+Node positions are not computed here at all -- the browser lays the graph
+out itself via a d3-force simulation (see ``pathwalk_template.html``),
+which spreads a real CFG's shape out organically far better than any
+depth-layered grid this module could compute.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +26,7 @@ from functools import reduce
 from pathlib import Path
 from typing import IO, TypedDict
 
-import networkx as nx
-from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node
+from cobble.dataflow.srccfg.cfg import Cfg
 
 _LOG = logging.getLogger(__name__)
 
@@ -28,13 +41,15 @@ JsonRecord = Mapping[str, JsonValue]
 
 
 class AnimNode(TypedDict):
-    """One paragraph node in the animation graph."""
+    """One paragraph node in the animation graph.
+
+    No position is carried here -- the browser lays the graph out itself
+    via a force simulation (see ``pathwalk_template.html``), which spreads
+    nodes far more organically than any position this module could compute.
+    """
 
     id: str
     label: str
-    x: float
-    y: float
-    kind: str
 
 
 class AnimEdge(TypedDict):
@@ -112,200 +127,98 @@ def collapse_path(
 
 
 # ---------------------------------------------------------------------------
-# paragraphs_of
+# Edge kind lookup
 # ---------------------------------------------------------------------------
 
 
-def _add_node_to_para(
-    acc: Mapping[str, frozenset[str]], entry: tuple[str, Node]
-) -> dict[str, frozenset[str]]:
-    program, node = entry
-    key = f"{program}/{node.paragraph}"
-    return {**acc, key: acc.get(key, frozenset()) | {node.id}}
+def _edge_kind_lookup(
+    cfgs: Sequence[Cfg], node_para: Mapping[str, str]
+) -> dict[tuple[str, str], str]:
+    """(src_para, tgt_para) -> the first-seen edge kind connecting them.
 
-
-def paragraphs_of(cfgs: Sequence[Cfg]) -> dict[str, set[str]]:
-    """Map "PROGRAM/paragraph" key → set of statement node IDs across all CFGs."""
-    all_entries = tuple((cfg.program, node) for cfg in cfgs for node in cfg.nodes)
-    frozen = reduce(_add_node_to_para, all_entries, {})
-    return {k: set(v) for k, v in frozen.items()}
-
-
-# ---------------------------------------------------------------------------
-# paragraph_graph — helpers
-# ---------------------------------------------------------------------------
-
-
-def _cross_para_pair(edge: Edge, node_para: Mapping[str, str]) -> tuple[str, str]:
-    """Qualified (src_para, tgt_para) via ``node_para``, or ("", "") when
-    same paragraph or either endpoint is unresolvable.
-
-    Resolved via the same structured lookup ``node_paragraph_of`` builds --
-    never by splitting ``edge.source``/``edge.target``, which cannot recover
-    a paragraph from a "#label"/"#end" suffixed id (no "/" to split on) and
-    recovers the statement index, not the paragraph, from a "/"-suffixed one.
+    Built once from every CFG's own edges, resolved via ``node_para`` (never
+    by splitting an edge endpoint's id string -- see ``node_paragraph_of``).
+    Used only to label an edge a sampled path actually took with its real
+    kind (PERFORM/RETURN/FALLTHRU/...); this is a lookup, not a graph --
+    nothing here is drawn or laid out from it beyond what a path visited.
     """
-    src_para = node_para.get(edge.source, "")
-    tgt_para = node_para.get(edge.target, "")
-    if not src_para or not tgt_para or src_para == tgt_para:
-        return ("", "")
-    return (src_para, tgt_para)
-
-
-def _first_matching_kind(
-    cfg: Cfg, node_para: Mapping[str, str], src_para: str, tgt_para: str
-) -> str:
-    matching = next(
+    triples = (
         (
-            e
-            for e in cfg.edges
-            if _cross_para_pair(e, node_para) == (src_para, tgt_para)
-        ),
-        Edge(source="", target="", kind=EdgeKind.FLOW),
-    )
-    return matching.kind.value
-
-
-def _cross_valid_edges(
-    cfg: Cfg, node_para: Mapping[str, str]
-) -> tuple[tuple[str, str], ...]:
-    """All qualified cross-paragraph (src, tgt) pairs from a CFG's edges."""
-    return tuple(
-        pair for pair in (_cross_para_pair(e, node_para) for e in cfg.edges) if pair[0]
-    )
-
-
-def _add_cfg_edges(g: nx.DiGraph, cfg: Cfg, node_para: Mapping[str, str]) -> nx.DiGraph:
-    for src_para, tgt_para in _cross_valid_edges(cfg, node_para):
-        g.add_edge(
-            src_para,
-            tgt_para,
-            kind=_first_matching_kind(cfg, node_para, src_para, tgt_para),
+            node_para.get(edge.source, ""),
+            node_para.get(edge.target, ""),
+            edge.kind.value,
         )
-    return g
-
-
-def _add_cfg_nodes(g: nx.DiGraph, cfg: Cfg) -> nx.DiGraph:
-    for node in cfg.nodes:
-        g.add_node(f"{cfg.program}/{node.paragraph}", kind=node.kind.value)
-    return g
-
-
-def _add_cfg_to_graph(
-    g: nx.DiGraph, cfg: Cfg, node_para: Mapping[str, str]
-) -> nx.DiGraph:
-    return _add_cfg_edges(_add_cfg_nodes(g, cfg), cfg, node_para)
-
-
-def paragraph_graph(cfgs: Sequence[Cfg]) -> nx.DiGraph:
-    """Directed paragraph-level graph from a CFG bundle.
-
-    Nodes are program-qualified paragraph keys ("PROGRAM/PARAGRAPH"), which
-    avoids collisions when different programs reuse the same paragraph name.
-    Edges are cross-paragraph transitions within a program.
-    """
-    node_para = node_paragraph_of(cfgs)
+        for cfg in cfgs
+        for edge in cfg.edges
+    )
+    valid = (t for t in triples if t[0] and t[1] and t[0] != t[1])
     return reduce(
-        lambda g, cfg: _add_cfg_to_graph(g, cfg, node_para), cfgs, nx.DiGraph()
+        lambda acc, t: acc if (t[0], t[1]) in acc else {**acc, (t[0], t[1]): t[2]},
+        valid,
+        {},
     )
 
 
 # ---------------------------------------------------------------------------
-# layered_positions
+# Nodes, edges, and layout -- all derived from the sampled paths
 # ---------------------------------------------------------------------------
 
 
-def _back_edges(g: nx.DiGraph) -> frozenset[tuple[str, str]]:
-    return frozenset(
-        (u, v)
-        for cycle in nx.simple_cycles(g)
-        for u, v in zip(cycle, (*cycle[1:], cycle[0]), strict=False)
-    )
+def _paths_nodes(paths: Sequence[tuple[str, ...]]) -> tuple[str, ...]:
+    """Every paragraph key appearing in any sampled path, in first-seen order.
 
-
-def _isolated_nodes(g: nx.DiGraph, dag: nx.DiGraph) -> tuple[str, ...]:
-    return tuple(node for node in g.nodes() if node not in dag)
-
-
-def _dag_from_acyclic(g: nx.DiGraph) -> nx.DiGraph:
-    back = _back_edges(g)
-    dag = nx.DiGraph((u, v) for u, v in g.edges() if (u, v) not in back)
-    for node in _isolated_nodes(g, dag):
-        dag.add_node(node)
-    return dag
-
-
-def _dag_from(g: nx.DiGraph) -> nx.DiGraph:
-    return nx.DiGraph(g) if nx.is_directed_acyclic_graph(g) else _dag_from_acyclic(g)
-
-
-def _x_for(pos_idx: int, n_in_layer: int) -> float:
-    return 0.05 + (pos_idx / (n_in_layer - 1)) * 0.90 if n_in_layer > 1 else 0.5
-
-
-def _layer_positions(
-    layer_idx: int, n_layers: int, layer: Sequence[str]
-) -> dict[str, tuple[float, float]]:
-    y = round(0.05 + (layer_idx / max(n_layers - 1, 1)) * 0.90, 4)
-    return {
-        node: (round(_x_for(pos_idx, len(layer)), 4), y)
-        for pos_idx, node in enumerate(sorted(layer))
-    }
-
-
-def _generations(g: nx.DiGraph) -> list[list[str]]:
-    try:
-        return list(nx.topological_generations(_dag_from(g)))
-    except nx.NetworkXUnfeasible:
-        return [list(g.nodes())]
-
-
-def layered_positions(g: nx.DiGraph) -> dict[str, tuple[float, float]]:
-    """Assign stable x,y positions in [0.05, 0.95]² using topological layering.
-
-    Returns ``{node_name: (x, y)}`` where y increases with depth.
+    Only paragraphs a sampled walk actually visited are drawn -- a paragraph
+    the sampler never reached (dead code, or a coverage gap) has nothing
+    recorded to animate and is left off the graph entirely.
     """
-    generations = _generations(g)
-    n_layers = max(len(generations), 1)
-    return {
-        node: xy
-        for layer_idx, layer in enumerate(generations)
-        for node, xy in _layer_positions(layer_idx, n_layers, layer).items()
-    }
+    all_paras = (para for path in paths for para in path)
+    return reduce(lambda acc, para: acc if para in acc else (*acc, para), all_paras, ())
+
+
+def _paths_edges(paths: Sequence[tuple[str, ...]]) -> tuple[tuple[str, str], ...]:
+    """Every consecutive (src, tgt) pair actually observed across all sampled
+    paths, in first-seen order.
+
+    This -- not a full static CFG -- is the edge set drawn: only an edge a
+    sampled walk actually took is ever shown.
+    """
+    all_pairs = ((path[i], path[i + 1]) for path in paths for i in range(len(path) - 1))
+    valid_pairs = (pair for pair in all_pairs if pair[0] != pair[1])
+    return reduce(
+        lambda acc, pair: acc if pair in acc else (*acc, pair), valid_pairs, ()
+    )
 
 
 # ---------------------------------------------------------------------------
 # _derive_branch_edges_new
 # ---------------------------------------------------------------------------
-
-
-def _path_edges(path: tuple[str, ...], g: nx.DiGraph) -> frozenset[tuple[str, str]]:
+def _path_edges(path: tuple[str, ...]) -> frozenset[tuple[str, str]]:
     return frozenset(
-        (path[i], path[i + 1])
-        for i in range(len(path) - 1)
-        if g.has_edge(path[i], path[i + 1])
+        (path[i], path[i + 1]) for i in range(len(path) - 1) if path[i] != path[i + 1]
     )
 
 
 def _new_edges_step(
-    g: nx.DiGraph,
     acc: tuple[frozenset[tuple[str, str]], tuple[list[list[str]], ...]],
     path: tuple[str, ...],
 ) -> tuple[frozenset[tuple[str, str]], tuple[list[list[str]], ...]]:
     covered, result = acc
-    newly = _path_edges(path, g) - covered
+    newly = _path_edges(path) - covered
     return (covered | newly, (*result, sorted([list(e) for e in newly])))
 
 
 def _derive_branch_edges_new(
     paths: Sequence[tuple[str, ...]],
-    g: nx.DiGraph,
 ) -> tuple[list[list[str]], ...]:
-    _, result = reduce(
-        lambda acc, path: _new_edges_step(g, acc, path),
-        paths,
-        (frozenset(), ()),
-    )
+    """Which edges each path covers for the first time, in path order.
+
+    The coverage this drives measures progress through revealing everything
+    ``--record-paths`` captured -- not independent CFG coverage. Whether the
+    sampler covered the *real* CFG is fields-trace's own reported statistic
+    (its ``N/M branches`` line), computed against the static CFG it walked;
+    this bundle only ever knows the paths it was handed.
+    """
+    _, result = reduce(_new_edges_step, paths, (frozenset(), ()))
     return result
 
 
@@ -397,22 +310,11 @@ def _anim_path(
     )
 
 
-def _node_entry(
-    n: str,
-    data: Mapping[str, JsonValue],
-    positions: Mapping[str, tuple[float, float]],
-) -> AnimNode:
-    x, y = positions.get(n, (0.5, 0.5))
-    # id is the program-qualified key ("PROGRAM/PARAGRAPH"); label is just the
+def _node_entry(n: str) -> AnimNode:
+    # id is the qualified key ("PROGRAM/PARAGRAPH"); label is just the
     # trailing paragraph segment, kept for readable on-screen display.
     label = n.rsplit("/", 1)[-1]
-    return AnimNode(
-        id=n,
-        label=label,
-        x=x,
-        y=y,
-        kind=str(data.get("kind", "ASSIGN")),
-    )
+    return AnimNode(id=n, label=label)
 
 
 def build_bundle(
@@ -424,10 +326,18 @@ def build_bundle(
 ) -> AnimBundle:
     """Build the JSON-serialisable animation bundle.
 
+    Every node and edge comes from the recorded paths themselves --
+    ``cfgs`` is consulted only to resolve a path's raw node ids to
+    paragraph keys and to look up an edge's real kind for display; it
+    never contributes a node or edge the paths did not themselves visit.
+    No position is computed here at all: the browser lays the graph out
+    itself via a force simulation (see ``pathwalk_template.html``).
+
     Parameters
     ----------
     cfgs:
-        Parsed CFG objects (one per program file).
+        Parsed CFG objects (one per program file) -- consulted only for
+        node-id resolution and edge-kind lookup, never for graph or layout.
     path_records:
         File-like yielding JSONL lines; only lines with ``"kind": "path"`` are consumed.
     var_names:
@@ -437,17 +347,20 @@ def build_bundle(
     pause_ms:
         Milliseconds to pause at path boundaries.
     """
-    g = paragraph_graph(cfgs)
     node_para = node_paragraph_of(cfgs)
-    positions = layered_positions(g)
     raw_paths = _parse_path_records(path_records)
     collapsed = tuple(collapse_path(_raw_nodes(r), node_para) for r in raw_paths)
-    new_edges = _derive_branch_edges_new(collapsed, g)
+
+    nodes_seq = _paths_nodes(collapsed)
+    edges_seq = _paths_edges(collapsed)
+    kind_lookup = _edge_kind_lookup(cfgs, node_para)
+    new_edges = _derive_branch_edges_new(collapsed)
+
     return AnimBundle(
-        nodes=[_node_entry(n, data, positions) for n, data in g.nodes(data=True)],
+        nodes=[_node_entry(n) for n in nodes_seq],
         edges=[
-            AnimEdge(source=u, target=v, kind=str(data.get("kind", "FLOW")))
-            for u, v, data in g.edges(data=True)
+            AnimEdge(source=s, target=t, kind=kind_lookup.get((s, t), "FLOW"))
+            for s, t in edges_seq
         ],
         paths=[
             _anim_path(para_seq, new_edges[i], raw_paths[i], var_names)
@@ -465,7 +378,8 @@ def build_bundle(
 
 
 def render_html(bundle: AnimBundle, output: Path) -> None:
-    """Write a self-contained HTML animation file."""
+    """Write the HTML animation file. Loads d3-force from a CDN at view
+    time for the layout simulation; not self-contained offline."""
     template = (
         importlib.resources.files("cobble.viz")
         .joinpath("pathwalk_template.html")

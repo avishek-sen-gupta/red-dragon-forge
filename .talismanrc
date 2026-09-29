@@ -474,11 +474,11 @@ fileignoreconfig:
 - filename: cobble/cobble/viz/pathwalk_template.html
   checksum: 1e6cab5f8e3467404c50ed9bca0b169a4de9ad2ae02c3980873a3bc1420769ac
 - filename: cobble/cobble/viz/pathwalk_viz.py
-  checksum: 7a1c6f24195afdf1d426cebea9a3245ad5d6a085d8e6456f2009a8e164d7a8ab
+  checksum: 5f347dfac777fe9a3065d5c8858533be6413a7f23bb4e47873ef5b001d861cad
 - filename: cobble/cobble/dataflow/fields/trace_report.py
   checksum: 5bff435e279a61ee123e923938cd65f8b7e6351f1475abda4b7b9a335149162e
 - filename: cobble/cobble/viz/pathwalk_template.html
   checksum: 1e6cab5f8e3467404c50ed9bca0b169a4de9ad2ae02c3980873a3bc1420769ac
 - filename: cobble/tests/viz/test_pathwalk_viz.py
-  checksum: 5588530985e03cf0bdccbdce082648adb16ab0c0855de5d5f8bfa627a0156575
+  checksum: 5f4569c14aca97b037c0685ec58ddf13ee6477e844a23ef5e7c394e4a53b7aeb
 version: "1.0"

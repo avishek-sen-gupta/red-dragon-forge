@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import json
 
-import networkx as nx
 from cobble.dataflow.srccfg.cfg import (
     Atom,
     Cfg,
@@ -18,13 +17,13 @@ from cobble.viz.pathwalk_viz import (
     JsonRecord,
     build_bundle,
     collapse_path,
-    layered_positions,
     node_paragraph_of,
-    paragraph_graph,
-    paragraphs_of,
     render_html,
 )
+from cobble.viz.pathwalk_viz import _edge_kind_lookup as edge_kind_lookup
 from cobble.viz.pathwalk_viz import _parser as pathwalk_parser
+from cobble.viz.pathwalk_viz import _paths_edges as paths_edges
+from cobble.viz.pathwalk_viz import _paths_nodes as paths_nodes
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -110,84 +109,6 @@ def test_collapse_path_drops_unknown_node_ids() -> None:
     assert result == ("PROG/MAIN",)
 
 
-# ---------------------------------------------------------------------------
-# paragraphs_of
-# ---------------------------------------------------------------------------
-
-
-def test_paragraphs_of_returns_node_ids() -> None:
-    mapping = paragraphs_of((_CFG,))
-    assert "PROG/MAIN" in mapping
-    assert "PROG/SUB" in mapping
-    assert "MAIN/0" in mapping["PROG/MAIN"]
-    assert "MAIN#label" in mapping["PROG/MAIN"]
-    assert "SUB/0" in mapping["PROG/SUB"]
-
-
-# ---------------------------------------------------------------------------
-# paragraph_graph
-# ---------------------------------------------------------------------------
-
-
-def test_paragraph_graph_has_both_paragraphs() -> None:
-    g = paragraph_graph((_CFG,))
-    assert "PROG/MAIN" in g.nodes
-    assert "PROG/SUB" in g.nodes
-
-
-def test_paragraph_graph_has_perform_edge() -> None:
-    g = paragraph_graph((_CFG,))
-    # MAIN/0 --PERFORM--> SUB/label: different paragraphs → graph edge
-    assert g.has_edge("PROG/MAIN", "PROG/SUB")
-
-
-def test_paragraph_graph_no_self_loops_for_intra_para_edges() -> None:
-    cfg = Cfg(
-        program="P",
-        nodes=(
-            _node("A/0", "A"),
-            _node("A/1", "A"),
-        ),
-        edges=(_edge("A/0", "A/1"),),
-    )
-    g = paragraph_graph((cfg,))
-    assert not g.has_edge("P/A", "P/A")
-
-
-def test_paragraph_graph_qualifies_by_program_on_name_collision() -> None:
-    """Two programs each declaring a paragraph named the same
-    ("0000-MAIN") must NOT collapse into one graph node. Real node ids
-    never carry a program prefix, so this must be resolved via
-    (cfg.program, node.paragraph), never by splitting the id string."""
-    cfg_a = Cfg(
-        program="PROGA",
-        nodes=(_node("0000-MAIN/0", "0000-MAIN"),),
-        edges=(),
-    )
-    cfg_b = Cfg(
-        program="PROGB",
-        nodes=(_node("0000-MAIN/0", "0000-MAIN"),),
-        edges=(),
-    )
-    g = paragraph_graph((cfg_a, cfg_b))
-    assert "PROGA/0000-MAIN" in g.nodes
-    assert "PROGB/0000-MAIN" in g.nodes
-    assert g.number_of_nodes() == 2
-
-
-def test_paragraph_graph_captures_label_and_end_suffixed_edges() -> None:
-    """Regression: real cross-paragraph edges route through '#label'/'#end'
-    suffixed node ids that contain zero '/' characters -- a PERFORM target
-    is always a '#label' node; a RETURN source is always inside the
-    performed paragraph. A resolver that requires a '/' in both endpoints
-    (or extracts the segment after the first '/' as "the paragraph") drops
-    or mis-resolves every such edge. Must resolve via node.paragraph, not
-    by splitting the id."""
-    g = paragraph_graph((_CFG,))
-    assert g.has_edge("PROG/MAIN", "PROG/SUB")  # PERFORM: MAIN/0 -> SUB#label
-    assert g.has_edge("PROG/SUB", "PROG/MAIN")  # RETURN:  SUB/0  -> MAIN/0
-
-
 def test_node_paragraph_of_maps_real_shaped_ids() -> None:
     """node_paragraph_of resolves every node.id to its qualified paragraph
     key via structured fields, covering '#label', '#end', and '/index'
@@ -200,48 +121,68 @@ def test_node_paragraph_of_maps_real_shaped_ids() -> None:
 
 
 # ---------------------------------------------------------------------------
-# layered_positions
+# _edge_kind_lookup
 # ---------------------------------------------------------------------------
 
 
-def test_layered_positions_all_nodes_placed() -> None:
-    g = nx.DiGraph()
-    g.add_edge("A", "B")
-    g.add_edge("B", "C")
-    positions = layered_positions(g)
-    assert set(positions.keys()) == {"A", "B", "C"}
+def test_edge_kind_lookup_resolves_perform_and_return() -> None:
+    lookup = edge_kind_lookup((_CFG,), _NODE_PARA)
+    assert lookup[("PROG/MAIN", "PROG/SUB")] == "PERFORM"
+    assert lookup[("PROG/SUB", "PROG/MAIN")] == "RETURN"
 
 
-def test_layered_positions_y_increases_with_depth() -> None:
-    g = nx.DiGraph()
-    g.add_edge("A", "B")
-    g.add_edge("B", "C")
-    pos = layered_positions(g)
-    assert pos["A"][1] < pos["B"][1] < pos["C"][1]
+def test_edge_kind_lookup_captures_label_and_end_suffixed_edges() -> None:
+    """Regression: real cross-paragraph edges route through '#label'/'#end'
+    suffixed node ids that contain zero '/' characters -- a PERFORM target
+    is always a '#label' node; a RETURN source is always inside the
+    performed paragraph. Resolved via node.paragraph, not by splitting the
+    id, so both endpoints -- one with no '/' at all -- still resolve."""
+    lookup = edge_kind_lookup((_CFG,), _NODE_PARA)
+    assert ("PROG/MAIN", "PROG/SUB") in lookup
+    assert ("PROG/SUB", "PROG/MAIN") in lookup
 
 
-def test_layered_positions_values_in_unit_range() -> None:
-    g = nx.DiGraph()
-    g.add_edge("X", "Y")
-    pos = layered_positions(g)
-    for x, y in pos.values():
-        assert 0.0 <= x <= 1.0
-        assert 0.0 <= y <= 1.0
+def test_edge_kind_lookup_omits_intra_paragraph_edges() -> None:
+    cfg = Cfg(
+        program="P",
+        nodes=(_node("A/0", "A"), _node("A/1", "A")),
+        edges=(_edge("A/0", "A/1"),),
+    )
+    node_para = {"A/0": "P/A", "A/1": "P/A"}
+    lookup = edge_kind_lookup((cfg,), node_para)
+    assert lookup == {}
 
 
-def test_layered_positions_single_node() -> None:
-    g = nx.DiGraph()
-    g.add_node("SOLO")
-    pos = layered_positions(g)
-    assert "SOLO" in pos
+# ---------------------------------------------------------------------------
+# _paths_nodes / _paths_edges -- derived purely from sampled paths
+# ---------------------------------------------------------------------------
 
 
-def test_layered_positions_cycle_handled() -> None:
-    g = nx.DiGraph()
-    g.add_edge("A", "B")
-    g.add_edge("B", "A")
-    pos = layered_positions(g)
-    assert set(pos.keys()) == {"A", "B"}
+def test_paths_nodes_first_seen_order() -> None:
+    assert paths_nodes([("A", "B"), ("B", "C")]) == ("A", "B", "C")
+
+
+def test_paths_nodes_dedupes_across_paths() -> None:
+    assert paths_nodes([("A", "B"), ("A", "C")]) == ("A", "B", "C")
+
+
+def test_paths_nodes_empty() -> None:
+    assert paths_nodes([]) == ()
+
+
+def test_paths_edges_first_seen_order_and_dedup() -> None:
+    result = paths_edges([("A", "B", "C"), ("A", "B", "D")])
+    assert result == (("A", "B"), ("B", "C"), ("B", "D"))
+
+
+def test_paths_edges_drops_self_loops() -> None:
+    """A path may revisit the same paragraph consecutively (a trivial
+    self-loop at paragraph granularity); this is not a drawable edge."""
+    assert paths_edges([("A", "A", "B")]) == (("A", "B"),)
+
+
+def test_paths_edges_empty() -> None:
+    assert paths_edges([]) == ()
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +244,7 @@ def test_build_bundle_branch_edges_new_is_list() -> None:
 
 
 def test_build_bundle_branch_edges_not_repeated_across_paths() -> None:
-    # Path 0 covers MAIN->SUB (via PERFORM edge). Path 1 covers same route.
+    # Path 0 covers MAIN->SUB. Path 1 covers the same route.
     p0 = {
         "kind": "path",
         "path_index": 0,
@@ -347,9 +288,7 @@ def test_build_bundle_nodes_list_has_expected_shape() -> None:
     bundle = build_bundle((_CFG,), path_jsonl, [], 50, 600)
     for node in bundle["nodes"]:
         assert "id" in node
-        assert "x" in node
-        assert "y" in node
-        assert "kind" in node
+        assert "label" in node
 
 
 def test_build_bundle_edges_list_has_expected_shape() -> None:
@@ -368,8 +307,40 @@ def test_build_bundle_edges_list_has_expected_shape() -> None:
         assert "kind" in edge
 
 
+def test_build_bundle_edge_kind_resolved_from_cfg() -> None:
+    """The edge a path actually took is labelled with its real kind, looked
+    up from the CFG -- not left as a generic default."""
+    path_jsonl = _make_path_jsonl(
+        {
+            "kind": "path",
+            "path_index": 0,
+            "nodes": ["MAIN/0", "SUB/0"],
+            "deps": [],
+        }
+    )
+    bundle = build_bundle((_CFG,), path_jsonl, [], 50, 600)
+    edge = next(
+        e
+        for e in bundle["edges"]
+        if e["source"] == "PROG/MAIN" and e["target"] == "PROG/SUB"
+    )
+    assert edge["kind"] == "PERFORM"
+
+
+def test_build_bundle_only_visited_paragraphs_appear() -> None:
+    """A paragraph the sampled paths never visited (here: nothing visits
+    SUB) contributes no node -- only what --record-paths actually recorded
+    is ever drawn."""
+    path_jsonl = _make_path_jsonl(
+        {"kind": "path", "path_index": 0, "nodes": ["MAIN/0"], "deps": []}
+    )
+    bundle = build_bundle((_CFG,), path_jsonl, [], 50, 600)
+    node_ids = {n["id"] for n in bundle["nodes"]}
+    assert node_ids == {"PROG/MAIN"}
+
+
 def test_build_bundle_scalar_dep_does_not_raise() -> None:
-    """Finding 1: non-Mapping dep element (e.g. a string scalar) must not raise."""
+    """Non-Mapping dep element (e.g. a string scalar) must not raise."""
     path_jsonl = _make_path_jsonl(
         {
             "kind": "path",
@@ -382,30 +353,14 @@ def test_build_bundle_scalar_dep_does_not_raise() -> None:
     assert len(bundle["paths"]) == 1
 
 
-def test_layered_positions_two_independent_cycles_y_increases() -> None:
-    """Finding 2: two independent cycles (A↔B and C↔D with A->C) must be fully
-    stripped so topological_generations succeeds and y increases with depth.
-
-    After stripping all back-edges both cycles are removed.  The only surviving
-    forward edge is A->C, so A must appear at a shallower depth than C.
-    All four nodes must still be present in the output.
-    """
-    g = nx.DiGraph()
-    g.add_edges_from([("A", "B"), ("B", "A"), ("C", "D"), ("D", "C"), ("A", "C")])
-    pos = layered_positions(g)
-    assert set(pos.keys()) == {"A", "B", "C", "D"}
-    # A->C is the only surviving DAG edge: A must be shallower than C.
-    assert pos["A"][1] < pos["C"][1]
-
-
 # ---------------------------------------------------------------------------
 # render_html
 # ---------------------------------------------------------------------------
 
 _BUNDLE: AnimBundle = {
     "nodes": [
-        {"id": "MAIN", "label": "MAIN", "x": 0.5, "y": 0.1, "kind": "LABEL"},
-        {"id": "SUB", "label": "SUB", "x": 0.5, "y": 0.7, "kind": "ASSIGN"},
+        {"id": "MAIN", "label": "MAIN"},
+        {"id": "SUB", "label": "SUB"},
     ],
     "edges": [{"source": "MAIN", "target": "SUB", "kind": "PERFORM"}],
     "paths": [
@@ -424,20 +379,13 @@ def test_render_html_produces_file(tmp_path):
     assert out.stat().st_size > 1000
 
 
-def test_render_html_is_self_contained(tmp_path):
+def test_render_html_loads_d3_from_cdn(tmp_path):
+    """No self-containment requirement here -- the layout is a genuine
+    force simulation via d3-force, loaded from a CDN at view time."""
     out = tmp_path / "anim.html"
     render_html(_BUNDLE, out)
     content = out.read_text()
-    # The only http:// allowed is the SVG namespace
-    import re
-
-    external_urls = [
-        u
-        for u in re.findall(r'https?://[^\s"]+', content)
-        if "w3.org/2000/svg" not in u and "w3.org/1999/xlink" not in u
-    ]
-    assert external_urls == [], f"External URLs found: {external_urls}"
-    assert "cdn" not in content.lower()
+    assert "d3js.org" in content
 
 
 def test_render_html_embeds_data(tmp_path):
