@@ -474,11 +474,12 @@ def dynamic_target_graph(
 def _not_attempted_graph(
     sites: Sequence[DynamicSite], corpus_index: CorpusIndex
 ) -> _DynamicGraph:
-    """Every dynamic XCTL/LINK site the CICS walk saw, marked not-attempted.
+    """The dynamic XCTL/LINK sites no targets.jsonl row answers, marked
+    not-attempted.
 
-    Used only when no targets.jsonl is configured at all -- with the table
-    present, dynamic_target_graph is the exclusive source of these edges, so a
-    site it resolves is never also written here under the wrong reason.
+    ``sites`` is what _write_not_attempted_sites left after subtracting the
+    table's own (caller, expression) pairs, so a site the analysis resolved is
+    never also written here under the wrong reason.
     """
     return (
         tuple(
@@ -496,6 +497,46 @@ def _not_attempted_graph(
             )
             for site in sites
         ),
+    )
+
+
+def _operand_name(expression: str) -> str:
+    """An operand expression reduced to the data-name the two front ends agree on.
+
+    They do not agree on the rest. The fixpoint's CFG renders the subscript into its
+    ``expression`` -- CDEMO-MENU-OPT-PGMNAME(WS-OPTION) -- while the CICS walk
+    carries the data-name alone, so matching the rendered texts leaves the two menu
+    sites reading as unanswered and marks them not-attempted beside the eleven
+    candidates the table had already resolved for them. In COBOL the name ends at
+    the first parenthesis, whether a subscript or a reference modifier follows.
+    """
+    return expression.split("(", 1)[0].strip()
+
+
+def _site(caller: str, expression: str) -> tuple[str, str]:
+    return caller, _operand_name(expression)
+
+
+def _covered_sites(path: Path) -> frozenset[tuple[str, str]]:
+    """Every (caller, operand) a targets.jsonl answers for, or nothing.
+
+    Matched on the operand and not on the CFG node id: a row carries the node the
+    fixpoint's own CFG named, and the CICS walk knows a site by the program and the
+    operand alone. A caller writing one operand at several sites is answered by one
+    entry, which is how the DYNAMIC_TARGET id is scoped too.
+    """
+    return frozenset(
+        _site(text(row, "caller"), text(row, "expression"))
+        for row in read_targets(path)
+    )
+
+
+def _unanswered_sites(
+    sites: Sequence[DynamicSite], covered: frozenset[tuple[str, str]]
+) -> tuple[DynamicSite, ...]:
+    """The sites no row in the table speaks for."""
+    return tuple(
+        site for site in sites if _site(site.program, site.expression) not in covered
     )
 
 
@@ -749,14 +790,32 @@ def _write_not_attempted_sites(
     extraction: FlowExtraction,
     writer: GraphWriter,
 ) -> None:
-    """A dynamic site this walk saw, marked not-attempted -- but only when no
-    artifact is configured at all. With the artifact present,
-    dynamic_target_graph over it is the exclusive source of these edges (wired
-    in _extract_all), so nothing here would duplicate or race it.
+    """Every dynamic site this walk saw that targets.jsonl does not answer for.
+
+    Subtracted site by site rather than skipped whenever the file exists: a table
+    written for a subset of members -- a fields config carrying a ``members``
+    filter, or a member whose walk the dequeue cap gave up on and whose rows were
+    dropped -- covers some callers and not others, and testing the file would
+    remove every uncovered member's sites from the graph entirely. That is the
+    invisibility this stage exists to end, applied to exactly the members hardest
+    to analyse.
+
+    dynamic_target_graph over the table (wired in _extract_all) remains the
+    exclusive source for a site the table does name, so nothing here duplicates
+    or races it.
     """
-    if _targets_path(config).is_file():
-        return
-    writer.add_all(*_not_attempted_graph(extraction.dynamic_sites, corpus_index))
+    sites = _unanswered_sites(
+        extraction.dynamic_sites, _covered_sites(_targets_path(config))
+    )
+    logger.info(
+        "dynamic sites: %d seen, %d answered by %s, %d marked %s",
+        len(extraction.dynamic_sites),
+        len(extraction.dynamic_sites) - len(sites),
+        _TARGETS_FILE,
+        len(sites),
+        _NOT_ATTEMPTED,
+    )
+    writer.add_all(*_not_attempted_graph(sites, corpus_index))
 
 
 def _flow_extraction_attempt(
