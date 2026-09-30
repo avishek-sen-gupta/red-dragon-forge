@@ -41,7 +41,8 @@ class DynamicSite:
     reach: a program-transfer edge built from it would dedupe keep-first
     against whatever the dataflow's targets.jsonl later resolves for the same
     site, freezing the wrong answer in before the artifact ever got read.
-    build_graph reads this only when no artifact is configured at all.
+    build_graph marks a site not-attempted from this only where the artifact
+    holds no row for the same (program, expression).
     """
 
     program: str
