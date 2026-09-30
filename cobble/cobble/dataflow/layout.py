@@ -225,6 +225,8 @@ class Cell:
     usage: str
     redefines: str
     occurs: int
+    value: str = ""
+    value_is_figurative: bool = False
     index: tuple[int, ...] = ()
     decl: int = -1
     ordinal: int = -1
@@ -296,6 +298,8 @@ def _occurrence(
             usage=node.field.usage,
             redefines=node.field.redefines,
             occurs=node.field.occurs,
+            value=node.field.value,
+            value_is_figurative=node.field.value_is_figurative,
             index=index,
             decl=node.decl,
             ordinal=ordinal,
