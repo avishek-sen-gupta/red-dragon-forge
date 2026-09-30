@@ -16,8 +16,18 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import reduce
 from types import MappingProxyType
 
+from cobble.dataflow.fields.values import (
+    EMPTY as VALUES_EMPTY,
+)
+from cobble.dataflow.fields.values import (
+    UnresolvedReason,
+    ValueSet,
+    because,
+    merged,
+)
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
 
@@ -52,34 +62,97 @@ class Source:
     node: str
 
 
-State = Mapping[FieldExtent, frozenset[Source]]
+_NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})
+_NO_VALUES: Mapping[FieldExtent, ValueSet] = MappingProxyType({})
 
-EMPTY: State = MappingProxyType({})
+
+@dataclass(frozen=True)
+class State:
+    """What reaches each extent, and what each extent can hold.
+
+    One object rather than two maps threaded side by side, because both are killed
+    by the same ``must_cover`` rule and a value that outlived the provenance of the
+    write that placed it would be a value the program cannot hold. Joining one and
+    forgetting the other has to be impossible, not merely discouraged.
+    """
+
+    sources: Mapping[FieldExtent, frozenset[Source]] = _NO_SOURCES
+    values: Mapping[FieldExtent, ValueSet] = _NO_VALUES
 
 
-def join(left: State, right: State) -> State:
-    """Union of provenance, extent by extent. Order does not matter."""
-    keys = (*left, *(extent for extent in right if extent not in left))
+EMPTY = State()
+
+
+def _joined_sources(
+    left: Mapping[FieldExtent, frozenset[Source]],
+    right: Mapping[FieldExtent, frozenset[Source]],
+) -> Mapping[FieldExtent, frozenset[Source]]:
+    union_extents = (*left, *(extent for extent in right if extent not in left))
     return MappingProxyType(
         {
             extent: left.get(extent, frozenset()) | right.get(extent, frozenset())
-            for extent in keys
+            for extent in union_extents
         }
     )
 
 
-def write(state: State, target: FieldExtent, sources: frozenset[Source]) -> State:
-    """``sources`` reach ``target``, and whatever ``target`` must_covers stops doing.
-
-    An EXACT target must_covers itself, so it drops its own prior provenance -- a
-    strong update. A CLAMPED one covers nothing, so its prior provenance is kept
-    and this is a weak update.
-    """
-    survivors = {
-        extent: held for extent, held in state.items() if not target.must_cover(extent)
-    }
+def _joined_values(
+    left: Mapping[FieldExtent, ValueSet], right: Mapping[FieldExtent, ValueSet]
+) -> Mapping[FieldExtent, ValueSet]:
+    union_extents = (*left, *(extent for extent in right if extent not in left))
     return MappingProxyType(
-        {**survivors, target: survivors.get(target, frozenset()) | sources}
+        {
+            extent: merged(
+                left.get(extent, VALUES_EMPTY), right.get(extent, VALUES_EMPTY)
+            )
+            for extent in union_extents
+        }
+    )
+
+
+def join(left: State, right: State) -> State:
+    """Union of both components, extent by extent. Order does not matter."""
+    return State(
+        sources=_joined_sources(left.sources, right.sources),
+        values=_joined_values(left.values, right.values),
+    )
+
+
+def write(
+    state: State,
+    target: FieldExtent,
+    sources: frozenset[Source],
+    values: ValueSet = VALUES_EMPTY,
+) -> State:
+    """``sources`` and ``values`` reach ``target``; whatever it must_covers stops.
+
+    An EXACT target must_covers itself, so it drops its own prior entry in both maps
+    -- a strong update. A CLAMPED one covers nothing, so both are kept and this is a
+    weak update. The two components are filtered by one predicate on purpose.
+    """
+    kept_sources = {
+        extent: held
+        for extent, held in state.sources.items()
+        if not target.must_cover(extent)
+    }
+    kept_values = {
+        extent: held
+        for extent, held in state.values.items()
+        if not target.must_cover(extent)
+    }
+    return State(
+        sources=MappingProxyType(
+            {
+                **kept_sources,
+                target: kept_sources.get(target, frozenset()) | sources,
+            }
+        ),
+        values=MappingProxyType(
+            {
+                **kept_values,
+                target: merged(kept_values.get(target, VALUES_EMPTY), values),
+            }
+        ),
     )
 
 
@@ -87,7 +160,41 @@ def reaching(state: State, read: FieldExtent) -> frozenset[Source]:
     """Every source held at an extent this read might overlap."""
     return frozenset(
         source
-        for extent, sources in state.items()
+        for extent, sources in state.sources.items()
         if read.may_alias(extent)
         for source in sources
     )
+
+
+def _sliced(held: ValueSet, extent: FieldExtent, read: FieldExtent) -> ValueSet:
+    at = read.start - extent.start
+    return ValueSet(
+        values=frozenset(value[at : at + read.length] for value in held.values),
+        reasons=held.reasons,
+    )
+
+
+def values_at(state: State, read: FieldExtent) -> ValueSet:
+    """Every value the bytes at ``read`` can hold, sliced out of what holds them.
+
+    Matched by byte range and not by extent identity, because two names over one
+    piece of storage are two extents differing only in ``field_name`` -- the image
+    files a value under the FILLER that declares it and a program reads it through
+    the REDEFINES, and those are not equal extents.
+
+    A read wholly inside a wider valued extent is sliced out of it, which is what
+    makes a reference-modified read resolvable. A read straddling two valued extents
+    is inside neither and yields no value at all: composing bytes from two unrelated
+    literals would produce a plausible name the program can never hold, and a wrong
+    answer here becomes a wrong edge in the graph.
+    """
+    found = tuple(
+        _sliced(held, extent, read)
+        for extent, held in state.values.items()
+        if extent.region is read.region
+        and extent.start <= read.start
+        and read.end <= extent.end
+    )
+    if not found:
+        return because(UnresolvedReason.UNINITIALISED)
+    return reduce(merged, found, VALUES_EMPTY)

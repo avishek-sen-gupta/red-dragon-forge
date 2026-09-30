@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cobble.dataflow.fields.state import EMPTY, Source, join, reaching, write
+from cobble.dataflow.fields.state import EMPTY, Source, join, reaching, values_at, write
+from cobble.dataflow.fields.values import UnresolvedReason, ValueSet, because, of_value
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
 
@@ -94,3 +95,51 @@ def test_join_keeps_an_extent_only_one_side_holds():
 def test_join_of_a_state_with_itself_is_that_state():
     left = write(EMPTY, _extent(0, 4), frozenset({_source("WS-L")}))
     assert join(left, left) == left
+
+
+def test_a_strong_write_kills_both_components_and_a_clamped_one_kills_neither():
+    exact = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.EXACT, "WS-A")
+    clamped = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.CLAMPED, "WS-A")
+    first = write(EMPTY, exact, frozenset(), of_value(b"PGMOLD  "))
+
+    assert values_at(
+        write(first, exact, frozenset(), of_value(b"PGMNEW  ")), exact
+    ) == (of_value(b"PGMNEW  "))
+    assert values_at(
+        write(first, clamped, frozenset(), of_value(b"PGMNEW  ")), exact
+    ) == ValueSet(frozenset({b"PGMOLD  ", b"PGMNEW  "}), frozenset())
+
+
+def test_a_value_is_found_by_byte_range_not_by_extent_identity():
+    declared = FieldExtent(RegionId.WORKING_STORAGE, 39, 8, Precision.EXACT, "FILLER_3")
+    read_as = FieldExtent(
+        RegionId.WORKING_STORAGE, 39, 8, Precision.EXACT, "CDEMO-MENU-OPT-PGMNAME"
+    )
+    state = write(EMPTY, declared, frozenset(), of_value(b"COACTVWC"))
+
+    assert declared != read_as
+    assert values_at(state, read_as) == of_value(b"COACTVWC")
+
+
+def test_a_read_inside_a_valued_extent_is_sliced_and_one_that_straddles_two_is_not():
+    left = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.EXACT, "WS-L")
+    right = FieldExtent(RegionId.WORKING_STORAGE, 8, 8, Precision.EXACT, "WS-R")
+    state = write(
+        write(EMPTY, left, frozenset(), of_value(b"COACTVWC")),
+        right,
+        frozenset(),
+        of_value(b"COCRDLIC"),
+    )
+    inside = FieldExtent(RegionId.WORKING_STORAGE, 2, 4, Precision.EXACT, "SLICE")
+    straddling = FieldExtent(
+        RegionId.WORKING_STORAGE, 4, 8, Precision.EXACT, "STRADDLE"
+    )
+
+    assert values_at(state, inside) == of_value(b"ACTV")
+    assert values_at(state, straddling) == because(UnresolvedReason.UNINITIALISED)
+
+
+def test_an_extent_nothing_has_written_reports_uninitialised():
+    unwritten = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.EXACT, "WS-A")
+
+    assert values_at(EMPTY, unwritten) == because(UnresolvedReason.UNINITIALISED)
