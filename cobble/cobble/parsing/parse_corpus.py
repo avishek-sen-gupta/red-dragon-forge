@@ -50,6 +50,7 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
 from cobble.parsing.asg_cache import cache_path, failure_path, is_cached
+from cobble.parsing.copybook_dir import unscannable
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_parser import ProLeapCobolParser
@@ -151,6 +152,22 @@ def bridge_jar(environ: Mapping[str, str]) -> Path:
             f"bridge JAR not built: {jar} (run `make setup` at the forge root)"
         )
     return jar
+
+
+def copybook_dirs(config: CorpusConfig) -> tuple[Path, ...]:
+    """The corpus's copybook directories, once ProLeap can be trusted to scan them.
+
+    The sibling of bridge_jar: the second of the two things the bridge needs
+    before a corpus walk, refused here rather than 3779 times inside the pool.
+    """
+    bad = unscannable(config.copybook_dirs)
+    if not bad:
+        return config.copybook_dirs
+    named = ", ".join(f"{d.path} ({d.reason.value})" for d in bad)
+    raise SystemExit(
+        f"copybook_dirs ProLeap cannot scan: {named} "
+        f"(`sym` is written by cobble-sym; see red-dragon-forge-jbh)"
+    )
 
 
 def pending(config: CorpusConfig) -> tuple[list[Job], int]:
@@ -264,13 +281,17 @@ def _planned(config: CorpusConfig, args: argparse.Namespace) -> list[Job]:
 
 
 def _run(
-    todo: Sequence[Job], config: CorpusConfig, args: argparse.Namespace, jar: str
+    todo: Sequence[Job],
+    dirs: Sequence[Path],
+    config: CorpusConfig,
+    args: argparse.Namespace,
+    jar: str,
 ) -> int:
     t0 = time.perf_counter()
     results = _results(
         todo,
         jar,
-        tuple(str(d) for d in config.copybook_dirs),
+        tuple(str(d) for d in dirs),
         tuple(config.copybook_extensions),
         args.jobs,
         t0,
@@ -284,10 +305,11 @@ def main() -> int:
     args = _parse_args()
     config = load_corpus_config(args.config)
     jar = str(bridge_jar(os.environ))
+    dirs = copybook_dirs(config)
     todo = _planned(config, args)
     if not todo:
         return 0
-    return _run(todo, config, args, jar)
+    return _run(todo, dirs, config, args, jar)
 
 
 if __name__ == "__main__":
