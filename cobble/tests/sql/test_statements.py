@@ -24,4 +24,6 @@ def test_exec_sql_statement_round_trips_to_dict() -> None:
     assert ExecSqlStatement(text=text).to_dict() == {
         "type": "EXEC_SQL",
         "text": text,
+        "whenever_condition": "none",
+        "whenever_goto": "",
     }

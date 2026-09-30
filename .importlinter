@@ -88,13 +88,16 @@ forbidden_modules =
 # Cobble parses, walks the ASG and emits a graph. It never lowers to IR and never
 # executes, so it reaches for the workspace's STATIC surface only: red-dragon's
 # cobol_asg package, cicada's EXEC CICS parsing, jackal's JCL model and parsing,
-# and squall's statement vocabulary.
+# and squall's statement vocabulary. squall.parser is on that surface rather than
+# the forbidden list below: its whole import closure is stdlib, lark and its own
+# sql_model, so it is a grammar-based text-to-model parser, not a runtime, and
+# parsing is what cobble does for a living.
 #
 # Import-linter enforces prohibitions, not permissions, so only the forbidden
 # lists below are machine-checked. The allowed surface -- cobol_asg.*,
 # cobol_memory, cics.{cics_parser,cics_visitor,cics_grammar,csd_parse,statements,
 # bms}, bms_copybook_gen, jackal.{model,dsn,value_parts,tso,jcl.*} and
-# squall.statements -- is stated here because it is what a future extraction of a
+# squall.{statements,parser} -- is stated here because it is what a future extraction of a
 # lean core would have to contain. Keeping the two in step is a review
 # obligation, not an automated one.
 
@@ -138,7 +141,6 @@ forbidden_modules =
     squall.connector
     squall.coprocessor
     squall.dclgen
-    squall.parser
     squall.preprocess
     squall.strategy
     red_dragon_forge

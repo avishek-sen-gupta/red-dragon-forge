@@ -34,7 +34,6 @@ from squall.dclgen_meta import derive_field_meta
 from squall.parser.sql_model import (
     FieldMeta,
     GoTo,
-    Kind,
     ParsedSql,
     WheneverAction,
     WheneverCondition,
@@ -228,18 +227,21 @@ class SqlLoweringStrategy:
         # here is a frontend dispatch bug, not a condition to defend against.
         exec_sql_stmt = cast(ExecSqlStatement, stmt)
 
-        # Parse the directive ONCE, here at lowering time. The statement is
-        # static, so the Lark parse must not run at execution time (it would
-        # re-parse on every pass through a PERFORM loop). The runtime builtin
-        # receives the already-parsed ParsedSql plan and only binds + executes.
-        plan = parse_exec_sql(exec_sql_stmt.text)
-
-        if plan.kind is Kind.WHENEVER:
+        if exec_sql_stmt.whenever_condition is not WheneverCondition.NONE:
             # Precompiler directive: record the (condition -> action) and emit no
             # IR. A Continue/NoOpAction simply overrides any active GoTo so the
-            # emit loop stops branching for that condition.
-            self._whenever[plan.whenever_condition] = plan.whenever_action
+            # emit loop stops branching for that condition. Already parsed at ASG
+            # construction, so the grammar does not run again here.
+            self._whenever[exec_sql_stmt.whenever_condition] = (
+                exec_sql_stmt.whenever_action
+            )
             return
+
+        # Parse the plan ONCE, here at lowering time. The statement is static, so
+        # the Lark parse must not run at execution time (it would re-parse on
+        # every pass through a PERFORM loop). The runtime builtin receives the
+        # already-parsed ParsedSql plan and only binds + executes.
+        plan = parse_exec_sql(exec_sql_stmt.text)
 
         # append() (squall.strategy_stores) is the __exec_sql builtin's own
         # closed-over plan pool -- this is the one place lowering writes to it.

@@ -1,4 +1,11 @@
-from squall.statements import ExecSqlStatement, SqlDialectParser
+from squall.statements import (
+    Continue,
+    ExecSqlStatement,
+    GoTo,
+    NoOpAction,
+    SqlDialectParser,
+    WheneverCondition,
+)
 
 
 class TestSqlDialectParser:
@@ -31,3 +38,40 @@ class TestSqlDialectParser:
         )
 
         assert SqlDialectParser().parse(stmt.to_dict()) == stmt
+
+    def test_a_whenever_directive_is_typed_on_the_statement(self):
+        """The directive is what cobble's CFG needs and what strategy re-parsed
+        on every lowering. Parsed once, here at the ASG boundary."""
+        stmt = SqlDialectParser().parse(
+            {
+                "type": "EXEC_SQL",
+                "exec_sql_text": "EXEC SQL WHENEVER NOT FOUND GO TO NF-PARA END-EXEC",
+            }
+        )
+
+        assert stmt.whenever_condition == WheneverCondition.NOT_FOUND
+        assert stmt.whenever_action == GoTo("NF-PARA")
+
+    def test_a_non_directive_statement_carries_the_null_objects(self):
+        stmt = SqlDialectParser().parse(
+            {
+                "type": "EXEC_SQL",
+                "exec_sql_text": "EXEC SQL SELECT A INTO :B FROM T END-EXEC",
+            }
+        )
+
+        assert stmt.whenever_condition == WheneverCondition.NONE
+        assert stmt.whenever_action == NoOpAction()
+
+    def test_the_directive_survives_the_cache_without_reparsing(self):
+        """Serialised flat, so a cache read reconstructs it instead of running the
+        grammar again for every SQL statement of every member on every stage."""
+        stmt = SqlDialectParser().parse(
+            {
+                "type": "EXEC_SQL",
+                "exec_sql_text": "EXEC SQL WHENEVER SQLERROR CONTINUE END-EXEC",
+            }
+        )
+
+        assert SqlDialectParser().parse(stmt.to_dict()) == stmt
+        assert stmt.whenever_action == Continue()
