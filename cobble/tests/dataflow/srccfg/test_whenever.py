@@ -158,3 +158,35 @@ def test_the_sqlcode_each_condition_tests_is_the_one_db2_defines() -> None:
         "SQLCODE > 0",
         "SQLCODE <> 100",
     ]
+
+
+def test_each_exec_sql_node_is_labelled_with_its_own_verb() -> None:
+    """Uniform EXECSQL told a reader nothing -- a directive, a cursor OPEN and a
+    SELECT were indistinguishable. GENERIC keeps EXECSQL, because inventing a
+    verb for text the parser could not classify would be worse than saying so."""
+    cfg = _cfg(
+        [
+            _para(
+                "MAIN",
+                [
+                    _sql("DECLARE C1 CURSOR FOR SELECT A FROM T"),
+                    _sql("OPEN C1"),
+                    _sql("FETCH C1 INTO :B"),
+                    _sql("SELECT A INTO :B FROM T"),
+                    _sql("UPDATE T SET A = 1"),
+                    _sql("COMMIT"),
+                    _sql("NOT ACTUALLY SQL"),
+                ],
+            )
+        ]
+    )
+
+    assert [n.transfer for n in cfg.nodes if n.id.startswith("MAIN/")] == [
+        "DECLARE CURSOR",
+        "OPEN",
+        "FETCH",
+        "SELECT INTO",
+        "UPDATE",
+        "COMMIT",
+        "EXECSQL",
+    ]

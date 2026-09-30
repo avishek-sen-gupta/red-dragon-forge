@@ -61,9 +61,10 @@ from cobble.dataflow.srccfg.synthetic import (
 )
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
-from squall.statements import WheneverCondition
+from squall.statements import Kind, WheneverCondition
 
 GOTO_TRANSFER = "GO TO"
+SQL_TRANSFER = "EXECSQL"
 DISPATCH_TRANSFER = "GO TO DEPENDING"
 PERFORM_TRANSFER = "PERFORM"
 RANGE_SEPARATOR = "|"
@@ -987,11 +988,33 @@ def _exec_sql(statement, ctx: Ctx, path: str) -> Fragment:
     """
     if statement.whenever_condition is not WheneverCondition.NONE:
         return EMPTY_FRAGMENT
-    body = _plain(statement, ctx, path)
+    body = _labelled(_plain(statement, ctx, path), _sql_transfer(statement.kind))
     governing = ctx.whenever.get(node_id(ctx, path), ())
     return seq(
         (body, _whenever_guards(ctx, path, governing, 0)),
         nop_id=node_id(ctx, path, "#sql.join"),
+    )
+
+
+def _sql_transfer(kind: Kind) -> str:
+    """The statement's own SQL verb, rather than a uniform EXECSQL for all of
+    them. Kind's values are the grammar's rule names, so OPEN is ``open_`` and a
+    SELECT ... INTO is ``select_into``; GENERIC is what the parser returns for a
+    block it could not classify, which keeps the label it always had."""
+    if kind is Kind.GENERIC:
+        return SQL_TRANSFER
+    return kind.value.rstrip("_").replace("_", " ").upper()
+
+
+def _labelled(fragment: Fragment, transfer: str) -> Fragment:
+    return Fragment(
+        nodes=tuple(
+            replace(node, transfer=transfer) if node.id == fragment.entry else node
+            for node in fragment.nodes
+        ),
+        edges=fragment.edges,
+        entry=fragment.entry,
+        exits=fragment.exits,
     )
 
 
