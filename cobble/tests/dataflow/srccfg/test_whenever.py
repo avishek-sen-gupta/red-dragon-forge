@@ -190,3 +190,27 @@ def test_each_exec_sql_node_is_labelled_with_its_own_verb() -> None:
         "COMMIT",
         "EXECSQL",
     ]
+
+
+def test_a_directive_db2_does_not_define_still_emits_no_node_and_no_edge() -> None:
+    """The grammar admits conditions and actions Db2 does not define. None of
+    them may reach the CFG as a jump: reading `DO HANDLER()` as a GO TO once
+    produced an edge to a paragraph named ')'. They are directives all the same,
+    so they contribute no node either."""
+    cfg = _cfg(
+        [
+            _para(
+                "MAIN",
+                [
+                    _sql("WHENEVER MYCOND GO TO H"),
+                    _sql("WHENEVER SQLERROR DO HANDLER()"),
+                    _sql("WHENEVER NOT FOUND STOP"),
+                    _sql("SELECT A INTO :B FROM T"),
+                ],
+            ),
+            _para("H", [{"type": "STOP_RUN"}]),
+        ]
+    )
+
+    assert [n.id for n in cfg.nodes if n.id.startswith("MAIN/")] == ["MAIN/3"]
+    assert [e.target for e in cfg.edges if "whenever" in e.source] == []

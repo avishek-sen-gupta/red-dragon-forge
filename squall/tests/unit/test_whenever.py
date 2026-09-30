@@ -8,6 +8,8 @@ SQLCODE branching. Slice 1: SQLERROR / NOT FOUND with CONTINUE / GO TO.
 
 from __future__ import annotations
 
+import pytest
+
 from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import (
     Continue,
@@ -110,3 +112,41 @@ def test_whenever_goto_emits_conditional_branch(bridge_jar=None):
     assert any(
         isinstance(i, BranchIf) for i in linked.merged_ir
     ), "expected a conditional branch from the synthetic WHENEVER IF/GO TO"
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["DO HANDLER()", "PERFORM ERR-PARA", "STOP"],
+    ids=["do", "perform", "stop"],
+)
+def test_an_action_db2_does_not_define_is_not_a_jump(action: str) -> None:
+    """PERFORM/STOP/DO are Pro*COBOL, not Db2. Reading them as GO TO invented a
+    target -- `DO HANDLER()` became GoTo(')') and `STOP` a jump to a paragraph
+    named STOP -- which a CFG then drew an edge to."""
+    plan = parse_exec_sql(f"EXEC SQL WHENEVER SQLERROR {action} END-EXEC")
+
+    assert plan.whenever_condition == WheneverCondition.SQLERROR
+    assert plan.whenever_action == NoOpAction()
+
+
+def test_not_found_with_an_unsupported_action_is_unmodelled_rather_than_fatal() -> None:
+    """This used to raise out of the enum lookup, which reached cobble's corpus
+    parse as a member it could no longer parse at all.
+
+    The condition still comes back NONE rather than NOT_FOUND: the opaque-run
+    action alternative takes FOUND, leaving the condition tokens as bare NOT.
+    Binding NOT FOUND tighter is grammar surgery that buys nothing here, because
+    PERFORM is an action Db2 does not define and no branch is emitted for it
+    either way. What matters is that it neither raises nor invents a jump."""
+    plan = parse_exec_sql("EXEC SQL WHENEVER NOT FOUND PERFORM H END-EXEC")
+
+    assert plan.whenever_condition == WheneverCondition.NONE
+    assert plan.whenever_action == NoOpAction()
+
+
+def test_a_condition_db2_does_not_define_does_not_raise() -> None:
+    """The grammar admits a bare NAME as a condition, so an unguarded enum
+    lookup turned a dialect-specific condition into an exception."""
+    plan = parse_exec_sql("EXEC SQL WHENEVER MYCOND GO TO H END-EXEC")
+
+    assert plan.whenever_condition == WheneverCondition.NONE

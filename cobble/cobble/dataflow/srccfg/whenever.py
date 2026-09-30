@@ -26,6 +26,7 @@ from cobol_asg.cobol_statements import CobolStatementType
 from squall.statements import (
     ExecSqlStatement,
     GoTo,
+    Kind,
     WheneverAction,
     WheneverCondition,
 )
@@ -53,9 +54,12 @@ def governing_directives(asg: CobolASG) -> Mapping[str, Governing]:
 
 
 def _is_executable_sql(statement: CobolStatementType) -> bool:
+    """A directive is recognised by its KIND, not by whether its condition parsed.
+    The grammar admits conditions Db2 does not define, and those come back NONE --
+    keying on the condition would lower such a directive as an executable
+    statement and give it a node."""
     return (
-        isinstance(statement, ExecSqlStatement)
-        and statement.whenever_condition is WheneverCondition.NONE
+        isinstance(statement, ExecSqlStatement) and statement.kind is not Kind.WHENEVER
     )
 
 
@@ -63,18 +67,19 @@ def _advance(active: Active, entry: Entry) -> Active:
     _, statement = entry
     if not isinstance(statement, ExecSqlStatement):
         return active
-    if statement.whenever_condition is WheneverCondition.NONE:
+    if statement.kind is not Kind.WHENEVER:
         return active
     return {**active, statement.whenever_condition: statement.whenever_action}
 
 
 def _active_gotos(active: Active) -> Governing:
-    """Only the conditions whose action is a GO TO. CONTINUE overrides an earlier
-    GO TO by replacing it with an action that names no label."""
+    """Only conditions whose action is a GO TO and whose SQLCA test is known.
+    CONTINUE overrides an earlier GO TO by replacing it with an action that names
+    no label, and a condition Db2 does not define has no predicate to guard on."""
     return tuple(
         (condition, action.target)
         for condition, action in active.items()
-        if isinstance(action, GoTo)
+        if isinstance(action, GoTo) and condition in SQLCA_CONDITIONS
     )
 
 
