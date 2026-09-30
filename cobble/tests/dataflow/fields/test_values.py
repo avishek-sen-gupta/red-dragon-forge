@@ -23,11 +23,18 @@ def test_a_set_over_the_budget_keeps_the_lowest_sorted_and_records_the_overflow(
     assert result.values == frozenset(sorted(values)[:MAX_VALUES])
     assert result.reasons == frozenset({UnresolvedReason.OVER_BUDGET})
     assert result.complete is False
+    assert bounded(frozenset({b"PGMA"}), frozenset()) == of_value(b"PGMA")
 
 
 def test_merging_unions_both_components_and_re_applies_the_budget():
     left = ValueSet(frozenset({b"PGMA"}), frozenset({UnresolvedReason.FROM_FILE}))
     right = ValueSet(frozenset({b"PGMB"}), frozenset({UnresolvedReason.NO_EXTENT}))
+    big = bounded(
+        frozenset(f"A{n:07d}".encode() for n in range(MAX_VALUES - 2)), frozenset()
+    )
+    other = bounded(
+        frozenset(f"B{n:07d}".encode() for n in range(MAX_VALUES - 2)), frozenset()
+    )
 
     assert merged(left, right) == ValueSet(
         frozenset({b"PGMA", b"PGMB"}),
@@ -35,6 +42,9 @@ def test_merging_unions_both_components_and_re_applies_the_budget():
     )
     assert merged(of_value(b"PGMA"), EMPTY) == of_value(b"PGMA")
     assert merged(EMPTY, EMPTY).complete is True
+    assert big.complete is True and other.complete is True
+    assert len(merged(big, other).values) == MAX_VALUES
+    assert merged(big, other).reasons == frozenset({UnresolvedReason.OVER_BUDGET})
 
 
 def test_a_value_is_truncated_or_space_filled_to_the_field_width():
