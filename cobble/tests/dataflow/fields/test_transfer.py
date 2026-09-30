@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 from cobble.dataflow.fields.extent import operand_extents
-from cobble.dataflow.fields.state import EMPTY, reaching
+from cobble.dataflow.fields.state import EMPTY, reaching, values_at
 from cobble.dataflow.fields.transfer import transfer
+from cobble.dataflow.fields.values import of_value
+from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.cobol_expression import LiteralNode
 from cobol_asg.ref_mod import RefModOperand
 
@@ -598,3 +600,29 @@ def test_an_unsubscripted_cics_commarea_is_written_exactly_as_before(
     )
     state, index = after(asg)
     assert names_reaching(state, index, "WS-COMM") == {"%CALL:'SUBPROG'"}
+
+
+def test_a_literal_move_carries_its_text_fitted_to_the_target(
+    index_of, program_of, field
+):
+    asg = program_of(
+        [],
+        paragraphs=[
+            {
+                "name": "MAIN",
+                "statements": [
+                    {
+                        "type": "MOVE",
+                        "operands": [{"name": "'COSGN00C'"}, {"name": "WS-PGM"}],
+                    }
+                ],
+            }
+        ],
+        data_fields=[field(1, "WS-PGM", "X(8)")],
+    )
+    index = index_of(asg)
+    statement = statement_index(asg)[next(iter(statement_index(asg)))]
+    after = transfer(statement, "n1", EMPTY, index)
+    target = index.extent_of(index.cells_named("WS-PGM", (), 0)[0])
+
+    assert values_at(after, target) == of_value(b"COSGN00C")

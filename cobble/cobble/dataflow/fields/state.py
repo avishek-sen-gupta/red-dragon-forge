@@ -65,6 +65,11 @@ class Source:
 _NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})
 _NO_VALUES: Mapping[FieldExtent, ValueSet] = MappingProxyType({})
 
+# Reasons a missing entry already conveys, so storing them buys nothing.
+_UNINFORMATIVE = frozenset(
+    {UnresolvedReason.NOT_A_LITERAL, UnresolvedReason.UNINITIALISED}
+)
+
 
 @dataclass(frozen=True, slots=True)
 class State:
@@ -87,11 +92,27 @@ def _joined_sources(
     left: Mapping[FieldExtent, frozenset[Source]],
     right: Mapping[FieldExtent, frozenset[Source]],
 ) -> Mapping[FieldExtent, frozenset[Source]]:
-    union_extents = (*left, *(extent for extent in right if extent not in left))
+    """Every extent from either side, its sources unioned where both hold one.
+
+    Short-circuits on an empty or identical ``right`` return ``left`` itself
+    rather than a rebuilt copy, and likewise for an empty ``left`` -- every one
+    of these maps is a read-only ``MappingProxyType`` nothing mutates, so handing
+    back the same object is safe. ``FieldExtent``'s hash is expensive (two Enum
+    fields going through ``Enum.__hash__``), and the old union-then-lookup shape
+    hashed every extent three times over the whole union; ``{**left, **right}``
+    walks only ``right``'s entries once each.
+    """
+    if left is right or not right:
+        return left
+    if not left:
+        return right
     return MappingProxyType(
         {
-            extent: left.get(extent, frozenset()) | right.get(extent, frozenset())
-            for extent in union_extents
+            **left,
+            **{
+                extent: (left[extent] | held) if extent in left else held
+                for extent, held in right.items()
+            },
         }
     )
 
@@ -99,21 +120,34 @@ def _joined_sources(
 def _joined_values(
     left: Mapping[FieldExtent, ValueSet], right: Mapping[FieldExtent, ValueSet]
 ) -> Mapping[FieldExtent, ValueSet]:
-    if not left and not right:
-        return _NO_VALUES
-    union_extents = (*left, *(extent for extent in right if extent not in left))
+    """Every extent from either side, its values merged where both hold one.
+
+    Same short-circuits and the same reason as ``_joined_sources``.
+    """
+    if left is right or not right:
+        return left
+    if not left:
+        return right
     return MappingProxyType(
         {
-            extent: merged(
-                left.get(extent, VALUES_EMPTY), right.get(extent, VALUES_EMPTY)
-            )
-            for extent in union_extents
+            **left,
+            **{
+                extent: merged(left[extent], held) if extent in left else held
+                for extent, held in right.items()
+            },
         }
     )
 
 
 def join(left: State, right: State) -> State:
-    """Union of both components, extent by extent. Order does not matter."""
+    """Union of both components, extent by extent. Order does not matter.
+
+    ``left is right`` is the fixpoint's own common case -- a node joined against
+    itself once its in-state has settled -- and short-circuits before either
+    component is touched.
+    """
+    if left is right:
+        return left
     return State(
         sources=_joined_sources(left.sources, right.sources),
         values=_joined_values(left.values, right.values),
@@ -128,16 +162,34 @@ def _kept_values(
     Nothing to store and nothing already held means nothing to build: most
     programs declare no ``VALUE`` clause, and a fresh proxy over an empty
     comprehension on every write would allocate for a map that only ever holds
-    nothing. A bare reason with no values is still real information, so it
-    always takes the normal path.
+    nothing.
+
+    The map holds only what a lookup could not otherwise infer. A ``ValueSet``
+    with no values whose reasons are all in ``_UNINFORMATIVE`` carries nothing an
+    absent entry does not already say: both ``values_at`` and ``exact_values``
+    return exactly ``because(NOT_A_LITERAL)``-or-``UNINITIALISED`` on a miss, so a
+    non-literal MOVE target and a field-to-field MOVE whose source has no known
+    value each restate, at a real map entry, what the absence of that entry would
+    already have told the caller. That redundancy is what grew ``state.values``
+    to the size of ``state.sources`` and made ``_joined_values`` cost as much as
+    ``_joined_sources``. ``FROM_FILE``, ``FROM_CALLEE`` and the rest are not in
+    the set, because a miss does not convey any of them -- they are still stored.
+
+    The ``must_cover`` kill runs unconditionally, whether or not anything gets
+    stored: a stale value surviving a write that overwrote it would report a
+    value the program cannot hold, and that is true whether the new write says
+    "not a literal" or says nothing worth a map entry at all.
     """
-    if not state.values and not values.values and not values.reasons:
+    worth_storing = bool(values.values) or not values.reasons <= _UNINFORMATIVE
+    if not state.values and not worth_storing:
         return _NO_VALUES
     surviving = {
         extent: held
         for extent, held in state.values.items()
         if not target.must_cover(extent)
     }
+    if not worth_storing:
+        return MappingProxyType(surviving) if surviving else _NO_VALUES
     return MappingProxyType(
         {**surviving, target: merged(surviving.get(target, VALUES_EMPTY), values)}
     )
@@ -203,6 +255,8 @@ def values_at(state: State, read: FieldExtent) -> ValueSet:
     literals would produce a plausible name the program can never hold, and a wrong
     answer here becomes a wrong edge in the graph.
     """
+    if not state.values:
+        return because(UnresolvedReason.UNINITIALISED)
     found = tuple(
         _sliced(held, extent, read)
         for extent, held in state.values.items()
@@ -213,3 +267,20 @@ def values_at(state: State, read: FieldExtent) -> ValueSet:
     if not found:
         return because(UnresolvedReason.UNINITIALISED)
     return reduce(merged, found, VALUES_EMPTY)
+
+
+def exact_values(state: State, read: FieldExtent) -> ValueSet:
+    """The values held at exactly ``read``'s own extent, or why there are none.
+
+    One dict hit, for the transfer's hot path: a MOVE asks this once per source
+    extent on every statement, and ``values_at``'s containment scan costs
+    O(|state.values|) per call, which over a large member's writes is what makes
+    the walk quadratic.
+
+    The trade is deliberate. A source read through a different name than the one
+    that declared its value -- a redefined table read as CDEMO-MENU-OPT-PGMNAME
+    where the value was declared on the FILLER beneath it -- misses here and
+    reports UNINITIALISED rather than the value. That aliasing matters at a call
+    site, not in a MOVE chain, and ``values_at`` keeps the scan for exactly that.
+    """
+    return state.values.get(read, because(UnresolvedReason.UNINITIALISED))

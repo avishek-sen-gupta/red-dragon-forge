@@ -34,11 +34,25 @@ from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
 from cobble.dataflow.fields.state import (
     CICS_STATE,
+    EMPTY,
     LITERAL,
     NOWHERE,
     Source,
     State,
+    exact_values,
     write,
+)
+from cobble.dataflow.fields.values import (
+    EMPTY as VALUES_EMPTY,
+)
+from cobble.dataflow.fields.values import (
+    UnresolvedReason,
+    ValueSet,
+    because,
+    fitted,
+    merged,
+    of_value,
+    refitted,
 )
 from cobble.dataflow.srccfg.literals import is_literal
 from cobol_asg.cobol_expression import ExprNode, FieldRefNode, RefModNode
@@ -71,11 +85,14 @@ class Write:
 
     target: FieldExtent
     sources: frozenset[Source]
+    values: ValueSet
 
 
 def _applied(state: State, writes: Iterator[Write]) -> State:
     return reduce(
-        lambda held, entry: write(held, entry.target, entry.sources), writes, state
+        lambda held, entry: write(held, entry.target, entry.sources, entry.values),
+        writes,
+        state,
     )
 
 
@@ -102,11 +119,31 @@ def _unresolved_origin(operand: RefModOperand, reason: str) -> str:
     return reason.upper()
 
 
+def _literal_value(operand: RefModOperand, width: int) -> ValueSet:
+    """A quoted literal's own bytes; anything else is not a literal."""
+    if not is_literal(operand.name):
+        return because(UnresolvedReason.NOT_A_LITERAL)
+    text = operand.name.strip()
+    if not (text[:1] in "'\"" and text[-1:] == text[:1]):
+        return because(UnresolvedReason.NOT_A_LITERAL)
+    return of_value(fitted(text[1:-1].encode("utf-8", errors="replace"), width))
+
+
+def _carried(state: State, extents: tuple[FieldExtent, ...], width: int) -> ValueSet:
+    return refitted(
+        reduce(
+            merged, (exact_values(state, extent) for extent in extents), VALUES_EMPTY
+        ),
+        width,
+    )
+
+
 def _one_move(
     operand: RefModOperand,
     sources: OperandExtents,
     target: FieldExtent,
     node: str,
+    state: State,
 ) -> Iterator[Write]:
     """The whole target from the whole source, or from a named origin.
 
@@ -117,8 +154,24 @@ def _one_move(
     """
     if not sources.extents:
         origin = _unresolved_origin(operand, sources.reason)
-        return iter((Write(target, _synthetic(origin, node)),))
-    return iter((Write(target, _from_extents(sources.extents, node)),))
+        return iter(
+            (
+                Write(
+                    target,
+                    _synthetic(origin, node),
+                    values=_literal_value(operand, target.length),
+                ),
+            )
+        )
+    return iter(
+        (
+            Write(
+                target,
+                _from_extents(sources.extents, node),
+                values=_carried(state, sources.extents, target.length),
+            ),
+        )
+    )
 
 
 def _source_operand(statement: MoveStatement) -> RefModOperand:
@@ -132,7 +185,7 @@ def _move_targets(statement: MoveStatement) -> tuple[RefModOperand, ...]:
 
 
 def _move_writes(
-    statement: MoveStatement, node: str, index: CellIndex
+    statement: MoveStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     sources = operand_extents(statement.source, index)
     operand = _source_operand(statement)
@@ -140,7 +193,7 @@ def _move_writes(
         entry
         for target_operand in _move_targets(statement)
         for target in operand_extents(target_operand, index).extents
-        for entry in _one_move(operand, sources, target, node)
+        for entry in _one_move(operand, sources, target, node, state)
     )
 
 
@@ -149,7 +202,7 @@ def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, 
 
 
 def _initialize_writes(
-    statement: InitializeStatement, node: str, index: CellIndex
+    statement: InitializeStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     """The group's whole extent, from LITERAL -- not one write per child cell.
 
@@ -158,8 +211,18 @@ def _initialize_writes(
     group's own extent already contains. Which children those are is in the
     declared extents, which a consumer intersects against this one, so the
     fan-out was a per-edge restatement of the layout.
+
+    ``INITIALIZE`` sets a category default this unit does not model, so the
+    value is ``NOT_A_LITERAL`` rather than the literal bytes a numeric
+    INITIALIZE actually zeroes.
     """
-    return _origin_writes(_initialize_targets(statement), LITERAL, node, index)
+    return _origin_writes(
+        _initialize_targets(statement),
+        LITERAL,
+        node,
+        index,
+        values=because(UnresolvedReason.NOT_A_LITERAL),
+    )
 
 
 def _named_stubs(reads: tuple[RefModOperand, ...], index: CellIndex) -> tuple[str, ...]:
@@ -189,6 +252,9 @@ def _union_writes(
     When a read operand has no resolvable extents but carries a name that is not
     a literal, a synthetic ``FIELD:<name>`` source is emitted so backward
     provenance queries name the unresolvable input rather than reporting nothing.
+
+    A ``STRING``/arithmetic/``COMPUTE`` result is never a literal, so the value
+    is always ``NOT_A_LITERAL``.
     """
     every = tuple(
         extent
@@ -199,7 +265,7 @@ def _union_writes(
     stub_src = _synthetic(f"FIELD:{','.join(stubs)}", node) if stubs else frozenset()
     sources = _from_extents(every, node) | stub_src
     return (
-        Write(target, sources)
+        Write(target, sources, values=because(UnresolvedReason.NOT_A_LITERAL))
         for operand in targets
         for target in operand_extents(operand, index).extents
     )
@@ -220,7 +286,7 @@ def _arithmetic_targets(statement: ArithmeticStatement) -> tuple[RefModOperand, 
 
 
 def _arithmetic_writes(
-    statement: ArithmeticStatement, node: str, index: CellIndex
+    statement: ArithmeticStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _union_writes(
         (statement.source, statement.target),
@@ -252,7 +318,7 @@ def _compute_targets(statement: ComputeStatement) -> tuple[RefModOperand, ...]:
 
 
 def _compute_writes(
-    statement: ComputeStatement, node: str, index: CellIndex
+    statement: ComputeStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _union_writes(
         _expression_reads(statement.expression),
@@ -267,7 +333,7 @@ def _string_targets(statement: StringStatement) -> tuple[RefModOperand, ...]:
 
 
 def _string_writes(
-    statement: StringStatement, node: str, index: CellIndex
+    statement: StringStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _union_writes(
         tuple(sending.value for sending in statement.sendings),
@@ -278,7 +344,11 @@ def _string_writes(
 
 
 def _origin_writes(
-    operands: tuple[RefModOperand, ...], origin: str, node: str, index: CellIndex
+    operands: tuple[RefModOperand, ...],
+    origin: str,
+    node: str,
+    index: CellIndex,
+    values: ValueSet,
 ) -> Iterator[Write]:
     """Write ``origin`` to every target extent.
 
@@ -287,7 +357,7 @@ def _origin_writes(
     trace rather than silently dropped.
     """
     resolved = tuple(
-        Write(target, _synthetic(origin, node))
+        Write(target, _synthetic(origin, node), values=values)
         for operand in operands
         for target in operand_extents(operand, index).extents
     )
@@ -295,7 +365,8 @@ def _origin_writes(
         return iter(resolved)
     stub_targets = tuple(op for op in operands if op.name and not is_literal(op.name))
     return iter(
-        Write(NOWHERE, _synthetic(f"{origin}→{op.name}", node)) for op in stub_targets
+        Write(NOWHERE, _synthetic(f"{origin}→{op.name}", node), values=values)
+        for op in stub_targets
     )
 
 
@@ -304,13 +375,14 @@ def _read_targets(statement: ReadStatement) -> tuple[RefModOperand, ...]:
 
 
 def _read_writes(
-    statement: ReadStatement, node: str, index: CellIndex
+    statement: ReadStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _origin_writes(
         _read_targets(statement),
         f"FILE:{statement.file_name}",
         node,
         index,
+        values=because(UnresolvedReason.FROM_FILE),
     )
 
 
@@ -347,10 +419,14 @@ def _call_origin(statement: CallStatement) -> str:
 
 
 def _call_writes(
-    statement: CallStatement, node: str, index: CellIndex
+    statement: CallStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _origin_writes(
-        _call_targets(statement), _call_origin(statement), node, index
+        _call_targets(statement),
+        _call_origin(statement),
+        node,
+        index,
+        values=because(UnresolvedReason.FROM_CALLEE),
     )
 
 
@@ -384,6 +460,13 @@ def _cics_origin(statement: ExecCicsStatement) -> str:
     return CICS_STATE
 
 
+def _cics_values(statement: ExecCicsStatement) -> ValueSet:
+    """A file verb's target came from the file; anything else is unmodeled CICS state."""
+    if statement.verb.upper() in _CICS_FILE_VERBS:
+        return because(UnresolvedReason.FROM_FILE)
+    return because(UnresolvedReason.NOT_A_LITERAL)
+
+
 def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
     """LINK and XCTL write through the COMMAREA; everything else through a receiver."""
     if statement.verb.upper() in _CICS_CALL_VERBS:
@@ -394,7 +477,7 @@ def _cics_targets(statement: ExecCicsStatement) -> tuple[RefModOperand, ...]:
 
 
 def _cics_writes(
-    statement: ExecCicsStatement, node: str, index: CellIndex
+    statement: ExecCicsStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     if statement.verb.upper() in _CICS_CALL_VERBS:
         return _origin_writes(
@@ -402,13 +485,20 @@ def _cics_writes(
             f"%CALL:{_option(statement, 'PROGRAM')}",
             node,
             index,
+            values=because(UnresolvedReason.FROM_CALLEE),
         )
     return _origin_writes(
-        _cics_targets(statement), _cics_origin(statement), node, index
+        _cics_targets(statement),
+        _cics_origin(statement),
+        node,
+        index,
+        values=_cics_values(statement),
     )
 
 
-def _no_writes(statement: Statement, node: str, index: CellIndex) -> Iterator[Write]:
+def _no_writes(
+    statement: Statement, node: str, index: CellIndex, state: State
+) -> Iterator[Write]:
     return iter(())
 
 
@@ -457,7 +547,9 @@ _TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
 )
 
 
-def writes_of(statement: Statement, node: str, index: CellIndex) -> tuple[Write, ...]:
+def writes_of(
+    statement: Statement, node: str, index: CellIndex, state: State = EMPTY
+) -> tuple[Write, ...]:
     """Every extent ``statement`` writes and what reaches each one.
 
     Public because an edge has to come from the writes themselves and not from
@@ -465,9 +557,13 @@ def writes_of(statement: Statement, node: str, index: CellIndex) -> tuple[Write,
     in-state when the statement runs again, so the diff would be empty and the
     edge would vanish -- silently, which is the failure mode this whole module is
     arranged against.
+
+    ``state`` defaults to empty because only a transfer needs a source field's
+    current value to carry it forward; provenance-only callers (extraction, the
+    trace walk) want no values and pass none.
     """
     handler = _WRITES_BY_KIND.get(type(statement).__name__, _no_writes)
-    return tuple(handler(statement, node, index))
+    return tuple(handler(statement, node, index, state))
 
 
 def transfer(statement: Statement, node: str, state: State, index: CellIndex) -> State:
@@ -477,7 +573,7 @@ def transfer(statement: Statement, node: str, state: State, index: CellIndex) ->
     what this does dispatch on, so a coverage measurement can subtract the rest
     rather than credit it as analysed.
     """
-    return _applied(state, iter(writes_of(statement, node, index)))
+    return _applied(state, iter(writes_of(statement, node, index, state)))
 
 
 def write_operands(statement: Statement) -> tuple[RefModOperand, ...]:
