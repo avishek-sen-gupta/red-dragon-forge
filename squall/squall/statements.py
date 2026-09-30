@@ -12,6 +12,7 @@ from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import (
     Continue,
     GoTo,
+    Kind,
     NoOpAction,
     WheneverAction,
     WheneverCondition,
@@ -21,6 +22,7 @@ __all__ = [
     "Continue",
     "ExecSqlStatement",
     "GoTo",
+    "Kind",
     "NoOpAction",
     "SqlDialectParser",
     "WheneverAction",
@@ -39,6 +41,7 @@ class ExecSqlStatement:
     text: str
     whenever_condition: WheneverCondition = WheneverCondition.NONE
     whenever_action: WheneverAction = field(default_factory=NoOpAction)
+    kind: Kind = Kind.GENERIC
 
     def to_dict(self) -> dict:
         """Flat, string-valued, and always both directive keys.
@@ -53,6 +56,7 @@ class ExecSqlStatement:
             "text": self.text,
             "whenever_condition": self.whenever_condition.value,
             "whenever_goto": _goto_target(self.whenever_action),
+            "sql_kind": self.kind.value,
         }
 
 
@@ -88,7 +92,12 @@ def _goto_target(action: WheneverAction) -> str:
 def _from_cache(text: str, data: Mapping[str, str]) -> ExecSqlStatement:
     condition = WheneverCondition(data.get("whenever_condition") or "none")
     target = data.get("whenever_goto") or ""
-    return ExecSqlStatement(text, condition, _cached_action(condition, target))
+    return ExecSqlStatement(
+        text,
+        condition,
+        _cached_action(condition, target),
+        Kind(data.get("sql_kind") or Kind.GENERIC.value),
+    )
 
 
 def _cached_action(condition: WheneverCondition, target: str) -> WheneverAction:
@@ -103,4 +112,6 @@ def _cached_action(condition: WheneverCondition, target: str) -> WheneverAction:
 
 def _from_source(text: str) -> ExecSqlStatement:
     plan = parse_exec_sql(text)
-    return ExecSqlStatement(text, plan.whenever_condition, plan.whenever_action)
+    return ExecSqlStatement(
+        text, plan.whenever_condition, plan.whenever_action, plan.kind
+    )

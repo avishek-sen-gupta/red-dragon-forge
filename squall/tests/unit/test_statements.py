@@ -2,6 +2,7 @@ from squall.statements import (
     Continue,
     ExecSqlStatement,
     GoTo,
+    Kind,
     NoOpAction,
     SqlDialectParser,
     WheneverCondition,
@@ -75,3 +76,21 @@ class TestSqlDialectParser:
 
         assert SqlDialectParser().parse(stmt.to_dict()) == stmt
         assert stmt.whenever_action == Continue()
+
+    def test_the_statement_kind_is_carried_and_survives_the_cache(self):
+        """What the CFG labels a node with. GENERIC is the null object the parser
+        already returns for text it cannot classify, so an unparseable block keeps
+        the label it had rather than inventing one."""
+        select = SqlDialectParser().parse(
+            {
+                "type": "EXEC_SQL",
+                "exec_sql_text": "EXEC SQL SELECT A INTO :B FROM T END-EXEC",
+            }
+        )
+        garbage = SqlDialectParser().parse(
+            {"type": "EXEC_SQL", "exec_sql_text": "EXEC SQL NOT SQL END-EXEC"}
+        )
+
+        assert select.kind == Kind.SELECT_INTO
+        assert garbage.kind == Kind.GENERIC
+        assert SqlDialectParser().parse(select.to_dict()) == select

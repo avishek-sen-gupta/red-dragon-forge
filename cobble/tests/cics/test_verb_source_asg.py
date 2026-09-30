@@ -1,13 +1,12 @@
-from collections.abc import Mapping
-
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cics.statements import ExecCicsStatement
 from cobble.cics.verb_source_asg import _statement_to_verb
 from cobol_asg import cobol_statements
-from squall.statements import ExecSqlStatement
+from cobol_asg.cobol_statements import CobolStatementType
+from squall.statements import ExecSqlStatement, Kind
 
 
-def _parse_under_production_dialects(data: Mapping):
+def _parse_under_production_dialects(data: dict) -> CobolStatementType:
     """Parse one bridge statement dict with the dialect parsers the ASG walk uses."""
     with asg_dialect_parsers_registered():
         return cobol_statements.parse_statement(data)
@@ -16,7 +15,7 @@ def _parse_under_production_dialects(data: Mapping):
 def test_exec_sql_parses_instead_of_raising() -> None:
     text = "EXEC SQL SELECT ACCT_ID INTO :WS-ACCT FROM ACCTDAT END-EXEC"
     stmt = _parse_under_production_dialects({"type": "EXEC_SQL", "exec_sql_text": text})
-    assert stmt == ExecSqlStatement(text=text)
+    assert stmt == ExecSqlStatement(text=text, kind=Kind.SELECT_INTO)
 
 
 def test_exec_cics_still_parses() -> None:
@@ -32,6 +31,7 @@ def _verb_fields(text: str, data_fields=()) -> tuple:
     stmt = _parse_under_production_dialects(
         {"type": "EXEC_CICS", "exec_cics_text": text}
     )
+    assert isinstance(stmt, ExecCicsStatement)
     match _statement_to_verb(stmt, "SOMEPROG", list(data_fields)):
         case None:
             return ()
