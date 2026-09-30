@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
+from cobble.dataflow.fields.side_tables import target_row
+from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import build_corpus
 from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
@@ -23,8 +25,10 @@ from cobble.dataflow.fixpoint.build_corpus import (
     EDGES_FILE,
     EXTENTS_FILE,
     NODES_FILE,
+    TARGETS_FILE,
     cli,
 )
+from cobble.dataflow.fixpoint.targets import ResolvedTarget
 
 
 def _program(program_id: str, target: str = "WS-B") -> dict:
@@ -845,6 +849,91 @@ def _ambiguous_area(target: str) -> dict:
             }
         ],
     }
+
+
+def test_a_dynamic_site_is_one_row_whether_or_not_it_resolved():
+    resolved = ResolvedTarget(
+        caller="PROGA",
+        node="MAIN/3",
+        transfer="CICS_XCTL",
+        expression="WS-PGM",
+        candidates=("COSGN00C",),
+    )
+    unresolved = ResolvedTarget(
+        caller="PROGA",
+        node="MAIN/7",
+        transfer="CICS_XCTL",
+        expression="CDEMO-TO-PROGRAM",
+        reasons=(UnresolvedReason.INBOUND_LINKAGE,),
+        dropped=("",),
+    )
+
+    assert target_row(resolved) == (
+        "PROGA\x00MAIN/3",
+        json.dumps(
+            {
+                "caller": "PROGA",
+                "node": "MAIN/3",
+                "transfer": "CICS_XCTL",
+                "expression": "WS-PGM",
+                "candidates": ["COSGN00C"],
+                "reasons": [],
+                "dropped": [],
+            }
+        ),
+    )
+    assert json.loads(target_row(unresolved)[1])["reasons"] == ["inbound-linkage"]
+
+
+def _two_dynamic_sites() -> dict:
+    """XPROGA, one field, two LINK sites naming it: unresolved before the MOVE,
+    resolved after."""
+    return {
+        "program_id": "XPROGA",
+        "data_fields": [
+            {"level": 1, "name": "WS-TARGET", "pic": "X(8)", "offset": 0},
+        ],
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    _dynamic_link("WS-TARGET"),
+                    _move("'XPROGB'", "WS-TARGET"),
+                    _dynamic_link("WS-TARGET"),
+                ],
+            }
+        ],
+    }
+
+
+def test_a_dynamic_call_site_is_published_whether_or_not_it_resolves(corpus):
+    """The corpus fact a whole-corpus graph build needs: which programs each
+    dynamic CALL/XCTL/LINK site can reach, beside the four graph tables."""
+    argv, out_dir = corpus({"XPROGA": json.dumps(_two_dynamic_sites())})
+
+    assert cli(argv) == 0
+
+    rows = {row["node"]: row for row in _rows(out_dir / TARGETS_FILE)}
+    assert (rows["MAIN/0"]["candidates"], rows["MAIN/0"]["reasons"]) == (
+        [],
+        ["uninitialised"],
+    )
+    assert (rows["MAIN/2"]["candidates"], rows["MAIN/2"]["reasons"]) == (
+        ["XPROGB"],
+        [],
+    )
+
+
+def test_the_report_states_how_dynamic_sites_resolved(corpus, caplog):
+    argv, _ = corpus({"XPROGA": json.dumps(_two_dynamic_sites())})
+
+    with caplog.at_level(logging.INFO):
+        assert cli(argv) == 0
+
+    assert (
+        "fields: 2 dynamic call sites, 1 resolved to one program, 0 to several, "
+        "1 to none (uninitialised 1)" in caplog.text
+    )
 
 
 def test_the_two_alias_counts_can_both_hold_one_site(corpus, caplog):
