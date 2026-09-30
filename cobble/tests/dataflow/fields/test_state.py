@@ -192,3 +192,44 @@ def test_a_write_with_no_known_value_still_erases_the_value_it_overwrites():
     assert values_at(known, extent) == of_value(b"COSGN00C")
     assert values_at(overwritten, extent) == because(UnresolvedReason.UNINITIALISED)
     assert values_at(weakly, extent) == of_value(b"COSGN00C")
+
+
+def test_a_partial_write_invalidates_the_value_it_overwrote_part_of():
+    """A write narrower than a valued extent cannot leave that value standing.
+
+    The kill used to be must_cover alone, which asks whether the writer CONTAINS the
+    victim -- so a reference-modified write into a field declared VALUE 'COSGN00C'
+    changed nothing, and the whole field still read back as that literal with EMPTY
+    reasons: a proven graph edge to a program the site may never reach. Whatever the
+    partial write knew, and whatever its precision -- a CLAMPED slice lands somewhere
+    inside the bytes the value claims, which is enough to make the claim false -- the
+    values go and NOT_A_LITERAL says so.
+
+    The reasons of the entry survive, and an entry holding no values at all is left
+    alone: a write cannot cancel doubt about bytes outside it, and the doubt a callee
+    write-back puts over a whole commarea is what keeps a dynamic site a candidate.
+    """
+    whole = _extent(0, 8, name="WS-PGM")
+    part = _extent(0, 1, name="WS-PGM")
+    clamped_part = _extent(0, 1, precision=Precision.CLAMPED, name="WS-PGM")
+    declared = write(EMPTY, whole, frozenset(), of_value(b"COSGN00C"))
+    from_callee = write(
+        EMPTY, whole, frozenset(), because(UnresolvedReason.FROM_CALLEE)
+    )
+
+    with_literal = write(declared, part, frozenset(), of_value(b"X"))
+    with_unknown = write(
+        declared, part, frozenset(), because(UnresolvedReason.NOT_A_LITERAL)
+    )
+    weakly = write(declared, clamped_part, frozenset(), of_value(b"X"))
+
+    assert values_at(declared, whole) == of_value(b"COSGN00C")
+    assert values_at(with_literal, whole) == because(UnresolvedReason.NOT_A_LITERAL)
+    assert values_at(with_literal, part) == ValueSet(
+        frozenset({b"X"}), frozenset({UnresolvedReason.NOT_A_LITERAL})
+    )
+    assert values_at(with_unknown, whole) == because(UnresolvedReason.NOT_A_LITERAL)
+    assert values_at(weakly, whole) == because(UnresolvedReason.NOT_A_LITERAL)
+    assert values_at(
+        write(from_callee, part, frozenset(), of_value(b"X")), whole
+    ) == because(UnresolvedReason.FROM_CALLEE)

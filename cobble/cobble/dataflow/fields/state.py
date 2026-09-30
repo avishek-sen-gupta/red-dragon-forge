@@ -2,10 +2,19 @@
 
 The governing asymmetry is cobol_memory's: a read matches by ``may_alias``, which
 over-approximates, so provenance survives when overlap is uncertain; a write kills
-only where ``must_cover`` holds, which under-approximates, so a CLAMPED extent --
-a computed subscript -- adds provenance without ever removing any. Getting that
-round the wrong way would drop real edges rather than keep spurious ones, and a
+provenance only where ``must_cover`` holds, which under-approximates, so a CLAMPED
+extent -- a computed subscript -- adds provenance without ever removing any. Getting
+that round the wrong way would drop real edges rather than keep spurious ones, and a
 dropped edge is invisible in the output.
+
+The value half is killed further, and it has to be: a write that changes part of a
+valued extent invalidates the values there without covering the extent, so
+``must_cover`` alone leaves them standing (``_invalidated``). A value is an
+assertion about bytes and the graph promotes a site to a proven edge on the strength
+of one, so a partly overwritten value kept whole is not caution -- it is a call the
+program may never make, asserted as a fact. Doubt is never killed that way: only the
+values go, and the reasons stay, because a write says nothing about the bytes
+outside it.
 
 A state is keyed by extent rather than by field name because a name is not an
 address: two names over one piece of storage are one key here, which is the whole
@@ -75,10 +84,16 @@ _UNINFORMATIVE = frozenset(
 class State:
     """What reaches each extent, and what each extent can hold.
 
-    One object rather than two maps threaded side by side, because both are killed
-    by the same ``must_cover`` rule and a value that outlived the provenance of the
-    write that placed it would be a value the program cannot hold. Joining one and
-    forgetting the other has to be impossible, not merely discouraged.
+    One object rather than two maps threaded side by side, because a value that
+    outlived the provenance of the write that placed it would be a value the
+    program cannot hold. Joining one and forgetting the other has to be
+    impossible, not merely discouraged.
+
+    The two halves are killed by related but different rules. ``sources`` keeps
+    whatever the write does not ``must_cover``, so an over-approximated
+    provenance survives. ``values`` additionally invalidates what the write only
+    partly overwrote, because a value is a claim about bytes and a partly
+    overwritten claim is false rather than merely uncertain. See ``_invalidated``.
     """
 
     sources: Mapping[FieldExtent, frozenset[Source]] = _NO_SOURCES
@@ -154,10 +169,71 @@ def join(left: State, right: State) -> State:
     )
 
 
+def _disjoint(target: FieldExtent, extent: FieldExtent) -> bool:
+    return (
+        target.region is not extent.region
+        or extent.end <= target.start
+        or target.end <= extent.start
+    )
+
+
+def _range_contains(target: FieldExtent, extent: FieldExtent) -> bool:
+    return (
+        target.region is extent.region
+        and target.start <= extent.start
+        and extent.end <= target.end
+    )
+
+
+def _partly_overwritten(target: FieldExtent, extent: FieldExtent) -> bool:
+    """Whether a write to ``target`` changed some of ``extent``'s bytes and not all.
+
+    A write that misses the extent entirely, and one whose range spans the whole of
+    it -- where ``must_cover`` decides, and a CLAMPED span over a table is the weak
+    update ``write`` documents -- are both false here. What is left is the partial
+    write: narrower than the extent, or straddling its edge.
+
+    Asked with the same region/start/end arithmetic ``values_at`` uses, not through
+    ``may_alias``: the kill has to agree with the read that will ask, and
+    ``may_alias`` answers the provenance half's question instead.
+    """
+    return not _disjoint(target, extent) and not _range_contains(target, extent)
+
+
+def _invalidated(held: ValueSet) -> ValueSet:
+    """What an entry still says once a write overwrote part of the bytes it claims.
+
+    The values go. They named the content of a byte range the write has since
+    changed, so keeping them reports a value the program cannot hold -- and with
+    empty reasons, which is what promotes a dynamic call site to a proven edge:
+    ``MOVE X TO WS-PGM(1:1)`` over a field declared ``VALUE 'COSGN00C'`` used to
+    leave the whole field reading back as that literal, with nothing said. Splicing
+    the new bytes into the old ones instead was rejected: the result would be a name
+    assembled from two writes the fixpoint reached separately, the same fabrication
+    ``values_at`` refuses for a read straddling two valued extents.
+
+    The reasons stay, and NOT_A_LITERAL joins them, because a write cannot remove
+    doubt about bytes it did not write. An entry claiming no values in the first
+    place -- a callee write-back's doubt over a whole commarea, which is most of
+    what this map holds at a call site -- has nothing to invalidate and stands as
+    it is, so a narrow MOVE into that commarea does not quietly delete the reason
+    the site is only a candidate.
+    """
+    if not held.values:
+        return held
+    return ValueSet(reasons=held.reasons | {UnresolvedReason.NOT_A_LITERAL})
+
+
+def _after_write(target: FieldExtent, extent: FieldExtent, held: ValueSet) -> ValueSet:
+    if _partly_overwritten(target, extent):
+        return _invalidated(held)
+    return held
+
+
 def _kept_values(
     state: State, target: FieldExtent, values: ValueSet
 ) -> Mapping[FieldExtent, ValueSet]:
-    """The value map after ``target``'s must_cover kill, or the shared empty map.
+    """The value map after ``target``'s kill, or the shared empty map.
 
     Nothing to store and nothing already held means nothing to build: most
     programs declare no ``VALUE`` clause, and a fresh proxy over an empty
@@ -175,16 +251,16 @@ def _kept_values(
     ``_joined_sources``. ``FROM_FILE``, ``FROM_CALLEE`` and the rest are not in
     the set, because a miss does not convey any of them -- they are still stored.
 
-    The ``must_cover`` kill runs unconditionally, whether or not anything gets
-    stored: a stale value surviving a write that overwrote it would report a
-    value the program cannot hold, and that is true whether the new write says
-    "not a literal" or says nothing worth a map entry at all.
+    The kill runs unconditionally, whether or not anything gets stored: a stale
+    value surviving a write that overwrote it would report a value the program
+    cannot hold, and that is true whether the new write says "not a literal" or
+    says nothing worth a map entry at all.
     """
     worth_storing = bool(values.values) or not values.reasons <= _UNINFORMATIVE
     if not state.values and not worth_storing:
         return _NO_VALUES
     surviving = {
-        extent: held
+        extent: _after_write(target, extent, held)
         for extent, held in state.values.items()
         if not target.must_cover(extent)
     }
@@ -201,11 +277,14 @@ def write(
     sources: frozenset[Source],
     values: ValueSet = VALUES_EMPTY,
 ) -> State:
-    """``sources`` and ``values`` reach ``target``; whatever it must_covers stops.
+    """``sources`` and ``values`` reach ``target``; whatever it overwrites stops.
 
     An EXACT target must_covers itself, so it drops its own prior entry in both maps
     -- a strong update. A CLAMPED one covers nothing, so both are kept and this is a
-    weak update. The two components are filtered by one predicate on purpose.
+    weak update. A target narrower than an entry is where the two halves part: the
+    provenance is kept, because a read of the untouched bytes still depends on the
+    write that placed them, while the values go, because ``_value_survives`` says a
+    partly overwritten value is a false claim rather than an imprecise one.
     """
     kept_sources = {
         extent: held
