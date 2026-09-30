@@ -25,6 +25,10 @@ wants the definers joins on the pair it already names.
 own table because a row belongs to neither program's flow graph -- it is the
 relation between them.
 
+``targets.jsonl`` says which programs a dynamic CALL/XCTL/LINK site can reach.
+Its own table for the same reason as ``aliases.jsonl``: a call site's possible
+callees are not a fact about either program's field graph.
+
 Same temp-and-rename discipline as GraphWriter, so a crashed run leaves no
 truncated file, and the same keep-first dedupe: two members declaring one
 program_id is normal on a real corpus, and the first one analysed is the one
@@ -39,6 +43,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.sink_state import FirstSighting
 
 
@@ -150,6 +155,30 @@ def alias_row(alias: CommareaAlias) -> _Row:
                 "callee_extent": alias.callee_extent,
                 "returns": alias.returns,
                 "reason": alias.reason,
+            }
+        ),
+    )
+
+
+def target_row(target: ResolvedTarget) -> _Row:
+    """One dynamic call site's row, identified by its caller and the node that names it.
+
+    Every site is a row, including one that resolved to nothing -- a reader can then
+    tell "we looked and could not say" from "there is no such site", which an absent
+    row cannot express. Reasons serialise as their enum values; the enum is the type
+    and the string is the wire.
+    """
+    return (
+        f"{target.caller}\x00{target.node}",
+        json.dumps(
+            {
+                "caller": target.caller,
+                "node": target.node,
+                "transfer": target.transfer,
+                "expression": target.expression,
+                "candidates": list(target.candidates),
+                "reasons": [reason.value for reason in target.reasons],
+                "dropped": list(target.dropped),
             }
         ),
     )

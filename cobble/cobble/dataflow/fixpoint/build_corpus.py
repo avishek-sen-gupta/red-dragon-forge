@@ -4,13 +4,14 @@ No JVM: the ASG cache is the whole input. A member that raises is reported and t
 run continues, because the answer wanted from a corpus pass is "which members are
 missing from this output", and a run that aborts answers that for one member only.
 
-Five files, so that the graph holds only what nothing outside it could state:
+Six files, so that the graph holds only what nothing outside it could state:
 
   nodes.jsonl    the FIELD endpoints, no attributes
   edges.jsonl    one FLOWS_TO per (node, source extent, target extent)
   extents.jsonl  every declared name's level, usage, and byte ranges
   defs.jsonl     the definitions reaching each (node, source extent)
   aliases.jsonl  per call site and caller window, the bytes shared with a callee
+  targets.jsonl  per dynamic call site, the candidate programs it can reach
 
 An aliases row is one LINK/XCTL/CALL site and one caller window: the bytes the
 caller and the callee both address, or the named reason they share none. The
@@ -93,10 +94,12 @@ from cobble.dataflow.fields.side_tables import (
     defs_row,
     extent_row,
     jsonl_writer,
+    target_row,
 )
 from cobble.dataflow.fixpoint.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
+from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter
 from cobble.path_utils import ensure_dir
@@ -109,6 +112,7 @@ EDGES_FILE = "edges.jsonl"
 EXTENTS_FILE = "extents.jsonl"
 DEFS_FILE = "defs.jsonl"
 ALIASES_FILE = "aliases.jsonl"
+TARGETS_FILE = "targets.jsonl"
 DEFAULT_FLOOR = 0.60
 
 
@@ -129,6 +133,7 @@ class MemberResult:
     extents: tuple[FieldExtents, ...] = ()
     defs: tuple[ReachingDefs, ...] = ()
     aliases: tuple[CommareaAlias, ...] = ()
+    targets: tuple[ResolvedTarget, ...] = ()
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
@@ -155,6 +160,10 @@ class RunTotals:
     programs: tuple[tuple[str, str], ...] = ()
     aliased: int = 0
     dead_ends: tuple[str, ...] = ()
+    dynamic_sites: int = 0
+    resolved_one: int = 0
+    resolved_several: int = 0
+    unresolved_reasons: tuple[str, ...] = ()
 
     @property
     def coverage(self) -> float:
@@ -211,7 +220,7 @@ def _duplicates(totals: RunTotals) -> tuple[tuple[str, tuple[str, ...]], ...]:
 def _tables(
     member: str, flow: ProgramFlow, index: CellIndex, locations: FileLocationResolver
 ) -> MemberResult:
-    """The four graph tables, or the reason this member has none of them."""
+    """The graph tables, or the reason this member has none of them."""
     if flow.skipped:
         return MemberResult(member=member, program=flow.program, skipped=flow.skipped)
     records = graph_records(flow, index, locations)
@@ -222,6 +231,7 @@ def _tables(
         edges=records.edges,
         extents=records.extents,
         defs=records.defs,
+        targets=flow.targets,
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
@@ -341,6 +351,29 @@ def _dead_ends(result: MemberResult) -> tuple[str, ...]:
     return tuple(stopped.values())
 
 
+def _resolved_one(result: MemberResult) -> int:
+    return sum(1 for target in result.targets if len(target.candidates) == 1)
+
+
+def _resolved_several(result: MemberResult) -> int:
+    return sum(1 for target in result.targets if len(target.candidates) > 1)
+
+
+def _unresolved_reasons(result: MemberResult) -> tuple[str, ...]:
+    """Why a site resolved to no program, one entry per reason it carries.
+
+    Only sites with no candidates: one carrying both candidates and a reason --
+    the menu table's ``uninitialised`` alongside ten resolved names -- answered
+    the question already, so it is not a none. A site can carry more than one
+    reason, so this does not partition ``dynamic_sites`` and is not made to."""
+    return tuple(
+        reason.value
+        for target in result.targets
+        if not target.candidates
+        for reason in target.reasons
+    )
+
+
 def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
     return RunTotals(
         analysed=totals.analysed + (0 if result.skipped else 1),
@@ -352,17 +385,23 @@ def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
         programs=(*totals.programs, *_seen(result)),
         aliased=totals.aliased + _aliased(result),
         dead_ends=(*totals.dead_ends, *_dead_ends(result)),
+        dynamic_sites=totals.dynamic_sites + len(result.targets),
+        resolved_one=totals.resolved_one + _resolved_one(result),
+        resolved_several=totals.resolved_several + _resolved_several(result),
+        unresolved_reasons=(*totals.unresolved_reasons, *_unresolved_reasons(result)),
     )
 
 
 @dataclass(frozen=True)
 class _Sinks:
-    """All five artefacts of one run.
+    """All six artefacts of one run.
 
     Separate files because only two of them are graph facts: where a field is
-    declared, which statements could have last written a range, and which bytes a
-    call site hands to another program are all true whether or not anything flowed
-    -- and the last of the three is a fact about neither program's graph. See
+    declared, which statements could have last written a range, which bytes a
+    call site hands to another program, and which programs a dynamic call site
+    can reach are all true whether or not anything flowed -- and the reason
+    targets is its own file is the same reason aliases is: a call site's
+    possible callees are not a fact about either program's field graph. See
     side_tables.
     """
 
@@ -370,12 +409,14 @@ class _Sinks:
     extents: JsonlWriter
     defs: JsonlWriter
     aliases: JsonlWriter
+    targets: JsonlWriter
 
     def add_result(self, result: MemberResult) -> None:
         self.graph.add_all(result.nodes, result.edges)
         self.extents.add_rows(map(extent_row, result.extents))
         self.defs.add_rows(map(defs_row, result.defs))
         self.aliases.add_rows(map(alias_row, result.aliases))
+        self.targets.add_rows(map(target_row, result.targets))
 
 
 def _written(sinks: _Sinks, result: MemberResult) -> MemberResult:
@@ -485,6 +526,34 @@ def _report_aliases(totals: RunTotals) -> None:
     )
 
 
+def _target_breakdown(reasons: Sequence[str]) -> str:
+    if not reasons:
+        return ""
+    counted = ", ".join(
+        f"{reason} {count}" for reason, count in _tallied(reasons).items()
+    )
+    return f" ({counted})"
+
+
+def _report_targets(totals: RunTotals) -> None:
+    """Nothing for a run with no dynamic call sites, for the same reason as
+    aliases: a corpus of none has no completeness to state. The three buckets
+    partition ``dynamic_sites`` -- a site has zero, one or several candidates,
+    never two of those at once -- unlike the reason breakdown, which does not."""
+    if not totals.dynamic_sites:
+        return
+    none = totals.dynamic_sites - totals.resolved_one - totals.resolved_several
+    logger.info(
+        "fields: %d dynamic call sites, %d resolved to one program, %d to "
+        "several, %d to none%s",
+        totals.dynamic_sites,
+        totals.resolved_one,
+        totals.resolved_several,
+        none,
+        _target_breakdown(totals.unresolved_reasons),
+    )
+
+
 def _report_members(totals: RunTotals) -> None:
     logger.info(
         "fields: %d members, coverage %.1f%% (%d/%d writes), %d unhandled, %d skipped",
@@ -496,6 +565,7 @@ def _report_members(totals: RunTotals) -> None:
         len(totals.skipped),
     )
     _report_aliases(totals)
+    _report_targets(totals)
     for member, reason in sorted(totals.skipped):
         logger.warning("fields: !! skipped %s: %s", member, reason)
     if totals.unsettled:
@@ -578,9 +648,10 @@ def _analysed_run(
         _side_writer(config, EXTENTS_FILE) as extents,
         _side_writer(config, DEFS_FILE) as defs,
         _side_writer(config, ALIASES_FILE) as aliases,
+        _side_writer(config, TARGETS_FILE) as targets,
     ):
         totals = _run(
-            _Sinks(graph, extents, defs, aliases),
+            _Sinks(graph, extents, defs, aliases, targets),
             paths,
             _options(arguments),
             locations,
