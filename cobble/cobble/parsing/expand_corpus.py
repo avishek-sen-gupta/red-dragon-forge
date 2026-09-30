@@ -40,7 +40,13 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
 from cobble.parsing.expanded_cache import expanded_path, is_expanded
-from cobble.parsing.parse_corpus import Job, Result, bridge_jar, record_failure
+from cobble.parsing.parse_corpus import (
+    Job,
+    Result,
+    bridge_jar,
+    copybook_dirs,
+    record_failure,
+)
 from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import CobolParseError, RealSubprocessRunner
@@ -174,13 +180,17 @@ def _planned(config: CorpusConfig, args: argparse.Namespace) -> list[Job]:
 
 
 def _run(
-    todo: Sequence[Job], config: CorpusConfig, args: argparse.Namespace, jar: str
+    todo: Sequence[Job],
+    dirs: Sequence[Path],
+    config: CorpusConfig,
+    args: argparse.Namespace,
+    jar: str,
 ) -> int:
     t0 = time.perf_counter()
     results = _expanded(
         todo,
         jar,
-        config.copybook_dirs,
+        dirs,
         config.copybook_extensions,
         args.jobs,
         t0,
@@ -217,10 +227,11 @@ def main() -> int:
     args = _parse_args()
     config = load_corpus_config(args.config)
     jar = str(bridge_jar(os.environ))
+    dirs = copybook_dirs(config)
     todo = _planned(config, args)
     if not todo:
         return 0
-    return _run(todo, config, args, jar)
+    return _run(todo, dirs, config, args, jar)
 
 
 if __name__ == "__main__":

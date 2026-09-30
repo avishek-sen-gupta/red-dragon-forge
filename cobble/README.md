@@ -124,7 +124,12 @@ copy of the config. Drop generated output with `rm -rf out out-parsed sym`; `sym
 `copybook_dirs` entry, so `cobble-sym` has to run again before the next build.
 
 `cobble-parse-corpus` and `cobble-expand-corpus` are the two stages that start a JVM,
-at 4-7 seconds per member. Both are **resumable**, each on its own output: the parse
+at 4-7 seconds per member. Both refuse to start at all if any `copybook_dirs` entry is
+not an existing directory, naming it and why: ProLeap's copybook finder reads
+`File.listFiles()` unguarded, so such an entry is a Java NullPointerException on every
+member rather than a missing copybook, and each stage would otherwise record that as
+the member's permanent failure. `sym` is the usual one — it is written by `cobble-sym`,
+so run that first. Both are **resumable**, each on its own output: the parse
 skips a member whose ASG (or recorded failure) is already in `asg_dir`, so re-running
 it after an interrupt costs nothing for what it already did. Delete `asg_dir` to force
 a full reparse after a bridge or grammar change.
