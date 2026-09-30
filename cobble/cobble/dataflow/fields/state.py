@@ -320,6 +320,24 @@ def _sliced(held: ValueSet, extent: FieldExtent, read: FieldExtent) -> ValueSet:
     )
 
 
+def _missing(read: FieldExtent) -> ValueSet:
+    """Why a read found no value: what its region says, since nothing else can.
+
+    A LINKAGE miss is not an uninitialised field. LINKAGE declares storage the
+    caller owns and this intra-program walk never sees written, so the reason is
+    that the writer is outside the analysis -- which is what Unit 2's
+    interprocedural pass will answer and ``UNINITIALISED`` would have hidden.
+
+    Answered at read time and never stored. Storing it would put an entry in
+    ``state.values`` for every LINKAGE byte range any statement reads, which is
+    the redundancy ``_UNINFORMATIVE`` exists to keep out of the map; computed on a
+    miss it costs one enum comparison and grows nothing.
+    """
+    if read.region is RegionId.LINKAGE:
+        return because(UnresolvedReason.INBOUND_LINKAGE)
+    return because(UnresolvedReason.UNINITIALISED)
+
+
 def values_at(state: State, read: FieldExtent) -> ValueSet:
     """Every value the bytes at ``read`` can hold, sliced out of what holds them.
 
@@ -335,7 +353,7 @@ def values_at(state: State, read: FieldExtent) -> ValueSet:
     answer here becomes a wrong edge in the graph.
     """
     if not state.values:
-        return because(UnresolvedReason.UNINITIALISED)
+        return _missing(read)
     found = tuple(
         _sliced(held, extent, read)
         for extent, held in state.values.items()
@@ -344,7 +362,7 @@ def values_at(state: State, read: FieldExtent) -> ValueSet:
         and read.end <= extent.end
     )
     if not found:
-        return because(UnresolvedReason.UNINITIALISED)
+        return _missing(read)
     return reduce(merged, found, VALUES_EMPTY)
 
 
@@ -359,7 +377,7 @@ def exact_values(state: State, read: FieldExtent) -> ValueSet:
     The trade is deliberate. A source read through a different name than the one
     that declared its value -- a redefined table read as CDEMO-MENU-OPT-PGMNAME
     where the value was declared on the FILLER beneath it -- misses here and
-    reports UNINITIALISED rather than the value. That aliasing matters at a call
+    reports ``_missing``'s reason rather than the value. That aliasing matters at a call
     site, not in a MOVE chain, and ``values_at`` keeps the scan for exactly that.
     """
-    return state.values.get(read, because(UnresolvedReason.UNINITIALISED))
+    return state.values.get(read, _missing(read))

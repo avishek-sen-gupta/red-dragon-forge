@@ -233,3 +233,20 @@ def test_a_partial_write_invalidates_the_value_it_overwrote_part_of():
     assert values_at(
         write(from_callee, part, frozenset(), of_value(b"X")), whole
     ) == because(UnresolvedReason.FROM_CALLEE)
+
+
+def test_a_miss_reports_the_region_that_explains_it():
+    """LINKAGE is storage the caller owns, so a miss there is not an uninitialised
+    field: the writer is outside an intra-program walk. Answered on the miss and
+    never stored, so state.values does not grow an entry per LINKAGE read."""
+    linkage = FieldExtent(RegionId.LINKAGE, 0, 8, Precision.EXACT, "DFHCOMMAREA-PGM")
+    working = _extent(0, 8, name="WS-PGM")
+    state = write(EMPTY, working, frozenset(), of_value(b"COSGN00C"))
+
+    assert values_at(state, linkage) == because(UnresolvedReason.INBOUND_LINKAGE)
+    assert exact_values(state, linkage) == because(UnresolvedReason.INBOUND_LINKAGE)
+    assert values_at(EMPTY, linkage) == because(UnresolvedReason.INBOUND_LINKAGE)
+    assert values_at(state, _extent(8, 8, name="WS-OTHER")) == because(
+        UnresolvedReason.UNINITIALISED
+    )
+    assert exact_values(state, working) == of_value(b"COSGN00C")
