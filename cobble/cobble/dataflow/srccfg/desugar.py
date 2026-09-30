@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from types import MappingProxyType
 
 from cics.statements import CicsOperand
 from cobble.dataflow.depgraph.flows import (
@@ -58,7 +59,9 @@ from cobble.dataflow.srccfg.synthetic import (
     handler_field,
     io_status_field,
 )
+from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
+from squall.statements import WheneverCondition
 
 GOTO_TRANSFER = "GO TO"
 DISPATCH_TRANSFER = "GO TO DEPENDING"
@@ -111,6 +114,10 @@ class Ctx:
     index: Mapping[str, EightyEight]
     error_handlers: tuple[str, ...] = ()
     source_file: str = ""
+    # Which WHENEVER GO TOs govern each EXEC SQL node id. Computed once per
+    # program in source order, because the directive is a precompiler one --
+    # see srccfg/whenever.py.
+    whenever: Mapping[str, Governing] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -969,6 +976,39 @@ def _text(value) -> str:
     return str(value or "").upper()
 
 
+def _exec_sql(statement, ctx: Ctx, path: str) -> Fragment:
+    """An EXEC SQL block, and the branches any active WHENEVER gives it.
+
+    A WHENEVER contributes NO node: it is a precompiler directive that emits no
+    runtime code, so a node for it would imply an execution step that never
+    happens. Every other EXEC SQL is followed by one guard per governing
+    condition, mirroring what squall.strategy lowers -- IF SQLCODE <op> <val>
+    GO TO target -- so the CFG says what the runtime does.
+    """
+    if statement.whenever_condition is not WheneverCondition.NONE:
+        return EMPTY_FRAGMENT
+    body = _plain(statement, ctx, path)
+    governing = ctx.whenever.get(node_id(ctx, path), ())
+    return seq(
+        (body, _whenever_guards(ctx, path, governing, 0)),
+        nop_id=node_id(ctx, path, "#sql.join"),
+    )
+
+
+def _whenever_guards(
+    ctx: Ctx, path: str, governing: Governing, position: int
+) -> Fragment:
+    """Each condition's guard in turn, the failing arm falling into the next and
+    the last falling through to the statement after."""
+    if position >= len(governing):
+        return EMPTY_FRAGMENT
+    condition, target = governing[position]
+    slot = f"{path}.sql{position}"
+    cond = lower_condition(read_condition(SQLCA_CONDITIONS[condition]), ctx, slot)
+    taken = _transfer(ctx, slot, "#whenever", target)
+    return _wire_arms(cond, taken, _whenever_guards(ctx, path, governing, position + 1))
+
+
 def _exec_cics(statement, ctx: Ctx, path: str) -> Fragment:
     verb = str(getattr(statement, "verb", "") or "").upper()
     if verb in ARMING_VERBS:
@@ -1257,6 +1297,7 @@ _HANDLERS = {
     "PerformStatement": _perform,
     "SearchStatement": _search,
     "ExecCicsStatement": _exec_cics,
+    "ExecSqlStatement": _exec_sql,
     "CallStatement": _cobol_call,
     "StopRunStatement": _terminator,
     "GobackStatement": _terminator,
