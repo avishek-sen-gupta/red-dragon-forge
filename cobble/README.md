@@ -449,7 +449,7 @@ writes six files to `<out_dir>`:
 | `extents.jsonl` | *declared* name | its `level`, its `usage`, and the byte ranges it owns |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
 | `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
-| `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and `dropped` values the walk could not keep |
+| `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and the `dropped` values that resolved but name no program |
 
 A `FIELD` id is `<program>.<field>`, because a field name is only unique within a
 program: two copybooks routinely give one piece of storage two names. An edge
@@ -625,14 +625,25 @@ surface's five primitives, and the corpus pass's exit codes.
 A `CALL WS-PROG` or `EXEC CICS XCTL PROGRAM(CDEMO-TO-PROGRAM)` names its target
 through a data item, not a literal. A field's declared `VALUE` clause becomes
 bytes in an initial image, the fixpoint walk starts from it, and transfer
-functions carry literals forward through moves, redefinitions and `EXEC CICS
-RECEIVE`/`LINK` write-backs. `targets.jsonl` (above) is a second pass that reads
-the settled byte state at each such site and resolves it against the corpus's
-known program names, producing one row per site: the candidates it reached, and
-a typed `reasons` entry for each source of remaining doubt (`from-callee`: the
+functions carry literals forward through moves and redefinitions.
+`targets.jsonl` (above) is a second pass that reads the settled byte state at
+each such site, producing one row per site: the candidates it reached, and a
+typed `reasons` entry for each source of remaining doubt (`from-callee`: the
 walk models a callee's `LINK`/`XCTL` write-back even though the callee may never
-return control to update it; `uninitialised`: a branch reaches the site with no
-write recorded on that byte range at all).
+return control to update it; `inbound-linkage`: the read landed in the LINKAGE
+region, whose writer is a caller an intra-program walk never sees;
+`uninitialised`: a branch reaches the site with no write recorded on that byte
+range at all).
+
+Two things the pass does **not** do. It does not check a candidate against the
+corpus's program names: `targets.py:_is_program_name` rejects only a value that
+could not name anything at all — blank or unprintable — and a `PROGRAM` node is
+minted for whatever survives, with the rest reported in `dropped`. That every
+candidate on this corpus is a real member is a property of the data, not a guard.
+And it carries nothing forward out of a write whose content it cannot name: an
+`EXEC CICS RECEIVE` target, a file read and a callee write-back each contribute
+their reason and no value, so a name that only such a write could have supplied
+stays unresolved.
 
 `cobble-build` reads `targets.jsonl` by convention at the build's `out_dir` and
 turns each row into one of three edge forms, by a three-way rule:
@@ -653,8 +664,8 @@ defect this unit removed when a fallback-to-operand-text read fabricated
 
 On the CardDemo corpus, most resolved sites are `*_CANDIDATE`, not proven: of
 29 dynamic call sites, 17 resolve to exactly one program and 12 to several, but
-only a handful of the 17 singletons carry no doubt. 23 of the 29 carry the
-`from-callee` reason, because `cobble/dataflow/fields/transfer.py` models an
+only 3 of the 17 singletons carry no doubt. 23 of the 29 carry both
+`inbound-linkage` and the `from-callee` reason, because `cobble/dataflow/fields/transfer.py` models an
 `EXEC CICS XCTL`'s COMMAREA the same way as `LINK`'s — a callee write-back —
 even though `cobble/dataflow/srccfg/link.py` documents that `XCTL` does not
 return control to the site that issued it, and no CICS control-transfer verb
@@ -664,6 +675,13 @@ that — so a verb that never returns stops modelling a write-back from it — i
 follow-up, not done here; a reader comparing 45 `XCTL_CANDIDATE` edges against 5
 proven `XCTL` edges should read this as "resolved, mostly with acknowledged
 doubt," not "only 5 sites resolved."
+
+Every row this corpus produces is a `CICS_XCTL`. It contains no dynamic COBOL
+`CALL` — every `CALL` in it names a literal — and no `EXEC CICS LINK` in any
+member the build can read, the one CSD-defined program without source being
+skipped. So the `CALL` and `LINK` arms of the three-way rule ship exercised by
+unit tests only, and a corpus that uses either is the first thing to read them
+against.
 
 ### Querying the field dataflow
 
