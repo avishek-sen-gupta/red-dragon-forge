@@ -61,7 +61,7 @@ from cobble.dataflow.srccfg.synthetic import (
 )
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
-from squall.statements import Kind, WheneverCondition
+from squall.statements import Kind
 
 GOTO_TRANSFER = "GO TO"
 SQL_TRANSFER = "EXECSQL"
@@ -986,7 +986,7 @@ def _exec_sql(statement, ctx: Ctx, path: str) -> Fragment:
     condition, mirroring what squall.strategy lowers -- IF SQLCODE <op> <val>
     GO TO target -- so the CFG says what the runtime does.
     """
-    if statement.whenever_condition is not WheneverCondition.NONE:
+    if statement.kind is Kind.WHENEVER:
         return EMPTY_FRAGMENT
     body = _labelled(_plain(statement, ctx, path), _sql_transfer(statement.kind))
     governing = ctx.whenever.get(node_id(ctx, path), ())

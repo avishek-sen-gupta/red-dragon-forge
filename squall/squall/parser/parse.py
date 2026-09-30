@@ -153,7 +153,30 @@ def _connect_db(stmt: Tree) -> DbName:
     if isinstance(inner, Token) and inner.type == "NAME":
         return LiteralDb(str(inner).upper())
     # host_var Tree -> its single HOST_VAR_TOK child.
-    return HostVarDb(_parse_host_var_tok(inner.children[0].value))
+    return HostVarDb(_parse_host_var_tok(_token(_subtree(inner).children[0]).value))
+
+
+def _pos(offset: int | None) -> int:
+    """A token's source offset. Lark types these Optional, but the parser is
+    built with positions propagated, so an absent one is a broken Lark contract
+    rather than something a COBOL member can cause."""
+    if offset is None:
+        raise AssertionError("Lark token carries no source position")
+    return offset
+
+
+def _subtree(branch: object) -> Tree:
+    """A child that the grammar guarantees is a subtree rather than a token."""
+    if not isinstance(branch, Tree):
+        raise AssertionError(f"expected a subtree, got {type(branch).__name__}")
+    return branch
+
+
+def _token(branch: object) -> Token:
+    """A child that the grammar guarantees is a token rather than a subtree."""
+    if not isinstance(branch, Token):
+        raise AssertionError(f"expected a token, got {type(branch).__name__}")
+    return branch
 
 
 def _connect_spec(stmt: Tree, kind: Kind) -> ConnectSpec:
@@ -209,18 +232,40 @@ def _whenever_fields(
 
 
 def _whenever_condition(node: Tree) -> WheneverCondition:
-    """Normalise the condition tokens to the matching WheneverCondition member."""
+    """The matching WheneverCondition member, or NONE for one Db2 does not define.
+
+    The grammar admits a bare NAME as a condition, and the opaque-run action can
+    swallow the second word of NOT FOUND, so the tokens here are not guaranteed
+    to name a member. An unguarded lookup raised instead, which reached cobble's
+    corpus parse as a member it could no longer parse at all.
+    """
     tokens = [str(c) for c in node.children if isinstance(c, Token)]
-    return WheneverCondition(" ".join(tokens).upper())
+    joined = " ".join(tokens).upper()
+    return next(
+        (member for member in WheneverCondition if member.value == joined),
+        WheneverCondition.NONE,
+    )
+
+
+_GOTO_OPENERS = ("GOTO", "GO")
 
 
 def _whenever_action(node: Tree) -> WheneverAction:
-    """Return Continue() or GoTo(target) for the action subtree."""
+    """Continue(), GoTo(target), or NoOpAction for an action Db2 does not define.
+
+    Only a GOTO/GO TO yields a target. Treating every non-CONTINUE action as one
+    and taking its last token invented jumps: PERFORM/STOP/DO are Pro*COBOL, and
+    `DO HANDLER()` came back as GoTo(')') -- a paragraph name a CFG would then
+    draw an edge to.
+    """
     tokens = [c for c in node.children if isinstance(c, Token)]
-    if tokens and str(tokens[0]).upper() == "CONTINUE":
-        return Continue()
-    # GOTO <name> or GO TO <name>: the target is the trailing NAME token.
-    return GoTo(str(tokens[-1]))
+    match [str(t).upper() for t in tokens]:
+        case ["CONTINUE", *_]:
+            return Continue()
+        case [opener, *_] if opener in _GOTO_OPENERS:
+            return GoTo(str(tokens[-1]))
+        case _:
+            return NoOpAction()
 
 
 def _cursor_ref(stmt: Tree, kind: Kind) -> CursorRef:
@@ -288,7 +333,7 @@ def _build_query(inner: str, stmt: Tree, kind: Kind) -> str:
 
     # input host_var tokens -> "?"
     for tok in _collect_input_hv_tokens(stmt):
-        replacements.append((tok.start_pos, tok.end_pos, "?"))
+        replacements.append((_pos(tok.start_pos), _pos(tok.end_pos), "?"))
 
     # INTO clause removal for select_into / values_into. Consume one leading
     # space so removing "col INTO :a FROM" yields "col FROM" (single space)
@@ -297,7 +342,7 @@ def _build_query(inner: str, stmt: Tree, kind: Kind) -> str:
         into_tok = _find_into_keyword_token(stmt)
         into_list_node = _find_into_list_node(stmt)
         if into_tok is not None and into_list_node is not None:
-            raw = into_tok.start_pos
+            raw = _pos(into_tok.start_pos)
             # Consume one leading space if present (safe at pos 0: the slice is "").
             start = raw - (1 if inner[raw - 1 : raw] == " " else 0)
             replacements.append((start, into_list_node.meta.end_pos, ""))
@@ -366,7 +411,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
     """
     inner = _strip_envelope(text)
     tree = _PARSER.parse(inner)
-    stmt: Tree = tree.children[0]
+    stmt = _subtree(tree.children[0])
     kind: Kind = Kind(stmt.data)
 
     hv_pairs = _collect_all_hvs_in_order(stmt)
