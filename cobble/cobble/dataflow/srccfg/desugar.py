@@ -32,6 +32,7 @@ from cobble.dataflow.depgraph.flows import (
 )
 from cobble.dataflow.srccfg.cfg import (
     EMPTY_FRAGMENT,
+    NO_TARGET_OPERAND,
     Atom,
     Edge,
     EdgeKind,
@@ -61,6 +62,7 @@ from cobble.dataflow.srccfg.synthetic import (
 )
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
+from cobol_asg.ref_mod import RefModOperand
 from squall.statements import Kind
 
 GOTO_TRANSFER = "GO TO"
@@ -1095,6 +1097,15 @@ def commarea_field(node: Node) -> str:
     return node.transfer_operand
 
 
+def _ref_mod_operand(operand: CicsOperand) -> RefModOperand:
+    return RefModOperand(
+        name=operand.text,
+        ref_mod_start=operand.ref_mod_start,
+        ref_mod_length=operand.ref_mod_length,
+        subscripts=operand.subscripts,
+    )
+
+
 def _with_call(statement, node: Node, verb: str) -> Node:
     from cobble.dataflow.depgraph.graph import is_literal
 
@@ -1103,6 +1114,7 @@ def _with_call(statement, node: Node, verb: str) -> Node:
     program = _callee(statement)
     if not (transfer and program):
         return node
+    resolved = _option_is_literal(statement, PROGRAM_OPTION)
     return Node(
         id=node.id,
         kind=NodeKind.CALL,
@@ -1111,7 +1123,12 @@ def _with_call(statement, node: Node, verb: str) -> Node:
         reads=node.reads,
         transfer=f"CICS_{transfer}",
         target=program.strip("'\"") if is_literal(program) else program,
-        target_resolved=_option_is_literal(statement, PROGRAM_OPTION),
+        target_resolved=resolved,
+        target_operand=(
+            NO_TARGET_OPERAND
+            if resolved
+            else _ref_mod_operand(_option_operand(statement, PROGRAM_OPTION))
+        ),
         transfer_operand=_option_text(statement, COMMAREA_OPTION),
     )
 
@@ -1278,6 +1295,19 @@ def _callee_name(target) -> str:
             return identifier.name.strip().upper()
 
 
+def _identifier_operand(callee) -> RefModOperand:
+    """The structured callee, for the data-item arm of a CALL's target.
+
+    Mirrors ``_callee_name``'s own match on the same two arms, rather than
+    testing ``callee.identifier`` for None.
+    """
+    match callee.identifier:
+        case None:
+            return NO_TARGET_OPERAND
+        case operand:
+            return operand
+
+
 def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
     """CALL 'PROGB' USING A B. The parameters are the alias list, so they are kept in
     order -- OMITTED included, since a parameter's position is its identity."""
@@ -1292,6 +1322,7 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
         transfer=CALL_TRANSFER,
         target=_callee_name(callee),
         target_resolved=not callee.resolved_at_runtime,
+        target_operand=_identifier_operand(callee),
         using=tuple(
             (
                 ""

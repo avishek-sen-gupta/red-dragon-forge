@@ -72,6 +72,7 @@ from cobble.dataflow.fields.transfer import (
     writes_of,
 )
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
+from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import build_program, label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg
@@ -144,6 +145,7 @@ class ProgramFlow:
     program: str
     edges: tuple[FlowEdge, ...] = ()
     defs: tuple[ReachingDef, ...] = ()
+    targets: tuple[ResolvedTarget, ...] = ()
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
@@ -608,6 +610,7 @@ def analyse(
         program=cfg.program,
         edges=extracted.edges,
         defs=extracted.defs,
+        targets=resolved_targets(cfg, index, walk.states, walk.settled),
         writes=tally.writes,
         covered=tally.covered,
         unhandled=tally.unhandled,

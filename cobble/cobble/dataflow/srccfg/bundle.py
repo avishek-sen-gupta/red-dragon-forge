@@ -35,6 +35,7 @@ from cobble.dataflow.srccfg.cfg import (
     SourceSpan,
 )
 from cobble.dataflow.srccfg.link import BundleCall
+from cobol_asg.ref_mod import RefModOperand
 
 JsonValue = str | int | float | bool | Sequence["JsonValue"] | Mapping[str, "JsonValue"]
 
@@ -69,7 +70,11 @@ def cfg_to_dict(cfg: Cfg) -> dict:
 
 
 def _node_dict(node: Node) -> dict:
-    return {**asdict(node), "kind": node.kind.name}
+    return {
+        **asdict(node),
+        "kind": node.kind.name,
+        "target_operand": node.target_operand.to_dict(),
+    }
 
 
 def cfg_from_dict(document: Mapping) -> Cfg:
@@ -91,11 +96,21 @@ def _node_of(entry: Mapping) -> Node:
             **{
                 k: v
                 for k, v in entry.items()
-                if k not in ("kind", "atom", "span", "writes", "reads", "using")
+                if k
+                not in (
+                    "kind",
+                    "atom",
+                    "span",
+                    "writes",
+                    "reads",
+                    "using",
+                    "target_operand",
+                )
             },
             "kind": NodeKind[entry["kind"]],
             "atom": Atom(**atom),
             "span": SourceSpan(**span) if span else SourceSpan(),
+            "target_operand": RefModOperand.from_dict(entry.get("target_operand", {})),
             "writes": tuple(entry.get("writes", ())),
             "reads": tuple(entry.get("reads", ())),
             "using": tuple(entry.get("using", ())),
