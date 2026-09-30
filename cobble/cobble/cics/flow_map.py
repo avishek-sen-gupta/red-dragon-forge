@@ -21,25 +21,29 @@ import logging
 import tempfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from tqdm import tqdm
-
 from bms_copybook_gen.models import BmsMapSet
 from cics.csd_parse import parse_csd, parse_csd_files
-from cobble.cics.flow_observer import CicsVerb  # noqa: F401  (re-exported vocabulary)
+from cobble.cics.flow_observer import (  # noqa: F401  (re-exported vocabulary)
+    CicsVerb,
+    DynamicSite,
+)
 from cobble.cics.graph_sink import GraphSink
-from cobble.cics.verb_source_asg import (
+from cobble.cics.verb_source_asg import (  # SEAM: VM-free verb source
+    VerbStreamResult,
     stream_program_verbs,
-)  # SEAM: VM-free verb source (was cics.verb_source_lowering)
-from cobol_asg.cobol_parser import CobolParser
+)
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
+from cobol_asg.cobol_parser import CobolParser
+from tqdm import tqdm
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
@@ -49,10 +53,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class FlowExtraction:
-    """What one pass did: the programs it read, and the ones it could not."""
+    """A summary of one pass: which programs were read, which ones failed, and
+    which dynamic XCTL/LINK sites turned up along the way."""
 
     programs_read: int = 0
     failures: tuple[str, ...] = ()
+    dynamic_sites: tuple[DynamicSite, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -141,8 +147,9 @@ def _read_program(
     bms_mapsets: Mapping[str, BmsMapSet],
     sink: GraphSink,
     corpus_index: CorpusIndex,
-) -> tuple[str, ...]:
-    """One program's verb edges into the sink; the message if it could not be read.
+) -> VerbStreamResult:
+    """One program's verb edges into the sink; what could not be read, and the
+    dynamic sites it named.
 
     Named before the read, not after: on a corpus where one member takes minutes,
     this line is the only thing that distinguishes a working run from a stuck one.
@@ -160,12 +167,10 @@ def _read_programs(
     bms_mapsets: Mapping[str, BmsMapSet],
     sink: GraphSink,
     corpus_index: CorpusIndex,
-) -> tuple[str, ...]:
-    """Stream every program's CICS verbs into the sink; what could not be read."""
+) -> tuple[VerbStreamResult, ...]:
+    """Stream every program's CICS verbs into the sink; one result each."""
     return tuple(
-        message
-        for prog_name in tqdm(programs, desc="CICS verbs", unit="program")
-        for message in _read_program(
+        _read_program(
             prog_name,
             cobol_sources[prog_name],
             parser,
@@ -173,6 +178,7 @@ def _read_programs(
             sink,
             corpus_index,
         )
+        for prog_name in tqdm(programs, desc="CICS verbs", unit="program")
     )
 
 
@@ -190,10 +196,16 @@ def extract_transaction_flow_graph(
     csd = _csd_definitions(csd_source)
     _emit(_starts_edges(csd.transid_to_program), sink, corpus_index)
     programs = _programs_to_read(csd.transid_to_program, cobol_sources)
-    failures = _read_programs(
+    results = _read_programs(
         programs, cobol_sources, parser, bms_mapsets, sink, corpus_index
+    )
+    failures = tuple(chain.from_iterable(result.failures for result in results))
+    dynamic_sites = tuple(
+        chain.from_iterable(result.dynamic_sites for result in results)
     )
     _emit(_defines_dataset_edges(csd.file_to_dataset), sink, corpus_index)
     return FlowExtraction(
-        programs_read=len(programs) - len(failures), failures=failures
+        programs_read=len(programs) - len(failures),
+        failures=failures,
+        dynamic_sites=dynamic_sites,
     )

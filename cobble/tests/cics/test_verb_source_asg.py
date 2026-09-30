@@ -52,3 +52,29 @@ def test_a_start_with_no_transid_is_not_a_graph_event() -> None:
     """START TRANSID is optional in the API. With no transaction named there is
     nothing for the graph to point at -- the same rule RETURN already follows."""
     assert _verb_fields("EXEC CICS START TERMID(EIBTRMID) END-EXEC") == ()
+
+
+def _transfer_operands(text: str) -> tuple[str, str]:
+    """XCTL/LINK's PROGRAM operand, as (xctl_target, program_operand)."""
+    stmt = _parse_under_production_dialects(
+        {"type": "EXEC_CICS", "exec_cics_text": text}
+    )
+    assert isinstance(stmt, ExecCicsStatement)
+    verb = _statement_to_verb(stmt, "SOMEPROG", [])
+    assert verb is not None
+    return (verb.xctl_target, verb.program_operand)
+
+
+def test_a_literal_xctl_target_is_carried_and_a_dynamic_one_is_not_fabricated() -> None:
+    """A literal PROGRAM(...) is still the whole answer. A data-name operand with
+    no static VALUE used to fall back to the field's own name, fabricating a
+    PROGRAM node out of a data item -- it now carries that name unresolved, as
+    program_operand, and xctl_target stays "" so no edge is built from it."""
+    assert _transfer_operands("EXEC CICS XCTL PROGRAM('COSGN00C') END-EXEC") == (
+        "COSGN00C",
+        "",
+    )
+    assert _transfer_operands("EXEC CICS XCTL PROGRAM(WS-PGM) END-EXEC") == (
+        "",
+        "WS-PGM",
+    )

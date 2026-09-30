@@ -62,6 +62,12 @@ class NodeKind(Enum):
     # "<program>.<field>" because a field name is only unique within a program
     # — two copybooks routinely give one piece of storage two names.
     FIELD = "FIELD"
+    # A dynamic CALL/XCTL/LINK site whose target the dataflow could not pin to a
+    # program. id is "<program>.<expression>" -- scoped like FIELD, because the
+    # expression is a data name unique only within its program, and a
+    # corpus-wide node per expression would fuse every member that names it
+    # into one hub (see dataflow/depgraph/flows.py:319).
+    DYNAMIC_TARGET = "DYNAMIC_TARGET"
 
 
 class EdgeKind(Enum):
@@ -69,6 +75,13 @@ class EdgeKind(Enum):
     COPY = "COPY"
     XCTL = "XCTL"
     LINK = "LINK"
+    # A call site with two or more candidate programs, or one candidate the
+    # analysis could not fully vouch for. Distinct from CALL/XCTL/LINK so a
+    # consumer filtering on EdgeKind cannot mistake a possible target for a
+    # proven one.
+    CALL_CANDIDATE = "CALL_CANDIDATE"
+    XCTL_CANDIDATE = "XCTL_CANDIDATE"
+    LINK_CANDIDATE = "LINK_CANDIDATE"
     RETURN_TRANSID = "RETURN_TRANSID"
     STARTS = "STARTS"
     # PROGRAM -> TRANSACTION, from EXEC CICS START TRANSID(...): asynchronous

@@ -86,6 +86,7 @@ def test_node_kind_values() -> None:
         "INSTREAM_DATA",
         "COBOL_FILE",
         "FIELD",
+        "DYNAMIC_TARGET",
     }
 
 
@@ -109,4 +110,7 @@ def test_edge_kind_values() -> None:
         "ENDS_BROWSE",
         "DEFINES_DATASET",
         "FLOWS_TO",
+        "CALL_CANDIDATE",
+        "XCTL_CANDIDATE",
+        "LINK_CANDIDATE",
     }

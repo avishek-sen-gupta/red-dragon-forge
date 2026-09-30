@@ -14,17 +14,7 @@ from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 
 
 def _verb(verb: str, **operands) -> CicsVerb:
-    return CicsVerb(
-        verb=verb,
-        program="SOMEPROG",
-        **{
-            "map_name": None,
-            "mapset_name": None,
-            "xctl_target": None,
-            "transid": None,
-            **operands,
-        },
-    )
+    return CicsVerb(verb=verb, program="SOMEPROG", **operands)
 
 
 def _edge_fields(verb: CicsVerb) -> tuple:
