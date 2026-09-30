@@ -14,11 +14,12 @@ import json
 import logging
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 from cobble.dataflow.fields.aliases import NOT_IN_CACHE
 from cobble.dataflow.fields.side_tables import CommareaAlias
-from cobble.dataflow.fields.state import Source, write
+from cobble.dataflow.fields.state import EMPTY, Source, State, write
 from cobble.dataflow.fields.trace import (
     NO_WINDOW,
     NOT_PARSED,
@@ -150,13 +151,13 @@ def test_seeding_carries_provenance_across_unchanged_and_credits_no_node():
     window_in = _extent(RegionId.WORKING_STORAGE, 0, 8, "WS-AREA")
     window_out = _extent(RegionId.LINKAGE, 0, 8, "DFHCOMMAREA")
     held = write(
-        {},
+        EMPTY,
         _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-KEY"),
         _sourced("WS-SEED", "TPROGA/MAIN-PARA/0"),
     )
     found = _seeded(held, window_in, window_out)
 
-    ((extent, sources),) = tuple(found.items())
+    ((extent, sources),) = tuple(found.sources.items())
     assert extent.region is RegionId.LINKAGE
     assert (extent.start, extent.length) == (0, 4)
     assert tuple(one.node for one in sources) == ("TPROGA/MAIN-PARA/0",)
@@ -168,12 +169,12 @@ def test_seeding_leaves_behind_whatever_the_window_does_not_reach():
     window_in = _extent(RegionId.WORKING_STORAGE, 0, 8, "WS-AREA")
     window_out = _extent(RegionId.LINKAGE, 0, 8, "DFHCOMMAREA")
     held = write(
-        {},
+        EMPTY,
         _extent(RegionId.WORKING_STORAGE, 40, 4, "WS-PRIVATE"),
         _sourced("WS-SEED", "TPROGA/MAIN-PARA/0"),
     )
 
-    assert not _seeded(held, window_in, window_out)
+    assert _seeded(held, window_in, window_out).sources == {}
 
 
 def test_two_caller_extents_clipping_to_one_window_range_keep_both_provenances():
@@ -183,19 +184,23 @@ def test_two_caller_extents_clipping_to_one_window_range_keep_both_provenances()
     window_in = _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-AREA")
     window_out = _extent(RegionId.LINKAGE, 0, 4, "DFHCOMMAREA")
     first = write(
-        {},
+        EMPTY,
         _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-KEY"),
         _sourced("WS-SEED", "TPROGA/MAIN-PARA/0"),
     )
-    both = {
-        **first,
-        _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-ALIAS"): _sourced(
-            "WS-OTHER", "TPROGA/MAIN-PARA/1"
-        ),
-    }
+    both = State(
+        sources=MappingProxyType(
+            {
+                **first.sources,
+                _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-ALIAS"): _sourced(
+                    "WS-OTHER", "TPROGA/MAIN-PARA/1"
+                ),
+            }
+        )
+    )
     found = _seeded(both, window_in, window_out)
 
-    ((_extent_out, sources),) = tuple(found.items())
+    ((_extent_out, sources),) = tuple(found.sources.items())
     assert {one.node for one in sources} == {
         "TPROGA/MAIN-PARA/0",
         "TPROGA/MAIN-PARA/1",
@@ -1337,10 +1342,16 @@ def test_a_passed_through_sources_definers_are_read_in_its_own_programs_storage(
     ws_in = _extent(RegionId.WORKING_STORAGE, 0, 4, "WS-IN")
     ws_comm = _extent(RegionId.WORKING_STORAGE, 100, 4, "WS-COMM")
     dfh = _extent(RegionId.LINKAGE, 0, 4, "DFHCOMMAREA")
-    caller = {
-        ws_in: _sourced("WS-SEED", "CALLER/M/0"),
-        ws_comm: frozenset({Source(origin="", extent=ws_in, node="CALLER/M/1")}),
-    }
+    caller = State(
+        sources=MappingProxyType(
+            {
+                ws_in: _sourced("WS-SEED", "CALLER/M/0"),
+                ws_comm: frozenset(
+                    {Source(origin="", extent=ws_in, node="CALLER/M/1")}
+                ),
+            }
+        )
+    )
     callee = _seeded(caller, ws_comm, dfh)
     frame = Frame(
         program="CALLEE",

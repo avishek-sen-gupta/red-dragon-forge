@@ -247,16 +247,23 @@ def _seeded(held: State, source: FieldExtent, target: FieldExtent) -> State:
     """
     bound = tuple(
         (_rebased(extent, source, target), sources)
-        for extent, sources in held.items()
+        for extent, sources in held.sources.items()
         if extent.may_alias(source)
     )
-    keys = tuple(dict.fromkeys(extent for extent, _ in bound))
-    return {
-        key: frozenset(
-            one for extent, sources in bound if extent == key for one in sources
+    rebased_extents = tuple({extent: None for extent, _ in bound})
+    return State(
+        sources=MappingProxyType(
+            {
+                rebased_extent: frozenset(
+                    one
+                    for extent, sources in bound
+                    if extent == rebased_extent
+                    for one in sources
+                )
+                for rebased_extent in rebased_extents
+            }
         )
-        for key in keys
-    }
+    )
 
 
 NO_CFG = Cfg(program="", nodes=(), edges=())
@@ -806,7 +813,7 @@ def _restored(caller: State, back: State) -> State:
     return reduce(
         lambda held, pair: write(held, pair[0], pair[1]),
         sorted(
-            back.items(),
+            back.sources.items(),
             key=lambda pair: (
                 pair[0].region.value,
                 pair[0].start,
@@ -851,7 +858,7 @@ def _bridge(
             via=_via(resumed),
             source_program=_reader(source),
         )
-        for caller_ext, sources in back.items()
+        for caller_ext, sources in back.sources.items()
         for source in sources
     )
 
@@ -1172,7 +1179,7 @@ def _queue_stop(queue: _Queue) -> str:
 
 
 def _done(run: _Run, budget: Budget) -> bool:
-    return run.stopped or (run.trace.paths and _met(run, budget))
+    return bool(run.stopped or (run.trace.paths and _met(run, budget)))
 
 
 @dataclass(frozen=True)
