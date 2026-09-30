@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from cobble.dataflow.fields.state import EMPTY, Source, join, reaching, values_at, write
+from cobble.dataflow.fields.state import (
+    EMPTY,
+    Source,
+    exact_values,
+    join,
+    reaching,
+    values_at,
+    write,
+)
 from cobble.dataflow.fields.values import UnresolvedReason, ValueSet, because, of_value
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -143,3 +151,44 @@ def test_an_extent_nothing_has_written_reports_uninitialised():
     unwritten = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.EXACT, "WS-A")
 
     assert values_at(EMPTY, unwritten) == because(UnresolvedReason.UNINITIALISED)
+
+
+def test_exact_values_hits_its_own_extent_and_misses_an_aliased_one():
+    """exact_values is the transfer's hot-path lookup, one dict hit and no scan.
+
+    The trade is deliberate: a source read through a different name than the one
+    that declared its value -- a REDEFINES read as CDEMO-MENU-OPT-PGMNAME over the
+    FILLER that actually holds it -- misses exact_values and reports UNINITIALISED,
+    while values_at's containment scan still finds it through the byte range. That
+    aliasing gap only matters at a call site, not in a MOVE chain.
+    """
+    declared = FieldExtent(RegionId.WORKING_STORAGE, 39, 8, Precision.EXACT, "FILLER_3")
+    read_as = FieldExtent(
+        RegionId.WORKING_STORAGE, 39, 8, Precision.EXACT, "CDEMO-MENU-OPT-PGMNAME"
+    )
+    state = write(EMPTY, declared, frozenset(), of_value(b"COACTVWC"))
+
+    assert exact_values(state, declared) == of_value(b"COACTVWC")
+    assert exact_values(state, read_as) == because(UnresolvedReason.UNINITIALISED)
+    assert values_at(state, read_as) == of_value(b"COACTVWC")
+
+
+def test_a_write_with_no_known_value_still_erases_the_value_it_overwrites():
+    """Mutation (c): skipping the map entry must never skip the must_cover kill.
+
+    An EXACT write with nothing known erases what was there -- the extent reads
+    back as unknown -- because it was KILLED, not because anything was stored for
+    it. A CLAMPED write does not erase, since a computed subscript may not have
+    hit this cell.
+    """
+    extent = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.EXACT, "WS-PGM")
+    known = write(EMPTY, extent, frozenset(), of_value(b"COSGN00C"))
+    overwritten = write(
+        known, extent, frozenset(), because(UnresolvedReason.NOT_A_LITERAL)
+    )
+    clamped = FieldExtent(RegionId.WORKING_STORAGE, 0, 8, Precision.CLAMPED, "WS-PGM")
+    weakly = write(known, clamped, frozenset(), because(UnresolvedReason.NOT_A_LITERAL))
+
+    assert values_at(known, extent) == of_value(b"COSGN00C")
+    assert values_at(overwritten, extent) == because(UnresolvedReason.UNINITIALISED)
+    assert values_at(weakly, extent) == of_value(b"COSGN00C")
