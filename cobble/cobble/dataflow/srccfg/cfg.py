@@ -1,4 +1,5 @@
-"""The graph vocabulary, with no knowledge of COBOL or of the ASG.
+"""The graph vocabulary, with no knowledge of COBOL or of the ASG beyond the one
+structured operand a dynamic call target carries.
 
 Two node kinds carry meaning. A TEST holds ONE atomic predicate and has exactly
 two out-edges, TRUE and FALSE; an ASSIGN holds what it writes, what it reads and
@@ -13,7 +14,11 @@ no formula to normalise and no solver to run.
 A Fragment is a partly built graph: its exits are out-edges that have no target
 yet, and sequencing is the act of giving them one. Absent values are empty
 tuples and empty strings throughout -- never None -- so a caller never has to
-ask whether a field is there before reading it.
+ask whether a field is there before reading it. ``Node.target_operand`` follows
+the same rule with its own null object, ``NO_TARGET_OPERAND``: a dynamic call's
+subscripted operand is kept structured rather than folded into ``target``'s
+rendered text, so a reader of the operand never has to re-parse a subscript back
+out of a string.
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
+
+from cobol_asg.ref_mod import RefModOperand
 
 
 class NodeKind(Enum):
@@ -74,6 +81,8 @@ class SourceSpan:
 
 NO_SPAN = SourceSpan()
 
+NO_TARGET_OPERAND = RefModOperand(name="")
+
 
 @dataclass(frozen=True)
 class Node:
@@ -86,6 +95,7 @@ class Node:
     transfer: str = ""
     target: str = ""
     target_resolved: bool = True
+    target_operand: RefModOperand = NO_TARGET_OPERAND
     transfer_operand: str = ""
     using: tuple[str, ...] = ()
     span: SourceSpan = NO_SPAN

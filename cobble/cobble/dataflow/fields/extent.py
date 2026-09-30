@@ -359,6 +359,43 @@ def _field_extents(operand: RefModOperand, index: CellIndex) -> OperandExtents:
     return OperandExtents(extents=_sliced(base, operand))
 
 
+def _every_occurrence(
+    candidates: tuple[Cell, ...], index: CellIndex
+) -> tuple[FieldExtent, ...]:
+    return tuple(
+        index.extent_of(occurrence)
+        for cell in _one_per_declaration(candidates)
+        for occurrence in index.occurrences_of(cell)
+    )
+
+
+def operand_occurrence_extents(
+    operand: RefModOperand, index: CellIndex
+) -> tuple[FieldExtent, ...]:
+    """One EXACT extent per occurrence an operand could denote.
+
+    Deliberately not ``operand_extents``. A computed subscript there yields one
+    CLAMPED extent spanning every occurrence -- ``_spanning``'s min(start) to
+    max(end) -- which for CDEMO-MENU-OPT-PGMNAME(WS-OPTION) is 11*46+8 bytes and
+    covers every row's 35-byte caption and 1-byte user type as well. That span
+    exists so a computed subscript can never *kill* a definition, which is a
+    write-side concern; reading a value through it would answer 'Account View'
+    where a program name was asked for.
+
+    Constant subscripts still select their one occurrence, via the same ``_selected``
+    the clamped path falls back from, so a literal index loses no precision here.
+    """
+    candidates = index.cells_named(
+        operand.name, operand.qualifiers, len(operand.subscripts)
+    )
+    if not candidates:
+        return ()
+    if not operand.subscripts:
+        return _sliced(tuple(index.extent_of(cell) for cell in candidates), operand)
+    selected = _selected(operand.subscripts, candidates, index)
+    return _sliced(selected or _every_occurrence(candidates, index), operand)
+
+
 def operand_extents(
     operand: RefModOperand | FunctionCallOperand, index: CellIndex
 ) -> OperandExtents:
