@@ -429,13 +429,15 @@ uv run cobble-dataflow-fixpoint --config config/fields.toml --member PROGA --swe
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
 a usage error. The usual question is about the fields of one program, and a
-whole-cache pass still costs real time, so it is asked for rather than defaulted
-into. Measured on the 29-member CardDemo cache: 72.5s total before the walk
-seeded from `VALUE`; per member now, `COACTUPC` 66.4s / `COCRDLIC` 9.3s /
-`COMEN01C` 2.6s. Seeding the walk from the `VALUE` image roughly doubles it on
-large members, which is why `tests/dataflow/fields/test_fields_acceptance.py`'s
-performance bound on `COACTUPC` moved from 60s to 90s
-(`config/carddemo-fields-tests.toml`).
+whole-cache pass still costs real time — tens of seconds for a large member,
+a couple of seconds for a typical one, not the minutes per member this once
+claimed — so it is asked for rather than defaulted into. Seeding the walk from
+the `VALUE` image roughly doubles the cost on large members, because the entry
+state then holds an entry per valued extent and those propagate through every
+join. Per-member seconds vary by machine, so none are restated here;
+`tests/dataflow/fields/test_fields_acceptance.py`'s performance bound (90s, for
+the corpus's largest member) and the measurement it was calibrated against both
+live in `config/carddemo-fields-tests.toml`.
 
 Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
 writes six files to `<out_dir>`:
