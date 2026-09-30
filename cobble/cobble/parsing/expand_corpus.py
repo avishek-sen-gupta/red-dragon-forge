@@ -21,8 +21,9 @@ parsing/expanded_cache.py. The destination is --out-dir rather than a TOML key
 because nothing downstream consumes expanded source, so there is no second stage
 to agree with.
 
-parse_corpus is imported from and never modified: Job, Result and bridge_jar mean
-the same things here, and the two stages must not disagree about the bridge JAR.
+parse_corpus is imported from rather than copied: Job, Result, bridge_jar and
+record_failure mean the same things here, and the two stages must not disagree
+about the bridge JAR or about how a member's failure is recorded.
 """
 
 from __future__ import annotations
@@ -38,9 +39,8 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
-from cobble.parsing.asg_cache import failure_path
 from cobble.parsing.expanded_cache import expanded_path, is_expanded
-from cobble.parsing.parse_corpus import Job, Result, bridge_jar
+from cobble.parsing.parse_corpus import Job, Result, bridge_jar, record_failure
 from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import CobolParseError, RealSubprocessRunner
@@ -59,12 +59,6 @@ def pending(config: CorpusConfig, out_dir: Path) -> tuple[list[Job], int]:
     return todo, len(sources) - len(todo)
 
 
-def _record_failure(job: Job, exc: CobolParseError, seconds: float) -> Result:
-    detail = f"{type(exc).__name__}: {exc}"
-    failure_path(job.dest.parent, job.source).write_text(detail[:2000])
-    return Result(job.stem, False, seconds, detail[:120])
-
-
 def _write_expansion(dest: Path, expanded: str) -> None:
     """latin-1, matching RealSubprocessRunner and the bridge's SOURCE_CHARSET, so a
     high byte in a VALUE literal survives. Written beside the target and renamed,
@@ -80,7 +74,7 @@ def expand_with(parser: ProLeapCobolParser, job: Job) -> Result:
     try:
         expanded = parser.expand(job.source.read_bytes())
     except CobolParseError as exc:
-        return _record_failure(job, exc, time.perf_counter() - t0)
+        return record_failure(job, exc, time.perf_counter() - t0)
     _write_expansion(job.dest, expanded)
     return Result(job.stem, True, time.perf_counter() - t0, "")
 
