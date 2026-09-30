@@ -2,6 +2,7 @@ from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cics.statements import ExecCicsStatement
 from cobble.cics.verb_source_asg import _statement_to_verb
 from cobol_asg import cobol_statements
+from cobol_asg.asg_types import CobolField
 from cobol_asg.cobol_statements import CobolStatementType
 from squall.statements import ExecSqlStatement, Kind
 
@@ -54,13 +55,13 @@ def test_a_start_with_no_transid_is_not_a_graph_event() -> None:
     assert _verb_fields("EXEC CICS START TERMID(EIBTRMID) END-EXEC") == ()
 
 
-def _transfer_operands(text: str) -> tuple[str, str]:
+def _transfer_operands(text: str, data_fields: tuple = ()) -> tuple[str, str]:
     """XCTL/LINK's PROGRAM operand, as (xctl_target, program_operand)."""
     stmt = _parse_under_production_dialects(
         {"type": "EXEC_CICS", "exec_cics_text": text}
     )
     assert isinstance(stmt, ExecCicsStatement)
-    verb = _statement_to_verb(stmt, "SOMEPROG", [])
+    verb = _statement_to_verb(stmt, "SOMEPROG", list(data_fields))
     assert verb is not None
     return (verb.xctl_target, verb.program_operand)
 
@@ -78,3 +79,26 @@ def test_a_literal_xctl_target_is_carried_and_a_dynamic_one_is_not_fabricated() 
         "",
         "WS-PGM",
     )
+
+
+def test_a_field_with_a_value_clause_is_still_not_resolved() -> None:
+    """The regression this fix closes. The old ``_resolve_operand`` walked
+    ``data_fields`` for a static VALUE and used it -- for WS-ABEND-PGM PIC X(8)
+    VALUE 'ABNDPROC', the corpus's commonest instance at 127 XCTL/LINK sites,
+    that happened to land on the right program by accident, since nothing
+    checks whether a later MOVE overwrote it before the transfer runs. A
+    field carrying a VALUE must resolve exactly like one that carries none:
+    unresolved, as program_operand, never as xctl_target.
+    """
+    ws_abend_pgm = CobolField(
+        name="WS-ABEND-PGM",
+        level=1,
+        pic="X(8)",
+        usage="DISPLAY",
+        offset=0,
+        value="ABNDPROC",
+        value_is_figurative=False,
+    )
+    assert _transfer_operands(
+        "EXEC CICS XCTL PROGRAM(WS-ABEND-PGM) END-EXEC", (ws_abend_pgm,)
+    ) == ("", "WS-ABEND-PGM")
