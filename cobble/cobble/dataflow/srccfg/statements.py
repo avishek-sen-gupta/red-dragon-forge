@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 
-from cobble.dataflow.srccfg.build import paragraph_order
+from cobble.dataflow.srccfg.paragraphs import paragraph_order
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_statements import CobolStatementType
 
@@ -119,10 +119,19 @@ def _walk(
     )
 
 
-def statement_index(asg: CobolASG) -> Mapping[str, CobolStatementType]:
-    """Every statement-bearing CFG node id, mapped to its statement."""
-    return dict(
+def statement_entries(asg: CobolASG) -> tuple[Entry, ...]:
+    """Every statement-bearing CFG node id with its statement, in SOURCE order.
+
+    Ordered rather than mapped because a precompiler directive governs what
+    follows it textually, which a mapping cannot express (see srccfg/whenever.py).
+    """
+    return tuple(
         entry
         for ref in paragraph_order(asg)
         for entry in _walk(ref.statements, ref.name, "")
     )
+
+
+def statement_index(asg: CobolASG) -> Mapping[str, CobolStatementType]:
+    """Every statement-bearing CFG node id, mapped to its statement."""
+    return dict(statement_entries(asg))
