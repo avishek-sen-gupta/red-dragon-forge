@@ -30,6 +30,7 @@ config/*.toml
 # CardDemo is a public sample corpus, so its configs identify nothing.
 !config/carddemo.toml
 !config/parse-carddemo.toml
+!config/carddemo-fields-tests.toml
 
 # Local tool builds (hlasm_export and friends, when built from here)
 tools/

@@ -1,0 +1,20 @@
+cache_dir = "out-parsed"
+
+members = [
+  "COMEN01C", "COACTUPC", "COCRDLIC", "COCRDUPC", "COTRN02C",
+  "COUSR00C", "COSGN00C", "CBTRN02C", "CBACT04C", "CORPT00C",
+]
+
+[oracle]
+member = "COMEN01C"
+source_field = "WS-PGMNAME"
+target_field = "CDEMO-FROM-PROGRAM"
+cfg_nodes = [
+  "PROCESS-ENTER-KEY/7.then.0.when.0.1.then.1",
+  "PROCESS-ENTER-KEY/7.then.0.when.2.1",
+  "PROCESS-ENTER-KEY/7.then.0.when.2.2",
+]
+
+[performance]
+member = "COACTUPC"
+seconds = 60.0

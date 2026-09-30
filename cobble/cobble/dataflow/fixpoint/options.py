@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-ITERATION_FACTOR = 50
+ITERATION_FACTOR = 150
 
 
 @dataclass(frozen=True)

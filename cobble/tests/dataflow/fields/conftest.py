@@ -23,18 +23,23 @@ from cobble.dataflow.layout import program_records
 from cobol_asg.asg_types import CobolASG
 
 CORPUS_CONFIG = Path(__file__).resolve().parents[3] / "config" / "fields-tests.toml"
+PUBLIC_CONFIG = (
+    Path(__file__).resolve().parents[3] / "config" / "carddemo-fields-tests.toml"
+)
 
 
 @pytest.fixture
-def corpus_config() -> Mapping:
-    """A gitignored config naming real members, or a skip.
+def corpus_config() -> Mapping[str, object]:
+    """A local config naming real members, else the tracked public-corpus one.
 
-    Shape: see config/fields-tests.example.toml. The names stay out of the
-    repository; the assertions do not depend on what they are.
+    The local name stays gitignored because it is where a corpus under analysis
+    gets pointed at; the public one is tracked so the acceptance tests are a gate
+    rather than a permanent skip.
     """
-    if not CORPUS_CONFIG.is_file():
-        pytest.skip(f"no {CORPUS_CONFIG.name}; acceptance needs a parsed cache")
-    return tomllib.loads(CORPUS_CONFIG.read_text(encoding="utf-8"))
+    chosen = CORPUS_CONFIG if CORPUS_CONFIG.is_file() else PUBLIC_CONFIG
+    if not chosen.is_file():
+        pytest.skip(f"no {CORPUS_CONFIG.name} and no {PUBLIC_CONFIG.name}")
+    return tomllib.loads(chosen.read_text(encoding="utf-8"))
 
 
 @pytest.fixture

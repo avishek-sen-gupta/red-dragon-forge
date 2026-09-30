@@ -26,7 +26,7 @@ from cobble.dataflow.fixpoint.fixpoint import analysed
 from cobble.dataflow.fixpoint.query import FieldStore, Side, store_of
 from cobol_asg.asg_types import CobolASG
 
-COVERAGE_FLOOR = 0.60
+COVERAGE_FLOOR = 0.85
 
 
 def _rows(pairs) -> tuple[dict, ...]:
@@ -107,10 +107,9 @@ def test_the_pinned_derivation_holds_end_to_end(corpus_config):
         if any(one.source_range.overlaps(part) for part in source.ranges)
     ]
 
-    assert carried, f"no flow {oracle['source_field']} -> {oracle['target_field']}"
-    assert any(one.node == oracle["cfg_node"] for one in carried), [
+    assert {one.node for one in carried} == set(oracle["cfg_nodes"]), sorted(
         one.node for one in carried
-    ]
+    )
 
 
 def test_the_worst_member_completes_within_its_bound(corpus_config):
