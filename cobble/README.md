@@ -39,6 +39,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-sym --config <corpus>` | Generate the BMS symbolic copybooks from their `.bms` sources |
 | `cobble-csd --config <corpus>` | Synthesize a CSD for a corpus that arrived without one |
 | `cobble-parse-corpus --config <parse>` | Parse the corpus to one JSON ASG per member (the cache every later stage reads) |
+| `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
 | `cobble-build --config <corpus>` | Extract the graph to `out/` |
 | `cobble-compare` | Identity-diff vs `reference/` (449/803) |
 | `cobble-render` / `cobble-render-webgl --config <corpus>` | Render `out/` as an interactive HTML / WebGL graph |
@@ -122,10 +123,21 @@ holds. To parse differently for a special case, point `cobble-parse-corpus` at a
 copy of the config. Drop generated output with `rm -rf out out-parsed sym`; `sym/` is a
 `copybook_dirs` entry, so `cobble-sym` has to run again before the next build.
 
-`cobble-parse-corpus` is the only stage that starts a JVM, at 4-7 seconds per member. It is
-**resumable**: a member whose ASG (or recorded failure) is already in `asg_dir` is
-skipped, so re-running it after an interrupt costs nothing for what it already did.
-Delete `asg_dir` to force a full reparse after a bridge or grammar change.
+`cobble-parse-corpus` and `cobble-expand-corpus` are the two stages that start a JVM,
+at 4-7 seconds per member. Both are **resumable**, each on its own output: the parse
+skips a member whose ASG (or recorded failure) is already in `asg_dir`, so re-running
+it after an interrupt costs nothing for what it already did. Delete `asg_dir` to force
+a full reparse after a bridge or grammar change.
+
+`cobble-expand-corpus` stops one stage earlier than the parse and writes the text the
+COBOL grammar is handed — copybooks inlined, continuations folded, comments stripped —
+as one `<member>.cbl` per member. That is what to read when a member will **not** parse,
+which is exactly when no ASG exists to read instead. It resumes on `--out-dir` rather
+than on `asg_dir`, deliberately: keyed on the ASG cache it would skip every member of an
+already-parsed corpus and write nothing. A member it cannot expand gets the same
+`<member>.fail` record the parse uses, for the same reason — a missing copybook is
+permanent until the copybook arrives. Nothing downstream consumes the output, which is
+why the destination is a flag and not a config key.
 
 `cobble-build` re-runs the four extractors (CALL/COPY, CICS flow, JCL, batch
 FILE-CONTROL) from scratch every time, reading the ASGs `cobble-parse-corpus` wrote
@@ -816,7 +828,7 @@ consumers may not import each other).
 | `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
 | `cobble/cics/flow_map.py` | Ported, and the one other module that diverges — in how the pass *reports*, not in what it emits. It returns what it read and what it could not (production reports into a list the caller hands down), and it says where it is: a bar over its per-program loop, which is where a corpus run spends its time, and each member's name at DEBUG before it is read. Every node and edge, and the order they reach the sink, are unchanged. |
 | `cobble/build_graph.py` / `cobble/compare.py` | This repo's own driver scripts (not ported from `red-dragon-forge`): extract the graph → `out/` (`cobble-build --config <path>`, reading the config's `asg_dir` — needs `cobble-parse-corpus` first); identity-diff `out/` vs `reference/` (`python -m cobble.compare`). |
-| `cobble/parsing/` | **Stage-1.** The one place a corpus is turned into ASGs and the one place they are read back: `parse_corpus.py` writes one JSON ASG per member (`cobble-parse-corpus --config <path>`), `asg_cache.py` owns the naming rule and the reader every later stage calls, `config.py` is the parse's own config. Nothing downstream starts a JVM. |
+| `cobble/parsing/` | **Stage-1.** The one place a corpus is turned into ASGs and the one place they are read back: `parse_corpus.py` writes one JSON ASG per member (`cobble-parse-corpus --config <path>`), `asg_cache.py` owns the naming rule and the reader every later stage calls, `config.py` is the parse's own config. `expand_corpus.py` is the same walk stopped before the grammar runs, writing expanded source instead (`cobble-expand-corpus --config <path> --out-dir <dir>`), with `expanded_cache.py` owning its naming; it reuses `parse_corpus`'s `Job`, `Result` and `bridge_jar` so the two cannot disagree about the JAR. These two stages start a JVM; nothing downstream does. |
 | `cobble/corpus_config.py` | `CorpusConfig`/`BmsConfig` dataclasses + TOML loading (`tomllib`, stdlib); `cobble.build_graph`/`cobble.generate_sym` read the corpus location/layout from here instead of a hardcoded CardDemo path. `asg_dir` is an input: the cache Stage-1 wrote. |
 | `config/carddemo.toml` | The corpus config CardDemo uses, read by every stage from `cobble-parse-corpus` to `cobble-render`. Copy it as a starting point for a different corpus. |
 | `cobble/corpus_index.py` / `cobble/file_location.py` | `CorpusIndex` resolves every `(NodeKind, id)` to a `FileLocation` (a real `Path`, or a `NoFileLocation` explaining why not: not file-based, no CSD/definition source, or genuinely unresolved) once per run, from the same `CorpusConfig`. Every extractor and `GraphWriter` resolve a given node identically regardless of call order, which is what lets `GraphWriter` stream nodes keep-first with no merge step. |

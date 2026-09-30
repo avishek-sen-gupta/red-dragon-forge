@@ -37,6 +37,10 @@ cobble-render-webgl = "cobble.render_graph_webgl:main"
 # The parse every other stage reads: one JSON ASG per member, named for the
 # member. Run it once per corpus change; nothing downstream starts a JVM.
 cobble-parse-corpus = "cobble.parsing.parse_corpus:main"
+# The same corpus walk, stopped one stage earlier: the expanded source the COBOL
+# grammar is handed, for reading a member the parse above could not produce an ASG
+# for. Resumable on its own output, so a parsed corpus still expands.
+cobble-expand-corpus = "cobble.parsing.expand_corpus:main"
 # The coarse variable dependency graph: one round of the pass-through judgment
 # loop per cobble-depgraph run, all of them over the one cache above.
 cobble-depgraph = "cobble.dataflow.depgraph.build:main"

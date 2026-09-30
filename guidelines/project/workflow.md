@@ -51,8 +51,9 @@ cd cicada && uv run --no-sync python -m pytest
 Three environment facts that cause confusing failures:
 
 - **`bridge-env.sh` is required** for cicada, squall, jackal and the root suite. `cobble` does
-  **not** need it — only the parse stage starts a JVM, and every stage after it reads the one
-  ASG cache that stage wrote.
+  **not** need it — no test in its suite starts a JVM. Two of its *stages* do,
+  `cobble-parse-corpus` and `cobble-expand-corpus`, but the suite covers only their pure
+  parts; every stage after the parse reads the one ASG cache that stage wrote.
 - **Db2-backed tests need a running Db2**: `make db2-up`, then source `squall/db2/dsn-env.sh`
   for `SQUALL_DB2_DSN`. Keep the container running between runs; the first init is slow.
 - **`--no-sync`** on `uv run` is deliberate in the hooks and Makefile — it keeps a test run from
