@@ -170,6 +170,12 @@ _RESOLVERS: Mapping[NodeKind, Callable[[CorpusIndex, NodeKind, str], FileLocatio
             # GraphWriter.add_edge resolves both endpoints of every edge, so a
             # kind absent from this table is a KeyError on the first edge.
             NodeKind.FIELD: lambda index, kind, key: _NOT_INDEXED,
+            # DYNAMIC_TARGET: declared inside a program, like FIELD, but cobble
+            # keeps no index for it either -- NOT_INDEXED on the same grounds.
+            # Also not optional for the same reason FIELD's comment gives: a
+            # DYNAMIC_TARGET reached only through GraphWriter.add_edge's
+            # defensive endpoint stub would KeyError here without this row.
+            NodeKind.DYNAMIC_TARGET: lambda index, kind, node_id: _NOT_INDEXED,
         }
     )
 )

@@ -42,17 +42,19 @@ from pathlib import Path
 from types import MappingProxyType
 
 import networkx as nx
-from tqdm import tqdm
-
 from cics.csd_parse import CsdParseError, parse_csd
 from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
-from cobble.cics.flow_map import extract_transaction_flow_graph
+from cobble.cics.flow_map import FlowExtraction, extract_transaction_flow_graph
+from cobble.cics.flow_observer import DynamicSite
 from cobble.cics.graph_sink import GraphSink
+from cobble.cics.suppressed_transactions import SuppressedTransactions
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
+from cobble.dataflow.fixpoint.rows import Row, strings, text
+from cobble.dataflow.fixpoint.rows import read as read_targets
 from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
 from cobble.jcl.jcl_graph import jcl_graph_from_job
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
@@ -74,6 +76,7 @@ from cobol_asg.import_types import ImportKind, ImportRef
 from cobol_asg.source_text import decode_source
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from jackal.jcl.parser import bridge_parser
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +332,173 @@ def _ref_graph(
     )
 
 
+# ── dynamic call targets: the three-way rule over targets.jsonl ──────────────
+
+# One row's ``transfer`` to the edge kind it earns once the site is a proven
+# fact: exactly one candidate and an empty ``reasons``, or no candidate at
+# all -- both cases are certain about the transfer itself.
+_ORDINARY: Mapping[str, EdgeKind] = MappingProxyType(
+    {
+        "CICS_XCTL": EdgeKind.XCTL,
+        "CICS_LINK": EdgeKind.LINK,
+        "CALL": EdgeKind.CALL,
+    }
+)
+
+# The same rows, for the kind a site earns instead when two or more
+# candidates survived, or one did but carrying doubt.
+_CANDIDATE: Mapping[str, EdgeKind] = MappingProxyType(
+    {
+        "CICS_XCTL": EdgeKind.XCTL_CANDIDATE,
+        "CICS_LINK": EdgeKind.LINK_CANDIDATE,
+        "CALL": EdgeKind.CALL_CANDIDATE,
+    }
+)
+
+# CicsVerb spells XCTL/LINK without the CICS_ prefix targets.jsonl's
+# ``transfer`` column carries; only these two verbs reach _not_attempted_graph,
+# since a dynamic COBOL CALL is invisible to the walk that fills it.
+_CICS_TRANSFER: Mapping[str, EdgeKind] = MappingProxyType(
+    {"XCTL": EdgeKind.XCTL, "LINK": EdgeKind.LINK}
+)
+
+# A graph-level value the lattice never produces -- nothing in the analysis
+# concludes this, only the absence of the artifact that would have.
+_NOT_ATTEMPTED = "not-attempted"
+
+_DynamicGraph = tuple[tuple[GraphNode, ...], tuple[GraphEdge, ...]]
+
+
+def _dynamic_target_id(caller: str, expression: str) -> str:
+    """The id ``<program>.<expression>`` -- scoped like FIELD, never corpus-wide;
+    see NodeKind.DYNAMIC_TARGET."""
+    return f"{caller}.{expression}"
+
+
+def _dynamic_target_node(
+    caller: str,
+    expression: str,
+    reason: str,
+    dropped: Sequence[str],
+    corpus_index: CorpusIndex,
+) -> GraphNode:
+    node_id = _dynamic_target_id(caller, expression)
+    return GraphNode(
+        id=node_id,
+        kind=NodeKind.DYNAMIC_TARGET,
+        location=corpus_index.resolve_file_path(NodeKind.DYNAMIC_TARGET, node_id),
+        attrs={"reason": reason, "dropped": list(dropped)},
+    )
+
+
+def _ordinary_target(
+    caller: str, transfer: str, candidate: str, corpus_index: CorpusIndex
+) -> _DynamicGraph:
+    """Exactly one candidate and no doubt: a proven CALL/XCTL/LINK edge."""
+    return (
+        (_program_node(candidate, corpus_index),),
+        (_ref_edge(caller, candidate, NodeKind.PROGRAM, _ORDINARY[transfer]),),
+    )
+
+
+def _candidate_targets(
+    caller: str, transfer: str, candidates: Sequence[str], corpus_index: CorpusIndex
+) -> _DynamicGraph:
+    """Two or more candidates, or one carrying doubt: one *_CANDIDATE edge each."""
+    kind = _CANDIDATE[transfer]
+    return (
+        tuple(_program_node(candidate, corpus_index) for candidate in candidates),
+        tuple(
+            _ref_edge(caller, candidate, NodeKind.PROGRAM, kind)
+            for candidate in candidates
+        ),
+    )
+
+
+def _no_candidate_target(
+    caller: str,
+    transfer: str,
+    expression: str,
+    reasons: Sequence[str],
+    dropped: Sequence[str],
+    corpus_index: CorpusIndex,
+) -> _DynamicGraph:
+    """No candidate survived: a proven transfer to a DYNAMIC_TARGET node, which
+    carries why -- the reasons, or (candidates and reasons both empty) the
+    dropped values that explain it on their own."""
+    node = _dynamic_target_node(
+        caller, expression, ", ".join(reasons), dropped, corpus_index
+    )
+    return (node,), (
+        _ref_edge(caller, node.id, NodeKind.DYNAMIC_TARGET, _ORDINARY[transfer]),
+    )
+
+
+def _row_target(row: Row, corpus_index: CorpusIndex) -> _DynamicGraph:
+    """One targets.jsonl row, resolved by the three-way rule.
+
+    Promotion to an ordinary edge requires an empty ``reasons``, not merely one
+    candidate: a walk that did not settle yields a subset, so a singleton
+    carrying a reason may have a second candidate the walk never reached.
+    """
+    caller = text(row, "caller")
+    transfer = text(row, "transfer")
+    candidates = strings(row, "candidates")
+    reasons = strings(row, "reasons")
+    if len(candidates) == 1 and not reasons:
+        return _ordinary_target(caller, transfer, candidates[0], corpus_index)
+    if candidates:
+        return _candidate_targets(caller, transfer, candidates, corpus_index)
+    return _no_candidate_target(
+        caller,
+        transfer,
+        text(row, "expression"),
+        reasons,
+        strings(row, "dropped"),
+        corpus_index,
+    )
+
+
+def dynamic_target_graph(
+    rows: Sequence[Row], corpus_index: CorpusIndex
+) -> _DynamicGraph:
+    """Every dynamic CALL/XCTL/LINK site targets.jsonl names, as the three-way
+    rule's nodes and edges. See _ORDINARY/_CANDIDATE and NodeKind.DYNAMIC_TARGET."""
+    built = tuple(_row_target(row, corpus_index) for row in rows)
+    return (
+        tuple(chain.from_iterable(nodes for nodes, _edges in built)),
+        tuple(chain.from_iterable(edges for _nodes, edges in built)),
+    )
+
+
+def _not_attempted_graph(
+    sites: Sequence[DynamicSite], corpus_index: CorpusIndex
+) -> _DynamicGraph:
+    """Every dynamic XCTL/LINK site the CICS walk saw, marked not-attempted.
+
+    Used only when no targets.jsonl is configured at all -- with the table
+    present, dynamic_target_graph is the exclusive source of these edges, so a
+    site it resolves is never also written here under the wrong reason.
+    """
+    return (
+        tuple(
+            _dynamic_target_node(
+                site.program, site.expression, _NOT_ATTEMPTED, (), corpus_index
+            )
+            for site in sites
+        ),
+        tuple(
+            _ref_edge(
+                site.program,
+                _dynamic_target_id(site.program, site.expression),
+                NodeKind.DYNAMIC_TARGET,
+                _CICS_TRANSFER[site.transfer],
+            )
+            for site in sites
+        ),
+    )
+
+
 def _has_working_storage(source: bytes) -> bool:
     return any(
         line.strip().upper().split()[:2] == ["WORKING-STORAGE", "SECTION."]
@@ -515,28 +685,6 @@ def _is_synthetic_transaction(kind: NodeKind, node_id: str) -> bool:
     return kind is NodeKind.TRANSACTION and node_id.startswith(SYNTHETIC_TRANSID_PREFIX)
 
 
-class _Suppressed:
-    """What the placeholder filter removed, so the stage can say so.
-
-    A filter that drops a thousand transactions in silence reads, in the log,
-    exactly like one that found none: every count the stage prints describes its
-    inputs. Transactions are counted by id because the sink sees each placeholder
-    more than once -- as a node, and again as an edge endpoint; edges are counted as
-    seen, since each is emitted once. Rebuilt rather than mutated in place so both
-    counts are only ever read whole.
-    """
-
-    def __init__(self) -> None:
-        self.transactions: frozenset[str] = frozenset()
-        self.edges = 0
-
-    def transaction(self, node_id: str) -> None:
-        self.transactions = self.transactions | {node_id}
-
-    def edge(self) -> None:
-        self.edges = self.edges + 1
-
-
 @dataclass(frozen=True)
 class _WithoutSyntheticTransactions:
     """A sink that drops the placeholder transactions a generated CSD carries.
@@ -555,7 +703,7 @@ class _WithoutSyntheticTransactions:
     """
 
     inner: GraphSink
-    suppressed: _Suppressed = field(default_factory=_Suppressed)
+    suppressed: SuppressedTransactions = field(default_factory=SuppressedTransactions)
 
     def add_node(self, node: GraphNode) -> None:
         if _is_synthetic_transaction(node.kind, node.id):
@@ -583,7 +731,7 @@ def _csd_source(config: CorpusConfig) -> str:
     )
 
 
-def _log_suppressed(suppressed: _Suppressed) -> None:
+def _log_suppressed(suppressed: SuppressedTransactions) -> None:
     """Say what the placeholder filter removed, or say nothing when it removed
     nothing -- a real CSD has no placeholders and needs no line about them."""
     if not suppressed.transactions:
@@ -595,13 +743,30 @@ def _log_suppressed(suppressed: _Suppressed) -> None:
     )
 
 
-def _run_flow_extractor(
+def _write_not_attempted_sites(
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    extraction: FlowExtraction,
+    writer: GraphWriter,
+) -> None:
+    """A dynamic site this walk saw, marked not-attempted -- but only when no
+    artifact is configured at all. With the artifact present,
+    dynamic_target_graph over it is the exclusive source of these edges (wired
+    in _extract_all), so nothing here would duplicate or race it.
+    """
+    if _targets_path(config).is_file():
+        return
+    writer.add_all(*_not_attempted_graph(extraction.dynamic_sites, corpus_index))
+
+
+def _flow_extraction_attempt(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
     found: _CicsSources,
     writer: GraphWriter,
-) -> tuple[str, ...]:
-    """Run the flow extractor over the whole CSD and return what it skipped.
+) -> tuple[FlowExtraction, tuple[str, ...]]:
+    """What the whole-CSD pass produced, or a blank FlowExtraction paired with
+    a single abort message when it raised.
 
     The whole CSD is one call, so a failure escaping it is the stage's, not one
     member's -- and one that escapes takes the pass's own report with it, so the
@@ -620,14 +785,28 @@ def _run_flow_extractor(
         )
     except Exception as exc:
         logger.warning("CICS flow graph (whole CSD) failed: %s", exc, exc_info=True)
-        return (f"CICS flow graph (whole CSD): {exc}",)
+        return FlowExtraction(), (f"CICS flow graph (whole CSD): {exc}",)
     finally:
         _log_suppressed(sink.suppressed)
+    return extraction, ()
+
+
+def _run_flow_extractor(
+    config: CorpusConfig,
+    corpus_index: CorpusIndex,
+    found: _CicsSources,
+    writer: GraphWriter,
+) -> tuple[str, ...]:
+    """Run the flow extractor over the whole CSD and return what it skipped."""
+    extraction, abort = _flow_extraction_attempt(config, corpus_index, found, writer)
+    if abort:
+        return abort
     logger.info(
         "CICS flow: %d programs read, %d skipped",
         extraction.programs_read,
         len(extraction.failures),
     )
+    _write_not_attempted_sites(config, corpus_index, extraction, writer)
     return extraction.failures
 
 
@@ -690,6 +869,40 @@ def _build_batch_file_graph(
 # ── the run ──────────────────────────────────────────────────────
 
 
+_TARGETS_FILE = "targets.jsonl"
+
+
+def _targets_path(config: CorpusConfig) -> Path:
+    """Where the dataflow fixpoint stage's table would be, if this build's
+    out_dir is also where `cobble-fields --all` wrote it.
+
+    Convention, not configuration: the same rule ``_out_paths`` already applies
+    to nodes.jsonl/edges.jsonl, so a corpus that runs both stages into one
+    out_dir gets the enrichment for free, and a corpus that has not run the
+    fixpoint stage at all -- the common case -- reads as the file not existing,
+    which ``read_targets`` already turns into "no rows" rather than an error.
+    """
+    return config.out_dir / _TARGETS_FILE
+
+
+def _build_dynamic_targets(
+    config: CorpusConfig, corpus_index: CorpusIndex
+) -> _DynamicGraph:
+    """The three-way rule's nodes and edges over targets.jsonl, or nothing.
+
+    Named and logged as its own input, not folded silently into a stage that
+    already runs: a corpus whose node count changed because this table
+    appeared or disappeared must read as that, not as drift nothing explains.
+    """
+    path = _targets_path(config)
+    if not path.is_file():
+        logger.info("dynamic targets: skipped (no %s)", path)
+        return ((), ())
+    rows = read_targets(path)
+    logger.info("dynamic targets: %d rows read from %s", len(rows), path)
+    return dynamic_target_graph(rows, corpus_index)
+
+
 def _extract_all(
     config: CorpusConfig, corpus_index: CorpusIndex, csd: _CsdRead, store: JclStore
 ) -> tuple[str, ...]:
@@ -698,12 +911,14 @@ def _extract_all(
     ensure_dir(config.out_dir)
     nodes_jsonl, edges_jsonl = _out_paths(config)
     with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
-        return (
+        failures = (
             _build_jcl_graph(config, corpus_index, writer, store)
             + _build_call_copy_graph(config, corpus_index, cics_program_names, writer)
             + _cics_flow_or_skip(config, corpus_index, csd.transid_to_program, writer)
             + _build_batch_file_graph(config, corpus_index, cics_program_names, writer)
         )
+        writer.add_all(*_build_dynamic_targets(config, corpus_index))
+        return failures
 
 
 def _edge_kind_lines(graph: nx.MultiDiGraph) -> tuple[str, ...]:
