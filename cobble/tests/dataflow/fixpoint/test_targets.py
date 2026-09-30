@@ -50,7 +50,7 @@ def test_a_value_table_read_at_a_computed_subscript_yields_every_declared_progra
 
     assert menu, sorted(expression for _, expression in found)
     assert {tuple(sorted(t.candidates)) for t in menu} == {MENU_PROGRAMS}
-    assert {UnresolvedReason.UNINITIALISED} <= set(menu[0].reasons)
+    assert {t.reasons for t in menu} == {(UnresolvedReason.UNINITIALISED,)}
 
 
 def test_a_local_literal_move_resolves_each_site_to_its_own_program():
