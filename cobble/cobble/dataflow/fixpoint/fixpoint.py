@@ -62,6 +62,7 @@ from itertools import accumulate, repeat
 from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
+from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.state import EMPTY, State, join, reaching
 from cobble.dataflow.fields.transfer import (
     HANDLED,
@@ -337,6 +338,7 @@ def _settled(
     index: CellIndex,
     entry: str,
     cap: int,
+    entry_state: State,
 ) -> _Pass:
     """Iterate to a fixpoint, or to the cap if a defect keeps the state growing.
 
@@ -347,7 +349,7 @@ def _settled(
     off ``queue``.
     """
     start = _Pass(
-        states=MappingProxyType({entry: EMPTY}),
+        states=MappingProxyType({entry: entry_state}),
         queue=(entry,),
         progress=_Progress(started=time.monotonic()),
     )
@@ -421,6 +423,7 @@ def _swept(
     index: CellIndex,
     entry: str,
     budget: int,
+    entry_state: State,
 ) -> _Walk:
     """Sweep until nothing grows or the budget is spent, whichever comes first.
 
@@ -437,7 +440,7 @@ def _swept(
     can never report a settled loop even when it found every flow in it.
     """
     order = depth_first_order(cfg, entry)
-    states: Mapping[str, State] = MappingProxyType({entry: EMPTY})
+    states: Mapping[str, State] = MappingProxyType({entry: entry_state})
     sweep, settled = 0, False
     while sweep < budget and not settled:
         grown = _propagated(cfg, statements, index, order, states, sweep + 1)
@@ -459,9 +462,10 @@ def _worked(
     index: CellIndex,
     entry: str,
     factor: int,
+    entry_state: State,
 ) -> _Walk:
     cap = factor * max(len(cfg.nodes), 1)
-    run = _settled(cfg, statements, index, entry, cap)
+    run = _settled(cfg, statements, index, entry, cap, entry_state)
     return _Walk(
         states=run.states,
         dequeues=run.dequeues,
@@ -476,6 +480,7 @@ def _walked(
     index: CellIndex,
     entry: str,
     options: AnalysisOptions,
+    entry_state: State,
 ) -> _Walk:
     """An entry the CFG does not hold reaches nothing, and is not a failure.
 
@@ -486,8 +491,8 @@ def _walked(
     if entry not in cfg.node_ids:
         return _Walk()
     if options.sweeps:
-        return _swept(cfg, statements, index, entry, options.sweeps)
-    return _worked(cfg, statements, index, entry, options.factor)
+        return _swept(cfg, statements, index, entry, options.sweeps, entry_state)
+    return _worked(cfg, statements, index, entry, options.factor, entry_state)
 
 
 def _definers(state: State, extent: FieldExtent, node: str) -> frozenset[str]:
@@ -577,7 +582,10 @@ def _skip_reason(run: _Pass, cap: int, program: str, nodes: int) -> str:
 
 
 def analyse(
-    asg, index: CellIndex, options: AnalysisOptions = DEFAULT_OPTIONS
+    asg,
+    index: CellIndex,
+    options: AnalysisOptions = DEFAULT_OPTIONS,
+    entry_state: State = EMPTY,
 ) -> ProgramFlow:
     """Every flow in one program, given an index its fields can be laid out into.
 
@@ -586,12 +594,15 @@ def analyse(
     the lattice height at each node, and the height is the distinct sources held
     at each extent. ``options.sweeps`` runs the cheaper walk instead, whose
     budget is passes over the program rather than visits to a node.
+
+    ``entry_state`` is what reaches the program before any statement runs -- the
+    initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.
     """
     cfg = build_program(asg)
     statements = statement_index(asg)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
-    walk = _walked(cfg, statements, index, _entry_node(asg), options)
+    walk = _walked(cfg, statements, index, _entry_node(asg), options, entry_state)
     extracted = _extracted(found, walk.states, index)
     return ProgramFlow(
         program=cfg.program,
@@ -620,7 +631,9 @@ def analysed(
     comes back with a skip is ``NO_INDEX``, which holds no cells.
     """
     try:
-        index = cell_index(program_records(asg))
+        records = program_records(asg)
+        index = cell_index(records)
     except UnsizeableFieldError as error:
         return ProgramFlow(program=asg.program_id, skipped=str(error)), NO_INDEX
-    return analyse(asg, index, options), index
+    entry_state = State(values=initial_image(records, index))
+    return analyse(asg, index, options, entry_state), index

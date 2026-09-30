@@ -488,6 +488,42 @@ def test_a_sweep_visits_each_reachable_node_once(flow_of):
     assert flow.dequeues <= flow.nodes
 
 
+def test_seeding_the_entry_state_leaves_the_coverage_counters_alone(
+    program_of, field, index_of
+):
+    """Seeding does not change what the walk reaches -- only what it starts with.
+
+    Task 7 is where a resolved call site proves the seeding does anything; here
+    the observable claim is narrower -- the coverage counters and ``settled`` are
+    identical with and without it, and ``writes > 0`` so a program that analysed
+    nothing cannot satisfy this vacuously.
+    """
+    asg = program_of(
+        [],
+        paragraphs=[{"name": "MAIN", "statements": [_move("WS-PGM", "WS-COPY")]}],
+        data_fields=[
+            field(
+                1,
+                "REC",
+                children=[
+                    field(5, "WS-PGM", "X(8)", offset=0, value="COSGN00C"),
+                    field(5, "WS-COPY", "X(8)", offset=8),
+                ],
+            )
+        ],
+    )
+    index = index_of(asg)
+    bare = analyse(asg, index, DEFAULT_OPTIONS)
+    seeded = analysed(asg)[0]
+
+    assert seeded.writes > 0
+    assert (seeded.writes, seeded.covered, seeded.settled) == (
+        bare.writes,
+        bare.covered,
+        bare.settled,
+    )
+
+
 def test_an_unsizeable_program_is_recorded_not_dropped(program_of, field, monkeypatch):
     """layout.UnsizeableFieldError must surface as a skip with a reason.
 

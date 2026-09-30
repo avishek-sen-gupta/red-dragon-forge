@@ -15,6 +15,10 @@ cfg_nodes = [
   "PROCESS-ENTER-KEY/7.then.0.when.2.2",
 ]
 
+# COACTUPC, 2064 nodes, measured on this corpus at ITERATION_FACTOR 150:
+#   28.6s before the value lattice, 34.4s carrying values, 70.2s once the walk
+#   is seeded from the VALUE image. 90s is the measured 70.2s plus headroom for a
+#   slower machine. Raise it only with a new measurement recorded here.
 [performance]
 member = "COACTUPC"
-seconds = 60.0
+seconds = 90.0
