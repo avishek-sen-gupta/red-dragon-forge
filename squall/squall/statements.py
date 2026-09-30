@@ -5,6 +5,7 @@ SQL-specific type names.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -23,10 +24,19 @@ class ExecSqlStatement:
 
 
 class SqlDialectParser:
-    """Constructs ExecSqlStatement from raw EXEC SQL bridge JSON."""
+    """Constructs ExecSqlStatement from EXEC SQL JSON, from either producer.
 
-    def applies(self, data: dict) -> bool:
+    Two feed it and they name the text differently: the ProLeap bridge emits
+    ``exec_sql_text`` on a first parse, and ``ExecSqlStatement.to_dict`` writes
+    ``text`` thereafter. Reading only the bridge's key recovered nothing from a
+    cached ASG -- and cobble's cache IS ``CobolASG.to_dict()``, so every stage
+    after the parse saw an empty statement.
+    """
+
+    def applies(self, data: Mapping[str, str]) -> bool:
         return data.get("type") == "EXEC_SQL"
 
-    def parse(self, data: dict) -> ExecSqlStatement:
-        return ExecSqlStatement(text=data.get("exec_sql_text", "") or "")
+    def parse(self, data: Mapping[str, str]) -> ExecSqlStatement:
+        return ExecSqlStatement(
+            text=data.get("exec_sql_text") or data.get("text") or ""
+        )
