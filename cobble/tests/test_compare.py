@@ -1,5 +1,5 @@
 """The identity diff's reporting: the count it returns drives the exit code, and
-the detail it emits is what someone reads when 449/803 does not reproduce."""
+the detail it emits is what someone reads when 448/832 does not reproduce."""
 
 import logging
 

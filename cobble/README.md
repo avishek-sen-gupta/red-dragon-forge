@@ -5,7 +5,7 @@ living in the `red-dragon-forge` workspace. It is a file-by-file **port** of the
 streaming graph pipeline, kept decoupled from the RedDragon interpreter/VM. Point
 it at any corpus via a TOML config (see [Point this at your own
 codebase](#point-this-at-your-own-codebase)); the AWS **CardDemo** corpus is the
-proof case, where it reproduces the **exact same 449-node / 803-edge graph** from
+proof case, where it reproduces the **exact same 448-node / 832-edge graph** from
 nothing but the corpus (forge's `vendor/carddemo` submodule) and the tools forge
 builds from source.
 
@@ -41,7 +41,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-parse-corpus --config <parse>` | Parse the corpus to one JSON ASG per member (the cache every later stage reads) |
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
 | `cobble-build --config <corpus>` | Extract the graph to `out/` |
-| `cobble-compare` | Identity-diff vs `reference/` (449/803) |
+| `cobble-compare` | Identity-diff vs `reference/` (448/832) |
 | `cobble-render` / `cobble-render-webgl --config <corpus>` | Render `out/` as an interactive HTML / WebGL graph |
 | `cobble-srccfg-build PROGRAM --config <corpus>` | Build one program's source CFG **and every program it transitively calls** |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <json> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
@@ -55,7 +55,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 uv run cobble-sym --config config/carddemo.toml              # generate the BMS symbolic copybooks
 uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus -> one JSON ASG per member in out-parsed/
 uv run cobble-build --config config/carddemo.toml            # extract the graph -> out/nodes.jsonl, out/edges.jsonl
-uv run cobble-compare                                        # identity-diff out/ vs reference/ (must be empty: 449/803)
+uv run cobble-compare                                        # identity-diff out/ vs reference/ (must be empty: 448/832)
 uv run cobble-render --config config/carddemo.toml           # -> out/graph.html
 ```
 
@@ -429,11 +429,16 @@ uv run cobble-dataflow-fixpoint --config config/fields.toml --member PROGA --swe
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
 a usage error. The usual question is about the fields of one program, and a
-whole-cache pass is minutes of fixpoint per member, so it is asked for rather
-than defaulted into.
+whole-cache pass still costs real time, so it is asked for rather than defaulted
+into. Measured on the 29-member CardDemo cache: 72.5s total before the walk
+seeded from `VALUE`; per member now, `COACTUPC` 66.4s / `COCRDLIC` 9.3s /
+`COMEN01C` 2.6s. Seeding the walk from the `VALUE` image roughly doubles it on
+large members, which is why `tests/dataflow/fields/test_fields_acceptance.py`'s
+performance bound on `COACTUPC` moved from 60s to 90s
+(`config/carddemo-fields-tests.toml`).
 
 Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
-writes five files to `<out_dir>`:
+writes six files to `<out_dir>`:
 
 | file | one row per | holds |
 | ---- | ----------- | ----- |
@@ -442,6 +447,7 @@ writes five files to `<out_dir>`:
 | `extents.jsonl` | *declared* name | its `level`, its `usage`, and the byte ranges it owns |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
 | `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
+| `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and `dropped` values the walk could not keep |
 
 A `FIELD` id is `<program>.<field>`, because a field name is only unique within a
 program: two copybooks routinely give one piece of storage two names. An edge
@@ -609,8 +615,53 @@ nothing in the run says exit 3.
 `tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
 over-approximates, `must_cover` under-approximates), the extent wire form and its
 round trip, the per-statement transfer functions, the node-keyed fixpoint,
-extent-to-name resolution, what each of the five files carries, the query
+extent-to-name resolution, what each of the six files carries, the query
 surface's five primitives, and the corpus pass's exit codes.
+
+### Resolving a dynamic call target
+
+A `CALL WS-PROG` or `EXEC CICS XCTL PROGRAM(CDEMO-TO-PROGRAM)` names its target
+through a data item, not a literal. A field's declared `VALUE` clause becomes
+bytes in an initial image, the fixpoint walk starts from it, and transfer
+functions carry literals forward through moves, redefinitions and `EXEC CICS
+RECEIVE`/`LINK` write-backs. `targets.jsonl` (above) is a second pass that reads
+the settled byte state at each such site and resolves it against the corpus's
+known program names, producing one row per site: the candidates it reached, and
+a typed `reasons` entry for each source of remaining doubt (`from-callee`: the
+walk models a callee's `LINK`/`XCTL` write-back even though the callee may never
+return control to update it; `uninitialised`: a branch reaches the site with no
+write recorded on that byte range at all).
+
+`cobble-build` reads `targets.jsonl` by convention at the build's `out_dir` and
+turns each row into one of three edge forms, by a three-way rule:
+
+| candidates | reasons | edge(s) |
+| ---------- | ------- | ------- |
+| exactly one | none | one ordinary `CALL`/`XCTL`/`LINK` edge, straight to the resolved `PROGRAM` — proven |
+| one or more | any | one `*_CANDIDATE` edge per candidate (`CALL_CANDIDATE`/`XCTL_CANDIDATE`/`LINK_CANDIDATE`) — resolved but carrying doubt |
+| none | — | one edge to a `DYNAMIC_TARGET` node, carrying the reasons (or the dropped values) that explain why nothing survived |
+
+A `DYNAMIC_TARGET` node's id is `<program>.<expression>` — scoped to the
+program that names it, like a `FIELD` id, never a corpus-wide node keyed on the
+expression text alone. `CDEMO-TO-PROGRAM` is written by more than one caller
+with a different candidate set each time; a single node per expression name
+would fuse every member naming it into one hub that means nothing, the same
+defect this unit removed when a fallback-to-operand-text read fabricated
+`PROGRAM` nodes named after variables.
+
+On the CardDemo corpus, most resolved sites are `*_CANDIDATE`, not proven: of
+29 dynamic call sites, 17 resolve to exactly one program and 12 to several, but
+only a handful of the 17 singletons carry no doubt. 23 of the 29 carry the
+`from-callee` reason, because `cobble/dataflow/fields/transfer.py` models an
+`EXEC CICS XCTL`'s COMMAREA the same way as `LINK`'s — a callee write-back —
+even though `cobble/dataflow/srccfg/link.py` documents that `XCTL` does not
+return control to the site that issued it, and no CICS control-transfer verb
+is a CFG terminator (`cobble/dataflow/srccfg/desugar.py`'s terminator map
+holds only `STOP RUN`/`GOBACK`/`EXIT PROGRAM`). Refining
+that — so a verb that never returns stops modelling a write-back from it — is a
+follow-up, not done here; a reader comparing 45 `XCTL_CANDIDATE` edges against 5
+proven `XCTL` edges should read this as "resolved, mostly with acknowledged
+doubt," not "only 5 sites resolved."
 
 ### Querying the field dataflow
 
@@ -807,7 +858,7 @@ Unlike `cobble-build` + `cobble-compare` (one big end-to-end golden-file check o
 the real CardDemo corpus, needing the forge-built tools), `tests/` unit-tests cobble's pure
 modules in isolation (grammars, dataclass transforms, graph merging) with
 hand-built inputs, giving localized signal on which piece broke rather than
-just "449/803 doesn't match." Coverage is still partial; see `tests/` for
+just "448/832 doesn't match." Coverage is still partial; see `tests/` for
 what's covered so far.
 
 ### Formatting, linting, and pre-commit hooks
@@ -841,7 +892,7 @@ consumers may not import each other).
 | `tests/` | The pytest unit suite (`uv run python -m pytest`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
-| `reference/` | The 449/803 identity golden (copied from the production fitness golden, the *target*, not an input to the extraction). |
+| `reference/` | The 448/832 identity golden (copied from the production fitness golden, the *target*, not an input to the extraction). |
 | `bms-macros/` | The hand-written `DFHMSD`/`DFHMDI`/`DFHMDF` prototype macros (assembler SYSLIB for `hlasm_export`). Source, not generated. |
 ## Invariant
 
@@ -855,7 +906,7 @@ grep -rE '^\s*(import|from)\s+(interpreter|cics|jackal|knowledge_graph)\b' cobbl
 
 The only coupling to RedDragon is (a) the two bridge JARs and `hlasm_export`,
 invoked as subprocesses, all **built from source** by forge's `make setup`, and (b) the one seam
-(`cobble/cics/verb_source_asg.py`). The graph identity (449/803) is reached by
+(`cobble/cics/verb_source_asg.py`). The graph identity (448/832) is reached by
 independent Python that shells out to those tools: the decoupling, proven by a
 package that imports no production interpreter code and ships no generated
 artifacts.
