@@ -66,7 +66,7 @@ _NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})
 _NO_VALUES: Mapping[FieldExtent, ValueSet] = MappingProxyType({})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class State:
     """What reaches each extent, and what each extent can hold.
 
@@ -99,6 +99,8 @@ def _joined_sources(
 def _joined_values(
     left: Mapping[FieldExtent, ValueSet], right: Mapping[FieldExtent, ValueSet]
 ) -> Mapping[FieldExtent, ValueSet]:
+    if not left and not right:
+        return _NO_VALUES
     union_extents = (*left, *(extent for extent in right if extent not in left))
     return MappingProxyType(
         {
@@ -115,6 +117,29 @@ def join(left: State, right: State) -> State:
     return State(
         sources=_joined_sources(left.sources, right.sources),
         values=_joined_values(left.values, right.values),
+    )
+
+
+def _kept_values(
+    state: State, target: FieldExtent, values: ValueSet
+) -> Mapping[FieldExtent, ValueSet]:
+    """The value map after ``target``'s must_cover kill, or the shared empty map.
+
+    Nothing to store and nothing already held means nothing to build: most
+    programs declare no ``VALUE`` clause, and a fresh proxy over an empty
+    comprehension on every write would allocate for a map that only ever holds
+    nothing. A bare reason with no values is still real information, so it
+    always takes the normal path.
+    """
+    if not state.values and not values.values and not values.reasons:
+        return _NO_VALUES
+    surviving = {
+        extent: held
+        for extent, held in state.values.items()
+        if not target.must_cover(extent)
+    }
+    return MappingProxyType(
+        {**surviving, target: merged(surviving.get(target, VALUES_EMPTY), values)}
     )
 
 
@@ -135,11 +160,6 @@ def write(
         for extent, held in state.sources.items()
         if not target.must_cover(extent)
     }
-    kept_values = {
-        extent: held
-        for extent, held in state.values.items()
-        if not target.must_cover(extent)
-    }
     return State(
         sources=MappingProxyType(
             {
@@ -147,12 +167,7 @@ def write(
                 target: kept_sources.get(target, frozenset()) | sources,
             }
         ),
-        values=MappingProxyType(
-            {
-                **kept_values,
-                target: merged(kept_values.get(target, VALUES_EMPTY), values),
-            }
-        ),
+        values=_kept_values(state, target, values),
     )
 
 
