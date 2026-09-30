@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 
 from cobble.corpus_config import CorpusConfig
-from cobble.parsing.parse_corpus import bridge_jar, pending
+from tests.parsing.bridges import CannedBridge, RejectingBridge
+from cobble.parsing.parse_corpus import Job, bridge_jar, parse_with, pending
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import SubprocessRunner
 
 
 def _config(tmp_path: Path) -> CorpusConfig:
@@ -84,3 +87,63 @@ def test_an_unset_bridge_jar_names_the_script_that_exports_it() -> None:
 def test_an_unbuilt_bridge_jar_names_the_target_that_builds_it(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="make setup"):
         bridge_jar({"PROLEAP_BRIDGE_JAR": str(tmp_path / "absent.jar")})
+
+
+def _job(config: CorpusConfig, name: str) -> Job:
+    source = config.cobol_dir / name
+    return Job(source, config.asg_dir / f"{source.stem}.json")
+
+
+def _parser(bridge: SubprocessRunner) -> ProLeapCobolParser:
+    return ProLeapCobolParser(bridge, "bridge.jar")
+
+
+def test_a_member_the_parser_cannot_turn_into_an_asg_is_recorded_as_its_failure(
+    tmp_path: Path,
+) -> None:
+    """Both arms of "this member is data cobble cannot handle": the bridge
+    rejecting the source, and bridge output that will not deserialise. A corpus
+    member that will not parse is data, not a bug, so it is recorded and never
+    retried."""
+    config = _config(tmp_path)
+    _members(config, "A.cbl", "B.cbl")
+
+    rejected = parse_with(
+        _parser(RejectingBridge("could not find copy book")), _job(config, "A.cbl")
+    )
+    undeserialisable = parse_with(_parser(CannedBridge("{")), _job(config, "B.cbl"))
+
+    assert (rejected.ok, undeserialisable.ok) == (False, False)
+    assert (config.asg_dir / "A.fail").read_text() == (
+        "CobolParseError: could not find copy book"
+    )
+    assert (config.asg_dir / "B.fail").read_text().startswith("JSONDecodeError:")
+
+
+def test_a_parsed_member_is_written_where_the_cache_expects_it(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    _members(config, "A.cbl")
+
+    result = parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
+
+    assert result.ok is True
+    assert (config.asg_dir / "A.json").read_text() == "{}"
+
+
+def test_a_failure_to_WRITE_is_not_blamed_on_the_member(tmp_path: Path) -> None:
+    """The write used to sit inside the same catch as the parse, so a full disk
+    or an unwritable asg_dir was recorded as "this member is unparseable" -- for
+    every member, permanently, because a .fail is never retried. A run-wide fault
+    must end the run instead (red-dragon-forge-jbh)."""
+    config = _config(tmp_path)
+    _members(config, "A.cbl")
+    # dest unwritable, its directory fine -- so recording a .fail WOULD succeed,
+    # which is what makes this test able to tell the two behaviours apart.
+    (config.asg_dir / "A.json").mkdir()
+
+    with pytest.raises(OSError):
+        parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
+
+    assert not (config.asg_dir / "A.fail").exists()
