@@ -481,4 +481,6 @@ fileignoreconfig:
   checksum: 1e6cab5f8e3467404c50ed9bca0b169a4de9ad2ae02c3980873a3bc1420769ac
 - filename: cobble/tests/viz/test_pathwalk_viz.py
   checksum: 5f4569c14aca97b037c0685ec58ddf13ee6477e844a23ef5e7c394e4a53b7aeb
+- filename: docs/superpowers/specs/2026-09-30-cobble-exec-sql-whenever-cfg-design.md
+  checksum: b90673ade73466398c449dbb4f24acad1bd8f544acf727a1105cc41a71dbb5ed
 version: "1.0"
