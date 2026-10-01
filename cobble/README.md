@@ -119,7 +119,7 @@ Cross-program field flow is a different system — `cobble/dataflow/fields/`.
 a bare `cobble-build` fails with a clear error instead of silently assuming CardDemo.
 `cobble-build` also requires `--output`, the graph file it writes: one JSON line per
 node and per edge, each tagged `"type": "node"` or `"type": "edge"`. The stages that
-read only that file — `cobble-compare` and the renderers — take it
+read only that file — `cobble-compare`, the renderers, `cobble-viz-callgraph` — take it
 as `--graph` and no config.
 Every stage, the parse included, reads the same **corpus** config, so the parse
 and the build cannot disagree about which members and copybook dirs `asg_dir`
@@ -239,7 +239,7 @@ HTML files — open in any browser, no server required.
 ```bash
 # Call dependency graph — which programs CICS-LINK to which
 uv run cobble-viz-callgraph \
-  --edges  <out_dir>/edges.jsonl \
+  --graph  out/carddemo.jsonl \
   --cfg    <srccfg_dir>/cfg-<ENTRY>.json \
   --out    out-viz/call-dep.json
 
