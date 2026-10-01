@@ -18,10 +18,16 @@
 - Read JSONL through `fixpoint/rows.py` helpers only — never `json.loads`.
 - **Never source `bridge-env.sh`** for the cobble suite: it switches on acceptance tests that already fail for unrelated reasons. Run a suite ONCE, in the foreground. Do not background a suite and wait.
 - `make fmt` from the repo root, never `black .`. `uv run lint-imports`. Never `--no-verify`.
-- Do not touch `.talismanrc` — reword if flagged (it matches the bare substrings "key" and "pass").
+- Do not touch `.talismanrc` — reword if flagged. The scanner matches short ordinary English fragments inside identifiers and prose, so false positives are routine and rewording is the documented remedy.
 - No `__init__.py` under `tests/`.
 - `python-fp-lint`: `C901` ceiling 3, `PLR0915` ceiling 10 statements, no reassignment across branches.
-- Worktree prerequisites are already in place: submodules, `.venv`, `cobble/out-parsed` (29 members), `cobble/out-fields/extents.jsonl` (108 MB).
+- **The graph is ONE tagged file.** `cobble/reference/graph.jsonl` holds 1280 rows — 448 tagged `node`, 832 tagged `edge`. Verify with `uv run --no-sync cobble-compare --graph <path>`; `cobble-build` writes it via `--output`. Node identity is `(kind, id)` and edge identity is `(source, source_kind, target, target_kind, kind)`, unchanged from the two-file era, so the review discipline still applies.
+- **Worktree prerequisites**, none of which a fresh worktree inherits — all five are in place, and a future resume must redo them:
+  1. `git submodule update --init vendor/red-dragon vendor/carddemo`
+  2. `uv sync --all-packages`
+  3. `cobble/out-parsed` — 29 ASG members, copied from the main checkout rather than re-parsed (parsing needs the ProLeap JAR and takes minutes)
+  4. `cobble/out-fields/extents.jsonl` — 108 MB, regenerate with `cobble-extents --asg-dir out-parsed --out out-fields/extents.jsonl` (no JVM)
+  5. **The bridge JARs, symlinked from the main checkout.** Without them `test_fields_synthetic.py` and `test_fields_trace.py` skip on `no bridge JAR at vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar`, costing ~40 tests that LOOK fine in the summary. Symlink both bridges rather than running `make jar`.
 
 ## Review Focus
 
@@ -53,7 +59,17 @@ The reference graph holds only ONE fabricated node because `_resolve_operand`'s 
 
 ## Baseline to hold
 
-`cobble-compare` is EMPTY DIFF at 448 nodes / 832 edges through Tasks 1–2. Tasks 3–5 will move it **substantially** — 122 operands stop being resolved from declarations and start being resolved from dataflow, so expect candidate edges in volume and some targets to change. Each task states its expected delta BEFORE regenerating anything, and Task 6 does the row-by-row review. Suites: `tests/dataflow/` 899 passed / 13 skipped; `tests/cics/` + `tests/knowledge_graph/` 94 passed.
+`cobble-compare --graph <out>/graph.jsonl` is EMPTY DIFF through Tasks 1–2, against a reference of 1280 rows (448 `node`, 832 `edge`).
+
+Tasks 3–5 will move it **substantially**: 122 operands stop being resolved from declarations and start being resolved from dataflow, so expect candidate edges in volume and some targets to change. Each task states its expected delta BEFORE regenerating anything.
+
+Suites, measured on this branch after the single-graph-file change landed:
+- `tests/cics/` + `tests/knowledge_graph/` + `tests/test_compare.py` + `tests/test_build_graph.py` — **129 green**
+- `tests/dataflow/` — **13 skipped**, all expected: twelve want an srccfg acceptance config and one wants a closure config, and neither exists for this corpus. State how many tests ran, as arithmetic against the previous run, never as a bare number — three times in the preceding unit a suite covered less while still reporting green.
+
+### Task 6 uses a diff classifier, not a reading
+
+Unit 1 reviewed its reference delta line by line because it was four nodes and 63 edges. A 122-operand change is too large for that. One tagged file with unchanged identity semantics makes the better instrument cheap: read `reference/graph.jsonl` and the regenerated file, group every added and removed row by `(type, kind)`, and assert each group's size against a stated expectation. A group nobody predicted is the defect — same rule as Unit 1, enforced by arithmetic rather than by eye.
 
 ---
 
@@ -61,13 +77,13 @@ The reference graph holds only ONE fabricated node because `_resolve_operand`'s 
 
 No behaviour change. `DynamicSite`, `ResolvedTarget` and the `targets.jsonl` row gain a `role` naming what the operand denotes — a typed enum (`PROGRAM`, `TRANSID`, `MAP`, `MAPSET`, `FILE`) serialised by value, following `UnresolvedReason`'s precedent. Every existing row reads `role: "PROGRAM"`.
 
-Gate: `cobble-compare` EMPTY DIFF, both suites unmoved. A test asserts a round-tripped row carries its role.
+Gate: `cobble-compare --graph <out>/graph.jsonl` EMPTY DIFF, both suites unmoved. A test asserts a round-tripped row carries its role.
 
 ### Task 2: Generalise the three-way rule over a (verb, role) table
 
 Add the nine candidate `EdgeKind` members — the variants of `READS`, `WRITES`, `UPDATES`, `DELETES`, `ENDS_BROWSE`, `RETURN_TRANSID`, `START_TRANSID`, `SENDS_MAP`, `RECEIVES_MAP` — and ONE table mapping `(verb, role)` to `(NodeKind, ordinary EdgeKind, candidate EdgeKind)`, replacing `_ORDINARY` and `_CANDIDATE`. Generalise `DYNAMIC_TARGET`'s docstring from "a dynamic CALL/XCTL/LINK site" to any dynamic reference, with the role in `attrs`.
 
-Promotion stays exactly one condition: one candidate AND empty reasons. Only PROGRAM rows exist yet, so `cobble-compare` stays EMPTY DIFF.
+Promotion stays exactly one condition: one candidate AND empty reasons. Only PROGRAM rows exist yet, so `cobble-compare --graph` stays EMPTY DIFF.
 
 ### Task 3: Resolve a dynamic TRANSID
 
