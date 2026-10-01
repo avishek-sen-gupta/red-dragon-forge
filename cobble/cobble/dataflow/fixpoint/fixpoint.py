@@ -66,7 +66,7 @@ from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
-from cobble.dataflow.fields.state import EMPTY, State, join, reaching
+from cobble.dataflow.fields.state import EMPTY, State, join, reaching, values_at
 from cobble.dataflow.fields.transfer import (
     HANDLED,
     Statement,
@@ -75,6 +75,8 @@ from cobble.dataflow.fields.transfer import (
     writes_of,
 )
 from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
+from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
+from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
@@ -122,6 +124,7 @@ class ReachingDef:
     node: str
     extent: FieldExtent
     definers: tuple[str, ...]
+    held: ValueSet = VALUES_EMPTY
 
 
 @dataclass(frozen=True)
@@ -611,6 +614,7 @@ def _at(
                 node=node_id,
                 extent=source.extent,
                 definers=tuple(sorted(_definers(state, source.extent, node_id))),
+                held=values_at(state, source.extent),
             )
             for _, source in moved
             if not source.origin
