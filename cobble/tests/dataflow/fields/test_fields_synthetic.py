@@ -114,7 +114,7 @@ def _parsed(workspace: Path) -> Path:
 def _built(workspace: Path, cache: Path) -> Path:
     out = workspace / "out"
     extents = workspace / "extents.jsonl"
-    assert emit(cache, extents, ()) == 0
+    assert emit(cache, extents, (), max_workers=1) == 0
     assert (
         cli(
             [
@@ -428,7 +428,7 @@ def two_program_artefact(tmp_path_factory) -> Path:
         )
         assert result.ok, result.error
     extents = root / "extents.jsonl"
-    assert emit(cache, extents, ()) == 0
+    assert emit(cache, extents, (), max_workers=1) == 0
     assert (
         cli(
             [

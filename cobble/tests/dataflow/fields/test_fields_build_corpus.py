@@ -151,7 +151,7 @@ def corpus(tmp_path: Path):
         for name, body in members.items():
             (asg_dir / f"{name}.json").write_text(body, encoding="utf-8")
         extents = tmp_path / "extents.jsonl"
-        emit(asg_dir, extents, declared)
+        emit(asg_dir, extents, declared, max_workers=1)
         return (
             [
                 "--asg-dir",

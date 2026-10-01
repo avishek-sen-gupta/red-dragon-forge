@@ -443,6 +443,10 @@ Reading all 29 members of CardDemo back takes under 3s in total, against 34.6s t
 lay the same members' DATA DIVISIONs out again — 1.2s per member, 2.2s for the
 worst.
 
+`cobble-extents` lays members out in parallel worker processes — `--max-workers`,
+default 4 — and writes them in member order, so the table is byte for byte the one a
+single worker writes. It logs each member's row count and time as it is written.
+
 The table is **streamed**, one member at a time, and each member's records are
 dropped before the next member's arrive, so the peak memory is the largest member's
 layout rather than the corpus's — 29 members' cells held at once are 1.5GB of
