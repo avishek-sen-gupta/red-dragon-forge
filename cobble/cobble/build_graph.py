@@ -69,7 +69,7 @@ from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
 from cobble.parsing.asg_cache import asg_of
-from cobble.path_utils import ensure_dir, ensure_parent
+from cobble.path_utils import ensure_parent
 from cobol_asg.cobol_imports import extract_cobol_imports
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.import_types import ImportKind, ImportRef
@@ -966,7 +966,6 @@ def _extract_all(
 ) -> tuple[str, ...]:
     """Run the four extractors into one writer, returning everything they skipped."""
     cics_program_names = frozenset(csd.transid_to_program.values())
-    ensure_dir(config.out_dir)
     with graph_writer(ensure_parent(output), corpus_index) as writer:
         failures = (
             _build_jcl_graph(config, corpus_index, writer, store)

@@ -40,7 +40,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-csd --config <corpus>` | Synthesize a CSD for a corpus that arrived without one |
 | `cobble-parse-corpus --config <parse>` | Parse the corpus to one JSON ASG per member (the cache every later stage reads) |
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
-| `cobble-build --config <corpus>` | Extract the graph to `out/` |
+| `cobble-build --config <corpus> --output <file>` | Extract the graph to one file, a tagged row per node and edge |
 | `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/832) |
 | `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
 | `cobble-srccfg-build PROGRAM --config <corpus>` | Build one program's source CFG **and every program it transitively calls** |
