@@ -7,25 +7,23 @@ currently is.
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
 
 from cobble.cics.flow_map import extract_transaction_flow_graph
+from cobble.corpus_index import CorpusIndex
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
+from cobble.parsing.asg_cache import cache_path, cached_asg
+from cobol_asg.asg_types import CobolASG
 
 _CSD = """
 DEFINE TRANSACTION(AAAA) GROUP(GRP) PROGRAM(PROGONE)
 DEFINE TRANSACTION(BBBB) GROUP(GRP) PROGRAM(PROGTWO)
 """
 
-_SOURCES = {"PROGONE": b"PROGONE SOURCE", "PROGTWO": b"PROGTWO SOURCE"}
-
-
-class _NoFilePaths:
-    """The one thing the flow pass asks of the corpus index."""
-
-    def resolve_file_path(self, kind, node_id):
-        return None
+_MEMBERS = {"PROGONE": Path("PROGONE.cbl"), "PROGTWO": Path("PROGTWO.cbl")}
 
 
 class _CollectingSink:
@@ -40,59 +38,53 @@ class _CollectingSink:
         self.edges = (*self.edges, edge)
 
 
-@dataclass(frozen=True)
-class _EmptyAsg:
-    """An ASG with nothing in it: enough for the walk, which finds no EXEC CICS."""
+class _Reader:
+    """Reads an empty ASG for each member, except the one it is told to refuse --
+    what a member missing from the cache does. Records what it was asked for."""
 
-    data_fields: tuple = ()
-
-
-class _Parser:
-    """Parses to an empty ASG, except for the source it is told to refuse -- what a
-    member carrying a construct the bridge rejects does. Records what it was given."""
-
-    def __init__(self, refuses: bytes = b"") -> None:
+    def __init__(self, refuses: str = "") -> None:
         self.refuses = refuses
-        self.parsed: tuple[bytes, ...] = ()
+        self.read: tuple[Path, ...] = ()
 
-    def parse(self, source: bytes) -> _EmptyAsg:
-        self.parsed = (*self.parsed, source)
-        if self.refuses and self.refuses in source:
-            raise ValueError("bridge said no")
-        return _EmptyAsg()
+    def __call__(self, member: Path) -> CobolASG:
+        self.read = (*self.read, member)
+        if self.refuses and member.stem == self.refuses:
+            raise FileNotFoundError("no cached ASG")
+        return CobolASG()
 
 
-def _run(parser: _Parser, sink: _CollectingSink, csd: str = _CSD, sources=_SOURCES):
+def _run(reader: _Reader, sink: _CollectingSink, csd: str = _CSD, members=_MEMBERS):
     return extract_transaction_flow_graph(
         csd,
         {},
-        sources,
-        parser=parser,
+        members,
+        read_asg=reader,
         sink=sink,
-        corpus_index=_NoFilePaths(),
+        corpus_index=CorpusIndex(),
     )
 
 
 def test_the_pass_reports_how_many_programs_it_read() -> None:
     """The stage's other counts are its inputs -- transactions defined, sources
     found. Only the pass itself knows how many it got through."""
-    extraction = _run(_Parser(), _CollectingSink())
+    extraction = _run(_Reader(), _CollectingSink())
 
     assert (extraction.programs_read, extraction.failures) == (2, ())
 
 
-def test_a_program_the_parser_refuses_is_reported_and_the_rest_still_stream() -> None:
+def test_a_program_whose_asg_cannot_be_read_is_reported_and_the_rest_still_stream() -> (
+    None
+):
     """One unreadable member must not cost the run the other members' edges, and
     must not vanish either: it comes back so the run can say what is missing."""
-    parser = _Parser(refuses=b"PROGONE")
+    reader = _Reader(refuses="PROGONE")
     sink = _CollectingSink()
 
-    extraction = _run(parser, sink)
+    extraction = _run(reader, sink)
 
     assert extraction.programs_read == 1
-    assert len(extraction.failures) == 1
-    assert extraction.failures[0].startswith("CICS program PROGONE:")
-    assert parser.parsed == (b"PROGONE SOURCE", b"PROGTWO SOURCE")
+    assert extraction.failures == ("CICS program PROGONE: no cached ASG",)
+    assert reader.read == (Path("PROGONE.cbl"), Path("PROGTWO.cbl"))
     assert [(edge.source, edge.target) for edge in sink.edges] == [
         ("AAAA", "PROGONE"),
         ("BBBB", "PROGTWO"),
@@ -100,34 +92,36 @@ def test_a_program_the_parser_refuses_is_reported_and_the_rest_still_stream() ->
 
 
 def test_two_transactions_naming_one_program_read_it_once() -> None:
-    """Reading a program is a bridge subprocess and an ASG; a CSD that names it
-    twice must not pay for it twice."""
-    parser = _Parser()
+    """Reading a program builds its ASG; a CSD that names it twice must not pay for
+    it twice."""
+    reader = _Reader()
 
     extraction = _run(
-        parser,
+        reader,
         _CollectingSink(),
         csd=(
             "DEFINE TRANSACTION(AAAA) GROUP(GRP) PROGRAM(PROGONE)\n"
             "DEFINE TRANSACTION(BBBB) GROUP(GRP) PROGRAM(PROGONE)\n"
         ),
-        sources={"PROGONE": b"PROGONE SOURCE"},
+        members={"PROGONE": Path("PROGONE.cbl")},
     )
 
-    assert (extraction.programs_read, len(parser.parsed)) == (1, 1)
+    assert (extraction.programs_read, reader.read) == (1, (Path("PROGONE.cbl"),))
 
 
 def test_a_program_with_no_source_is_not_read() -> None:
     """The stage reports the missing source itself, before this pass runs; the pass
-    has nothing to parse and must not invent a failure for it."""
-    parser = _Parser()
+    has nothing to read and must not invent a failure for it."""
+    reader = _Reader()
 
-    extraction = _run(parser, _CollectingSink(), sources={"PROGONE": b"PROGONE SOURCE"})
+    extraction = _run(
+        reader, _CollectingSink(), members={"PROGONE": Path("PROGONE.cbl")}
+    )
 
-    assert (extraction.programs_read, extraction.failures, len(parser.parsed)) == (
+    assert (extraction.programs_read, extraction.failures, reader.read) == (
         1,
         (),
-        1,
+        (Path("PROGONE.cbl"),),
     )
 
 
@@ -137,8 +131,58 @@ def test_each_program_is_named_before_it_is_read(caplog) -> None:
     watching run from a stuck one."""
     caplog.set_level(logging.DEBUG)
 
-    _run(_Parser(), _CollectingSink())
+    _run(_Reader(), _CollectingSink())
 
-    assert [message for message in caplog.messages if "PROGTWO" in message] == [
-        "CICS flow: reading PROGTWO"
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "cobble.cics.flow_map" and "PROGTWO" in record.getMessage()
+    ] == ["CICS flow: reading PROGTWO"]
+
+
+def test_a_program_read_from_the_parse_cache_yields_its_cics_verb_edges(
+    tmp_path: Path,
+) -> None:
+    """The cache stores EXEC CICS already parsed -- a verb and its options, no source
+    text -- and only the serialized form's dialect parser reads that back. Read with
+    the bridge's, every verb comes back empty and every edge from it is lost."""
+    source = tmp_path / "PROGONE.cbl"
+    cached = cache_path(tmp_path, source)
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_text(
+        json.dumps(
+            {
+                "program_id": "PROGONE",
+                "paragraphs": [
+                    {
+                        "name": "MAIN",
+                        "statements": [
+                            {
+                                "type": "EXEC_CICS",
+                                "verb": "XCTL",
+                                "options": {
+                                    "PROGRAM": {"text": "PROGTWO", "is_literal": True}
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    sink = _CollectingSink()
+
+    extraction = extract_transaction_flow_graph(
+        "DEFINE TRANSACTION(AAAA) GROUP(GRP) PROGRAM(PROGONE)\n",
+        {},
+        {"PROGONE": source},
+        read_asg=partial(cached_asg, tmp_path),
+        sink=sink,
+        corpus_index=CorpusIndex(),
+    )
+
+    assert (extraction.programs_read, extraction.failures) == (1, ())
+    assert [(edge.source, edge.target, edge.kind.value) for edge in sink.edges] == [
+        ("AAAA", "PROGONE", "STARTS"),
+        ("PROGONE", "PROGTWO", "XCTL"),
     ]
