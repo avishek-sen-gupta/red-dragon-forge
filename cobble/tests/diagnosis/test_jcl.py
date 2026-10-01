@@ -46,7 +46,6 @@ jcl_globs = ["*.jcl"]
 copybook_dirs = ["{tmp_path}/cpy"]
 copybook_extensions = ["", "cpy"]
 asg_dir = "{tmp_path}/parsed"
-out_dir = "{tmp_path}/out"
 """,
     )
 

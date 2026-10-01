@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
-
-from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
+from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index_builder import build_corpus_index
+from cobble.corpus_table import DEFAULT_COPYBOOK_EXTENSIONS
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import NodeKind
 from jackal.dsn import DirectDSN, InStreamDSN
@@ -24,7 +24,6 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         copybook_dirs=(tmp_path / "cpy",),
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
         asg_dir=tmp_path / "parsed",
-        out_dir=tmp_path / "out",
     )
     return CorpusConfig(**{**defaults, **overrides})
 

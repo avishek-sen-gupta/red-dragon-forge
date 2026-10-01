@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from cobble.build_graph import _build_dynamic_targets
+from cobble.build_graph import _build_dynamic_targets, _dynamic_call_targets
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
 from cobble.dataflow.fields.emit_extents import emit
@@ -37,7 +37,6 @@ from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, GraphNode, N
 from cobble.knowledge_graph.graph_writer import graph_writer
 from cobble.knowledge_graph.row_type import RowType
 from cobble.path_utils import ensure_parent
-from tests.test_build_graph import _config
 
 
 def _program(program_id: str, target: str = "WS-B") -> dict:
@@ -1092,7 +1091,9 @@ def test_the_build_reads_the_graph_and_targets_the_fixpoint_wrote(tmp_path, corp
     resolver = CorpusIndex()
     with graph_writer(graph, resolver) as writer:
         writer.add_all(
-            *_build_dynamic_targets(_config(tmp_path, out_dir=out_dir), resolver)
+            *_build_dynamic_targets(
+                _dynamic_call_targets(str(out_dir / TARGETS_FILE)), resolver
+            )
         )
 
     assert read_graph(graph) == (

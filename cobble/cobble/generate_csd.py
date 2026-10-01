@@ -13,18 +13,20 @@ naming convention, which the config supplies as `transid_rules`. Everything it
 cannot establish comes out marked synthetic or reported, never guessed -- see
 cobble/cics/synth_csd.py for what each tier of evidence means.
 
-Writes <out_dir>/synthetic.csd. Point the config's `csd_files` at it to use it,
+Writes the CSD to --out, which has no default. Point the config's `csd_files` at
+it to use it,
 which keeps the generated file an explicit input to the next run rather than
 something build_graph silently picks up.
 
-Invoke as: uv run python -m cobble.generate_csd --config <path>
+Invoke as: uv run python -m cobble.generate_csd --config <path> --out <file>
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import Mapping
+import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from cobble.cics.synth_csd import (
@@ -39,8 +41,6 @@ from cobble.matching_files import matching_files
 from cobble.path_utils import ensure_parent
 
 logger = logging.getLogger(__name__)
-
-CSD_NAME = "synthetic.csd"
 
 
 def _members(config: CorpusConfig) -> Mapping[str, bytes]:
@@ -59,16 +59,12 @@ def synthesise_from_corpus(config: CorpusConfig) -> SynthesisedCsd:
     return synthesise_csd(_members(config), config.transid_rules)
 
 
-def csd_target(config: CorpusConfig) -> Path:
-    return config.out_dir / CSD_NAME
-
-
 def write_csd(csd: SynthesisedCsd, target: Path) -> Path:
     ensure_parent(target).write_text(render_csd(csd), encoding="utf-8")
     return target
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -78,10 +74,11 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--out",
+        required=True,
         type=Path,
-        help=f"Where to write the CSD (default: <out_dir>/{CSD_NAME})",
+        help="Where to write the CSD",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _warn_if_no_convention(config: CorpusConfig) -> None:
@@ -100,11 +97,11 @@ def _warn_if_no_convention(config: CorpusConfig) -> None:
 
 def main() -> int:
     configure_cli_logging()
-    args = _parse_args()
+    args = _parse_args(sys.argv[1:])
     config = load_corpus_config(args.config)
     _warn_if_no_convention(config)
     csd = synthesise_from_corpus(config)
-    target = write_csd(csd, args.out or csd_target(config))
+    target = write_csd(csd, args.out)
     logger.info("%s", "\n".join(report_lines(csd)))
     logger.info("wrote %s -- add it to the config's csd_files to use it", target)
     return 0

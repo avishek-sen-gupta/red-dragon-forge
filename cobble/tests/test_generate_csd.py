@@ -9,11 +9,12 @@ produces a worklist that resolves to nothing.
 
 from pathlib import Path
 
+import pytest
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX, TransidRule
-from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
+from cobble.corpus_config import CorpusConfig
+from cobble.corpus_table import DEFAULT_COPYBOOK_EXTENSIONS
 from cobble.generate_csd import (
-    CSD_NAME,
-    csd_target,
+    _parse_args,
     synthesise_from_corpus,
     write_csd,
 )
@@ -32,7 +33,6 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         copybook_dirs=(tmp_path / "cpy",),
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
         asg_dir=tmp_path / "parsed",
-        out_dir=tmp_path / "out",
         transid_rules=(_RULE,),
     )
     return CorpusConfig(**{**defaults, **overrides})
@@ -71,15 +71,25 @@ def test_only_the_members_the_cobol_globs_select_are_scanned(tmp_path: Path) -> 
     assert [d.program for d in result.defines] == ["PGM002"]
 
 
-def test_the_csd_lands_next_to_the_graph_and_parses_back(tmp_path: Path) -> None:
-    """out_dir may not exist yet -- this stage can run before any graph build."""
+def test_the_csd_lands_where_out_says_and_parses_back(tmp_path: Path) -> None:
+    """The directory may not exist yet -- this stage can run before any graph build."""
     _member(tmp_path, "PGM004.cbl", "EXEC CICS SEND MAP('SOMEMAP') END-EXEC.")
     config = _config(tmp_path)
 
-    target = write_csd(synthesise_from_corpus(config), csd_target(config))
+    out = tmp_path / "generated" / "corpus.csd"
 
-    assert target == tmp_path / "out" / CSD_NAME
-    assert target.read_text(encoding="utf-8") == (
+    assert write_csd(synthesise_from_corpus(config), out) == out
+    assert out.read_text(encoding="utf-8") == (
         f"DEFINE TRANSACTION({SYNTHETIC_TRANSID_PREFIX}PGM004) "
         "PROGRAM(PGM004) GROUP(SYNTHETIC)\n"
     )
+
+
+def test_the_csd_has_no_default_destination() -> None:
+    assert _parse_args(["--config", "c.toml", "--out", "gen/corpus.csd"]).out == Path(
+        "gen/corpus.csd"
+    )
+
+    with pytest.raises(SystemExit) as refused:
+        _parse_args(["--config", "c.toml"])
+    assert refused.value.code == 2

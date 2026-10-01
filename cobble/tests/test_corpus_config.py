@@ -1,18 +1,26 @@
 from pathlib import Path
 
 import pytest
-
+from cobble.bms_table import DEFAULT_BMS_GLOBS, BmsTable
 from cobble.cics.synth_csd import TransidRule
 from cobble.corpus_config import (
-    DEFAULT_BMS_GLOBS,
-    DEFAULT_COPYBOOK_EXTENSIONS,
     BmsConfig,
     CorpusConfig,
-    _bms_config_from_dict,
-    _corpus_config_from_dict,
+    _bms_config,
+    _corpus_config,
     load_bms_config,
     load_corpus_config,
 )
+from cobble.corpus_table import DEFAULT_COPYBOOK_EXTENSIONS, CorpusTable
+from pydantic import ValidationError
+
+
+def _corpus_config_from_dict(data: dict) -> CorpusConfig:
+    return _corpus_config(CorpusTable.model_validate(data))
+
+
+def _bms_config_from_dict(data: dict) -> BmsConfig:
+    return _bms_config(BmsTable.model_validate(data))
 
 
 def test_corpus_config_from_dict_full() -> None:
@@ -26,7 +34,6 @@ def test_corpus_config_from_dict_full() -> None:
         "copybook_dirs": ["sym", "vendor/carddemo/app/cpy"],
         "copybook_extensions": ["cpy", "txt"],
         "asg_dir": "parsed",
-        "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
     assert config == CorpusConfig(
@@ -39,7 +46,6 @@ def test_corpus_config_from_dict_full() -> None:
         copybook_dirs=(Path("sym"), Path("vendor/carddemo/app/cpy")),
         copybook_extensions=("cpy", "txt"),
         asg_dir=Path("parsed"),
-        out_dir=Path("out"),
     )
 
 
@@ -55,7 +61,6 @@ def test_corpus_config_omitting_copybook_extensions_keeps_the_shipped_defaults()
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
         "asg_dir": "parsed",
-        "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
     assert config.copybook_extensions == DEFAULT_COPYBOOK_EXTENSIONS
@@ -80,7 +85,6 @@ def test_corpus_config_from_dict_missing_optional_fields_default_to_empty_tuple(
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
         "asg_dir": "parsed",
-        "out_dir": "out",
     }
     config = _corpus_config_from_dict(data)
     assert config.csd_files == ()
@@ -95,14 +99,13 @@ def test_corpus_config_from_dict_empty_csd_files_is_valid() -> None:
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
         "asg_dir": "parsed",
-        "out_dir": "out",
         "csd_files": [],
     }
     assert _corpus_config_from_dict(data).csd_files == ()
 
 
 def test_corpus_config_from_dict_missing_required_key_raises() -> None:
-    with pytest.raises(KeyError, match="cobol_dir"):
+    with pytest.raises(ValidationError, match="cobol_dir"):
         _corpus_config_from_dict({})
 
 
@@ -114,7 +117,6 @@ def _minimal(**overrides) -> dict:
         "jcl_globs": ["*.jcl"],
         "copybook_dirs": ["cpy"],
         "asg_dir": "parsed",
-        "out_dir": "out",
         **overrides,
     }
 
@@ -133,7 +135,7 @@ def test_a_corpus_config_missing_its_asg_dir_raises() -> None:
     reports an empty graph as a successful one."""
     data = {k: v for k, v in _minimal().items() if k != "asg_dir"}
 
-    with pytest.raises(KeyError, match="asg_dir"):
+    with pytest.raises(ValidationError, match="asg_dir"):
         _corpus_config_from_dict(data)
 
 
@@ -166,7 +168,7 @@ def test_a_transid_rule_missing_its_template_raises() -> None:
     """Half a rule would derive the transaction "" for every member it matches."""
     data = _minimal(transid_rules=[{"member_pattern": "^PGM...$"}])
 
-    with pytest.raises(KeyError, match="transid_template"):
+    with pytest.raises(ValidationError, match="transid_template"):
         _corpus_config_from_dict(data)
 
 
@@ -193,7 +195,7 @@ def test_bms_config_omitting_bms_globs_keeps_the_shipped_default() -> None:
 
 
 def test_bms_config_from_dict_missing_required_key_raises() -> None:
-    with pytest.raises(KeyError, match="bms_dir"):
+    with pytest.raises(ValidationError, match="bms_dir"):
         _bms_config_from_dict({})
 
 
@@ -207,7 +209,6 @@ def test_load_corpus_config_reads_toml_file(tmp_path: Path) -> None:
         'jcl_globs = ["*.jcl"]\n'
         'copybook_dirs = ["cpy"]\n'
         'asg_dir = "parsed"\n'
-        'out_dir = "out"\n'
     )
     config = load_corpus_config(config_path)
     assert config.cobol_dir == Path("cbl")
@@ -229,7 +230,7 @@ def test_load_bms_config_reads_toml_file(tmp_path: Path) -> None:
 def test_load_corpus_config_missing_corpus_section_raises(tmp_path: Path) -> None:
     config_path = tmp_path / "test.toml"
     config_path.write_text('[bms]\nbms_dir = "x"\nmacros_dir = "y"\nsym_dir = "z"\n')
-    with pytest.raises(KeyError, match="corpus"):
+    with pytest.raises(ValidationError, match="corpus"):
         load_corpus_config(config_path)
 
 
@@ -248,7 +249,6 @@ def test_a_corpus_config_with_transid_rules_reads_them_as_a_table_array(
         'jcl_globs = ["*.jcl"]\n'
         'copybook_dirs = ["cpy"]\n'
         'asg_dir = "parsed"\n'
-        'out_dir = "out"\n'
         "\n"
         "[[corpus.transid_rules]]\n"
         'member_pattern = "ACCT*"\n'
@@ -256,3 +256,20 @@ def test_a_corpus_config_with_transid_rules_reads_them_as_a_table_array(
     )
     config = load_corpus_config(config_path)
     assert [r.member_pattern for r in config.transid_rules] == ["ACCT*"]
+
+
+def test_a_config_still_naming_out_dir_loads(tmp_path: Path) -> None:
+    """out_dir left the corpus config when every stage took its output path on the
+    command line; a config written before that still loads, the key unread."""
+    config_path = tmp_path / "test.toml"
+    config_path.write_text(
+        "[corpus]\n"
+        'cobol_dir = "cbl"\n'
+        'cobol_globs = ["*.cbl"]\n'
+        'jcl_dir = "jcl"\n'
+        'jcl_globs = ["*.jcl"]\n'
+        'copybook_dirs = ["cpy"]\n'
+        'asg_dir = "parsed"\n'
+        'out_dir = "out"\n'
+    )
+    assert load_corpus_config(config_path).asg_dir == Path("parsed")

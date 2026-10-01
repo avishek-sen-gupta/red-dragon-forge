@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from cobble.build_graph import (
+    NO_DYNAMIC_CALL_TARGETS,
     RULE,
     _edge_kind_lines,
     _failure_report_lines,
@@ -21,8 +22,9 @@ from cobble.build_graph import (
     _without_synthetic_transactions,
 )
 from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
-from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
+from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index import FileLocationResolver
+from cobble.corpus_table import DEFAULT_COPYBOOK_EXTENSIONS
 from cobble.file_location import NOT_ATTEMPTED, FileLocation
 from cobble.knowledge_graph.graph_file import read_graph
 from cobble.knowledge_graph.graph_types import (
@@ -46,7 +48,6 @@ def _config(tmp_path: Path, **overrides) -> CorpusConfig:
         copybook_dirs=(tmp_path / "cpy",),
         copybook_extensions=DEFAULT_COPYBOOK_EXTENSIONS,
         asg_dir=tmp_path / "parsed",
-        out_dir=tmp_path / "out",
     )
     return CorpusConfig(**{**defaults, **overrides})
 
@@ -104,7 +105,7 @@ def test_a_csd_path_that_is_a_directory_is_unusable(tmp_path: Path) -> None:
 
 
 def test_a_csd_path_that_does_not_exist_is_unusable(tmp_path: Path) -> None:
-    """A generated CSD is deleted whenever out_dir is cleaned, so the config keeps
+    """A generated CSD is deleted whenever its directory is cleaned, so the config keeps
     pointing at a path nothing has written yet -- the commonest way to reach here."""
     absent = tmp_path / "out" / "synthetic.csd"
 
@@ -419,3 +420,25 @@ def test_the_graph_goes_where_output_says_and_output_is_required() -> None:
     with pytest.raises(SystemExit) as refused:
         _parse_args(["--config", "c.toml"])
     assert refused.value.code == 2
+
+
+def test_dynamic_call_targets_are_the_named_table_or_none(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Absent, the build adds no dynamic-target edges; named, it reads that file's
+    rows; named but missing, it refuses before any corpus work starts."""
+    base = ["--config", "c.toml", "--output", "out/corpus.jsonl"]
+    assert _parse_args(base).dynamic_call_targets == NO_DYNAMIC_CALL_TARGETS
+
+    table = tmp_path / "targets.jsonl"
+    row = {"caller": "A", "expression": "WS-T", "candidates": ["B"], "reasons": []}
+    table.write_text(json.dumps(row) + "\n")
+    assert _parse_args(
+        [*base, "--dynamic-call-targets", str(table)]
+    ).dynamic_call_targets.rows == (row,)
+
+    absent = tmp_path / "absent.jsonl"
+    with pytest.raises(SystemExit) as refused:
+        _parse_args([*base, "--dynamic-call-targets", str(absent)])
+    assert refused.value.code == 2
+    assert f"{absent} not found" in capsys.readouterr().err
