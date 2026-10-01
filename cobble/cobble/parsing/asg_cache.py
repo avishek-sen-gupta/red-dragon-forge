@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobol_asg.asg_types import CobolASG
 
 FAILURE_SUFFIX = ".fail"
@@ -56,3 +57,13 @@ def asg_of(asg_dir: Path, source: Path) -> CobolASG:
             f"{source.name}: no cached ASG at {path} (run cobble-parse-corpus first)"
         )
     return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def cached_asg(asg_dir: Path, source: Path) -> CobolASG:
+    """One member's ASG from the cache, its coprocessor statements read back.
+
+    The cache holds EXEC CICS already parsed, which only the serialized form's
+    dialect parser reconstructs; the bridge's reads it back as an empty verb.
+    """
+    with cached_asg_dialect_parsers_registered():
+        return asg_of(asg_dir, source)

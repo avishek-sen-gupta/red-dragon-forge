@@ -9,8 +9,8 @@ Production sources CICS verbs by lowering each program to the VM
 the VM). This module reproduces the SAME ``{program: [CicsVerb]}`` shape from a
 typed-ASG walk instead, so the port pulls in no VM:
 
-  * Parse each program to a ``CobolASG`` with the ported ProLeap bridge, with the
-    coprocessor dialect parsers (see ``cics.asg_dialect_scope``) registered on the
+  * Read each program's ``CobolASG`` through the reader it is handed -- the parse
+    cache, in cobble-build -- with the coprocessor dialect parsers (see ``cics.asg_dialect_scope``) registered on the
     ``_dialect_parsers`` ContextVar so EXEC CICS blocks materialise as
     ``ExecCicsStatement`` (verb + options) and EXEC SQL blocks as opaque
     ``ExecSqlStatement`` text rather than aborting the program.
@@ -31,19 +31,23 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from collections.abc import Callable
 from functools import reduce
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cics.statements import ExecCicsStatement
-from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb, DynamicSite
 from cobble.knowledge_graph.graph_types import GraphNode
+from cobol_asg.asg_types import CobolASG
 
 if TYPE_CHECKING:
     from cobble.corpus_index import CorpusIndex
 
 logger = logging.getLogger(__name__)
+
+AsgReader = Callable[[Path], CobolASG]
 
 
 # ── operand → static VALUE resolution (mirrors cics.strategy._field_value /
@@ -294,9 +298,14 @@ class VerbStreamResult:
 
 
 def stream_program_verbs(
-    prog_name, raw, parser, bms_mapsets, sink, corpus_index: CorpusIndex
+    prog_name: str,
+    member: Path,
+    read_asg: AsgReader,
+    bms_mapsets,
+    sink,
+    corpus_index: CorpusIndex,
 ) -> VerbStreamResult:
-    """Parse one program's ASG and stream its CICS-verb graph edges into ``sink``.
+    """Read one program's ASG and stream its CICS-verb graph edges into ``sink``.
 
     Isolates + loudly warns on failure, exactly as production does, and returns the
     failure rather than appending it to a list the caller handed down: what one
@@ -306,8 +315,7 @@ def stream_program_verbs(
     so the two differ by that argument alone.
     """
     try:
-        with asg_dialect_parsers_registered():
-            asg = parser.parse(raw)
+        asg = read_asg(member)
         verbs = _program_verbs(asg, prog_name)
         for edge in _program_edges(verbs, bms_mapsets):
             _emit(edge, sink, corpus_index)

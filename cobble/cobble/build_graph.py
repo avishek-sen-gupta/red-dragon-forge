@@ -12,9 +12,9 @@ cobble/corpus_config.py) passed via --config -- nothing about the corpus is
 hardcoded here. Writes the graph to --output as one JSONL file, a row per node
 and per edge, and prints per-extractor + merged counts.
 
-Needs a cobble-parse-corpus run first: the FILE-CONTROL extractor reads the ASGs
-from the config's asg_dir rather than parsing them, because a parse is 4-7 seconds
-of JVM per member and every other stage needs the same ASGs. A member absent from
+Needs a cobble-parse-corpus run first: the CICS-flow and FILE-CONTROL extractors
+read the ASGs from the config's asg_dir rather than parsing them, because a parse
+is 4-7 seconds of JVM per member and every other stage needs the same ASGs. A member absent from
 that cache is reported as one skipped member, not silently reparsed.
 
 Every extractor RETURNS what it skipped rather than appending to a shared list,
@@ -25,18 +25,18 @@ job is to stream to disk.
 
 Invoke as: uv run python -m cobble.build_graph --config <path> --output <file>
 
-Env: PROLEAP_BRIDGE_JAR and JCL_BRIDGE_JAR -- `. ../bridge-env.sh` exports both.
+Env: JCL_BRIDGE_JAR -- `. ../bridge-env.sh` exports it. No COBOL is parsed here.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from types import MappingProxyType
@@ -69,13 +69,11 @@ from cobble.knowledge_graph.graph_types import (
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
-from cobble.parsing.asg_cache import asg_of
+from cobble.parsing.asg_cache import asg_of, cached_asg
 from cobble.path_utils import ensure_parent
 from cobol_asg.cobol_imports import extract_cobol_imports
-from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.import_types import ImportKind, ImportRef
 from cobol_asg.source_text import decode_source
-from cobol_asg.subprocess_runner import RealSubprocessRunner
 from jackal.jcl.parser import bridge_parser
 from tqdm import tqdm
 
@@ -93,19 +91,6 @@ _REF_GRAPH_SHAPE: Mapping[ImportKind, tuple[NodeKind, EdgeKind]] = MappingProxyT
         ImportKind.REQUIRE: (NodeKind.PROGRAM, EdgeKind.CALL),
     }
 )
-
-
-def _bridge_jar() -> str:
-    return os.environ["PROLEAP_BRIDGE_JAR"]
-
-
-def _make_parser(config: CorpusConfig) -> ProLeapCobolParser:
-    return ProLeapCobolParser(
-        RealSubprocessRunner(),
-        _bridge_jar(),
-        copybook_dirs=list(config.copybook_dirs),
-        copybook_exts=list(config.copybook_extensions),
-    )
 
 
 # ── CSD: transaction -> program ──────────────────────────────────
@@ -668,7 +653,7 @@ def _build_call_copy_graph(
 class _CicsSources:
     """The CICS programs whose source was found, and the ones that were not."""
 
-    sources: tuple[tuple[str, bytes], ...] = ()
+    paths: tuple[tuple[str, Path], ...] = ()
     failures: tuple[str, ...] = ()
 
 
@@ -677,21 +662,21 @@ def _cics_source(program: str, stems: Mapping[str, Path]) -> _CicsSources:
         message = f"CICS program {program}: not found in cobol_globs matches"
         logger.warning("CICS program %s: not found in cobol_globs matches", program)
         return _CicsSources(failures=(message,))
-    return _CicsSources(sources=((program, stems[program].read_bytes()),))
+    return _CicsSources(paths=((program, stems[program]),))
 
 
 def _cics_sources(
     program_names: frozenset[str], stems: Mapping[str, Path]
 ) -> _CicsSources:
-    # "CICS sources", not "CICS flow": this loop only reads each member's bytes off
-    # disk. The flow pass -- one bridge subprocess and one ASG per member, i.e. all
+    # "CICS sources", not "CICS flow": this loop only finds each member's source
+    # path. The flow stage -- one ASG per member, built from the parse cache, i.e. all
     # of the stage's cost -- runs after it, under its own bar in cics/flow_map.py.
     found = tuple(
         _cics_source(program, stems)
         for program in tqdm(program_names, desc="CICS sources", unit="program")
     )
     return _CicsSources(
-        sources=tuple(chain.from_iterable(item.sources for item in found)),
+        paths=tuple(chain.from_iterable(item.paths for item in found)),
         failures=tuple(chain.from_iterable(item.failures for item in found)),
     )
 
@@ -714,7 +699,7 @@ def _build_cics_flow_graph(
     logger.info(
         "CICS flow: %d transactions, %d program sources found",
         len(transid_to_program),
-        len(found.sources),
+        len(found.paths),
     )
     return found.failures + _run_flow_extractor(
         config, corpus_index, found, targets, writer
@@ -834,8 +819,8 @@ def _flow_extraction_attempt(
         extraction = extract_transaction_flow_graph(
             csd_source=_csd_source(config),
             bms_mapsets={},
-            cobol_sources=dict(found.sources),
-            parser=_make_parser(config),
+            members=dict(found.paths),
+            read_asg=partial(cached_asg, config.asg_dir),
             sink=sink,
             corpus_index=corpus_index,
         )

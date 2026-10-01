@@ -5,8 +5,8 @@ program is read (via the verb source's on_verb seam), plus the structural
 STARTS / DEFINES_DATASET edges from the CSD. Per-program failures are isolated
 and loudly warned; they do not abort the pass.
 
-Reading a program is the expensive part of a corpus run -- a bridge subprocess and
-an ASG per member -- and it happens in this module's loop, so this is where the
+Reading a program is the expensive part of a corpus run -- one ASG built from the
+parse cache per member -- and it happens in this module's loop, so this is where the
 pass says where it has got to: a bar over that loop, and the member's name at DEBUG
 before it is read.
 
@@ -33,6 +33,7 @@ from cobble.cics.flow_observer import (  # noqa: F401  (re-exported vocabulary)
 )
 from cobble.cics.graph_sink import GraphSink
 from cobble.cics.verb_source_asg import (  # SEAM: VM-free verb source
+    AsgReader,
     VerbStreamResult,
     stream_program_verbs,
 )
@@ -42,7 +43,6 @@ from cobble.knowledge_graph.graph_types import (
     GraphNode,
     NodeKind,
 )
-from cobol_asg.cobol_parser import CobolParser
 from tqdm import tqdm
 
 if TYPE_CHECKING:
@@ -127,23 +127,23 @@ def _emit(
 
 
 def _programs_to_read(
-    transid_to_program: Mapping[str, str], cobol_sources: Mapping[str, bytes]
+    transid_to_program: Mapping[str, str], members: Mapping[str, Path]
 ) -> tuple[str, ...]:
     """Each program a transaction names and whose source the stage found, once, in
     CSD order. ``dict.fromkeys`` rather than a seen-set: a program two transactions
-    name is one program to read, and reading it is a subprocess and an ASG.
+    name is one program to read, and reading it builds an ASG.
 
     A program with no source is not a failure here -- the stage reported that when
     it looked for the file, before this pass ran.
     """
     named = dict.fromkeys(transid_to_program.values())
-    return tuple(prog_name for prog_name in named if prog_name in cobol_sources)
+    return tuple(prog_name for prog_name in named if prog_name in members)
 
 
 def _read_program(
     prog_name: str,
-    source: bytes,
-    parser: CobolParser,
+    member: Path,
+    read_asg: AsgReader,
     bms_mapsets: Mapping[str, BmsMapSet],
     sink: GraphSink,
     corpus_index: CorpusIndex,
@@ -156,14 +156,14 @@ def _read_program(
     """
     logger.debug("CICS flow: reading %s", prog_name)
     return stream_program_verbs(
-        prog_name, source, parser, bms_mapsets, sink, corpus_index
+        prog_name, member, read_asg, bms_mapsets, sink, corpus_index
     )
 
 
 def _read_programs(
     programs: Sequence[str],
-    cobol_sources: Mapping[str, bytes],
-    parser: CobolParser,
+    members: Mapping[str, Path],
+    read_asg: AsgReader,
     bms_mapsets: Mapping[str, BmsMapSet],
     sink: GraphSink,
     corpus_index: CorpusIndex,
@@ -172,8 +172,8 @@ def _read_programs(
     return tuple(
         _read_program(
             prog_name,
-            cobol_sources[prog_name],
-            parser,
+            members[prog_name],
+            read_asg,
             bms_mapsets,
             sink,
             corpus_index,
@@ -185,9 +185,9 @@ def _read_programs(
 def extract_transaction_flow_graph(
     csd_source: str,
     bms_mapsets: Mapping[str, BmsMapSet],
-    cobol_sources: Mapping[str, bytes],
+    members: Mapping[str, Path],
     *,
-    parser: CobolParser,
+    read_asg: AsgReader,
     sink: GraphSink,
     corpus_index: CorpusIndex,
 ) -> FlowExtraction:
@@ -195,9 +195,9 @@ def extract_transaction_flow_graph(
     ``sink``, and report what was read."""
     csd = _csd_definitions(csd_source)
     _emit(_starts_edges(csd.transid_to_program), sink, corpus_index)
-    programs = _programs_to_read(csd.transid_to_program, cobol_sources)
+    programs = _programs_to_read(csd.transid_to_program, members)
     results = _read_programs(
-        programs, cobol_sources, parser, bms_mapsets, sink, corpus_index
+        programs, members, read_asg, bms_mapsets, sink, corpus_index
     )
     failures = tuple(chain.from_iterable(result.failures for result in results))
     dynamic_sites = tuple(
