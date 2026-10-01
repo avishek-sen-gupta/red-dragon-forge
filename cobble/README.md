@@ -42,7 +42,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
 | `cobble-build --config <corpus>` | Extract the graph to `out/` |
 | `cobble-compare` | Identity-diff vs `reference/` (448/832) |
-| `cobble-render` / `cobble-render-webgl --config <corpus>` | Render `out/` as an interactive HTML / WebGL graph |
+| `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
 | `cobble-srccfg-build PROGRAM --config <corpus>` | Build one program's source CFG **and every program it transitively calls** |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <json> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
 | `cobble-srccfg-query <query> <subject> --cfg <json>` | Ask a built CFG for guards or a field's provenance |
@@ -56,7 +56,7 @@ uv run cobble-sym --config config/carddemo.toml              # generate the BMS 
 uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus -> one JSON ASG per member in out-parsed/
 uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl   # extract the graph -> out/carddemo.jsonl
 uv run cobble-compare                                        # identity-diff out/ vs reference/ (must be empty: 448/832)
-uv run cobble-render --config config/carddemo.toml           # -> out/graph.html
+uv run cobble-render --graph out/carddemo.jsonl              # -> out/carddemo.html
 ```
 
 ### Source CFGs, and drawing a call closure
@@ -217,7 +217,7 @@ Then run:
 uv run cobble-sym           --config your-corpus.toml   # first, if you have BMS maps: sym/*.cpy
 uv run cobble-parse-corpus  --config your-corpus.toml   # then the parse -> one ASG per member
 uv run cobble-build         --config your-corpus.toml --output out/your-corpus.jsonl   # then the graph -> that one file
-uv run cobble-render        --config your-corpus.toml   # optional HTML visualization
+uv run cobble-render        --graph out/your-corpus.jsonl   # optional HTML visualization
 ```
 
 That order matters: `cobble-sym` writes the symbolic copybooks the parse resolves
@@ -892,19 +892,18 @@ trace with no footer — the query tool reads whatever dep rows are present.
 ### Render the HTML visualization
 
 ```bash
-uv run cobble-render --config config/carddemo.toml   # reads <out_dir>/{nodes,edges}.jsonl -> writes <out_dir>/graph.html
+uv run cobble-render --graph out/carddemo.jsonl   # reads the graph file -> writes out/carddemo.html
 ```
 
-`--config` is required here too (same as `cobble-build`/`cobble-sym`): `out_dir` comes from
-the config's `corpus.out_dir` field, so `render_graph.py` looks in the same
-place `build_graph.py` wrote to. `<out_dir>/graph.html` is a single
+`--graph` is the file `cobble-build --output` wrote; no config is read. The page is
+written beside it and named for its stem, and `cobble-render-webgl` writes
+`<stem>-webgl.html` the same way. `out/carddemo.html` is a single
 self-contained file (vis-network is vendored at
 `cobble/knowledge_graph/vendor/vis-network.min.js` and inlined; no server,
 no CDN, no network access needed). Open it directly in a browser. It has
 checkboxes to filter by node/edge kind, a search box that highlights matching
-node labels, and click-to-highlight-neighbors on any node. Requires
-`<out_dir>/nodes.jsonl` / `<out_dir>/edges.jsonl` to already exist (i.e. run `cobble-build`
-first).
+node labels, and click-to-highlight-neighbors on any node. A missing `--graph` file
+exits 1 and names `cobble-build --output`.
 
 ### Unit tests
 
@@ -944,9 +943,9 @@ consumers may not import each other).
 | `cobble/build_graph.py` / `cobble/compare.py` | This repo's own driver scripts (not ported from `red-dragon-forge`): extract the graph → `out/` (`cobble-build --config <path>`, reading the config's `asg_dir` — needs `cobble-parse-corpus` first); identity-diff `out/` vs `reference/` (`python -m cobble.compare`). |
 | `cobble/parsing/` | **Stage-1.** The one place a corpus is turned into ASGs and the one place they are read back: `parse_corpus.py` writes one JSON ASG per member (`cobble-parse-corpus --config <path>`), `asg_cache.py` owns the naming rule and the reader every later stage calls, `config.py` is the parse's own config. `expand_corpus.py` is the same walk stopped before the grammar runs, writing expanded source instead (`cobble-expand-corpus --config <path> --out-dir <dir>`), with `expanded_cache.py` owning its naming; it reuses `parse_corpus`'s `Job`, `Result` and `bridge_jar` so the two cannot disagree about the JAR. These two stages start a JVM; nothing downstream does. |
 | `cobble/corpus_config.py` | `CorpusConfig`/`BmsConfig` dataclasses + TOML loading (`tomllib`, stdlib); `cobble.build_graph`/`cobble.generate_sym` read the corpus location/layout from here instead of a hardcoded CardDemo path. `asg_dir` is an input: the cache Stage-1 wrote. |
-| `config/carddemo.toml` | The corpus config CardDemo uses, read by every stage from `cobble-parse-corpus` to `cobble-render`. Copy it as a starting point for a different corpus. |
+| `config/carddemo.toml` | The corpus config CardDemo uses, read by every stage from `cobble-parse-corpus` to `cobble-build`. Copy it as a starting point for a different corpus. |
 | `cobble/corpus_index.py` / `cobble/file_location.py` | `CorpusIndex` resolves every `(NodeKind, id)` to a `FileLocation` (a real `Path`, or a `NoFileLocation` explaining why not: not file-based, no CSD/definition source, or genuinely unresolved) once per run, from the same `CorpusConfig`. Every extractor and `GraphWriter` resolve a given node identically regardless of call order, which is what lets `GraphWriter` stream nodes keep-first with no merge step. |
-| `cobble/render_graph.py` | Render `<out_dir>/{nodes,edges}.jsonl` as a self-contained interactive HTML graph at `<out_dir>/graph.html` (`python -m cobble.render_graph --config <path>`; `out_dir` comes from the config's `corpus.out_dir` field. `cobble/knowledge_graph/export.py` reads the NDJSON, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
+| `cobble/render_graph.py` | Render the graph file as a self-contained interactive HTML graph beside it, `<stem>.html` (`python -m cobble.render_graph --graph <file>`. `cobble/knowledge_graph/graph_file.py` reads the file, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
 | `tests/` | The pytest unit suite (`uv run python -m pytest`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |

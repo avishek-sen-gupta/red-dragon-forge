@@ -1,12 +1,15 @@
+import json
+import logging
 from pathlib import Path
 
 import networkx as nx
 import pytest
-
 from cobble.file_location import NOT_ATTEMPTED
-from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 from cobble.knowledge_graph import render as render_module
+from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
 from cobble.knowledge_graph.render import render_html
+
+from cobble import render_graph, render_graph_webgl
 
 
 def _sample_graph() -> nx.MultiDiGraph:
@@ -55,3 +58,57 @@ def test_render_html_raises_when_vendored_js_missing(
 
     with pytest.raises(FileNotFoundError):
         render_html(_sample_graph(), tmp_path / "graph.html")
+
+
+def _graph_file(path: Path) -> Path:
+    rows = (
+        {
+            "type": "node",
+            "id": "COACTVW",
+            "kind": "PROGRAM",
+            "file_path": None,
+            "file_path_reason": "not_attempted",
+            "attrs": {},
+        },
+        {
+            "type": "node",
+            "id": "COCOM01Y",
+            "kind": "COPYBOOK",
+            "file_path": None,
+            "file_path_reason": "not_attempted",
+            "attrs": {},
+        },
+        {
+            "type": "edge",
+            "source": "COACTVW",
+            "source_kind": "PROGRAM",
+            "target": "COCOM01Y",
+            "target_kind": "COPYBOOK",
+            "kind": "COPY",
+            "attrs": {},
+        },
+    )
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return path
+
+
+def test_the_page_lands_beside_the_graph_and_is_titled_by_its_stem(
+    tmp_path: Path,
+) -> None:
+    written = render_graph._render(_graph_file(tmp_path / "carddemo.jsonl"))
+
+    assert written == tmp_path / "carddemo.html"
+    assert "<title>carddemo Knowledge Graph</title>" in written.read_text()
+
+
+@pytest.mark.parametrize("renderer", [render_graph, render_graph_webgl])
+def test_a_missing_graph_file_names_the_command_that_writes_one(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, renderer
+) -> None:
+    caplog.set_level(logging.ERROR)
+    absent = tmp_path / "absent.jsonl"
+
+    assert renderer._run(renderer._parse_args(["--graph", str(absent)])) == 1
+    assert caplog.messages == [
+        f"error: {absent} not found — run `cobble-build --output` first"
+    ]
