@@ -203,7 +203,7 @@ def _failure_report_lines(failures: Sequence[str]) -> tuple[str, ...]:
         RULE,
         f"!!  {len(failures)} FAILURE(S) -- THIS GRAPH IS INCOMPLETE",
         "!!  The members below were SKIPPED. Everything in them is absent from",
-        "!!  nodes.jsonl/edges.jsonl and every reference to it is UNRESOLVED.",
+        "!!  the graph file and every reference to it is UNRESOLVED.",
         RULE,
         *_tally_lines(failures),
         RULE,
@@ -217,7 +217,7 @@ def _report_failures(failures: Sequence[str]) -> None:
 
     A skipped member is not a warning about the run -- it is a statement about
     the output: those jobs, steps, programs and datasets are absent from
-    nodes.jsonl, and every reference to them resolves UNRESOLVED. The counts
+    the graph file, and every reference to them resolves UNRESOLVED. The counts
     logged above this look like a finished graph either way, so this has to be
     hard to scroll past and it has to name the shape of what went wrong, not
     just list lines.

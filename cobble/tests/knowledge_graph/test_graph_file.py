@@ -2,9 +2,16 @@ import json
 from pathlib import Path
 
 import pytest
-from cobble.file_location import FileLocationReason, NoFileLocation
+from cobble.corpus_index import FileLocationResolver
+from cobble.file_location import (
+    NOT_ATTEMPTED,
+    FileLocation,
+    FileLocationReason,
+    NoFileLocation,
+)
 from cobble.knowledge_graph.graph_file import read_graph
 from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.knowledge_graph.graph_writer import graph_writer
 from pydantic import ValidationError
 
 
@@ -95,3 +102,49 @@ def test_one_tagged_file_reads_back_as_its_nodes_and_its_edges(tmp_path: Path) -
 def test_a_row_the_format_does_not_admit_is_refused(tmp_path: Path, row: dict) -> None:
     with pytest.raises(ValidationError):
         read_graph(_lines(tmp_path / "graph.jsonl", row))
+
+
+class _NothingResolved(FileLocationResolver):
+    def resolve_file_path(self, kind: NodeKind, node_id: str) -> FileLocation:
+        return NOT_ATTEMPTED
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        Path("cbl/PROGONE.cbl"),
+        *(NoFileLocation(reason) for reason in FileLocationReason),
+    ],
+    ids=str,
+)
+def test_what_the_writer_writes_the_reader_reads_back(
+    tmp_path: Path, location: FileLocation
+) -> None:
+    """Parametrized over the enum rather than a hand-listed set, so a reason added
+    later cannot be silently unwritable or unreadable."""
+    node = GraphNode(
+        id="PROGONE",
+        kind=NodeKind.PROGRAM,
+        location=location,
+        attrs={"lang": "COBOL", "lines": [1, 2], "nested": {"a": [True, 1.5]}},
+    )
+    edge = GraphEdge(
+        source="PROGONE",
+        source_kind=NodeKind.PROGRAM,
+        target="COCOM01Y",
+        target_kind=NodeKind.COPYBOOK,
+        kind=EdgeKind.COPY,
+        attrs={"line": 42},
+    )
+    graph = tmp_path / "graph.jsonl"
+    with graph_writer(graph, _NothingResolved()) as writer:
+        writer.add_node(node)
+        writer.add_edge(edge)
+
+    assert read_graph(graph) == (
+        [
+            node,
+            GraphNode(id="COCOM01Y", kind=NodeKind.COPYBOOK, location=NOT_ATTEMPTED),
+        ],
+        [edge],
+    )

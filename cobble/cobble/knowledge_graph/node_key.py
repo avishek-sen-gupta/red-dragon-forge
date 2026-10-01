@@ -16,7 +16,4 @@ from typing import TypeAlias
 
 from cobble.knowledge_graph.graph_types import NodeKind
 
-# Written as a quoted TypeAlias rather than a 3.12 `type` statement for the
-# same reason graph_types.py's AttrValue is: the lint config parses this
-# package as 3.11.
-NodeKey: TypeAlias = "tuple[NodeKind, str]"
+NodeKey: TypeAlias = tuple[NodeKind, str]
