@@ -72,8 +72,8 @@ warned about by name. Neither is a skip: nothing is invented either way.
 Exit status contract:
   0 - every member analysed, coverage at or above the floor
   1 - coverage below the floor
-  2 - ASG directory not found, extents table not found, config missing its table,
-      or a --member the cache does not hold
+  2 - ASG directory not found, extents table not found, or a --member the cache
+      does not hold
   3 - one or more members skipped, unreadable, absent from the extents table, or
       colliding on program_id
 """
@@ -117,7 +117,6 @@ from cobble.dataflow.fields.side_tables import (
     jsonl_writer,
     target_row,
 )
-from cobble.dataflow.fixpoint.config import FieldsConfig, load_fields_config
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
@@ -680,19 +679,19 @@ def _report(totals: RunTotals) -> None:
     sys.stdout.write("\n")
 
 
-def _writer(config: FieldsConfig, locations: CorpusIndex) -> GraphWriter:
+def _writer(arguments: argparse.Namespace, locations: CorpusIndex) -> GraphWriter:
     return GraphWriter(
-        config.out_dir / NODES_FILE, config.out_dir / EDGES_FILE, locations
+        arguments.out_dir / NODES_FILE, arguments.out_dir / EDGES_FILE, locations
     )
 
 
 def _side_writer(
-    config: FieldsConfig, name: str
+    arguments: argparse.Namespace, name: str
 ) -> AbstractContextManager[JsonlWriter]:
-    return jsonl_writer(config.out_dir / name)
+    return jsonl_writer(arguments.out_dir / name)
 
 
-def _selected(config: FieldsConfig, members: Sequence[str]) -> tuple[Path, ...]:
+def _selected(asg_dir: Path, members: Sequence[str]) -> tuple[Path, ...]:
     """The named members' cache files, or every one the cache holds.
 
     Named members keep their given order rather than being sorted. The analysis
@@ -701,8 +700,8 @@ def _selected(config: FieldsConfig, members: Sequence[str]) -> tuple[Path, ...]:
     order the ones missing from that table are reported in.
     """
     if not members:
-        return tuple(sorted(config.asg_dir.glob("*.json")))
-    return tuple(config.asg_dir / f"{member}.json" for member in members)
+        return tuple(sorted(asg_dir.glob("*.json")))
+    return tuple(asg_dir / f"{member}.json" for member in members)
 
 
 def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
@@ -744,9 +743,7 @@ def _inputs(
     )
 
 
-def _analysed_run(
-    config: FieldsConfig, paths: Sequence[Path], arguments: argparse.Namespace
-) -> int:
+def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     """One index for both halves: the nodes emit builds and the ones the writer
     synthesises from an edge must carry the same location for the same id.
 
@@ -754,15 +751,15 @@ def _analysed_run(
     ASG cache and never the corpus tree, so it has nothing to index. FIELD
     resolves NOT_INDEXED whatever the index holds; see corpus_index's table.
     """
-    ensure_dir(config.out_dir)
+    ensure_dir(arguments.out_dir)
     locations = CorpusIndex()
     with (
         cached_asg_dialect_parsers_registered(),
-        _writer(config, locations) as graph,
-        _side_writer(config, EXTENTS_FILE) as extents,
-        _side_writer(config, DEFS_FILE) as defs,
-        _side_writer(config, ALIASES_FILE) as aliases,
-        _side_writer(config, TARGETS_FILE) as targets,
+        _writer(arguments, locations) as graph,
+        _side_writer(arguments, EXTENTS_FILE) as extents,
+        _side_writer(arguments, DEFS_FILE) as defs,
+        _side_writer(arguments, ALIASES_FILE) as aliases,
+        _side_writer(arguments, TARGETS_FILE) as targets,
     ):
         totals = _run(
             _Sinks(graph, extents, defs, aliases, targets),
@@ -772,13 +769,13 @@ def _analysed_run(
     return _exit_code(totals, arguments.min_coverage)
 
 
-def _completed(config: FieldsConfig, arguments: argparse.Namespace) -> int:
+def _completed(arguments: argparse.Namespace) -> int:
     """A named member the cache does not hold ends the run before it starts.
 
     Analysing the rest would report a coverage figure over a member set the
     caller did not ask for, and exit 0 while their program went unexamined.
     """
-    paths = _selected(config, arguments.member)
+    paths = _selected(arguments.asg_dir, arguments.member)
     absent = _absent(paths)
     if absent:
         logger.error(
@@ -786,7 +783,7 @@ def _completed(config: FieldsConfig, arguments: argparse.Namespace) -> int:
             ", ".join(path.stem for path in absent),
         )
         return 2
-    return _analysed_run(config, paths, arguments)
+    return _analysed_run(paths, arguments)
 
 
 def _budget(given: str) -> int:
@@ -797,17 +794,28 @@ def _budget(given: str) -> int:
     return count
 
 
-def _parsed(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Field-level byte dataflow over a cached ASG corpus."
+def _add_inputs(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--asg-dir",
+        type=Path,
+        required=True,
+        help="the ASG cache cobble-parse-corpus wrote: one JSON per member",
     )
-    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        required=True,
+        help="where this stage's six artefacts go",
+    )
     parser.add_argument(
         "--extents",
         type=Path,
         required=True,
         help="extents.jsonl from cobble-extents: the layout this stage reads",
     )
+
+
+def _add_walk_budget(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
@@ -823,13 +831,25 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         metavar="N",
         help="reverse-postorder passes instead of the worklist; 2 is the useful floor",
     )
+
+
+def _add_selection(parser: argparse.ArgumentParser) -> None:
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--member", nargs="+", default=(), metavar="NAME")
     selection.add_argument("--all", action="store_true")
+
+
+def _parsed(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Field-level byte dataflow over a cached ASG corpus."
+    )
+    _add_inputs(parser)
+    _add_walk_budget(parser)
+    _add_selection(parser)
     return parser.parse_args(tuple(argv) if argv else None)
 
 
-def _overwrites_its_input(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
+def _overwrites_its_input(arguments: argparse.Namespace) -> bool:
     """Whether --extents names the file this run is about to write.
 
     The stage publishes its own ``extents.jsonl`` into ``out_dir``, so a caller
@@ -838,37 +858,37 @@ def _overwrites_its_input(config: FieldsConfig, arguments: argparse.Namespace) -
     run wrote, and the layout every member was analysed against would have come
     from a file no longer there to check.
     """
-    if arguments.extents.resolve() != (config.out_dir / EXTENTS_FILE).resolve():
+    if arguments.extents.resolve() != (arguments.out_dir / EXTENTS_FILE).resolve():
         return False
     logger.error(
         "fields: !! --extents %s is this run's own output; write the input "
         "elsewhere (cobble-extents --asg-dir %s --out <path>)",
         arguments.extents,
-        config.asg_dir,
+        arguments.asg_dir,
     )
     return True
 
 
-def _rejected(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
+def _rejected(arguments: argparse.Namespace) -> bool:
     """Whether the run cannot start, for either reason it cannot."""
-    return _missing_input(config, arguments) or _overwrites_its_input(config, arguments)
+    return _missing_input(arguments) or _overwrites_its_input(arguments)
 
 
-def _missing_input(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
+def _missing_input(arguments: argparse.Namespace) -> bool:
     """Whether either input is out of reach, said once per input.
 
     The extents table is as much an input as the cache, and a run that cannot find
     it has nothing to analyse rather than 300 members to skip identically.
     """
-    if not config.asg_dir.is_dir():
-        logger.error("fields: !! no ASG cache at %s", config.asg_dir)
+    if not arguments.asg_dir.is_dir():
+        logger.error("fields: !! no ASG cache at %s", arguments.asg_dir)
         return True
     if not arguments.extents.is_file():
         logger.error(
             "fields: !! no extents table at %s; run cobble-extents --asg-dir %s "
             "--out %s",
             arguments.extents,
-            config.asg_dir,
+            arguments.asg_dir,
             arguments.extents,
         )
         return True
@@ -878,14 +898,9 @@ def _missing_input(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parsed(argv)
-    try:
-        config = load_fields_config(arguments.config)
-    except (OSError, KeyError, ValueError) as error:
-        logger.error("fields: !! %s", error)
+    if _rejected(arguments):
         return 2
-    if _rejected(config, arguments):
-        return 2
-    return _completed(config, arguments)
+    return _completed(arguments)
 
 
 def main() -> int:

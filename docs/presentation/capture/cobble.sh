@@ -89,12 +89,7 @@ tail -2 "$WORK/trace-COACTVWC.log" | tee "$ART/dataflow/trace-COACTVWC-summary.t
 uv run --no-sync cobble-trace-query backward WS-CARD-RID-ACCT-ID --trace "$WORK/trace-COACTVWC.jsonl" --depth 5 \
   | tee "$ART/dataflow/COACTVWC-acct-rid-backward.txt"
 
-cat > "$WORK/fields.toml" <<EOF
-[fields]
-asg_dir = "$ROOT/cobble/out-parsed"
-out_dir = "$WORK/fields"
-EOF
-uv run --no-sync cobble-dataflow-fixpoint --config "$WORK/fields.toml" \
+uv run --no-sync cobble-dataflow-fixpoint --asg-dir "$ROOT/cobble/out-parsed" --out-dir "$WORK/fields" \
   --member COSGN00C COMEN01C COADM01C COACTVWC > "$ART/dataflow/fixpoint-summary.json" 2> "$WORK/fixpoint.log"
 grep -v "dequeues," "$WORK/fixpoint.log" > "$ART/dataflow/fixpoint-report.txt"
 cp "$WORK/fields/aliases.jsonl" "$ART/dataflow/aliases.jsonl"

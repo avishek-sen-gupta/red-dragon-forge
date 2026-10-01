@@ -79,7 +79,7 @@ uv run --no-sync cobble-srccfg-build --config <work>/srccfg.toml --output <work>
 # cobble.viz.{callgraph_cmd,sequence_cmd,render_cmd}.main() invoked via python -c (see limitations)
 uv run --no-sync cobble-fields-trace COACTVWC --asg-dir out-parsed --out <work>/trace-COACTVWC.jsonl
 uv run --no-sync cobble-trace-query backward WS-CARD-RID-ACCT-ID --trace <work>/trace-COACTVWC.jsonl --depth 5
-uv run --no-sync cobble-dataflow-fixpoint --config <work>/fields.toml --member COSGN00C COMEN01C COADM01C COACTVWC
+uv run --no-sync cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir <work>/fields --member COSGN00C COMEN01C COADM01C COACTVWC
 uv run --no-sync cobble-dataflow-fixpoint-query reaches COSGN00C.WS-USER-ID --out <work>/fields --across-calls --max-hops 2 --depth 6
 uv run --no-sync python -m cobble.bms_render --config config/carddemo.toml --format html --out-dir <artifacts>/screens
 ```

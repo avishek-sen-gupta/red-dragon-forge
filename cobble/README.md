@@ -423,9 +423,9 @@ worker rather than the gigabytes a full corpus of them would be.
 
 ```bash
 uv run cobble-extents --asg-dir out-parsed --out out-fields/extents-input.jsonl     # the layout, once per corpus change
-uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields/extents-input.jsonl --member PROGA PROGB
-uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields/extents-input.jsonl --all
-uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields/extents-input.jsonl --member PROGA --sweeps 3
+uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --extents out-fields/extents-input.jsonl --member PROGA PROGB
+uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --extents out-fields/extents-input.jsonl --all
+uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --extents out-fields/extents-input.jsonl --member PROGA --sweeps 3
 ```
 
 `--extents` is required and is the table `cobble-extents` writes: this stage
@@ -633,7 +633,7 @@ Exit status is the gate:
 | ---- | ------- |
 | 0 | every member analysed, coverage at or above the floor |
 | 1 | coverage below the floor |
-| 2 | ASG directory not found, config missing its `[fields]` table, or a `--member` the cache does not hold |
+| 2 | ASG directory not found, extents table not found, or a `--member` the cache does not hold |
 | 3 | one or more members skipped, unreadable, or colliding on program_id |
 
 A named member absent from the cache ends the run before it starts: analysing
