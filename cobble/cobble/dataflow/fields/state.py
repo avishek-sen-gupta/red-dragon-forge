@@ -72,6 +72,7 @@ class Source:
 
 
 _NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})
+_NO_SOURCE_SET: frozenset[Source] = frozenset()
 _NO_VALUES: Mapping[FieldExtent, ValueSet] = MappingProxyType({})
 
 # Reasons a missing entry already conveys, so storing them buys nothing.
@@ -103,6 +104,11 @@ class State:
 EMPTY = State()
 
 
+def _covers(prior: ValueSet, held: ValueSet) -> bool:
+    """Whether merging ``held`` into ``prior`` would add nothing to it."""
+    return held.values <= prior.values and held.reasons <= prior.reasons
+
+
 def _joined_sources(
     left: Mapping[FieldExtent, frozenset[Source]],
     right: Mapping[FieldExtent, frozenset[Source]],
@@ -121,15 +127,14 @@ def _joined_sources(
         return left
     if not left:
         return right
-    return MappingProxyType(
-        {
-            **left,
-            **{
-                extent: (left[extent] | held) if extent in left else held
-                for extent, held in right.items()
-            },
-        }
-    )
+    grown = {
+        extent: held | prior
+        for extent, held in right.items()
+        for prior in (left.get(extent, _NO_SOURCE_SET),)
+        if (prior is not held and not held <= prior)
+        or (not held and extent not in left)
+    }
+    return MappingProxyType({**left, **grown}) if grown else left
 
 
 def _joined_values(
@@ -143,15 +148,14 @@ def _joined_values(
         return left
     if not left:
         return right
-    return MappingProxyType(
-        {
-            **left,
-            **{
-                extent: merged(left[extent], held) if extent in left else held
-                for extent, held in right.items()
-            },
-        }
-    )
+    grown = {
+        extent: merged(prior, held) if extent in left else held
+        for extent, held in right.items()
+        for prior in (left.get(extent, VALUES_EMPTY),)
+        if (prior is not held and not _covers(prior, held))
+        or (held == VALUES_EMPTY and extent not in left)
+    }
+    return MappingProxyType({**left, **grown}) if grown else left
 
 
 def join(left: State, right: State) -> State:

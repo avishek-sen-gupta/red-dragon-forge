@@ -184,10 +184,15 @@ class _Progress:
 
 @dataclass(frozen=True)
 class _Pass:
-    """One step of the worklist: entry states settled so far, and what to revisit."""
+    """One step of the worklist: entry states settled so far, and what to revisit.
+
+    ``queue`` holds reverse-postorder positions, not node ids: each step takes the
+    earliest, so a node is revisited only after the nodes that feed it have had
+    their turn -- the same fixpoint as any order, reached in far fewer dequeues.
+    """
 
     states: Mapping[str, State]
-    queue: tuple[str, ...]
+    queue: frozenset[int]
     dequeues: int = 0
     progress: _Progress = _Progress()
 
@@ -309,14 +314,17 @@ def _step(
     statements: Mapping[str, Statement],
     index: CellIndex,
     cap: int,
+    order: DepthFirstOrder,
+    rank: Mapping[str, int],
     run: _Pass,
 ) -> _Pass:
-    node_id, *rest = run.queue
+    earliest = min(run.queue)
+    node_id = order.ordered[earliest]
     after = _after(statements, node_id, run.states[node_id], index)
     grown = _grown(cfg, node_id, after, run.states)
     stepped = _Pass(
         states=MappingProxyType({**run.states, **grown}),
-        queue=(*rest, *(target for target in grown if target not in rest)),
+        queue=(run.queue - {earliest}) | {rank[target] for target in grown},
         dequeues=run.dequeues + 1,
         progress=run.progress,
     )
@@ -351,14 +359,16 @@ def _settled(
     whether or not the fixpoint was found. Which of the two happened is read back
     off ``queue``.
     """
+    order = depth_first_order(cfg, entry)
+    rank = MappingProxyType({node_id: n for n, node_id in enumerate(order.ordered)})
     start = _Pass(
         states=MappingProxyType({entry: entry_state}),
-        queue=(entry,),
+        queue=frozenset({rank[entry]}),
         progress=_Progress(started=time.monotonic()),
     )
     passes = accumulate(
         repeat(None),
-        lambda run, _: _step(cfg, statements, index, cap, run),
+        lambda run, _: _step(cfg, statements, index, cap, order, rank, run),
         initial=start,
     )
     return next(run for run in passes if _done(run, cap))

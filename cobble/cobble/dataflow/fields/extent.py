@@ -23,10 +23,11 @@ spurious edge costs less than a lost one:
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from itertools import accumulate, groupby
-from operator import add, attrgetter, floordiv, mul, sub
+from operator import add, attrgetter, floordiv, itemgetter, mul, sub
 from types import MappingProxyType
 from typing import TypeVar
 
@@ -58,6 +59,11 @@ _ARITHMETIC = MappingProxyType({"+": add, "-": sub, "*": mul, "/": floordiv})
 
 _DeclKey = tuple[str, int]
 _Key = TypeVar("_Key", str, tuple[str, int])
+
+
+_Placed = tuple[int, Cell, FieldExtent]
+_ByStart = tuple[tuple[int, ...], tuple[_Placed, ...]]
+_NO_START: _ByStart = ((), ())
 
 
 @dataclass(frozen=True)
@@ -146,6 +152,13 @@ class CellIndex:
     by_decl: Mapping[_DeclKey, tuple[Cell, ...]]
     placements: Mapping[str, _Placement]
     ordered: tuple[Cell, ...]
+    placed: tuple[tuple[Cell, FieldExtent], ...] = ()
+    """``ordered`` with each cell's extent, computed once: ``within`` scans every
+    cell per call, and building the extent each time was most of its cost."""
+    by_start: Mapping[RegionId, _ByStart] = MappingProxyType({})
+    """Each region's cells sorted by start, with their positions in ``ordered``:
+    a cell containing an extent starts at or before it, so ``containing`` bisects
+    to that prefix instead of scanning the program."""
 
     def region_of(self, cell: Cell) -> RegionId:
         return self.placements[cell.record].region
@@ -177,15 +190,17 @@ class CellIndex:
 
     def containing(self, extent: FieldExtent) -> tuple[Cell, ...]:
         """The cells that fully contain this extent, group or elementary."""
-        return tuple(
-            cell for cell in self.ordered if _spans(self.extent_of(cell), extent)
+        starts, entries = self.by_start.get(extent.region, _NO_START)
+        positions = sorted(
+            position
+            for position, _cell, placed in entries[: bisect_right(starts, extent.start)]
+            if extent.end <= placed.end
         )
+        return tuple(self.ordered[position] for position in positions)
 
     def within(self, extent: FieldExtent) -> tuple[Cell, ...]:
         """The cells this extent fully contains, in record order."""
-        return tuple(
-            cell for cell in self.ordered if _spans(extent, self.extent_of(cell))
-        )
+        return tuple(cell for cell, placed in self.placed if _spans(extent, placed))
 
     def elementary_within(self, extent: FieldExtent) -> tuple[Cell, ...]:
         """The same, less the groups: the bytes' own owners, counted once each."""
@@ -227,11 +242,35 @@ def _placements(records: tuple[Record, ...]) -> Mapping[str, _Placement]:
 def cell_index(records: tuple[Record, ...]) -> CellIndex:
     """Every cell in one program, under the two handles a reference gives us."""
     cells = tuple(cell for record in records for cell in record.cells)
-    return CellIndex(
+    unplaced = CellIndex(
         by_name=_grouped(cells, _name_key),
         by_decl=_grouped(cells, _decl_key),
         placements=_placements(records),
         ordered=cells,
+    )
+    placed = tuple((cell, unplaced.extent_of(cell)) for cell in cells)
+    return replace(unplaced, placed=placed, by_start=_by_start(placed))
+
+
+def _by_start(
+    placed: tuple[tuple[Cell, FieldExtent], ...],
+) -> Mapping[RegionId, _ByStart]:
+    ranked = sorted(
+        (extent.region.name, extent.start, position)
+        for position, (_cell, extent) in enumerate(placed)
+    )
+    return MappingProxyType(
+        {
+            RegionId[name]: (
+                tuple(start for _name, start, _position in group),
+                tuple(
+                    (position, *placed[position]) for _name, _start, position in group
+                ),
+            )
+            for name, group in (
+                (name, tuple(group)) for name, group in groupby(ranked, itemgetter(0))
+            )
+        }
     )
 
 
