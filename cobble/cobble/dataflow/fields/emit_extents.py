@@ -16,6 +16,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -40,8 +41,8 @@ def _members(asg_dir: Path) -> tuple[str, ...]:
     return tuple(sorted(p.stem for p in asg_dir.glob("*.json")))
 
 
-def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> str:
-    """One member's rows, or the reason it has none.
+def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> tuple[int, str]:
+    """How many rows one member wrote, or the reason it has none.
 
     Every failure is a reason rather than an abort, which matters more now that the
     fixpoint stage reads its records here: one member's broken cache file would
@@ -51,19 +52,24 @@ def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> str:
     try:
         layout = program_layout(_asg_at(asg_dir / f"{member}.json"))
     except UnsizeableFieldError as unsizeable:
-        return f"unsizeable: {unsizeable}"
+        return 0, f"unsizeable: {unsizeable}"
     except Exception as failure:  # noqa: BLE001 - one member must not end the run
-        return f"unreadable: {failure!r}"
-    writer.add_rows(extent_row(ext) for ext in _declared_extents(layout, member))
-    return ""
+        return 0, f"unreadable: {failure!r}"
+    rows = tuple(extent_row(ext) for ext in _declared_extents(layout, member))
+    writer.add_rows(rows)
+    return len(rows), ""
 
 
 def _emit_tracked(
     asg_dir: Path, n: int, total: int, member: str, writer: JsonlWriter
 ) -> str:
-    reason = _emit_one(asg_dir, member, writer)
-    if n % 50 == 0 or n == total:
-        logger.info("extents: %d/%d", n, total)
+    logger.info("extents: [%d/%d] %s", n, total, member)
+    started = time.monotonic()
+    written, reason = _emit_one(asg_dir, member, writer)
+    if not reason:
+        logger.info(
+            "extents:   %s %d rows, %.1fs", member, written, time.monotonic() - started
+        )
     return reason
 
 
