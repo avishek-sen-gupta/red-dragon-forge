@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -398,6 +399,7 @@ def test_the_run_writes_four_tables_and_no_layout_into_the_graph(corpus):
         ALIASES_FILE,
         DEFS_FILE,
         GRAPH_FILE,
+        "members",
         TARGETS_FILE,
     ]
     assert [node["attrs"] for node in _tagged(out_dir / GRAPH_FILE, RowType.NODE)] == [
@@ -907,12 +909,13 @@ def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
     asg_dir = Path(argv[argv.index("--asg-dir") + 1])
     ((member, block),) = tuple(member_rows(Path(argv[argv.index("--extents") + 1])))
 
-    result, _seconds = build_corpus._analysed_in_worker(
+    result, _seconds = build_corpus._analysed(
         build_corpus._MemberTask(
             member=member,
             path=asg_dir / "XPROGA.json",
             block=block,
             options=AnalysisOptions(sweeps=0, factor=ITERATION_FACTOR),
+            members=asg_dir / "members",
         )
     )
 
@@ -1144,13 +1147,7 @@ def test_parallel_workers_write_what_one_worker_writes(corpus, tmp_path):
     assert cli(serial_argv) == 0
     assert cli(parallel_argv) == 0
 
-    assert sorted(path.name for path in parallel.iterdir()) == sorted(
-        path.name for path in out_dir.iterdir()
-    )
-    assert all(
-        (parallel / path.name).read_bytes() == path.read_bytes()
-        for path in out_dir.iterdir()
-    )
+    assert _published(parallel) == _published(out_dir)
 
 
 def test_members_are_reported_in_table_order_whatever_order_they_finish(corpus, caplog):
@@ -1204,3 +1201,82 @@ def test_two_programs_reading_the_same_named_bytes_keep_a_defs_row_each(corpus):
         "PROGA.WS-A": ("MAIN/0",),
         "PROGB.WS-A": ("MAIN/0",),
     }
+
+
+def _published(out_dir: Path) -> dict[str, bytes]:
+    return {
+        name: (out_dir / name).read_bytes()
+        for name in (GRAPH_FILE, DEFS_FILE, ALIASES_FILE, TARGETS_FILE)
+    }
+
+
+def _member_lines(messages: list[str]) -> list[str]:
+    return [message for message in messages if message.startswith("fields: [")]
+
+
+def test_an_interrupted_run_resumes_to_what_an_uninterrupted_one_publishes(
+    corpus, capsys, caplog
+):
+    """A finished member is a directory of its own tables and counts; a re-run
+    reuses it, analyses only what never finished, and publishes the corpus files
+    and summary a single uninterrupted run does."""
+    argv, out_dir = corpus(_three_members(), extra=("--min-coverage", "0.0"))
+    assert cli(argv) == 0
+    whole, summary = _published(out_dir), capsys.readouterr().out
+    members = out_dir / "members"
+    shutil.rmtree(members / "MEMBERC")
+    (members / "MEMBERC.tmp").mkdir()
+    (members / "MEMBERC.tmp" / GRAPH_FILE).write_text('{"type": "node", "id"')
+    for name in whole:
+        (out_dir / name).unlink()
+
+    with caplog.at_level(logging.INFO):
+        assert cli(argv) == 0
+
+    assert _published(out_dir) == whole
+    assert capsys.readouterr().out == summary
+    assert _member_lines(caplog.messages) == [
+        "fields: [1/3] MEMBERA reused",
+        "fields: [2/3] MEMBERB reused",
+        "fields: [3/3] MEMBERC",
+    ]
+    assert sorted(path.name for path in members.iterdir()) == [
+        "MEMBERA",
+        "MEMBERB",
+        "MEMBERC",
+    ]
+
+
+def test_force_analyses_every_member_again(corpus, caplog):
+    argv, out_dir = corpus(_three_members(), extra=("--min-coverage", "0.0"))
+    assert cli(argv) == 0
+    whole = _published(out_dir)
+
+    with caplog.at_level(logging.INFO):
+        assert cli([*argv, "--force"]) == 0
+
+    assert _published(out_dir) == whole
+    assert _member_lines(caplog.messages) == [
+        "fields: [1/3] MEMBERA",
+        "fields: [2/3] MEMBERB",
+        "fields: [3/3] MEMBERC",
+    ]
+
+
+def test_a_named_member_run_publishes_it_alone_and_keeps_the_rest(corpus):
+    argv, out_dir = corpus(_three_members(), extra=("--min-coverage", "0.0"))
+    assert cli(argv) == 0
+    named = ["--member" if one == "--all" else one for one in argv]
+    named.insert(named.index("--member") + 1, "MEMBERA")
+
+    assert cli(named) == 0
+
+    programs = {
+        node["id"].split(".")[0] for node in _tagged(out_dir / GRAPH_FILE, RowType.NODE)
+    }
+    assert programs == {"PROGA"}
+    assert sorted(path.name for path in (out_dir / "members").iterdir()) == [
+        "MEMBERA",
+        "MEMBERB",
+        "MEMBERC",
+    ]
