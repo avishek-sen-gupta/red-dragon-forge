@@ -665,8 +665,9 @@ def _admissible(walk: _Walk, loaded: Loaded, edges: Sequence[Edge]) -> tuple[Edg
 
     An arm whose target has no successors of its own ends the path there, and
     ``desugar._raisable`` makes such an arm the FIRST one at every CICS command with
-    no NOHANDLE and no RESP: its raising arm is a ``#dispatch`` stub with no exits,
-    because naming the armed handler is a reaching-definitions question. Since a
+    no NOHANDLE and no RESP: its raising arm is a ``#dispatch`` node, which has no
+    exits wherever no HANDLE CONDITION is armed (``program_cfg`` joins it to the
+    handlers that are). Since a
     plan continues with the first arm past its own end, leaving that arm first ends
     every route at the first such command beyond its last flip -- measured at 663 of
     9030 reachable nodes on a real member, whatever the path budget. The order is

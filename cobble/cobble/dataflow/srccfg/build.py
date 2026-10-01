@@ -44,34 +44,13 @@ from cobble.dataflow.srccfg.desugar import (
 )
 
 
-def _error_handlers(order: Sequence[ParagraphRef]) -> tuple[str, ...]:
-    """Every handler label registered by any HANDLE CONDITION in the program."""
-    return tuple(
-        dict.fromkeys(
-            label.upper()
-            for ref in order
-            for statement in ref.statements
-            if str(getattr(statement, "verb", "") or "").upper() == "HANDLE CONDITION"
-            for name, value in getattr(statement, "options", {}).items()
-            if name.upper() not in ("NOHANDLE", "RESP", "RESP2")
-            for label in (str(getattr(value, "text", "") or "").strip(),)
-            if label
-        )
-    )
-
-
-def build_program(
-    asg, error_handlers: tuple[str, ...] = (), source_file: str = ""
-) -> Cfg:
+def build_program(asg, source_file: str = "") -> Cfg:
     order = paragraph_order(asg)
     context = program_context(asg)
     index = condition_index(asg)
-    handlers = error_handlers if error_handlers else ()
     governing = governing_directives(asg)
     parts = tuple(
-        _paragraph_cfg(
-            ref, asg.program_id, context, index, handlers, source_file, governing
-        )
+        _paragraph_cfg(ref, asg.program_id, context, index, source_file, governing)
         for ref in order
     )
     nodes = tuple(node for part in parts for node in part[0])
@@ -94,7 +73,6 @@ def _paragraph_cfg(
     program: str,
     context,
     index,
-    handlers: tuple[str, ...],
     source_file: str = "",
     governing: Mapping[str, Governing] = MappingProxyType({}),
 ) -> tuple[tuple[Node, ...], tuple[Edge, ...]]:
@@ -103,7 +81,6 @@ def _paragraph_cfg(
         paragraph=ref.name,
         flows=context,
         index=index,
-        error_handlers=handlers,
         source_file=source_file,
         whenever=governing,
     )
