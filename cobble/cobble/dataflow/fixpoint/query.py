@@ -51,8 +51,8 @@ from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
-    EDGES_FILE,
     EXTENTS_FILE,
+    GRAPH_FILE,
 )
 from cobble.dataflow.fixpoint.rows import Row
 
@@ -215,8 +215,9 @@ class Alias:
 class FieldStore:
     """The four tables a question needs, indexed for the joins it makes.
 
-    ``nodes.jsonl`` is not read: every FIELD node it holds is an endpoint of some
-    edge, so it adds no fact a query here asks for. ``aliases`` is not indexed:
+    The graph file's node rows are dropped with every other non-FLOWS_TO row:
+    every FIELD node is an endpoint of some edge, so they add no fact a query
+    here asks for. ``aliases`` is not indexed:
     ``across`` scans every alias row per call.
     """
 
@@ -777,7 +778,7 @@ def load(out_dir: Path) -> FieldStore:
     """
     return store_of(
         rows.read(out_dir / EXTENTS_FILE),
-        rows.read(out_dir / EDGES_FILE),
+        rows.read(out_dir / GRAPH_FILE),
         rows.read(out_dir / DEFS_FILE),
         rows.read(out_dir / ALIASES_FILE),
     )

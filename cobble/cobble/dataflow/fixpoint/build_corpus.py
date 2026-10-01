@@ -21,10 +21,10 @@ A member that raises is reported and the run continues, because the answer wante
 from a whole-corpus run is "which members are missing from this output", and a run
 that aborts answers that for one member only.
 
-Six files, so that the graph holds only what nothing outside it could state:
+Five files, so that the graph holds only what nothing outside it could state:
 
-  nodes.jsonl    the FIELD endpoints, no attributes
-  edges.jsonl    one FLOWS_TO per (node, source extent, target extent)
+  graph.jsonl    the FIELD endpoints (no attributes) and one FLOWS_TO per
+                 (node, source extent, target extent), each row tagged node or edge
   extents.jsonl  every declared name's level, usage, and byte ranges
   defs.jsonl     the definitions reaching each (node, source extent)
   aliases.jsonl  per call site and caller window, the bytes shared with a callee
@@ -121,14 +121,13 @@ from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
-from cobble.knowledge_graph.graph_writer import GraphWriter
+from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
 
-NODES_FILE = "nodes.jsonl"
-EDGES_FILE = "edges.jsonl"
+GRAPH_FILE = "graph.jsonl"
 EXTENTS_FILE = "extents.jsonl"
 DEFS_FILE = "defs.jsonl"
 ALIASES_FILE = "aliases.jsonl"
@@ -679,10 +678,10 @@ def _report(totals: RunTotals) -> None:
     sys.stdout.write("\n")
 
 
-def _writer(arguments: argparse.Namespace, locations: CorpusIndex) -> GraphWriter:
-    return GraphWriter(
-        arguments.out_dir / NODES_FILE, arguments.out_dir / EDGES_FILE, locations
-    )
+def _writer(
+    arguments: argparse.Namespace, locations: CorpusIndex
+) -> AbstractContextManager[GraphWriter]:
+    return graph_writer(arguments.out_dir / GRAPH_FILE, locations)
 
 
 def _side_writer(

@@ -1,29 +1,31 @@
 """GraphWriter — streaming sink for the knowledge graph.
 
-Both nodes and edges stream to their .jsonl file deduped keep-first, on
-first sighting, with no buffering. What counts as the same edge depends on
-its kind -- see ATTRS_ARE_IDENTITY -- because for most kinds the endpoints
-are the whole claim, while a byte-level dataflow edge says something
-different for each extent pair it carries. This is only correct because a node's
-location is resolved once, up front, by a CorpusIndex passed in at
-construction — every occurrence of a given (kind, id), whether from an
-extractor's explicit add_node or add_edge's own defensive endpoint-stub
-synthesis, resolves to the same location no matter what order things arrive
-in. (Previously, node identity was reconciled by buffering everything in a
-dict and merging file_path = existing or new on every add_node, because the
-path was only opportunistically available at some call sites — see
-corpus_index.py.)
-Files are written to temp paths and renamed on close() so a crash leaves no
-truncated output. Structurally satisfies cicada's GraphSink.
+Nodes and edges stream to one .jsonl file, each row tagged with which it is
+(see graph_file), deduped keep-first, on first sighting, with no buffering.
+What counts as the same edge depends on its kind -- see ATTRS_ARE_IDENTITY --
+because for most kinds the endpoints are the whole claim, while a byte-level
+dataflow edge says something different for each extent pair it carries. This
+is only correct because a node's location is resolved once, up front, by a
+CorpusIndex passed in at construction — every occurrence of a given (kind, id),
+whether from an extractor's explicit add_node or add_edge's own defensive
+endpoint-stub synthesis, resolves to the same location no matter what order
+things arrive in. add_edge writes both endpoints before the edge, so every node
+row precedes the first edge row naming it.
+The file is written to a temp path and renamed on close() so a crash leaves no
+truncated output. Opened through ``graph_writer`` rather than the context-manager
+protocol, whose ``__exit__`` signature the lint rules cannot express. Structurally
+satisfies cicada's GraphSink.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cobble.file_location import to_json_fields
+from cobble.knowledge_graph.graph_file import edge_row, node_row
 from cobble.knowledge_graph.graph_types import (
     ATTRS_ARE_IDENTITY,
     GraphEdge,
@@ -32,7 +34,7 @@ from cobble.knowledge_graph.graph_types import (
 from cobble.sink_state import FirstSighting
 
 if TYPE_CHECKING:
-    from cobble.corpus_index import CorpusIndex
+    from cobble.corpus_index import FileLocationResolver
 
 
 def _edge_key(edge: GraphEdge) -> tuple:
@@ -55,37 +57,20 @@ def _edge_key(edge: GraphEdge) -> tuple:
 
 
 class GraphWriter:
-    def __init__(
-        self, nodes_path: Path, edges_path: Path, corpus_index: CorpusIndex
-    ) -> None:
+    def __init__(self, path: Path, corpus_index: FileLocationResolver) -> None:
         self._corpus_index = corpus_index
         # Nodes and edges dedupe separately: the same (kind, id) pair can
         # legitimately appear in both an edge key and a node key.
         self._nodes_written = FirstSighting()
         self._edges_written = FirstSighting()
-        self._ntmp = nodes_path.with_suffix(nodes_path.suffix + ".tmp")
-        self._etmp = edges_path.with_suffix(edges_path.suffix + ".tmp")
-        self._nodes_path = nodes_path
-        self._edges_path = edges_path
-        self._nf = self._ntmp.open("w")
-        self._ef = self._etmp.open("w")
+        self._tmp = path.with_suffix(path.suffix + ".tmp")
+        self._path = path
+        self._file = self._tmp.open("w")
 
     def add_node(self, node: GraphNode) -> None:
         if not self._nodes_written.first_time((node.kind, node.id)):
             return
-        self._nf.write(
-            json.dumps(
-                {
-                    "id": node.id,
-                    "kind": node.kind.value,
-                    # file_path plus, when there is none, why not — so a reader
-                    # need not re-derive the reason from the node's kind.
-                    **to_json_fields(node.location),
-                    "attrs": node.attrs,
-                }
-            )
-            + "\n"
-        )
+        self._file.write(node_row(node).model_dump_json() + "\n")
 
     def add_edge(self, edge: GraphEdge) -> None:
         # A defensive fallback: an edge whose endpoints were never explicitly
@@ -112,19 +97,7 @@ class GraphWriter:
         )
         if not self._edges_written.first_time(_edge_key(edge)):
             return
-        self._ef.write(
-            json.dumps(
-                {
-                    "source": edge.source,
-                    "source_kind": edge.source_kind.value,
-                    "target": edge.target,
-                    "target_kind": edge.target_kind.value,
-                    "kind": edge.kind.value,
-                    "attrs": edge.attrs,
-                }
-            )
-            + "\n"
-        )
+        self._file.write(edge_row(edge).model_dump_json() + "\n")
 
     def add_all(self, nodes, edges) -> None:
         for n in nodes:
@@ -133,13 +106,16 @@ class GraphWriter:
             self.add_edge(e)
 
     def close(self) -> None:
-        self._nf.close()
-        self._ef.close()
-        self._ntmp.rename(self._nodes_path)
-        self._etmp.rename(self._edges_path)
+        self._file.close()
+        self._tmp.rename(self._path)
 
-    def __enter__(self) -> GraphWriter:
-        return self
 
-    def __exit__(self, *exc: object) -> None:
-        self.close()
+@contextmanager
+def graph_writer(
+    path: Path, corpus_index: FileLocationResolver
+) -> Iterator[GraphWriter]:
+    writer = GraphWriter(path, corpus_index)
+    try:
+        yield writer
+    finally:
+        writer.close()

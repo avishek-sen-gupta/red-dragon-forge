@@ -23,13 +23,13 @@ from cobble.dataflow.fixpoint import build_corpus
 from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
-    EDGES_FILE,
     EXTENTS_FILE,
-    NODES_FILE,
+    GRAPH_FILE,
     TARGETS_FILE,
     cli,
 )
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.knowledge_graph.row_type import RowType
 
 
 def _program(program_id: str, target: str = "WS-B") -> dict:
@@ -117,6 +117,16 @@ def _rows(path: Path) -> tuple[dict, ...]:
     return tuple(json.loads(line) for line in lines)
 
 
+def _tagged(path: Path, row_type: RowType) -> tuple[dict, ...]:
+    return tuple(row for row in _rows(path) if row["type"] == row_type.value)
+
+
+def _edge_text(out_dir: Path) -> str:
+    return "".join(
+        json.dumps(row) for row in _tagged(out_dir / GRAPH_FILE, RowType.EDGE)
+    )
+
+
 @pytest.fixture
 def corpus(tmp_path: Path):
     """An ASG directory, an output directory, a config naming both, and the extents.
@@ -158,7 +168,7 @@ def test_a_run_writes_nodes_and_edges_and_exits_zero(corpus):
 
     assert cli(argv) == 0
 
-    edge = json.loads((out_dir / "edges.jsonl").read_text(encoding="utf-8"))
+    (edge,) = _tagged(out_dir / GRAPH_FILE, RowType.EDGE)
     assert (edge["source"], edge["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
     assert edge["kind"] == "FLOWS_TO"
 
@@ -177,7 +187,7 @@ def test_one_flow_written_on_four_paths_is_one_edge_and_one_defs_row(corpus):
 
     read = [
         row
-        for row in _rows(out_dir / "edges.jsonl")
+        for row in _tagged(out_dir / GRAPH_FILE, RowType.EDGE)
         if (row["source"], row["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
         and row["attrs"]["node"] == "MAIN/1"
     ]
@@ -229,7 +239,7 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
         written.append(
             tuple(
                 (out_dir / name).read_bytes()
-                for name in (EDGES_FILE, EXTENTS_FILE, DEFS_FILE, ALIASES_FILE)
+                for name in (GRAPH_FILE, EXTENTS_FILE, DEFS_FILE, ALIASES_FILE)
             )
         )
 
@@ -243,8 +253,7 @@ def test_every_endpoint_node_states_why_it_has_no_file(corpus):
 
     assert cli(argv) == 0
 
-    rows = (out_dir / "nodes.jsonl").read_text(encoding="utf-8").splitlines()
-    nodes = [json.loads(row) for row in rows]
+    nodes = _tagged(out_dir / GRAPH_FILE, RowType.NODE)
     assert {node["kind"] for node in nodes} == {"FIELD"}
     assert {node["file_path_reason"] for node in nodes} == {"not_indexed"}
 
@@ -256,7 +265,7 @@ def test_a_malformed_member_is_reported_and_the_run_continues(corpus):
 
     assert cli(argv) == 3
 
-    assert "FLOWS_TO" in (out_dir / "edges.jsonl").read_text(encoding="utf-8")
+    assert "FLOWS_TO" in _edge_text(out_dir)
 
 
 def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
@@ -282,7 +291,7 @@ def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
 
     summary = json.loads(capsys.readouterr().out)
     assert (summary["analysed"], summary["skipped"]) == (1, 1)
-    assert "PROGB" not in (out_dir / EDGES_FILE).read_text(encoding="utf-8")
+    assert "PROGB" not in _edge_text(out_dir)
     reason = (
         "no rows in extents.jsonl: run cobble-extents "
         f"--asg-dir {out_dir.parent / "asg"} "
@@ -357,7 +366,7 @@ def test_two_members_declaring_one_program_id_are_both_reported(corpus):
     """Node ids are scoped by program, so a collision merges two namespaces.
 
     srccfg answers this by qualifying its output filename, which it can do because
-    it writes one file per member. This stage writes one shared edges.jsonl, so
+    it writes one file per member. This stage writes one shared graph.jsonl, so
     there is nothing to qualify -- the run reports instead.
     """
     argv, _ = corpus(
@@ -405,7 +414,10 @@ def test_the_declared_extents_go_to_their_own_file_not_into_the_nodes(corpus):
         "DISPLAY",
     )
     assert declared["PROGA.REC"]["level"] == 1
-    assert [node["attrs"] for node in _rows(out_dir / NODES_FILE)] == [{}, {}]
+    assert [node["attrs"] for node in _tagged(out_dir / GRAPH_FILE, RowType.NODE)] == [
+        {},
+        {},
+    ]
 
 
 def test_a_named_member_is_the_only_one_analysed(corpus):
@@ -420,7 +432,7 @@ def test_a_named_member_is_the_only_one_analysed(corpus):
 
     assert cli(argv) == 0
 
-    edges = (out_dir / "edges.jsonl").read_text(encoding="utf-8")
+    edges = _edge_text(out_dir)
     assert "PROGA" in edges
     assert "PROGB" not in edges
 
@@ -450,7 +462,7 @@ def test_a_named_member_the_cache_does_not_hold_exits_two(corpus):
 
     assert cli(argv) == 2
 
-    assert not (out_dir / "edges.jsonl").exists()
+    assert not (out_dir / GRAPH_FILE).exists()
 
 
 def test_the_iteration_factor_reaches_the_fixpoint(corpus):
@@ -471,7 +483,7 @@ def test_a_sweep_budget_analyses_the_member_and_reports_that_it_settled(corpus, 
     assert cli(argv) == 0
 
     assert json.loads(capsys.readouterr().out)["unsettled"] == 0
-    edge = json.loads((out_dir / "edges.jsonl").read_text(encoding="utf-8"))
+    (edge,) = _tagged(out_dir / GRAPH_FILE, RowType.EDGE)
     assert (edge["source"], edge["target"]) == ("PROGA.WS-A", "PROGA.WS-B")
 
 
@@ -697,7 +709,7 @@ def test_a_callee_the_parse_cannot_read_costs_one_row_and_not_the_four_tables(
 
     assert cli(argv) == 0
 
-    for name in (NODES_FILE, EDGES_FILE, EXTENTS_FILE, DEFS_FILE):
+    for name in (GRAPH_FILE, EXTENTS_FILE, DEFS_FILE):
         assert _rows(out_dir / name), name
     (row,) = _rows(out_dir / ALIASES_FILE)
     assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "MAIN/1", "LINK")
@@ -908,7 +920,7 @@ def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
 
     assert cli(argv) == 0
 
-    for name in (NODES_FILE, EDGES_FILE, EXTENTS_FILE, DEFS_FILE):
+    for name in (GRAPH_FILE, EXTENTS_FILE, DEFS_FILE):
         assert _rows(out_dir / name), name
     (row,) = _rows(out_dir / ALIASES_FILE)
     assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "", "")
