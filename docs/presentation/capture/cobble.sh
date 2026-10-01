@@ -22,7 +22,13 @@ viz() {
 
 echo "== parse + build + compare + render (whole-system graph)"
 uv run --no-sync cobble-parse-corpus --config config/carddemo.toml 2>&1 | tail -3
-uv run --no-sync cobble-build --config config/carddemo.toml --output out/carddemo.jsonl > "$WORK/build.log" 2>&1
+# The reference graph includes the dynamic-target edges, so the build reads the
+# whole-corpus fixpoint's targets.jsonl.
+uv run --no-sync cobble-extents --asg-dir out-parsed --out "$WORK/extents-input.jsonl"
+uv run --no-sync cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir "$WORK/fields-all" \
+  --extents "$WORK/extents-input.jsonl" --all > /dev/null 2> "$WORK/fixpoint-all.log"
+uv run --no-sync cobble-build --config config/carddemo.toml --output out/carddemo.jsonl \
+  --dynamic-call-targets "$WORK/fields-all/targets.jsonl" > "$WORK/build.log" 2>&1
 grep -A12 "FAILURE" "$WORK/build.log" > "$ART/build-warnings.txt" || true
 uv run --no-sync cobble-compare --graph out/carddemo.jsonl 2>&1 | tee "$ART/compare.txt"
 grep -q "EMPTY DIFF" "$ART/compare.txt"
@@ -91,7 +97,7 @@ uv run --no-sync cobble-trace-query backward WS-CARD-RID-ACCT-ID --trace "$WORK/
   | tee "$ART/dataflow/COACTVWC-acct-rid-backward.txt"
 
 uv run --no-sync cobble-dataflow-fixpoint --asg-dir "$ROOT/cobble/out-parsed" --out-dir "$WORK/fields" \
-  --member COSGN00C COMEN01C COADM01C COACTVWC > "$ART/dataflow/fixpoint-summary.json" 2> "$WORK/fixpoint.log"
+  --extents "$WORK/extents-input.jsonl" --member COSGN00C COMEN01C COADM01C COACTVWC > "$ART/dataflow/fixpoint-summary.json" 2> "$WORK/fixpoint.log"
 grep -v "dequeues," "$WORK/fixpoint.log" > "$ART/dataflow/fixpoint-report.txt"
 cp "$WORK/fields/aliases.jsonl" "$ART/dataflow/aliases.jsonl"
 uv run --no-sync cobble-dataflow-fixpoint-query reaches COSGN00C.WS-USER-ID --out "$WORK/fields" \

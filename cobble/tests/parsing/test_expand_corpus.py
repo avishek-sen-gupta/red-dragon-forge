@@ -19,7 +19,6 @@ def _config(tmp_path: Path) -> CorpusConfig:
         copybook_dirs=(),
         copybook_extensions=("cpy",),
         asg_dir=tmp_path / "asg",
-        out_dir=tmp_path / "out",
     )
 
 

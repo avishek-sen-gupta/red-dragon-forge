@@ -7,45 +7,36 @@ the parse, depgraph and srccfg stages all are -- and one corpus described in two
 markup languages is a corpus described twice. tomllib is stdlib, so the switch
 also drops a dependency.
 
-Split into a pure core (dict -> dataclass, no I/O) and an imperative shell
-(reads the TOML file off disk). Every required field is read without a
-fallback default -- a missing key raises rather than silently guessing a
-path. List-shaped fields are never None; an absent/empty key means an empty
-tuple, except for the two that describe how files are NAMED rather than where
-they live (`copybook_extensions`, `bms_globs`): those fall back to the
-conventions cobble shipped with, so a corpus only spells them out when its
-members don't follow those conventions. Relative paths are NOT resolved here -- they stay relative to
-whatever the caller's current working directory is (matching today's
-implicit behavior of running scripts from the repo root).
+The TOML is validated on arrival into typed tables (corpus_table, bms_table) and
+mapped onto the dataclasses here; nothing indexes the parsed dict. Every
+required key is required by its table -- a missing one fails validation naming
+it rather than silently guessing a path. List-shaped fields are never None; a
+list left out of the file is an empty tuple, except for the two that describe how files
+are NAMED rather than where they live (`copybook_extensions`, `bms_globs`):
+those fall back to the conventions cobble shipped with. Keys a table does not
+declare are ignored, so a config still naming a key cobble no longer reads
+loads. Paths expand ~ and environment variables and are otherwise left
+relative to the caller's working directory.
 """
 
 from __future__ import annotations
 
 import tomllib
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from cobble.bms_file import BmsFile
+from cobble.bms_table import BmsTable
 from cobble.cics.synth_csd import TransidRule
+from cobble.corpus_file import CorpusFile
+from cobble.corpus_table import CorpusTable
 from cobble.path_utils import config_path
+
 
 # The extensions the ProLeap bridge has always searched (see
 # proleap-bridge/src/main/java/org/reddragon/bridge/Main.java). Kept as the
 # default so a config written before `copybook_extensions` existed resolves
 # copybooks exactly as it did before.
-DEFAULT_COPYBOOK_EXTENSIONS: tuple[str, ...] = (
-    "",
-    "cpy",
-    "CPY",
-    "cob",
-    "cbl",
-    "copy",
-    "COPY",
-)
-
-DEFAULT_BMS_GLOBS: tuple[str, ...] = ("*.bms",)
-
-
 @dataclass(frozen=True)
 class CorpusConfig:
     cobol_dir: Path
@@ -60,7 +51,6 @@ class CorpusConfig:
     # this stage, like cobol_dir -- cobble-build reads ASGs and never makes them,
     # because a parse is 4-7 seconds of JVM per member and has been paid already.
     asg_dir: Path
-    out_dir: Path
     # How this corpus's member names encode the transaction each one serves, for
     # `python -m cobble.generate_csd` to reconstruct a CSD the site never
     # exported. Empty for a corpus that ships a real one; see cics/synth_csd.py.
@@ -75,57 +65,39 @@ class BmsConfig:
     sym_dir: Path
 
 
-def _require(data: Mapping, key: str) -> str | list[str]:
-    if key not in data:
-        raise KeyError(f"config missing required key: {key!r}")
-    return data[key]
-
-
-def _transid_rule(data: Mapping) -> TransidRule:
-    return TransidRule(
-        member_pattern=str(_require(data, "member_pattern")),
-        transid_template=str(_require(data, "transid_template")),
-    )
-
-
-def _corpus_config_from_dict(data: Mapping) -> CorpusConfig:
+def _corpus_config(table: CorpusTable) -> CorpusConfig:
     return CorpusConfig(
-        cobol_dir=config_path(_require(data, "cobol_dir")),
-        cobol_globs=tuple(_require(data, "cobol_globs")),
-        jcl_dir=config_path(_require(data, "jcl_dir")),
-        jcl_globs=tuple(_require(data, "jcl_globs")),
-        proclib_dirs=tuple(config_path(p) for p in data.get("proclib_dirs", ())),
-        csd_files=tuple(config_path(p) for p in data.get("csd_files", ())),
-        copybook_dirs=tuple(config_path(p) for p in _require(data, "copybook_dirs")),
-        copybook_extensions=tuple(
-            data.get("copybook_extensions", DEFAULT_COPYBOOK_EXTENSIONS)
-        ),
-        asg_dir=config_path(_require(data, "asg_dir")),
-        out_dir=config_path(_require(data, "out_dir")),
-        transid_rules=tuple(
-            _transid_rule(rule) for rule in data.get("transid_rules", ())
-        ),
+        cobol_dir=config_path(table.cobol_dir),
+        cobol_globs=table.cobol_globs,
+        jcl_dir=config_path(table.jcl_dir),
+        jcl_globs=table.jcl_globs,
+        proclib_dirs=tuple(map(config_path, table.proclib_dirs)),
+        csd_files=tuple(map(config_path, table.csd_files)),
+        copybook_dirs=tuple(map(config_path, table.copybook_dirs)),
+        copybook_extensions=table.copybook_extensions,
+        asg_dir=config_path(table.asg_dir),
+        transid_rules=table.transid_rules,
     )
 
 
-def _bms_config_from_dict(data: Mapping) -> BmsConfig:
+def _bms_config(table: BmsTable) -> BmsConfig:
     return BmsConfig(
-        bms_dir=config_path(_require(data, "bms_dir")),
-        bms_globs=tuple(data.get("bms_globs", DEFAULT_BMS_GLOBS)),
-        macros_dir=config_path(_require(data, "macros_dir")),
-        sym_dir=config_path(_require(data, "sym_dir")),
+        bms_dir=config_path(table.bms_dir),
+        bms_globs=table.bms_globs,
+        macros_dir=config_path(table.macros_dir),
+        sym_dir=config_path(table.sym_dir),
     )
 
 
 def load_corpus_config(path: Path) -> CorpusConfig:
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    if "corpus" not in data:
-        raise KeyError("config missing required key: 'corpus'")
-    return _corpus_config_from_dict(data["corpus"])
+    return _corpus_config(
+        CorpusFile.model_validate(
+            tomllib.loads(path.read_text(encoding="utf-8"))
+        ).corpus
+    )
 
 
 def load_bms_config(path: Path) -> BmsConfig:
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    if "bms" not in data:
-        raise KeyError("config missing required key: 'bms'")
-    return _bms_config_from_dict(data["bms"])
+    return _bms_config(
+        BmsFile.model_validate(tomllib.loads(path.read_text(encoding="utf-8"))).bms
+    )

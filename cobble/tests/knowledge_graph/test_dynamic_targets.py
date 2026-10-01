@@ -8,7 +8,13 @@ import json
 from pathlib import Path
 
 from cobble.build_graph import dynamic_target_graph
-from cobble.build_graph import _covered_sites, _not_attempted_graph, _unanswered_sites
+from cobble.build_graph import (
+    NO_DYNAMIC_CALL_TARGETS,
+    _covered_sites,
+    _dynamic_call_targets,
+    _not_attempted_graph,
+    _unanswered_sites,
+)
 from cobble.cics.flow_observer import DynamicSite
 from cobble.corpus_index import CorpusIndex
 from cobble.knowledge_graph.graph_types import EdgeKind, NodeKind
@@ -180,7 +186,7 @@ def test_a_table_covering_one_member_leaves_the_others_not_attempted(
         ),
     )
 
-    covered = _covered_sites(table)
+    covered = _covered_sites(_dynamic_call_targets(str(table)))
     unanswered = _unanswered_sites(sites, covered)
 
     assert covered == frozenset(
@@ -190,7 +196,7 @@ def test_a_table_covering_one_member_leaves_the_others_not_attempted(
         }
     )
     assert unanswered == (sites[1], sites[2])
-    assert _unanswered_sites(sites, _covered_sites(tmp_path / "absent.jsonl")) == sites
+    assert _unanswered_sites(sites, _covered_sites(NO_DYNAMIC_CALL_TARGETS)) == sites
     nodes, edges = _not_attempted_graph(unanswered, CorpusIndex())
     assert [(n.id, n.attrs["reason"]) for n in nodes] == [
         ("COACTUPC.CDEMO-TO-PROGRAM", "not-attempted"),

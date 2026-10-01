@@ -262,7 +262,7 @@ def write_stubs(
     A target the config does not list is refused BEFORE anything is created. That
     used to be written and then flagged, which is too late twice over: the stubs
     are files nobody reads, and the path may be one another tool owns -- `--fix
-    <out_dir>/synthetic.csd` put a directory where the generated CSD goes and cost
+    out/synthetic.csd` put a directory where the generated CSD had been written and cost
     the next build every TRANSACTION node. Comparison is on resolved paths, so a
     listed dir reached by a different spelling is still listed.
     """

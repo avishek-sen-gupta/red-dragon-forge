@@ -37,7 +37,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | Command | What it does |
 |---------|--------------|
 | `cobble-sym --config <corpus>` | Generate the BMS symbolic copybooks from their `.bms` sources |
-| `cobble-csd --config <corpus>` | Synthesize a CSD for a corpus that arrived without one |
+| `cobble-csd --config <corpus> --out <file>` | Synthesize a CSD for a corpus that arrived without one |
 | `cobble-parse-corpus --config <parse>` | Parse the corpus to one JSON ASG per member (the cache every later stage reads) |
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
 | `cobble-build --config <corpus> --output <file>` | Extract the graph to one file, a tagged row per node and edge |
@@ -54,7 +54,11 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 . ../bridge-env.sh
 uv run cobble-sym --config config/carddemo.toml              # generate the BMS symbolic copybooks
 uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus -> one JSON ASG per member in out-parsed/
-uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl   # extract the graph -> out/carddemo.jsonl
+uv run cobble-extents --asg-dir out-parsed --out out-fields/extents-input.jsonl   # every member's declared layout
+uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields \
+  --extents out-fields/extents-input.jsonl --all             # -> out-fields/targets.jsonl, among others
+uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl \
+  --dynamic-call-targets out-fields/targets.jsonl            # extract the graph -> out/carddemo.jsonl
 uv run cobble-compare --graph out/carddemo.jsonl             # identity-diff against reference/graph.jsonl (must be empty: 448/832)
 uv run cobble-render --graph out/carddemo.jsonl              # -> out/carddemo.html
 ```
@@ -171,7 +175,6 @@ csd_files = ["path/to/your/site.csd"]   # omit or leave empty ([]) if your corpu
 copybook_dirs = ["path/to/your/copybooks"]
 copybook_extensions = ["cpy", "txt"]    # omit unless your copybooks are named unconventionally
 asg_dir = "out-parsed"                  # what `cobble-parse-corpus` wrote; an INPUT to this stage
-out_dir = "out"
 
 # omit unless you have no CSD; see "Recover a CSD" below. A table array ENDS the
 # table it's in, so these have to come after every bare key of [corpus].
@@ -282,7 +285,7 @@ entirely: no transaction gets a worklist entry, so no member is scanned for its
 `EXEC CICS LINK`/`XCTL` operands and none of those edges reach the graph.
 
 ```bash
-uv run cobble-csd --config your-corpus.toml    # -> <out_dir>/synthetic.csd
+uv run cobble-csd --config your-corpus.toml --out out/synthetic.csd   # --out is required
 ```
 
 This reconstructs the `DEFINE TRANSACTION(...) PROGRAM(...)` pairs from the
@@ -315,8 +318,8 @@ use it, which keeps it an explicit, reviewable input to the next run:
 csd_files = ["out/synthetic.csd"]
 ```
 
-Because it lives under `out_dir`, cleaning `out_dir` leaves `csd_files` pointing
-at a path nothing has written — so `build_graph` **refuses to start** when a
+Because it lives wherever `--out` put it, cleaning that directory leaves
+`csd_files` pointing at a path nothing has written — so `build_graph` **refuses to start** when a
 `csd_files` entry is not a readable regular file, naming the paths, before the
 expensive phase. That used to be one guarded warning, and the run went on to
 write a graph missing the entire CICS stage. An empty `csd_files` is still a
@@ -374,7 +377,7 @@ And `DIR` outside the config's `copybook_dirs` is **refused before anything is
 created** — nothing written, the listed dirs printed, exit code 2. ProLeap lists
 those directories and nothing else, so stubs anywhere else resolve nothing, and a
 path outside them may belong to something that is not a copybook dir at all: one
-`--fix <out_dir>/synthetic.csd` put a *directory* where `cobble-csd` writes the
+`--fix out/synthetic.csd` put a *directory* where `cobble-csd` had written the
 generated CSD, and the next build came out with 32,463 nodes and zero
 `TRANSACTION`. A listed dir that does not exist yet is still created.
 
@@ -685,8 +688,10 @@ And it carries nothing forward out of a write whose content it cannot name: an
 their reason and no value, so a name that only such a write could have supplied
 stays unresolved.
 
-`cobble-build` reads `targets.jsonl` by convention at the build's `out_dir` and
-turns each row into one of three edge forms, by a three-way rule:
+`cobble-build --dynamic-call-targets <file>` reads that `targets.jsonl` and turns
+each row into one of three edge forms, by a three-way rule. Without the flag the
+build adds no dynamic-target edges; a named file that does not exist stops the
+build before it starts.
 
 | candidates | reasons | edge(s) |
 | ---------- | ------- | ------- |
@@ -950,7 +955,7 @@ consumers may not import each other).
 | `cobble/render_graph.py` | Render the graph file as a self-contained interactive HTML graph beside it, `<stem>.html` (`python -m cobble.render_graph --graph <file>`. `cobble/knowledge_graph/graph_file.py` reads the file, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
 | `tests/` | The pytest unit suite (`uv run python -m pytest`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
-| `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
+| `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → the file `--out` names (`python -m cobble.generate_csd --config <path> --out <file>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
 | `reference/graph.jsonl` | The 448/832 identity golden, in the graph file's format (copied from the production fitness golden, the *target*, not an input to the extraction). |
 | `bms-macros/` | The hand-written `DFHMSD`/`DFHMDI`/`DFHMDF` prototype macros (assembler SYSLIB for `hlasm_export`). Source, not generated. |
 ## Invariant

@@ -55,6 +55,7 @@ from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
 from cobble.dataflow.fixpoint.rows import Row, strings, text
 from cobble.dataflow.fixpoint.rows import read as read_targets
+from cobble.dynamic_call_targets import NO_DYNAMIC_CALL_TARGETS, DynamicCallTargets
 from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
 from cobble.jcl.jcl_graph import jcl_graph_from_job
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
@@ -147,8 +148,8 @@ def _unusable_csd_paths(config: CorpusConfig) -> tuple[Path, ...]:
 def _unusable_csd_message(unusable: Sequence[Path]) -> str:
     """Why the run is refusing to start, and the two ways out.
 
-    A generated CSD lives under out_dir, so cleaning out_dir leaves the config
-    pointing at nothing -- and a directory can appear at that path from any tool
+    A generated CSD lives wherever cobble-csd --out put it, so cleaning that
+    directory leaves the config pointing at nothing -- and a directory can appear at that path from any tool
     told to write there. Both read the same from here.
     """
     return "\n".join(
@@ -513,8 +514,8 @@ def _site(caller: str, expression: str) -> tuple[str, str]:
     return caller, _operand_name(expression)
 
 
-def _covered_sites(path: Path) -> frozenset[tuple[str, str]]:
-    """Every (caller, operand) a targets.jsonl answers for, or nothing.
+def _covered_sites(targets: DynamicCallTargets) -> frozenset[tuple[str, str]]:
+    """Every (caller, operand) the dynamic-call-targets table answers for.
 
     Matched on the operand and not on the CFG node id: a row carries the node the
     fixpoint's own CFG named, and the CICS walk knows a site by the program and the
@@ -522,8 +523,7 @@ def _covered_sites(path: Path) -> frozenset[tuple[str, str]]:
     entry, which is how the DYNAMIC_TARGET id is scoped too.
     """
     return frozenset(
-        _site(text(row, "caller"), text(row, "expression"))
-        for row in read_targets(path)
+        _site(text(row, "caller"), text(row, "expression")) for row in targets.rows
     )
 
 
@@ -700,6 +700,7 @@ def _build_cics_flow_graph(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
     transid_to_program: Mapping[str, str],
+    targets: DynamicCallTargets,
     writer: GraphWriter,
 ) -> tuple[str, ...]:
     stems = {
@@ -715,7 +716,9 @@ def _build_cics_flow_graph(
         len(transid_to_program),
         len(found.sources),
     )
-    return found.failures + _run_flow_extractor(config, corpus_index, found, writer)
+    return found.failures + _run_flow_extractor(
+        config, corpus_index, found, targets, writer
+    )
 
 
 def _is_synthetic_transaction(kind: NodeKind, node_id: str) -> bool:
@@ -781,12 +784,13 @@ def _log_suppressed(suppressed: SuppressedTransactions) -> None:
 
 
 def _write_not_attempted_sites(
-    config: CorpusConfig,
+    targets: DynamicCallTargets,
     corpus_index: CorpusIndex,
     extraction: FlowExtraction,
     writer: GraphWriter,
 ) -> None:
-    """Every dynamic site this walk saw that targets.jsonl does not answer for.
+    """Every dynamic site this walk saw that the dynamic-call-targets table does not
+    answer for.
 
     Subtracted site by site rather than skipped whenever the file exists: a table
     written for a subset of members -- a fields config carrying a ``members``
@@ -800,14 +804,11 @@ def _write_not_attempted_sites(
     exclusive source for a site the table does name, so nothing here duplicates
     or races it.
     """
-    sites = _unanswered_sites(
-        extraction.dynamic_sites, _covered_sites(_targets_path(config))
-    )
+    sites = _unanswered_sites(extraction.dynamic_sites, _covered_sites(targets))
     logger.info(
-        "dynamic sites: %d seen, %d answered by %s, %d marked %s",
+        "dynamic sites: %d seen, %d answered by --dynamic-call-targets, %d marked %s",
         len(extraction.dynamic_sites),
         len(extraction.dynamic_sites) - len(sites),
-        _TARGETS_FILE,
         len(sites),
         _NOT_ATTEMPTED,
     )
@@ -850,6 +851,7 @@ def _run_flow_extractor(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
     found: _CicsSources,
+    targets: DynamicCallTargets,
     writer: GraphWriter,
 ) -> tuple[str, ...]:
     """Run the flow extractor over the whole CSD and return what it skipped."""
@@ -861,7 +863,7 @@ def _run_flow_extractor(
         extraction.programs_read,
         len(extraction.failures),
     )
-    _write_not_attempted_sites(config, corpus_index, extraction, writer)
+    _write_not_attempted_sites(targets, corpus_index, extraction, writer)
     return extraction.failures
 
 
@@ -869,12 +871,15 @@ def _cics_flow_or_skip(
     config: CorpusConfig,
     corpus_index: CorpusIndex,
     transid_to_program: Mapping[str, str],
+    targets: DynamicCallTargets,
     writer: GraphWriter,
 ) -> tuple[str, ...]:
     if not config.csd_files:
         logger.info("CICS flow: skipped (no csd_files configured)")
         return ()
-    return _build_cics_flow_graph(config, corpus_index, transid_to_program, writer)
+    return _build_cics_flow_graph(
+        config, corpus_index, transid_to_program, targets, writer
+    )
 
 
 # ── extractor 4: batch FILE-CONTROL ──────────────────────────────
@@ -924,42 +929,23 @@ def _build_batch_file_graph(
 # ── the run ──────────────────────────────────────────────────────
 
 
-_TARGETS_FILE = "targets.jsonl"
-
-
-def _targets_path(config: CorpusConfig) -> Path:
-    """Where the dataflow fixpoint stage's table would be, if this build's
-    out_dir is also where `cobble-fields --all` wrote it.
-
-    Convention, not configuration: a corpus that runs both stages into one
-    out_dir gets the enrichment for free, and a corpus that has not run the
-    fixpoint stage at all -- the common case -- reads as the file not existing,
-    which ``read_targets`` already turns into "no rows" rather than an error.
-    """
-    return config.out_dir / _TARGETS_FILE
-
-
 def _build_dynamic_targets(
-    config: CorpusConfig, corpus_index: CorpusIndex
+    targets: DynamicCallTargets, corpus_index: CorpusIndex
 ) -> _DynamicGraph:
-    """The three-way rule's nodes and edges over targets.jsonl, or nothing.
+    """The three-way rule's nodes and edges over the dynamic-call-targets table.
 
-    Named and logged as its own input, not folded silently into a stage that
-    already runs: a corpus whose node count changed because this table
-    appeared or disappeared must read as that, not as drift nothing explains.
+    Logged as its own input, not folded silently into a stage that already runs:
+    a corpus whose node count changed because this table was or was not named
+    must read as that, not as drift nothing explains.
     """
-    path = _targets_path(config)
-    if not path.is_file():
-        logger.info("dynamic targets: skipped (no %s)", path)
-        return ((), ())
-    rows = read_targets(path)
-    logger.info("dynamic targets: %d rows read from %s", len(rows), path)
-    return dynamic_target_graph(rows, corpus_index)
+    logger.info("dynamic call targets: %d rows", len(targets.rows))
+    return dynamic_target_graph(targets.rows, corpus_index)
 
 
 def _extract_all(
     config: CorpusConfig,
     output: Path,
+    targets: DynamicCallTargets,
     corpus_index: CorpusIndex,
     csd: _CsdRead,
     store: JclStore,
@@ -970,10 +956,12 @@ def _extract_all(
         failures = (
             _build_jcl_graph(config, corpus_index, writer, store)
             + _build_call_copy_graph(config, corpus_index, cics_program_names, writer)
-            + _cics_flow_or_skip(config, corpus_index, csd.transid_to_program, writer)
+            + _cics_flow_or_skip(
+                config, corpus_index, csd.transid_to_program, targets, writer
+            )
             + _build_batch_file_graph(config, corpus_index, cics_program_names, writer)
         )
-        writer.add_all(*_build_dynamic_targets(config, corpus_index))
+        writer.add_all(*_build_dynamic_targets(targets, corpus_index))
         return failures
 
 
@@ -1001,6 +989,16 @@ def _report_merged(output: Path) -> None:
     )
 
 
+def _dynamic_call_targets(text: str) -> DynamicCallTargets:
+    path = Path(text)
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(
+            f"{path} not found — cobble-dataflow-fixpoint writes targets.jsonl "
+            "into its --out-dir"
+        )
+    return DynamicCallTargets(rows=read_targets(path))
+
+
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1015,10 +1013,19 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         type=Path,
         help="The graph file to write: one JSON line per node and per edge, tagged with which it is",
     )
+    parser.add_argument(
+        "--dynamic-call-targets",
+        type=_dynamic_call_targets,
+        default=NO_DYNAMIC_CALL_TARGETS,
+        help="The targets.jsonl cobble-dataflow-fixpoint wrote: which programs each "
+        "dynamic CALL/XCTL/LINK site can reach. Without it, no dynamic-target edges",
+    )
     return parser.parse_args(argv)
 
 
-def _corpus_failures(config: CorpusConfig, output: Path) -> tuple[str, ...]:
+def _corpus_failures(
+    config: CorpusConfig, output: Path, targets: DynamicCallTargets
+) -> tuple[str, ...]:
     """One full pass over the corpus, returning everything it skipped.
 
     Both JCL passes read every member, so the bridge runs once per member here
@@ -1039,7 +1046,7 @@ def _corpus_failures(config: CorpusConfig, output: Path) -> tuple[str, ...]:
         return (
             corpus_index.failures
             + csd.failures
-            + _extract_all(config, output, corpus_index, csd, store)
+            + _extract_all(config, output, targets, corpus_index, csd, store)
         )
 
 
@@ -1057,7 +1064,7 @@ def main() -> int:
     unusable_csd = _unusable_csd_paths(config)
     if unusable_csd:
         sys.exit(_unusable_csd_message(unusable_csd))
-    failures = _corpus_failures(config, args.output)
+    failures = _corpus_failures(config, args.output, args.dynamic_call_targets)
     _report_merged(args.output)
     _report_failures(failures)
     return 0
