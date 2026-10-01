@@ -161,3 +161,20 @@ table.state td:first-child { white-space: nowrap; }
 }
 
 nav.back { font-size: 0.9rem; margin-bottom: 1.2rem; }
+
+.bytes {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0.8rem 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.bytes .byte-index { color: var(--muted); }
+.bytes .span { border: 1px solid var(--rule); border-radius: 4px; background: var(--panel-2); padding: 0.1rem 0; }
+.bytes .byte { border: 1px solid var(--rule); border-radius: 4px; padding: 0.45rem 0; }
+.bytes .byte.read { outline: 2px solid var(--blue); outline-offset: -2px; }
+.bytes .byte.w0 { background: rgba(122, 162, 255, 0.18); }
+.bytes .byte.w1 { background: rgba(245, 176, 65, 0.24); }
