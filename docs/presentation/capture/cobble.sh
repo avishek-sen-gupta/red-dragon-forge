@@ -101,6 +101,7 @@ uv run --no-sync cobble-dataflow-fixpoint --asg-dir "$ROOT/cobble/out-parsed" --
 grep -v "dequeues," "$WORK/fixpoint.log" > "$ART/dataflow/fixpoint-report.txt"
 cp "$WORK/fields/aliases.jsonl" "$ART/dataflow/aliases.jsonl"
 uv run --no-sync cobble-dataflow-fixpoint-query reaches COSGN00C.WS-USER-ID --out "$WORK/fields" \
+  --extents "$WORK/extents-input.jsonl" \
   --across-calls --max-hops 2 --depth 6 | tee "$ART/dataflow/COSGN00C-user-id-across-calls.txt"
 
 uv run --no-sync python - "$ART/dataflow" <<'PY'

@@ -453,9 +453,8 @@ the order they were named in. Which members are analysed is unchanged.
 
 A member the table does not hold is a recorded skip naming the command that fixes
 it — never a crash, never silence — reported after the members it does hold. An
-absent table is exit 2 before the first member, and so is `--extents
-<out_dir>/extents.jsonl`: that path is this stage's own output, and a run that read
-the file it then truncated would leave nothing behind saying which layout it used.
+absent table is exit 2 before the first member. The table is read, never
+republished: queries take the same file as their own `--extents`.
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
 a usage error. The usual question is about the fields of one program, and a
@@ -470,13 +469,12 @@ the corpus's largest member) and the measurement it was calibrated against both
 live in `config/carddemo-fields-tests.toml`.
 
 Reads the ASG cache `cobble-parse-corpus` wrote and the extents table
-`cobble-extents` wrote over it — no JVM, no corpus tree — and writes five files to
+`cobble-extents` wrote over it — no JVM, no corpus tree — and writes four files to
 `<out_dir>`:
 
 | file | one row per | holds |
 | ---- | ----------- | ----- |
 | `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows: nothing but the id — every attribute it once carried now has a table; edge rows: the `FLOWS_TO` relation and `node`, the statement that moved the bytes. Each row's `type` says which |
-| `extents.jsonl` | *declared* name | its `level`, its `usage`, the byte ranges it owns, and a column per declared property of each of those occurrences |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
 | `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and the `dropped` values that resolved but name no program |
@@ -497,7 +495,7 @@ duplicated per path and then deduplicated by endpoint, which kept one and droppe
 the rest — nondeterministically. As relations of their own each is stated once
 and all of it survives.
 
-`extents.jsonl` is one row per name against the ranges it owns —
+The table `cobble-extents` writes — the `--extents` input — is one row per name against the ranges it owns —
 `{"id": "PROGA.WS-B", "level": 5, "usage": "DISPLAY", "extents":
 ["WS-B@working_storage[4:8]"], "program": "PROGA", "names": ["WS-B"], "starts": [4],
 ...}`. Those first four fields are the whole of what the queries read, and they
@@ -660,7 +658,7 @@ nothing in the run says exit 3.
 `tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
 over-approximates, `must_cover` under-approximates), the extent wire form and its
 round trip, the per-statement transfer functions, the node-keyed fixpoint,
-extent-to-name resolution, what each of the five files carries, the query
+extent-to-name resolution, what each of the four files carries, the query
 surface's five primitives, and the corpus pass's exit codes.
 
 ### Resolving a dynamic call target
@@ -731,14 +729,14 @@ against.
 ### Querying the field dataflow
 
 ```bash
-uv run cobble-dataflow-fixpoint-query writers    WS-TOTAL --out out/fields
-uv run cobble-dataflow-fixpoint-query readers    PROGA.WS-TOTAL --out out/fields
-uv run cobble-dataflow-fixpoint-query reaches    WS-TOTAL --out out/fields --depth 4
-uv run cobble-dataflow-fixpoint-query contains   SOME-REC --out out/fields
-uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --out out/fields --across-calls --max-hops 2
+uv run cobble-dataflow-fixpoint-query writers    WS-TOTAL --out out-fields --extents out-fields/extents-input.jsonl
+uv run cobble-dataflow-fixpoint-query readers    PROGA.WS-TOTAL --out out-fields --extents out-fields/extents-input.jsonl
+uv run cobble-dataflow-fixpoint-query reaches    WS-TOTAL --out out-fields --extents out-fields/extents-input.jsonl --depth 4
+uv run cobble-dataflow-fixpoint-query contains   SOME-REC --out out-fields --extents out-fields/extents-input.jsonl
+uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --out out-fields --extents out-fields/extents-input.jsonl --across-calls --max-hops 2
 ```
 
-Joins the graph with the extents, defs and aliases tables and answers in bytes. The
+Joins the graph, defs and aliases tables with the `--extents` table and answers in bytes. The
 queries are `extents`, `writers`, `readers`, `reaches`, `reached-by`, `contains`,
 `within`, and `overlapping`; the subject is a field name, or `PROGRAM.FIELD` to
 disambiguate one declared in several members.

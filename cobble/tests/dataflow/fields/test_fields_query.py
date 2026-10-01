@@ -403,12 +403,13 @@ def test_an_artefact_without_the_defs_table_still_answers_every_other_question(
     """A directory written by an older build is worth querying, not refusing."""
     from cobble.dataflow.fixpoint.query import load
 
-    (tmp_path / "extents.jsonl").write_text(
+    extents = tmp_path / "extents.jsonl"
+    extents.write_text(
         '{"id": "PROGA.WS-A", "level": 5, "usage": "DISPLAY", '
         '"extents": ["WS-A@working_storage[0:4]"]}\n',
         encoding="utf-8",
     )
-    store = load(tmp_path)
+    store = load(tmp_path, extents)
 
     assert [field.id for field in store.field("WS-A")] == ["PROGA.WS-A"]
     assert store.flows == ()
