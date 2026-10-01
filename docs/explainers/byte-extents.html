@@ -9,17 +9,18 @@
 <body>
 <main>
 <nav class="back"><a href="index.html">← All explainers</a></nav>
-<div class="kicker">Explainer 3 of 4</div>
+<div class="kicker">Explainer 4 of 5</div>
 <h1>Byte-extent aliasing</h1>
 <p class="lede">In COBOL, memory is bytes, not variables. Treat every field as a byte range and aliasing follows from one test: do two ranges overlap?</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
 
-<h2>The problem</h2>
+<h2 id="the-problem">The problem</h2>
 <p>The <a href="reaching-definitions.html">reaching definitions</a> page tracked writes by variable name. That works when every name owns its own storage. In COBOL many names share storage. A group like <code>REC</code> is just the bytes of its children laid end to end, so writing <code>REC</code> writes <code>WS-A</code> and <code>WS-B</code>. <code>REDEFINES</code> gives the same bytes a second name with a different shape. A move into one child changes half of the group. Tracking by name gets every one of these wrong.</p>
 
-<h2>The intuition</h2>
+<h2 id="the-intuition">The intuition</h2>
 <p>Lay the program's data out as the compiler does: each field is a start offset and a length in some storage region. Forget names. A write paints the bytes it covers. A read looks at the bytes it covers and asks which writes painted any of them. Two fields <strong>alias</strong> when their ranges overlap — whatever they are called, however they were declared.</p>
 
-<h2>The example</h2>
+<h2 id="the-example">The example</h2>
 <p><code>REC</code> is eight bytes: <code>WS-A</code> is bytes 0–4 and <code>WS-B</code> is bytes 4–8. <code>WHOLE</code> redefines the same eight bytes as one field. The program writes the group, then one child, then reads each child and the redefinition.</p>
 <pre class="cobol">       IDENTIFICATION DIVISION.
        PROGRAM-ID. BYTEEXT.
@@ -41,8 +42,10 @@
            MOVE WHOLE TO OUT-ALL.
            STOP RUN.</pre>
 
-<h2>Step by step</h2>
+<h2 id="step-by-step">Step by step</h2>
 <p>The strip is bytes 0 to 8 of working storage. Each byte shows the statement that last wrote it. Below it are the definitions the analysis keeps, one per write, each with the range it wrote.</p>
+<details class="walk">
+<summary>The byte strip, one statement at a time <span class="dim">(5 steps)</span></summary>
 <ol class="steps">
 <li>
 <p class="note">MOVE 'AAAABBBB' TO REC: a literal, so no definers. It writes REC [0:8].</p>
@@ -65,8 +68,9 @@
 <div class="bytes"><div class="byte-index">0</div><div class="byte-index">1</div><div class="byte-index">2</div><div class="byte-index">3</div><div class="byte-index">4</div><div class="byte-index">5</div><div class="byte-index">6</div><div class="byte-index">7</div><div class="span" style="grid-column:1 / 9">REC</div><div class="span" style="grid-column:1 / 5">WS-A</div><div class="span" style="grid-column:5 / 9">WS-B</div><div class="span" style="grid-column:1 / 9">WHOLE</div><div class="byte w1  read">/1</div><div class="byte w1  read">/1</div><div class="byte w1  read">/1</div><div class="byte w1  read">/1</div><div class="byte w0  read">/0</div><div class="byte w0  read">/0</div><div class="byte w0  read">/0</div><div class="byte w0  read">/0</div></div><p class="dim">Definitions kept (amber: overlaps this read)</p><div class="chips"><span class="chip changed">MAIN-PARA/0 REC [0:8]</span><span class="chip changed">MAIN-PARA/1 WS-A [0:4]</span></div><p class="dim">Who wrote what this read sees</p><table class="state"><tbody><tr><td>byte by byte (exact)</td><td>MAIN-PARA/0, MAIN-PARA/1</td></tr><tr><td>per write (cobble)</td><td class="">MAIN-PARA/0, MAIN-PARA/1</td></tr></tbody></table>
 </li>
 </ol>
+</details>
 
-<h2>The rule</h2>
+<h2 id="the-rule">The rule</h2>
 <div class="rule">
 extent      = (region, start, end)<br>
 may_alias(a, b)  = same region ∧ a.start &lt; b.end ∧ b.start &lt; a.end<br>
@@ -76,14 +80,14 @@ definers(read r at s) = { d ∈ in(s) | may_alias(d, r) }
 </div>
 <p>Two different tests, on purpose. A definition is a <em>possible</em> source of a read when it overlaps any byte of it. A definition is <em>certainly</em> gone only when a later write covers every byte it wrote. Anything between — a partial overwrite — leaves it alive.</p>
 
-<h2>What goes wrong</h2>
+<h2 id="what-goes-wrong">What goes wrong</h2>
 <ul>
 <li><strong>The answer can be loose.</strong> At <code>MAIN-PARA/2</code> the strip shows that bytes 0–4 were last written by <code>MAIN-PARA/1</code> alone. But the analysis keeps one definition per write, and <code>MAIN-PARA/1</code> covers only half of <code>MAIN-PARA/0</code>'s eight bytes, so it cannot kill it. <code>MAIN-PARA/0</code> still overlaps the read, and is reported as a definer although none of its bytes survive there. That is an over-approximation: it never misses a real source, it sometimes names one too many. Getting it exact would mean splitting a definition into byte ranges every time something writes part of it.</li>
 <li><strong>Kill only on certainty.</strong> A write whose position is not known exactly — a table element with a computed subscript, a field after an <code>OCCURS DEPENDING ON</code> — may alias widely but must cover nothing. Treating it as covering would delete real sources: a wrong answer, not a loose one.</li>
 <li><strong>A field that cannot be sized</strong> has no extent at all, and the analysis cannot place its reads and writes. Cobble reports such a program as unsizeable rather than guess.</li>
 </ul>
 
-<h2>In cobble</h2>
+<h2 id="in-cobble">In cobble</h2>
 <p>Every field's extent comes from its declaration alone — level, usage, <code>OCCURS</code>, <code>REDEFINES</code> — in <a href="../../cobble/cobble/dataflow/fields/extent.py"><code>extent.py</code></a>. The two tests are <code>may_alias</code> and <code>must_cover</code> on the extent type in red-dragon's <a href="../../vendor/red-dragon/cobol_memory/field_extent.py"><code>field_extent.py</code></a>. A move of a literal has no source field, so cobble names its source <code>LITERAL</code>.</p>
 </main>
 

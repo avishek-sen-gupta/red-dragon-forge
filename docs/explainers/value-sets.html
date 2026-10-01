@@ -9,18 +9,19 @@
 <body>
 <main>
 <nav class="back"><a href="index.html">← All explainers</a></nav>
-<div class="kicker">Explainer 4 of 4</div>
+<div class="kicker">Explainer 5 of 5</div>
 <h1>Value sets and dynamic calls</h1>
 <p class="lede">Resolving <code>CALL WS-PGM</code> without running the program: track every value a field can hold, and say so when the list may be short.</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
 
-<h2>The problem</h2>
+<h2 id="the-problem">The problem</h2>
 <p><code>CALL 'PROGB'</code> names its target in the source; a call graph can draw that edge by reading it. <code>CALL WS-PGM</code> calls whatever program name is in <code>WS-PGM</code> when the statement runs. Leave those edges out and the call graph has holes exactly where a program dispatches on data — menus, routers, transaction handlers. Guess and it draws edges that do not exist.</p>
 
-<h2>The intuition</h2>
+<h2 id="the-intuition">The intuition</h2>
 <p>For every field, carry the set of byte values it may hold at each statement. A <code>MOVE</code> of a literal sets it to exactly that value. A <code>MOVE</code> from another field copies that field's set. Where paths meet, take the union. At a <code>CALL</code> through a field, the field's set is the list of programs that call could reach.</p>
 <p>The set can be incomplete: the value may come from a file, from a caller, or from nowhere the analysis can see. So each set also carries <strong>reasons</strong> it may be missing values. An empty set of reasons means "these and no others"; any reason means "at least these".</p>
 
-<h2>The example</h2>
+<h2 id="the-example">The example</h2>
 <p>Two branches put different program names into <code>WS-PGM</code> before calling through it. A second call goes through <code>WS-OTHER</code>, which nothing assigns.</p>
 <pre class="cobol">       IDENTIFICATION DIVISION.
        PROGRAM-ID. VALSETS.
@@ -40,8 +41,10 @@
            CALL WS-OTHER.
            STOP RUN.</pre>
 
-<h2>Step by step</h2>
+<h2 id="step-by-step">Step by step</h2>
 <p>Values are shown as stored: <code>PIC X(8)</code> pads <code>'PROGB'</code> with three spaces, written <code>␣</code>. A call trims the trailing spaces off a value to get a program name.</p>
+<details class="walk">
+<summary>The value sets, one statement at a time <span class="dim">(6 steps)</span></summary>
 <ol class="steps">
 <li>
 <p class="note">IF WS-FLAG = 'Y'. On entry, nothing has been written: every field is empty and uninitialised.</p>
@@ -68,8 +71,9 @@
 <p class="dim">Value sets after this statement (amber: reasons the set may be short)</p><table class="state"><tbody><tr><th>field</th><th>values</th></tr><tr><td>WS-FLAG</td><td>{} <span class="changed">+ uninitialised</span></td></tr><tr><td>WS-PGM</td><td>{'PROGB␣␣␣', 'PROGC␣␣␣'}</td></tr><tr><td>WS-OTHER</td><td>{} <span class="changed">+ uninitialised</span></td></tr></tbody></table>
 </li>
 </ol>
+</details>
 
-<h2>The rule</h2>
+<h2 id="the-rule">The rule</h2>
 <div class="rule">
 value set  = (values, reasons)<br>
 MOVE literal TO f  : f := ({literal padded to f}, {})<br>
@@ -85,14 +89,14 @@ call through f     : candidates = trimmed values of f, reasons = f's reasons
 <li><strong>Unresolved</strong> — no candidates. A single dynamic-target node carrying the expression and the reasons, so the hole is visible rather than silent.</li>
 </ul>
 
-<h2>What goes wrong</h2>
+<h2 id="what-goes-wrong">What goes wrong</h2>
 <ul>
 <li><strong>Under-approximation is the normal case, and the reasons say why.</strong> <code>uninitialised</code>: nothing in the program wrote the field. <code>over-budget</code>: more than 32 values reached it; the first 32 in sorted order are kept. <code>incomplete-walk</code>: the <a href="fixpoints.html">fixpoint</a> stopped before settling, so later values may not have arrived. Others name where a value came from that the analysis cannot follow: a file, the caller's parameters, a called program, a non-literal expression.</li>
 <li><strong>One candidate is not proof.</strong> A walk that stopped early can leave a single value in the set while a second was still on its way. That is why a proven edge needs an empty set of reasons, not just one candidate.</li>
 <li><strong>A value is not always a program name.</strong> A field can hold spaces or a sentinel like <code>'NONE'</code> on some path. Values that cannot be a program name are dropped from the candidates and recorded separately.</li>
 </ul>
 
-<h2>In cobble</h2>
+<h2 id="in-cobble">In cobble</h2>
 <p>The value set, its budget and its reasons are in <a href="../../cobble/cobble/dataflow/fields/values.py"><code>values.py</code></a>; call sites are turned into <code>targets.jsonl</code> rows in <a href="../../cobble/cobble/dataflow/fixpoint/targets.py"><code>targets.py</code></a>; the three-way rule is <code>_row_target</code> in <a href="../../cobble/cobble/build_graph.py"><code>build_graph.py</code></a>.</p>
 </main>
 

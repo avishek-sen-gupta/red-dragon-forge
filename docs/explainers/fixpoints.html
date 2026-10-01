@@ -9,18 +9,21 @@
 <body>
 <main>
 <nav class="back"><a href="index.html">← All explainers</a></nav>
-<div class="kicker">Explainer 1 of 4</div>
+<div class="kicker">Explainer 2 of 5</div>
 <h1>Fixpoints and worklists</h1>
 <p class="lede">How a program analysis handles loops: keep applying the rules until nothing changes.</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
 
-<h2>The problem</h2>
-<p>You want to know, for every statement in a program, something that is true on <em>every</em> path that reaches it — which statements may have last written each variable, say. Straight-line code is easy: walk it top to bottom. A loop is not. The statement at the top of a loop can be reached from before the loop or from the end of its own body, and you cannot know what the end of the body looks like until you have walked the body, which starts at the top.</p>
+<h2 id="the-problem">The problem</h2>
+<p>You want to know, at every statement in a program, which statements may have last written each field — not on one run, but on <em>any</em> run, whatever the input data. You cannot run the program on every input, so you reason about it instead.</p>
 
-<h2>The intuition</h2>
-<p>Start with every statement knowing nothing. Visit statements one at a time. At each one, gather what its predecessors currently know, apply the statement's effect, and if the result is bigger than what the statement knew before, tell its successors to look again. Stop when nobody needs to look again.</p>
-<p>That stopping point is a <strong>fixpoint</strong>: applying the rules once more would change nothing. It is reached because the facts only ever grow and there are finitely many of them. And it is the same answer whatever order you visit in — order changes how much work you do, not what you find.</p>
+<h2 id="the-intuition">The intuition</h2>
+<p>Start the way you would by hand: walk the program from the top, keeping notes at each statement on which statements may have last written each field. A <code>MOVE</code> into a field replaces that field's note with itself. At an <code>IF</code>, walk both arms, because you do not know which one will run; where the arms meet, keep everything either arm noted.</p>
+<p>That works until you reach a loop. The first time you arrive at the loop's test, the only thing that reaches it is what came from before the loop. Then you walk the body, and by the end of the body you know something new — say, a field was just written inside it. That flows back to the test, so the test's notes were incomplete. You have to go round again with the new information, and again, until a trip round the loop adds nothing. That end state, where one more trip would change nothing, is the <strong>fixpoint</strong>.</p>
+<p>Re-walking the whole program each time is wasteful: a statement's notes can only change if something before it changed. So keep a list of the statements that need visiting — the <strong>worklist</strong>. It starts with the first statement. Take a statement off the list and work out its notes from what its predecessors have noted so far. If its notes changed, everything after it may change too, so put its successors on the list. If they did not change, add nothing. When the list runs dry, no statement's notes can change any more: you are at the fixpoint.</p>
+<p>Two things make this trustworthy. It always stops, because notes only ever grow and there are only so many statements that could appear in them. And it reaches the same notes whatever order you take statements off the list: order changes how much work you do, not what you find.</p>
 
-<h2>The example</h2>
+<h2 id="the-example">The example</h2>
 <p>A loop whose body copies <code>WS-A</code> into <code>WS-B</code>, and a read of <code>WS-B</code> after the loop.</p>
 <pre class="cobol">       IDENTIFICATION DIVISION.
        PROGRAM-ID. FIXLOOP.
@@ -38,65 +41,74 @@
        LOOP-PARA.
            MOVE WS-A TO WS-B.
            ADD 1 TO WS-N.</pre>
-<p>The facts here are, for each field, the set of statements that may have last written it. <code>start</code> stands for the value the field holds on entry. The statements are named the way cobble names them: paragraph, then position.</p>
+<p>The notes here are, for each field, the set of statements that may have last written it. <code>start</code> stands for the value the field holds on entry. The statements are named the way cobble names them: paragraph, then position.</p>
 
-<h2>Step by step</h2>
-<p>The queue of statements waiting to be visited is the <strong>worklist</strong>. This run hands out the statement that comes earliest in <strong>reverse postorder</strong>, which here means the loop body before what follows the loop. Each step shows the facts after the visited statement (amber: what changed) and the worklist after it.</p>
+<h2 id="step-by-step">Step by step</h2>
+<p>When the worklist holds more than one statement, something has to pick which goes next. This run picks the one that comes earliest in <strong>reverse postorder</strong> — an order in which every statement comes after the statements that lead into it, except where a loop leads back to its own test. <a href="traversal-orders.html">Visiting a graph</a> builds it step by step. For this program it is <code>MAIN-PARA/0, LOOP-PARA/0, LOOP-PARA/1, MAIN-PARA/1, MAIN-PARA/2</code>: the loop body comes before the code after the loop, so the loop settles before that code is visited.</p>
+<p>Each step shows the notes after the visited statement (amber: what changed) and the worklist after it.</p>
+<details class="walk">
+<summary>The worklist run, one visit at a time <span class="dim">(8 steps)</span></summary>
 <ol class="steps">
-<li>
-<p class="note">Visit MAIN-PARA/0 (PERFORM LOOP-PARA UNTIL WS-N &gt; 3). Its facts are set for the first time, so MAIN-PARA/1 and LOOP-PARA/0 are queued.</p>
-<p class="dim">Facts after MAIN-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{start}</td></tr><tr><td>WS-C</td><td class="changed">{start}</td></tr><tr><td>WS-N</td><td class="changed">{start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/0</span></div>
+<li class="before">
+<p class="note">Nothing has been visited. The worklist holds only the program's first statement, MAIN-PARA/0. It is the only statement with an input: the program's starting state, in which every field holds whatever it held when the program began — written <code>start</code>.</p>
+<p class="dim">Starting state, the input to MAIN-PARA/0</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td>{start}</td></tr><tr><td>WS-B</td><td>{start}</td></tr><tr><td>WS-C</td><td>{start}</td></tr><tr><td>WS-N</td><td>{start}</td></tr></tbody></table>
+<p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/0</span></div>
 </li>
 <li>
-<p class="note">Visit LOOP-PARA/0 (MOVE WS-A TO WS-B). Its facts are set for the first time, so LOOP-PARA/1 is queued.</p>
-<p class="dim">Facts after LOOP-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="changed">{start}</td></tr><tr><td>WS-N</td><td class="changed">{start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/1</span></div>
+<p class="note">Visit MAIN-PARA/0 (PERFORM LOOP-PARA UNTIL WS-N &gt; 3). It gets notes for the first time, so MAIN-PARA/1 and LOOP-PARA/0 are queued.</p>
+<p class="dim">Notes after MAIN-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{start}</td></tr><tr><td>WS-C</td><td class="changed">{start}</td></tr><tr><td>WS-N</td><td class="changed">{start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/0</span></div>
 </li>
 <li>
-<p class="note">Visit LOOP-PARA/1 (ADD 1 TO WS-N). Its facts are set for the first time, so MAIN-PARA/0 is queued.</p>
-<p class="dim">Facts after LOOP-PARA/1: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="changed">{start}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">MAIN-PARA/0</span></div>
+<p class="note">Visit LOOP-PARA/0 (MOVE WS-A TO WS-B). It gets notes for the first time, so LOOP-PARA/1 is queued.</p>
+<p class="dim">Notes after LOOP-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="changed">{start}</td></tr><tr><td>WS-N</td><td class="changed">{start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/1</span></div>
 </li>
 <li>
-<p class="note">Visit MAIN-PARA/0 (PERFORM LOOP-PARA UNTIL WS-N &gt; 3). Its facts grew, so LOOP-PARA/0 is queued to look again.</p>
-<p class="dim">Facts after MAIN-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0, start}</td></tr><tr><td>WS-C</td><td class="">{start}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/0</span></div>
+<p class="note">Visit LOOP-PARA/1 (ADD 1 TO WS-N). It gets notes for the first time, so MAIN-PARA/0 is queued.</p>
+<p class="dim">Notes after LOOP-PARA/1: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="changed">{start}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">MAIN-PARA/0</span></div>
 </li>
 <li>
-<p class="note">Visit LOOP-PARA/0 (MOVE WS-A TO WS-B). Its facts grew, so LOOP-PARA/1 is queued to look again.</p>
-<p class="dim">Facts after LOOP-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="">{start}</td></tr><tr><td>WS-B</td><td class="">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="">{start}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/1</span></div>
+<p class="note">Visit MAIN-PARA/0 (PERFORM LOOP-PARA UNTIL WS-N &gt; 3). Its notes grew, so LOOP-PARA/0 is queued for a redo.</p>
+<p class="dim">Notes after MAIN-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0, start}</td></tr><tr><td>WS-C</td><td class="">{start}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/0</span></div>
+</li>
+<li>
+<p class="note">Visit LOOP-PARA/0 (MOVE WS-A TO WS-B). Its notes grew, so LOOP-PARA/1 is queued for a redo.</p>
+<p class="dim">Notes after LOOP-PARA/0: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="">{start}</td></tr><tr><td>WS-B</td><td class="">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="">{start}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span><span class="chip">LOOP-PARA/1</span></div>
 </li>
 <li>
 <p class="note">Visit LOOP-PARA/1 (ADD 1 TO WS-N). Nothing changed, so nothing is queued.</p>
-<p class="dim">Facts after LOOP-PARA/1: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="">{start}</td></tr><tr><td>WS-B</td><td class="">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="">{start}</td></tr><tr><td>WS-N</td><td class="">{LOOP-PARA/1}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span></div>
+<p class="dim">Notes after LOOP-PARA/1: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="">{start}</td></tr><tr><td>WS-B</td><td class="">{LOOP-PARA/0}</td></tr><tr><td>WS-C</td><td class="">{start}</td></tr><tr><td>WS-N</td><td class="">{LOOP-PARA/1}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/1</span></div>
 </li>
 <li>
-<p class="note">Visit MAIN-PARA/1 (MOVE WS-B TO WS-C). Its facts are set for the first time, so MAIN-PARA/2 is queued.</p>
-<p class="dim">Facts after MAIN-PARA/1: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0, start}</td></tr><tr><td>WS-C</td><td class="changed">{MAIN-PARA/1}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/2</span></div>
+<p class="note">Visit MAIN-PARA/1 (MOVE WS-B TO WS-C). It gets notes for the first time, so MAIN-PARA/2 is queued.</p>
+<p class="dim">Notes after MAIN-PARA/1: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0, start}</td></tr><tr><td>WS-C</td><td class="changed">{MAIN-PARA/1}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="chip">MAIN-PARA/2</span></div>
 </li>
 <li>
-<p class="note">Visit MAIN-PARA/2 (STOP RUN). Its facts are set for the first time; it has no successor left to queue.</p>
-<p class="dim">Facts after MAIN-PARA/2: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0, start}</td></tr><tr><td>WS-C</td><td class="changed">{MAIN-PARA/1}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="dim">empty — fixpoint reached</span></div>
+<p class="note">Visit MAIN-PARA/2 (STOP RUN). It gets notes for the first time; it has no successor left to queue.</p>
+<p class="dim">Notes after MAIN-PARA/2: which statements may have last written each field</p><table class="state"><tbody><tr><th>field</th><th>last written by</th></tr><tr><td>WS-A</td><td class="changed">{start}</td></tr><tr><td>WS-B</td><td class="changed">{LOOP-PARA/0, start}</td></tr><tr><td>WS-C</td><td class="changed">{MAIN-PARA/1}</td></tr><tr><td>WS-N</td><td class="changed">{LOOP-PARA/1, start}</td></tr></tbody></table><p class="dim">Worklist</p><div class="chips"><span class="dim">empty — fixpoint reached</span></div>
 </li>
 </ol>
-<p>A first-in-first-out worklist reaches exactly the same facts, but leaves the loop before it has settled, so it visits <code>MAIN-PARA/1</code> and <code>MAIN-PARA/2</code> twice: 10 visits instead of 8.</p>
+</details>
+<p>A first-in-first-out worklist reaches exactly the same notes, but leaves the loop before it has settled, so it visits <code>MAIN-PARA/1</code> and <code>MAIN-PARA/2</code> twice: 10 visits instead of 8.</p>
 <table class="state"><tr><th>visit</th><th>first in, first out</th><th>reverse postorder</th></tr><tr><td>1</td><td>MAIN-PARA/0</td><td>MAIN-PARA/0</td></tr><tr><td>2</td><td>MAIN-PARA/1</td><td>LOOP-PARA/0</td></tr><tr><td>3</td><td>LOOP-PARA/0</td><td>LOOP-PARA/1</td></tr><tr><td>4</td><td>MAIN-PARA/2</td><td>MAIN-PARA/0</td></tr><tr><td>5</td><td>LOOP-PARA/1</td><td>LOOP-PARA/0</td></tr><tr><td>6</td><td>MAIN-PARA/0</td><td>LOOP-PARA/1</td></tr><tr><td>7</td><td>MAIN-PARA/1</td><td>MAIN-PARA/1</td></tr><tr><td>8</td><td>LOOP-PARA/0</td><td>MAIN-PARA/2</td></tr><tr><td>9</td><td>MAIN-PARA/2</td><td></td></tr><tr><td>10</td><td>LOOP-PARA/1</td><td></td></tr></table>
 
-<h2>The rule</h2>
+<h2 id="the-rule">The rule</h2>
 <div class="rule">
 in(s)  = ⋃ out(p) for every predecessor p of s   (the entry also gets "start")<br>
 out(s) = transfer_s(in(s))<br>
 repeat: take s from the worklist; if out(s) grew, add s's successors<br>
 until the worklist is empty
 </div>
-<p>Two properties make this terminate with one answer. Each transfer is <strong>monotone</strong>: more knowledge in never means less out. And the facts form a finite lattice: each field can be credited to at most every write in the program. Every change makes some set strictly bigger, so changes run out.</p>
+<p>Two properties make this terminate with one answer. Each transfer is <strong>monotone</strong>: more knowledge in never means less out. And there are only finitely many notes: each field can be credited to at most every write in the program. Every change makes some set strictly bigger, so changes run out.</p>
 
-<h2>What goes wrong</h2>
+<h2 id="what-goes-wrong">What goes wrong</h2>
 <ul>
-<li><strong>Order is cost.</strong> First-in-first-out wanders out of the loop before the loop has settled, then has to redo everything after it once the loop changes. Reverse postorder — roughly, "a statement before its successors, the loop body before what follows the loop" — finishes the loop first. On cobble's largest program, changing order alone cut statement visits from about 107,000 to about 20,000, with an identical answer.</li>
-<li><strong>Budgets.</strong> A big program with many nested loops can still need a lot of visits, so a real analysis caps them. Stopping early gives facts that are <em>missing</em> some writes, never ones that are wrong: everything recorded was reached by a real path. Cobble publishes such a result and marks it unsettled.</li>
+<li><strong>Order is cost.</strong> First-in-first-out wanders out of the loop before the loop has settled, then has to redo everything after it once the loop changes. Reverse postorder, with the loop body ahead of the code after the loop, finishes the loop first. On cobble's largest program, changing order alone cut statement visits from about 107,000 to about 20,000, with an identical answer.</li>
+<li><strong>Budgets.</strong> A big program with many nested loops can still need a lot of visits, so a real analysis caps them. Stopping early gives notes that are <em>missing</em> some writes, never ones that are wrong: everything recorded was reached by a real path. Cobble publishes such a result and marks it unsettled.</li>
 <li><strong>Non-monotone rules break everything.</strong> If a transfer could shrink a fact, the loop could oscillate forever, and different orders could stop at different answers.</li>
 </ul>
 
-<h2>In cobble</h2>
-<p>The worklist and its reverse-postorder queue live in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a>; the per-field facts and their union are in <a href="../../cobble/cobble/dataflow/fields/state.py"><code>state.py</code></a>. Cobble's facts are byte ranges rather than whole fields — see <a href="byte-extents.html">byte extents</a> — but the loop is this one.</p>
+<h2 id="in-cobble">In cobble</h2>
+<p>The worklist and its reverse-postorder queue live in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a>; the per-field notes and their union are in <a href="../../cobble/cobble/dataflow/fields/state.py"><code>state.py</code></a>. Cobble's notes are kept per byte range rather than whole fields — see <a href="byte-extents.html">byte extents</a> — but the loop is this one.</p>
 </main>
 
 </body>
