@@ -2,9 +2,18 @@
 the detail it emits is what someone reads when 448/832 does not reproduce."""
 
 import logging
+from pathlib import Path
 
-import cobble.compare
-from cobble.compare import _absent_inputs, _edge_key, _node_key, _report
+from cobble.compare import (
+    REFERENCE,
+    _absent_inputs,
+    _edge_identity,
+    _node_identity,
+    _parse_args,
+    _report,
+    _run,
+)
+from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
 
 
 def test_identical_sets_report_no_differences(caplog) -> None:
@@ -55,43 +64,60 @@ def test_the_report_is_logged_rather_than_printed(capsys, caplog) -> None:
     assert caplog.messages
 
 
-def test_an_unextracted_tree_names_the_command_that_extracts(
-    tmp_path, monkeypatch, caplog
-) -> None:
+def test_an_unextracted_tree_names_the_command_that_extracts(tmp_path, caplog) -> None:
     """`cobble-compare` on a clean checkout used to raise FileNotFoundError from
     _load, which tells the reader nothing about what to run first."""
     caplog.set_level(logging.ERROR)
-    (tmp_path / "reference").mkdir()
-    for name in ("nodes.jsonl", "edges.jsonl"):
-        (tmp_path / "reference" / name).write_text("")
-    monkeypatch.setattr(cobble.compare, "_REPO_ROOT", tmp_path)
+    reference = tmp_path / "graph.jsonl"
+    reference.write_text("")
+    absent = tmp_path / "out" / "carddemo.jsonl"
 
-    assert cobble.compare.main() == 1
-    assert "out/nodes.jsonl" in caplog.text
-    assert "cobble-build --config" in caplog.text
+    assert _run(_parse_args(["--graph", str(absent)]), reference) == 1
+    assert str(absent) in caplog.text
+    assert "cobble-build --config config/carddemo.toml --output" in caplog.text
 
 
 def test_absent_inputs_names_both_sides(tmp_path) -> None:
-    absent = _absent_inputs(tmp_path / "reference", tmp_path / "out")
+    reference = tmp_path / "reference" / "graph.jsonl"
+    graph = tmp_path / "out" / "carddemo.jsonl"
 
-    assert {p.name for p in absent} == {"nodes.jsonl", "edges.jsonl"}
-    assert len(absent) == 4
+    assert _absent_inputs(reference, graph) == (reference, graph)
+
+
+def test_the_committed_reference_matches_itself() -> None:
+    """The whole diff, end to end, over the real reference file: read, keyed, and
+    compared on both sides -- so the file parses and the keys are total over it."""
+    assert _run(_parse_args(["--graph", str(REFERENCE)]), REFERENCE) == 0
 
 
 def test_the_keys_are_the_documented_identities() -> None:
     """Node identity is (kind, id) and edge identity is the 5-tuple; the diff means
     nothing if these drift from what the reference was built with."""
-    assert _node_key({"kind": "PROGRAM", "id": "A", "file_path": "x"}) == (
+    assert _node_identity(
+        GraphNode(id="A", kind=NodeKind.PROGRAM, location=Path("x"))
+    ) == (
         "PROGRAM",
         "A",
     )
-    assert _edge_key(
-        {
-            "source": "A",
-            "source_kind": "PROGRAM",
-            "target": "B",
-            "target_kind": "PROGRAM",
-            "kind": "CALLS",
-            "attrs": {"line": 1},
-        }
-    ) == ("A", "PROGRAM", "B", "PROGRAM", "CALLS")
+    assert _edge_identity(
+        GraphEdge(
+            source="A",
+            source_kind=NodeKind.PROGRAM,
+            target="B",
+            target_kind=NodeKind.PROGRAM,
+            kind=EdgeKind.CALL,
+            attrs={"line": 1},
+        )
+    ) == ("A", "PROGRAM", "B", "PROGRAM", "CALL")
+
+
+def test_a_graph_missing_one_reference_edge_is_one_difference(tmp_path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    graph = tmp_path / "carddemo.jsonl"
+    graph.write_text(
+        "".join(f"{line}\n" for line in REFERENCE.read_text().splitlines()[:-1])
+    )
+
+    assert _run(_parse_args(["--graph", str(graph)]), REFERENCE) == 1
+    assert "MISSING (1)" in caplog.text
+    assert "RESULT: 1 difference(s)." in caplog.text

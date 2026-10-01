@@ -41,7 +41,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-parse-corpus --config <parse>` | Parse the corpus to one JSON ASG per member (the cache every later stage reads) |
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
 | `cobble-build --config <corpus>` | Extract the graph to `out/` |
-| `cobble-compare` | Identity-diff vs `reference/` (448/832) |
+| `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/832) |
 | `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
 | `cobble-srccfg-build PROGRAM --config <corpus>` | Build one program's source CFG **and every program it transitively calls** |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <json> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
@@ -55,7 +55,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 uv run cobble-sym --config config/carddemo.toml              # generate the BMS symbolic copybooks
 uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus -> one JSON ASG per member in out-parsed/
 uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl   # extract the graph -> out/carddemo.jsonl
-uv run cobble-compare                                        # identity-diff out/ vs reference/ (must be empty: 448/832)
+uv run cobble-compare --graph out/carddemo.jsonl             # identity-diff against reference/graph.jsonl (must be empty: 448/832)
 uv run cobble-render --graph out/carddemo.jsonl              # -> out/carddemo.html
 ```
 
@@ -115,10 +115,12 @@ Note the analyses are **per program**: `cobble-srccfg-query`'s guards and proven
 over one CFG at a time, so a field crossing a COMMAREA stops at the caller's boundary.
 Cross-program field flow is a different system — `cobble/dataflow/fields/`.
 
-`--config` is required by every stage but `cobble-compare`; there's no default, so
+`--config` is required by every stage that reads the corpus; there's no default, so
 a bare `cobble-build` fails with a clear error instead of silently assuming CardDemo.
 `cobble-build` also requires `--output`, the graph file it writes: one JSON line per
-node and per edge, each tagged `"type": "node"` or `"type": "edge"`.
+node and per edge, each tagged `"type": "node"` or `"type": "edge"`. The stages that
+read only that file — `cobble-compare` and the renderers — take it
+as `--graph` and no config.
 Every stage, the parse included, reads the same **corpus** config, so the parse
 and the build cannot disagree about which members and copybook dirs `asg_dir`
 holds. To parse differently for a special case, point `cobble-parse-corpus` at a
@@ -940,7 +942,7 @@ consumers may not import each other).
 | `cobble/` | The ported extraction code, plus this repo's own driver scripts (see below); everything lives under one package so there's no Python at the repo root. Extraction modules are byte-for-byte / import-rewired from their `red-dragon-forge` counterpart (imports → `cobble.*`), with the two documented exceptions below (`cics/verb_source_asg.py`, `cics/flow_map.py`). Imports **no** production Python: only `cobble.*`, stdlib (configs are TOML, read with `tomllib`), and pip (`lark`, `networkx`, `antlr4-python3-runtime`). Includes `cobble/bms_copybook_gen/` (the copybook generator, run as `python -m cobble.bms_copybook_gen`). |
 | `cobble/cics/verb_source_asg.py` | **The one seam.** Production sources CICS verbs by *lowering* each program through the CICS strategy (which needs the VM). This replaces that with a VM-free walk of the typed `CobolASG`: it reads each `EXEC CICS` statement, resolves operands to their static `VALUE` clauses, and routes the `CicsVerb`s through the byte-for-byte `flow_graph_core._verb_edge`. |
 | `cobble/cics/flow_map.py` | Ported, and the one other module that diverges — in how the pass *reports*, not in what it emits. It returns what it read and what it could not (production reports into a list the caller hands down), and it says where it is: a bar over its per-program loop, which is where a corpus run spends its time, and each member's name at DEBUG before it is read. Every node and edge, and the order they reach the sink, are unchanged. |
-| `cobble/build_graph.py` / `cobble/compare.py` | This repo's own driver scripts (not ported from `red-dragon-forge`): extract the graph → `out/` (`cobble-build --config <path>`, reading the config's `asg_dir` — needs `cobble-parse-corpus` first); identity-diff `out/` vs `reference/` (`python -m cobble.compare`). |
+| `cobble/build_graph.py` / `cobble/compare.py` | This repo's own driver scripts (not ported from `red-dragon-forge`): extract the graph → one file (`cobble-build --config <path> --output <file>`, reading the config's `asg_dir` — needs `cobble-parse-corpus` first); identity-diff it against `reference/graph.jsonl` (`python -m cobble.compare --graph <file>`). |
 | `cobble/parsing/` | **Stage-1.** The one place a corpus is turned into ASGs and the one place they are read back: `parse_corpus.py` writes one JSON ASG per member (`cobble-parse-corpus --config <path>`), `asg_cache.py` owns the naming rule and the reader every later stage calls, `config.py` is the parse's own config. `expand_corpus.py` is the same walk stopped before the grammar runs, writing expanded source instead (`cobble-expand-corpus --config <path> --out-dir <dir>`), with `expanded_cache.py` owning its naming; it reuses `parse_corpus`'s `Job`, `Result` and `bridge_jar` so the two cannot disagree about the JAR. These two stages start a JVM; nothing downstream does. |
 | `cobble/corpus_config.py` | `CorpusConfig`/`BmsConfig` dataclasses + TOML loading (`tomllib`, stdlib); `cobble.build_graph`/`cobble.generate_sym` read the corpus location/layout from here instead of a hardcoded CardDemo path. `asg_dir` is an input: the cache Stage-1 wrote. |
 | `config/carddemo.toml` | The corpus config CardDemo uses, read by every stage from `cobble-parse-corpus` to `cobble-build`. Copy it as a starting point for a different corpus. |
@@ -949,7 +951,7 @@ consumers may not import each other).
 | `tests/` | The pytest unit suite (`uv run python -m pytest`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → `<out_dir>/synthetic.csd` (`python -m cobble.generate_csd --config <path>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
-| `reference/` | The 448/832 identity golden (copied from the production fitness golden, the *target*, not an input to the extraction). |
+| `reference/graph.jsonl` | The 448/832 identity golden, in the graph file's format (copied from the production fitness golden, the *target*, not an input to the extraction). |
 | `bms-macros/` | The hand-written `DFHMSD`/`DFHMDI`/`DFHMDF` prototype macros (assembler SYSLIB for `hlasm_export`). Source, not generated. |
 ## Invariant
 

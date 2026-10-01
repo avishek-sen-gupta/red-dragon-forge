@@ -241,8 +241,6 @@ fileignoreconfig:
   checksum: 4e2b999a6db46b5c62909da8cf4cb58eaf4060a92a8e837f4c638bdc6cf7e702
 - filename: cobble/docs/superpowers/specs/2026-07-11-corpus-config-design.md
   checksum: f8134203939ab2a66414f5e2644f5eac8e72b3df1a61671ac6a961368683e928
-- filename: cobble/reference/edges.jsonl
-  checksum: 879868be3373a6963c94764f6673c7253f6eefbd458a4a1d3f146138667b079f
 - filename: cobble/tests/cics/test_flow_map.py
   checksum: d526f5817ca7317c48fcddccf8ba97f9ad25b03a4305c434a968be373dd97945
 - filename: cobble/tests/jackal/test_bridge_parser.py
@@ -487,4 +485,6 @@ fileignoreconfig:
   checksum: 678ae42c15d4a85765fddc8c4b1ac58082ad8ef8734235cc86386894cd91849d
 - filename: docs/superpowers/plans/2026-10-01-cobble-single-graph-file.md
   checksum: ab86e94d30381f45e3b9d7423338135279ecc04fdc09a444773a348202a4e7cf
+- filename: cobble/reference/graph.jsonl
+  checksum: e57e54f70ee857af5bf705fa38f8d06e4ffd0427f8cdb379e39cc4c23a8fc7ef
 version: "1.0"

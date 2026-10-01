@@ -1,4 +1,4 @@
-"""compare.py — identity diff of out/ vs reference/ node & edge sets.
+"""compare.py — identity diff of a graph file (--graph) against reference/graph.jsonl.
 
 Node identity   = (kind, id)
 Edge identity   = (source, source_kind, target, target_kind, kind)
@@ -10,37 +10,38 @@ The report is logged rather than printed: the exit code is what a caller acts on
 the text is for whoever is reading, and one stream means the per-set blocks cannot
 interleave with a trailing verdict.
 
-Invoke as: uv run python -m cobble.compare
+Invoke as: uv run python -m cobble.compare --graph <file>
 """
 
 from __future__ import annotations
 
-import json
+import argparse
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
+from cobble.knowledge_graph.graph_file import read_graph
+from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 
 logger = logging.getLogger(__name__)
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+REFERENCE = Path(__file__).resolve().parent.parent / "reference" / "graph.jsonl"
 
 
-def _load(path: Path, keyer):
-    return {
-        keyer(json.loads(line))
-        for line in path.read_text().splitlines()
-        if line.strip()
-    }
+def _node_identity(node: GraphNode) -> tuple[str, str]:
+    return (node.kind.value, node.id)
 
 
-def _node_key(d):
-    return (d["kind"], d["id"])
-
-
-def _edge_key(d):
-    return (d["source"], d["source_kind"], d["target"], d["target_kind"], d["kind"])
+def _edge_identity(edge: GraphEdge) -> tuple[str, str, str, str, str]:
+    return (
+        edge.source,
+        edge.source_kind.value,
+        edge.target,
+        edge.target_kind.value,
+        edge.kind.value,
+    )
 
 
 def _lines(missing, extra, label, ref, out):
@@ -70,47 +71,57 @@ def _report(label, ref, out):
     return len(missing) + len(extra)
 
 
-# (label, filename, identity function) -- one row per set the diff covers.
-_SETS = (
-    ("NODES", "nodes.jsonl", _node_key),
-    ("EDGES", "edges.jsonl", _edge_key),
-)
+def _absent_inputs(reference: Path, graph: Path) -> tuple[Path, ...]:
+    return tuple(path for path in (reference, graph) if not path.is_file())
 
 
-def _absent_inputs(ref_dir: Path, out_dir: Path) -> tuple[Path, ...]:
-    return tuple(
-        d / name
-        for _, name, _ in _SETS
-        for d in (ref_dir, out_dir)
-        if not (d / name).is_file()
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--graph",
+        required=True,
+        type=Path,
+        help="The graph file cobble-build wrote",
+    )
+    return parser.parse_args(argv)
+
+
+def _diff(reference: Path, graph: Path) -> int:
+    ref_nodes, ref_edges = read_graph(reference)
+    out_nodes, out_edges = read_graph(graph)
+    return _report(
+        "NODES",
+        set(map(_node_identity, ref_nodes)),
+        set(map(_node_identity, out_nodes)),
+    ) + _report(
+        "EDGES",
+        set(map(_edge_identity, ref_edges)),
+        set(map(_edge_identity, out_edges)),
     )
 
 
-def main() -> int:
-    configure_cli_logging()
-    out_dir = _REPO_ROOT / "out"
-    ref_dir = _REPO_ROOT / "reference"
-    absent = _absent_inputs(ref_dir, out_dir)
+def _run(args: argparse.Namespace, reference: Path) -> int:
+    absent = _absent_inputs(reference, args.graph)
     if absent:
         logger.error(
             "nothing to compare — absent: %s\n"
-            "  out/ is produced by:  cobble-build --config config/carddemo.toml\n"
-            "  reference/ is committed — if it is absent, the checkout is incomplete.",
-            ", ".join(str(p.relative_to(_REPO_ROOT)) for p in absent),
+            "  the graph is produced by:  cobble-build --config config/carddemo.toml --output <file>\n"
+            "  the reference is committed — if it is absent, the checkout is incomplete.",
+            ", ".join(map(str, absent)),
         )
         return 1
-    # sum over a generator rather than a running total: the reports still come out
-    # in _SETS order because a generator is consumed in order.
-    diff = sum(
-        _report(label, _load(ref_dir / name, keyer), _load(out_dir / name, keyer))
-        for label, name, keyer in _SETS
-    )
+    diff = _diff(reference, args.graph)
     if diff == 0:
-        logger.info("\nRESULT: EMPTY DIFF — out matches reference exactly.")
+        logger.info("\nRESULT: EMPTY DIFF — the graph matches the reference exactly.")
         return 0
     # ERROR, not INFO: a nonzero diff is the failure this script exists to catch.
     logger.error("\nRESULT: %d difference(s).", diff)
     return 1
+
+
+def main() -> int:
+    configure_cli_logging()
+    return _run(_parse_args(sys.argv[1:]), REFERENCE)
 
 
 if __name__ == "__main__":
