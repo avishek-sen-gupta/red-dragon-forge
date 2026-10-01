@@ -192,6 +192,7 @@ def _reaching_defs(flow: ProgramFlow) -> tuple[ReachingDefs, ...]:
     """The definitions reaching each read, in the wire form of their extents."""
     return tuple(
         ReachingDefs(
+            program=flow.program,
             node=entry.node,
             extent=extent_text(entry.extent),
             definers=entry.definers,

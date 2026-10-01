@@ -224,7 +224,7 @@ class FieldStore:
     by_name: Mapping[str, tuple[Field, ...]]
     by_program: Mapping[str, tuple[Field, ...]]
     flows: tuple[Flow, ...]
-    definers: Mapping[tuple[str, str], tuple[str, ...]]
+    definers: Mapping[tuple[str, str, str], tuple[str, ...]]
     aliases: tuple[Alias, ...] = ()
 
     def field(self, wanted: str) -> tuple[Field, ...]:
@@ -315,7 +315,9 @@ class FieldStore:
 
     def definers_of(self, flow: Flow) -> tuple[str, ...]:
         """The statements that could have written what this flow moved."""
-        return self.definers.get((flow.node, flow.source_text), ())
+        return self.definers.get(
+            (_program_of(flow.source), flow.node, flow.source_text), ()
+        )
 
     def across(
         self, ranges: Sequence[ByteRange]
@@ -759,9 +761,11 @@ def store_of(
         flows=tuple(_flow(row) for row in edges if rows.text(row, "kind") == FLOWS_TO),
         definers=MappingProxyType(
             {
-                (rows.text(row, "node"), rows.text(row, "extent")): rows.strings(
-                    row, "definers"
-                )
+                (
+                    rows.text(row, "program"),
+                    rows.text(row, "node"),
+                    rows.text(row, "extent"),
+                ): rows.strings(row, "definers")
                 for row in defs
             }
         ),
