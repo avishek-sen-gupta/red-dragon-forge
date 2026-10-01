@@ -410,6 +410,7 @@ dependencies = [
     { name = "red-dragon" },
     { name = "squall" },
     { name = "tqdm" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -431,6 +432,7 @@ requires-dist = [
     { name = "red-dragon", editable = "vendor/red-dragon" },
     { name = "squall", editable = "squall" },
     { name = "tqdm", specifier = ">=4.68.4" },
+    { name = "typing-extensions", specifier = ">=4.6" },
 ]
 
 [package.metadata.requires-dev]

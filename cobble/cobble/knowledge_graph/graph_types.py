@@ -19,17 +19,19 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TypeAlias
 
 from cobble.file_location import NOT_ATTEMPTED, FileLocation
+from typing_extensions import TypeAliasType
 
 # What an attribute may hold: whatever the nodes/edges JSONL can carry, spelled
 # out rather than Any so a value that could never serialise is a type error here
-# instead of a json.dumps failure at the end of a corpus run. Written as a quoted
-# TypeAlias rather than a 3.12 `type` statement because the lint config still
-# parses this package as 3.11.
-AttrValue: TypeAlias = (
-    "str | int | float | bool | Sequence[AttrValue] | Mapping[str, AttrValue]"
+# instead of a json.dumps failure at the end of a corpus run. A TypeAliasType
+# rather than a 3.12 `type` statement because the lint config still parses this
+# package as 3.11, and rather than a plain TypeAlias because pydantic can only
+# validate a recursive alias it can name -- see cobble.knowledge_graph.graph_file.
+AttrValue = TypeAliasType(
+    "AttrValue",
+    "str | int | float | bool | Sequence[AttrValue] | Mapping[str, AttrValue]",
 )
 
 
