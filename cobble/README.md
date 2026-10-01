@@ -487,7 +487,7 @@ Reads the ASG cache `cobble-parse-corpus` wrote and the extents table
 | file | one row per | holds |
 | ---- | ----------- | ----- |
 | `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows: nothing but the id — every attribute it once carried now has a table; edge rows: the `FLOWS_TO` relation and `node`, the statement that moved the bytes. Each row's `type` says which |
-| `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
+| `defs.jsonl` | `(program, node, source extent)` | the statements whose writes reach that read; the program is in the key because node ids and extents repeat across programs |
 | `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and the `dropped` values that resolved but name no program |
 

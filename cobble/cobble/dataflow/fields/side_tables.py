@@ -113,6 +113,7 @@ class ReachingDefs:
     nothing short of a path-sensitive walk says which one ran.
     """
 
+    program: str
     node: str
     extent: str
     definers: tuple[str, ...]
@@ -210,11 +211,17 @@ def extent_row(field: FieldExtents) -> _Row:
 
 
 def defs_row(defs: ReachingDefs) -> _Row:
-    """One reaching-definition row, keyed by the pair a flow joins on."""
+    """One reaching-definition row, identified by what a flow joins on.
+
+    The program is part of that identity: node ids and extent texts are paragraph
+    and field names, which repeat across programs, and an identity without it kept
+    the first program's row and dropped every other's.
+    """
     return (
-        f"{defs.node}\x00{defs.extent}",
+        f"{defs.program}\x00{defs.node}\x00{defs.extent}",
         json.dumps(
             {
+                "program": defs.program,
                 "node": defs.node,
                 "extent": defs.extent,
                 "definers": list(defs.definers),

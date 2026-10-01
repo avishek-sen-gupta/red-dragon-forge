@@ -373,10 +373,12 @@ def test_a_cycle_over_the_same_bytes_terminates(declared):
 
 
 def test_the_definers_of_a_flow_come_off_the_defs_table(store):
-    """Keyed by the node that moved the value and the source range as written."""
+    """Joined on the program, the node that moved the value, and the source range as
+    written."""
     found = store(
         defs=(
             {
+                "program": "PROGA",
                 "node": GROUP_MOVE,
                 "extent": _range("REC", 0, 8),
                 "definers": ["MAIN/A", "MAIN/B"],

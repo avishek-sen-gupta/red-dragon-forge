@@ -31,6 +31,7 @@ from cobble.dataflow.fixpoint.build_corpus import (
     cli,
 )
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
+from cobble.dataflow.fixpoint.query import load
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_file import read_graph
@@ -1174,3 +1175,32 @@ def test_a_worker_count_below_one_is_a_usage_error(corpus):
         cli(argv)
 
     assert failure.value.code == 2
+
+
+def test_two_programs_reading_the_same_named_bytes_keep_a_defs_row_each(corpus):
+    """Paragraph and field names repeat across programs, so a defs row keyed by
+    node and extent alone collided: the first program's row was kept and every
+    later one dropped, and the query answered the second program's flow from the
+    first program's row, or not at all."""
+    argv, out_dir = corpus(
+        {
+            "MEMBERA": json.dumps(_program("PROGA")),
+            "MEMBERB": json.dumps(_program("PROGB")),
+        }
+    )
+    extents = Path(argv[argv.index("--extents") + 1])
+
+    assert cli(argv) == 0
+
+    assert [
+        (row["program"], row["node"], row["extent"], row["definers"])
+        for row in _rows(out_dir / DEFS_FILE)
+    ] == [
+        ("PROGA", "MAIN/0", "WS-A@working_storage[0:4]", ["MAIN/0"]),
+        ("PROGB", "MAIN/0", "WS-A@working_storage[0:4]", ["MAIN/0"]),
+    ]
+    store = load(out_dir, extents)
+    assert {flow.source: store.definers_of(flow) for flow in store.flows} == {
+        "PROGA.WS-A": ("MAIN/0",),
+        "PROGB.WS-A": ("MAIN/0",),
+    }
