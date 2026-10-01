@@ -8,6 +8,15 @@ here could disagree with the published one and nothing would say so. A member th
 table does not hold is a recorded skip naming the command that fixes it, never a
 crash and never silence.
 
+The table drives the run: it is streamed one member at a time and each member's
+records are dropped before the next arrives, so the memory is the largest member's
+layout rather than the corpus's -- 29 members' cells held at once are 1.5GB of
+objects, and the corpora this is for are ten times longer. What that costs is the
+order: members are analysed in the order the table holds them, which for --all is
+the sorted order they were already in, and for --member is no longer the order they
+were named in. The selection still decides what is analysed, and a selected member
+the table does not hold is reported after the ones it does.
+
 A member that raises is reported and the run continues, because the answer wanted
 from a whole-corpus run is "which members are missing from this output", and a run
 that aborts answers that for one member only.
@@ -76,13 +85,14 @@ import json
 import logging
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import groupby
 from operator import itemgetter
 from pathlib import Path
+from types import MappingProxyType
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
@@ -94,7 +104,7 @@ from cobble.dataflow.fields.aliases import (
 )
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.extent import CellIndex
-from cobble.dataflow.fields.extents_input import DeclaredLayouts, declared_layouts
+from cobble.dataflow.fields.extents_input import MemberLayout, declared_layouts
 from cobble.dataflow.fields.program_layout import ProgramLayout
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
@@ -157,11 +167,16 @@ class MemberResult:
 class RunTotals:
     """The run so far. ``programs`` is every (program_id, member) pair seen.
 
-    Pairs rather than a keyed map: a program_id declared by two members is normal
-    on a real corpus, and a map keyed by it would keep the last member and lose
+    Pairs rather than a map on the program_id: a program_id declared by two members
+    is normal on a real corpus, and a map on it would hold the last member and lose
     the others without saying so.
+
+    ``members`` is every member this run reached, which is how a selected member
+    the extents table never yielded is told from one it did. Names only -- the
+    results themselves are written and dropped as they are produced.
     """
 
+    members: tuple[str, ...] = ()
     analysed: int = 0
     writes: int = 0
     covered: int = 0
@@ -303,29 +318,20 @@ def _aliased_member(
     return replace(result, aliases=_alias_rows(asg, index, asg_dir))
 
 
-def _analysed_member(path: Path, inputs: _Inputs) -> MemberResult:
+def _analysed_member(published: MemberLayout, inputs: _Inputs) -> MemberResult:
     """The four tables first, then the aliases folded onto them.
 
     In that order because the alias pass cannot discard what it never held -- the
     four tables are already in the result it replaces by the time it runs.
 
-    The layout comes from the extents table, never from this program's DATA
+    The layout arrives from the extents table, never from this program's DATA
     DIVISION: this stage computes no extent of its own, so the records the walk is
-    seeded from are the same ones ``cobble-extents`` published. A member the table
-    does not hold is a reason here rather than in ``_member_result``, so that a
-    cache file this stage cannot even read is still reported as unreadable --
-    the more specific of the two answers, and the true one.
+    seeded from are the same ones ``cobble-extents`` published.
     """
+    path = inputs.chosen[published.member]
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    if not inputs.layouts.holds(path.stem):
-        return MemberResult(
-            member=path.stem,
-            program=asg.program_id,
-            skipped=_no_extents(path, inputs.extents),
-        )
-    layout = inputs.layouts.layout(path.stem)
-    flow, index = analysed(asg, inputs.options, layout)
-    tables = _tables(path.stem, flow, layout, inputs.locations)
+    flow, index = analysed(asg, inputs.options, published.layout)
+    tables = _tables(published.member, flow, published.layout, inputs.locations)
     return _aliased_member(tables, asg, index, path.parent)
 
 
@@ -343,16 +349,16 @@ def _no_extents(path: Path, extents: Path) -> str:
     )
 
 
-def _member_result(path: Path, inputs: _Inputs) -> MemberResult:
+def _member_result(published: MemberLayout, inputs: _Inputs) -> MemberResult:
     """Every failure one member can have, as a reason rather than an abort.
 
     The records are built before anything is written, so a member that raises
     halfway through leaves no partial rows behind it.
     """
     try:
-        return _analysed_member(path, inputs)
+        return _analysed_member(published, inputs)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
-        return MemberResult(member=path.stem, skipped=f"unreadable: {error!r}")
+        return MemberResult(member=published.member, skipped=f"unreadable: {error!r}")
 
 
 def _skipped(result: MemberResult) -> tuple[tuple[str, str], ...]:
@@ -414,6 +420,7 @@ def _unresolved_reasons(result: MemberResult) -> tuple[str, ...]:
 
 def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
     return RunTotals(
+        members=(*totals.members, result.member),
         analysed=totals.analysed + (0 if result.skipped else 1),
         writes=totals.writes + result.writes,
         covered=totals.covered + result.covered,
@@ -493,29 +500,76 @@ def _log_result(result: MemberResult, seconds: float) -> None:
 
 
 def _logged_member(
-    numbered: tuple[int, Path], total: int, inputs: _Inputs
+    numbered: tuple[int, MemberLayout], total: int, inputs: _Inputs
 ) -> MemberResult:
     """One member's analysis, announced before it starts and measured after.
 
     Before, because a member can take minutes: a run that says nothing until it
     finishes is indistinguishable from a hung one.
     """
-    position, path = numbered
-    logger.info("fields: [%d/%d] %s", position, total, path.stem)
+    position, published = numbered
+    logger.info("fields: [%d/%d] %s", position, total, published.member)
     started = time.monotonic()
-    result = _member_result(path, inputs)
+    result = _member_result(published, inputs)
     _log_result(result, time.monotonic() - started)
     return result
 
 
-def _run(sinks: _Sinks, paths: Sequence[Path], inputs: _Inputs) -> RunTotals:
-    return reduce(
+def _wanted(inputs: _Inputs) -> Iterator[MemberLayout]:
+    """The layouts the table yields, less the members this run was not asked for.
+
+    The table drives the run, which is what bounds the memory at one member's
+    records instead of the corpus's: a loop over the selection would have to ask
+    the file for a member at a time, and a file streamed once cannot be asked
+    twice. The selection still decides what is analysed -- it decides it here
+    rather than before the file is opened, and the order the run reports in is the
+    table's.
+    """
+    return (
+        one for one in declared_layouts(inputs.extents) if one.member in inputs.chosen
+    )
+
+
+def _unpublished(inputs: _Inputs, totals: RunTotals) -> tuple[MemberResult, ...]:
+    """A reason for every selected member the table never yielded.
+
+    In the order they were asked for, and after the members that were analysed,
+    because these were never in the sequence the run followed.
+    """
+    return tuple(
+        MemberResult(
+            member=member,
+            skipped=_no_extents(inputs.chosen[member], inputs.extents),
+        )
+        for member in inputs.chosen
+        if member not in totals.members
+    )
+
+
+def _reported(result: MemberResult) -> MemberResult:
+    """A skip nothing timed, logged the way a timed one is."""
+    _log_result(result, 0.0)
+    return result
+
+
+def _run(sinks: _Sinks, inputs: _Inputs) -> RunTotals:
+    """Every member the table holds that was asked for, then every one it does not.
+
+    The first fold consumes the table once; the second only names what the first
+    never saw, and reads no file at all.
+    """
+    reached = reduce(
         lambda totals, numbered: _folded(
             totals,
-            _written(sinks, _logged_member(numbered, len(paths), inputs)),
+            _written(sinks, _logged_member(numbered, len(inputs.chosen), inputs)),
         ),
-        enumerate(paths, start=1),
+        enumerate(_wanted(inputs), start=1),
         RunTotals(),
+    )
+    return reduce(
+        lambda totals, result: _folded(totals, _reported(result)),
+        _unpublished(inputs, reached),
+        reached,
     )
 
 
@@ -641,8 +695,10 @@ def _side_writer(
 def _selected(config: FieldsConfig, members: Sequence[str]) -> tuple[Path, ...]:
     """The named members' cache files, or every one the cache holds.
 
-    Named members keep their given order rather than being sorted: a caller
-    naming a program and its callees reads the report in the order they asked.
+    Named members keep their given order rather than being sorted. The analysis
+    order is the extents table's, since the table is what the run streams, so what
+    the given order still decides is which members are analysed at all and the
+    order the ones missing from that table are reported in.
     """
     if not members:
         return tuple(sorted(config.asg_dir.glob("*.json")))
@@ -671,18 +727,20 @@ class _Inputs:
 
     options: AnalysisOptions
     locations: FileLocationResolver
-    layouts: DeclaredLayouts
     extents: Path
+    chosen: Mapping[str, Path]
 
 
 def _inputs(
-    config: FieldsConfig, arguments: argparse.Namespace, locations: CorpusIndex
+    paths: Sequence[Path], arguments: argparse.Namespace, locations: CorpusIndex
 ) -> _Inputs:
+    """``chosen`` is the selection by member name, in the order it was given: that
+    is the order a member the table does not hold gets reported in."""
     return _Inputs(
         options=_options(arguments),
         locations=locations,
-        layouts=declared_layouts(arguments.extents),
         extents=arguments.extents,
+        chosen=MappingProxyType({path.stem: path for path in paths}),
     )
 
 
@@ -708,8 +766,7 @@ def _analysed_run(
     ):
         totals = _run(
             _Sinks(graph, extents, defs, aliases, targets),
-            paths,
-            _inputs(config, arguments, locations),
+            _inputs(paths, arguments, locations),
         )
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
@@ -772,6 +829,31 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(tuple(argv) if argv else None)
 
 
+def _overwrites_its_input(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
+    """Whether --extents names the file this run is about to write.
+
+    The stage publishes its own ``extents.jsonl`` into ``out_dir``, so a caller
+    pointing --extents at that path is handing it the file it truncates on the way
+    in. Rejected rather than documented: the surviving table would be whatever the
+    run wrote, and the layout every member was analysed against would have come
+    from a file no longer there to check.
+    """
+    if arguments.extents.resolve() != (config.out_dir / EXTENTS_FILE).resolve():
+        return False
+    logger.error(
+        "fields: !! --extents %s is this run's own output; write the input "
+        "elsewhere (cobble-extents --asg-dir %s --out <path>)",
+        arguments.extents,
+        config.asg_dir,
+    )
+    return True
+
+
+def _rejected(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
+    """Whether the run cannot start, for either reason it cannot."""
+    return _missing_input(config, arguments) or _overwrites_its_input(config, arguments)
+
+
 def _missing_input(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
     """Whether either input is out of reach, said once per input.
 
@@ -801,7 +883,7 @@ def cli(argv: Sequence[str] = ()) -> int:
     except (OSError, KeyError, ValueError) as error:
         logger.error("fields: !! %s", error)
         return 2
-    if _missing_input(config, arguments):
+    if _rejected(config, arguments):
         return 2
     return _completed(config, arguments)
 

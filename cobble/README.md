@@ -432,11 +432,23 @@ uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields
 computes no extent of its own. A member's records come out of that file, and the
 walk is seeded from the `VALUE` image of exactly those records, so the layout the
 analysis ran against is the published one and not a second computation of it.
-Reading all 29 members of CardDemo back takes under 3s in total, against
-roughly 2s **per member** to lay the DATA DIVISION out again. A member the table
-does not hold is a recorded skip naming the command that fixes it — never a crash,
-never silence — and an absent table is exit 2 before the first member. Write it
-somewhere other than `<out_dir>/extents.jsonl`, which is this stage's own output.
+Reading all 29 members of CardDemo back takes under 3s in total, against 34.6s to
+lay the same members' DATA DIVISIONs out again — 1.2s per member, 2.2s for the
+worst.
+
+The table is **streamed**, one member at a time, and each member's records are
+dropped before the next member's arrive, so the peak memory is the largest member's
+layout rather than the corpus's — 29 members' cells held at once are 1.5GB of
+Python objects, and this is meant for corpora ten times longer. The cost is the
+order: members are analysed in the order the table holds them, which for `--all` is
+the sorted order they were already in, and for `--member PROGA PROGB` is no longer
+the order they were named in. Which members are analysed is unchanged.
+
+A member the table does not hold is a recorded skip naming the command that fixes
+it — never a crash, never silence — reported after the members it does hold. An
+absent table is exit 2 before the first member, and so is `--extents
+<out_dir>/extents.jsonl`: that path is this stage's own output, and a run that read
+the file it then truncated would leave nothing behind saying which layout it used.
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
 a usage error. The usual question is about the fields of one program, and a

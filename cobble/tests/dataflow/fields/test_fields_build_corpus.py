@@ -297,6 +297,23 @@ def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
     ]
 
 
+def test_naming_the_run_s_own_extents_file_as_its_input_exits_two(corpus):
+    """The one path --extents must not be: the file this run truncates on the way in.
+
+    A guard rather than a note in the README, because the failure is silent -- the
+    table left on disk afterwards is the one the run wrote, so nothing says which
+    layout the members were analysed against.
+    """
+    argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    given = Path(argv[argv.index("--extents") + 1])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    own = out_dir / EXTENTS_FILE
+    own.write_text(given.read_text(encoding="utf-8"), encoding="utf-8")
+
+    assert cli([str(own) if one == str(given) else one for one in argv]) == 2
+    assert own.read_text(encoding="utf-8") == given.read_text(encoding="utf-8")
+
+
 def test_a_missing_extents_table_exits_two(corpus):
     """Exit 2, the input-not-found code, rather than 29 identical skips."""
     argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})

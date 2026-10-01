@@ -109,9 +109,10 @@ def test_the_rows_rebuild_the_records_they_were_written_from(tmp_path: Path):
     layout = program_layout(_asg(MEMBER))
     path = _written(layout, MEMBER, tmp_path / "extents.jsonl")
 
-    rebuilt = declared_layouts(path).layout(MEMBER)
+    (published,) = tuple(declared_layouts(path))
 
-    assert rebuilt.records == layout.records
+    assert (published.member, published.layout.records) == (MEMBER, layout.records)
+    rebuilt = published.layout
     assert _cell_at(rebuilt, "CDEMO-MENU-OPT-PGMNAME") == PGMNAME
     assert _cell_at(rebuilt, "FILLER_3") == FILLER
     (menu,) = [record for record in rebuilt.records if record.name == MENU_RECORD]

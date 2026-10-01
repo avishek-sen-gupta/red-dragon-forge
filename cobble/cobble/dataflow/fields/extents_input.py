@@ -16,14 +16,21 @@ member has. An older artefact, written before the columns existed, carries no
 ``program`` and no cells, so every member reads as absent -- which is the answer
 wanted there: the file predates what is being asked of it, and saying so beats
 rebuilding a layout from a table that does not hold one.
+
+One member at a time, never the table: 29 members' cells are 1.5GB of objects
+once built, and the 300-member corpus this is meant for would be fifteen times
+that. A caller takes one member's layout, analyses it and drops it, so the peak is
+the largest member's records and not the corpus's. A member's rows are consecutive
+-- both producers write member by member -- so the block closes when the next
+member's first row arrives.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
-from types import MappingProxyType
 
 from cobble.dataflow.fields.program_layout import ProgramLayout, layout_of
 from cobble.dataflow.fields.side_tables import DeclaredCell, DeclaredRecord
@@ -57,18 +64,11 @@ class _Columns:
 
 
 @dataclass(frozen=True)
-class DeclaredLayouts:
-    """Every member's records, as the extents table spells them."""
+class MemberLayout:
+    """One member of a table, and the records its rows spell out."""
 
-    by_program: Mapping[str, tuple[Record, ...]]
-
-    def holds(self, program: str) -> bool:
-        """Whether the table has rows for this member at all."""
-        return program.upper() in self.by_program
-
-    def layout(self, program: str) -> ProgramLayout:
-        """One member's records, with the index built over them here."""
-        return layout_of(self.by_program[program.upper()])
+    member: str
+    layout: ProgramLayout
 
 
 def _columns(row: rows.Row) -> _Columns:
@@ -173,32 +173,23 @@ def _records(cells: Sequence[DeclaredCell]) -> tuple[Record, ...]:
     return tuple(_record(_at(cells, position)) for position in positions)
 
 
-def _published(path: Path) -> tuple[tuple[str, tuple[DeclaredCell, ...]], ...]:
-    """Each row's member and the cells it published, parsed once."""
-    return tuple(
-        (rows.text(row, "program").upper(), _declared_cells(row))
-        for row in rows.read(path)
-    )
+def _member_of(row: rows.Row) -> str:
+    return rows.text(row, "program").upper()
 
 
-def _cells_of(
-    published: Sequence[tuple[str, tuple[DeclaredCell, ...]]], program: str
-) -> tuple[DeclaredCell, ...]:
-    return tuple(
-        cell for member, cells in published if member == program for cell in cells
-    )
+def _block_cells(block: Iterable[rows.Row]) -> tuple[DeclaredCell, ...]:
+    return tuple(cell for row in block for cell in _declared_cells(row))
 
 
-def declared_layouts(path: Path) -> DeclaredLayouts:
-    """Every member in an extents table, with its records rebuilt.
+def declared_layouts(path: Path) -> Iterator[MemberLayout]:
+    """Each member the table holds, in the order it holds them, one at a time.
 
-    Read whole rather than per member: the table is one file for the corpus, and a
-    stage analysing twenty members would otherwise parse it twenty times.
+    A generator and not a mapping: the caller is a corpus stage that analyses one
+    member and moves on, so holding every member's records would make the peak the
+    corpus's rather than the largest member's. One read of the file, so no member is
+    parsed twice either.
     """
-    published = _published(path)
-    members = sorted({member for member, _ in published})
-    return DeclaredLayouts(
-        by_program=MappingProxyType(
-            {member: _records(_cells_of(published, member)) for member in members}
-        )
+    return (
+        MemberLayout(member=member, layout=layout_of(_records(_block_cells(block))))
+        for member, block in groupby(rows.stream(path), _member_of)
     )
