@@ -753,9 +753,56 @@ doubt," not "only 5 sites resolved."
 Every row this corpus produces is a `CICS_XCTL`. It contains no dynamic COBOL
 `CALL` — every `CALL` in it names a literal — and no `EXEC CICS LINK` in any
 member the build can read, the one CSD-defined program without source being
-skipped. So the `CALL` and `LINK` arms of the three-way rule ship exercised by
-unit tests only, and a corpus that uses either is the first thing to read them
-against.
+skipped. So on this corpus the `CALL` and `LINK` arms of the three-way rule go
+unexercised; `CALL` is pinned instead by a bridge-compiled program in
+`tests/dataflow/fixpoint/test_call_shapes_synthetic.py`, and `LINK` by unit tests
+only.
+
+#### Which call sites are detected
+
+A site gets a `targets.jsonl` row when its transfer is `CALL`, `EXEC CICS XCTL` or
+`EXEC CICS LINK` and its program operand is a data item. A literal target —
+`CALL 'PROGB'`, `XCTL PROGRAM('PROGB')` — is an ordinary edge and gets no row.
+
+| Form | Resolved through |
+| ---- | ---------------- |
+| `CALL WS-PGM` | the bytes of `WS-PGM` |
+| `CALL WS-PGM OF WS-REC` | the qualified field's bytes, not a same-named field elsewhere |
+| `CALL WS-LONG(9:8)` | exactly the reference-modified bytes, so two windows of one field resolve separately |
+| `CALL WS-PGMS(I)` | every occurrence the subscript can reach |
+| `… USING [BY REFERENCE / BY CONTENT] …`, `RETURNING`, `ON EXCEPTION` | as the bare form; the phrases do not change the target |
+| `XCTL` / `LINK PROGRAM(WS-PGM)` | as `CALL WS-PGM` |
+
+The bytes are whatever reaches the site: a `VALUE` clause, any `MOVE` into the
+field or a group or redefinition over it, joined across branches. A value is
+trimmed of trailing spaces before it becomes a candidate.
+
+A `reasons` entry says why the candidates may be short:
+
+| Reason | Raised when |
+| ------ | ----------- |
+| `uninitialised` | some path reaches the site with no write to those bytes and no `VALUE` |
+| `not-a-literal` | a write whose content the walk cannot name, such as CICS state it does not model |
+| `from-file` | the bytes came from a `READ` or a CICS file verb |
+| `from-callee` | the bytes are a `LINK`/`XCTL` COMMAREA a callee may have written back |
+| `inbound-linkage` | the bytes are in the LINKAGE SECTION, written by a caller this walk never sees |
+| `no-extent` | the operand has no byte range to read, so nothing could be looked up |
+| `over-budget` | more than 32 values reached it; the first 32 in sorted order are kept |
+| `incomplete-walk` | the fixpoint stopped at its cap before settling |
+
+Two limits sit upstream of the walk:
+
+- **The ASG must come from a current bridge.** Since red-dragon `76d98d2e`
+  (2026-09-20) the bridge writes a data-item callee as
+  `"program_ref": {"name": …}` and a literal as a bare `"program"` string. A cache
+  parsed before that writes both as `"program"`, which reads as a literal: every
+  dynamic `CALL` in it silently becomes a static edge to a `PROGRAM` named after
+  the variable, with no row. Re-parse such a cache into a fresh directory, since
+  `cobble-parse-corpus` skips members it already has, with a JAR rebuilt by
+  `make jar-force`.
+- **Nested programs are not in the ASG.** The bridge serialises only the outer
+  program, so a `CALL` inside a nested `PROGRAM-ID` is not seen, nor is anything
+  else in it.
 
 ### Querying the field dataflow
 
