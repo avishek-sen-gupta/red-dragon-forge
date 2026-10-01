@@ -113,18 +113,15 @@ def _parsed(workspace: Path) -> Path:
 
 def _built(workspace: Path, cache: Path) -> Path:
     out = workspace / "out"
-    config = workspace / "fields.toml"
-    config.write_text(
-        f'[fields]\nasg_dir = "{cache}"\nout_dir = "{out}"\n', encoding="utf-8"
-    )
-
     extents = workspace / "extents.jsonl"
     assert emit(cache, extents, ()) == 0
     assert (
         cli(
             [
-                "--config",
-                str(config),
+                "--asg-dir",
+                str(cache),
+                "--out-dir",
+                str(out),
                 "--extents",
                 str(extents),
                 "--member",
@@ -430,14 +427,22 @@ def two_program_artefact(tmp_path_factory) -> Path:
             Job(path, cache / f"{program}.json"), str(_bridge_jar()), (), ("cpy",)
         )
         assert result.ok, result.error
-    config = root / "fields.toml"
-    config.write_text(
-        f'[fields]\nasg_dir = "{cache}"\nout_dir = "{out}"\n', encoding="utf-8"
-    )
-
     extents = root / "extents.jsonl"
     assert emit(cache, extents, ()) == 0
-    assert cli(["--config", str(config), "--extents", str(extents), "--all"]) == 0
+    assert (
+        cli(
+            [
+                "--asg-dir",
+                str(cache),
+                "--out-dir",
+                str(out),
+                "--extents",
+                str(extents),
+                "--all",
+            ]
+        )
+        == 0
+    )
     return out
 
 

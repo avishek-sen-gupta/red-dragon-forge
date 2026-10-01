@@ -134,17 +134,14 @@ def corpus(tmp_path: Path):
         asg_dir.mkdir(exist_ok=True)
         for name, body in members.items():
             (asg_dir / f"{name}.json").write_text(body, encoding="utf-8")
-        config = tmp_path / "fields.toml"
-        config.write_text(
-            f'[fields]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path / "out"}"\n',
-            encoding="utf-8",
-        )
         extents = tmp_path / "extents.jsonl"
         emit(asg_dir, extents, declared)
         return (
             [
-                "--config",
-                str(config),
+                "--asg-dir",
+                str(asg_dir),
+                "--out-dir",
+                str(tmp_path / "out"),
                 "--extents",
                 str(extents),
                 *_selector(extra),
@@ -326,23 +323,34 @@ def test_a_missing_extents_table_exits_two(corpus):
 
 
 def test_a_missing_asg_directory_exits_two(tmp_path: Path):
-    config = tmp_path / "fields.toml"
-    config.write_text(
-        f'[fields]\nasg_dir = "{tmp_path / "nope"}"\nout_dir = "{tmp_path / "out"}"\n',
-        encoding="utf-8",
-    )
-
-    argv = ["--config", str(config), "--extents", str(tmp_path / "e.jsonl"), "--all"]
-
-    assert cli(argv) == 2
-
-
-def test_a_config_without_the_table_exits_two(tmp_path: Path):
-    config = tmp_path / "fields.toml"
-    config.write_text('[other]\nasg_dir = "/x"\n', encoding="utf-8")
-    argv = ["--config", str(config), "--extents", str(tmp_path / "e.jsonl"), "--all"]
+    argv = [
+        "--asg-dir",
+        str(tmp_path / "nope"),
+        "--out-dir",
+        str(tmp_path / "out"),
+        "--extents",
+        str(tmp_path / "e.jsonl"),
+        "--all",
+    ]
 
     assert cli(argv) == 2
+
+
+def test_a_missing_required_argument_is_a_usage_error(tmp_path: Path):
+    """--asg-dir and --out-dir replaced the TOML config; a bare invocation still
+    fails clearly rather than defaulting into a run that finds no members."""
+    argv = [
+        "--out-dir",
+        str(tmp_path / "out"),
+        "--extents",
+        str(tmp_path / "e.jsonl"),
+        "--all",
+    ]
+
+    with pytest.raises(SystemExit) as failure:
+        cli(argv)
+
+    assert failure.value.code == 2
 
 
 def test_two_members_declaring_one_program_id_are_both_reported(corpus):
