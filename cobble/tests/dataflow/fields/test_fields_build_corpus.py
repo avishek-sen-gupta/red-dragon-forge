@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
+from cobble.dataflow.fields.emit_extents import emit
 from cobble.dataflow.fields.side_tables import target_row
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import build_corpus
@@ -118,9 +119,17 @@ def _rows(path: Path) -> tuple[dict, ...]:
 
 @pytest.fixture
 def corpus(tmp_path: Path):
-    """An ASG directory, an output directory, and a config naming both."""
+    """An ASG directory, an output directory, a config naming both, and the extents.
 
-    def build(members: dict, extra: tuple[str, ...] = ()) -> tuple[list[str], Path]:
+    The extents table is an input to this stage, so the fixture runs the stage
+    before it -- ``cobble-extents`` over the same cache -- rather than hand-writing
+    rows. ``declared`` narrows which members it covers, for the case where a
+    member's layout was never published.
+    """
+
+    def build(
+        members: dict, extra: tuple[str, ...] = (), declared: tuple[str, ...] = ()
+    ) -> tuple[list[str], Path]:
         asg_dir = tmp_path / "asg"
         asg_dir.mkdir(exist_ok=True)
         for name, body in members.items():
@@ -130,7 +139,19 @@ def corpus(tmp_path: Path):
             f'[fields]\nasg_dir = "{asg_dir}"\nout_dir = "{tmp_path / "out"}"\n',
             encoding="utf-8",
         )
-        return ["--config", str(config), *_selector(extra), *extra], tmp_path / "out"
+        extents = tmp_path / "extents.jsonl"
+        emit(asg_dir, extents, declared)
+        return (
+            [
+                "--config",
+                str(config),
+                "--extents",
+                str(extents),
+                *_selector(extra),
+                *extra,
+            ],
+            tmp_path / "out",
+        )
 
     return build
 
@@ -241,6 +262,52 @@ def test_a_malformed_member_is_reported_and_the_run_continues(corpus):
     assert "FLOWS_TO" in (out_dir / "edges.jsonl").read_text(encoding="utf-8")
 
 
+def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
+    corpus, capsys, caplog
+):
+    """The layout is an input, so a member without one is a member not analysed.
+
+    Recorded the way the unsizeable skip is recorded -- by name, with a reason, and
+    exit 3 -- because the alternative answers "this program has no field flows"
+    for a program nobody ever laid out. The reason names the command that fixes it:
+    nothing else about the artefact says the table is read rather than written.
+    """
+    argv, out_dir = corpus(
+        {
+            "MEMBERA": json.dumps(_program("PROGA")),
+            "MEMBERB": json.dumps(_program("PROGB")),
+        },
+        declared=("MEMBERA",),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert cli(argv) == 3
+
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["analysed"], summary["skipped"]) == (1, 1)
+    assert "PROGB" not in (out_dir / EDGES_FILE).read_text(encoding="utf-8")
+    reason = (
+        "no rows in extents.jsonl: run cobble-extents "
+        f"--asg-dir {out_dir.parent / "asg"} "
+        f"--out {out_dir.parent / "extents.jsonl"} MEMBERB"
+    )
+    reported = [record.getMessage() for record in caplog.records]
+    assert [one for one in reported if one.startswith("fields: !! skipped")] == [
+        f"fields: !! skipped MEMBERB: {reason}"
+    ]
+
+
+def test_a_missing_extents_table_exits_two(corpus):
+    """Exit 2, the input-not-found code, rather than 29 identical skips."""
+    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    absent = [
+        "nowhere.jsonl" if argument.endswith("extents.jsonl") else argument
+        for argument in argv
+    ]
+
+    assert cli(absent) == 2
+
+
 def test_a_missing_asg_directory_exits_two(tmp_path: Path):
     config = tmp_path / "fields.toml"
     config.write_text(
@@ -248,14 +315,17 @@ def test_a_missing_asg_directory_exits_two(tmp_path: Path):
         encoding="utf-8",
     )
 
-    assert cli(["--config", str(config), "--all"]) == 2
+    argv = ["--config", str(config), "--extents", str(tmp_path / "e.jsonl"), "--all"]
+
+    assert cli(argv) == 2
 
 
 def test_a_config_without_the_table_exits_two(tmp_path: Path):
     config = tmp_path / "fields.toml"
     config.write_text('[other]\nasg_dir = "/x"\n', encoding="utf-8")
+    argv = ["--config", str(config), "--extents", str(tmp_path / "e.jsonl"), "--all"]
 
-    assert cli(["--config", str(config), "--all"]) == 2
+    assert cli(argv) == 2
 
 
 def test_two_members_declaring_one_program_id_are_both_reported(corpus):

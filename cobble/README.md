@@ -422,10 +422,21 @@ worker rather than the gigabytes a full corpus of them would be.
 ### Field-level byte dataflow
 
 ```bash
-uv run cobble-dataflow-fixpoint --config config/fields.toml --member PROGA PROGB   # one program and its neighbours
-uv run cobble-dataflow-fixpoint --config config/fields.toml --all                  # the whole cache
-uv run cobble-dataflow-fixpoint --config config/fields.toml --member PROGA --sweeps 3
+uv run cobble-extents --asg-dir out-parsed --out out-fields/extents-input.jsonl     # the layout, once per corpus change
+uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields/extents-input.jsonl --member PROGA PROGB
+uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields/extents-input.jsonl --all
+uv run cobble-dataflow-fixpoint --config config/fields.toml --extents out-fields/extents-input.jsonl --member PROGA --sweeps 3
 ```
+
+`--extents` is required and is the table `cobble-extents` writes: this stage
+computes no extent of its own. A member's records come out of that file, and the
+walk is seeded from the `VALUE` image of exactly those records, so the layout the
+analysis ran against is the published one and not a second computation of it.
+Reading all 29 members of CardDemo back takes under 3s in total, against
+roughly 2s **per member** to lay the DATA DIVISION out again. A member the table
+does not hold is a recorded skip naming the command that fixes it — never a crash,
+never silence — and an absent table is exit 2 before the first member. Write it
+somewhere other than `<out_dir>/extents.jsonl`, which is this stage's own output.
 
 Exactly one of `--member` and `--all` is required; both together, or neither, is
 a usage error. The usual question is about the fields of one program, and a
@@ -439,14 +450,15 @@ join. Per-member seconds vary by machine, so none are restated here;
 the corpus's largest member) and the measurement it was calibrated against both
 live in `config/carddemo-fields-tests.toml`.
 
-Reads the ASG cache `cobble-parse-corpus` wrote — no JVM, no corpus tree — and
-writes six files to `<out_dir>`:
+Reads the ASG cache `cobble-parse-corpus` wrote and the extents table
+`cobble-extents` wrote over it — no JVM, no corpus tree — and writes six files to
+`<out_dir>`:
 
 | file | one row per | holds |
 | ---- | ----------- | ----- |
 | `nodes.jsonl` | `FIELD` endpoint | nothing but the id — every attribute it once carried now has a table |
 | `edges.jsonl` | `(node, source extent, target extent)` | the `FLOWS_TO` relation and `node`, the statement that moved the bytes |
-| `extents.jsonl` | *declared* name | its `level`, its `usage`, and the byte ranges it owns |
+| `extents.jsonl` | *declared* name | its `level`, its `usage`, the byte ranges it owns, and a column per declared property of each of those occurrences |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
 | `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and the `dropped` values that resolved but name no program |
@@ -469,7 +481,20 @@ and all of it survives.
 
 `extents.jsonl` is one row per name against the ranges it owns —
 `{"id": "PROGA.WS-B", "level": 5, "usage": "DISPLAY", "extents":
-["WS-B@working_storage[4:8]"]}`. Its own file because where a field *is* is true
+["WS-B@working_storage[4:8]"], "program": "PROGA", "names": ["WS-B"], "starts": [4],
+...}`. Those first four fields are the whole of what the queries read, and they
+have not moved; after them come arrays **parallel to `extents`**, one entry per
+occurrence, carrying everything that occurrence was declared with — its record,
+qualification path, start, length, level, PIC, usage, REDEFINES, OCCURS,
+subscripts, declaration number, ordinal, parent, `VALUE` — plus its record's
+origin, size and place in declaration order. That is `layout`'s whole answer, which
+is why `cobble-dataflow-fixpoint` reads its records here instead of recomputing
+them, and `cobble.dataflow.fields.extents_input` is the reader that rebuilds them.
+Columns rather than an object per occurrence because a 29-member corpus declares
+569226 of them, and an object apiece would spell all nineteen field names once per
+occurrence: 113MB of table as columns, several times that as objects.
+
+Its own file because where a field *is* is true
 whether or not a value ever moved through it. *Declared*, because an edge names
 the smallest field covering the bytes it moved, so a group-level write puts the
 group in the graph and leaves every child it filled out of it — and the child is

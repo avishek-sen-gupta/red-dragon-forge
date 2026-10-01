@@ -1,8 +1,16 @@
 """The field dataflow corpus pass.
 
-No JVM: the ASG cache is the whole input. A member that raises is reported and the
-run continues, because the answer wanted from a corpus pass is "which members are
-missing from this output", and a run that aborts answers that for one member only.
+No JVM. Two inputs: the ASG cache, and the ``extents.jsonl`` ``cobble-extents``
+wrote over that same cache. This stage computes no extent of its own -- a member's
+records are read back out of that table, and the walk is seeded from the VALUE
+image of exactly those records. The table is required, because a layout invented
+here could disagree with the published one and nothing would say so. A member the
+table does not hold is a recorded skip naming the command that fixes it, never a
+crash and never silence.
+
+A member that raises is reported and the run continues, because the answer wanted
+from a whole-corpus run is "which members are missing from this output", and a run
+that aborts answers that for one member only.
 
 Six files, so that the graph holds only what nothing outside it could state:
 
@@ -55,9 +63,10 @@ warned about by name. Neither is a skip: nothing is invented either way.
 Exit status contract:
   0 - every member analysed, coverage at or above the floor
   1 - coverage below the floor
-  2 - ASG directory not found, config missing its table, or a --member the
-      cache does not hold
-  3 - one or more members skipped, unreadable, or colliding on program_id
+  2 - ASG directory not found, extents table not found, config missing its table,
+      or a --member the cache does not hold
+  3 - one or more members skipped, unreadable, absent from the extents table, or
+      colliding on program_id
 """
 
 from __future__ import annotations
@@ -85,7 +94,8 @@ from cobble.dataflow.fields.aliases import (
 )
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.extent import CellIndex
-from cobble.dataflow.fields.program_layout import ProgramLayout, program_layout
+from cobble.dataflow.fields.extents_input import DeclaredLayouts, declared_layouts
+from cobble.dataflow.fields.program_layout import ProgramLayout
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
     FieldExtents,
@@ -293,35 +303,54 @@ def _aliased_member(
     return replace(result, aliases=_alias_rows(asg, index, asg_dir))
 
 
-def _analysed_member(
-    path: Path, options: AnalysisOptions, locations: FileLocationResolver
-) -> MemberResult:
+def _analysed_member(path: Path, inputs: _Inputs) -> MemberResult:
     """The four tables first, then the aliases folded onto them.
 
     In that order because the alias pass cannot discard what it never held -- the
     four tables are already in the result it replaces by the time it runs.
 
-    The layout is built once and handed to both ``analysed`` and the tables: the
-    records the walk is seeded from and the records the extents rows are written
-    from have to be the same ones.
+    The layout comes from the extents table, never from this program's DATA
+    DIVISION: this stage computes no extent of its own, so the records the walk is
+    seeded from are the same ones ``cobble-extents`` published. A member the table
+    does not hold is a reason here rather than in ``_member_result``, so that a
+    cache file this stage cannot even read is still reported as unreadable --
+    the more specific of the two answers, and the true one.
     """
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    layout = program_layout(asg)
-    flow, index = analysed(asg, options, layout)
-    tables = _tables(path.stem, flow, layout, locations)
+    if not inputs.layouts.holds(path.stem):
+        return MemberResult(
+            member=path.stem,
+            program=asg.program_id,
+            skipped=_no_extents(path, inputs.extents),
+        )
+    layout = inputs.layouts.layout(path.stem)
+    flow, index = analysed(asg, inputs.options, layout)
+    tables = _tables(path.stem, flow, layout, inputs.locations)
     return _aliased_member(tables, asg, index, path.parent)
 
 
-def _member_result(
-    path: Path, options: AnalysisOptions, locations: FileLocationResolver
-) -> MemberResult:
+def _no_extents(path: Path, extents: Path) -> str:
+    """The reason a member the extents table does not hold produces no rows.
+
+    A reason and not a crash, for the same cause the unsizeable skip exists for: a
+    member whose layout this run does not have is one member missing from the
+    output, and the run still has to say which. Names the command that fixes it,
+    because nothing else about the artefact says the table is an input.
+    """
+    return (
+        f"no rows in {extents.name}: run cobble-extents "
+        f"--asg-dir {path.parent} --out {extents} {path.stem}"
+    )
+
+
+def _member_result(path: Path, inputs: _Inputs) -> MemberResult:
     """Every failure one member can have, as a reason rather than an abort.
 
     The records are built before anything is written, so a member that raises
     halfway through leaves no partial rows behind it.
     """
     try:
-        return _analysed_member(path, options, locations)
+        return _analysed_member(path, inputs)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=path.stem, skipped=f"unreadable: {error!r}")
 
@@ -464,10 +493,7 @@ def _log_result(result: MemberResult, seconds: float) -> None:
 
 
 def _logged_member(
-    numbered: tuple[int, Path],
-    total: int,
-    options: AnalysisOptions,
-    locations: FileLocationResolver,
+    numbered: tuple[int, Path], total: int, inputs: _Inputs
 ) -> MemberResult:
     """One member's analysis, announced before it starts and measured after.
 
@@ -477,21 +503,16 @@ def _logged_member(
     position, path = numbered
     logger.info("fields: [%d/%d] %s", position, total, path.stem)
     started = time.monotonic()
-    result = _member_result(path, options, locations)
+    result = _member_result(path, inputs)
     _log_result(result, time.monotonic() - started)
     return result
 
 
-def _run(
-    sinks: _Sinks,
-    paths: Sequence[Path],
-    options: AnalysisOptions,
-    locations: FileLocationResolver,
-) -> RunTotals:
+def _run(sinks: _Sinks, paths: Sequence[Path], inputs: _Inputs) -> RunTotals:
     return reduce(
         lambda totals, numbered: _folded(
             totals,
-            _written(sinks, _logged_member(numbered, len(paths), options, locations)),
+            _written(sinks, _logged_member(numbered, len(paths), inputs)),
         ),
         enumerate(paths, start=1),
         RunTotals(),
@@ -639,6 +660,32 @@ def _options(arguments: argparse.Namespace) -> AnalysisOptions:
     )
 
 
+@dataclass(frozen=True)
+class _Inputs:
+    """What every member of one run is analysed against.
+
+    One value rather than four parameters threaded through four functions: all of
+    them are settled before the first member and none of them changes between
+    members.
+    """
+
+    options: AnalysisOptions
+    locations: FileLocationResolver
+    layouts: DeclaredLayouts
+    extents: Path
+
+
+def _inputs(
+    config: FieldsConfig, arguments: argparse.Namespace, locations: CorpusIndex
+) -> _Inputs:
+    return _Inputs(
+        options=_options(arguments),
+        locations=locations,
+        layouts=declared_layouts(arguments.extents),
+        extents=arguments.extents,
+    )
+
+
 def _analysed_run(
     config: FieldsConfig, paths: Sequence[Path], arguments: argparse.Namespace
 ) -> int:
@@ -662,8 +709,7 @@ def _analysed_run(
         totals = _run(
             _Sinks(graph, extents, defs, aliases, targets),
             paths,
-            _options(arguments),
-            locations,
+            _inputs(config, arguments, locations),
         )
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
@@ -699,6 +745,12 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         description="Field-level byte dataflow over a cached ASG corpus."
     )
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--extents",
+        type=Path,
+        required=True,
+        help="extents.jsonl from cobble-extents: the layout this stage reads",
+    )
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
@@ -720,6 +772,27 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(tuple(argv) if argv else None)
 
 
+def _missing_input(config: FieldsConfig, arguments: argparse.Namespace) -> bool:
+    """Whether either input is out of reach, said once per input.
+
+    The extents table is as much an input as the cache, and a run that cannot find
+    it has nothing to analyse rather than 300 members to skip identically.
+    """
+    if not config.asg_dir.is_dir():
+        logger.error("fields: !! no ASG cache at %s", config.asg_dir)
+        return True
+    if not arguments.extents.is_file():
+        logger.error(
+            "fields: !! no extents table at %s; run cobble-extents --asg-dir %s "
+            "--out %s",
+            arguments.extents,
+            config.asg_dir,
+            arguments.extents,
+        )
+        return True
+    return False
+
+
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parsed(argv)
@@ -728,8 +801,7 @@ def cli(argv: Sequence[str] = ()) -> int:
     except (OSError, KeyError, ValueError) as error:
         logger.error("fields: !! %s", error)
         return 2
-    if not config.asg_dir.is_dir():
-        logger.error("fields: !! no ASG cache at %s", config.asg_dir)
+    if _missing_input(config, arguments):
         return 2
     return _completed(config, arguments)
 
