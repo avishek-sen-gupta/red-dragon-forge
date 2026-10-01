@@ -8,6 +8,9 @@ from these tests passing.
 
 from __future__ import annotations
 
+from functools import reduce
+from itertools import pairwise
+
 from cobble.dataflow.depgraph.flows import program_context
 
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, NodeKind
@@ -343,3 +346,31 @@ def test_as_fragment_places_true_exits_before_false_exits(program_of) -> None:
     fragment = as_fragment(cond)
 
     assert [e.kind for e in fragment.exits] == [EdgeKind.TRUE, EdgeKind.FALSE]
+
+
+def test_a_long_or_chain_lowers_to_tests_chained_on_the_false_edge(program_of) -> None:
+    """The bridge nests ``A OR B OR ...`` on the left, one level per operand, so a
+    long chain must not cost a stack frame per operand to read or to lower."""
+    asg = program_of([])
+    length = 1000
+    raw = reduce(
+        lambda chain, n: {"op": "OR", "left": chain, "right": _rel(f"WS-F{n}", "'Y'")},
+        range(1, length),
+        _rel("WS-F0", "'Y'"),
+    )
+
+    frag = lower_condition(read_condition(raw), _ctx(asg), "0", "")
+
+    ids = [f"MAIN/0#test.{'L' * (length - 1)}"] + [
+        f"MAIN/0#test.{'L' * (length - 1 - n)}R" for n in range(1, length)
+    ]
+    assert [node.id for node in frag.nodes] == ids
+    assert [node.atom.left for node in frag.nodes] == [
+        f"WS-F{n}" for n in range(length)
+    ]
+    assert [(e.source, e.target, e.kind) for e in frag.edges] == [
+        (source, target, EdgeKind.FALSE) for source, target in pairwise(ids)
+    ]
+    assert frag.entry == ids[0]
+    assert [e.node_id for e in frag.true_exits] == ids
+    assert [e.node_id for e in frag.false_exits] == [ids[-1]]
