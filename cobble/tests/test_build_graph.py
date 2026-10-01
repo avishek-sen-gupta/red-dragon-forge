@@ -6,12 +6,14 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 
+import pytest
 from cobble.build_graph import (
     RULE,
     _edge_kind_lines,
     _failure_report_lines,
     _file_control_failures,
     _load_transid_to_program,
+    _parse_args,
     _report_failures,
     _tally_lines,
     _unusable_csd_message,
@@ -22,12 +24,14 @@ from cobble.cics.synth_csd import SYNTHETIC_TRANSID_PREFIX
 from cobble.corpus_config import DEFAULT_COPYBOOK_EXTENSIONS, CorpusConfig
 from cobble.corpus_index import FileLocationResolver
 from cobble.file_location import NOT_ATTEMPTED, FileLocation
+from cobble.knowledge_graph.graph_file import read_graph
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
+from cobble.knowledge_graph.graph_writer import graph_writer
 from cobble.knowledge_graph.merge import merge_graph
 
 
@@ -316,16 +320,6 @@ class _NoFilePaths(FileLocationResolver):
         return NOT_ATTEMPTED
 
 
-class _CollectingWriter:
-    def __init__(self) -> None:
-        self.nodes: tuple = ()
-        self.edges: tuple = ()
-
-    def add_all(self, nodes, edges) -> None:
-        self.nodes = (*self.nodes, *nodes)
-        self.edges = (*self.edges, *edges)
-
-
 def _asg_with(coprocessor_statement: Mapping) -> dict:
     """A batch program with one FILE-CONTROL entry, an OPEN, and one
     coprocessor statement the base dispatch table does not know."""
@@ -347,16 +341,27 @@ def _asg_with(coprocessor_statement: Mapping) -> dict:
     }
 
 
+def _file_control_written(
+    tmp_path: Path, path: Path, asg_dir: Path
+) -> tuple[tuple[str, ...], list[GraphEdge], list[GraphNode]]:
+    graph = tmp_path / "graph.jsonl"
+    with graph_writer(graph, _NoFilePaths()) as writer:
+        failures = _file_control_failures(path, asg_dir, _NoFilePaths(), writer)
+    nodes, edges = read_graph(graph)
+    return failures, edges, nodes
+
+
 def _run_file_control(
     tmp_path: Path, asg: Mapping
-) -> tuple[tuple[str, ...], _CollectingWriter]:
+) -> tuple[tuple[str, ...], list[GraphEdge]]:
     """The stage as it runs: one cached ASG on disk, no JVM anywhere near it."""
     asg_dir = tmp_path / "parsed"
     asg_dir.mkdir()
     (asg_dir / "SOMEPROG.json").write_text(json.dumps(asg), encoding="utf-8")
-    writer = _CollectingWriter()
-    path = tmp_path / "cbl" / "SOMEPROG.cbl"
-    return _file_control_failures(path, asg_dir, _NoFilePaths(), writer), writer
+    failures, edges, _nodes = _file_control_written(
+        tmp_path, tmp_path / "cbl" / "SOMEPROG.cbl", asg_dir
+    )
+    return failures, edges
 
 
 def test_a_member_missing_from_the_asg_cache_is_reported_not_parsed(
@@ -367,15 +372,14 @@ def test_a_member_missing_from_the_asg_cache_is_reported_not_parsed(
     not a silent 5-second reparse, and not an aborted run."""
     asg_dir = tmp_path / "parsed"
     asg_dir.mkdir()
-    writer = _CollectingWriter()
 
-    failures = _file_control_failures(
-        tmp_path / "cbl" / "GONE.cbl", asg_dir, _NoFilePaths(), writer
+    failures, edges, nodes = _file_control_written(
+        tmp_path, tmp_path / "cbl" / "GONE.cbl", asg_dir
     )
 
     assert len(failures) == 1
     assert "GONE.cbl" in failures[0]
-    assert writer.nodes == ()
+    assert (nodes, edges) == ([], [])
 
 
 def test_file_control_reads_a_member_containing_exec_cics(tmp_path: Path) -> None:
@@ -387,26 +391,31 @@ def test_file_control_reads_a_member_containing_exec_cics(tmp_path: Path) -> Non
     ``Unknown COBOL statement type: 'EXEC_CICS'`` and contributed nothing, not even
     its PROGRAM node.
     """
-    failures, writer = _run_file_control(
+    failures, edges = _run_file_control(
         tmp_path,
         _asg_with({"type": "EXEC_CICS", "exec_cics_text": "EXEC CICS RETURN END-EXEC"}),
     )
 
     assert failures == ()
-    assert [(edge.source, edge.target) for edge in writer.edges] == [
-        ("SOMEPROG", "CUSTDD")
-    ]
+    assert [(edge.source, edge.target) for edge in edges] == [("SOMEPROG", "CUSTDD")]
 
 
 def test_file_control_reads_a_member_containing_exec_sql(tmp_path: Path) -> None:
     """Same defect, second coprocessor: a batch program with embedded SQL and no
     CICS at all failed here too, and no CSD could ever route it elsewhere."""
-    failures, writer = _run_file_control(
+    failures, edges = _run_file_control(
         tmp_path,
         _asg_with({"type": "EXEC_SQL", "exec_sql_text": "EXEC SQL COMMIT END-EXEC"}),
     )
 
     assert failures == ()
-    assert [(edge.source, edge.target) for edge in writer.edges] == [
-        ("SOMEPROG", "CUSTDD")
-    ]
+    assert [(edge.source, edge.target) for edge in edges] == [("SOMEPROG", "CUSTDD")]
+
+
+def test_the_graph_goes_where_output_says_and_output_is_required() -> None:
+    args = _parse_args(["--config", "c.toml", "--output", "out/corpus.jsonl"])
+    assert (args.config, args.output) == (Path("c.toml"), Path("out/corpus.jsonl"))
+
+    with pytest.raises(SystemExit) as refused:
+        _parse_args(["--config", "c.toml"])
+    assert refused.value.code == 2

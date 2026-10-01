@@ -5,8 +5,10 @@ from itertools import pairwise
 
 import pytest
 from cobble.dataflow.fields.extent_text import byte_range
-from cobble.dataflow.fixpoint.query import Side, cli, crossing, store_of
-from test_fields_query import _declared, _edge
+from cobble.dataflow.fixpoint.build_corpus import GRAPH_FILE
+from cobble.dataflow.fixpoint.query import Side, cli, crossing, load, store_of
+from cobble.knowledge_graph.row_type import RowType
+from tests.dataflow.fields.test_fields_query import _declared, _edge
 
 
 def _alias_row(
@@ -975,11 +977,34 @@ def _written(out, name: str, payloads) -> None:
     )
 
 
+def _written_graph(out, edge_rows) -> None:
+    node = {
+        "type": RowType.NODE.value,
+        "id": "XPROGA.WS-AREA",
+        "kind": "FIELD",
+        "file_path": None,
+        "file_path_reason": "not_indexed",
+        "attrs": {},
+    }
+    edges = ({"type": RowType.EDGE.value, **row} for row in edge_rows)
+    _written(out, GRAPH_FILE, (node, *edges))
+
+
+def test_the_graph_file_s_node_rows_are_not_read_as_flows(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written_graph(out, _two_program_edge_rows())
+    _written(out, "aliases.jsonl", (_alias_row(),))
+
+    assert load(out).flows == _two_program_store().flows
+
+
 def test_the_default_answer_does_not_mention_crossing(tmp_path, capsys):
     out = tmp_path / "out"
     out.mkdir()
     _written(out, "extents.jsonl", _two_program_extent_rows())
-    _written(out, "edges.jsonl", _two_program_edge_rows())
+    _written_graph(out, _two_program_edge_rows())
     _written(out, "aliases.jsonl", (_alias_row(),))
 
     assert cli(["reaches", "XPROGA.WS-AREA", "--out", str(out)]) == 0
@@ -993,7 +1018,7 @@ def test_the_flag_reports_the_hop_and_the_site(tmp_path, capsys):
     out = tmp_path / "out"
     out.mkdir()
     _written(out, "extents.jsonl", _two_program_extent_rows())
-    _written(out, "edges.jsonl", _two_program_edge_rows())
+    _written_graph(out, _two_program_edge_rows())
     _written(out, "aliases.jsonl", (_alias_row(),))
 
     assert (
@@ -1023,7 +1048,7 @@ def test_a_landing_line_names_the_bytes_it_landed_on(tmp_path, capsys):
     out = tmp_path / "out"
     out.mkdir()
     _written(out, "extents.jsonl", _two_program_extent_rows())
-    _written(out, "edges.jsonl", _two_program_edge_rows())
+    _written_graph(out, _two_program_edge_rows())
     _written(out, "aliases.jsonl", (_alias_row(),))
 
     assert cli(["reaches", "XPROGA.WS-AREA", "--out", str(out), "--across-calls"]) == 0

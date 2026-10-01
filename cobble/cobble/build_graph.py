@@ -9,8 +9,8 @@ pipeline.
 
 Corpus location and layout come from a TOML config file (see
 cobble/corpus_config.py) passed via --config -- nothing about the corpus is
-hardcoded here. Writes <out_dir>/{nodes,edges}.jsonl and prints per-extractor
-+ merged counts.
+hardcoded here. Writes the graph to --output as one JSONL file, a row per node
+and per edge, and prints per-extractor + merged counts.
 
 Needs a cobble-parse-corpus run first: the FILE-CONTROL extractor reads the ASGs
 from the config's asg_dir rather than parsing them, because a parse is 4-7 seconds
@@ -23,7 +23,7 @@ caller's state, and the run's report is one fold over those results. The
 GraphWriter it feeds is the one real accumulator here, and deliberately so: its
 job is to stream to disk.
 
-Invoke as: uv run python -m cobble.build_graph --config <path>
+Invoke as: uv run python -m cobble.build_graph --config <path> --output <file>
 
 Env: PROLEAP_BRIDGE_JAR and JCL_BRIDGE_JAR -- `. ../bridge-env.sh` exports both.
 """
@@ -58,18 +58,18 @@ from cobble.dataflow.fixpoint.rows import read as read_targets
 from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
 from cobble.jcl.jcl_graph import jcl_graph_from_job
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
-from cobble.knowledge_graph.export import read_ndjson
+from cobble.knowledge_graph.graph_file import read_graph
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
     GraphEdge,
     GraphNode,
     NodeKind,
 )
-from cobble.knowledge_graph.graph_writer import GraphWriter
+from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
 from cobble.parsing.asg_cache import asg_of
-from cobble.path_utils import ensure_dir
+from cobble.path_utils import ensure_dir, ensure_parent
 from cobol_asg.cobol_imports import extract_cobol_imports
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.import_types import ImportKind, ImportRef
@@ -105,10 +105,6 @@ def _make_parser(config: CorpusConfig) -> ProLeapCobolParser:
         copybook_dirs=list(config.copybook_dirs),
         copybook_exts=list(config.copybook_extensions),
     )
-
-
-def _out_paths(config: CorpusConfig) -> tuple[Path, Path]:
-    return config.out_dir / "nodes.jsonl", config.out_dir / "edges.jsonl"
 
 
 # ── CSD: transaction -> program ──────────────────────────────────
@@ -935,8 +931,7 @@ def _targets_path(config: CorpusConfig) -> Path:
     """Where the dataflow fixpoint stage's table would be, if this build's
     out_dir is also where `cobble-fields --all` wrote it.
 
-    Convention, not configuration: the same rule ``_out_paths`` already applies
-    to nodes.jsonl/edges.jsonl, so a corpus that runs both stages into one
+    Convention, not configuration: a corpus that runs both stages into one
     out_dir gets the enrichment for free, and a corpus that has not run the
     fixpoint stage at all -- the common case -- reads as the file not existing,
     which ``read_targets`` already turns into "no rows" rather than an error.
@@ -963,13 +958,16 @@ def _build_dynamic_targets(
 
 
 def _extract_all(
-    config: CorpusConfig, corpus_index: CorpusIndex, csd: _CsdRead, store: JclStore
+    config: CorpusConfig,
+    output: Path,
+    corpus_index: CorpusIndex,
+    csd: _CsdRead,
+    store: JclStore,
 ) -> tuple[str, ...]:
     """Run the four extractors into one writer, returning everything they skipped."""
     cics_program_names = frozenset(csd.transid_to_program.values())
     ensure_dir(config.out_dir)
-    nodes_jsonl, edges_jsonl = _out_paths(config)
-    with GraphWriter(nodes_jsonl, edges_jsonl, corpus_index) as writer:
+    with graph_writer(ensure_parent(output), corpus_index) as writer:
         failures = (
             _build_jcl_graph(config, corpus_index, writer, store)
             + _build_call_copy_graph(config, corpus_index, cics_program_names, writer)
@@ -993,20 +991,18 @@ def _edge_kind_lines(graph: nx.MultiDiGraph) -> tuple[str, ...]:
     )
 
 
-def _report_merged(config: CorpusConfig) -> None:
-    nodes_jsonl, edges_jsonl = _out_paths(config)
-    graph = merge_graph(*read_ndjson(nodes_jsonl, edges_jsonl))
+def _report_merged(output: Path) -> None:
+    graph = merge_graph(*read_graph(output))
     logger.info(
-        "\nMerged graph: %d nodes, %d edges\n%s\nWrote %s\nWrote %s",
+        "\nMerged graph: %d nodes, %d edges\n%s\nWrote %s",
         graph.number_of_nodes(),
         graph.number_of_edges(),
         "\n".join(_edge_kind_lines(graph)),
-        nodes_jsonl,
-        edges_jsonl,
+        output,
     )
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -1014,10 +1010,16 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         help="Path to a corpus TOML config (see cobble/corpus_config.py / config/carddemo.toml)",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="The graph file to write: one JSON line per node and per edge, tagged with which it is",
+    )
+    return parser.parse_args(argv)
 
 
-def _corpus_failures(config: CorpusConfig) -> tuple[str, ...]:
+def _corpus_failures(config: CorpusConfig, output: Path) -> tuple[str, ...]:
     """One full pass over the corpus, returning everything it skipped.
 
     Both JCL passes read every member, so the bridge runs once per member here
@@ -1038,7 +1040,7 @@ def _corpus_failures(config: CorpusConfig) -> tuple[str, ...]:
         return (
             corpus_index.failures
             + csd.failures
-            + _extract_all(config, corpus_index, csd, store)
+            + _extract_all(config, output, corpus_index, csd, store)
         )
 
 
@@ -1048,15 +1050,16 @@ def main() -> int:
     # interleave in the order they happened, with no stdout buffering to work
     # around. stdout stays empty.
     configure_cli_logging()
-    config = load_corpus_config(_parse_args().config)
+    args = _parse_args(sys.argv[1:])
+    config = load_corpus_config(args.config)
     # Before the expensive phase, because this one cannot be recovered from later:
     # read as a per-file failure it was one warning in a report under a graph that
     # otherwise looked finished.
     unusable_csd = _unusable_csd_paths(config)
     if unusable_csd:
         sys.exit(_unusable_csd_message(unusable_csd))
-    failures = _corpus_failures(config)
-    _report_merged(config)
+    failures = _corpus_failures(config, args.output)
+    _report_merged(args.output)
     _report_failures(failures)
     return 0
 

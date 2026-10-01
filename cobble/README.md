@@ -54,7 +54,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 . ../bridge-env.sh
 uv run cobble-sym --config config/carddemo.toml              # generate the BMS symbolic copybooks
 uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus -> one JSON ASG per member in out-parsed/
-uv run cobble-build --config config/carddemo.toml            # extract the graph -> out/nodes.jsonl, out/edges.jsonl
+uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl   # extract the graph -> out/carddemo.jsonl
 uv run cobble-compare                                        # identity-diff out/ vs reference/ (must be empty: 448/832)
 uv run cobble-render --config config/carddemo.toml           # -> out/graph.html
 ```
@@ -117,6 +117,8 @@ Cross-program field flow is a different system — `cobble/dataflow/fields/`.
 
 `--config` is required by every stage but `cobble-compare`; there's no default, so
 a bare `cobble-build` fails with a clear error instead of silently assuming CardDemo.
+`cobble-build` also requires `--output`, the graph file it writes: one JSON line per
+node and per edge, each tagged `"type": "node"` or `"type": "edge"`.
 Every stage, the parse included, reads the same **corpus** config, so the parse
 and the build cannot disagree about which members and copybook dirs `asg_dir`
 holds. To parse differently for a special case, point `cobble-parse-corpus` at a
@@ -214,7 +216,7 @@ Then run:
 ```bash
 uv run cobble-sym           --config your-corpus.toml   # first, if you have BMS maps: sym/*.cpy
 uv run cobble-parse-corpus  --config your-corpus.toml   # then the parse -> one ASG per member
-uv run cobble-build         --config your-corpus.toml   # then the graph -> <out_dir>/{nodes,edges}.jsonl
+uv run cobble-build         --config your-corpus.toml --output out/your-corpus.jsonl   # then the graph -> that one file
 uv run cobble-render        --config your-corpus.toml   # optional HTML visualization
 ```
 
@@ -463,13 +465,12 @@ the corpus's largest member) and the measurement it was calibrated against both
 live in `config/carddemo-fields-tests.toml`.
 
 Reads the ASG cache `cobble-parse-corpus` wrote and the extents table
-`cobble-extents` wrote over it — no JVM, no corpus tree — and writes six files to
+`cobble-extents` wrote over it — no JVM, no corpus tree — and writes five files to
 `<out_dir>`:
 
 | file | one row per | holds |
 | ---- | ----------- | ----- |
-| `nodes.jsonl` | `FIELD` endpoint | nothing but the id — every attribute it once carried now has a table |
-| `edges.jsonl` | `(node, source extent, target extent)` | the `FLOWS_TO` relation and `node`, the statement that moved the bytes |
+| `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows: nothing but the id — every attribute it once carried now has a table; edge rows: the `FLOWS_TO` relation and `node`, the statement that moved the bytes. Each row's `type` says which |
 | `extents.jsonl` | *declared* name | its `level`, its `usage`, the byte ranges it owns, and a column per declared property of each of those occurrences |
 | `defs.jsonl` | `(node, source extent)` | the statements whose writes reach that read |
 | `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
@@ -645,7 +646,7 @@ while the program in question went unexamined.
 in the query join, stating which bytes that site shares with its callee, but it is
 not an edge — naming several members analyses each independently, so no edge
 crosses a program. A non-empty program_id
-two members declare is exit 3 rather than a rename, since one shared `edges.jsonl`
+two members declare is exit 3 rather than a rename, since one shared `graph.jsonl`
 has no filename to qualify — both members' field ids would silently merge into one
 namespace. Two members that declare *no* program_id are not reported at all: the
 collision check skips a blank name, so their ids merge under one empty prefix and
@@ -654,7 +655,7 @@ nothing in the run says exit 3.
 `tests/dataflow/fields/` covers the byte-extent algebra (`may_alias`
 over-approximates, `must_cover` under-approximates), the extent wire form and its
 round trip, the per-statement transfer functions, the node-keyed fixpoint,
-extent-to-name resolution, what each of the six files carries, the query
+extent-to-name resolution, what each of the five files carries, the query
 surface's five primitives, and the corpus pass's exit codes.
 
 ### Resolving a dynamic call target
