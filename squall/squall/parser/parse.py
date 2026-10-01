@@ -264,9 +264,16 @@ def _whenever_action(node: Tree) -> WheneverAction:
         case ["CONTINUE", *_]:
             return Continue()
         case [opener, *_] if opener in _GOTO_OPENERS:
-            return GoTo(str(tokens[-1]))
+            return GoTo(_label(node.children[-1]))
         case _:
             return NoOpAction()
+
+
+def _label(last: Token | Tree) -> str:
+    """The paragraph a GO TO names, without the colon Db2 allows before it."""
+    if isinstance(last, Tree):
+        return str(last.children[0]).lstrip(":").strip()
+    return str(last)
 
 
 def _cursor_ref(stmt: Tree, kind: Kind) -> CursorRef:

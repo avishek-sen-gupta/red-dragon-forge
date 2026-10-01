@@ -78,7 +78,9 @@ disconnect:     DISCONNECT _run
 // ── Error handling ───────────────────────────────────────────────────────────
 whenever:        WHENEVER whenever_cond whenever_action
 whenever_cond:   NOT FOUND | SQLERROR | SQLWARNING | NAME
-whenever_action: CONTINUE | GOTO NAME | GO TO NAME | _run
+whenever_action: CONTINUE | GOTO _host_label | GO TO _host_label | _run
+// Db2 lets the label carry a colon, which lexes as a host variable.
+_host_label:     NAME | host_var
 get_diagnostics: GET DIAGNOSTICS _run
 signal:          SIGNAL _run
 

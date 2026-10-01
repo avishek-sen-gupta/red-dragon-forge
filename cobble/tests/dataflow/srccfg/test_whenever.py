@@ -102,14 +102,15 @@ def test_a_governed_statement_branches_to_each_handler_and_the_directive_vanishe
 ):
     """The directives contribute no node -- they emit no runtime code -- and the
     statement they govern gets one SQLCODE test per condition, the failing arm
-    falling into the next and the last falling through."""
+    falling into the next and the last falling through. A label may carry the
+    colon Db2 allows before it, and still names its paragraph."""
     cfg = _cfg(
         [
             _para(
                 "MAIN",
                 [
                     _sql("WHENEVER NOT FOUND GO TO NF"),
-                    _sql("WHENEVER SQLERROR GO TO ERR"),
+                    _sql("WHENEVER SQLERROR GO TO :ERR"),
                     _sql("SELECT A INTO :B FROM T"),
                     {"type": "STOP_RUN"},
                 ],
