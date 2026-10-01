@@ -20,8 +20,7 @@ import networkx as nx
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.link import BundleCall
 from cobble.dataflow.srccfg.presentation import cross_calls, label_of, qualified
-
-NodeKey = tuple[Enum, str]
+from cobble.knowledge_graph.drawn_node import DrawnNode
 
 
 class CallKind(Enum):
@@ -33,9 +32,10 @@ class CallKind(Enum):
     """
 
     CALL = "CALL"
+    CALL_CANDIDATE = "CALL_CANDIDATE"
 
 
-def keys_of(cfgs: Sequence[Cfg]) -> Mapping[str, NodeKey]:
+def drawn_nodes_of(cfgs: Sequence[Cfg]) -> Mapping[str, DrawnNode]:
     """Every node's graph key, looked up by the qualified id an edge names it by."""
     return {
         qualified(cfg.program, node.id): (node.kind, qualified(cfg.program, node.id))
@@ -52,18 +52,18 @@ def graph_of(cfgs: Sequence[Cfg], calls: Sequence[BundleCall] = ()) -> nx.MultiD
     occurs in a dozen members of a closure and a page that does not say which one
     leaves the reader nowhere.
     """
-    keys = keys_of(cfgs)
+    drawn = drawn_nodes_of(cfgs)
     graph = nx.MultiDiGraph()
-    graph.add_nodes_from(_nodes_of(cfgs, keys))
-    graph.add_edges_from(_flow_edges(cfgs, keys))
-    graph.add_edges_from(_call_edges(cfgs, keys, calls))
+    graph.add_nodes_from(_nodes_of(cfgs, drawn))
+    graph.add_edges_from(_flow_edges(cfgs, drawn))
+    graph.add_edges_from(_call_edges(cfgs, drawn, calls))
     return graph
 
 
-def _nodes_of(cfgs: Sequence[Cfg], keys: Mapping[str, NodeKey]) -> tuple:
+def _nodes_of(cfgs: Sequence[Cfg], drawn: Mapping[str, DrawnNode]) -> tuple:
     return tuple(
         (
-            keys[qualified(cfg.program, node.id)],
+            drawn[qualified(cfg.program, node.id)],
             {"kind": node.kind, "id": f"{cfg.program} {label_of(node)}"},
         )
         for cfg in cfgs
@@ -71,11 +71,11 @@ def _nodes_of(cfgs: Sequence[Cfg], keys: Mapping[str, NodeKey]) -> tuple:
     )
 
 
-def _flow_edges(cfgs: Sequence[Cfg], keys: Mapping[str, NodeKey]) -> tuple:
+def _flow_edges(cfgs: Sequence[Cfg], drawn: Mapping[str, DrawnNode]) -> tuple:
     return tuple(
         (
-            keys[qualified(cfg.program, edge.source)],
-            keys[qualified(cfg.program, edge.target)],
+            drawn[qualified(cfg.program, edge.source)],
+            drawn[qualified(cfg.program, edge.target)],
             {"kind": edge.kind},
         )
         for cfg in cfgs
@@ -84,9 +84,13 @@ def _flow_edges(cfgs: Sequence[Cfg], keys: Mapping[str, NodeKey]) -> tuple:
 
 
 def _call_edges(
-    cfgs: Sequence[Cfg], keys: Mapping[str, NodeKey], calls: Sequence[BundleCall]
+    cfgs: Sequence[Cfg], drawn: Mapping[str, DrawnNode], calls: Sequence[BundleCall]
 ) -> tuple:
     return tuple(
-        (keys[call.source], keys[call.target], {"kind": CallKind.CALL})
+        (
+            drawn[call.source],
+            drawn[call.target],
+            {"kind": CallKind.CALL if call.certain else CallKind.CALL_CANDIDATE},
+        )
         for call in cross_calls(cfgs, calls)
     )

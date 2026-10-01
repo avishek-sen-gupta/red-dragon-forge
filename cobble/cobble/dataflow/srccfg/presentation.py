@@ -72,6 +72,7 @@ class CrossCall:
     source: str
     target: str
     transfer: str
+    certain: bool = True
 
 
 def call_nodes(cfg: Cfg) -> tuple[Node, ...]:
@@ -100,10 +101,10 @@ def _drawable(
 ) -> tuple[CrossCall, ...]:
     """The calls that join two programs drawn here, and only those.
 
-    A call the resolver could not pin, or one whose callee is not in this drawing,
-    yields nothing: an edge to a node that does not exist draws a program that looks
-    built and is not -- and what a closure establishes is that these programs are a
-    single path.
+    A call with no entry -- a dynamic site nothing answered, or a callee not in this
+    drawing -- yields nothing: an edge to a node that does not exist draws a program
+    that looks built and is not. A dynamic site's candidates are drawn, each saying
+    whether it is certain, so a doubtful hop is visible as one.
     """
     drawn = {cfg.program for cfg in cfgs}
     return tuple(
@@ -111,7 +112,8 @@ def _drawable(
             source=qualified(call.caller, call.node),
             target=qualified(call.program, call.entry),
             transfer=call.transfer,
+            certain=call.certain,
         )
         for call in calls
-        if call.resolved and call.entry and {call.caller, call.program} <= drawn
+        if call.entry and {call.caller, call.program} <= drawn
     )

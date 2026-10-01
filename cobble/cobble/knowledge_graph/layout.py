@@ -23,8 +23,7 @@ import subprocess
 from collections.abc import Mapping, Sequence
 
 import networkx as nx
-
-from cobble.knowledge_graph.node_key import NodeKey
+from cobble.knowledge_graph.drawn_node import DrawnNode
 
 # -Goverlap=prism spreads overlapping nodes apart after the main layout, which
 # is what stops dense neighbourhoods reading as one blob. -Gstart fixes the
@@ -36,7 +35,7 @@ _SFDP_COMMAND = ("sfdp", "-Tplain", "-Goverlap=prism", "-Gstart=7")
 _TIMEOUT_SECONDS = 1800
 
 
-def _dot(order: Sequence[NodeKey], graph: nx.MultiDiGraph) -> str:
+def _dot(order: Sequence[DrawnNode], graph: nx.MultiDiGraph) -> str:
     """The graph as undirected DOT over integer indices into ``order``.
 
     Undirected because a layout has no use for edge direction, and every node
@@ -81,8 +80,8 @@ def _plain_position(fields: Sequence[str]) -> tuple[int, tuple[float, float]]:
 
 
 def _positions_from_plain(
-    plain: str, order: Sequence[NodeKey]
-) -> Mapping[NodeKey, tuple[float, float]]:
+    plain: str, order: Sequence[DrawnNode]
+) -> Mapping[DrawnNode, tuple[float, float]]:
     """The node lines of -Tplain output, keyed back to the original nodes.
 
     -Tplain interleaves one ``graph`` line, the ``node`` lines, the ``edge``
@@ -99,7 +98,7 @@ def _positions_from_plain(
     }
 
 
-def sfdp_positions(graph: nx.MultiDiGraph) -> Mapping[NodeKey, tuple[float, float]]:
+def sfdp_positions(graph: nx.MultiDiGraph) -> Mapping[DrawnNode, tuple[float, float]]:
     """Lay the graph out with sfdp and return one (x, y) per node.
 
     Keys are the graph's own node keys, so the result indexes straight from a

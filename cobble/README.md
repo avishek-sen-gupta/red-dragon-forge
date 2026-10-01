@@ -103,6 +103,11 @@ one candidate and no reasons. A site with no candidates stays one call naming th
 field, with its reasons and an empty `entry`. A named file that does not exist stops
 the build before it starts.
 
+`cobble-srccfg-dot` and `cobble-srccfg-webgl` draw a certain dynamic call like a
+literal one (`CALL`, dashed orange in DOT) and every other candidate as
+`CALL_CANDIDATE` (dotted grey in DOT, its own colour on the WebGL page), so a hop
+the analysis is unsure of looks unsure. A site with no candidates draws nothing.
+
 ```bash
 uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml \
   --dynamic-call-targets out-fields/targets.jsonl --output closure.json

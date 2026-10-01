@@ -33,8 +33,7 @@ from math import sqrt
 from pathlib import Path
 
 import networkx as nx
-
-from cobble.knowledge_graph.node_key import NodeKey
+from cobble.knowledge_graph.drawn_node import DrawnNode
 from cobble.knowledge_graph.palette import DEFAULT_COLOR, EDGE_COLORS, NODE_COLORS
 
 _VENDOR = Path(__file__).parent / "vendor"
@@ -344,7 +343,7 @@ def _edge_row(
 
 def _node_rows(
     graph: nx.MultiDiGraph,
-    positions: Mapping[NodeKey, tuple[float, float]],
+    positions: Mapping[DrawnNode, tuple[float, float]],
     kind_names: Sequence[str],
 ) -> tuple[tuple, ...]:
     """Every node's row, in the graph's own node order.
@@ -383,7 +382,7 @@ def _colors_for(kind_names: Sequence[str], palette: Mapping[str, str]) -> Mappin
 
 def render_webgl_html(
     graph: nx.MultiDiGraph,
-    positions: Mapping[NodeKey, tuple[float, float]],
+    positions: Mapping[DrawnNode, tuple[float, float]],
     output_path: Path,
     *,
     title: str = "Knowledge Graph",

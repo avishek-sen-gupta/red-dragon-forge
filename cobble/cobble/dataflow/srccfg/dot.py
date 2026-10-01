@@ -63,6 +63,7 @@ EDGE_COLOURS: Mapping[EdgeKind, str] = {
 UNLABELLED = (EdgeKind.FLOW, EdgeKind.FALLTHRU)
 
 CALL_COLOUR = "#ef6c00"
+CANDIDATE_COLOUR = "#9e9e9e"
 
 
 def _escaped(text: str) -> str:
@@ -121,10 +122,13 @@ def _clusters(cfgs: Sequence[Cfg]) -> tuple[str, ...]:
 
 
 def _call_arrow(call: CrossCall) -> str:
+    look = (
+        f'color="{CALL_COLOUR}", style=dashed'
+        if call.certain
+        else f'color="{CANDIDATE_COLOUR}", style=dotted'
+    )
     return _arrow(
-        call.source,
-        call.target,
-        f'color="{CALL_COLOUR}", style=dashed, label="{_escaped(call.transfer)}"',
+        call.source, call.target, f'{look}, label="{_escaped(call.transfer)}"'
     )
 
 
