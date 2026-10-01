@@ -22,23 +22,24 @@ viz() {
 
 echo "== parse + build + compare + render (whole-system graph)"
 uv run --no-sync cobble-parse-corpus --config config/carddemo.toml 2>&1 | tail -3
-uv run --no-sync cobble-build --config config/carddemo.toml > "$WORK/build.log" 2>&1
+uv run --no-sync cobble-build --config config/carddemo.toml --output out/carddemo.jsonl > "$WORK/build.log" 2>&1
 grep -A12 "FAILURE" "$WORK/build.log" > "$ART/build-warnings.txt" || true
-uv run --no-sync cobble-compare 2>&1 | tee "$ART/compare.txt"
+uv run --no-sync cobble-compare --graph out/carddemo.jsonl 2>&1 | tee "$ART/compare.txt"
 grep -q "EMPTY DIFF" "$ART/compare.txt"
-uv run --no-sync cobble-render --config config/carddemo.toml
-cp out/graph.html "$ART/graph.html"
+uv run --no-sync cobble-render --graph out/carddemo.jsonl
+cp out/carddemo.html "$ART/graph.html"
 
 uv run --no-sync python - "$ART/stats.json" <<'PY'
 import collections, json, pathlib, sys
-nodes = [json.loads(l) for l in open("out/nodes.jsonl") if l.strip()]
-edges = [json.loads(l) for l in open("out/edges.jsonl") if l.strip()]
+rows = [json.loads(l) for l in open("out/carddemo.jsonl") if l.strip()]
+nodes = [r for r in rows if r["type"] == "node"]
+edges = [r for r in rows if r["type"] == "edge"]
 unresolved = collections.Counter(
     n["kind"] for n in nodes if n.get("file_path_reason") == "unresolved"
 )
 stats = {
     "corpus": "CardDemo (vendor/carddemo)",
-    "source": "cobble/out/nodes.jsonl, cobble/out/edges.jsonl after cobble-build --config config/carddemo.toml",
+    "source": "cobble/out/carddemo.jsonl after cobble-build --config config/carddemo.toml --output out/carddemo.jsonl",
     "total_nodes": len(nodes),
     "total_edges": len(edges),
     "nodes_by_kind": dict(collections.Counter(n["kind"] for n in nodes).most_common()),
@@ -61,20 +62,20 @@ for p in COSGN00C COACTVWC; do
 done
 
 echo "== call graph + sequence diagrams"
-viz callgraph_cmd --edges out/edges.jsonl --cfg "$WORK/cfg-COSGN00C.json" --out "$ART/viz/COSGN00C-call-dep.json"
+viz callgraph_cmd --graph out/carddemo.jsonl --cfg "$WORK/cfg-COSGN00C.json" --out "$ART/viz/COSGN00C-call-dep.json"
 # viz-callgraph keeps only kind == LINK; CardDemo's online flow is all XCTL, so the
 # as-shipped graph has no edges. The second variant relabels XCTL edges as LINK in a
-# scratch copy of edges.jsonl so the XCTL hand-offs are drawn.
-uv run --no-sync python - out/edges.jsonl "$WORK/edges-xctl-as-link.jsonl" <<'PY'
+# scratch copy of the graph file so the XCTL hand-offs are drawn. Node rows pass through.
+uv run --no-sync python - out/carddemo.jsonl "$WORK/graph-xctl-as-link.jsonl" <<'PY'
 import json, sys
 with open(sys.argv[1]) as src, open(sys.argv[2], "w") as dst:
     for line in src:
-        e = json.loads(line)
-        if e["kind"] == "XCTL":
-            e["kind"] = "LINK"
-        dst.write(json.dumps(e) + "\n")
+        r = json.loads(line)
+        if r["type"] == "edge" and r["kind"] == "XCTL":
+            r["kind"] = "LINK"
+        dst.write(json.dumps(r) + "\n")
 PY
-viz callgraph_cmd --edges "$WORK/edges-xctl-as-link.jsonl" --cfg "$WORK/cfg-COSGN00C.json" --out "$ART/viz/COSGN00C-call-dep-xctl.json"
+viz callgraph_cmd --graph "$WORK/graph-xctl-as-link.jsonl" --cfg "$WORK/cfg-COSGN00C.json" --out "$ART/viz/COSGN00C-call-dep-xctl.json"
 viz sequence_cmd --cfg "$WORK/cfg-COSGN00C.json" --entry COSGN00C --out "$ART/viz/COSGN00C-sequences.json"
 viz sequence_cmd --cfg "$WORK/cfg-COACTVWC.json" --entry COACTVWC --out "$ART/viz/COACTVWC-sequences.json"
 viz render_cmd --input "$ART/viz/COSGN00C-call-dep.json" --mode callgraph --out "$ART/viz/COSGN00C-callgraph.html"
