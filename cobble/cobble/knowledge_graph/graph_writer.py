@@ -11,10 +11,11 @@ whether from an extractor's explicit add_node or add_edge's own defensive
 endpoint-stub synthesis, resolves to the same location no matter what order
 things arrive in. add_edge writes both endpoints before the edge, so every node
 row precedes the first edge row naming it.
-The file is written to a temp path and renamed on close() so a crash leaves no
-truncated output. Opened through ``graph_writer`` rather than the context-manager
-protocol, whose ``__exit__`` signature the lint rules cannot express. Structurally
-satisfies cicada's GraphSink.
+The file is written to a temp path and renamed only when the run completes, so
+a run that raises leaves its partial rows in the .tmp and nothing at the path.
+Opened through ``graph_writer`` rather than the context-manager protocol, whose
+``__exit__`` signature the lint rules cannot express. Structurally satisfies
+cicada's GraphSink.
 """
 
 from __future__ import annotations
@@ -109,6 +110,9 @@ class GraphWriter:
         self._file.close()
         self._tmp.rename(self._path)
 
+    def abandon(self) -> None:
+        self._file.close()
+
 
 @contextmanager
 def graph_writer(
@@ -117,5 +121,7 @@ def graph_writer(
     writer = GraphWriter(path, corpus_index)
     try:
         yield writer
-    finally:
-        writer.close()
+    except BaseException:
+        writer.abandon()
+        raise
+    writer.close()

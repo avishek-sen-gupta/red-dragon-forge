@@ -5,6 +5,7 @@ from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import MagicMock
 
+import pytest
 from cobble.file_location import FileLocation, FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
@@ -236,3 +237,15 @@ def test_an_edge_follows_its_endpoints_and_the_file_appears_only_on_close(
         ("edge", "CALL"),
     ]
     assert not graph_path.with_suffix(".jsonl.tmp").exists()
+
+
+def test_a_run_that_raises_publishes_nothing(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.jsonl"
+
+    with pytest.raises(RuntimeError, match="extractor failed"):
+        with graph_writer(graph_path, _corpus_index_stub()) as writer:
+            writer.add_node(GraphNode(id="A", kind=NodeKind.PROGRAM))
+            raise RuntimeError("extractor failed")
+
+    assert not graph_path.exists()
+    assert graph_path.with_suffix(".jsonl.tmp").read_text().count("\n") == 1
