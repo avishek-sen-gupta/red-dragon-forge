@@ -32,8 +32,9 @@ fixed by the statement set before iteration begins, so the lattice has finite
 height and join is monotone. What the cap does defend against is cost, not
 non-termination -- height lives in the per-extent source set, so the number of
 growth events is nodes x extents x distinct sources, and a large member can want
-hundreds of thousands of dequeues. It records a reason rather than truncating
-silently.
+hundreds of thousands of dequeues. A walk stopped there is published unsettled,
+not dropped: by monotonicity its state is a subset of the fixpoint, so every flow
+read off it is real.
 
 The sweep walk is the cheap alternative. It visits in reverse postorder, where
 every predecessor a node is reached through -- back edges aside -- is already
@@ -183,7 +184,7 @@ class _Progress:
 
 
 @dataclass(frozen=True)
-class _Pass:
+class _Worklist:
     """One step of the worklist: entry states settled so far, and what to revisit.
 
     ``queue`` holds reverse-postorder positions, not node ids: each step takes the
@@ -269,7 +270,7 @@ def _grown(
     }
 
 
-def _eta(run: _Pass, cap: int) -> str:
+def _eta(run: _Worklist, cap: int) -> str:
     """What the drain rate says is left, or why it says nothing yet.
 
     Two readings of the queue give dequeues per node drained, and the elapsed
@@ -291,7 +292,7 @@ def _eta(run: _Pass, cap: int) -> str:
     return f"~{left * elapsed / run.dequeues / 60:.0f}m left, ~{left:,.0f} dequeues"
 
 
-def _heartbeat(cfg: Cfg, run: _Pass, cap: int) -> None:
+def _heartbeat(cfg: Cfg, run: _Worklist, cap: int) -> None:
     """A pass that runs for minutes has to say so while it runs.
 
     Reach against the node count is the number worth watching: a walk that stops
@@ -316,13 +317,13 @@ def _step(
     cap: int,
     order: DepthFirstOrder,
     rank: Mapping[str, int],
-    run: _Pass,
-) -> _Pass:
+    run: _Worklist,
+) -> _Worklist:
     earliest = min(run.queue)
     node_id = order.ordered[earliest]
     after = _after(statements, node_id, run.states[node_id], index)
     grown = _grown(cfg, node_id, after, run.states)
-    stepped = _Pass(
+    stepped = _Worklist(
         states=MappingProxyType({**run.states, **grown}),
         queue=(run.queue - {earliest}) | {rank[target] for target in grown},
         dequeues=run.dequeues + 1,
@@ -339,7 +340,7 @@ def _step(
     )
 
 
-def _done(run: _Pass, cap: int) -> bool:
+def _done(run: _Worklist, cap: int) -> bool:
     return not run.queue or run.dequeues >= cap
 
 
@@ -350,7 +351,7 @@ def _settled(
     entry: str,
     cap: int,
     entry_state: State,
-) -> _Pass:
+) -> _Worklist:
     """Iterate to a fixpoint, or to the cap if a defect keeps the state growing.
 
     ``accumulate`` over an endless source is lazy, so no step runs past the one
@@ -361,7 +362,7 @@ def _settled(
     """
     order = depth_first_order(cfg, entry)
     rank = MappingProxyType({node_id: n for n, node_id in enumerate(order.ordered)})
-    start = _Pass(
+    start = _Worklist(
         states=MappingProxyType({entry: entry_state}),
         queue=frozenset({rank[entry]}),
         progress=_Progress(started=time.monotonic()),
@@ -479,12 +480,8 @@ def _worked(
 ) -> _Walk:
     cap = factor * max(len(cfg.nodes), 1)
     run = _settled(cfg, statements, index, entry, cap, entry_state)
-    return _Walk(
-        states=run.states,
-        dequeues=run.dequeues,
-        settled=not run.queue,
-        skipped=_skip_reason(run, cap, cfg.program, len(cfg.nodes)),
-    )
+    _warn_if_capped(run, cap, cfg.program, len(cfg.nodes))
+    return _Walk(states=run.states, dequeues=run.dequeues, settled=not run.queue)
 
 
 def _walked(
@@ -585,13 +582,18 @@ def _extracted(
     )
 
 
-def _skip_reason(run: _Pass, cap: int, program: str, nodes: int) -> str:
+def _warn_if_capped(run: _Worklist, cap: int, program: str, nodes: int) -> None:
+    """A walk stopped at the cap is published unsettled, as a sweep budget's is:
+    the state so far is a subset of the fixpoint, so its flows are real and only
+    some may be missing."""
     if not run.queue:
-        return ""
+        return
     logger.warning(
-        "fields: dequeue cap %d reached for %s (%d nodes)", cap, program, nodes
+        "fields: dequeue cap %d reached for %s (%d nodes); publishing unsettled",
+        cap,
+        program,
+        nodes,
     )
-    return f"dequeue cap {cap} reached"
 
 
 def analyse(
