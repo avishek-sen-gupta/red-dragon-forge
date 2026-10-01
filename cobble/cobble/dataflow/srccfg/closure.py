@@ -16,6 +16,7 @@ import logging
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import accumulate, repeat
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
@@ -37,12 +38,31 @@ def build_closure(asg_dir: Path, seed: str, source_dir: Path) -> Bundle:
 def _expand(
     asg_dir: Path, source_dir: Path, pending: tuple[str, ...], built: tuple[Cfg, ...]
 ) -> tuple[Cfg, ...]:
-    """Breadth-first from the seed, one program built once."""
-    if not pending:
-        return built
-    head, *rest = pending
-    visit = _visit(asg_dir, source_dir, head, built, len(rest))
-    return _expand(asg_dir, source_dir, (*rest, *visit.callees), (*built, *visit.cfgs))
+    """Breadth-first from the seed, one program built once.
+
+    Stepped rather than recursive: a closure is as long as the call chains it
+    follows, and a recursive walk dies at the interpreter's thousand frames.
+    """
+    walks = accumulate(
+        repeat(None),
+        lambda walk, _: _step(asg_dir, source_dir, walk),
+        initial=_Walk(pending=pending, built=built),
+    )
+    return next(walk for walk in walks if not walk.pending).built
+
+
+@dataclass(frozen=True)
+class _Walk:
+    """The programs still to visit, in order, and the CFGs built so far."""
+
+    pending: tuple[str, ...]
+    built: tuple[Cfg, ...]
+
+
+def _step(asg_dir: Path, source_dir: Path, walk: _Walk) -> _Walk:
+    head, *rest = walk.pending
+    visit = _visit(asg_dir, source_dir, head, walk.built, len(rest))
+    return _Walk(pending=(*rest, *visit.callees), built=(*walk.built, *visit.cfgs))
 
 
 @dataclass(frozen=True)

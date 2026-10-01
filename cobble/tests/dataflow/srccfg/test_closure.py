@@ -153,6 +153,26 @@ def test_two_programs_that_call_each_other_are_each_built_once(tmp_path: Path) -
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA", "PROGB"]
 
 
+def test_a_closure_longer_than_the_interpreter_stack_is_built(tmp_path: Path) -> None:
+    """Following dynamic calls makes closures long, and a walk that recurses once
+    per program dies at a thousand of them."""
+    chain = [f"PROG{n:04d}" for n in range(1100)]
+    asg_dir = _cache(
+        tmp_path,
+        {
+            **{
+                caller: [_link(f"'{callee}'")]
+                for caller, callee in zip(chain, chain[1:])
+            },
+            chain[-1]: [_move()],
+        },
+    )
+
+    bundle = build_closure(asg_dir, chain[0], Path())
+
+    assert [cfg.program for cfg in bundle.cfgs] == chain
+
+
 def _move_with_span() -> dict:
     return {
         "type": "MOVE",
