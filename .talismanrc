@@ -487,4 +487,6 @@ fileignoreconfig:
   checksum: ab86e94d30381f45e3b9d7423338135279ecc04fdc09a444773a348202a4e7cf
 - filename: cobble/reference/graph.jsonl
   checksum: e57e54f70ee857af5bf705fa38f8d06e4ffd0427f8cdb379e39cc4c23a8fc7ef
+- filename: docs/superpowers/plans/2026-09-30-cobble-dynamic-call-resolution-unit-1.md
+  checksum: 55fea677560d44e44ee55b90ae7e9e838788f3523eb06eea867794ef68e5fa30
 version: "1.0"
