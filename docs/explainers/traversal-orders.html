@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visiting a graph</title>
+<link rel="stylesheet" href="explainer.css">
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Explainer 1 of 5</div>
+<h1>Visiting a graph: BFS, DFS and reverse postorder</h1>
+<p class="lede">Three ways to walk the statements of a program, and why one of them hands every statement its input complete.</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-example">The example</a></li><li><a href="#breadth-first-nearest-first">Breadth-first: nearest first</a></li><li><a href="#depth-first-as-far-as-you-can-then-back-up">Depth-first: as far as you can, then back up</a></li><li><a href="#reverse-postorder">Reverse postorder</a></li><li><a href="#with-a-loop">With a loop</a></li><li><a href="#in-short">In short</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="the-problem">The problem</h2>
+<p>A program's statements form a graph: an arrow from each statement to every statement that can run next. An <code>IF</code> has two arrows out, one per arm. The statement after the <code>IF</code> has two arrows in. A loop has an arrow from the end of its body back to its test.</p>
+<p>An analysis visits the statements one at a time, and at each one it needs to know what happened <em>before</em> it — on every arrow coming in. If it visits a statement before one of the statements that lead into it, it has to come back to it later, when that input arrives. So the order of visiting decides how much work is repeated. There are a few standard orders, and they have names.</p>
+
+<h2 id="the-example">The example</h2>
+<p>An <code>IF</code> whose then-arm is three statements long and whose else-arm is one, followed by a statement both arms lead into.</p>
+<pre class="cobol">           IF WS-FLAG = 'Y'                  A
+               MOVE 'YES ' TO WS-A           B1
+               ADD 1 TO WS-N                 B2
+               MOVE WS-N TO WS-M             B3
+           ELSE
+               MOVE 'NO  ' TO WS-A           C
+           END-IF.
+           MOVE WS-A TO WS-B.                D
+           STOP RUN.                         E</pre>
+<p>As a graph, with the arrows written out. When a statement has two arrows out, the first one listed is the one a walk tries first.</p>
+<pre class="cobol">        A
+       / \
+     B1   C
+      |   |
+     B2   |
+      |   |
+     B3   |
+       \ /
+        D
+        |
+        E
+
+A → B1, C     B1 → B2
+B2 → B3       B3 → D
+C → D         D → E</pre>
+<p>The statement to watch is <code>D</code>. It has two predecessors, <code>B3</code> and <code>C</code>, and a good order visits both of them before it.</p>
+
+<h2 id="breadth-first-nearest-first">Breadth-first: nearest first</h2>
+<p>Breadth-first search (<strong>BFS</strong>) sorts statements by how many arrows it takes to reach them from the start, and visits the nearest first.</p>
+<p>Some statements can be reached in more than one way. <code>D</code> is two arrows away through the else-arm (<code>A → C → D</code>) and four through the then-arm (<code>A → B1 → B2 → B3 → D</code>). BFS counts the shortest. It finds each statement once, the first time any path reaches it, and the shortest path always gets there first; when a longer path arrives later, the statement is already placed and the longer path is ignored. So <code>D</code> counts as two arrows away, and <code>E</code>, just after it, as three.</p>
+<p>Grouped by that shortest count:</p>
+<pre class="cobol">0 arrows:  A
+1 arrow:   B1  C     A → B1
+                     A → C
+2 arrows:  B2  D     A → B1 → B2
+                     A → C → D
+                     (D's 4-arrow path ignored)
+3 arrows:  B3  E     A → B1 → B2 → B3
+                     A → C → D → E
+                     (E's 5-arrow path ignored)</pre>
+<p>BFS reads the groups top to bottom: <code>A B1 C B2 D B3 E</code>.</p>
+<p>Look where <code>D</code> landed: in the 2-arrow group, placed by its short path. But its other predecessor, <code>B3</code>, is in the 3-arrow group, so BFS visits <code>D</code> before <code>B3</code>. An analysis walking in this order would work out <code>D</code> from the else-arm alone, then have to redo it when the then-arm's input arrives.</p>
+<p>The trouble is that distance from the start says nothing about whether everything leading into a statement has been visited. A statement with a short path and a long path into it is reached by the short one first.</p>
+<p>How BFS produces that order: it keeps a <strong>queue</strong> — a line of statements that have been found but not yet visited. It always takes the statement at the front of the line, and puts each newly found statement at the back. A statement it has seen before is not added again.</p>
+<details class="walk">
+<summary>BFS on the example, one queue step at a time <span class="dim">(7 steps)</span></summary>
+<ol class="steps">
+<li class="before">
+<p class="note">Only the start has been found.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">A</span></div>
+<p class="dim">Seen so far: A</p>
+</li>
+<li>
+<p class="note">Take <code>A</code> from the front. It leads to <code>B1</code> and <code>C</code>; neither has been seen, so both go on the back, in that order.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">B1</span><span class="chip">C</span></div>
+<p class="dim">Seen so far: A B1 C</p>
+</li>
+<li>
+<p class="note">Take <code>B1</code>. It leads to <code>B2</code>, not seen yet: on the back, behind <code>C</code>.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">C</span><span class="chip">B2</span></div>
+<p class="dim">Seen so far: A B1 C B2</p>
+</li>
+<li>
+<p class="note">Take <code>C</code>. It leads to <code>D</code>, not seen yet: on the back. This is the moment <code>D</code> is found — by the 2-arrow path through <code>C</code>.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">B2</span><span class="chip">D</span></div>
+<p class="dim">Seen so far: A B1 C B2 D</p>
+</li>
+<li>
+<p class="note">Take <code>B2</code>. It leads to <code>B3</code>, not seen yet: on the back, behind <code>D</code>.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">D</span><span class="chip">B3</span></div>
+<p class="dim">Seen so far: A B1 C B2 D B3</p>
+</li>
+<li>
+<p class="note">Take <code>D</code> — before <code>B3</code>, because <code>D</code> joined the queue first. It leads to <code>E</code>, not seen yet: on the back.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">B3</span><span class="chip">E</span></div>
+<p class="dim">Seen so far: A B1 C B2 D B3 E</p>
+</li>
+<li>
+<p class="note">Take <code>B3</code>. It leads to <code>D</code>, but <code>D</code> has been seen already, so nothing is added. This is the 4-arrow path to <code>D</code> arriving, and being ignored.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="chip">E</span></div>
+<p class="dim">Seen so far: A B1 C B2 D B3 E</p>
+</li>
+<li>
+<p class="note">Take <code>E</code>. It leads nowhere. The queue is empty: every statement has been visited.</p>
+<p class="dim">Queue, front first</p><div class="chips"><span class="dim">empty</span></div>
+<p class="dim">Seen so far: A B1 C B2 D B3 E</p>
+</li>
+</ol>
+</details>
+<p>The statements were taken in the order <code>A B1 C B2 D B3 E</code> — the groups above, read top to bottom. That is not a coincidence. Everything found from a 1-arrow statement joins the back of the line behind every 1-arrow statement still waiting, so the whole 1-arrow group is taken before any of the 2-arrow group, and so on down. And a statement is placed when it is first seen, which is by its shortest path: step 6 is the longer path to <code>D</code> showing up after <code>D</code> already has its place.</p>
+
+<h2 id="depth-first-as-far-as-you-can-then-back-up">Depth-first: as far as you can, then back up</h2>
+<p>Depth-first search (<strong>DFS</strong>) walks a single path from the start, making it as long as it can before trying anything else. It repeats one rule, always looking at the last statement on the path:</p>
+<ul>
+<li>If that statement has an arrow DFS has not tried yet, to a statement it has not seen yet, follow it: the new statement <strong>joins</strong> the path.</li>
+<li>Otherwise, DFS is done with that statement: it <strong>leaves</strong> the path, and DFS backs up to the statement before it.</li>
+</ul>
+<p>Every statement joins the path once and leaves it once. That gives two orders:</p>
+<ul>
+<li><strong>Preorder</strong>: statements in the order they <em>join</em> the path.</li>
+<li><strong>Postorder</strong>: statements in the order they <em>leave</em> it. A statement only leaves once everything it leads to has been dealt with.</li>
+</ul>
+<p>"Not seen yet" means DFS has to remember what it has seen. The two lists are that memory. Everything in the preorder list has joined the path at some point, so it has been seen. Everything in the postorder list has also left. So when DFS looks at an arrow, its target is in one of three states:</p>
+<ul>
+<li><strong>Not in preorder</strong>: never seen. DFS follows the arrow, and the target joins the path.</li>
+<li><strong>In preorder but not in postorder</strong>: still on the path. Following the arrow would go round in a circle. This is the back edge of the loop section below.</li>
+<li><strong>In postorder</strong>: already left. Everything reachable from it has been explored, so going there again would only repeat work. DFS skips it — as at step 13, where <code>C</code> skips <code>D</code>.</li>
+</ul>
+<p>Watch both lists grow (amber: just written):</p>
+<details class="walk">
+<summary>DFS on the example, one step at a time <span class="dim">(14 steps)</span></summary>
+<ol class="steps">
+<li>
+<p class="note">Start: <code>A</code> joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip changed">A</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>A</code> has two arrows; take the first, to <code>B1</code>. <code>B1</code> is new, so it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip changed">B1</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>B1</code> leads to <code>B2</code>, which is new: it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip changed">B2</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>B2</code> leads to <code>B3</code>, new: it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip changed">B3</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>B3</code> leads to <code>D</code>, new: it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip changed">D</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>D</code> leads to <code>E</code>, new: it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip changed">E</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>E</code> leads nowhere, so DFS is done with it: <code>E</code> leaves the path, and DFS is back at <code>D</code>.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip changed">E</span></div>
+</li>
+<li>
+<p class="note"><code>D</code>'s only arrow, to <code>E</code>, has been followed. Nothing left to try: <code>D</code> leaves the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip changed">D</span></div>
+</li>
+<li>
+<p class="note">Same for <code>B3</code>: its arrow has been followed. It leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip">D</span><span class="chip changed">B3</span></div>
+</li>
+<li>
+<p class="note">And <code>B2</code>. It leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip">D</span><span class="chip">B3</span><span class="chip changed">B2</span></div>
+</li>
+<li>
+<p class="note">And <code>B1</code>. It leaves, and DFS is back at <code>A</code>.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip">D</span><span class="chip">B3</span><span class="chip">B2</span><span class="chip changed">B1</span></div>
+</li>
+<li>
+<p class="note"><code>A</code> has a second arrow, to <code>C</code>, not tried yet. <code>C</code> is new: it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span><span class="chip">C</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span><span class="chip changed">C</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip">D</span><span class="chip">B3</span><span class="chip">B2</span><span class="chip">B1</span></div>
+</li>
+<li>
+<p class="note"><code>C</code> leads to <code>D</code> — but <code>D</code> is in the postorder list: it has already left the path, so DFS does not go there again. <code>C</code> has nothing left to try: it leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">A</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span><span class="chip">C</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip">D</span><span class="chip">B3</span><span class="chip">B2</span><span class="chip">B1</span><span class="chip changed">C</span></div>
+</li>
+<li>
+<p class="note"><code>A</code> has followed both its arrows. It leaves. The path is empty: DFS is finished.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="dim">nothing yet</span></div>
+<p class="dim">Preorder (written when a statement joins the path)</p><div class="chips"><span class="chip">A</span><span class="chip">B1</span><span class="chip">B2</span><span class="chip">B3</span><span class="chip">D</span><span class="chip">E</span><span class="chip">C</span></div>
+<p class="dim">Postorder (written when a statement leaves the path)</p><div class="chips"><span class="chip">E</span><span class="chip">D</span><span class="chip">B3</span><span class="chip">B2</span><span class="chip">B1</span><span class="chip">C</span><span class="chip changed">A</span></div>
+</li>
+</ol>
+</details>
+<p>Preorder: <code>A B1 B2 B3 D E C</code>. That is no better than BFS: <code>D</code> comes before its predecessor <code>C</code>.</p>
+<p>Postorder: <code>E D B3 B2 B1 C A</code>. Every statement comes <em>after</em> everything it leads to — backwards from what an analysis wants.</p>
+
+<h2 id="reverse-postorder">Reverse postorder</h2>
+<p>So turn postorder around. <strong>Reverse postorder</strong>: <code>A C B1 B2 B3 D E</code>.</p>
+<p>Now <code>D</code> comes after both <code>B3</code> and <code>C</code>, and <code>E</code> after <code>D</code>. Every statement comes after every statement that leads into it. An analysis walking in this order finds each statement's input complete the first time it gets there, so it never redoes anything.</p>
+<p>Why it always works, in a graph without loops: take any arrow <code>X → Y</code>. <code>X</code> cannot leave the path before <code>Y</code> has left it. Either <code>Y</code> had already left when <code>X</code> tried the arrow — as <code>D</code> had when <code>C</code> tried <code>C → D</code> — or <code>Y</code> joins the path after <code>X</code>, and being further along the path, leaves first. Either way <code>Y</code> leaves first, so <code>Y</code> is earlier in postorder and <code>X</code> is earlier in reverse postorder. That holds for every arrow at once. In the example, <code>C</code> left second to last, just before <code>A</code>, so turning the list round puts it second — ahead of <code>D</code>, as the arrow <code>C → D</code> requires.</p>
+
+<h2 id="with-a-loop">With a loop</h2>
+<p>A loop breaks the guarantee, because a loop's statements lead into each other in a circle: no order can put each of them after all its predecessors. Here is the loop from the <a href="fixpoints.html">fixpoints</a> page:</p>
+<pre class="cobol">           PERFORM LOOP-PARA UNTIL WS-N > 3.   T    (the loop's test)
+           MOVE WS-B TO WS-C.                  X1
+           STOP RUN.                           X2
+       LOOP-PARA.
+           MOVE WS-A TO WS-B.                  L1
+           ADD 1 TO WS-N.                      L2</pre>
+<pre class="cobol">       T &lt;---+
+      / \    |
+    X1   L1  |
+     |    |  |
+    X2   L2 -+
+
+T → X1, L1    L1 → L2
+L2 → T        X1 → X2</pre>
+<p>DFS from <code>T</code>, taking <code>T</code>'s arrows in the order listed: <code>X1</code> first. The rule is the same as before; step 8 is the new situation.</p>
+<details class="walk">
+<summary>DFS on the loop, taking X1 first <span class="dim">(11 steps)</span></summary>
+<ol class="steps">
+<li>
+<p class="note">Start: <code>T</code> joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip changed">T</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>T</code> has two arrows; take the first, to <code>X1</code>. New: it joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip changed">X1</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>X1</code> leads to <code>X2</code>. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip changed">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>X2</code> leads nowhere: it leaves the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip changed">X2</span></div>
+</li>
+<li>
+<p class="note"><code>X1</code> has nothing left to try: it leaves. DFS is back at <code>T</code>.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip changed">X1</span></div>
+</li>
+<li>
+<p class="note"><code>T</code>'s second arrow, to <code>L1</code>. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span><span class="chip changed">L1</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip">X1</span></div>
+</li>
+<li>
+<p class="note"><code>L1</code> leads to <code>L2</code>. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span><span class="chip">L1</span><span class="chip changed">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip">X1</span></div>
+</li>
+<li>
+<p class="note"><code>L2</code> leads to <code>T</code>. <code>T</code> is in the preorder list but not the postorder list: it is still on the path. Following the arrow would go round the loop and arrive back where DFS already is, so DFS does not. This arrow is a <strong>back edge</strong>.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip">X1</span></div>
+</li>
+<li>
+<p class="note"><code>L2</code> has nothing left to try: it leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip">X1</span><span class="chip changed">L2</span></div>
+</li>
+<li>
+<p class="note"><code>L1</code> has nothing left: it leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip">X1</span><span class="chip">L2</span><span class="chip changed">L1</span></div>
+</li>
+<li>
+<p class="note"><code>T</code> has tried both arrows: it leaves. DFS is finished.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="dim">nothing yet</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">X2</span><span class="chip">X1</span><span class="chip">L2</span><span class="chip">L1</span><span class="chip changed">T</span></div>
+</li>
+</ol>
+</details>
+<p>That label belongs to one run of DFS, not to the graph: try the arrows in another order and a different arrow of a loop can be the back edge. What every run guarantees is that each loop contains at least one, so a graph has a back edge exactly when it has a loop. That is the one thing cobble asks of them. (Compiler textbooks also use "back edge" for a narrower idea built on <em>dominators</em>. Cobble does not use it, and nothing in these pages needs it.)</p>
+<p>Postorder: <code>X2 X1 L2 L1 T</code>. Reverse postorder: <code>T L1 L2 X1 X2</code>.</p>
+<p>Every arrow still points forward in this order except the back edge <code>L2 → T</code>. That is the general result: in reverse postorder, the only arrows pointing backwards are the back edges that close loops. So the only redo an analysis needs is a trip round each loop.</p>
+<p>One thing reverse postorder does not fix: where the code after the loop lands. Run DFS again, but take <code>T</code>'s arrow to <code>L1</code> first:</p>
+<details class="walk">
+<summary>DFS on the loop, taking L1 first <span class="dim">(11 steps)</span></summary>
+<ol class="steps">
+<li>
+<p class="note">Start: <code>T</code> joins the path.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip changed">T</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note">Take <code>T</code>'s arrow to <code>L1</code> first this time. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip changed">L1</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>L1</code> leads to <code>L2</code>. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip changed">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>L2</code> leads to <code>T</code>. <code>T</code> is in the preorder list but not the postorder list: it is still on the path. Following the arrow would go round the loop and arrive back where DFS already is, so DFS does not. This arrow is a <strong>back edge</strong>.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="dim">nothing yet</span></div>
+</li>
+<li>
+<p class="note"><code>L2</code> has nothing left: it leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip changed">L2</span></div>
+</li>
+<li>
+<p class="note"><code>L1</code> has nothing left: it leaves. DFS is back at <code>T</code>.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">L2</span><span class="chip changed">L1</span></div>
+</li>
+<li>
+<p class="note"><code>T</code>'s other arrow, to <code>X1</code>. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span><span class="chip changed">X1</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">L2</span><span class="chip">L1</span></div>
+</li>
+<li>
+<p class="note"><code>X1</code> leads to <code>X2</code>. New: it joins.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span><span class="chip">X1</span><span class="chip changed">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">L2</span><span class="chip">L1</span></div>
+</li>
+<li>
+<p class="note"><code>X2</code> leads nowhere: it leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span><span class="chip">X1</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">L2</span><span class="chip">L1</span><span class="chip changed">X2</span></div>
+</li>
+<li>
+<p class="note"><code>X1</code> has nothing left: it leaves.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="chip">T</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">L2</span><span class="chip">L1</span><span class="chip">X2</span><span class="chip changed">X1</span></div>
+</li>
+<li>
+<p class="note"><code>T</code> has tried both arrows: it leaves. DFS is finished.</p>
+<p class="dim">Path, start first</p><div class="chips"><span class="dim">nothing yet</span></div>
+<p class="dim">Preorder (joined)</p><div class="chips"><span class="chip">T</span><span class="chip">L1</span><span class="chip">L2</span><span class="chip">X1</span><span class="chip">X2</span></div>
+<p class="dim">Postorder (left)</p><div class="chips"><span class="chip">L2</span><span class="chip">L1</span><span class="chip">X2</span><span class="chip">X1</span><span class="chip changed">T</span></div>
+</li>
+</ol>
+</details>
+<p>Postorder: <code>L2 L1 X2 X1 T</code>. Reverse postorder: <code>T X1 X2 L1 L2</code>. That is also valid — every arrow but the back edge still points forward — but it puts the code after the loop <em>before</em> the loop body. An analysis using it visits <code>X1</code> and <code>X2</code> before the loop has settled, and has to visit them again once it does. Which arrow DFS tries first decides which of the two orders you get.</p>
+
+<h2 id="in-short">In short</h2>
+<table class="state">
+<tr><th>order</th><th>example</th><th>every statement after its predecessors?</th></tr>
+<tr><td>BFS</td><td>A B1 C B2 D B3 E</td><td>no — D before B3</td></tr>
+<tr><td>DFS preorder</td><td>A B1 B2 B3 D E C</td><td>no — D before C</td></tr>
+<tr><td>DFS postorder</td><td>E D B3 B2 B1 C A</td><td>the opposite: every statement before its predecessors</td></tr>
+<tr><td>reverse postorder</td><td>A C B1 B2 B3 D E</td><td>yes, except across a back edge</td></tr>
+</table>
+
+<h2 id="in-cobble">In cobble</h2>
+<p>Cobble's depth-first search, its reverse postorder and its back edges are in <a href="../../cobble/cobble/dataflow/srccfg/order.py"><code>order.py</code></a>. It tries a statement's arrows in the order the control-flow graph lists them. The search keeps its own stack rather than calling itself, because a real program's paths are thousands of statements long and Python allows a thousand nested calls.</p>
+</main>
+</body>
+</html>

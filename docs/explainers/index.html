@@ -13,6 +13,7 @@
 <p class="lede">The techniques cobble's field dataflow is built on, for engineers who have not met them before. Each page states a problem, walks a small COBOL program one statement at a time with the analysis state after each, and ends with the precise rule and where it goes wrong.</p>
 <p>Read them in order; each builds on the one before.</p>
 <ol>
+<li><a href="traversal-orders.html">Visiting a graph: BFS, DFS and reverse postorder</a> — the standard orders for walking a program's statements, and why reverse postorder hands every statement its input complete.</li>
 <li><a href="fixpoints.html">Fixpoints and worklists</a> — how an analysis handles loops: apply the rules until nothing changes, and why the visiting order matters for cost but not for the answer.</li>
 <li><a href="reaching-definitions.html">Gen/kill and reaching definitions</a> — for every read, which writes could have produced the value it sees, and why only a certain overwrite may discard one.</li>
 <li><a href="byte-extents.html">Byte-extent aliasing</a> — fields as byte ranges: how groups, <code>REDEFINES</code> and partial writes alias, and why overlapping is not the same as covering.</li>

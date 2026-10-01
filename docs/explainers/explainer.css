@@ -155,3 +155,17 @@ ol.steps > li::before {
   color: var(--accent);
 }
 ol.steps .note { margin: 0.3rem 0 0.5rem; }
+ol.steps > li.before { counter-increment: none; }
+ol.steps > li.before::before { content: "Before step 1"; }
+
+nav.toc { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 0.4rem 1rem; margin: 1.2rem 0; font-size: 0.95rem; }
+nav.toc p { margin: 0.3rem 0; }
+nav.toc ol { margin: 0.2rem 0 0.4rem; padding-left: 1.4rem; }
+nav.toc li { margin: 0.15rem 0; }
+h2 { scroll-margin-top: 1rem; }
+
+details.walk { border: 1px solid var(--rule); border-radius: 8px; margin: 1rem 0; background: var(--panel); }
+details.walk > summary { cursor: pointer; padding: 0.6rem 0.8rem; font-weight: 600; color: var(--accent); }
+details.walk[open] > summary { border-bottom: 1px solid var(--rule); }
+details.walk > ol.steps { margin: 0.8rem; }
+details.walk ol.steps > li { background: var(--ground); }
