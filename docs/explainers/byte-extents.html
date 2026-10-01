@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Byte-extent aliasing</title>
+<link rel="stylesheet" href="explainer.css">
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Explainer 3 of 4</div>
+<h1>Byte-extent aliasing</h1>
+<p class="lede">In COBOL, memory is bytes, not variables. Treat every field as a byte range and aliasing follows from one test: do two ranges overlap?</p>
+
+<h2>The problem</h2>
+<p>The <a href="reaching-definitions.html">reaching definitions</a> page tracked writes by variable name. That works when every name owns its own storage. In COBOL many names share storage. A group like <code>REC</code> is just the bytes of its children laid end to end, so writing <code>REC</code> writes <code>WS-A</code> and <code>WS-B</code>. <code>REDEFINES</code> gives the same bytes a second name with a different shape. A move into one child changes half of the group. Tracking by name gets every one of these wrong.</p>
+
+<h2>The intuition</h2>
+<p>Lay the program's data out as the compiler does: each field is a start offset and a length in some storage region. Forget names. A write paints the bytes it covers. A read looks at the bytes it covers and asks which writes painted any of them. Two fields <strong>alias</strong> when their ranges overlap — whatever they are called, however they were declared.</p>
+
+<h2>The example</h2>
+<p><code>REC</code> is eight bytes: <code>WS-A</code> is bytes 0–4 and <code>WS-B</code> is bytes 4–8. <code>WHOLE</code> redefines the same eight bytes as one field. The program writes the group, then one child, then reads each child and the redefinition.</p>
+<pre class="cobol" id="program"></pre>
+
+<h2>Step through it</h2>
+<p>The strip is bytes 0 to 8 of working storage. Each byte shows the statement that last wrote it. Below it are the definitions the analysis keeps, one per write, each with the range it wrote.</p>
+<div id="stepper"></div>
+
+<h2>The rule</h2>
+<div class="rule">
+extent      = (region, start, end)<br>
+may_alias(a, b)  = same region ∧ a.start &lt; b.end ∧ b.start &lt; a.end<br>
+must_cover(w, d) = same region ∧ w.start ≤ d.start ∧ d.end ≤ w.end ∧ w is exact<br>
+kill(s)     = { d | s's write must_cover d }<br>
+definers(read r at s) = { d ∈ in(s) | may_alias(d, r) }
+</div>
+<p>Two different tests, on purpose. A definition is a <em>possible</em> source of a read when it overlaps any byte of it. A definition is <em>certainly</em> gone only when a later write covers every byte it wrote. Anything between — a partial overwrite — leaves it alive.</p>
+
+<h2>What goes wrong</h2>
+<ul>
+<li><strong>The answer can be loose.</strong> At <code>MAIN-PARA/2</code> the strip shows that bytes 0–4 were last written by <code>MAIN-PARA/1</code> alone. But the analysis keeps one definition per write, and <code>MAIN-PARA/1</code> covers only half of <code>MAIN-PARA/0</code>'s eight bytes, so it cannot kill it. <code>MAIN-PARA/0</code> still overlaps the read, and is reported as a definer although none of its bytes survive there. That is an over-approximation: it never misses a real source, it sometimes names one too many. Getting it exact would mean splitting a definition into byte ranges every time something writes part of it.</li>
+<li><strong>Kill only on certainty.</strong> A write whose position is not known exactly — a table element with a computed subscript, a field after an <code>OCCURS DEPENDING ON</code> — may alias widely but must cover nothing. Treating it as covering would delete real sources: a wrong answer, not a loose one.</li>
+<li><strong>A field that cannot be sized</strong> has no extent at all, and the analysis cannot place its reads and writes. Cobble reports such a program as unsizeable rather than guess.</li>
+</ul>
+
+<h2>In cobble</h2>
+<p>Every field's extent comes from its declaration alone — level, usage, <code>OCCURS</code>, <code>REDEFINES</code> — in <a href="../../cobble/cobble/dataflow/fields/extent.py"><code>extent.py</code></a>. The two tests are <code>may_alias</code> and <code>must_cover</code> on the extent type in red-dragon's <a href="../../vendor/red-dragon/cobol_memory/field_extent.py"><code>field_extent.py</code></a>. A move of a literal has no source field, so cobble names its source <code>LITERAL</code>.</p>
+</main>
+
+<script type="application/json" id="example">
+{"member": "BYTEEXT",
+ "program": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. BYTEEXT.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  REC.\n           05  WS-A             PIC X(4).\n           05  WS-B             PIC X(4).\n       01  WHOLE REDEFINES REC  PIC X(8).\n       01  OUT-A                PIC X(4).\n       01  OUT-B                PIC X(4).\n       01  OUT-ALL              PIC X(8).\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           MOVE 'AAAABBBB' TO REC.\n           MOVE 'XXXX' TO WS-A.\n           MOVE WS-A TO OUT-A.\n           MOVE WS-B TO OUT-B.\n           MOVE WHOLE TO OUT-ALL.\n           STOP RUN.\n",
+ "expected": {"checks": ["flows", "defs"],
+   "flows": [["BYTEEXT.LITERAL", "BYTEEXT.REC"], ["BYTEEXT.LITERAL", "BYTEEXT.WS-A"],
+             ["BYTEEXT.WHOLE", "BYTEEXT.OUT-ALL"], ["BYTEEXT.WS-A", "BYTEEXT.OUT-A"],
+             ["BYTEEXT.WS-B", "BYTEEXT.OUT-B"]],
+   "defs": [
+     {"node": "MAIN-PARA/2", "extent": "WS-A@working_storage[0:4]",
+      "definers": ["MAIN-PARA/0", "MAIN-PARA/1"]},
+     {"node": "MAIN-PARA/3", "extent": "WS-B@working_storage[4:8]",
+      "definers": ["MAIN-PARA/0"]},
+     {"node": "MAIN-PARA/4", "extent": "WHOLE@working_storage[0:8]",
+      "definers": ["MAIN-PARA/0", "MAIN-PARA/1"]}]}}
+</script>
+<script src="stepper.js"></script>
+<script>
+/* The byte-extent model for the BYTEEXT example. */
+const example = Stepper.example();
+const LITERAL = "LITERAL";
+const STRIP = 8;
+const FIELDS = {
+  REC: [0, 8], "WS-A": [0, 4], "WS-B": [4, 8], WHOLE: [0, 8],
+  "OUT-A": [8, 12], "OUT-B": [12, 16], "OUT-ALL": [16, 24],
+};
+const extent = (field) => `${field}@working_storage[${FIELDS[field][0]}:${FIELDS[field][1]}]`;
+
+const STATEMENTS = [
+  { id: "MAIN-PARA/0", text: "MOVE 'AAAABBBB' TO REC", source: LITERAL, target: "REC" },
+  { id: "MAIN-PARA/1", text: "MOVE 'XXXX' TO WS-A", source: LITERAL, target: "WS-A" },
+  { id: "MAIN-PARA/2", text: "MOVE WS-A TO OUT-A", source: "WS-A", target: "OUT-A" },
+  { id: "MAIN-PARA/3", text: "MOVE WS-B TO OUT-B", source: "WS-B", target: "OUT-B" },
+  { id: "MAIN-PARA/4", text: "MOVE WHOLE TO OUT-ALL", source: "WHOLE", target: "OUT-ALL" },
+];
+
+const mayAlias = ([a0, a1], [b0, b1]) => a0 < b1 && b0 < a1;
+const mustCover = ([w0, w1], [d0, d1]) => w0 <= d0 && d1 <= w1;
+const range = ([start, end]) => `[${start}:${end}]`;
+
+const walk = () =>
+  STATEMENTS.reduce(
+    ({ defs, bytes, rows, flows, steps }, s) => {
+      const read = s.source === LITERAL ? null : FIELDS[s.source];
+      const definers = read === null ? [] : defs.filter((d) => mayAlias(d.range, read)).map((d) => d.id).sort();
+      const lastWriters = read === null ? [] : [...new Set(bytes.slice(read[0], read[1]).filter((b) => b))].sort();
+      const written = FIELDS[s.target];
+      const killed = defs.filter((d) => mustCover(written, d.range));
+      const survivors = defs.filter((d) => !killed.includes(d));
+      const nextDefs = [...survivors, { id: s.id, field: s.target, range: written }];
+      const nextBytes = bytes.map((b, i) => (i >= written[0] && i < written[1] ? s.id : b));
+      const row = definers.length ? [{ node: s.id, extent: extent(s.source), definers }] : [];
+      const partial = defs.filter((d) => mayAlias(written, d.range) && !mustCover(written, d.range));
+      const note =
+        (read === null
+          ? `${s.text}: a literal, so no definers. `
+          : `${s.text} reads ${s.source} ${range(read)}. Definitions overlapping it: ${definers.join(", ") || "none"}. ` +
+            `Bytes last written by: ${lastWriters.join(", ") || "nobody"}. `) +
+        (written[0] < STRIP
+          ? `It writes ${s.target} ${range(written)}` +
+            (killed.length ? `, covering and killing ${killed.map((d) => d.id).join(", ")}.` : ".") +
+            (partial.length ? ` It overlaps ${partial.map((d) => d.id).join(", ")} without covering it, so that definition stays.` : "")
+          : `It writes ${s.target}, outside the record.`);
+      return {
+        defs: nextDefs,
+        bytes: nextBytes,
+        rows: [...rows, ...row],
+        flows: [...flows, [`${example.member}.${s.source}`, `${example.member}.${s.target}`]],
+        steps: [...steps, { id: s.id, read, definers, lastWriters, killed, defs: nextDefs, bytes: nextBytes, note }],
+      };
+    },
+    { defs: [], bytes: Array(24).fill(""), rows: [], flows: [], steps: [] }
+  );
+
+const short = (id) => (id ? id.replace("MAIN-PARA/", "/") : "·");
+
+const render = (step) => {
+  const inRead = (i) => step.read !== null && i >= step.read[0] && i < step.read[1];
+  const header = Array.from({ length: STRIP }, (_, i) => `<div class="byte-index">${i}</div>`).join("");
+  const names = ["REC", "WS-A", "WS-B", "WHOLE"].map((f) =>
+    `<div class="span" style="grid-column:${FIELDS[f][0] + 1} / ${FIELDS[f][1] + 1}">${f}</div>`).join("");
+  const cells = step.bytes.slice(0, STRIP).map((b, i) =>
+    `<div class="byte ${b ? `w${b.slice(-1)}` : ""} ${b === step.id ? "changed" : ""} ${inRead(i) ? "read" : ""}">${Stepper.escape(short(b))}</div>`).join("");
+  const defs = step.defs.filter((d) => d.range[0] < STRIP).map((d) =>
+    `<span class="chip ${step.definers.includes(d.id) ? "changed" : ""}">${Stepper.escape(d.id)} ${d.field} ${range(d.range)}</span>`).join("");
+  const killed = step.killed.map((d) => `<span class="chip dim"><s>${Stepper.escape(d.id)} ${d.field} ${range(d.range)}</s></span>`).join("");
+  const list = STATEMENTS.map((s) => `<tr class="${s.id === step.id ? "current" : ""}"><td>${Stepper.escape(s.id)}</td><td>${Stepper.escape(s.text)}</td></tr>`).join("");
+  const answer = step.read === null ? "" :
+    `<p class="dim">Who wrote what this read sees</p><table class="state">` +
+    `<tr><td>byte by byte (exact)</td><td>${Stepper.escape(step.lastWriters.join(", "))}</td></tr>` +
+    `<tr><td>per write (cobble)</td><td class="${step.definers.join() !== step.lastWriters.join() ? "changed" : ""}">${Stepper.escape(step.definers.join(", "))}</td></tr></table>`;
+  return `<table class="state">${list}</table>` +
+    `<div class="bytes">${header}${names}${cells}</div>` +
+    `<p class="dim">Definitions kept (amber: overlaps this read)</p><div class="chips">${defs}${killed}</div>${answer}`;
+};
+
+const model = walk();
+Stepper.showProgram(document.getElementById("program"));
+Stepper.verify("flows", model.flows, example.expected.flows);
+Stepper.verify("reaching definitions", model.rows, example.expected.defs);
+Stepper.mount(document.getElementById("stepper"), model.steps, render);
+</script>
+</body>
+</html>
