@@ -218,7 +218,7 @@ fileignoreconfig:
 - filename: cobble/cobble/knowledge_graph/merge.py
   checksum: 0141de8cb164892ac3e680cc41b163614cab23e2151a259bbd94d52540247336
 - filename: cobble/cobble/knowledge_graph/node_key.py
-  checksum: 1dada7ede893f840e52600e5844baeb83b6004b0c0c6bb80d752ec0c000dea5c
+  checksum: cbb02ecdca03251ccb77b040067d4bad604a07507c95e9076491f6918eb7f550
 - filename: cobble/cobble/knowledge_graph/render.py
   checksum: c506e3dfda9664593063dc74ba28fd404a300ef1da78296bae308169a237b588
 - filename: cobble/cobble/knowledge_graph/render_webgl.py

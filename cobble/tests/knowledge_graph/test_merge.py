@@ -1,7 +1,7 @@
 """merge_graph() — what the merged graph says about a node seen more than once.
 
 Three extractors and GraphWriter's own endpoint synthesis can all produce the
-same (kind, id). What survives that fold decides what nodes.jsonl claims, so
+same (kind, id). What survives that fold decides what the graph file claims, so
 the precedence is pinned here rather than left to arrival order.
 """
 

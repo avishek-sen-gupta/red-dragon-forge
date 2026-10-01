@@ -1,9 +1,10 @@
 """FileLocation — the source file a knowledge-graph node is defined in, or an
 explicit marker for why it has none.
 
-Carried on GraphNode itself and serialised as two complementary fields of
-nodes.jsonl: ``file_path`` when there is a file, ``file_path_reason`` when
-there is not. Exactly one of the two is ever set.
+Carried on GraphNode itself and serialised as two complementary fields of a
+graph file's node row: ``file_path`` when there is a file, ``file_path_reason``
+when there is not. Exactly one of the two is ever set; see
+cobble.knowledge_graph.graph_file.
 
 The reason used to stop here, inside the build: every NoFileLocation
 collapsed to ``file_path: null`` and nothing else, so a program the corpus
@@ -17,7 +18,6 @@ the writer, which is where it can be kept true.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -44,11 +44,6 @@ class FileLocationReason(Enum):
     # endpoint nodes, and hand-built fixtures. Neither a resolution failure
     # nor a kind without files: simply never asked.
     NOT_ATTEMPTED = "not_attempted"
-    # Read back from a nodes.jsonl written before this field existed, where a
-    # missing file was a bare ``file_path: null``. The reason was known when
-    # that file was built and thrown away, so it cannot be recovered here —
-    # saying which one it was would be the guess this field exists to avoid.
-    NOT_STATED = "not_stated"
 
 
 @dataclass(frozen=True)
@@ -61,38 +56,3 @@ FileLocation = Path | NoFileLocation
 # What a node built without a CorpusIndex carries. Shared rather than
 # constructed per node: it is the same statement every time.
 NOT_ATTEMPTED = NoFileLocation(FileLocationReason.NOT_ATTEMPTED)
-
-
-def to_json_fields(location: FileLocation) -> Mapping[str, object]:
-    """The two nodes.jsonl fields a location writes: the path, and why not.
-
-    Both keys are always present -- one of them null -- so every node row has
-    the same shape and a consumer can read ``file_path_reason`` without first
-    checking whether this writer emitted it. Typed to ``object`` rather than
-    ``str | None`` because these are JSON values on their way to json.dumps,
-    where the absent one is a null and not a Python-side optional to unwrap.
-    """
-    match location:
-        case Path():
-            return {"file_path": str(location), "file_path_reason": None}
-        case NoFileLocation(reason=reason):
-            return {"file_path": None, "file_path_reason": reason.value}
-
-
-def from_json(row: Mapping[str, object]) -> FileLocation:
-    """A location read back from a nodes.jsonl row.
-
-    Takes the whole row rather than its two fields so that "the file did not
-    say" is one case here instead of an optional at every call site. A row
-    written before ``file_path_reason`` existed is NOT_STATED rather than an
-    error: those rows are the entire installed base until a corpus is rebuilt.
-    A non-string in either field would be a writer bug and reads as absent,
-    which keeps a malformed row from aborting a whole corpus run.
-    """
-    match (row.get("file_path"), row.get("file_path_reason")):
-        case (str() as path, _):
-            return Path(path)
-        case (_, str() as reason):
-            return NoFileLocation(FileLocationReason(reason))
-        case _:
-            return NoFileLocation(FileLocationReason.NOT_STATED)

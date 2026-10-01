@@ -16,23 +16,11 @@ interpreter.project.coprocessor_compile plays for CoprocessorSpec.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
 from cobble.file_location import NOT_ATTEMPTED, FileLocation
-from typing_extensions import TypeAliasType
-
-# What an attribute may hold: whatever the nodes/edges JSONL can carry, spelled
-# out rather than Any so a value that could never serialise is a type error here
-# instead of a json.dumps failure at the end of a corpus run. A TypeAliasType
-# rather than a 3.12 `type` statement because the lint config still parses this
-# package as 3.11, and rather than a plain TypeAlias because pydantic can only
-# validate a recursive alias it can name -- see cobble.knowledge_graph.graph_file.
-AttrValue = TypeAliasType(
-    "AttrValue",
-    "str | int | float | bool | Sequence[AttrValue] | Mapping[str, AttrValue]",
-)
+from cobble.knowledge_graph.attr_value import AttrValue
 
 
 class NodeKind(Enum):
@@ -142,7 +130,7 @@ class GraphNode:
     producer called CorpusIndex, got back a reason, and threw it away at
     construction — the node could then only say "no file", not which of the
     several unrelated reasons applied. Keeping the FileLocation whole is what
-    lets the reason reach nodes.jsonl; see cobble.file_location.
+    lets the reason reach the graph file; see cobble.file_location.
 
     Defaults to NOT_ATTEMPTED rather than "unresolved": a node built with no
     CorpusIndex in reach has not failed to resolve, it was never looked up.
