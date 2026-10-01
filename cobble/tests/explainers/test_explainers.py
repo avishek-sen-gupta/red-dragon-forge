@@ -18,7 +18,7 @@ EXPLAINERS = FORGE / "docs" / "explainers"
 BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
 OPENING = '<script type="application/json" id="example">'
 CLOSING = "</script>"
-PAGES = ("fixpoints.html",)
+PAGES = ("fixpoints.html", "reaching-definitions.html")
 
 
 class Check(StrEnum):

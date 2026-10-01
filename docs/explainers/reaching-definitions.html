@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reaching definitions</title>
+<link rel="stylesheet" href="explainer.css">
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Explainer 2 of 4</div>
+<h1>Gen/kill and reaching definitions</h1>
+<p class="lede">For every read of a variable, which writes could have produced the value it sees.</p>
+
+<h2>The problem</h2>
+<p>You are looking at <code>MOVE WS-A TO WS-B</code> and want to know where the value in <code>WS-A</code> came from. In a real program there may be dozens of statements that write <code>WS-A</code>, behind branches and loops. Some can reach this read; some are always overwritten before it. Searching for every write by name gives you all of them, including the ones that cannot matter. You want only the ones with a path to the read along which nothing else overwrites the variable.</p>
+
+<h2>The intuition</h2>
+<p>Walk the program carrying a set of <strong>definitions</strong>: each one is "statement S wrote variable V". When a statement writes <code>V</code>, it adds its own definition — it <strong>generates</strong> it — and throws away every other definition of <code>V</code>, because the new value replaced them: it <strong>kills</strong> them. Where two paths meet, either path could have been taken, so keep the definitions from both. At any read, the definitions of that variable in the set are the answer.</p>
+
+<h2>The example</h2>
+<p>Both arms of an <code>IF</code> write <code>WS-A</code>. Then it is read, overwritten, and read again.</p>
+<pre class="cobol" id="program"></pre>
+<p>Statements are named the way cobble names them: <code>MAIN-PARA/0</code> is the <code>IF</code>, and <code>MAIN-PARA/0.then.0</code> and <code>MAIN-PARA/0.else.0</code> are the first statement in each arm. A read is identified by its statement and the bytes it reads: <code>WS-A@working_storage[1:5]</code> is <code>WS-A</code>, bytes 1 to 5 of working storage, after the one-byte <code>WS-FLAG</code>.</p>
+
+<h2>Step through it</h2>
+<div id="stepper"></div>
+
+<h2>The rule</h2>
+<div class="rule">
+gen(s)  = { (s, v) | s writes v }<br>
+kill(s) = { (d, v) | s writes v, d ≠ s }<br>
+in(s)   = ⋃ out(p) for every predecessor p<br>
+out(s)  = gen(s) ∪ (in(s) − kill(s))<br>
+definers(read of v at s) = { d | (d, v) ∈ in(s) }
+</div>
+<p>This is the same shape as every analysis in the <a href="fixpoints.html">fixpoints</a> page: a transfer per statement and a union where paths meet. With no loop, a single walk in program order already reaches the fixpoint. With a loop, the worklist runs it until nothing grows.</p>
+
+<h2>What goes wrong</h2>
+<ul>
+<li><strong>Only a certain overwrite may kill.</strong> A write that <em>might</em> replace the value — through an array element with an unknown subscript, or a write that covers only part of the variable — must not remove the old definitions, because the old value may still be there. Such a write is a <em>weak update</em>: it generates without killing. Killing on a maybe is the one mistake here that produces a wrong answer rather than a loose one. In COBOL the partial case is everywhere; the <a href="byte-extents.html">byte extents</a> page is about it.</li>
+<li><strong>Loops bring definitions back round.</strong> A write at the bottom of a loop reaches a read at the top on the next iteration. That is why the analysis needs a fixpoint rather than a single walk.</li>
+<li><strong>Union is generous.</strong> The answer is every write that <em>could</em> reach, along paths the analysis cannot rule out. If the <code>IF</code> condition were always true, the else arm's write would still be listed: the analysis does not evaluate conditions.</li>
+<li><strong>A read with no definition</strong> — <code>WS-FLAG</code> in the <code>IF</code> here — gets no row. Its value comes from outside the program, or from its initial state.</li>
+</ul>
+
+<h2>In cobble</h2>
+<p>The per-read definers are collected during the fixpoint in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a> and written one row per read by <a href="../../cobble/cobble/dataflow/fields/side_tables.py"><code>side_tables.py</code></a> into <code>defs.jsonl</code>. Its definitions are kept per byte range, not per variable name; the next page shows why.</p>
+</main>
+
+<script type="application/json" id="example">
+{"member": "REACHDEF",
+ "program": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. REACHDEF.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-FLAG              PIC X.\n       01  WS-A                 PIC X(4).\n       01  WS-B                 PIC X(4).\n       01  WS-C                 PIC X(4).\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           IF WS-FLAG = 'Y'\n               MOVE 'YES ' TO WS-A\n           ELSE\n               MOVE 'NO  ' TO WS-A\n           END-IF.\n           MOVE WS-A TO WS-B.\n           MOVE 'DONE' TO WS-A.\n           MOVE WS-A TO WS-C.\n           STOP RUN.\n",
+ "expected": {"checks": ["defs"],
+   "defs": [
+     {"node": "MAIN-PARA/1", "extent": "WS-A@working_storage[1:5]",
+      "definers": ["MAIN-PARA/0.else.0", "MAIN-PARA/0.then.0"]},
+     {"node": "MAIN-PARA/3", "extent": "WS-A@working_storage[1:5]",
+      "definers": ["MAIN-PARA/2"]}]}}
+</script>
+<script src="stepper.js"></script>
+<script>
+/* The gen/kill model for the REACHDEF example. */
+const example = Stepper.example();
+const LAYOUT = [["WS-FLAG", 1], ["WS-A", 4], ["WS-B", 4], ["WS-C", 4]];
+const EXTENTS = Object.fromEntries(
+  LAYOUT.map(([name], i) => {
+    const start = LAYOUT.slice(0, i).reduce((sum, [, size]) => sum + size, 0);
+    return [name, `${name}@working_storage[${start}:${start + LAYOUT[i][1]}]`];
+  })
+);
+
+const STATEMENTS = [
+  { id: "MAIN-PARA/0", text: "IF WS-FLAG = 'Y'", from: [], reads: ["WS-FLAG"], writes: [] },
+  { id: "MAIN-PARA/0.then.0", text: "MOVE 'YES ' TO WS-A", from: ["MAIN-PARA/0"], reads: [], writes: ["WS-A"] },
+  { id: "MAIN-PARA/0.else.0", text: "MOVE 'NO  ' TO WS-A", from: ["MAIN-PARA/0"], reads: [], writes: ["WS-A"] },
+  { id: "MAIN-PARA/1", text: "MOVE WS-A TO WS-B", from: ["MAIN-PARA/0.then.0", "MAIN-PARA/0.else.0"], reads: ["WS-A"], writes: ["WS-B"] },
+  { id: "MAIN-PARA/2", text: "MOVE 'DONE' TO WS-A", from: ["MAIN-PARA/1"], reads: [], writes: ["WS-A"] },
+  { id: "MAIN-PARA/3", text: "MOVE WS-A TO WS-C", from: ["MAIN-PARA/2"], reads: ["WS-A"], writes: ["WS-C"] },
+  { id: "MAIN-PARA/4", text: "STOP RUN", from: ["MAIN-PARA/3"], reads: [], writes: [] },
+];
+
+const label = ([statement, field]) => `${field} ← ${statement}`;
+const sorted = (defs) => [...defs].sort((a, b) => (label(a) < label(b) ? -1 : 1));
+const distinct = (defs) => sorted([...new Map(defs.map((d) => [label(d), d])).values()]);
+
+const walk = () =>
+  STATEMENTS.reduce(
+    ({ out, steps, rows }, s) => {
+      const incoming = distinct(s.from.flatMap((p) => out[p]));
+      const killed = incoming.filter(([, field]) => s.writes.includes(field));
+      const generated = s.writes.map((field) => [s.id, field]);
+      const result = distinct([...incoming.filter((d) => !killed.includes(d)), ...generated]);
+      const read = s.reads.map((field) => ({
+        node: s.id,
+        extent: EXTENTS[field],
+        definers: incoming.filter(([, f]) => f === field).map(([statement]) => statement).sort(),
+      }));
+      const found = read.filter((r) => r.definers.length);
+      const merge = s.from.length > 1 ? `Two paths meet here, so the incoming set is the union of both arms. ` : "";
+      const note = merge +
+        (generated.length ? `${s.text} generates ${generated.map(label).join(", ")}` : `${s.text} writes nothing`) +
+        (killed.length ? ` and kills ${killed.map(label).join(", ")}.` : ".") +
+        read.map((r) => (r.definers.length
+          ? ` Its read of ${r.extent.split("@")[0]} sees ${r.definers.join(" and ")}.`
+          : ` Its read of ${r.extent.split("@")[0]} has no reaching definition, so no row.`)).join("");
+      return {
+        out: { ...out, [s.id]: result },
+        rows: [...rows, ...found],
+        steps: [...steps, { id: s.id, incoming, killed, generated, result, read, rows: [...rows, ...found], note }],
+      };
+    },
+    { out: {}, steps: [], rows: [] }
+  );
+
+const chips = (defs, cls) =>
+  defs.length ? defs.map((d) => `<span class="chip ${cls(d)}">${Stepper.escape(label(d))}</span>`).join("") : `<span class="dim">none</span>`;
+
+const render = (step) => {
+  const list = STATEMENTS.map((s) => `<tr class="${s.id === step.id ? "current" : ""}"><td>${Stepper.escape(s.id)}</td><td>${Stepper.escape(s.text)}</td></tr>`).join("");
+  const rows = step.rows.map((r) =>
+    `<p><code>${Stepper.escape(r.node)}</code> reads <code>${Stepper.escape(r.extent)}</code></p>` +
+    `<div class="chips">${r.definers.map((d) => `<span class="chip">${Stepper.escape(d)}</span>`).join("")}</div>`).join("");
+  return `<table class="state">${list}</table>` +
+    `<p class="dim">Reaching on the way in</p><div class="chips">${chips(step.incoming, (d) => (step.killed.includes(d) ? "dim" : ""))}</div>` +
+    `<p class="dim">Reaching on the way out (new in amber)</p><div class="chips">${chips(step.result, (d) => (step.generated.some((g) => label(g) === label(d)) ? "changed" : ""))}</div>` +
+    `<p class="dim">Rows so far: each read and its definers</p>${rows || '<p class="dim">none yet</p>'}`;
+};
+
+const model = walk();
+Stepper.showProgram(document.getElementById("program"));
+Stepper.verify("reaching definitions", model.rows, example.expected.defs);
+Stepper.mount(document.getElementById("stepper"), model.steps, render);
+</script>
+</body>
+</html>
