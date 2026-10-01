@@ -15,7 +15,7 @@ worth of query for it.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
 Row = Mapping[str, object]
@@ -28,6 +28,21 @@ def read(path: Path) -> tuple[Row, ...]:
     return tuple(
         json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
     )
+
+
+def stream(path: Path) -> Iterator[Row]:
+    """The same lines one at a time, for a table too large to hold.
+
+    ``read`` is right for a table a query indexes whole. It is wrong for one whose
+    rows rebuild objects a caller uses and drops -- the declared layout of 300
+    members is tens of gigabytes of cells at once, and one member's is not. A blank
+    line is skipped rather than refused, which is what ``read``'s ``splitlines``
+    already did with a trailing one.
+    """
+    if not path.is_file():
+        return
+    with path.open(encoding="utf-8") as lines:
+        yield from (json.loads(line) for line in lines if line.strip())
 
 
 def text(row: Row, key: str, default: str = "") -> str:

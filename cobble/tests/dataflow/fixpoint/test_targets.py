@@ -86,8 +86,9 @@ def test_the_layout_read_from_the_extents_table_resolves_the_same_targets(
     path = tmp_path / "extents.jsonl"
     path.write_text("".join(f"{row}\n" for _, row in rows), encoding="utf-8")
 
+    (published,) = tuple(declared_layouts(path))
     computed, _ = analysed(asg)
-    from_file, _ = analysed(asg, layout=declared_layouts(path).layout("COMEN01C"))
+    from_file, _ = analysed(asg, layout=published.layout)
 
     assert _candidates(from_file) == _candidates(computed)
     menu = {
