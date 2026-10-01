@@ -91,39 +91,6 @@ pre.cobol {
   white-space: nowrap;
 }
 
-.stepper {
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  padding: 0.8rem;
-  margin: 1rem 0;
-}
-
-.stepper .controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.stepper button, .choice button {
-  font: inherit;
-  font-size: 0.9rem;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  padding: 0.3rem 0.8rem;
-  cursor: pointer;
-}
-
-.stepper button:disabled { opacity: 0.4; cursor: default; }
-.choice button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-.choice { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
-
-.stepper .counter { font-family: var(--mono); font-size: 0.85rem; color: var(--muted); margin-left: auto; }
-.stepper .note { margin: 0.8rem 0 0.4rem; min-height: 3em; }
-.stepper .body { overflow-x: auto; }
 
 table.state {
   border-collapse: collapse;
@@ -149,16 +116,6 @@ table.state td:first-child { white-space: nowrap; }
 .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; font-family: var(--mono); font-size: 0.78rem; }
 .chip { border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.55rem; }
 
-.banner-error {
-  background: var(--red);
-  color: #fff;
-  padding: 0.8rem 1rem;
-  border-radius: 6px;
-  margin-bottom: 1.2rem;
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-}
 
 nav.back { font-size: 0.9rem; margin-bottom: 1.2rem; }
 
@@ -178,3 +135,23 @@ nav.back { font-size: 0.9rem; margin-bottom: 1.2rem; }
 .bytes .byte.read { outline: 2px solid var(--blue); outline-offset: -2px; }
 .bytes .byte.w0 { background: rgba(122, 162, 255, 0.18); }
 .bytes .byte.w1 { background: rgba(245, 176, 65, 0.24); }
+
+ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 1rem 0; }
+ol.steps > li {
+  counter-increment: step;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin: 0 0 0.8rem;
+  overflow-x: auto;
+}
+ol.steps > li::before {
+  content: "Step " counter(step);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+ol.steps .note { margin: 0.3rem 0 0.5rem; }
