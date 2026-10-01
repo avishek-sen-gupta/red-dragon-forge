@@ -162,7 +162,7 @@ def test_every_node_kind_has_its_own_colour() -> None:
 
 
 def test_every_edge_kind_including_the_cross_program_call_has_its_own_colour() -> None:
-    assert {kind.value for kind in EdgeKind} | {CallKind.CALL.value} <= set(
+    assert {kind.value for kind in EdgeKind} | {kind.value for kind in CallKind} <= set(
         EDGE_PALETTE
     )
 

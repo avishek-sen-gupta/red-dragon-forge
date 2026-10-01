@@ -27,6 +27,7 @@ from cobble.dataflow.srccfg.bundle import (
     load_bundle,
 )
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.dot import dot_of
 from cobble.dataflow.srccfg.dynamic_targets import DynamicSite, DynamicTargets
 from cobble.dataflow.srccfg.joined import CallKind, graph_of
 from cobble.dataflow.srccfg.link import (
@@ -194,6 +195,32 @@ def test_a_dynamic_site_is_one_call_per_candidate_each_saying_how_certain_it_is(
     )
     written = bundle_to_json(Bundle(seed="PROGA", cfgs=cfgs, calls=calls))
     assert bundle_of(json.loads(written)).calls == calls
+
+
+def test_a_dynamic_sites_candidates_are_drawn_and_only_a_proven_one_as_a_call() -> None:
+    """A candidate drawn as a plain CALL claims a certainty the analysis does not
+    have; one not drawn at all hides the path the closure was built to show."""
+    cfgs = (_dynamic_caller(), _callee("PROGB"), _callee("PROGC"))
+    calls = bundle_calls(cfgs, DYNAMIC_TARGETS)
+
+    assert cross_calls(cfgs, calls) == (
+        CrossCall("PROGA::MAIN/0", "PROGB::MAIN#label", "CICS_LINK", certain=True),
+        CrossCall("PROGA::MAIN/1", "PROGB::MAIN#label", "CICS_LINK", certain=False),
+        CrossCall("PROGA::MAIN/1", "PROGC::MAIN#label", "CICS_LINK", certain=False),
+    )
+    assert sorted(
+        kind.value
+        for _source, _target, kind in graph_of(cfgs, calls).edges(data="kind")
+        if isinstance(kind, CallKind)
+    ) == ["CALL", "CALL_CANDIDATE", "CALL_CANDIDATE"]
+    assert [line for line in dot_of(cfgs, calls).splitlines() if "->" in line] == [
+        '    "PROGA::MAIN/0" -> "PROGB::MAIN#label"'
+        ' [color="#ef6c00", style=dashed, label="CICS_LINK"];',
+        '    "PROGA::MAIN/1" -> "PROGB::MAIN#label"'
+        ' [color="#9e9e9e", style=dotted, label="CICS_LINK"];',
+        '    "PROGA::MAIN/1" -> "PROGC::MAIN#label"'
+        ' [color="#9e9e9e", style=dotted, label="CICS_LINK"];',
+    ]
 
 
 def test_a_bundle_document_loads_as_its_cfgs_and_its_calls(tmp_path: Path) -> None:

@@ -35,14 +35,15 @@ import networkx as nx
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.srccfg.bundle import load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, NodeKind
-from cobble.dataflow.srccfg.joined import CallKind, NodeKey, graph_of
+from cobble.dataflow.srccfg.joined import CallKind, graph_of
 from cobble.dataflow.srccfg.link import BundleCall
+from cobble.knowledge_graph.drawn_node import DrawnNode
 from cobble.knowledge_graph.layout import sfdp_positions
 from cobble.knowledge_graph.render_webgl import render_webgl_html
 
 logger = logging.getLogger(__name__)
 
-Layout = Callable[[nx.MultiDiGraph], Mapping[NodeKey, tuple[float, float]]]
+Layout = Callable[[nx.MultiDiGraph], Mapping[DrawnNode, tuple[float, float]]]
 
 
 # Where the branches are is what a reader looks for first, so TEST takes the loudest
@@ -71,6 +72,7 @@ EDGE_PALETTE: Mapping[str, str] = MappingProxyType(
         EdgeKind.FLOW.value: "#BBBBBB",
         EdgeKind.FALLTHRU.value: "#DDDDDD",
         CallKind.CALL.value: "#EF6C00",
+        CallKind.CALL_CANDIDATE.value: "#9E9E9E",
     }
 )
 

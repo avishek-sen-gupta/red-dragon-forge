@@ -176,9 +176,10 @@ def _calls_at(
         return (_call_to(site, node, site.program, entries),)
     answer = targets.at(site.caller, node.id)
     if not answer.candidates:
-        return (
-            _dynamic_call(site, node, site.program, entries, answer.reasons, False),
+        unanswered = _dynamic_call(
+            site, node, site.program, entries, answer.reasons, False
         )
+        return (replace(unanswered, entry=""),)
     return tuple(
         _dynamic_call(site, node, candidate, entries, answer.reasons, answer.proven)
         for candidate in answer.candidates
