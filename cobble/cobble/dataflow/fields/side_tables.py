@@ -50,6 +50,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
+from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
+from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.layout import Cell
 from cobble.sink_state import FirstSighting
@@ -117,6 +119,7 @@ class ReachingDefs:
     node: str
     extent: str
     definers: tuple[str, ...]
+    held: ValueSet = VALUES_EMPTY
 
 
 @dataclass(frozen=True)
@@ -237,6 +240,11 @@ def defs_row(defs: ReachingDefs) -> _Row:
                 "node": defs.node,
                 "extent": defs.extent,
                 "definers": list(defs.definers),
+                "values": sorted(
+                    value.decode("utf-8", errors="replace")
+                    for value in defs.held.values
+                ),
+                "reasons": sorted(reason.value for reason in defs.held.reasons),
             }
         ),
     )
