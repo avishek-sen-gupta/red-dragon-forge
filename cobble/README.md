@@ -43,7 +43,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-build --config <corpus> --output <file>` | Extract the graph to one file, a tagged row per node and edge |
 | `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/832) |
 | `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
-| `cobble-srccfg-build PROGRAM --config <corpus>` | Build one program's source CFG **and every program it transitively calls** |
+| `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <json> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
 | `cobble-srccfg-query <query> <subject> --cfg <json>` | Ask a built CFG for guards or a field's provenance |
 | `python -m pytest` | Run the pytest unit suite |
@@ -85,11 +85,28 @@ callee needs, so no consumer has to rebuild the join to walk the closure:
 ```json
 {"caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0",
  "transfer": "CICS_XCTL", "program": "COMEN01C", "entry": "MAIN-PARA#label",
- "resolved": true, "commarea": "CARDDEMO-COMMAREA"}
+ "resolved": true, "commarea": "CARDDEMO-COMMAREA",
+ "expression": "", "reasons": [], "certain": true}
 ```
 
 Unresolved sites and callees outside the bundle are kept, with an empty `entry`,
 because "this program calls something we did not build" is an answer.
+
+**Dynamic calls.** A `CALL`/`XCTL`/`LINK` through a field names no program, so by
+default it pulls nothing into the closure. Given the fixpoint's
+`--dynamic-call-targets <out-dir>/targets.jsonl` (the flag `cobble-build` takes), each
+such site's candidates are built like any callee — transitively, so a candidate's own
+dynamic calls are followed too — and the site becomes one call per candidate, joined
+to that candidate's entry. `expression` names the field the site calls through,
+`reasons` carries the row's doubt, and `certain` is the three-way rule's proven case:
+one candidate and no reasons. A site with no candidates stays one call naming the
+field, with its reasons and an empty `entry`. A named file that does not exist stops
+the build before it starts.
+
+```bash
+uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml \
+  --dynamic-call-targets out-fields/targets.jsonl --output closure.json
+```
 
 Every CFG file has one shape — `{"cfgs": [...], "calls": [...]}` — whether it holds a
 whole closure or the single program the corpus build writes. A member has no calls to

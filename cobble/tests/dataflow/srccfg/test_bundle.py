@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -26,6 +27,7 @@ from cobble.dataflow.srccfg.bundle import (
     load_bundle,
 )
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.dynamic_targets import DynamicSite, DynamicTargets
 from cobble.dataflow.srccfg.joined import CallKind, graph_of
 from cobble.dataflow.srccfg.link import (
     COMMAREA_RECORD,
@@ -121,6 +123,77 @@ def test_a_bundle_round_trips_through_json_with_its_calls() -> None:
 
     assert read.calls == bundle.calls
     assert [cfg.program for cfg in read.cfgs] == ["PROGA", "PROGB"]
+
+
+def _dynamic(node_id: str, field: str) -> Node:
+    return _call(node_id, field, resolved=False)
+
+
+def _dynamic_caller() -> Cfg:
+    return Cfg(
+        program="PROGA",
+        nodes=(
+            _label("MAIN"),
+            _dynamic("MAIN/0", "WS-ONE"),
+            _dynamic("MAIN/1", "WS-TWO"),
+            _dynamic("MAIN/2", "WS-NONE"),
+        ),
+        edges=(),
+    )
+
+
+DYNAMIC_TARGETS = DynamicTargets(
+    sites=MappingProxyType(
+        {
+            ("PROGA", "MAIN/0"): DynamicSite(candidates=("PROGB",), reasons=()),
+            ("PROGA", "MAIN/1"): DynamicSite(
+                candidates=("PROGB", "PROGC"), reasons=("from-callee",)
+            ),
+            ("PROGA", "MAIN/2"): DynamicSite(candidates=(), reasons=("uninitialised",)),
+        }
+    )
+)
+
+
+def _dynamic_call(
+    node: str,
+    program: str,
+    expression: str,
+    reasons: tuple[str, ...],
+    certain: bool,
+    entry: str = "MAIN#label",
+) -> BundleCall:
+    return BundleCall(
+        caller="PROGA",
+        node=node,
+        transfer="CICS_LINK",
+        program=program,
+        entry=entry,
+        resolved=False,
+        commarea="WS-COMMAREA",
+        expression=expression,
+        reasons=reasons,
+        certain=certain,
+    )
+
+
+def test_a_dynamic_site_is_one_call_per_candidate_each_saying_how_certain_it_is() -> (
+    None
+):
+    """One candidate and no doubt is proven; anything else is a candidate; a site
+    with no candidates stays the one unresolved call it always was, now with why."""
+    cfgs = (_dynamic_caller(), _callee("PROGB"), _callee("PROGC"))
+
+    calls = bundle_calls(cfgs, DYNAMIC_TARGETS)
+
+    assert calls == (
+        _dynamic_call("MAIN/0", "PROGB", "WS-ONE", (), True),
+        _dynamic_call("MAIN/1", "PROGB", "WS-TWO", ("from-callee",), False),
+        _dynamic_call("MAIN/1", "PROGC", "WS-TWO", ("from-callee",), False),
+        _dynamic_call("MAIN/2", "WS-NONE", "WS-NONE", ("uninitialised",), False, ""),
+    )
+    written = bundle_to_json(Bundle(seed="PROGA", cfgs=cfgs, calls=calls))
+    assert bundle_of(json.loads(written)).calls == calls
 
 
 def test_a_bundle_document_loads_as_its_cfgs_and_its_calls(tmp_path: Path) -> None:

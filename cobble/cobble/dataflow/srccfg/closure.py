@@ -24,19 +24,40 @@ from cobble.dataflow.srccfg.build_corpus import cfg_of, source_file_of
 from cobble.dataflow.srccfg.bundle import Bundle, bundle_to_json
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
-from cobble.dataflow.srccfg.link import bundle_calls, call_graph, callees_of
+from cobble.dataflow.srccfg.dynamic_targets import (
+    NO_DYNAMIC_TARGETS,
+    DynamicTargets,
+    dynamic_targets_of,
+)
+from cobble.dataflow.srccfg.link import (
+    bundle_calls,
+    call_graph,
+    callees_of,
+    dynamic_callees,
+)
 from cobble.path_utils import ensure_parent
 
 logger = logging.getLogger(__name__)
 
 
-def build_closure(asg_dir: Path, seed: str, source_dir: Path) -> Bundle:
-    cfgs = _expand(asg_dir, source_dir, (seed,), ())
-    return Bundle(seed=seed, cfgs=cfgs, calls=bundle_calls(cfgs))
+def build_closure(
+    asg_dir: Path,
+    seed: str,
+    source_dir: Path,
+    targets: DynamicTargets = NO_DYNAMIC_TARGETS,
+) -> Bundle:
+    """``targets`` turns each dynamic call site it answers into calls to its
+    candidates, and builds them like any callee."""
+    cfgs = _expand(asg_dir, source_dir, targets, (seed,), ())
+    return Bundle(seed=seed, cfgs=cfgs, calls=bundle_calls(cfgs, targets))
 
 
 def _expand(
-    asg_dir: Path, source_dir: Path, pending: tuple[str, ...], built: tuple[Cfg, ...]
+    asg_dir: Path,
+    source_dir: Path,
+    targets: DynamicTargets,
+    pending: tuple[str, ...],
+    built: tuple[Cfg, ...],
 ) -> tuple[Cfg, ...]:
     """Breadth-first from the seed, one program built once.
 
@@ -45,7 +66,7 @@ def _expand(
     """
     walks = accumulate(
         repeat(None),
-        lambda walk, _: _step(asg_dir, source_dir, walk),
+        lambda walk, _: _step(asg_dir, source_dir, targets, walk),
         initial=_Walk(pending=pending, built=built),
     )
     return next(walk for walk in walks if not walk.pending).built
@@ -59,9 +80,11 @@ class _Walk:
     built: tuple[Cfg, ...]
 
 
-def _step(asg_dir: Path, source_dir: Path, walk: _Walk) -> _Walk:
+def _step(
+    asg_dir: Path, source_dir: Path, targets: DynamicTargets, walk: _Walk
+) -> _Walk:
     head, *rest = walk.pending
-    visit = _visit(asg_dir, source_dir, head, walk.built, len(rest))
+    visit = _visit(asg_dir, source_dir, targets, head, walk.built, len(rest))
     return _Walk(pending=(*rest, *visit.callees), built=(*walk.built, *visit.cfgs))
 
 
@@ -75,7 +98,12 @@ class _Visit:
 
 
 def _visit(
-    asg_dir: Path, source_dir: Path, program: str, built: tuple[Cfg, ...], pending: int
+    asg_dir: Path,
+    source_dir: Path,
+    targets: DynamicTargets,
+    program: str,
+    built: tuple[Cfg, ...],
+    pending: int,
 ) -> _Visit:
     path = asg_dir / f"{program}.json"
     if program in tuple(cfg.program for cfg in built):
@@ -88,7 +116,11 @@ def _visit(
     )
     cfg = cfg_of(path, source_file=source_file_of(source_dir, program))
     logger.info("srccfg: %s done  nodes=%d", program, len(cfg.nodes))
-    return _Visit(cfgs=(cfg,), callees=callees_of(call_graph((cfg,)), cfg.program))
+    callees = {
+        *callees_of(call_graph((cfg,)), cfg.program),
+        *dynamic_callees(cfg, targets),
+    }
+    return _Visit(cfgs=(cfg,), callees=tuple(sorted(callees)))
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -103,7 +135,25 @@ def _parser() -> argparse.ArgumentParser:
         default=Path(),
         help="write the closure here instead of stdout",
     )
+    parser.add_argument(
+        "--dynamic-call-targets",
+        type=_dynamic_call_targets,
+        default=NO_DYNAMIC_TARGETS,
+        help="The targets.jsonl cobble-dataflow-fixpoint wrote: each dynamic "
+        "CALL/XCTL/LINK site's candidates are built and joined like any callee. "
+        "Without it, dynamic sites pull in nothing",
+    )
     return parser
+
+
+def _dynamic_call_targets(text: str) -> DynamicTargets:
+    path = Path(text)
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(
+            f"{path} not found — cobble-dataflow-fixpoint writes targets.jsonl "
+            "into its --out-dir"
+        )
+    return dynamic_targets_of(path)
 
 
 def main(argv: Sequence[str] = ()) -> int:
@@ -120,7 +170,12 @@ def main(argv: Sequence[str] = ()) -> int:
         logger.error("%s: no ASG for this program in the cache", arguments.program)
         return 1
     document = bundle_to_json(
-        build_closure(config.asg_dir, arguments.program, config.source_dir)
+        build_closure(
+            config.asg_dir,
+            arguments.program,
+            config.source_dir,
+            arguments.dynamic_call_targets,
+        )
     )
     return _emitted(document, arguments.output)
 

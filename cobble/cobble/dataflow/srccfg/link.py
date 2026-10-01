@@ -15,11 +15,12 @@ an XCTL is unreachable when it may in fact be reached by a different path.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import chain
 
 from cobble.dataflow.srccfg.cfg import Cfg, Node
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, CALL_TRANSFERS, commarea_field
+from cobble.dataflow.srccfg.dynamic_targets import NO_DYNAMIC_TARGETS, DynamicTargets
 from cobble.dataflow.srccfg.synthetic import using_field
 
 COMMAREA_RECORD = "DFHCOMMAREA"
@@ -132,6 +133,9 @@ class BundleCall:
     entry: str = ""
     resolved: bool = True
     commarea: str = ""
+    expression: str = ""
+    reasons: tuple[str, ...] = ()
+    certain: bool = True
 
 
 def entry_nodes(cfgs: Sequence[Cfg]) -> Mapping[str, str]:
@@ -143,26 +147,85 @@ def entry_nodes(cfgs: Sequence[Cfg]) -> Mapping[str, str]:
     return {cfg.program: cfg.nodes[0].id for cfg in cfgs if cfg.nodes}
 
 
-def bundle_calls(cfgs: Sequence[Cfg]) -> tuple[BundleCall, ...]:
+def bundle_calls(
+    cfgs: Sequence[Cfg], targets: DynamicTargets = NO_DYNAMIC_TARGETS
+) -> tuple[BundleCall, ...]:
     """Every call out of the bundle's programs, joined to the callee's entry.
 
     Unresolved sites and calls out of the bundle are kept and carry an empty entry,
     because "this program calls something we did not build" is the answer a reader
     of the closure most often wants and deriving it back from nothing is not possible.
+
+    A dynamic site ``targets`` answers is one call per candidate, each joined to that
+    candidate's entry; ``certain`` is the three-way rule's proven case, one candidate
+    and no reasons. A dynamic site with no candidates stays one call naming the field.
     """
     entries = entry_nodes(cfgs)
     return tuple(
-        BundleCall(
-            caller=site.caller,
-            node=node.id,
-            transfer=node.transfer,
-            program=site.program,
-            entry=entries.get(site.program, ""),
-            resolved=site.resolved,
-            commarea=site.commarea,
-        )
+        call
         for cfg in cfgs
         for site, node in _sites(cfg)
+        for call in _calls_at(site, node, entries, targets)
+    )
+
+
+def _calls_at(
+    site: CallSite, node: Node, entries: Mapping[str, str], targets: DynamicTargets
+) -> tuple[BundleCall, ...]:
+    if site.resolved:
+        return (_call_to(site, node, site.program, entries),)
+    answer = targets.at(site.caller, node.id)
+    if not answer.candidates:
+        return (
+            _dynamic_call(site, node, site.program, entries, answer.reasons, False),
+        )
+    return tuple(
+        _dynamic_call(site, node, candidate, entries, answer.reasons, answer.proven)
+        for candidate in answer.candidates
+    )
+
+
+def _dynamic_call(
+    site: CallSite,
+    node: Node,
+    program: str,
+    entries: Mapping[str, str],
+    reasons: tuple[str, ...],
+    certain: bool,
+) -> BundleCall:
+    return replace(
+        _call_to(site, node, program, entries),
+        expression=site.program,
+        reasons=reasons,
+        certain=certain,
+    )
+
+
+def _call_to(
+    site: CallSite, node: Node, program: str, entries: Mapping[str, str]
+) -> BundleCall:
+    return BundleCall(
+        caller=site.caller,
+        node=node.id,
+        transfer=node.transfer,
+        program=program,
+        entry=entries.get(program, ""),
+        resolved=site.resolved,
+        commarea=site.commarea,
+    )
+
+
+def dynamic_callees(cfg: Cfg, targets: DynamicTargets) -> tuple[str, ...]:
+    """Every candidate of every dynamic site in ``cfg`` that ``targets`` answers."""
+    return tuple(
+        sorted(
+            {
+                candidate
+                for site in call_sites(cfg)
+                if not site.resolved
+                for candidate in targets.at(site.caller, site.node).candidates
+            }
+        )
     )
 
 
