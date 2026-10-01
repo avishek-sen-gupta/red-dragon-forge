@@ -63,6 +63,7 @@ from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.image import initial_image
+from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
 from cobble.dataflow.fields.state import EMPTY, State, join, reaching
 from cobble.dataflow.fields.transfer import (
     HANDLED,
@@ -623,20 +624,37 @@ def analyse(
     )
 
 
+def _laid_out(asg, layout: ProgramLayout) -> ProgramLayout:
+    """The layout the caller already had, or this program's own.
+
+    ``NO_LAYOUT`` is the absence, not an empty program: a program really declaring
+    nothing has records of its own and never compares equal to the sentinel by
+    identity.
+    """
+    if layout is NO_LAYOUT:
+        return layout_of(program_records(asg))
+    return layout
+
+
 def analysed(
-    asg, options: AnalysisOptions = DEFAULT_OPTIONS
+    asg,
+    options: AnalysisOptions = DEFAULT_OPTIONS,
+    layout: ProgramLayout = NO_LAYOUT,
 ) -> tuple[ProgramFlow, CellIndex]:
-    """analyse, with the index built here so an unsizeable field is a skip.
+    """analyse, with the layout built here so an unsizeable field is a skip.
 
     layout raises while computing extents, which is before any statement has been
     seen, so a program that cannot be laid out has no partial answer worth
     returning -- only a recorded reason. Never silently dropped. The index that
     comes back with a skip is ``NO_INDEX``, which holds no cells.
+
+    ``layout`` is for a caller that already has the records -- read back from the
+    extents table rather than laid out again. Given one, nothing here touches the
+    DATA DIVISION, and an unsizeable field was the other caller's to report.
     """
     try:
-        records = program_records(asg)
-        index = cell_index(records)
+        built = _laid_out(asg, layout)
     except UnsizeableFieldError as error:
         return ProgramFlow(program=asg.program_id, skipped=str(error)), NO_INDEX
-    entry_state = State(values=initial_image(records, index))
-    return analyse(asg, index, options, entry_state), index
+    entry_state = State(values=initial_image(built.records, built.index))
+    return analyse(asg, built.index, options, entry_state), built.index

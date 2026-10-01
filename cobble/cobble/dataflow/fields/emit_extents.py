@@ -2,7 +2,12 @@
 
 A field's byte ranges follow from its declaration alone — level, usage, OCCURS,
 REDEFINES — and need no fixpoint, no flow, no JVM. This is the layout table both
-the fixpoint artefact and the path-sampled trace query against.
+the fixpoint artefact and the path-sampled trace query against, and the one the
+fixpoint stage reads its records back out of rather than laying them out again.
+
+Rows carry the member they came from, not the PROGRAM-ID it declares: this stage
+never looks inside the program, and a member whose id disagrees with its file name
+is still the member a caller asked for.
 """
 
 from __future__ import annotations
@@ -17,9 +22,9 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit import _declared_extents
-from cobble.dataflow.fields.extent import cell_index
+from cobble.dataflow.fields.program_layout import program_layout
 from cobble.dataflow.fields.side_tables import JsonlWriter, extent_row, jsonl_writer
-from cobble.dataflow.layout import UnsizeableFieldError, program_records
+from cobble.dataflow.layout import UnsizeableFieldError
 from cobble.path_utils import ensure_parent
 from cobol_asg.asg_types import CobolASG
 
@@ -36,13 +41,20 @@ def _members(asg_dir: Path) -> tuple[str, ...]:
 
 
 def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> str:
-    path = asg_dir / f"{member}.json"
-    asg = _asg_at(path)
+    """One member's rows, or the reason it has none.
+
+    Every failure is a reason rather than an abort, which matters more now that the
+    fixpoint stage reads its records here: one member's broken cache file would
+    otherwise cost every other member in the corpus its layout, and that stage its
+    whole input.
+    """
     try:
-        index = cell_index(program_records(asg))
-    except UnsizeableFieldError as error:
-        return f"unsizeable: {error}"
-    writer.add_rows(extent_row(ext) for ext in _declared_extents(index, member))
+        layout = program_layout(_asg_at(asg_dir / f"{member}.json"))
+    except UnsizeableFieldError as unsizeable:
+        return f"unsizeable: {unsizeable}"
+    except Exception as failure:  # noqa: BLE001 - one member must not end the run
+        return f"unreadable: {failure!r}"
+    writer.add_rows(extent_row(ext) for ext in _declared_extents(layout, member))
     return ""
 
 

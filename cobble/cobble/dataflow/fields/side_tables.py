@@ -13,6 +13,12 @@ the whole record tree and the byte correspondence of a group move are derivable
 from this table plus the two ranges an edge carries, which is why no edge
 carries either.
 
+Beside those four it carries one column per declared property of a cell, parallel
+to ``extents``, plus its record's origin, size and place in declaration order.
+That is the whole of ``layout``'s answer, so a stage that needs the records --
+the fixpoint, which seeds its entry state from the VALUE image -- reads them here
+instead of laying the DATA DIVISION out a second time.
+
 ``defs.jsonl`` says which statements could have last written one byte range by
 the time one CFG node runs. Its own table because the relation is keyed by
 (node, range) and not by the flow: one source range at one node had a hundred
@@ -38,13 +44,39 @@ whose layout the ids in the graph were named from.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.dataflow.layout import Cell
 from cobble.sink_state import FirstSighting
+
+
+@dataclass(frozen=True)
+class DeclaredRecord:
+    """Where one record sits among the program's records.
+
+    A cell names its record but says nothing about the record itself, and the
+    record's own three facts are what a reader rebuilding the layout is missing:
+    which section allocated it, how many bytes it owns -- the widest view of it,
+    which is not the last cell's end -- and its place in declaration order, which
+    is what lays the section's records end to end at the right bases.
+    """
+
+    origin: str
+    size: int
+    position: int
+
+
+@dataclass(frozen=True)
+class DeclaredCell:
+    """One occurrence of one field, with the facts of the record holding it."""
+
+    cell: Cell
+    record: DeclaredRecord
 
 
 @dataclass(frozen=True)
@@ -56,12 +88,21 @@ class FieldExtents:
     span from the first range to the last: between two occurrences of an element
     lie its siblings' bytes, and a single spanning range would report this field
     as covered by a write that only ever touched them.
+
+    ``cells`` is those same occurrences in the same order, each with everything
+    its ``Cell`` was declared with -- which is what makes the table a layout a
+    reader can rebuild rather than only a geometry it can intersect. ``level`` and
+    ``usage`` stay where they are, both the first cell's, because that is what the
+    table has always published; a name two records declare at different levels
+    carries both in ``cells`` and the first of them at the top.
     """
 
     id: str
     level: int
     usage: str
     extents: tuple[str, ...]
+    program: str = ""
+    cells: tuple[DeclaredCell, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -104,8 +145,55 @@ class CommareaAlias:
 _Row = tuple[str, str]
 
 
+_Column = str | int | bool | tuple[str, ...] | tuple[int, ...]
+
+_CELL_COLUMNS: Mapping[str, Callable[[DeclaredCell], _Column]] = MappingProxyType(
+    {
+        "names": lambda one: one.cell.name,
+        "records": lambda one: one.cell.record,
+        "paths": lambda one: one.cell.path,
+        "starts": lambda one: one.cell.start,
+        "lengths": lambda one: one.cell.length,
+        "levels": lambda one: one.cell.level,
+        "pics": lambda one: one.cell.pic,
+        "usages": lambda one: one.cell.usage,
+        "redefines": lambda one: one.cell.redefines,
+        "occurs": lambda one: one.cell.occurs,
+        "values": lambda one: one.cell.value,
+        "figurative": lambda one: one.cell.value_is_figurative,
+        "indexes": lambda one: one.cell.index,
+        "decls": lambda one: one.cell.decl,
+        "ordinals": lambda one: one.cell.ordinal,
+        "parents": lambda one: one.cell.parent,
+        "origins": lambda one: one.record.origin,
+        "record_sizes": lambda one: one.record.size,
+        "record_positions": lambda one: one.record.position,
+    }
+)
+
+
+def _cell_columns(cells: Sequence[DeclaredCell]) -> Mapping[str, tuple[_Column, ...]]:
+    """One array per declared property, each parallel to ``extents``.
+
+    Columns rather than one object per cell: a member's records hold 569226 cells
+    between them, and an object apiece would spell all nineteen field names once
+    per cell. Those names are the cost worth removing; a reader indexes the arrays
+    by position, the same position the extent at that index was written from.
+    """
+    return {
+        name: tuple(column(one) for one in cells)
+        for name, column in _CELL_COLUMNS.items()
+    }
+
+
 def extent_row(field: FieldExtents) -> _Row:
-    """One declared field's row, keyed by its id."""
+    """One declared field's row, under the id the writer dedupes on.
+
+    The first four fields are the row as it has always been, in the order it has
+    always had: a consumer reading ``id``, ``level``, ``usage`` and ``extents``
+    reads the same values from a row carrying the layout columns as from one
+    written before they existed.
+    """
     return (
         field.id,
         json.dumps(
@@ -114,6 +202,8 @@ def extent_row(field: FieldExtents) -> _Row:
                 "level": field.level,
                 "usage": field.usage,
                 "extents": list(field.extents),
+                "program": field.program,
+                **_cell_columns(field.cells),
             }
         ),
     )

@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.extent import CellIndex, cell_index
+from cobble.dataflow.fields.program_layout import ProgramLayout, program_layout
 from cobble.dataflow.layout import program_records
 from cobol_asg.asg_types import CobolASG
 
@@ -64,6 +65,16 @@ def index_of():
 
     def build(asg: CobolASG) -> CellIndex:
         return cell_index(program_records(asg))
+
+    return build
+
+
+@pytest.fixture
+def layout_of():
+    """A program's records and the index over them, the pair emit now takes."""
+
+    def build(asg: CobolASG) -> ProgramLayout:
+        return program_layout(asg)
 
     return build
 

@@ -21,13 +21,21 @@ value ever moved through it. See side_tables.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from cobble.corpus_index import FileLocationResolver
 from cobble.dataflow.fields.extent import CellIndex
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.naming import smallest_covering
-from cobble.dataflow.fields.side_tables import FieldExtents, ReachingDefs
+from cobble.dataflow.fields.program_layout import ProgramLayout
+from cobble.dataflow.fields.side_tables import (
+    DeclaredCell,
+    DeclaredRecord,
+    FieldExtents,
+    ReachingDefs,
+)
 from cobble.dataflow.fixpoint.fixpoint import FlowEdge, ProgramFlow
 from cobble.knowledge_graph.graph_types import (
     AttrValue,
@@ -95,7 +103,7 @@ def _edge(edge: FlowEdge, program: str, index: CellIndex) -> GraphEdge:
 
 def graph_records(
     flow: ProgramFlow,
-    index: CellIndex,
+    layout: ProgramLayout,
     locations: FileLocationResolver,
 ) -> ProgramRecords:
     """One program's FLOWS_TO edges, a FIELD node per endpoint, every field's extents.
@@ -117,6 +125,7 @@ def graph_records(
     and a node built without asking is NOT_ATTEMPTED -- which would claim no
     index was in reach when one was.
     """
+    index = layout.index
     edges = tuple(_edge(edge, flow.program, index) for edge in flow.edges)
     ids = tuple(
         dict.fromkeys(
@@ -126,12 +135,30 @@ def graph_records(
     return ProgramRecords(
         nodes=tuple(_node(node_id, locations) for node_id in ids),
         edges=edges,
-        extents=_declared_extents(index, flow.program),
+        extents=_declared_extents(layout, flow.program),
         defs=_reaching_defs(flow),
     )
 
 
-def _declared_extents(index: CellIndex, program: str) -> tuple[FieldExtents, ...]:
+def _records_declared(layout: ProgramLayout) -> Mapping[str, DeclaredRecord]:
+    """Each record's own three facts, under the name its cells carry.
+
+    Found by name, because that is the handle a cell holds and the same handle
+    ``CellIndex.placements`` is addressed by -- so a program whose two records
+    share a name is already one this package cannot address, and this is not the
+    place that starts.
+    """
+    return MappingProxyType(
+        {
+            record.name: DeclaredRecord(
+                origin=record.origin, size=record.size, position=position
+            )
+            for position, record in enumerate(layout.records)
+        }
+    )
+
+
+def _declared_extents(layout: ProgramLayout, program: str) -> tuple[FieldExtents, ...]:
     """Every declared name in the program, with how and where it was declared.
 
     Declared, not reached: the point of the file is the fields the graph does
@@ -141,14 +168,21 @@ def _declared_extents(index: CellIndex, program: str) -> tuple[FieldExtents, ...
     Level and usage come off the first cell because every occurrence of one
     declaration shares both. A name two records declare at different levels keeps
     the first, which is the same tie ``smallest_covering`` already resolves one
-    way for the ids in the graph.
+    way for the ids in the graph -- and both levels are in ``cells`` either way,
+    where a reader rebuilding the layout needs each cell's own.
     """
+    index = layout.index
+    declared = _records_declared(layout)
     return tuple(
         FieldExtents(
             id=field_id(program, name),
             level=cells[0].level,
             usage=cells[0].usage,
             extents=tuple(extent_text(index.extent_of(cell)) for cell in cells),
+            program=program,
+            cells=tuple(
+                DeclaredCell(cell=cell, record=declared[cell.record]) for cell in cells
+            ),
         )
         for name, cells in index.by_name.items()
     )
