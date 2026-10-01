@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from cobble.dataflow.srccfg.closure import build_closure, main
+from cobble.dataflow.srccfg.dynamic_targets import dynamic_targets_of
 
 
 def _asg(program: str, statements: list[dict]) -> dict:
@@ -171,6 +172,118 @@ def test_a_closure_longer_than_the_interpreter_stack_is_built(tmp_path: Path) ->
     bundle = build_closure(asg_dir, chain[0], Path())
 
     assert [cfg.program for cfg in bundle.cfgs] == chain
+
+
+def _target_row(
+    caller: str, node: str, field: str, candidates: list[str], reasons: list[str]
+) -> dict:
+    return {
+        "caller": caller,
+        "node": node,
+        "transfer": "CICS_LINK",
+        "expression": field,
+        "candidates": candidates,
+        "reasons": reasons,
+        "dropped": [],
+    }
+
+
+def _targets_file(tmp_path: Path, rows: list[dict]) -> Path:
+    path = tmp_path / "targets.jsonl"
+    path.write_text("".join(f"{json.dumps(row)}\n" for row in rows))
+    return path
+
+
+def _dynamic_corpus(tmp_path: Path) -> tuple[Path, Path]:
+    asg_dir = _cache(
+        tmp_path,
+        {
+            "PROGA": [
+                _link("WS-ONE", literal=False),
+                _link("WS-TWO", literal=False),
+                _link("WS-NONE", literal=False),
+            ],
+            "PROGB": [_move()],
+            "PROGC": [_link("WS-NEXT", literal=False)],
+            "PROGD": [_move()],
+            "PROGZ": [_move()],
+        },
+    )
+    targets = _targets_file(
+        tmp_path,
+        [
+            _target_row("PROGA", "MAIN/0", "WS-ONE", ["PROGB"], []),
+            _target_row(
+                "PROGA", "MAIN/1", "WS-TWO", ["PROGB", "PROGC"], ["from-callee"]
+            ),
+            _target_row("PROGA", "MAIN/2", "WS-NONE", [], ["uninitialised"]),
+            _target_row("PROGC", "MAIN/0", "WS-NEXT", ["PROGD"], []),
+        ],
+    )
+    return asg_dir, targets
+
+
+def test_a_dynamic_call_pulls_in_every_candidate_and_each_candidates_own(
+    tmp_path: Path,
+) -> None:
+    asg_dir, targets = _dynamic_corpus(tmp_path)
+
+    bundle = build_closure(asg_dir, "PROGA", Path(), dynamic_targets_of(targets))
+
+    assert [cfg.program for cfg in bundle.cfgs] == ["PROGA", "PROGB", "PROGC", "PROGD"]
+    assert [
+        (c.caller, c.node, c.program, c.entry, c.expression, c.reasons, c.certain)
+        for c in bundle.calls
+    ] == [
+        ("PROGA", "MAIN/0", "PROGB", "MAIN#label", "WS-ONE", (), True),
+        ("PROGA", "MAIN/1", "PROGB", "MAIN#label", "WS-TWO", ("from-callee",), False),
+        ("PROGA", "MAIN/1", "PROGC", "MAIN#label", "WS-TWO", ("from-callee",), False),
+        ("PROGA", "MAIN/2", "WS-NONE", "", "WS-NONE", ("uninitialised",), False),
+        ("PROGC", "MAIN/0", "PROGD", "MAIN#label", "WS-NEXT", (), True),
+    ]
+
+
+def test_the_cli_follows_dynamic_calls_only_when_given_the_targets(
+    tmp_path: Path, capsys
+) -> None:
+    asg_dir, targets = _dynamic_corpus(tmp_path)
+    config = str(_config(tmp_path, asg_dir))
+
+    assert main(["--config", config, "PROGA"]) == 0
+    without = json.loads(capsys.readouterr().out)
+    assert (
+        main(["--config", config, "--dynamic-call-targets", str(targets), "PROGA"]) == 0
+    )
+    with_targets = json.loads(capsys.readouterr().out)
+
+    assert [cfg["program"] for cfg in without["cfgs"]] == ["PROGA"]
+    assert [cfg["program"] for cfg in with_targets["cfgs"]] == [
+        "PROGA",
+        "PROGB",
+        "PROGC",
+        "PROGD",
+    ]
+
+
+def test_a_named_targets_file_that_does_not_exist_stops_the_build(
+    tmp_path: Path, capsys
+) -> None:
+    asg_dir, _ = _dynamic_corpus(tmp_path)
+    missing = tmp_path / "nowhere" / "targets.jsonl"
+
+    with pytest.raises(SystemExit) as stopped:
+        main(
+            [
+                "--config",
+                str(_config(tmp_path, asg_dir)),
+                "--dynamic-call-targets",
+                str(missing),
+                "PROGA",
+            ]
+        )
+
+    assert stopped.value.code == 2
+    assert capsys.readouterr().out == ""
 
 
 def _move_with_span() -> dict:

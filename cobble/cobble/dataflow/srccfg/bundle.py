@@ -172,7 +172,7 @@ def cfg_dicts_of(
 def calls_of(document: JsonValue, source: str = "<document>") -> tuple[BundleCall, ...]:
     """The calls that join the CFGs; a file with none spells that ``[]``."""
     return tuple(
-        BundleCall(**entry)
+        BundleCall(**{**entry, "reasons": tuple(entry.get("reasons", ()))})
         for entry in _shape_of(document, source).get(BUNDLE_CALLS, ())
     )
 
