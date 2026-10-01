@@ -76,9 +76,10 @@ from cobble.dataflow.fields.transfer import (
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
-from cobble.dataflow.srccfg.build import build_program, label_id, paragraph_order
+from cobble.dataflow.srccfg.build import label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
+from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
@@ -613,7 +614,7 @@ def analyse(
     ``entry_state`` is what reaches the program before any statement runs -- the
     initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.
     """
-    cfg = build_program(asg)
+    cfg = program_cfg(asg)
     statements = statement_index(asg)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
