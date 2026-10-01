@@ -26,13 +26,13 @@ def two_fields(field):
 
 
 @pytest.fixture
-def records_of(program_of, index_of):
+def records_of(program_of, layout_of):
     """One program's nodes, edges and declared extents."""
 
     def build(statements, data_fields):
         asg = program_of(statements, data_fields=data_fields)
-        index = index_of(asg)
-        return graph_records(analyse(asg, index), index, CorpusIndex())
+        layout = layout_of(asg)
+        return graph_records(analyse(asg, layout.index), layout, CorpusIndex())
 
     return build
 

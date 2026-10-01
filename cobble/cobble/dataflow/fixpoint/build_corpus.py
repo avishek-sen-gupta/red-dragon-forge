@@ -85,6 +85,7 @@ from cobble.dataflow.fields.aliases import (
 )
 from cobble.dataflow.fields.emit import graph_records
 from cobble.dataflow.fields.extent import CellIndex
+from cobble.dataflow.fields.program_layout import ProgramLayout, program_layout
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
     FieldExtents,
@@ -218,12 +219,15 @@ def _duplicates(totals: RunTotals) -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 
 def _tables(
-    member: str, flow: ProgramFlow, index: CellIndex, locations: FileLocationResolver
+    member: str,
+    flow: ProgramFlow,
+    layout: ProgramLayout,
+    locations: FileLocationResolver,
 ) -> MemberResult:
     """The graph tables, or the reason this member has none of them."""
     if flow.skipped:
         return MemberResult(member=member, program=flow.program, skipped=flow.skipped)
-    records = graph_records(flow, index, locations)
+    records = graph_records(flow, layout, locations)
     return MemberResult(
         member=member,
         program=flow.program,
@@ -296,10 +300,15 @@ def _analysed_member(
 
     In that order because the alias pass cannot discard what it never held -- the
     four tables are already in the result it replaces by the time it runs.
+
+    The layout is built once and handed to both ``analysed`` and the tables: the
+    records the walk is seeded from and the records the extents rows are written
+    from have to be the same ones.
     """
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    flow, index = analysed(asg, options)
-    tables = _tables(path.stem, flow, index, locations)
+    layout = program_layout(asg)
+    flow, index = analysed(asg, options, layout)
+    tables = _tables(path.stem, flow, layout, locations)
     return _aliased_member(tables, asg, index, path.parent)
 
 

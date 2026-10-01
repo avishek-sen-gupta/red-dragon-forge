@@ -57,7 +57,45 @@ def strings(row: Row, key: str) -> tuple[str, ...]:
     """A row's list of strings. ``str`` is rejected deliberately: it is itself a
     Sequence, so a scalar written where a list belongs would otherwise read back as
     one entry per character."""
-    value = row.get(key)
+    return tuple(str(one) for one in _sequence(row.get(key)))
+
+
+def numbers(row: Row, field: str) -> tuple[int, ...]:
+    """A row's list of integers -- a column of one, where a table is written as
+    arrays parallel to each other rather than as an object per entry."""
+    return tuple(int(str(one)) for one in _sequence(row.get(field)))
+
+
+def flags(row: Row, field: str) -> tuple[bool, ...]:
+    """The same for booleans, on the same terms as ``flag``: only JSON ``true``
+    reads as true, so a column written with anything else is conservative."""
+    return tuple(one is True for one in _sequence(row.get(field)))
+
+
+def string_lists(row: Row, field: str) -> tuple[tuple[str, ...], ...]:
+    """A column whose entries are themselves lists of strings -- a qualification
+    path, which has a name per level and is a list for that reason alone."""
+    return tuple(
+        tuple(str(one) for one in _sequence(entry))
+        for entry in _sequence(row.get(field))
+    )
+
+
+def number_lists(row: Row, field: str) -> tuple[tuple[int, ...], ...]:
+    """The same for integers -- a subscript per enclosing table."""
+    return tuple(
+        tuple(int(str(one)) for one in _sequence(entry))
+        for entry in _sequence(row.get(field))
+    )
+
+
+def _sequence(value: object) -> Sequence[object]:
+    """A JSON array, or nothing where something else was written.
+
+    ``str`` is excluded for the reason ``strings`` gives: it is a Sequence of its
+    own characters, and one written where an array belongs would read as a list of
+    them rather than as the malformed row it is.
+    """
     if isinstance(value, str) or not isinstance(value, Sequence):
         return ()
-    return tuple(str(one) for one in value)
+    return value

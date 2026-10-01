@@ -21,6 +21,7 @@ import pytest
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit import ProgramRecords, graph_records
+from cobble.dataflow.fields.program_layout import program_layout
 from cobble.dataflow.fields.side_tables import defs_row, extent_row
 from cobble.dataflow.fixpoint.fixpoint import analysed
 from cobble.dataflow.fixpoint.query import FieldStore, Side, store_of
@@ -59,7 +60,15 @@ def _asg(cache: Path, member: str) -> CobolASG:
 
 
 def _analysed(cache: Path, member: str):
-    return analysed(_asg(cache, member))
+    """The flow and the layout it was analysed against.
+
+    The layout is built here and handed in, which is what the corpus pass does
+    with the one it reads from the extents table -- so the acceptance path and the
+    stage take the same route through ``analysed``.
+    """
+    asg = _asg(cache, member)
+    layout = program_layout(asg)
+    return analysed(asg, layout=layout)[0], layout
 
 
 def test_most_resolvable_writes_produce_at_least_one_edge(corpus_config):
@@ -96,8 +105,8 @@ def test_the_pinned_derivation_holds_end_to_end(corpus_config):
     reason the queries intersect ranges instead.
     """
     oracle = corpus_config["oracle"]
-    flow, index = _analysed(Path(corpus_config["cache_dir"]), oracle["member"])
-    store = _store(graph_records(flow, index, CorpusIndex()))
+    flow, layout = _analysed(Path(corpus_config["cache_dir"]), oracle["member"])
+    store = _store(graph_records(flow, layout, CorpusIndex()))
     (source,) = store.field(oracle["source_field"])
     (target,) = store.field(oracle["target_field"])
 
