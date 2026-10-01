@@ -18,13 +18,20 @@ import logging
 import sys
 import time
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
+from itertools import repeat
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit import _declared_extents
 from cobble.dataflow.fields.program_layout import program_layout
-from cobble.dataflow.fields.side_tables import JsonlWriter, extent_row, jsonl_writer
+from cobble.dataflow.fields.side_tables import (
+    JsonlWriter,
+    _Row,
+    extent_row,
+    jsonl_writer,
+)
 from cobble.dataflow.layout import UnsizeableFieldError
 from cobble.path_utils import ensure_parent
 from cobol_asg.asg_types import CobolASG
@@ -41,52 +48,73 @@ def _members(asg_dir: Path) -> tuple[str, ...]:
     return tuple(sorted(p.stem for p in asg_dir.glob("*.json")))
 
 
-def _emit_one(asg_dir: Path, member: str, writer: JsonlWriter) -> tuple[int, str]:
-    """How many rows one member wrote, or the reason it has none.
+def _laid_out(asg_dir: Path, member: str) -> tuple[tuple[_Row, ...], str, float]:
+    """One member's rows, or the reason it has none, and how long it took.
 
-    Every failure is a reason rather than an abort, which matters more now that the
-    fixpoint stage reads its records here: one member's broken cache file would
-    otherwise cost every other member in the corpus its layout, and that stage its
-    whole input.
+    Runs in a worker process, so it writes and logs nothing: the parent owns the
+    one writer and the report. Every failure is a reason rather than an abort --
+    one member's broken cache file must not cost every other member its layout,
+    and the fixpoint stage its whole input.
     """
+    started = time.monotonic()
     try:
         layout = program_layout(_asg_at(asg_dir / f"{member}.json"))
     except UnsizeableFieldError as unsizeable:
-        return 0, f"unsizeable: {unsizeable}"
+        return (), f"unsizeable: {unsizeable}", time.monotonic() - started
     except Exception as failure:  # noqa: BLE001 - one member must not end the run
-        return 0, f"unreadable: {failure!r}"
+        return (), f"unreadable: {failure!r}", time.monotonic() - started
     rows = tuple(extent_row(ext) for ext in _declared_extents(layout, member))
-    writer.add_rows(rows)
-    return len(rows), ""
+    return rows, "", time.monotonic() - started
 
 
-def _emit_tracked(
-    asg_dir: Path, n: int, total: int, member: str, writer: JsonlWriter
+def _written(
+    numbered: tuple[int, tuple[str, tuple[tuple[_Row, ...], str, float]]],
+    total: int,
+    writer: JsonlWriter,
 ) -> str:
-    logger.info("extents: [%d/%d] %s", n, total, member)
-    started = time.monotonic()
-    written, reason = _emit_one(asg_dir, member, writer)
-    if not reason:
-        logger.info(
-            "extents:   %s %d rows, %.1fs", member, written, time.monotonic() - started
-        )
-    return reason
+    """Write one member's rows and report it; the reason it was skipped, or ""."""
+    n, (member, (rows, reason, seconds)) = numbered
+    if reason:
+        logger.warning("extents: [%d/%d] %s skipped: %s", n, total, member, reason)
+        return reason
+    writer.add_rows(rows)
+    logger.info(
+        "extents: [%d/%d] %s %d rows, %.1fs", n, total, member, len(rows), seconds
+    )
+    return ""
 
 
-def emit(asg_dir: Path, out: Path, members: Sequence[str]) -> int:
+def emit(asg_dir: Path, out: Path, members: Sequence[str], max_workers: int) -> int:
+    """Lay members out across worker processes, writing them in member order.
+
+    Workers finish out of order; ``map`` hands results back in submission order,
+    so the table is the one a serial run writes, byte for byte.
+    """
     chosen = members if members else _members(asg_dir)
     total = len(chosen)
-    logger.info("extents: %d members from %s", total, asg_dir)
+    logger.info("extents: %d members from %s, %d workers", total, asg_dir, max_workers)
     ensure_parent(out)
-    with jsonl_writer(out) as writer:
+    with (
+        ProcessPoolExecutor(max_workers=max_workers) as pool,
+        jsonl_writer(out) as writer,
+    ):
+        results = pool.map(_laid_out, repeat(asg_dir), chosen)
         skipped = tuple(
-            member
-            for n, member in enumerate(chosen, 1)
-            for reason in (_emit_tracked(asg_dir, n, total, member, writer),)
-            if reason and not logger.warning("extents: skipping %s: %s", member, reason)
+            reason
+            for numbered in enumerate(zip(chosen, results, strict=True), 1)
+            for reason in (_written(numbered, total, writer),)
+            if reason
         )
     logger.info("extents: wrote %s (%d skipped)", out, len(skipped))
     return 3 if skipped else 0
+
+
+def _workers(given: str) -> int:
+    """No worker lays out no member, so a count below one is a usage error."""
+    count = int(given)
+    if count < 1:
+        raise argparse.ArgumentTypeError(f"needs at least one worker, got {count}")
+    return count
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -98,6 +126,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--out", required=True, type=Path, help="where to write extents.jsonl"
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=_workers,
+        default=4,
+        help="worker processes laying members out in parallel (default 4)",
     )
     parser.add_argument(
         "members",
@@ -113,7 +147,9 @@ def cli(argv: Sequence[str] = ()) -> int:
     if not arguments.asg_dir.is_dir():
         logger.error("extents: no ASG cache at %s", arguments.asg_dir)
         return 2
-    return emit(arguments.asg_dir, arguments.out, arguments.members)
+    return emit(
+        arguments.asg_dir, arguments.out, arguments.members, arguments.max_workers
+    )
 
 
 def main() -> int:
