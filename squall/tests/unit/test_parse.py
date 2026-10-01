@@ -24,6 +24,19 @@ def test_select_into() -> None:
     assert p.query == "SELECT acct_bal FROM account WHERE acct_id = ?"
 
 
+def test_whitespace_between_a_colon_and_its_host_variable_is_tolerated() -> None:
+    """``: WS-ID`` is the host variable ``WS-ID``, as Db2's precompiler reads it --
+    after the statement's colon and after an indicator's, a line break included."""
+    p = parse_exec_sql(
+        "EXEC SQL SELECT acct_bal INTO : WS-BAL:  WS-BAL-IND FROM account "
+        "WHERE acct_id = :\n           WS-ID END-EXEC"
+    )
+    assert p.kind is Kind.SELECT_INTO
+    assert p.out_vars == (HostVar("WS-BAL", "WS-BAL-IND"),)
+    assert p.in_vars == (HostVar("WS-ID", None),)
+    assert p.query == "SELECT acct_bal FROM account WHERE acct_id = ?"
+
+
 def test_update_input_order() -> None:
     p = parse_exec_sql("EXEC SQL UPDATE CONTROL SET V = :HV-V WHERE N = :HV-N END-EXEC")
     assert p.in_vars == (HostVar("HV-V", None), HostVar("HV-N", None))

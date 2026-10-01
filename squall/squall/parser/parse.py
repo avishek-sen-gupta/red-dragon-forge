@@ -91,9 +91,10 @@ def _strip_envelope(text: str) -> str:
 
 
 def _parse_host_var_tok(tok_value: str) -> HostVar:
-    """Convert a HOST_VAR_TOK string like ':FOO' or ':FOO:IND' to HostVar."""
-    # tok_value always starts with ':'; split on ':' and discard empty strings
-    parts = [s for s in tok_value.split(":") if s]
+    """Convert a HOST_VAR_TOK string like ':FOO', ': FOO' or ':FOO:IND' to HostVar."""
+    # tok_value always starts with ':'; split on ':', drop the whitespace either
+    # colon may be followed by, and discard empty strings
+    parts = [s.strip() for s in tok_value.split(":") if s.strip()]
     name = parts[0]
     indicator = parts[1] if len(parts) >= 2 else None
     return HostVar(name=name, indicator=indicator)
