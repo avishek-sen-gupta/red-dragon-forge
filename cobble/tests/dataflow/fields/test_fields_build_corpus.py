@@ -453,14 +453,18 @@ def test_a_named_member_the_cache_does_not_hold_exits_two(corpus):
     assert not (out_dir / GRAPH_FILE).exists()
 
 
-def test_the_iteration_factor_reaches_the_fixpoint(corpus):
-    """A member given up on at the default factor is re-runnable with more room,
-    so the cap has to be settable from the command line."""
+def test_the_iteration_factor_reaches_the_fixpoint(corpus, capsys):
+    """A member stopped at the cap is published unsettled rather than skipped, and
+    re-runnable with more room, so the cap has to be settable from the command
+    line."""
     argv, _ = corpus(
         {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--iteration-factor", "0")
     )
 
-    assert cli(argv) == 3
+    assert cli(argv) == 0
+
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["skipped"], summary["unsettled"]) == (0, 1)
 
 
 def test_a_sweep_budget_analyses_the_member_and_reports_that_it_settled(corpus, capsys):
@@ -668,7 +672,7 @@ def test_a_budget_skipped_member_still_emits_its_alias_rows(corpus, capsys):
         extra=("--iteration-factor", "0"),
     )
 
-    assert cli(argv) == 3
+    assert cli(argv) == 0
 
     rows = _rows(out_dir / ALIASES_FILE)
     assert [row["callee"] for row in rows if not row["reason"]] == ["XPROGB"]

@@ -544,7 +544,11 @@ def _identified(
 def _walk_note(result: MemberCounts) -> str:
     """How the answer was reached, when that changes what it means."""
     if not result.sweeps:
-        return ""
+        return (
+            ""
+            if result.settled
+            else ", NOT SETTLED at the dequeue cap -- edges are a subset"
+        )
     if result.settled:
         return f", settled in {result.sweeps} sweeps"
     return f", NOT SETTLED after {result.sweeps} sweeps -- edges are a subset"
@@ -860,7 +864,7 @@ def _report_members(totals: RunTotals) -> None:
         logger.warning("fields: !! skipped %s: %s", member, reason)
     if totals.unsettled:
         logger.warning(
-            "fields: !! %d members still growing when the sweep budget ran out "
+            "fields: !! %d members still growing when their walk's budget ran out "
             "(%s); their edges are a subset of the flows those programs have",
             len(totals.unsettled),
             ", ".join(sorted(totals.unsettled)),

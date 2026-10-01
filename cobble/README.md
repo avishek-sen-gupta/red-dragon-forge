@@ -605,9 +605,9 @@ The JSON summary states `aliased` — distinct *sites*, not rows — against the
 `alias_dead_ends` breakdown, so the table's coverage is read off the run. The two
 are not a partition of the site count: one of a twice-declared name's two cells can
 share a window while the other is zero-length and can never be crossed, which puts
-that one site in both buckets, so the two can exceed the site total. A member the
-walk's budget gave up on still contributes its rows: they need the caller's layout,
-and the dequeue cap is reached long after that layout is built. Two members contribute
+that one site in both buckets, so the two can exceed the site total. A member whose
+walk stopped at its budget contributes its rows like any other: they need the
+caller's layout, which is built before the walk starts. Two members contribute
 none — one whose own cache file will not parse, which is reported as a skip
 instead, and one whose layout never built, which is the unsizeable-field skip and
 is not reachable today. The table costs a full parse of every distinct callee's
@@ -629,7 +629,10 @@ Two walks reach the answer, and `--iteration-factor` and `--sweeps` are their
 budgets — mutually exclusive, because each binds only its own walk.
 
 `--iteration-factor` (default 50) drives the worklist walk: dequeues allowed per
-CFG node before a member is given up on with `dequeue cap N reached`. No constant
+CFG node before the walk stops with `dequeue cap N reached`. A member stopped there
+is published **unsettled**, exactly as a sweep budget's is (below): its flows so far
+are a subset of the program's, warned about by name and counted as `unsettled` in
+the JSON summary, and its dynamic call targets carry `incomplete-walk`. No constant
 is right for every program. The bound is nodes × the lattice height at each node,
 height is the distinct sources held at each extent, so a large member can need a
 factor in the hundreds. The heartbeat carries an estimate from the queue's drain
@@ -640,9 +643,9 @@ refining provenance rather than discovering the program.
 `--sweeps N` runs the cheaper walk instead: at most N passes in reverse
 postorder, stopping early on a pass that changes nothing. Reverse postorder is
 what makes it cheap — every predecessor a node is reached through, back edges
-aside, is already processed, so one pass carries a forward chain of any length,
-where the worklist's FIFO order re-visits a node long before its predecessors
-have settled. A member reported as **settled in k sweeps** is exactly as
+aside, is already processed, so one pass carries a forward chain of any length.
+The worklist also visits in reverse-postorder priority, but keeps revisiting
+until nothing grows; a sweep budget stops after N passes. A member reported as **settled in k sweeps** is exactly as
 complete as the worklist's answer; one still growing when the budget runs out is
 an under-approximation — a subset of that program's flows, warned about by name
 and counted as `unsettled` in the JSON summary. Nothing is invented either way,

@@ -306,19 +306,19 @@ def test_an_unhandled_statement_class_is_counted_not_ignored(flow_of):
     assert flow.unhandled == 1
 
 
-def test_reaching_the_dequeue_cap_records_a_reason(flow_of):
-    """The cap is a defect backstop, so a truncated answer must never look complete.
+def test_reaching_the_dequeue_cap_keeps_what_it_found_marked_unsettled(
+    loop_paragraphs, flow_of
+):
+    """The cap stops a walk the way a sweep budget does, so it is answered the same
+    way: join is monotone, so the state at the cap is a subset of the fixpoint and
+    every flow read off it is real. Discarding it threw away flows the walk had
+    already proven -- here all of them -- and only ``settled`` says some may be
+    missing."""
+    capped = flow_of(loop_paragraphs, AnalysisOptions(factor=1))
 
-    Termination rests on monotone join over a finite lattice, not on the cap, so a
-    program that trips it is beyond what this pass can claim -- and the factor is
-    zero here because no correct program of this size reaches the default.
-    """
-    flow = flow_of(
-        [{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}],
-        AnalysisOptions(factor=0),
-    )
-    assert "cap" in flow.skipped
-    assert flow.writes == 1
+    assert (capped.skipped, capped.settled) == ("", False)
+    assert _pairs(capped) == {("WS-A", "WS-B"), ("WS-B", "WS-C")}
+    assert _pairs(capped) <= _pairs(flow_of(loop_paragraphs))
 
 
 def test_a_raised_factor_lifts_the_cap_for_a_member_that_tripped_it(flow_of):
@@ -326,16 +326,16 @@ def test_a_raised_factor_lifts_the_cap_for_a_member_that_tripped_it(flow_of):
     so a member given up on can be re-run with more room rather than reworked."""
     paragraphs = [{"name": "MAIN", "statements": [_move("WS-A", "WS-B")]}]
 
-    assert flow_of(paragraphs, AnalysisOptions(factor=0)).skipped
-    assert not flow_of(paragraphs, AnalysisOptions(factor=1)).skipped
+    assert not flow_of(paragraphs, AnalysisOptions(factor=0)).settled
+    assert flow_of(paragraphs, AnalysisOptions(factor=1)).settled
 
 
 def test_the_first_heartbeat_has_no_rate_and_a_later_one_estimates_from_the_drain():
     """Two samples make a rate; one makes nothing, and says so rather than zero."""
-    first = fixpoint._Pass(states={}, queue=("A",) * 40, dequeues=2000)
-    later = fixpoint._Pass(
+    first = fixpoint._Worklist(states={}, queue=frozenset(range(40)), dequeues=2000)
+    later = fixpoint._Worklist(
         states={},
-        queue=("A",) * 40,
+        queue=frozenset(range(40)),
         dequeues=4000,
         progress=fixpoint._Progress(
             started=time.monotonic() - 10.0, dequeues=2000, queued=60
@@ -348,9 +348,9 @@ def test_the_first_heartbeat_has_no_rate_and_a_later_one_estimates_from_the_drai
 
 def test_an_estimate_that_runs_past_the_cap_says_so_instead_of_a_time():
     """The number worth acting on: waiting buys nothing if the cap arrives first."""
-    run = fixpoint._Pass(
+    run = fixpoint._Worklist(
         states={},
-        queue=("A",) * 40,
+        queue=frozenset(range(40)),
         dequeues=4000,
         progress=fixpoint._Progress(
             started=time.monotonic() - 10.0, dequeues=2000, queued=60
@@ -361,9 +361,9 @@ def test_an_estimate_that_runs_past_the_cap_says_so_instead_of_a_time():
 
 
 def test_a_queue_that_is_not_draining_yields_no_estimate():
-    run = fixpoint._Pass(
+    run = fixpoint._Worklist(
         states={},
-        queue=("A",) * 80,
+        queue=frozenset(range(80)),
         dequeues=4000,
         progress=fixpoint._Progress(
             started=time.monotonic() - 10.0, dequeues=2000, queued=60
