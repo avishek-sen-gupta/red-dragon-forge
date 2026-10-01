@@ -116,7 +116,6 @@ class Ctx:
     paragraph: str
     flows: ProgramContext
     index: Mapping[str, EightyEight]
-    error_handlers: tuple[str, ...] = ()
     source_file: str = ""
     # Which WHENEVER GO TOs govern each EXEC SQL node id. Computed once per
     # program in source order, because the directive is a precompiler one --
@@ -1220,61 +1219,17 @@ def _called(statement, fragment: Fragment, verb: str) -> Fragment:
     )
 
 
-def _handler_goto(ctx: Ctx, path: str, index: int, handler: str) -> Fragment:
-    goto = Node(
-        id=node_id(ctx, path, f"#dispatch.{index}"),
+def _dispatch_fragment(ctx: Ctx, path: str) -> Fragment:
+    """The raise arm's destination: a dispatch node, joined to the handlers armed
+    there by ``with_handler_edges`` once the whole program is lowered."""
+    dispatch = Node(
+        id=node_id(ctx, path, "#dispatch"),
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
-        transfer=GOTO_TRANSFER,
-        target=handler,
+        reads=(HANDLER_ANY,),
+        transfer=DISPATCH_TRANSFER_CICS,
     )
-    return Fragment(nodes=(goto,), edges=(), entry=goto.id, exits=())
-
-
-def _handler_chain(
-    ctx: Ctx, path: str, handlers: tuple[str, ...], index: int
-) -> Fragment:
-    """A chain of TEST nodes, one per handler. Each TRUE arm GOTOs the handler;
-    FALSE falls through to the next. The last FALSE is a dead end."""
-    if index >= len(handlers):
-        stub = Node(
-            id=node_id(ctx, path, "#dispatch.end"),
-            kind=NodeKind.CALL,
-            paragraph=ctx.paragraph,
-            reads=(HANDLER_ANY,),
-            transfer=DISPATCH_TRANSFER_CICS,
-        )
-        return Fragment(nodes=(stub,), edges=(), entry=stub.id, exits=())
-    cond = _exits_of(
-        Node(
-            id=node_id(ctx, path, f"#dispatch.{index}#test"),
-            kind=NodeKind.TEST,
-            paragraph=ctx.paragraph,
-            atom=Atom(
-                text=f"{HANDLER_ANY} {handlers[index]}",
-                left=HANDLER_ANY,
-                op="==",
-                right=handlers[index],
-            ),
-        )
-    )
-    goto = _handler_goto(ctx, path, index, handlers[index])
-    tail = _handler_chain(ctx, path, handlers, index + 1)
-    return _wire_arms(cond, goto, tail)
-
-
-def _dispatch_fragment(ctx: Ctx, path: str) -> Fragment:
-    """The raise arm's destination: a chain of handler tests, or a dead stub."""
-    if not ctx.error_handlers:
-        dispatch = Node(
-            id=node_id(ctx, path, "#dispatch"),
-            kind=NodeKind.CALL,
-            paragraph=ctx.paragraph,
-            reads=(HANDLER_ANY,),
-            transfer=DISPATCH_TRANSFER_CICS,
-        )
-        return Fragment(nodes=(dispatch,), edges=(), entry=dispatch.id, exits=())
-    return _handler_chain(ctx, path, ctx.error_handlers, 0)
+    return Fragment(nodes=(dispatch,), edges=(), entry=dispatch.id, exits=())
 
 
 def _raisable(body: Fragment, ctx: Ctx, path: str) -> Fragment:
