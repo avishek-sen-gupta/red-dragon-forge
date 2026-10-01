@@ -88,6 +88,7 @@ pre.cobol {
   font-family: var(--mono);
   font-size: 0.85rem;
   overflow-x: auto;
+  white-space: nowrap;
 }
 
 .stepper {
