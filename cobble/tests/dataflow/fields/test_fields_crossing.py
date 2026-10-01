@@ -993,31 +993,17 @@ def _written_graph(out, edge_rows) -> None:
 def test_the_graph_file_s_node_rows_are_not_read_as_flows(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
-    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
     _written_graph(out, _two_program_edge_rows())
     _written(out, "aliases.jsonl", (_alias_row(),))
 
-    assert load(out).flows == _two_program_store().flows
+    assert load(out, tmp_path / "extents.jsonl").flows == _two_program_store().flows
 
 
 def test_the_default_answer_does_not_mention_crossing(tmp_path, capsys):
     out = tmp_path / "out"
     out.mkdir()
-    _written(out, "extents.jsonl", _two_program_extent_rows())
-    _written_graph(out, _two_program_edge_rows())
-    _written(out, "aliases.jsonl", (_alias_row(),))
-
-    assert cli(["reaches", "XPROGA.WS-AREA", "--out", str(out)]) == 0
-
-    printed = capsys.readouterr().out
-    assert "across calls" not in printed
-    assert "XPROGB" not in printed
-
-
-def test_the_flag_reports_the_hop_and_the_site(tmp_path, capsys):
-    out = tmp_path / "out"
-    out.mkdir()
-    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
     _written_graph(out, _two_program_edge_rows())
     _written(out, "aliases.jsonl", (_alias_row(),))
 
@@ -1028,6 +1014,34 @@ def test_the_flag_reports_the_hop_and_the_site(tmp_path, capsys):
                 "XPROGA.WS-AREA",
                 "--out",
                 str(out),
+                "--extents",
+                str(tmp_path / "extents.jsonl"),
+            ]
+        )
+        == 0
+    )
+
+    printed = capsys.readouterr().out
+    assert "across calls" not in printed
+    assert "XPROGB" not in printed
+
+
+def test_the_flag_reports_the_hop_and_the_site(tmp_path, capsys):
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
+    _written_graph(out, _two_program_edge_rows())
+    _written(out, "aliases.jsonl", (_alias_row(),))
+
+    assert (
+        cli(
+            [
+                "reaches",
+                "XPROGA.WS-AREA",
+                "--out",
+                str(out),
+                "--extents",
+                str(tmp_path / "extents.jsonl"),
                 "--across-calls",
                 "--max-hops",
                 "2",
@@ -1047,11 +1061,24 @@ def test_a_landing_line_names_the_bytes_it_landed_on(tmp_path, capsys):
     apart: without the range the rows read as one row printed twice."""
     out = tmp_path / "out"
     out.mkdir()
-    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
     _written_graph(out, _two_program_edge_rows())
     _written(out, "aliases.jsonl", (_alias_row(),))
 
-    assert cli(["reaches", "XPROGA.WS-AREA", "--out", str(out), "--across-calls"]) == 0
+    assert (
+        cli(
+            [
+                "reaches",
+                "XPROGA.WS-AREA",
+                "--out",
+                str(out),
+                "--extents",
+                str(tmp_path / "extents.jsonl"),
+                "--across-calls",
+            ]
+        )
+        == 0
+    )
 
     printed = capsys.readouterr().out
     assert "XPROGB.DFHCOMMAREA  DFHCOMMAREA@linkage[0:12]" in printed
@@ -1065,10 +1092,20 @@ def test_a_question_that_cannot_cross_a_call_refuses_the_flag(tmp_path, query):
     from a corpus in which no call site shares any bytes."""
     out = tmp_path / "out"
     out.mkdir()
-    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
 
     with pytest.raises(SystemExit) as refused:
-        cli([query, "XPROGA.WS-AREA", "--out", str(out), "--across-calls"])
+        cli(
+            [
+                query,
+                "XPROGA.WS-AREA",
+                "--out",
+                str(out),
+                "--extents",
+                str(tmp_path / "extents.jsonl"),
+                "--across-calls",
+            ]
+        )
 
     assert refused.value.code == 2
 
@@ -1076,7 +1113,7 @@ def test_a_question_that_cannot_cross_a_call_refuses_the_flag(tmp_path, query):
 def test_asking_to_cross_zero_hops_is_rejected(tmp_path):
     out = tmp_path / "out"
     out.mkdir()
-    _written(out, "extents.jsonl", _two_program_extent_rows())
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
 
     with pytest.raises(SystemExit):
         cli(
@@ -1085,6 +1122,8 @@ def test_asking_to_cross_zero_hops_is_rejected(tmp_path):
                 "XPROGA.WS-AREA",
                 "--out",
                 str(out),
+                "--extents",
+                str(tmp_path / "extents.jsonl"),
                 "--across-calls",
                 "--max-hops",
                 "0",

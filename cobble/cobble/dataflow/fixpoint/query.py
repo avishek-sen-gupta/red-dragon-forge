@@ -51,7 +51,6 @@ from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
-    EXTENTS_FILE,
     GRAPH_FILE,
 )
 from cobble.dataflow.fixpoint.rows import Row
@@ -770,14 +769,15 @@ def store_of(
     )
 
 
-def load(out_dir: Path) -> FieldStore:
-    """The artefact as one store. Missing tables load as empty, not as an error.
+def load(out_dir: Path, extents: Path) -> FieldStore:
+    """The artefact, joined with the extents table the fixpoint read, as one store.
+    Missing tables load as empty, not as an error.
 
     A run of an older build has no defs.jsonl, and a query that answers every
     other question about it is more use than one that refuses the directory.
     """
     return store_of(
-        rows.read(out_dir / EXTENTS_FILE),
+        rows.read(extents),
         rows.read(out_dir / GRAPH_FILE),
         rows.read(out_dir / DEFS_FILE),
         rows.read(out_dir / ALIASES_FILE),
@@ -1002,6 +1002,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("subject", help="a field name, or PROGRAM.FIELD to qualify it")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument(
+        "--extents",
+        required=True,
+        type=Path,
+        help="extents.jsonl from cobble-extents: the layout the fixpoint read",
+    )
+    parser.add_argument(
         "--depth",
         type=int,
         default=MAX_DEPTH,
@@ -1027,7 +1033,10 @@ def cli(argv: Sequence[str] = ()) -> int:
     if not arguments.out.is_dir():
         sys.stderr.write(f"fields: !! no artefact directory at {arguments.out}\n")
         return 2
-    return _report(load(arguments.out), arguments)
+    if not arguments.extents.is_file():
+        sys.stderr.write(f"fields: !! no extents table at {arguments.extents}\n")
+        return 2
+    return _report(load(arguments.out, arguments.extents), arguments)
 
 
 def main() -> int:

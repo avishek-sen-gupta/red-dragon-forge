@@ -25,7 +25,6 @@ from cobble.dataflow.fixpoint import build_corpus
 from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
-    EXTENTS_FILE,
     GRAPH_FILE,
     TARGETS_FILE,
     cli,
@@ -246,7 +245,7 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
         written.append(
             tuple(
                 (out_dir / name).read_bytes()
-                for name in (GRAPH_FILE, EXTENTS_FILE, DEFS_FILE, ALIASES_FILE)
+                for name in (GRAPH_FILE, DEFS_FILE, ALIASES_FILE)
             )
         )
 
@@ -308,23 +307,6 @@ def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
     assert [one for one in reported if one.startswith("fields: !! skipped")] == [
         f"fields: !! skipped MEMBERB: {reason}"
     ]
-
-
-def test_naming_the_run_s_own_extents_file_as_its_input_exits_two(corpus):
-    """The one path --extents must not be: the file this run truncates on the way in.
-
-    A guard rather than a note in the README, because the failure is silent -- the
-    table left on disk afterwards is the one the run wrote, so nothing says which
-    layout the members were analysed against.
-    """
-    argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
-    given = Path(argv[argv.index("--extents") + 1])
-    out_dir.mkdir(parents=True, exist_ok=True)
-    own = out_dir / EXTENTS_FILE
-    own.write_text(given.read_text(encoding="utf-8"), encoding="utf-8")
-
-    assert cli([str(own) if one == str(given) else one for one in argv]) == 2
-    assert own.read_text(encoding="utf-8") == given.read_text(encoding="utf-8")
 
 
 def test_a_missing_extents_table_exits_two(corpus):
@@ -402,25 +384,19 @@ def test_a_lowered_floor_accepts_the_same_run(corpus):
     assert cli(argv) == 0
 
 
-def test_the_declared_extents_go_to_their_own_file_not_into_the_nodes(corpus):
-    """Geometry a consumer can intersect, beside the graph rather than in it.
-
-    REC is in the extents file and not in the graph: no value moves through a
-    group whose child was the target, so it is a declaration and not a flow
-    fact -- and a reader intersecting the group write against it is exactly what
-    the file is for."""
+def test_the_run_writes_four_tables_and_no_layout_into_the_graph(corpus):
+    """The layout is cobble-extents' table, which this stage reads and does not
+    republish; a field node carries its id and nothing a layout would add."""
     argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
 
     assert cli(argv) == 0
 
-    declared = {field["id"]: field for field in _rows(out_dir / EXTENTS_FILE)}
-    assert declared["PROGA.WS-B"]["extents"] == ["WS-B@working_storage[4:8]"]
-    assert declared["PROGA.REC"]["extents"] == ["REC@working_storage[0:8]"]
-    assert (declared["PROGA.WS-B"]["level"], declared["PROGA.WS-B"]["usage"]) == (
-        5,
-        "DISPLAY",
-    )
-    assert declared["PROGA.REC"]["level"] == 1
+    assert sorted(path.name for path in out_dir.iterdir()) == [
+        ALIASES_FILE,
+        DEFS_FILE,
+        GRAPH_FILE,
+        TARGETS_FILE,
+    ]
     assert [node["attrs"] for node in _tagged(out_dir / GRAPH_FILE, RowType.NODE)] == [
         {},
         {},
@@ -716,7 +692,7 @@ def test_a_callee_the_parse_cannot_read_costs_one_row_and_not_the_four_tables(
 
     assert cli(argv) == 0
 
-    for name in (GRAPH_FILE, EXTENTS_FILE, DEFS_FILE):
+    for name in (GRAPH_FILE, DEFS_FILE):
         assert _rows(out_dir / name), name
     (row,) = _rows(out_dir / ALIASES_FILE)
     assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "MAIN/1", "LINK")
@@ -927,7 +903,7 @@ def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
 
     assert cli(argv) == 0
 
-    for name in (GRAPH_FILE, EXTENTS_FILE, DEFS_FILE):
+    for name in (GRAPH_FILE, DEFS_FILE):
         assert _rows(out_dir / name), name
     (row,) = _rows(out_dir / ALIASES_FILE)
     assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "", "")

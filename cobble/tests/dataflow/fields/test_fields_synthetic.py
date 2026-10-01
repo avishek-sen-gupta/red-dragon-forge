@@ -141,7 +141,7 @@ def artefact(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="module")
 def store(artefact: Path) -> FieldStore:
-    return load(artefact)
+    return load(artefact, artefact.parent / "extents.jsonl")
 
 
 def _one(store: FieldStore, name: str):
@@ -351,7 +351,7 @@ def test_the_run_settled_and_explained_every_write_it_found(artefact: Path):
     regression this suite should name before a corpus run has to."""
     rows = tuple(
         json.loads(line)
-        for line in (artefact / "extents.jsonl")
+        for line in (artefact.parent / "extents.jsonl")
         .read_text(encoding="utf-8")
         .splitlines()
     )
@@ -465,7 +465,7 @@ def test_a_crossing_query_reaches_the_callee_write_and_comes_back(
 ):
     """The whole point: the caller's outbound field crosses in, the callee's write
     crosses back, and the caller's own sink sees it."""
-    store = load(two_program_artefact)
+    store = load(two_program_artefact, two_program_artefact.parent / "extents.jsonl")
     (start,) = store.field(f"{CALLER}.WS-OUT-KEY")
 
     found = crossing(store, start.ranges, Side.SOURCE, depth=6, hops=2)
@@ -479,7 +479,7 @@ def test_a_crossing_query_reaches_the_callee_write_and_comes_back(
 
 def test_the_callee_bytes_are_the_rebased_caller_bytes(two_program_artefact: Path):
     """A name match would get this wrong; a byte rebase does not."""
-    store = load(two_program_artefact)
+    store = load(two_program_artefact, two_program_artefact.parent / "extents.jsonl")
     (outbound,) = store.field(f"{CALLER}.WS-OUT-KEY")
 
     ((_alias, landing),) = store.across(outbound.ranges)

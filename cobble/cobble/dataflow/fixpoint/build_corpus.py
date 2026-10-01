@@ -21,11 +21,10 @@ A member that raises is reported and the run continues, because the answer wante
 from a whole-corpus run is "which members are missing from this output", and a run
 that aborts answers that for one member only.
 
-Five files, so that the graph holds only what nothing outside it could state:
+Four files, so that the graph holds only what nothing outside it could state:
 
   graph.jsonl    the FIELD endpoints (no attributes) and one FLOWS_TO per
                  (node, source extent, target extent), each row tagged node or edge
-  extents.jsonl  every declared name's level, usage, and byte ranges
   defs.jsonl     the definitions reaching each (node, source extent)
   aliases.jsonl  per call site and caller window, the bytes shared with a callee
   targets.jsonl  per dynamic call site, the candidate programs it can reach
@@ -108,12 +107,10 @@ from cobble.dataflow.fields.extents_input import MemberLayout, declared_layouts
 from cobble.dataflow.fields.program_layout import ProgramLayout
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
-    FieldExtents,
     JsonlWriter,
     ReachingDefs,
     alias_row,
     defs_row,
-    extent_row,
     jsonl_writer,
     target_row,
 )
@@ -128,7 +125,6 @@ from cobol_asg.asg_types import CobolASG
 logger = logging.getLogger(__name__)
 
 GRAPH_FILE = "graph.jsonl"
-EXTENTS_FILE = "extents.jsonl"
 DEFS_FILE = "defs.jsonl"
 ALIASES_FILE = "aliases.jsonl"
 TARGETS_FILE = "targets.jsonl"
@@ -149,7 +145,6 @@ class MemberResult:
     program: str = ""
     nodes: tuple[GraphNode, ...] = ()
     edges: tuple[GraphEdge, ...] = ()
-    extents: tuple[FieldExtents, ...] = ()
     defs: tuple[ReachingDefs, ...] = ()
     aliases: tuple[CommareaAlias, ...] = ()
     targets: tuple[ResolvedTarget, ...] = ()
@@ -256,7 +251,6 @@ def _tables(
         program=flow.program,
         nodes=records.nodes,
         edges=records.edges,
-        extents=records.extents,
         defs=records.defs,
         targets=flow.targets,
         writes=flow.writes,
@@ -437,26 +431,24 @@ def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
 
 @dataclass(frozen=True)
 class _Sinks:
-    """All six artefacts of one run.
+    """All four artefacts of one run.
 
-    Separate files because only two of them are graph facts: where a field is
-    declared, which statements could have last written a range, which bytes a
-    call site hands to another program, and which programs a dynamic call site
-    can reach are all true whether or not anything flowed -- and the reason
+    Separate files because only the graph holds flows: which statements could have
+    last written a range, which bytes a call site hands to another program, and
+    which programs a dynamic call site can reach are all true whether or not
+    anything flowed -- and the reason
     targets is its own file is the same reason aliases is: a call site's
     possible callees are not a fact about either program's field graph. See
     side_tables.
     """
 
     graph: GraphWriter
-    extents: JsonlWriter
     defs: JsonlWriter
     aliases: JsonlWriter
     targets: JsonlWriter
 
     def add_result(self, result: MemberResult) -> None:
         self.graph.add_all(result.nodes, result.edges)
-        self.extents.add_rows(map(extent_row, result.extents))
         self.defs.add_rows(map(defs_row, result.defs))
         self.aliases.add_rows(map(alias_row, result.aliases))
         self.targets.add_rows(map(target_row, result.targets))
@@ -755,13 +747,12 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     with (
         cached_asg_dialect_parsers_registered(),
         _writer(arguments, locations) as graph,
-        _side_writer(arguments, EXTENTS_FILE) as extents,
         _side_writer(arguments, DEFS_FILE) as defs,
         _side_writer(arguments, ALIASES_FILE) as aliases,
         _side_writer(arguments, TARGETS_FILE) as targets,
     ):
         totals = _run(
-            _Sinks(graph, extents, defs, aliases, targets),
+            _Sinks(graph, defs, aliases, targets),
             _inputs(paths, arguments, locations),
         )
     _report(totals)
@@ -848,29 +839,9 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(tuple(argv) if argv else None)
 
 
-def _overwrites_its_input(arguments: argparse.Namespace) -> bool:
-    """Whether --extents names the file this run is about to write.
-
-    The stage publishes its own ``extents.jsonl`` into ``out_dir``, so a caller
-    pointing --extents at that path is handing it the file it truncates on the way
-    in. Rejected rather than documented: the surviving table would be whatever the
-    run wrote, and the layout every member was analysed against would have come
-    from a file no longer there to check.
-    """
-    if arguments.extents.resolve() != (arguments.out_dir / EXTENTS_FILE).resolve():
-        return False
-    logger.error(
-        "fields: !! --extents %s is this run's own output; write the input "
-        "elsewhere (cobble-extents --asg-dir %s --out <path>)",
-        arguments.extents,
-        arguments.asg_dir,
-    )
-    return True
-
-
 def _rejected(arguments: argparse.Namespace) -> bool:
-    """Whether the run cannot start, for either reason it cannot."""
-    return _missing_input(arguments) or _overwrites_its_input(arguments)
+    """Whether the run cannot start."""
+    return _missing_input(arguments)
 
 
 def _missing_input(arguments: argparse.Namespace) -> bool:
