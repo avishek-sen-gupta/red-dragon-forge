@@ -210,6 +210,18 @@ def extent_row(field: FieldExtents) -> _Row:
     )
 
 
+def defs_identity(program: str, node: str, extent: str) -> str:
+    return f"{program}\x00{node}\x00{extent}"
+
+
+def alias_identity(caller: str, node: str, caller_extent: str) -> str:
+    return f"{caller}\x00{node}\x00{caller_extent}"
+
+
+def target_identity(caller: str, node: str) -> str:
+    return f"{caller}\x00{node}"
+
+
 def defs_row(defs: ReachingDefs) -> _Row:
     """One reaching-definition row, identified by what a flow joins on.
 
@@ -218,7 +230,7 @@ def defs_row(defs: ReachingDefs) -> _Row:
     the first program's row and dropped every other's.
     """
     return (
-        f"{defs.program}\x00{defs.node}\x00{defs.extent}",
+        defs_identity(defs.program, defs.node, defs.extent),
         json.dumps(
             {
                 "program": defs.program,
@@ -241,7 +253,7 @@ def alias_row(alias: CommareaAlias) -> _Row:
     drops, rightly: there is one window there to report and not two.
     """
     return (
-        f"{alias.caller}\x00{alias.node}\x00{alias.caller_extent}",
+        alias_identity(alias.caller, alias.node, alias.caller_extent),
         json.dumps(
             {
                 "caller": alias.caller,
@@ -266,7 +278,7 @@ def target_row(target: ResolvedTarget) -> _Row:
     and the string is the wire.
     """
     return (
-        f"{target.caller}\x00{target.node}",
+        target_identity(target.caller, target.node),
         json.dumps(
             {
                 "caller": target.caller,
@@ -312,18 +324,22 @@ class JsonlWriter:
         self._file.close()
         self._tmp.rename(self._path)
 
+    def abandon(self) -> None:
+        self._file.close()
+
 
 @contextmanager
 def jsonl_writer(path: Path) -> Iterator[JsonlWriter]:
-    """The ``with`` form of ``JsonlWriter``, closing it however the block ends.
+    """The ``with`` form of ``JsonlWriter``: published on a clean exit only.
 
-    ``knowledge_graph/graph_writer.py``'s ``GraphWriter`` implements the protocol
-    directly, with the ``*exc: object`` annotation the same lint rules reject; it
-    passes only because the blocking hook lints staged files and nothing has staged
-    it since. Whoever does needs this seam, and this is the precedent.
+    A block that raises leaves its rows in the .tmp and nothing at the path, as
+    ``graph_writer`` does: renamed into place, a partial table would read as
+    complete to every consumer.
     """
     writer = JsonlWriter(path)
     try:
         yield writer
-    finally:
-        writer.close()
+    except BaseException:
+        writer.abandon()
+        raise
+    writer.close()

@@ -463,6 +463,19 @@ are written and reported in table order, so the four tables are byte for byte wh
 one worker writes. The walk's own progress lines come from the workers and
 interleave; each names its program.
 
+The run is **resumable**. Each finished member is a directory of its own,
+`<out_dir>/members/<MEMBER>/` — its four tables and a `counts.json` holding what it
+adds to the run's report — renamed into place when the member is done, so a
+directory that exists is a member that finished, skipped members included. A
+re-run reuses those members (`[n/N] MEMBER reused`) and analyses only the rest. The
+four corpus files are rebuilt from the selected members' directories, in table
+order and through the same deduping writers, only once every member is done: an
+interrupted run leaves the previous corpus files as they were, and a resumed run
+publishes exactly the files and summary an uninterrupted one does. A `--member`
+run publishes only its members and leaves every other directory alone. Nothing
+checks whether a member directory came from a different `--sweeps`, ASG cache or
+extents table; `--force` discards every member directory and analyses again.
+
 A member the table does not hold is a recorded skip naming the command that fixes
 it — never a crash, never silence — reported after the members it does hold. An
 absent table is exit 2 before the first member. The table is read, never

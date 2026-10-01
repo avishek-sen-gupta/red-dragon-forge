@@ -22,6 +22,15 @@ def _rows(path: Path) -> tuple[GraphRow, ...]:
     )
 
 
+def read_graph_rows(path: Path) -> tuple[GraphNode | GraphEdge, ...]:
+    """Every node and edge in file order, for a caller replaying a graph file
+    through a writer: the order is the writer's, endpoint nodes before their edge."""
+    return tuple(
+        row.to_edge() if isinstance(row, EdgeRow) else row.to_node()
+        for row in _rows(path)
+    )
+
+
 def read_graph(path: Path) -> tuple[list[GraphNode], list[GraphEdge]]:
     rows = _rows(path)
     return (

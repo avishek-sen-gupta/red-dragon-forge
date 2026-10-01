@@ -82,9 +82,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import shutil
 import sys
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
@@ -115,15 +116,21 @@ from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
     JsonlWriter,
     ReachingDefs,
+    alias_identity,
     alias_row,
+    defs_identity,
     defs_row,
     jsonl_writer,
+    target_identity,
     target_row,
 )
+from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
+from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.knowledge_graph.graph_file import read_graph_rows
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.path_utils import ensure_dir
@@ -135,6 +142,8 @@ GRAPH_FILE = "graph.jsonl"
 DEFS_FILE = "defs.jsonl"
 ALIASES_FILE = "aliases.jsonl"
 TARGETS_FILE = "targets.jsonl"
+MEMBERS_DIR = "members"
+COUNTS_FILE = "counts.json"
 DEFAULT_FLOOR = 0.60
 
 
@@ -369,16 +378,16 @@ def _member_result(
         return MemberResult(member=published.member, skipped=f"unreadable: {error!r}")
 
 
-def _skipped(result: MemberResult) -> tuple[tuple[str, str], ...]:
-    return ((result.member, result.skipped),) if result.skipped else ()
+def _skipped(counts: MemberCounts) -> tuple[tuple[str, str], ...]:
+    return ((counts.member, counts.skipped),) if counts.skipped else ()
 
 
-def _seen(result: MemberResult) -> tuple[tuple[str, str], ...]:
-    return ((result.program, result.member),) if result.program else ()
+def _seen(counts: MemberCounts) -> tuple[tuple[str, str], ...]:
+    return ((counts.program, counts.member),) if counts.program else ()
 
 
-def _unsettled(result: MemberResult) -> tuple[str, ...]:
-    return () if result.skipped or result.settled else (result.member,)
+def _unsettled(counts: MemberCounts) -> tuple[str, ...]:
+    return () if counts.skipped or counts.settled else (counts.member,)
 
 
 def _site(alias: CommareaAlias) -> tuple[str, str]:
@@ -426,22 +435,43 @@ def _unresolved_reasons(result: MemberResult) -> tuple[str, ...]:
     )
 
 
-def _folded(totals: RunTotals, result: MemberResult) -> RunTotals:
+def counts_of(result: MemberResult) -> MemberCounts:
+    """What a member adds to the run's report, without the records themselves."""
+    return MemberCounts(
+        member=result.member,
+        program=result.program,
+        skipped=result.skipped,
+        writes=result.writes,
+        covered=result.covered,
+        unhandled=result.unhandled,
+        sweeps=result.sweeps,
+        settled=result.settled,
+        edges=len(result.edges),
+        aliased=_aliased(result),
+        dead_ends=_dead_ends(result),
+        dynamic_sites=len(result.targets),
+        resolved_one=_resolved_one(result),
+        resolved_several=_resolved_several(result),
+        unresolved_reasons=_unresolved_reasons(result),
+    )
+
+
+def _folded(totals: RunTotals, counts: MemberCounts) -> RunTotals:
     return RunTotals(
-        members=(*totals.members, result.member),
-        analysed=totals.analysed + (0 if result.skipped else 1),
-        writes=totals.writes + result.writes,
-        covered=totals.covered + result.covered,
-        unhandled=totals.unhandled + result.unhandled,
-        skipped=(*totals.skipped, *_skipped(result)),
-        unsettled=(*totals.unsettled, *_unsettled(result)),
-        programs=(*totals.programs, *_seen(result)),
-        aliased=totals.aliased + _aliased(result),
-        dead_ends=(*totals.dead_ends, *_dead_ends(result)),
-        dynamic_sites=totals.dynamic_sites + len(result.targets),
-        resolved_one=totals.resolved_one + _resolved_one(result),
-        resolved_several=totals.resolved_several + _resolved_several(result),
-        unresolved_reasons=(*totals.unresolved_reasons, *_unresolved_reasons(result)),
+        members=(*totals.members, counts.member),
+        analysed=totals.analysed + (0 if counts.skipped else 1),
+        writes=totals.writes + counts.writes,
+        covered=totals.covered + counts.covered,
+        unhandled=totals.unhandled + counts.unhandled,
+        skipped=(*totals.skipped, *_skipped(counts)),
+        unsettled=(*totals.unsettled, *_unsettled(counts)),
+        programs=(*totals.programs, *_seen(counts)),
+        aliased=totals.aliased + counts.aliased,
+        dead_ends=(*totals.dead_ends, *counts.dead_ends),
+        dynamic_sites=totals.dynamic_sites + counts.dynamic_sites,
+        resolved_one=totals.resolved_one + counts.resolved_one,
+        resolved_several=totals.resolved_several + counts.resolved_several,
+        unresolved_reasons=(*totals.unresolved_reasons, *counts.unresolved_reasons),
     )
 
 
@@ -469,13 +499,49 @@ class _Sinks:
         self.aliases.add_rows(map(alias_row, result.aliases))
         self.targets.add_rows(map(target_row, result.targets))
 
+    def add_member(self, directory: Path) -> None:
+        """One finished member's tables, replayed in the order they were written,
+        so the writers dedupe across members exactly as one uninterrupted run."""
+        tuple(map(self._add_graph_row, read_graph_rows(directory / GRAPH_FILE)))
+        self.defs.add_rows(_identified(directory / DEFS_FILE, _defs_identity))
+        self.aliases.add_rows(_identified(directory / ALIASES_FILE, _alias_identity))
+        self.targets.add_rows(_identified(directory / TARGETS_FILE, _target_identity))
 
-def _written(sinks: _Sinks, result: MemberResult) -> MemberResult:
-    sinks.add_result(result)
-    return result
+    def _add_graph_row(self, row: GraphNode | GraphEdge) -> None:
+        if isinstance(row, GraphEdge):
+            self.graph.add_edge(row)
+            return
+        self.graph.add_node(row)
 
 
-def _walk_note(result: MemberResult) -> str:
+def _defs_identity(row: Row) -> str:
+    return defs_identity(
+        rows.text(row, "program"), rows.text(row, "node"), rows.text(row, "extent")
+    )
+
+
+def _alias_identity(row: Row) -> str:
+    return alias_identity(
+        rows.text(row, "caller"),
+        rows.text(row, "node"),
+        rows.text(row, "caller_extent"),
+    )
+
+
+def _target_identity(row: Row) -> str:
+    return target_identity(rows.text(row, "caller"), rows.text(row, "node"))
+
+
+def _identified(
+    path: Path, identity: Callable[[Row], str]
+) -> tuple[tuple[str, str], ...]:
+    """Each line of a member's table under the identity its writer deduped it on;
+    the line itself is kept as written, so the corpus file is the same bytes."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return tuple(zip(map(identity, rows.read(path)), lines, strict=True))
+
+
+def _walk_note(result: MemberCounts) -> str:
     """How the answer was reached, when that changes what it means."""
     if not result.sweeps:
         return ""
@@ -484,7 +550,7 @@ def _walk_note(result: MemberResult) -> str:
     return f", NOT SETTLED after {result.sweeps} sweeps -- edges are a subset"
 
 
-def _log_result(result: MemberResult, seconds: float) -> None:
+def _log_result(result: MemberCounts, seconds: float) -> None:
     if result.skipped:
         logger.warning(
             "fields:   %s skipped after %.1fs: %s",
@@ -499,7 +565,7 @@ def _log_result(result: MemberResult, seconds: float) -> None:
         result.covered,
         result.writes,
         result.unhandled,
-        len(result.edges),
+        result.edges,
         seconds,
         _walk_note(result),
     )
@@ -513,10 +579,12 @@ class _MemberTask:
     path: Path
     block: tuple[Row, ...]
     options: AnalysisOptions
+    members: Path
+    reused: bool = False
 
 
-def _analysed_in_worker(task: _MemberTask) -> tuple[MemberResult, float]:
-    """One member's result and its seconds, computed in a worker process.
+def _analysed(task: _MemberTask) -> tuple[MemberResult, float]:
+    """One member's result and its seconds.
 
     The layout is built here from the member's table rows rather than shipped
     built: rows are plain values, the layout an object graph many times their size.
@@ -533,17 +601,56 @@ def _analysed_in_worker(task: _MemberTask) -> tuple[MemberResult, float]:
     return result, time.monotonic() - started
 
 
+def _member_directory(result: MemberResult, members: Path) -> None:
+    """Write one member's four tables and counts, then rename the directory into
+    place: a member directory that exists is a member that finished."""
+    staging = members / f"{result.member}.tmp"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    with (
+        graph_writer(staging / GRAPH_FILE, CorpusIndex()) as graph,
+        jsonl_writer(staging / DEFS_FILE) as defs,
+        jsonl_writer(staging / ALIASES_FILE) as aliases,
+        jsonl_writer(staging / TARGETS_FILE) as targets,
+    ):
+        _Sinks(graph, defs, aliases, targets).add_result(result)
+    (staging / COUNTS_FILE).write_text(
+        counts_of(result).model_dump_json(), encoding="utf-8"
+    )
+    staging.rename(members / result.member)
+
+
+def _analysed_in_worker(task: _MemberTask) -> tuple[MemberCounts, float, bool]:
+    """A member analysed in a worker process, its directory written there, and
+    only its counts sent back. A skipped member gets its directory too: a member
+    the walk's budget gave up on still has alias rows, and its counts carry the
+    reason, so a resumed run reports the skip exactly as a fresh one."""
+    result, seconds = _analysed(task)
+    _member_directory(result, task.members)
+    return counts_of(result), seconds, False
+
+
+def _reused_in_worker(task: _MemberTask) -> tuple[MemberCounts, float, bool]:
+    path = task.members / task.member / COUNTS_FILE
+    return (
+        MemberCounts.model_validate_json(path.read_text(encoding="utf-8")),
+        0.0,
+        True,
+    )
+
+
 def _in_order(
     pool: ProcessPoolExecutor, tasks: Iterator[_MemberTask], window: int
-) -> Iterator[tuple[MemberResult, float]]:
+) -> Iterator[tuple[MemberCounts, float, bool]]:
     """Results in task order, with at most ``window`` + 1 members in flight.
 
     ``map`` would submit every task at once and so read the whole table into
     memory; here ``lead`` runs ``window`` submissions ahead of ``lag``, each
     result taken submits the next task, and the table is read only that far ahead.
     """
-    submitted: Iterator[Future[tuple[MemberResult, float]]] = (
-        pool.submit(_analysed_in_worker, task) for task in tasks
+    submitted: Iterator[Future[tuple[MemberCounts, float, bool]]] = (
+        pool.submit(_reused_in_worker if task.reused else _analysed_in_worker, task)
+        for task in tasks
     )
     lag, lead = tee(submitted)
     next(islice(lead, window, window), None)
@@ -551,13 +658,16 @@ def _in_order(
 
 
 def _reported_member(
-    numbered: tuple[int, tuple[MemberResult, float]], total: int
-) -> MemberResult:
-    """One member's lines, logged as its rows are written, in table order."""
-    position, (result, seconds) = numbered
-    logger.info("fields: [%d/%d] %s", position, total, result.member)
-    _log_result(result, seconds)
-    return result
+    numbered: tuple[int, tuple[MemberCounts, float, bool]], total: int
+) -> MemberCounts:
+    """One member's lines, logged in table order as its result arrives."""
+    position, (counts, seconds, reused) = numbered
+    if reused:
+        logger.info("fields: [%d/%d] %s reused", position, total, counts.member)
+        return counts
+    logger.info("fields: [%d/%d] %s", position, total, counts.member)
+    _log_result(counts, seconds)
+    return counts
 
 
 def _tasks(inputs: _Inputs) -> Iterator[_MemberTask]:
@@ -572,22 +682,25 @@ def _tasks(inputs: _Inputs) -> Iterator[_MemberTask]:
         _MemberTask(
             member=member,
             path=inputs.chosen[member],
-            block=block,
+            block=() if reused else block,
             options=inputs.options,
+            members=inputs.members,
+            reused=reused,
         )
         for member, block in member_rows(inputs.extents)
         if member in inputs.chosen
+        for reused in ((inputs.members / member).is_dir(),)
     )
 
 
-def _unpublished(inputs: _Inputs, totals: RunTotals) -> tuple[MemberResult, ...]:
+def _unpublished(inputs: _Inputs, totals: RunTotals) -> tuple[MemberCounts, ...]:
     """A reason for every selected member the table never yielded.
 
     In the order they were asked for, and after the members that were analysed,
     because these were never in the sequence the run followed.
     """
     return tuple(
-        MemberResult(
+        MemberCounts(
             member=member,
             skipped=_no_extents(inputs.chosen[member], inputs.extents),
         )
@@ -596,13 +709,13 @@ def _unpublished(inputs: _Inputs, totals: RunTotals) -> tuple[MemberResult, ...]
     )
 
 
-def _reported(result: MemberResult) -> MemberResult:
+def _reported(result: MemberCounts) -> MemberCounts:
     """A skip nothing timed, logged the way a timed one is."""
     _log_result(result, 0.0)
     return result
 
 
-def _run(sinks: _Sinks, inputs: _Inputs, pool: ProcessPoolExecutor) -> RunTotals:
+def _run(inputs: _Inputs, pool: ProcessPoolExecutor) -> RunTotals:
     """Every member the table holds that was asked for, then every one it does not.
 
     The first fold consumes the table once; the second only names what the first
@@ -610,7 +723,7 @@ def _run(sinks: _Sinks, inputs: _Inputs, pool: ProcessPoolExecutor) -> RunTotals
     """
     reached = reduce(
         lambda totals, numbered: _folded(
-            totals, _written(sinks, _reported_member(numbered, len(inputs.chosen)))
+            totals, _reported_member(numbered, len(inputs.chosen))
         ),
         enumerate(_in_order(pool, _tasks(inputs), inputs.workers), start=1),
         RunTotals(),
@@ -779,6 +892,7 @@ class _Inputs:
     extents: Path
     chosen: Mapping[str, Path]
     workers: int
+    members: Path
 
 
 def _inputs(
@@ -792,6 +906,7 @@ def _inputs(
         extents=arguments.extents,
         chosen=MappingProxyType({path.stem: path for path in paths}),
         workers=arguments.max_workers,
+        members=arguments.out_dir / MEMBERS_DIR,
     )
 
 
@@ -803,24 +918,38 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     ASG cache and never the corpus tree, so it has nothing to index. FIELD
     resolves NOT_INDEXED whatever the index holds; see corpus_index's table.
     """
-    ensure_dir(arguments.out_dir)
+    members = arguments.out_dir / MEMBERS_DIR
+    if arguments.force:
+        shutil.rmtree(members, ignore_errors=True)
+    ensure_dir(members)
     locations = CorpusIndex()
+    with ProcessPoolExecutor(
+        max_workers=arguments.max_workers, initializer=configure_cli_logging
+    ) as pool:
+        totals = _run(_inputs(paths, arguments, locations), pool)
+    _publish(arguments, locations, totals)
+    _report(totals)
+    return _exit_code(totals, arguments.min_coverage)
+
+
+def _publish(
+    arguments: argparse.Namespace, locations: CorpusIndex, totals: RunTotals
+) -> None:
+    """The four corpus files, rebuilt from every finished member this run reached,
+    in table order. Only after every member is done, so an interrupted run leaves
+    the previous corpus files as they were rather than half of a new one."""
+    finished = tuple(
+        directory
+        for directory in (arguments.out_dir / MEMBERS_DIR / m for m in totals.members)
+        if directory.is_dir()
+    )
     with (
-        ProcessPoolExecutor(
-            max_workers=arguments.max_workers, initializer=configure_cli_logging
-        ) as pool,
         _writer(arguments, locations) as graph,
         _side_writer(arguments, DEFS_FILE) as defs,
         _side_writer(arguments, ALIASES_FILE) as aliases,
         _side_writer(arguments, TARGETS_FILE) as targets,
     ):
-        totals = _run(
-            _Sinks(graph, defs, aliases, targets),
-            _inputs(paths, arguments, locations),
-            pool,
-        )
-    _report(totals)
-    return _exit_code(totals, arguments.min_coverage)
+        tuple(map(_Sinks(graph, defs, aliases, targets).add_member, finished))
 
 
 def _completed(arguments: argparse.Namespace) -> int:
@@ -894,6 +1023,11 @@ def _add_selection(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_workers(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="discard every finished member under <out-dir>/members and analyse again",
+    )
     parser.add_argument(
         "--max-workers",
         type=worker_count,
