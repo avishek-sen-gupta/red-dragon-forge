@@ -109,7 +109,7 @@ def emit(asg_dir: Path, out: Path, members: Sequence[str], max_workers: int) -> 
     return 3 if skipped else 0
 
 
-def _workers(given: str) -> int:
+def worker_count(given: str) -> int:
     """No worker lays out no member, so a count below one is a usage error."""
     count = int(given)
     if count < 1:
@@ -129,7 +129,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--max-workers",
-        type=_workers,
+        type=worker_count,
         default=4,
         help="worker processes laying members out in parallel (default 4)",
     )

@@ -455,6 +455,14 @@ order: members are analysed in the order the table holds them, which for `--all`
 the sorted order they were already in, and for `--member PROGA PROGB` is no longer
 the order they were named in. Which members are analysed is unchanged.
 
+Members are analysed in parallel worker processes — `--max-workers`, default 4. The
+parent streams the table and hands each worker one member's rows, never the built
+layout, keeping at most `--max-workers` + 1 members in flight: the peak memory is
+that many members' layouts, and the table is still read only that far ahead. Results
+are written and reported in table order, so the four tables are byte for byte what
+one worker writes. The walk's own progress lines come from the workers and
+interleave; each names its program.
+
 A member the table does not hold is a recorded skip naming the command that fixes
 it — never a crash, never silence — reported after the members it does hold. An
 absent table is exit 2 before the first member. The table is read, never

@@ -85,10 +85,11 @@ import logging
 import sys
 import time
 from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import groupby
+from itertools import groupby, islice, tee, zip_longest
 from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
@@ -102,8 +103,13 @@ from cobble.dataflow.fields.aliases import (
     commarea_aliases,
 )
 from cobble.dataflow.fields.emit import graph_records
+from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fields.extent import CellIndex
-from cobble.dataflow.fields.extents_input import MemberLayout, declared_layouts
+from cobble.dataflow.fields.extents_input import (
+    MemberLayout,
+    member_layout,
+    member_rows,
+)
 from cobble.dataflow.fields.program_layout import ProgramLayout
 from cobble.dataflow.fields.side_tables import (
     CommareaAlias,
@@ -116,6 +122,7 @@ from cobble.dataflow.fields.side_tables import (
 )
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
+from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
@@ -310,7 +317,12 @@ def _aliased_member(
     return replace(result, aliases=_alias_rows(asg, index, asg_dir))
 
 
-def _analysed_member(published: MemberLayout, inputs: _Inputs) -> MemberResult:
+def _analysed_member(
+    published: MemberLayout,
+    path: Path,
+    options: AnalysisOptions,
+    locations: FileLocationResolver,
+) -> MemberResult:
     """The four tables first, then the aliases folded onto them.
 
     In that order because the alias pass cannot discard what it never held -- the
@@ -320,10 +332,9 @@ def _analysed_member(published: MemberLayout, inputs: _Inputs) -> MemberResult:
     DIVISION: this stage computes no extent of its own, so the records the walk is
     seeded from are the same ones ``cobble-extents`` published.
     """
-    path = inputs.chosen[published.member]
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    flow, index = analysed(asg, inputs.options, published.layout)
-    tables = _tables(published.member, flow, published.layout, inputs.locations)
+    flow, index = analysed(asg, options, published.layout)
+    tables = _tables(published.member, flow, published.layout, locations)
     return _aliased_member(tables, asg, index, path.parent)
 
 
@@ -341,14 +352,19 @@ def _no_extents(path: Path, extents: Path) -> str:
     )
 
 
-def _member_result(published: MemberLayout, inputs: _Inputs) -> MemberResult:
+def _member_result(
+    published: MemberLayout,
+    path: Path,
+    options: AnalysisOptions,
+    locations: FileLocationResolver,
+) -> MemberResult:
     """Every failure one member can have, as a reason rather than an abort.
 
     The records are built before anything is written, so a member that raises
     halfway through leaves no partial rows behind it.
     """
     try:
-        return _analysed_member(published, inputs)
+        return _analysed_member(published, path, options, locations)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=published.member, skipped=f"unreadable: {error!r}")
 
@@ -489,34 +505,78 @@ def _log_result(result: MemberResult, seconds: float) -> None:
     )
 
 
-def _logged_member(
-    numbered: tuple[int, MemberLayout], total: int, inputs: _Inputs
-) -> MemberResult:
-    """One member's analysis, announced before it starts and measured after.
+@dataclass(frozen=True)
+class _MemberTask:
+    """What a worker process needs to analyse one member: plain values only."""
 
-    Before, because a member can take minutes: a run that says nothing until it
-    finishes is indistinguishable from a hung one.
+    member: str
+    path: Path
+    block: tuple[Row, ...]
+    options: AnalysisOptions
+
+
+def _analysed_in_worker(task: _MemberTask) -> tuple[MemberResult, float]:
+    """One member's result and its seconds, computed in a worker process.
+
+    The layout is built here from the member's table rows rather than shipped
+    built: rows are plain values, the layout an object graph many times their size.
+    ``CorpusIndex()`` is the same empty index the parent's writer resolves with.
     """
-    position, published = numbered
-    logger.info("fields: [%d/%d] %s", position, total, published.member)
     started = time.monotonic()
-    result = _member_result(published, inputs)
-    _log_result(result, time.monotonic() - started)
+    with cached_asg_dialect_parsers_registered():
+        result = _member_result(
+            member_layout(task.member, task.block),
+            task.path,
+            task.options,
+            CorpusIndex(),
+        )
+    return result, time.monotonic() - started
+
+
+def _in_order(
+    pool: ProcessPoolExecutor, tasks: Iterator[_MemberTask], window: int
+) -> Iterator[tuple[MemberResult, float]]:
+    """Results in task order, with at most ``window`` + 1 members in flight.
+
+    ``map`` would submit every task at once and so read the whole table into
+    memory; here ``lead`` runs ``window`` submissions ahead of ``lag``, each
+    result taken submits the next task, and the table is read only that far ahead.
+    """
+    submitted: Iterator[Future[tuple[MemberResult, float]]] = (
+        pool.submit(_analysed_in_worker, task) for task in tasks
+    )
+    lag, lead = tee(submitted)
+    next(islice(lead, window, window), None)
+    return (future.result() for future, _ahead in zip_longest(lag, lead))
+
+
+def _reported_member(
+    numbered: tuple[int, tuple[MemberResult, float]], total: int
+) -> MemberResult:
+    """One member's lines, logged as its rows are written, in table order."""
+    position, (result, seconds) = numbered
+    logger.info("fields: [%d/%d] %s", position, total, result.member)
+    _log_result(result, seconds)
     return result
 
 
-def _wanted(inputs: _Inputs) -> Iterator[MemberLayout]:
-    """The layouts the table yields, less the members this run was not asked for.
+def _tasks(inputs: _Inputs) -> Iterator[_MemberTask]:
+    """The members the table holds, less the ones this run was not asked for.
 
-    The table drives the run, which is what bounds the memory at one member's
-    records instead of the corpus's: a loop over the selection would have to ask
-    the file for a member at a time, and a file streamed once cannot be asked
-    twice. The selection still decides what is analysed -- it decides it here
-    rather than before the file is opened, and the order the run reports in is the
+    The table drives the run, which is what bounds the memory: a loop over the
+    selection would have to ask the file for a member at a time, and a file
+    streamed once cannot be asked twice. The order the run reports in is the
     table's.
     """
     return (
-        one for one in declared_layouts(inputs.extents) if one.member in inputs.chosen
+        _MemberTask(
+            member=member,
+            path=inputs.chosen[member],
+            block=block,
+            options=inputs.options,
+        )
+        for member, block in member_rows(inputs.extents)
+        if member in inputs.chosen
     )
 
 
@@ -542,7 +602,7 @@ def _reported(result: MemberResult) -> MemberResult:
     return result
 
 
-def _run(sinks: _Sinks, inputs: _Inputs) -> RunTotals:
+def _run(sinks: _Sinks, inputs: _Inputs, pool: ProcessPoolExecutor) -> RunTotals:
     """Every member the table holds that was asked for, then every one it does not.
 
     The first fold consumes the table once; the second only names what the first
@@ -550,10 +610,9 @@ def _run(sinks: _Sinks, inputs: _Inputs) -> RunTotals:
     """
     reached = reduce(
         lambda totals, numbered: _folded(
-            totals,
-            _written(sinks, _logged_member(numbered, len(inputs.chosen), inputs)),
+            totals, _written(sinks, _reported_member(numbered, len(inputs.chosen)))
         ),
-        enumerate(_wanted(inputs), start=1),
+        enumerate(_in_order(pool, _tasks(inputs), inputs.workers), start=1),
         RunTotals(),
     )
     return reduce(
@@ -719,6 +778,7 @@ class _Inputs:
     locations: FileLocationResolver
     extents: Path
     chosen: Mapping[str, Path]
+    workers: int
 
 
 def _inputs(
@@ -731,6 +791,7 @@ def _inputs(
         locations=locations,
         extents=arguments.extents,
         chosen=MappingProxyType({path.stem: path for path in paths}),
+        workers=arguments.max_workers,
     )
 
 
@@ -745,7 +806,9 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     ensure_dir(arguments.out_dir)
     locations = CorpusIndex()
     with (
-        cached_asg_dialect_parsers_registered(),
+        ProcessPoolExecutor(
+            max_workers=arguments.max_workers, initializer=configure_cli_logging
+        ) as pool,
         _writer(arguments, locations) as graph,
         _side_writer(arguments, DEFS_FILE) as defs,
         _side_writer(arguments, ALIASES_FILE) as aliases,
@@ -754,6 +817,7 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
         totals = _run(
             _Sinks(graph, defs, aliases, targets),
             _inputs(paths, arguments, locations),
+            pool,
         )
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
@@ -829,6 +893,15 @@ def _add_selection(parser: argparse.ArgumentParser) -> None:
     selection.add_argument("--all", action="store_true")
 
 
+def _add_workers(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--max-workers",
+        type=worker_count,
+        default=4,
+        help="worker processes analysing members in parallel (default 4)",
+    )
+
+
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Field-level byte dataflow over a cached ASG corpus."
@@ -836,6 +909,7 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     _add_inputs(parser)
     _add_walk_budget(parser)
     _add_selection(parser)
+    _add_workers(parser)
     return parser.parse_args(tuple(argv) if argv else None)
 
 

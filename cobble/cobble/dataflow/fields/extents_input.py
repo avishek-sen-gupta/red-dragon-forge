@@ -181,6 +181,24 @@ def _block_cells(block: Iterable[rows.Row]) -> tuple[DeclaredCell, ...]:
     return tuple(cell for row in block for cell in _declared_cells(row))
 
 
+def member_rows(path: Path) -> Iterator[tuple[str, tuple[rows.Row, ...]]]:
+    """Each member the table holds and its rows, in table order, one at a time.
+
+    The rows rather than the built layout, for a caller that builds it elsewhere:
+    rows are plain values, cheap to hand to another process, where the layout is
+    an object graph many times their size.
+    """
+    return (
+        (member, tuple(block))
+        for member, block in groupby(rows.stream(path), _member_of)
+    )
+
+
+def member_layout(member: str, block: Sequence[rows.Row]) -> MemberLayout:
+    """One member's records, built from its rows in the table."""
+    return MemberLayout(member=member, layout=layout_of(_records(_block_cells(block))))
+
+
 def declared_layouts(path: Path) -> Iterator[MemberLayout]:
     """Each member the table holds, in the order it holds them, one at a time.
 
@@ -189,7 +207,4 @@ def declared_layouts(path: Path) -> Iterator[MemberLayout]:
     corpus's rather than the largest member's. One read of the file, so no member is
     parsed twice either.
     """
-    return (
-        MemberLayout(member=member, layout=layout_of(_records(_block_cells(block))))
-        for member, block in groupby(rows.stream(path), _member_of)
-    )
+    return (member_layout(member, block) for member, block in member_rows(path))

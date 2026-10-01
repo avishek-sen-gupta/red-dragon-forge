@@ -19,6 +19,7 @@ from cobble.build_graph import _build_dynamic_targets, _dynamic_call_targets
 from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
 from cobble.dataflow.fields.emit_extents import emit
+from cobble.dataflow.fields.extents_input import member_rows
 from cobble.dataflow.fields.side_tables import target_row
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint import build_corpus
@@ -29,6 +30,7 @@ from cobble.dataflow.fixpoint.build_corpus import (
     TARGETS_FILE,
     cli,
 )
+from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_file import read_graph
@@ -883,16 +885,17 @@ def _never_aliases(asg, index, asg_dir):
 
 
 def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
-    corpus, capsys, monkeypatch
+    corpus, monkeypatch
 ):
     """The one wall, told apart from a callee whose cache file is broken.
 
     Those are different bugs with different owners: one is the corpus's and one is
     this repo's. It costs the member its alias rows, which is loud, and leaves the
-    four tables that have nothing to do with aliasing intact, which is the point.
-    Reached by making the alias phase raise, since no known route does.
+    tables that have nothing to do with aliasing intact, which is the point.
+    Reached by making the alias phase raise, since no known route does -- and
+    in-process, since a worker process would import the module unpatched.
     """
-    argv, out_dir = corpus(
+    argv, _ = corpus(
         {"XPROGA": json.dumps(_linking("XPROGB"))}, extra=("--member", "XPROGA")
     )
     monkeypatch.setattr(
@@ -900,16 +903,25 @@ def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
         "commarea_aliases",
         _never_aliases,
     )
+    asg_dir = Path(argv[argv.index("--asg-dir") + 1])
+    ((member, block),) = tuple(member_rows(Path(argv[argv.index("--extents") + 1])))
 
-    assert cli(argv) == 0
+    result, _seconds = build_corpus._analysed_in_worker(
+        build_corpus._MemberTask(
+            member=member,
+            path=asg_dir / "XPROGA.json",
+            block=block,
+            options=AnalysisOptions(sweeps=0, factor=ITERATION_FACTOR),
+        )
+    )
 
-    for name in (GRAPH_FILE, DEFS_FILE):
-        assert _rows(out_dir / name), name
-    (row,) = _rows(out_dir / ALIASES_FILE)
-    assert (row["caller"], row["node"], row["transfer"]) == ("XPROGA", "", "")
-    assert row["reason"].startswith(ALIAS_PHASE_FAILED)
-    summary = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert summary["alias_dead_ends"] == {ALIAS_PHASE_FAILED: 1}
+    assert (result.skipped, bool(result.edges), bool(result.defs)) == ("", True, True)
+    (row,) = result.aliases
+    assert (row.caller, row.node, row.transfer) == ("XPROGA", "", "")
+    assert row.reason.startswith(ALIAS_PHASE_FAILED)
+    assert build_corpus._dead_ends(result) == (
+        f"{ALIAS_PHASE_FAILED}: RuntimeError('the pass itself')",
+    )
 
 
 def _ambiguous_area(target: str) -> dict:
@@ -1108,3 +1120,57 @@ def test_the_build_reads_the_graph_and_targets_the_fixpoint_wrote(tmp_path, corp
             ),
         ],
     )
+
+
+def _three_members() -> dict:
+    return {
+        "MEMBERA": json.dumps(_program("PROGA")),
+        "MEMBERB": json.dumps(_branched("PROGB")),
+        "MEMBERC": json.dumps(_program("PROGC", target="WS-GONE")),
+    }
+
+
+def test_parallel_workers_write_what_one_worker_writes(corpus, tmp_path):
+    """Members finish out of order across workers; the tables do not."""
+    argv, out_dir = corpus(_three_members(), extra=("--min-coverage", "0.0"))
+    parallel = tmp_path / "parallel"
+    serial_argv = [*argv, "--max-workers", "1"]
+    parallel_argv = [
+        str(parallel) if one == str(out_dir) else one
+        for one in [*argv, "--max-workers", "3"]
+    ]
+
+    assert cli(serial_argv) == 0
+    assert cli(parallel_argv) == 0
+
+    assert sorted(path.name for path in parallel.iterdir()) == sorted(
+        path.name for path in out_dir.iterdir()
+    )
+    assert all(
+        (parallel / path.name).read_bytes() == path.read_bytes()
+        for path in out_dir.iterdir()
+    )
+
+
+def test_members_are_reported_in_table_order_whatever_order_they_finish(corpus, caplog):
+    argv, _ = corpus(
+        _three_members(), extra=("--min-coverage", "0.0", "--max-workers", "3")
+    )
+
+    with caplog.at_level(logging.INFO):
+        assert cli(argv) == 0
+
+    assert [
+        message for message in caplog.messages if message.startswith("fields: [")
+    ] == ["fields: [1/3] MEMBERA", "fields: [2/3] MEMBERB", "fields: [3/3] MEMBERC"]
+
+
+def test_a_worker_count_below_one_is_a_usage_error(corpus):
+    argv, _ = corpus(
+        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--max-workers", "0")
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        cli(argv)
+
+    assert failure.value.code == 2
