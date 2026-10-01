@@ -86,11 +86,11 @@ import shutil
 import sys
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import groupby, islice, tee, zip_longest
+from itertools import accumulate, groupby, islice, repeat, takewhile
 from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
@@ -581,6 +581,17 @@ class _MemberTask:
     options: AnalysisOptions
     members: Path
     reused: bool = False
+    position: int = 0
+
+
+@dataclass(frozen=True)
+class _Finished:
+    """One member's counts back from a worker, and where it sits in table order."""
+
+    position: int
+    counts: MemberCounts
+    seconds: float
+    reused: bool
 
 
 def _analysed(task: _MemberTask) -> tuple[MemberResult, float]:
@@ -620,54 +631,77 @@ def _member_directory(result: MemberResult, members: Path) -> None:
     staging.rename(members / result.member)
 
 
-def _analysed_in_worker(task: _MemberTask) -> tuple[MemberCounts, float, bool]:
+def _analysed_in_worker(task: _MemberTask) -> _Finished:
     """A member analysed in a worker process, its directory written there, and
     only its counts sent back. A skipped member gets its directory too: a member
     the walk's budget gave up on still has alias rows, and its counts carry the
     reason, so a resumed run reports the skip exactly as a fresh one."""
     result, seconds = _analysed(task)
     _member_directory(result, task.members)
-    return counts_of(result), seconds, False
+    return _Finished(task.position, counts_of(result), seconds, reused=False)
 
 
-def _reused_in_worker(task: _MemberTask) -> tuple[MemberCounts, float, bool]:
+def _reused_in_worker(task: _MemberTask) -> _Finished:
     path = task.members / task.member / COUNTS_FILE
-    return (
-        MemberCounts.model_validate_json(path.read_text(encoding="utf-8")),
-        0.0,
-        True,
-    )
+    counts = MemberCounts.model_validate_json(path.read_text(encoding="utf-8"))
+    return _Finished(task.position, counts, 0.0, reused=True)
 
 
-def _in_order(
-    pool: ProcessPoolExecutor, tasks: Iterator[_MemberTask], window: int
-) -> Iterator[tuple[MemberCounts, float, bool]]:
-    """Results in task order, with at most ``window`` + 1 members in flight.
+_Pending = frozenset[Future[_Finished]]
 
-    ``map`` would submit every task at once and so read the whole table into
-    memory; here ``lead`` runs ``window`` submissions ahead of ``lag``, each
-    result taken submits the next task, and the table is read only that far ahead.
-    """
-    submitted: Iterator[Future[tuple[MemberCounts, float, bool]]] = (
+
+def _submitted(pool: ProcessPoolExecutor, tasks: Iterator[_MemberTask]) -> _Pending:
+    return frozenset(
         pool.submit(_reused_in_worker if task.reused else _analysed_in_worker, task)
         for task in tasks
     )
-    lag, lead = tee(submitted)
-    next(islice(lead, window, window), None)
-    return (future.result() for future, _ahead in zip_longest(lag, lead))
 
 
-def _reported_member(
-    numbered: tuple[int, tuple[MemberCounts, float, bool]], total: int
-) -> MemberCounts:
-    """One member's lines, logged in table order as its result arrives."""
-    position, (counts, seconds, reused) = numbered
-    if reused:
-        logger.info("fields: [%d/%d] %s reused", position, total, counts.member)
-        return counts
-    logger.info("fields: [%d/%d] %s", position, total, counts.member)
-    _log_result(counts, seconds)
-    return counts
+def _round(
+    pool: ProcessPoolExecutor,
+    tasks: Iterator[_MemberTask],
+    window: int,
+    pending: _Pending,
+) -> tuple[_Pending, _Pending]:
+    """Whatever finished first, and the in-flight set refilled to ``window``."""
+    done, running = wait(pending, return_when=FIRST_COMPLETED)
+    refill = _submitted(pool, islice(tasks, window - len(running)))
+    return frozenset(done), frozenset(running) | refill
+
+
+def _as_finished(
+    pool: ProcessPoolExecutor, tasks: Iterator[_MemberTask], window: int
+) -> Iterator[_Finished]:
+    """Results as members finish, with at most ``window`` members in flight.
+
+    In completion order, not table order: one slow member at the head of an
+    ordered window held every other slot idle behind it -- on a long-tailed corpus,
+    most of them for most of the run. The table is still read only ``window``
+    members ahead, and nothing downstream needs the order: each worker writes its
+    own member directory, and the report is folded in table order afterwards.
+    """
+    first = _submitted(pool, islice(tasks, window))
+    rounds = accumulate(
+        repeat(None),
+        lambda state, _: _round(pool, tasks, window, state[1]),
+        initial=(frozenset(), first),
+    )
+    return (
+        future.result()
+        for done, _running in takewhile(lambda state: state[0] or state[1], rounds)
+        for future in done
+    )
+
+
+def _reported_member(numbered: tuple[int, _Finished], total: int) -> _Finished:
+    """One member's lines, logged as it finishes: ``n`` counts finished members."""
+    finished, member = numbered
+    if member.reused:
+        logger.info("fields: [%d/%d] %s reused", finished, total, member.counts.member)
+        return member
+    logger.info("fields: [%d/%d] %s", finished, total, member.counts.member)
+    _log_result(member.counts, member.seconds)
+    return member
 
 
 def _tasks(inputs: _Inputs) -> Iterator[_MemberTask]:
@@ -678,6 +712,11 @@ def _tasks(inputs: _Inputs) -> Iterator[_MemberTask]:
     streamed once cannot be asked twice. The order the run reports in is the
     table's.
     """
+    selected = (
+        (member, block)
+        for member, block in member_rows(inputs.extents)
+        if member in inputs.chosen
+    )
     return (
         _MemberTask(
             member=member,
@@ -686,9 +725,9 @@ def _tasks(inputs: _Inputs) -> Iterator[_MemberTask]:
             options=inputs.options,
             members=inputs.members,
             reused=reused,
+            position=position,
         )
-        for member, block in member_rows(inputs.extents)
-        if member in inputs.chosen
+        for position, (member, block) in enumerate(selected)
         for reused in ((inputs.members / member).is_dir(),)
     )
 
@@ -721,12 +760,17 @@ def _run(inputs: _Inputs, pool: ProcessPoolExecutor) -> RunTotals:
     The first fold consumes the table once; the second only names what the first
     never saw, and reads no file at all.
     """
+    finished = {
+        member.position: member.counts
+        for member in (
+            _reported_member(numbered, len(inputs.chosen))
+            for numbered in enumerate(
+                _as_finished(pool, _tasks(inputs), inputs.workers), start=1
+            )
+        )
+    }
     reached = reduce(
-        lambda totals, numbered: _folded(
-            totals, _reported_member(numbered, len(inputs.chosen))
-        ),
-        enumerate(_in_order(pool, _tasks(inputs), inputs.workers), start=1),
-        RunTotals(),
+        _folded, (finished[position] for position in sorted(finished)), RunTotals()
     )
     return reduce(
         lambda totals, result: _folded(totals, _reported(result)),

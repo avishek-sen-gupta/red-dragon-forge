@@ -1150,7 +1150,7 @@ def test_parallel_workers_write_what_one_worker_writes(corpus, tmp_path):
     assert _published(parallel) == _published(out_dir)
 
 
-def test_members_are_reported_in_table_order_whatever_order_they_finish(corpus, caplog):
+def test_every_member_is_reported_once_as_it_finishes(corpus, caplog):
     argv, _ = corpus(
         _three_members(), extra=("--min-coverage", "0.0", "--max-workers", "3")
     )
@@ -1158,9 +1158,12 @@ def test_members_are_reported_in_table_order_whatever_order_they_finish(corpus, 
     with caplog.at_level(logging.INFO):
         assert cli(argv) == 0
 
-    assert [
-        message for message in caplog.messages if message.startswith("fields: [")
-    ] == ["fields: [1/3] MEMBERA", "fields: [2/3] MEMBERB", "fields: [3/3] MEMBERC"]
+    assert _member_lines(caplog.messages) == ["MEMBERA", "MEMBERB", "MEMBERC"]
+    assert sorted(
+        message.split("] ", 1)[0]
+        for message in caplog.messages
+        if message.startswith("fields: [")
+    ) == ["fields: [1/3", "fields: [2/3", "fields: [3/3"]
 
 
 def test_a_worker_count_below_one_is_a_usage_error(corpus):
@@ -1211,7 +1214,13 @@ def _published(out_dir: Path) -> dict[str, bytes]:
 
 
 def _member_lines(messages: list[str]) -> list[str]:
-    return [message for message in messages if message.startswith("fields: [")]
+    """Which members were reported, and how, without the completion counter:
+    members finish in whatever order the workers do."""
+    return sorted(
+        message.split("] ", 1)[1]
+        for message in messages
+        if message.startswith("fields: [")
+    )
 
 
 def test_an_interrupted_run_resumes_to_what_an_uninterrupted_one_publishes(
@@ -1236,9 +1245,9 @@ def test_an_interrupted_run_resumes_to_what_an_uninterrupted_one_publishes(
     assert _published(out_dir) == whole
     assert capsys.readouterr().out == summary
     assert _member_lines(caplog.messages) == [
-        "fields: [1/3] MEMBERA reused",
-        "fields: [2/3] MEMBERB reused",
-        "fields: [3/3] MEMBERC",
+        "MEMBERA reused",
+        "MEMBERB reused",
+        "MEMBERC",
     ]
     assert sorted(path.name for path in members.iterdir()) == [
         "MEMBERA",
@@ -1256,11 +1265,7 @@ def test_force_analyses_every_member_again(corpus, caplog):
         assert cli([*argv, "--force"]) == 0
 
     assert _published(out_dir) == whole
-    assert _member_lines(caplog.messages) == [
-        "fields: [1/3] MEMBERA",
-        "fields: [2/3] MEMBERB",
-        "fields: [3/3] MEMBERC",
-    ]
+    assert _member_lines(caplog.messages) == ["MEMBERA", "MEMBERB", "MEMBERC"]
 
 
 def test_a_named_member_run_publishes_it_alone_and_keeps_the_rest(corpus):
