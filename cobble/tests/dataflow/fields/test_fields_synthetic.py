@@ -32,6 +32,7 @@ import json
 from pathlib import Path
 
 import pytest
+from cobble.dataflow.fields.emit_extents import emit
 from cobble.dataflow.fields.extent_text import NO_RANGE, byte_range
 from cobble.dataflow.fixpoint.build_corpus import cli
 from cobble.dataflow.fixpoint.query import (
@@ -117,7 +118,21 @@ def _built(workspace: Path, cache: Path) -> Path:
         f'[fields]\nasg_dir = "{cache}"\nout_dir = "{out}"\n', encoding="utf-8"
     )
 
-    assert cli(["--config", str(config), "--member", PROGRAM]) == 0
+    extents = workspace / "extents.jsonl"
+    assert emit(cache, extents, ()) == 0
+    assert (
+        cli(
+            [
+                "--config",
+                str(config),
+                "--extents",
+                str(extents),
+                "--member",
+                PROGRAM,
+            ]
+        )
+        == 0
+    )
     return out
 
 
@@ -420,7 +435,9 @@ def two_program_artefact(tmp_path_factory) -> Path:
         f'[fields]\nasg_dir = "{cache}"\nout_dir = "{out}"\n', encoding="utf-8"
     )
 
-    assert cli(["--config", str(config), "--all"]) == 0
+    extents = root / "extents.jsonl"
+    assert emit(cache, extents, ()) == 0
+    assert cli(["--config", str(config), "--extents", str(extents), "--all"]) == 0
     return out
 
 
