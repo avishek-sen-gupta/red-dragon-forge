@@ -19,6 +19,7 @@ class UnresolvedReason(Enum):
     UNINITIALISED = "uninitialised"
     OVER_BUDGET = "over-budget"
     INCOMPLETE_WALK = "incomplete-walk"
+    UNMODELLED = "unmodelled"
 
 
 @dataclass(frozen=True)

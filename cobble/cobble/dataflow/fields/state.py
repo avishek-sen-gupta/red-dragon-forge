@@ -306,6 +306,38 @@ def write(
     )
 
 
+def weak_write(
+    state: State,
+    target: FieldExtent,
+    sources: frozenset[Source],
+    doubt: ValueSet,
+) -> State:
+    """``sources`` may reach ``target``, which may or may not have changed.
+
+    Nothing is killed: the write may leave the target as it was, so every definer
+    already there stays, and so does every value. What changes is the doubt --
+    ``doubt``'s reasons join every value the write overlaps, and the target's own
+    entry is what it held merged with ``doubt``, so a value the walk can no longer
+    vouch for is read back as a candidate rather than an answer.
+    """
+    marked = {
+        extent: (
+            ValueSet(values=held.values, reasons=held.reasons | doubt.reasons)
+            if extent.may_alias(target)
+            else held
+        )
+        for extent, held in state.values.items()
+    }
+    return State(
+        sources=MappingProxyType(
+            {**state.sources, target: state.sources.get(target, frozenset()) | sources}
+        ),
+        values=MappingProxyType(
+            {**marked, target: merged(values_at(state, target), doubt)}
+        ),
+    )
+
+
 def reaching(state: State, read: FieldExtent) -> frozenset[Source]:
     """Every source held at an extent this read might overlap."""
     return frozenset(

@@ -40,8 +40,10 @@ from cobble.dataflow.fields.state import (
     Source,
     State,
     exact_values,
+    weak_write,
     write,
 )
+from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import (
     EMPTY as VALUES_EMPTY,
 )
@@ -72,7 +74,7 @@ from cobol_memory.field_extent import FieldExtent
 
 # cobol_asg has no statement base class, and its own union leaves out the
 # dialect-parsed EXEC CICS form, so the two have to be spelled together here.
-Statement = CobolStatementType | ExecCicsStatement
+Statement = CobolStatementType | ExecCicsStatement | UnmodelledWrite
 
 _CICS_FILE_VERBS = frozenset({"READ", "READNEXT", "READPREV"})
 _CICS_CALL_VERBS = frozenset({"LINK", "XCTL"})
@@ -86,14 +88,17 @@ class Write:
     target: FieldExtent
     sources: frozenset[Source]
     values: ValueSet
+    weak: bool = False
 
 
 def _applied(state: State, writes: Iterator[Write]) -> State:
-    return reduce(
-        lambda held, entry: write(held, entry.target, entry.sources, entry.values),
-        writes,
-        state,
-    )
+    return reduce(_one_applied, writes, state)
+
+
+def _one_applied(state: State, entry: Write) -> State:
+    if entry.weak:
+        return weak_write(state, entry.target, entry.sources, entry.values)
+    return write(state, entry.target, entry.sources, entry.values)
 
 
 def _from_extents(extents: tuple[FieldExtent, ...], node: str) -> frozenset[Source]:
@@ -506,6 +511,34 @@ def _no_targets(statement: Statement) -> tuple[RefModOperand, ...]:
     return ()
 
 
+def _unmodelled_targets(statement: UnmodelledWrite) -> tuple[RefModOperand, ...]:
+    return statement.targets
+
+
+def _unmodelled_writes(
+    statement: UnmodelledWrite, node: str, index: CellIndex, state: State
+) -> Iterator[Write]:
+    """A weak write to every target extent, from every source extent or the verb."""
+    extents = tuple(
+        extent
+        for operand in statement.sources
+        for extent in operand_extents(operand, index).extents
+    )
+    sources = (
+        _from_extents(extents, node) if extents else _synthetic(statement.verb, node)
+    )
+    return (
+        Write(
+            target=target,
+            sources=sources,
+            values=because(UnresolvedReason.UNMODELLED),
+            weak=True,
+        )
+        for operand in statement.targets
+        for target in operand_extents(operand, index).extents
+    )
+
+
 HANDLED: tuple[type, ...] = (
     MoveStatement,
     InitializeStatement,
@@ -527,6 +560,7 @@ _WRITES_BY_KIND: Mapping[str, Callable[..., Iterator[Write]]] = MappingProxyType
         "ReadStatement": _read_writes,
         "CallStatement": _call_writes,
         "ExecCicsStatement": _cics_writes,
+        "UnmodelledWrite": _unmodelled_writes,
     }
 )
 
@@ -542,6 +576,7 @@ _TARGETS_BY_KIND: Mapping[str, Callable[..., tuple[RefModOperand, ...]]] = (
             "ReadStatement": _read_targets,
             "CallStatement": _call_targets,
             "ExecCicsStatement": _cics_targets,
+            "UnmodelledWrite": _unmodelled_targets,
         }
     )
 )
