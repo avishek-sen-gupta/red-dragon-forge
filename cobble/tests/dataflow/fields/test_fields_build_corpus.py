@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from cobble.build_graph import _build_dynamic_targets
+from cobble.corpus_index import CorpusIndex
 from cobble.dataflow.fields.aliases import ALIAS_PHASE_FAILED
 from cobble.dataflow.fields.emit_extents import emit
 from cobble.dataflow.fields.side_tables import target_row
@@ -29,7 +31,13 @@ from cobble.dataflow.fixpoint.build_corpus import (
     cli,
 )
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.file_location import FileLocationReason, NoFileLocation
+from cobble.knowledge_graph.graph_file import read_graph
+from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, GraphNode, NodeKind
+from cobble.knowledge_graph.graph_writer import graph_writer
 from cobble.knowledge_graph.row_type import RowType
+from cobble.path_utils import ensure_parent
+from tests.test_build_graph import _config
 
 
 def _program(program_id: str, target: str = "WS-B") -> dict:
@@ -1062,4 +1070,64 @@ def test_the_two_alias_counts_can_both_hold_one_site(corpus, caplog):
 
     assert (
         "1 call sites share a commarea window, 1 do not: empty-window 1" in caplog.text
+    )
+
+
+def test_the_build_reads_the_graph_and_targets_the_fixpoint_wrote(tmp_path, corpus):
+    """The two stages end to end, no JVM: the fixpoint's graph file reads back
+    through the build's reader, and the build's dynamic-target stage turns the
+    targets.jsonl it published into the build's own graph file -- an unresolved
+    site into a DYNAMIC_TARGET, a resolved one into an ordinary LINK."""
+    argv, out_dir = corpus({"XPROGA": json.dumps(_two_dynamic_sites())})
+    assert cli(argv) == 0
+
+    _fields, flows = read_graph(out_dir / GRAPH_FILE)
+    assert [(flow.source, flow.target, flow.attrs["node"]) for flow in flows] == [
+        ("XPROGA.%CALL:WS-TARGET", "XPROGA.WS-TARGET", "MAIN/0"),
+        ("XPROGA.LITERAL", "XPROGA.WS-TARGET", "MAIN/1"),
+        ("XPROGA.%CALL:WS-TARGET", "XPROGA.WS-TARGET", "MAIN/2"),
+    ]
+
+    graph = ensure_parent(tmp_path / "build" / "corpus.jsonl")
+    resolver = CorpusIndex()
+    with graph_writer(graph, resolver) as writer:
+        writer.add_all(
+            *_build_dynamic_targets(_config(tmp_path, out_dir=out_dir), resolver)
+        )
+
+    assert read_graph(graph) == (
+        [
+            GraphNode(
+                id="XPROGA.WS-TARGET",
+                kind=NodeKind.DYNAMIC_TARGET,
+                location=NoFileLocation(FileLocationReason.NOT_INDEXED),
+                attrs={"reason": "uninitialised", "dropped": []},
+            ),
+            GraphNode(
+                id="XPROGB",
+                kind=NodeKind.PROGRAM,
+                location=NoFileLocation(FileLocationReason.UNRESOLVED),
+            ),
+            GraphNode(
+                id="XPROGA",
+                kind=NodeKind.PROGRAM,
+                location=NoFileLocation(FileLocationReason.UNRESOLVED),
+            ),
+        ],
+        [
+            GraphEdge(
+                source="XPROGA",
+                source_kind=NodeKind.PROGRAM,
+                target="XPROGA.WS-TARGET",
+                target_kind=NodeKind.DYNAMIC_TARGET,
+                kind=EdgeKind.LINK,
+            ),
+            GraphEdge(
+                source="XPROGA",
+                source_kind=NodeKind.PROGRAM,
+                target="XPROGB",
+                target_kind=NodeKind.PROGRAM,
+                kind=EdgeKind.LINK,
+            ),
+        ],
     )
