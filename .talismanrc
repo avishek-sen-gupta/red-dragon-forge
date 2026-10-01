@@ -483,4 +483,8 @@ fileignoreconfig:
   checksum: 5f4569c14aca97b037c0685ec58ddf13ee6477e844a23ef5e7c394e4a53b7aeb
 - filename: docs/superpowers/specs/2026-09-30-cobble-exec-sql-whenever-cfg-design.md
   checksum: 36a247961ed723b5f5f5fca4664047c5be67ae7e895be491517b0cf3ba2485fb
+- filename: docs/superpowers/specs/2026-10-01-cobble-single-graph-file-design.md
+  checksum: 678ae42c15d4a85765fddc8c4b1ac58082ad8ef8734235cc86386894cd91849d
+- filename: docs/superpowers/plans/2026-10-01-cobble-single-graph-file.md
+  checksum: ab86e94d30381f45e3b9d7423338135279ecc04fdc09a444773a348202a4e7cf
 version: "1.0"
