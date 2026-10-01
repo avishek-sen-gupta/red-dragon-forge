@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from itertools import pairwise
+from functools import reduce
+from itertools import accumulate, pairwise, repeat, takewhile
 from types import MappingProxyType
 
 from cics.statements import CicsOperand
@@ -371,12 +372,29 @@ def _negated(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
     return _swap(lower_condition(cond.inner, ctx, path, slot))
 
 
-def _anded(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
-    return _chain(cond, ctx, path, slot, EdgeKind.TRUE)
+def _chained(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
+    """An AND/OR chain, lowered down its left side and joined back up.
+
+    Each combination's left child takes its slot plus ``L`` and its right child
+    plus ``R``, so the link ``depth`` levels down has slot ``slot + "L" * depth``.
+    Walking the left side rather than recursing keeps a long ``A OR B OR ...``,
+    which the bridge nests on the left, from costing a stack frame per operand.
+    """
+    spine = _left_spine(cond)
+    innermost = lower_condition(spine[-1].left, ctx, path, slot + "L" * len(spine))
+
+    def linked(left: CondFragment, numbered) -> CondFragment:
+        depth, link = numbered
+        right = lower_condition(link.right, ctx, path, f"{slot}{'L' * depth}R")
+        return _joined(left, right, _THROUGH[type(link)])
+
+    return reduce(linked, reversed(tuple(enumerate(spine))), innermost)
 
 
-def _ored(cond, ctx: Ctx, path: str, slot: str) -> CondFragment:
-    return _chain(cond, ctx, path, slot, EdgeKind.FALSE)
+def _left_spine(cond) -> tuple:
+    """The AND/OR links down the left side, outermost first."""
+    lefts = accumulate(repeat(None), lambda link, _: link.left, initial=cond)
+    return tuple(takewhile(lambda link: type(link) in _THROUGH, lefts))
 
 
 def _test(atom, ctx: Ctx, path: str, slot: str) -> CondFragment:
@@ -400,11 +418,9 @@ def _swap(inner: CondFragment) -> CondFragment:
     )
 
 
-def _chain(cond, ctx: Ctx, path: str, slot: str, through: EdgeKind) -> CondFragment:
+def _joined(left: CondFragment, right: CondFragment, through: EdgeKind) -> CondFragment:
     """Short-circuit: the right side is only reached along ``through`` from the
     left, and the other side's exits from BOTH halves escape the chain."""
-    left = lower_condition(cond.left, ctx, path, f"{slot}L")
-    right = lower_condition(cond.right, ctx, path, f"{slot}R")
     taken = left.true_exits if through is EdgeKind.TRUE else left.false_exits
     kept = left.false_exits if through is EdgeKind.TRUE else left.true_exits
     joined = CondFragment(
@@ -1336,7 +1352,9 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
     return _with_arms(statement, ctx, path, _one(node))
 
 
-_COMPOUNDS = {Not: _negated, And: _anded, Or: _ored}
+_THROUGH = {And: EdgeKind.TRUE, Or: EdgeKind.FALSE}
+
+_COMPOUNDS = {Not: _negated, And: _chained, Or: _chained}
 
 _LOOP_FORMS = {
     "PerformTimesSpec": _times_loop,

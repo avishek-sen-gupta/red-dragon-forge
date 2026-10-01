@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import reduce
+from itertools import accumulate, repeat, takewhile
 
 from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
 from cobble.dataflow.srccfg.synthetic import dfhresp_operand
@@ -54,9 +56,15 @@ def read_condition(raw: ConditionData) -> Cond:
         case str():
             return _named(raw)
         case Mapping():
-            return _wrap(raw, _body(raw))
+            return _read_mapping(raw)
         case _:
             return UNRESOLVED
+
+
+def _read_mapping(raw: Mapping) -> Cond:
+    if _is_combination(raw):
+        return _combined(raw)
+    return _wrap(raw, _body(raw))
 
 
 def _wrap(raw: Mapping, inner: Cond) -> Cond:
@@ -75,7 +83,6 @@ def _is_combination(raw: Mapping) -> bool:
 
 
 _BODY_SHAPES = (
-    (_is_combination, lambda raw: _combine(str(raw["op"]), raw["left"], raw["right"])),
     (lambda raw: "relation" in raw, lambda raw: _relation(raw["relation"])),
     (lambda raw: "condition" in raw, lambda raw: read_condition(raw["condition"])),
     (
@@ -89,11 +96,31 @@ _BODY_SHAPES = (
 _COMBINATIONS = {"AND": And, "OR": Or}
 
 
-def _combine(op: str, left: ConditionData, right: ConditionData) -> Cond:
-    combination = _COMBINATIONS.get(op)
+def _combined(raw: Mapping) -> Cond:
+    """A chain of combinations, read down its left side and folded back up.
+
+    The bridge nests ``A OR B OR C`` on the left, one level per operand, so a
+    recursive read costs a stack frame per operand and a long chain overflows.
+    """
+    spine = _left_spine(raw)
+    return reduce(_linked, reversed(spine), read_condition(spine[-1]["left"]))
+
+
+def _left_spine(raw: Mapping) -> tuple[Mapping, ...]:
+    """The combinations down the left side, outermost first."""
+    lefts = accumulate(repeat(None), lambda node, _: node["left"], initial=raw)
+    return tuple(takewhile(_is_combination_node, lefts))
+
+
+def _is_combination_node(node: ConditionData) -> bool:
+    return isinstance(node, Mapping) and _is_combination(node)
+
+
+def _linked(left: Cond, link: Mapping) -> Cond:
+    combination = _COMBINATIONS.get(str(link["op"]))
     if not combination:
-        return UNRESOLVED
-    return combination(left=read_condition(left), right=read_condition(right))
+        return _wrap(link, UNRESOLVED)
+    return _wrap(link, combination(left=left, right=read_condition(link["right"])))
 
 
 def _relation(raw: ConditionData) -> Cond:
