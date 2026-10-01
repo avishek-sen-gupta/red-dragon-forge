@@ -460,6 +460,12 @@ Reading all 29 members of CardDemo back takes under 3s in total, against 34.6s t
 lay the same members' DATA DIVISIONs out again — 1.2s per member, 2.2s for the
 worst.
 
+The walk runs over the same control-flow graph `cobble-srccfg-build` writes: both
+build it through `srccfg/program.py:program_cfg`, which joins every CICS command
+that can raise a condition to the `HANDLE CONDITION` paragraphs armed where it runs.
+A paragraph reached only through such a handler is walked like any other, so its
+writes appear in every output.
+
 `cobble-extents` lays members out in parallel worker processes — `--max-workers`,
 default 4 — and writes them in member order, so the table is byte for byte the one a
 single worker writes. It logs each member's row count and time as it is written.

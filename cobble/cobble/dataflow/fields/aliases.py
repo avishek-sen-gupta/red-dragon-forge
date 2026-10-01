@@ -14,7 +14,7 @@ bytes are still the same storage, bounded by the callee's own declaration, which
 is already one side of the ``min``.
 
 No fixpoint and no walk, but not free either: one extra desugar per caller --
-``build_program`` is not memoised, and the fixpoint has already run it for the
+``program_cfg`` is not memoised, and the fixpoint has already run it for the
 same member -- plus a full ``json.loads`` and ``CobolASG.from_dict`` of every
 distinct callee's cache file, of which only the LINKAGE is then laid out.
 ``from_dict`` has no partial mode, so the whole member is parsed to reach one
@@ -33,9 +33,9 @@ from cobble.dataflow.fields.extent import CellIndex, cell_index
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.layout import UnsizeableFieldError, section_records
-from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, LINK_TRANSFER
 from cobble.dataflow.srccfg.link import COMMAREA_RECORD, CallSite, call_sites
+from cobble.dataflow.srccfg.program import program_cfg
 from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -101,7 +101,7 @@ def commarea_aliases(
     """
     return tuple(
         row
-        for site in call_sites(build_program(asg))
+        for site in call_sites(program_cfg(asg))
         for row in _site_rows(site, index, asg_dir)
     )
 

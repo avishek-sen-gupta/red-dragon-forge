@@ -13,11 +13,10 @@ from functools import reduce
 from pathlib import Path
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.bundle import one_cfg_document
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
-from cobble.dataflow.srccfg.dataflow import with_handler_edges
+from cobble.dataflow.srccfg.program import program_cfg
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 
@@ -112,7 +111,7 @@ def cfg_of(path: Path, source_file: str = "") -> Cfg:
     """One member's CFG, with its CICS handler transfers resolved."""
     with cached_asg_dialect_parsers_registered():
         asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    return with_handler_edges(build_program(asg, source_file=source_file))
+    return program_cfg(asg, source_file=source_file)
 
 
 @dataclass(frozen=True)

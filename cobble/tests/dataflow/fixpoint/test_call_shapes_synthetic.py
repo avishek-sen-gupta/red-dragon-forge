@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from cobble.dataflow.fields.emit_extents import emit
-from cobble.dataflow.fixpoint.build_corpus import cli
-
-FORGE = Path(__file__).resolve().parents[4]
-BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
 
 PROGRAM = "CALLSHP"
 
@@ -54,45 +50,11 @@ SOURCE = """\
 """
 
 
-def _bridge_jar() -> Path:
-    found = sorted(FORGE.glob(BRIDGE_GLOB))
-    if not found:
-        pytest.skip(f"no bridge JAR at {BRIDGE_GLOB}; run `make jar`")
-    return found[-1]
-
-
 @pytest.fixture(scope="module")
 def targets(
-    tmp_path_factory: pytest.TempPathFactory,
+    fixpoint_out: Callable[[str, str], Path],
 ) -> list[tuple[str, str, tuple[str, ...], tuple[str, ...]]]:
-    from cobble.parsing.parse_corpus import Job, parse_one
-
-    workspace = tmp_path_factory.mktemp("call-shapes")
-    source = workspace / f"{PROGRAM}.cbl"
-    source.write_text(SOURCE, encoding="utf-8")
-    cache = workspace / "parsed"
-    cache.mkdir()
-    parsed = parse_one(
-        Job(source, cache / f"{PROGRAM}.json"), str(_bridge_jar()), (), ("cpy",)
-    )
-    assert parsed.ok, parsed.error
-    extents = workspace / "extents.jsonl"
-    assert emit(cache, extents, (), max_workers=1) == 0
-    out = workspace / "out"
-    cli(
-        [
-            "--asg-dir",
-            str(cache),
-            "--out-dir",
-            str(out),
-            "--extents",
-            str(extents),
-            "--member",
-            PROGRAM,
-            "--max-workers",
-            "1",
-        ]
-    )
+    out = fixpoint_out(PROGRAM, SOURCE)
     return [
         (
             row["node"],
