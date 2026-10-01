@@ -32,6 +32,20 @@ def test_parse_whenever_go_to_two_words():
     assert p.whenever_action == GoTo("ERR-EXIT")
 
 
+@pytest.mark.parametrize(
+    "action",
+    ["GOTO ERR-EXIT", "GO TO ERR-EXIT", "GOTO :ERR-EXIT", "GO TO :ERR-EXIT"],
+)
+def test_the_target_of_a_go_to_is_its_label_with_or_without_a_colon(
+    action: str,
+) -> None:
+    """Db2 lets the host label carry a colon. Without it in the grammar the colon
+    form fell through to the catch-all, and the jump's target came back as ``TO``."""
+    p = parse_exec_sql(f"EXEC SQL WHENEVER SQLERROR {action} END-EXEC")
+
+    assert (p.kind, p.whenever_action) == (Kind.WHENEVER, GoTo("ERR-EXIT"))
+
+
 def test_parse_whenever_not_found_continue():
     p = parse_exec_sql("EXEC SQL WHENEVER NOT FOUND CONTINUE END-EXEC")
     assert p.kind is Kind.WHENEVER
