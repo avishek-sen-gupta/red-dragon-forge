@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixpoints and worklists</title>
+<link rel="stylesheet" href="explainer.css">
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Explainer 1 of 4</div>
+<h1>Fixpoints and worklists</h1>
+<p class="lede">How a program analysis handles loops: keep applying the rules until nothing changes.</p>
+
+<h2>The problem</h2>
+<p>You want to know, for every statement in a program, something that is true on <em>every</em> path that reaches it — which statements may have last written each variable, say. Straight-line code is easy: walk it top to bottom. A loop is not. The statement at the top of a loop can be reached from before the loop or from the end of its own body, and you cannot know what the end of the body looks like until you have walked the body, which starts at the top.</p>
+
+<h2>The intuition</h2>
+<p>Start with every statement knowing nothing. Visit statements one at a time. At each one, gather what its predecessors currently know, apply the statement's effect, and if the result is bigger than what the statement knew before, tell its successors to look again. Stop when nobody needs to look again.</p>
+<p>That stopping point is a <strong>fixpoint</strong>: applying the rules once more would change nothing. It is reached because the facts only ever grow and there are finitely many of them. And it is the same answer whatever order you visit in — order changes how much work you do, not what you find.</p>
+
+<h2>The example</h2>
+<p>A loop whose body copies <code>WS-A</code> into <code>WS-B</code>, and a read of <code>WS-B</code> after the loop.</p>
+<pre class="cobol" id="program"></pre>
+<p>The facts here are, for each field, the set of statements that may have last written it. <code>start</code> stands for the value the field holds on entry. The statements are named the way cobble names them: paragraph, then position.</p>
+
+<h2>Step through it</h2>
+<p>The queue of statements waiting to be visited is the <strong>worklist</strong>. Choose how it hands out the next statement:</p>
+<div class="choice" id="order"></div>
+<div id="stepper"></div>
+<p id="tally" class="dim"></p>
+
+<h2>The rule</h2>
+<div class="rule">
+in(s)  = ⋃ out(p) for every predecessor p of s   (the entry also gets "start")<br>
+out(s) = transfer_s(in(s))<br>
+repeat: take s from the worklist; if out(s) grew, add s's successors<br>
+until the worklist is empty
+</div>
+<p>Two properties make this terminate with one answer. Each transfer is <strong>monotone</strong>: more knowledge in never means less out. And the facts form a finite lattice: each field can be credited to at most every write in the program. Every change makes some set strictly bigger, so changes run out.</p>
+
+<h2>What goes wrong</h2>
+<ul>
+<li><strong>Order is cost.</strong> First-in-first-out wanders out of the loop before the loop has settled, then has to redo everything after it once the loop changes. Reverse postorder — roughly, "a statement before its successors, the loop body before what follows the loop" — finishes the loop first. On cobble's largest program, changing order alone cut statement visits from about 107,000 to about 20,000, with an identical answer.</li>
+<li><strong>Budgets.</strong> A big program with many nested loops can still need a lot of visits, so a real analysis caps them. Stopping early gives facts that are <em>missing</em> some writes, never ones that are wrong: everything recorded was reached by a real path. Cobble publishes such a result and marks it unsettled.</li>
+<li><strong>Non-monotone rules break everything.</strong> If a transfer could shrink a fact, the loop could oscillate forever, and different orders could stop at different answers.</li>
+</ul>
+
+<h2>In cobble</h2>
+<p>The worklist and its reverse-postorder queue live in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a>; the per-field facts and their union are in <a href="../../cobble/cobble/dataflow/fields/state.py"><code>state.py</code></a>. Cobble's facts are byte ranges rather than whole fields — see <a href="byte-extents.html">byte extents</a> — but the loop is this one.</p>
+</main>
+
+<script type="application/json" id="example">
+{"member": "FIXLOOP",
+ "program": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. FIXLOOP.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-A                 PIC X(4) VALUE 'AAAA'.\n       01  WS-B                 PIC X(4).\n       01  WS-C                 PIC X(4).\n       01  WS-N                 PIC 9(2) VALUE 0.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           PERFORM LOOP-PARA UNTIL WS-N > 3.\n           MOVE WS-B TO WS-C.\n           STOP RUN.\n       LOOP-PARA.\n           MOVE WS-A TO WS-B.\n           ADD 1 TO WS-N.\n",
+ "expected": {"checks": ["flows"],
+   "flows": [["FIXLOOP.WS-A", "FIXLOOP.WS-B"], ["FIXLOOP.WS-B", "FIXLOOP.WS-C"],
+             ["FIXLOOP.WS-N", "FIXLOOP.WS-N"]]}}
+</script>
+<script src="stepper.js"></script>
+<script>
+/* The fixpoint model for the FIXLOOP example. */
+const example = Stepper.example();
+const FIELDS = ["WS-A", "WS-B", "WS-C", "WS-N"];
+const START = "start";
+
+const STATEMENTS = [
+  { id: "MAIN-PARA/0", text: "PERFORM LOOP-PARA UNTIL WS-N > 3", next: ["MAIN-PARA/1", "LOOP-PARA/0"], writes: [] },
+  { id: "LOOP-PARA/0", text: "MOVE WS-A TO WS-B", next: ["LOOP-PARA/1"], writes: [["WS-A", "WS-B"]] },
+  { id: "LOOP-PARA/1", text: "ADD 1 TO WS-N", next: ["MAIN-PARA/0"], writes: [["WS-N", "WS-N"]] },
+  { id: "MAIN-PARA/1", text: "MOVE WS-B TO WS-C", next: ["MAIN-PARA/2"], writes: [["WS-B", "WS-C"]] },
+  { id: "MAIN-PARA/2", text: "STOP RUN", next: [], writes: [] },
+];
+const ENTRY = "MAIN-PARA/0";
+const byId = Object.fromEntries(STATEMENTS.map((s) => [s.id, s]));
+const predecessors = (id) => STATEMENTS.filter((s) => s.next.includes(id)).map((s) => s.id);
+
+const nothing = () => Object.fromEntries(FIELDS.map((f) => [f, []]));
+const entryFacts = () => Object.fromEntries(FIELDS.map((f) => [f, [START]]));
+const union = (a, b) => Object.fromEntries(FIELDS.map((f) => [f, [...new Set([...a[f], ...b[f]])].sort()]));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+const transfer = (statement, facts) =>
+  statement.writes.reduce((out, [, target]) => ({ ...out, [target]: [statement.id] }), facts);
+
+const reversePostorder = () => {
+  const seen = new Set();
+  const post = [];
+  const visit = (id) => {
+    seen.add(id);
+    byId[id].next.filter((n) => !seen.has(n)).forEach(visit);
+    post.push(id);
+  };
+  visit(ENTRY);
+  return post.reverse();
+};
+
+const fifo = (queue) => queue[0];
+const byRank = (ranks) => (queue) => [...queue].sort((a, b) => ranks.indexOf(a) - ranks.indexOf(b))[0];
+
+const run = (choose) => {
+  const out = Object.fromEntries(STATEMENTS.map((s) => [s.id, null]));
+  const flows = new Set();
+  const visits = Object.fromEntries(STATEMENTS.map((s) => [s.id, 0]));
+  const steps = [];
+  let queue = [ENTRY];
+  while (queue.length) {
+    const id = choose(queue);
+    queue = queue.filter((q) => q !== id);
+    const statement = byId[id];
+    const incoming = predecessors(id).map((p) => out[p]).filter((f) => f !== null);
+    const facts = incoming.reduce(union, id === ENTRY ? entryFacts() : nothing());
+    const result = transfer(statement, facts);
+    const before = out[id];
+    const grew = before === null || !same(before, result);
+    out[id] = result;
+    visits[id] += 1;
+    statement.writes.forEach(([source, target]) => flows.add(JSON.stringify([`${example.member}.${source}`, `${example.member}.${target}`])));
+    const added = grew ? statement.next.filter((n) => !queue.includes(n)) : [];
+    queue = [...queue, ...added];
+    steps.push({
+      id, before, result, queue: [...queue], visits: { ...visits }, out: { ...out },
+      note: grew
+        ? `Visit ${id} (${statement.text}). Its facts ${before === null ? "are set for the first time" : "grew"}` +
+          (added.length ? `, so ${added.join(" and ")} ${added.length > 1 ? "are" : "is"} queued${before === null ? "" : " to look again"}.` : "; it has no successor left to queue.")
+        : `Visit ${id} (${statement.text}). Nothing changed, so nothing is queued.`,
+    });
+  }
+  return { steps, flows: [...flows].map((f) => JSON.parse(f)) };
+};
+
+const ORDERS = {
+  fifo: { label: "First in, first out", run: run(fifo) },
+  rpo: { label: "Reverse postorder", run: run(byRank(reversePostorder())) },
+};
+
+const factsText = (facts, field) => (facts === null ? "—" : `{${facts[field].join(", ")}}`);
+
+const render = (step) => {
+  const rows = STATEMENTS.map((s) => {
+    const cls = s.id === step.id ? "current" : "";
+    return `<tr class="${cls}"><td>${Stepper.escape(s.id)}</td><td>${Stepper.escape(s.text)}</td><td>${step.visits[s.id]}</td></tr>`;
+  }).join("");
+  const facts = FIELDS.map((f) => {
+    const changed = step.before === null || factsText(step.before, f) !== factsText(step.result, f);
+    return `<tr><td>${f}</td><td class="${changed ? "changed" : ""}">${Stepper.escape(factsText(step.result, f))}</td></tr>`;
+  }).join("");
+  const queue = step.queue.length
+    ? step.queue.map((q) => `<span class="chip">${Stepper.escape(q)}</span>`).join("")
+    : `<span class="dim">empty — fixpoint reached</span>`;
+  return `<table class="state"><tr><th>statement</th><th></th><th>visits</th></tr>${rows}</table>` +
+    `<p class="dim">Facts after ${Stepper.escape(step.id)}: which statements may have last written each field</p>` +
+    `<table class="state"><tr><th>field</th><th>last written by</th></tr>${facts}</table>` +
+    `<p class="dim">Worklist</p><div class="chips">${queue}</div>`;
+};
+
+const choose = (name) => {
+  document.querySelectorAll("#order button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.order === name)));
+  Stepper.mount(document.getElementById("stepper"), ORDERS[name].run.steps, render);
+};
+
+Object.entries(ORDERS).forEach(([name, order]) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.dataset.order = name;
+  b.textContent = order.label;
+  b.addEventListener("click", () => choose(name));
+  document.getElementById("order").append(b);
+});
+
+const finalOut = (order) => order.run.steps[order.run.steps.length - 1].out;
+Stepper.showProgram(document.getElementById("program"));
+Stepper.verify("first in, first out: flows", ORDERS.fifo.run.flows, example.expected.flows);
+Stepper.verify("reverse postorder: flows", ORDERS.rpo.run.flows, example.expected.flows);
+Stepper.verify("both orders reach the same facts", finalOut(ORDERS.fifo), finalOut(ORDERS.rpo));
+document.getElementById("tally").textContent =
+  `First in, first out takes ${ORDERS.fifo.run.steps.length} visits; reverse postorder takes ${ORDERS.rpo.run.steps.length}. ` +
+  `Both end with the same facts at every statement, and with the flows WS-A → WS-B, WS-B → WS-C and WS-N → WS-N.`;
+choose("rpo");
+</script>
+</body>
+</html>

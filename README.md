@@ -37,6 +37,8 @@ and each stays independently buildable and testable. What may import what is enf
 [`.importlinter`](.importlinter) contract and recorded in
 [`docs/design/2026-09-09-package-boundaries.md`](docs/design/2026-09-09-package-boundaries.md).
 
+How the field dataflow works, for engineers new to it: [`docs/explainers/`](docs/explainers/index.html).
+
 ## Quick start
 
 ```bash
