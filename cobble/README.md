@@ -457,11 +457,14 @@ the order they were named in. Which members are analysed is unchanged.
 
 Members are analysed in parallel worker processes — `--max-workers`, default 4. The
 parent streams the table and hands each worker one member's rows, never the built
-layout, keeping at most `--max-workers` + 1 members in flight: the peak memory is
-that many members' layouts, and the table is still read only that far ahead. Results
-are written and reported in table order, so the four tables are byte for byte what
-one worker writes. The walk's own progress lines come from the workers and
-interleave; each names its program.
+layout, keeping at most `--max-workers` members in flight: the peak memory is
+that many members' layouts, and the table is still read only that far ahead. A
+member is submitted as soon as any worker finishes, not the oldest one, so one slow
+member never holds the other workers idle behind it. Members are reported as they
+finish -- `[n/N]` counts finished members -- while the corpus files and the summary
+are built in table order, so they are byte for byte what one worker writes. The
+walk's own progress lines come from the workers and interleave; each names its
+program.
 
 The run is **resumable**. Each finished member is a directory of its own,
 `<out_dir>/members/<MEMBER>/` — its four tables and a `counts.json` holding what it
