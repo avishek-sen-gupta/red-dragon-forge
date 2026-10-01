@@ -12,6 +12,7 @@ class MemberCounts(BaseModel):
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
+    unmodelled: int = 0
     sweeps: int = 0
     settled: bool = True
     edges: int = 0

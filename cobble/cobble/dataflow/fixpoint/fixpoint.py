@@ -62,6 +62,7 @@ from dataclasses import dataclass, replace
 from itertools import accumulate, repeat
 from types import MappingProxyType
 
+from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
@@ -73,11 +74,14 @@ from cobble.dataflow.fields.transfer import (
     write_operands,
     writes_of,
 )
+from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg
+from cobble.dataflow.srccfg.conditions import EightyEight, condition_index
+from cobble.dataflow.srccfg.literals import is_literal
 from cobble.dataflow.srccfg.order import DepthFirstOrder, depth_first_order
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
@@ -152,6 +156,7 @@ class ProgramFlow:
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
+    unmodelled: int = 0
     nodes: int = 0
     dequeues: int = 0
     sweeps: int = 0
@@ -167,6 +172,7 @@ class _Tally:
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
+    unmodelled: int = 0
 
 
 @dataclass(frozen=True)
@@ -224,11 +230,74 @@ def _statements_at(
     )
 
 
+def with_unmodelled(
+    statements: Mapping[str, Statement],
+    cfg: Cfg,
+    eighty_eights: Mapping[str, EightyEight],
+) -> Mapping[str, Statement]:
+    """Every statement the transfer has no handler for, but that lowering says
+    writes storage, replaced by the weak write it is read as.
+
+    The names come from the CFG node, which already holds what every statement
+    kind writes and reads. A level-88 name stands for its parent field, which is
+    the storage a ``SET ... TO TRUE`` changes.
+    """
+    return MappingProxyType(
+        {
+            node_id: _unmodelled_or(statement, node_id, cfg, eighty_eights)
+            for node_id, statement in statements.items()
+        }
+    )
+
+
+def _unmodelled_or(
+    statement: Statement,
+    node_id: str,
+    cfg: Cfg,
+    eighty_eights: Mapping[str, EightyEight],
+) -> Statement:
+    if isinstance(statement, HANDLED) or node_id not in cfg.node_ids:
+        return statement
+    node = cfg.node(node_id)
+    targets = _storage(node.writes, eighty_eights)
+    if not targets:
+        return statement
+    return UnmodelledWrite(
+        verb=node.transfer or type(statement).__name__,
+        targets=targets,
+        sources=_storage(node.reads, eighty_eights),
+    )
+
+
+def _storage(
+    names: Sequence[str], eighty_eights: Mapping[str, EightyEight]
+) -> tuple[RefModOperand, ...]:
+    return tuple(
+        RefModOperand(name=_parent(name, eighty_eights))
+        for name in dict.fromkeys(names)
+        if name and not is_literal(name) and not name.startswith(IDENTITY_PREFIXES)
+    )
+
+
+def _parent(name: str, eighty_eights: Mapping[str, EightyEight]) -> str:
+    condition = eighty_eights.get(name.upper())
+    return condition.parent if condition else name
+
+
 def _resolved(operands: Sequence[RefModOperand], index: CellIndex) -> int:
     return sum(1 for operand in operands if operand_extents(operand, index).extents)
 
 
 def _one_tally(statement: Statement, index: CellIndex) -> _Tally:
+    """An unmodelled write has no handler and still writes: it counts as both."""
+    if isinstance(statement, UnmodelledWrite):
+        operands = statement.targets
+        return _Tally(
+            writes=len(operands),
+            covered=_resolved(operands, index),
+            unhandled=1,
+            unmodelled=len(operands),
+        )
     if not isinstance(statement, HANDLED):
         return _Tally(unhandled=1)
     operands = write_operands(statement)
@@ -241,6 +310,7 @@ def _tally(found: tuple[tuple[str, Statement], ...], index: CellIndex) -> _Tally
         writes=sum(one.writes for one in counted),
         covered=sum(one.covered for one in counted),
         unhandled=sum(one.unhandled for one in counted),
+        unmodelled=sum(one.unmodelled for one in counted),
     )
 
 
@@ -615,7 +685,7 @@ def analyse(
     initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.
     """
     cfg = program_cfg(asg)
-    statements = statement_index(asg)
+    statements = with_unmodelled(statement_index(asg), cfg, condition_index(asg))
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
     walk = _walked(cfg, statements, index, _entry_node(asg), options, entry_state)
@@ -628,6 +698,7 @@ def analyse(
         writes=tally.writes,
         covered=tally.covered,
         unhandled=tally.unhandled,
+        unmodelled=tally.unmodelled,
         nodes=len(cfg.nodes),
         dequeues=walk.dequeues,
         sweeps=walk.sweeps,

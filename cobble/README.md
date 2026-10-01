@@ -471,6 +471,20 @@ that can raise a condition to the `HANDLE CONDITION` paragraphs armed where it r
 A paragraph reached only through such a handler is walked like any other, so its
 writes appear in every output.
 
+**Statements with no transfer of their own.** The transfer models `MOVE`,
+`INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL` and `EXEC CICS`. Any
+other statement that writes storage — `ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,
+`SEARCH`, the `CORRESPONDING` forms, `WRITE`/`REWRITE … FROM`, `XML GENERATE` — is
+read as a *weak* write of the names its CFG node lists: it becomes a definer of its
+targets and kills nothing, its reads become the flow's sources (or, with none, a
+source named after the verb), and every value it may have changed gains the reason
+`unmodelled`. A level-88 name written by `SET … TO TRUE` stands for its parent. The
+summary counts these writes as `unmodelled`; they are part of `writes` and
+`covered` like any other, and the statement still counts as `unhandled`.
+
+`EXEC SQL … INTO` and `FETCH … INTO` are not covered: the SQL is opaque text and
+nothing names its host variables as writes yet, so those writes are still lost.
+
 `cobble-extents` lays members out in parallel worker processes — `--max-workers`,
 default 4 — and writes them in member order, so the table is byte for byte the one a
 single worker writes. It logs each member's row count and time as it is written.
@@ -817,6 +831,7 @@ A `reasons` entry says why the candidates may be short:
 | `no-extent` | the operand has no byte range to read, so nothing could be looked up |
 | `over-budget` | more than 32 values reached it; the first 32 in sorted order are kept |
 | `incomplete-walk` | the fixpoint stopped at its cap before settling |
+| `unmodelled` | a statement the transfer has no handler for may have written the bytes — `ACCEPT`, `UNSTRING`, `SET … TO TRUE` and the rest; the old value stays possible |
 
 Two limits sit upstream of the walk:
 

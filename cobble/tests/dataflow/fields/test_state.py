@@ -9,6 +9,7 @@ from cobble.dataflow.fields.state import (
     join,
     reaching,
     values_at,
+    weak_write,
     write,
 )
 from cobble.dataflow.fields.values import UnresolvedReason, ValueSet, because, of_value
@@ -250,3 +251,28 @@ def test_a_miss_reports_the_region_that_explains_it():
         UnresolvedReason.UNINITIALISED
     )
     assert exact_values(state, working) == of_value(b"COSGN00C")
+
+
+def test_a_weak_write_kills_nothing_and_says_the_old_value_may_have_changed():
+    """An unmodelled statement may overwrite its target fully, partly or not at all:
+    every old definer stays, the old value stays possible, and the doubt is named."""
+    held = _extent(0, 8, name="WS-P")
+    unwritten = _extent(8, 8, name="WS-Q")
+    first = write(EMPTY, held, frozenset({_source("WS-OLD")}), of_value(b"PROGA   "))
+    doubt = because(UnresolvedReason.UNMODELLED)
+
+    after = weak_write(
+        weak_write(first, held, frozenset({_source("WS-NEW")}), doubt),
+        unwritten,
+        frozenset(),
+        doubt,
+    )
+
+    assert _names(after, held) == {"WS-OLD", "WS-NEW"}
+    assert values_at(after, held) == ValueSet(
+        frozenset({b"PROGA   "}), frozenset({UnresolvedReason.UNMODELLED})
+    )
+    assert values_at(after, unwritten) == ValueSet(
+        frozenset(),
+        frozenset({UnresolvedReason.UNINITIALISED, UnresolvedReason.UNMODELLED}),
+    )

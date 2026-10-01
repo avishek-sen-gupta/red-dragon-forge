@@ -167,6 +167,7 @@ class MemberResult:
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
+    unmodelled: int = 0
     sweeps: int = 0
     settled: bool = True
     skipped: str = ""
@@ -190,6 +191,7 @@ class RunTotals:
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
+    unmodelled: int = 0
     skipped: tuple[tuple[str, str], ...] = ()
     unsettled: tuple[str, ...] = ()
     programs: tuple[tuple[str, str], ...] = ()
@@ -212,6 +214,7 @@ def _summary(totals: RunTotals) -> dict[str, float | int | Mapping[str, int]]:
         "covered": totals.covered,
         "coverage": round(totals.coverage, 4),
         "unhandled": totals.unhandled,
+        "unmodelled": totals.unmodelled,
         "skipped": len(totals.skipped),
         "unsettled": len(totals.unsettled),
         "collisions": len(_duplicates(totals)),
@@ -272,6 +275,7 @@ def _tables(
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
+        unmodelled=flow.unmodelled,
         sweeps=flow.sweeps,
         settled=flow.settled,
     )
@@ -444,6 +448,7 @@ def counts_of(result: MemberResult) -> MemberCounts:
         writes=result.writes,
         covered=result.covered,
         unhandled=result.unhandled,
+        unmodelled=result.unmodelled,
         sweeps=result.sweeps,
         settled=result.settled,
         edges=len(result.edges),
@@ -463,6 +468,7 @@ def _folded(totals: RunTotals, counts: MemberCounts) -> RunTotals:
         writes=totals.writes + counts.writes,
         covered=totals.covered + counts.covered,
         unhandled=totals.unhandled + counts.unhandled,
+        unmodelled=totals.unmodelled + counts.unmodelled,
         skipped=(*totals.skipped, *_skipped(counts)),
         unsettled=(*totals.unsettled, *_unsettled(counts)),
         programs=(*totals.programs, *_seen(counts)),
@@ -564,11 +570,12 @@ def _log_result(result: MemberCounts, seconds: float) -> None:
         )
         return
     logger.info(
-        "fields:   %s %d/%d writes covered, %d unhandled, %d edges, %.1fs%s",
+        "fields:   %s %d/%d writes covered, %d unhandled, %d unmodelled, %d edges, %.1fs%s",
         result.program,
         result.covered,
         result.writes,
         result.unhandled,
+        result.unmodelled,
         result.edges,
         seconds,
         _walk_note(result),
@@ -850,12 +857,13 @@ def _report_targets(totals: RunTotals) -> None:
 
 def _report_members(totals: RunTotals) -> None:
     logger.info(
-        "fields: %d members, coverage %.1f%% (%d/%d writes), %d unhandled, %d skipped",
+        "fields: %d members, coverage %.1f%% (%d/%d writes), %d unhandled, %d unmodelled, %d skipped",
         totals.analysed,
         totals.coverage * 100,
         totals.covered,
         totals.writes,
         totals.unhandled,
+        totals.unmodelled,
         len(totals.skipped),
     )
     _report_aliases(totals)
