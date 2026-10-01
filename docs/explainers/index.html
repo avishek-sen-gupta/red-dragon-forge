@@ -10,13 +10,13 @@
 <main>
 <div class="kicker">cobble · field dataflow</div>
 <h1>Algorithm explainers</h1>
-<p class="lede">The techniques cobble's field dataflow is built on, for engineers who have not met them before. Each page states a problem, steps through a small COBOL program one statement at a time, and ends with the precise rule and where it goes wrong.</p>
-<p>Every page checks itself: its example's answer is the one cobble actually computes, enforced by cobble's test suite, and the page shows a red banner if its own model disagrees.</p>
+<p class="lede">The techniques cobble's field dataflow is built on, for engineers who have not met them before. Each page states a problem, walks a small COBOL program one statement at a time with the analysis state after each, and ends with the precise rule and where it goes wrong.</p>
 <p>Read them in order; each builds on the one before.</p>
 <ol>
 <li><a href="fixpoints.html">Fixpoints and worklists</a> — how an analysis handles loops: apply the rules until nothing changes, and why the visiting order matters for cost but not for the answer.</li>
 <li><a href="reaching-definitions.html">Gen/kill and reaching definitions</a> — for every read, which writes could have produced the value it sees, and why only a certain overwrite may discard one.</li>
 <li><a href="byte-extents.html">Byte-extent aliasing</a> — fields as byte ranges: how groups, <code>REDEFINES</code> and partial writes alias, and why overlapping is not the same as covering.</li>
+<li><a href="value-sets.html">Value sets and dynamic calls</a> — resolving <code>CALL WS-PGM</code> statically by tracking the values a field can hold, and the reasons that set may be incomplete.</li>
 </ol>
 </main>
 </body>

@@ -21,11 +21,58 @@
 
 <h2>The example</h2>
 <p>Both arms of an <code>IF</code> write <code>WS-A</code>. Then it is read, overwritten, and read again.</p>
-<pre class="cobol" id="program"></pre>
+<pre class="cobol">       IDENTIFICATION DIVISION.
+       PROGRAM-ID. REACHDEF.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-FLAG              PIC X.
+       01  WS-A                 PIC X(4).
+       01  WS-B                 PIC X(4).
+       01  WS-C                 PIC X(4).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           IF WS-FLAG = 'Y'
+               MOVE 'YES ' TO WS-A
+           ELSE
+               MOVE 'NO  ' TO WS-A
+           END-IF.
+           MOVE WS-A TO WS-B.
+           MOVE 'DONE' TO WS-A.
+           MOVE WS-A TO WS-C.
+           STOP RUN.</pre>
 <p>Statements are named the way cobble names them: <code>MAIN-PARA/0</code> is the <code>IF</code>, and <code>MAIN-PARA/0.then.0</code> and <code>MAIN-PARA/0.else.0</code> are the first statement in each arm. A read is identified by its statement and the bytes it reads: <code>WS-A@working_storage[1:5]</code> is <code>WS-A</code>, bytes 1 to 5 of working storage, after the one-byte <code>WS-FLAG</code>.</p>
 
-<h2>Step through it</h2>
-<div id="stepper"></div>
+<h2>Step by step</h2>
+<ol class="steps">
+<li>
+<p class="note">IF WS-FLAG = 'Y' writes nothing. Its read of WS-FLAG has no reaching definition, so no row.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="dim">none</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="dim">none</span></div><p class="dim">Rows so far: each read and its definers</p><p class="dim">none yet</p>
+</li>
+<li>
+<p class="note">MOVE 'YES ' TO WS-A generates WS-A ← MAIN-PARA/0.then.0.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="dim">none</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="chip changed">WS-A ← MAIN-PARA/0.then.0</span></div><p class="dim">Rows so far: each read and its definers</p><p class="dim">none yet</p>
+</li>
+<li>
+<p class="note">MOVE 'NO  ' TO WS-A generates WS-A ← MAIN-PARA/0.else.0.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="dim">none</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="chip changed">WS-A ← MAIN-PARA/0.else.0</span></div><p class="dim">Rows so far: each read and its definers</p><p class="dim">none yet</p>
+</li>
+<li>
+<p class="note">Two paths meet here, so the incoming set is the union of both arms. MOVE WS-A TO WS-B generates WS-B ← MAIN-PARA/1. Its read of WS-A sees MAIN-PARA/0.else.0 and MAIN-PARA/0.then.0.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="chip ">WS-A ← MAIN-PARA/0.else.0</span><span class="chip ">WS-A ← MAIN-PARA/0.then.0</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="chip ">WS-A ← MAIN-PARA/0.else.0</span><span class="chip ">WS-A ← MAIN-PARA/0.then.0</span><span class="chip changed">WS-B ← MAIN-PARA/1</span></div><p class="dim">Rows so far: each read and its definers</p><p><code>MAIN-PARA/1</code> reads <code>WS-A@working_storage[1:5]</code></p><div class="chips"><span class="chip">MAIN-PARA/0.else.0</span><span class="chip">MAIN-PARA/0.then.0</span></div>
+</li>
+<li>
+<p class="note">MOVE 'DONE' TO WS-A generates WS-A ← MAIN-PARA/2 and kills WS-A ← MAIN-PARA/0.else.0, WS-A ← MAIN-PARA/0.then.0.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="chip dim">WS-A ← MAIN-PARA/0.else.0</span><span class="chip dim">WS-A ← MAIN-PARA/0.then.0</span><span class="chip ">WS-B ← MAIN-PARA/1</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="chip changed">WS-A ← MAIN-PARA/2</span><span class="chip ">WS-B ← MAIN-PARA/1</span></div><p class="dim">Rows so far: each read and its definers</p><p><code>MAIN-PARA/1</code> reads <code>WS-A@working_storage[1:5]</code></p><div class="chips"><span class="chip">MAIN-PARA/0.else.0</span><span class="chip">MAIN-PARA/0.then.0</span></div>
+</li>
+<li>
+<p class="note">MOVE WS-A TO WS-C generates WS-C ← MAIN-PARA/3. Its read of WS-A sees MAIN-PARA/2.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="chip ">WS-A ← MAIN-PARA/2</span><span class="chip ">WS-B ← MAIN-PARA/1</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="chip ">WS-A ← MAIN-PARA/2</span><span class="chip ">WS-B ← MAIN-PARA/1</span><span class="chip changed">WS-C ← MAIN-PARA/3</span></div><p class="dim">Rows so far: each read and its definers</p><p><code>MAIN-PARA/1</code> reads <code>WS-A@working_storage[1:5]</code></p><div class="chips"><span class="chip">MAIN-PARA/0.else.0</span><span class="chip">MAIN-PARA/0.then.0</span></div><p><code>MAIN-PARA/3</code> reads <code>WS-A@working_storage[1:5]</code></p><div class="chips"><span class="chip">MAIN-PARA/2</span></div>
+</li>
+<li>
+<p class="note">STOP RUN writes nothing.</p>
+<p class="dim">Reaching on the way in</p><div class="chips"><span class="chip ">WS-A ← MAIN-PARA/2</span><span class="chip ">WS-B ← MAIN-PARA/1</span><span class="chip ">WS-C ← MAIN-PARA/3</span></div><p class="dim">Reaching on the way out (new in amber)</p><div class="chips"><span class="chip ">WS-A ← MAIN-PARA/2</span><span class="chip ">WS-B ← MAIN-PARA/1</span><span class="chip ">WS-C ← MAIN-PARA/3</span></div><p class="dim">Rows so far: each read and its definers</p><p><code>MAIN-PARA/1</code> reads <code>WS-A@working_storage[1:5]</code></p><div class="chips"><span class="chip">MAIN-PARA/0.else.0</span><span class="chip">MAIN-PARA/0.then.0</span></div><p><code>MAIN-PARA/3</code> reads <code>WS-A@working_storage[1:5]</code></p><div class="chips"><span class="chip">MAIN-PARA/2</span></div>
+</li>
+</ol>
 
 <h2>The rule</h2>
 <div class="rule">
@@ -49,89 +96,5 @@ definers(read of v at s) = { d | (d, v) ∈ in(s) }
 <p>The per-read definers are collected during the fixpoint in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a> and written one row per read by <a href="../../cobble/cobble/dataflow/fields/side_tables.py"><code>side_tables.py</code></a> into <code>defs.jsonl</code>. Its definitions are kept per byte range, not per variable name; the next page shows why.</p>
 </main>
 
-<script type="application/json" id="example">
-{"member": "REACHDEF",
- "program": "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. REACHDEF.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01  WS-FLAG              PIC X.\n       01  WS-A                 PIC X(4).\n       01  WS-B                 PIC X(4).\n       01  WS-C                 PIC X(4).\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           IF WS-FLAG = 'Y'\n               MOVE 'YES ' TO WS-A\n           ELSE\n               MOVE 'NO  ' TO WS-A\n           END-IF.\n           MOVE WS-A TO WS-B.\n           MOVE 'DONE' TO WS-A.\n           MOVE WS-A TO WS-C.\n           STOP RUN.\n",
- "expected": {"checks": ["defs"],
-   "defs": [
-     {"node": "MAIN-PARA/1", "extent": "WS-A@working_storage[1:5]",
-      "definers": ["MAIN-PARA/0.else.0", "MAIN-PARA/0.then.0"]},
-     {"node": "MAIN-PARA/3", "extent": "WS-A@working_storage[1:5]",
-      "definers": ["MAIN-PARA/2"]}]}}
-</script>
-<script src="stepper.js"></script>
-<script>
-/* The gen/kill model for the REACHDEF example. */
-const example = Stepper.example();
-const LAYOUT = [["WS-FLAG", 1], ["WS-A", 4], ["WS-B", 4], ["WS-C", 4]];
-const EXTENTS = Object.fromEntries(
-  LAYOUT.map(([name], i) => {
-    const start = LAYOUT.slice(0, i).reduce((sum, [, size]) => sum + size, 0);
-    return [name, `${name}@working_storage[${start}:${start + LAYOUT[i][1]}]`];
-  })
-);
-
-const STATEMENTS = [
-  { id: "MAIN-PARA/0", text: "IF WS-FLAG = 'Y'", from: [], reads: ["WS-FLAG"], writes: [] },
-  { id: "MAIN-PARA/0.then.0", text: "MOVE 'YES ' TO WS-A", from: ["MAIN-PARA/0"], reads: [], writes: ["WS-A"] },
-  { id: "MAIN-PARA/0.else.0", text: "MOVE 'NO  ' TO WS-A", from: ["MAIN-PARA/0"], reads: [], writes: ["WS-A"] },
-  { id: "MAIN-PARA/1", text: "MOVE WS-A TO WS-B", from: ["MAIN-PARA/0.then.0", "MAIN-PARA/0.else.0"], reads: ["WS-A"], writes: ["WS-B"] },
-  { id: "MAIN-PARA/2", text: "MOVE 'DONE' TO WS-A", from: ["MAIN-PARA/1"], reads: [], writes: ["WS-A"] },
-  { id: "MAIN-PARA/3", text: "MOVE WS-A TO WS-C", from: ["MAIN-PARA/2"], reads: ["WS-A"], writes: ["WS-C"] },
-  { id: "MAIN-PARA/4", text: "STOP RUN", from: ["MAIN-PARA/3"], reads: [], writes: [] },
-];
-
-const label = ([statement, field]) => `${field} ← ${statement}`;
-const sorted = (defs) => [...defs].sort((a, b) => (label(a) < label(b) ? -1 : 1));
-const distinct = (defs) => sorted([...new Map(defs.map((d) => [label(d), d])).values()]);
-
-const walk = () =>
-  STATEMENTS.reduce(
-    ({ out, steps, rows }, s) => {
-      const incoming = distinct(s.from.flatMap((p) => out[p]));
-      const killed = incoming.filter(([, field]) => s.writes.includes(field));
-      const generated = s.writes.map((field) => [s.id, field]);
-      const result = distinct([...incoming.filter((d) => !killed.includes(d)), ...generated]);
-      const read = s.reads.map((field) => ({
-        node: s.id,
-        extent: EXTENTS[field],
-        definers: incoming.filter(([, f]) => f === field).map(([statement]) => statement).sort(),
-      }));
-      const found = read.filter((r) => r.definers.length);
-      const merge = s.from.length > 1 ? `Two paths meet here, so the incoming set is the union of both arms. ` : "";
-      const note = merge +
-        (generated.length ? `${s.text} generates ${generated.map(label).join(", ")}` : `${s.text} writes nothing`) +
-        (killed.length ? ` and kills ${killed.map(label).join(", ")}.` : ".") +
-        read.map((r) => (r.definers.length
-          ? ` Its read of ${r.extent.split("@")[0]} sees ${r.definers.join(" and ")}.`
-          : ` Its read of ${r.extent.split("@")[0]} has no reaching definition, so no row.`)).join("");
-      return {
-        out: { ...out, [s.id]: result },
-        rows: [...rows, ...found],
-        steps: [...steps, { id: s.id, incoming, killed, generated, result, read, rows: [...rows, ...found], note }],
-      };
-    },
-    { out: {}, steps: [], rows: [] }
-  );
-
-const chips = (defs, cls) =>
-  defs.length ? defs.map((d) => `<span class="chip ${cls(d)}">${Stepper.escape(label(d))}</span>`).join("") : `<span class="dim">none</span>`;
-
-const render = (step) => {
-  const list = STATEMENTS.map((s) => `<tr class="${s.id === step.id ? "current" : ""}"><td>${Stepper.escape(s.id)}</td><td>${Stepper.escape(s.text)}</td></tr>`).join("");
-  const rows = step.rows.map((r) =>
-    `<p><code>${Stepper.escape(r.node)}</code> reads <code>${Stepper.escape(r.extent)}</code></p>` +
-    `<div class="chips">${r.definers.map((d) => `<span class="chip">${Stepper.escape(d)}</span>`).join("")}</div>`).join("");
-  return `<table class="state">${list}</table>` +
-    `<p class="dim">Reaching on the way in</p><div class="chips">${chips(step.incoming, (d) => (step.killed.includes(d) ? "dim" : ""))}</div>` +
-    `<p class="dim">Reaching on the way out (new in amber)</p><div class="chips">${chips(step.result, (d) => (step.generated.some((g) => label(g) === label(d)) ? "changed" : ""))}</div>` +
-    `<p class="dim">Rows so far: each read and its definers</p>${rows || '<p class="dim">none yet</p>'}`;
-};
-
-const model = walk();
-Stepper.showProgram(document.getElementById("program"));
-Stepper.verify("reaching definitions", model.rows, example.expected.defs);
-Stepper.mount(document.getElementById("stepper"), model.steps, render);
-</script>
 </body>
 </html>
