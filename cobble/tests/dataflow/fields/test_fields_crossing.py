@@ -7,7 +7,7 @@ from itertools import pairwise
 import pytest
 from cobble.dataflow.fields.extent_text import byte_range
 from cobble.dataflow.fixpoint.build_corpus import GRAPH_FILE
-from cobble.dataflow.fixpoint.query import Side, cli, crossing, load, store_of
+from cobble.dataflow.fixpoint.query import Side, cli, crossing, load, load_for, store_of
 from cobble.knowledge_graph.row_type import RowType
 from tests.dataflow.fields.test_fields_query import _declared, _edge
 
@@ -1001,6 +1001,51 @@ def test_the_graph_file_s_node_rows_are_not_read_as_flows(tmp_path):
     assert load(out, tmp_path / "extents.jsonl").flows == _two_program_store().flows
 
 
+def test_a_query_reads_only_the_programs_that_declare_its_subject(tmp_path):
+    """The extents table can run to gigabytes and a question about one field needs
+    only the programs declaring it: a qualified name its own program, a bare name
+    every program that declares it, an undeclared name none. The flows load whole,
+    as before -- they come from the graph, not the extents."""
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(
+        tmp_path,
+        "extents.jsonl",
+        (
+            *_two_program_extent_rows(),
+            _declared("WS-AREA", 1, ((0, 4),), program="XPROGC"),
+        ),
+    )
+    _written_graph(out, _two_program_edge_rows())
+    extents = tmp_path / "extents.jsonl"
+
+    assert set(load_for(out, extents, "XPROGA.WS-AREA").by_program) == {"XPROGA"}
+    assert set(load_for(out, extents, "ws-area").by_program) == {"XPROGA", "XPROGC"}
+    assert dict(load_for(out, extents, "NOWHERE").fields) == {}
+    assert load_for(out, extents, "WS-AREA").flows == load(out, extents).flows
+
+
+def test_a_long_scan_says_how_far_it_has_got(tmp_path, caplog):
+    """A table of many programs takes a while to scan, so every hundred programs
+    the scan says so."""
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(
+        tmp_path,
+        "extents.jsonl",
+        tuple(
+            _declared("WS-A", 1, ((0, 4),), program=f"P{at:03d}") for at in range(150)
+        ),
+    )
+    caplog.set_level(logging.INFO)
+
+    load_for(out, tmp_path / "extents.jsonl", "NOWHERE")
+
+    assert [m for m in caplog.messages if m.startswith("scanned ")] == [
+        "scanned 100 programs"
+    ]
+
+
 def test_the_command_logs_what_it_loads_and_how_the_walk_goes(tmp_path, caplog):
     """A big artefact takes a while to read, so the command says which table it is
     on and how large it was, then how the walk is going -- on stderr, and with no
@@ -1013,12 +1058,11 @@ def test_the_command_logs_what_it_loads_and_how_the_walk_goes(tmp_path, caplog):
     lines = {
         name: len(path.read_text(encoding="utf-8").splitlines())
         for name, path in (
-            ("extents.jsonl", tmp_path / "extents.jsonl"),
             ("graph.jsonl", out / "graph.jsonl"),
             ("aliases.jsonl", out / "aliases.jsonl"),
         )
     }
-    store = load(out, tmp_path / "extents.jsonl")
+    store = load_for(out, tmp_path / "extents.jsonl", "XPROGA.WS-AREA")
     caplog.set_level(logging.INFO)
 
     cli(
@@ -1032,9 +1076,10 @@ def test_the_command_logs_what_it_loads_and_how_the_walk_goes(tmp_path, caplog):
         ]
     )
 
-    assert caplog.messages[:10] == [
-        "reading extents.jsonl (0.0 MB)",
-        f"extents.jsonl: {lines['extents.jsonl']} rows",
+    assert caplog.messages[:11] == [
+        "scanning extents.jsonl (0.0 MB) for the programs declaring the subject",
+        "kept XPROGA: 2 rows",
+        "extents.jsonl: kept 1 programs, 2 rows",
         "reading graph.jsonl (0.0 MB)",
         f"graph.jsonl: {lines['graph.jsonl']} rows",
         "defs.jsonl: not there, read as empty",
@@ -1045,7 +1090,7 @@ def test_the_command_logs_what_it_loads_and_how_the_walk_goes(tmp_path, caplog):
         "answering reaches",
         "field 1 of 1",
     ]
-    assert caplog.messages[10].startswith("depth 1: ")
+    assert caplog.messages[11].startswith("depth 1: ")
     assert "WS-AREA" not in caplog.text
 
 

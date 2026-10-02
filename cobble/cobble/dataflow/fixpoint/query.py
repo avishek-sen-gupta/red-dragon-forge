@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import cached_property, reduce
@@ -866,8 +866,27 @@ def load(out_dir: Path, extents: Path) -> FieldStore:
     A run of an older build has no defs.jsonl, and a query that answers every
     other question about it is more use than one that refuses the directory.
     """
+    return _ready(_table(extents), out_dir)
+
+
+def load_for(out_dir: Path, extents: Path, subject: str) -> FieldStore:
+    """``load``, keeping only the declarations of the programs ``subject`` is
+    declared in.
+
+    The extents table is one row per declared field, grouped by program, and it is
+    large: a record's row carries all of its cells. A question about one field needs
+    only its own programs' declarations -- the flows come from the graph, and every
+    other answer stays inside the subject's program. So the table is streamed one
+    program's rows at a time and a program is kept only if it declares the subject:
+    a qualified ``PROGRAM.FIELD`` keeps that program, a bare name every program
+    declaring it. Memory is the kept programs and the one being read, not the table.
+    """
+    return _ready(_declaring(extents, subject), out_dir)
+
+
+def _ready(declared: Sequence[Row], out_dir: Path) -> FieldStore:
     store = store_of(
-        _table(extents),
+        declared,
         _table(out_dir / GRAPH_FILE),
         _table(out_dir / DEFS_FILE),
         _table(out_dir / ALIASES_FILE),
@@ -879,6 +898,60 @@ def load(out_dir: Path, extents: Path) -> FieldStore:
         len(store.definers),
     )
     return store
+
+
+PROGRESS_EVERY = 100
+
+
+def _declaring(path: Path, subject: str) -> tuple[Row, ...]:
+    if not path.is_file():
+        logger.info("%s: not there, read as empty", path.name)
+        return ()
+    logger.info(
+        "scanning %s (%.1f MB) for the programs declaring the subject",
+        path.name,
+        path.stat().st_size / 1e6,
+    )
+    kept = tuple(
+        block
+        for at, block in enumerate(_program_blocks(path), start=1)
+        if _scanned(at) and _declares(block, subject) and _kept(block)
+    )
+    found = tuple(row for block in kept for row in block)
+    logger.info("%s: kept %d programs, %d rows", path.name, len(kept), len(found))
+    return found
+
+
+def _program_blocks(path: Path) -> Iterator[tuple[Row, ...]]:
+    """The table's rows a program at a time. A program's rows are contiguous, and a
+    row's program is its id's qualifier, as everywhere else here."""
+    return (tuple(block) for _, block in groupby(rows.stream(path), _row_program))
+
+
+def _row_program(row: Row) -> str:
+    return _program_of(rows.text(row, "id"))
+
+
+def _scanned(at: int) -> bool:
+    """Says how far a long scan has got, every ``PROGRESS_EVERY`` programs; always
+    true, so it can sit in the scan's filter."""
+    if not at % PROGRESS_EVERY:
+        logger.info("scanned %d programs", at)
+    return True
+
+
+def _kept(block: Sequence[Row]) -> bool:
+    """Says which program the scan kept, as it keeps it; always true."""
+    logger.info("kept %s: %d rows", _program_of(rows.text(block[0], "id")), len(block))
+    return True
+
+
+def _declares(block: Sequence[Row], subject: str) -> bool:
+    """A qualified subject names one field id; a bare one, any field of that name."""
+    wanted = subject.upper()
+    if "." in wanted:
+        return any(rows.text(row, "id").upper() == wanted for row in block)
+    return any(_bare(rows.text(row, "id")) == wanted for row in block)
 
 
 def _table(path: Path) -> tuple[Row, ...]:
@@ -1155,7 +1228,10 @@ def cli(argv: Sequence[str] = ()) -> int:
     if not arguments.extents.is_file():
         sys.stderr.write(f"fields: !! no extents table at {arguments.extents}\n")
         return 2
-    return _report(load(arguments.fixpoint_dir, arguments.extents), arguments)
+    return _report(
+        load_for(arguments.fixpoint_dir, arguments.extents, arguments.subject),
+        arguments,
+    )
 
 
 def main() -> int:
