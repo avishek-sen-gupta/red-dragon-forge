@@ -491,4 +491,6 @@ fileignoreconfig:
   checksum: 55fea677560d44e44ee55b90ae7e9e838788f3523eb06eea867794ef68e5fa30
 - filename: docs/superpowers/plans/2026-10-02-srccfg-jsonl.md
   checksum: 22b1c8a31adc79ddaeb672e3d5af96193b985c1ae3def8c1965ea36f712ade04
+- filename: docs/superpowers/plans/2026-10-02-srccfg-reach.md
+  checksum: fd808074d85aca2abee080dac45078fc50d791c97b090ea11476c9df3f215a9d
 version: "1.0"
