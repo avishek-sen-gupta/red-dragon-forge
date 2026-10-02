@@ -1,6 +1,7 @@
 """Crossing a commarea: the rebase, its direction, and how far it travels."""
 
 import json
+import logging
 from itertools import pairwise
 
 import pytest
@@ -998,6 +999,54 @@ def test_the_graph_file_s_node_rows_are_not_read_as_flows(tmp_path):
     _written(out, "aliases.jsonl", (_alias_row(),))
 
     assert load(out, tmp_path / "extents.jsonl").flows == _two_program_store().flows
+
+
+def test_the_command_logs_what_it_loads_and_how_the_walk_goes(tmp_path, caplog):
+    """A big artefact takes a while to read, so the command says which table it is
+    on and how large it was, then how the walk is going -- on stderr, and with no
+    field name, so the log stays safe to tail."""
+    out = tmp_path / "out"
+    out.mkdir()
+    _written(tmp_path, "extents.jsonl", _two_program_extent_rows())
+    _written_graph(out, _two_program_edge_rows())
+    _written(out, "aliases.jsonl", (_alias_row(),))
+    lines = {
+        name: len(path.read_text(encoding="utf-8").splitlines())
+        for name, path in (
+            ("extents.jsonl", tmp_path / "extents.jsonl"),
+            ("graph.jsonl", out / "graph.jsonl"),
+            ("aliases.jsonl", out / "aliases.jsonl"),
+        )
+    }
+    store = load(out, tmp_path / "extents.jsonl")
+    caplog.set_level(logging.INFO)
+
+    cli(
+        [
+            "reaches",
+            "XPROGA.WS-AREA",
+            "--fixpoint-dir",
+            str(out),
+            "--extents",
+            str(tmp_path / "extents.jsonl"),
+        ]
+    )
+
+    assert caplog.messages[:10] == [
+        "reading extents.jsonl (0.0 MB)",
+        f"extents.jsonl: {lines['extents.jsonl']} rows",
+        "reading graph.jsonl (0.0 MB)",
+        f"graph.jsonl: {lines['graph.jsonl']} rows",
+        "defs.jsonl: not there, read as empty",
+        "reading aliases.jsonl (0.0 MB)",
+        f"aliases.jsonl: {lines['aliases.jsonl']} rows",
+        f"ready: {len(store.fields)} fields, {len(store.flows)} flows, "
+        f"{len(store.definers)} definer rows",
+        "answering reaches",
+        "field 1 of 1",
+    ]
+    assert caplog.messages[10].startswith("depth 1: ")
+    assert "WS-AREA" not in caplog.text
 
 
 def test_the_default_answer_does_not_mention_crossing(tmp_path, capsys):
