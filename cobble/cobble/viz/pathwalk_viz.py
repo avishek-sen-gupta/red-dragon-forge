@@ -403,7 +403,7 @@ def _parser() -> argparse.ArgumentParser:
         "--cfg",
         type=Path,
         required=True,
-        help="srccfg bundle JSON from cobble-srccfg-build",
+        help="the CFG file (JSONL) cobble-srccfg-build wrote",
     )
     p.add_argument(
         "--paths",
