@@ -6,7 +6,7 @@ Tests for host-variable surfacing and lexer safety (strings, comments).
 
 from __future__ import annotations
 
-from squall.parser._grammar import parse
+from squall.parser.parse import parse
 
 
 def _parse_host_var_tok(tok_value: str) -> list[str]:

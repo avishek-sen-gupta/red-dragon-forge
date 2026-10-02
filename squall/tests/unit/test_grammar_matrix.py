@@ -14,7 +14,7 @@ import pathlib
 
 import pytest
 
-from squall.parser._grammar import parse
+from squall.parser.parse import parse
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

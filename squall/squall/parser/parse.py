@@ -60,6 +60,12 @@ _PARSER: Final[Lark] = Lark(
     propagate_positions=True,
 )
 
+
+def parse(body: str) -> Tree:
+    """The parse tree of one EXEC SQL body, without its delimiters."""
+    return _PARSER.parse(body)
+
+
 # ── Envelope patterns ─────────────────────────────────────────────────────────
 
 # Fixed-keyword strip: match EXEC SQL at start, END-EXEC at end.
@@ -416,7 +422,7 @@ def parse_exec_sql(text: str) -> ParsedSql:
         Frozen dataclass with kind, in_vars, out_vars, cursor, query.
     """
     inner = _strip_envelope(text)
-    tree = _PARSER.parse(inner)
+    tree = parse(inner)
     stmt = _subtree(tree.children[0])
     kind: Kind = Kind(stmt.data)
 
