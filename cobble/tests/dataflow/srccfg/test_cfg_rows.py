@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from cobble.dataflow.srccfg.cfg import Atom, Edge, EdgeKind, Node, NodeKind, SourceSpan
+from cobble.dataflow.srccfg.bundle import load_bundle
+from cobble.dataflow.srccfg.cfg import (
+    Atom,
+    Cfg,
+    Edge,
+    EdgeKind,
+    Node,
+    NodeKind,
+    SourceSpan,
+)
 from cobble.dataflow.srccfg.link import BundleCall
 from cobble.dataflow.srccfg.rows.call_row import CfgCallRow
 from cobble.dataflow.srccfg.rows.cfg_row import (
@@ -11,11 +22,16 @@ from cobble.dataflow.srccfg.rows.cfg_row import (
     call_row,
     edge_row,
     node_row,
+    outcome_row,
     program_row,
+    refused_row,
+    summary_row,
+    unresolved_row,
 )
 from cobble.dataflow.srccfg.rows.edge_row import CfgEdgeRow
 from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
 from cobble.dataflow.srccfg.rows.program_row import CfgProgramRow
+from cobble.dataflow.srccfg.rows.reach_outcome import ReachOutcome
 from cobol_asg.ref_mod import RefModLiteral, RefModOperand
 
 NODE = Node(
@@ -93,3 +109,35 @@ def test_a_row_with_an_unknown_type_or_a_stray_field_is_refused() -> None:
         CFG_ROWS.validate_json('{"type": "programme", "program": "PROGA"}')
     with pytest.raises(ValueError, match="extra"):
         CFG_ROWS.validate_json('{"type": "program", "program": "PROGA", "seed": true}')
+
+
+def test_reach_rows_read_back_and_a_cfg_reader_sees_only_the_graph(
+    tmp_path: Path,
+) -> None:
+    """The reach rows travel in the same file as the reached subgraph: each reads
+    back as itself, and load_bundle -- so every renderer -- builds the graph and
+    skips them."""
+    edge = Edge(source="MAIN/0", target="MAIN#end", kind=EdgeKind.FLOW)
+    end = Node(id="MAIN#end", kind=NodeKind.NOP, paragraph="MAIN")
+    reach = (
+        outcome_row(ReachOutcome.XCTL, "MAIN/0"),
+        unresolved_row("MAIN/1"),
+        refused_row("MAIN/2"),
+        summary_row("MAIN/0", 3),
+    )
+    rows = (
+        program_row("PROGA"),
+        node_row("PROGA", NODE),
+        node_row("PROGA", end),
+        edge_row("PROGA", edge),
+        *reach,
+    )
+    path = tmp_path / "reach.jsonl"
+    path.write_text("".join(f"{row.model_dump_json()}\n" for row in rows))
+
+    assert (
+        tuple(CFG_ROWS.validate_json(row.model_dump_json()) for row in reach) == reach
+    )
+    assert load_bundle(path).cfgs == (
+        Cfg(program="PROGA", nodes=(NODE, end), edges=(edge,)),
+    )

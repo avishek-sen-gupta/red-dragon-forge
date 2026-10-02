@@ -8,3 +8,7 @@ class CfgRowType(StrEnum):
     NODE = "node"
     EDGE = "edge"
     CALL = "call"
+    OUTCOME = "outcome"
+    UNRESOLVED = "unresolved"
+    REFUSED = "refused"
+    SUMMARY = "summary"
