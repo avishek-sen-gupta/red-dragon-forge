@@ -326,7 +326,7 @@ fileignoreconfig:
 - filename: cobble/cobble/dataflow/fields/side_tables.py
   checksum: bbba8baf46404ae5467a01c832daaec6b3ca1c59761fa8f45a0285b808709eac
 - filename: cobble/cobble/dataflow/fixpoint/query.py
-  checksum: 23f6397221486740df616bd013619ec318efc5173af825ffcaa7db54a1915b16
+  checksum: be3d9da41f96f7a03abe63d6b8cc7cc8994d622eb7a9fc840b2cbbf9f4c4cb7c
 - filename: cobble/tests/dataflow/fields/test_fields_synthetic.py
   checksum: ac334a88abcd9c8ce8d105554216d508834231a26cdad5239e27859b0808ac6f
 - filename: cobble/cobble/dataflow/fixpoint/rows.py

@@ -931,10 +931,22 @@ nor `within`, and a range straddling two records, contained by neither.
 
 Ranges compare only within a program: a byte offset is a coordinate in one
 member's region, so a walk that dropped the program would leak into members
-nobody asked about. `reaches` and `reached-by` walk the closure of that
-intersection to `--depth` (default 6), stopping on a field already visited over
-overlapping bytes — both parts, because bytes alone prune a sibling inside a group
-already reached, and an id alone prunes a second occurrence of a table entry.
+nobody asked about.
+
+`reaches` and `reached-by` follow values in statement order, to `--depth`
+(default 6). Each step goes from one statement's move to the next move that can
+actually see its result: forward, to a read the write reaches; backward, to a
+write the read can see — the fixpoint's `defs.jsonl` says which. So in
+
+```cobol
+MOVE WS-B TO WS-C      *> runs first
+MOVE WS-A TO WS-B
+```
+
+`reaches WS-A` is `WS-B` alone: the copy of `WS-B` into `WS-C` ran before
+`WS-A` was moved in. A literal or a file read ends a chain without being a
+landing. `--across-calls` (below) still walks field to field, regardless of
+statement order.
 
 #### Crossing a call: `--across-calls`
 

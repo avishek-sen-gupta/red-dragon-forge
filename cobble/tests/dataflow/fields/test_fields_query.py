@@ -310,11 +310,21 @@ def test_a_group_holding_only_some_occurrences_of_a_table_entry_does_not_contain
     ]
 
 
+def _defined(node: str, extent: str, *definers: str) -> dict:
+    return {
+        "program": "PROGA",
+        "node": node,
+        "extent": extent,
+        "definers": list(definers),
+    }
+
+
 def test_a_transitive_walk_hops_through_a_group_write(store):
     """WS-A flows into REC-B by the group move, and on out of WS-C by the next one.
 
     Following ids would stop at REC-B: nothing names WS-C as a target, so the
-    second hop is only reachable because the frontier is a byte range.
+    second hop is only reachable because the frontier is a byte range. The hop is
+    taken because the group move's write is one the next move's read can see.
     """
     found = store(
         edges=(
@@ -325,7 +335,8 @@ def test_a_transitive_walk_hops_through_a_group_write(store):
                 _range("WS-C", 8, 12),
                 _range("WS-TAIL", 16, 20),
             ),
-        )
+        ),
+        defs=(_defined(CHILD_MOVE, _range("WS-C", 8, 12), GROUP_MOVE),),
     )
     reached = reaches(found, _one(found, "WS-A").ranges, Side.SOURCE, 4)
 
@@ -364,11 +375,42 @@ def test_a_cycle_over_the_same_bytes_terminates(declared):
             _edge("WS-A", "WS-B", "MAIN/0", _range("WS-A", 0, 4), _range("WS-B", 4, 8)),
             _edge("WS-B", "WS-A", "MAIN/1", _range("WS-B", 4, 8), _range("WS-A", 0, 4)),
         ),
-        (),
+        (
+            _defined("MAIN/1", _range("WS-B", 4, 8), "MAIN/0"),
+            _defined("MAIN/0", _range("WS-A", 0, 4), "MAIN/1"),
+        ),
     )
     assert reaches(store, _one(store, "WS-A").ranges, Side.SOURCE, 20) == {
         "PROGA.WS-B": 1,
         "PROGA.WS-A": 2,
+    }
+
+
+def test_a_walk_follows_a_flow_only_into_a_statement_its_write_can_reach(declared):
+    """B is copied to C at statement 0, before A is copied to B at statement 1, and
+    C goes on to D at statement 2. A's value reaches B and stops there: the read of
+    B that fed C ran before A was ever moved in. From D the walk goes back through C
+    to the B statement 0 read, which nothing wrote -- never to A."""
+    store = store_of(
+        declared,
+        (
+            _edge(
+                "WS-B", "WS-C", "MAIN/0", _range("WS-B", 4, 8), _range("WS-C", 8, 12)
+            ),
+            _edge("WS-A", "WS-B", "MAIN/1", _range("WS-A", 0, 4), _range("WS-B", 4, 8)),
+            _edge(
+                "WS-C", "WS-D", "MAIN/2", _range("WS-C", 8, 12), _range("WS-D", 12, 16)
+            ),
+        ),
+        (_defined("MAIN/2", _range("WS-C", 8, 12), "MAIN/0"),),
+    )
+
+    assert reaches(store, _one(store, "WS-A").ranges, Side.SOURCE, 6) == {
+        "PROGA.WS-B": 1
+    }
+    assert reaches(store, _one(store, "WS-D").ranges, Side.TARGET, 6) == {
+        "PROGA.WS-C": 1,
+        "PROGA.WS-B": 2,
     }
 
 
