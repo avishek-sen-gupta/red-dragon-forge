@@ -403,10 +403,10 @@ fileignoreconfig:
   checksum: 3608b69945b2626a3954e03431b566e0623c01e57ea8b66cb61abe02a0634703
 - filename: cobble/cobble/dataflow/srccfg/bundle.py
   checksum: 220c3e94144d226bac20a71f1695800f01539dd495df6d6a51a6192f8ce0c1e6
-- filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.json
-  checksum: 29bd06b4ce7e7b056556877eb69f622d077563546d9775fa01e9ffcf708f1b0e
-- filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.json
-  checksum: 8313ab10ce0c3629c9f3c7e27db5e62ff8f4545066883ef3e017722ca471bed0
+- filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.jsonl
+  checksum: af6dec30002593f7b7d209c703bc9d8877b13bc3e4a92492a8503ab8ea38902d
+- filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.jsonl
+  checksum: f990ce94181c8f6d0809372db1285dc48db1eb8b7757b8bd06d68ce970e8945b
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequence-program.html
   checksum: e5cc3f24822c63276009ae4976fc9a87f3a535f5e7453930e16e8b47673b57b5
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequences.json
