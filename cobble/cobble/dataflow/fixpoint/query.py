@@ -1076,7 +1076,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("query", type=Query, choices=tuple(Query))
     parser.add_argument("subject", help="a field name, or PROGRAM.FIELD to qualify it")
-    parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument(
+        "--fixpoint-dir",
+        required=True,
+        type=Path,
+        help="the directory cobble-dataflow-fixpoint wrote (its --out-dir)",
+    )
     parser.add_argument(
         "--extents",
         required=True,
@@ -1106,13 +1111,15 @@ def _parser() -> argparse.ArgumentParser:
 
 def cli(argv: Sequence[str] = ()) -> int:
     arguments = _parsed(argv)
-    if not arguments.out.is_dir():
-        sys.stderr.write(f"fields: !! no artefact directory at {arguments.out}\n")
+    if not arguments.fixpoint_dir.is_dir():
+        sys.stderr.write(
+            f"fields: !! no fixpoint directory at {arguments.fixpoint_dir}\n"
+        )
         return 2
     if not arguments.extents.is_file():
         sys.stderr.write(f"fields: !! no extents table at {arguments.extents}\n")
         return 2
-    return _report(load(arguments.out, arguments.extents), arguments)
+    return _report(load(arguments.fixpoint_dir, arguments.extents), arguments)
 
 
 def main() -> int:
