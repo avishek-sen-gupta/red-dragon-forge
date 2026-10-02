@@ -489,4 +489,6 @@ fileignoreconfig:
   checksum: e57e54f70ee857af5bf705fa38f8d06e4ffd0427f8cdb379e39cc4c23a8fc7ef
 - filename: docs/superpowers/plans/2026-09-30-cobble-dynamic-call-resolution-unit-1.md
   checksum: 55fea677560d44e44ee55b90ae7e9e838788f3523eb06eea867794ef68e5fa30
+- filename: docs/superpowers/plans/2026-10-02-srccfg-jsonl.md
+  checksum: 22b1c8a31adc79ddaeb672e3d5af96193b985c1ae3def8c1965ea36f712ade04
 version: "1.0"
