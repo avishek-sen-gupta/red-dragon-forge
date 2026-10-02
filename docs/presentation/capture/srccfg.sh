@@ -19,32 +19,32 @@ EOF
 
 for p in COSGN00C COACTVWC; do
   { /usr/bin/time -p uv run --no-sync cobble-srccfg-build --config "$WORK/srccfg.toml" \
-      --output "$ART/cfg-$p.json" "$p"; } 2>&1 | tee "$ART/build-$p.txt"
+      --output "$ART/cfg-$p.jsonl" "$p"; } 2>&1 | tee "$ART/build-$p.txt"
 done
 
 uv run --no-sync python - "$ART" <<'PY'
 import collections, json, pathlib, sys
 
-from cobble.dataflow.srccfg.bundle import load_cfg_dicts
+from cobble.dataflow.srccfg.bundle import load_bundle
 
 art = pathlib.Path(sys.argv[1])
 summary = {}
 for entry in ("COSGN00C", "COACTVWC"):
-    members = load_cfg_dicts(art / f"cfg-{entry}.json")
+    cfgs = load_bundle(art / f"cfg-{entry}.jsonl").cfgs
     summary[entry] = [
         {
-            "program": m["program"],
-            "nodes": len(m["nodes"]),
-            "edges": len(m["edges"]),
-            "node_kinds": dict(collections.Counter(n["kind"] for n in m["nodes"]).most_common()),
+            "program": cfg.program,
+            "nodes": len(cfg.nodes),
+            "edges": len(cfg.edges),
+            "node_kinds": dict(collections.Counter(n.kind.name for n in cfg.nodes).most_common()),
         }
-        for m in members
+        for cfg in cfgs
     ]
 (art / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 print(json.dumps(summary, indent=2))
 PY
 
-uv run --no-sync cobble-srccfg-dot --cfg "$ART/cfg-COSGN00C.json" --output "$ART/cfg-COSGN00C.dot"
+uv run --no-sync cobble-srccfg-dot --cfg "$ART/cfg-COSGN00C.jsonl" --output "$ART/cfg-COSGN00C.dot"
 
 # One paragraph of the closure, small enough to read on a slide.
 uv run --no-sync python - "$ART" <<'PY'
@@ -65,22 +65,22 @@ PY
 
 q() { uv run --no-sync cobble-srccfg-query "$@"; }
 {
-  echo "\$ cobble-srccfg-query guards READ-USER-SEC-FILE/1.when.0.0.then.5.then.0 --cfg cfg-COSGN00C.json   # XCTL COADM01C"
-  q guards "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0" --cfg "$ART/cfg-COSGN00C.json"
+  echo "\$ cobble-srccfg-query guards READ-USER-SEC-FILE/1.when.0.0.then.5.then.0 --cfg cfg-COSGN00C.jsonl   # XCTL COADM01C"
+  q guards "READ-USER-SEC-FILE/1.when.0.0.then.5.then.0" --cfg "$ART/cfg-COSGN00C.jsonl"
   echo
-  echo "\$ cobble-srccfg-query guards READ-USER-SEC-FILE/1.when.0.0.then.5.else.0 --cfg cfg-COSGN00C.json   # XCTL COMEN01C"
-  q guards "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0" --cfg "$ART/cfg-COSGN00C.json"
+  echo "\$ cobble-srccfg-query guards READ-USER-SEC-FILE/1.when.0.0.then.5.else.0 --cfg cfg-COSGN00C.jsonl   # XCTL COMEN01C"
+  q guards "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0" --cfg "$ART/cfg-COSGN00C.jsonl"
 } > "$ART/guards-COSGN00C-xctl.txt"
 
 {
-  echo "\$ cobble-srccfg-query provenance CDEMO-USER-ID --max-depth 2 --cfg cfg-COSGN00C.json"
-  q provenance CDEMO-USER-ID --max-depth 2 --cfg "$ART/cfg-COSGN00C.json"
+  echo "\$ cobble-srccfg-query provenance CDEMO-USER-ID --max-depth 2 --cfg cfg-COSGN00C.jsonl"
+  q provenance CDEMO-USER-ID --max-depth 2 --cfg "$ART/cfg-COSGN00C.jsonl"
 } > "$ART/provenance-COSGN00C-CDEMO-USER-ID.txt"
 
 {
-  echo "\$ cobble-srccfg-query coassign CC-ACCT-ID --cfg cfg-COACTVWC.json"
-  q coassign CC-ACCT-ID --cfg "$ART/cfg-COACTVWC.json"
+  echo "\$ cobble-srccfg-query coassign CC-ACCT-ID --cfg cfg-COACTVWC.jsonl"
+  q coassign CC-ACCT-ID --cfg "$ART/cfg-COACTVWC.jsonl"
 } > "$ART/coassign-COACTVWC-CC-ACCT-ID.txt"
 
-uv run --no-sync cobble-srccfg-webgl --cfg "$ART/cfg-COSGN00C.json" --output "$ART/cfg-COSGN00C-webgl.html"
+uv run --no-sync cobble-srccfg-webgl --cfg "$ART/cfg-COSGN00C.jsonl" --output "$ART/cfg-COSGN00C-webgl.html"
 echo "srccfg artifacts written to $ART"

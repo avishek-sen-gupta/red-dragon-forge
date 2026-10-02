@@ -64,11 +64,11 @@ asg_dir = "$ROOT/cobble/out-parsed"
 out_dir = "$WORK/srccfg"
 EOF
 for p in COSGN00C COACTVWC; do
-  uv run --no-sync cobble-srccfg-build --config "$WORK/srccfg.toml" --output "$WORK/cfg-$p.json" "$p"
+  uv run --no-sync cobble-srccfg-build --config "$WORK/srccfg.toml" --output "$WORK/cfg-$p.jsonl" "$p"
 done
 
 echo "== call graph + sequence diagrams"
-viz callgraph_cmd --graph out/carddemo.jsonl --cfg "$WORK/cfg-COSGN00C.json" --out "$ART/viz/COSGN00C-call-dep.json"
+viz callgraph_cmd --graph out/carddemo.jsonl --cfg "$WORK/cfg-COSGN00C.jsonl" --out "$ART/viz/COSGN00C-call-dep.json"
 # viz-callgraph keeps only kind == LINK; CardDemo's online flow is all XCTL, so the
 # as-shipped graph has no edges. The second variant relabels XCTL edges as LINK in a
 # scratch copy of the graph file so the XCTL hand-offs are drawn. Node rows pass through.
@@ -81,9 +81,9 @@ with open(sys.argv[1]) as src, open(sys.argv[2], "w") as dst:
             r["kind"] = "LINK"
         dst.write(json.dumps(r) + "\n")
 PY
-viz callgraph_cmd --graph "$WORK/graph-xctl-as-link.jsonl" --cfg "$WORK/cfg-COSGN00C.json" --out "$ART/viz/COSGN00C-call-dep-xctl.json"
-viz sequence_cmd --cfg "$WORK/cfg-COSGN00C.json" --entry COSGN00C --out "$ART/viz/COSGN00C-sequences.json"
-viz sequence_cmd --cfg "$WORK/cfg-COACTVWC.json" --entry COACTVWC --out "$ART/viz/COACTVWC-sequences.json"
+viz callgraph_cmd --graph "$WORK/graph-xctl-as-link.jsonl" --cfg "$WORK/cfg-COSGN00C.jsonl" --out "$ART/viz/COSGN00C-call-dep-xctl.json"
+viz sequence_cmd --cfg "$WORK/cfg-COSGN00C.jsonl" --entry COSGN00C --out "$ART/viz/COSGN00C-sequences.json"
+viz sequence_cmd --cfg "$WORK/cfg-COACTVWC.jsonl" --entry COACTVWC --out "$ART/viz/COACTVWC-sequences.json"
 viz render_cmd --input "$ART/viz/COSGN00C-call-dep.json" --mode callgraph --out "$ART/viz/COSGN00C-callgraph.html"
 viz render_cmd --input "$ART/viz/COSGN00C-call-dep-xctl.json" --mode callgraph --out "$ART/viz/COSGN00C-callgraph-xctl.html"
 viz render_cmd --input "$ART/viz/COSGN00C-sequences.json" --mode top --out "$ART/viz/COSGN00C-sequence-top.html"
