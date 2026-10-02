@@ -61,6 +61,7 @@ from cobble.dataflow.srccfg.synthetic import (
     handler_field,
     io_status_field,
 )
+from cobble.dataflow.srccfg.varying import spec_text
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
 from cobol_asg.ref_mod import RefModOperand
@@ -888,10 +889,14 @@ def _varying_loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
     inner_body = _nest_after_specs(getattr(spec, "after_specs", ()), body, ctx, path)
     variable = str(getattr(spec, "varying_var", "") or "").upper()
     init = _step_node(
-        ctx, path, "#init", variable, (_text(getattr(spec, "varying_from", "")),)
+        ctx, path, "#init", variable, (spec_text(getattr(spec, "varying_from", "")),)
     )
     step = _step_node(
-        ctx, path, "#step", variable, (variable, _text(getattr(spec, "varying_by", "")))
+        ctx,
+        path,
+        "#step",
+        variable,
+        (variable, spec_text(getattr(spec, "varying_by", ""))),
     )
     loop = _tested_loop(
         _until_test(spec, ctx, path),
@@ -932,14 +937,14 @@ def _one_after_loop(
         path,
         f"{suffix}#init",
         variable,
-        (_text(getattr(spec, "varying_from", "")),),
+        (spec_text(getattr(spec, "varying_from", "")),),
     )
     step = _step_node(
         ctx,
         path,
         f"{suffix}#step",
         variable,
-        (variable, _text(getattr(spec, "varying_by", ""))),
+        (variable, spec_text(getattr(spec, "varying_by", ""))),
     )
     loop = _tested_loop(
         lower_condition(
@@ -984,14 +989,6 @@ def _step_node(
         reads=_dedupe(reads),
         transfer="SET",
     )
-
-
-def _text(value) -> str:
-    """varying_from is a structured expression dict in newer parses and text in
-    older ones; either way what is wanted is the name or the literal."""
-    if isinstance(value, Mapping):
-        return str(value.get("name", value.get("value", ""))).upper()
-    return str(value or "").upper()
 
 
 def _exec_sql(statement, ctx: Ctx, path: str) -> Fragment:
