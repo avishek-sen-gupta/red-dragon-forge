@@ -33,17 +33,26 @@ def test_parse_whenever_go_to_two_words():
 
 
 @pytest.mark.parametrize(
-    "action",
-    ["GOTO ERR-EXIT", "GO TO ERR-EXIT", "GOTO :ERR-EXIT", "GO TO :ERR-EXIT"],
+    ("action", "label"),
+    [
+        ("GOTO ERR-EXIT", "ERR-EXIT"),
+        ("GO TO ERR-EXIT", "ERR-EXIT"),
+        ("GOTO :ERR-EXIT", "ERR-EXIT"),
+        ("GO TO :ERR-EXIT", "ERR-EXIT"),
+        ("GO TO 9000-ERR-EXIT", "9000-ERR-EXIT"),
+        ("GOTO :9000-ERR-EXIT", "9000-ERR-EXIT"),
+        ("GO TO 9000", "9000"),
+    ],
 )
-def test_the_target_of_a_go_to_is_its_label_with_or_without_a_colon(
-    action: str,
+def test_the_target_of_a_go_to_is_its_whole_label_with_or_without_a_colon(
+    action: str, label: str
 ) -> None:
-    """Db2 lets the host label carry a colon. Without it in the grammar the colon
-    form fell through to the catch-all, and the jump's target came back as ``TO``."""
+    """Db2 lets the host label carry a colon, and a COBOL paragraph name may start
+    with digits. Either one the grammar did not take fell through to the catch-all,
+    whose last token -- TO, or the part after the digits -- came back as the target."""
     p = parse_exec_sql(f"EXEC SQL WHENEVER SQLERROR {action} END-EXEC")
 
-    assert (p.kind, p.whenever_action) == (Kind.WHENEVER, GoTo("ERR-EXIT"))
+    assert (p.kind, p.whenever_action) == (Kind.WHENEVER, GoTo(label))
 
 
 def test_parse_whenever_not_found_continue():

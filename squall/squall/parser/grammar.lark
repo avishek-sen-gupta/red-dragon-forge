@@ -80,7 +80,7 @@ whenever:        WHENEVER whenever_cond whenever_action
 whenever_cond:   NOT FOUND | SQLERROR | SQLWARNING | NAME
 whenever_action: CONTINUE | GOTO _host_label | GO TO _host_label | _run
 // Db2 lets the label carry a colon, which lexes as a host variable.
-_host_label:     NAME | host_var
+_host_label:     PARA_LABEL
 get_diagnostics: GET DIAGNOSTICS _run
 signal:          SIGNAL _run
 
@@ -207,6 +207,8 @@ COMMA:  ","
 LP:     "("
 RP:     ")"
 DOT:    "."
+// A COBOL paragraph name may start with digits, and Db2 allows a colon before it.
+PARA_LABEL: /(:\s*)?[A-Za-z0-9_]+(-[A-Za-z0-9_]+)*/
 NAME:   /[A-Za-z_][A-Za-z0-9_]*(-[A-Za-z0-9_]+)*/
 NUM:    /\d+(\.\d+)?/
 STRING: /'([^']|'')*'/

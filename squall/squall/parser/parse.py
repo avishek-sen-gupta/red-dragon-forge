@@ -271,9 +271,7 @@ def _whenever_action(node: Tree) -> WheneverAction:
 
 def _label(last: Token | Tree) -> str:
     """The paragraph a GO TO names, without the colon Db2 allows before it."""
-    if isinstance(last, Tree):
-        return str(last.children[0]).lstrip(":").strip()
-    return str(last)
+    return str(last).lstrip(":").strip()
 
 
 def _cursor_ref(stmt: Tree, kind: Kind) -> CursorRef:

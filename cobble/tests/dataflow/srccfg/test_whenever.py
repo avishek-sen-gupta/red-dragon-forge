@@ -103,20 +103,21 @@ def test_a_governed_statement_branches_to_each_handler_and_the_directive_vanishe
     """The directives contribute no node -- they emit no runtime code -- and the
     statement they govern gets one SQLCODE test per condition, the failing arm
     falling into the next and the last falling through. A label may carry the
-    colon Db2 allows before it, and still names its paragraph."""
+    colon Db2 allows before it and may start with digits, and still names its
+    paragraph whole."""
     cfg = _cfg(
         [
             _para(
                 "MAIN",
                 [
-                    _sql("WHENEVER NOT FOUND GO TO NF"),
-                    _sql("WHENEVER SQLERROR GO TO :ERR"),
+                    _sql("WHENEVER NOT FOUND GO TO 9000-NF"),
+                    _sql("WHENEVER SQLERROR GO TO :9100-ERR"),
                     _sql("SELECT A INTO :B FROM T"),
                     {"type": "STOP_RUN"},
                 ],
             ),
-            _para("NF", [{"type": "STOP_RUN"}]),
-            _para("ERR", [{"type": "STOP_RUN"}]),
+            _para("9000-NF", [{"type": "STOP_RUN"}]),
+            _para("9100-ERR", [{"type": "STOP_RUN"}]),
         ]
     )
     ids = [n.id for n in cfg.nodes if n.id.startswith("MAIN/")]
@@ -130,8 +131,8 @@ def test_a_governed_statement_branches_to_each_handler_and_the_directive_vanishe
         "MAIN/2.sql1#whenever",
         "MAIN/3",
     ]
-    assert ("MAIN/2.sql0#whenever", "NF#label") in edges
-    assert ("MAIN/2.sql1#whenever", "ERR#label") in edges
+    assert ("MAIN/2.sql0#whenever", "9000-NF#label") in edges
+    assert ("MAIN/2.sql1#whenever", "9100-ERR#label") in edges
     assert ("MAIN/2.sql0#test", "MAIN/2.sql1#test") in edges
     assert ("MAIN/2.sql1#test", "MAIN/3") in edges
 
