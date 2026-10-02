@@ -11,16 +11,15 @@ import json
 from pathlib import Path
 
 from cobble.dataflow.srccfg.build_corpus import asg_paths, build_corpus, build_one
-from cobble.dataflow.srccfg.bundle import cfg_from_dict, cfg_to_dict, load_bundle
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl, load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
 
 
-def _only_cfg(path: Path) -> dict:
-    """The one CFG in a member file, which is a one-element bundle like any other."""
-    document = json.loads(path.read_text())
-    assert [*document] == ["cfgs", "calls"]
-    return document["cfgs"][0]
+def _only_cfg(path: Path) -> Cfg:
+    """The one CFG in a member file, which is a one-program bundle like any other."""
+    (cfg,) = load_bundle(path).cfgs
+    return cfg
 
 
 def _asg(program: str) -> dict:
@@ -70,8 +69,8 @@ def test_one_member_builds_to_one_json_named_for_the_program(tmp_path: Path) -> 
     result = build_one(asg_dir / "PROGA.json", out_dir)
 
     assert result.message == ""
-    assert result.cfg_path == out_dir / "PROGA.json"
-    assert _only_cfg(result.cfg_path)["program"] == "PROGA"
+    assert result.cfg_path == out_dir / "PROGA.jsonl"
+    assert _only_cfg(result.cfg_path).program == "PROGA"
 
 
 def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) -> None:
@@ -89,8 +88,8 @@ def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) ->
         asg_dir / "MEMBERA.json", tmp_path / "srccfg", source_dir=tmp_path / "src"
     )
 
-    nodes = _only_cfg(result.cfg_path)["nodes"]
-    spanned = {n["span"]["source_file"] for n in nodes if n["span"]["line_start"]}
+    nodes = _only_cfg(result.cfg_path).nodes
+    spanned = {n.span.source_file for n in nodes if n.span.line_start}
     assert spanned == {"src/MEMBERA.txt"}
 
 
@@ -101,12 +100,12 @@ def test_the_written_json_carries_every_node_and_edge(tmp_path: Path) -> None:
 
     written = _only_cfg(build_one(asg_dir / "PROGA.json", tmp_path / "out").cfg_path)
 
-    assert [node["id"] for node in written["nodes"]] == [
+    assert [node.id for node in written.nodes] == [
         "MAIN#label",
         "MAIN/0",
         "MAIN#end",
     ]
-    assert {edge["kind"] for edge in written["edges"]} == {"FLOW"}
+    assert {edge.kind.name for edge in written.edges} == {"FLOW"}
 
 
 def test_a_member_that_does_not_parse_is_a_reported_failure(tmp_path: Path) -> None:
@@ -119,7 +118,7 @@ def test_a_member_that_does_not_parse_is_a_reported_failure(tmp_path: Path) -> N
 
     failed = [r for r in results if r.message]
     assert [r.member for r in failed] == ["BROKEN"]
-    assert (tmp_path / "out" / "PROGA.json").exists()
+    assert (tmp_path / "out" / "PROGA.jsonl").exists()
 
 
 def test_the_failure_message_names_the_member_and_says_what_happened(
@@ -143,10 +142,10 @@ def test_a_failing_member_writes_no_partial_cfg(tmp_path: Path) -> None:
 
     build_corpus(SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out"))
 
-    assert list((tmp_path / "out").glob("*.json")) == []
+    assert list((tmp_path / "out").glob("*.jsonl")) == []
 
 
-def test_cfg_to_dict_is_json_serialisable_without_a_custom_encoder(
+def test_an_edge_kind_is_written_by_name(
     tmp_path: Path,
 ) -> None:
     """Enums and frozen dataclasses are not JSON by themselves, and a default=str
@@ -159,7 +158,8 @@ def test_cfg_to_dict_is_json_serialisable_without_a_custom_encoder(
         edges=(Edge(source="MAIN/0", target="MAIN/0", kind=EdgeKind.TRUE),),
     )
 
-    assert json.loads(json.dumps(cfg_to_dict(cfg)))["edges"][0]["kind"] == "TRUE"
+    edge_line = bundle_jsonl(Bundle(seed="PROGA", cfgs=(cfg,))).splitlines()[-1]
+    assert json.loads(edge_line)["kind"] == "TRUE"
 
 
 def _rebuilt(asg_dir: Path) -> Cfg:
@@ -179,20 +179,19 @@ def test_a_written_cfg_reads_back_identical(tmp_path: Path) -> None:
     assert load_bundle(built.cfg_path).cfgs == (_rebuilt(asg_dir),)
 
 
-def test_a_corpus_member_is_written_in_the_one_document_shape(tmp_path: Path) -> None:
-    """One member is a one-element `cfgs` with an empty `calls`, not a bare CFG object.
+def test_a_corpus_member_is_written_in_the_one_shape(tmp_path: Path) -> None:
+    """One member is one program and no call rows, the same shape as a closure.
 
-    A member has no cross-program calls to record, and it says so with [] rather than
-    by being a different shape -- so a reader never has to ask which kind of file it
-    was handed."""
+    A member has no cross-program calls to record, and it says so by having none
+    rather than by being a different shape -- so a reader never has to ask which
+    kind of file it was handed."""
     asg_dir = _cache(tmp_path, "PROGA")
     built = build_one(asg_dir / "PROGA.json", tmp_path / "out")
 
-    document = json.loads(built.cfg_path.read_text())
+    read = load_bundle(built.cfg_path)
 
-    assert sorted(document) == ["calls", "cfgs"]
-    assert [entry["program"] for entry in document["cfgs"]] == ["PROGA"]
-    assert document["calls"] == []
+    assert [cfg.program for cfg in read.cfgs] == ["PROGA"]
+    assert read.calls == ()
 
 
 # F8: two members can declare one PROGRAM-ID, and the output is named for the program
@@ -220,11 +219,11 @@ def test_a_duplicate_program_id_does_not_overwrite_the_first_members_cfg(
         SrcCfgCorpusConfig(asg_dir=asg_dir, out_dir=tmp_path / "out")
     )
 
-    assert sorted(p.name for p in (tmp_path / "out").glob("*.json")) == [
-        "PROGA.json",
-        "PROGA__MEMB.json",
+    assert sorted(p.name for p in (tmp_path / "out").glob("*.jsonl")) == [
+        "PROGA.jsonl",
+        "PROGA__MEMB.jsonl",
     ]
-    assert [r.cfg_path.name for r in results] == ["PROGA.json", "PROGA__MEMB.json"]
+    assert [r.cfg_path.name for r in results] == ["PROGA.jsonl", "PROGA__MEMB.jsonl"]
 
 
 def test_a_duplicate_program_id_is_reported_and_names_both_sides(
@@ -240,4 +239,4 @@ def test_a_duplicate_program_id_is_reported_and_names_both_sides(
 
     assert results[0].message == ""
     assert results[1].message.startswith("MEMB: PROGRAM-ID PROGA is already built")
-    assert "PROGA__MEMB.json" in results[1].message
+    assert "PROGA__MEMB.jsonl" in results[1].message

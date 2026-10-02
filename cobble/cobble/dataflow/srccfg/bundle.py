@@ -1,48 +1,44 @@
 """The one shape a CFG file has, and the only code that reads or writes it.
 
-    {"cfgs": [ ...one dict per program... ], "calls": [ ...what joins them... ]}
+One JSON row per line: a ``program`` row opening each CFG, then its ``node`` rows,
+then its ``edge`` rows, and the ``call`` rows joining the programs after all of
+them. The first program is the bundle's seed. A corpus member is a file with one
+program and no calls; a closure is the same file with more.
 
-Every writer emits exactly this, and every reader accepts exactly this. A corpus
-member is a one-element ``cfgs`` with no ``calls``; a closure of one program is the
-same file. Neither a missing key nor an empty list is a different shape: absence is
-spelled ``[]``, so no reader has to ask which kind of file it was handed.
-
-It was once three shapes -- a bare object per corpus member, a bare list from the
-closure CLI, and this object once ``calls`` existed. Every reader then carried its
-own guess at which it had, and the guesses disagreed: ``accesses`` iterated a dict's
-keys and crashed, ``load_cfg`` handed back a Cfg with no program and no nodes, and a
-one-program bundle could not be told from a bare object at all, so its calls were
-silently dropped. The shapes are gone rather than tolerated, because a reader that
-accepts three cannot tell a stale file from a current one.
-
-Files written before this are not read. ``cobble-srccfg-build`` regenerates them.
+Rows rather than one document so a file can be written and read as it streams. A
+line that is not a row -- the one-document shape this replaced, or a row cut off
+mid-write -- is refused with its line number, and ``cobble-srccfg-build``
+regenerates the file.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
+from itertools import groupby
+from operator import attrgetter
 from pathlib import Path
+from typing import TypeVar
 
-from cobble.dataflow.srccfg.cfg import (
-    Atom,
-    Cfg,
-    Edge,
-    EdgeKind,
-    Node,
-    NodeKind,
-    SourceSpan,
-)
+from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.link import BundleCall
-from cobol_asg.ref_mod import RefModOperand
-
-JsonValue = str | int | float | bool | Sequence["JsonValue"] | Mapping[str, "JsonValue"]
-
-BUNDLE_CFGS = "cfgs"
-BUNDLE_CALLS = "calls"
+from cobble.dataflow.srccfg.rows.call_row import CfgCallRow
+from cobble.dataflow.srccfg.rows.cfg_row import (
+    CFG_ROWS,
+    CfgRow,
+    call_row,
+    edge_row,
+    node_row,
+    program_row,
+)
+from cobble.dataflow.srccfg.rows.edge_row import CfgEdgeRow
+from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
+from cobble.dataflow.srccfg.rows.program_row import CfgProgramRow
+from pydantic import ValidationError
 
 REBUILD_HINT = "rebuild it with cobble-srccfg-build"
+
+RowT = TypeVar("RowT", CfgNodeRow, CfgEdgeRow)
 
 
 class CfgDocumentError(ValueError):
@@ -56,139 +52,78 @@ class Bundle:
     calls: tuple[BundleCall, ...] = ()
 
 
-def cfg_to_dict(cfg: Cfg) -> dict:
-    """Plain JSON: enum members become their names, so a reader needs no import of
-    this package to interpret an edge."""
-    return {
-        "program": cfg.program,
-        "nodes": [_node_dict(node) for node in cfg.nodes],
-        "edges": [
-            {"source": e.source, "target": e.target, "kind": e.kind.name}
-            for e in cfg.edges
-        ],
-    }
-
-
-def _node_dict(node: Node) -> dict:
-    return {
-        **asdict(node),
-        "kind": node.kind.name,
-        "target_operand": node.target_operand.to_dict(),
-    }
-
-
-def cfg_from_dict(document: Mapping) -> Cfg:
-    return Cfg(
-        program=str(document.get("program", "")),
-        nodes=tuple(_node_of(entry) for entry in document.get("nodes", ())),
-        edges=tuple(
-            Edge(source=e["source"], target=e["target"], kind=EdgeKind[e["kind"]])
-            for e in document.get("edges", ())
-        ),
+def rows_of(bundle: Bundle) -> tuple[CfgRow, ...]:
+    return (
+        *(row for cfg in bundle.cfgs for row in _cfg_rows(cfg)),
+        *(call_row(call) for call in bundle.calls),
     )
 
 
-def _node_of(entry: Mapping) -> Node:
-    atom = entry.get("atom", {})
-    span = entry.get("span", {})
-    return Node(
-        **{
-            **{
-                k: v
-                for k, v in entry.items()
-                if k
-                not in (
-                    "kind",
-                    "atom",
-                    "span",
-                    "writes",
-                    "reads",
-                    "using",
-                    "target_operand",
-                )
-            },
-            "kind": NodeKind[entry["kind"]],
-            "atom": Atom(**atom),
-            "span": SourceSpan(**span) if span else SourceSpan(),
-            "target_operand": RefModOperand.from_dict(entry.get("target_operand", {})),
-            "writes": tuple(entry.get("writes", ())),
-            "reads": tuple(entry.get("reads", ())),
-            "using": tuple(entry.get("using", ())),
-        }
+def _cfg_rows(cfg: Cfg) -> tuple[CfgRow, ...]:
+    return (
+        program_row(cfg.program),
+        *(node_row(cfg.program, node) for node in cfg.nodes),
+        *(edge_row(cfg.program, edge) for edge in cfg.edges),
     )
 
 
-def bundle_to_json(bundle: Bundle) -> str:
-    """The seed's CFG first, then its callees': an ordered list, because the order is
-    the answer's, inside an object, because the calls belong to the bundle and not to
-    any one of its programs."""
-    return json.dumps(
-        {
-            BUNDLE_CFGS: [cfg_to_dict(cfg) for cfg in bundle.cfgs],
-            BUNDLE_CALLS: [asdict(call) for call in bundle.calls],
-        }
-    )
-
-
-def one_cfg_document(cfg: Cfg) -> str:
-    """A single program written in the shape every reader expects: one CFG, no calls."""
-    return bundle_to_json(Bundle(seed=cfg.program, cfgs=(cfg,)))
-
-
-_BARE_LIST = f"a bare list of CFGs is the pre-{BUNDLE_CFGS} shape and is no longer read"
-_BARE_CFG = (
-    f"no {BUNDLE_CFGS!r} key; a bare CFG object is the pre-{BUNDLE_CFGS} shape "
-    "and is no longer read"
-)
-_NOT_A_DOCUMENT = "not a CFG document"
-
-
-def _refused(source: str, problem: str) -> CfgDocumentError:
-    return CfgDocumentError(f"{source}: {problem} -- {REBUILD_HINT}")
-
-
-def _with_cfgs(document: Mapping, source: str) -> Mapping:
-    if BUNDLE_CFGS in document:
-        return document
-    raise _refused(source, _BARE_CFG)
-
-
-def _shape_of(document: JsonValue, source: str) -> Mapping:
-    """The document, or a refusal naming the shape it is instead."""
-    if isinstance(document, Mapping):
-        return _with_cfgs(document, source)
-    raise _refused(
-        source, _BARE_LIST if isinstance(document, list) else _NOT_A_DOCUMENT
-    )
-
-
-def _cfg_entries(
-    document: JsonValue, source: str = "<document>"
-) -> tuple[Mapping, ...]:
-    """The CFG objects as written, for the readers that want JSON rather than a Cfg."""
-    return tuple(_shape_of(document, source)[BUNDLE_CFGS])
-
-
-def calls_of(document: JsonValue, source: str = "<document>") -> tuple[BundleCall, ...]:
-    """The calls that join the CFGs; a file with none spells that ``[]``."""
-    return tuple(
-        BundleCall(**{**entry, "reasons": tuple(entry.get("reasons", ()))})
-        for entry in _shape_of(document, source).get(BUNDLE_CALLS, ())
-    )
-
-
-def bundle_of(document: JsonValue, source: str = "<document>") -> Bundle:
-    cfgs = tuple(cfg_from_dict(entry) for entry in _cfg_entries(document, source))
-    return Bundle(
-        seed=cfgs[0].program if cfgs else "",
-        cfgs=cfgs,
-        calls=calls_of(document, source),
-    )
-
-
-def load_document(path: Path) -> JsonValue:
-    return json.loads(path.read_text(encoding="utf-8"))
+def bundle_jsonl(bundle: Bundle) -> str:
+    return "".join(f"{row.model_dump_json()}\n" for row in rows_of(bundle))
 
 
 def load_bundle(path: Path) -> Bundle:
-    return bundle_of(load_document(path), str(path))
+    return bundle_of_rows(
+        tuple(
+            _row(line, f"{path.name}:{at}")
+            for at, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            if line.strip()
+        ),
+        path.name,
+    )
+
+
+def _row(line: str, where: str) -> CfgRow:
+    try:
+        return CFG_ROWS.validate_json(line)
+    except ValidationError as error:
+        raise CfgDocumentError(f"{where}: not a CFG row -- {REBUILD_HINT}") from error
+
+
+def bundle_of_rows(rows: Sequence[CfgRow], source: str = "<rows>") -> Bundle:
+    programs = tuple(row.program for row in rows if isinstance(row, CfgProgramRow))
+    order = {program: at for at, program in enumerate(programs)}
+    nodes = _by_program(
+        tuple(row for row in rows if isinstance(row, CfgNodeRow)), order, source
+    )
+    edges = _by_program(
+        tuple(row for row in rows if isinstance(row, CfgEdgeRow)), order, source
+    )
+    return Bundle(
+        seed=programs[0] if programs else "",
+        cfgs=tuple(
+            Cfg(
+                program=program,
+                nodes=tuple(row.to_node() for row in nodes.get(program, ())),
+                edges=tuple(row.to_edge() for row in edges.get(program, ())),
+            )
+            for program in programs
+        ),
+        calls=tuple(row.to_call() for row in rows if isinstance(row, CfgCallRow)),
+    )
+
+
+def _by_program(
+    rows: tuple[RowT, ...], order: Mapping[str, int], source: str
+) -> Mapping[str, tuple[RowT, ...]]:
+    """Each program's rows in file order. A stable sort by the program's position
+    keeps a program's own rows in the order they were written."""
+    strays = sorted({row.program for row in rows} - order.keys())
+    if strays:
+        raise CfgDocumentError(
+            f"{source}: rows for {', '.join(strays)} with no program row -- {REBUILD_HINT}"
+        )
+    ordered = sorted(rows, key=lambda row: order[row.program])
+    return {
+        program: tuple(group)
+        for program, group in groupby(ordered, key=attrgetter("program"))
+    }

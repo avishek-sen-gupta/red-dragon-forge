@@ -1,6 +1,6 @@
 """webgl.py -- a source CFG as one self-contained WebGL page.
 
-    uv run cobble-srccfg-webgl --cfg out-<corpus>-srccfg/MEMBER.json \
+    uv run cobble-srccfg-webgl --cfg out-<corpus>-srccfg/MEMBER.jsonl \
                                --output MEMBER-webgl.html   # --program MEMBER
                                                             # for one member of it
 

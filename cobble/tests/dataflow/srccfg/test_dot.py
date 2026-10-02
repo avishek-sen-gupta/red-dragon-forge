@@ -8,18 +8,16 @@ control flow here look like" has no textual answer that fits on a screen.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from cobble.dataflow.srccfg.bundle import (
     Bundle,
-    bundle_to_json,
-    cfg_to_dict,
+    bundle_jsonl,
     load_bundle,
 )
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.dot import dot_of, main
-from cobble.dataflow.srccfg.link import bundle_calls
+from cobble.dataflow.srccfg.link import BundleCall, bundle_calls
 
 
 def _label(paragraph: str) -> Node:
@@ -250,9 +248,9 @@ def test_each_kind_of_transfer_labels_its_edge_with_its_own_spelling() -> None:
 
 
 def _closure_file(tmp_path: Path, *cfgs: Cfg) -> Path:
-    path = tmp_path / "closure.json"
+    path = tmp_path / "closure.jsonl"
     path.write_text(
-        bundle_to_json(Bundle(seed=cfgs[0].program if cfgs else "", cfgs=cfgs)),
+        bundle_jsonl(Bundle(seed=cfgs[0].program if cfgs else "", cfgs=cfgs)),
         encoding="utf-8",
     )
     return path
@@ -315,24 +313,22 @@ def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:
 def test_the_cli_draws_the_call_edge_the_file_names(tmp_path: Path) -> None:
     """The bundle is what the renderer reads -- it does not go back to the CFGs and
     work the join out again, which is the whole reason the file carries it."""
-    path = tmp_path / "closure.json"
+    path = tmp_path / "closure.jsonl"
     path.write_text(
-        json.dumps(
-            {
-                "cfgs": [
-                    cfg_to_dict(_caller("PROGB")),
-                    cfg_to_dict(_one_program("PROGB")),
-                ],
-                "calls": [
-                    {
-                        "caller": "PROGA",
-                        "node": "MAIN/0",
-                        "transfer": "CICS_LINK",
-                        "program": "PROGB",
-                        "entry": "MAIN/0",
-                    }
-                ],
-            }
+        bundle_jsonl(
+            Bundle(
+                seed="PROGA",
+                cfgs=(_caller("PROGB"), _one_program("PROGB")),
+                calls=(
+                    BundleCall(
+                        caller="PROGA",
+                        node="MAIN/0",
+                        transfer="CICS_LINK",
+                        program="PROGB",
+                        entry="MAIN/0",
+                    ),
+                ),
+            )
         ),
         encoding="utf-8",
     )

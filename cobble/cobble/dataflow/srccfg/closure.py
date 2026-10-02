@@ -21,7 +21,7 @@ from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.srccfg.build_corpus import cfg_of, source_file_of
-from cobble.dataflow.srccfg.bundle import Bundle, bundle_to_json
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.dynamic_targets import (
@@ -169,7 +169,7 @@ def main(argv: Sequence[str] = ()) -> int:
     if not (config.asg_dir / f"{arguments.program}.json").is_file():
         logger.error("%s: no ASG for this program in the cache", arguments.program)
         return 1
-    document = bundle_to_json(
+    document = bundle_jsonl(
         build_closure(
             config.asg_dir,
             arguments.program,
@@ -182,7 +182,7 @@ def main(argv: Sequence[str] = ()) -> int:
 
 def _emitted(document: str, output: Path) -> int:
     if output == Path():
-        sys.stdout.write(f"{document}\n")
+        sys.stdout.write(document)
         return 0
-    ensure_parent(output).write_text(f"{document}\n", encoding="utf-8")
+    ensure_parent(output).write_text(document, encoding="utf-8")
     return 0

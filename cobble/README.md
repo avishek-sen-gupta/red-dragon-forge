@@ -44,8 +44,8 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/832) |
 | `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
 | `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets |
-| `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <json> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
-| `cobble-srccfg-query <query> <subject> --cfg <json>` | Ask a built CFG for guards or a field's provenance |
+| `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <jsonl> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
+| `cobble-srccfg-query <query> <subject> --cfg <jsonl>` | Ask a built CFG for guards or a field's provenance |
 | `python -m pytest` | Run the pytest unit suite |
 
 ### Build the graph from CardDemo
@@ -71,22 +71,21 @@ calls linking them — not a single merged graph.
 
 ```bash
 . ../bridge-env.sh
-uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml --output closure.json
-uv run cobble-srccfg-webgl --cfg closure.json --output closure.html    # the whole closure
-uv run cobble-srccfg-dot   --cfg closure.json --output one.dot         # graphviz DOT
+uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml --output closure.jsonl
+uv run cobble-srccfg-webgl --cfg closure.jsonl --output closure.html    # the whole closure
+uv run cobble-srccfg-dot   --cfg closure.jsonl --output one.dot         # graphviz DOT
 ```
 
-The bundle is a JSON object, `{"cfgs": [...], "calls": [...]}`. A CFG is what the
-corpus build writes one of per member, unchanged. A call entry names the calling
+The bundle is JSONL: one row per line, each tagged with a `type`. A `program` row
+opens each CFG, its `node` and `edge` rows follow, and the `call` rows joining the
+programs come after all of them; the first program is the seed. A CFG is what the
+corpus build writes one of per member, unchanged. A call row names the calling
 program and node, the callee and **the entry node in it the call lands on** — the one
 thing the call site itself does not know, and exactly what a reader crossing into the
 callee needs, so no consumer has to rebuild the join to walk the closure:
 
 ```json
-{"caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0",
- "transfer": "CICS_XCTL", "program": "COMEN01C", "entry": "MAIN-PARA#label",
- "resolved": true, "commarea": "CARDDEMO-COMMAREA",
- "expression": "", "reasons": [], "certain": true}
+{"type": "call", "caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0", "transfer": "CICS_XCTL", "program": "COMEN01C", "entry": "MAIN-PARA#label", "resolved": true, "commarea": "CARDDEMO-COMMAREA", "expression": "", "reasons": [], "certain": true}
 ```
 
 Unresolved sites and callees outside the bundle are kept, with an empty `entry`,
@@ -127,14 +126,14 @@ the analysis is unsure of looks unsure. A site with no candidates draws nothing.
 
 ```bash
 uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml \
-  --dynamic-call-targets out-fields/targets.jsonl --output closure.json
+  --dynamic-call-targets out-fields/targets.jsonl --output closure.jsonl
 ```
 
-Every CFG file has one shape — `{"cfgs": [...], "calls": [...]}` — whether it holds a
-whole closure or the single program the corpus build writes. A member has no calls to
-record and says so with `[]`, so no reader has to work out which kind of file it was
-handed. Files written before this are refused by name rather than half-read;
-`cobble-srccfg-build` regenerates them.
+Every CFG file has one shape — JSONL rows, as above — whether it holds a whole
+closure or the single program the corpus build writes, which is one `program` row and
+no `call` rows. A line that is not a row, including a file in the one-document shape
+this replaced, is refused with its line number rather than half-read;
+`cobble-srccfg-build` regenerates it.
 
 **`dot` for one program, `webgl` for a closure.** Graphviz gives the better picture —
 ranked top to bottom, edges labelled — but it is a layered layout with crossing
@@ -282,12 +281,12 @@ HTML files — open in any browser, no server required.
 # Call dependency graph — which programs CICS-LINK to which
 uv run cobble-viz-callgraph \
   --graph  out/carddemo.jsonl \
-  --cfg    <srccfg_dir>/cfg-<ENTRY>.json \
+  --cfg    <srccfg_dir>/cfg-<ENTRY>.jsonl \
   --out    out-viz/call-dep.json
 
 # Sequence diagrams — cross-program call order + per-program PERFORM trees
 uv run cobble-viz-sequence \
-  --cfg    <srccfg_dir>/cfg-<ENTRY>.json \
+  --cfg    <srccfg_dir>/cfg-<ENTRY>.jsonl \
   --entry  <ENTRY_PROGRAM> \
   --out    out-viz/sequences.json
 
@@ -297,7 +296,7 @@ uv run cobble-viz-render --input out-viz/sequences.json  --mode top       --out 
 uv run cobble-viz-render --input out-viz/sequences.json  --mode program   --program <PROG> --out sequence-prog.html
 ```
 
-`--cfg` is the JSON produced by `cobble-srccfg-build`; the program list and
+`--cfg` is the JSONL produced by `cobble-srccfg-build`; the program list and
 entry point are both derived from it automatically.  `--entry` is optional —
 omitted, it picks the program with no callers within the subgraph.
 

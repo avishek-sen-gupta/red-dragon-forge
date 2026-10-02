@@ -402,7 +402,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
   checksum: 3608b69945b2626a3954e03431b566e0623c01e57ea8b66cb61abe02a0634703
 - filename: cobble/cobble/dataflow/srccfg/bundle.py
-  checksum: def7cb525d9df1e5f9842dea9a8a3bf7f6005e082f5a6c6b5a1414eab7231d9a
+  checksum: 220c3e94144d226bac20a71f1695800f01539dd495df6d6a51a6192f8ce0c1e6
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.json
   checksum: 29bd06b4ce7e7b056556877eb69f622d077563546d9775fa01e9ffcf708f1b0e
 - filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.json

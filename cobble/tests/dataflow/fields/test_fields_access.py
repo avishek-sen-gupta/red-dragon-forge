@@ -13,7 +13,7 @@ from cobble.dataflow.fields.access import (
     accesses,
 )
 from cobble.dataflow.fields.access_query import _overlaps, query
-from cobble.dataflow.srccfg.bundle import Bundle, CfgDocumentError, bundle_to_json
+from cobble.dataflow.srccfg.bundle import Bundle, CfgDocumentError, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Node, NodeKind
 from cobble.dataflow.fields.trace_query import ByteRange
 
@@ -91,7 +91,7 @@ def test_synthetics_filtered_from_reads():
 
 def _write_cfgs(path: Path, *cfgs: Cfg) -> Path:
     path.write_text(
-        bundle_to_json(Bundle(seed=cfgs[0].program, cfgs=cfgs)), encoding="utf-8"
+        bundle_jsonl(Bundle(seed=cfgs[0].program, cfgs=cfgs)), encoding="utf-8"
     )
     return path
 
@@ -124,7 +124,7 @@ def test_accesses_emits_row_for_assign_read(tmp_path: Path) -> None:
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
-    cfg_path = _write_cfgs(tmp_path / "cfg.json", _program("PROG", _assign("WS-A")))
+    cfg_path = _write_cfgs(tmp_path / "cfg.jsonl", _program("PROG", _assign("WS-A")))
 
     rows = accesses(cfg_path, asg_dir)
 
@@ -144,7 +144,7 @@ def test_accesses_emits_row_for_test_condition(tmp_path: Path) -> None:
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
     cfg_path = _write_cfgs(
-        tmp_path / "cfg.json",
+        tmp_path / "cfg.jsonl",
         _program("PROG", _condition("WS-STATUS", "'Y'", "MAIN/1#test")),
     )
 
@@ -163,7 +163,7 @@ def test_accesses_dedupes_same_site_field(tmp_path: Path) -> None:
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
     cfg_path = _write_cfgs(
-        tmp_path / "cfg.json", _program("PROG", _assign("WS-A", "WS-A"))
+        tmp_path / "cfg.jsonl", _program("PROG", _assign("WS-A", "WS-A"))
     )
 
     rows = accesses(cfg_path, asg_dir)
@@ -185,7 +185,7 @@ def _one_assign_program(tmp_path: Path) -> tuple[Path, Cfg]:
 def test_accesses_reads_the_one_document_shape(tmp_path: Path) -> None:
     """A member file and a closure are the same shape, so accesses reads them alike."""
     asg_dir, cfg = _one_assign_program(tmp_path)
-    cfg_path = _write_cfgs(tmp_path / "cfg.json", cfg)
+    cfg_path = _write_cfgs(tmp_path / "cfg.jsonl", cfg)
 
     rows = accesses(cfg_path, asg_dir)
 
@@ -197,8 +197,9 @@ def test_accesses_reads_the_one_document_shape(tmp_path: Path) -> None:
     (
         [{"program": "PROG", "nodes": [], "edges": []}],
         {"program": "PROG", "nodes": [], "edges": []},
+        {"cfgs": [], "calls": []},
     ),
-    ids=("bare_list", "bare_object"),
+    ids=("bare_list", "bare_object", "one_document"),
 )
 def test_accesses_refuses_a_pre_bundle_file(tmp_path: Path, document) -> None:
     """The old shapes are rejected by name rather than half-read.
@@ -208,7 +209,7 @@ def test_accesses_refuses_a_pre_bundle_file(tmp_path: Path, document) -> None:
     tolerated now, so a stale file says so instead of answering with less.
     """
     asg_dir, _ = _one_assign_program(tmp_path)
-    cfg_path = tmp_path / "cfg.json"
+    cfg_path = tmp_path / "cfg.jsonl"
     cfg_path.write_text(json.dumps(document), encoding="utf-8")
 
     with pytest.raises(CfgDocumentError, match="cobble-srccfg-build"):
@@ -223,7 +224,7 @@ def test_accesses_spans_every_program_a_bundle_carries(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     cfg_path = _write_cfgs(
-        tmp_path / "cfg.json", cfg, _program("PROG2", _assign("WS-A"))
+        tmp_path / "cfg.jsonl", cfg, _program("PROG2", _assign("WS-A"))
     )
 
     rows = accesses(cfg_path, asg_dir)

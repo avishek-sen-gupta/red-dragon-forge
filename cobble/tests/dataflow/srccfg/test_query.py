@@ -13,7 +13,7 @@ from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.bundle import Bundle, bundle_to_json, one_cfg_document
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
 from cobble.dataflow.srccfg.coassign import Tier
 from cobble.dataflow.srccfg.query import (
     coassign_report,
@@ -70,8 +70,8 @@ def _guarded_cfg():
 
 def _written(tmp_path: Path):
     cfg = _guarded_cfg()
-    path = tmp_path / "PROGA.json"
-    path.write_text(one_cfg_document(cfg))
+    path = tmp_path / "PROGA.jsonl"
+    path.write_text(bundle_jsonl(Bundle(seed=cfg.program, cfgs=(cfg,))))
     return path
 
 
@@ -250,9 +250,9 @@ def _written_pair(tmp_path: Path) -> Path:
     from dataclasses import replace
 
     seed = _guarded_cfg()
-    path = tmp_path / "closure.json"
+    path = tmp_path / "closure.jsonl"
     path.write_text(
-        bundle_to_json(
+        bundle_jsonl(
             Bundle(seed=seed.program, cfgs=(seed, replace(seed, program="PROGB")))
         )
     )
@@ -286,8 +286,8 @@ def test_a_program_that_does_not_write_the_field_is_still_reported_on(
 
     seed = _guarded_cfg()
     other = replace(seed, program="PROGB", nodes=(), edges=())
-    path = tmp_path / "closure.json"
-    path.write_text(bundle_to_json(Bundle(seed=seed.program, cfgs=(seed, other))))
+    path = tmp_path / "closure.jsonl"
+    path.write_text(bundle_jsonl(Bundle(seed=seed.program, cfgs=(seed, other))))
 
     main(["provenance", "WS-OUT", "--cfg", str(path)])
 
