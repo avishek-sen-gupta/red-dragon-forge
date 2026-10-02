@@ -800,12 +800,13 @@ On the CardDemo corpus, most resolved sites are `*_CANDIDATE`, not proven: of
 only 3 of the 17 singletons carry no doubt. 23 of the 29 carry both
 `inbound-linkage` and the `from-callee` reason, because `cobble/dataflow/fields/transfer.py` models an
 `EXEC CICS XCTL`'s COMMAREA the same way as `LINK`'s — a callee write-back —
-even though `cobble/dataflow/srccfg/link.py` documents that `XCTL` does not
-return control to the site that issued it, and no CICS control-transfer verb
-is a CFG terminator (`cobble/dataflow/srccfg/desugar.py`'s terminator map
-holds only `STOP RUN`/`GOBACK`/`EXIT PROGRAM`). Refining
-that — so a verb that never returns stops modelling a write-back from it — is a
-follow-up, not done here; a reader comparing 45 `XCTL_CANDIDATE` edges against 5
+even though `XCTL` does not return control to the site that issued it. The CFG
+already says so: after an `XCTL` or `RETURN`, only the failure path continues —
+to the armed handler, or under `RESP`/`NOHANDLE` to the next statement — and
+`ABEND` ends the path outright. But the write-back still rides that failure
+path, where the callee never ran. Dropping it is a follow-up, not done here: it
+is also an exact write that kills older values, so removing it alone widens
+candidate sets; a reader comparing 45 `XCTL_CANDIDATE` edges against 5
 proven `XCTL` edges should read this as "resolved, mostly with acknowledged
 doubt," not "only 5 sites resolved."
 

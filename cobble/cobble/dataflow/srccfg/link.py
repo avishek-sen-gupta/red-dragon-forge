@@ -6,10 +6,9 @@ layouts, which are out of scope here. Saying record-to-record is the honest answ
 a field-level claim from a name match would be wrong wherever the two sides declare
 the area differently, which on a real corpus is most places.
 
-XCTL does not return, so control does not flow back to the caller. The node still
-has a FLOW exit to its successor, which is an over-approximation: reachable flow is
-over-approximated in the safe direction, and cutting the edge would claim code after
-an XCTL is unreachable when it may in fact be reached by a different path.
+XCTL does not return, so control does not flow back to the caller. Only a failed
+XCTL continues: to the armed handler, or, under RESP or NOHANDLE, to the next
+statement. ``desugar.py`` gives the node that shape, and the link adds no flow.
 """
 
 from __future__ import annotations
