@@ -44,7 +44,7 @@ How the field dataflow works, for engineers new to it: [`docs/explainers/`](docs
 ```bash
 git clone --recurse-submodules git@github.com:avishek-sen-gupta/red-dragon-forge.git
 cd red-dragon-forge
-make setup      # init submodules + build hlasm_export + the ProLeap + JCL bridge JARs + uv sync --all-packages
+make setup      # init submodules + build hlasm_export + rebuild the ProLeap + JCL bridge JARs + uv sync --all-packages
 make test-all   # every package's suite, building the shared JARs exactly once
 ```
 

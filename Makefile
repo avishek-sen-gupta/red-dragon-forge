@@ -14,7 +14,7 @@ DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 .PHONY: help setup hlasm jar jar-force python test test-all fmt db2-up db2-seed db2-status db2-restart db2-stop db2-clean
 
 help:
-	@echo "make setup     - init submodules + build hlasm_export + bridge JARs + uv sync"
+	@echo "make setup     - init submodules + build hlasm_export + rebuild bridge JARs + uv sync"
 	@echo "make hlasm     - build hlasm_export from the HLASM fork (skipped if already built)"
 	@echo "make jar       - build ProLeap + JCL bridge JARs (skipped if already built)"
 	@echo "make jar-force - force-rebuild both bridge JARs"
@@ -32,7 +32,7 @@ help:
 setup:
 	git submodule update --init --recursive
 	$(MAKE) hlasm
-	$(MAKE) jar
+	$(MAKE) jar-force
 	$(MAKE) python
 
 $(HLASM_EXPORT):
