@@ -99,6 +99,7 @@ class Node:
     transfer_operand: str = ""
     using: tuple[str, ...] = ()
     span: SourceSpan = NO_SPAN
+    resume: str = ""
 
 
 @dataclass(frozen=True)

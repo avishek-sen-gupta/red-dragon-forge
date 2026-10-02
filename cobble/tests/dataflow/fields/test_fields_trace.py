@@ -17,6 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 import pytest
+from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.aliases import NOT_IN_CACHE
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.fields.state import EMPTY, Source, State, write
@@ -46,6 +47,8 @@ from cobble.dataflow.fields.trace import (
 from cobble.dataflow.fields.trace_query import BACKWARD, query
 from cobble.dataflow.fields.trace_report import _footer_lines, _make_sink
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.program import program_cfg
+from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
 
@@ -207,8 +210,8 @@ def test_two_caller_extents_clipping_to_one_window_range_keep_both_provenances()
     }
 
 
-def _node(node_id: str, kind: NodeKind = NodeKind.NOP) -> Node:
-    return Node(id=node_id, kind=kind, paragraph=node_id.split("/")[0])
+def _node(node_id: str, kind: NodeKind = NodeKind.NOP, resume: str = "") -> Node:
+    return Node(id=node_id, kind=kind, paragraph=node_id.split("/")[0], resume=resume)
 
 
 def _edge(source: str, target: str, kind: EdgeKind = EdgeKind.FLOW) -> Edge:
@@ -522,8 +525,8 @@ def test_a_performed_paragraph_with_no_way_out_returns_to_its_performer():
 REDUNDANT = _only(
     "TPROGA",
     (
-        _node("M/0", NodeKind.CALL),
-        _node("M/1", NodeKind.CALL),
+        _node("M/0", NodeKind.CALL, resume="M/1"),
+        _node("M/1", NodeKind.CALL, resume="M/2"),
         _node("M/2"),
         _node("M/3", NodeKind.TEST),
         _node("M/4"),
@@ -534,9 +537,7 @@ REDUNDANT = _only(
         _node("S/end"),
     ),
     (
-        _edge("M/0", "M/1"),
         _edge("M/0", "S/0", EdgeKind.PERFORM),
-        _edge("M/1", "M/2"),
         _edge("M/1", "S/0", EdgeKind.PERFORM),
         _edge("M/2", "M/3"),
         _edge("M/3", "M/4", EdgeKind.TRUE),
@@ -574,8 +575,8 @@ def test_two_plans_flipping_one_branch_edge_do_not_both_run_before_a_third():
 STALE_ONLY = _only(
     "TPROGA",
     (
-        _node("M/0", NodeKind.CALL),
-        _node("M/1", NodeKind.CALL),
+        _node("M/0", NodeKind.CALL, resume="M/1"),
+        _node("M/1", NodeKind.CALL, resume="M/2"),
         _node("M/2"),
         _node("M/3", NodeKind.TEST),
         _node("M/4"),
@@ -589,9 +590,7 @@ STALE_ONLY = _only(
         _node("X/2"),
     ),
     (
-        _edge("M/0", "M/1"),
         _edge("M/0", "S/0", EdgeKind.PERFORM),
-        _edge("M/1", "M/2"),
         _edge("M/1", "S/0", EdgeKind.PERFORM),
         _edge("M/2", "M/3"),
         _edge("M/3", "M/4", EdgeKind.TRUE),
@@ -740,16 +739,14 @@ def test_the_closing_line_separates_an_exhausted_graph_from_a_spent_budget(caplo
 TWICE = _only(
     "TPROGA",
     (
-        _node("M/0", NodeKind.CALL),
-        _node("M/1", NodeKind.CALL),
+        _node("M/0", NodeKind.CALL, resume="M/1"),
+        _node("M/1", NodeKind.CALL, resume="M/2"),
         _node("M/2"),
         _node("S/0"),
         _node("S/end"),
     ),
     (
-        _edge("M/0", "M/1"),
         _edge("M/0", "S/0", EdgeKind.PERFORM),
-        _edge("M/1", "M/2"),
         _edge("M/1", "S/0", EdgeKind.PERFORM),
         _edge("S/0", "S/end"),
         _edge("S/end", "M/1", EdgeKind.RETURN),
@@ -797,9 +794,8 @@ def test_only_the_return_edge_back_to_your_own_caller_is_taken():
 
 FALLEN = _only(
     "TPROGA",
-    (_node("M/0"), _node("M/end"), _node("S/0"), _node("S/end")),
+    (_node("M/0", resume="M/end"), _node("M/end"), _node("S/0"), _node("S/end")),
     (
-        _edge("M/0", "M/end"),
         _edge("M/0", "S/0", EdgeKind.PERFORM),
         _edge("M/end", "S/0", EdgeKind.FALLTHRU),
         _edge("S/0", "S/end"),
@@ -1607,3 +1603,41 @@ def test_the_closing_line_separates_a_met_target_from_a_spent_budget(caplog):
     traced("TPROGA", _loader(LOOP), Budget(paths=1, coverage=1.0))
     (spent,) = [one for one in caplog.messages if one.startswith("trace: 1 path")]
     assert "path budget ran out" in spent
+
+
+def test_a_refused_perform_continues_where_the_performer_would_have():
+    """A PERFORM the re-entry rule refuses has no edge past it: the built CFG keeps
+    where it continues on the node, and the walk goes on from there."""
+    body = {
+        "program_id": "TPROGA",
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    {"type": "PERFORM", "operands": ["AGAIN"]},
+                    {"type": "MOVE", "operands": [{"name": "'R'"}, {"name": "WS-A"}]},
+                    {"type": "STOP_RUN"},
+                ],
+            },
+            {
+                "name": "AGAIN",
+                "statements": [{"type": "PERFORM", "operands": ["AGAIN"]}],
+            },
+        ],
+    }
+    with cached_asg_dialect_parsers_registered():
+        cfg = program_cfg(CobolASG.from_dict(body))
+    loaded = _only("TPROGA", cfg.nodes, cfg.edges, "MAIN#label")
+
+    found = traced("TPROGA", _loader(loaded), Budget(paths=1))
+
+    assert (found.paths, found.dead_ends) == (1, frozenset())
+    assert visited_order("TPROGA", _loader(loaded), Budget(paths=1)) == (
+        "MAIN#label",
+        "MAIN/0",
+        "AGAIN#label",
+        "AGAIN/0",
+        "AGAIN#end",
+        "MAIN/1",
+        "MAIN/2",
+    )

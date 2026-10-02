@@ -99,6 +99,14 @@ first paragraph, and its last paragraph's end flows into the section's end. So
 name one, a `PERFORM` of a section returns from the section's end, and falling off
 one section enters the next through its label.
 
+A performed range always runs, so a `PERFORM` that can return has no edge past it:
+its node's `resume` names where it continues, and the range's `RETURN` edge lands
+there. Two kinds keep a `FLOW` edge to the next statement instead and have no
+`resume`: a `PERFORM` of a range the program does not declare, which has no other
+way on, and one whose range end nothing reaches, which by the graph never returns
+but is kept reachable on purpose — the graph can be wrong about that (an `ALTER`ed
+`GO TO`, control flow the parse dropped), and dead code loses every flow after it.
+
 **Dynamic calls.** A `CALL`/`XCTL`/`LINK` through a field names no program, so by
 default it pulls nothing into the closure. Given the fixpoint's
 `--dynamic-call-targets <out-dir>/targets.jsonl` (the flag `cobble-build` takes), each
