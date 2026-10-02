@@ -23,8 +23,15 @@ from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 
 from cobble.dataflow.srccfg.paragraphs import paragraph_order
+from cobble.dataflow.srccfg.varying import spec_text
 from cobol_asg.asg_types import CobolASG
-from cobol_asg.cobol_statements import CobolStatementType
+from cobol_asg.cobol_statements import (
+    ArithmeticStatement,
+    CobolStatementType,
+    MoveStatement,
+    PerformVaryingSpec,
+)
+from cobol_asg.ref_mod import RefModOperand
 
 Arm = tuple[str, Sequence[CobolStatementType]]
 Entry = tuple[str, CobolStatementType]
@@ -99,9 +106,48 @@ def _arms(statement: CobolStatementType) -> Iterator[Arm]:
     return ((segment, body) for segment, body in arms(statement) if body)
 
 
+def _loop_assignments(statement: CobolStatementType, node: str) -> tuple[Entry, ...]:
+    """A PERFORM VARYING's synthetic nodes, as the statements they execute: each
+    loop's #init is MOVE FROM TO counter, its #step ADD BY TO counter. One level of
+    AFTER specs, addressed as lowering addresses them."""
+    spec = getattr(statement, "spec", "")
+    if not isinstance(spec, PerformVaryingSpec):
+        return ()
+    return (
+        *_assignments(spec, node),
+        *(
+            entry
+            for position, after in enumerate(spec.after_specs)
+            for entry in _assignments(after, f"{node}.after.{position}")
+        ),
+    )
+
+
+def _assignments(spec: PerformVaryingSpec, node: str) -> tuple[Entry, ...]:
+    counter = RefModOperand(name=spec.varying_var.upper())
+    return (
+        (
+            f"{node}#init",
+            MoveStatement(
+                source=RefModOperand(name=spec_text(spec.varying_from)),
+                targets=[counter],
+            ),
+        ),
+        (
+            f"{node}#step",
+            ArithmeticStatement(
+                op="ADD",
+                source=RefModOperand(name=spec_text(spec.varying_by)),
+                target=counter,
+            ),
+        ),
+    )
+
+
 def _at(statement: CobolStatementType, paragraph: str, path: str) -> Iterator[Entry]:
     return chain(
         ((f"{paragraph}/{path}", statement),),
+        _loop_assignments(statement, f"{paragraph}/{path}"),
         chain.from_iterable(
             _walk(body, paragraph, f"{path}.{segment}")
             for segment, body in _arms(statement)
