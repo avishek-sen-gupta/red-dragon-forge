@@ -1013,7 +1013,7 @@ Three limits follow from that, all of them open beads:
   a `READ INTO` from a file reads the same as a range nothing writes at all: the
   synthetic `FILE:`/literal/`%CALL:` source the walk ended on is never named.
 
-Field names go to stdout and nowhere else, so the log stays safe to tail.
+Field names go to stdout and nowhere else, so the log stays safe to tail. The log, on stderr, says what the command is doing: each table as it is read, with its size first — the extents table is usually the large one — then which of the matching fields it is answering for, and the walk depth by depth.
 
 `load()` reads a directory and `store_of()` takes the rows directly, off one
 assembly — an in-process caller and a reader of the published artefact cannot

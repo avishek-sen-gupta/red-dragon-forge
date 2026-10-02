@@ -37,6 +37,7 @@ and tells a reader nothing.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -47,6 +48,7 @@ from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
 
+from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fixpoint import rows
 from cobble.dataflow.fixpoint.build_corpus import (
@@ -55,6 +57,8 @@ from cobble.dataflow.fixpoint.build_corpus import (
     GRAPH_FILE,
 )
 from cobble.dataflow.fixpoint.rows import Row
+
+logger = logging.getLogger(__name__)
 
 MAX_DEPTH = 6
 
@@ -342,11 +346,15 @@ class FieldStore:
 
     @cached_property
     def _at_statement(self) -> Mapping[tuple[str, str], tuple[Flow, ...]]:
+        logger.info("indexing %d flows by statement", len(self.flows))
         return _flows_by((_flow_at(flow), flow) for flow in self.flows)
 
     @cached_property
     def _reads_after(self) -> Mapping[tuple[str, str], tuple[Flow, ...]]:
         """Each statement, against the flows whose reads its writes reach."""
+        logger.info(
+            "indexing %d flows by the statements that define them", len(self.flows)
+        )
         return _flows_by(
             ((_program_of(flow.target), definer), flow)
             for flow in self.flows
@@ -520,6 +528,12 @@ class _Walk:
 
 
 def _walk(store: FieldStore, side: Side, depth: int, walk: _Walk) -> Mapping[str, int]:
+    logger.info(
+        "depth %d: %d flows to go on from, %d fields found",
+        walk.level,
+        len(walk.frontier),
+        len(walk.found),
+    )
     if not walk.frontier or walk.level >= depth:
         return MappingProxyType(dict(walk.found))
     level = walk.level + 1
@@ -852,12 +866,31 @@ def load(out_dir: Path, extents: Path) -> FieldStore:
     A run of an older build has no defs.jsonl, and a query that answers every
     other question about it is more use than one that refuses the directory.
     """
-    return store_of(
-        rows.read(extents),
-        rows.read(out_dir / GRAPH_FILE),
-        rows.read(out_dir / DEFS_FILE),
-        rows.read(out_dir / ALIASES_FILE),
+    store = store_of(
+        _table(extents),
+        _table(out_dir / GRAPH_FILE),
+        _table(out_dir / DEFS_FILE),
+        _table(out_dir / ALIASES_FILE),
     )
+    logger.info(
+        "ready: %d fields, %d flows, %d definer rows",
+        len(store.fields),
+        len(store.flows),
+        len(store.definers),
+    )
+    return store
+
+
+def _table(path: Path) -> tuple[Row, ...]:
+    """One table, read whole, with its size said first: a large artefact takes a
+    while to read, and a command that says nothing looks hung."""
+    if not path.is_file():
+        logger.info("%s: not there, read as empty", path.name)
+        return ()
+    logger.info("reading %s (%.1f MB)", path.name, path.stat().st_size / 1e6)
+    found = rows.read(path)
+    logger.info("%s: %d rows", path.name, len(found))
+    return found
 
 
 def _range_text(one: ByteRange) -> str:
@@ -1019,7 +1052,9 @@ def _report(store: FieldStore, arguments: argparse.Namespace) -> int:
         sys.stdout.write(f"no declared field named {arguments.subject}\n")
         return 1
     limits = _limits_of(arguments)
-    for field in found:
+    logger.info("answering %s", arguments.query)
+    for at, field in enumerate(found, start=1):
+        logger.info("field %d of %d", at, len(found))
         sys.stdout.write("\n".join(_heading(field)) + "\n")
         sys.stdout.write(
             "\n".join(_answer(store, arguments.query, field, limits)) + "\n\n"
@@ -1110,6 +1145,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def cli(argv: Sequence[str] = ()) -> int:
+    configure_cli_logging()
     arguments = _parsed(argv)
     if not arguments.fixpoint_dir.is_dir():
         sys.stderr.write(
