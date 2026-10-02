@@ -92,6 +92,13 @@ callee needs, so no consumer has to rebuild the join to walk the closure:
 Unresolved sites and callees outside the bundle are kept, with an empty `entry`,
 because "this program calls something we did not build" is an answer.
 
+Every paragraph has a `<name>#label` node where control enters and a `<name>#end`
+node where it leaves, and so does every section: a section's label flows into its
+first paragraph, and its last paragraph's end flows into the section's end. So
+`PERFORM`, `GO TO` and a `WHENEVER`'s `GO TO` land on a section's label when they
+name one, a `PERFORM` of a section returns from the section's end, and falling off
+one section enters the next through its label.
+
 **Dynamic calls.** A `CALL`/`XCTL`/`LINK` through a field names no program, so by
 default it pulls nothing into the closure. Given the fixpoint's
 `--dynamic-call-targets <out-dir>/targets.jsonl` (the flag `cobble-build` takes), each
