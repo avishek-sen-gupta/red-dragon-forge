@@ -8,6 +8,8 @@ and no separate handler model.
 
 from __future__ import annotations
 
+import pytest
+
 from cobble.dataflow.depgraph.flows import program_context
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, NodeKind
@@ -136,6 +138,61 @@ def test_the_dispatch_node_has_no_outgoing_edge_of_its_own(program_of) -> None:
 
     assert cfg.successors("MAIN/0#dispatch") == ()
     assert [e.kind for e in cfg.predecessors("MAIN/1")] == [EdgeKind.FALSE]
+
+
+_PROGRAM = {"PROGRAM": {"text": "'PROGB'", "is_literal": True}}
+_RESP = {"RESP": {"text": "WS-RESP", "is_literal": False}}
+
+
+@pytest.mark.parametrize(
+    ("verb", "options", "edges"),
+    [
+        (
+            "LINK",
+            _PROGRAM,
+            {
+                ("MAIN/0", "MAIN/0#raise", EdgeKind.FLOW),
+                ("MAIN/0#raise", "MAIN/0#dispatch", EdgeKind.TRUE),
+                ("MAIN/0#raise", "MAIN/1", EdgeKind.FALSE),
+            },
+        ),
+        (
+            "XCTL",
+            _PROGRAM,
+            {
+                ("MAIN/0", "MAIN/0#raise", EdgeKind.FLOW),
+                ("MAIN/0#raise", "MAIN/0#dispatch", EdgeKind.TRUE),
+            },
+        ),
+        (
+            "RETURN",
+            {},
+            {
+                ("MAIN/0", "MAIN/0#raise", EdgeKind.FLOW),
+                ("MAIN/0#raise", "MAIN/0#dispatch", EdgeKind.TRUE),
+            },
+        ),
+        ("XCTL", {**_PROGRAM, **_RESP}, {("MAIN/0", "MAIN/1", EdgeKind.FLOW)}),
+        ("RETURN", {**_RESP}, {("MAIN/0", "MAIN/1", EdgeKind.FLOW)}),
+        ("ABEND", {"ABCODE": {"text": "'AB01'", "is_literal": True}}, set()),
+    ],
+)
+def test_a_command_that_leaves_the_program_continues_only_when_it_fails(
+    program_of, verb: str, options: dict, edges: set
+) -> None:
+    """A successful XCTL or RETURN never comes back, so the raise test's
+    nothing-raised arm reaches nothing; a failure still goes to the handler, or,
+    under RESP or NOHANDLE, on to the next statement. ABEND raises no condition and
+    never returns, so it ends the path outright. LINK returns, and keeps both."""
+    cfg = _cfg(
+        program_of,
+        [
+            _cics(verb, options),
+            {"type": "MOVE", "operands": [{"name": "'F'"}, {"name": "WS-RESULT"}]},
+        ],
+    )
+
+    assert {(e.source, e.target, e.kind) for e in cfg.edges} == edges
 
 
 def test_nohandle_suppresses_the_raise_test(program_of) -> None:

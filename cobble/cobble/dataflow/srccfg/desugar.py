@@ -84,6 +84,8 @@ ARM_CLAUSES = (
 
 ARMING_VERBS = ("HANDLE CONDITION", "IGNORE CONDITION", "HANDLE AID")
 SUPPRESSING_OPTIONS = ("NOHANDLE", "RESP", "RESP2")
+LEAVING_VERBS = ("XCTL", "RETURN")
+ABENDING_VERB = "ABEND"
 DISPATCH_TRANSFER_CICS = "HANDLE DISPATCH"
 
 LINK_TRANSFER = "LINK"
@@ -1064,10 +1066,25 @@ def _exec_cics(statement, ctx: Ctx, path: str) -> Fragment:
     verb = str(getattr(statement, "verb", "") or "").upper()
     if verb in ARMING_VERBS:
         return _arm(statement, ctx, path, verb)
+    if verb == ABENDING_VERB:
+        return replace(_plain_without_arms(statement, ctx, path), exits=())
+    return _command(statement, ctx, path, verb)
+
+
+def _command(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
     plain = _plain_without_arms(statement, ctx, path)
     annotated = _called(statement, plain, verb) if verb in ("LINK", "XCTL") else plain
     body = _with_arms(statement, ctx, path, annotated)
-    return body if _suppressed(statement) else _raisable(body, ctx, path)
+    if _suppressed(statement):
+        return body
+    return _unless_leaving(_raisable(body, ctx, path), verb)
+
+
+def _unless_leaving(raised: Fragment, verb: str) -> Fragment:
+    """A successful XCTL or RETURN never comes back, so the nothing-raised arm has
+    nowhere to go. Under RESP or NOHANDLE the command's one exit is its failure,
+    which does continue, so only the raising form loses it."""
+    return replace(raised, exits=()) if verb in LEAVING_VERBS else raised
 
 
 def _arm(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
