@@ -98,10 +98,23 @@ def _written(tmp_path: Path, text: str) -> Path:
 
 def test_a_bundle_round_trips_through_its_rows(tmp_path: Path) -> None:
     """The file is the whole handover: programs in order, an empty one included, and
-    the calls joining them."""
+    the calls joining them. Text that Unicode counts as a line break but JSON does not
+    escape -- NEL, which is what EBCDIC 0x15 decodes to, and the two separators --
+    stays inside its row."""
+    breaking = Node(
+        id="MAIN#label",
+        kind=NodeKind.LABEL,
+        paragraph="MAIN",
+        target="A\x85B\u2028C\u2029D",
+    )
     bundle = Bundle(
         seed="PROGA",
-        cfgs=(_caller("PROGB"), _callee(), Cfg(program="PROGC", nodes=(), edges=())),
+        cfgs=(
+            _caller("PROGB"),
+            _callee(),
+            Cfg(program="PROGC", nodes=(), edges=()),
+            Cfg(program="PROGD", nodes=(breaking,), edges=()),
+        ),
         calls=_bundle(_caller("PROGB"), _callee()).calls,
     )
 

@@ -75,7 +75,7 @@ def load_bundle(path: Path) -> Bundle:
     return bundle_of_rows(
         tuple(
             _row(line, f"{path.name}:{at}")
-            for at, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            for at, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1)
             if line.strip()
         ),
         path.name,
