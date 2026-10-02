@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from cobble.dataflow.fields.state import (
     EMPTY,
     Source,
+    State,
     exact_values,
     join,
     reaching,
@@ -101,6 +104,46 @@ def test_join_keeps_an_extent_only_one_side_holds():
     assert _names(joined, _extent(8, 4)) == {"WS-R"}
 
 
+def test_a_value_one_path_holds_keeps_the_doubt_of_a_path_that_lacks_it():
+    """A missing entry is a path that never wrote the bytes, or wrote content the
+    walk cannot name -- never a path that contributes nothing. So a value held on
+    one side only reads back with the other side's reason, whichever side it is,
+    and a value the other side holds inside a wider extent is sliced out of it
+    into the joined entry."""
+    pgm = _extent(0, 5, name="WS-PGM")
+    literal = write(EMPTY, pgm, frozenset(), of_value(b"PROGA"))
+    computed = write(EMPTY, pgm, frozenset(), because(UnresolvedReason.NOT_A_LITERAL))
+    other = write(EMPTY, pgm, frozenset(), of_value(b"PROGB"))
+    comm = FieldExtent(RegionId.LINKAGE, 0, 5, Precision.EXACT, "LK-PGM")
+    linked = write(EMPTY, comm, frozenset(), of_value(b"PROGA"))
+    record = _extent(0, 8, name="WS-REC")
+    declared = State(values=MappingProxyType({record: of_value(b"PROGCXYZ")}))
+    overlaid = write(declared, pgm, frozenset(), of_value(b"PROGD"))
+
+    assert values_at(join(literal, EMPTY), pgm) == ValueSet(
+        values=frozenset({b"PROGA"}),
+        reasons=frozenset({UnresolvedReason.UNINITIALISED}),
+    )
+    assert values_at(join(EMPTY, literal), pgm) == values_at(join(literal, EMPTY), pgm)
+    assert values_at(join(literal, computed), pgm) == ValueSet(
+        values=frozenset({b"PROGA"}),
+        reasons=frozenset({UnresolvedReason.NOT_A_LITERAL}),
+    )
+    assert values_at(join(computed, literal), pgm) == values_at(
+        join(literal, computed), pgm
+    )
+    assert values_at(join(linked, EMPTY), comm) == ValueSet(
+        values=frozenset({b"PROGA"}),
+        reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}),
+    )
+    assert values_at(join(literal, other), pgm) == ValueSet(
+        values=frozenset({b"PROGA", b"PROGB"})
+    )
+    assert exact_values(join(declared, overlaid), pgm) == ValueSet(
+        values=frozenset({b"PROGC", b"PROGD"})
+    )
+
+
 def test_join_of_a_state_with_itself_is_that_state():
     left = write(EMPTY, _extent(0, 4), frozenset({_source("WS-L")}))
     assert join(left, left) == left
@@ -145,7 +188,7 @@ def test_a_read_inside_a_valued_extent_is_sliced_and_one_that_straddles_two_is_n
     )
 
     assert values_at(state, inside) == of_value(b"ACTV")
-    assert values_at(state, straddling) == because(UnresolvedReason.UNINITIALISED)
+    assert values_at(state, straddling) == because(UnresolvedReason.NOT_A_LITERAL)
 
 
 def test_an_extent_nothing_has_written_reports_uninitialised():
@@ -155,13 +198,15 @@ def test_an_extent_nothing_has_written_reports_uninitialised():
 
 
 def test_exact_values_hits_its_own_extent_and_misses_an_aliased_one():
-    """exact_values is the transfer's hot-path lookup, one dict hit and no scan.
+    """exact_values is the transfer's hot-path lookup, one dict hit and no scan of
+    the value map.
 
     The trade is deliberate: a source read through a different name than the one
     that declared its value -- a REDEFINES read as CDEMO-MENU-OPT-PGMNAME over the
-    FILLER that actually holds it -- misses exact_values and reports UNINITIALISED,
-    while values_at's containment scan still finds it through the byte range. That
-    aliasing gap only matters at a call site, not in a MOVE chain.
+    FILLER that actually holds it -- misses exact_values and reports the miss's
+    reason, not-a-literal here since a write reached those bytes, while values_at's
+    containment scan still finds it through the byte range. That aliasing gap only
+    matters at a call site, not in a MOVE chain.
     """
     declared = FieldExtent(RegionId.WORKING_STORAGE, 39, 8, Precision.EXACT, "FILLER_3")
     read_as = FieldExtent(
@@ -170,7 +215,7 @@ def test_exact_values_hits_its_own_extent_and_misses_an_aliased_one():
     state = write(EMPTY, declared, frozenset(), of_value(b"COACTVWC"))
 
     assert exact_values(state, declared) == of_value(b"COACTVWC")
-    assert exact_values(state, read_as) == because(UnresolvedReason.UNINITIALISED)
+    assert exact_values(state, read_as) == because(UnresolvedReason.NOT_A_LITERAL)
     assert values_at(state, read_as) == of_value(b"COACTVWC")
 
 
@@ -191,7 +236,7 @@ def test_a_write_with_no_known_value_still_erases_the_value_it_overwrites():
     weakly = write(known, clamped, frozenset(), because(UnresolvedReason.NOT_A_LITERAL))
 
     assert values_at(known, extent) == of_value(b"COSGN00C")
-    assert values_at(overwritten, extent) == because(UnresolvedReason.UNINITIALISED)
+    assert values_at(overwritten, extent) == because(UnresolvedReason.NOT_A_LITERAL)
     assert values_at(weakly, extent) == of_value(b"COSGN00C")
 
 
@@ -236,10 +281,13 @@ def test_a_partial_write_invalidates_the_value_it_overwrote_part_of():
     ) == because(UnresolvedReason.FROM_CALLEE)
 
 
-def test_a_miss_reports_the_region_that_explains_it():
+def test_a_miss_reports_what_explains_it():
     """LINKAGE is storage the caller owns, so a miss there is not an uninitialised
-    field: the writer is outside an intra-program walk. Answered on the miss and
-    never stored, so state.values does not grow an entry per LINKAGE read."""
+    field: the writer is outside an intra-program walk. In WORKING-STORAGE a miss is
+    uninitialised only if nothing wrote the bytes; a write whose content the walk
+    cannot name stores no value, so a miss on written bytes is not-a-literal.
+    Answered on the miss and never stored, so state.values does not grow an entry
+    per read."""
     linkage = FieldExtent(RegionId.LINKAGE, 0, 8, Precision.EXACT, "DFHCOMMAREA-PGM")
     working = _extent(0, 8, name="WS-PGM")
     state = write(EMPTY, working, frozenset(), of_value(b"COSGN00C"))
@@ -251,6 +299,24 @@ def test_a_miss_reports_the_region_that_explains_it():
         UnresolvedReason.UNINITIALISED
     )
     assert exact_values(state, working) == of_value(b"COSGN00C")
+    computed = write(
+        state,
+        _extent(16, 8, name="WS-SUM"),
+        frozenset(),
+        because(UnresolvedReason.NOT_A_LITERAL),
+    )
+    assert values_at(computed, _extent(16, 8, name="WS-SUM")) == because(
+        UnresolvedReason.NOT_A_LITERAL
+    )
+    assert exact_values(computed, _extent(16, 8, name="WS-SUM")) == because(
+        UnresolvedReason.NOT_A_LITERAL
+    )
+    assert exact_values(computed, _extent(16, 4, name="WS-SUM-HI")) == because(
+        UnresolvedReason.NOT_A_LITERAL
+    )
+    assert exact_values(computed, _extent(24, 4, name="WS-NEXT")) == because(
+        UnresolvedReason.UNINITIALISED
+    )
 
 
 def test_a_weak_write_kills_nothing_and_says_the_old_value_may_have_changed():

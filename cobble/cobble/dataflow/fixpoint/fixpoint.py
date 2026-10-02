@@ -329,12 +329,22 @@ def _after(
     return transfer(statement, node_id, before, index) if statement else before
 
 
+def _arriving(states: Mapping[str, State], target: str, after: State) -> State:
+    """What reaches ``target`` once ``after`` does: the first path to arrive is all
+    there is, and a later one joins it. ``EMPTY`` is not a stand-in for "no path
+    yet" -- it is a path that wrote nothing, and joining with it would add doubt
+    about every value the arriving path holds."""
+    if target in states:
+        return join(states[target], after)
+    return after
+
+
 def _grown(
     cfg: Cfg, node_id: str, after: State, states: Mapping[str, State]
 ) -> Mapping[str, State]:
     """Successors whose entry state the state leaving ``node_id`` enlarges."""
     joined = {
-        edge.target: join(states.get(edge.target, EMPTY), after)
+        edge.target: _arriving(states, edge.target, after)
         for edge in cfg.successors(node_id)
     }
     return {
@@ -499,7 +509,7 @@ def _propagated(
     for visited, node_id in enumerate(order.ordered, start=1):
         after = _after(statements, node_id, grown[node_id], index)
         for edge in cfg.successors(node_id):
-            grown[edge.target] = join(grown.get(edge.target, EMPTY), after)
+            grown[edge.target] = _arriving(grown, edge.target, after)
         if not visited % HEARTBEAT:
             _sweep_progress(cfg, sweep, visited, len(order.ordered))
     return MappingProxyType(grown)

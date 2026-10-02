@@ -26,6 +26,9 @@ SOURCE = """\
        01  WS-ARG1              PIC X(4).
        01  WS-ARG2              PIC X(4).
        01  WS-RET               PIC S9(4) COMP.
+       01  WS-MAYBE             PIC X(8).
+       01  WS-NUMREC.
+           05  WS-NUM           PIC 9(8).
        PROCEDURE DIVISION.
        MAIN-PARA.
            MOVE 'PROGC' TO WS-PGM OF WS-REC.
@@ -46,6 +49,16 @@ SOURCE = """\
            CALL WS-SOMETIMES USING WS-ARG1.
            CALL WS-NOVALUE.
            CALL 'PROGG' USING WS-ARG1.
+           IF WS-FLAG = 'Y'
+               MOVE 'PROGH' TO WS-MAYBE
+           END-IF.
+           CALL WS-MAYBE.
+           IF WS-FLAG = 'Y'
+               MOVE 'PROGJ' TO WS-NUMREC
+           ELSE
+               COMPUTE WS-NUM = WS-RET + 1
+           END-IF.
+           CALL WS-NUMREC.
            STOP RUN.
 """
 
@@ -79,4 +92,6 @@ def test_every_call_through_a_data_item_gets_a_row_and_a_literal_call_does_not(
         ("MAIN-PARA/9", "WS-LONG", ("PROGE",), ()),
         ("MAIN-PARA/10", "WS-SOMETIMES", ("PROGB", "PROGF"), ()),
         ("MAIN-PARA/11", "WS-NOVALUE", (), ("uninitialised",)),
+        ("MAIN-PARA/14", "WS-MAYBE", ("PROGH",), ("uninitialised",)),
+        ("MAIN-PARA/16", "WS-NUMREC", ("PROGJ",), ("not-a-literal",)),
     ]
