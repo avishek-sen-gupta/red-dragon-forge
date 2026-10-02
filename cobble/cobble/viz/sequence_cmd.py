@@ -22,7 +22,8 @@ from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
-from cobble.dataflow.srccfg.bundle import JsonValue, load_cfg_dicts
+from cobble.dataflow.srccfg.bundle import load_bundle
+from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.path_utils import ensure_parent
 from cobble.viz.models import (
     Arm,
@@ -37,35 +38,16 @@ _LOG = logging.getLogger(__name__)
 _MAIN_PREFIXES = ("0000", "000", "MAIN", "CONTROL")
 _MAX_DEPTH = 20
 
-# Type aliases for CFG dicts (JSON-decoded, values are JSON scalars or lists/dicts)
-CfgNode = Mapping[str, JsonValue]
-CfgEdge = Mapping[str, JsonValue]
-CfgDict = Mapping[str, JsonValue]
-
-
-def _atom(node: CfgNode) -> Mapping[str, JsonValue]:
-    """A node's atom object, empty where the node has none."""
-    atom = node.get("atom", ())
-    return atom if isinstance(atom, Mapping) else {}
-
-
-def _rows(value: JsonValue) -> tuple[CfgNode, ...]:
-    """A CFG's nodes or edges: the JSON array of objects, never a scalar."""
-    if isinstance(value, str) or not isinstance(value, Sequence):
-        return ()
-    return tuple(item for item in value if isinstance(item, Mapping))
-
-
 # ── CFG indexing ──────────────────────────────────────────────────────────────
 
 
-def _entry_paragraph(cfg: CfgDict) -> str:
+def _entry_paragraph(cfg: Cfg) -> str:
     return next(
         (
-            str(n["paragraph"])
-            for n in _rows(cfg.get("nodes", ()))
-            if n.get("kind") == "LABEL"
-            and any(str(n["paragraph"]).startswith(px) for px in _MAIN_PREFIXES)
+            node.paragraph
+            for node in cfg.nodes
+            if node.kind is NodeKind.LABEL
+            and any(node.paragraph.startswith(px) for px in _MAIN_PREFIXES)
         ),
         "",
     )
@@ -82,32 +64,28 @@ class _Site:
 PerformsAcc = Mapping[str, tuple[_Site, ...]]
 
 
-def _perform_paras(
-    edge: CfgEdge, nodes_by_id: Mapping[str, CfgNode]
-) -> tuple[str, str]:
+def _perform_paras(edge: Edge, nodes_by_id: Mapping[str, Node]) -> tuple[str, str]:
     """Return (src_para, tgt_para) for a PERFORM edge; either may be ''."""
-    if edge.get("kind") != "PERFORM":
+    if edge.kind is not EdgeKind.PERFORM:
         return "", ""
-    src_para = str(
-        nodes_by_id.get(str(edge.get("source", "")), {}).get("paragraph", "")
-    )
-    tgt_para = str(edge.get("target") or "").replace("#label", "").replace("#end", "")
+    src_para = nodes_by_id[edge.source].paragraph if edge.source in nodes_by_id else ""
+    tgt_para = edge.target.replace("#label", "").replace("#end", "")
     return src_para, tgt_para
 
 
 def _add_perform(
-    acc: PerformsAcc, edge: CfgEdge, nodes_by_id: Mapping[str, CfgNode]
+    acc: PerformsAcc, edge: Edge, nodes_by_id: Mapping[str, Node]
 ) -> PerformsAcc:
     src_para, tgt_para = _perform_paras(edge, nodes_by_id)
     if not src_para or not tgt_para or src_para == tgt_para:
         return acc
-    site = _Site(node=str(edge.get("source", "")), target=tgt_para)
+    site = _Site(node=edge.source, target=tgt_para)
     return {**acc, src_para: (*acc.get(src_para, ()), site)}
 
 
 def _collect_performs(
-    edges: Sequence[CfgEdge],
-    nodes_by_id: Mapping[str, CfgNode],
+    edges: Sequence[Edge],
+    nodes_by_id: Mapping[str, Node],
 ) -> PerformsAcc:
     return reduce(lambda acc, e: _add_perform(acc, e, nodes_by_id), edges, {})
 
@@ -118,22 +96,18 @@ class _LinksDecisions:
     para_has_decision: dict[str, bool]
 
 
-def _add_node_link_decision(acc: _LinksDecisions, node: CfgNode) -> _LinksDecisions:
-    para = str(node.get("paragraph", ""))
-    if not para:
+def _add_node_link_decision(acc: _LinksDecisions, node: Node) -> _LinksDecisions:
+    if not node.paragraph:
         return acc
     has_decision = (
-        {**acc.para_has_decision, para: True}
-        if node.get("kind") == "TEST"
+        {**acc.para_has_decision, node.paragraph: True}
+        if node.kind is NodeKind.TEST
         else acc.para_has_decision
     )
-    target = str(node.get("target", ""))
-    is_cics_call = node.get("kind") == "CALL" and "CICS" in str(
-        node.get("transfer", "")
-    )
+    is_cics_call = node.kind is NodeKind.CALL and "CICS" in node.transfer
     para_link = (
-        {**acc.para_link, para: target}
-        if is_cics_call and para not in acc.para_link and target
+        {**acc.para_link, node.paragraph: node.target}
+        if is_cics_call and node.paragraph not in acc.para_link and node.target
         else acc.para_link
     )
     return _LinksDecisions(para_link=para_link, para_has_decision=has_decision)
@@ -212,19 +186,16 @@ def _call_type(site: str, arms: tuple[Arm, ...], index: _Index) -> str:
     return _CALL_TYPE[(is_loop, bool(arms))]
 
 
-def _index_cfg(cfg: CfgDict) -> _Index:
-    nodes = _rows(cfg.get("nodes", ()))
-    nodes_by_id: dict[str, CfgNode] = {str(n["id"]): n for n in nodes}
-    ld = reduce(_add_node_link_decision, nodes, _LinksDecisions({}, {}))
+def _index_cfg(cfg: Cfg) -> _Index:
+    nodes_by_id = {node.id: node for node in cfg.nodes}
+    ld = reduce(_add_node_link_decision, cfg.nodes, _LinksDecisions({}, {}))
     return _Index(
-        performs=_collect_performs(_rows(cfg.get("edges", ())), nodes_by_id),
+        performs=_collect_performs(cfg.edges, nodes_by_id),
         links=ld.para_link,
         has_decision=ld.para_has_decision,
         node_ids=frozenset(nodes_by_id),
         tests={
-            str(n["id"]): str(_atom(n).get("text", ""))
-            for n in nodes
-            if n.get("kind") == "TEST"
+            node.id: node.atom.text for node in cfg.nodes if node.kind is NodeKind.TEST
         },
     )
 
@@ -272,13 +243,12 @@ def _steps_of(
     )
 
 
-def extract_per_program(cfg: CfgDict) -> ProgramSequence:
-    program = str(cfg["program"])
+def extract_per_program(cfg: Cfg) -> ProgramSequence:
     entry = _entry_paragraph(cfg)
     if not entry:
-        return ProgramSequence(program=program, entry_paragraph="", steps=())
+        return ProgramSequence(program=cfg.program, entry_paragraph="", steps=())
     steps = _steps_of(entry, _index_cfg(cfg), frozenset({entry}), depth=1)
-    return ProgramSequence(program=program, entry_paragraph=entry, steps=steps)
+    return ProgramSequence(program=cfg.program, entry_paragraph=entry, steps=steps)
 
 
 # ── Cross-program ordered call list ──────────────────────────────────────────
@@ -295,7 +265,7 @@ def _emit_callee(
     callee: str,
     para: str,
     program: str,
-    cfg_by_prog: Mapping[str, CfgDict],
+    cfg_by_prog: Mapping[str, Cfg],
     cfg_indices: Mapping[str, _Index],
     target_programs: frozenset[str],
     depth: int,
@@ -323,7 +293,7 @@ def _emit_callee(
 def _walk_cross(
     program: str,
     para: str,
-    cfg_by_prog: Mapping[str, CfgDict],
+    cfg_by_prog: Mapping[str, Cfg],
     cfg_indices: Mapping[str, _Index],
     target_programs: frozenset[str],
     state: _CrossState,
@@ -361,7 +331,7 @@ def _walk_cross(
 
 def extract_cross_program(
     entry_program: str,
-    cfg_by_prog: Mapping[str, CfgDict],
+    cfg_by_prog: Mapping[str, Cfg],
     target_programs: frozenset[str],
     cfg_indices: Mapping[str, _Index],
 ) -> CrossProgramSequence:
@@ -401,15 +371,12 @@ def _write_output(
 
 
 def _run(args: argparse.Namespace) -> None:
-    cfgs_raw = load_cfg_dicts(args.cfg)
-    cfg_by_prog: dict[str, CfgDict] = {c["program"]: c for c in cfgs_raw}
-    targets = frozenset(cfg_by_prog.keys())
+    cfg_by_prog = {cfg.program: cfg for cfg in load_bundle(args.cfg).cfgs}
+    targets = frozenset(cfg_by_prog)
     entry = args.entry or next(iter(sorted(targets)))
     cfg_indices = {prog: _index_cfg(cfg) for prog, cfg in cfg_by_prog.items()}
     per_program = {
-        prog: extract_per_program(cfg_by_prog[prog])
-        for prog in sorted(targets)
-        if prog in cfg_by_prog
+        prog: extract_per_program(cfg_by_prog[prog]) for prog in sorted(targets)
     }
     _write_output(
         args,

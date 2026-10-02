@@ -162,7 +162,7 @@ def _shape_of(document: JsonValue, source: str) -> Mapping:
     )
 
 
-def cfg_dicts_of(
+def _cfg_entries(
     document: JsonValue, source: str = "<document>"
 ) -> tuple[Mapping, ...]:
     """The CFG objects as written, for the readers that want JSON rather than a Cfg."""
@@ -178,7 +178,7 @@ def calls_of(document: JsonValue, source: str = "<document>") -> tuple[BundleCal
 
 
 def bundle_of(document: JsonValue, source: str = "<document>") -> Bundle:
-    cfgs = tuple(cfg_from_dict(entry) for entry in cfg_dicts_of(document, source))
+    cfgs = tuple(cfg_from_dict(entry) for entry in _cfg_entries(document, source))
     return Bundle(
         seed=cfgs[0].program if cfgs else "",
         cfgs=cfgs,
@@ -192,8 +192,3 @@ def load_document(path: Path) -> JsonValue:
 
 def load_bundle(path: Path) -> Bundle:
     return bundle_of(load_document(path), str(path))
-
-
-def load_cfg_dicts(path: Path) -> tuple[Mapping, ...]:
-    """The CFG objects in a file, for a reader that walks the JSON directly."""
-    return cfg_dicts_of(load_document(path), str(path))

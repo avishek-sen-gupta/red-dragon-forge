@@ -13,7 +13,8 @@ from cobble.dataflow.fields.access import (
     accesses,
 )
 from cobble.dataflow.fields.access_query import _overlaps, query
-from cobble.dataflow.srccfg.bundle import CfgDocumentError
+from cobble.dataflow.srccfg.bundle import Bundle, CfgDocumentError, bundle_to_json
+from cobble.dataflow.srccfg.cfg import Atom, Cfg, Node, NodeKind
 from cobble.dataflow.fields.trace_query import ByteRange
 
 # ---------------------------------------------------------------------------
@@ -50,37 +51,37 @@ def test_plain_name_is_not_synthetic():
 # ---------------------------------------------------------------------------
 
 
+def _assign(*reads: str) -> Node:
+    return Node(id="MAIN/0", kind=NodeKind.ASSIGN, paragraph="MAIN", reads=reads)
+
+
+def _condition(left: str, right: str, node_id: str = "MAIN/0") -> Node:
+    return Node(
+        id=node_id,
+        kind=NodeKind.TEST,
+        paragraph="MAIN",
+        atom=Atom(text=f"{left} = {right}", left=left, op="==", right=right),
+    )
+
+
 def test_assign_node_uses_reads():
-    node = {"kind": "ASSIGN", "reads": ["WS-A", "WS-B"], "atom": {}}
-    assert _names_from_node(node) == ("WS-A", "WS-B")
+    assert _names_from_node(_assign("WS-A", "WS-B")) == ("WS-A", "WS-B")
 
 
 def test_test_node_uses_atom_left_right():
-    node = {
-        "kind": "TEST",
-        "reads": [],
-        "atom": {"left": "WS-STATUS", "op": "==", "right": "'Y'"},
-    }
-    assert _names_from_node(node) == ("WS-STATUS",)  # 'Y' filtered as literal
+    assert _names_from_node(_condition("WS-STATUS", "'Y'")) == ("WS-STATUS",)
 
 
 def test_test_node_both_sides_real():
-    node = {
-        "kind": "TEST",
-        "reads": [],
-        "atom": {"left": "WS-A", "op": "==", "right": "WS-B"},
-    }
-    assert set(_names_from_node(node)) == {"WS-A", "WS-B"}
+    assert set(_names_from_node(_condition("WS-A", "WS-B"))) == {"WS-A", "WS-B"}
 
 
 def test_names_are_deduped():
-    node = {"kind": "ASSIGN", "reads": ["WS-A", "WS-A"], "atom": {}}
-    assert _names_from_node(node) == ("WS-A",)
+    assert _names_from_node(_assign("WS-A", "WS-A")) == ("WS-A",)
 
 
 def test_synthetics_filtered_from_reads():
-    node = {"kind": "ASSIGN", "reads": ["%HANDLER", "WS-REAL", "FILE:X"], "atom": {}}
-    assert _names_from_node(node) == ("WS-REAL",)
+    assert _names_from_node(_assign("%HANDLER", "WS-REAL", "FILE:X")) == ("WS-REAL",)
 
 
 # ---------------------------------------------------------------------------
@@ -88,12 +89,15 @@ def test_synthetics_filtered_from_reads():
 # ---------------------------------------------------------------------------
 
 
-def _minimal_cfg(program: str, nodes: list[dict]) -> dict:
-    """The one document shape: the CFGs in `cfgs`, and `calls` empty rather than absent."""
-    return {
-        "cfgs": [{"program": program, "nodes": nodes, "edges": []}],
-        "calls": [],
-    }
+def _write_cfgs(path: Path, *cfgs: Cfg) -> Path:
+    path.write_text(
+        bundle_to_json(Bundle(seed=cfgs[0].program, cfgs=cfgs)), encoding="utf-8"
+    )
+    return path
+
+
+def _program(name: str, *nodes: Node) -> Cfg:
+    return Cfg(program=name, nodes=nodes, edges=())
 
 
 def _minimal_asg(program: str, fields: list[dict]) -> dict:
@@ -117,29 +121,10 @@ def test_accesses_emits_row_for_assign_read(tmp_path: Path) -> None:
         "PROG",
         [_field(1, "REC", children=[_field(5, "WS-A", "X(4)", offset=0)])],
     )
-    cfg = _minimal_cfg(
-        "PROG",
-        [
-            {
-                "id": "MAIN/0",
-                "kind": "ASSIGN",
-                "paragraph": "MAIN",
-                "reads": ["WS-A"],
-                "writes": [],
-                "atom": {},
-                "transfer": "",
-                "target": "",
-                "target_resolved": True,
-                "transfer_operand": "",
-                "using": [],
-            }
-        ],
-    )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
-    cfg_path = tmp_path / "cfg.json"
-    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+    cfg_path = _write_cfgs(tmp_path / "cfg.json", _program("PROG", _assign("WS-A")))
 
     rows = accesses(cfg_path, asg_dir)
 
@@ -155,29 +140,13 @@ def test_accesses_emits_row_for_test_condition(tmp_path: Path) -> None:
         "PROG",
         [_field(1, "REC", children=[_field(5, "WS-STATUS", "X(1)", offset=0)])],
     )
-    cfg = _minimal_cfg(
-        "PROG",
-        [
-            {
-                "id": "MAIN/1#test",
-                "kind": "TEST",
-                "paragraph": "MAIN",
-                "reads": [],
-                "writes": [],
-                "atom": {"left": "WS-STATUS", "op": "==", "right": "'Y'"},
-                "transfer": "",
-                "target": "",
-                "target_resolved": True,
-                "transfer_operand": "",
-                "using": [],
-            }
-        ],
-    )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
-    cfg_path = tmp_path / "cfg.json"
-    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+    cfg_path = _write_cfgs(
+        tmp_path / "cfg.json",
+        _program("PROG", _condition("WS-STATUS", "'Y'", "MAIN/1#test")),
+    )
 
     rows = accesses(cfg_path, asg_dir)
 
@@ -190,36 +159,19 @@ def test_accesses_dedupes_same_site_field(tmp_path: Path) -> None:
         "PROG",
         [_field(1, "REC", children=[_field(5, "WS-A", "X(4)", offset=0)])],
     )
-    cfg = _minimal_cfg(
-        "PROG",
-        [
-            {
-                "id": "MAIN/0",
-                "kind": "ASSIGN",
-                "paragraph": "MAIN",
-                "reads": ["WS-A", "WS-A"],
-                "writes": [],
-                "atom": {},
-                "transfer": "",
-                "target": "",
-                "target_resolved": True,
-                "transfer_operand": "",
-                "using": [],
-            }
-        ],
-    )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
-    cfg_path = tmp_path / "cfg.json"
-    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+    cfg_path = _write_cfgs(
+        tmp_path / "cfg.json", _program("PROG", _assign("WS-A", "WS-A"))
+    )
 
     rows = accesses(cfg_path, asg_dir)
     assert len(rows) == 1
 
 
-def _one_assign_program(tmp_path: Path) -> tuple[Path, dict]:
-    """An ASG on disk for PROG, and the single CFG entry that reads WS-A."""
+def _one_assign_program(tmp_path: Path) -> tuple[Path, Cfg]:
+    """An ASG on disk for PROG, and the single CFG that reads WS-A."""
     asg = _minimal_asg(
         "PROG",
         [_field(1, "REC", children=[_field(5, "WS-A", "X(4)", offset=0)])],
@@ -227,31 +179,13 @@ def _one_assign_program(tmp_path: Path) -> tuple[Path, dict]:
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
     (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
-    return asg_dir, _minimal_cfg(
-        "PROG",
-        [
-            {
-                "id": "MAIN/0",
-                "kind": "ASSIGN",
-                "paragraph": "MAIN",
-                "reads": ["WS-A"],
-                "writes": [],
-                "atom": {},
-                "transfer": "",
-                "target": "",
-                "target_resolved": True,
-                "transfer_operand": "",
-                "using": [],
-            }
-        ],
-    )
+    return asg_dir, _program("PROG", _assign("WS-A"))
 
 
 def test_accesses_reads_the_one_document_shape(tmp_path: Path) -> None:
     """A member file and a closure are the same shape, so accesses reads them alike."""
-    asg_dir, document = _one_assign_program(tmp_path)
-    cfg_path = tmp_path / "cfg.json"
-    cfg_path.write_text(json.dumps(document), encoding="utf-8")
+    asg_dir, cfg = _one_assign_program(tmp_path)
+    cfg_path = _write_cfgs(tmp_path / "cfg.json", cfg)
 
     rows = accesses(cfg_path, asg_dir)
 
@@ -283,16 +217,13 @@ def test_accesses_refuses_a_pre_bundle_file(tmp_path: Path, document) -> None:
 
 def test_accesses_spans_every_program_a_bundle_carries(tmp_path: Path) -> None:
     """A closure holds more than one program; rows come back for each, not just the seed."""
-    asg_dir, document = _one_assign_program(tmp_path)
-    second = {**document["cfgs"][0], "program": "PROG2"}
+    asg_dir, cfg = _one_assign_program(tmp_path)
     (asg_dir / "PROG2.json").write_text(
         (asg_dir / "PROG.json").read_text(encoding="utf-8").replace("PROG", "PROG2"),
         encoding="utf-8",
     )
-    cfg_path = tmp_path / "cfg.json"
-    cfg_path.write_text(
-        json.dumps({"cfgs": [document["cfgs"][0], second], "calls": []}),
-        encoding="utf-8",
+    cfg_path = _write_cfgs(
+        tmp_path / "cfg.json", cfg, _program("PROG2", _assign("WS-A"))
     )
 
     rows = accesses(cfg_path, asg_dir)

@@ -15,40 +15,20 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
-from cobble.dataflow.srccfg.bundle import JsonValue, load_cfg_dicts
+from cobble.dataflow.srccfg.bundle import load_bundle
+from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
 from cobol_asg.asg_types import CobolASG
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
 logger = logging.getLogger(__name__)
-
-_JsonRow = Mapping[str, JsonValue]
-
-
-def _submapping(value: JsonValue) -> _JsonRow:
-    """A nested JSON object, or an empty one where the key was absent or scalar."""
-    return value if isinstance(value, Mapping) else {}
-
-
-def _subrows(value: JsonValue) -> tuple[_JsonRow, ...]:
-    """A JSON array of objects, skipping anything in it that is not one."""
-    if isinstance(value, str) or not isinstance(value, Sequence):
-        return ()
-    return tuple(item for item in value if isinstance(item, Mapping))
-
-
-def _strings(value: JsonValue) -> tuple[str, ...]:
-    """A JSON array read as strings; a scalar or a missing key reads as none."""
-    if isinstance(value, str) or not isinstance(value, Sequence):
-        return ()
-    return tuple(str(item) for item in value)
 
 
 @dataclass(frozen=True)
@@ -76,12 +56,11 @@ def _real_names(names: Sequence[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(n for n in names if not _is_synthetic(n)))
 
 
-def _names_from_node(node: _JsonRow) -> tuple[str, ...]:
+def _names_from_node(node: Node) -> tuple[str, ...]:
     """Field names read at this node, deduped, synthetics removed."""
-    reads = _real_names(_strings(node.get("reads", ())))
-    atom = _submapping(node.get("atom", ()))
-    if node.get("kind") == "TEST":
-        extra = _real_names([str(atom.get("left", "")), str(atom.get("right", ""))])
+    reads = _real_names(node.reads)
+    if node.kind is NodeKind.TEST:
+        extra = _real_names((node.atom.left, node.atom.right))
         return tuple(dict.fromkeys((*reads, *extra)))
     return reads
 
@@ -101,14 +80,12 @@ def _try_index(program: str, asg_dir: Path) -> tuple[CellIndex, ...]:
         return ()
 
 
-def _rows_for_node(
-    program: str, node: _JsonRow, idx: CellIndex
-) -> tuple[AccessRow, ...]:
+def _rows_for_node(program: str, node: Node, idx: CellIndex) -> tuple[AccessRow, ...]:
     return tuple(
         AccessRow(
             program=program,
-            site=f"{program}/{node['id']}",
-            paragraph=str(node.get("paragraph", "")),
+            site=f"{program}/{node.id}",
+            paragraph=node.paragraph,
             extent=extent,
         )
         for name in _names_from_node(node)
@@ -116,19 +93,17 @@ def _rows_for_node(
     )
 
 
-def _rows_for_program(entry: _JsonRow, asg_dir: Path) -> tuple[AccessRow, ...]:
-    program = str(entry["program"])
-    logger.info("access: %s", program)
-    indices = _try_index(program, asg_dir)
+def _rows_for_program(cfg: Cfg, asg_dir: Path) -> tuple[AccessRow, ...]:
+    logger.info("access: %s", cfg.program)
+    indices = _try_index(cfg.program, asg_dir)
     if not indices:
         return ()
-    idx = indices[0]
     rows = tuple(
         row
-        for node in _subrows(entry.get("nodes", ()))
-        for row in _rows_for_node(program, node, idx)
+        for node in cfg.nodes
+        for row in _rows_for_node(cfg.program, node, indices[0])
     )
-    logger.info("access: %s — %d rows", program, len(rows))
+    logger.info("access: %s — %d rows", cfg.program, len(rows))
     return rows
 
 
@@ -136,8 +111,8 @@ def accesses(cfg_path: Path, asg_dir: Path) -> tuple[AccessRow, ...]:
     """All access rows across every program in ``cfg_path``."""
     all_rows = tuple(
         row
-        for entry in load_cfg_dicts(cfg_path)
-        for row in _rows_for_program(entry, asg_dir)
+        for cfg in load_bundle(cfg_path).cfgs
+        for row in _rows_for_program(cfg, asg_dir)
     )
     keyed = {
         (row.site, row.extent.field_name, row.extent.start): row for row in all_rows
