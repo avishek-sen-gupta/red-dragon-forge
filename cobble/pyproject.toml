@@ -48,7 +48,7 @@ cobble-depgraph = "cobble.dataflow.depgraph.build:main"
 cobble-depgraph-render = "cobble.dataflow.depgraph.render:main"
 cobble-srccfg-build = "cobble.dataflow.srccfg.closure:main"
 cobble-srccfg-query = "cobble.dataflow.srccfg.query:main"
-cobble-srccfg-reach = "cobble.dataflow.srccfg.reach.cli:main"
+cobble-srccfg-walk = "cobble.dataflow.srccfg.reach.cli:main"
 cobble-srccfg-dot = "cobble.dataflow.srccfg.dot:main"
 cobble-srccfg-webgl = "cobble.dataflow.srccfg.webgl:main"
 # Field-level byte dataflow over the one ASG cache, intra-program, no JVM: the
