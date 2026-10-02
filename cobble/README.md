@@ -9,6 +9,12 @@ proof case, where it reproduces the **exact same 448-node / 832-edge graph** fro
 nothing but the corpus (forge's `vendor/carddemo` submodule) and the tools forge
 builds from source.
 
+Beside the graph, cobble analyses each program statically, from the same ASG
+cache and without running it: a control-flow graph per program (`srccfg`), a
+byte-level dataflow fixpoint over every field (`dataflow/fixpoint`, `dataflow/fields`)
+that also resolves dynamic `CALL`/`XCTL` targets for the graph, and the queries,
+traces and views built on those.
+
 Everything generated (the BMS symbolic copybooks and the ASG cache) is generated
 from source; nothing pre-generated is shipped.
 
@@ -36,17 +42,40 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 
 | Command | What it does |
 |---------|--------------|
+| **Before parsing** | |
+| `diagnose-copybooks --config <corpus> [--fix <dir>]` | Which `COPY` statements the parser will not resolve, without running it; `--fix` writes an empty stub for each |
+| `diagnose-cobol --config <corpus>` | Which COBOL programs the ProLeap bridge will not parse |
+| `diagnose-jcl --config <corpus>` | Which JCL members the JCL bridge will not parse |
 | `cobble-sym --config <corpus>` | Generate the BMS symbolic copybooks from their `.bms` sources |
 | `cobble-csd --config <corpus> --out <file>` | Synthesize a CSD for a corpus that arrived without one |
-| `cobble-parse-corpus --config <parse>` | Parse the corpus to one JSON ASG per member (the cache every later stage reads) |
-| `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined) — no ASG, nothing downstream reads it |
-| `cobble-build --config <corpus> --output <file>` | Extract the graph to one file, a tagged row per node and edge |
+| `cobble-bms-metadata --config <corpus> [--output <file>]` | Each BMS map's fields and attributes as JSONL, via `hlasm_export` |
+| `cobble-bms-render --config <corpus> [--map <name>] [--format text\|html]` | Draw BMS maps as 3270 screens |
+| **Parsing** | |
+| `cobble-parse-corpus --config <corpus>` | Parse the corpus to one JSON ASG per member — the cache every later stage reads |
+| `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined); no ASG, nothing downstream reads it |
+| **Knowledge graph** | |
+| `cobble-build --config <corpus> --output <file> [--dynamic-call-targets <targets.jsonl>]` | Extract the graph to one file, a tagged row per node and edge |
 | `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/832) |
 | `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
-| `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets |
+| `cobble-viz-callgraph --graph <file> --cfg <jsonl> --out <file>` | The program-level call dependency graph, for `cobble.viz`'s renderer |
+| **Variable dependency graph** (name-level, coarse) | |
+| `cobble-depgraph --config <depgraph>` | Which variables feed which, by name, over the whole ASG cache |
+| `cobble-depgraph-render --config <depgraph>` | That graph as a WebGL page |
+| **Source control-flow graphs** | |
+| `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>] [--output <file>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets, as JSONL rows |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <jsonl> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
-| `cobble-srccfg-query <query> <subject> --cfg <jsonl>` | Ask a built CFG for guards or a field's provenance |
+| `cobble-srccfg-query {guards,provenance,coassign} <subject> --cfg <jsonl>` | A node's guards, a field's provenance by name, or the fields assigned together with one |
 | `cobble-srccfg-walk --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
+| **Byte-level field dataflow** | |
+| `cobble-extents --asg-dir <cache> --out <file>` | Every member's declared field layout in bytes — the table the dataflow stages read |
+| `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets (`graph`, `defs`, `aliases`, `targets` and the run summary) |
+| `cobble-dataflow-fixpoint-query <query> <field> --fixpoint-dir <dir> --extents <file>` | Ask the fixpoint's output for a field's `writers`, `readers`, what it `reaches` or is `reached-by` (in statement order), and byte containment/overlap |
+| `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from |
+| `cobble-trace-query {forward,backward} <field> --trace <file>` | Provenance over a trace: what a field affects, or what feeds it |
+| `cobble-viz-pathwalk --cfg <jsonl> --paths <file> --output <html>` | Animate a trace's recorded paths over the paragraphs, with chosen fields' provenance |
+| `cobble-fields-access --cfg <jsonl> --asg-dir <cache> --out <file>` | Every site in a CFG file that reads a field, with the bytes it reads |
+| `cobble-access-query <field> --accesses <file> --extents <file>` | The access sites for a field, by name and by overlapping bytes |
+| **Tests** | |
 | `python -m pytest` | Run the pytest unit suite |
 
 ### Build the graph from CardDemo
@@ -1134,6 +1163,15 @@ consumers may not import each other).
 | `config/carddemo.toml` | The corpus config CardDemo uses, read by every stage from `cobble-parse-corpus` to `cobble-build`. Copy it as a starting point for a different corpus. |
 | `cobble/corpus_index.py` / `cobble/file_location.py` | `CorpusIndex` resolves every `(NodeKind, id)` to a `FileLocation` (a real `Path`, or a `NoFileLocation` explaining why not: not file-based, no CSD/definition source, or genuinely unresolved) once per run, from the same `CorpusConfig`. Every extractor and `GraphWriter` resolve a given node identically regardless of call order, which is what lets `GraphWriter` stream nodes keep-first with no merge step. |
 | `cobble/render_graph.py` | Render the graph file as a self-contained interactive HTML graph beside it, `<stem>.html` (`python -m cobble.render_graph --graph <file>`. `cobble/knowledge_graph/graph_file.py` reads the file, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
+| `cobble/dataflow/srccfg/` | **Source control-flow graphs.** `desugar.py`/`build.py` lower each paragraph's statements to nodes and edges — PERFORM with its resume point and range end, GO TO, CICS raise arms and HANDLE CONDITION dispatch, EXEC SQL WHENEVER guards — and `program.py`'s `program_cfg` is the one way every consumer builds a program's CFG. `closure.py`/`link.py` join a program to the programs it calls; `bundle.py` and `rows/` are the JSONL file format, the only code that reads or writes it; `dataflow.py`/`query.py` answer the name-level guards and provenance questions; `dot.py`/`webgl.py` draw it. |
+| `cobble/dataflow/srccfg/reach/` | `cobble-srccfg-walk`: reachability from one PERFORM over states of a node and the PERFORMs open there (`expand.py` holds the rules, `walk.py` streams the rows). |
+| `cobble/dataflow/layout.py` | Byte extents for every field in a program's records — the substrate the field dataflow runs on. |
+| `cobble/dataflow/fields/` | **Byte-level field dataflow, the parts.** Extents and the extents table (`extent.py`, `emit_extents.py`), the per-statement transfer functions (`transfer.py`), the state each statement sees — provenance and value sets (`state.py`, `values.py`, `image.py` for `VALUE` clauses) — commarea aliasing across calls (`aliases.py`), the path-sampling trace and its queries (`trace*.py`), and field-access sites (`access*.py`). |
+| `cobble/dataflow/fixpoint/` | **The fixpoint.** The solver over each program's CFG (`fixpoint.py`), the corpus run writing `graph`, `defs`, `aliases` and `targets` (`build_corpus.py`), dynamic call-target resolution (`targets.py`), and the query over its output (`query.py`). |
+| `cobble/dataflow/depgraph/` | The coarse, name-level variable dependency graph, built from the ASG cache (`cobble-depgraph`). |
+| `cobble/viz/` | Views over the graph file and CFGs: the program call graph, PERFORM sequence diagrams, and trace path animation, rendered by `render_cmd.py`. |
+| `cobble/diagnosis/` | Read-only reports on what a corpus build will fail on, before the expensive phase: unresolved `COPY`s, unparseable COBOL and JCL. |
+| `cobble/bms_metadata.py` / `cobble/bms_render.py` | BMS screen maps as structured metadata (via `hlasm_export`) and as rendered 3270 screens. |
 | `tests/` | The pytest unit suite (`uv run python -m pytest`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → the file `--out` names (`python -m cobble.generate_csd --config <path> --out <file>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
