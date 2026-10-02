@@ -467,3 +467,21 @@ def test_a_section_is_a_label_every_jump_into_it_lands_on(asg_of) -> None:
         ("MAIN-PARA/2.sql0#whenever", "ERR-SECTION#label", EdgeKind.GOTO),
         ("MAIN-PARA/3", "ERR-SECTION#label", EdgeKind.GOTO),
     }
+
+
+def test_a_program_with_more_paragraphs_than_the_interpreter_stack_is_ordered(
+    asg_of,
+) -> None:
+    """Renaming duplicates walks every paragraph; a walk that recursed once per
+    paragraph died at a thousand of them."""
+    names = [f"P{n:04d}" for n in range(1100)] + ["P0000"]
+    asg = asg_of(
+        {
+            "program_id": "PROGA",
+            "paragraphs": [{"name": name, "statements": []} for name in names],
+        }
+    )
+
+    order = paragraph_order(asg)
+
+    assert [ref.name for ref in order] == [*names[:-1], "P0000%2"]

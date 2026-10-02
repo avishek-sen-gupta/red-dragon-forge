@@ -7,8 +7,9 @@ statements, so leaving the order in build would close an import cycle.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
+from itertools import groupby
+from operator import itemgetter
 
 from cobble.dataflow.srccfg.synthetic import IMPLICIT_FIRST
 
@@ -50,22 +51,29 @@ def _dedupe_names(refs: tuple[ParagraphRef, ...]) -> tuple[ParagraphRef, ...]:
     """Rename duplicate paragraph names to keep node ids unique. A duplicate
     paragraph name is legal in COBOL when in different sections, but would produce
     duplicate node ids and a false graph."""
-    if not refs:
-        return ()
-    return _scan_names(refs, 0, {})
+    occurrences = _occurrences(tuple(ref.name.upper() for ref in refs))
+    return tuple(
+        ParagraphRef(
+            name=ref.name if occurrence == 1 else f"{ref.name}%{occurrence}",
+            section=ref.section,
+            statements=ref.statements,
+        )
+        for ref, occurrence in zip(refs, occurrences, strict=True)
+    )
 
 
-def _scan_names(
-    refs: tuple[ParagraphRef, ...], position: int, seen: Mapping[str, int]
-) -> tuple[ParagraphRef, ...]:
-    if position >= len(refs):
-        return ()
-    ref = refs[position]
-    upper_name = ref.name.upper()
-    count = seen.get(upper_name, 0) + 1
-    renamed = ref.name if count == 1 else f"{ref.name}%{count}"
-    updated = ParagraphRef(name=renamed, section=ref.section, statements=ref.statements)
-    return (updated, *_scan_names(refs, position + 1, {**seen, upper_name: count}))
+def _occurrences(names: tuple[str, ...]) -> tuple[int, ...]:
+    """For each position, how many times its name has appeared up to and including
+    it. Grouped by sorting rather than counted by recursion: a program can have
+    thousands of paragraphs, and a walk that recursed once per paragraph died at a
+    thousand."""
+    by_name = sorted(zip(names, range(len(names)), strict=True))
+    numbered = {
+        at: occurrence
+        for _, group in groupby(by_name, itemgetter(0))
+        for occurrence, (_name, at) in enumerate(group, start=1)
+    }
+    return tuple(numbered[at] for at in range(len(names)))
 
 
 def _of_section(section) -> tuple[ParagraphRef, ...]:
