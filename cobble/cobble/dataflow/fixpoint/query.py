@@ -41,8 +41,9 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
-from functools import reduce
+from functools import cached_property, reduce
 from itertools import groupby
+from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
 
@@ -313,6 +314,45 @@ class FieldStore:
             )
         )
 
+    def following(self, flow: Flow, side: Side) -> tuple[Flow, ...]:
+        """The flows a walk may take next from ``flow``, in statement order.
+
+        Forward (``SOURCE``), the reads its write reaches: a flow whose source bytes
+        overlap this one's target, at a statement that lists this one's as a
+        definer. Backward (``TARGET``), the writes its read can see: a flow whose
+        target bytes overlap this one's source, at one of this one's definers. A
+        flow at a statement its write cannot reach -- one that ran first, or after
+        an overwrite -- is never a next step, which is what a walk over fields
+        alone could not tell.
+        """
+        if side is Side.SOURCE:
+            return tuple(
+                later
+                for later in self._reads_after.get(_flow_at(flow), ())
+                if later.source_range.overlaps(flow.target_range)
+            )
+        return tuple(
+            earlier
+            for definer in self.definers_of(flow)
+            for earlier in self._at_statement.get(
+                (_program_of(flow.target), definer), ()
+            )
+            if earlier.target_range.overlaps(flow.source_range)
+        )
+
+    @cached_property
+    def _at_statement(self) -> Mapping[tuple[str, str], tuple[Flow, ...]]:
+        return _flows_by((_flow_at(flow), flow) for flow in self.flows)
+
+    @cached_property
+    def _reads_after(self) -> Mapping[tuple[str, str], tuple[Flow, ...]]:
+        """Each statement, against the flows whose reads its writes reach."""
+        return _flows_by(
+            ((_program_of(flow.target), definer), flow)
+            for flow in self.flows
+            for definer in self.definers_of(flow)
+        )
+
     def definers_of(self, flow: Flow) -> tuple[str, ...]:
         """The statements that could have written what this flow moved."""
         return self.definers.get(
@@ -444,62 +484,94 @@ def reaches(
 ) -> Mapping[str, int]:
     """Field ids the walk lands on, against the depth each was first reached at.
 
-    Over ranges, not over ids: following ids would stop at the group an edge
-    names and never enter the children the group write filled. ``side`` is the end
-    a frontier range has to match, so SOURCE walks forward and TARGET backward.
+    The walk goes from flow to flow, and only in statement order: forward from a
+    write to the reads it reaches, backward from a read to the writes it can see,
+    as ``FieldStore.following`` says. A value copied into B after B was copied on
+    to C does not reach C. ``side`` is the end a starting flow's range has to
+    match, so SOURCE walks forward and TARGET backward.
 
-    Only the fields some flow named. A group this lands on reports as the group,
-    and the children the group write filled are ``contains``'s answer, not a hop.
-
-    What stops the walk is a field already visited over overlapping bytes -- both
-    parts, because bytes alone would prune a sibling inside a group already
-    reached, and an id alone would prune a second occurrence of a table entry.
+    Over ranges, not over ids: a group write's flow overlaps every child it
+    filled, so the walk enters them. A group it lands on reports as the group, and
+    the children are ``contains``'s answer, not a hop. ``depth`` bounds the walk;
+    each flow is taken once, so a loop costs one pass rather than one per level.
     """
-    landings = tuple(("", one) for one in start)
-    return _walk(store, side, depth, _Walk(landings, landings, MappingProxyType({}), 0))
+    first = store.touching(start, side)
+    return _walk(
+        store,
+        side,
+        depth,
+        _Walk(
+            seen=frozenset(first),
+            frontier=first,
+            found=_landed({}, first, side, 1),
+            level=1,
+        ),
+    )
 
 
 @dataclass(frozen=True)
 class _Walk:
-    """One level of the transitive walk: what has been landed on, and where next."""
+    """One level of the transitive walk: the flows taken, and the ones to go on from."""
 
-    seen: tuple[tuple[str, ByteRange], ...]
-    frontier: tuple[tuple[str, ByteRange], ...]
+    seen: frozenset[Flow]
+    frontier: tuple[Flow, ...]
     found: Mapping[str, int]
     level: int
 
 
 def _walk(store: FieldStore, side: Side, depth: int, walk: _Walk) -> Mapping[str, int]:
     if not walk.frontier or walk.level >= depth:
-        return walk.found
+        return MappingProxyType(dict(walk.found))
     level = walk.level + 1
-    landed = tuple(
-        (_far_id(flow, side), _far_end(flow, side))
-        for flow in store.touching(tuple(one for _, one in walk.frontier), side)
-        if _unseen(flow, side, walk.seen)
+    taken = tuple(
+        dict.fromkeys(
+            after
+            for flow in walk.frontier
+            for after in store.following(flow, side)
+            if after not in walk.seen
+        )
     )
     return _walk(
         store,
         side,
         depth,
         _Walk(
-            seen=(*walk.seen, *landed),
-            frontier=landed,
-            found=MappingProxyType(
-                {
-                    **walk.found,
-                    **{at: level for at, _ in landed if at not in walk.found},
-                }
-            ),
+            seen=walk.seen | frozenset(taken),
+            frontier=taken,
+            found=_landed(walk.found, taken, side, level),
             level=level,
         ),
     )
 
 
-def _unseen(flow: Flow, side: Side, seen: Sequence[tuple[str, ByteRange]]) -> bool:
-    landing, at = _far_end(flow, side), _far_id(flow, side)
-    return landing.known and not any(
-        at == other and landing.overlaps(one) for other, one in seen
+def _landed(
+    found: Mapping[str, int], flows: Sequence[Flow], side: Side, level: int
+) -> Mapping[str, int]:
+    """The far ends ``flows`` land on that no earlier level did. A far end that is
+    not storage -- a literal, a file -- ends its chain without being a landing."""
+    return {
+        **{
+            _far_id(flow, side): level
+            for flow in reversed(flows)
+            if _far_end(flow, side).known and _far_id(flow, side) not in found
+        },
+        **found,
+    }
+
+
+def _flow_at(flow: Flow) -> tuple[str, str]:
+    return (_program_of(flow.target), flow.node)
+
+
+def _flows_by(
+    pairs: Iterable[tuple[tuple[str, str], Flow]],
+) -> Mapping[tuple[str, str], tuple[Flow, ...]]:
+    ordered = sorted(pairs, key=itemgetter(0))
+    return MappingProxyType(
+        {
+            statement: tuple(flow for _, flow in group)
+            for statement, group in groupby(ordered, key=itemgetter(0))
+        }
     )
 
 
