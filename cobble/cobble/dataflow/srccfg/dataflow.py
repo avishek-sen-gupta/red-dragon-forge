@@ -24,17 +24,14 @@ Four things keep the walk finite and honest:
   frame's node. Without it, a paragraph performed from a dozen places hands every one
   of its return edges to every call site and the guard sets stop meaning anything.
 - **A PERFORM goes through the paragraph and comes back -- and where it did not, the
-  walk resumes.** The CALL node's FLOW edge to the next statement is the node the
-  paragraph's RETURN edge lands on, and a performed paragraph returns at its end
-  rather than falling through to the next one, so each of those generic edges is
-  walked only while the specific edge that duplicates it can still fire on this path.
-  Walking both unconditionally would report everything after a call twice under one
-  guard, and the duplicates would fill the cap and evict real paths. But refusing the
-  generic edge PREDICTS the specific one, and the cap can falsify that prediction
-  silently: the walk runs out of room inside the paragraph, never reaches its end, no
-  RETURN fires, and the refused edge was the only way past the call. So a second pass
-  takes those edges after all, from the frames that reached the call, and names the
-  nodes it recovered in ``resumed``.
+  walk resumes.** A resolved PERFORM has no edge past it: the node's ``resume`` is
+  where the paragraph's RETURN lands, and a performed paragraph returns at its end
+  rather than falling through to the next one. Taking the PERFORM PREDICTS that
+  RETURN, and the cap can falsify the prediction silently: the walk runs out of room
+  inside the paragraph, never reaches its end, no RETURN fires, and nothing else leads
+  past the call. So a second sweep steps to ``resume`` after all, from the frames that
+  reached the call, and names the nodes it recovered in ``resumed``. A PERFORM the
+  recursion guard bars steps to ``resume`` directly.
 - **The cap is reported, and the report is closed forward.** ``MAX_PATHS`` bounds the
   guards kept per node; every node whose own arrivals were cut short is named in
   ``overflowed``, and ``truncated`` is that set closed forward over reachability,
@@ -150,8 +147,8 @@ class Reaching:
       program. Closing forward is what makes the set usable -- the nodes with a guarded
       neighbour are only the boundary of the region the walk lost, and naming the
       boundary alone reported the rest of the region as dead code.
-    - ``resumed`` -- the call continuations the walk reached only by taking a PERFORM's
-      FLOW edge after no RETURN ever arrived; see ``_resumed_to_fixpoint``. Each carries
+    - ``resumed`` -- the call continuations the walk reached only by stepping to a
+      PERFORM's resume after no RETURN ever arrived; see ``_resumed_to_fixpoint``. Each carries
       the guard of the call, which is what a paragraph that returns hands back, and a
       guess for a paragraph that never returns at all. The imprecision travels downstream
       from these nodes without being named there: naming the closure would flag most of a
@@ -235,10 +232,10 @@ def reaching_conditions(cfg: Cfg, max_paths: int = MAX_PATHS) -> Reaching:
 def _resumed_to_fixpoint(cfg: Cfg, max_paths: int, swept: _Sweep) -> _Sweep:
     """Sweep again from every call continuation the search left unreached, until none is.
 
-    Refusing a call's FLOW edge predicts that the paragraph's RETURN will reach the
-    continuation instead. The cap can falsify that prediction without saying so: enough
-    paths inside the paragraph and the walk never gets to its end, no RETURN fires, and
-    the one edge that led past the call was refused on the strength of a return that
+    Taking a PERFORM predicts that the paragraph's RETURN will reach the call's resume.
+    The cap can falsify that prediction without saying so: enough paths inside the
+    paragraph and the walk never gets to its end, no RETURN fires, and the only way
+    past the call was given up on the strength of a return that
     never came. The loss is not local. Everything after the call is zeroed, including
     the returns of the calls that CONTAIN this one, so a partial answer inside a
     paragraph becomes a total answer of nothing for the rest of the program -- measured
@@ -499,9 +496,10 @@ def _next_walks(cfg: Cfg, walk: Walk) -> tuple[Walk, ...]:
     whether the paragraph runs: ``PERFORM PB`` twice in a row runs PB twice.
     """
     seen = walk.seen | {walk.node}
+    barred = () if _performs(cfg, walk, walk.node) else _resumption(cfg, walk.node)
     return tuple(
         _advance(walk, edge, seen)
-        for edge in cfg.successors(walk.node)
+        for edge in (*cfg.successors(walk.node), *barred)
         if _repeatable(walk, edge, seen) and _passable(cfg, walk, edge, seen)
     )
 
@@ -518,11 +516,22 @@ def _deferred_walks(cfg: Cfg, walk: Walk) -> tuple[Walk, ...]:
     have taken is refused for belonging to no frame.
     """
     seen = walk.seen | {walk.node}
+    if not _performs(cfg, walk, walk.node):
+        return ()
     return tuple(
         _advance(walk, edge, seen)
-        for edge in cfg.successors(walk.node)
-        if _duplicates_a_return(cfg, walk, edge) and _repeatable(walk, edge, seen)
+        for edge in _resumption(cfg, walk.node)
+        if _can_return(cfg, edge) and _repeatable(walk, edge, seen)
     )
+
+
+def _resumption(cfg: Cfg, node_id: str) -> tuple[Edge, ...]:
+    """The step from a resolved PERFORM to where it resumes, which is no edge of the
+    graph: the range always runs, so only a walk that cannot enter it takes this."""
+    resume = cfg.node(node_id).resume
+    if not resume:
+        return ()
+    return (Edge(source=node_id, target=resume, kind=EdgeKind.FLOW),)
 
 
 def _repeatable(walk: Walk, edge: Edge, seen: frozenset[str]) -> bool:
@@ -543,11 +552,9 @@ def _passable(cfg: Cfg, walk: Walk, edge: Edge, seen: frozenset[str]) -> bool:
     edge that can never fire again would leave the walk with no way out, and a walk
     that dies reports live code as unreachable.
     """
-    return (
-        _returns_to_its_own_call_site(cfg, walk, edge)
-        and not _duplicates_a_return(cfg, walk, edge)
-        and _not_a_fallthrough_a_return_will_take(cfg, walk, edge, seen)
-    )
+    return _returns_to_its_own_call_site(
+        cfg, walk, edge
+    ) and _not_a_fallthrough_a_return_will_take(cfg, walk, edge, seen)
 
 
 def _returns_to_its_own_call_site(cfg: Cfg, walk: Walk, edge: Edge) -> bool:
@@ -556,35 +563,11 @@ def _returns_to_its_own_call_site(cfg: Cfg, walk: Walk, edge: Edge) -> bool:
     Taking another call site's return joins that site's guard onto this path, and a
     paragraph performed from a dozen places would turn every guard set into the union
     of all of them. The legitimate targets are the FLOW successors of the node on top
-    of the stack, because that is what build.py attached the return edges to.
+    of the stack: its ``resume``, which is what build.py attached the return edges to.
     """
     if edge.kind is not EdgeKind.RETURN:
         return True
     return bool(walk.stack) and edge.target in _continuations(cfg, walk.stack[-1].call)
-
-
-def _duplicates_a_return(cfg: Cfg, walk: Walk, edge: Edge) -> bool:
-    """Whether this FLOW edge out of a CALL node goes where the paragraph's RETURN will.
-
-    A CALL node keeps a FLOW edge to the statement after it AND a PERFORM edge into the
-    paragraph, and the paragraph's RETURN edge lands on that same FLOW target. Walking
-    both reaches everything after the call twice under one guard, and ten calls in a row
-    would report 2^10 duplicate paths. So FLOW out of a CALL node is refused wherever
-    this path takes the PERFORM instead.
-
-    That refusal is a PREDICTION -- "the activation the PERFORM opens will run the
-    paragraph to its end and the RETURN will land here" -- and predictions can be wrong.
-    The two the graph can rule out up front are checked here: the path may be barred from
-    entering at all by the recursion guard, and the paragraph may be unable to reach its
-    own end at all, so the RETURN hanging off it can never fire for anyone
-    (``_can_return``). What neither can rule out is the cap silently falsifying the
-    prediction, which is what ``_resumed_to_fixpoint`` exists to repair.
-    """
-    return (
-        edge.kind is EdgeKind.FLOW
-        and _performs(cfg, walk, walk.node)
-        and _can_return(cfg, edge)
-    )
 
 
 def _not_a_fallthrough_a_return_will_take(
@@ -609,9 +592,7 @@ def _not_a_fallthrough_a_return_will_take(
 
 
 def _continuations(cfg: Cfg, call_id: str) -> frozenset[str]:
-    return frozenset(
-        edge.target for edge in cfg.successors(call_id) if edge.kind is EdgeKind.FLOW
-    )
+    return frozenset(edge.target for edge in _resumption(cfg, call_id))
 
 
 def _performs(cfg: Cfg, walk: Walk, node_id: str) -> bool:
@@ -648,8 +629,8 @@ def _can_return(cfg: Cfg, edge: Edge) -> bool:
     enters a paragraph walks it in a fresh activation and reaches the end unless the
     graph itself stops it, so the question of whether THIS path can still get to the
     return no longer arises. Asking it was the defect -- the answer was graph-level
-    while the blockage was path-level, and the FLOW edge it refused was the only way
-    past the call.
+    while the blockage was path-level, and the step it gave up was the only way past
+    the call.
     """
     return any(
         bool(cfg.predecessors(back.source))

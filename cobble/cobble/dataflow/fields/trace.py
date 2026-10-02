@@ -628,13 +628,26 @@ def _ran(walk: _Walk, loaded: Loaded) -> _Walk:
 def _sequel(cfg: Cfg, node: str) -> str:
     """Where a call or a PERFORM continues once it comes back.
 
-    This node's own FLOW edge, which ``build.py`` keeps even on a PERFORM node --
-    purely so the paragraph's RETURN targets can be computed from it.
+    A PERFORM whose range resolved records it on the node, because its range always
+    runs and ``build.py`` keeps no edge past it. A call continues along its own
+    FLOW edge, as does a PERFORM of a range the program does not declare.
     """
+    resume = cfg.node(node).resume
+    if resume:
+        return resume
     return next(
         (edge.target for edge in cfg.successors(node) if edge.kind is EdgeKind.FLOW),
         "",
     )
+
+
+def _stepped_over(cfg: Cfg, node: str) -> tuple[Edge, ...]:
+    """The way past a PERFORM the re-entry rule refused: to where it would have
+    resumed, skipping the paragraphs it would have run again."""
+    resume = cfg.node(node).resume
+    if not resume:
+        return ()
+    return (Edge(source=node, target=resume, kind=EdgeKind.FLOW),)
 
 
 def _return_edge(walk: _Walk, edges: Sequence[Edge]) -> tuple[Edge, ...]:
@@ -940,10 +953,9 @@ def _handed_back(walk: _Walk, unwound: tuple[Frame, ...]) -> _Walk:
 def _followed(walk: _Walk, loaded: Loaded) -> _Walk:
     """Along an edge. PERFORM and RETURN are decided by the stack; the rest sampled.
 
-    A PERFORM edge is always taken rather than sampled: the FLOW edge beside it is
-    a bookkeeping artefact of ``build.py``, and taking it would skip the paragraph.
-    A refused PERFORM -- its target is on the stack -- falls through to the FLOW
-    edge, which skips the paragraph rather than abandoning the path.
+    A PERFORM edge is always taken rather than sampled: the range always runs. A
+    refused PERFORM -- its target is on the stack -- passes over the paragraphs to
+    where it would have resumed, rather than abandoning the path.
     """
     edges = loaded.cfg.successors(walk.node)
     performed = tuple(one for one in edges if one.kind is EdgeKind.PERFORM)
@@ -952,7 +964,8 @@ def _followed(walk: _Walk, loaded: Loaded) -> _Walk:
     returned = _return_edge(walk, edges)
     if returned:
         return _returned(walk, returned[0])
-    return _sampled(walk, loaded, _admissible(walk, loaded, edges))
+    over = _stepped_over(loaded.cfg, walk.node) if performed else ()
+    return _sampled(walk, loaded, (*_admissible(walk, loaded, edges), *over))
 
 
 def _dead_end(walk: _Walk, row: CommareaAlias, reason: str) -> _Walk:

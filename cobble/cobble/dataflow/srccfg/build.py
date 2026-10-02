@@ -13,6 +13,7 @@ PERFORM THRU range. It is never sorted.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from itertools import pairwise
 from types import MappingProxyType
 
@@ -47,6 +48,24 @@ from cobble.dataflow.srccfg.desugar import (
 
 def build_program(asg, source_file: str = "") -> Cfg:
     order = paragraph_order(asg)
+    nodes, body = _lowered(asg, order, source_file)
+    resumes = _resumes(nodes, body, order)
+    return Cfg(
+        program=asg.program_id,
+        nodes=tuple(_resuming(node, resumes) for node in nodes),
+        edges=(
+            *_perform_edges(nodes, body, order),
+            *(edge for edge in body if not _skips_range(edge, resumes)),
+            *resolve_targets(nodes, frozenset(node.id for node in nodes)),
+        ),
+    )
+
+
+def _lowered(
+    asg, order: Sequence[ParagraphRef], source_file: str
+) -> tuple[tuple[Node, ...], tuple[Edge, ...]]:
+    """Every paragraph and section, lowered, and the edges that hold them together --
+    everything but where PERFORMs and GO TOs land."""
     context = program_context(asg)
     index = condition_index(asg)
     governing = governing_directives(asg)
@@ -55,26 +74,53 @@ def build_program(asg, source_file: str = "") -> Cfg:
         for ref in order
     )
     spans = _section_spans(order)
-    nodes = (
-        *(node for part in parts for node in part[0]),
-        *_section_nodes(spans),
-    )
-    body = (
-        *(edge for part in parts for edge in part[1]),
-        *_section_edges(spans),
-        *_fallthru(order),
-    )
-    known = frozenset(node.id for node in nodes)
-    perform_edges = _perform_edges(nodes, body, order)
-    return Cfg(
-        program=asg.program_id,
-        nodes=nodes,
-        edges=(
-            *perform_edges,
-            *body,
-            *resolve_targets(nodes, known),
+    return (
+        (*(node for part in parts for node in part[0]), *_section_nodes(spans)),
+        (
+            *(edge for part in parts for edge in part[1]),
+            *_section_edges(spans),
+            *_fallthru(order),
         ),
     )
+
+
+def _resumes(
+    nodes: Sequence[Node], body: Sequence[Edge], order: Sequence[ParagraphRef]
+) -> Mapping[str, str]:
+    """Each PERFORM that can return, and where it continues once it does: the FLOW
+    edge lowering gave it, which the RETURN edges were placed by.
+
+    The range always runs, so for a PERFORM that returns that edge is not a path -- a
+    walk taking it would skip the paragraphs. It becomes the node's ``resume``
+    instead. Two kinds keep the edge. A PERFORM whose range does not resolve has no
+    other way on. And one whose range end nothing reaches can never return, so the
+    statement after it is dead by the graph's account -- but the graph can be wrong
+    (an ALTERed GO TO, control flow the parse dropped), and dead code loses every flow
+    after it, so the edge stays as the deliberate over-approximation.
+    """
+    reached = frozenset(edge.target for edge in body)
+    returning = frozenset(
+        node.id
+        for node in nodes
+        if node.transfer == PERFORM_TRANSFER
+        for ends in (_range_ends(node, order),)
+        if ends and ends[1] in reached
+    )
+    return {
+        edge.source: edge.target
+        for edge in body
+        if edge.kind is EdgeKind.FLOW and edge.source in returning
+    }
+
+
+def _resuming(node: Node, resumes: Mapping[str, str]) -> Node:
+    if node.id not in resumes:
+        return node
+    return replace(node, resume=resumes[node.id])
+
+
+def _skips_range(edge: Edge, resumes: Mapping[str, str]) -> bool:
+    return edge.kind is EdgeKind.FLOW and edge.source in resumes
 
 
 def _paragraph_cfg(
@@ -262,14 +308,10 @@ def _perform_edges(
 def _one_perform(
     node: Node, edges: Sequence[Edge], order: Sequence[ParagraphRef]
 ) -> tuple[Edge, ...]:
-    first, _, last = node.target.partition(RANGE_SEPARATOR)
-    span = paragraph_range(order, first, last)
-    if not span:
+    ends = _range_ends(node, order)
+    if not ends:
         return ()
-    sections = frozenset(ref.section for ref in order if ref.section)
-    closing = _closing(order, first, last)
-    entry = label_id(first) if first in sections else label_id(span[0])
-    leaving = end_id(closing) if closing in sections else end_id(span[-1])
+    entry, leaving = ends
     return (
         Edge(source=node.id, target=entry, kind=EdgeKind.PERFORM),
         *(
@@ -277,6 +319,21 @@ def _one_perform(
             for flow in edges
             if flow.source == node.id and flow.kind is EdgeKind.FLOW
         ),
+    )
+
+
+def _range_ends(node: Node, order: Sequence[ParagraphRef]) -> tuple[str, ...]:
+    """The node a PERFORM enters its range at and the one it returns from, or
+    nothing when the range does not resolve."""
+    first, _, last = node.target.partition(RANGE_SEPARATOR)
+    span = paragraph_range(order, first, last)
+    if not span:
+        return ()
+    sections = frozenset(ref.section for ref in order if ref.section)
+    closing = _closing(order, first, last)
+    return (
+        label_id(first) if first in sections else label_id(span[0]),
+        end_id(closing) if closing in sections else end_id(span[-1]),
     )
 
 

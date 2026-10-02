@@ -974,23 +974,23 @@ def test_a_paragraph_end_is_reached_under_the_guards_of_its_last_statements(
     assert sorted(_kinds(guard)[0].value for guard in guards) == ["FALSE", "TRUE"]
 
 
-def test_a_return_to_a_non_flow_successor_of_the_call_is_not_taken() -> None:
-    """F10: the RETURN rule admits an edge only if its target is a FLOW successor of
-    the node on top of the stack, and nothing pinned the FLOW part of that.
+def test_a_return_to_anything_but_the_calls_resume_is_not_taken() -> None:
+    """F10: the RETURN rule admits an edge only if its target is where the node on
+    top of the stack resumes, and nothing else pins that.
 
     build_program cannot produce a counter-example: RETURN edges are created only at a
-    PERFORM node, sourced at the range end and targeting that node's FLOW successors,
-    so every RETURN target is already a FLOW successor of its call. The filter is
-    therefore unexercised by generated graphs rather than dead -- it is what makes
-    _continuations mean "where the call resumes", and _returns_from reads the same
-    helper to decide whether a FALLTHRU is a return in disguise. Widen it and that
-    refusal fires more often, which is the direction _passable's contract calls the
-    worse failure. So it is pinned here with a graph built by hand.
+    PERFORM node, sourced at the range end and targeting the node's resume, so every
+    RETURN target is already its call's resume. The filter is therefore unexercised by
+    generated graphs rather than dead -- it is what makes _continuations mean "where
+    the call resumes", and _returns_from reads the same helper to decide whether a
+    FALLTHRU is a return in disguise. Widen it and that refusal fires more often,
+    which is the direction _passable's contract calls the worse failure. So it is
+    pinned here with a graph built by hand.
 
-    MAIN/1 is reachable only through the RETURN out of the range end, and it is a
-    RETURN successor of the call rather than a FLOW one. It must stay unreached -- and
-    visibly so, through `abandoned`, because a walk that declined a route is not a
-    program with dead code.
+    MAIN/0 resumes at MAIN/2. MAIN/1 is reachable only through a RETURN out of the
+    range end that is not to the call's resume. It must stay unreached -- and visibly
+    so, through `abandoned`, because a walk that declined a route is not a program
+    with dead code.
     """
     cfg = Cfg(
         program="PROGA",
@@ -1001,6 +1001,7 @@ def test_a_return_to_a_non_flow_successor_of_the_call_is_not_taken() -> None:
                 paragraph="MAIN",
                 transfer="PERFORM",
                 target="P-ONE",
+                resume="MAIN/2",
             ),
             Node(id="P-ONE#label", kind=NodeKind.LABEL, paragraph="P-ONE"),
             Node(
@@ -1008,6 +1009,7 @@ def test_a_return_to_a_non_flow_successor_of_the_call_is_not_taken() -> None:
             ),
             Node(id="P-ONE#end", kind=NodeKind.NOP, paragraph="P-ONE"),
             Node(id="MAIN/1", kind=NodeKind.ASSIGN, paragraph="MAIN", writes=("WS-B",)),
+            Node(id="MAIN/2", kind=NodeKind.NOP, paragraph="MAIN"),
         ),
         edges=(
             Edge(source="MAIN/0", target="P-ONE#label", kind=EdgeKind.PERFORM),
@@ -1022,3 +1024,28 @@ def test_a_return_to_a_non_flow_successor_of_the_call_is_not_taken() -> None:
 
     assert guards_of(reaching, "MAIN/1") == ()
     assert "MAIN/1" in reaching.abandoned
+
+
+def test_a_perform_the_recursion_guard_bars_is_stepped_over_to_its_resume(
+    asg_of,
+) -> None:
+    """A paragraph may not be performed from inside itself, so the inner PERFORM is
+    barred -- and a resolved PERFORM has no edge past it. The walk steps to where it
+    would resume instead -- directly, so nothing after it is a guess the second pass
+    had to recover."""
+    cfg = build_program(
+        asg_of(
+            _program(
+                {"name": "MAIN", "statements": [_perform("AGAIN")]},
+                {
+                    "name": "AGAIN",
+                    "statements": [_perform("AGAIN"), _move("'A'", "WS-AFTER")],
+                },
+            )
+        )
+    )
+
+    reaching = reaching_conditions(cfg)
+
+    assert guards_of(reaching, _writer_of(cfg, "WS-AFTER")) == ((),)
+    assert reaching.resumed == frozenset()

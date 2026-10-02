@@ -129,6 +129,9 @@ def test_a_range_whose_ends_are_the_wrong_way_round_is_just_the_first(asg_of) ->
 def test_a_perform_edge_goes_to_the_label_and_the_return_comes_from_the_range_end(
     asg_of,
 ) -> None:
+    """The range always runs, so the PERFORM's only way on is into it; where it
+    continues once the range returns is recorded on the node, not as an edge a
+    walk could take instead."""
     cfg = build_program(
         asg_of(
             _program(
@@ -151,8 +154,8 @@ def test_a_perform_edge_goes_to_the_label_and_the_return_comes_from_the_range_en
 
     assert [(e.target, e.kind) for e in cfg.successors("0000-MAIN/0")] == [
         (label_id("1000-FIRST"), EdgeKind.PERFORM),
-        ("0000-MAIN/1", EdgeKind.FLOW),
     ]
+    assert cfg.node("0000-MAIN/0").resume == "0000-MAIN/1"
     edge_kinds = [
         e.kind
         for e in cfg.successors(end_id("2000-SECOND"))
@@ -174,7 +177,10 @@ def test_a_perform_of_an_undeclared_paragraph_gets_no_edges(asg_of) -> None:
     )
 
     assert [e.kind for e in cfg.successors("0000-MAIN/0")] == [EdgeKind.FLOW]
-    assert cfg.node("0000-MAIN/0").target == "NOWHERE"
+    assert (cfg.node("0000-MAIN/0").target, cfg.node("0000-MAIN/0").resume) == (
+        "NOWHERE",
+        "",
+    )
 
 
 def test_an_inline_perform_lowers_its_body_in_place(program_of) -> None:
@@ -516,3 +522,28 @@ def test_a_paragraph_performed_from_two_places_gets_two_return_edges(asg_of) -> 
     assert len(return_edges) == 2
     targets = {e.target for e in return_edges}
     assert targets == {"0000-MAIN/1", "1000-OTHER/1"}
+
+
+def test_a_perform_that_can_never_return_keeps_its_way_on(asg_of) -> None:
+    """Nothing reaches the range's end, so by the graph the statement after is dead --
+    but the graph can be wrong, so the PERFORM keeps its FLOW edge and no resume."""
+    cfg = build_program(
+        asg_of(
+            _program(
+                {
+                    "name": "0000-MAIN",
+                    "statements": [
+                        {"type": "PERFORM", "operands": ["1000-STOP"]},
+                        _move("'F'", "WS-RESULT"),
+                    ],
+                },
+                {"name": "1000-STOP", "statements": [{"type": "GOBACK"}]},
+            )
+        )
+    )
+
+    assert [(e.target, e.kind) for e in cfg.successors("0000-MAIN/0")] == [
+        (label_id("1000-STOP"), EdgeKind.PERFORM),
+        ("0000-MAIN/1", EdgeKind.FLOW),
+    ]
+    assert cfg.node("0000-MAIN/0").resume == ""
