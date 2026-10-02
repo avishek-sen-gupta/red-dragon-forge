@@ -77,7 +77,7 @@ def _active_gotos(active: Active) -> Governing:
     CONTINUE overrides an earlier GO TO by replacing it with an action that names
     no label, and a condition Db2 does not define has no predicate to guard on."""
     return tuple(
-        (condition, action.target)
+        (condition, action.target.upper())
         for condition, action in active.items()
         if isinstance(action, GoTo) and condition in SQLCA_CONDITIONS
     )

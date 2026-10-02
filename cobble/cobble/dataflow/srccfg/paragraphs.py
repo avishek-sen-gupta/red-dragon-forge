@@ -37,7 +37,10 @@ def paragraph_order(asg) -> tuple[ParagraphRef, ...]:
     A duplicate paragraph name -- legal in COBOL when in different sections -- is
     renamed on later occurrences to keep node ids unique. The first occurrence keeps
     its name unchanged; later ones become {name}%{n} where n is 2, 3, and so on.
-    Comparison is case-insensitive, matching how GO TO targets are upper-cased.
+
+    Names are upper-cased here, once. COBOL names are case-insensitive and every
+    jump target is upper-cased where it is lowered, so a name kept in its declared
+    spelling is a label no jump to it resolves to.
     """
     raw = (
         *_implicit(IMPLICIT_FIRST, "", asg.statements),
@@ -51,7 +54,7 @@ def _dedupe_names(refs: tuple[ParagraphRef, ...]) -> tuple[ParagraphRef, ...]:
     """Rename duplicate paragraph names to keep node ids unique. A duplicate
     paragraph name is legal in COBOL when in different sections, but would produce
     duplicate node ids and a false graph."""
-    occurrences = _occurrences(tuple(ref.name.upper() for ref in refs))
+    occurrences = _occurrences(tuple(ref.name for ref in refs))
     return tuple(
         ParagraphRef(
             name=ref.name if occurrence == 1 else f"{ref.name}%{occurrence}",
@@ -77,9 +80,10 @@ def _occurrences(names: tuple[str, ...]) -> tuple[int, ...]:
 
 
 def _of_section(section) -> tuple[ParagraphRef, ...]:
+    name = section.name.upper()
     return (
-        *_implicit(f"{section.name}{IMPLICIT_FIRST}", section.name, section.statements),
-        *(_of_paragraph(paragraph, section.name) for paragraph in section.paragraphs),
+        *_implicit(f"{name}{IMPLICIT_FIRST}", name, section.statements),
+        *(_of_paragraph(paragraph, name) for paragraph in section.paragraphs),
     )
 
 
@@ -91,5 +95,7 @@ def _implicit(name: str, section: str, statements) -> tuple[ParagraphRef, ...]:
 
 def _of_paragraph(paragraph, section: str) -> ParagraphRef:
     return ParagraphRef(
-        name=paragraph.name, section=section, statements=tuple(paragraph.statements)
+        name=paragraph.name.upper(),
+        section=section,
+        statements=tuple(paragraph.statements),
     )
