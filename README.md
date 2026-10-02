@@ -17,7 +17,7 @@ multi-language interpreter, vendored as a submodule and never modified by this r
 | [`squall/`](squall/) | The **EXEC SQL coprocessor runtime** for Db2-attached COBOL programs. |
 | [`jackal/`](jackal/) | The **JCL/batch execution engine**: job/step orchestration, IDCAMS, generation data groups. |
 | [`red_dragon_forge/`](red_dragon_forge/) | The **composition layer** — this repo's own code. |
-| [`cobble/`](cobble/) | **Corpus onboarding and knowledge-graph extraction**, analysis only. |
+| [`cobble/`](cobble/) | **Corpus onboarding, knowledge-graph extraction and static dataflow analysis**; it never runs a program. |
 
 **The composition layer** assembles multiple coprocessor extensions into one compiled,
 runnable COBOL program — without any one runtime knowing about the others — via a generic
@@ -25,12 +25,17 @@ runnable COBOL program — without any one runtime knowing about the others — 
 itself). See
 [`docs/design/2026-07-04-cics-sql-composition-design.md`](docs/design/2026-07-04-cics-sql-composition-design.md).
 
-**Cobble** parses and walks the ASG, and never lowers to IR or executes. On top of the
-program/file/transaction graph it builds field-level byte dataflow: a source-level CFG,
-variable dependency graphs, and a byte-range trace that follows a commarea across LINK
-boundaries. Its pipeline runs from `cobble/` as the `cobble-*` entry points
-(`uv run cobble-parse-corpus --config …` then `uv run cobble-build --config …`, TOML configs,
-after `. ../bridge-env.sh`); the parse is the only stage that starts a JVM, and every stage after it reads the one ASG cache it wrote.
+**Cobble** parses and walks the ASG, and never lowers to IR or executes. Beside the
+program/file/transaction graph it analyses each program statically: a source-level CFG, a
+byte-level dataflow fixpoint over every field — which writes reach each read, the values a
+field can hold, and from those the targets of dynamic `CALL`/`XCTL` — order-aware provenance
+queries over it, reachability from a PERFORM, variable dependency graphs, and a byte-range
+trace that follows a commarea across LINK boundaries. Its pipeline runs from `cobble/` as the
+`cobble-*` entry points with TOML configs, after `. ../bridge-env.sh`: `cobble-parse-corpus`,
+then `cobble-extents` and `cobble-dataflow-fixpoint`, then `cobble-build` (see
+[`cobble/README.md`](cobble/README.md) for every command). The parse and
+`cobble-expand-corpus` are the only stages that start a JVM; every stage after the parse
+reads the one ASG cache it wrote.
 
 Each package was originally its own repository, merged in via `git subtree` with full history,
 and each stays independently buildable and testable. What may import what is enforced by a root
