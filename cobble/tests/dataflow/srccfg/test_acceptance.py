@@ -22,8 +22,9 @@ from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
-from cobble.dataflow.srccfg.bundle import cfg_from_dict, cfg_to_dict
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl, bundle_of_rows
 from cobble.dataflow.srccfg.closure import build_closure
+from cobble.dataflow.srccfg.rows.cfg_row import CFG_ROWS
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.cfg import EdgeKind, NodeKind
 from cobble.dataflow.srccfg.dataflow import (
@@ -189,7 +190,9 @@ def test_a_cfg_round_trips_through_json(corpus_asg_paths) -> None:
     """The corpus call graph reads the written files, so a lossy round trip drops call
     sites -- and a dropped call site reads as a member with no callees."""
     for _, cfg in _cfgs(corpus_asg_paths):
-        assert cfg_to_dict(cfg_from_dict(cfg_to_dict(cfg))) == cfg_to_dict(cfg)
+        text = bundle_jsonl(Bundle(seed=cfg.program, cfgs=(cfg,)))
+        rows = tuple(CFG_ROWS.validate_json(line) for line in text.splitlines())
+        assert bundle_of_rows(rows).cfgs == (cfg,)
 
 
 def test_a_report_can_be_rendered_for_a_field_the_member_writes(

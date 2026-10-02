@@ -13,7 +13,7 @@ from functools import reduce
 from pathlib import Path
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
-from cobble.dataflow.srccfg.bundle import one_cfg_document
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
 from cobble.dataflow.srccfg.program import program_cfg
@@ -74,7 +74,7 @@ def build_one(
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         return MemberResult(member=member, message=f"{member}: {error!r}")
     ensure_dir(out_dir)
-    return _write(cfg, member, out_dir / f"{cfg.program or member}.json", taken)
+    return _write(cfg, member, out_dir / f"{cfg.program or member}.jsonl", taken)
 
 
 def _write(
@@ -83,11 +83,13 @@ def _write(
     """Write the CFG, under a qualified name if the preferred one is already used."""
     collided = preferred in taken
     written = (
-        preferred.with_name(f"{preferred.stem}{COLLISION_SEPARATOR}{member}.json")
+        preferred.with_name(f"{preferred.stem}{COLLISION_SEPARATOR}{member}.jsonl")
         if collided
         else preferred
     )
-    written.write_text(one_cfg_document(cfg), encoding="utf-8")
+    written.write_text(
+        bundle_jsonl(Bundle(seed=cfg.program, cfgs=(cfg,))), encoding="utf-8"
+    )
     return MemberResult(
         member=member,
         cfg_path=written,

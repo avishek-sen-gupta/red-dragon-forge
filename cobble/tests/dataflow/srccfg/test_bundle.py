@@ -9,20 +9,18 @@ disk, so they still load, and what they do not carry is derived.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import MappingProxyType
 
 import pytest
 
 from cobble.dataflow.srccfg.bundle import (
-    CfgDocumentError,
-    cfg_to_dict,
-    one_cfg_document,
     Bundle,
-    bundle_of,
-    bundle_to_json,
+    CfgDocumentError,
+    bundle_jsonl,
+    bundle_of_rows,
     load_bundle,
+    rows_of,
 )
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.dot import dot_of
@@ -35,6 +33,9 @@ from cobble.dataflow.srccfg.link import (
     bundle_calls,
 )
 from cobble.dataflow.srccfg.presentation import CrossCall, cross_calls
+from cobble.dataflow.srccfg.rows.edge_row import CfgEdgeRow
+from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
+from cobble.dataflow.srccfg.rows.program_row import CfgProgramRow
 from cobble.dataflow.srccfg.synthetic import using_field
 
 
@@ -89,10 +90,98 @@ def _bundle(*cfgs: Cfg) -> Bundle:
     return Bundle(seed=cfgs[0].program, cfgs=cfgs, calls=bundle_calls(cfgs))
 
 
-def _written(tmp_path: Path, document) -> Path:
-    path = tmp_path / "closure.json"
-    path.write_text(json.dumps(document), encoding="utf-8")
+def _written(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "cfg.jsonl"
+    path.write_text(text, encoding="utf-8")
     return path
+
+
+def test_a_bundle_round_trips_through_its_rows(tmp_path: Path) -> None:
+    """The file is the whole handover: programs in order, an empty one included, and
+    the calls joining them."""
+    bundle = Bundle(
+        seed="PROGA",
+        cfgs=(_caller("PROGB"), _callee(), Cfg(program="PROGC", nodes=(), edges=())),
+        calls=_bundle(_caller("PROGB"), _callee()).calls,
+    )
+
+    read = load_bundle(_written(tmp_path, bundle_jsonl(bundle)))
+
+    assert read == bundle
+
+
+def test_rows_come_program_first_and_every_edge_after_both_its_nodes() -> None:
+    """The order a streaming reader relies on, held by the writer."""
+    rows = rows_of(_bundle(_caller("PROGB"), _callee()))
+    seen = tuple((row.program, row.id) for row in rows if isinstance(row, CfgNodeRow))
+    opened = tuple(row.program for row in rows if isinstance(row, CfgProgramRow))
+
+    assert opened == ("PROGA", "PROGB")
+    assert all(
+        rows.index(row)
+        > max(
+            at
+            for at, other in enumerate(rows)
+            if isinstance(other, CfgNodeRow)
+            and other.program == row.program
+            and other.id in (row.source, row.target)
+        )
+        for row in rows
+        if isinstance(row, CfgEdgeRow)
+    )
+    assert all(
+        rows.index(row)
+        > next(
+            at
+            for at, other in enumerate(rows)
+            if isinstance(other, CfgProgramRow) and other.program == row.program
+        )
+        for row in rows
+        if isinstance(row, CfgNodeRow)
+    )
+    assert len(seen) == len(set(seen))
+
+
+@pytest.mark.parametrize(
+    ("text", "line"),
+    (
+        ('{"cfgs": [], "calls": []}\n', 1),
+        (
+            '{"type": "program", "program": "PROGA"}\n{"type": "node", "program": "PRO',
+            2,
+        ),
+    ),
+    ids=("pre-jsonl document", "truncated row"),
+)
+def test_a_line_that_is_not_a_row_is_refused_by_number(
+    tmp_path: Path, text: str, line: int
+) -> None:
+    """A file in the old one-document shape, or one cut off mid-write, says where it
+    stops being a CFG file and what to run."""
+    path = _written(tmp_path, text)
+
+    with pytest.raises(
+        CfgDocumentError, match=f"cfg.jsonl:{line}: .*cobble-srccfg-build"
+    ):
+        load_bundle(path)
+
+
+def test_blank_lines_are_not_rows_and_are_skipped(tmp_path: Path) -> None:
+    text = bundle_jsonl(_bundle(_callee()))
+
+    read = load_bundle(_written(tmp_path, f"\n{text}\n\n"))
+
+    assert read == _bundle(_callee())
+
+
+def test_a_row_naming_a_program_no_program_row_opened_is_refused(
+    tmp_path: Path,
+) -> None:
+    stray = '{"type": "edge", "program": "GHOST", "source": "A", "target": "B", "kind": "FLOW"}'
+    text = f'{{"type": "program", "program": "PROGA"}}\n{stray}\n'
+
+    with pytest.raises(CfgDocumentError, match="GHOST"):
+        load_bundle(_written(tmp_path, text))
 
 
 def test_a_bundle_carries_the_call_and_the_entry_node_it_lands_on() -> None:
@@ -111,17 +200,6 @@ def test_a_bundle_carries_the_call_and_the_entry_node_it_lands_on() -> None:
             commarea="WS-COMMAREA",
         ),
     )
-
-
-def test_a_bundle_round_trips_through_json_with_its_calls() -> None:
-    """The file is the whole handover: a call lost in writing is a join the reader
-    has to derive again, which is what carrying them exists to stop."""
-    bundle = _bundle(_caller("PROGB"), _callee())
-
-    read = bundle_of(json.loads(bundle_to_json(bundle)))
-
-    assert read.calls == bundle.calls
-    assert [cfg.program for cfg in read.cfgs] == ["PROGA", "PROGB"]
 
 
 def _dynamic(node_id: str, field: str) -> Node:
@@ -191,8 +269,8 @@ def test_a_dynamic_site_is_one_call_per_candidate_each_saying_how_certain_it_is(
         _dynamic_call("MAIN/1", "PROGC", "WS-TWO", ("from-callee",), False),
         _dynamic_call("MAIN/2", "WS-NONE", "WS-NONE", ("uninitialised",), False, ""),
     )
-    written = bundle_to_json(Bundle(seed="PROGA", cfgs=cfgs, calls=calls))
-    assert bundle_of(json.loads(written)).calls == calls
+    rows = rows_of(Bundle(seed="PROGA", cfgs=cfgs, calls=calls))
+    assert bundle_of_rows(rows).calls == calls
 
 
 def test_a_dynamic_sites_candidates_are_drawn_and_only_a_proven_one_as_a_call() -> None:
@@ -219,51 +297,6 @@ def test_a_dynamic_sites_candidates_are_drawn_and_only_a_proven_one_as_a_call() 
         '    "PROGA::MAIN/1" -> "PROGC::MAIN#label"'
         ' [color="#9e9e9e", style=dotted, label="CICS_LINK"];',
     ]
-
-
-def test_a_bundle_document_loads_as_its_cfgs_and_its_calls(tmp_path: Path) -> None:
-    bundle = _bundle(_caller("PROGB"), _callee())
-
-    read = load_bundle(_written(tmp_path, json.loads(bundle_to_json(bundle))))
-
-    assert [cfg.program for cfg in read.cfgs] == ["PROGA", "PROGB"]
-    assert read.calls == bundle.calls
-
-
-def test_a_one_program_file_is_the_same_shape_as_a_closure(tmp_path: Path) -> None:
-    """What build_one writes: one CFG in `cfgs`, and `calls` empty rather than absent."""
-    path = _written(tmp_path, json.loads(one_cfg_document(_callee())))
-
-    read = load_bundle(path)
-
-    assert [cfg.program for cfg in read.cfgs] == ["PROGB"]
-    assert read.calls == ()
-
-
-@pytest.mark.parametrize(
-    ("document", "why"),
-    (
-        (
-            [cfg_to_dict(_caller("PROGB")), cfg_to_dict(_callee())],
-            "a bare list of CFGs",
-        ),
-        (cfg_to_dict(_caller("PROGB")), "no 'cfgs' key"),
-    ),
-)
-def test_a_pre_bundle_file_is_refused_and_says_how_to_rebuild(
-    tmp_path: Path, document, why: str
-) -> None:
-    """The old shapes are not read at all.
-
-    Tolerating them is what let a one-program bundle be mistaken for a bare object,
-    silently dropping its calls; a reader that accepts three shapes also cannot tell
-    a stale file from a current one. So the file is rejected by name, and the message
-    says what to run.
-    """
-    path = _written(tmp_path, document)
-
-    with pytest.raises(CfgDocumentError, match=why):
-        load_bundle(path)
 
 
 def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:

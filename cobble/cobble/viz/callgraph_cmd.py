@@ -1,7 +1,7 @@
 """CLI: extract program-level call dependency graph from cobble's graph file.
 
 Input:  --graph <file>              (the graph file cobble-build --output wrote)
-        <srccfg_dir>/cfg-*.json     (cobble CFG or closure bundle — the program list)
+        <srccfg_dir>/cfg-*.jsonl    (cobble CFG or closure bundle — the program list)
 Output: <out_dir>/call-dep.json     (CallDepGraph)
 """
 
@@ -91,7 +91,7 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
     ap.add_argument(
         "--graph", required=True, type=Path, help="The graph file cobble-build wrote"
     )
-    ap.add_argument("--cfg", required=True, type=Path, help="cobble cfg-<ENTRY>.json")
+    ap.add_argument("--cfg", required=True, type=Path, help="cobble cfg-<ENTRY>.jsonl")
     ap.add_argument("--out", required=True, type=Path, help="output call-dep.json")
     return ap.parse_args(argv)
 

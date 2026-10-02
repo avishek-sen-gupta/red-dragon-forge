@@ -15,8 +15,10 @@ from pathlib import Path
 
 import pytest
 
+from cobble.dataflow.srccfg.bundle import bundle_of_rows
 from cobble.dataflow.srccfg.closure import build_closure, main
 from cobble.dataflow.srccfg.dynamic_targets import dynamic_targets_of
+from cobble.dataflow.srccfg.rows.cfg_row import CFG_ROWS
 
 
 def _asg(program: str, statements: list[dict]) -> dict:
@@ -53,25 +55,29 @@ def _config(tmp_path: Path, asg_dir: Path, source_dir: Path = Path()) -> Path:
     return config
 
 
+def _programs(text: str) -> list[str]:
+    rows = tuple(CFG_ROWS.validate_json(line) for line in text.splitlines() if line)
+    return [cfg.program for cfg in bundle_of_rows(rows).cfgs]
+
+
 def test_the_cli_writes_the_closure_to_stdout(tmp_path: Path, capsys) -> None:
     """stdout is the machine channel: the CFGs are the answer, so they go there and
     the log carries everything else."""
     asg_dir = _cache(tmp_path, {"PROGA": [_link("'PROGB'")], "PROGB": [_move()]})
 
     assert main(["--config", str(_config(tmp_path, asg_dir)), "PROGA"]) == 0
-    written = json.loads(capsys.readouterr().out)
-    assert [cfg["program"] for cfg in written["cfgs"]] == ["PROGA", "PROGB"]
+    assert _programs(capsys.readouterr().out) == ["PROGA", "PROGB"]
 
 
 def test_output_sends_the_closure_to_a_file_and_leaves_stdout_empty(
     tmp_path: Path, capsys
 ) -> None:
     asg_dir = _cache(tmp_path, {"PROGA": [_move()]})
-    out = tmp_path / "closure.json"
+    out = tmp_path / "closure.jsonl"
 
     main(["--config", str(_config(tmp_path, asg_dir)), "PROGA", "--output", str(out)])
 
-    assert [cfg["program"] for cfg in json.loads(out.read_text())["cfgs"]] == ["PROGA"]
+    assert _programs(out.read_text()) == ["PROGA"]
     assert capsys.readouterr().out == ""
 
 
@@ -250,14 +256,14 @@ def test_the_cli_follows_dynamic_calls_only_when_given_the_targets(
     config = str(_config(tmp_path, asg_dir))
 
     assert main(["--config", config, "PROGA"]) == 0
-    without = json.loads(capsys.readouterr().out)
+    without = _programs(capsys.readouterr().out)
     assert (
         main(["--config", config, "--dynamic-call-targets", str(targets), "PROGA"]) == 0
     )
-    with_targets = json.loads(capsys.readouterr().out)
+    with_targets = _programs(capsys.readouterr().out)
 
-    assert [cfg["program"] for cfg in without["cfgs"]] == ["PROGA"]
-    assert [cfg["program"] for cfg in with_targets["cfgs"]] == [
+    assert without == ["PROGA"]
+    assert with_targets == [
         "PROGA",
         "PROGB",
         "PROGC",

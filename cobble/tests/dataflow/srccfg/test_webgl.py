@@ -16,7 +16,7 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
-from cobble.dataflow.srccfg.bundle import Bundle, bundle_to_json
+from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.dataflow.srccfg.link import bundle_calls
 from cobble.dataflow.srccfg.webgl import (
@@ -204,9 +204,9 @@ def test_selecting_nothing_keeps_the_whole_closure() -> None:
 
 
 def _closure_file(tmp_path: Path, *cfgs: Cfg) -> Path:
-    path = tmp_path / "closure.json"
+    path = tmp_path / "closure.jsonl"
     path.write_text(
-        bundle_to_json(Bundle(seed=cfgs[0].program if cfgs else "", cfgs=cfgs)),
+        bundle_jsonl(Bundle(seed=cfgs[0].program if cfgs else "", cfgs=cfgs)),
         encoding="utf-8",
     )
     return path
