@@ -42,16 +42,23 @@ states visits each state once. The tool reports what *can* run and how the
 
 ## Semantics
 
-A state is a node plus a stack of frames; a frame is the `resume` node of an
-open `PERFORM`. The walk starts by entering the seed's range with one frame,
-the seed's own resume point.
+A state is a node plus a stack of frames; a frame is an open `PERFORM`'s resume
+point together with the range end its `RETURN` leaves from (`Node.range_end`,
+which the build records beside `Node.resume`). The walk starts by entering the
+seed's range with one frame, the seed's own.
+
+(Revised after the implementation's review: a frame was first the resume point
+alone, but the two arms of an IF can PERFORM different ranges that resume at one
+statement, and a frame keyed by resume point took one range's RETURN for the
+other's. A range end also returned only to the innermost frame, which left a GO
+TO from inside a nested PERFORM to the outer range's exit with no outcome.)
 
 | At | The walk |
 |---|---|
-| a `PERFORM` whose range resolves | pushes a frame for the node's resume point (`Node.resume`, else its `FLOW` successor, as `fields.trace._sequel` reads it) and follows the `PERFORM` edge only. It never takes the `FLOW` edge past it: control comes back through a `RETURN` or not at all. |
+| a `PERFORM` whose range resolves | pushes a frame of its resume point (`Node.resume`, else its `FLOW` successor, as `fields.trace._sequel` reads it) and its range end, and follows the `PERFORM` edge only. It never takes the `FLOW` edge past it: control comes back through a `RETURN` or not at all. |
 | a `PERFORM` whose range does not resolve (no `PERFORM` edge) | follows its `FLOW` edge and records it as unresolved. |
-| a `PERFORM` whose resume point is already on the stack | does not push: a recursive `PERFORM` is undefined in COBOL. Recorded as refused, and the walk continues at the resume point as if the range had run. |
-| a range end (`#end` with `RETURN` edges) | takes the `RETURN` edge whose target is the innermost frame's resume point, and pops. With no such edge it takes the `FALLTHRU`, as COBOL falls through an end no open `PERFORM` closes. |
+| a `PERFORM` whose frame is already open | does not push: a recursive `PERFORM` is undefined in COBOL. Recorded as refused, and the walk continues at the resume point as if the range had run. |
+| a range end (`#end` with `RETURN` edges) | returns from the innermost open frame whose range ends here, to its resume point, dropping the frames opened inside it (a `GO TO` out of a nested range abandons them). With no such frame it takes the `FALLTHRU`, as COBOL falls through an end no open `PERFORM` closes. Dropping the abandoned frames approximates the compiler, which leaves their ends armed. |
 | the seed's own resume point, reached by that pop | records **returns** and stops that branch. |
 | a `GO TO` (including one out of the range) | follows it with the stack unchanged. COBOL keeps the pending return, so a later arrival at that range's end still returns. |
 | a `TEST` | follows both arms. |

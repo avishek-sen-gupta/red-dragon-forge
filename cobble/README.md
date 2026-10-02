@@ -202,14 +202,14 @@ is reported as one skipped member, not silently reparsed.
 `cobble-srccfg-reach --cfg <file> --from <PERFORM node id>` answers "what can run
 from this PERFORM until control comes back, and how else can it end". It walks
 the first program in a `cobble-srccfg-build` file over states of a node and the
-PERFORMs open there, so a range end returns only to the innermost open PERFORM
-and falls through otherwise — the call-stack knowledge a plain BFS over the CFG
-lacks. It is reachability, not path enumeration: each state is visited once.
+PERFORMs open there, so a range end returns only to an open PERFORM whose range
+ends there and falls through otherwise — the call-stack knowledge a plain BFS over
+the CFG lacks. It is reachability, not path enumeration: each state is visited once.
 
 | At | The walk |
 | --- | --- |
 | a PERFORM | opens a frame for its resume point and enters the range; never takes the edge past it |
-| a range end | returns to the innermost open PERFORM if this end closes it, else falls through |
+| a range end | returns from the innermost open PERFORM whose range ends here — matched by the end, so two PERFORMs resuming at one statement stay apart — else falls through |
 | a GO TO | follows it; a GO TO out of a range keeps the pending return |
 | a decision | follows every arm |
 | a recursive PERFORM | is not entered (`refused`); the walk resumes after it |

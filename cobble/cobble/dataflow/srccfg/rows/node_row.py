@@ -44,6 +44,7 @@ class CfgNodeRow(BaseModel):
     using: tuple[str, ...]
     span: SourceSpan
     resume: str
+    range_end: str
 
     def to_node(self) -> Node:
         return Node(
@@ -61,4 +62,5 @@ class CfgNodeRow(BaseModel):
             using=self.using,
             span=self.span,
             resume=self.resume,
+            range_end=self.range_end,
         )

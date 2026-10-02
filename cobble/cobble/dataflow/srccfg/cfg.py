@@ -100,6 +100,7 @@ class Node:
     using: tuple[str, ...] = ()
     span: SourceSpan = NO_SPAN
     resume: str = ""
+    range_end: str = ""
 
 
 @dataclass(frozen=True)
