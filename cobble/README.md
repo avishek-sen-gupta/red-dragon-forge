@@ -70,7 +70,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-extents --asg-dir <cache> --out <file>` | Every member's declared field layout in bytes — the table the dataflow stages read |
 | `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets (`graph`, `defs`, `aliases`, `targets` and the run summary) |
 | `cobble-dataflow-fixpoint-query <query> <field> --fixpoint-dir <dir> --extents <file>` | Ask the fixpoint's output for a field's `writers`, `readers`, what it `reaches` or is `reached-by` (in statement order), and byte containment/overlap |
-| `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from |
+| `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>] [--single-program]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from; `--single-program` keeps to that program's own CFG |
 | `cobble-trace-query {forward,backward} <field> --trace <file>` | Provenance over a trace: what a field affects, or what feeds it |
 | `cobble-viz-pathwalk --cfg <jsonl> --paths <file> --output <html>` | Animate a trace's recorded paths over the paragraphs, with chosen fields' provenance |
 | `cobble-fields-access --cfg <jsonl> --asg-dir <cache> --out <file>` | Every site in a CFG file that reads a field, with the bytes it reads |
@@ -1042,6 +1042,12 @@ listed under `dead ends` with the reason the alias table gives it
 (`callee-not-in-cache` for a member with no ASG file), the commarea it passed is
 credited to `%CALL:<program>`, and the caller's path runs on past the call. Any
 corpus selection `LINK`s outside itself, so this is the common case.
+
+`--single-program` (off by default) keeps the trace to `PROGRAM`'s own CFG. Its
+`LINK` and `XCTL` sites run as ordinary statements — the commarea is credited to
+`%CALL:<program>` as above — rather than steps into the callee, so no other
+program is loaded, not even to size a shared window, the default `--max-depth`
+counts this program's nodes alone, and coverage is this program's branches.
 
 A path **is** a plan: the arm index to take at each branch, in the order the
 branches arise. The walk is a pure function of it, so a plan names a route

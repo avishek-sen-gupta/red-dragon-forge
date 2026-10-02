@@ -27,10 +27,13 @@ from cobble.dataflow.fields.trace import (
     Budget,
     DeadEnd,
     Dep,
+    Loader,
     Sink,
     Trace,
-    loadable,
-    sampled_streaming,
+    closure_loader,
+    runnable,
+    single_program_loader,
+    streamed,
 )
 from cobble.path_utils import ensure_parent
 from cobol_memory.field_extent import FieldExtent, Precision
@@ -237,7 +240,10 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         metavar="N",
-        help="nodes one path may visit (default: 2x the entry program's CFG nodes)",
+        help=(
+            "nodes one path may visit (default: 3x the CFG nodes of every program "
+            "the entry program can reach -- with --single-program, its own alone)"
+        ),
     )
     parser.add_argument(
         "--record-paths",
@@ -246,13 +252,34 @@ def _parser() -> argparse.ArgumentParser:
         metavar="PATHS",
         help="if given, write one path record per sampled path to this JSONL file",
     )
+    parser.add_argument(
+        "--single-program",
+        action="store_true",
+        help=(
+            "trace PROGRAM's own CFG alone: its calls run as statements rather "
+            "than stepping into the callees, and no other program is loaded"
+        ),
+    )
     return parser
 
 
-def _refused(asg_dir: Path, program: str) -> str:
+def _refused(asg_dir: Path, program: str, loader: Loader) -> str:
     if not asg_dir.is_dir():
         return f"no ASG cache at {asg_dir}"
-    return loadable(asg_dir, program)
+    path = asg_dir / f"{program}.json"
+    if not path.is_file():
+        return f"no ASG cache at {path}"
+    return runnable(loader(program))
+
+
+def _loader_of(arguments: argparse.Namespace) -> Loader:
+    if arguments.single_program:
+        logger.info(
+            "trace: --single-program: %s alone; calls into other programs are not entered",
+            arguments.program,
+        )
+        return single_program_loader(arguments.asg_dir, arguments.program)
+    return closure_loader(arguments.asg_dir)
 
 
 def _log_start(program: str, budget: Budget) -> float:
@@ -279,11 +306,11 @@ def _log_done(trace: Trace, started: float) -> None:
     )
 
 
-def _run_trace(program: str, asg_dir: Path, budget: Budget, out: Path) -> Trace:
+def _run_trace(program: str, loader: Loader, budget: Budget, out: Path) -> Trace:
     started = _log_start(program, budget)
     ensure_parent(out)
     with out.open("w", encoding="utf-8") as handle:
-        trace = sampled_streaming(program, asg_dir, budget, _make_sink(handle))
+        trace = streamed(program, loader, budget, _make_sink(handle))
         _write_footer(handle, trace)
     _log_done(trace, started)
     return trace
@@ -314,21 +341,21 @@ def _write_footer(handle: IO[str], trace: Trace) -> None:
 def _stream_with_recorder(
     recorder: _PathRecorder,
     program: str,
-    asg_dir: Path,
+    loader: Loader,
     budget: Budget,
     out: Path,
 ) -> Trace:
     with out.open("w", encoding="utf-8") as handle:
         sink = _make_recording_sink(_make_sink(handle), recorder)
         listener = functools.partial(_path_flush, recorder)
-        trace = sampled_streaming(program, asg_dir, budget, sink, listener)
+        trace = streamed(program, loader, budget, sink, listener)
         _write_footer(handle, trace)
     return trace
 
 
 def _run_trace_with_recorder(
     program: str,
-    asg_dir: Path,
+    loader: Loader,
     budget: Budget,
     out: Path,
     record_paths: Path,
@@ -338,7 +365,7 @@ def _run_trace_with_recorder(
     ensure_parent(record_paths)
     with record_paths.open("w", encoding="utf-8") as paths_handle:
         trace = _stream_with_recorder(
-            _PathRecorder(paths_handle), program, asg_dir, budget, out
+            _PathRecorder(paths_handle), program, loader, budget, out
         )
     _log_done(trace, started)
     return trace
@@ -352,14 +379,16 @@ def _budget_from(arguments: argparse.Namespace) -> Budget:
     )
 
 
-def _dispatch_trace(arguments: argparse.Namespace, budget: Budget) -> None:
+def _dispatch_trace(
+    arguments: argparse.Namespace, budget: Budget, loader: Loader
+) -> None:
     match arguments.record_paths:
         case None:
-            _run_trace(arguments.program, arguments.asg_dir, budget, arguments.out)
+            _run_trace(arguments.program, loader, budget, arguments.out)
         case record_paths:
             _run_trace_with_recorder(
                 arguments.program,
-                arguments.asg_dir,
+                loader,
                 budget,
                 arguments.out,
                 record_paths,
@@ -369,11 +398,12 @@ def _dispatch_trace(arguments: argparse.Namespace, budget: Budget) -> None:
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
-    reason = _refused(arguments.asg_dir, arguments.program)
+    loader = _loader_of(arguments)
+    reason = _refused(arguments.asg_dir, arguments.program, loader)
     if reason:
         logger.error("trace: !! %s", reason)
         return 2
-    _dispatch_trace(arguments, _budget_from(arguments))
+    _dispatch_trace(arguments, _budget_from(arguments), loader)
     return 0
 
 

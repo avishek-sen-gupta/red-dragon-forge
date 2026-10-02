@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -41,6 +42,7 @@ from cobble.dataflow.fields.trace import (
     _window,
     loadable,
     sampled,
+    single_program_loader,
     traced,
     visited_order,
 )
@@ -1102,6 +1104,56 @@ def parsed(tmp_path_factory) -> Path:
 @pytest.fixture(scope="module")
 def crossed(parsed: Path) -> Trace:
     return sampled("TPROGA", parsed, Budget(paths=8))
+
+
+def _caller_alone(parsed: Path, tmp_path: Path) -> Path:
+    """TPROGA's cache beside a TPROGB that is not even JSON: reading it would fail."""
+    cache = tmp_path / "asg"
+    cache.mkdir()
+    shutil.copy(parsed / "TPROGA.json", cache / "TPROGA.json")
+    (cache / "TPROGB.json").write_text("{ not json", encoding="utf-8")
+    return cache
+
+
+def test_a_single_program_trace_never_reads_another_programs_cache(
+    parsed: Path, crossed: Trace, tmp_path: Path
+) -> None:
+    """TPROGA's CFG alone: its LINK runs as a statement rather than a step into
+    TPROGB, so TPROGB's cache is never read and coverage counts TPROGA alone. No
+    crossing is refused either -- with no alias table there is no crossing site."""
+    cache = _caller_alone(parsed, tmp_path)
+
+    alone = traced("TPROGA", single_program_loader(cache, "TPROGA"), Budget(paths=8))
+
+    assert crossed.coverage.programs == frozenset({"TPROGA", "TPROGB"})
+    assert alone.coverage.programs == frozenset({"TPROGA"})
+    assert alone.dead_ends == frozenset()
+
+
+def test_the_command_traces_a_single_program_when_asked(
+    parsed: Path, tmp_path: Path, caplog
+) -> None:
+    from cobble.dataflow.fields.trace_report import cli
+
+    cache = _caller_alone(parsed, tmp_path)
+    caplog.set_level(logging.INFO)
+
+    code = cli(
+        [
+            "TPROGA",
+            "--asg-dir",
+            str(cache),
+            "--out",
+            str(tmp_path / "t.jsonl"),
+            "--single-program",
+        ]
+    )
+
+    assert code == 0
+    assert (
+        "trace: --single-program: TPROGA alone; calls into other programs are not entered"
+        in caplog.messages
+    )
 
 
 @pytest.fixture(scope="module")
