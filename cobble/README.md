@@ -900,11 +900,11 @@ Two limits sit upstream of the walk:
 ### Querying the field dataflow
 
 ```bash
-uv run cobble-dataflow-fixpoint-query writers    WS-TOTAL --out out-fields --extents out-fields/extents-input.jsonl
-uv run cobble-dataflow-fixpoint-query readers    PROGA.WS-TOTAL --out out-fields --extents out-fields/extents-input.jsonl
-uv run cobble-dataflow-fixpoint-query reaches    WS-TOTAL --out out-fields --extents out-fields/extents-input.jsonl --depth 4
-uv run cobble-dataflow-fixpoint-query contains   SOME-REC --out out-fields --extents out-fields/extents-input.jsonl
-uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --out out-fields --extents out-fields/extents-input.jsonl --across-calls --max-hops 2
+uv run cobble-dataflow-fixpoint-query writers    WS-TOTAL --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl
+uv run cobble-dataflow-fixpoint-query readers    PROGA.WS-TOTAL --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl
+uv run cobble-dataflow-fixpoint-query reaches    WS-TOTAL --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl --depth 4
+uv run cobble-dataflow-fixpoint-query contains   SOME-REC --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl
+uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl --across-calls --max-hops 2
 ```
 
 Joins the graph, defs and aliases tables with the `--extents` table and answers in bytes. The

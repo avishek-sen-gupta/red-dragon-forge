@@ -1012,7 +1012,7 @@ def test_the_default_answer_does_not_mention_crossing(tmp_path, capsys):
             [
                 "reaches",
                 "XPROGA.WS-AREA",
-                "--out",
+                "--fixpoint-dir",
                 str(out),
                 "--extents",
                 str(tmp_path / "extents.jsonl"),
@@ -1038,7 +1038,7 @@ def test_the_flag_reports_the_hop_and_the_site(tmp_path, capsys):
             [
                 "reaches",
                 "XPROGA.WS-AREA",
-                "--out",
+                "--fixpoint-dir",
                 str(out),
                 "--extents",
                 str(tmp_path / "extents.jsonl"),
@@ -1070,7 +1070,7 @@ def test_a_landing_line_names_the_bytes_it_landed_on(tmp_path, capsys):
             [
                 "reaches",
                 "XPROGA.WS-AREA",
-                "--out",
+                "--fixpoint-dir",
                 str(out),
                 "--extents",
                 str(tmp_path / "extents.jsonl"),
@@ -1099,7 +1099,7 @@ def test_a_question_that_cannot_cross_a_call_refuses_the_flag(tmp_path, query):
             [
                 query,
                 "XPROGA.WS-AREA",
-                "--out",
+                "--fixpoint-dir",
                 str(out),
                 "--extents",
                 str(tmp_path / "extents.jsonl"),
@@ -1120,7 +1120,7 @@ def test_asking_to_cross_zero_hops_is_rejected(tmp_path):
             [
                 "reaches",
                 "XPROGA.WS-AREA",
-                "--out",
+                "--fixpoint-dir",
                 str(out),
                 "--extents",
                 str(tmp_path / "extents.jsonl"),
