@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from cobble.cli_logging import configure_cli_logging
@@ -18,6 +19,7 @@ from cobble.dataflow.srccfg.bundle import Bundle, CfgDocumentError, load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.reach.reach_error import ReachError
 from cobble.dataflow.srccfg.reach.walk import reach_rows
+from cobble.dataflow.srccfg.rows.cfg_row import CfgRow
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,19 @@ def main(argv: Sequence[str] = ()) -> int:
     except (CfgDocumentError, ReachError, FileNotFoundError) as error:
         logger.error("%s", error)
         return 1
-    sys.stdout.writelines(f"{row.model_dump_json()}\n" for row in rows)
+    return _written(rows)
+
+
+def _written(rows: Iterator[CfgRow]) -> int:
+    """Rows to stdout as the walk makes them. A reader that stops early -- ``| head``
+    -- closes the pipe; that ends the command, quietly, rather than as a traceback,
+    and stdout is pointed at /dev/null so the interpreter's own final flush cannot
+    raise it again."""
+    try:
+        sys.stdout.writelines(f"{row.model_dump_json()}\n" for row in rows)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 0
 
 

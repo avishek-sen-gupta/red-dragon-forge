@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -123,6 +126,53 @@ def test_an_empty_cfg_file_is_an_error_not_an_empty_walk(
     assert main(["--cfg", str(path), "--from", "MAIN/0"]) == 1
     assert capsys.readouterr().out == ""
     assert "holds no program" in caplog.text
+
+
+def test_a_reader_that_stops_early_ends_the_command_quietly(tmp_path: Path) -> None:
+    """Stopping early is a use, not a failure: `| head` closes the pipe while rows
+    are still coming, and the command exits 0 with no traceback."""
+    chain = [
+        {
+            "name": f"P{at}",
+            "statements": [
+                {"type": "MOVE", "operands": [{"name": "'A'"}, {"name": "WS-A"}]}
+            ],
+        }
+        for at in range(600)
+    ]
+    body = {
+        "program_id": "PROGA",
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    {"type": "PERFORM", "operands": ["P0"], "thru": "P599"},
+                    {"type": "GOBACK"},
+                ],
+            },
+            *chain,
+        ],
+    }
+    with cached_asg_dialect_parsers_registered():
+        cfg = program_cfg(CobolASG.from_dict(json.loads(json.dumps(body))))
+    path = tmp_path / "long.jsonl"
+    path.write_text(bundle_jsonl(Bundle(seed="PROGA", cfgs=(cfg,))), encoding="utf-8")
+    command = (
+        "import sys; from cobble.dataflow.srccfg.reach.cli import main; "
+        f"sys.exit(main(['--cfg', {str(path)!r}, '--from', 'MAIN/0']))"
+    )
+    reading, writing = os.pipe()
+    errors = tmp_path / "stderr.txt"
+    with errors.open("w", encoding="utf-8") as stderr:
+        process = subprocess.Popen(
+            [sys.executable, "-c", command], stdout=writing, stderr=stderr
+        )
+    os.close(writing)
+    with os.fdopen(reading, "rb") as stdout:
+        first = stdout.readline()
+
+    assert (process.wait(), json.loads(first)["type"]) == (0, "program")
+    assert errors.read_text(encoding="utf-8") == ""
 
 
 def _bridge_jar() -> Path:
