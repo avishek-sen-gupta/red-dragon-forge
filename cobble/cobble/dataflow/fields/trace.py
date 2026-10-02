@@ -62,6 +62,7 @@ CROSSING_VERBS = (LINK_TRANSFER, XCTL_TRANSFER)
 
 NO_PROCEDURE = "callee-has-no-procedure"
 NOT_PARSED = "callee-not-parsed"
+OUTSIDE_SINGLE_PROGRAM = "outside-single-program"
 RE_ENTRY = "re-entry"
 
 
@@ -1391,6 +1392,25 @@ def _loaded(asg_dir: Path, program: str) -> Loaded:
     control comes back, and the caller's path runs on -- rather than an exception
     that ends a run of hundreds of paths.
     """
+    return _built(
+        asg_dir,
+        program,
+        lambda asg, index: _by_node(commarea_aliases(asg, index, asg_dir)),
+    )
+
+
+@cache
+def _loaded_alone(asg_dir: Path, program: str) -> Loaded:
+    """``_loaded`` with no alias table. No call site is then a crossing, so the
+    walk never steps into a callee, the depth budget counts this program alone,
+    and no callee's cache is read -- not even to size the shared window."""
+    return _built(asg_dir, program, lambda asg, index: NO_ALIASES)
+
+
+AliasesOf = Callable[[CobolASG, CellIndex], Mapping[str, tuple[CommareaAlias, ...]]]
+
+
+def _built(asg_dir: Path, program: str, aliases_of: AliasesOf) -> Loaded:
     logger.info("trace: loading %s", program)
     path = asg_dir / f"{program}.json"
     if not path.is_file():
@@ -1406,7 +1426,22 @@ def _loaded(asg_dir: Path, program: str) -> Loaded:
         statements=statement_index(asg),
         index=index,
         entry=_entry_node(asg),
-        aliases=_by_node(commarea_aliases(asg, index, asg_dir)),
+        aliases=aliases_of(asg, index),
+    )
+
+
+def closure_loader(asg_dir: Path) -> Loader:
+    """Every program a path reaches, each loaded as it is first asked for."""
+    return lambda member: _loaded(asg_dir, member)
+
+
+def single_program_loader(asg_dir: Path, program: str) -> Loader:
+    """``program`` alone: its own CFG, its call sites run as statements, and any
+    other program -- which nothing then asks for -- is a named refusal."""
+    return lambda member: (
+        _loaded_alone(asg_dir, member)
+        if member == program
+        else Loaded(program=member, reason=OUTSIDE_SINGLE_PROGRAM)
     )
 
 
@@ -1429,6 +1464,11 @@ def _by_node(
     """``commarea_aliases`` returns a whole member's sites at once; a path wants one."""
     keys = tuple(dict.fromkeys(row.node for row in rows))
     return {key: tuple(row for row in rows if row.node == key) for key in keys}
+
+
+def runnable(loaded: Loaded) -> str:
+    """Empty when a loaded program has a path to sample, or the reason it has none."""
+    return _loaded_unrunnable(loaded)
 
 
 def _loaded_unrunnable(loaded: Loaded) -> str:
@@ -1460,7 +1500,7 @@ def sampled(program: str, asg_dir: Path, budget: Budget = DEFAULT_BUDGET) -> Tra
     callee ``aliases.jsonl`` has no rows for, which is any member a single-member
     build did not select.
     """
-    return traced(program, lambda member: _loaded(asg_dir, member), budget)
+    return traced(program, closure_loader(asg_dir), budget)
 
 
 Sink = Callable[[frozenset[Dep]], None]
@@ -1524,20 +1564,3 @@ def streamed(
         ),
         resolved,
     ).trace
-
-
-def sampled_streaming(
-    program: str,
-    asg_dir: Path,
-    budget: Budget,
-    sink: Sink,
-    path_listener: PathListener = _ignore_path,
-) -> Trace:
-    """``streamed`` against the one ASG cache every other stage reads."""
-    return streamed(
-        program,
-        lambda member: _loaded(asg_dir, member),
-        budget,
-        sink,
-        path_listener,
-    )
