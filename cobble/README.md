@@ -46,6 +46,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <jsonl> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
 | `cobble-srccfg-query <query> <subject> --cfg <jsonl>` | Ask a built CFG for guards or a field's provenance |
+| `cobble-srccfg-reach --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
 | `python -m pytest` | Run the pytest unit suite |
 
 ### Build the graph from CardDemo
@@ -195,6 +196,35 @@ FILE-CONTROL) from scratch every time, reading the ASGs `cobble-parse-corpus` wr
 rather than parsing again; safe to re-run after touching any extractor code. Touch
 the corpus itself and `cobble-parse-corpus` has to run again first — a member with no cached ASG
 is reported as one skipped member, not silently reparsed.
+
+### Reachability from a PERFORM
+
+`cobble-srccfg-reach --cfg <file> --from <PERFORM node id>` answers "what can run
+from this PERFORM until control comes back, and how else can it end". It walks
+the first program in a `cobble-srccfg-build` file over states of a node and the
+PERFORMs open there, so a range end returns only to the innermost open PERFORM
+and falls through otherwise — the call-stack knowledge a plain BFS over the CFG
+lacks. It is reachability, not path enumeration: each state is visited once.
+
+| At | The walk |
+| --- | --- |
+| a PERFORM | opens a frame for its resume point and enters the range; never takes the edge past it |
+| a range end | returns to the innermost open PERFORM if this end closes it, else falls through |
+| a GO TO | follows it; a GO TO out of a range keeps the pending return |
+| a decision | follows every arm |
+| a recursive PERFORM | is not entered (`refused`); the walk resumes after it |
+| a PERFORM of an undeclared range | is stepped past (`unresolved`) |
+| a CALL or LINK | is stepped past; other programs are not entered |
+
+Output is JSONL on stdout, written as the walk goes: the reached nodes and the
+edges actually taken, in the src-cfg row format, so `cobble-srccfg-dot` and
+`-webgl` draw it; and, as each is found, `outcome` rows — `returns`, `stop-run`, `goback`,
+`exit-program`, `abend`, `xctl`, `cics-return`, `unhandled-condition`, `dead-end`,
+each at its node — plus `unresolved` and `refused` rows, and a last `summary` row
+with the number of states visited. A missing summary means the walk did not
+finish. The graph does not keep the stack: a paragraph reached from two
+PERFORMs shows both returns, so one route through the picture is not
+guaranteed to be a real execution.
 
 ### Point this at your own codebase
 
