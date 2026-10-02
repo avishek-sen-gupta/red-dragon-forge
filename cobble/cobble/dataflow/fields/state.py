@@ -75,6 +75,10 @@ _NO_SOURCES: Mapping[FieldExtent, frozenset[Source]] = MappingProxyType({})
 _NO_SOURCE_SET: frozenset[Source] = frozenset()
 _NO_VALUES: Mapping[FieldExtent, ValueSet] = MappingProxyType({})
 
+# The value of an extent a state has no entry for, told apart by identity alone:
+# no state ever stores this object, so ``get`` hands it back only on a miss.
+_UNHELD = ValueSet()
+
 # Reasons a missing entry already conveys, so storing them buys nothing.
 _UNINFORMATIVE = frozenset(
     {UnresolvedReason.NOT_A_LITERAL, UnresolvedReason.UNINITIALISED}
@@ -137,25 +141,53 @@ def _joined_sources(
     return MappingProxyType({**left, **grown}) if grown else left
 
 
-def _joined_values(
-    left: Mapping[FieldExtent, ValueSet], right: Mapping[FieldExtent, ValueSet]
-) -> Mapping[FieldExtent, ValueSet]:
-    """Every extent from either side, its values merged where both hold one.
+def _joined_values(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
+    """Every extent from either side, merged with what the other side holds there.
 
-    Same short-circuits and the same reason as ``_joined_sources``.
+    An extent one side has no entry for is not a side contributing nothing: that
+    path either never wrote the bytes or wrote content the walk cannot name, and
+    neither is stored. So the other side's view of those bytes -- a value sliced
+    from a wider extent, or the reason its miss gives -- joins the entry. Taking
+    the entry as it stood read a value set on one branch as certain after an IF
+    whose other branch computed the field or left it unset.
     """
-    if left is right or not right:
-        return left
-    if not left:
-        return right
-    grown = {
-        extent: merged(prior, held) if extent in left else held
-        for extent, held in right.items()
-        for prior in (left.get(extent, VALUES_EMPTY),)
-        if (prior is not held and not _covers(prior, held))
-        or (held == VALUES_EMPTY and extent not in left)
+    if left.values is right.values:
+        return left.values
+    grown = {**_doubted(left, right), **_arrived(left, right)}
+    return MappingProxyType({**left.values, **grown}) if grown else left.values
+
+
+def _arrived(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
+    """``right``'s entries that add to what ``left`` holds for the same bytes.
+
+    One lookup per entry, and the identity test first: most of a join is the same
+    ``ValueSet`` object on both sides, and a ``FieldExtent`` hash is expensive.
+    """
+    return {
+        extent: _arriving_value(left, extent, prior, held)
+        for extent, held in right.values.items()
+        for prior in (left.values.get(extent, _UNHELD),)
+        if prior is not held and (prior is _UNHELD or not _covers(prior, held))
     }
-    return MappingProxyType({**left, **grown}) if grown else left
+
+
+def _arriving_value(
+    left: State, extent: FieldExtent, prior: ValueSet, held: ValueSet
+) -> ValueSet:
+    if prior is _UNHELD:
+        return merged(values_at(left, extent), held)
+    return merged(prior, held)
+
+
+def _doubted(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
+    """``left``'s entries ``right`` has none for, with ``right``'s view added."""
+    return {
+        extent: merged(held, other)
+        for extent, held in left.values.items()
+        if extent not in right.values
+        for other in (values_at(right, extent),)
+        if not _covers(held, other)
+    }
 
 
 def join(left: State, right: State) -> State:
@@ -169,7 +201,7 @@ def join(left: State, right: State) -> State:
         return left
     return State(
         sources=_joined_sources(left.sources, right.sources),
-        values=_joined_values(left.values, right.values),
+        values=_joined_values(left, right),
     )
 
 
@@ -356,22 +388,34 @@ def _sliced(held: ValueSet, extent: FieldExtent, read: FieldExtent) -> ValueSet:
     )
 
 
-def _missing(read: FieldExtent) -> ValueSet:
-    """Why a read found no value: what its region says, since nothing else can.
+def _missing(state: State, read: FieldExtent) -> ValueSet:
+    """Why a read found no value: what its region and its writers say.
 
     A LINKAGE miss is not an uninitialised field. LINKAGE declares storage the
     caller owns and this intra-program walk never sees written, so the reason is
     that the writer is outside the analysis -- which is what Unit 2's
     interprocedural pass will answer and ``UNINITIALISED`` would have hidden.
 
+    Elsewhere a miss is uninitialised only when nothing wrote the bytes. A write
+    whose content the walk cannot name -- a numeric MOVE, any arithmetic -- stores
+    no value but does record its provenance, so a miss on bytes a write reached is
+    content the walk cannot name, not content nobody set.
+
     Answered at read time and never stored. Storing it would put an entry in
-    ``state.values`` for every LINKAGE byte range any statement reads, which is
-    the redundancy ``_UNINFORMATIVE`` exists to keep out of the map; computed on a
-    miss it costs one enum comparison and grows nothing.
+    ``state.values`` for every byte range any statement reads, which is the
+    redundancy ``_UNINFORMATIVE`` exists to keep out of the map.
     """
     if read.region is RegionId.LINKAGE:
         return because(UnresolvedReason.INBOUND_LINKAGE)
+    if _written(state, read):
+        return because(UnresolvedReason.NOT_A_LITERAL)
     return because(UnresolvedReason.UNINITIALISED)
+
+
+def _written(state: State, read: FieldExtent) -> bool:
+    return read in state.sources or any(
+        read.may_alias(extent) for extent in state.sources
+    )
 
 
 def values_at(state: State, read: FieldExtent) -> ValueSet:
@@ -389,7 +433,7 @@ def values_at(state: State, read: FieldExtent) -> ValueSet:
     answer here becomes a wrong edge in the graph.
     """
     if not state.values:
-        return _missing(read)
+        return _missing(state, read)
     found = tuple(
         _sliced(held, extent, read)
         for extent, held in state.values.items()
@@ -398,7 +442,7 @@ def values_at(state: State, read: FieldExtent) -> ValueSet:
         and read.end <= extent.end
     )
     if not found:
-        return _missing(read)
+        return _missing(state, read)
     return reduce(merged, found, VALUES_EMPTY)
 
 
@@ -416,4 +460,6 @@ def exact_values(state: State, read: FieldExtent) -> ValueSet:
     reports ``_missing``'s reason rather than the value. That aliasing matters at a call
     site, not in a MOVE chain, and ``values_at`` keeps the scan for exactly that.
     """
-    return state.values.get(read, _missing(read))
+    if read in state.values:
+        return state.values[read]
+    return _missing(state, read)

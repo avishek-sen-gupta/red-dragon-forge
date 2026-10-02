@@ -41,10 +41,10 @@ def test_the_counters_reads_inside_the_loop_see_the_loops_own_writes(
     }
 
     assert rows == {
-        "WS-I": (["MAIN-PARA/0#init", "MAIN-PARA/0#step"], [], ["uninitialised"]),
+        "WS-I": (["MAIN-PARA/0#init", "MAIN-PARA/0#step"], [], ["not-a-literal"]),
         "WS-J": (
             ["MAIN-PARA/0.after.0#init", "MAIN-PARA/0.after.0#step"],
             [],
-            ["uninitialised"],
+            ["not-a-literal"],
         ),
     }

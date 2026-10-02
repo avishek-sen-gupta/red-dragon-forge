@@ -834,8 +834,11 @@ A site gets a `targets.jsonl` row when its transfer is `CALL`, `EXEC CICS XCTL` 
 | `XCTL` / `LINK PROGRAM(WS-PGM)` | as `CALL WS-PGM` |
 
 The bytes are whatever reaches the site: a `VALUE` clause, any `MOVE` into the
-field or a group or redefinition over it, joined across branches. A value is
-trimmed of trailing spaces before it becomes a candidate.
+field or a group or redefinition over it, joined across branches. A branch that
+sets no value still counts: a field one branch moves a literal into and another
+computes or leaves unset reads back as that literal with the other branch's
+reason, a candidate rather than a proven target. A value is trimmed of trailing
+spaces before it becomes a candidate.
 
 A `reasons` entry says why the candidates may be short:
 
