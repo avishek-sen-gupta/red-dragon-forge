@@ -97,7 +97,9 @@ node where it leaves, and so does every section: a section's label flows into it
 first paragraph, and its last paragraph's end flows into the section's end. So
 `PERFORM`, `GO TO` and a `WHENEVER`'s `GO TO` land on a section's label when they
 name one, a `PERFORM` of a section returns from the section's end, and falling off
-one section enters the next through its label.
+one section enters the next through its label. Names are upper-cased, declared ones
+and jumped-to ones alike, since COBOL does not distinguish `Main-Para` from
+`MAIN-PARA`: node ids use the upper-case spelling whatever the source wrote.
 
 A performed range always runs, so a `PERFORM` that can return has no edge past it:
 its node's `resume` names where it continues, and the range's `RETURN` edge lands

@@ -391,23 +391,25 @@ def test_statements_of_duplicate_paragraphs_land_under_distinct_ids(asg_of) -> N
 
 def test_a_section_is_a_label_every_jump_into_it_lands_on(asg_of) -> None:
     """PERFORM, GO TO and a WHENEVER's GO TO may each name a section. Its label
-    flows into its first paragraph, and a PERFORM of it returns after its last."""
+    flows into its first paragraph, and a PERFORM of it returns after its last.
+    COBOL names are case-insensitive, so a name declared in one spelling and jumped
+    to in another is one name, and the graph spells it in upper case."""
     with asg_dialect_parsers_registered():
         asg = asg_of(
             {
                 "program_id": "PROGA",
                 "sections": [
                     {
-                        "name": "MAIN-SECTION",
+                        "name": "Main-Section",
                         "paragraphs": [
                             {
-                                "name": "MAIN-PARA",
+                                "name": "Main-Para",
                                 "statements": [
-                                    {"type": "PERFORM", "operands": ["WORK-SECTION"]},
+                                    {"type": "PERFORM", "operands": ["work-section"]},
                                     {
                                         "type": "EXEC_SQL",
                                         "text": "EXEC SQL WHENEVER SQLERROR"
-                                        " GO TO ERR-SECTION END-EXEC",
+                                        " GO TO Err-Section END-EXEC",
                                     },
                                     {
                                         "type": "EXEC_SQL",
@@ -417,23 +419,23 @@ def test_a_section_is_a_label_every_jump_into_it_lands_on(asg_of) -> None:
                                     {
                                         "type": "GOTO",
                                         "form": "simple",
-                                        "target": {"paragraph": "ERR-SECTION"},
+                                        "target": {"paragraph": "err-SECTION"},
                                     },
                                 ],
                             }
                         ],
                     },
                     {
-                        "name": "WORK-SECTION",
+                        "name": "Work-Section",
                         "paragraphs": [
-                            {"name": "WORK-1", "statements": [_move("'A'", "WS-A")]},
+                            {"name": "Work-1", "statements": [_move("'A'", "WS-A")]},
                             {"name": "WORK-2", "statements": [_move("'B'", "WS-B")]},
                         ],
                     },
                     {
-                        "name": "ERR-SECTION",
+                        "name": "err-section",
                         "paragraphs": [
-                            {"name": "ERR-1", "statements": [{"type": "STOP_RUN"}]}
+                            {"name": "Err-1", "statements": [{"type": "STOP_RUN"}]}
                         ],
                     },
                 ],
