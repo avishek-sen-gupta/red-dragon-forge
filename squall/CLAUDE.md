@@ -171,7 +171,7 @@ squall/
                      #   CobolFrontend; also registers the __cics_task_end_hook session-reset builtin
                      #   (reset_session_fn) for the composed-with-Cicada case
   preprocess.py      # EXEC SQL / DCLGEN / INCLUDE preprocessing over the source
-  parser/            # EXEC SQL parsing: grammar.lark + _grammar.py (Lark), parse.py, sql_model.py
+  parser/            # EXEC SQL parsing: grammar.lark (Lark), parse.py, sql_model.py
   statements.py      # parsed statement value types
   coprocessor.py     # coprocessor entry point / wiring
   binding.py         # generic host-variable binding engine (field <-> param, INTO mapping,
