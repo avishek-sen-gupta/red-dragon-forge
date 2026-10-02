@@ -8,7 +8,7 @@ disagrees with either, this file wins.
 Only the root has a Makefile; `cicada`, `squall`, `jackal` and `cobble` deliberately have none.
 
 ```bash
-make setup     # init submodules + build hlasm_export + ProLeap and JCL bridge JARs + uv sync
+make setup     # init submodules + build hlasm_export + rebuild ProLeap and JCL bridge JARs + uv sync
 make jar       # both bridge JARs; skipped if already built (jar-force rebuilds)
 make python    # uv sync --all-packages
 make fmt       # Black over BLACK_PATHS
