@@ -51,7 +51,7 @@ def test_each_read_carries_its_values_and_the_reasons_they_may_be_short(
             "program": PROGRAM,
             "node": "MAIN-PARA/0",
             "extent": "WS-A@working_storage[0:4]",
-            "definers": ["MAIN-PARA/0"],
+            "definers": [],
             "values": ["AAAA"],
             "reasons": [],
         },

@@ -579,10 +579,10 @@ def _walked(
     return _worked(cfg, statements, index, entry, options.factor, entry_state)
 
 
-def _definers(state: State, extent: FieldExtent, node: str) -> frozenset[str]:
-    """Where the value at ``extent`` was last written, or here if nowhere was."""
-    found = frozenset(source.node for source in reaching(state, extent))
-    return found or frozenset({node})
+def _definers(state: State, extent: FieldExtent) -> frozenset[str]:
+    """Where the value at ``extent`` was last written; nothing when no statement in
+    the program wrote it, and its content is its VALUE clause or nothing at all."""
+    return frozenset(source.node for source in reaching(state, extent))
 
 
 def _at(
@@ -613,7 +613,7 @@ def _at(
             ReachingDef(
                 node=node_id,
                 extent=source.extent,
-                definers=tuple(sorted(_definers(state, source.extent, node_id))),
+                definers=tuple(sorted(_definers(state, source.extent))),
                 held=values_at(state, source.extent),
             )
             for _, source in moved

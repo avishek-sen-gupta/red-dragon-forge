@@ -412,7 +412,7 @@ def test_one_sweep_loses_a_definition_the_loop_carries_backwards(flow_of):
     """A read whose feeding write comes later in the body needs the back edge.
 
     The worklist credits the read to the write below it; one sweep has not seen
-    that write yet, so it credits the read to itself -- an uninitialised read.
+    that write yet, so it credits the read to nothing -- an uninitialised read.
     That is the shape of what a single sweep drops, and nothing is invented in
     its place.
     """
@@ -435,9 +435,7 @@ def test_one_sweep_loses_a_definition_the_loop_carries_backwards(flow_of):
     ]
 
     assert _definers(flow_of(paragraphs), "WS-C") == {"LOOP-PARA/1"}
-    assert _definers(flow_of(paragraphs, AnalysisOptions(sweeps=1)), "WS-C") == {
-        "LOOP-PARA/0"
-    }
+    assert _definers(flow_of(paragraphs, AnalysisOptions(sweeps=1)), "WS-C") == set()
 
 
 def test_a_sweep_walk_that_runs_out_of_budget_says_so(loop_paragraphs, flow_of):

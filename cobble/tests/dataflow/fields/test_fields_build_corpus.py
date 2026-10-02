@@ -1188,8 +1188,8 @@ def test_two_programs_reading_the_same_named_bytes_keep_a_defs_row_each(corpus):
     first program's row, or not at all."""
     argv, out_dir = corpus(
         {
-            "MEMBERA": json.dumps(_program("PROGA")),
-            "MEMBERB": json.dumps(_program("PROGB")),
+            "MEMBERA": json.dumps(_written_then_read("PROGA")),
+            "MEMBERB": json.dumps(_written_then_read("PROGB")),
         }
     )
     extents = Path(argv[argv.index("--extents") + 1])
@@ -1200,13 +1200,35 @@ def test_two_programs_reading_the_same_named_bytes_keep_a_defs_row_each(corpus):
         (row["program"], row["node"], row["extent"], row["definers"])
         for row in _rows(out_dir / DEFS_FILE)
     ] == [
-        ("PROGA", "MAIN/0", "WS-A@working_storage[0:4]", ["MAIN/0"]),
-        ("PROGB", "MAIN/0", "WS-A@working_storage[0:4]", ["MAIN/0"]),
+        ("PROGA", "MAIN/1", "WS-A@working_storage[0:4]", ["MAIN/0"]),
+        ("PROGB", "MAIN/1", "WS-A@working_storage[0:4]", ["MAIN/0"]),
     ]
     store = load(out_dir, extents)
-    assert {flow.source: store.definers_of(flow) for flow in store.flows} == {
+    assert {
+        flow.source: store.definers_of(flow)
+        for flow in store.flows
+        if flow.source.endswith(".WS-A")
+    } == {
         "PROGA.WS-A": ("MAIN/0",),
         "PROGB.WS-A": ("MAIN/0",),
+    }
+
+
+def _written_then_read(program_id: str) -> dict:
+    """``_program`` with WS-A written first, so its read has a definer of its own."""
+    program = _program(program_id)
+    main = program["paragraphs"][0]
+    return {
+        **program,
+        "paragraphs": [
+            {
+                **main,
+                "statements": [
+                    {"type": "MOVE", "operands": [{"name": "'X'"}, {"name": "WS-A"}]},
+                    *main["statements"],
+                ],
+            }
+        ],
     }
 
 
