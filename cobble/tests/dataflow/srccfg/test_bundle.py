@@ -17,9 +17,7 @@ import pytest
 
 from cobble.dataflow.srccfg.bundle import (
     CfgDocumentError,
-    cfg_dicts_of,
     cfg_to_dict,
-    load_cfg_dicts,
     one_cfg_document,
     Bundle,
     bundle_of,
@@ -266,24 +264,6 @@ def test_a_pre_bundle_file_is_refused_and_says_how_to_rebuild(
 
     with pytest.raises(CfgDocumentError, match=why):
         load_bundle(path)
-
-    with pytest.raises(CfgDocumentError, match="cobble-srccfg-build"):
-        load_cfg_dicts(path)
-
-
-def test_a_reader_that_wants_the_json_sees_the_one_shape(tmp_path: Path) -> None:
-    """cobble.viz walks the CFG documents rather than building Cfgs out of them, and
-    it is pointed at the same files -- so it reads them through the same door."""
-    bundle = _bundle(_caller("PROGB"), _callee())
-    path = _written(tmp_path, json.loads(bundle_to_json(bundle)))
-
-    assert [cfg["program"] for cfg in load_cfg_dicts(path)] == ["PROGA", "PROGB"]
-    assert [
-        cfg["program"] for cfg in cfg_dicts_of(json.loads(bundle_to_json(bundle)))
-    ] == [
-        "PROGA",
-        "PROGB",
-    ]
 
 
 def test_the_calls_a_bundle_carries_draw_what_deriving_them_draws() -> None:

@@ -8,31 +8,32 @@ repeats, which arm each call is in, and that the arms are alternatives.
 
 from __future__ import annotations
 
+from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.viz.models import Arm
 from cobble.viz.render_cmd import _render_program
 from cobble.viz.sequence_cmd import extract_per_program
 
 
-def _label(paragraph: str) -> dict:
-    return {"id": f"{paragraph}#label", "kind": "LABEL", "paragraph": paragraph}
+def _label(paragraph: str) -> Node:
+    return Node(id=f"{paragraph}#label", kind=NodeKind.LABEL, paragraph=paragraph)
 
 
-def _perform(site: str) -> dict:
-    return {
-        "id": site,
-        "kind": "CALL",
-        "transfer": "PERFORM",
-        "paragraph": site.split("/")[0],
-    }
+def _perform(site: str) -> Node:
+    return Node(
+        id=site,
+        kind=NodeKind.CALL,
+        paragraph=site.split("/")[0],
+        transfer="PERFORM",
+    )
 
 
-def _test(node_id: str, text: str) -> dict:
-    return {
-        "id": node_id,
-        "kind": "TEST",
-        "paragraph": node_id.split("/")[0],
-        "atom": {"text": text},
-    }
+def _test(node_id: str, text: str) -> Node:
+    return Node(
+        id=node_id,
+        kind=NodeKind.TEST,
+        paragraph=node_id.split("/")[0],
+        atom=Atom(text=text),
+    )
 
 
 SITES = (
@@ -45,21 +46,21 @@ SITES = (
     ("S-PARA/0.then.0", "A-PARA"),
 )
 
-CFG = {
-    "program": "PROG",
-    "nodes": [
+CFG = Cfg(
+    program="PROG",
+    nodes=(
         *(_label(p) for p in ("0000-MAIN", "A-PARA", "S-PARA", "P-PARA", "R-PARA")),
         _test("0000-MAIN/1.when.0#test", "ENTER"),
         _test("0000-MAIN/1.when.1#test", "REENTER"),
         _test("0000-MAIN/1.when.1.1#test", "INPUT-ERROR"),
         _test("S-PARA/0#test", "FLAG"),
         *(_perform(site) for site, _ in SITES),
-    ],
-    "edges": [
-        {"source": site, "target": f"{target}#label", "kind": "PERFORM"}
+    ),
+    edges=tuple(
+        Edge(source=site, target=f"{target}#label", kind=EdgeKind.PERFORM)
         for site, target in SITES
-    ],
-}
+    ),
+)
 
 
 def test_every_perform_site_is_a_step_even_when_its_target_repeats():

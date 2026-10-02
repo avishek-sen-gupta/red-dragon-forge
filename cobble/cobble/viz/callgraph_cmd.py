@@ -13,7 +13,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from cobble.dataflow.srccfg.bundle import load_cfg_dicts
+from cobble.dataflow.srccfg.bundle import load_bundle
 from cobble.knowledge_graph.graph_file import read_graph
 from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge
 from cobble.path_utils import ensure_parent
@@ -102,8 +102,7 @@ def _run(args: argparse.Namespace) -> int:
             "error: %s not found — run `cobble-build --output` first", args.graph
         )
         return 1
-    cfgs_raw = load_cfg_dicts(args.cfg)
-    targets = frozenset(c["program"] for c in cfgs_raw)
+    targets = frozenset(cfg.program for cfg in load_bundle(args.cfg).cfgs)
     graph = extract(args.graph, targets)
     ensure_parent(args.out).write_text(graph.model_dump_json(indent=2))
     _LOG.info("call-dep.json: %d nodes, %d edges", len(graph.nodes), len(graph.edges))
