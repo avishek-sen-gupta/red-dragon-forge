@@ -50,9 +50,10 @@ def build_program(asg, source_file: str = "") -> Cfg:
     order = paragraph_order(asg)
     nodes, body = _lowered(asg, order, source_file)
     resumes = _resumes(nodes, body, order)
+    ends = _closing_ends(nodes, order)
     return Cfg(
         program=asg.program_id,
-        nodes=tuple(_resuming(node, resumes) for node in nodes),
+        nodes=tuple(_annotated(node, resumes, ends) for node in nodes),
         edges=(
             *_perform_edges(nodes, body, order),
             *(edge for edge in body if not _skips_range(edge, resumes)),
@@ -113,10 +114,27 @@ def _resumes(
     }
 
 
-def _resuming(node: Node, resumes: Mapping[str, str]) -> Node:
-    if node.id not in resumes:
+def _closing_ends(
+    nodes: Sequence[Node], order: Sequence[ParagraphRef]
+) -> Mapping[str, str]:
+    """Each PERFORM whose range resolves, and the range end its RETURN leaves from.
+
+    Two PERFORMs can resume at one statement -- the two arms of an IF -- so the
+    resume point alone does not say which RETURN is whose. The end it leaves from
+    does, and only the build knows it without decoding the target's text."""
+    return {
+        node.id: ends[1]
+        for node in nodes
+        if node.transfer == PERFORM_TRANSFER
+        for ends in (_range_ends(node, order),)
+        if ends
+    }
+
+
+def _annotated(node: Node, resumes: Mapping[str, str], ends: Mapping[str, str]) -> Node:
+    if node.id not in ends:
         return node
-    return replace(node, resume=resumes[node.id])
+    return replace(node, resume=resumes.get(node.id, ""), range_end=ends[node.id])
 
 
 def _skips_range(edge: Edge, resumes: Mapping[str, str]) -> bool:

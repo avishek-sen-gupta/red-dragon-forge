@@ -50,6 +50,7 @@ def node_row(program: str, node: Node) -> CfgNodeRow:
         using=node.using,
         span=node.span,
         resume=node.resume,
+        range_end=node.range_end,
     )
 
 

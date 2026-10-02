@@ -10,6 +10,7 @@ from types import MappingProxyType
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node
 from cobble.dataflow.srccfg.desugar import DISPATCH_TRANSFER_CICS, PERFORM_TRANSFER
 from cobble.dataflow.srccfg.reach.reach_error import ReachError
+from cobble.dataflow.srccfg.reach.reach_frame import ReachFrame
 from cobble.dataflow.srccfg.reach.reach_state import ReachState
 from cobble.dataflow.srccfg.reach.reach_step import ReachStep
 from cobble.dataflow.srccfg.reach.reach_visit import ReachVisit
@@ -94,14 +95,14 @@ def _performed(cfg: Cfg, node: Node, state: ReachState) -> ReachVisit:
         return ReachVisit(
             steps=_onward(cfg, node, state).steps, events=(unresolved_row(node.id),)
         )
-    resume = _resume(cfg, node)
-    if resume in state.stack:
-        return _stepped_over(node, resume, state)
+    frame = ReachFrame(resume=_resume(cfg, node), end=node.range_end)
+    if frame in state.stack:
+        return _stepped_over(node, frame.resume, state)
     return ReachVisit(
         steps=tuple(
             ReachStep(
                 edge=edge,
-                state=ReachState(node=edge.target, stack=(*state.stack, resume)),
+                state=ReachState(node=edge.target, stack=(*state.stack, frame)),
             )
             for edge in performs
         ),
@@ -142,24 +143,25 @@ def _resume(cfg: Cfg, node: Node) -> str:
 
 
 def _range_end(cfg: Cfg, node: Node, state: ReachState) -> ReachVisit:
-    """Return to the innermost open PERFORM if this end closes it; otherwise fall
-    through, as COBOL does at an end no open PERFORM closes."""
-    back = tuple(
-        edge
-        for edge in cfg.successors(node.id)
-        if edge.kind is EdgeKind.RETURN and edge.target == state.stack[-1]
-    )[:1]
-    if back:
-        return ReachVisit(
-            steps=(
-                ReachStep(
-                    edge=back[0],
-                    state=ReachState(node=back[0].target, stack=state.stack[:-1]),
-                ),
+    """Return from the innermost open PERFORM whose range ends here, dropping any
+    opened inside it that a GO TO left behind; with none, fall through, as COBOL
+    does at an end no open PERFORM closes.
+
+    A frame is matched by the end it returns from, never by where it resumes: the
+    two arms of an IF can PERFORM different ranges that resume at one statement."""
+    closing = tuple(at for at, frame in enumerate(state.stack) if frame.end == node.id)
+    if not closing:
+        return _fallen_through(cfg, node, state)
+    frame = state.stack[closing[-1]]
+    return ReachVisit(
+        steps=(
+            ReachStep(
+                edge=Edge(source=node.id, target=frame.resume, kind=EdgeKind.RETURN),
+                state=ReachState(node=frame.resume, stack=state.stack[: closing[-1]]),
             ),
-            events=(),
-        )
-    return _fallen_through(cfg, node, state)
+        ),
+        events=(),
+    )
 
 
 def _fallen_through(cfg: Cfg, node: Node, state: ReachState) -> ReachVisit:

@@ -55,6 +55,7 @@ NODE = Node(
         line_start=12, col_start=8, line_end=12, col_end=30, source_file="PROGA.cbl"
     ),
     resume="MAIN/4",
+    range_end="SUB#end",
 )
 
 

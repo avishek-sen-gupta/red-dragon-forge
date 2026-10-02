@@ -39,6 +39,22 @@ def _cics(verb: str, options: Mapping) -> dict:
     return {"type": "EXEC_CICS", "verb": verb, "options": dict(options)}
 
 
+def _if(then: dict, otherwise: dict) -> dict:
+    return {
+        "type": "IF",
+        "condition": {
+            "not": False,
+            "relation": {
+                "left": {"kind": "ref", "name": "WS-F"},
+                "op": "==",
+                "right": {"kind": "lit", "value": "'Y'"},
+            },
+        },
+        "children": [then],
+        "else_children": [otherwise],
+    }
+
+
 def _para(name: str, *statements: dict) -> dict:
     return {"name": name, "statements": list(statements)}
 
@@ -247,6 +263,51 @@ def test_an_end_only_another_site_closes_with_nowhere_to_fall_is_a_dead_end(
 
     assert _outcomes(rows) == {("dead-end", "Z#end")}
     assert ("Z#end", "MAIN/2", EdgeKind.RETURN) not in _edges(rows)
+
+
+def test_two_performs_resuming_at_one_statement_do_not_return_for_each_other(
+    asg_of: Asg,
+) -> None:
+    """Both arms of an IF perform a range and resume at the same next statement. A
+    jumps into B's range; B's end returns only for the PERFORM of B, which never
+    ran on this path, so control falls through to Z and stops there -- the walk
+    must not take B's RETURN as A's."""
+    rows = _rows(
+        asg_of,
+        "MAIN/0.then.0",
+        _para(
+            "MAIN",
+            _if(_perform("A"), _perform("B")),
+            _move("'X'", "WS-X"),
+            {"type": "STOP_RUN"},
+        ),
+        _para("A", _goto("B")),
+        _para("B", _move("'B'", "WS-B")),
+        _para("Z", {"type": "STOP_RUN"}),
+    )
+
+    assert _outcomes(rows) == {("stop-run", "Z/0")}
+    assert ("B#end", "MAIN/1", EdgeKind.RETURN) not in _edges(rows)
+
+
+def test_a_go_to_an_outer_ranges_exit_returns_from_the_outer_perform(
+    asg_of: Asg,
+) -> None:
+    """Inside P2's range, a GO TO reaches P1-EXIT, the end of the outer range: the
+    outer PERFORM returns from there, and the inner one it abandoned is dropped."""
+    rows = _rows(
+        asg_of,
+        "MAIN/0",
+        _para("MAIN", _perform("P1", "P1-EXIT"), {"type": "STOP_RUN"}),
+        _para("P1", _perform("P2", "P2-EXIT")),
+        _para("P1-EXIT", {"type": "EXIT"}),
+        _para("P2", _goto("P1-EXIT")),
+        _para("P2-EXIT", {"type": "EXIT"}),
+        _para("LAST", {"type": "STOP_RUN"}),
+    )
+
+    assert _outcomes(rows) == {("returns", "MAIN/1")}
+    assert ("P1-EXIT#end", "MAIN/1", EdgeKind.RETURN) in _edges(rows)
 
 
 def test_a_handled_condition_reaches_its_handler_and_the_loop_back_ends(
