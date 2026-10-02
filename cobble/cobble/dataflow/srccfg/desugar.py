@@ -45,7 +45,9 @@ from cobble.dataflow.srccfg.cfg import (
     seq,
 )
 from cobble.dataflow.srccfg.conditions import (
+    ALWAYS,
     And,
+    Cond,
     EightyEight,
     Not,
     Or,
@@ -577,11 +579,23 @@ def _when_condition(
             )
         ),
     )
-    return _and_chain(parts, ctx, path, 0)
+    slotted = tuple(zip(_ALSO_SLOTS[: len(parts)], parts, strict=True))
+    return _and_chain(_tested(slotted), ctx, path, 0)
 
 
-def _and_chain(parts, ctx: Ctx, path: str, position: int) -> CondFragment:
-    head = lower_condition(parts[position], ctx, path, _ALSO_SLOTS[position])
+def _tested(slotted: tuple[tuple[str, Cond], ...]) -> tuple[tuple[str, Cond], ...]:
+    """The parts that test anything. ANY matches whatever its subject holds, so
+    beside a real comparison it would only add a FALSE edge that never fires; a
+    WHEN of nothing but ANY keeps one, so the branch still has a node."""
+    tested = tuple(part for part in slotted if part[1] != ALWAYS)
+    return tested if tested else slotted[:1]
+
+
+def _and_chain(
+    parts: tuple[tuple[str, Cond], ...], ctx: Ctx, path: str, position: int
+) -> CondFragment:
+    slot, cond = parts[position]
+    head = lower_condition(cond, ctx, path, slot)
     if position + 1 >= len(parts):
         return head
     tail = _and_chain(parts, ctx, path, position + 1)

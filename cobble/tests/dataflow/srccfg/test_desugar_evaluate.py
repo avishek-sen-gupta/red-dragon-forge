@@ -371,3 +371,47 @@ def test_an_evaluate_with_no_branches_lowers_to_nothing(program_of) -> None:
     cfg = _cfg(program_of, [_evaluate()])
 
     assert cfg.nodes == ()
+
+
+def test_an_any_among_also_values_is_no_test_at_all(program_of) -> None:
+    """ANY matches whatever its subject holds, so beside a real comparison it adds
+    nothing but a FALSE edge that can never fire. The real comparisons keep their
+    own ALSO slots."""
+    cfg = _cfg(
+        program_of,
+        [
+            {
+                "type": "EVALUATE",
+                "subject": "WS-TYPE-B",
+                "also_subjects": ["WS-FLAG-A"],
+                "children": [
+                    {
+                        "type": "WHEN",
+                        "condition": "'G'",
+                        "also_conditions": ["ANY"],
+                        "children": [_move("'F'", "WS-RESULT")],
+                    },
+                    {
+                        "type": "WHEN",
+                        "condition": "ANY",
+                        "also_conditions": ["'Y'"],
+                        "children": [_move("'E'", "WS-RESULT")],
+                    },
+                    {"type": "WHEN_OTHER", "children": [_move("'O'", "WS-RESULT")]},
+                ],
+            }
+        ],
+    )
+
+    assert [
+        (n.id, n.atom.left, n.atom.op, n.atom.right)
+        for n in cfg.nodes
+        if n.kind == NodeKind.TEST
+    ] == [
+        ("MAIN/0.when.0#test", "WS-TYPE-B", "==", "'G'"),
+        ("MAIN/0.when.1#test.A1", "WS-FLAG-A", "==", "'Y'"),
+    ]
+    assert {(e.target, e.kind) for e in cfg.successors("MAIN/0.when.0#test")} == {
+        ("MAIN/0.when.0.0", EdgeKind.TRUE),
+        ("MAIN/0.when.1#test.A1", EdgeKind.FALSE),
+    }
