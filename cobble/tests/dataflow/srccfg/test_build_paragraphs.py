@@ -8,6 +8,7 @@ instead of the size of the call tree.
 
 from __future__ import annotations
 
+from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import (
     build_program,
     end_id,
@@ -386,3 +387,83 @@ def test_statements_of_duplicate_paragraphs_land_under_distinct_ids(asg_of) -> N
     second_body = [e.target for e in cfg.successors(label_id("1000-FIRST%2"))]
     assert first_body == ["1000-FIRST/0"]
     assert second_body == ["1000-FIRST%2/0"]
+
+
+def test_a_section_is_a_label_every_jump_into_it_lands_on(asg_of) -> None:
+    """PERFORM, GO TO and a WHENEVER's GO TO may each name a section. Its label
+    flows into its first paragraph, and a PERFORM of it returns after its last."""
+    with asg_dialect_parsers_registered():
+        asg = asg_of(
+            {
+                "program_id": "PROGA",
+                "sections": [
+                    {
+                        "name": "MAIN-SECTION",
+                        "paragraphs": [
+                            {
+                                "name": "MAIN-PARA",
+                                "statements": [
+                                    {"type": "PERFORM", "operands": ["WORK-SECTION"]},
+                                    {
+                                        "type": "EXEC_SQL",
+                                        "text": "EXEC SQL WHENEVER SQLERROR"
+                                        " GO TO ERR-SECTION END-EXEC",
+                                    },
+                                    {
+                                        "type": "EXEC_SQL",
+                                        "text": "EXEC SQL SELECT A INTO :B FROM T"
+                                        " END-EXEC",
+                                    },
+                                    {
+                                        "type": "GOTO",
+                                        "form": "simple",
+                                        "target": {"paragraph": "ERR-SECTION"},
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "name": "WORK-SECTION",
+                        "paragraphs": [
+                            {"name": "WORK-1", "statements": [_move("'A'", "WS-A")]},
+                            {"name": "WORK-2", "statements": [_move("'B'", "WS-B")]},
+                        ],
+                    },
+                    {
+                        "name": "ERR-SECTION",
+                        "paragraphs": [
+                            {"name": "ERR-1", "statements": [{"type": "STOP_RUN"}]}
+                        ],
+                    },
+                ],
+            }
+        )
+    cfg = build_program(asg)
+
+    assert [(node.id, node.kind) for node in cfg.nodes if "SECTION#" in node.id] == [
+        ("MAIN-SECTION#label", NodeKind.LABEL),
+        ("MAIN-SECTION#end", NodeKind.NOP),
+        ("WORK-SECTION#label", NodeKind.LABEL),
+        ("WORK-SECTION#end", NodeKind.NOP),
+        ("ERR-SECTION#label", NodeKind.LABEL),
+        ("ERR-SECTION#end", NodeKind.NOP),
+    ]
+    assert {
+        (e.source, e.target, e.kind)
+        for e in cfg.edges
+        if "SECTION#" in e.source or "SECTION#" in e.target
+    } == {
+        ("MAIN-SECTION#label", label_id("MAIN-PARA"), EdgeKind.FLOW),
+        (end_id("MAIN-PARA"), "MAIN-SECTION#end", EdgeKind.FLOW),
+        ("MAIN-SECTION#end", "WORK-SECTION#label", EdgeKind.FALLTHRU),
+        ("WORK-SECTION#label", label_id("WORK-1"), EdgeKind.FLOW),
+        (end_id("WORK-2"), "WORK-SECTION#end", EdgeKind.FLOW),
+        ("WORK-SECTION#end", "ERR-SECTION#label", EdgeKind.FALLTHRU),
+        ("ERR-SECTION#label", label_id("ERR-1"), EdgeKind.FLOW),
+        (end_id("ERR-1"), "ERR-SECTION#end", EdgeKind.FLOW),
+        ("MAIN-PARA/0", "WORK-SECTION#label", EdgeKind.PERFORM),
+        ("WORK-SECTION#end", "MAIN-PARA/2", EdgeKind.RETURN),
+        ("MAIN-PARA/2.sql0#whenever", "ERR-SECTION#label", EdgeKind.GOTO),
+        ("MAIN-PARA/3", "ERR-SECTION#label", EdgeKind.GOTO),
+    }
