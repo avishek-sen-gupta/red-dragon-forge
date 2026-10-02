@@ -495,4 +495,6 @@ fileignoreconfig:
   checksum: fd808074d85aca2abee080dac45078fc50d791c97b090ea11476c9df3f215a9d
 - filename: cobble/tests/dataflow/srccfg/test_reach.py
   checksum: 3cb2877b50de21eae2d5cbb8cc21adebcea808e618252bbdb928b31c9887ecc9
+- filename: cobble/tests/dataflow/srccfg/test_reach_cli.py
+  checksum: b6dd09b80b4bc4a7291dc2c4e892d6915335e3cd428b5842db0cedf4af3aaedf
 version: "1.0"
