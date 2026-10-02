@@ -1,4 +1,4 @@
-"""cobble-srccfg-reach: a CFG file in, the reached subgraph and its outcomes out."""
+"""cobble-srccfg-walk: a CFG file in, the reached subgraph and its outcomes out."""
 
 from __future__ import annotations
 

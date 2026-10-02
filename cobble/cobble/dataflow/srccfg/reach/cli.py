@@ -1,4 +1,4 @@
-"""cobble-srccfg-reach: what can run from one PERFORM until it returns, as src-cfg rows.
+"""cobble-srccfg-walk: what can run from one PERFORM until it returns, as src-cfg rows.
 
 Reads a CFG file cobble-srccfg-build wrote, walks the first program in it from the
 PERFORM node named by --from, and writes the reached subgraph and what it found to
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cobble-srccfg-reach",
+        prog="cobble-srccfg-walk",
         description="Everything that can run from one PERFORM until it returns.",
     )
     parser.add_argument(

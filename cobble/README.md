@@ -46,7 +46,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <jsonl> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
 | `cobble-srccfg-query <query> <subject> --cfg <jsonl>` | Ask a built CFG for guards or a field's provenance |
-| `cobble-srccfg-reach --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
+| `cobble-srccfg-walk --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
 | `python -m pytest` | Run the pytest unit suite |
 
 ### Build the graph from CardDemo
@@ -199,7 +199,7 @@ is reported as one skipped member, not silently reparsed.
 
 ### Reachability from a PERFORM
 
-`cobble-srccfg-reach --cfg <file> --from <PERFORM node id>` answers "what can run
+`cobble-srccfg-walk --cfg <file> --from <PERFORM node id>` answers "what can run
 from this PERFORM until control comes back, and how else can it end". It walks
 the first program in a `cobble-srccfg-build` file over states of a node and the
 PERFORMs open there, so a range end returns only to an open PERFORM whose range
