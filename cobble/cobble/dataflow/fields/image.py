@@ -8,11 +8,19 @@ from operator import itemgetter
 from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex
+from cobble.dataflow.fields.numeric_digits import aligned_digits
 from cobble.dataflow.fields.values import ValueSet, bounded, fitted
 from cobble.dataflow.layout import Cell, Record
+from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.pic_parser import parse_pic
 from cobol_memory.field_extent import FieldExtent
 
 WORKING_STORAGE = "WORKING-STORAGE"
+
+_TEXT = CobolTypeDescriptor(category=CobolDataCategory.ALPHANUMERIC, total_digits=0)
+_TEXT_CATEGORIES = frozenset(
+    {CobolDataCategory.ALPHANUMERIC, CobolDataCategory.ALPHANUMERIC_EDITED}
+)
 
 _FIGURATIVE = MappingProxyType(
     {
@@ -45,17 +53,41 @@ def _unquoted(text: str) -> str:
     return text
 
 
-def _literal_bytes(cell: Cell) -> bytes:
-    """One cell's declared content as bytes, figurative constants included.
+def _literal_bytes(cell: Cell) -> tuple[bytes, ...]:
+    """One cell's declared content as bytes, figurative constants included, or
+    nothing where the value has no faithful text form.
 
     A figurative constant is concrete storage -- SPACES is X'40' repeated to the
     field's width -- so excluding it would make the image claim a field holds
     nothing when the program can read eight spaces out of it and branch on them,
     which COMEN01C.cbl:198 does.
+
+    Values are text here, so a numeric VALUE is imaged only where text holds it
+    faithfully: unsigned or positive zoned decimal, as its digits. A negative zoned
+    value's sign is an overpunch, and COMP, COMP-3 and edited items are not digits
+    at all; for those nothing is claimed (red-dragon-forge-9il).
     """
     if cell.value_is_figurative:
-        return _FIGURATIVE.get(cell.value.strip().upper(), b" ") * cell.length
-    return _unquoted(cell.value).encode("utf-8", errors="replace")
+        return (_FIGURATIVE.get(cell.value.strip().upper(), b" ") * cell.length,)
+    kind = parse_pic(cell.pic, cell.usage) if cell.pic else _TEXT
+    if kind.category in _TEXT_CATEGORIES:
+        return (
+            fitted(
+                _unquoted(cell.value).encode("utf-8", errors="replace"), cell.length
+            ),
+        )
+    return _zoned_digits(cell, kind)
+
+
+def _zoned_digits(cell: Cell, kind: CobolTypeDescriptor) -> tuple[bytes, ...]:
+    if (
+        kind.category is not CobolDataCategory.ZONED_DECIMAL
+        or kind.sign_separate
+        or cell.value.strip().startswith("-")
+    ):
+        return ()
+    digits = aligned_digits(cell.value, kind.total_digits, kind.decimal_digits)
+    return (digits.encode("ascii"),) if len(digits) == cell.length else ()
 
 
 def initial_image(
@@ -75,12 +107,13 @@ def initial_image(
         (
             str(index.extent_of(cell)),
             index.extent_of(cell),
-            fitted(_literal_bytes(cell), cell.length),
+            value,
         )
         for record in records
         if record.origin == WORKING_STORAGE
         for cell in record.cells
         if cell.value and not cell.is_group
+        for value in _literal_bytes(cell)
     )
     addressed = {name: extent for name, extent, _ in entries}
     pairs = sorted((name, value) for name, _, value in entries)
