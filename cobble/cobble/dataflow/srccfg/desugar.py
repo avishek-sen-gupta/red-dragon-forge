@@ -595,7 +595,7 @@ def _branch(child, subjects: tuple[str, ...], ctx: Ctx, path: str) -> _Branch:
 def _guarded_branch(
     child, subjects: tuple[str, ...], ctx: Ctx, path: str, body: Fragment
 ) -> _Branch:
-    cond = _when_condition(child, subjects, ctx, path)
+    cond = _stacked_condition(child, subjects, ctx, path)
     into_body = _attach(cond.true_exits, body)
     return _Branch(
         nodes=(*cond.nodes, *body.nodes),
@@ -603,6 +603,38 @@ def _guarded_branch(
         entry=cond.entry,
         body_exits=body.exits if body.nodes else cond.true_exits,
         false_exits=cond.false_exits,
+    )
+
+
+def _stacked_condition(
+    child, subjects: tuple[str, ...], ctx: Ctx, path: str
+) -> CondFragment:
+    """WHEN c1 WHEN c2 <body>: each alternative is tried when the conditions before
+    it failed, and any one's TRUE exits enter the body -- an OR chain."""
+    return reduce(
+        _either,
+        (
+            _when_condition(alternative, subjects, ctx, f"{path}.alt.{position}")
+            for position, alternative in enumerate(getattr(child, "alternatives", ()))
+        ),
+        _when_condition(child, subjects, ctx, path),
+    )
+
+
+def _either(left: CondFragment, right: CondFragment) -> CondFragment:
+    return CondFragment(
+        nodes=(*left.nodes, *right.nodes),
+        edges=(
+            *left.edges,
+            *right.edges,
+            *(
+                Edge(source=exit_.node_id, target=right.entry, kind=exit_.kind)
+                for exit_ in left.false_exits
+            ),
+        ),
+        entry=left.entry,
+        true_exits=(*left.true_exits, *right.true_exits),
+        false_exits=right.false_exits,
     )
 
 
