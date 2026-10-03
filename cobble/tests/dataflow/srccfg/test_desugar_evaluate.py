@@ -415,3 +415,39 @@ def test_an_any_among_also_values_is_no_test_at_all(program_of) -> None:
         ("MAIN/0.when.0.0", EdgeKind.TRUE),
         ("MAIN/0.when.1#test.A1", EdgeKind.FALSE),
     }
+
+
+def test_a_stacked_when_reaches_its_one_body_from_either_condition(
+    program_of,
+) -> None:
+    """WHEN 1 WHEN 2 <body>: the second condition is tried when the first fails,
+    as OR chains, and either one's TRUE edge enters the single body."""
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                {
+                    "type": "WHEN",
+                    "condition": "1",
+                    "alternatives": [{"type": "WHEN", "condition": "2"}],
+                    "children": [_move("'F'", "WS-RESULT")],
+                },
+                {"type": "WHEN_OTHER", "children": [_move("'O'", "WS-OTHER")]},
+            )
+        ],
+    )
+    first, second = (n.id for n in cfg.nodes if n.kind == NodeKind.TEST)
+    body = next(n.id for n in cfg.nodes if "WS-RESULT" in n.writes)
+    other = next(n.id for n in cfg.nodes if "WS-OTHER" in n.writes)
+
+    assert (
+        _parts(cfg),
+        {(e.source, e.kind) for e in cfg.predecessors(second)},
+        {(e.source, e.kind) for e in cfg.predecessors(body)},
+        {(e.source, e.kind) for e in cfg.predecessors(other)},
+    ) == (
+        [("WS-TYPE-B", "==", "1"), ("WS-TYPE-B", "==", "2")],
+        {(first, EdgeKind.FALSE)},
+        {(first, EdgeKind.TRUE), (second, EdgeKind.TRUE)},
+        {(second, EdgeKind.FALSE)},
+    )
