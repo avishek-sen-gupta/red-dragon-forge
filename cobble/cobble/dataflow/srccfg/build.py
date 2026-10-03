@@ -155,6 +155,7 @@ def _paragraph_cfg(
         flows=context,
         index=index,
         source_file=source_file,
+        section=ref.section,
         whenever=governing,
     )
     body = lower_statements(ref.statements, ctx, "")

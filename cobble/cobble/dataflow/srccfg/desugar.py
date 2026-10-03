@@ -18,7 +18,7 @@ arm. Suffixes distinguish the several nodes one statement can lower to:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import accumulate, pairwise, repeat, takewhile
@@ -55,6 +55,7 @@ from cobble.dataflow.srccfg.conditions import (
     read_when_condition,
     resolve_atom,
 )
+from cobble.dataflow.srccfg.paragraphs import end_id
 from cobble.dataflow.srccfg.synthetic import (
     HANDLER_ANY,
     IGNORED,
@@ -66,6 +67,7 @@ from cobble.dataflow.srccfg.synthetic import (
 from cobble.dataflow.srccfg.varying import spec_text
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
+from cobol_asg.exit_kind import ExitKind
 from cobol_asg.ref_mod import RefModOperand
 from squall.statements import Kind
 
@@ -122,6 +124,7 @@ class Ctx:
     flows: ProgramContext
     index: Mapping[str, EightyEight]
     source_file: str = ""
+    section: str = ""
     # Which WHENEVER GO TOs govern each EXEC SQL node id. Computed once per
     # program in source order, because the directive is a precompiler one --
     # see srccfg/whenever.py.
@@ -270,6 +273,28 @@ def _terminator(statement, ctx: Ctx, path: str) -> Fragment:
     else; treating it as a terminator would cut most of a program in half.
     """
     return replace(_plain(statement, ctx, path), exits=())
+
+
+def _exit(statement, ctx: Ctx, path: str) -> Fragment:
+    """EXIT PARAGRAPH and EXIT SECTION jump to the end of what they leave.
+
+    That end is where the paragraph's fall-through and every PERFORM's RETURN
+    already hang, so the jump gives both. Plain EXIT and EXIT PERFORM [CYCLE] keep
+    the plain lowering and fall through.
+    """
+    if statement.kind not in _EXIT_LEAVES:
+        return _plain(statement, ctx, path)
+    stops = _terminator(statement, ctx, path)
+    return replace(
+        stops,
+        edges=(
+            Edge(
+                source=stops.entry,
+                target=end_id(_EXIT_LEAVES[statement.kind](ctx)),
+                kind=EdgeKind.GOTO,
+            ),
+        ),
+    )
 
 
 def _with_arms(statement, ctx: Ctx, path: str, body: Fragment) -> Fragment:
@@ -1345,6 +1370,11 @@ _LOOP_FORMS = {
     "PerformVaryingSpec": _varying_loop,
 }
 
+_EXIT_LEAVES: Mapping[ExitKind, Callable[[Ctx], str]] = {
+    ExitKind.PARAGRAPH: lambda ctx: ctx.paragraph,
+    ExitKind.SECTION: lambda ctx: ctx.section,
+}
+
 _HANDLERS = {
     "IfStatement": _if,
     "EvaluateStatement": _evaluate,
@@ -1357,4 +1387,5 @@ _HANDLERS = {
     "StopRunStatement": _terminator,
     "GobackStatement": _terminator,
     "ExitProgramStatement": _terminator,
+    "ExitStatement": _exit,
 }
