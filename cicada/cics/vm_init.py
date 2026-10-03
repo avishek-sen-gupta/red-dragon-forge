@@ -16,12 +16,12 @@ if TYPE_CHECKING:
 def make_cics_initial_vm(context: "CicsContext", ca_bytes: bytes) -> Any:
     """Build a fresh VMState with rgn_commarea and standard CICS locals.
 
-    The COMMAREA is bound to the LINKAGE SECTION (DFHCOMMAREA) via
-    __params_region. Stored as the region name string (not an Address object)
-    so region writes from LINKAGE section items resolve without double-wrapping.
+    The COMMAREA is argument 0 of __call_arguments, so it binds the program's
+    first LINKAGE 01 -- DFHCOMMAREA.
     """
-    from interpreter.vm.vm_types import VMState, StackFrame  # noqa: PLC0415
     from interpreter.address import Address  # noqa: PLC0415
+    from interpreter.cobol.call_arguments import call_arguments  # noqa: PLC0415
+    from interpreter.vm.vm_types import StackFrame, VMState  # noqa: PLC0415
 
     vm = VMState()
     commarea_addr = Address("rgn_commarea")
@@ -33,7 +33,7 @@ def make_cics_initial_vm(context: "CicsContext", ca_bytes: bytes) -> Any:
                 VarName("__cics_transid"): typed(context.transid, UNKNOWN),
                 VarName("__cics_eibcalen"): typed(len(ca_bytes), UNKNOWN),
                 VarName("__cics_eibaid"): typed(context.eibaid, UNKNOWN),
-                VarName("__params_region"): typed(commarea_addr.value, UNKNOWN),
+                VarName("__call_arguments"): call_arguments(vm, [commarea_addr]),
             },
         )
     )
