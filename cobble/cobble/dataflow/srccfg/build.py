@@ -18,13 +18,23 @@ from itertools import pairwise
 from types import MappingProxyType
 
 from cobble.dataflow.depgraph.flows import program_context
-from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.cfg import (
+    Cfg,
+    Edge,
+    EdgeKind,
+    Exit,
+    Fragment,
+    Node,
+    NodeKind,
+    seq,
+)
 from cobble.dataflow.srccfg.conditions import condition_index
 from cobble.dataflow.srccfg.paragraphs import (
     ParagraphRef,
     end_id,
     label_id,
     paragraph_order,
+    sentence_end_id,
 )
 from cobble.dataflow.srccfg.section_span import SectionSpan
 from cobble.dataflow.srccfg.whenever import Governing, governing_directives
@@ -43,6 +53,7 @@ from cobble.dataflow.srccfg.desugar import (
     RANGE_SEPARATOR,
     Ctx,
     lower_statements,
+    node_id,
 )
 
 
@@ -158,7 +169,13 @@ def _paragraph_cfg(
         section=ref.section,
         whenever=governing,
     )
-    body = lower_statements(ref.statements, ctx, "")
+    body = seq(
+        tuple(
+            _sentence(ref, ctx, position, first, statements)
+            for position, (first, statements) in enumerate(_sentences(ref))
+        ),
+        nop_id=node_id(ctx, "empty"),
+    )
     label = Node(id=label_id(ref.name), kind=NodeKind.LABEL, paragraph=ref.name)
     end = Node(id=end_id(ref.name), kind=NodeKind.NOP, paragraph=ref.name)
     return (
@@ -374,4 +391,39 @@ def resolve_targets(nodes: Sequence[Node], known: frozenset[str]) -> tuple[Edge,
         if node.transfer in (GOTO_TRANSFER, DISPATCH_TRANSFER)
         and node.target
         and label_id(node.target) in known
+    )
+
+
+def _sentences(ref: ParagraphRef) -> tuple[tuple[int, tuple], ...]:
+    """Each sentence's first position and statements; one sentence when the ASG
+    records none, as a synthetic paragraph does."""
+    ends = ref.sentence_ends or (len(ref.statements) - 1,)
+    firsts = (0, *(end + 1 for end in ends[:-1]))
+    return tuple(
+        (first, ref.statements[first : end + 1])
+        for first, end in zip(firsts, ends, strict=True)
+    )
+
+
+def _sentence(
+    ref: ParagraphRef, ctx: Ctx, position: int, first: int, statements: tuple
+) -> Fragment:
+    """One sentence, and the node after its period when a NEXT SENTENCE in it
+    jumps there -- only then, so a program without one builds unchanged."""
+    end = sentence_end_id(ref.name, position)
+    body = lower_statements(statements, replace(ctx, sentence=end), "", first)
+    if end not in {edge.target for edge in body.edges}:
+        return body
+    landing = Node(id=end, kind=NodeKind.NOP, paragraph=ref.name)
+    return Fragment(
+        nodes=(*body.nodes, landing),
+        edges=(
+            *body.edges,
+            *(
+                Edge(source=exit_.node_id, target=end, kind=exit_.kind)
+                for exit_ in body.exits
+            ),
+        ),
+        entry=body.entry,
+        exits=(Exit(node_id=end, kind=EdgeKind.FLOW),),
     )
