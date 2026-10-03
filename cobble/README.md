@@ -51,7 +51,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-bms-metadata --config <corpus> [--output <file>]` | Each BMS map's fields and attributes as JSONL, via `hlasm_export` |
 | `cobble-bms-render --config <corpus> [--map <name>] [--format text\|html]` | Draw BMS maps as 3270 screens |
 | **Parsing** | |
-| `cobble-parse-corpus --config <corpus>` | Parse the corpus to one JSON ASG per member — the cache every later stage reads |
+| `cobble-parse-corpus --config <corpus> [--force]` | Parse the corpus to one JSON ASG per member — the cache every later stage reads; members with an ASG are skipped unless `--force` |
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined); no ASG, nothing downstream reads it |
 | **Knowledge graph** | |
 | `cobble-build --config <corpus> --output <file> [--dynamic-call-targets <targets.jsonl>]` | Extract the graph to one file, a tagged row per node and edge |
@@ -311,7 +311,10 @@ One JSON ASG per member, named for the **member's filename**, not its
 `PROGRAM-ID`: `MYPROG.cbl` → `MYPROG.json`. Two members declaring the same
 `PROGRAM-ID` is normal on a real corpus, and naming the cache after the id would
 have one overwrite the other. A member that won't parse gets a `.fail` beside it
-carrying the parser's message, and is not retried on the next run.
+carrying the parser's message, and is retried on every run, since the copybook it
+lacked may have arrived since; only a member with an ASG is skipped. `--force`
+re-parses every member. A re-parse whose outcome changes removes the other record,
+so a member never has both an ASG and a `.fail`.
 
 Then run:
 

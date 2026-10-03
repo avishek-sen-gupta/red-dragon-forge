@@ -15,22 +15,25 @@ parse and the build cannot disagree about them; the bridge JAR comes from
 PROLEAP_BRIDGE_JAR. Where each ASG lands comes from parsing/asg_cache.py, which is
 also what every reader uses, so writer and readers cannot drift.
 
-Resumable: a program with an existing .json or .fail is skipped, so an
-interrupted run costs nothing. Each parse is its own JVM subprocess, so the work
-is embarrassingly parallel -- --jobs defaults to one worker per core.
+Resumable: a program with an existing .json is skipped, so an interrupted run
+costs nothing; --force parses every program regardless. A .fail is not a reason
+to skip: it records the last attempt, and the copybook it lacked may have arrived
+or the bridge been fixed since, so a failed program is retried on every run. Each
+parse is its own JVM subprocess, so the work is embarrassingly parallel -- --jobs
+defaults to one worker per core.
 
 Failures are expected and are not errors here. A missing copybook makes the
 program unparseable, and 328 of the copybooks one corpus references are stubs for
 foreign applications that are not in this corpus. Each failure writes
-<program>.fail where the .json would have gone, which is also what makes the skip
-above cheap: a program that cannot parse is not retried on every run.
+<program>.fail where the .json would have gone. A re-parse whose outcome changes
+removes the other record, so a program never has both, and a stale ASG is never
+read as current.
 
 Only failures that are about the MEMBER are recorded that way -- the bridge
 rejecting the source, and bridge output that will not deserialise. Anything else
 ends the run. The write in particular sits outside the catch: a full disk or an
 unwritable asg_dir is not evidence about a member, and recording it as one would
-poison the cache for every member at once, permanently, since a .fail is never
-retried (red-dragon-forge-jbh).
+mark every member failed at once (red-dragon-forge-jbh).
 """
 
 from __future__ import annotations
@@ -49,7 +52,7 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
-from cobble.parsing.asg_cache import cache_path, failure_path, is_cached
+from cobble.parsing.asg_cache import cache_path, failure_path
 from cobble.parsing.copybook_dir import unscannable
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
@@ -94,9 +97,11 @@ def _parser_for(
 
 
 def record_failure(job: Job, exc: Exception, seconds: float) -> Result:
-    """Record *exc* as this member's permanent failure, beside where its output
-    would have gone. Shared with expand_corpus: same record, same reason."""
+    """Record *exc* as this member's failure, beside where its output would have
+    gone, and drop any output an earlier attempt left there. Shared with
+    expand_corpus: same record, same reason."""
     detail = f"{type(exc).__name__}: {exc}"
+    job.dest.unlink(missing_ok=True)
     failure_path(job.dest.parent, job.source).write_text(detail[:2000])
     return Result(job.stem, False, seconds, detail[:120])
 
@@ -130,6 +135,7 @@ def parse_with(parser: ProLeapCobolParser, job: Job) -> Result:
     except (CobolParseError, ValueError, KeyError) as exc:
         return record_failure(job, exc, time.perf_counter() - t0)
     _write_asg(job.dest, asg)
+    failure_path(job.dest.parent, job.source).unlink(missing_ok=True)
     return Result(job.stem, True, time.perf_counter() - t0, "")
 
 
@@ -170,13 +176,14 @@ def copybook_dirs(config: CorpusConfig) -> tuple[Path, ...]:
     )
 
 
-def pending(config: CorpusConfig) -> tuple[list[Job], int]:
-    """The programs still to parse, and how many the cache already holds."""
+def pending(config: CorpusConfig, force: bool = False) -> tuple[list[Job], int]:
+    """The programs still to parse, and how many already have an ASG: every
+    program without one, failed or never tried -- or, forced, every program."""
     sources = matching_files(config.cobol_dir, config.cobol_globs)
     todo = [
         Job(source, cache_path(config.asg_dir, source))
         for source in sources
-        if not is_cached(config.asg_dir, source)
+        if force or not cache_path(config.asg_dir, source).exists()
     ]
     return todo, len(sources) - len(todo)
 
@@ -194,6 +201,11 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=os.cpu_count() or 4,
         help="Worker processes, each running its own JVM (default: one per core)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Parse every program, including those that already have an ASG",
     )
     return parser.parse_args()
 
@@ -268,7 +280,7 @@ def _summarise(results: Sequence[Result], t0: float) -> None:
 
 def _planned(config: CorpusConfig, args: argparse.Namespace) -> list[Job]:
     ensure_dir(config.asg_dir)
-    todo, done = pending(config)
+    todo, done = pending(config, args.force)
     logger.info(
         "%s -> %s: %d cached, %d to parse, %d workers",
         config.cobol_dir,
