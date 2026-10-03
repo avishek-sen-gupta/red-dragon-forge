@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from cobble.dataflow.srccfg.cfg import Atom, Node, NodeKind, SourceSpan
 from cobble.dataflow.srccfg.rows.cfg_row_type import CfgRowType
+from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModOperand
 from pydantic import BaseModel, ConfigDict, PlainSerializer, PlainValidator
 
@@ -41,7 +42,7 @@ class CfgNodeRow(BaseModel):
     target_resolved: bool
     target_operand: Operand
     transfer_operand: str
-    using: tuple[str, ...]
+    using: tuple[UsingArgument, ...]
     span: SourceSpan
     resume: str
     range_end: str

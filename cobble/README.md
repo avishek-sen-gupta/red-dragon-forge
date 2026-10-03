@@ -621,7 +621,7 @@ Reads the ASG cache `cobble-parse-corpus` wrote and the extents table
 | ---- | ----------- | ----- |
 | `graph.jsonl` | `FIELD` endpoint, and `(node, source extent, target extent)` | node rows: nothing but the id — every attribute it once carried now has a table; edge rows: the `FLOWS_TO` relation and `node`, the statement that moved the bytes. Each row's `type` says which |
 | `defs.jsonl` | `(program, node, source extent)` | the statements whose writes reach that read (`definers`; empty when no statement wrote those bytes, so their content is a `VALUE` clause or nothing), the byte values the read can see (`values`, untrimmed) and why they may be short (`reasons`, as in `targets.jsonl`); the program is part of its identity because node ids and extents repeat across programs. Only reads that feed a write have a row, and only quoted literals become values — a numeric field carries reasons, not values |
-| `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address, or the reason they share none |
+| `aliases.jsonl` | (`LINK`/`XCTL`/`CALL` site, caller window) | the commarea window the caller and callee both address — for a `CALL`, one window per `USING` argument, shared with the callee parameter at that position in its `PROCEDURE DIVISION USING` — or the reason they share none |
 | `targets.jsonl` | dynamic `CALL`/`XCTL`/`LINK` site | the settled byte state read at that site: `caller`, `transfer`, the operand `expression`, the `candidates` it resolved to, any `reasons` the candidates carry doubt, and the `dropped` values that resolved but name no program |
 
 A `FIELD` id is `<program>.<field>`, because a field name is only unique within a
@@ -692,7 +692,7 @@ stopped it *and* naming the callee it
 stopped on, so a consumer learns whose cache file to look at without going back to
 the ASG. Some of those reasons state a fact about the two programs — no bytes are
 shared, and none would be at run time either — while the rest state a limit of this
-analysis: sharing very likely happens and we could not say which bytes. All ten,
+analysis: sharing very likely happens and we could not say which bytes. All twelve,
 labelled, because the row carries the bare string and a consumer has no way to
 discover the partition (`b7k` is the machine-readable field this is standing in for):
 
@@ -704,7 +704,9 @@ discover the partition (`b7k` is the machine-readable field this is standing in 
 | `dynamic-target` | limit | the target is a field: nothing short of running the program resolves it |
 | `callee-not-in-cache` | limit | the target resolved to a name the ASG cache has no file for |
 | `caller-field-unknown` | limit | the `COMMAREA` operand named nothing this member's layout holds |
-| `call-using-unsupported` | limit | a static `CALL … USING`, which this pass does not model |
+| `argument-is-not-a-field` | fact | a `CALL … USING` argument is a literal or `OMITTED`, so no caller storage is passed |
+| `callee-declares-no-parameter-there` | fact | the callee's `PROCEDURE DIVISION USING` lists no parameter at that argument's position |
+| `parameter-not-in-linkage` | limit | the callee's `USING` names a parameter its `LINKAGE` layout lacks — usually a missing copybook |
 | `unreadable` | limit | the callee's cache file would not parse (the row carries the error) |
 | `unsizeable` | limit | the callee's `LINKAGE` layout never built |
 | `alias-phase-failed` | limit | the phase failed on this member before reaching any site |
@@ -989,6 +991,9 @@ which this analysis does not answer across a call.
 A hop is not an edge: the two windows are the same storage, so a crossing is a byte
 identity rebased to the other side's offsets. `LINK` returns, so its window is
 symmetric and the callee's write-back comes home; `XCTL` does not, so it is inbound
+only. A `CALL` crosses per argument, into the parameter at the same position in the
+callee's `PROCEDURE DIVISION USING`: `BY REFERENCE` is shared storage and comes home
+as `LINK` does, while `BY CONTENT` and `BY VALUE` hand over a copy and are inbound
 only. Each landing prints the bytes it landed on, its `hops` — the cheapest route
 the walk found within the depth budget — and `via`, the last site that route
 crossed. Landings are the whole answer: the walk reports what it reached and says
@@ -1041,7 +1046,10 @@ A callee the parse never covered is an opaque block, not an error: the site is
 listed under `dead ends` with the reason the alias table gives it
 (`callee-not-in-cache` for a member with no ASG file), the commarea it passed is
 credited to `%CALL:<program>`, and the caller's path runs on past the call. Any
-corpus selection `LINK`s outside itself, so this is the common case.
+corpus selection `LINK`s outside itself, so this is the common case. A `CALL` is
+never stepped into yet: its site is a dead end reading `transfer-not-crossable: CALL`,
+its `BY REFERENCE` arguments are credited to `%CALL:<program>`, and the path runs on
+(`coo`).
 
 `--single-program` (off by default) keeps the trace to `PROGRAM`'s own CFG. Its
 `LINK` and `XCTL` sites run as ordinary statements — the commarea is credited to

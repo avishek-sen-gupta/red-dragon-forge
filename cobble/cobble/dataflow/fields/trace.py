@@ -1041,11 +1041,10 @@ def _callee_unenterable(callee: Loaded) -> str:
 def _refusal(walk: _Walk, row: CommareaAlias, window: Window, callee: Loaded) -> str:
     """Why this site cannot be crossed, or empty. First reason wins.
 
-    A CALL ... USING row is refused by its transfer: the caller's parameters bind
-    positionally onto the callee's PROCEDURE DIVISION USING, which is a different
-    relation from a commarea window and is deliberately out of scope. Its own row
-    already carries ``call-using-unsupported``, so nothing here has to invent a
-    reason for it.
+    A CALL ... USING row is refused by its transfer: the alias table binds one
+    window per argument, and a frame here binds one window per site and reads
+    ``returns`` as control coming back, which a BY CONTENT argument's row does not
+    say. ``transfer-not-crossable: CALL`` names that limit.
     """
     return (
         _transfer_uncrossable(row, window)

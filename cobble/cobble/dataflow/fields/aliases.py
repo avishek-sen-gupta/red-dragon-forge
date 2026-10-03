@@ -33,9 +33,11 @@ from cobble.dataflow.fields.extent import CellIndex, cell_index
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.side_tables import CommareaAlias
 from cobble.dataflow.layout import UnsizeableFieldError, section_records
+from cobble.dataflow.srccfg.argument_mode import ArgumentMode
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, LINK_TRANSFER
 from cobble.dataflow.srccfg.link import COMMAREA_RECORD, CallSite, call_sites
 from cobble.dataflow.srccfg.program import program_cfg
+from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -49,13 +51,17 @@ CALLEE_HAS_NO_COMMAREA = "callee-declares-no-commarea"
 UNSIZEABLE = "unsizeable"
 UNREADABLE = "unreadable"
 CALLER_FIELD_UNKNOWN = "caller-field-unknown"
-CALL_USING = "call-using-unsupported"
+NO_ARGUMENT_FIELD = "argument-is-not-a-field"
+CALLEE_HAS_NO_PARAMETER = "callee-declares-no-parameter-there"
+PARAMETER_NOT_IN_LINKAGE = "parameter-not-in-linkage"
 EMPTY_WINDOW = "empty-window"
 ALIAS_PHASE_FAILED = "alias-phase-failed"
 
 COMMAREA_LEVEL = 1
 
 _QUALIFIERS = frozenset({"OF", "IN"})
+
+EMPTY_INDEX = cell_index(())
 
 NO_EXTENT = FieldExtent(
     region=RegionId.LINKAGE,
@@ -75,6 +81,16 @@ class _Callee:
 
 
 @dataclass(frozen=True)
+class _Linkage:
+    """A callee's LINKAGE laid out, and the parameters its PROCEDURE DIVISION USING
+    names in order; or why the callee could not be read."""
+
+    index: CellIndex = EMPTY_INDEX
+    using: tuple[str, ...] = ()
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class _Reference:
     """A commarea operand's own name, and the groups its chain qualifies it by."""
 
@@ -83,9 +99,11 @@ class _Reference:
 
 
 _REFUSALS = (
-    (lambda site: site.transfer == CALL_TRANSFER, CALL_USING),
     (lambda site: not site.resolved, DYNAMIC_TARGET),
-    (lambda site: not site.commarea.split(), NO_COMMAREA_OPERAND),
+    (
+        lambda site: site.transfer != CALL_TRANSFER and not site.commarea.split(),
+        NO_COMMAREA_OPERAND,
+    ),
 )
 
 
@@ -99,23 +117,97 @@ def commarea_aliases(
     that index, and widening its result for a pass that shares none of its work
     would couple the two for no reason.
     """
+    cfg = program_cfg(asg)
     return tuple(
         row
-        for site in call_sites(program_cfg(asg))
-        for row in _site_rows(site, index, asg_dir)
+        for site in call_sites(cfg)
+        for row in _site_rows(site, cfg.node(site.node).using, index, asg_dir)
     )
 
 
 def _site_rows(
-    site: CallSite, index: CellIndex, asg_dir: Path
+    site: CallSite,
+    arguments: tuple[UsingArgument, ...],
+    index: CellIndex,
+    asg_dir: Path,
 ) -> tuple[CommareaAlias, ...]:
     refused = _refused(site)
     if refused:
         return (_dead(site, refused),)
-    callee = _callee_commarea(asg_dir, site.program)
+    return _callee_rows(site, arguments, index, _callee_linkage(asg_dir, site.program))
+
+
+def _callee_rows(
+    site: CallSite,
+    arguments: tuple[UsingArgument, ...],
+    index: CellIndex,
+    linkage: _Linkage,
+) -> tuple[CommareaAlias, ...]:
+    if linkage.reason:
+        return (_dead(site, linkage.reason),)
+    if site.transfer == CALL_TRANSFER:
+        return _argument_rows(site, arguments, index, linkage)
+    return _commarea_rows(site, index, linkage)
+
+
+def _commarea_rows(
+    site: CallSite, index: CellIndex, linkage: _Linkage
+) -> tuple[CommareaAlias, ...]:
+    callee = _linkage_commarea(linkage.index)
     if callee.reason:
         return (_dead(site, callee.reason),)
-    return _windows(site, index, callee.extent)
+    return _windows(site, site.commarea, index, callee.extent, _returns(site))
+
+
+def _returns(site: CallSite) -> bool:
+    return site.transfer == LINK_TRANSFER
+
+
+def _argument_rows(
+    site: CallSite,
+    arguments: tuple[UsingArgument, ...],
+    index: CellIndex,
+    linkage: _Linkage,
+) -> tuple[CommareaAlias, ...]:
+    """One CALL USING argument against the callee parameter at its position.
+
+    BY REFERENCE shares the caller's storage, so the alias returns the way LINK's
+    commarea does; BY CONTENT and BY VALUE hand over a copy, which the callee reads
+    and cannot write back through.
+    """
+    return tuple(
+        row
+        for position, argument in enumerate(arguments)
+        for row in _argument_window(site, argument, index, linkage, position)
+    )
+
+
+def _argument_window(
+    site: CallSite,
+    argument: UsingArgument,
+    index: CellIndex,
+    linkage: _Linkage,
+    position: int,
+) -> tuple[CommareaAlias, ...]:
+    if not argument.name:
+        return (_dead(site, NO_ARGUMENT_FIELD),)
+    parameter = _parameter(linkage, position)
+    if parameter.reason:
+        return (_dead(site, parameter.reason),)
+    return _windows(
+        site,
+        argument.name,
+        index,
+        parameter.extent,
+        argument.mode is ArgumentMode.REFERENCE,
+    )
+
+
+def _parameter(linkage: _Linkage, position: int) -> _Callee:
+    """The level-01 LINKAGE record the callee's USING names at ``position``."""
+    if position >= len(linkage.using):
+        return _Callee(reason=CALLEE_HAS_NO_PARAMETER)
+    return _record_named(linkage.index, linkage.using[position])
 
 
 def _refused(site: CallSite) -> str:
@@ -161,16 +253,24 @@ def _reference(operand: str) -> _Reference:
 
 
 def _windows(
-    site: CallSite, index: CellIndex, callee: FieldExtent
+    site: CallSite,
+    operand: str,
+    index: CellIndex,
+    callee: FieldExtent,
+    returns: bool,
 ) -> tuple[CommareaAlias, ...]:
-    reference = _reference(site.commarea)
+    reference = _reference(operand)
     cells = index.cells_named(reference.name, reference.qualifiers, 0)
     if not cells:
         return (_dead(site, CALLER_FIELD_UNKNOWN),)
-    return tuple(_aliased(site, index.extent_of(cell), callee) for cell in cells)
+    return tuple(
+        _aliased(site, index.extent_of(cell), callee, returns) for cell in cells
+    )
 
 
-def _aliased(site: CallSite, caller: FieldExtent, callee: FieldExtent) -> CommareaAlias:
+def _aliased(
+    site: CallSite, caller: FieldExtent, callee: FieldExtent, returns: bool
+) -> CommareaAlias:
     """The shared window, or a dead end when one side lays out at nothing.
 
     A zero-length window is not a narrow alias, it is no alias: ``ByteRange``
@@ -187,24 +287,24 @@ def _aliased(site: CallSite, caller: FieldExtent, callee: FieldExtent) -> Commar
         callee=site.program,
         caller_extent=extent_text(replace(caller, length=shared)),
         callee_extent=extent_text(replace(callee, length=shared)),
-        returns=site.transfer == LINK_TRANSFER,
+        returns=returns,
     )
 
 
 @cache
-def _callee_commarea(asg_dir: Path, callee: str) -> _Callee:
-    """The callee's ``DFHCOMMAREA`` window, memoised per cache directory.
+def _callee_linkage(asg_dir: Path, callee: str) -> _Linkage:
+    """The callee's LINKAGE and USING list, memoised per cache directory.
 
     ``asg_dir`` is part of the key, so a run against a different parse never
     reads another one's answer.
     """
     path = asg_dir / f"{callee}.json"
     if not path.is_file():
-        return _Callee(reason=NOT_IN_CACHE)
-    return _read_commarea(path)
+        return _Linkage(reason=NOT_IN_CACHE)
+    return _read_linkage(path)
 
 
-def _read_commarea(path: Path) -> _Callee:
+def _read_linkage(path: Path) -> _Linkage:
     """Total in the callee: whatever one cache file does costs one site's alias.
 
     Every exception type, not a list of them. A body that is valid JSON and not an
@@ -214,11 +314,11 @@ def _read_commarea(path: Path) -> _Callee:
     and the cost of guessing short is the CALLER's records.
     """
     try:
-        return _linkage_commarea(_asg_at(path))
+        return _linkage_of(_asg_at(path))
     except UnsizeableFieldError:
-        return _Callee(reason=UNSIZEABLE)
+        return _Linkage(reason=UNSIZEABLE)
     except Exception as error:  # noqa: BLE001 - one callee costs one alias
-        return _Callee(reason=f"{UNREADABLE}: {error!r}")
+        return _Linkage(reason=f"{UNREADABLE}: {error!r}")
 
 
 def _asg_at(path: Path) -> CobolASG:
@@ -232,20 +332,32 @@ def _asg_at(path: Path) -> CobolASG:
         return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
-def _linkage_commarea(asg: CobolASG) -> _Callee:
-    """The callee's ``DFHCOMMAREA`` record, laid out from its LINKAGE alone.
+def _linkage_of(asg: CobolASG) -> _Linkage:
+    return _Linkage(
+        index=cell_index(section_records(LINKAGE_ORIGIN, tuple(asg.linkage_fields))),
+        using=tuple(param.name for param in asg.procedure_using),
+    )
+
+
+def _linkage_commarea(index: CellIndex) -> _Callee:
+    """The callee's ``DFHCOMMAREA`` record, laid out from its LINKAGE alone."""
+    found = _record_named(index, COMMAREA_RECORD)
+    if found.reason:
+        return _Callee(reason=CALLEE_HAS_NO_COMMAREA)
+    return found
+
+
+def _record_named(index: CellIndex, name: str) -> _Callee:
+    """The level-01 LINKAGE record ``name``.
 
     Only the level-01 entry counts: ``cells_named`` does not filter on level, and a
-    field named ``DFHCOMMAREA`` under some other record is not the area a LINK
-    passes. First declared wins among those, which is deterministic and is all a
-    duplicate 01 of that name could ever justify.
+    field of that name under some other record is not the storage a caller passes.
+    First declared wins among those, which is deterministic and is all a duplicate
+    01 of that name could ever justify.
     """
-    index = cell_index(section_records(LINKAGE_ORIGIN, tuple(asg.linkage_fields)))
     records = tuple(
-        cell
-        for cell in index.cells_named(COMMAREA_RECORD, (), 0)
-        if cell.level == COMMAREA_LEVEL
+        cell for cell in index.cells_named(name, (), 0) if cell.level == COMMAREA_LEVEL
     )
     if not records:
-        return _Callee(reason=CALLEE_HAS_NO_COMMAREA)
+        return _Callee(reason=PARAMETER_NOT_IN_LINKAGE)
     return _Callee(extent=index.extent_of(records[0]))

@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 
+from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModOperand
 
 
@@ -97,7 +98,7 @@ class Node:
     target_resolved: bool = True
     target_operand: RefModOperand = NO_TARGET_OPERAND
     transfer_operand: str = ""
-    using: tuple[str, ...] = ()
+    using: tuple[UsingArgument, ...] = ()
     span: SourceSpan = NO_SPAN
     resume: str = ""
     range_end: str = ""

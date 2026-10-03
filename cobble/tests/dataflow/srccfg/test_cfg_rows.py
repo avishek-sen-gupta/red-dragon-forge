@@ -31,7 +31,9 @@ from cobble.dataflow.srccfg.rows.cfg_row import (
 from cobble.dataflow.srccfg.rows.edge_row import CfgEdgeRow
 from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
 from cobble.dataflow.srccfg.rows.program_row import CfgProgramRow
+from cobble.dataflow.srccfg.argument_mode import ArgumentMode
 from cobble.dataflow.srccfg.rows.reach_outcome import ReachOutcome
+from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModLiteral, RefModOperand
 
 NODE = Node(
@@ -50,7 +52,7 @@ NODE = Node(
         ref_mod_length=RefModLiteral("8"),
     ),
     transfer_operand="WS-PGM",
-    using=("WS-ARG",),
+    using=(UsingArgument("WS-ARG", ArgumentMode.CONTENT),),
     span=SourceSpan(
         line_start=12, col_start=8, line_end=12, col_end=30, source_file="PROGA.cbl"
     ),
