@@ -45,7 +45,7 @@ from cobble.dataflow.srccfg.build import (
     paragraph_order,
 )
 from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, NodeKind
-from cobble.dataflow.srccfg.desugar import LINK_TRANSFER, XCTL_TRANSFER
+from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, LINK_TRANSFER, XCTL_TRANSFER
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
@@ -58,7 +58,7 @@ DEFAULT_PATHS = 200
 DEFAULT_COVERAGE = 1.0
 DEFAULT_MAX_DEPTH = 50000
 
-CROSSING_VERBS = (LINK_TRANSFER, XCTL_TRANSFER)
+CROSSING_VERBS = (LINK_TRANSFER, XCTL_TRANSFER, CALL_TRANSFER)
 
 NO_PROCEDURE = "callee-has-no-procedure"
 NOT_PARSED = "callee-not-parsed"
@@ -85,17 +85,22 @@ DEFAULT_BUDGET = Budget()
 
 @dataclass(frozen=True)
 class Window:
-    """A commarea's two ends: the caller's bytes and the callee's, same length.
+    """Shared storage's two ends -- a commarea, or one CALL argument -- the
+    caller's bytes and the callee's, same length.
 
     ``known`` False is a call site with no window to bind -- a dynamic target, a
     callee absent from the cache, an operand naming no field. A sentinel rather
     than an absent value, so a caller compares windows the same way everywhere.
+    ``writes_back`` is whether the callee's writes reach the caller: a LINK's
+    commarea and a BY REFERENCE argument do; an XCTL's commarea and a BY CONTENT or
+    BY VALUE argument, a copy, do not.
     """
 
     caller: str = ""
     caller_extent: FieldExtent = NO_EXTENT
     callee_extent: FieldExtent = NO_EXTENT
     known: bool = False
+    writes_back: bool = False
 
 
 NO_WINDOW = Window()
@@ -208,7 +213,11 @@ def _window(row: CommareaAlias, callee: str) -> Window:
     if not caller.length or not landed.length:
         return NO_WINDOW
     return Window(
-        caller=row.caller, caller_extent=caller, callee_extent=landed, known=True
+        caller=row.caller,
+        caller_extent=caller,
+        callee_extent=landed,
+        known=True,
+        writes_back=row.returns,
     )
 
 
@@ -313,7 +322,8 @@ class Frame:
     resume: str = ""
     crossing: bool = False
     returns: bool = False
-    window: Window = NO_WINDOW
+    caller: str = ""
+    windows: tuple[Window, ...] = ()
     visits: MappingProxyType[str, int] = MappingProxyType({})
 
 
@@ -361,7 +371,7 @@ def _via(stack: tuple[Frame, ...]) -> str:
     crossings = tuple(one for one in stack if one.crossing)
     if not crossings:
         return ""
-    return f"{crossings[-1].window.caller}/{crossings[-1].site}"
+    return f"{crossings[-1].caller}/{crossings[-1].site}"
 
 
 @dataclass(frozen=True)
@@ -863,7 +873,7 @@ def _bridge(
     """
     return frozenset(
         Dep(
-            program=frame.window.caller,
+            program=frame.caller,
             node=frame.site,
             target=caller_ext,
             origin=source.origin,
@@ -926,27 +936,39 @@ def _ended(walk: _Walk) -> _Walk:
 def _handed_back(walk: _Walk, unwound: tuple[Frame, ...]) -> _Walk:
     """The path back in the caller that a crossing frame owes its bytes to.
 
-    Seeding the caller's window back needs no conversion and no flow edge: the two
-    sides were the same bytes all along. An empty resume point is a call that was the
-    last thing its caller did, so there is nothing to come back to.
+    Seeding the caller's windows back needs no conversion and no flow edge: the
+    two sides were the same bytes all along. Only a window that writes back is
+    seeded -- a BY CONTENT argument was a copy. An empty resume point is a call
+    that was the last thing its caller did, so there is nothing to come back to.
     """
     if not (unwound and unwound[-1].returns and unwound[-1].resume):
         return replace(walk, running=False)
     frame = unwound[-1]
     resumed = unwound[:-1]
     callee_state = walk.store.get(frame.program, EMPTY)
-    back = _seeded(callee_state, frame.window.callee_extent, frame.window.caller_extent)
+    return reduce(
+        lambda back_walk, window: _window_back(
+            back_walk, frame, resumed, callee_state, window
+        ),
+        (window for window in frame.windows if window.writes_back),
+        replace(walk, node=frame.resume, stack=resumed),
+    )
+
+
+def _window_back(
+    walk: _Walk,
+    frame: Frame,
+    resumed: tuple[Frame, ...],
+    callee_state: State,
+    window: Window,
+) -> _Walk:
+    back = _seeded(callee_state, window.callee_extent, window.caller_extent)
     return replace(
         walk,
-        node=frame.resume,
-        stack=resumed,
         deps=walk.deps | _bridge(frame, resumed, walk.store, back),
         store={
             **walk.store,
-            frame.window.caller: _restored(
-                walk.store.get(frame.window.caller, EMPTY),
-                back,
-            ),
+            frame.caller: _restored(walk.store.get(frame.caller, EMPTY), back),
         },
     )
 
@@ -989,16 +1011,18 @@ def _entered(
     walk: _Walk,
     loaded: Loaded,
     row: CommareaAlias,
-    window: Window,
+    windows: tuple[Window, ...],
     callee: Loaded,
 ) -> _Walk:
-    """Step into the callee with the shared window bound, and nothing else.
+    """Step into the callee with its shared windows bound, and nothing else.
 
     The callee's slice starts empty because CICS gives a LINKed program fresh
     WORKING-STORAGE, so a program entered twice on one path does not inherit its
-    own earlier run's memory. The resume point is read off the CALLER's graph:
-    that is where the path comes back to.
+    own earlier run's memory; each window seeds it with the caller's bytes there.
+    The resume point is read off the CALLER's graph: that is where the path comes
+    back to. A CALL always comes back, whatever its arguments' modes.
     """
+    caller_state = walk.store.get(walk.program, EMPTY)
     return replace(
         walk,
         node=callee.entry,
@@ -1009,25 +1033,36 @@ def _entered(
                 site=walk.node,
                 resume=_sequel(loaded.cfg, walk.node),
                 crossing=True,
-                returns=row.returns,
-                window=window,
+                returns=row.returns or row.transfer == CALL_TRANSFER,
+                caller=walk.program,
+                windows=windows,
             ),
         ),
         store={
             **walk.store,
-            row.callee: _seeded(
-                walk.store.get(walk.program, EMPTY),
-                window.caller_extent,
-                window.callee_extent,
+            row.callee: State(
+                sources=MappingProxyType(
+                    {
+                        extent: sources
+                        for window in windows
+                        for extent, sources in _seeded(
+                            caller_state, window.caller_extent, window.callee_extent
+                        ).sources.items()
+                    }
+                )
             ),
         },
     )
 
 
-def _transfer_uncrossable(row: CommareaAlias, window: Window) -> str:
-    if row.transfer not in CROSSING_VERBS or not window.known:
+def _transfer_uncrossable(row: CommareaAlias, windows: tuple[Window, ...]) -> str:
+    """A LINK or XCTL needs its commarea window; a CALL needs only a callee to name,
+    since an argument with no window is its own dead end, not the site's."""
+    if row.transfer not in CROSSING_VERBS:
         return row.reason or f"transfer-not-crossable: {row.transfer}"
-    return ""
+    if row.transfer == CALL_TRANSFER:
+        return row.reason if not row.callee else ""
+    return "" if windows else row.reason or f"transfer-not-crossable: {row.transfer}"
 
 
 def _callee_unenterable(callee: Loaded) -> str:
@@ -1038,34 +1073,54 @@ def _callee_unenterable(callee: Loaded) -> str:
     return ""
 
 
-def _refusal(walk: _Walk, row: CommareaAlias, window: Window, callee: Loaded) -> str:
-    """Why this site cannot be crossed, or empty. First reason wins.
-
-    A CALL ... USING row is refused by its transfer: the alias table binds one
-    window per argument, and a frame here binds one window per site and reads
-    ``returns`` as control coming back, which a BY CONTENT argument's row does not
-    say. ``transfer-not-crossable: CALL`` names that limit.
-    """
+def _refusal(
+    walk: _Walk, row: CommareaAlias, windows: tuple[Window, ...], callee: Loaded
+) -> str:
+    """Why this site cannot be crossed, or empty. First reason wins."""
     return (
-        _transfer_uncrossable(row, window)
+        _transfer_uncrossable(row, windows)
         or _callee_unenterable(callee)
         or (RE_ENTRY if _open(walk.stack, row.callee, callee.entry) else "")
     )
 
 
-def _called(walk: _Walk, loaded: Loaded, loader: Loader, row: CommareaAlias) -> _Walk:
-    """A LINK or an XCTL: bind the shared window and step in, or say why not.
+def _windows(rows: tuple[CommareaAlias, ...]) -> tuple[Window, ...]:
+    """The windows a crossing binds: a LINK's or XCTL's one commarea, or one per
+    CALL argument that has a window."""
+    bound = rows if rows[0].transfer == CALL_TRANSFER else rows[:1]
+    return tuple(
+        window for window in (_window(row, row.callee) for row in bound) if window.known
+    )
+
+
+def _argument_dead_ends(walk: _Walk, rows: tuple[CommareaAlias, ...]) -> _Walk:
+    """A CALL argument with no window -- a literal, a position the callee lists no
+    parameter at -- is a dead end of its own; the CALL is still entered."""
+    return reduce(
+        lambda dead_walk, row: _dead_end(dead_walk, row, row.reason),
+        (row for row in rows if row.reason and row.transfer == CALL_TRANSFER),
+        walk,
+    )
+
+
+def _called(
+    walk: _Walk, loaded: Loaded, loader: Loader, rows: tuple[CommareaAlias, ...]
+) -> _Walk:
+    """A LINK, an XCTL or a CALL: bind the shared windows and step in, or say why
+    not.
 
     A refusal does not end the caller's path. ``transfer`` has already credited the
-    commarea to ``%CALL:<program>`` exactly as the fixpoint does, so stopping here
-    would lose the caller's remaining statements and gain nothing.
+    commarea or BY REFERENCE arguments to ``%CALL:<program>`` exactly as the
+    fixpoint does, so stopping here would lose the caller's remaining statements and
+    gain nothing.
     """
-    window = _window(row, row.callee)
+    row = rows[0]
+    windows = _windows(rows)
     callee = loader(row.callee) if row.callee else Loaded(program="")
-    refused = _refusal(walk, row, window, callee)
+    refused = _refusal(walk, row, windows, callee)
     if refused:
         return _followed(_dead_end(walk, row, refused), loaded)
-    return _entered(walk, loaded, row, window, callee)
+    return _entered(_argument_dead_ends(walk, rows), loaded, row, windows, callee)
 
 
 def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
@@ -1078,7 +1133,7 @@ def _moved(walk: _Walk, loaded: Loaded, loader: Loader) -> _Walk:
     rows = loaded.aliases.get(walk.node, ())
     if not rows:
         return _followed(walk, loaded)
-    return _called(walk, loaded, loader, rows[0])
+    return _called(walk, loaded, loader, tuple(rows))
 
 
 def _stepped(walk: _Walk, loader: Loader) -> _Walk:

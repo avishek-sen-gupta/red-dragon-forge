@@ -1050,9 +1050,11 @@ listed under `dead ends` with the reason the alias table gives it
 (`callee-not-in-cache` for a member with no ASG file), the commarea it passed is
 credited to `%CALL:<program>`, and the caller's path runs on past the call. Any
 corpus selection `LINK`s outside itself, so this is the common case. A `CALL` is
-never stepped into yet: its site is a dead end reading `transfer-not-crossable: CALL`,
-its `BY REFERENCE` arguments are credited to `%CALL:<program>`, and the path runs on
-(`coo`).
+stepped into with one window per `USING` argument, bound to the callee parameter at
+that position: on return, only a `BY REFERENCE` argument's window is written back,
+since `BY CONTENT` and `BY VALUE` handed over a copy. An argument with no window -- a
+literal, a position the callee lists no parameter at -- is a dead end of its own,
+and the `CALL` is still entered.
 
 `--single-program` (off by default) keeps the trace to `PROGRAM`'s own CFG. Its
 `LINK` and `XCTL` sites run as ordinary statements — the commarea is credited to
