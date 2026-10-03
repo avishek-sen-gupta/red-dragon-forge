@@ -52,14 +52,27 @@ def test_a_member_with_a_cached_asg_is_not_parsed_again(tmp_path: Path) -> None:
     assert done == 1
 
 
-def test_a_member_that_failed_before_is_not_retried(tmp_path: Path) -> None:
-    """A missing copybook is permanent until the copybook arrives, so a retry is
-    pure cost -- and on one corpus it is 328 members' worth of it."""
+def test_a_member_that_failed_before_is_retried(tmp_path: Path) -> None:
+    """A .fail records the last attempt, not a verdict: the copybook may have
+    arrived, or the bridge been fixed, since. Only an ASG counts as done."""
     config = _config(tmp_path)
     _members(config, "A.cbl")
     (config.asg_dir / "A.fail").write_text("boom")
 
-    assert pending(config) == ([], 1)
+    todo, done = pending(config)
+
+    assert ([job.stem for job in todo], done) == (["A"], 0)
+
+
+def test_force_parses_every_member_whatever_is_cached(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    _members(config, "A.cbl", "B.cbl", "C.cbl")
+    (config.asg_dir / "A.json").write_text("{}")
+    (config.asg_dir / "B.fail").write_text("boom")
+
+    todo, done = pending(config, force=True)
+
+    assert (sorted(job.stem for job in todo), done) == (["A", "B", "C"], 0)
 
 
 def test_each_pending_job_writes_where_the_cache_expects_it(tmp_path: Path) -> None:
@@ -146,3 +159,22 @@ def test_a_failure_to_WRITE_is_not_blamed_on_the_member(tmp_path: Path) -> None:
         parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
 
     assert not (config.asg_dir / "A.fail").exists()
+
+
+def test_a_reparse_replaces_the_other_outcome(tmp_path: Path) -> None:
+    """A member that now parses loses its old .fail, and one that now fails loses
+    its old ASG: a stale ASG would be read as current by every later stage."""
+    config = _config(tmp_path)
+    _members(config, "A.cbl", "B.cbl")
+    (config.asg_dir / "A.fail").write_text("boom")
+    (config.asg_dir / "B.json").write_text("{}")
+
+    parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
+    parse_with(
+        _parser(RejectingBridge("could not find copy book")), _job(config, "B.cbl")
+    )
+
+    assert sorted(path.name for path in config.asg_dir.iterdir()) == [
+        "A.json",
+        "B.fail",
+    ]

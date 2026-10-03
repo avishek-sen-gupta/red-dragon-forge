@@ -36,13 +36,6 @@ def failure_path(asg_dir: Path, source: Path) -> Path:
     return asg_dir / f"{source.stem}{FAILURE_SUFFIX}"
 
 
-def is_cached(asg_dir: Path, source: Path) -> bool:
-    """Whether this member has been through the parser, successfully or not."""
-    return (
-        cache_path(asg_dir, source).exists() or failure_path(asg_dir, source).exists()
-    )
-
-
 def asg_of(asg_dir: Path, source: Path) -> CobolASG:
     """One member's ASG, read from the cache.
 
