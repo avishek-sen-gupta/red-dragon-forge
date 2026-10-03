@@ -85,12 +85,12 @@ def _aliases_of(cfg: Cfg, site: CallSite, node: Node) -> tuple[Alias, ...]:
         return tuple(
             Alias(
                 caller=cfg.program,
-                caller_field=name,
+                caller_field=argument.name,
                 callee=site.program,
                 callee_field=using_field(position),
             )
-            for position, name in enumerate(node.using)
-            if name
+            for position, argument in enumerate(node.using)
+            if argument.name
         )
     if not site.commarea:
         return ()

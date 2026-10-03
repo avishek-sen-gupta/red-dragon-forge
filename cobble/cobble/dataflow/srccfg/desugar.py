@@ -31,6 +31,7 @@ from cobble.dataflow.depgraph.flows import (
     operand_names,
     verb_of,
 )
+from cobble.dataflow.srccfg.argument_mode import ArgumentMode
 from cobble.dataflow.srccfg.cfg import (
     EMPTY_FRAGMENT,
     NO_TARGET_OPERAND,
@@ -64,9 +65,11 @@ from cobble.dataflow.srccfg.synthetic import (
     handler_field,
     io_status_field,
 )
+from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobble.dataflow.srccfg.varying import spec_text
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
+from cobol_asg.cobol_statements import CallUsingParam
 from cobol_asg.exit_kind import ExitKind
 from cobol_asg.ref_mod import RefModOperand
 from squall.statements import Kind
@@ -1347,17 +1350,16 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
         target=_callee_name(callee),
         target_resolved=not callee.resolved_at_runtime,
         target_operand=_identifier_operand(callee),
-        using=tuple(
-            (
-                ""
-                if getattr(param, "omitted", False)
-                or getattr(param, "is_literal", False)
-                else getattr(param, "name", "")
-            )
-            for param in getattr(statement, "using", ())
-        ),
+        using=tuple(_argument(param) for param in getattr(statement, "using", ())),
     )
     return _with_arms(statement, ctx, path, _one(node))
+
+
+def _argument(param: CallUsingParam) -> UsingArgument:
+    return UsingArgument(
+        name="" if param.omitted or param.is_literal else param.name,
+        mode=ArgumentMode(param.param_type.upper()),
+    )
 
 
 _THROUGH = {And: EdgeKind.TRUE, Or: EdgeKind.FALSE}

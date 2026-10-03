@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from cobble.dataflow.fields.aliases import (
-    CALL_USING,
     CALLEE_HAS_NO_COMMAREA,
+    CALLEE_HAS_NO_PARAMETER,
     CALLER_FIELD_UNKNOWN,
     DYNAMIC_TARGET,
     EMPTY_WINDOW,
@@ -250,20 +250,37 @@ def test_a_link_without_a_commarea_shares_nothing(
     assert row.callee == "XPROGB"
 
 
-def test_a_call_site_is_refused_rather_than_guessed():
-    from cobble.dataflow.fields.aliases import _refused
-    from cobble.dataflow.srccfg.link import CallSite
-
-    site = CallSite(
-        caller="PROGA",
-        node="MAIN/1",
-        transfer="CALL",
-        program="XPROGB",
-        resolved=True,
-        commarea="WS-AREA",
+def test_an_argument_past_the_callees_parameters_is_a_named_dead_end(
+    tmp_path, program_of, field, index_of
+):
+    (tmp_path / "XPROGB.json").write_text(
+        json.dumps(
+            {
+                "program_id": "XPROGB",
+                "linkage_fields": [field(1, "LK-A", pic="X(12)")],
+                "procedure_using": [{"name": "LK-A", "type": "REFERENCE"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    asg = _caller(
+        (field(5, "WS-ID", pic="X(12)", offset=0),),
+        {
+            "type": "CALL",
+            "program": "'XPROGB'",
+            "using": [{"name": "WS-AREA"}, {"name": "WS-AREA"}],
+        },
+        program_of,
+        field,
     )
 
-    assert _refused(site) == CALL_USING
+    assert [
+        (row.caller_extent, row.callee_extent, row.returns, row.reason)
+        for row in _rows(asg, tmp_path, index_of)
+    ] == [
+        ("WS-AREA@working_storage[0:12]", "LK-A@linkage[0:12]", True, ""),
+        ("", "", False, CALLEE_HAS_NO_PARAMETER),
+    ]
 
 
 def test_the_row_keys_on_the_site_and_the_window(tmp_path, program_of, field, index_of):

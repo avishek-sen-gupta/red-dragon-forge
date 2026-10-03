@@ -37,6 +37,7 @@ from cobble.dataflow.srccfg.rows.edge_row import CfgEdgeRow
 from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
 from cobble.dataflow.srccfg.rows.program_row import CfgProgramRow
 from cobble.dataflow.srccfg.synthetic import using_field
+from cobble.dataflow.srccfg.using_argument import UsingArgument
 
 
 def _label(paragraph: str) -> Node:
@@ -64,7 +65,7 @@ def _call(
         target=program,
         target_resolved=resolved,
         transfer_operand="" if using else "WS-COMMAREA",
-        using=using,
+        using=tuple(UsingArgument(name) for name in using),
     )
 
 
