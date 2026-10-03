@@ -22,7 +22,6 @@ from cobble.dataflow.srccfg.cfg import (
     Cfg,
     Edge,
     EdgeKind,
-    Exit,
     Fragment,
     Node,
     NodeKind,
@@ -52,6 +51,7 @@ from cobble.dataflow.srccfg.desugar import (
     PERFORM_TRANSFER,
     RANGE_SEPARATOR,
     Ctx,
+    landed,
     lower_statements,
     node_id,
 )
@@ -412,18 +412,4 @@ def _sentence(
     jumps there -- only then, so a program without one builds unchanged."""
     end = sentence_end_id(ref.name, position)
     body = lower_statements(statements, replace(ctx, sentence=end), "", first)
-    if end not in {edge.target for edge in body.edges}:
-        return body
-    landing = Node(id=end, kind=NodeKind.NOP, paragraph=ref.name)
-    return Fragment(
-        nodes=(*body.nodes, landing),
-        edges=(
-            *body.edges,
-            *(
-                Edge(source=exit_.node_id, target=end, kind=exit_.kind)
-                for exit_ in body.exits
-            ),
-        ),
-        entry=body.entry,
-        exits=(Exit(node_id=end, kind=EdgeKind.FLOW),),
-    )
+    return landed(body, end, ref.name)

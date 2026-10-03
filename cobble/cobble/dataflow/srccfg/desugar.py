@@ -129,6 +129,8 @@ class Ctx:
     source_file: str = ""
     section: str = ""
     sentence: str = ""
+    perform_leave: str = ""
+    perform_cycle: str = ""
     # Which WHENEVER GO TOs govern each EXEC SQL node id. Computed once per
     # program in source order, because the directive is a precompiler one --
     # see srccfg/whenever.py.
@@ -284,34 +286,32 @@ def _terminator(statement, ctx: Ctx, path: str) -> Fragment:
 
 
 def _exit(statement, ctx: Ctx, path: str) -> Fragment:
-    """EXIT PARAGRAPH and EXIT SECTION jump to the end of what they leave.
+    """EXIT PARAGRAPH / SECTION jump to the end of what they leave -- where the
+    fall-through and every PERFORM's RETURN already hang, so the jump gives both.
+    EXIT PERFORM jumps past its inline PERFORM, EXIT PERFORM CYCLE past one
+    iteration of it.
 
-    That end is where the paragraph's fall-through and every PERFORM's RETURN
-    already hang, so the jump gives both. Plain EXIT and EXIT PERFORM [CYCLE] keep
-    the plain lowering and fall through.
+    Plain EXIT falls through, and so does an EXIT with nothing of its kind around
+    it -- EXIT SECTION in no section, EXIT PERFORM in no inline PERFORM -- which no
+    compiler accepts, rather than jumping to a node that does not exist.
     """
-    if statement.kind not in _EXIT_LEAVES:
+    target = _EXIT_TARGETS.get(statement.kind, _NOWHERE)(ctx)
+    if not target:
         return _plain(statement, ctx, path)
-    stops = _terminator(statement, ctx, path)
-    return replace(
-        stops,
-        edges=(
-            Edge(
-                source=stops.entry,
-                target=end_id(_EXIT_LEAVES[statement.kind](ctx)),
-                kind=EdgeKind.GOTO,
-            ),
-        ),
-    )
+    return _jump(statement, ctx, path, target)
 
 
 def _next_sentence(statement, ctx: Ctx, path: str) -> Fragment:
     """NEXT SENTENCE jumps past the period ending its sentence, which build.py
     lands on a node of its own after the sentence's last statement."""
+    return _jump(statement, ctx, path, ctx.sentence)
+
+
+def _jump(statement, ctx: Ctx, path: str, target: str) -> Fragment:
     stops = _terminator(statement, ctx, path)
     return replace(
         stops,
-        edges=(Edge(source=stops.entry, target=ctx.sentence, kind=EdgeKind.GOTO),),
+        edges=(Edge(source=stops.entry, target=target, kind=EdgeKind.GOTO),),
     )
 
 
@@ -837,16 +837,53 @@ def _target_name(ref) -> str:
 
 
 def _perform(statement, ctx: Ctx, path: str) -> Fragment:
-    """A call, a block, or either of those wrapped in a loop."""
-    inner = _perform_body(statement, ctx, path)
-    return _loop(getattr(statement, "spec", ""), inner, ctx, path)
+    """A call, a block, or either of those wrapped in a loop.
 
-
-def _perform_body(statement, ctx: Ctx, path: str) -> Fragment:
+    An inline block is what EXIT PERFORM leaves, so it gets a landing after the
+    loop -- added only when one jumps there.
+    """
+    spec = getattr(statement, "spec", "")
     target = str(getattr(statement, "target", "") or "").upper()
-    if not target:
-        return lower_statements(getattr(statement, "children", ()), ctx, f"{path}.body")
-    return _call(ctx, path, _range_target(target, getattr(statement, "thru", "")))
+    if target:
+        call = _call(ctx, path, _range_target(target, getattr(statement, "thru", "")))
+        return _loop(spec, call, ctx, path)
+    leave = node_id(ctx, path, "#leave")
+    inner = replace(ctx, perform_leave=leave)
+    looped = _loop(spec, _inline_body(statement, inner, path), inner, path)
+    return landed(looped, leave, ctx.paragraph)
+
+
+def _inline_body(statement, ctx: Ctx, path: str) -> Fragment:
+    """One iteration of an inline block, and the landing EXIT PERFORM CYCLE jumps
+    to: what follows it is the loop's own step and test."""
+    cycle = node_id(ctx, path, "#cycle")
+    body = lower_statements(
+        getattr(statement, "children", ()),
+        replace(ctx, perform_cycle=cycle),
+        f"{path}.body",
+    )
+    return landed(body, cycle, ctx.paragraph)
+
+
+def landed(fragment: Fragment, landing: str, paragraph: str) -> Fragment:
+    """``fragment`` with a no-op node ``landing`` after it, when some edge in it
+    jumps there; unchanged otherwise, so a construct nothing jumps out of keeps
+    the graph it always had."""
+    if landing not in {edge.target for edge in fragment.edges}:
+        return fragment
+    node = Node(id=landing, kind=NodeKind.NOP, paragraph=paragraph)
+    return Fragment(
+        nodes=(*fragment.nodes, node),
+        edges=(
+            *fragment.edges,
+            *(
+                Edge(source=exit_.node_id, target=landing, kind=exit_.kind)
+                for exit_ in fragment.exits
+            ),
+        ),
+        entry=fragment.entry,
+        exits=(Exit(node_id=landing, kind=EdgeKind.FLOW),),
+    )
 
 
 def _range_target(target: str, thru: str) -> str:
@@ -1387,10 +1424,17 @@ _LOOP_FORMS = {
     "PerformVaryingSpec": _varying_loop,
 }
 
-_EXIT_LEAVES: Mapping[ExitKind, Callable[[Ctx], str]] = {
-    ExitKind.PARAGRAPH: lambda ctx: ctx.paragraph,
-    ExitKind.SECTION: lambda ctx: ctx.section,
+_EXIT_TARGETS: Mapping[ExitKind, Callable[[Ctx], str]] = {
+    ExitKind.PARAGRAPH: lambda ctx: end_id(ctx.paragraph),
+    ExitKind.SECTION: lambda ctx: end_id(ctx.section) if ctx.section else "",
+    ExitKind.PERFORM: lambda ctx: ctx.perform_leave,
+    ExitKind.PERFORM_CYCLE: lambda ctx: ctx.perform_cycle,
 }
+
+
+def _NOWHERE(ctx: Ctx) -> str:
+    return ""
+
 
 _HANDLERS = {
     "IfStatement": _if,

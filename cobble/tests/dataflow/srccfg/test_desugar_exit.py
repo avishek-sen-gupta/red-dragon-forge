@@ -6,7 +6,8 @@ back, and a paragraph that is run into falls out of it as it would off its last
 statement. The rest of the paragraph -- or section -- loses that route in.
 
 The other EXITs must not move. Plain EXIT is the PERFORM THRU sentinel, and EXIT
-PERFORM [CYCLE] is not lowered yet.
+PERFORM [CYCLE] outside any inline PERFORM -- which no compiler accepts -- has nothing
+to leave, so it falls through rather than jump to a node that does not exist.
 """
 
 from __future__ import annotations
