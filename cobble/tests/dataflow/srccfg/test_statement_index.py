@@ -7,7 +7,7 @@ address: desugar builds it from the paragraph plus a dotted nesting path.
 
 from __future__ import annotations
 
-from cobol_asg.cobol_statements import MoveStatement
+from cobol_asg.cobol_statements import CobolStatementType, MoveStatement
 
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.statements import statement_index
@@ -15,6 +15,11 @@ from cobble.dataflow.srccfg.statements import statement_index
 
 def _move(source: str, target: str) -> dict:
     return {"type": "MOVE", "operands": [{"name": source}, {"name": target}]}
+
+
+def _moved_into(statement: CobolStatementType) -> str:
+    assert isinstance(statement, MoveStatement)
+    return statement.targets[0].name
 
 
 def _when(*children: dict) -> dict:
@@ -41,8 +46,8 @@ def test_a_statement_under_an_if_arm_is_indexed_at_the_arm_path(program_of):
         ]
     )
     index = statement_index(asg)
-    assert index["MAIN/0.then.0"].targets[0].name == "WS-B"
-    assert index["MAIN/0.else.0"].targets[0].name == "WS-D"
+    assert _moved_into(index["MAIN/0.then.0"]) == "WS-B"
+    assert _moved_into(index["MAIN/0.else.0"]) == "WS-D"
 
 
 def test_an_inline_perform_body_is_indexed_under_body_not_then(program_of):
@@ -53,7 +58,7 @@ def test_an_inline_perform_body_is_indexed_under_body_not_then(program_of):
     """
     asg = program_of([{"type": "PERFORM", "children": [_move("WS-A", "WS-B")]}])
     index = statement_index(asg)
-    assert index["MAIN/0.body.0"].targets[0].name == "WS-B"
+    assert _moved_into(index["MAIN/0.body.0"]) == "WS-B"
     assert "MAIN/0.then.0" not in index
 
 
@@ -79,8 +84,8 @@ def test_an_evaluate_when_body_is_indexed_under_its_branch_position(program_of):
         ]
     )
     index = statement_index(asg)
-    assert index["MAIN/0.when.0.0"].targets[0].name == "WS-B"
-    assert index["MAIN/0.when.1.0"].targets[0].name == "WS-D"
+    assert _moved_into(index["MAIN/0.when.0.0"]) == "WS-B"
+    assert _moved_into(index["MAIN/0.when.1.0"]) == "WS-D"
 
 
 def test_a_search_indexes_both_its_whens_and_its_at_end(program_of):
@@ -95,8 +100,8 @@ def test_a_search_indexes_both_its_whens_and_its_at_end(program_of):
         ]
     )
     index = statement_index(asg)
-    assert index["MAIN/0.when.0.0"].targets[0].name == "WS-B"
-    assert index["MAIN/0.at_end.0"].targets[0].name == "WS-D"
+    assert _moved_into(index["MAIN/0.when.0.0"]) == "WS-B"
+    assert _moved_into(index["MAIN/0.at_end.0"]) == "WS-D"
 
 
 def test_division_level_statements_are_indexed_under_the_synthetic_paragraph(
@@ -112,8 +117,8 @@ def test_division_level_statements_are_indexed_under_the_synthetic_paragraph(
         }
     )
     index = statement_index(asg)
-    assert index["%MAIN/0"].targets[0].name == "WS-B"
-    assert index["MAIN/0"].targets[0].name == "WS-D"
+    assert _moved_into(index["%MAIN/0"]) == "WS-B"
+    assert _moved_into(index["MAIN/0"]) == "WS-D"
 
 
 def test_a_duplicate_paragraph_name_is_indexed_under_its_renamed_form(asg_of):
@@ -139,8 +144,8 @@ def test_a_duplicate_paragraph_name_is_indexed_under_its_renamed_form(asg_of):
         }
     )
     index = statement_index(asg)
-    assert index["DUP/0"].targets[0].name == "WS-B"
-    assert index["DUP%2/0"].targets[0].name == "WS-D"
+    assert _moved_into(index["DUP/0"]) == "WS-B"
+    assert _moved_into(index["DUP%2/0"]) == "WS-D"
 
 
 def test_every_statement_bearing_cfg_node_has_an_entry(asg_of):
@@ -208,7 +213,21 @@ def test_every_statement_bearing_cfg_node_has_an_entry(asg_of):
                                 }
                             ],
                             "else_children": [_move("WS-C", "WS-D")],
-                        }
+                        },
+                        {
+                            "type": "CALL",
+                            "program": "'PROGB'",
+                            "using": [],
+                            "on_exception": [_move("WS-L", "WS-M")],
+                            "not_on_exception": [_move("WS-N", "WS-O")],
+                        },
+                        {
+                            "type": "STRING",
+                            "sendings": [],
+                            "into": {"name": "WS-S"},
+                            "on_overflow": [_move("WS-T", "WS-U")],
+                            "not_on_overflow": [_move("WS-V", "WS-W")],
+                        },
                     ],
                 }
             ],
