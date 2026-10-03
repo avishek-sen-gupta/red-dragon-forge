@@ -128,6 +128,7 @@ class Ctx:
     index: Mapping[str, EightyEight]
     source_file: str = ""
     section: str = ""
+    sentence: str = ""
     # Which WHENEVER GO TOs govern each EXEC SQL node id. Computed once per
     # program in source order, because the directive is a precompiler one --
     # see srccfg/whenever.py.
@@ -155,12 +156,16 @@ def node_id(ctx: Ctx, path: str, suffix: str = "") -> str:
     return f"{ctx.paragraph}/{path}{suffix}"
 
 
-def lower_statements(statements: Sequence, ctx: Ctx, path: str) -> Fragment:
+def lower_statements(
+    statements: Sequence, ctx: Ctx, path: str, first: int = 0
+) -> Fragment:
+    """``first`` numbers the statements from a later position, for a sentence that
+    does not open its paragraph: its ids stay the paragraph's own."""
     prefix = f"{path}." if path else ""
     return seq(
         tuple(
             lower_statement(statement, ctx, f"{prefix}{position}")
-            for position, statement in enumerate(statements)
+            for position, statement in enumerate(statements, first)
         ),
         nop_id=node_id(ctx, f"{prefix}empty"),
     )
@@ -297,6 +302,16 @@ def _exit(statement, ctx: Ctx, path: str) -> Fragment:
                 kind=EdgeKind.GOTO,
             ),
         ),
+    )
+
+
+def _next_sentence(statement, ctx: Ctx, path: str) -> Fragment:
+    """NEXT SENTENCE jumps past the period ending its sentence, which build.py
+    lands on a node of its own after the sentence's last statement."""
+    stops = _terminator(statement, ctx, path)
+    return replace(
+        stops,
+        edges=(Edge(source=stops.entry, target=ctx.sentence, kind=EdgeKind.GOTO),),
     )
 
 
@@ -1390,4 +1405,5 @@ _HANDLERS = {
     "GobackStatement": _terminator,
     "ExitProgramStatement": _terminator,
     "ExitStatement": _exit,
+    "NextSentenceStatement": _next_sentence,
 }

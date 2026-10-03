@@ -7,7 +7,7 @@ statements, so leaving the order in build would close an import cycle.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import groupby
 from operator import itemgetter
 
@@ -19,6 +19,7 @@ class ParagraphRef:
     name: str
     section: str
     statements: tuple
+    sentence_ends: tuple[int, ...] = ()
 
 
 def label_id(name: str) -> str:
@@ -27,6 +28,10 @@ def label_id(name: str) -> str:
 
 def end_id(name: str) -> str:
     return f"{name}#end"
+
+
+def sentence_end_id(name: str, position: int) -> str:
+    return f"{name}#sentence.{position}"
 
 
 def paragraph_order(asg) -> tuple[ParagraphRef, ...]:
@@ -56,11 +61,7 @@ def _dedupe_names(refs: tuple[ParagraphRef, ...]) -> tuple[ParagraphRef, ...]:
     duplicate node ids and a false graph."""
     occurrences = _occurrences(tuple(ref.name for ref in refs))
     return tuple(
-        ParagraphRef(
-            name=ref.name if occurrence == 1 else f"{ref.name}%{occurrence}",
-            section=ref.section,
-            statements=ref.statements,
-        )
+        replace(ref, name=ref.name if occurrence == 1 else f"{ref.name}%{occurrence}")
         for ref, occurrence in zip(refs, occurrences, strict=True)
     )
 
@@ -98,4 +99,5 @@ def _of_paragraph(paragraph, section: str) -> ParagraphRef:
         name=paragraph.name.upper(),
         section=section,
         statements=tuple(paragraph.statements),
+        sentence_ends=tuple(paragraph.sentence_ends),
     )
