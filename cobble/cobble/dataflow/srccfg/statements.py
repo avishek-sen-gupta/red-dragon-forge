@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from itertools import chain
 
+from cobble.dataflow.srccfg.arm_clauses import ARM_CLAUSES
 from cobble.dataflow.srccfg.paragraphs import paragraph_order
 from cobble.dataflow.srccfg.varying import spec_text
 from cobol_asg.asg_types import CobolASG
@@ -36,13 +37,8 @@ from cobol_asg.ref_mod import RefModOperand
 Arm = tuple[str, Sequence[CobolStatementType]]
 Entry = tuple[str, CobolStatementType]
 
-_PLAIN_ARMS = (
-    "at_end",
-    "not_at_end",
-    "invalid_key",
-    "not_invalid_key",
-    "on_size_error",
-    "not_on_size_error",
+_PLAIN_ARMS = tuple(
+    attribute for clause in ARM_CLAUSES for attribute in (clause[0], clause[1])
 )
 
 

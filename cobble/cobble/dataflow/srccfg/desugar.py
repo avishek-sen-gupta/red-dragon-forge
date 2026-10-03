@@ -32,6 +32,7 @@ from cobble.dataflow.depgraph.flows import (
     verb_of,
 )
 from cobble.dataflow.srccfg.argument_mode import ArgumentMode
+from cobble.dataflow.srccfg.arm_clauses import ARM_CLAUSES
 from cobble.dataflow.srccfg.cfg import (
     EMPTY_FRAGMENT,
     NO_TARGET_OPERAND,
@@ -80,12 +81,6 @@ DISPATCH_TRANSFER = "GO TO DEPENDING"
 PERFORM_TRANSFER = "PERFORM"
 RANGE_SEPARATOR = "|"
 TIMES_OP = "TIMES"
-
-ARM_CLAUSES = (
-    ("at_end", "not_at_end", "AT END"),
-    ("invalid_key", "not_invalid_key", "INVALID KEY"),
-    ("on_size_error", "not_on_size_error", "ON SIZE ERROR"),
-)
 
 ARMING_VERBS = ("HANDLE CONDITION", "IGNORE CONDITION", "HANDLE AID")
 SUPPRESSING_OPTIONS = ("NOHANDLE", "RESP", "RESP2")
@@ -372,7 +367,11 @@ def _arm_test(
 
 def _arm_subject(statement) -> str:
     """A file when there is one, otherwise the first target -- a size error is about
-    the arithmetic, not about a file."""
+    the arithmetic, not about a file. A statement with no target of that kind names
+    what its phrase is about, in _ARM_SUBJECTS."""
+    named_by_kind = _ARM_SUBJECTS.get(type(statement).__name__)
+    if named_by_kind:
+        return named_by_kind(statement)
     named = str(getattr(statement, "file_name", "") or "").upper()
     if named:
         return named
@@ -1454,6 +1453,12 @@ _LOOP_FORMS = {
     "PerformTimesSpec": _times_loop,
     "PerformUntilSpec": _until_loop,
     "PerformVaryingSpec": _varying_loop,
+}
+
+_ARM_SUBJECTS: Mapping[str, Callable[..., str]] = {
+    "CallStatement": lambda statement: _callee_name(statement.target),
+    "StringStatement": lambda statement: statement.into.name.upper(),
+    "UnstringStatement": lambda statement: statement.source.name.upper(),
 }
 
 _EXIT_TARGETS: Mapping[ExitKind, Callable[[Ctx], str]] = {
