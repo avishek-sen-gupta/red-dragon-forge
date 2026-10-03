@@ -36,6 +36,7 @@ def _build_initial_vm(context: CicsContext):
     """The same initial VM run_cics() sets up: COMMAREA bound to an addressable
     region and a main frame carrying the transid / EIBCALEN / EIBAID / params."""
     from interpreter.address import Address
+    from interpreter.cobol.call_arguments import call_arguments
     from interpreter.func_name import FuncName
     from interpreter.types.type_expr import UNKNOWN
     from interpreter.types.typed_value import typed
@@ -52,7 +53,7 @@ def _build_initial_vm(context: CicsContext):
                 VarName("__cics_transid"): typed(context.transid, UNKNOWN),
                 VarName("__cics_eibcalen"): typed(len(context.commarea), UNKNOWN),
                 VarName("__cics_eibaid"): typed(context.eibaid, UNKNOWN),
-                VarName("__params_region"): typed(commarea_addr, UNKNOWN),
+                VarName("__call_arguments"): call_arguments(vm, [commarea_addr]),
             },
         )
     )

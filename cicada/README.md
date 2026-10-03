@@ -247,8 +247,9 @@ max_steps)` executes a single program for one turn:
 - Seeds the context holder so `__cics_init_eib` can initialise `EIBTRNID`/`EIBCALEN`/`EIBAID`.
 - Delegates VM setup to `make_cics_initial_vm(context, ca_bytes)` — builds a fresh `VMState`
   with a `rgn_commarea` region and a `StackFrame` carrying `__cics_transid`, `__cics_eibcalen`,
-  `__cics_eibaid`, and `__params_region` (stored as the region name string `"rgn_commarea"`,
-  not an `Address` object, so region writes from LINKAGE section items resolve cleanly).
+  `__cics_eibaid`, and `__call_arguments` -- red-dragon's argument array, built with
+  `call_arguments(vm, [rgn_commarea])`, so the COMMAREA is argument 0 and binds the program's
+  first LINKAGE 01, DFHCOMMAREA.
 - Delegates entry-point selection to `make_entry_point(program)` — uses `entry_func_label`
   when present (multi-module link), otherwise the `func_*` prefix predicate.
 - Runs via `run_linked`; returns the `DispatchResult` left in `result_holder`.
