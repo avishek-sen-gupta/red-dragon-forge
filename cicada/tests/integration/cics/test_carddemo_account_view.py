@@ -298,8 +298,8 @@ def test_real_carddemo_account_view_detail(tmp_path, bridge_jar):
     ), f"COACTVWC did not render CACTVWA; maps={[s.get('map') for s in screens]}"
     fields = [s for s in screens if s.get("map") == "CACTVWA"][-1]["fields"]
 
-    def got(key: str) -> str:
-        return (fields.get(key) or "").strip()
+    def got(name: str) -> str:
+        return (fields.get(name) or "").replace("\x00", "").strip()
 
     # Account fields (from ACCTDAT).
     assert got("ACSTTUS") == _STATUS, f"ACSTTUS: got {fields.get('ACSTTUS')!r}"
