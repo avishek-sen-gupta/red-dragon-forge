@@ -1407,8 +1407,15 @@ def test_a_passed_through_sources_definers_are_read_in_its_own_programs_storage(
         resume="L/1",
         crossing=True,
         returns=True,
-        window=Window(
-            caller="CALLER", caller_extent=ws_comm, callee_extent=dfh, known=True
+        caller="CALLER",
+        windows=(
+            Window(
+                caller="CALLER",
+                caller_extent=ws_comm,
+                callee_extent=dfh,
+                known=True,
+                writes_back=True,
+            ),
         ),
     )
 
