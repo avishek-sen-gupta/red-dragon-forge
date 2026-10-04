@@ -370,9 +370,17 @@ def _write_output(
     )
 
 
-def _run(args: argparse.Namespace) -> None:
+def _run(args: argparse.Namespace) -> int:
     cfg_by_prog = {cfg.program: cfg for cfg in load_bundle(args.cfg).cfgs}
     targets = frozenset(cfg_by_prog)
+    if args.entry and args.entry not in targets:
+        _LOG.error(
+            "error: entry program %s is not in %s; it holds %s",
+            args.entry,
+            args.cfg,
+            ", ".join(sorted(targets)),
+        )
+        return 1
     entry = args.entry or next(iter(sorted(targets)))
     cfg_indices = {prog: _index_cfg(cfg) for prog, cfg in cfg_by_prog.items()}
     per_program = {
@@ -383,12 +391,13 @@ def _run(args: argparse.Namespace) -> None:
         extract_cross_program(entry, cfg_by_prog, targets, cfg_indices),
         per_program,
     )
+    return 0
 
 
-def main() -> None:
+def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cfg", required=True, type=Path, help="cobble cfg-<ENTRY>.jsonl")
     ap.add_argument("--entry", default="", help="entry program (default: first in CFG)")
     ap.add_argument("--out", required=True, type=Path, help="output sequences.json")
-    _run(ap.parse_args())
+    return _run(ap.parse_args())
