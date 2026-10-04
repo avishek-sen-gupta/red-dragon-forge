@@ -159,23 +159,34 @@ def _render_step(
 ) -> tuple[str, ...]:
     label = short(program)
     para = step["paragraph"]
-    callee = step.get("callee_program")
     decision = _DECISION if step.get("has_decision") else ""
     children = step.get("children", [])
-    if callee:
-        callee_label = short(callee)
-        return (
-            f"{pad}{label}->>{callee_label}: {para}",
-            f"{pad}{callee_label}-->>{label}: ",
-        )
-    if children:
-        return (
-            f"{pad}rect rgb(235,240,255)",
-            f"{pad}    Note over {label}: {para}{decision}",
-            *_render_steps(children, program, pad + "    ", short),
-            f"{pad}end",
-        )
-    return (f"{pad}Note over {label}: {para}{decision}",)
+    calls = _call_arrows(step, label, pad + "    " if children else pad, short)
+    if not children:
+        return calls or (f"{pad}Note over {label}: {para}{decision}",)
+    return (
+        f"{pad}rect rgb(235,240,255)",
+        f"{pad}    Note over {label}: {para}{decision}",
+        *_render_steps(children, program, pad + "    ", short),
+        *calls,
+        f"{pad}end",
+    )
+
+
+def _call_arrows(
+    step: Mapping, label: str, pad: str, short: Callable[[str], str]
+) -> tuple[str, ...]:
+    """The call a step makes to another program and its return, or nothing. The
+    step does not record where the call falls among its paragraph's PERFORMs, so
+    it is drawn after them."""
+    callee = step.get("callee_program")
+    if not callee:
+        return ()
+    callee_label = short(callee)
+    return (
+        f"{pad}{label}->>{callee_label}: {step['paragraph']}",
+        f"{pad}{callee_label}-->>{label}: ",
+    )
 
 
 def _render_program(program: str, seq: dict) -> str:
