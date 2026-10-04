@@ -56,9 +56,11 @@ _DECISION = " ⬡"
 
 
 def _make_short(programs: list[str]) -> Callable[[str], str]:
-    """Return a label-shortening function that strips the common prefix of all program names."""
+    """Return a label-shortening function that strips the common prefix of all
+    program names -- unless that prefix is a whole name, which would leave an
+    empty label."""
     prefix = os.path.commonprefix(programs) if len(programs) > 1 else ""
-    if len(prefix) < 2 or not prefix.isupper():
+    if len(prefix) < 2 or not prefix.isupper() or prefix in programs:
         return lambda p: p
     return lambda p: p[len(prefix) :]
 
