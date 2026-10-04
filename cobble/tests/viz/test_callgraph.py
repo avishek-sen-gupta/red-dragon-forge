@@ -38,24 +38,38 @@ def _graph(tmp_path: Path) -> Path:
         _edge("A", "CPY", "COPY", {}),
         _edge("B", "A", "COPY", {}),
         _edge("B", "C", "LINK", {"paragraph": "P2"}),
+        _edge("B", "D", "XCTL", {}),
+        _edge("D", "A", "CALL", {}),
+        _edge("A", "D", "XCTL_CANDIDATE", {}),
     )
     path = tmp_path / "carddemo.jsonl"
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     return path
 
 
-def test_only_link_edges_between_target_programs_are_kept(tmp_path: Path) -> None:
-    graph = extract(_graph(tmp_path), frozenset({"A", "B"}))
+def test_proven_call_edges_of_every_kind_between_target_programs_are_kept(
+    tmp_path: Path,
+) -> None:
+    graph = extract(_graph(tmp_path), frozenset({"A", "B", "D"}))
 
     assert graph == CallDepGraph(
         entry="A",
         nodes=(
-            ProgramNode(program="A", calls=("B",), called_by=()),
-            ProgramNode(program="B", calls=(), called_by=("A",)),
+            ProgramNode(program="A", calls=("B",), called_by=("D",)),
+            ProgramNode(program="B", calls=("D",), called_by=("A",)),
+            ProgramNode(program="D", calls=("A",), called_by=("B",)),
         ),
         edges=(
             CallEdge(from_program="A", to_program="B", paragraph="P1", commarea="CA"),
+            CallEdge(from_program="B", to_program="D", paragraph="", commarea=""),
+            CallEdge(from_program="D", to_program="A", paragraph="", commarea=""),
         ),
+    )
+
+
+def test_no_target_programs_give_an_empty_graph(tmp_path: Path) -> None:
+    assert extract(_graph(tmp_path), frozenset()) == CallDepGraph(
+        entry="", nodes=(), edges=()
     )
 
 
