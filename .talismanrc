@@ -499,4 +499,6 @@ fileignoreconfig:
   checksum: b6dd09b80b4bc4a7291dc2c4e892d6915335e3cd428b5842db0cedf4af3aaedf
 - filename: cobble/cobble/dataflow/srccfg/arm_clauses.py
   checksum: b74101234c683e9df7f51c46ef055c7446ec7e67f34b0c369c367259ddcb7f59
+- filename: docs/design/2026-10-05-jcl-to-be-architecture.md
+  checksum: b7852f568b4863010293bb8fd18fbc5a2aa0f194bad3b4867652cbd586414644
 version: "1.0"
