@@ -82,6 +82,21 @@ class SourceSpan:
 
 NO_SPAN = SourceSpan()
 
+
+def span_of(construct, source_file: str) -> SourceSpan:
+    match getattr(construct, "span", None):
+        case None:
+            return NO_SPAN
+        case s:
+            return SourceSpan(
+                line_start=s.line_start,
+                col_start=s.col_start,
+                line_end=s.line_end,
+                col_end=s.col_end,
+                source_file=source_file,
+            )
+
+
 NO_TARGET_OPERAND = RefModOperand(name="")
 
 

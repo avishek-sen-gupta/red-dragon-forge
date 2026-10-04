@@ -11,6 +11,7 @@ from typing import Any
 
 from cics.cics_visitor import CicsOperand, parse_exec_cics_text
 from cobol_asg.ref_mod import RefModOperand
+from cobol_asg.source_span import SourceSpan
 
 _STRUCTURE = ("subscripts", "ref_mod_start", "ref_mod_length")
 
@@ -71,6 +72,7 @@ class ExecCicsStatement:
 
     verb: str
     options: dict[str, "CicsOperand | None"]
+    span: SourceSpan | None = None
 
     def to_dict(self) -> dict:
         """The statement as JSON, losslessly: ``from_dict`` reconstructs it.
@@ -84,7 +86,10 @@ class ExecCicsStatement:
             name: operand_to_dict(operand) if isinstance(operand, CicsOperand) else None
             for name, operand in self.options.items()
         }
-        return {"type": "EXEC_CICS", "verb": self.verb, "options": serialised}
+        result = {"type": "EXEC_CICS", "verb": self.verb, "options": serialised}
+        if self.span is not None:
+            self.span.write_into(result)
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> ExecCicsStatement:
@@ -101,6 +106,7 @@ class ExecCicsStatement:
                 name: operand_from_dict(value) if isinstance(value, dict) else None
                 for name, value in options.items()
             },
+            span=SourceSpan.from_dict(data),
         )
 
 
@@ -124,7 +130,9 @@ class CicsDialectParser:
             r"\*>.*", "", data.get("exec_cics_text", ""), flags=re.MULTILINE
         ).strip()
         verb, options = parse_exec_cics_text(text)
-        stmt = ExecCicsStatement(verb=verb, options=options)
+        stmt = ExecCicsStatement(
+            verb=verb, options=options, span=SourceSpan.from_dict(data)
+        )
         self.statements.append(stmt)
         return stmt
 
