@@ -61,7 +61,7 @@ def rows_of(bundle: Bundle) -> tuple[CfgRow, ...]:
 
 def _cfg_rows(cfg: Cfg) -> tuple[CfgRow, ...]:
     return (
-        program_row(cfg.program),
+        program_row(cfg.program, cfg.external),
         *(node_row(cfg.program, node) for node in cfg.nodes),
         *(edge_row(cfg.program, edge) for edge in cfg.edges),
     )
@@ -91,6 +91,9 @@ def _row(line: str, where: str) -> CfgRow:
 
 def bundle_of_rows(rows: Sequence[CfgRow], source: str = "<rows>") -> Bundle:
     programs = tuple(row.program for row in rows if isinstance(row, CfgProgramRow))
+    external = frozenset(
+        row.program for row in rows if isinstance(row, CfgProgramRow) and row.external
+    )
     order = {program: at for at, program in enumerate(programs)}
     nodes = _by_program(
         tuple(row for row in rows if isinstance(row, CfgNodeRow)), order, source
@@ -105,6 +108,7 @@ def bundle_of_rows(rows: Sequence[CfgRow], source: str = "<rows>") -> Bundle:
                 program=program,
                 nodes=tuple(row.to_node() for row in nodes.get(program, ())),
                 edges=tuple(row.to_edge() for row in edges.get(program, ())),
+                external=program in external,
             )
             for program in programs
         ),

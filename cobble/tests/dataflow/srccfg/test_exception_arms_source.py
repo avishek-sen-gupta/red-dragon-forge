@@ -69,7 +69,7 @@ def _built(tmp_path: Path) -> Cfg:
     config.write_text(f'[srccfg]\nasg_dir = "{cache}"\n', encoding="utf-8")
     built = tmp_path / "ARMSP.jsonl"
     assert build_main(["--config", str(config), "ARMSP", "--output", str(built)]) == 0
-    (cfg,) = load_bundle(built).cfgs
+    cfg = load_bundle(built).cfgs[0]
     return cfg
 
 
