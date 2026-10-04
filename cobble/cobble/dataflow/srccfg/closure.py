@@ -22,7 +22,7 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.srccfg.build_corpus import cfg_of, source_file_of
 from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
-from cobble.dataflow.srccfg.cfg import Cfg
+from cobble.dataflow.srccfg.cfg import Cfg, external_cfg
 from cobble.dataflow.srccfg.config import load_srccfg_build_config
 from cobble.dataflow.srccfg.dynamic_targets import (
     NO_DYNAMIC_TARGETS,
@@ -109,8 +109,10 @@ def _visit(
     if program in tuple(cfg.program for cfg in built):
         return _Visit()
     if not path.is_file():
-        logger.warning("%s: called but not in the ASG cache; not built", program)
-        return _Visit()
+        logger.warning(
+            "%s: called but not in the ASG cache; an external stub stands in", program
+        )
+        return _Visit(cfgs=(external_cfg(program),))
     logger.info(
         "srccfg: building %s  (built=%d pending=%d)", program, len(built), pending
     )

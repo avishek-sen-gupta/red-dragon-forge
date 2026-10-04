@@ -22,7 +22,14 @@ from cobble.dataflow.srccfg.bundle import (
     load_bundle,
     rows_of,
 )
-from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, Node, NodeKind
+from cobble.dataflow.srccfg.cfg import (
+    EXTERNAL_ENTRY,
+    Cfg,
+    Edge,
+    EdgeKind,
+    Node,
+    NodeKind,
+)
 from cobble.dataflow.srccfg.dot import dot_of
 from cobble.dataflow.srccfg.dynamic_targets import DynamicSite, DynamicTargets
 from cobble.dataflow.srccfg.joined import CallKind, graph_of
@@ -115,6 +122,7 @@ def test_a_bundle_round_trips_through_its_rows(tmp_path: Path) -> None:
             _callee(),
             Cfg(program="PROGC", nodes=(), edges=()),
             Cfg(program="PROGD", nodes=(breaking,), edges=()),
+            Cfg(program="PROGE", nodes=(EXTERNAL_ENTRY,), edges=(), external=True),
         ),
         calls=_bundle(_caller("PROGB"), _callee()).calls,
     )

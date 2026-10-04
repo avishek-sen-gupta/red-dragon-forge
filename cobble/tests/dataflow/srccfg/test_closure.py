@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 
 from cobble.dataflow.srccfg.bundle import bundle_of_rows
+from cobble.dataflow.srccfg.cfg import EXTERNAL_ENTRY
 from cobble.dataflow.srccfg.closure import build_closure, main
+from cobble.dataflow.srccfg.presentation import cross_calls
 from cobble.dataflow.srccfg.dynamic_targets import dynamic_targets_of
 from cobble.dataflow.srccfg.rows.cfg_row import CFG_ROWS
 
@@ -134,18 +136,35 @@ def test_a_callee_of_a_callee_is_in_the_closure(tmp_path: Path) -> None:
     assert [cfg.program for cfg in bundle.cfgs] == ["PROGA", "PROGB", "PROGC"]
 
 
-def test_a_callee_with_no_asg_in_the_cache_does_not_end_the_run(
+def test_a_callee_with_no_asg_in_the_cache_is_an_external_one_node_program(
     tmp_path: Path, caplog
 ) -> None:
-    """The seed is what was asked for. A callee the cache does not hold -- another
-    subsystem's module, most often -- is named on the log and the rest is built."""
+    """A callee the cache does not hold -- another subsystem's module, most often --
+    is named on the log and stands in the closure as an external program of one
+    node and no structure: its call lands on that node, and the caller carries on
+    past the call as it would after any other."""
     asg_dir = _cache(tmp_path, {"PROGA": [_link("'PROGB'")]})
 
     with caplog.at_level(logging.WARNING):
         bundle = build_closure(asg_dir, "PROGA", Path())
 
-    assert [cfg.program for cfg in bundle.cfgs] == ["PROGA"]
-    assert "PROGB" in caplog.text
+    stub = bundle.cfgs[1]
+    (call,) = bundle.calls
+    assert (
+        [(cfg.program, cfg.external) for cfg in bundle.cfgs],
+        stub.nodes,
+        stub.edges,
+        (call.program, call.entry),
+        len(cross_calls(bundle.cfgs, bundle.calls)),
+        caplog.messages,
+    ) == (
+        [("PROGA", False), ("PROGB", True)],
+        (EXTERNAL_ENTRY,),
+        (),
+        ("PROGB", EXTERNAL_ENTRY.id),
+        1,
+        ["PROGB: called but not in the ASG cache; an external stub stands in"],
+    )
 
 
 def test_two_programs_that_call_each_other_are_each_built_once(tmp_path: Path) -> None:

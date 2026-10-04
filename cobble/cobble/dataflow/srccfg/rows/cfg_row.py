@@ -28,8 +28,8 @@ CfgRow = (
 CFG_ROWS: TypeAdapter[CfgRow] = TypeAdapter(CfgRow)
 
 
-def program_row(program: str) -> CfgProgramRow:
-    return CfgProgramRow(type=CfgRowType.PROGRAM, program=program)
+def program_row(program: str, external: bool = False) -> CfgProgramRow:
+    return CfgProgramRow(type=CfgRowType.PROGRAM, program=program, external=external)
 
 
 def node_row(program: str, node: Node) -> CfgNodeRow:

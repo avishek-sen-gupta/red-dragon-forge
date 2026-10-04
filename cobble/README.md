@@ -118,8 +118,13 @@ callee needs, so no consumer has to rebuild the join to walk the closure:
 {"type": "call", "caller": "COSGN00C", "node": "READ-USER-SEC-FILE/1.when.0.0.then.5.else.0", "transfer": "CICS_XCTL", "program": "COMEN01C", "entry": "MAIN-PARA#label", "resolved": true, "commarea": "CARDDEMO-COMMAREA", "expression": "", "reasons": [], "certain": true}
 ```
 
-Unresolved sites and callees outside the bundle are kept, with an empty `entry`,
-because "this program calls something we did not build" is an answer.
+A callee the ASG cache does not hold — another subsystem's module, or a member whose
+parse failed — is still in the closure, as an **external** program: its `program` row
+carries `"external": true`, and its CFG is the single node `%EXTERNAL#label` with no
+edges. Its calls land on that node like any other, and the caller carries on past a
+CALL or LINK as usual, so it draws as a call that returns into a program with no
+inside. Unresolved sites with no candidate program are kept with an empty `entry`,
+because "this program calls something we cannot name" is an answer.
 
 Every paragraph has a `<name>#label` node where control enters and a `<name>#end`
 node where it leaves, and so does every section: a section's label flows into its

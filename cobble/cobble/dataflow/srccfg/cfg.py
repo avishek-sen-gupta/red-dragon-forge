@@ -130,11 +130,17 @@ class Fragment:
 EMPTY_FRAGMENT = Fragment()
 
 
+# The one node of an external program: a callee the ASG cache does not hold, which
+# a closure keeps as a call target with no structure of its own.
+EXTERNAL_ENTRY = Node(id="%EXTERNAL#label", kind=NodeKind.LABEL, paragraph="%EXTERNAL")
+
+
 @dataclass(frozen=True)
 class Cfg:
     program: str
     nodes: tuple[Node, ...]
     edges: tuple[Edge, ...]
+    external: bool = False
 
     @cached_property
     def _by_id(self) -> dict[str, Node]:
@@ -212,3 +218,8 @@ def _join(left: Fragment, right: Fragment) -> Fragment:
         entry=left.entry,
         exits=right.exits,
     )
+
+
+def external_cfg(program: str) -> Cfg:
+    """A program known only as a call target: one node, no edges, marked external."""
+    return Cfg(program=program, nodes=(EXTERNAL_ENTRY,), edges=(), external=True)
