@@ -4,19 +4,21 @@
 batch programs end-to-end." It is the durable companion to the Beads epic
 **`jackal-1o2`** ("broaden JCL execution coverage"); every gap below links to its issue.
 
-**Last updated:** 2026-07-11.
+**Last updated:** 2026-10-05.
 
 **Status legend:** ✅ done · 🔶 tracked (open issue) · ⬜ untracked / future.
 
 ---
 
-## Framing: parsing is solved — it's all execution now
+## Framing: parsing is mostly solved — mostly execution now
 
-The JCL *parser* is done (`jackal-1o2.9`, merged): the vendored MIT **mapa** ANTLR grammar
-runs behind a Java bridge and parses ~all real JCL structurally (38/38 CardDemo jobs clean).
-So every item in this roadmap is **execution semantics over already-parsed structure**, plus
-the **utility** and **dataset/runtime** layers that programs assume exist. The work is
-interpretation, not grammar.
+The JCL *parser* landed (`jackal-1o2.9`): the vendored MIT **mapa** ANTLR grammar runs behind a
+Java bridge and parses all 38 CardDemo jobs. CardDemo is not production JCL, though. A
+feature-usage census of an external production batch corpus, plus a probe of the bridge with
+one synthetic job per construct, found three parse defects that CardDemo never triggers (see
+[Production-corpus 80/20 order](#production-corpus-8020-order)). Apart from those, the work is
+**execution semantics over already-parsed structure**, plus the **utility** and
+**dataset/runtime** layers that programs assume exist.
 
 For a snapshot of how much of a real workload this already runs, see the companion measurement
 [`docs/analysis/2026-07-09-carddemo-job-executability.md`](analysis/2026-07-09-carddemo-job-executability.md)
@@ -27,9 +29,15 @@ realistic roadmap; Layer 5 is separate, large, mostly-independent emulation.
 
 ---
 
-## Layer 0 — Parse the JCL  ✅
-mapa grammar parses JOB/EXEC/DD + all parameters, PROC, COND/IF, GDG, concatenation,
-in-stream, INCLUDE, etc. Nothing further needed. (`jackal-1o2.9`, done.)
+## Layer 0 — Parse the JCL  ✅ / 🔶
+mapa grammar parses JOB/EXEC/DD + all parameters, PROC, COND, GDG, in-stream, INCLUDE, etc.
+(`jackal-1o2.9`, done). Three open defects, all found on production-style JCL:
+
+| Defect | Status | Issue | Reach in the census |
+|---|---|---|---|
+| `DCB=dsn` / `DCB=(dsn,…)` fails the whole job | 🔶 | `red-dragon-forge-2cy.2` | ≥25% of jobs |
+| Concatenated DDs after the first are dropped | 🔶 | `red-dragon-forge-2cy.3` | common |
+| `IF/THEN/ELSE` flattened, condition lost | 🔶 | `red-dragon-forge-2cy.7` | ~1% |
 
 ## Layer 1 — JCL execution semantics (the *control plane*)
 How a job sequences and wires its steps.
@@ -39,7 +47,7 @@ How a job sequences and wires its steps.
 | JOB → EXEC step sequencing | ✅ | — | any multi-step job |
 | DD: DSN / DISP / in-stream / SYSOUT | ✅ | — | file wiring |
 | `COND=` step bypass (RC-gated) | ✅ | `1o2.1` | "stop the job if a step failed" — most chains |
-| `IF/THEN/ELSE/ENDIF` + `COND=EVEN/ONLY` | 🔶 | `1o2.8` | modern conditional flow; abend-conditional steps |
+| `IF/THEN/ELSE/ENDIF` + `COND=EVEN/ONLY` | 🔶 | `1o2.8` (after `2cy.7`) | modern conditional flow; abend-conditional steps |
 | PROC + symbolics (`&VAR`) | 🔶 | `1o2.2` | core expansion landed (`expand_procs`, wired in `runner.py`); remaining: `SET`/instream PROC/`--proclib-dir` CLI flag |
 | `INCLUDE` / `JCLLIB` | 🔶 | `1o2.15` | shared JCL fragments |
 | Referbacks (`DSN=*.STEP.DD`) | ✅ | `1o2.10` | inter-step dataset passing |
@@ -47,6 +55,7 @@ How a job sequences and wires its steps.
 | DD concatenation | 🔶 | `1o2.5` | multi-file input; load-lib / proc-lib chains |
 | `DCB=` (LRECL/RECFM/BLKSIZE) | 🔶 | `1o2.12` | correct record I/O (13 CardDemo jobs) |
 | `PARM=` into the program | ✅ | `1o2.13` | parameterized programs |
+| Unknown `PGM=` → explicit "unsupported" + stubs | 🔶 | `red-dragon-forge-xkk` | today any non-utility program is read as COBOL source and fails with a file-not-found error |
 | `DUMMY` / `DSN=NULLFILE` | 🔶 | `1o2.14` | empty-input / discard DDs |
 | System symbols (`&SYSUID`, `&SYSDATE`, JES) | ⬜→🔶 | `1o2.23` | date-stamped DSNs, generated names |
 
@@ -70,8 +79,8 @@ Each is its own SYSIN mini-language. This is where "useful program" frequently l
 | Utility | Status | Issue | Depth |
 |---|---|---|---|
 | IEFBR14 | ✅ | — | allocation no-op |
-| IDCAMS | ✅ core / 🔶 deeper | `1o2.6` | grammar/typed-AST comprehensive (LISTCAT/PRINT/ALTER/DEFINE AIX·GDG·PATH, EXPORT/IMPORT, VERIFY, BLDINDEX, modal IF/THEN/ELSE); executor coverage incremental |
-| SORT (DFSORT) — subset | 🔶 | `1o2.3` | FIELDS, INCLUDE/OMIT, SUM |
+| IDCAMS | ✅ core / 🔶 deeper | `red-dragon-forge-vqa` (VERIFY/VFY, comprehensive parser wiring), `1o2.6` (GDG define, AIX) | grammar/typed-AST comprehensive (LISTCAT/PRINT/ALTER/DEFINE AIX·GDG·PATH, EXPORT/IMPORT, VERIFY, BLDINDEX, modal IF/THEN/ELSE); executor coverage incremental |
+| SORT (DFSORT) — subset | 🔶 | `1o2.3` | FIELDS, INCLUDE/OMIT, OUTREC FIELDS, SUM, OPTION COPY |
 | IEBGENER | 🔶 | `1o2.3` | sequential copy (+ simple reformat) |
 | IEBCOPY | 🔶 | `1o2.18` | PDS member copy/compress (needs `1o2.16`) |
 | Deeper DFSORT (INREC/OUTREC/JOINKEYS) + ICETOOL | 🔶 | `1o2.24` | large — scope incrementally |
@@ -90,7 +99,8 @@ Invisible until a program needs it.
 
 ## Layer 5 — Subsystem batch (far frontier — separate tracks, not in `jackal-1o2`)
 Each is a large independent emulation, not part of the JCL surface proper:
-- **DB2 batch** — `EXEC SQL` programs via `IKJEFT01` / `DSN`.
+- **DB2 batch** — `EXEC SQL` programs via `IKJEFT01` / `DSN` (`red-dragon-forge-46d`; composed in
+  `red_dragon_forge/`, since jackal must not import squall).
 - **IMS DLI batch** — `DFSRRC00`.
 - **CICS online region** — red-dragon's CICS work.
 
@@ -133,14 +143,60 @@ IDCAMS depth (1o2.6) ──► VSAM AIX (1o2.22);  VSAM ESDS/RRDS (1o2.21) paral
 DD concatenation (1o2.5) supports STEPLIB chains once PDS (1o2.16) lands
 ```
 
-**Recommended near-term order (by CardDemo + general leverage):**
+**Superseded order (CardDemo + general leverage, 2026-07-11).** Replaced by
+[Production-corpus 80/20 order](#production-corpus-8020-order); kept for the CardDemo context:
 `1o2.1` (COND) → `1o2.4` (GDG) → `1o2.12` (DCB) → `1o2.3` (SORT/IEBGENER) →
 `1o2.10`/`1o2.11` (referbacks/temp) → `1o2.6` (IDCAMS depth) → `1o2.16` (PDS) →
 `1o2.2`/`1o2.15`/`1o2.17` (PROC + libs). Lower-frequency items (`1o2.19`–`1o2.24`) follow.
 
 ---
 
+## Production-corpus 80/20 order
+
+Ordered by reach in the production census. The goal is to analyse a comparable corpus's JCL as
+soon as possible: static understanding first (cobble, epic `red-dragon-forge-2cy`), then
+execution (jackal, epic `jackal-1o2`). Priorities live in Beads; this is the sequence.
+
+**Static (cobble graph).**
+
+| # | Item | Issue | P | Why |
+|---|---|---|---|---|
+| 0 | Run `diagnose-jcl` on the target corpus; census-construct bridge fixture | `2cy.1` | 1 | replace the estimate with a measurement |
+| 1 | Parse `DCB=dsn` / `DCB=(dsn,…)` | `2cy.2` | 0 | ≥25% of jobs fail to parse at all |
+| 2 | GDG relative generations as a typed DSN; graph keys the base | `2cy.4` | 1 | ≥25% of jobs; restores lineage across jobs |
+| 3 | `&&temp` datasets as job-scoped graph nodes | `2cy.5` | 1 | the dominant step-to-step idiom; no data flow within a job today |
+| 4 | Keep concatenated DDs | `2cy.3` | 1 | data silently dropped |
+| 5 | `COND=` as edge attrs | `2cy.6` | 2 | near-universal; shows what gates each step |
+| 6 | Keep `IF/THEN/ELSE` structure | `2cy.7` | 3 | ~1% |
+
+Already right for analysis: `IKJEFT01` → DB2 `RUN PROGRAM`, cataloged procs absent from the
+corpus (program nodes), `OUTPUT`, `$DJDE$` print payload in `DD *`, `AMP=`, `TYPRUN=`, `JOBLIB`,
+quoted `PARM` with unbalanced parentheses, `DD DUMMY`.
+
+**Execution (jackal), after the static track.**
+
+| # | Item | Issue | P | Why |
+|---|---|---|---|---|
+| 1 | Unsupported-program result + stubs | `red-dragon-forge-xkk` | 2 | otherwise any job containing a SORT/TSO/SAS/FTP step dies on a missing `.cbl` |
+| 2 | `DD DUMMY` | `1o2.14` | 2 | ≥47% of jobs |
+| 3 | IDCAMS VERIFY/VFY, `IF…THEN DO…END`, comprehensive parser | `red-dragon-forge-vqa` | 2 | IDCAMS ≥64%; `VFY` gates ≥24% of jobs at step one |
+| 4 | GDG + `IEFBR14` pre-create / `(MOD,DELETE)` idioms | `1o2.4` | 2 | ≥25% |
+| 5 | DCB attributes, then SORT subset | `1o2.12` → `1o2.3` | 2 | SORT ≥40%; INCLUDE/OMIT ≥62% |
+| 6 | IEBGENER copy | `1o2.3` | 2 | ≥37% |
+| 7 | Concatenated reads | `1o2.5` | 3 | after `2cy.3` |
+| 8 | `IKJEFT01` DB2 steps through squall | `red-dragon-forge-46d` | 3 | 26%; crosses runtimes |
+
+**Demoted to P4** (zero or near-zero use in the census): PROC symbolics and `SET` (`1o2.2`,
+`forge-6qr`, `forge-zmp`), `INCLUDE`/`JCLLIB` (`1o2.15`), PDS and load-library resolution
+(`1o2.16`, `1o2.17`), `RESTART=` (`1o2.25`). Already P4 and staying there: deeper DFSORT and
+ICETOOL (`1o2.24`), `TYPRUN=` (`1o2.26`), `OUTPUT` (`1o2.27`).
+
+---
+
 ## The three biggest non-obvious gaps
+
+Written from the CardDemo view. For production-style corpora, the census puts PDS and
+library-based lookup at P4 (see above); the abend model still stands.
 
 1. **PDS/PDSE + members (`1o2.16`)** — the most structurally significant missing piece;
    underpins load libs, library-based PROC/INCLUDE/copybook lookup, and IEBCOPY. Gates
