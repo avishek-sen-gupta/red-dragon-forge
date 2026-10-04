@@ -299,7 +299,10 @@ def _inspect(s, ctx: ProgramContext) -> tuple[Block, ...]:
 
 def _set(s, ctx: ProgramContext) -> tuple[Block, ...]:
     """SET X TO Y. SET ... TO TRUE and SET ... TO 1 drop out as literals in pass1."""
-    return _block(operand_names(s.values), operand_names(s.targets))
+    return _block(
+        operand_names(v.text for v in s.values),
+        operand_names(t.text for t in s.targets),
+    )
 
 
 def _search(s, ctx: ProgramContext) -> tuple[Block, ...]:

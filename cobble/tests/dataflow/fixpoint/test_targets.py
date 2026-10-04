@@ -110,8 +110,6 @@ def test_a_local_literal_move_resolves_each_site_to_its_own_program():
     assert sorted(per_site.values()) == [
         ("COADM01C", "COSGN00C"),
         ("COUSR02C",),
-        ("COUSR02C",),
-        ("COUSR03C",),
         ("COUSR03C",),
     ]
 
