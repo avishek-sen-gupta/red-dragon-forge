@@ -129,3 +129,40 @@ def test_alternative_arms_render_as_one_alt_block_with_a_nested_one():
     ]
     assert opened == lines.count("end")
     assert sum(1 for line in lines if line.startswith("Note over PROG: S-PARA")) == 3
+
+
+def test_a_paragraph_that_calls_a_program_still_draws_its_performs():
+    """A paragraph holding a CICS call keeps its PERFORMs: the block shows them,
+    then the call."""
+    step = {
+        "type": "link",
+        "paragraph": "ENTER-KEY",
+        "callee_program": "BRAVO",
+        "has_decision": False,
+        "call_type": "simple",
+        "arms": [],
+        "children": [
+            {
+                "type": "perform",
+                "paragraph": "CHECK-INPUT",
+                "callee_program": "",
+                "has_decision": False,
+                "call_type": "simple",
+                "arms": [],
+                "children": [],
+            }
+        ],
+    }
+    diagram = _render_program(
+        "ALPHA", {"program": "ALPHA", "entry_paragraph": "MAIN", "steps": [step]}
+    )
+    lines = [line.strip() for line in diagram.splitlines()]
+
+    assert lines[lines.index("rect rgb(235,240,255)") :] == [
+        "rect rgb(235,240,255)",
+        "Note over ALPHA: ENTER-KEY",
+        "Note over ALPHA: CHECK-INPUT",
+        "ALPHA->>BRAVO: ENTER-KEY",
+        "BRAVO-->>ALPHA:",
+        "end",
+    ]
