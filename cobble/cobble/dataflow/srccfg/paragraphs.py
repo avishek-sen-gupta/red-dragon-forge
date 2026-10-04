@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from itertools import groupby
 from operator import itemgetter
 
+from cobble.dataflow.srccfg.cfg import NO_SPAN, SourceSpan, span_of
 from cobble.dataflow.srccfg.synthetic import IMPLICIT_FIRST
 
 
@@ -20,6 +21,7 @@ class ParagraphRef:
     section: str
     statements: tuple
     sentence_ends: tuple[int, ...] = ()
+    span: SourceSpan = NO_SPAN
 
 
 def label_id(name: str) -> str:
@@ -91,7 +93,14 @@ def _of_section(section) -> tuple[ParagraphRef, ...]:
 def _implicit(name: str, section: str, statements) -> tuple[ParagraphRef, ...]:
     if not statements:
         return ()
-    return (ParagraphRef(name=name, section=section, statements=tuple(statements)),)
+    return (
+        ParagraphRef(
+            name=name,
+            section=section,
+            statements=tuple(statements),
+            span=span_of(statements[0], ""),
+        ),
+    )
 
 
 def _of_paragraph(paragraph, section: str) -> ParagraphRef:
@@ -100,4 +109,5 @@ def _of_paragraph(paragraph, section: str) -> ParagraphRef:
         section=section,
         statements=tuple(paragraph.statements),
         sentence_ends=tuple(paragraph.sentence_ends),
+        span=span_of(paragraph, ""),
     )

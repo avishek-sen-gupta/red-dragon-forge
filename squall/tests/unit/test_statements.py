@@ -7,6 +7,9 @@ from squall.statements import (
     SqlDialectParser,
     WheneverCondition,
 )
+from cobol_asg.source_span import SourceSpan
+
+_POSITION = ("line_start", "col_start", "line_end", "col_end")
 
 
 class TestSqlDialectParser:
@@ -38,6 +41,27 @@ class TestSqlDialectParser:
             text="EXEC SQL WHENEVER SQLERROR GO TO ERR-PARA END-EXEC"
         )
 
+        assert SqlDialectParser().parse(stmt.to_dict()) == stmt
+
+    def test_the_bridge_position_survives_parsing_and_the_cache(self):
+        stmt = SqlDialectParser().parse(
+            {
+                "type": "EXEC_SQL",
+                "exec_sql_text": "EXEC SQL SELECT A INTO :WS-A FROM T END-EXEC",
+                "line_start": 212,
+                "col_start": 11,
+                "line_end": 214,
+                "col_end": 18,
+            }
+        )
+
+        assert stmt.span == SourceSpan(212, 11, 214, 18)
+        assert {k: stmt.to_dict()[k] for k in _POSITION} == {
+            "line_start": 212,
+            "col_start": 11,
+            "line_end": 214,
+            "col_end": 18,
+        }
         assert SqlDialectParser().parse(stmt.to_dict()) == stmt
 
     def test_a_whenever_directive_is_typed_on_the_statement(self):

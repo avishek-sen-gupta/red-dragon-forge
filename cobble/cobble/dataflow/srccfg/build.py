@@ -25,7 +25,9 @@ from cobble.dataflow.srccfg.cfg import (
     Fragment,
     Node,
     NodeKind,
+    SourceSpan,
     seq,
+    span_of,
 )
 from cobble.dataflow.srccfg.conditions import condition_index
 from cobble.dataflow.srccfg.paragraphs import (
@@ -85,7 +87,13 @@ def _lowered(
         _paragraph_cfg(ref, asg.program_id, context, index, source_file, governing)
         for ref in order
     )
-    spans = _section_spans(order)
+    spans = _section_spans(
+        order,
+        {
+            section.name.upper(): span_of(section, source_file)
+            for section in asg.sections
+        },
+    )
     return (
         (*(node for part in parts for node in part[0]), *_section_nodes(spans)),
         (
@@ -176,8 +184,11 @@ def _paragraph_cfg(
         ),
         nop_id=node_id(ctx, "empty"),
     )
-    label = Node(id=label_id(ref.name), kind=NodeKind.LABEL, paragraph=ref.name)
-    end = Node(id=end_id(ref.name), kind=NodeKind.NOP, paragraph=ref.name)
+    located = replace(ref.span, source_file=source_file)
+    label = Node(
+        id=label_id(ref.name), kind=NodeKind.LABEL, paragraph=ref.name, span=located
+    )
+    end = Node(id=end_id(ref.name), kind=NodeKind.NOP, paragraph=ref.name, span=located)
     return (
         (label, *body.nodes, end),
         (
@@ -231,13 +242,16 @@ def _entering(current: ParagraphRef, nxt: ParagraphRef) -> str:
     return label_id(nxt.name)
 
 
-def _section_spans(order: Sequence[ParagraphRef]) -> tuple[SectionSpan, ...]:
+def _section_spans(
+    order: Sequence[ParagraphRef], located: Mapping[str, SourceSpan]
+) -> tuple[SectionSpan, ...]:
     sections = tuple(dict.fromkeys(ref.section for ref in order if ref.section))
     return tuple(
         SectionSpan(
             section=section,
             first=next(ref.name for ref in order if ref.section == section),
             last=next(ref.name for ref in reversed(order) if ref.section == section),
+            span=located[section],
         )
         for section in sections
     )
@@ -252,9 +266,17 @@ def _section_nodes(spans: Sequence[SectionSpan]) -> tuple[Node, ...]:
         for span in spans
         for node in (
             Node(
-                id=label_id(span.section), kind=NodeKind.LABEL, paragraph=span.section
+                id=label_id(span.section),
+                kind=NodeKind.LABEL,
+                paragraph=span.section,
+                span=span.span,
             ),
-            Node(id=end_id(span.section), kind=NodeKind.NOP, paragraph=span.section),
+            Node(
+                id=end_id(span.section),
+                kind=NodeKind.NOP,
+                paragraph=span.section,
+                span=span.span,
+            ),
         )
     )
 
@@ -412,4 +434,4 @@ def _sentence(
     jumps there -- only then, so a program without one builds unchanged."""
     end = sentence_end_id(ref.name, position)
     body = lower_statements(statements, replace(ctx, sentence=end), "", first)
-    return landed(body, end, ref.name)
+    return landed(body, end, ref.name, replace(ref.span, source_file=ctx.source_file))

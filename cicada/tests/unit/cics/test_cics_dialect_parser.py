@@ -5,6 +5,9 @@ dialect-parser mechanism instead of the removed _cics_text_parser contextvar."""
 from __future__ import annotations
 
 from cics.statements import CicsDialectParser, CicsOperand, ExecCicsStatement
+from cobol_asg.source_span import SourceSpan
+
+_POSITION = ("line_start", "col_start", "line_end", "col_end")
 
 
 class TestCicsDialectParserApplies:
@@ -107,6 +110,27 @@ class TestExecCicsStatementRoundTrip:
             }
         )
 
+        assert ExecCicsStatement.from_dict(statement.to_dict()) == statement
+
+    def test_the_bridge_position_survives_parsing_and_the_round_trip(self):
+        statement = CicsDialectParser().parse(
+            {
+                "exec_cics_text": "EXEC CICS RETURN TRANSID(WS-TRANID) END-EXEC",
+                "type": "EXEC_CICS",
+                "line_start": 479,
+                "col_start": 6,
+                "line_end": 483,
+                "col_end": 13,
+            }
+        )
+
+        assert statement.span == SourceSpan(479, 6, 483, 13)
+        assert {k: statement.to_dict()[k] for k in _POSITION} == {
+            "line_start": 479,
+            "col_start": 6,
+            "line_end": 483,
+            "col_end": 13,
+        }
         assert ExecCicsStatement.from_dict(statement.to_dict()) == statement
 
     def test_a_plain_operand_still_serializes_to_the_two_keys_it_always_did(self):

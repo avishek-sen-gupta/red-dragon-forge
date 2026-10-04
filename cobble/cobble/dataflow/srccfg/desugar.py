@@ -35,6 +35,7 @@ from cobble.dataflow.srccfg.argument_mode import ArgumentMode
 from cobble.dataflow.srccfg.arm_clauses import ARM_CLAUSES
 from cobble.dataflow.srccfg.cfg import (
     EMPTY_FRAGMENT,
+    NO_SPAN,
     NO_TARGET_OPERAND,
     Atom,
     Edge,
@@ -45,6 +46,7 @@ from cobble.dataflow.srccfg.cfg import (
     NodeKind,
     SourceSpan,
     seq,
+    span_of,
 )
 from cobble.dataflow.srccfg.conditions import (
     ALWAYS,
@@ -126,6 +128,7 @@ class Ctx:
     sentence: str = ""
     perform_leave: str = ""
     perform_cycle: str = ""
+    span: SourceSpan = NO_SPAN
     # Which WHENEVER GO TOs govern each EXEC SQL node id. Computed once per
     # program in source order, because the directive is a precompiler one --
     # see srccfg/whenever.py.
@@ -170,22 +173,12 @@ def lower_statements(
 
 def lower_statement(statement, ctx: Ctx, path: str) -> Fragment:
     handler = _HANDLERS.get(type(statement).__name__)
-    return handler(statement, ctx, path) if handler else _plain(statement, ctx, path)
-
-
-def _span(statement, ctx: Ctx) -> SourceSpan:
-    """Source location from the ASG statement's own ``span`` attribute."""
-    match getattr(statement, "span", None):
-        case None:
-            return SourceSpan()
-        case s:
-            return SourceSpan(
-                line_start=int(getattr(s, "line_start", 0) or 0),
-                col_start=int(getattr(s, "col_start", 0) or 0),
-                line_end=int(getattr(s, "line_end", 0) or 0),
-                col_end=int(getattr(s, "col_end", 0) or 0),
-                source_file=ctx.source_file,
-            )
+    located = replace(ctx, span=span_of(statement, ctx.source_file))
+    return (
+        handler(statement, located, path)
+        if handler
+        else _plain(statement, located, path)
+    )
 
 
 def _plain(statement, ctx: Ctx, path: str) -> Fragment:
@@ -202,7 +195,7 @@ def _plain(statement, ctx: Ctx, path: str) -> Fragment:
         writes=writes,
         reads=reads,
         transfer=verb_of(statement) or _fallback_verb(kind),
-        span=_span(statement, ctx),
+        span=ctx.span,
     )
     return _with_arms(statement, ctx, path, _one(node))
 
@@ -354,6 +347,7 @@ def _arm_test(
         id=node_id(ctx, path, suffix),
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         atom=Atom(
             text=f"{label} {subject}",
             left=io_status_field(subject),
@@ -404,7 +398,7 @@ def _plain_without_arms(statement, ctx: Ctx, path: str) -> Fragment:
             writes=writes,
             reads=reads,
             transfer=verb_of(statement) or _fallback_verb(kind),
-            span=_span(statement, ctx),
+            span=ctx.span,
         )
     )
 
@@ -449,6 +443,7 @@ def _test(atom, ctx: Ctx, path: str, slot: str) -> CondFragment:
         id=node_id(ctx, path, suffix),
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         atom=resolve_atom(atom, ctx.index),
     )
     return _exits_of(node)
@@ -776,6 +771,7 @@ def _opaque_test(ctx: Ctx, path: str, text: str) -> Node:
         id=node_id(ctx, path, "#test"),
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         atom=Atom(text=text, resolved=False),
     )
 
@@ -790,6 +786,7 @@ def _search_missing_when(at_end: Fragment, ctx: Ctx, path: str) -> Fragment:
         id=node_id(ctx, path, "#test"),
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         atom=Atom(text="SEARCH outcome unknown", resolved=False),
     )
     cond = _exits_of(node)
@@ -829,6 +826,7 @@ def _transfer(ctx: Ctx, path: str, suffix: str, target: str) -> Fragment:
         id=node_id(ctx, path, suffix),
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         transfer=GOTO_TRANSFER,
         target=target,
     )
@@ -845,6 +843,7 @@ def _computed_goto(form, targets, ctx: Ctx, path: str) -> Fragment:
         id=node_id(ctx, path),
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         reads=operand_names((getattr(form, "index", ""),)),
         transfer=DISPATCH_TRANSFER,
     )
@@ -881,7 +880,7 @@ def _perform(statement, ctx: Ctx, path: str) -> Fragment:
     leave = node_id(ctx, path, "#leave")
     inner = replace(ctx, perform_leave=leave)
     looped = _loop(spec, _inline_body(statement, inner, path), inner, path)
-    return landed(looped, leave, ctx.paragraph)
+    return landed(looped, leave, ctx.paragraph, ctx.span)
 
 
 def _inline_body(statement, ctx: Ctx, path: str) -> Fragment:
@@ -893,16 +892,18 @@ def _inline_body(statement, ctx: Ctx, path: str) -> Fragment:
         replace(ctx, perform_cycle=cycle),
         f"{path}.body",
     )
-    return landed(body, cycle, ctx.paragraph)
+    return landed(body, cycle, ctx.paragraph, ctx.span)
 
 
-def landed(fragment: Fragment, landing: str, paragraph: str) -> Fragment:
+def landed(
+    fragment: Fragment, landing: str, paragraph: str, span: SourceSpan
+) -> Fragment:
     """``fragment`` with a no-op node ``landing`` after it, when some edge in it
     jumps there; unchanged otherwise, so a construct nothing jumps out of keeps
     the graph it always had."""
     if landing not in {edge.target for edge in fragment.edges}:
         return fragment
-    node = Node(id=landing, kind=NodeKind.NOP, paragraph=paragraph)
+    node = Node(id=landing, kind=NodeKind.NOP, paragraph=paragraph, span=span)
     return Fragment(
         nodes=(*fragment.nodes, node),
         edges=(
@@ -927,6 +928,7 @@ def _call(ctx: Ctx, path: str, target: str) -> Fragment:
         id=node_id(ctx, path),
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         transfer=PERFORM_TRANSFER,
         target=target,
     )
@@ -965,6 +967,7 @@ def _times_test(spec, ctx: Ctx, path: str) -> CondFragment:
         id=node_id(ctx, path, "#loop"),
         kind=NodeKind.TEST,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         atom=Atom(text=f"{times} TIMES", left=times, op=TIMES_OP),
         reads=_dedupe((times,)),
     )
@@ -1112,6 +1115,7 @@ def _step_node(
         id=node_id(ctx, path, suffix),
         kind=NodeKind.ASSIGN,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         writes=_dedupe((variable,)),
         reads=_dedupe(reads),
         transfer="SET",
@@ -1205,6 +1209,7 @@ def _arm(statement, ctx: Ctx, path: str, verb: str) -> Fragment:
             id=node_id(ctx, path),
             kind=NodeKind.ASSIGN,
             paragraph=ctx.paragraph,
+            span=ctx.span,
             writes=tuple(handler_field(name) for name, _ in options),
             reads=_dedupe(_armed_value(value, verb) for _, value in options),
             transfer=verb,
@@ -1273,6 +1278,7 @@ def _with_call(statement, node: Node, verb: str) -> Node:
         id=node.id,
         kind=NodeKind.CALL,
         paragraph=node.paragraph,
+        span=node.span,
         writes=node.writes,
         reads=node.reads,
         transfer=f"CICS_{transfer}",
@@ -1365,6 +1371,7 @@ def _dispatch_fragment(ctx: Ctx, path: str) -> Fragment:
         id=node_id(ctx, path, "#dispatch"),
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         reads=(HANDLER_ANY,),
         transfer=DISPATCH_TRANSFER_CICS,
     )
@@ -1381,6 +1388,7 @@ def _raisable(body: Fragment, ctx: Ctx, path: str) -> Fragment:
             id=node_id(ctx, path, "#raise"),
             kind=NodeKind.TEST,
             paragraph=ctx.paragraph,
+            span=ctx.span,
             atom=Atom(
                 text=f"{HANDLER_ANY} {RAISED}", left=HANDLER_ANY, op="==", right=RAISED
             ),
@@ -1427,6 +1435,7 @@ def _cobol_call(statement, ctx: Ctx, path: str) -> Fragment:
         id=node_id(ctx, path),
         kind=NodeKind.CALL,
         paragraph=ctx.paragraph,
+        span=ctx.span,
         writes=writes,
         reads=reads,
         transfer=CALL_TRANSFER,

@@ -8,6 +8,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from cobol_asg.source_span import SourceSpan
+from squall.exec_sql_payload import NO_POSITION, ExecSqlPayload
 from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import (
     Continue,
@@ -42,21 +44,27 @@ class ExecSqlStatement:
     whenever_condition: WheneverCondition = WheneverCondition.NONE
     whenever_action: WheneverAction = field(default_factory=NoOpAction)
     kind: Kind = Kind.GENERIC
+    span: SourceSpan = NO_POSITION
 
     def to_dict(self) -> dict:
-        """Flat, string-valued, and always both directive keys.
+        """Flat, and always both directive keys; the four position keys only when
+        the bridge reported a position.
 
         cobble's ASG cache IS this dict, and re-deriving the directive on every
         read would run the SQL grammar for every statement of every member in
-        every stage. Written flat rather than as a nested object so the whole
-        statement stays a Mapping[str, str] for whoever reads it back.
+        every stage. Written through ExecSqlPayload, the model parse() reads it
+        back into, so the two directions cannot disagree about a key.
         """
+        payload = ExecSqlPayload(
+            text=self.text,
+            whenever_condition=self.whenever_condition,
+            whenever_goto=_goto_target(self.whenever_action),
+            sql_kind=self.kind,
+        )
+        located = payload if self.span == NO_POSITION else payload.at(self.span)
         return {
             "type": "EXEC_SQL",
-            "text": self.text,
-            "whenever_condition": self.whenever_condition.value,
-            "whenever_goto": _goto_target(self.whenever_action),
-            "sql_kind": self.kind.value,
+            **located.model_dump(mode="json", exclude_unset=True),
         }
 
 
@@ -70,14 +78,14 @@ class SqlDialectParser:
     after the parse saw an empty statement.
     """
 
-    def applies(self, data: Mapping[str, str]) -> bool:
+    def applies(self, data: Mapping[str, str | int]) -> bool:
         return data.get("type") == "EXEC_SQL"
 
-    def parse(self, data: Mapping[str, str]) -> ExecSqlStatement:
-        text = data.get("exec_sql_text") or data.get("text") or ""
-        if "whenever_condition" in data:
-            return _from_cache(text, data)
-        return _from_source(text)
+    def parse(self, data: Mapping[str, str | int]) -> ExecSqlStatement:
+        payload = ExecSqlPayload.model_validate(data)
+        if payload.is_cached():
+            return _from_cache(payload)
+        return _from_source(payload.sql(), payload.span())
 
 
 def _goto_target(action: WheneverAction) -> str:
@@ -89,14 +97,14 @@ def _goto_target(action: WheneverAction) -> str:
             return ""
 
 
-def _from_cache(text: str, data: Mapping[str, str]) -> ExecSqlStatement:
-    condition = WheneverCondition(data.get("whenever_condition") or "none")
-    target = data.get("whenever_goto") or ""
+def _from_cache(payload: ExecSqlPayload) -> ExecSqlStatement:
+    condition = payload.whenever_condition
     return ExecSqlStatement(
-        text,
+        payload.sql(),
         condition,
-        _cached_action(condition, target),
-        Kind(data.get("sql_kind") or Kind.GENERIC.value),
+        _cached_action(condition, payload.whenever_goto),
+        payload.sql_kind,
+        payload.span(),
     )
 
 
@@ -110,8 +118,8 @@ def _cached_action(condition: WheneverCondition, target: str) -> WheneverAction:
     return Continue()
 
 
-def _from_source(text: str) -> ExecSqlStatement:
+def _from_source(text: str, span: SourceSpan) -> ExecSqlStatement:
     plan = parse_exec_sql(text)
     return ExecSqlStatement(
-        text, plan.whenever_condition, plan.whenever_action, plan.kind
+        text, plan.whenever_condition, plan.whenever_action, plan.kind, span
     )
