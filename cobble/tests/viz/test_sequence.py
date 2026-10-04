@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.viz.models import Arm
-from cobble.viz.render_cmd import _render_program
+from cobble.viz.render_cmd import _make_short, _render_program
 from cobble.viz.sequence_cmd import extract_per_program
 
 
@@ -166,3 +166,15 @@ def test_a_paragraph_that_calls_a_program_still_draws_its_performs():
         "BRAVO-->>ALPHA:",
         "end",
     ]
+
+
+def test_participant_labels_drop_a_shared_prefix_unless_one_would_be_empty():
+    shared = _make_short(["COADM01C", "COSGN00C"])
+    whole = _make_short(["CO", "COX"])
+
+    assert (shared("COADM01C"), shared("COSGN00C"), whole("CO"), whole("COX")) == (
+        "ADM01C",
+        "SGN00C",
+        "CO",
+        "COX",
+    )
