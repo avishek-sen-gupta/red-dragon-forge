@@ -8,6 +8,8 @@ repeats, which arm each call is in, and that the arms are alternatives.
 
 from __future__ import annotations
 
+from argparse import Namespace
+
 from cobble.dataflow.srccfg.cfg import Atom, Cfg, Edge, EdgeKind, Node, NodeKind
 from cobble.viz.models import Arm
 from cobble.viz.render_cmd import _make_short, _render_program
@@ -177,4 +179,24 @@ def test_participant_labels_drop_a_shared_prefix_unless_one_would_be_empty():
         "SGN00C",
         "CO",
         "COX",
+    )
+
+
+def test_an_entry_program_missing_from_the_bundle_is_an_error(tmp_path, caplog) -> None:
+    import logging
+
+    from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
+    from cobble.viz.sequence_cmd import _run
+
+    bundle = tmp_path / "closure.jsonl"
+    bundle.write_text(bundle_jsonl(Bundle(seed="PROG", cfgs=(CFG,))))
+    out = tmp_path / "sequences.json"
+    caplog.set_level(logging.ERROR)
+
+    status = _run(Namespace(cfg=bundle, entry="NOPROG", out=out))
+
+    assert (status, out.exists(), caplog.messages) == (
+        1,
+        False,
+        [f"error: entry program NOPROG is not in {bundle}; it holds PROG"],
     )
