@@ -10,6 +10,9 @@ all execute through the pipeline described here.
 RedDragon is included as an editable submodule at `vendor/red-dragon`, so its source can be
 read and modified in place.
 
+What is missing for a production CICS estate beyond CardDemo, ranked by reach:
+[`docs/cics-production-roadmap.md`](docs/cics-production-roadmap.md).
+
 ---
 
 ## Setup
