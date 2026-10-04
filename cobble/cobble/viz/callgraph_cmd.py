@@ -24,6 +24,10 @@ _LOG = logging.getLogger(__name__)
 # (src_prog, tgt_prog, paragraph, commarea)
 _LinkKey = tuple[str, str, str, str]
 
+# The proven program-to-program transfers; a *_CANDIDATE edge is a possible
+# target the analysis could not vouch for.
+_CALL_KINDS = frozenset({EdgeKind.CALL, EdgeKind.XCTL, EdgeKind.LINK})
+
 
 def _extract_para(edge: GraphEdge) -> str:
     return str(
@@ -39,8 +43,8 @@ def _is_cross_link(src: str, tgt: str, target_programs: frozenset[str]) -> bool:
 def _valid_link(
     edge: GraphEdge, target_programs: frozenset[str]
 ) -> tuple[_LinkKey, ...]:
-    """Return a 1-tuple for a valid cross-program LINK edge, else ()."""
-    if edge.kind is not EdgeKind.LINK:
+    """Return a 1-tuple for a proven cross-program call edge, else ()."""
+    if edge.kind not in _CALL_KINDS:
         return ()
     src = edge.source.split(".")[0]
     tgt = edge.target.split(".")[0]
@@ -75,13 +79,10 @@ def extract(graph_path: Path, target_programs: frozenset[str]) -> CallDepGraph:
         )
         for prog in sorted(target_programs)
     )
+    programs = sorted(target_programs)
     entry = next(
-        (
-            prog
-            for prog in sorted(target_programs)
-            if not _callers_of(prog, unique_keys)
-        ),
-        sorted(target_programs)[0],
+        (prog for prog in programs if not _callers_of(prog, unique_keys)),
+        next(iter(programs), ""),
     )
     return CallDepGraph(entry=entry, nodes=nodes, edges=edges)
 
