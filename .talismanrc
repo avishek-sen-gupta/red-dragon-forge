@@ -501,4 +501,6 @@ fileignoreconfig:
   checksum: b74101234c683e9df7f51c46ef055c7446ec7e67f34b0c369c367259ddcb7f59
 - filename: docs/design/2026-10-05-jcl-to-be-architecture.md
   checksum: b7852f568b4863010293bb8fd18fbc5a2aa0f194bad3b4867652cbd586414644
+- filename: cicada/docs/cics-production-roadmap.md
+  checksum: cdc461a4020cd727af9b29ba33e93ce5c42d81a2c5bc9b8a8ab2dae2df96a3ca
 version: "1.0"
