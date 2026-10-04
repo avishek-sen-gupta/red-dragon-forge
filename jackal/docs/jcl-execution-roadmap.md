@@ -6,6 +6,10 @@ batch programs end-to-end." It is the durable companion to the Beads epic
 
 **Last updated:** 2026-10-05.
 
+**Target shape:** [`docs/design/2026-10-05-jcl-to-be-architecture.md`](../../docs/design/2026-10-05-jcl-to-be-architecture.md)
+— the to-be execution architecture these items are built into, and the four model fixes
+(`red-dragon-forge-5fu`, `lrk`, `8in`, `93f`) that come before the items they block.
+
 **Status legend:** ✅ done · 🔶 tracked (open issue) · ⬜ untracked / future.
 
 ---
