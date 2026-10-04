@@ -78,7 +78,7 @@ def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
             ptr = frame.local_vars[VarName("__prog_DRIVER")].value
             base = getattr(ptr, "base", ptr)
             ws_handle = vm.heap_get(base).fields[FieldName("ws_handle")].value
-            region = vm.region_get(Address(ws_handle))
+            region = vm.region_get(Address(str(ws_handle)))
             assert region is not None, "DRIVER WS region missing"
             return int(region[0:4].decode("cp037"))
     raise AssertionError("DRIVER singleton not found in VM state")

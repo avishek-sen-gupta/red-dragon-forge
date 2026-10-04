@@ -6,10 +6,11 @@ all .txt resolves nothing under the bridge's built-in list). These tests pin
 how that reaches the java command line.
 """
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from cobol_asg.subprocess_runner import SubprocessRunner
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import SubprocessRunner
 
 _MINIMAL_ASG = '{"data_fields": [], "sections": [], "paragraphs": []}'
 
@@ -21,8 +22,8 @@ class RecordingRunner(SubprocessRunner):
         self.command: list[str] = []
         self.input_data: str = ""
 
-    def run(self, command: list[str], input_data: str) -> str:
-        self.command = command
+    def run(self, command: Sequence[str], input_data: str) -> str:
+        self.command = list(command)
         self.input_data = input_data
         return _MINIMAL_ASG
 
@@ -43,6 +44,8 @@ def test_parse_passes_each_copybook_extension_as_a_repeated_flag() -> None:
         "cpy",
         "-copybook-ext",
         "txt",
+        "-pointer-size",
+        "4",
     ]
 
 
@@ -79,4 +82,6 @@ def test_parse_emits_copybook_dirs_before_extensions() -> None:
         "sym",
         "-copybook-ext",
         "cpy",
+        "-pointer-size",
+        "4",
     ]
