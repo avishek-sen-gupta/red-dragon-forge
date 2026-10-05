@@ -1,11 +1,16 @@
 """The return-to-caller idiom, compiled by the real bridge, linked end to end."""
 
-import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from cobble.dataflow.combine.cli import cli
 from tests.dataflow.combine.corpus_toml import CONFIG
+from tests.dataflow.combine.linked_rows import (
+    LinkRow,
+    TargetRow,
+    link_rows,
+    target_rows,
+)
 
 PROGA = """\
        IDENTIFICATION DIVISION.
@@ -45,10 +50,6 @@ PROGB = """\
 """
 
 
-def _rows(path: Path) -> list[dict[str, object]]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-
-
 def test_return_to_caller_links_end_to_end(
     fixpoint_corpus: Callable[[Mapping[str, str]], Path], tmp_path: Path
 ) -> None:
@@ -72,39 +73,50 @@ def test_return_to_caller_links_end_to_end(
         == 0
     )
 
-    single = [
-        (r["caller"], r["candidates"], r["reasons"])
-        for r in _rows(out / "targets.jsonl")
-    ]
-    linked = [
-        (r["caller"], r["candidates"], r["reasons"], r["outside"])
-        for r in _rows(combined / "targets.jsonl")
-    ]
-    links = sorted(
-        (
-            r["caller"],
-            r["callee"],
-            r["caller_extent"],
-            r["callee_extent"],
-            r["discovered"],
+    assert target_rows(out / "targets.jsonl") == [
+        TargetRow(
+            caller="PROGB",
+            node="MAIN-PARA/1",
+            transfer="CICS_XCTL",
+            expression="WS-NEXT",
+            candidates=("PROGM",),
+            reasons=("inbound-linkage",),
+            dropped=(),
         )
-        for r in _rows(combined / "links.jsonl")
-    )
-    assert single == [("PROGB", ["PROGM"], ["inbound-linkage"])]
-    assert linked == [("PROGB", ["PROGA", "PROGM"], [], [])]
-    assert links == [
-        (
-            "PROGA",
-            "PROGB",
-            "WS-AREA@working_storage[0:20]",
-            "DFHCOMMAREA@linkage[0:20]",
-            False,
+    ]
+    assert target_rows(combined / "targets.jsonl") == [
+        TargetRow(
+            caller="PROGB",
+            node="MAIN-PARA/1",
+            transfer="CICS_XCTL",
+            expression="WS-NEXT",
+            candidates=("PROGA", "PROGM"),
+            reasons=(),
+            dropped=(),
+            outside=(),
+        )
+    ]
+    assert link_rows(combined / "links.jsonl") == [
+        LinkRow(
+            caller="PROGA",
+            node="MAIN-PARA/1",
+            transfer="XCTL",
+            callee="PROGB",
+            caller_extent="WS-AREA@working_storage[0:20]",
+            callee_extent="DFHCOMMAREA@linkage[0:20]",
+            returns=False,
+            reason="",
+            discovered=False,
         ),
-        (
-            "PROGB",
-            "PROGA",
-            "DFHCOMMAREA@linkage[0:20]",
-            "DFHCOMMAREA@linkage[0:20]",
-            True,
+        LinkRow(
+            caller="PROGB",
+            node="MAIN-PARA/1",
+            transfer="XCTL",
+            callee="PROGA",
+            caller_extent="DFHCOMMAREA@linkage[0:20]",
+            callee_extent="DFHCOMMAREA@linkage[0:20]",
+            returns=False,
+            reason="",
+            discovered=True,
         ),
     ]

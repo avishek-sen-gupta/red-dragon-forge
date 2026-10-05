@@ -277,6 +277,19 @@ def alias_row(alias: CommareaAlias) -> _Row:
     )
 
 
+def target_fields(target: ResolvedTarget) -> dict[str, str | list[str]]:
+    """One dynamic call site's row fields, before they are written as text."""
+    return {
+        "caller": target.caller,
+        "node": target.node,
+        "transfer": target.transfer,
+        "expression": target.expression,
+        "candidates": list(target.candidates),
+        "reasons": [reason.value for reason in target.reasons],
+        "dropped": list(target.dropped),
+    }
+
+
 def target_row(target: ResolvedTarget) -> _Row:
     """One dynamic call site's row, identified by its caller and the node that names it.
 
@@ -287,17 +300,7 @@ def target_row(target: ResolvedTarget) -> _Row:
     """
     return (
         target_identity(target.caller, target.node),
-        json.dumps(
-            {
-                "caller": target.caller,
-                "node": target.node,
-                "transfer": target.transfer,
-                "expression": target.expression,
-                "candidates": list(target.candidates),
-                "reasons": [reason.value for reason in target.reasons],
-                "dropped": list(target.dropped),
-            }
-        ),
+        json.dumps(target_fields(target)),
     )
 
 

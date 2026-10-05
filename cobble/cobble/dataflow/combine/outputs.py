@@ -6,15 +6,20 @@ from pathlib import Path
 from cobble.dataflow.combine.edge import Edge
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.linked_target import LinkedTarget
-from cobble.dataflow.fields.side_tables import jsonl_writer, target_row
+from cobble.dataflow.fields.side_tables import (
+    jsonl_writer,
+    target_fields,
+    target_identity,
+)
 from cobble.dataflow.jumps.jump_kind import JumpKind
 
 _RETURNS = frozenset({JumpKind.LINK, JumpKind.CALL})
 
 
 def _target(found: LinkedTarget) -> tuple[str, str]:
-    identity, row = target_row(found.target)
-    return identity, json.dumps({**json.loads(row), "outside": list(found.outside)})
+    target = found.target
+    row = {**target_fields(target), "outside": list(found.outside)}
+    return target_identity(target.caller, target.node), json.dumps(row)
 
 
 def _link(edge: Edge) -> tuple[str, str]:
@@ -31,7 +36,10 @@ def _link(edge: Edge) -> tuple[str, str]:
             "discovered": edge.discovered,
         }
     )
-    return f"{edge.caller}\0{edge.node}\0{edge.callee}\0{edge.param}", row
+    return (
+        f"{edge.caller}\0{edge.node}\0{edge.callee}\0{edge.param}\0{edge.callee_node}",
+        row,
+    )
 
 
 def write_outputs(out_dir: Path, linked: Linked) -> None:
