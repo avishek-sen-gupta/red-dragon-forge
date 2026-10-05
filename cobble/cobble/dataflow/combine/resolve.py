@@ -16,21 +16,24 @@ from cobble.dataflow.jumps.jump_kind import JumpKind
 
 _LINKAGE = "linkage"
 _CALLS = frozenset({JumpKind.LINK, JumpKind.CALL})
-_STRUCTURAL = frozenset(
-    {UnresolvedReason.INBOUND_LINKAGE, UnresolvedReason.FROM_CALLEE}
+_WRITER_EXPLAINED = frozenset(
+    {
+        UnresolvedReason.NOT_A_LITERAL,
+        UnresolvedReason.FROM_CALLEE,
+        UnresolvedReason.FROM_FILE,
+    }
 )
 _Seen = frozenset[tuple[str, str, int, int]]
 
 
 def resolve(tables: ProgramTables, node: str, at: ByteRange) -> Resolution:
-    facts = tables.facts_at(node, at)
-    if not facts:
-        return Resolution(
-            stops=frozenset(
-                {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.NOT_RECORDED,))}
-            )
-        )
-    return _from_facts(tables, node, at, facts, frozenset())
+    return _from_facts(tables, node, at, tables.facts_at(node, at), frozenset())
+
+
+def _unknown_stop(reasons: tuple[UnresolvedReason, ...]) -> Resolution:
+    if not reasons:
+        return Resolution()
+    return Resolution(stops=frozenset({Stop(StopKind.UNKNOWN, reasons=reasons)}))
 
 
 def _visit(node: str, at: ByteRange) -> tuple[str, str, int, int]:
@@ -50,6 +53,8 @@ def _from_facts(
 ) -> Resolution:
     if _visit(node, at) in seen:
         return Resolution()
+    if not facts:
+        return _unknown_stop((UnresolvedReason.NOT_RECORDED,))
     inner = seen | {_visit(node, at)}
     return reduce(
         joined,
@@ -68,47 +73,46 @@ def _from_fact(
 ) -> Resolution:
     part = _overlap(at, where)
     values = Resolution(values=_sliced(fact, where, part))
-    if fact.writers:
-        return reduce(
-            joined,
-            (
-                _through(tables, writer, flow, part, fact, seen)
-                for writer in fact.writers
-                for flow in tables.flows.get(writer, ())
-                if flow.target.overlaps(part)
-            ),
-            joined(values, _unsettled(fact)),
-        )
-    if part.region == _LINKAGE and not fact.values:
-        return joined(values, _received(tables, part))
-    return joined(values, _unknown(fact))
+    return reduce(
+        joined,
+        (
+            _through(tables, writer, flow, part, fact, seen)
+            for writer in fact.writers
+            for flow in tables.flows.get(writer, ())
+            if flow.target.overlaps(part)
+        ),
+        joined(values, _path_history(tables, part, fact)),
+    )
+
+
+def _path_history(tables: ProgramTables, part: ByteRange, fact: Fact) -> Resolution:
+    reasons = tuple(
+        r for r in fact.reasons if not fact.writers or r not in _WRITER_EXPLAINED
+    )
+    received = part.region == _LINKAGE and (
+        UnresolvedReason.INBOUND_LINKAGE in reasons or not (fact.writers or fact.values)
+    )
+    if not received:
+        return _unknown_stop(reasons)
+    return joined(
+        _received(tables, part),
+        _unknown_stop(
+            tuple(r for r in reasons if r is not UnresolvedReason.INBOUND_LINKAGE)
+        ),
+    )
 
 
 def _received(tables: ProgramTables, part: ByteRange) -> Resolution:
     params = tables.received_param(part)
     if not params:
-        return Resolution(
-            stops=frozenset(
-                {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.INBOUND_LINKAGE,))}
-            )
-        )
+        return _unknown_stop((UnresolvedReason.INBOUND_LINKAGE,))
     return Resolution(
         stops=frozenset({Stop(StopKind.RECEIVED, at=part, param=params[0])})
     )
 
 
 def _unknown(fact: Fact) -> Resolution:
-    reasons = tuple(r for r in fact.reasons if r not in _STRUCTURAL)
-    complete = fact.values and UnresolvedReason.INCOMPLETE_WALK not in reasons
-    if complete or not reasons:
-        return Resolution()
-    return Resolution(stops=frozenset({Stop(StopKind.UNKNOWN, reasons=reasons)}))
-
-
-def _unsettled(fact: Fact) -> Resolution:
-    if UnresolvedReason.INCOMPLETE_WALK not in fact.reasons:
-        return Resolution()
-    return _unknown(fact)
+    return _unknown_stop(tuple(r for r in fact.reasons if r in _WRITER_EXPLAINED))
 
 
 def _through(
