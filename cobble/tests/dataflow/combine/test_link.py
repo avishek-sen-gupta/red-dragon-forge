@@ -431,3 +431,126 @@ def test_a_run_resolves_each_program_node_and_range_once_across_rounds() -> None
     )
     assert set(plain.calls) == set(counted.calls)
     assert len(plain.calls) == 5
+
+
+def _menu(name: str, options: tuple[str, ...]) -> ProgramTables:
+    option = Fact(
+        "WS-OPT@working_storage[0:8]", values=tuple(o.ljust(8) for o in options)
+    )
+    inbound = Fact("LK-AREA@linkage[0:20]", reasons=(UnresolvedReason.INBOUND_LINKAGE,))
+    jump = Jump(
+        name,
+        "X",
+        9,
+        JumpKind.XCTL,
+        False,
+        target=option,
+        areas=(JumpArea(0, "DFHCOMMAREA@linkage[0:20]", (inbound,)),),
+    )
+    return ProgramTables(
+        name,
+        facts={"X": _facts(name, (option, inbound))},
+        flows={},
+        jumps={"X": jump},
+        received=((0, byte_range("DFHCOMMAREA@linkage[0:20]", name)),),
+        sites={"X": TargetSite("CICS_XCTL", "WS-OPT")},
+    )
+
+
+def _stamper(name: str, back: str) -> ProgramTables:
+    origin = byte_range("WS-FROM@working_storage[0:8]", name)
+    to = byte_range("WS-TO@working_storage[8:16]", name)
+    stamped = Fact(
+        "WS-FROM@working_storage[0:8]", values=(name.ljust(8),), writers=("SF",)
+    )
+    named = Fact(
+        "WS-TO@working_storage[8:16]", values=(back.ljust(8),), writers=("SB", "CP")
+    )
+    jump = Jump(
+        name,
+        "X",
+        9,
+        JumpKind.XCTL,
+        False,
+        target=named,
+        areas=(JumpArea(0, "WS-AREA@working_storage[0:20]", (stamped, named)),),
+    )
+    return ProgramTables(
+        name,
+        facts={"X": _facts(name, (stamped, named)), "CP": _facts(name, (stamped,))},
+        flows={
+            "SF": (Flow("SF", NO_RANGE, origin),),
+            "SB": (Flow("SB", NO_RANGE, to),),
+            "CP": (Flow("CP", origin, to),),
+        },
+        jumps={"X": jump},
+        received=(),
+        sites={"X": TargetSite("CICS_XCTL", "WS-TO")},
+    )
+
+
+def _bouncer(name: str, extent: str) -> ProgramTables:
+    inbound = Fact("LK-AREA@linkage[0:20]", reasons=(UnresolvedReason.INBOUND_LINKAGE,))
+    jump = Jump(
+        name,
+        "X",
+        9,
+        JumpKind.XCTL,
+        False,
+        target=Fact(extent, reasons=(UnresolvedReason.INBOUND_LINKAGE,)),
+        areas=(JumpArea(0, "DFHCOMMAREA@linkage[0:20]", (inbound,)),),
+    )
+    return ProgramTables(
+        name,
+        facts={"X": _facts(name, (inbound,))},
+        flows={},
+        jumps={"X": jump},
+        received=((0, byte_range("DFHCOMMAREA@linkage[0:20]", name)),),
+        sites={"X": TargetSite("CICS_XCTL", "LK-TO")},
+    )
+
+
+def _menu_loop(extent: str) -> Linked:
+    return link(
+        {
+            "M": _menu("M", ("A", "B")),
+            "A": _stamper("A", "M"),
+            "B": _bouncer("B", extent),
+        },
+        areas("M", "A", "B"),
+        {},
+        OutsideJumps(),
+    )
+
+
+def test_an_edge_chosen_by_a_fields_value_hands_over_the_callees_name() -> None:
+    linked = _menu_loop("LK-TO@linkage[8:16]")
+    assert (_row(linked, "M"), _row(linked, "A"), _row(linked, "B")) == (
+        (("A", "B"), (), ()),
+        (("A", "M"), (), ()),
+        (("M",), (), ()),
+    )
+    assert {
+        (e.caller, e.callee, e.discovered, str(e.named_by)) for e in linked.edges
+    } == {
+        ("M", "A", False, "(not storage)"),
+        ("M", "B", False, "(not storage)"),
+        ("A", "A", True, "WS-TO@working_storage[8:16]"),
+        ("A", "M", False, "WS-TO@working_storage[8:16]"),
+        ("B", "M", True, "LK-TO@linkage[8:16]"),
+    }
+    assert linked.report.rounds == 3
+
+
+def test_bytes_straddling_the_naming_field_keep_every_value_the_caller_held() -> None:
+    linked = _menu_loop("LK-TO@linkage[4:12]")
+    (found,) = [t for t in linked.targets if t.target.caller == "B"]
+    assert (found.target.candidates, found.target.dropped) == (("A", "M"), ("",))
+    assert {(e.caller, e.callee, e.discovered) for e in linked.edges} == {
+        ("M", "A", False),
+        ("M", "B", False),
+        ("A", "A", True),
+        ("A", "M", False),
+        ("B", "A", True),
+        ("B", "M", True),
+    }

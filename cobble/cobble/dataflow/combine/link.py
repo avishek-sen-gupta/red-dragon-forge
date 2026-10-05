@@ -17,7 +17,7 @@ from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.stop import Stop
 from cobble.dataflow.combine.stop_kind import StopKind
 from cobble.dataflow.combine.walk import walked
-from cobble.dataflow.fields.extent_text import ByteRange, byte_range
+from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, is_program_name
 from cobble.dataflow.jumps.fact import Fact
@@ -28,6 +28,7 @@ from cobble.dataflow.jumps.jump_kind import JumpKind
 _ENTERING = frozenset(
     {JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL, JumpKind.RETURN_TRANSID}
 )
+_NAMED = frozenset({JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL})
 _OUTSIDE = Held(reasons=frozenset({UnresolvedReason.OUTSIDE_ANALYSED_SET}))
 _INBOUND = Held(reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}))
 _FROM_CALLEE = Held(reasons=frozenset({UnresolvedReason.FROM_CALLEE}))
@@ -154,7 +155,15 @@ def _from_caller(edge: Edge, stop: Stop) -> _Expansion:
     if not edge.callee_window.covers(stop.at):
         return _ending(_INBOUND)
     at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
+    if edge.named_by.covers(at):
+        return _ending(Held(values=frozenset({_callee_name(edge, at)})))
     return Held(), ((edge.caller, edge.node, at),)
+
+
+def _callee_name(edge: Edge, at: ByteRange) -> str:
+    named = edge.named_by
+    padded = edge.callee.ljust(named.length)
+    return padded[at.start - named.start : at.end - named.start]
 
 
 def _received(world: _World, program: str, stop: Stop) -> _Expansion:
@@ -340,9 +349,10 @@ def _entry_edges(
     area: JumpArea,
 ) -> tuple[Edge, ...]:
     kind = JumpKind.XCTL if jump.kind is JumpKind.RETURN_TRANSID else jump.kind
-    theirs = world.areas.area(callee, kind, area.param)
-    if not theirs.known:
+    received = world.areas.area(callee, kind, area.param)
+    if not received.known:
         return ()
+    mine, theirs = _lined_up(byte_range(area.extent, program), received)
     return (
         Edge(
             program,
@@ -350,10 +360,19 @@ def _entry_edges(
             jump.kind,
             callee,
             area.param,
-            *_lined_up(byte_range(area.extent, program), theirs),
+            mine,
+            theirs,
             discovered=discovered,
+            named_by=_named_by(program, jump, mine),
         ),
     )
+
+
+def _named_by(program: str, jump: Jump, mine: ByteRange) -> ByteRange:
+    field = byte_range(jump.target.extent, program)
+    if jump.kind not in _NAMED or not mine.covers(field):
+        return NO_RANGE
+    return field
 
 
 def _sorted_reasons(
