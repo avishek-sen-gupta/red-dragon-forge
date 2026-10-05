@@ -573,6 +573,16 @@ that can raise a condition to the `HANDLE CONDITION` paragraphs armed where it r
 A paragraph reached only through such a handler is walked like any other, so its
 writes appear in every output.
 
+**A write kills what it overwrites, and only that.** An exact write drops every
+entry it fully covers, in both the provenance and the value map. An exact write
+into part of an exact entry splits that entry: the bytes left untouched keep its
+writers, values (sliced to them) and reasons, and the overwritten bytes hold only
+the new write. So `MOVE WS-PGMNAME TO CDEMO-FROM-PROGRAM` after a whole-record copy
+of the commarea leaves `CDEMO-FROM-PROGRAM` with one writer and no
+`inbound-linkage`, while its untouched neighbours keep both. A read straddling two
+pieces finds no value. Where either side is CLAMPED (a computed subscript), nothing
+is split: the entry keeps its writers whole and loses its values to `not-a-literal`.
+
 **Statements with no transfer of their own.** The transfer models `MOVE`,
 `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL` and `EXEC CICS`. Any
 other statement that writes storage — `ACCEPT`, `UNSTRING`, `INSPECT`, `SET`,

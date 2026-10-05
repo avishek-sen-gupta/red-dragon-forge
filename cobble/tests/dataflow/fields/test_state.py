@@ -251,9 +251,9 @@ def test_a_partial_write_invalidates_the_value_it_overwrote_part_of():
     inside the bytes the value claims, which is enough to make the claim false -- the
     values go and NOT_A_LITERAL says so.
 
-    The reasons of the entry survive, and an entry holding no values at all is left
-    alone: a write cannot cancel doubt about bytes outside it, and the doubt a callee
-    write-back puts over a whole commarea is what keeps a dynamic site a candidate.
+    An EXACT write splits the entry, so the bytes it wrote read back as its value
+    alone, and a read of the whole straddles the write and what is left of the
+    entry and finds no value -- a callee's doubt over the untouched rest included.
     """
     whole = _extent(0, 8, name="WS-PGM")
     part = _extent(0, 1, name="WS-PGM")
@@ -271,14 +271,12 @@ def test_a_partial_write_invalidates_the_value_it_overwrote_part_of():
 
     assert values_at(declared, whole) == of_value(b"COSGN00C")
     assert values_at(with_literal, whole) == because(UnresolvedReason.NOT_A_LITERAL)
-    assert values_at(with_literal, part) == ValueSet(
-        frozenset({b"X"}), frozenset({UnresolvedReason.NOT_A_LITERAL})
-    )
+    assert values_at(with_literal, part) == of_value(b"X")
     assert values_at(with_unknown, whole) == because(UnresolvedReason.NOT_A_LITERAL)
     assert values_at(weakly, whole) == because(UnresolvedReason.NOT_A_LITERAL)
     assert values_at(
         write(from_callee, part, frozenset(), of_value(b"X")), whole
-    ) == because(UnresolvedReason.FROM_CALLEE)
+    ) == because(UnresolvedReason.NOT_A_LITERAL)
 
 
 def test_a_miss_reports_what_explains_it():
@@ -342,3 +340,102 @@ def test_a_weak_write_kills_nothing_and_says_the_old_value_may_have_changed():
         frozenset(),
         frozenset({UnresolvedReason.UNINITIALISED, UnresolvedReason.UNMODELLED}),
     )
+
+
+def test_an_exact_write_into_an_exact_entry_splits_off_the_bytes_it_left_alone():
+    """The bytes a narrow EXACT write left untouched keep the wider entry's writers,
+    values and reasons, as pieces of it; the bytes it overwrote hold only the new
+    write. A read straddling a piece and the new write is inside neither."""
+    record = _extent(0, 12, name="WS-REC")
+    old = frozenset({_source("WS-OLD")})
+    new = frozenset({_source("WS-NEW")})
+    held = ValueSet(
+        frozenset({b"ABCDEFGHIJKL"}), frozenset({UnresolvedReason.FROM_CALLEE})
+    )
+    declared = write(EMPTY, record, old, held)
+    middle = write(declared, _extent(4, 4, name="WS-MID"), new, of_value(b"WXYZ"))
+    left = write(declared, _extent(0, 4, name="WS-LO"), new, of_value(b"WXYZ"))
+    right = write(declared, _extent(8, 8, name="WS-HI"), new, of_value(b"WXYZWXYZ"))
+    piece = ValueSet(frozenset({b"ABCD"}), frozenset({UnresolvedReason.FROM_CALLEE}))
+
+    assert middle.sources == {
+        _extent(0, 4, name="WS-REC"): old,
+        _extent(4, 4, name="WS-MID"): new,
+        _extent(8, 4, name="WS-REC"): old,
+    }
+    assert middle.values == {
+        _extent(0, 4, name="WS-REC"): piece,
+        _extent(4, 4, name="WS-MID"): of_value(b"WXYZ"),
+        _extent(8, 4, name="WS-REC"): ValueSet(
+            frozenset({b"IJKL"}), frozenset({UnresolvedReason.FROM_CALLEE})
+        ),
+    }
+    assert _names(middle, _extent(4, 4)) == {"WS-NEW"}
+    assert values_at(middle, _extent(4, 4)) == of_value(b"WXYZ")
+    assert _names(middle, _extent(0, 4)) == {"WS-OLD"}
+    assert values_at(middle, _extent(0, 4)) == piece
+    assert values_at(middle, _extent(2, 4)) == because(UnresolvedReason.NOT_A_LITERAL)
+    assert left.sources == {
+        _extent(0, 4, name="WS-LO"): new,
+        _extent(4, 8, name="WS-REC"): old,
+    }
+    assert left.values == {
+        _extent(0, 4, name="WS-LO"): of_value(b"WXYZ"),
+        _extent(4, 8, name="WS-REC"): ValueSet(
+            frozenset({b"EFGHIJKL"}), frozenset({UnresolvedReason.FROM_CALLEE})
+        ),
+    }
+    assert right.sources == {
+        _extent(0, 8, name="WS-REC"): old,
+        _extent(8, 8, name="WS-HI"): new,
+    }
+    assert right.values == {
+        _extent(0, 8, name="WS-REC"): ValueSet(
+            frozenset({b"ABCDEFGH"}), frozenset({UnresolvedReason.FROM_CALLEE})
+        ),
+        _extent(8, 8, name="WS-HI"): of_value(b"WXYZWXYZ"),
+    }
+
+
+def test_a_clamped_write_or_a_clamped_entry_is_never_split():
+    """A computed subscript says where bytes might be, not where they are, so
+    neither side of a CLAMPED overlap can be cut into what it left untouched: the
+    entry keeps its writers whole and only its values are invalidated. An entry
+    holding no values has nothing to invalidate, so a callee's doubt stands."""
+    old = frozenset({_source("WS-OLD")})
+    new = frozenset({_source("WS-NEW")})
+    exact_record = _extent(0, 12, name="WS-REC")
+    clamped_record = _extent(0, 12, precision=Precision.CLAMPED, name="WS-REC")
+    clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-MID")
+    exact_part = _extent(4, 4, name="WS-MID")
+    doubted = ValueSet(frozenset(), frozenset({UnresolvedReason.NOT_A_LITERAL}))
+
+    weakly = write(
+        write(EMPTY, exact_record, old, of_value(b"ABCDEFGHIJKL")),
+        clamped_part,
+        new,
+        of_value(b"WXYZ"),
+    )
+    into_clamped = write(
+        write(EMPTY, clamped_record, old, of_value(b"ABCDEFGHIJKL")),
+        exact_part,
+        new,
+        of_value(b"WXYZ"),
+    )
+
+    assert weakly.sources == {exact_record: old, clamped_part: new}
+    assert weakly.values == {exact_record: doubted, clamped_part: of_value(b"WXYZ")}
+    assert into_clamped.sources == {clamped_record: old, exact_part: new}
+    assert into_clamped.values == {
+        clamped_record: doubted,
+        exact_part: of_value(b"WXYZ"),
+    }
+    assert values_at(
+        write(
+            write(EMPTY, exact_record, old, because(UnresolvedReason.FROM_CALLEE)),
+            clamped_part,
+            new,
+            of_value(b"WXYZ"),
+        ),
+        exact_record,
+    ) == because(UnresolvedReason.FROM_CALLEE)

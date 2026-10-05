@@ -186,3 +186,38 @@ def test_an_unsettled_walk_keeps_every_jump_and_marks_its_facts_incomplete(
         (a.extent, [f.reasons for f in a.fields]) for a in by_kind[JumpKind.XCTL].areas
     ] == [("WS-AREA@working_storage[0:20]", [unread, unread])]
     assert by_kind[JumpKind.CALL].target == Fact(values=("SUBP",), reasons=incomplete)
+
+
+MENU = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-COMM.
+           05  WS-COMM-FROM     PIC X(8).
+           05  WS-COMM-USER     PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA          PIC X(16).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA(1:EIBCALEN) TO WS-COMM.
+           MOVE 'PROGM' TO WS-COMM-FROM.
+           EXEC CICS XCTL PROGRAM('PROGB') COMMAREA(WS-COMM) END-EXEC.
+"""
+
+
+def test_a_sub_field_overwritten_after_a_record_copy_forgets_the_copy(
+    fixpoint_corpus: Callable[[Mapping[str, str]], Path],
+) -> None:
+    out = fixpoint_corpus({"PROGM": MENU})
+    (xctl,) = _by_kind(_jumps(out, "PROGM"), JumpKind.XCTL)
+    (area,) = xctl.areas
+    assert [(f.extent, f.values, f.writers, f.reasons) for f in area.fields] == [
+        ("WS-COMM-FROM@working_storage[0:8]", ("PROGM   ",), ("MAIN-PARA/1",), ()),
+        (
+            "WS-COMM-USER@working_storage[8:16]",
+            (),
+            ("MAIN-PARA/0",),
+            (UnresolvedReason.INBOUND_LINKAGE,),
+        ),
+    ]
