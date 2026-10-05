@@ -1324,6 +1324,12 @@ def test_the_callee_reads_bytes_the_caller_defined(crossed):
 
     assert str(dep.source).startswith("DFHCOMMAREA@linkage[0:8]")
     assert [one for one in dep.definers if one.startswith("TPROGA/")]
+    (overwritten,) = {
+        (str(one.source), one.definers)
+        for one in crossed.deps
+        if one.program == "TPROGB" and one.node == "SUB-PARA/2"
+    }
+    assert overwritten == ("SUB-RESULT@working_storage[4:8]", ("TPROGB/SUB-PARA/1",))
 
 
 def test_the_callers_sink_reads_bytes_the_callee_defined(crossed):
