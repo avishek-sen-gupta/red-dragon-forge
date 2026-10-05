@@ -260,6 +260,11 @@ def _parser() -> argparse.ArgumentParser:
             "than stepping into the callees, and no other program is loaded"
         ),
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="retrace even if --out already exists (default: skip and leave it as is)",
+    )
     return parser
 
 
@@ -398,6 +403,11 @@ def _dispatch_trace(
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(tuple(argv) if argv else None)
+    if not arguments.force and arguments.out.exists():
+        logger.info(
+            "trace: %s already exists, skipping (--force to retrace)", arguments.out
+        )
+        return 0
     loader = _loader_of(arguments)
     reason = _refused(arguments.asg_dir, arguments.program, loader)
     if reason:
