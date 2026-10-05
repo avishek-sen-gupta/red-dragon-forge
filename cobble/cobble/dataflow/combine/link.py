@@ -112,10 +112,7 @@ def _outside_callers(world: _World, program: str) -> Held:
 
 def _entering(edge: Edge, program: str, stop: Stop) -> bool:
     return (
-        edge.callee == program
-        and edge.kind in _ENTERING
-        and edge.param == stop.param
-        and edge.callee_window.overlaps(stop.at)
+        edge.callee == program and edge.kind in _ENTERING and edge.param == stop.param
     )
 
 
