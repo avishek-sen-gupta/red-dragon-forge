@@ -36,10 +36,7 @@ def _link(edge: Edge) -> tuple[str, str]:
             "discovered": edge.discovered,
         }
     )
-    return (
-        f"{edge.caller}\0{edge.node}\0{edge.callee}\0{edge.param}\0{edge.callee_node}",
-        row,
-    )
+    return row, row
 
 
 def write_outputs(out_dir: Path, linked: Linked) -> None:
