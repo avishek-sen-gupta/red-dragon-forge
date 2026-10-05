@@ -8,6 +8,7 @@ from cobble.dataflow.combine.link import link
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.program_tables import ProgramTables
+from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.target_site import TargetSite
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
@@ -30,7 +31,7 @@ def _facts(program: str, facts: tuple[Fact, ...]) -> tuple[tuple[ByteRange, Fact
     return tuple((byte_range(fact.extent, program), fact) for fact in facts)
 
 
-def caller(name: str, stamp: str, to: str) -> ProgramTables:
+def caller(name: str, stamp: str, to: str, width: int = 20) -> ProgramTables:
     fields = (
         Fact("WS-FROM@working_storage[0:8]", values=(stamp.ljust(8),), writers=("S",)),
         Fact(
@@ -44,7 +45,7 @@ def caller(name: str, stamp: str, to: str) -> ProgramTables:
         JumpKind.XCTL,
         False,
         target=Fact(values=(to,)),
-        areas=(JumpArea(0, "WS-AREA@working_storage[0:20]", fields),),
+        areas=(JumpArea(0, f"WS-AREA@working_storage[0:{width}]", fields),),
     )
     return ProgramTables(
         name,
@@ -110,13 +111,16 @@ def test_return_to_caller_resolves_to_every_program_that_jumps_in() -> None:
         {"A": caller("A", "A", "B"), "B": returner("B", "M")},
         areas("A", "B"),
         {},
-        OutsideJumps(),
+        OutsideJumps(unresolved=2, without_results=("Z",)),
     )
     assert _row(linked, "B") == (("A", "M"), (), ())
     assert {(e.caller, e.callee, e.discovered) for e in linked.edges} == {
         ("A", "B", False),
         ("B", "A", True),
     }
+    assert linked.report == RunReport(
+        rounds=3, discovered=1, unresolved_outside_jumps=2, without_results=("Z",)
+    )
 
 
 def test_a_target_found_only_across_programs_grows_the_call_graph() -> None:
@@ -127,8 +131,10 @@ def test_a_target_found_only_across_programs_grows_the_call_graph() -> None:
     }
     linked = link(tables, areas("C", "P", "R"), {}, OutsideJumps())
     assert _row(linked, "P") == (("M", "R"), (), ())
-    assert ("P", "R", True) in {
-        (e.caller, e.callee, e.discovered) for e in linked.edges
+    assert {(e.caller, e.callee, e.discovered) for e in linked.edges} == {
+        ("C", "P", False),
+        ("P", "R", True),
+        ("R", "R", True),
     }
     assert _row(linked, "R") == (("Q", "R"), (), ())
 
@@ -144,6 +150,39 @@ def test_a_cycle_that_adds_nothing_terminates_with_no_invented_candidates() -> N
         (("B",), (), ()),
         (("A",), (), ()),
     )
+    relayed = link(
+        {"A": relay("A", "B"), "B": relay("B", "A")},
+        areas("A", "B"),
+        {},
+        OutsideJumps(),
+    )
+    assert (_row(relayed, "A"), _row(relayed, "B")) == (
+        ((), ("inbound-linkage",), ()),
+        ((), ("inbound-linkage",), ()),
+    )
+
+
+def relay(name: str, to: str) -> ProgramTables:
+    lk = byte_range("LK-FROM@linkage[0:8]", name)
+    inbound = Fact("LK-FROM@linkage[0:8]", reasons=(UnresolvedReason.INBOUND_LINKAGE,))
+    onward = Jump(
+        name,
+        "J",
+        7,
+        JumpKind.XCTL,
+        False,
+        target=Fact(values=(to,)),
+        areas=(JumpArea(0, "DFHCOMMAREA@linkage[0:20]", (inbound,)),),
+    )
+    site = Jump(name, "X", 9, JumpKind.XCTL, False, target=inbound)
+    return ProgramTables(
+        name,
+        facts={"J": ((lk, inbound),), "X": ((lk, inbound),)},
+        flows={},
+        jumps={"J": onward, "X": site},
+        received=((0, byte_range("DFHCOMMAREA@linkage[0:20]", name)),),
+        sites={"X": TargetSite("CICS_XCTL", "LK-FROM")},
+    )
 
 
 def test_a_window_narrower_than_the_bytes_contributes_nothing() -> None:
@@ -154,6 +193,17 @@ def test_a_window_narrower_than_the_bytes_contributes_nothing() -> None:
         OutsideJumps(),
     )
     assert _row(linked, "B") == (("M",), ("inbound-linkage",), ())
+    mixed = link(
+        {
+            "A": caller("A", "A", "B"),
+            "C": caller("C", "C", "B", width=4),
+            "B": returner("B", "M"),
+        },
+        areas("A", "B", "C"),
+        {},
+        OutsideJumps(),
+    )
+    assert _row(mixed, "B") == (("A", "M"), ("inbound-linkage",), ())
 
 
 def test_an_outside_caller_with_a_known_target_is_named() -> None:
@@ -193,8 +243,9 @@ def test_return_transid_re_enters_the_programs_own_entry() -> None:
     }
 
 
-def test_start_from_reaches_the_started_programs_retrieve() -> None:
-    message = Fact("WS-MSG@working_storage[0:8]", values=("PROGZ   ",))
+def _started(width: int) -> Mapping[str, ProgramTables]:
+    extent = f"WS-MSG@working_storage[0:{width}]"
+    message = Fact(extent, values=("PROGZ   "[:width],))
     start = Jump(
         "S",
         "ST",
@@ -202,7 +253,7 @@ def test_start_from_reaches_the_started_programs_retrieve() -> None:
         JumpKind.START,
         False,
         transid=Fact(values=("TRNR",)),
-        areas=(JumpArea(0, "WS-MSG@working_storage[0:8]", (message,)),),
+        areas=(JumpArea(0, extent, (message,)),),
     )
     into = byte_range("WS-IN@working_storage[0:8]", "R")
     target = Fact("WS-IN@working_storage[0:8]", writers=("RT",))
@@ -215,7 +266,7 @@ def test_start_from_reaches_the_started_programs_retrieve() -> None:
         areas=(JumpArea(0, "WS-IN@working_storage[0:8]"),),
     )
     xctl = Jump("R", "X", 9, JumpKind.XCTL, False, target=target)
-    tables = {
+    return {
         "S": ProgramTables(
             "S",
             facts={"ST": _facts("S", (message,))},
@@ -233,11 +284,16 @@ def test_start_from_reaches_the_started_programs_retrieve() -> None:
             sites={"X": TargetSite("CICS_XCTL", "WS-IN")},
         ),
     }
-    linked = link(tables, areas(), {"TRNR": "R"}, OutsideJumps())
+
+
+def test_start_from_reaches_the_started_programs_retrieve() -> None:
+    linked = link(_started(8), areas(), {"TRNR": "R"}, OutsideJumps())
+    narrow = link(_started(4), areas(), {"TRNR": "R"}, OutsideJumps())
     assert _row(linked, "R") == (("PROGZ",), (), ())
     assert {(e.caller, e.kind, e.callee, e.callee_node) for e in linked.edges} == {
         ("S", JumpKind.START, "R", "RT")
     }
+    assert _row(narrow, "R") == ((), ("not-a-literal",), ())
 
 
 def _linker(name: str) -> ProgramTables:
@@ -263,8 +319,8 @@ def _linker(name: str) -> ProgramTables:
     )
 
 
-def test_a_link_write_back_reaches_the_callers_later_jump() -> None:
-    left = Fact("LK-FROM@linkage[0:8]", values=("Q       ",))
+def _writer(value: str, exits: bool) -> ProgramTables:
+    left = Fact("LK-FROM@linkage[0:8]", values=(value,))
     exit_ = Jump(
         "W",
         "E",
@@ -273,19 +329,34 @@ def test_a_link_write_back_reaches_the_callers_later_jump() -> None:
         False,
         areas=(JumpArea(0, "DFHCOMMAREA@linkage[0:20]", (left,)),),
     )
-    callee = ProgramTables(
+    return ProgramTables(
         "W",
         facts={"E": _facts("W", (left,))},
         flows={},
-        jumps={"E": exit_},
+        jumps={"E": exit_} if exits else {},
         received=((0, byte_range("DFHCOMMAREA@linkage[0:20]", "W")),),
         sites={},
     )
-    linked = link({"A": _linker("A"), "W": callee}, areas("A", "W"), {}, OutsideJumps())
-    unanalysed = link({"A": _linker("A")}, areas("A", "W"), {}, OutsideJumps())
-    assert (_row(linked, "A"), _row(unanalysed, "A")) == (
+
+
+def test_a_link_write_back_reaches_the_callers_later_jump() -> None:
+    narrow = FakeAreas(
+        {("A", 0): "DFHCOMMAREA@linkage[0:20]", ("W", 0): "DFHCOMMAREA@linkage[0:4]"}
+    )
+    rows = tuple(
+        _row(link(tables, given, {}, OutsideJumps()), "A")
+        for tables, given in (
+            ({"A": _linker("A"), "W": _writer("Q       ", True)}, areas("A", "W")),
+            ({"A": _linker("A")}, areas("A", "W")),
+            ({"A": _linker("A"), "W": _writer("QWERTYUI", True)}, narrow),
+            ({"A": _linker("A"), "W": _writer("Q       ", False)}, areas("A", "W")),
+        )
+    )
+    assert rows == (
         (("Q",), (), ()),
-        ((), ("outside-analysed-set",), ()),
+        ((), ("from-callee",), ()),
+        ((), ("from-callee",), ()),
+        ((), ("from-callee",), ()),
     )
 
 

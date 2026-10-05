@@ -10,6 +10,7 @@ class Held:
     values: frozenset[str] = frozenset()
     reasons: frozenset[UnresolvedReason] = frozenset()
     outside: frozenset[str] = frozenset()
+    cycled: bool = False
 
 
 def held_join(left: Held, right: Held) -> Held:
@@ -17,4 +18,5 @@ def held_join(left: Held, right: Held) -> Held:
         left.values | right.values,
         left.reasons | right.reasons,
         left.outside | right.outside,
+        left.cycled or right.cycled,
     )

@@ -27,6 +27,9 @@ _ENTERING = frozenset(
     {JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL, JumpKind.RETURN_TRANSID}
 )
 _OUTSIDE = Held(reasons=frozenset({UnresolvedReason.OUTSIDE_ANALYSED_SET}))
+_INBOUND = Held(reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}))
+_FROM_CALLEE = Held(reasons=frozenset({UnresolvedReason.FROM_CALLEE}))
+_NOT_A_LITERAL = Held(reasons=frozenset({UnresolvedReason.NOT_A_LITERAL}))
 _Visiting = frozenset[tuple[str, str, str, int, int]]
 _EdgeOrder = tuple[str, str, str, int, str, str, int, int, str, int, int, bool]
 
@@ -84,11 +87,9 @@ def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> Byt
 def _held(
     world: _World, program: str, node: str, at: ByteRange, visiting: _Visiting
 ) -> Held:
-    if program not in world.tables:
-        return _OUTSIDE
     visit = (program, node, at.region, at.start, at.end)
     if visit in visiting:
-        return Held()
+        return Held(cycled=True)
     found = resolve(world.tables[program], node, at)
     inner = visiting | {visit}
     return reduce(
@@ -114,29 +115,23 @@ def _entering(edge: Edge, program: str, stop: Stop) -> bool:
         edge.callee == program
         and edge.kind in _ENTERING
         and edge.param == stop.param
-        and edge.callee_window.covers(stop.at)
+        and edge.callee_window.overlaps(stop.at)
     )
+
+
+def _from_caller(world: _World, edge: Edge, stop: Stop, visiting: _Visiting) -> Held:
+    if not edge.callee_window.covers(stop.at):
+        return _INBOUND
+    at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
+    return _held(world, edge.caller, edge.node, at, visiting)
 
 
 def _received(world: _World, program: str, stop: Stop, visiting: _Visiting) -> Held:
     into = tuple(e for e in world.edges if _entering(e, program, stop))
     from_callers = reduce(
-        held_join,
-        (
-            _held(
-                world,
-                e.caller,
-                e.node,
-                _shifted(stop.at, e.callee_window, e.caller_window, e.caller),
-                visiting,
-            )
-            for e in into
-        ),
-        Held(),
+        held_join, (_from_caller(world, e, stop, visiting) for e in into), Held()
     )
-    gaps = (
-        Held() if into else Held(reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}))
-    )
+    gaps = Held() if into else _INBOUND
     return held_join(held_join(from_callers, gaps), _outside_callers(world, program))
 
 
@@ -147,23 +142,35 @@ def _returned(world: _World, program: str, stop: Stop, visiting: _Visiting) -> H
         if e.caller == program and e.node == stop.node and e.param == stop.param
     )
     if not out:
-        return Held(reasons=frozenset({UnresolvedReason.FROM_CALLEE}))
+        return _FROM_CALLEE
     return reduce(held_join, (_left_by(world, e, stop, visiting) for e in out), Held())
 
 
 def _left_by(world: _World, edge: Edge, stop: Stop, visiting: _Visiting) -> Held:
-    if edge.callee not in world.tables:
-        return _OUTSIDE
+    exits = _exits(world, edge.callee)
+    if not exits or not edge.caller_window.covers(stop.at):
+        return _FROM_CALLEE
     at = _shifted(stop.at, edge.caller_window, edge.callee_window, edge.callee)
     return reduce(
         held_join,
-        (
-            _held(world, edge.callee, exit_.node, at, visiting)
-            for exit_ in world.tables[edge.callee].jumps.values()
-            if exit_.kind is JumpKind.EXIT
-        ),
+        (_held(world, edge.callee, exit_.node, at, visiting) for exit_ in exits),
         Held(),
     )
+
+
+def _exits(world: _World, program: str) -> tuple[Jump, ...]:
+    if program not in world.tables:
+        return ()
+    return tuple(
+        j for j in world.tables[program].jumps.values() if j.kind is JumpKind.EXIT
+    )
+
+
+def _from_starter(world: _World, edge: Edge, stop: Stop, visiting: _Visiting) -> Held:
+    if not edge.callee_window.covers(stop.at):
+        return _NOT_A_LITERAL
+    at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
+    return _held(world, edge.caller, edge.node, at, visiting)
 
 
 def _retrieved(world: _World, program: str, stop: Stop, visiting: _Visiting) -> Held:
@@ -175,20 +182,9 @@ def _retrieved(world: _World, program: str, stop: Stop, visiting: _Visiting) -> 
         and e.callee_node == stop.node
     )
     if not starts:
-        return Held(reasons=frozenset({UnresolvedReason.NOT_A_LITERAL}))
+        return _NOT_A_LITERAL
     return reduce(
-        held_join,
-        (
-            _held(
-                world,
-                e.caller,
-                e.node,
-                _shifted(stop.at, e.callee_window, e.caller_window, e.caller),
-                visiting,
-            )
-            for e in starts
-        ),
-        Held(),
+        held_join, (_from_starter(world, e, stop, visiting) for e in starts), Held()
     )
 
 
@@ -339,10 +335,16 @@ def _sorted_reasons(
     return tuple(r for _, r in sorted((r.value, r) for r in reasons))
 
 
+def _answered(held: Held) -> Held:
+    if held.values or held.reasons or not held.cycled:
+        return held
+    return held_join(held, _INBOUND)
+
+
 def _target(world: _World, program: str, node: str) -> LinkedTarget:
     tables = world.tables[program]
     site = tables.sites[node]
-    held = _fact_held(world, program, node, tables.jumps[node].target)
+    held = _answered(_fact_held(world, program, node, tables.jumps[node].target))
     names = _names(held.values)
     return LinkedTarget(
         ResolvedTarget(
