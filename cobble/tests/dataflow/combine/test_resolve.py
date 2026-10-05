@@ -194,6 +194,48 @@ def test_a_literal_write_inside_the_walk_contributes_its_value_only() -> None:
             {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.INCOMPLETE_WALK,))}
         ),
     )
+    on_one_branch = tables(
+        facts={
+            "J": (
+                (
+                    LK,
+                    Fact(
+                        "LK-FROM@linkage[0:8]",
+                        values=("COMEN01C",),
+                        writers=("M1",),
+                        reasons=(UnresolvedReason.INBOUND_LINKAGE,),
+                    ),
+                ),
+            )
+        },
+        flows={"M1": (Flow("M1", NO_RANGE, LK),)},
+    )
+    assert resolve(on_one_branch, "J", LK) == Resolution(
+        values=frozenset({"COMEN01C"}),
+        stops=frozenset({Stop(StopKind.RECEIVED, at=LK, param=0)}),
+    )
+    literal_and_arithmetic = tables(
+        facts={
+            "J": (
+                (
+                    WS,
+                    Fact(
+                        "WS-NEXT@working_storage[0:8]",
+                        values=("PROGM   ",),
+                        writers=("M1", "A1"),
+                        reasons=(UnresolvedReason.NOT_A_LITERAL,),
+                    ),
+                ),
+            )
+        },
+        flows={"M1": (Flow("M1", NO_RANGE, WS),), "A1": (Flow("A1", NO_RANGE, WS),)},
+    )
+    assert resolve(literal_and_arithmetic, "J", WS) == Resolution(
+        values=frozenset({"PROGM   "}),
+        stops=frozenset(
+            {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.NOT_A_LITERAL,))}
+        ),
+    )
 
 
 def test_a_computed_value_stops_as_unknown_with_its_reason() -> None:
@@ -251,6 +293,15 @@ def test_a_computed_value_stops_as_unknown_with_its_reason() -> None:
 
 def test_no_facts_at_a_point_is_reported_not_guessed() -> None:
     assert resolve(tables(facts={}, flows={}), "J", WS) == Resolution(
+        stops=frozenset(
+            {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.NOT_RECORDED,))}
+        )
+    )
+    mid_walk = tables(
+        facts={"J": ((WS, Fact("WS-NEXT@working_storage[0:8]", writers=("M1",))),)},
+        flows={"M1": (Flow("M1", TMP, WS),)},
+    )
+    assert resolve(mid_walk, "J", WS) == Resolution(
         stops=frozenset(
             {Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.NOT_RECORDED,))}
         )
