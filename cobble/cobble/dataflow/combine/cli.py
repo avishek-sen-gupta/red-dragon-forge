@@ -1,6 +1,7 @@
 """cobble-dataflow-combine — link the per-program fixpoint results across programs."""
 
 import argparse
+import logging
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -15,6 +16,8 @@ from cobble.dataflow.combine.outputs import write_outputs
 from cobble.dataflow.combine.outside import outside_jumps
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.run_report import RunReport
+
+_LOG = logging.getLogger(__name__)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -73,11 +76,19 @@ def _inside(
     return wanted & present, tuple(sorted(wanted - present))
 
 
-def _report(report: RunReport) -> None:
-    sys.stderr.write(
-        f"combine: {report.rounds} rounds, {report.discovered} discovered edges, "
-        f"{report.unresolved_outside_jumps} outside jumps with unresolved targets, "
-        f"{len(report.without_results)} outside programs without results\n"
+def _report(report: RunReport, every: bool) -> None:
+    _LOG.info(
+        "combine: %d rounds, %d discovered edges",
+        report.rounds,
+        report.discovered,
+    )
+    if every:
+        return
+    _LOG.info(
+        "combine: %d outside jumps with unresolved targets, "
+        "%d outside programs without results",
+        report.unresolved_outside_jumps,
+        len(report.without_results),
     )
 
 
@@ -105,15 +116,19 @@ def _combine(arguments: argparse.Namespace, inside: frozenset[str]) -> None:
         _outside(arguments, config, inside, transactions),
     )
     write_outputs(arguments.out_dir, linked)
-    _report(linked.report)
+    _report(linked.report, arguments.all)
 
 
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(argv or sys.argv[1:])
+    members = arguments.fixpoint_dir / "members"
+    if not members.is_dir():
+        _LOG.error("combine: !! no fixpoint results at %s", members)
+        return 2
     inside, missing = _inside(arguments.fixpoint_dir, arguments.member, arguments.all)
     if missing:
-        sys.stderr.write(f"combine: !! no fixpoint results for: {', '.join(missing)}\n")
+        _LOG.error("combine: !! no fixpoint results for: %s", ", ".join(missing))
         return 1
     _combine(arguments, inside)
     return 0

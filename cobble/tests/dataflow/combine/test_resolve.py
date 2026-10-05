@@ -319,3 +319,34 @@ def test_a_copy_loop_inside_one_program_terminates() -> None:
         flows={"M1": (Flow("M1", b, a),), "M2": (Flow("M2", a, b),)},
     )
     assert resolve(t, "J", a) == Resolution()
+
+
+def test_an_inbound_reason_on_written_working_storage_is_explained_by_its_writers() -> (
+    None
+):
+    inbound = (UnresolvedReason.INBOUND_LINKAGE,)
+    copied = tables(
+        facts={
+            "J": (
+                (
+                    WS,
+                    Fact(
+                        "WS-NEXT@working_storage[0:8]", writers=("M",), reasons=inbound
+                    ),
+                ),
+            ),
+            "M": ((LK, Fact("LK-FROM@linkage[0:8]", reasons=inbound)),),
+        },
+        flows={"M": (Flow("M", LK, WS),)},
+    )
+    unwritten = tables(
+        facts={"J": ((WS, Fact("WS-NEXT@working_storage[0:8]", reasons=inbound)),)},
+        flows={},
+    )
+
+    assert resolve(copied, "J", WS).stops == frozenset(
+        {Stop(StopKind.RECEIVED, at=LK, param=0)}
+    )
+    assert resolve(unwritten, "J", WS).stops == frozenset(
+        {Stop(StopKind.UNKNOWN, reasons=inbound)}
+    )

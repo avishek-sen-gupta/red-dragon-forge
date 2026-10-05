@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.rows import jump_row
 from tests.dataflow.combine.corpus_toml import CONFIG
+from tests.dataflow.combine.linked_rows import TargetRow, target_rows
 
 
 def _member(fixpoint: Path, name: str) -> None:
@@ -39,28 +41,65 @@ def _arguments(tmp_path: Path, *selection: str) -> list[str]:
     ]
 
 
+def _messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [record.getMessage() for record in caplog.records]
+
+
 def test_a_member_with_no_results_is_refused_and_nothing_is_written(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     _member(tmp_path / "fx", "B")
 
     assert cli(_arguments(tmp_path, "--member", "B", "MISSING")) == 1
 
-    assert "MISSING" in capsys.readouterr().err
+    assert _messages(caplog) == ["combine: !! no fixpoint results for: MISSING"]
     assert not (tmp_path / "out").exists()
 
 
-def test_a_member_named_twice_is_linked_once(tmp_path: Path) -> None:
+def test_a_missing_fixpoint_directory_is_refused_not_a_traceback(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert cli(_arguments(tmp_path, "--all")) == 2
+
+    assert _messages(caplog) == [
+        f"combine: !! no fixpoint results at {tmp_path / 'fx' / 'members'}"
+    ]
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_member_named_twice_is_linked_once_and_reports_the_outside(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     _member(tmp_path / "fx", "B")
+    caplog.set_level(logging.INFO)
 
     assert cli(_arguments(tmp_path, "--member", "B", "B")) == 0
 
-    rows = [
-        json.loads(line)
-        for line in (tmp_path / "out" / "targets.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
+    assert target_rows(tmp_path / "out" / "targets.jsonl") == [
+        TargetRow(
+            caller="B",
+            node="X",
+            transfer="CICS_XCTL",
+            expression="WS-NEXT",
+            candidates=("M",),
+            reasons=(),
+            dropped=(),
+            outside=(),
+        )
     ]
-    assert [(r["caller"], r["candidates"], r["outside"]) for r in rows] == [
-        ("B", ["M"], [])
+    assert _messages(caplog) == [
+        "combine: 1 rounds, 0 discovered edges",
+        "combine: 0 outside jumps with unresolved targets, "
+        "0 outside programs without results",
     ]
+
+
+def test_all_reports_no_outside(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _member(tmp_path / "fx", "B")
+    caplog.set_level(logging.INFO)
+
+    assert cli(_arguments(tmp_path, "--all")) == 0
+
+    assert _messages(caplog) == ["combine: 1 rounds, 0 discovered edges"]
