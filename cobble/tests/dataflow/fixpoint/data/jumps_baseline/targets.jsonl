@@ -1,0 +1,1 @@
+{"caller": "PROGA", "node": "MAIN-PARA/3", "transfer": "CICS_XCTL", "expression": "WS-NEXT", "candidates": ["PROGB"], "reasons": [], "dropped": []}

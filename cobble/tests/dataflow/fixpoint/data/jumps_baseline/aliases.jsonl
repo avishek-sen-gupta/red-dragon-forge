@@ -1,0 +1,5 @@
+{"caller": "PROGA", "node": "MAIN-PARA/1", "transfer": "CALL", "callee": "SUBP", "caller_extent": "WS-ONE@working_storage[28:32]", "callee_extent": "LK-1@linkage[0:4]", "returns": true, "reason": ""}
+{"caller": "PROGA", "node": "MAIN-PARA/1", "transfer": "CALL", "callee": "SUBP", "caller_extent": "WS-TWO@working_storage[32:36]", "callee_extent": "LK-2@linkage[4:8]", "returns": true, "reason": ""}
+{"caller": "PROGA", "node": "MAIN-PARA/1", "transfer": "CALL", "callee": "SUBP", "caller_extent": "WS-THREE@working_storage[36:40]", "callee_extent": "LK-3@linkage[8:12]", "returns": true, "reason": ""}
+{"caller": "PROGA", "node": "MAIN-PARA/2", "transfer": "LINK", "callee": "PROGB", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "caller-field-unknown"}
+{"caller": "PROGA", "node": "MAIN-PARA/3", "transfer": "XCTL", "callee": "", "caller_extent": "", "callee_extent": "", "returns": false, "reason": "dynamic-target"}

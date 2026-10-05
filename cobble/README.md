@@ -69,7 +69,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-srccfg-dfs-walk --cfg <jsonl> --from <node-id> [--mode primary\|tree]` | The same stepper driven depth-first instead of level-by-level: a readable execution-*order* trace (`primary`: first arm at every branch, alternates noted; `tree`: both arms, recursed) |
 | **Byte-level field dataflow** | |
 | `cobble-extents --asg-dir <cache> --out <file>` | Every member's declared field layout in bytes — the table the dataflow stages read |
-| `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets (`graph`, `defs`, `aliases`, `targets` and the run summary) |
+| `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets, what every jump hands over (`graph`, `defs`, `aliases`, `targets`, `jumps` and the run summary) |
 | `cobble-dataflow-fixpoint-query <query> <field> --fixpoint-dir <dir> --extents <file>` | Ask the fixpoint's output for a field's `writers`, `readers`, what it `reaches` or is `reached-by` (in statement order), and byte containment/overlap |
 | `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>] [--single-program]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from; `--single-program` keeps to that program's own CFG |
 | `cobble-trace-query {forward,backward} <field> --trace <file>` | Provenance over a trace: what a field affects, or what feeds it |
@@ -610,11 +610,11 @@ walk's own progress lines come from the workers and interleave; each names its
 program.
 
 The run is **resumable**. Each finished member is a directory of its own,
-`<out_dir>/members/<MEMBER>/` — its four tables and a `counts.json` holding what it
+`<out_dir>/members/<MEMBER>/` — its five tables and a `counts.json` holding what it
 adds to the run's report — renamed into place when the member is done, so a
 directory that exists is a member that finished, skipped members included. A
 re-run reuses those members (`[n/N] MEMBER reused`) and analyses only the rest. The
-four corpus files are rebuilt from the selected members' directories, in table
+five corpus files are rebuilt from the selected members' directories, in table
 order and through the same deduping writers, only once every member is done: an
 interrupted run leaves the previous corpus files as they were, and a resumed run
 publishes exactly the files and summary an uninterrupted one does. A `--member`
