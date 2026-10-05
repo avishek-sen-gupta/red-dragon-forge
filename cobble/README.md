@@ -71,6 +71,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-extents --asg-dir <cache> --out <file>` | Every member's declared field layout in bytes — the table the dataflow stages read |
 | `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets, what every jump hands over (`graph`, `defs`, `aliases`, `targets`, `jumps` and the run summary) |
 | `cobble-dataflow-fixpoint-query <query> <field> --fixpoint-dir <dir> --extents <file>` | Ask the fixpoint's output for a field's `writers`, `readers`, what it `reaches` or is `reached-by` (in statement order), and byte containment/overlap |
+| `cobble-dataflow-combine --config <corpus> --fixpoint-dir <dir> --out-dir <dir> (--all \| --member <name>...)` | Link the fixpoint's per-program results across programs: dynamic targets resolved through the bytes callers hand over, plus the links used |
 | `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>] [--single-program] [--force]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from; `--single-program` keeps to that program's own CFG; an existing `--out` is left as it is unless `--force` |
 | `cobble-trace-query {forward,backward} <field> --trace <file>` | Provenance over a trace: what a field affects, or what feeds it |
 | `cobble-viz-pathwalk --cfg <jsonl> --paths <file> --output <html>` | Animate a trace's recorded paths over the paragraphs, with chosen fields' provenance |
@@ -953,6 +954,34 @@ Two limits sit upstream of the walk:
 - **Nested programs are not in the ASG.** The bridge serialises only the outer
   program, so a `CALL` inside a nested `PROGRAM-ID` is not seen, nor is anything
   else in it.
+
+### Linking programs
+
+```bash
+uv run cobble-dataflow-combine --config corpus.toml --fixpoint-dir out-fields --out-dir out-linked --all
+uv run cobble-dataflow-combine --config corpus.toml --fixpoint-dir out-fields --out-dir out-linked --member PROGA PROGB
+```
+
+`cobble-dataflow-fixpoint` settles each program alone, so a target read from the
+commarea is only ever `inbound-linkage`. This command reads that output (every
+`members/<program>/` table), the corpus TOML's `asg_dir` for each callee's received area
+and its `csd_files` for transaction-to-program names, and lets values cross programs.
+It links in rounds: a target found only after values arrive adds edges, which can
+deliver more values, until the edges stop growing.
+
+`--all` links every program with results. `--member` links only those named
+(case-insensitive, each once) and refuses the run, writing nothing, when one has no
+results. Under `--member`, programs left out are read for the jumps they make into the
+linked set: a target a linked program may be reached from by one of them lists it in
+`outside`, and the run report counts what it cannot say.
+
+| File | Row | Holds |
+|---|---|---|
+| `targets.jsonl` | dynamic site | the fixpoint's `targets.jsonl` row after linking (`candidates`, `reasons`, `dropped`), plus `outside`: the programs outside the linked set known to jump into the caller |
+| `links.jsonl` | one link used | `caller`, `node`, `transfer`, `callee`, the bytes lined up on each side (`caller_extent`, `callee_extent`), `returns` (a `LINK` or `CALL`), and `discovered` (the link exists only because linking resolved its target) |
+
+The run report goes to stderr: rounds, discovered links, outside jumps whose targets
+could not be resolved, and outside programs with no results at all.
 
 ### Querying the field dataflow
 
