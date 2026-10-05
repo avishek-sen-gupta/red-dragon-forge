@@ -525,4 +525,6 @@ fileignoreconfig:
   checksum: ee38e80604dfce34cad5f5fccb5a3893dedc29b44a8d08f239201b4672c013cf
 - filename: docs/explainers/structured-program-theorem.html
   checksum: 9783ecb10e242f2010a331c8ffd67a3621ec9f6857d30d6a68523ceb4936a54c
+- filename: docs/superpowers/specs/2026-10-05-cross-program-dataflow-combine-design.md
+  checksum: a881632af83f40c117236ed10704f0860342eab363bec500300d63827f0d1234
 version: "1.0"
