@@ -91,7 +91,7 @@ def test_an_xctl_hands_over_its_commarea_field_by_field(out: Path) -> None:
         "WS-AREA@working_storage[0:20]",
     )
     assert [(f.extent, f.values, f.writers, f.reasons) for f in area.fields] == [
-        ("WS-FROM@working_storage[0:8]", ("PROGA   ",), (), ()),
+        ("WS-FROM@working_storage[0:8]", ("PROGA   ",), ("MAIN-PARA/0",), ()),
         (
             "WS-REST@working_storage[8:20]",
             (),
@@ -142,10 +142,12 @@ def test_every_program_has_an_entry_row_and_exits_list_received_areas(
         "",
         [(0, ()), (1, ()), (2, ())],
     )
-    assert [(a.param, [f.values for f in a.fields]) for a in goback.areas] == [
-        (0, [("ABCD",)]),
-        (1, [()]),
-        (2, [()]),
+    assert [
+        (a.param, [(f.values, f.writers) for f in a.fields]) for a in goback.areas
+    ] == [
+        (0, [(("ABCD",), ("MAIN-PARA/0",))]),
+        (1, [((), ())]),
+        (2, [((), ())]),
     ]
 
 
