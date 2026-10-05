@@ -361,3 +361,38 @@ def _record_named(index: CellIndex, name: str) -> _Callee:
     if not records:
         return _Callee(reason=PARAMETER_NOT_IN_LINKAGE)
     return _Callee(extent=index.extent_of(records[0]))
+
+
+def area_extents(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:
+    reference = _reference(operand)
+    return tuple(
+        index.extent_of(cell)
+        for cell in index.cells_named(reference.name, reference.qualifiers, 0)
+    )
+
+
+def received_areas(
+    asg: CobolASG, index: CellIndex
+) -> tuple[tuple[int, FieldExtent], ...]:
+    commarea = _linkage_commarea(index)
+    if not commarea.reason:
+        return ((0, commarea.extent),)
+    found = tuple(
+        (position, _record_named(index, param.name))
+        for position, param in enumerate(asg.procedure_using)
+    )
+    return tuple(
+        (position, callee.extent) for position, callee in found if not callee.reason
+    )
+
+
+def callee_received_area(
+    asg_dir: Path, callee: str, by_position: bool, param: int
+) -> FieldExtent:
+    linkage = _callee_linkage(asg_dir, callee)
+    if linkage.reason:
+        return NO_EXTENT
+    found = (
+        _parameter(linkage, param) if by_position else _linkage_commarea(linkage.index)
+    )
+    return NO_EXTENT if found.reason else found.extent
