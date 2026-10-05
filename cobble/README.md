@@ -979,6 +979,11 @@ and its `csd_files` for transaction-to-program names, and lets values cross prog
 It links in rounds: a target found only after values arrive adds edges, which can
 deliver more values, until the edges stop growing.
 
+A `XCTL`, `LINK` or `CALL` link to a callee exists because the target field could name
+that callee, so when the field lies inside the bytes handed over, those bytes on that link
+hold exactly the callee's name, space-padded. Bytes wholly inside the field resolve to
+that name; bytes that straddle it are walked as before.
+
 `--all` links every program with results. `--member` links only those named
 (case-insensitive, each once) and refuses the run, writing nothing, when one has no
 results. Under `--member`, programs left out are read for the jumps they make into the

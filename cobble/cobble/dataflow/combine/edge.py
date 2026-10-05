@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from cobble.dataflow.fields.extent_text import ByteRange
+from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange
 from cobble.dataflow.jumps.jump_kind import JumpKind
 
 
@@ -17,3 +17,4 @@ class Edge:
     callee_window: ByteRange
     callee_node: str = ""
     discovered: bool = False
+    named_by: ByteRange = NO_RANGE
