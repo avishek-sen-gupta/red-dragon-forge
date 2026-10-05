@@ -1,6 +1,6 @@
 """A Fact is the settled state's answer for some bytes at one node."""
 
-from cobble.dataflow.fields.state import EMPTY, Source, write
+from cobble.dataflow.fields.state import EMPTY, NOWHERE, Source, write
 from cobble.dataflow.fields.values import UnresolvedReason, ValueSet
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.facts import fact_at, merged
@@ -12,7 +12,12 @@ LK = FieldExtent(RegionId.LINKAGE, 0, 8, Precision.EXACT, "LK-FROM")
 STATE = write(
     EMPTY,
     WS,
-    frozenset({Source(origin="", extent=LK, node="MAIN/2")}),
+    frozenset(
+        {
+            Source(origin="", extent=LK, node="MAIN/2"),
+            Source(origin="LITERAL", extent=NOWHERE, node="MAIN/9"),
+        }
+    ),
     ValueSet(values=frozenset({b"PROGA   "})),
 )
 
@@ -34,17 +39,22 @@ def test_a_fact_carries_unstripped_values_writers_and_reasons() -> None:
 def test_facts_merge_by_union_keeping_the_first_extent() -> None:
     assert merged(
         (
-            Fact("A@working_storage[0:8]", ("X",), ("N/1",)),
+            Fact(
+                "A@working_storage[0:8]",
+                ("X",),
+                ("N/1",),
+                (UnresolvedReason.NOT_A_LITERAL,),
+            ),
             Fact(
                 "A@working_storage[8:16]",
                 ("Y",),
                 ("N/2",),
-                (UnresolvedReason.FROM_FILE,),
+                (UnresolvedReason.NO_EXTENT,),
             ),
         )
     ) == Fact(
         "A@working_storage[0:8]",
         ("X", "Y"),
         ("N/1", "N/2"),
-        (UnresolvedReason.FROM_FILE,),
+        (UnresolvedReason.NO_EXTENT, UnresolvedReason.NOT_A_LITERAL),
     )
