@@ -21,13 +21,14 @@ A member that raises is reported and the run continues, because the answer wante
 from a whole-corpus run is "which members are missing from this output", and a run
 that aborts answers that for one member only.
 
-Four files, so that the graph holds only what nothing outside it could state:
+Five files, so that the graph holds only what nothing outside it could state:
 
   graph.jsonl    the FIELD endpoints (no attributes) and one FLOWS_TO per
                  (node, source extent, target extent), each row tagged node or edge
   defs.jsonl     the definitions reaching each (node, source extent)
   aliases.jsonl  per call site and caller window, the bytes shared with a callee
   targets.jsonl  per dynamic call site, the candidate programs it can reach
+  jumps.jsonl    per jump, exit, RETRIEVE and entry, what it hands over
 
 An aliases row is one LINK/XCTL/CALL site and one caller window: the bytes the
 caller and the callee both address, or the named reason they share none. The
@@ -130,6 +131,8 @@ from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
+from cobble.dataflow.jumps.jump import Jump
+from cobble.dataflow.jumps.rows import jump_identity, jump_row
 from cobble.knowledge_graph.graph_file import read_graph_rows
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
@@ -142,6 +145,7 @@ GRAPH_FILE = "graph.jsonl"
 DEFS_FILE = "defs.jsonl"
 ALIASES_FILE = "aliases.jsonl"
 TARGETS_FILE = "targets.jsonl"
+JUMPS_FILE = "jumps.jsonl"
 MEMBERS_DIR = "members"
 COUNTS_FILE = "counts.json"
 DEFAULT_FLOOR = 0.60
@@ -164,6 +168,7 @@ class MemberResult:
     defs: tuple[ReachingDefs, ...] = ()
     aliases: tuple[CommareaAlias, ...] = ()
     targets: tuple[ResolvedTarget, ...] = ()
+    jumps: tuple[Jump, ...] = ()
     writes: int = 0
     covered: int = 0
     unhandled: int = 0
@@ -272,6 +277,7 @@ def _tables(
         edges=records.edges,
         defs=records.defs,
         targets=flow.targets,
+        jumps=flow.jumps,
         writes=flow.writes,
         covered=flow.covered,
         unhandled=flow.unhandled,
@@ -483,7 +489,7 @@ def _folded(totals: RunTotals, counts: MemberCounts) -> RunTotals:
 
 @dataclass(frozen=True)
 class _Sinks:
-    """All four artefacts of one run.
+    """All five artefacts of one run.
 
     Separate files because only the graph holds flows: which statements could have
     last written a range, which bytes a call site hands to another program, and
@@ -498,12 +504,14 @@ class _Sinks:
     defs: JsonlWriter
     aliases: JsonlWriter
     targets: JsonlWriter
+    jumps: JsonlWriter
 
     def add_result(self, result: MemberResult) -> None:
         self.graph.add_all(result.nodes, result.edges)
         self.defs.add_rows(map(defs_row, result.defs))
         self.aliases.add_rows(map(alias_row, result.aliases))
         self.targets.add_rows(map(target_row, result.targets))
+        self.jumps.add_rows((jump_identity(j), jump_row(j)) for j in result.jumps)
 
     def add_member(self, directory: Path) -> None:
         """One finished member's tables, replayed in the order they were written,
@@ -512,6 +520,7 @@ class _Sinks:
         self.defs.add_rows(_identified(directory / DEFS_FILE, _defs_identity))
         self.aliases.add_rows(_identified(directory / ALIASES_FILE, _alias_identity))
         self.targets.add_rows(_identified(directory / TARGETS_FILE, _target_identity))
+        self.jumps.add_rows(_identified(directory / JUMPS_FILE, _jump_identity))
 
     def _add_graph_row(self, row: GraphNode | GraphEdge) -> None:
         if isinstance(row, GraphEdge):
@@ -536,6 +545,12 @@ def _alias_identity(row: Row) -> str:
 
 def _target_identity(row: Row) -> str:
     return target_identity(rows.text(row, "caller"), rows.text(row, "node"))
+
+
+def _jump_identity(row: Row) -> str:
+    return "\0".join(
+        (rows.text(row, "program"), rows.text(row, "node"), rows.text(row, "kind"))
+    )
 
 
 def _identified(
@@ -624,7 +639,7 @@ def _analysed(task: _MemberTask) -> tuple[MemberResult, float]:
 
 
 def _member_directory(result: MemberResult, members: Path) -> None:
-    """Write one member's four tables and counts, then rename the directory into
+    """Write one member's five tables and counts, then rename the directory into
     place: a member directory that exists is a member that finished."""
     staging = members / f"{result.member}.tmp"
     shutil.rmtree(staging, ignore_errors=True)
@@ -634,8 +649,9 @@ def _member_directory(result: MemberResult, members: Path) -> None:
         jsonl_writer(staging / DEFS_FILE) as defs,
         jsonl_writer(staging / ALIASES_FILE) as aliases,
         jsonl_writer(staging / TARGETS_FILE) as targets,
+        jsonl_writer(staging / JUMPS_FILE) as jumps,
     ):
-        _Sinks(graph, defs, aliases, targets).add_result(result)
+        _Sinks(graph, defs, aliases, targets, jumps).add_result(result)
     (staging / COUNTS_FILE).write_text(
         counts_of(result).model_dump_json(), encoding="utf-8"
     )
@@ -1004,8 +1020,9 @@ def _publish(
         _side_writer(arguments, DEFS_FILE) as defs,
         _side_writer(arguments, ALIASES_FILE) as aliases,
         _side_writer(arguments, TARGETS_FILE) as targets,
+        _side_writer(arguments, JUMPS_FILE) as jumps,
     ):
-        tuple(map(_Sinks(graph, defs, aliases, targets).add_member, finished))
+        tuple(map(_Sinks(graph, defs, aliases, targets, jumps).add_member, finished))
 
 
 def _completed(arguments: argparse.Namespace) -> int:

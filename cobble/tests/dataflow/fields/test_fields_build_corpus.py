@@ -28,6 +28,7 @@ from cobble.dataflow.fixpoint.build_corpus import (
     ALIASES_FILE,
     DEFS_FILE,
     GRAPH_FILE,
+    JUMPS_FILE,
     TARGETS_FILE,
     cli,
 )
@@ -388,7 +389,7 @@ def test_a_lowered_floor_accepts_the_same_run(corpus):
     assert cli(argv) == 0
 
 
-def test_the_run_writes_four_tables_and_no_layout_into_the_graph(corpus):
+def test_the_run_writes_five_tables_and_no_layout_into_the_graph(corpus):
     """The layout is cobble-extents' table, which this stage reads and does not
     republish; a field node carries its id and nothing a layout would add."""
     argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
@@ -399,6 +400,7 @@ def test_the_run_writes_four_tables_and_no_layout_into_the_graph(corpus):
         ALIASES_FILE,
         DEFS_FILE,
         GRAPH_FILE,
+        JUMPS_FILE,
         "members",
         TARGETS_FILE,
     ]
@@ -1235,7 +1237,7 @@ def _written_then_read(program_id: str) -> dict:
 def _published(out_dir: Path) -> dict[str, bytes]:
     return {
         name: (out_dir / name).read_bytes()
-        for name in (GRAPH_FILE, DEFS_FILE, ALIASES_FILE, TARGETS_FILE)
+        for name in (GRAPH_FILE, DEFS_FILE, ALIASES_FILE, TARGETS_FILE, JUMPS_FILE)
     }
 
 
