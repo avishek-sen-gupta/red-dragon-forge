@@ -13,9 +13,7 @@ def fact_at(state: State, extent: FieldExtent) -> Fact:
     return Fact(
         extent=extent_text(extent),
         values=tuple(sorted(v.decode("utf-8", errors="replace") for v in held.values)),
-        writers=tuple(
-            sorted({s.node for s in reaching(state, extent) if not s.origin})
-        ),
+        writers=tuple(sorted({s.node for s in reaching(state, extent)})),
         reasons=tuple(r for _, r in sorted((r.value, r) for r in held.reasons)),
     )
 

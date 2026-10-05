@@ -27,7 +27,7 @@ def test_a_fact_carries_unstripped_values_writers_and_reasons() -> None:
         Fact(
             extent="WS-FROM@working_storage[0:8]",
             values=("PROGA   ",),
-            writers=("MAIN/2",),
+            writers=("MAIN/2", "MAIN/9"),
         ),
         Fact(
             extent="LK-FROM@linkage[0:8]",
