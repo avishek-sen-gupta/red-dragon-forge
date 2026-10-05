@@ -527,4 +527,6 @@ fileignoreconfig:
   checksum: 9783ecb10e242f2010a331c8ffd67a3621ec9f6857d30d6a68523ceb4936a54c
 - filename: docs/superpowers/specs/2026-10-05-cross-program-dataflow-combine-design.md
   checksum: a881632af83f40c117236ed10704f0860342eab363bec500300d63827f0d1234
+- filename: docs/superpowers/plans/2026-10-06-cross-program-dataflow-combine.md
+  checksum: a8fb734914598b1b86a212f271a343858707089cc74da4747acd5e60e1c44847
 version: "1.0"
