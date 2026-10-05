@@ -39,7 +39,7 @@ class ResolvedTarget:
         return not self.reasons
 
 
-def _is_program_name(name: str) -> bool:
+def is_program_name(name: str) -> bool:
     """A resolved value that could name a load module.
 
     Not a pattern standing in for a type: every candidate here is already known to
@@ -80,11 +80,11 @@ def _resolved(
         node=node.id,
         transfer=node.transfer,
         expression=node.target,
-        candidates=tuple(name for name in names if _is_program_name(name)),
+        candidates=tuple(name for name in names if is_program_name(name)),
         reasons=tuple(
             reason for _, reason in sorted((reason.value, reason) for reason in reasons)
         ),
-        dropped=tuple(name for name in names if not _is_program_name(name)),
+        dropped=tuple(name for name in names if not is_program_name(name)),
     )
 
 
