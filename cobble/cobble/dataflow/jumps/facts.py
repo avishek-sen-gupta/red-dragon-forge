@@ -16,16 +16,17 @@ def fact_at(state: State, extent: FieldExtent) -> Fact:
         writers=tuple(
             sorted({s.node for s in reaching(state, extent) if not s.origin})
         ),
-        reasons=tuple(sorted(held.reasons, key=str)),
+        reasons=tuple(r for _, r in sorted((r.value, r) for r in held.reasons)),
     )
 
 
 def merged(facts: Sequence[Fact]) -> Fact:
     if not facts:
         return Fact()
+    all_reasons = {r for fact in facts for r in fact.reasons}
     return Fact(
         extent=facts[0].extent,
         values=tuple(sorted({v for fact in facts for v in fact.values})),
         writers=tuple(sorted({w for fact in facts for w in fact.writers})),
-        reasons=tuple(sorted({r for fact in facts for r in fact.reasons}, key=str)),
+        reasons=tuple(r for _, r in sorted((r.value, r) for r in all_reasons)),
     )
