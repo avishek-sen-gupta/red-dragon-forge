@@ -859,17 +859,19 @@ def store_of(
     )
 
 
-def load(out_dir: Path, extents: Path) -> FieldStore:
+def load(out_dir: Path, extents: Path, links: Path = Path()) -> FieldStore:
     """The artefact, joined with the extents table the fixpoint read, as one store.
     Missing tables load as empty, not as an error.
 
     A run of an older build has no defs.jsonl, and a query that answers every
     other question about it is more use than one that refuses the directory.
     """
-    return _ready(_table(extents), out_dir)
+    return _ready(_table(extents), out_dir, links)
 
 
-def load_for(out_dir: Path, extents: Path, subject: str) -> FieldStore:
+def load_for(
+    out_dir: Path, extents: Path, subject: str, links: Path = Path()
+) -> FieldStore:
     """``load``, keeping only the declarations of the programs ``subject`` is
     declared in.
 
@@ -881,15 +883,15 @@ def load_for(out_dir: Path, extents: Path, subject: str) -> FieldStore:
     a qualified ``PROGRAM.FIELD`` keeps that program, a bare name every program
     declaring it. Memory is the kept programs and the one being read, not the table.
     """
-    return _ready(_declaring(extents, subject), out_dir)
+    return _ready(_declaring(extents, subject), out_dir, links)
 
 
-def _ready(declared: Sequence[Row], out_dir: Path) -> FieldStore:
+def _ready(declared: Sequence[Row], out_dir: Path, links: Path = Path()) -> FieldStore:
     store = store_of(
         declared,
         _table(out_dir / GRAPH_FILE),
         _table(out_dir / DEFS_FILE),
-        _table(out_dir / ALIASES_FILE),
+        _table(links if links != Path() else out_dir / ALIASES_FILE),
     )
     logger.info(
         "ready: %d fields, %d flows, %d definer rows",
@@ -1214,6 +1216,12 @@ def _parser() -> argparse.ArgumentParser:
         metavar="N",
         help="commarea crossings allowed per path, with --across-calls",
     )
+    parser.add_argument(
+        "--links",
+        type=Path,
+        default=Path(),
+        help="links.jsonl from cobble-dataflow-combine, read in place of aliases.jsonl",
+    )
     return parser
 
 
@@ -1229,7 +1237,12 @@ def cli(argv: Sequence[str] = ()) -> int:
         sys.stderr.write(f"fields: !! no extents table at {arguments.extents}\n")
         return 2
     return _report(
-        load_for(arguments.fixpoint_dir, arguments.extents, arguments.subject),
+        load_for(
+            arguments.fixpoint_dir,
+            arguments.extents,
+            arguments.subject,
+            arguments.links,
+        ),
         arguments,
     )
 

@@ -4,6 +4,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from cobble.dataflow.combine.cli import cli
+from cobble.dataflow.fields.extent_text import byte_range
+from cobble.dataflow.fixpoint.query import load_for
 from tests.dataflow.combine.corpus_toml import CONFIG
 from tests.dataflow.combine.linked_rows import (
     LinkRow,
@@ -119,4 +121,34 @@ def test_return_to_caller_links_end_to_end(
             reason="",
             discovered=True,
         ),
+    ]
+
+
+def test_links_let_the_provenance_query_cross_a_discovered_jump(
+    fixpoint_corpus: Callable[[Mapping[str, str]], Path], tmp_path: Path
+) -> None:
+    out = fixpoint_corpus({"PROGA": PROGA, "PROGB": PROGB})
+    config = tmp_path / "corpus.toml"
+    config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
+    combined = tmp_path / "combined"
+    cli(
+        [
+            "--config",
+            str(config),
+            "--fixpoint-dir",
+            str(out),
+            "--out-dir",
+            str(combined),
+            "--all",
+        ]
+    )
+    extents = out.parent / "extents.jsonl"
+    from_b = byte_range("DFHCOMMAREA@linkage[0:20]", "PROGB")
+
+    plain = load_for(out, extents, "PROGB.DFHCOMMAREA")
+    linked = load_for(out, extents, "PROGB.DFHCOMMAREA", combined / "links.jsonl")
+
+    assert [a.callee for a, _ in plain.across((from_b,))] == []
+    assert [(a.callee, str(landed)) for a, landed in linked.across((from_b,))] == [
+        ("PROGA", "DFHCOMMAREA@linkage[0:20]")
     ]
