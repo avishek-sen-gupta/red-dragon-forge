@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reaching conditions</title>
+<link rel="stylesheet" href="explainer.css">
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/+esm";
+  const light = matchMedia("(prefers-color-scheme: light)").matches;
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    themeVariables: light
+      ? { darkMode: false, background: "#fbfaf7", primaryColor: "#e6e3da", primaryTextColor: "#1a1f26", primaryBorderColor: "#d3cfc4", lineColor: "#5d6673", textColor: "#1a1f26", edgeLabelBackground: "#f1efe9", clusterBkg: "#f1efe9", clusterBorder: "#d3cfc4", fontFamily: "IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" }
+      : { darkMode: true, background: "#0b0f14", primaryColor: "#1a2230", primaryTextColor: "#e6edf3", primaryBorderColor: "#263041", lineColor: "#8b98a9", textColor: "#e6edf3", edgeLabelBackground: "#121821", clusterBkg: "#121821", clusterBorder: "#263041", fontFamily: "IBM Plex Mono, JetBrains Mono, Menlo, Consolas, monospace" },
+  });
+</script>
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Graph algorithms · how did I get here</div>
+<h1>Reaching conditions</h1>
+<p class="lede">Not "can execution reach this statement" but "what has to be true about the data for it to." Built up one statement at a time, with the two spots where the real implementation's shortcuts show.</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#first-slice-away-the-dead-ends">First, slice away the dead ends</a></li><li><a href="#building-the-condition-one-statement-at-a-time">Building the condition, one statement at a time</a></li><li><a href="#a-branch-that-merges-back">A branch that merges back</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li></ol></nav>
+
+<h2 id="the-problem">The problem</h2>
+<p><a href="dominance-and-reachability.html">Reachability</a> answers yes or no: can execution get from here to there at all. A sharper question, for a statement guarded by one or more <code>IF</code>s: not just that it can be reached, but <strong>under what condition on the data</strong> — spelled out as a boolean expression over the program's own fields, true exactly when some path to the statement is the one actually taken.</p>
+<p>Two kinds of edge matter to this question. Leaving an ordinary statement, control always goes the one way it can — call that edge <strong>always taken</strong>. Leaving an <code>IF</code>, there are two edges: one taken exactly when the condition holds, one taken exactly when it does not. Tag each edge with which of the three it is, and the reaching condition of any statement becomes: for each way in, the edge's own condition combined with however <em>that predecessor</em> was reached — and if there is more than one way in, any one of them being true is enough.</p>
+
+<h2 id="first-slice-away-the-dead-ends">First, slice away the dead ends</h2>
+<p>A real flowgraph has branches that never lead to the statement being asked about at all — error handlers, early <code>STOP RUN</code>s, unrelated sections. None of that is needed to answer the question, so the first step throws it away: keep only the statements and edges that lie on <em>some</em> path from the start to the target, nothing else. What is left is called a <strong>slice</strong>, and it comes with the start-to-target paths already topologically ordered — every statement after everything that can lead into it, the same order <a href="traversal-orders.html">visiting a graph</a> builds for exactly this reason.</p>
+<p>Take a start statement <code>A</code>, two nested <code>IF</code>s, and a <code>DISPLAY</code> guarded by both — reusing the shape of a real example from this technique's own source project, with the field conditions written as <code>C1</code> and <code>C2</code>:</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B["B: IF C1"]
+    B -->|C1| C
+    B -->|"not C1"| Stop1["STOP RUN"]
+    C -->|always| B2["B2: IF C2"]
+    B2 -->|C2| D["D: DISPLAY"]
+    B2 -->|"not C2"| Stop2["STOP RUN"]
+</pre>
+<p>Both <code>STOP RUN</code> arms never reach <code>D</code>. Sliced from <code>A</code> to <code>D</code>, they disappear entirely:</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|"then: C1"| C
+    C -->|"then: C2"| D
+</pre>
+<p>Four statements, three edges, nothing left that doesn't lead somewhere useful.</p>
+
+<h2 id="building-the-condition-one-statement-at-a-time">Building the condition, one statement at a time</h2>
+<p>Walking the slice in topological order, each statement's condition is built from its predecessors', already known by the time it is needed:</p>
+<div class="rule">
+condition(v) = OR, over every incoming edge (u → v):<br>
+&nbsp;&nbsp;AND(that edge's own condition, condition(u))
+</div>
+<p>Diagrams below mark the statement whose condition a step is computing in <span class="changed">amber</span>.</p>
+<details class="walk">
+<summary>Computing the condition at each of A, B, C, D <span class="dim">(4 steps)</span></summary>
+<ol class="steps">
+<li class="before"><p class="note">Nothing computed yet.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|"then: C1"| C
+    C -->|"then: C2"| D
+</pre></li>
+<li><p class="note"><code>A</code> has no incoming edge in the slice at all — it is the start. With nothing to combine, its condition is the empty case.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|"then: C1"| C
+    C -->|"then: C2"| D
+    class A changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(A)</p><div class="chips"><span class="chip changed">FALSE</span></div></li>
+<li><p class="note"><code>B</code>'s only way in: the always-taken edge from <code>A</code>. Combine that edge's own condition (always true) with <code>A</code>'s condition.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|"then: C1"| C
+    C -->|"then: C2"| D
+    class B changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(B)</p><div class="chips"><span class="chip changed">TRUE</span></div></li>
+<li><p class="note"><code>C</code>'s only way in: the then-edge from <code>B</code>, carrying <code>C1</code>. Combined with <code>B</code>'s (true) condition, <code>C1</code> survives unchanged.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|"then: C1"| C
+    C -->|"then: C2"| D
+    class C changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(C)</p><div class="chips"><span class="chip changed">C1</span></div></li>
+<li><p class="note"><code>D</code>'s only way in: the then-edge from <code>C</code>, carrying <code>C2</code>. Combined with <code>C</code>'s condition, <code>C1</code>: both now have to hold.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|"then: C1"| C
+    C -->|"then: C2"| D
+    class D changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(D)</p><div class="chips"><span class="chip changed">AND(C2, C1)</span></div></li>
+</ol>
+</details>
+<p><code>AND(C2, C1)</code> — reach <code>D</code> exactly when both guards hold. That is the literal answer this technique's own source project documents for the real COBOL this shape is drawn from.</p>
+
+<h2 id="a-branch-that-merges-back">A branch that merges back</h2>
+<p>One statement can have more than one way in. Change the shape so both of <code>B</code>'s arms lead to <code>D</code> instead of one of them being a dead end:</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B["B: IF C1"]
+    B -->|C1| C
+    B -->|"not C1"| X
+    C -->|always| D
+    X -->|always| D
+</pre>
+<details class="walk">
+<summary>Computing the condition with two ways into D <span class="dim">(5 steps)</span></summary>
+<ol class="steps">
+<li class="before"><p class="note">Nothing computed yet.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|C1| C
+    B -->|"not C1"| X
+    C -->|always| D
+    X -->|always| D
+</pre></li>
+<li><p class="note"><code>A</code>: no incoming edge. Same empty case as before.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|C1| C
+    B -->|"not C1"| X
+    C -->|always| D
+    X -->|always| D
+    class A changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(A)</p><div class="chips"><span class="chip changed">FALSE</span></div></li>
+<li><p class="note"><code>B</code>: always-taken from <code>A</code>. Same as before.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|C1| C
+    B -->|"not C1"| X
+    C -->|always| D
+    X -->|always| D
+    class B changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(B)</p><div class="chips"><span class="chip changed">TRUE</span></div></li>
+<li><p class="note"><code>C</code>: then-edge from <code>B</code>, carrying <code>C1</code>. <code>X</code>: else-edge from <code>B</code>, carrying <code>NOT C1</code>.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|C1| C
+    B -->|"not C1"| X
+    C -->|always| D
+    X -->|always| D
+    class C changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+</pre>
+<p class="dim">condition(C)</p><div class="chips"><span class="chip changed">C1</span></div><p class="dim">condition(X)</p><div class="chips"><span class="chip">NOT C1</span></div></li>
+<li><p class="note"><code>D</code>: two ways in, both always-taken, from <code>C</code> and from <code>X</code>. Combine each edge with its source's condition, then take either being enough.</p>
+<pre class="mermaid">
+flowchart TD
+    A -->|always| B
+    B -->|C1| C
+    B -->|"not C1"| X
+    C -->|always| D
+    X -->|always| D
+    class D changed
+    classDef changed fill:#f5b041,stroke:#f5b041,color:#000
+    linkStyle 3 stroke:#f5b041,stroke-width:3px
+    linkStyle 4 stroke:#f5b041,stroke-width:3px
+</pre>
+<p class="dim">condition(D)</p><div class="chips"><span class="chip changed">OR(C1, NOT C1)</span></div></li>
+</ol>
+</details>
+<p>Reach <code>D</code> when <code>C1</code> holds, or when it does not — which is every possible value <code>C1</code> could have. <code>D</code> is unconditionally reached once <code>B</code> is, which is exactly what the diagram shows by inspection: both of <code>B</code>'s only two arms lead to <code>D</code>. The answer the walk produces, though, is the literal expression <code>OR(C1, NOT C1)</code>, not the word "always" — see below.</p>
+
+<h2 id="what-goes-wrong">What goes wrong</h2>
+<ul>
+<li><strong>The start statement's own condition reads <code>FALSE</code>, not <code>TRUE</code>.</strong> It genuinely does, in the real implementation — a statement with no incoming slice edge gets the empty case of the rule above, and OR of nothing is false, not true. Looked at on its own, that reads backward: the start is reached unconditionally, so <code>TRUE</code> is the answer a person would expect. It never surfaces as a wrong <em>final</em> answer in either walk above, but only because of the next point.</li>
+<li><strong><code>AND</code> with a false operand returns the <em>other</em> operand, not false, when that operand sits on the left.</strong> Also real: the actual rule returns <code>lhs</code> whenever either side is false, which is correct boolean <code>AND</code> only when <code>lhs</code> itself is the false one. When <code>rhs</code> is the false side instead — exactly the shape at <code>B</code> above, combining the always-true edge with <code>A</code>'s wrongly-false condition — the result comes back as the (non-false) <code>lhs</code>, which happens to be the right answer for an always-taken edge out of the start. The two quirks cancel out for every statement directly off the start; nothing here checks that they always will.</li>
+<li><strong><code>OR(C1, NOT C1)</code> is never recognised as <code>TRUE</code>.</strong> It is a tautology — true for every value <code>C1</code> could hold — but the rule only simplifies an operand that is already the literal constant true or false, not one that is logically guaranteed to be. The merged-branch example above reports the unsimplified expression. This is a known, stated limitation of the real implementation, not an oversight found by reading between the lines of the code.</li>
+<li><strong>None of this holds once the slice has a cycle.</strong> The rule above assumes every predecessor's condition is already known by the time a statement needs it — true only when the slice is a DAG, which a slice containing a loop is not. A predecessor not yet computed silently defaults to <code>TRUE</code>, understating what is actually required rather than raising an error.</li>
+</ul>
+
+<h2 id="where-this-is-used">Where this is used</h2>
+<p>Answering "what has to be true for this line to run at all" for a specific statement someone has pointed at — a crash report, a line a debugger stopped on, a <code>DISPLAY</code> whose output someone is trying to explain. The slice step already does most of the narrowing: everything not on some path to the statement in question is gone before the condition work even starts, so the condition itself only ever has to describe the guards that are actually relevant.</p>
+</main>
+</body>
+</html>

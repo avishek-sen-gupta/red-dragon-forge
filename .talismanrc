@@ -503,4 +503,12 @@ fileignoreconfig:
   checksum: b7852f568b4863010293bb8fd18fbc5a2aa0f194bad3b4867652cbd586414644
 - filename: cicada/docs/cics-production-roadmap.md
   checksum: cdc461a4020cd727af9b29ba33e93ce5c42d81a2c5bc9b8a8ab2dae2df96a3ca
+- filename: docs/explainers/eliminating-gotos.html
+  checksum: f7e8729fdbda4230eaa8c38831ce97d1f9e6f260c50fc168ef1cfa5a44bcc97c
+- filename: docs/explainers/tree-zippers.html
+  checksum: 93afaee19753d733422feafb32423f58afcb7db827f1e0a3256010c566817d15
+- filename: docs/explainers/reducibility-and-loops.html
+  checksum: eeedb806e620bb91a4e70b99ff397e0b8e1d93b61061ac3b9fac63b2699e024e
+- filename: docs/explainers/dominance-and-reachability.html
+  checksum: 086581f3aed2a206b56970c2e8b990d72f91ae7ff501d4d54d7aef1906a0b8f0
 version: "1.0"
