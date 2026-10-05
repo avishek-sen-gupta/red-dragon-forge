@@ -1596,11 +1596,8 @@ def test_a_missing_cache_directory_is_refused_with_a_status_and_not_a_traceback(
 
 
 def test_output_already_present_is_skipped_without_force(
-    parsed: Path, tmp_path: Path, caplog
+    parsed: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Without --force, an existing --out is left exactly as it is -- no retrace, no
-    overwrite -- and the skip is logged. A sentinel the real trace would never write
-    proves the file was never touched, not merely that it still has content."""
     from cobble.dataflow.fields.trace_report import cli
 
     out = tmp_path / "trace.jsonl"
@@ -1611,30 +1608,25 @@ def test_output_already_present_is_skipped_without_force(
 
     assert code == 0
     assert out.read_text(encoding="utf-8") == "sentinel: not a real trace\n"
-    assert any(
-        "already exists, skipping" in message for message in caplog.messages
+    assert (
+        f"trace: {out} already exists, skipping (--force to retrace)" in caplog.messages
     )
 
 
 def test_force_retraces_and_overwrites_an_existing_output(
     parsed: Path, tmp_path: Path
 ) -> None:
-    """--force is the escape hatch: with it, an existing --out is overwritten
-    unconditionally, same as if it had never existed."""
     from cobble.dataflow.fields.trace_report import cli
 
+    fresh = tmp_path / "fresh.jsonl"
     out = tmp_path / "trace.jsonl"
     out.write_text("sentinel: not a real trace\n", encoding="utf-8")
 
+    fresh_code = cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(fresh)])
     code = cli(["TPROGA", "--asg-dir", str(parsed), "--out", str(out), "--force"])
 
-    assert code == 0
-    rows = [
-        json.loads(line)
-        for line in out.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    assert any(r.get("kind") == "dep" for r in rows)
+    assert (fresh_code, code) == (0, 0)
+    assert out.read_text(encoding="utf-8") == fresh.read_text(encoding="utf-8")
 
 
 def test_positive_validator_accepts_positive_integers():
