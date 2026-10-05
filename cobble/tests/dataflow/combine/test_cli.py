@@ -103,3 +103,16 @@ def test_all_reports_no_outside(
     assert cli(_arguments(tmp_path, "--all")) == 0
 
     assert _messages(caplog) == ["combine: 1 rounds, 0 discovered edges"]
+
+
+def test_a_config_whose_parse_cache_is_missing_is_refused_not_an_empty_run(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _member(tmp_path / "fx", "B")
+    arguments = _arguments(tmp_path, "--all")
+    (tmp_path / "asg").rmdir()
+
+    assert cli(arguments) == 2
+
+    assert _messages(caplog) == [f"combine: !! no parse cache at {tmp_path / 'asg'}"]
+    assert not (tmp_path / "out").exists()

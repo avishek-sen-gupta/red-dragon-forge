@@ -16,6 +16,7 @@ from cobble.dataflow.combine.outputs import write_outputs
 from cobble.dataflow.combine.outside import outside_jumps
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.run_report import RunReport
+from cobble.dataflow.combine.table_callee_areas import TableCalleeAreas
 
 _LOG = logging.getLogger(__name__)
 
@@ -103,15 +104,17 @@ def _outside(
     return outside_jumps(arguments.fixpoint_dir, config.asg_dir, inside, transactions)
 
 
-def _combine(arguments: argparse.Namespace, inside: frozenset[str]) -> None:
-    config = load_corpus_config(arguments.config)
+def _combine(
+    arguments: argparse.Namespace, config: CorpusConfig, inside: frozenset[str]
+) -> None:
     transactions = _transactions(config.csd_files)
+    tables = {
+        program: load_tables(arguments.fixpoint_dir, program)
+        for program in sorted(inside)
+    }
     linked = link(
-        {
-            program: load_tables(arguments.fixpoint_dir, program)
-            for program in sorted(inside)
-        },
-        AsgCalleeAreas(config.asg_dir),
+        tables,
+        TableCalleeAreas(tables, AsgCalleeAreas(config.asg_dir)),
         transactions,
         _outside(arguments, config, inside, transactions),
     )
@@ -119,18 +122,27 @@ def _combine(arguments: argparse.Namespace, inside: frozenset[str]) -> None:
     _report(linked.report, arguments.all)
 
 
+def _unusable(arguments: argparse.Namespace, config: CorpusConfig) -> Sequence[str]:
+    members = arguments.fixpoint_dir / "members"
+    return (
+        *(() if members.is_dir() else (f"no fixpoint results at {members}",)),
+        *(() if config.asg_dir.is_dir() else (f"no parse cache at {config.asg_dir}",)),
+    )
+
+
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(argv or sys.argv[1:])
-    members = arguments.fixpoint_dir / "members"
-    if not members.is_dir():
-        _LOG.error("combine: !! no fixpoint results at %s", members)
+    config = load_corpus_config(arguments.config)
+    unusable = _unusable(arguments, config)
+    if unusable:
+        _LOG.error("combine: !! %s", "; ".join(unusable))
         return 2
     inside, missing = _inside(arguments.fixpoint_dir, arguments.member, arguments.all)
     if missing:
         _LOG.error("combine: !! no fixpoint results for: %s", ", ".join(missing))
         return 1
-    _combine(arguments, inside)
+    _combine(arguments, config, inside)
     return 0
 
 
