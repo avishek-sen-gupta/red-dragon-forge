@@ -85,10 +85,16 @@ def _from_fact(
     )
 
 
+def _explained(reason: UnresolvedReason, part: ByteRange, fact: Fact) -> bool:
+    if not fact.writers:
+        return False
+    if reason in _WRITER_EXPLAINED:
+        return True
+    return reason is UnresolvedReason.INBOUND_LINKAGE and part.region != _LINKAGE
+
+
 def _path_history(tables: ProgramTables, part: ByteRange, fact: Fact) -> Resolution:
-    reasons = tuple(
-        r for r in fact.reasons if not fact.writers or r not in _WRITER_EXPLAINED
-    )
+    reasons = tuple(r for r in fact.reasons if not _explained(r, part, fact))
     received = part.region == _LINKAGE and (
         UnresolvedReason.INBOUND_LINKAGE in reasons or not (fact.writers or fact.values)
     )
