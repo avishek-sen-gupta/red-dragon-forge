@@ -71,9 +71,12 @@ held at that moment. `defs.jsonl` and `graph.jsonl` are not changed.
 
 (Offsets and node ids in examples are illustrative.)
 
-- `kind`: `XCTL`, `LINK`, `CALL`, `RETURN_TRANSID`, `START`, `EXIT` (a `GOBACK` or an
-  `EXEC CICS RETURN` without `TRANSID`), or `RETRIEVE` (where a started program receives a `START`'s
-  `FROM` bytes; its one area is the `INTO` field).
+- `kind`: `XCTL`, `LINK`, `CALL`, `RETURN_TRANSID`, `START`, `EXIT` (a `GOBACK`,
+  `EXIT PROGRAM`, `STOP RUN`, or an `EXEC CICS RETURN` without `TRANSID`), `RETRIEVE` (where a
+  started program receives a `START`'s `FROM` bytes; its one area is the `INTO` field), or `ENTRY` —
+  one row per program, with node `""`, listing its received areas with no field facts. `ENTRY` exists
+  because many CICS programs never return without a `TRANSID` and so have no `EXIT` row, yet linking
+  still needs to know where their received bytes are. (Amended 2026-10-06, before implementation.)
 - `target`: the program jumped to, in one shape whatever the source: `values` are the names it can be,
   and `extent`, `writers` and `reasons` say where they came from. A literal target is just
   `values: ["COMEN01C"]` with an empty `extent` and no writers or reasons. Empty for `RETURN_TRANSID`,
