@@ -71,7 +71,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-extents --asg-dir <cache> --out <file>` | Every member's declared field layout in bytes — the table the dataflow stages read |
 | `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets, what every jump hands over (`graph`, `defs`, `aliases`, `targets`, `jumps` and the run summary) |
 | `cobble-dataflow-fixpoint-query <query> <field> --fixpoint-dir <dir> --extents <file>` | Ask the fixpoint's output for a field's `writers`, `readers`, what it `reaches` or is `reached-by` (in statement order), and byte containment/overlap |
-| `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>] [--single-program]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from; `--single-program` keeps to that program's own CFG |
+| `cobble-fields-trace <program> --asg-dir <cache> --out <file> [--record-paths <file>] [--single-program] [--force]` | Sample execution paths from a program's entry and record, per path, where each field's bytes came from; `--single-program` keeps to that program's own CFG; an existing `--out` is left as it is unless `--force` |
 | `cobble-trace-query {forward,backward} <field> --trace <file>` | Provenance over a trace: what a field affects, or what feeds it |
 | `cobble-viz-pathwalk --cfg <jsonl> --paths <file> --output <html>` | Animate a trace's recorded paths over the paragraphs, with chosen fields' provenance |
 | `cobble-fields-access --cfg <jsonl> --asg-dir <cache> --out <file>` | Every site in a CFG file that reads a field, with the bytes it reads |
@@ -1066,7 +1066,8 @@ came from, so the path resumes at the performer instead of ending there.
 The output is **JSONL, streamed to disk per path**: each path's deps are appended
 immediately, so a killed run still produces a queryable file. Footer rows (dead
 ends, coverage, limits) are written once at the end. The file may contain
-duplicate dep rows across paths; the query tool deduplicates on load.
+duplicate dep rows across paths; the query tool deduplicates on load. An existing
+`--out` is skipped and left untouched; `--force` traces again and overwrites it.
 
 A callee the parse never covered is an opaque block, not an error: the site is
 listed under `dead ends` with the reason the alias table gives it
