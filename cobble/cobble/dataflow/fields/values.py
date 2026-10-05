@@ -20,6 +20,8 @@ class UnresolvedReason(Enum):
     OVER_BUDGET = "over-budget"
     INCOMPLETE_WALK = "incomplete-walk"
     UNMODELLED = "unmodelled"
+    OUTSIDE_ANALYSED_SET = "outside-analysed-set"
+    NOT_RECORDED = "not-recorded"
 
 
 @dataclass(frozen=True)
