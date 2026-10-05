@@ -1,13 +1,17 @@
 """Linking: values cross programs over a call graph that grows from those values."""
 
+from collections import Counter
 from collections.abc import Mapping
 
 from cobble.dataflow.combine.callee_areas import CalleeAreas
 from cobble.dataflow.combine.flow import Flow
 from cobble.dataflow.combine.link import link
 from cobble.dataflow.combine.linked import Linked
+from cobble.dataflow.combine.memo_resolve import MemoResolve
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.program_tables import ProgramTables
+from cobble.dataflow.combine.resolution import Resolution
+from cobble.dataflow.combine.resolve import resolve
 from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.target_site import TargetSite
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
@@ -397,3 +401,33 @@ def test_a_site_whose_target_has_no_extent_keeps_its_reason() -> None:
     )
     linked = link({"N": tables}, areas(), {}, OutsideJumps())
     assert (_row(linked, "N"), linked.edges) == (((), ("no-extent",), ()), ())
+
+
+class CountingResolve:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, ByteRange]] = []
+
+    def __call__(self, tables: ProgramTables, node: str, at: ByteRange) -> Resolution:
+        self.calls.append((tables.program, node, at))
+        return resolve(tables, node, at)
+
+
+def test_a_run_resolves_each_program_node_and_range_once_across_rounds() -> None:
+    tables = {"A": caller("A", "A", "B"), "B": returner("B", "M")}
+    plain, counted = CountingResolve(), CountingResolve()
+
+    unmemoised = link(tables, areas("A", "B"), {}, OutsideJumps(), plain)
+    memoised = link(
+        tables, areas("A", "B"), {}, OutsideJumps(), MemoResolve(tables, counted)
+    )
+
+    assert memoised == unmemoised
+    assert memoised.report.rounds == 3
+    assert Counter(counted.calls) == Counter(
+        {
+            ("A", "X", byte_range("WS-AREA@working_storage[0:8]", "A")): 1,
+            ("B", "X", byte_range("WS-NEXT@working_storage[0:8]", "B")): 1,
+        }
+    )
+    assert set(plain.calls) == set(counted.calls)
+    assert len(plain.calls) == 5

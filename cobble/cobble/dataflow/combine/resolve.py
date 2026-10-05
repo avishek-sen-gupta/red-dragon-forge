@@ -1,13 +1,15 @@
 """Resolve what some bytes hold at one node, walking back to received, returned and retrieved bytes."""
 
+from collections.abc import Callable
 from dataclasses import replace
-from functools import reduce
+from functools import partial, reduce
 
 from cobble.dataflow.combine.flow import Flow
 from cobble.dataflow.combine.program_tables import ProgramTables
 from cobble.dataflow.combine.resolution import Resolution, joined
 from cobble.dataflow.combine.stop import Stop
 from cobble.dataflow.combine.stop_kind import StopKind
+from cobble.dataflow.combine.walk import walked
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.jumps.fact import Fact
@@ -23,11 +25,13 @@ _WRITER_EXPLAINED = frozenset(
         UnresolvedReason.FROM_FILE,
     }
 )
-_Seen = frozenset[tuple[str, str, int, int]]
+Resolve = Callable[[ProgramTables, str, ByteRange], Resolution]
+_Vertex = tuple[str, ByteRange]
+_Step = tuple[Resolution, tuple[_Vertex, ...]]
 
 
 def resolve(tables: ProgramTables, node: str, at: ByteRange) -> Resolution:
-    return _from_facts(tables, node, at, tables.facts_at(node, at), frozenset())
+    return walked((node, at), partial(_expanded, tables), joined, Resolution()).found
 
 
 def _unknown_stop(reasons: tuple[UnresolvedReason, ...]) -> Resolution:
@@ -36,30 +40,23 @@ def _unknown_stop(reasons: tuple[UnresolvedReason, ...]) -> Resolution:
     return Resolution(stops=frozenset({Stop(StopKind.UNKNOWN, reasons=reasons)}))
 
 
-def _visit(node: str, at: ByteRange) -> tuple[str, str, int, int]:
-    return (node, at.region, at.start, at.end)
-
-
 def _overlap(a: ByteRange, b: ByteRange) -> ByteRange:
     return replace(a, start=max(a.start, b.start), end=min(a.end, b.end))
 
 
-def _from_facts(
-    tables: ProgramTables,
-    node: str,
-    at: ByteRange,
-    facts: tuple[tuple[ByteRange, Fact], ...],
-    seen: _Seen,
-) -> Resolution:
-    if _visit(node, at) in seen:
-        return Resolution()
+def _stepped(left: _Step, right: _Step) -> _Step:
+    return joined(left[0], right[0]), left[1] + right[1]
+
+
+def _expanded(tables: ProgramTables, vertex: _Vertex) -> _Step:
+    node, at = vertex
+    facts = tables.facts_at(node, at)
     if not facts:
-        return _unknown_stop((UnresolvedReason.NOT_RECORDED,))
-    inner = seen | {_visit(node, at)}
+        return _unknown_stop((UnresolvedReason.NOT_RECORDED,)), ()
     return reduce(
-        joined,
-        (_from_fact(tables, at, where, fact, inner) for where, fact in facts),
-        Resolution(),
+        _stepped,
+        (_from_fact(tables, at, where, fact) for where, fact in facts),
+        (Resolution(), ()),
     )
 
 
@@ -69,19 +66,19 @@ def _sliced(fact: Fact, where: ByteRange, part: ByteRange) -> frozenset[str]:
 
 
 def _from_fact(
-    tables: ProgramTables, at: ByteRange, where: ByteRange, fact: Fact, seen: _Seen
-) -> Resolution:
+    tables: ProgramTables, at: ByteRange, where: ByteRange, fact: Fact
+) -> _Step:
     part = _overlap(at, where)
     values = Resolution(values=_sliced(fact, where, part))
     return reduce(
-        joined,
+        _stepped,
         (
-            _through(tables, writer, flow, part, fact, seen)
+            _through(tables, writer, flow, part, fact)
             for writer in fact.writers
             for flow in tables.flows.get(writer, ())
             if flow.target.overlaps(part)
         ),
-        joined(values, _path_history(tables, part, fact)),
+        (joined(values, _path_history(tables, part, fact)), ()),
     )
 
 
@@ -127,11 +124,10 @@ def _through(
     flow: Flow,
     part: ByteRange,
     fact: Fact,
-    seen: _Seen,
-) -> Resolution:
+) -> _Step:
     written = _overlap(part, flow.target)
     if not flow.source.known:
-        return _synthetic(tables, writer, written, fact)
+        return _synthetic(tables, writer, written, fact), ()
     offset = flow.source.start - flow.target.start
     source = replace(
         flow.source,
@@ -139,8 +135,8 @@ def _through(
         end=min(flow.source.end, written.end + offset),
     )
     if source.start >= source.end:
-        return Resolution()
-    return _from_facts(tables, writer, source, tables.facts_at(writer, source), seen)
+        return Resolution(), ()
+    return Resolution(), ((writer, source),)
 
 
 def _synthetic(
