@@ -204,6 +204,24 @@ def test_a_window_narrower_than_the_bytes_contributes_nothing() -> None:
         OutsideJumps(),
     )
     assert _row(mixed, "B") == (("A", "M"), ("inbound-linkage",), ())
+    missed = link(
+        {
+            "A": caller("A", "A", "B"),
+            "D": caller("D", "D", "B", width=0),
+            "B": returner("B", "M"),
+        },
+        areas("A", "B", "D"),
+        {},
+        OutsideJumps(),
+    )
+    assert (_row(missed, "B"), [str(e.callee_window) for e in missed.edges]) == (
+        (("A", "M"), ("inbound-linkage",), ()),
+        [
+            "DFHCOMMAREA@linkage[0:20]",
+            "DFHCOMMAREA@linkage[0:20]",
+            "DFHCOMMAREA@linkage[0:0]",
+        ],
+    )
 
 
 def test_an_outside_caller_with_a_known_target_is_named() -> None:
