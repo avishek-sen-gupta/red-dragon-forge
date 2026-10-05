@@ -350,3 +350,49 @@ def test_an_inbound_reason_on_written_working_storage_is_explained_by_its_writer
     assert resolve(unwritten, "J", WS).stops == frozenset(
         {Stop(StopKind.UNKNOWN, reasons=inbound)}
     )
+
+
+STAGES = 40
+
+
+def _stage(k: int) -> dict[str, tuple[tuple[ByteRange, Fact], ...]]:
+    extent = "WS-NEXT@working_storage[0:8]"
+    nxt = f"N{k + 1}"
+    return {
+        f"N{k}": ((WS, Fact(extent, writers=(f"A{k}", f"B{k}"))),),
+        f"A{k}": ((WS, Fact(extent, values=(f"A{k}".ljust(8),), writers=(nxt,))),),
+        f"B{k}": (
+            (
+                WS,
+                Fact(extent, writers=(nxt,), reasons=(UnresolvedReason.UNINITIALISED,)),
+            ),
+        ),
+    }
+
+
+def test_a_chain_of_rejoining_copies_walks_each_range_once() -> None:
+    inbound = (UnresolvedReason.INBOUND_LINKAGE,)
+    stages = {node: row for k in range(STAGES) for node, row in _stage(k).items()}
+    copies = {
+        node: (Flow(node, WS, WS),)
+        for k in range(STAGES)
+        for node in (f"A{k}", f"B{k}", f"N{k + 1}")
+    }
+    t = tables(
+        facts={
+            **stages,
+            f"N{STAGES}": ((WS, Fact("WS-NEXT@working_storage[0:8]", writers=("M",))),),
+            "M": ((LK, Fact("LK-FROM@linkage[0:8]", reasons=inbound)),),
+        },
+        flows={**copies, "M": (Flow("M", LK, WS),)},
+    )
+
+    assert resolve(t, "N0", WS) == Resolution(
+        values=frozenset(f"A{k}".ljust(8) for k in range(STAGES)),
+        stops=frozenset(
+            {
+                Stop(StopKind.RECEIVED, at=LK, param=0),
+                Stop(StopKind.UNKNOWN, reasons=(UnresolvedReason.UNINITIALISED,)),
+            }
+        ),
+    )

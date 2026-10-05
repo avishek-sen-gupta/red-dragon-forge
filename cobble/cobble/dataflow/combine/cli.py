@@ -12,9 +12,11 @@ from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.dataflow.combine.asg_callee_areas import AsgCalleeAreas
 from cobble.dataflow.combine.link import link
 from cobble.dataflow.combine.load import load_tables
+from cobble.dataflow.combine.memo_resolve import MemoResolve
 from cobble.dataflow.combine.outputs import write_outputs
 from cobble.dataflow.combine.outside import outside_jumps
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
+from cobble.dataflow.combine.resolve import resolve
 from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.table_callee_areas import TableCalleeAreas
 
@@ -117,6 +119,7 @@ def _combine(
         TableCalleeAreas(tables, AsgCalleeAreas(config.asg_dir)),
         transactions,
         _outside(arguments, config, inside, transactions),
+        MemoResolve(tables, resolve),
     )
     write_outputs(arguments.out_dir, linked)
     _report(linked.report, arguments.all)

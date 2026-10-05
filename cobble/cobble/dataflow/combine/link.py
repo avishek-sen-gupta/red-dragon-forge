@@ -2,7 +2,8 @@
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from functools import reduce
+from functools import partial, reduce
+from types import MappingProxyType
 
 from cobble.dataflow.combine.callee_areas import CalleeAreas
 from cobble.dataflow.combine.edge import Edge
@@ -11,10 +12,11 @@ from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.linked_target import LinkedTarget
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.program_tables import ProgramTables
-from cobble.dataflow.combine.resolve import resolve
+from cobble.dataflow.combine.resolve import Resolve, resolve
 from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.stop import Stop
 from cobble.dataflow.combine.stop_kind import StopKind
+from cobble.dataflow.combine.walk import walked
 from cobble.dataflow.fields.extent_text import ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, is_program_name
@@ -30,7 +32,9 @@ _OUTSIDE = Held(reasons=frozenset({UnresolvedReason.OUTSIDE_ANALYSED_SET}))
 _INBOUND = Held(reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}))
 _FROM_CALLEE = Held(reasons=frozenset({UnresolvedReason.FROM_CALLEE}))
 _NOT_A_LITERAL = Held(reasons=frozenset({UnresolvedReason.NOT_A_LITERAL}))
-_Visiting = frozenset[tuple[str, str, str, int, int]]
+_Vertex = tuple[str, str, ByteRange]
+_Expansion = tuple[Held, tuple[_Vertex, ...]]
+_Start = tuple[str, str, Fact]
 _EdgeOrder = tuple[str, str, str, int, str, str, int, int, str, int, int, bool]
 
 
@@ -41,9 +45,11 @@ class _World:
     outside: OutsideJumps
     areas: CalleeAreas
     transactions: Mapping[str, str]
+    resolver: Resolve
+    answers: Mapping[_Start, Held] = MappingProxyType({})
 
 
-_Follow = Callable[[_World, str, Stop, _Visiting], Held]
+_Follow = Callable[[_World, str, Stop], _Expansion]
 _Callees = Callable[[_World, str, Jump], tuple[tuple[str, bool], ...]]
 
 
@@ -52,15 +58,35 @@ def link(
     areas: CalleeAreas,
     transactions: Mapping[str, str],
     outside: OutsideJumps,
+    resolver: Resolve = resolve,
 ) -> Linked:
-    return _rounds(_World(tables, frozenset(), outside, areas, transactions), 1)
+    world = _World(tables, frozenset(), outside, areas, transactions, resolver)
+    return _rounds(_answered_in(world), 1)
 
 
 def _rounds(world: _World, round_: int) -> Linked:
     found = frozenset(_edges(world))
     if found <= world.edges:
         return _linked(world, round_)
-    return _rounds(replace(world, edges=world.edges | found), round_ + 1)
+    return _rounds(_answered_in(replace(world, edges=world.edges | found)), round_ + 1)
+
+
+def _answered_in(world: _World) -> _World:
+    return replace(
+        world,
+        answers=MappingProxyType(
+            {
+                (program, jump.node, fact): _fact_held(world, program, jump.node, fact)
+                for program, tables in world.tables.items()
+                for jump in tables.jumps.values()
+                for fact in (jump.target, jump.transid)
+            }
+        ),
+    )
+
+
+def _answer(world: _World, program: str, node: str, fact: Fact) -> Held:
+    return world.answers[(program, node, fact)]
 
 
 def _names(values: frozenset[str]) -> tuple[str, ...]:
@@ -70,7 +96,7 @@ def _names(values: frozenset[str]) -> tuple[str, ...]:
 def _fact_held(world: _World, program: str, node: str, fact: Fact) -> Held:
     if not fact.extent:
         return Held(values=frozenset(fact.values), reasons=frozenset(fact.reasons))
-    return _held(world, program, node, byte_range(fact.extent, program), frozenset())
+    return _held(world, (program, node, byte_range(fact.extent, program)))
 
 
 def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> ByteRange:
@@ -84,23 +110,31 @@ def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> Byt
     )
 
 
-def _held(
-    world: _World, program: str, node: str, at: ByteRange, visiting: _Visiting
-) -> Held:
-    visit = (program, node, at.region, at.start, at.end)
-    if visit in visiting:
-        return Held(cycled=True)
-    found = resolve(world.tables[program], node, at)
-    inner = visiting | {visit}
+def _held(world: _World, start: _Vertex) -> Held:
+    walk = walked(start, partial(_expanded, world), held_join, Held())
+    return held_join(walk.found, Held(cycled=walk.revisited))
+
+
+def _joined(left: _Expansion, right: _Expansion) -> _Expansion:
+    return held_join(left[0], right[0]), left[1] + right[1]
+
+
+def _ending(held: Held) -> _Expansion:
+    return held, ()
+
+
+def _expanded(world: _World, vertex: _Vertex) -> _Expansion:
+    program, node, at = vertex
+    found = world.resolver(world.tables[program], node, at)
     return reduce(
-        held_join,
-        (_FOLLOW[stop.kind](world, program, stop, inner) for stop in found.stops),
-        Held(values=found.values),
+        _joined,
+        (_FOLLOW[stop.kind](world, program, stop) for stop in found.stops),
+        _ending(Held(values=found.values)),
     )
 
 
-def _unknown(world: _World, program: str, stop: Stop, visiting: _Visiting) -> Held:
-    return Held(reasons=frozenset(stop.reasons))
+def _unknown(world: _World, program: str, stop: Stop) -> _Expansion:
+    return _ending(Held(reasons=frozenset(stop.reasons)))
 
 
 def _outside_callers(world: _World, program: str) -> Held:
@@ -116,43 +150,41 @@ def _entering(edge: Edge, program: str, stop: Stop) -> bool:
     )
 
 
-def _from_caller(world: _World, edge: Edge, stop: Stop, visiting: _Visiting) -> Held:
+def _from_caller(edge: Edge, stop: Stop) -> _Expansion:
     if not edge.callee_window.covers(stop.at):
-        return _INBOUND
+        return _ending(_INBOUND)
     at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
-    return _held(world, edge.caller, edge.node, at, visiting)
+    return Held(), ((edge.caller, edge.node, at),)
 
 
-def _received(world: _World, program: str, stop: Stop, visiting: _Visiting) -> Held:
+def _received(world: _World, program: str, stop: Stop) -> _Expansion:
     into = tuple(e for e in world.edges if _entering(e, program, stop))
     from_callers = reduce(
-        held_join, (_from_caller(world, e, stop, visiting) for e in into), Held()
+        _joined, (_from_caller(e, stop) for e in into), _ending(Held())
     )
     gaps = Held() if into else _INBOUND
-    return held_join(held_join(from_callers, gaps), _outside_callers(world, program))
+    return _joined(
+        from_callers, _ending(held_join(gaps, _outside_callers(world, program)))
+    )
 
 
-def _returned(world: _World, program: str, stop: Stop, visiting: _Visiting) -> Held:
+def _returned(world: _World, program: str, stop: Stop) -> _Expansion:
     out = tuple(
         e
         for e in world.edges
         if e.caller == program and e.node == stop.node and e.param == stop.param
     )
     if not out:
-        return _FROM_CALLEE
-    return reduce(held_join, (_left_by(world, e, stop, visiting) for e in out), Held())
+        return _ending(_FROM_CALLEE)
+    return reduce(_joined, (_left_by(world, e, stop) for e in out), _ending(Held()))
 
 
-def _left_by(world: _World, edge: Edge, stop: Stop, visiting: _Visiting) -> Held:
+def _left_by(world: _World, edge: Edge, stop: Stop) -> _Expansion:
     exits = _exits(world, edge.callee)
     if not exits or not edge.caller_window.covers(stop.at):
-        return _FROM_CALLEE
+        return _ending(_FROM_CALLEE)
     at = _shifted(stop.at, edge.caller_window, edge.callee_window, edge.callee)
-    return reduce(
-        held_join,
-        (_held(world, edge.callee, exit_.node, at, visiting) for exit_ in exits),
-        Held(),
-    )
+    return Held(), tuple((edge.callee, exit_.node, at) for exit_ in exits)
 
 
 def _exits(world: _World, program: str) -> tuple[Jump, ...]:
@@ -163,14 +195,14 @@ def _exits(world: _World, program: str) -> tuple[Jump, ...]:
     )
 
 
-def _from_starter(world: _World, edge: Edge, stop: Stop, visiting: _Visiting) -> Held:
+def _from_starter(edge: Edge, stop: Stop) -> _Expansion:
     if not edge.callee_window.covers(stop.at):
-        return _NOT_A_LITERAL
+        return _ending(_NOT_A_LITERAL)
     at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
-    return _held(world, edge.caller, edge.node, at, visiting)
+    return Held(), ((edge.caller, edge.node, at),)
 
 
-def _retrieved(world: _World, program: str, stop: Stop, visiting: _Visiting) -> Held:
+def _retrieved(world: _World, program: str, stop: Stop) -> _Expansion:
     starts = tuple(
         e
         for e in world.edges
@@ -179,10 +211,8 @@ def _retrieved(world: _World, program: str, stop: Stop, visiting: _Visiting) -> 
         and e.callee_node == stop.node
     )
     if not starts:
-        return _NOT_A_LITERAL
-    return reduce(
-        held_join, (_from_starter(world, e, stop, visiting) for e in starts), Held()
-    )
+        return _ending(_NOT_A_LITERAL)
+    return reduce(_joined, (_from_starter(e, stop) for e in starts), _ending(Held()))
 
 
 _FOLLOW: Mapping[StopKind, _Follow] = {
@@ -214,7 +244,7 @@ def _program_callees(
     world: _World, program: str, jump: Jump
 ) -> tuple[tuple[str, bool], ...]:
     own = frozenset(_names(frozenset(jump.target.values)))
-    found = _names(_fact_held(world, program, jump.node, jump.target).values)
+    found = _names(_answer(world, program, jump.node, jump.target).values)
     return tuple((name, name not in own) for name in found)
 
 
@@ -222,7 +252,7 @@ def _transaction_callees(
     world: _World, program: str, jump: Jump
 ) -> tuple[tuple[str, bool], ...]:
     own = frozenset(_names(frozenset(jump.transid.values)))
-    found = _names(_fact_held(world, program, jump.node, jump.transid).values)
+    found = _names(_answer(world, program, jump.node, jump.transid).values)
     return tuple(
         (world.transactions[t], t not in own) for t in found if t in world.transactions
     )
@@ -341,7 +371,7 @@ def _answered(held: Held) -> Held:
 def _target(world: _World, program: str, node: str) -> LinkedTarget:
     tables = world.tables[program]
     site = tables.sites[node]
-    held = _answered(_fact_held(world, program, node, tables.jumps[node].target))
+    held = _answered(_answer(world, program, node, tables.jumps[node].target))
     names = _names(held.values)
     return LinkedTarget(
         ResolvedTarget(
