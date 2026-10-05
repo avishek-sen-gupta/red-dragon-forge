@@ -6,6 +6,7 @@ from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.fields.aliases import area_extents, received_areas
 from cobble.dataflow.fields.extent import CellIndex, operand_occurrence_extents
 from cobble.dataflow.fields.extent_text import extent_text
+from cobble.dataflow.fields.state import EMPTY as STATE_EMPTY
 from cobble.dataflow.fields.state import State
 from cobble.dataflow.fields.transfer import Statement
 from cobble.dataflow.fields.values import UnresolvedReason
@@ -41,16 +42,50 @@ def jumps_of(
     statements: Mapping[str, Statement],
     index: CellIndex,
     states: Mapping[str, State],
+    settled: bool,
 ) -> tuple[Jump, ...]:
     return (
         _entry(asg, cfg, index),
         *(
-            jump
+            _with_incomplete_walk(jump, settled)
             for node in cfg.nodes
-            if node.id in states and node.id in statements
+            if node.id in statements
             for jump in _at(
-                asg, cfg.program, node, statements[node.id], index, states[node.id]
+                asg,
+                cfg.program,
+                node,
+                statements[node.id],
+                index,
+                states.get(node.id, STATE_EMPTY),
             )
+        ),
+    )
+
+
+def _incomplete(fact: Fact) -> Fact:
+    reasons = {*fact.reasons, UnresolvedReason.INCOMPLETE_WALK}
+    return Fact(
+        fact.extent,
+        fact.values,
+        fact.writers,
+        tuple(reason for _, reason in sorted((r.value, r) for r in reasons)),
+    )
+
+
+def _with_incomplete_walk(jump: Jump, settled: bool) -> Jump:
+    if settled or jump.kind is JumpKind.ENTRY:
+        return jump
+    return Jump(
+        jump.program,
+        jump.node,
+        jump.line,
+        jump.kind,
+        jump.returns,
+        target=_incomplete(jump.target),
+        transid=_incomplete(jump.transid),
+        areas=tuple(
+            JumpArea(area.param, area.extent, tuple(map(_incomplete, area.fields)))
+            for area in jump.areas
         ),
     )
 

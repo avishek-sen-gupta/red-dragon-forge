@@ -1,13 +1,19 @@
 """jumps.jsonl, compiled by the real bridge: one row per jump, exit, RETRIEVE and entry."""
 
+import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
+from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.values import UnresolvedReason
+from cobble.dataflow.fixpoint.fixpoint import analysed
+from cobble.dataflow.fixpoint.options import AnalysisOptions
+from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.rows import jump_from_row
+from cobol_asg.asg_types import CobolASG
 
 BASELINE = Path(__file__).parent / "data" / "jumps_baseline"
 
@@ -74,7 +80,11 @@ def out(fixpoint_corpus: Callable[[Mapping[str, str]], Path]) -> Path:
 
 
 def _jumps(out: Path, program: str) -> tuple[Jump, ...]:
-    lines = (out / "members" / program / "jumps.jsonl").read_text().splitlines()
+    lines = (
+        (out / "members" / program / "jumps.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
     return tuple(jump_from_row(line) for line in lines)
 
 
@@ -152,6 +162,27 @@ def test_every_program_has_an_entry_row_and_exits_list_received_areas(
 
 
 def test_the_existing_tables_are_unchanged(out: Path) -> None:
-    assert {name: (out / name).read_text() for name in EXISTING} == {
-        name: (BASELINE / name).read_text() for name in EXISTING
+    assert {name: (out / name).read_text(encoding="utf-8") for name in EXISTING} == {
+        name: (BASELINE / name).read_text(encoding="utf-8") for name in EXISTING
     }
+
+
+def test_an_unsettled_walk_keeps_every_jump_and_marks_its_facts_incomplete(
+    out: Path,
+) -> None:
+    with cached_asg_dialect_parsers_registered():
+        asg = CobolASG.from_dict(
+            json.loads((out.parent / "parsed" / "PROGA.json").read_text("utf-8"))
+        )
+    flow, _ = analysed(asg, AnalysisOptions(factor=0))
+    by_kind = {jump.kind: jump for jump in flow.jumps}
+    incomplete = (UnresolvedReason.INCOMPLETE_WALK,)
+    unread = (UnresolvedReason.INCOMPLETE_WALK, UnresolvedReason.UNINITIALISED)
+    assert sorted(kind.value for kind in by_kind) == ["CALL", "ENTRY", "LINK", "XCTL"]
+    assert by_kind[JumpKind.XCTL].target == Fact(
+        extent="WS-NEXT@working_storage[20:28]", reasons=unread
+    )
+    assert [
+        (a.extent, [f.reasons for f in a.fields]) for a in by_kind[JumpKind.XCTL].areas
+    ] == [("WS-AREA@working_storage[0:20]", [unread, unread])]
+    assert by_kind[JumpKind.CALL].target == Fact(values=("SUBP",), reasons=incomplete)

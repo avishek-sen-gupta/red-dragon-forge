@@ -78,9 +78,9 @@ from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
+from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.jumps.discover import jumps_of
 from cobble.dataflow.jumps.jump import Jump
-from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg
@@ -712,7 +712,7 @@ def analyse(
         edges=extracted.edges,
         defs=extracted.defs,
         targets=resolved_targets(cfg, index, walk.states, walk.settled),
-        jumps=jumps_of(asg, cfg, statements, index, walk.states),
+        jumps=jumps_of(asg, cfg, statements, index, walk.states, walk.settled),
         writes=tally.writes,
         covered=tally.covered,
         unhandled=tally.unhandled,
