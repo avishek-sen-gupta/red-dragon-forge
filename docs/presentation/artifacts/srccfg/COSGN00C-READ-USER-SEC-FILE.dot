@@ -58,9 +58,4 @@ digraph srccfg {
     "COSGN00C::READ-USER-SEC-FILE/1.when.1#test" -> "COSGN00C::READ-USER-SEC-FILE/1.when.2.0" [color="#c62828", label="FALSE"];
     "COSGN00C::READ-USER-SEC-FILE/0" -> "COSGN00C::READ-USER-SEC-FILE/1.when.0#test" [color="#666666"];
     "COSGN00C::READ-USER-SEC-FILE#label" -> "COSGN00C::READ-USER-SEC-FILE/0" [color="#666666"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.then.5.then.0#raise" -> "COSGN00C::READ-USER-SEC-FILE#end" [color="#c62828", label="FALSE"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.then.5.else.0#raise" -> "COSGN00C::READ-USER-SEC-FILE#end" [color="#c62828", label="FALSE"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.0.0.else.2" -> "COSGN00C::READ-USER-SEC-FILE#end" [color="#666666"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.1.3" -> "COSGN00C::READ-USER-SEC-FILE#end" [color="#666666"];
-    "COSGN00C::READ-USER-SEC-FILE/1.when.2.3" -> "COSGN00C::READ-USER-SEC-FILE#end" [color="#666666"];
 }

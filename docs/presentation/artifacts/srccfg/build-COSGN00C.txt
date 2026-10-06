@@ -1,12 +1,61 @@
 srccfg: building COSGN00C  (built=0 pending=0)
-reaching_defs: COSGN00C  done  processed=957
+reaching_defs: COSGN00C  done  processed=953
 srccfg: COSGN00C done  nodes=104
 srccfg: building COADM01C  (built=1 pending=1)
-reaching_defs: COADM01C  done  processed=1141
+reaching_defs: COADM01C  done  processed=1473
 srccfg: COADM01C done  nodes=124
-srccfg: building COMEN01C  (built=2 pending=0)
-reaching_defs: COMEN01C  done  processed=1338
+srccfg: building COMEN01C  (built=2 pending=7)
+reaching_defs: COMEN01C  done  processed=1852
 srccfg: COMEN01C done  nodes=137
-real 2.22
-user 1.81
-sys 0.07
+COTRTLIC: called but not in the ASG cache; an external stub stands in
+COTRTUPC: called but not in the ASG cache; an external stub stands in
+srccfg: building COUSR00C  (built=5 pending=15)
+reaching_defs: COUSR00C  done  processed=7411
+srccfg: COUSR00C done  nodes=407
+srccfg: building COUSR01C  (built=6 pending=18)
+reaching_defs: COUSR01C  done  processed=1764
+srccfg: COUSR01C done  nodes=132
+srccfg: building COUSR02C  (built=7 pending=19)
+reaching_defs: COUSR02C  done  processed=2832
+srccfg: COUSR02C done  nodes=195
+srccfg: building COUSR03C  (built=8 pending=21)
+reaching_defs: COUSR03C  done  processed=2096
+srccfg: COUSR03C done  nodes=154
+srccfg: building COACTUPC  (built=9 pending=23)
+reaching_defs: COACTUPC  done  processed=149000
+srccfg: COACTUPC done  nodes=2004
+srccfg: building COACTVWC  (built=10 pending=24)
+reaching_defs: COACTVWC  done  processed=8836
+srccfg: COACTVWC done  nodes=408
+srccfg: building COBIL00C  (built=11 pending=24)
+reaching_defs: COBIL00C  done  processed=4943
+srccfg: COBIL00C done  nodes=254
+srccfg: building COCRDLIC  (built=12 pending=25)
+reaching_defs: COCRDLIC  done  processed=31737
+srccfg: COCRDLIC done  nodes=693
+srccfg: building COCRDSLC  (built=13 pending=27)
+reaching_defs: COCRDSLC  done  processed=11030
+srccfg: COCRDSLC done  nodes=403
+srccfg: building COCRDUPC  (built=14 pending=28)
+reaching_defs: COCRDUPC  done  processed=35990
+srccfg: COCRDUPC done  nodes=718
+COPAUS0C: called but not in the ASG cache; an external stub stands in
+srccfg: building CORPT00C  (built=16 pending=28)
+reaching_defs: CORPT00C  done  processed=4260
+srccfg: CORPT00C done  nodes=282
+srccfg: building COTRN00C  (built=17 pending=29)
+reaching_defs: COTRN00C  done  processed=7658
+srccfg: COTRN00C done  nodes=409
+srccfg: building COTRN01C  (built=18 pending=31)
+reaching_defs: COTRN01C  done  processed=1419
+srccfg: COTRN01C done  nodes=127
+srccfg: building COTRN02C  (built=19 pending=33)
+reaching_defs: COTRN02C  done  processed=9412
+srccfg: COTRN02C done  nodes=400
+srccfg: building CSUTLDTC  (built=20 pending=22)
+reaching_defs: CSUTLDTC  done  processed=170
+srccfg: CSUTLDTC done  nodes=41
+CEEDAYS: called but not in the ASG cache; an external stub stands in
+real 7.08
+user 7.02
+sys 0.04

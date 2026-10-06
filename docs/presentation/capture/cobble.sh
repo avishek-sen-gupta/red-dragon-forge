@@ -23,17 +23,68 @@ viz() {
 echo "== parse + build + compare + render (whole-system graph)"
 uv run --no-sync cobble-parse-corpus --config config/carddemo.toml 2>&1 | tail -3
 # The reference graph includes the dynamic-target edges, so the build reads the
-# whole-corpus fixpoint's targets.jsonl.
+# targets the combine resolved across programs from the whole-corpus fixpoint.
 uv run --no-sync cobble-extents --asg-dir out-parsed --out "$WORK/extents-input.jsonl"
 uv run --no-sync cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir "$WORK/fields-all" \
-  --extents "$WORK/extents-input.jsonl" --all > /dev/null 2> "$WORK/fixpoint-all.log"
+  --extents "$WORK/extents-input.jsonl" --all --force > /dev/null 2> "$WORK/fixpoint-all.log"
+{ /usr/bin/time -p uv run --no-sync cobble-dataflow-combine --config config/carddemo.toml \
+    --fixpoint-dir "$WORK/fields-all" --out-dir "$WORK/combined" --all; } > "$WORK/combine.log" 2>&1
+tail -3 "$WORK/combine.log"
 uv run --no-sync cobble-build --config config/carddemo.toml --output out/carddemo.jsonl \
-  --dynamic-call-targets "$WORK/fields-all/targets.jsonl" > "$WORK/build.log" 2>&1
+  --dynamic-call-targets "$WORK/combined/targets.jsonl" > "$WORK/build.log" 2>&1
 grep -A12 "FAILURE" "$WORK/build.log" > "$ART/build-warnings.txt" || true
 uv run --no-sync cobble-compare --graph out/carddemo.jsonl 2>&1 | tee "$ART/compare.txt"
 grep -q "EMPTY DIFF" "$ART/compare.txt"
-uv run --no-sync cobble-render --graph out/carddemo.jsonl
-cp out/carddemo.html "$ART/graph.html"
+uv run --no-sync cobble-render-webgl --graph out/carddemo.jsonl
+cp out/carddemo-webgl.html "$ART/graph-webgl.html"
+bash "$ROOT/docs/presentation/capture/screenshot.sh" "$ART/graph-webgl.html" "$ART/graph.png" 1920 1200
+
+echo "== dynamic XCTL targets: fixpoint alone vs combined, and the program-level fan-out"
+uv run --no-sync python - "$WORK/fields-all/targets.jsonl" "$WORK/combined/targets.jsonl" \
+  out/carddemo.jsonl "$ART" <<'PY'
+import json, pathlib, sys
+fixpoint_path, combined_path, graph_path, art = map(pathlib.Path, sys.argv[1:])
+site = lambda r: (r["caller"], r["node"])
+fixpoint = {site(r): r for r in map(json.loads, fixpoint_path.read_text().splitlines())}
+combined = {site(r): r for r in map(json.loads, combined_path.read_text().splitlines())}
+assert set(fixpoint) == set(combined)
+gained = [
+    {"caller": k[0], "node": k[1], "expression": combined[k]["expression"],
+     "gained": sorted(set(combined[k]["candidates"]) - set(fixpoint[k]["candidates"]))}
+    for k in sorted(combined)
+    if set(combined[k]["candidates"]) != set(fixpoint[k]["candidates"])
+]
+proven = lambda rows: sum(1 for r in rows.values() if len(r["candidates"]) == 1 and not r["reasons"])
+summary = {
+    "dynamic_sites": len(combined),
+    "with_a_candidate": {"fixpoint": sum(1 for r in fixpoint.values() if r["candidates"]),
+                         "combined": sum(1 for r in combined.values() if r["candidates"])},
+    "proven_one_target_no_reasons": {"fixpoint": proven(fixpoint), "combined": proven(combined)},
+    "fixpoint_set_equals_combined_set": len(combined) - len(gained),
+    "combine_gains": gained,
+}
+(art / "dynamic-targets.json").write_text(json.dumps(summary, indent=2) + "\n")
+print(json.dumps(summary, indent=2))
+
+edges = sorted(
+    {(r["source"], r["target"], r["kind"])
+     for r in map(json.loads, graph_path.read_text().splitlines())
+     if r["type"] == "edge" and r["kind"] in ("XCTL", "XCTL_CANDIDATE")}
+)
+gained_pairs = {(g["caller"], t) for g in gained for t in g["gained"]}
+style = {"XCTL": 'style=solid, color="#1f3a5f"', "XCTL_CANDIDATE": 'style=dashed, color="#7a8699"'}
+lines = [
+    "digraph dynamic_xctl {",
+    '  rankdir=LR; nodesep=0.08; ranksep=0.9; bgcolor="white"; margin=0.05;',
+    '  node [shape=box, style="rounded,filled", fillcolor="#eef2f7", color="#1f3a5f", fontname="Helvetica-Bold", fontsize=20, margin="0.12,0.04"];',
+    "  edge [arrowsize=0.6, penwidth=1.2];",
+    *(f'  "{s}" -> "{t}" [{style[k]}];' for s, t, k in edges if (s, t) not in gained_pairs),
+    *(f'  "{s}" -> "{t}" [style=dashed, color="#c0392b", penwidth=2.4];' for s, t, k in edges if (s, t) in gained_pairs),
+    "}",
+]
+(art / "dynamic-xctl.dot").write_text("\n".join(lines) + "\n")
+PY
+dot -Tpng -Gdpi=110 "$ART/dynamic-xctl.dot" -o "$ART/dynamic-xctl.png"
 
 uv run --no-sync python - "$ART/stats.json" <<'PY'
 import collections, json, pathlib, sys
@@ -45,7 +96,7 @@ unresolved = collections.Counter(
 )
 stats = {
     "corpus": "CardDemo (vendor/carddemo)",
-    "source": "cobble/out/carddemo.jsonl after cobble-build --config config/carddemo.toml --output out/carddemo.jsonl",
+    "source": "cobble/out/carddemo.jsonl after cobble-build --config config/carddemo.toml --output out/carddemo.jsonl --dynamic-call-targets <combined>/targets.jsonl",
     "total_nodes": len(nodes),
     "total_edges": len(edges),
     "nodes_by_kind": dict(collections.Counter(n["kind"] for n in nodes).most_common()),
