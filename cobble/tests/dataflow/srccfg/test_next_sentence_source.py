@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.srccfg.closure import main as build_main
-from cobble.dataflow.srccfg.reach.cli import main as walk_main
+from cobble.dataflow.srccfg.reach.reachability_cli import main as walk_main
 from cobble.dataflow.srccfg.rows.cfg_row import CFG_ROWS
 from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
 from cobble.dataflow.srccfg.rows.outcome_row import CfgOutcomeRow

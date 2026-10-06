@@ -65,7 +65,8 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>] [--output <file>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets, as JSONL rows |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <jsonl> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
 | `cobble-srccfg-query {guards,provenance,coassign} <subject> --cfg <jsonl>` | A node's guards, a field's provenance by name, or the fields assigned together with one |
-| `cobble-srccfg-walk --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
+| `cobble-srccfg-reachability-walk --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
+| `cobble-srccfg-dfs-walk --cfg <jsonl> --from <node-id> [--mode primary\|tree]` | The same stepper driven depth-first instead of level-by-level: a readable execution-*order* trace (`primary`: first arm at every branch, alternates noted; `tree`: both arms, recursed) |
 | **Byte-level field dataflow** | |
 | `cobble-extents --asg-dir <cache> --out <file>` | Every member's declared field layout in bytes — the table the dataflow stages read |
 | `cobble-dataflow-fixpoint --asg-dir <cache> --out-dir <dir> --extents <file> (--all \| --member <name>...)` | The fixpoint: which writes reach every read, the values fields can hold, dynamic call targets (`graph`, `defs`, `aliases`, `targets` and the run summary) |
@@ -231,9 +232,9 @@ rather than parsing again; safe to re-run after touching any extractor code. Tou
 the corpus itself and `cobble-parse-corpus` has to run again first — a member with no cached ASG
 is reported as one skipped member, not silently reparsed.
 
-### Reachability from a PERFORM
+### Reachability from a PERFORM, and execution order
 
-`cobble-srccfg-walk --cfg <file> --from <PERFORM node id>` answers "what can run
+`cobble-srccfg-reachability-walk --cfg <file> --from <PERFORM node id>` answers "what can run
 from this PERFORM until control comes back, and how else can it end". It walks
 the first program in a `cobble-srccfg-build` file over states of a node and the
 PERFORMs open there, so a range end returns only to an open PERFORM whose range
@@ -259,6 +260,23 @@ with the number of states visited. A missing summary means the walk did not
 finish. The graph does not keep the stack: a paragraph reached from two
 PERFORMs shows both returns, so one route through the picture is not
 guaranteed to be a real execution.
+
+Rows arrive level-by-level — distance from the seed, not runtime sequence.
+`cobble-srccfg-dfs-walk` drives the identical stepper (`reach/expand.py`'s
+`expand()`/`start()`, nothing about PERFORM/RANGE_END/recursive-PERFORM
+handling reimplemented) depth-first instead, which is what makes it the
+faithful tool for "what executes, in order": `--mode primary` is one
+straight line, the first arm at every branch, with every untaken alternate
+noted inline rather than expanded; `--mode tree` recurses both arms of
+every branch (the same reachable set as `cobble-srccfg-reachability-walk`, shown in
+real control order instead of BFS levels). A TEST node has two live
+successors in general, so there is no single "the" execution order for a
+program with any conditional in its reachable set — cross-check
+`--mode primary`'s branch points against source before calling any one
+arm "the" answer, and read every `outcome` event it prints before
+claiming a path returns to its caller: a GOTO buried in the reachable set
+can leave the task entirely and never come back, same program, different
+path.
 
 ### Point this at your own codebase
 
@@ -1188,7 +1206,7 @@ consumers may not import each other).
 | `cobble/corpus_index.py` / `cobble/file_location.py` | `CorpusIndex` resolves every `(NodeKind, id)` to a `FileLocation` (a real `Path`, or a `NoFileLocation` explaining why not: not file-based, no CSD/definition source, or genuinely unresolved) once per run, from the same `CorpusConfig`. Every extractor and `GraphWriter` resolve a given node identically regardless of call order, which is what lets `GraphWriter` stream nodes keep-first with no merge step. |
 | `cobble/render_graph.py` | Render the graph file as a self-contained interactive HTML graph beside it, `<stem>.html` (`python -m cobble.render_graph --graph <file>`. `cobble/knowledge_graph/graph_file.py` reads the file, `merge.py` builds one `networkx.MultiDiGraph`, `render.py` inlines the vendored `vis-network.min.js`). |
 | `cobble/dataflow/srccfg/` | **Source control-flow graphs.** `desugar.py`/`build.py` lower each paragraph's statements to nodes and edges — PERFORM with its resume point and range end, GO TO, EXIT PARAGRAPH / SECTION / PERFORM [CYCLE], NEXT SENTENCE (per sentence, from the ASG's sentence ends), EVALUATE with stacked WHENs chained into one body, the end-of-file, I-O error, size error, CALL exception and STRING / UNSTRING overflow arms (`arm_clauses.py`, which the statement index reads too), CICS raise arms and HANDLE CONDITION dispatch, EXEC SQL WHENEVER guards — and `program.py`'s `program_cfg` is the one way every consumer builds a program's CFG. `closure.py`/`link.py` join a program to the programs it calls; `bundle.py` and `rows/` are the JSONL file format, the only code that reads or writes it; `dataflow.py`/`query.py` answer the name-level guards and provenance questions; `dot.py`/`webgl.py` draw it. |
-| `cobble/dataflow/srccfg/reach/` | `cobble-srccfg-walk`: reachability from one PERFORM over states of a node and the PERFORMs open there (`expand.py` holds the rules, `walk.py` streams the rows). |
+| `cobble/dataflow/srccfg/reach/` | `cobble-srccfg-reachability-walk`: reachability from one PERFORM over states of a node and the PERFORMs open there (`expand.py` holds the rules, `walk.py` streams the rows, `reachability_cli.py` is the entry point). `cobble-srccfg-dfs-walk` drives the identical stepper depth-first for an execution-order trace instead (`dfs.py`/`dfs_cli.py`). |
 | `cobble/dataflow/layout.py` | Byte extents for every field in a program's records — the substrate the field dataflow runs on. |
 | `cobble/dataflow/fields/` | **Byte-level field dataflow, the parts.** Extents and the extents table (`extent.py`, `emit_extents.py`), the per-statement transfer functions (`transfer.py`), the state each statement sees — provenance and value sets (`state.py`, `values.py`, `image.py` for `VALUE` clauses) — commarea aliasing across calls (`aliases.py`), the path-sampling trace and its queries (`trace*.py`), and field-access sites (`access*.py`). |
 | `cobble/dataflow/fixpoint/` | **The fixpoint.** The solver over each program's CFG (`fixpoint.py`), the corpus run writing `graph`, `defs`, `aliases` and `targets` (`build_corpus.py`), dynamic call-target resolution (`targets.py`), and the query over its output (`query.py`). |

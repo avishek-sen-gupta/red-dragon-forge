@@ -23,7 +23,15 @@
 <div class="kicker">Graph algorithms · structuring a method</div>
 <h1>Dominance and reachability</h1>
 <p class="lede">Where a branch's two arms come back together, and exactly which statements are inside a loop — worked both the slow way and the fast way, on the same small graph, so the difference is visible rather than asserted.</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-example">The example</a></li><li><a href="#dominators-looking-backward">Dominators: looking backward</a></li><li><a href="#post-dominators-looking-forward">Post-dominators: looking forward</a></li><li><a href="#the-slow-way-a-full-set-per-statement">The slow way: a full set per statement</a></li><li><a href="#the-fast-way-one-pointer-per-statement">The fast way: one pointer per statement</a></li><li><a href="#the-two-compared">The two compared</a></li><li><a href="#loops-reachability-with-a-stopping-point">Loops: reachability with a stopping point</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-example">The example</a></li><li><a href="#dominators-looking-backward">Dominators: looking backward</a></li><li><a href="#post-dominators-looking-forward">Post-dominators: looking forward</a></li><li><a href="#the-slow-way-a-full-set-per-statement">The slow way: a full set per statement</a></li><li><a href="#the-fast-way-one-pointer-per-statement">The fast way: one pointer per statement</a></li><li><a href="#the-two-compared">The two compared</a></li><li><a href="#loops-reachability-with-a-stopping-point">Loops: reachability with a stopping point</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li><li><a href="#references">References</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Dominance and reachability are the first things a tool needs once it has a control-flow graph and wants to say something about it in English, or in another language's syntax, rather than just a list of edges.</p>
+<ul>
+<li><strong>Narrating an unfamiliar method or paragraph</strong> before a human — or a model — tries to explain what it does: finding where a branch's two arms reunite, and exactly which statements belong to a loop, is the structural skeleton any such narration is built on top of. Get the loop body wrong and the narration describes the wrong statements as repeating.</li>
+<li><strong>Reconstructing structured source from a control-flow graph</strong> — the core move inside any decompiler or legacy transpiler — needs a branch's immediate post-dominator before it can emit a single <code>if</code>/<code>else</code>: that is the one statement guaranteed to run after either arm, the natural point to resume straight-line code.</li>
+<li><strong>A prerequisite, not a substitute, for <a href="reducibility-and-loops.html">reducibility</a>:</strong> dominance alone describes a region cleanly only once that region is known to have a single entry per loop. An irreducible region needs restructuring first — this page's techniques are what the pages after it build on, not a way around them.</li>
+</ul>
 
 <h2 id="the-example">The example</h2>
 <p>The same diamond as <a href="traversal-orders.html">visiting a graph</a>: a branch, two arms of different lengths, a statement both arms reach, then the end. Diagrams below mark the node a step is currently working out in <span class="changed">amber</span>.</p>
@@ -40,7 +48,7 @@ flowchart TD
 <p>Two questions about it, both answered on this page: once <code>A</code> branches, what is the statement both arms are guaranteed to reach? And separately — on a different graph, below — exactly which statements belong to a loop?</p>
 
 <h2 id="dominators-looking-backward">Dominators: looking backward</h2>
-<p>Pick a statement and ask which earlier statements execution is guaranteed to have already passed through to get there, no matter which way it arrived. To reach <code>B3</code>: always through <code>B2</code>, always through <code>B1</code>, always through <code>A</code> — no other way in. Each of those <strong>dominates</strong> <code>B3</code>. <code>C</code> does not — the other arm reaches <code>B3</code> without it.</p>
+<p>Pick a statement and ask which earlier statements execution is guaranteed to have already passed through to get there, no matter which way it arrived — the iterative dataflow formulation below is Allen and Cocke's.<sup>[1]</sup> To reach <code>B3</code>: always through <code>B2</code>, always through <code>B1</code>, always through <code>A</code> — no other way in. Each of those <strong>dominates</strong> <code>B3</code>. <code>C</code> does not — the other arm reaches <code>B3</code> without it.</p>
 <table class="state"><tbody><tr><th>statement</th><th>dominated by</th></tr><tr><td>A</td><td>{A}</td></tr><tr><td>B1</td><td>{A, B1}</td></tr><tr><td>B2</td><td>{A, B1, B2}</td></tr><tr><td>B3</td><td>{A, B1, B2, B3}</td></tr><tr><td>C</td><td>{A, C}</td></tr><tr><td>D</td><td>{A, D}</td></tr><tr><td>E</td><td>{A, D, E}</td></tr></tbody></table>
 <p>Of everything dominating <code>B3</code>, the closest — <code>B2</code> — is its <strong>immediate dominator</strong>. Chaining immediate dominators (<code>A → B1 → B2 → B3</code>) is the one unavoidable route in.</p>
 
@@ -316,7 +324,7 @@ flowchart TD
 <p>On six statements the difference is a handful of extra visits — not worth caring about. The per-visit cost is what stops scaling gently: a set of size up to <code>n</code>, compared across all <code>n</code> statements, every round, is <code>n²</code> work per round. A chain-walk is bounded by how far apart two pointers' chains are, which in practice is a handful of hops, not the size of the whole method. <a href="#where-this-is-used">Where this is used</a> has the numbers from a method large enough for that difference to be the whole story.</p>
 
 <h2 id="loops-reachability-with-a-stopping-point">Loops: reachability with a stopping point</h2>
-<p>A different question needs no sets or pointers at all: which statements belong to a loop. Take the loop from <a href="traversal-orders.html#with-a-loop">visiting a graph</a>. Below, <span class="changed">amber</span> marks the statement a step is currently taking off the worklist; a bordered node marks a statement already confirmed as part of the loop body.</p>
+<p>A different question needs no sets or pointers at all: which statements belong to a loop — the backward walk below, bounded at the header, is Aho, Sethi and Ullman's.<sup>[2]</sup> Take the loop from <a href="traversal-orders.html#with-a-loop">visiting a graph</a>. Below, <span class="changed">amber</span> marks the statement a step is currently taking off the worklist; a bordered node marks a statement already confirmed as part of the loop body.</p>
 <pre class="mermaid">
 flowchart TD
     T --> X1
@@ -399,6 +407,12 @@ flowchart TD
 <p>Most methods in a normal corpus are small enough that either approach — whole candidate sets or a chain of pointers — finishes before anyone would notice the difference. One real method's control-flow graph, though, had on the order of seven thousand statements and eighteen thousand edges — an unusually large single method, the kind a long hand-written dispatcher or a heavily generated chain of conditions produces, but not actually rare in enterprise code once a corpus is big enough. Built the whole-candidate-set way, settling that method's post-dominators alone was doing tens of millions of set comparisons per round, for however many rounds a graph that shape needed — long enough that it looked indistinguishable from a tool that had hung, rather than one that was simply still working. Rebuilt the pointer-chasing way described above, the same method's region tree finished in about a second.</p>
 <table class="state"><tr><th></th><th>this page's example</th><th>a real large method</th></tr><tr><td>statements</td><td>7</td><td>≈ 7,300</td></tr><tr><td>edges</td><td>7</td><td>≈ 18,000</td></tr><tr><td>slow way</td><td>12 visits, instant</td><td>tens of millions of set comparisons per round — looked indistinguishable from a hung tool</td></tr><tr><td>fast way</td><td>6 visits, instant</td><td>about one second</td></tr></table>
 <p>Nothing about the fast way is specific to a large method — it is the same six-step walk run on this page, just run on a graph with a thousand times more statements in it.</p>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>F. E. Allen and J. Cocke. "Graph-Theoretic Constructs for Program Control Flow Analysis." IBM Research Report RC 3923, 1972. The iterative dataflow algorithm for computing dominators.</li>
+<li>A. V. Aho, R. Sethi, and J. D. Ullman. <em>Compilers: Principles, Techniques, and Tools.</em> Addison-Wesley, 1986, p. 604 (Algorithm 10.1), reprinted 2nd ed. 2006, p. 665 (Algorithm 9.46). Constructing the natural loop of a back edge.</li>
+</ol>
 </main>
 </body>
 </html>

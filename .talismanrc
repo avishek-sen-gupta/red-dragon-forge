@@ -506,9 +506,23 @@ fileignoreconfig:
 - filename: docs/explainers/eliminating-gotos.html
   checksum: f7e8729fdbda4230eaa8c38831ce97d1f9e6f260c50fc168ef1cfa5a44bcc97c
 - filename: docs/explainers/tree-zippers.html
-  checksum: 93afaee19753d733422feafb32423f58afcb7db827f1e0a3256010c566817d15
+  checksum: 4bb3d3ec94a3ca576d8e46e1b4e58999e12f9befae0a0fa67945b16067d01534
 - filename: docs/explainers/reducibility-and-loops.html
   checksum: eeedb806e620bb91a4e70b99ff397e0b8e1d93b61061ac3b9fac63b2699e024e
 - filename: docs/explainers/dominance-and-reachability.html
-  checksum: 086581f3aed2a206b56970c2e8b990d72f91ae7ff501d4d54d7aef1906a0b8f0
+  checksum: 808c98b330e2ecf7a03221f4820a112f839535cf4d14d82db1b5b24b82cbdcf2
+- filename: docs/explainers/traversal-orders.html
+  checksum: 3d6f221ea9d953372a7b5f133b6c8b9d7e58c7ca00da9c46e7f1bb1edae0d880
+- filename: docs/explainers/fixpoints.html
+  checksum: e7aff9f5c434b8361195fd9447fa7974ccfab1ff76e1564469f3e3426d7eb6be
+- filename: docs/explainers/byte-extents.html
+  checksum: e395fd25bd24e5553ee2d4a737c6ef67e967ab3c47988645e2c01f9475813e85
+- filename: cobble/cobble/dataflow/srccfg/subgraph.py
+  checksum: 9f47880f20d546bd63ae6c9975da21fa0caed89138178483f7da3fc99d00a829
+- filename: docs/explainers/dj-graphs-and-natural-loops.html
+  checksum: ff18429f70f309d6c4113df12491d0e679f26a35b7cfb8118345eaaf259c4914
+- filename: cobble/cobble/dataflow/srccfg/reach/dfs.py
+  checksum: ee38e80604dfce34cad5f5fccb5a3893dedc29b44a8d08f239201b4672c013cf
+- filename: docs/explainers/structured-program-theorem.html
+  checksum: 9783ecb10e242f2010a331c8ffd67a3621ec9f6857d30d6a68523ceb4936a54c
 version: "1.0"

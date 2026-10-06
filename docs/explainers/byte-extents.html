@@ -12,7 +12,15 @@
 <div class="kicker">Explainer 4 of 5</div>
 <h1>Byte-extent aliasing</h1>
 <p class="lede">In COBOL, memory is bytes, not variables. Treat every field as a byte range and aliasing follows from one test: do two ranges overlap?</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Any format where more than one name can describe the same bytes needs this test, not just COBOL — the technique is the same wherever the hiding happens.</p>
+<ul>
+<li><strong>A commarea passed between programs</strong> is a block of bytes two different programs may lay out two different ways, each matching its own copybook. Following a value across that boundary means tracking the byte range it occupies, not the field name either side happens to give it — the name is local to one program's view, the bytes are not.</li>
+<li><strong>A dataflow result that only tracks declared names</strong> is exactly the trap this page's own counter-example sets: a write through one <code>REDEFINES</code> view and a read through another look unrelated by name and identical by byte range. Treating only the name as the identity of a value is the single most direct way to make an otherwise-correct dataflow analysis wrong on real legacy data layouts.</li>
+<li><strong>The same question outside COBOL:</strong> a packed binary buffer, a shared-memory structure exposed through a foreign-function boundary, a union type reinterpreting one block of memory as two different shapes — any reverse-engineering task built on top of a byte-oriented format runs into the identical overlap-vs-covers distinction this page's rule answers.</li>
+</ul>
 
 <h2 id="the-problem">The problem</h2>
 <p>The <a href="reaching-definitions.html">reaching definitions</a> page tracked writes by variable name. That works when every name owns its own storage. In COBOL many names share storage. A group like <code>REC</code> is just the bytes of its children laid end to end, so writing <code>REC</code> writes <code>WS-A</code> and <code>WS-B</code>. <code>REDEFINES</code> gives the same bytes a second name with a different shape. A move into one child changes half of the group. Tracking by name gets every one of these wrong.</p>

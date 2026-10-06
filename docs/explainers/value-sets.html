@@ -12,7 +12,15 @@
 <div class="kicker">Explainer 5 of 5</div>
 <h1>Value sets and dynamic calls</h1>
 <p class="lede">Resolving <code>CALL WS-PGM</code> without running the program: track every value a field can hold, and say so when the list may be short.</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Any call graph for a program with dynamic dispatch has this hole in it until something fills it in — the question is always the same: what values can actually reach the thing deciding where to go next.</p>
+<ul>
+<li><strong>A menu, a router, a transaction dispatcher</strong> — any program whose next call is chosen by a field's runtime value rather than written as a literal — is invisible to a call graph built by reading <code>CALL</code> statements alone. The value-set technique on this page is what turns that into a graph with real edges instead of a gap at every dispatch point.</li>
+<li><strong>The same question, on the Java side, over a different kind of value:</strong> a backward data-dependency walk that crosses method boundaries can resolve a literal that reaches a dynamically-dispatched call's argument several call frames up — the identical "what value could this hold" question, answered by walking data flow backward instead of forward.</li>
+<li><strong>Virtual dispatch resolution is a value-set problem one level up:</strong> "every concrete class an interface call's receiver could actually be at runtime" is the same kind of set, just over types instead of string literals — a call graph builder resolving polymorphic calls is running this page's technique on a different domain.</li>
+</ul>
 
 <h2 id="the-problem">The problem</h2>
 <p><code>CALL 'PROGB'</code> names its target in the source; a call graph can draw that edge by reading it. <code>CALL WS-PGM</code> calls whatever program name is in <code>WS-PGM</code> when the statement runs. Leave those edges out and the call graph has holes exactly where a program dispatches on data — menus, routers, transaction handlers. Guess and it draws edges that do not exist.</p>
