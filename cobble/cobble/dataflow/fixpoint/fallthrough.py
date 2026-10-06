@@ -6,15 +6,21 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import accumulate, permutations, repeat
 
-from cobble.dataflow.srccfg.build import ParagraphRef, label_id
+from cics.statements import CicsOperand, ExecCicsStatement
+from cobble.dataflow.fields.transfer import Statement
+from cobble.dataflow.srccfg.build import ParagraphRef, end_id, label_id
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind, Node
 from cobble.dataflow.srccfg.desugar import (
     DISPATCH_TRANSFER_CICS,
     GOTO_TRANSFER,
     PERFORM_TRANSFER,
+    RANGE_SEPARATOR,
 )
 
 ALTER_TRANSFER = "ALTER"
+ENTRY_TRANSFER = "ENTRY"
+HANDLE_ABEND = "HANDLE ABEND"
+LABEL_OPTION = "LABEL"
 NOWHERE = ""
 NOT_FOLLOWED = frozenset({EdgeKind.PERFORM, EdgeKind.RETURN})
 
@@ -22,7 +28,8 @@ Unresolved = Callable[[Node, frozenset[EdgeKind]], bool]
 
 UNRESOLVED_WHEN: Mapping[str, Unresolved] = {
     GOTO_TRANSFER: lambda node, kinds: EdgeKind.GOTO not in kinds,
-    PERFORM_TRANSFER: lambda node, kinds: EdgeKind.PERFORM not in kinds,
+    PERFORM_TRANSFER: lambda node, kinds: EdgeKind.PERFORM not in kinds
+    or _fell_back(node),
     ALTER_TRANSFER: lambda node, kinds: True,
     DISPATCH_TRANSFER_CICS: lambda node, kinds: bool(node.target),
 }
@@ -52,10 +59,15 @@ class _Span:
     last: int
 
 
-def fallthroughs_pruned(cfg: Cfg, order: Sequence[ParagraphRef]) -> Cfg:
-    if not order or _unresolved(cfg):
+def fallthroughs_pruned(
+    cfg: Cfg, order: Sequence[ParagraphRef], statements: Mapping[str, Statement]
+) -> Cfg:
+    if not order:
         return cfg
-    kept = _falling(cfg, order)
+    roots = _roots(cfg, order, statements)
+    if _unresolved(cfg, roots):
+        return cfg
+    kept = _falling(cfg, order, roots)
     return replace(
         cfg,
         edges=tuple(
@@ -66,8 +78,37 @@ def fallthroughs_pruned(cfg: Cfg, order: Sequence[ParagraphRef]) -> Cfg:
     )
 
 
-def _unresolved(cfg: Cfg) -> bool:
-    return any(
+def _roots(
+    cfg: Cfg, order: Sequence[ParagraphRef], statements: Mapping[str, Statement]
+) -> frozenset[str]:
+    return frozenset(
+        {
+            label_id(order[0].name),
+            *(node.id for node in cfg.nodes if node.transfer == ENTRY_TRANSFER),
+            *(
+                label_id(label)
+                for statement in statements.values()
+                for label in (_abend_label(statement),)
+                if label
+            ),
+        }
+    )
+
+
+def _abend_label(statement: Statement) -> str:
+    if not isinstance(statement, ExecCicsStatement) or statement.verb != HANDLE_ABEND:
+        return ""
+    label = statement.options.get(LABEL_OPTION)
+    return label.text.upper() if isinstance(label, CicsOperand) else ""
+
+
+def _fell_back(node: Node) -> bool:
+    last = node.target.partition(RANGE_SEPARATOR)[2]
+    return bool(last) and node.range_end != end_id(last)
+
+
+def _unresolved(cfg: Cfg, roots: frozenset[str]) -> bool:
+    return not roots <= cfg.node_ids or any(
         UNRESOLVED_WHEN.get(node.transfer, _resolved)(
             node, frozenset(edge.kind for edge in cfg.successors(node.id))
         )
@@ -79,12 +120,15 @@ def _resolved(node: Node, kinds: frozenset[EdgeKind]) -> bool:
     return False
 
 
-def _falling(cfg: Cfg, order: Sequence[ParagraphRef]) -> frozenset[str]:
+def _falling(
+    cfg: Cfg, order: Sequence[ParagraphRef], roots: frozenset[str]
+) -> frozenset[str]:
     activations = _activations(cfg)
     return frozenset[str]().union(
-        _reached(cfg, label_id(order[0].name), NOWHERE),
+        _reached(cfg, roots, NOWHERE),
         *(
-            _reached(cfg, activation.entry, activation.closing) - {activation.closing}
+            _reached(cfg, frozenset({activation.entry}), activation.closing)
+            - {activation.closing}
             for activation in activations
         ),
         _overlapped(cfg, order, activations),
@@ -100,11 +144,11 @@ def _activations(cfg: Cfg) -> frozenset[_Activation]:
     )
 
 
-def _reached(cfg: Cfg, start: str, closing: str) -> frozenset[str]:
+def _reached(cfg: Cfg, starts: frozenset[str], closing: str) -> frozenset[str]:
     steps = accumulate(
         repeat(None),
         lambda reach, _: _step(cfg, reach, closing),
-        initial=_Reach(seen=frozenset({start}), frontier=frozenset({start})),
+        initial=_Reach(seen=starts, frontier=starts),
     )
     return next(reach.seen for reach in steps if not reach.frontier)
 

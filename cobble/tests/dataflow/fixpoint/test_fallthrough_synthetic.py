@@ -13,6 +13,7 @@ from cobble.dataflow.jumps.rows import jump_from_row
 from cobble.dataflow.srccfg.build import paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind
 from cobble.dataflow.srccfg.program import program_cfg
+from cobble.dataflow.srccfg.statements import statement_index
 from cobol_asg.asg_types import CobolASG
 
 HEADER = """\
@@ -123,12 +124,54 @@ UNRESOLVED_CONSTRUCTS = {
     "FTGOTO": ("           GO TO NOWHERE-PARA.", " NEXT-PARA"),
     "FTPERF": ("           PERFORM NOWHERE-PARA.", " NEXT-PARA"),
     "FTALTER": ("           ALTER SWITCH-PARA TO PROCEED TO INIT-PARA.", " NEXT-PARA"),
+    "FTABENDNO": (
+        "           EXEC CICS HANDLE ABEND LABEL(NOWHERE-PARA) END-EXEC.",
+        " NEXT-PARA",
+    ),
     "FTHANDLE": (
         "           EXEC CICS HANDLE CONDITION ERROR(NOWHERE-PARA) END-EXEC.\n"
         "           EXEC CICS RECEIVE INTO(WS-A) END-EXEC.",
         " NEXT-PARA",
     ),
 }
+
+THRU_FELL_BACK = """\
+       MAIN-PARA.
+           PERFORM B-PARA THRU {last}.
+           STOP RUN.
+       A-PARA.
+           MOVE 'A' TO WS-A.
+       B-PARA.
+           MOVE 'B' TO WS-A.
+       C-PARA.
+           MOVE 'C' TO WS-A.
+       D-PARA.
+           MOVE 'D' TO WS-A.
+"""
+
+THRU_ENDS = {"FTTHRUBACK": "A-PARA", "FTTHRUNONE": "NOWHERE-PARA"}
+
+ENTERED = """\
+       MAIN-PARA.
+           PERFORM B-PARA.
+           STOP RUN.
+       B-PARA.
+           ENTRY 'ALTENT'.
+           MOVE 'B' TO WS-A.
+       C-PARA.
+           MOVE 'C' TO WS-A.
+"""
+
+ABEND_LABEL = """\
+       MAIN-PARA.
+           EXEC CICS HANDLE ABEND LABEL(B-PARA) END-EXEC.
+           PERFORM B-PARA.
+           STOP RUN.
+       B-PARA.
+           MOVE 'B' TO WS-A.
+       C-PARA.
+           MOVE 'C' TO WS-A.
+"""
 
 RETURNING = """\
        IDENTIFICATION DIVISION.
@@ -172,6 +215,12 @@ SOURCES = {
         + UNRESOLVED.format(construct=construct, switch=switch)
         for name, (construct, switch) in UNRESOLVED_CONSTRUCTS.items()
     },
+    **{
+        name: HEADER.format(name=name) + THRU_FELL_BACK.format(last=last)
+        for name, last in THRU_ENDS.items()
+    },
+    "FTENTRY": HEADER.format(name="FTENTRY") + ENTERED,
+    "FTABEND": HEADER.format(name="FTABEND") + ABEND_LABEL,
     "FTBACK": RETURNING,
 }
 
@@ -197,7 +246,7 @@ def _before_and_after(out: Path, member: str) -> tuple[Pairs, Pairs]:
         asg = CobolASG.from_dict(json.loads(text))
     cfg = program_cfg(asg)
     return _fallthroughs(cfg), _fallthroughs(
-        fallthroughs_pruned(cfg, paragraph_order(asg))
+        fallthroughs_pruned(cfg, paragraph_order(asg), statement_index(asg))
     )
 
 
@@ -279,6 +328,35 @@ def test_unresolved_control_flow_leaves_the_program_untouched(
     assert _before_and_after(out, member) == (every, every)
 
 
+@pytest.mark.parametrize("member", sorted(THRU_ENDS))
+def test_a_thru_end_that_fell_back_leaves_the_program_untouched(
+    out: Path, member: str
+) -> None:
+    every = frozenset(
+        {
+            ("MAIN-PARA#end", "A-PARA#label"),
+            ("A-PARA#end", "B-PARA#label"),
+            ("B-PARA#end", "C-PARA#label"),
+            ("C-PARA#end", "D-PARA#label"),
+        }
+    )
+    assert _before_and_after(out, member) == (every, every)
+
+
+def test_a_paragraph_holding_an_entry_falls_through(out: Path) -> None:
+    assert _before_and_after(out, "FTENTRY") == (
+        frozenset({("MAIN-PARA#end", "B-PARA#label"), ("B-PARA#end", "C-PARA#label")}),
+        frozenset({("B-PARA#end", "C-PARA#label")}),
+    )
+
+
+def test_a_handle_abend_label_falls_through(out: Path) -> None:
+    assert _before_and_after(out, "FTABEND") == (
+        frozenset({("MAIN-PARA#end", "B-PARA#label"), ("B-PARA#end", "C-PARA#label")}),
+        frozenset({("B-PARA#end", "C-PARA#label")}),
+    )
+
+
 def _jumps(out: Path, program: str) -> tuple[Jump, ...]:
     lines = (
         (out / "members" / program / "jumps.jsonl")
@@ -291,8 +369,6 @@ def _jumps(out: Path, program: str) -> tuple[Jump, ...]:
 def test_every_performer_writes_the_xctl_target_so_no_linkage_reaches_it(
     out: Path,
 ) -> None:
-    """INIT-PARA is performed before WS-TO-PGM is written; only its fall-through
-    could carry the commarea copy to the XCTL."""
     (xctl,) = (j for j in _jumps(out, "FTBACK") if j.kind is JumpKind.XCTL)
     assert (xctl.target.values, xctl.target.reasons) == (
         ("PGMA    ", "PGMB    "),
