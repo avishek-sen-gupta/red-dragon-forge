@@ -18,10 +18,13 @@ overwritten value kept whole is not caution -- it is a call the program may neve
 make, asserted as a fact. Doubt is never killed that way: only the values go, and
 the reasons stay, because a write says nothing about the bytes outside it.
 
-A join drops a provenance key lying inside a wider key whose sources include its own
-(``_canonical``): no read or later write can tell the two apart, and keeping both
-would carry a record one path split and another kept whole through every later
-write. The value map is never pruned so, because ``exact_values`` looks up exactly.
+A join drops a provenance entry lying inside a wider entry of the same field name
+whose sources include its own (``_canonical``). Those are the pieces ``_split`` cuts
+from one entry, and no read or later write can tell them from the wider one; keeping
+both would carry a record one path split and another kept whole through every later
+write. An entry of another name inside it, a child field or a REDEFINES, stays: that
+costs nothing a reader sees, and it confines the comparison to one name's entries.
+The value map is never pruned so, because ``exact_values`` looks up exactly.
 
 A state is keyed by extent rather than by field name because a name is not an
 address: two names over one piece of storage are one key here, which is the whole
@@ -184,10 +187,13 @@ def _canonical(
     joined: Mapping[FieldExtent, frozenset[Source]],
     grown: Mapping[FieldExtent, frozenset[Source]],
 ) -> Mapping[FieldExtent, frozenset[Source]]:
+    names = {changed.field_name for changed in grown}
+    near = tuple(extent for extent in joined if extent.field_name in names)
     doomed = {
         inner
         for changed in grown
-        for extent in joined
+        for extent in near
+        if extent.field_name == changed.field_name
         for inner, outer in ((extent, changed), (changed, extent))
         if _redundant(joined, inner, outer)
     }
