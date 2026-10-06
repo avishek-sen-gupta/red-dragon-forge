@@ -5,7 +5,7 @@ living in the `red-dragon-forge` workspace. It is a file-by-file **port** of the
 streaming graph pipeline, kept decoupled from the RedDragon interpreter/VM. Point
 it at any corpus via a TOML config (see [Point this at your own
 codebase](#point-this-at-your-own-codebase)); the AWS **CardDemo** corpus is the
-proof case, where it reproduces the **exact same 448-node / 832-edge graph** from
+proof case, where it builds a **448-node / 843-edge graph** from
 nothing but the corpus (forge's `vendor/carddemo` submodule) and the tools forge
 builds from source.
 
@@ -55,7 +55,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-expand-corpus --config <corpus> --out-dir <dir>` | Write each member's expanded source (copybooks inlined); no ASG, nothing downstream reads it |
 | **Knowledge graph** | |
 | `cobble-build --config <corpus> --output <file> [--dynamic-call-targets <targets.jsonl>]` | Extract the graph to one file, a tagged row per node and edge |
-| `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/832) |
+| `cobble-compare --graph <file>` | Identity-diff vs `reference/graph.jsonl` (448/843) |
 | `cobble-render` / `cobble-render-webgl --graph <file>` | Render the graph file as an interactive HTML / WebGL page beside it |
 | `cobble-viz-callgraph --graph <file> --cfg <jsonl> --out <file>` | The program-level call dependency graph, for `cobble.viz`'s renderer |
 | **Variable dependency graph** (name-level, coarse) | |
@@ -89,9 +89,11 @@ uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus 
 uv run cobble-extents --asg-dir out-parsed --out out-fields/extents-input.jsonl   # every member's declared layout
 uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields \
   --extents out-fields/extents-input.jsonl --all             # -> out-fields/targets.jsonl, among others
+uv run cobble-dataflow-combine --config config/carddemo.toml --fixpoint-dir out-fields \
+  --out-dir out-combined --all                               # link the programs -> out-combined/targets.jsonl
 uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl \
-  --dynamic-call-targets out-fields/targets.jsonl            # extract the graph -> out/carddemo.jsonl
-uv run cobble-compare --graph out/carddemo.jsonl             # identity-diff against reference/graph.jsonl (must be empty: 448/832)
+  --dynamic-call-targets out-combined/targets.jsonl          # extract the graph -> out/carddemo.jsonl
+uv run cobble-compare --graph out/carddemo.jsonl             # identity-diff against reference/graph.jsonl (must be empty: 448/843)
 uv run cobble-render --graph out/carddemo.jsonl              # -> out/carddemo.html
 ```
 
@@ -1219,7 +1221,7 @@ Unlike `cobble-build` + `cobble-compare` (one big end-to-end golden-file check o
 the real CardDemo corpus, needing the forge-built tools), `tests/` unit-tests cobble's pure
 modules in isolation (grammars, dataclass transforms, graph merging) with
 hand-built inputs, giving localized signal on which piece broke rather than
-just "448/832 doesn't match." Coverage is still partial; see `tests/` for
+just "448/843 doesn't match." Coverage is still partial; see `tests/` for
 what's covered so far.
 
 ### Formatting, linting, and pre-commit hooks
@@ -1262,7 +1264,7 @@ consumers may not import each other).
 | `tests/` | The pytest unit suite (`uv run python -m pytest`), mirroring `cobble/`'s package structure. No JARs/corpus needed; pure modules tested in isolation with hand-built inputs. |
 | `cobble/generate_sym.py` | **Stage-0.** Generates the BMS symbolic copybooks: `hlasm_export <map>.bms --syslib bms-macros/ | python -m cobble.bms_copybook_gen → sym/*.cpy` (`python -m cobble.generate_sym --config <path>`). |
 | `cobble/generate_csd.py` / `cobble/cics/synth_csd.py` | **Stage-0, optional.** Reconstructs a CSD a corpus arrived without, so its CICS members reach the flow stage at all → the file `--out` names (`python -m cobble.generate_csd --config <path> --out <file>`). `synth_csd.py` is the pure core: literal transaction ids in the source, placed on members by the config's `transid_rules`, everything else marked synthetic or reported — never guessed. |
-| `reference/graph.jsonl` | The 448/832 identity golden, in the graph file's format (copied from the production fitness golden, the *target*, not an input to the extraction). |
+| `reference/graph.jsonl` | The 448/843 identity golden, in the graph file's format: cobble's own output for CardDemo with the cross-program combine. It began as a copy of the production fitness golden (448/832) and departs from it in 14 edges: 3 candidates proven `XCTL` because the target field is moved a literal right before the jump, 4 return-to-caller candidates the combine finds across programs, and 7 self-`XCTL` candidates that come from the fixpoint letting a performed paragraph fall through into the next. |
 | `bms-macros/` | The hand-written `DFHMSD`/`DFHMDI`/`DFHMDF` prototype macros (assembler SYSLIB for `hlasm_export`). Source, not generated. |
 ## Invariant
 
@@ -1276,7 +1278,7 @@ grep -rE '^\s*(import|from)\s+(interpreter|cics|jackal|knowledge_graph)\b' cobbl
 
 The only coupling to RedDragon is (a) the two bridge JARs and `hlasm_export`,
 invoked as subprocesses, all **built from source** by forge's `make setup`, and (b) the one seam
-(`cobble/cics/verb_source_asg.py`). The graph identity (448/832) is reached by
+(`cobble/cics/verb_source_asg.py`). The graph identity (448/843) is reached by
 independent Python that shells out to those tools: the decoupling, proven by a
 package that imports no production interpreter code and ships no generated
 artifacts.
