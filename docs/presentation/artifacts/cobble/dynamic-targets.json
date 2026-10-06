@@ -1,0 +1,46 @@
+{
+  "dynamic_sites": 24,
+  "with_a_candidate": {
+    "fixpoint": 24,
+    "combined": 24
+  },
+  "proven_one_target_no_reasons": {
+    "fixpoint": 6,
+    "combined": 6
+  },
+  "fixpoint_set_equals_combined_set": 20,
+  "combine_gains": [
+    {
+      "caller": "COCRDSLC",
+      "node": "0000-MAIN/9.when.0.8",
+      "expression": "CDEMO-TO-PROGRAM",
+      "gained": [
+        "COCRDLIC"
+      ]
+    },
+    {
+      "caller": "COCRDUPC",
+      "node": "0000-MAIN/9.when.0.11",
+      "expression": "CDEMO-TO-PROGRAM",
+      "gained": [
+        "COCRDLIC"
+      ]
+    },
+    {
+      "caller": "COUSR02C",
+      "node": "RETURN-TO-PREV-SCREEN/4",
+      "expression": "CDEMO-TO-PROGRAM",
+      "gained": [
+        "COUSR00C"
+      ]
+    },
+    {
+      "caller": "COUSR03C",
+      "node": "RETURN-TO-PREV-SCREEN/4",
+      "expression": "CDEMO-TO-PROGRAM",
+      "gained": [
+        "COUSR00C"
+      ]
+    }
+  ]
+}

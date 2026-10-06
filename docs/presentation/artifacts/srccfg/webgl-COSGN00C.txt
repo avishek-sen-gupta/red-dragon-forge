@@ -1,0 +1,2 @@
+laying out 6996 nodes / 9320 edges -- this is the slow part
+rendered 6996 nodes, 9320 edges -> ~/code/red-dragon-forge/docs/presentation/artifacts/srccfg/cfg-COSGN00C-webgl.html (1.0 MB)

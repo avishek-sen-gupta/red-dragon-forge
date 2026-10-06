@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Source-CFG evidence: per-program CFGs with reaching conditions, expanded across XCTL/LINK/CALL.
-# Reads cobble's ASG cache (cobble/out-parsed, written by `cobble-parse-corpus`); no JVM.
+# Source-CFG evidence: per-program CFGs with reaching conditions, expanded across XCTL/LINK/CALL,
+# dynamic targets included. Reads cobble's ASG cache (cobble/out-parsed, written by
+# `cobble-parse-corpus`) and the combine's targets.jsonl that capture/cobble.sh leaves in
+# cobble/out-presentation/combined; no JVM.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -10,6 +12,8 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$ART"
 cd "$ROOT/cobble"
 [[ -d out-parsed ]] || { echo "cobble/out-parsed missing: run uv run cobble-parse-corpus --config config/carddemo.toml" >&2; exit 1; }
+TARGETS="$ROOT/cobble/out-presentation/combined/targets.jsonl"
+[[ -f "$TARGETS" ]] || { echo "$TARGETS missing: run capture/cobble.sh (make cobble) first" >&2; exit 1; }
 
 cat > "$WORK/srccfg.toml" <<EOF
 [srccfg]
@@ -17,10 +21,15 @@ asg_dir = "$ROOT/cobble/out-parsed"
 out_dir = "$WORK/out"
 EOF
 
-for p in COSGN00C COACTVWC; do
+# The sign-on closure follows dynamic XCTLs too, as the slides show it; COACTVWC is only
+# queried within itself, so its closure stays the program and its literal calls.
+build() {
+  local p="$1"; shift
   { /usr/bin/time -p uv run --no-sync cobble-srccfg-build --config "$WORK/srccfg.toml" \
-      --output "$ART/cfg-$p.jsonl" "$p"; } 2>&1 | tee "$ART/build-$p.txt"
-done
+      "$@" --output "$ART/cfg-$p.jsonl" "$p"; } 2>&1 | tee "$ART/build-$p.txt"
+}
+build COSGN00C --dynamic-call-targets "$TARGETS"
+build COACTVWC
 
 uv run --no-sync python - "$ART" <<'PY'
 import collections, json, pathlib, sys
@@ -30,16 +39,22 @@ from cobble.dataflow.srccfg.bundle import load_bundle
 art = pathlib.Path(sys.argv[1])
 summary = {}
 for entry in ("COSGN00C", "COACTVWC"):
-    cfgs = load_bundle(art / f"cfg-{entry}.jsonl").cfgs
-    summary[entry] = [
-        {
-            "program": cfg.program,
-            "nodes": len(cfg.nodes),
-            "edges": len(cfg.edges),
-            "node_kinds": dict(collections.Counter(n.kind.name for n in cfg.nodes).most_common()),
-        }
-        for cfg in cfgs
-    ]
+    bundle = load_bundle(art / f"cfg-{entry}.jsonl")
+    summary[entry] = {
+        "programs": len(bundle.cfgs),
+        "nodes": sum(len(cfg.nodes) for cfg in bundle.cfgs),
+        "edges_within_programs": sum(len(cfg.edges) for cfg in bundle.cfgs),
+        "calls_between_programs": len(bundle.calls),
+        "cfgs": [
+            {
+                "program": cfg.program,
+                "nodes": len(cfg.nodes),
+                "edges": len(cfg.edges),
+                "node_kinds": dict(collections.Counter(n.kind.name for n in cfg.nodes).most_common()),
+            }
+            for cfg in bundle.cfgs
+        ],
+    }
 (art / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 print(json.dumps(summary, indent=2))
 PY
@@ -82,5 +97,7 @@ q() { uv run --no-sync cobble-srccfg-query "$@"; }
   q coassign CC-ACCT-ID --cfg "$ART/cfg-COACTVWC.jsonl"
 } > "$ART/coassign-COACTVWC-CC-ACCT-ID.txt"
 
-uv run --no-sync cobble-srccfg-webgl --cfg "$ART/cfg-COSGN00C.jsonl" --output "$ART/cfg-COSGN00C-webgl.html"
+uv run --no-sync cobble-srccfg-webgl --cfg "$ART/cfg-COSGN00C.jsonl" --output "$ART/cfg-COSGN00C-webgl.html" \
+  2>&1 | tee "$ART/webgl-COSGN00C.txt"
+bash "$ROOT/docs/presentation/capture/screenshot.sh" "$ART/cfg-COSGN00C-webgl.html" "$ART/cfg-COSGN00C-webgl.png" 1920 1200
 echo "srccfg artifacts written to $ART"

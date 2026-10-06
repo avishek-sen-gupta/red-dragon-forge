@@ -88,14 +88,14 @@
   <div class="cols wide-left">
     <div>
       <div style="background:#fff; border-radius:10px; overflow:hidden; height:560px; position:relative; box-shadow:0 18px 50px rgba(0,0,0,.55)">
-        <img src="artifacts/cobble/graph.png" alt="CardDemo knowledge graph" style="position:absolute; width:1900px; max-width:none; left:-620px; top:-340px">
+        <img src="artifacts/cobble/graph.png" alt="CardDemo knowledge graph" style="position:absolute; width:1180px; max-width:none; left:-150px; top:-120px">
       </div>
-      <div class="caption">Interactive in the browser: filter by kind, search, highlight neighbours — artifacts/cobble/graph.html (built by make artifacts)</div>
+      <div class="caption">Interactive in the browser: filter by kind, search, highlight neighbours — artifacts/cobble/graph-webgl.html (built by make artifacts)</div>
     </div>
     <div>
       <div class="stats" style="grid-template-columns:1fr 1fr">
-        <div class="stat"><div class="n">449</div><div class="l">Nodes</div></div>
-        <div class="stat"><div class="n">803</div><div class="l">Edges — exact match against the golden reference</div></div>
+        <div class="stat"><div class="n">448</div><div class="l">Nodes</div></div>
+        <div class="stat"><div class="n">836</div><div class="l">Edges — exact match against the golden reference</div></div>
       </div>
       <table style="margin-top:18px">
         <tr><th>Relationship</th><th class="num">Edges</th></tr>
@@ -103,13 +103,49 @@
         <tr><td>Program copies copybook</td><td class="num">205</td></tr>
         <tr><td>JCL step runs program</td><td class="num">200</td></tr>
         <tr><td>Program writes / updates / deletes</td><td class="num">63</td></tr>
-        <tr><td>XCTL · CALL</td><td class="num">36</td></tr>
         <tr><td>Transaction starts program · sends / receives map</td><td class="num">52</td></tr>
+        <tr><td>XCTL candidate — dynamic target, one of several</td><td class="num">46</td></tr>
+        <tr><td>CALL</td><td class="num">15</td></tr>
+        <tr><td>XCTL — proven target</td><td class="num">8</td></tr>
       </table>
     </div>
   </div>
-  <div class="source">artifacts/cobble/stats.json · artifacts/cobble/compare.txt · cobble/knowledge_graph/graph_types.py</div>
-  <aside class="notes">Parse of 29 programs took about 0.4 minutes. Honest limits: 18 program nodes are unresolved (system utilities, assembler modules, one program named in the CSD with no source, and 4 XCTL targets held in variables), so the menu's dynamic fan-out is not in the graph.</aside>
+  <div class="source">artifacts/cobble/stats.json · artifacts/cobble/compare.txt · artifacts/cobble/graph.png · cobble/knowledge_graph/graph_types.py</div>
+  <aside class="notes">Parse of 29 programs took about 0.4 minutes. XCTL targets held in variables are now in the graph: 24 such sites, resolved by per-program dataflow and then by linking programs together — the next slide. A site with exactly one target and no doubt becomes a proven XCTL (6 of the 8; the other 2 are sign-on's literal targets); every other site becomes one candidate edge per possible target (46). Honest limits: 17 program nodes are unresolved — system utilities (IDCAMS, SORT, IEBGENER, IEFBR14, IKJEFT1B, DFHCSDUP, SDSF, FTP, CEE3ABD, CEEDAYS), assembler modules (COBDATFT, MVSWAIT), CBSTM03A (an upper-case .CBL the corpus glob skips), COCRDSEC (named in the CSD, no source anywhere), and COPAUS0C, COTRTLIC, COTRTUPC — menu targets whose source sits in CardDemo's optional Db2 and IMS trees, outside the base corpus. The table leaves out RETURN TRANSID (17), dataset definitions (8) and browse ends (5).</aside>
+</section>
+
+<section>
+  <div class="kicker">Cobble · dynamic call targets</div>
+  <h2>Dynamic targets, resolved across programs</h2>
+  <div class="whiteboard" style="padding:4px 0">
+    <img src="artifacts/cobble/dynamic-xctl.png" alt="Program-level XCTL fan-out in CardDemo" style="width:100%; max-width:100%; height:auto; display:block">
+  </div>
+  <div class="caption">Program → program XCTL from the graph. Solid: proven target. Dashed: candidate. Red: a candidate only the cross-program combine finds.</div>
+  <div class="cols" style="margin-top:10px; gap:40px">
+    <div>
+      <ol style="font-size:0.5em; margin:0 0 0 1.2em">
+        <li><strong>Fixpoint, per program.</strong> Follows the values a program assigns itself — VALUE clauses, MOVEs, menu tables — to every <code>XCTL PROGRAM(field)</code>.</li>
+        <li><strong>Combine, across programs.</strong> Links callers to callees and carries the COMMAREA bytes a caller hands over into the callee. That answers "return to whoever called me".</li>
+      </ol>
+      <div class="stats" style="grid-template-columns:repeat(3,1fr); margin-top:10px; gap:14px">
+        <div class="stat" style="padding:12px 16px"><div class="n" style="font-size:1.3em">24</div><div class="l">dynamic XCTL sites</div></div>
+        <div class="stat" style="padding:12px 16px"><div class="n" style="font-size:1.3em">20/24</div><div class="l">fully resolved by the fixpoint alone</div></div>
+        <div class="stat" style="padding:12px 16px"><div class="n" style="font-size:1.3em">24/24</div><div class="l">with the combine</div></div>
+      </div>
+    </div>
+    <div>
+      <table style="font-size:0.46em">
+        <tr><th>Site (field CDEMO-TO-PROGRAM)</th><th>Target gained</th></tr>
+        <tr><td>COCRDSLC 0000-MAIN</td><td>COCRDLIC</td></tr>
+        <tr><td>COCRDUPC 0000-MAIN</td><td>COCRDLIC</td></tr>
+        <tr><td>COUSR02C RETURN-TO-PREV-SCREEN</td><td>COUSR00C</td></tr>
+        <tr><td>COUSR03C RETURN-TO-PREV-SCREEN</td><td>COUSR00C</td></tr>
+      </table>
+      <div class="caption">Each detail program returns to the list that opened it: it moves CDEMO-FROM-PROGRAM into CDEMO-TO-PROGRAM, and only the caller, which wrote its own name there, knows the value.</div>
+    </div>
+  </div>
+  <div class="source">artifacts/cobble/dynamic-targets.json · dynamic-xctl.dot · dynamic-xctl.png · stats.json · capture/cobble.sh</div>
+  <aside class="notes">"Fully resolved" here means: the site's candidate set from the fixpoint alone already equals its set after the combine. 24 of 24 sites name at least one program even from the fixpoint alone; at 4 of them that set is missing the caller the program returns to, and the combine adds it — 3 rounds, 4 discovered links. Only 6 of the 24 are proven: one target and no reason for doubt. The rest are candidate sets — sound over-approximations, kept with their reasons (uninitialised, not-a-literal, unmodelled), so a candidate edge means "may transfer here", not "does". A subscripted target such as the menu table entry CDEMO-MENU-OPT-PGMNAME(WS-OPTION) names no single occurrence, so linking keeps the fixpoint's candidates and its doubt for it. Cost: the combine runs in about 1.4 seconds over the whole corpus, after the fixpoint.</aside>
 </section>
 
 <section>
@@ -131,7 +167,7 @@
     </div>
     <div>
 <pre class="log" style="white-space:pre-wrap">$ cobble-srccfg-query guards &lt;XCTL COADM01C node&gt;
-<span class="hl">33 path(s)</span>
+<span class="hl">5 path(s)</span>
 path 0: NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
   AND NOT (USERIDI == SPACES) AND NOT (USERIDI == LOW-VALUES)
   AND NOT (PASSWDI == SPACES) AND NOT (PASSWDI == LOW-VALUES)
@@ -140,18 +176,18 @@ path 0: NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
   AND <span class="ok">CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A)</span>
 
 $ cobble-srccfg-query guards &lt;XCTL COMEN01C node&gt;
-<span class="hl">33 path(s)</span>
+<span class="hl">5 path(s)</span>
 path 0: … AND <span class="ok">SEC-USR-PWD == WS-USER-PWD</span>
   AND <span class="warn">NOT (CDEMO-USRTYP-ADMIN (CDEMO-USER-TYPE == A))</span></pre>
       <div class="stats" style="grid-template-columns:repeat(3,1fr); margin-top:16px">
-        <div class="stat"><div class="n">3</div><div class="l">programs in the sign-on closure, expanded through XCTL</div></div>
-        <div class="stat"><div class="n">365</div><div class="l">CFG nodes across the closure</div></div>
-        <div class="stat"><div class="n">&lt;2s</div><div class="l">to build, from the parse cache — no compile</div></div>
+        <div class="stat"><div class="n">22</div><div class="l">programs in the sign-on closure, expanded through XCTL, dynamic targets included</div></div>
+        <div class="stat"><div class="n">6,996</div><div class="l">CFG nodes across the closure</div></div>
+        <div class="stat"><div class="n">~7s</div><div class="l">to build, from the parse cache — no compile</div></div>
       </div>
     </div>
   </div>
-  <div class="source">artifacts/srccfg/guards-COSGN00C-xctl.txt · COSGN00C-READ-USER-SEC-FILE.png · summary.json · capture/srccfg.sh</div>
-  <aside class="notes">Every node carries the conditions — with their literals — that must hold to reach it. That is what a business-rule review needs: "admin menu only when the stored password matches and the user type is A" is read straight off the guards, and can be checked against a stated rule. Guard lists are capped and say so when truncated.</aside>
+  <div class="source">artifacts/srccfg/guards-COSGN00C-xctl.txt · COSGN00C-READ-USER-SEC-FILE.png · summary.json · build-COSGN00C.txt · capture/srccfg.sh</div>
+  <aside class="notes">Every node carries the conditions — with their literals — that must hold to reach it. That is what a business-rule review needs: "admin menu only when the stored password matches and the user type is A" is read straight off the guards, and can be checked against a stated rule. Guard lists are capped and say so when truncated. The closure is built with the combine's dynamic targets, so it reaches 22 programs (COPAUS0C, COTRTLIC and COTRTUPC as external stubs, their source being outside the base corpus); the build time is wall clock including uv start-up.</aside>
 </section>
 
 <section>
@@ -164,14 +200,15 @@ CDEMO-USER-ID in COSGN00C:
 backward -- what its value is derived from:
   CDEMO-USER-ID &lt;-
   PROCESS-ENTER-KEY/2 MOVE when NOT (EIBCALEN == 0) AND EIBAID == DFHENTER
-    AND NOT (USERIDI == SPACES) AND NOT (PASSWDI == SPACES) …
-    <span class="warn">(guard cap hit: this list is incomplete)</span>
+    AND NOT (USERIDI == SPACES) AND NOT (USERIDI == LOW-VALUES) …
     USERIDI  &lt;- source (written nowhere in this member)
     EIBCALEN &lt;- source (written nowhere in this member)
-    EIBAID   &lt;- source (written nowhere in this member)
     PASSWDI  &lt;- source (written nowhere in this member)
     %HANDLER[ANY] &lt;- synthetic (the handler armed for ANY)
-    WS-ERR-FLG &lt;- …
+  READ-USER-SEC-FILE/1.when.0.0.then.2 MOVE when …
+    WS-USER-ID &lt;-
+    PROCESS-ENTER-KEY/2 MOVE when …
+      USERIDI <span class="warn">(truncated at depth 2)</span>
 forward -- what its value reaches: …</pre>
       <div class="caption">One walk, both directions; conditions travel with every step; truncation is stated, never silent</div>
     </div>
@@ -184,14 +221,14 @@ CC-ACCT-ID: 3 candidate(s)
   <span class="warn">(guards are a subset of the real ones,
    so a tier-3 match is not established)</span></pre>
       <div class="caption">Fields assigned together, ranked by how tightly: same statement → same source → same guard → same paragraph</div>
-      <div class="whiteboard" style="height:300px; margin-top:18px; position:relative">
-        <img src="artifacts/srccfg/cfg-COSGN00C-webgl.png" alt="WebGL view of the sign-on CFG closure" style="position:absolute; height:360px; left:50%; top:-20px; transform:translateX(-50%)">
+      <div class="whiteboard" style="height:340px; margin-top:18px; position:relative">
+        <img src="artifacts/srccfg/cfg-COSGN00C-webgl.png" alt="WebGL view of the sign-on CFG closure" style="position:absolute; width:640px; left:42px; top:-26px">
       </div>
-      <div class="caption">The whole sign-on closure (365 nodes, 501 edges) as a self-contained WebGL page — also exported as Graphviz DOT, and the source for the sequence views</div>
+      <div class="caption">The whole sign-on closure, dynamic XCTLs followed (22 programs, 6,996 nodes, 9,320 edges) as a self-contained WebGL page — also exported as Graphviz DOT, and the source for the sequence views</div>
     </div>
   </div>
-  <div class="source">artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt (excerpt) · coassign-COACTVWC-CC-ACCT-ID.txt · cobble/cobble/dataflow/srccfg/query.py</div>
-  <aside class="notes">Why this exists: the older MOVE-only dependency graph has no control dependence — on a production corpus a backward closure over one hub field reached 24,459 nodes, and fields that only appear in guards were missing entirely. Conditions are what make a closure small enough to read. Limits: dynamic XCTL targets are not expanded; reaching conditions don't yet finish on the very largest production members.</aside>
+  <div class="source">artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt (excerpt) · coassign-COACTVWC-CC-ACCT-ID.txt · cfg-COSGN00C-webgl.png · webgl-COSGN00C.txt · summary.json · cobble/cobble/dataflow/srccfg/query.py</div>
+  <aside class="notes">Why this exists: the older MOVE-only dependency graph has no control dependence — on a production corpus a backward closure over one hub field reached 24,459 nodes, and fields that only appear in guards were missing entirely. Conditions are what make a closure small enough to read. Dynamic XCTL targets are now expanded, from the combine's targets: candidates are followed like any callee, so the closure over-approximates which programs sign-on can reach. Limits: reaching conditions don't yet finish on the very largest production members.</aside>
 </section>
 
 <section>

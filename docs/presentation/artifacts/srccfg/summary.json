@@ -1,54 +1,278 @@
 {
-  "COSGN00C": [
-    {
-      "program": "COSGN00C",
-      "nodes": 104,
-      "edges": 137,
-      "node_kinds": {
-        "ASSIGN": 43,
-        "CALL": 21,
-        "TEST": 20,
-        "NOP": 14,
-        "LABEL": 6
+  "COSGN00C": {
+    "programs": 22,
+    "nodes": 6996,
+    "edges_within_programs": 9249,
+    "calls_between_programs": 71,
+    "cfgs": [
+      {
+        "program": "COSGN00C",
+        "nodes": 104,
+        "edges": 123,
+        "node_kinds": {
+          "ASSIGN": 43,
+          "CALL": 21,
+          "TEST": 20,
+          "NOP": 14,
+          "LABEL": 6
+        }
+      },
+      {
+        "program": "COADM01C",
+        "nodes": 124,
+        "edges": 161,
+        "node_kinds": {
+          "ASSIGN": 56,
+          "TEST": 29,
+          "CALL": 18,
+          "NOP": 13,
+          "LABEL": 8
+        }
+      },
+      {
+        "program": "COMEN01C",
+        "nodes": 137,
+        "edges": 175,
+        "node_kinds": {
+          "ASSIGN": 64,
+          "TEST": 35,
+          "CALL": 19,
+          "NOP": 12,
+          "LABEL": 7
+        }
+      },
+      {
+        "program": "COTRTLIC",
+        "nodes": 1,
+        "edges": 0,
+        "node_kinds": {
+          "LABEL": 1
+        }
+      },
+      {
+        "program": "COTRTUPC",
+        "nodes": 1,
+        "edges": 0,
+        "node_kinds": {
+          "LABEL": 1
+        }
+      },
+      {
+        "program": "COUSR00C",
+        "nodes": 407,
+        "edges": 547,
+        "node_kinds": {
+          "ASSIGN": 201,
+          "TEST": 113,
+          "CALL": 47,
+          "NOP": 30,
+          "LABEL": 16
+        }
+      },
+      {
+        "program": "COUSR01C",
+        "nodes": 132,
+        "edges": 172,
+        "node_kinds": {
+          "ASSIGN": 62,
+          "TEST": 24,
+          "CALL": 24,
+          "NOP": 13,
+          "LABEL": 9
+        }
+      },
+      {
+        "program": "COUSR02C",
+        "nodes": 195,
+        "edges": 263,
+        "node_kinds": {
+          "ASSIGN": 91,
+          "TEST": 40,
+          "CALL": 35,
+          "NOP": 18,
+          "LABEL": 11
+        }
+      },
+      {
+        "program": "COUSR03C",
+        "nodes": 154,
+        "edges": 204,
+        "node_kinds": {
+          "ASSIGN": 68,
+          "CALL": 30,
+          "TEST": 27,
+          "NOP": 18,
+          "LABEL": 11
+        }
+      },
+      {
+        "program": "COACTUPC",
+        "nodes": 2004,
+        "edges": 2721,
+        "node_kinds": {
+          "ASSIGN": 872,
+          "TEST": 666,
+          "NOP": 230,
+          "CALL": 135,
+          "LABEL": 101
+        }
+      },
+      {
+        "program": "COACTVWC",
+        "nodes": 408,
+        "edges": 497,
+        "node_kinds": {
+          "ASSIGN": 179,
+          "TEST": 85,
+          "NOP": 71,
+          "LABEL": 37,
+          "CALL": 36
+        }
+      },
+      {
+        "program": "COBIL00C",
+        "nodes": 254,
+        "edges": 330,
+        "node_kinds": {
+          "ASSIGN": 116,
+          "TEST": 45,
+          "CALL": 45,
+          "NOP": 32,
+          "LABEL": 16
+        }
+      },
+      {
+        "program": "COCRDLIC",
+        "nodes": 693,
+        "edges": 874,
+        "node_kinds": {
+          "ASSIGN": 326,
+          "TEST": 171,
+          "NOP": 99,
+          "CALL": 56,
+          "LABEL": 41
+        }
+      },
+      {
+        "program": "COCRDSLC",
+        "nodes": 403,
+        "edges": 506,
+        "node_kinds": {
+          "ASSIGN": 164,
+          "TEST": 98,
+          "NOP": 68,
+          "CALL": 37,
+          "LABEL": 36
+        }
+      },
+      {
+        "program": "COCRDUPC",
+        "nodes": 718,
+        "edges": 947,
+        "node_kinds": {
+          "ASSIGN": 309,
+          "TEST": 212,
+          "NOP": 97,
+          "CALL": 53,
+          "LABEL": 47
+        }
+      },
+      {
+        "program": "COPAUS0C",
+        "nodes": 1,
+        "edges": 0,
+        "node_kinds": {
+          "LABEL": 1
+        }
+      },
+      {
+        "program": "CORPT00C",
+        "nodes": 282,
+        "edges": 391,
+        "node_kinds": {
+          "ASSIGN": 148,
+          "TEST": 61,
+          "CALL": 42,
+          "NOP": 21,
+          "LABEL": 10
+        }
+      },
+      {
+        "program": "COTRN00C",
+        "nodes": 409,
+        "edges": 550,
+        "node_kinds": {
+          "ASSIGN": 206,
+          "TEST": 111,
+          "CALL": 46,
+          "NOP": 30,
+          "LABEL": 16
+        }
+      },
+      {
+        "program": "COTRN01C",
+        "nodes": 127,
+        "edges": 162,
+        "node_kinds": {
+          "ASSIGN": 62,
+          "TEST": 21,
+          "CALL": 21,
+          "NOP": 14,
+          "LABEL": 9
+        }
+      },
+      {
+        "program": "COTRN02C",
+        "nodes": 400,
+        "edges": 577,
+        "node_kinds": {
+          "ASSIGN": 189,
+          "TEST": 86,
+          "CALL": 69,
+          "NOP": 38,
+          "LABEL": 18
+        }
+      },
+      {
+        "program": "CSUTLDTC",
+        "nodes": 41,
+        "edges": 49,
+        "node_kinds": {
+          "ASSIGN": 20,
+          "TEST": 9,
+          "NOP": 7,
+          "LABEL": 3,
+          "CALL": 2
+        }
+      },
+      {
+        "program": "CEEDAYS",
+        "nodes": 1,
+        "edges": 0,
+        "node_kinds": {
+          "LABEL": 1
+        }
       }
-    },
-    {
-      "program": "COADM01C",
-      "nodes": 124,
-      "edges": 174,
-      "node_kinds": {
-        "ASSIGN": 56,
-        "TEST": 29,
-        "CALL": 18,
-        "NOP": 13,
-        "LABEL": 8
+    ]
+  },
+  "COACTVWC": {
+    "programs": 1,
+    "nodes": 408,
+    "edges_within_programs": 497,
+    "calls_between_programs": 1,
+    "cfgs": [
+      {
+        "program": "COACTVWC",
+        "nodes": 408,
+        "edges": 497,
+        "node_kinds": {
+          "ASSIGN": 179,
+          "TEST": 85,
+          "NOP": 71,
+          "LABEL": 37,
+          "CALL": 36
+        }
       }
-    },
-    {
-      "program": "COMEN01C",
-      "nodes": 137,
-      "edges": 188,
-      "node_kinds": {
-        "ASSIGN": 64,
-        "TEST": 35,
-        "CALL": 19,
-        "NOP": 12,
-        "LABEL": 7
-      }
-    }
-  ],
-  "COACTVWC": [
-    {
-      "program": "COACTVWC",
-      "nodes": 411,
-      "edges": 523,
-      "node_kinds": {
-        "ASSIGN": 180,
-        "TEST": 86,
-        "NOP": 71,
-        "LABEL": 37,
-        "CALL": 37
-      }
-    }
-  ]
+    ]
+  }
 }

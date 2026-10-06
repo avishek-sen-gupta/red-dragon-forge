@@ -1,13 +1,13 @@
 {
   "corpus": "CardDemo (vendor/carddemo)",
-  "source": "cobble/out/nodes.jsonl, cobble/out/edges.jsonl after cobble-build --config config/carddemo.toml",
-  "total_nodes": 449,
-  "total_edges": 803,
+  "source": "cobble/out/carddemo.jsonl after cobble-build --config config/carddemo.toml --output out/carddemo.jsonl --dynamic-call-targets <combined>/targets.jsonl",
+  "total_nodes": 448,
+  "total_edges": 836,
   "nodes_by_kind": {
     "STEP": 100,
     "INSTREAM_DATA": 81,
     "DATASET": 62,
-    "PROGRAM": 47,
+    "PROGRAM": 46,
     "COPYBOOK": 45,
     "JOB": 38,
     "COBOL_FILE": 25,
@@ -20,19 +20,20 @@
     "COPY": 205,
     "JCL_STEP_RUNS": 200,
     "WRITES": 50,
-    "XCTL": 21,
+    "XCTL_CANDIDATE": 46,
     "STARTS": 18,
     "RETURN_TRANSID": 17,
     "RECEIVES_MAP": 17,
     "SENDS_MAP": 17,
     "CALL": 15,
     "UPDATES": 12,
+    "XCTL": 8,
     "DEFINES_DATASET": 8,
     "ENDS_BROWSE": 5,
     "DELETES": 1
   },
   "unresolved_nodes_by_kind": {
-    "PROGRAM": 18
+    "PROGRAM": 17
   },
   "cobol_members_parsed": 29
 }
