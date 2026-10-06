@@ -36,7 +36,7 @@ def test_a_fact_carries_unstripped_values_writers_and_reasons() -> None:
     )
 
 
-def test_facts_merge_by_union_keeping_the_first_extent() -> None:
+def test_facts_merge_by_union_naming_an_extent_only_when_they_share_one() -> None:
     assert merged(
         (
             Fact(
@@ -53,8 +53,14 @@ def test_facts_merge_by_union_keeping_the_first_extent() -> None:
             ),
         )
     ) == Fact(
-        "A@working_storage[0:8]",
+        "",
         ("X", "Y"),
         ("N/1", "N/2"),
         (UnresolvedReason.NO_EXTENT, UnresolvedReason.NOT_A_LITERAL),
     )
+    assert merged(
+        (
+            Fact("A@working_storage[0:8]", ("X",), ("N/1",)),
+            Fact("A@working_storage[0:8]", ("Y",), ("N/2",)),
+        )
+    ) == Fact("A@working_storage[0:8]", ("X", "Y"), ("N/1", "N/2"))

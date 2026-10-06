@@ -986,6 +986,10 @@ that callee, so when the field lies inside the bytes handed over, those bytes on
 hold exactly the callee's name, space-padded. Bytes wholly inside the field resolve to
 that name; bytes that straddle it are walked as before.
 
+A target with a computed subscript, `PROGRAM(WS-PGMS(I))`, names no single occurrence. Its
+jump row carries no extent, so linking keeps the fixpoint's own candidates and reasons for
+it rather than walking one occurrence's bytes, and no link pins any occurrence to a name.
+
 `--all` links every program with results. `--member` links only those named
 (case-insensitive, each once) and refuses the run, writing nothing, when one has no
 results. Under `--member`, programs left out are read for the jumps they make into the

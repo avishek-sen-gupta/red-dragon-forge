@@ -173,3 +173,84 @@ def test_the_areas_taken_from_the_tables_equal_the_ones_read_from_the_parse_cach
         "DFHCOMMAREA@linkage[0:20]",
         "DFHCOMMAREA@linkage[0:20]",
     ]
+
+
+PROGM = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-SRC               PIC X(8) VALUE 'PROGA'.
+       01  WS-I                 PIC 9.
+       01  WS-TBL.
+           05  WS-EL            PIC X(8) OCCURS 3.
+       LINKAGE SECTION.
+       01  DFHCOMMAREA          PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE WS-SRC TO WS-EL(1).
+           MOVE 'PROGB' TO WS-EL(2).
+           MOVE DFHCOMMAREA TO WS-EL(3).
+           EXEC CICS XCTL PROGRAM(WS-EL(WS-I))
+               COMMAREA(WS-TBL) END-EXEC.
+"""
+
+PROGN = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGB.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-EL1           PIC X(8).
+           05  LK-REST          PIC X(16).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS XCTL PROGRAM(LK-EL1) END-EXEC.
+"""
+
+
+def test_a_subscripted_target_keeps_its_doubt_and_pins_no_occurrence(
+    fixpoint_corpus: Callable[[Mapping[str, str]], Path], tmp_path: Path
+) -> None:
+    out = fixpoint_corpus({"PROGM": PROGM, "PROGB": PROGN})
+    config = tmp_path / "corpus.toml"
+    config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
+    combined = tmp_path / "combined"
+
+    assert (
+        cli(
+            [
+                "--config",
+                str(config),
+                "--fixpoint-dir",
+                str(out),
+                "--out-dir",
+                str(combined),
+                "--all",
+            ]
+        )
+        == 0
+    )
+
+    assert target_rows(combined / "targets.jsonl") == [
+        TargetRow(
+            caller="PROGB",
+            node="MAIN-PARA/0",
+            transfer="CICS_XCTL",
+            expression="LK-EL1",
+            candidates=("PROGA",),
+            reasons=(),
+            dropped=(),
+            outside=(),
+        ),
+        TargetRow(
+            caller="PROGM",
+            node="MAIN-PARA/3",
+            transfer="CICS_XCTL",
+            expression="WS-EL(WS-I)",
+            candidates=("PROGA", "PROGB"),
+            reasons=("inbound-linkage",),
+            dropped=(),
+            outside=(),
+        ),
+    ]
