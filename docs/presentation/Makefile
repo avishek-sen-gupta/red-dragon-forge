@@ -8,7 +8,7 @@ export CARDDEMO_HOME ?= $(ROOT)/vendor/carddemo/app
 
 REVEAL_VERSION := 6.0.2
 
-.PHONY: vendor artifacts cobble srccfg cobble-features cics headless jcl db2 serve
+.PHONY: vendor artifacts cobble srccfg cobble-features cics headless jcl db2 video serve
 
 # reveal.js is fetched rather than versioned; the deck needs only these dist files.
 vendor: vendor/reveal.js/reveal.js
@@ -43,6 +43,9 @@ jcl:
 
 db2:
 	cd $(ROOT) && SQUALL_DIR=squall . squall/db2/dsn-env.sh && uv run --no-sync python docs/presentation/capture/db2_inqcust_capture.py
+
+video:
+	cd $(ROOT) && bash docs/presentation/capture/carddemo_3270_video.sh
 
 serve: vendor
 	python3 -m http.server 8000 --bind 127.0.0.1
