@@ -18,6 +18,11 @@ overwritten value kept whole is not caution -- it is a call the program may neve
 make, asserted as a fact. Doubt is never killed that way: only the values go, and
 the reasons stay, because a write says nothing about the bytes outside it.
 
+A join drops a provenance key lying inside a wider key whose sources include its own
+(``_canonical``): no read or later write can tell the two apart, and keeping both
+would carry a record one path split and another kept whole through every later
+write. The value map is never pruned so, because ``exact_values`` looks up exactly.
+
 A state is keyed by extent rather than by field name because a name is not an
 address: two names over one piece of storage are one key here, which is the whole
 reason for working in bytes.
@@ -143,7 +148,54 @@ def _joined_sources(
         if (prior is not held and not held <= prior)
         or (not held and extent not in left)
     }
-    return MappingProxyType({**left, **grown}) if grown else left
+    return _with_grown(left, grown)
+
+
+def _with_grown(
+    left: Mapping[FieldExtent, frozenset[Source]],
+    grown: Mapping[FieldExtent, frozenset[Source]],
+) -> Mapping[FieldExtent, frozenset[Source]]:
+    if not grown:
+        return left
+    return _canonical({**left, **grown}, grown)
+
+
+def _inside(inner: FieldExtent, outer: FieldExtent) -> bool:
+    return (
+        inner.region is outer.region
+        and outer.start <= inner.start
+        and inner.start + inner.length <= outer.start + outer.length
+        and 0 < inner.length < outer.length
+        and (
+            inner.precision is Precision.EXACT or outer.precision is not Precision.EXACT
+        )
+    )
+
+
+def _redundant(
+    sources: Mapping[FieldExtent, frozenset[Source]],
+    inner: FieldExtent,
+    outer: FieldExtent,
+) -> bool:
+    return _inside(inner, outer) and sources[inner] <= sources[outer]
+
+
+def _canonical(
+    joined: Mapping[FieldExtent, frozenset[Source]],
+    grown: Mapping[FieldExtent, frozenset[Source]],
+) -> Mapping[FieldExtent, frozenset[Source]]:
+    doomed = {
+        inner
+        for changed in grown
+        for extent in joined
+        for inner, outer in ((extent, changed), (changed, extent))
+        if _redundant(joined, inner, outer)
+    }
+    if not doomed:
+        return MappingProxyType(joined)
+    return MappingProxyType(
+        {extent: held for extent, held in joined.items() if extent not in doomed}
+    )
 
 
 def _joined_values(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
@@ -278,14 +330,26 @@ def _gathered(
     into: Mapping[FieldExtent, _Held],
     combine: Callable[[_Held, _Held], _Held],
 ) -> dict[FieldExtent, _Held]:
-    return reduce(
-        lambda held, one: {
-            **held,
-            one[0]: combine(held[one[0]], one[1]) if one[0] in held else one[1],
-        },
+    touched: dict[FieldExtent, _Held] = reduce(
+        lambda held, one: {**held, one[0]: _added(held, into, one, combine)},
         pieces,
-        dict(into),
+        {},
     )
+    return {**into, **touched}
+
+
+def _added(
+    held: Mapping[FieldExtent, _Held],
+    into: Mapping[FieldExtent, _Held],
+    one: tuple[FieldExtent, _Held],
+    combine: Callable[[_Held, _Held], _Held],
+) -> _Held:
+    extent, piece = one
+    if extent in held:
+        return combine(held[extent], piece)
+    if extent in into:
+        return combine(into[extent], piece)
+    return piece
 
 
 def _split(

@@ -439,3 +439,35 @@ def test_a_clamped_write_or_a_clamped_entry_is_never_split():
         ),
         exact_record,
     ) == because(UnresolvedReason.FROM_CALLEE)
+
+
+def test_a_join_keeps_one_canonical_key_set_however_paths_split_a_record():
+    old = frozenset({_source("WS-OLD")})
+    new = frozenset({_source("WS-NEW")})
+    other = frozenset({_source("WS-OTHER")})
+    record = _extent(0, 12, name="WS-REC")
+    middle_part = _extent(4, 4, name="WS-MID")
+    clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-MID")
+    whole = write(EMPTY, record, old)
+    middle = write(whole, middle_part, new)
+    high = write(whole, _extent(8, 4, name="WS-HI"), other)
+    maybe = write(whole, clamped_part, old)
+    valued = write(EMPTY, record, old, of_value(b"ABCDEFGHIJKL"))
+    valued_middle = write(valued, middle_part, new, of_value(b"WXYZ"))
+
+    assert join(whole, middle) == join(middle, whole)
+    assert join(whole, middle).sources == {record: old, middle_part: new}
+    assert join(middle, high) == join(high, middle)
+    assert join(middle, high).sources == {
+        _extent(0, 8, name="WS-REC"): old,
+        middle_part: new,
+        _extent(8, 4, name="WS-REC"): old,
+        _extent(8, 4, name="WS-HI"): other,
+    }
+    assert join(whole, maybe).sources == {record: old, clamped_part: old}
+    assert set(join(valued, valued_middle).values) == {
+        record,
+        _extent(0, 4, name="WS-REC"),
+        middle_part,
+        _extent(8, 4, name="WS-REC"),
+    }
