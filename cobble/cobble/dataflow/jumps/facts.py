@@ -23,8 +23,15 @@ def merged(facts: Sequence[Fact]) -> Fact:
         return Fact()
     all_reasons = {r for fact in facts for r in fact.reasons}
     return Fact(
-        extent=facts[0].extent,
+        extent=_one_extent(facts),
         values=tuple(sorted({v for fact in facts for v in fact.values})),
         writers=tuple(sorted({w for fact in facts for w in fact.writers})),
         reasons=tuple(r for _, r in sorted((r.value, r) for r in all_reasons)),
     )
+
+
+def _one_extent(facts: Sequence[Fact]) -> str:
+    extents = {fact.extent for fact in facts}
+    if len(extents) > 1:
+        return ""
+    return facts[0].extent
