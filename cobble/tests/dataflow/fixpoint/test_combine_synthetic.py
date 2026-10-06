@@ -3,11 +3,13 @@
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+import pytest
 from cobble.dataflow.combine.asg_callee_areas import AsgCalleeAreas
 from cobble.dataflow.combine.cli import cli
 from cobble.dataflow.combine.load import load_tables
 from cobble.dataflow.combine.table_callee_areas import TableCalleeAreas
 from cobble.dataflow.fields.extent_text import byte_range
+from cobble.dataflow.fixpoint.query import cli as query_cli
 from cobble.dataflow.fixpoint.query import load_for
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from tests.dataflow.combine.corpus_toml import CONFIG
@@ -158,13 +160,16 @@ def test_links_let_the_provenance_query_cross_a_discovered_jump(
     ]
 
 
-def test_the_areas_taken_from_the_tables_equal_the_ones_read_from_the_parse_cache(
+def test_the_areas_taken_from_the_tables_equal_the_ones_read_once_from_the_parse_cache(
     fixpoint_corpus: Callable[[Mapping[str, str]], Path],
 ) -> None:
     out = fixpoint_corpus({"PROGA": PROGA, "PROGB": PROGB})
     asg = AsgCalleeAreas(out.parent / "parsed")
     tables = {name: load_tables(out, name) for name in ("PROGA", "PROGB")}
     from_tables = TableCalleeAreas(tables, asg)
+    outside = TableCalleeAreas({}, asg)
+    first = outside.area("PROGA", JumpKind.XCTL, 0)
+    (out.parent / "parsed" / "PROGA.json").unlink()
 
     assert [from_tables.area(name, JumpKind.XCTL, 0) for name in tables] == [
         asg.area(name, JumpKind.XCTL, 0) for name in tables
@@ -173,6 +178,10 @@ def test_the_areas_taken_from_the_tables_equal_the_ones_read_from_the_parse_cach
         "DFHCOMMAREA@linkage[0:20]",
         "DFHCOMMAREA@linkage[0:20]",
     ]
+    assert (str(first), str(outside.area("PROGA", JumpKind.LINK, 0))) == (
+        "DFHCOMMAREA@linkage[0:20]",
+        "DFHCOMMAREA@linkage[0:20]",
+    )
 
 
 PROGM = """\
@@ -254,3 +263,59 @@ def test_a_subscripted_target_keeps_its_doubt_and_pins_no_occurrence(
             outside=(),
         ),
     ]
+
+
+def test_the_query_command_reads_links_in_place_of_aliases(
+    fixpoint_corpus: Callable[[Mapping[str, str]], Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = fixpoint_corpus({"PROGA": PROGA, "PROGB": PROGB})
+    config = tmp_path / "corpus.toml"
+    config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
+    combined = tmp_path / "combined"
+    cli(
+        [
+            "--config",
+            str(config),
+            "--fixpoint-dir",
+            str(out),
+            "--out-dir",
+            str(combined),
+            "--all",
+        ]
+    )
+    query = [
+        "reaches",
+        "PROGB.DFHCOMMAREA",
+        "--fixpoint-dir",
+        str(out),
+        "--extents",
+        str(out.parent / "extents.jsonl"),
+        "--across-calls",
+        "--max-hops",
+        "2",
+    ]
+    capsys.readouterr()
+
+    assert query_cli(query) == 0
+    plain = capsys.readouterr().out
+    assert query_cli([*query, "--links", str(combined / "links.jsonl")]) == 0
+    linked = capsys.readouterr().out
+
+    heading = (
+        "PROGB.DFHCOMMAREA  level 01  usage DISPLAY\n"
+        "  declared at DFHCOMMAREA@linkage[0:20]\n"
+    )
+    assert plain == (
+        heading
+        + "flows into across calls (depth 6, max 2 hops, 1 landings):\n"
+        + "  hop 0  depth 1  PROGB.WS-NEXT  WS-NEXT@working_storage[0:8]\n\n"
+    )
+    assert linked == (
+        heading
+        + "flows into across calls (depth 6, max 2 hops, 2 landings):\n"
+        + "  hop 0  depth 1  PROGB.WS-NEXT  WS-NEXT@working_storage[0:8]\n"
+        + "  hop 1  depth 1  PROGA.DFHCOMMAREA  DFHCOMMAREA@linkage[0:20]"
+        + "  via PROGB:MAIN-PARA/1\n\n"
+    )

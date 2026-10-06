@@ -116,3 +116,18 @@ def test_a_config_whose_parse_cache_is_missing_is_refused_not_an_empty_run(
 
     assert _messages(caplog) == [f"combine: !! no parse cache at {tmp_path / 'asg'}"]
     assert not (tmp_path / "out").exists()
+
+
+def test_a_missing_config_is_refused_not_a_traceback(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _member(tmp_path / "fx", "B")
+    arguments = _arguments(tmp_path, "--all")
+    (tmp_path / "corpus.toml").unlink()
+
+    assert cli(arguments) == 2
+
+    assert _messages(caplog) == [
+        f"combine: !! no corpus config at {tmp_path / 'corpus.toml'}"
+    ]
+    assert not (tmp_path / "out").exists()

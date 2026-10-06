@@ -5,8 +5,8 @@ import json
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
-from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.jump_area import JumpArea
+from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.rows import jump_from_row, jump_identity, jump_row
 
 JUMP = Jump(
