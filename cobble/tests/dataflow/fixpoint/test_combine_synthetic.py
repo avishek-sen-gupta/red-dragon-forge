@@ -274,7 +274,7 @@ def test_the_query_command_reads_links_in_place_of_aliases(
     config = tmp_path / "corpus.toml"
     config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
     combined = tmp_path / "combined"
-    cli(
+    linked = cli(
         [
             "--config",
             str(config),
@@ -285,6 +285,7 @@ def test_the_query_command_reads_links_in_place_of_aliases(
             "--all",
         ]
     )
+    assert linked == 0
     query = [
         "reaches",
         "PROGB.DFHCOMMAREA",
