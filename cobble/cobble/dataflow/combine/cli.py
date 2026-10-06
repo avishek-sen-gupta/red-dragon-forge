@@ -136,7 +136,13 @@ def _unusable(arguments: argparse.Namespace, config: CorpusConfig) -> Sequence[s
 def cli(argv: Sequence[str] = ()) -> int:
     configure_cli_logging()
     arguments = _parser().parse_args(argv or sys.argv[1:])
-    config = load_corpus_config(arguments.config)
+    if not arguments.config.is_file():
+        _LOG.error("combine: !! no corpus config at %s", arguments.config)
+        return 2
+    return _configured(arguments, load_corpus_config(arguments.config))
+
+
+def _configured(arguments: argparse.Namespace, config: CorpusConfig) -> int:
     unusable = _unusable(arguments, config)
     if unusable:
         _LOG.error("combine: !! %s", "; ".join(unusable))

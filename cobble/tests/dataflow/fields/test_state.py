@@ -343,9 +343,6 @@ def test_a_weak_write_kills_nothing_and_says_the_old_value_may_have_changed():
 
 
 def test_an_exact_write_into_an_exact_entry_splits_off_the_bytes_it_left_alone():
-    """The bytes a narrow EXACT write left untouched keep the wider entry's writers,
-    values and reasons, as pieces of it; the bytes it overwrote hold only the new
-    write. A read straddling a piece and the new write is inside neither."""
     record = _extent(0, 12, name="WS-REC")
     old = frozenset({_source("WS-OLD")})
     new = frozenset({_source("WS-NEW")})
@@ -398,10 +395,6 @@ def test_an_exact_write_into_an_exact_entry_splits_off_the_bytes_it_left_alone()
 
 
 def test_a_clamped_write_or_a_clamped_entry_is_never_split():
-    """A computed subscript says where bytes might be, not where they are, so
-    neither side of a CLAMPED overlap can be cut into what it left untouched: the
-    entry keeps its writers whole and only its values are invalidated. An entry
-    holding no values has nothing to invalidate, so a callee's doubt stands."""
     old = frozenset({_source("WS-OLD")})
     new = frozenset({_source("WS-NEW")})
     exact_record = _extent(0, 12, name="WS-REC")

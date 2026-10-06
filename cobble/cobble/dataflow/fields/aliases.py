@@ -259,13 +259,10 @@ def _windows(
     callee: FieldExtent,
     returns: bool,
 ) -> tuple[CommareaAlias, ...]:
-    reference = _reference(operand)
-    cells = index.cells_named(reference.name, reference.qualifiers, 0)
-    if not cells:
+    extents = area_extents(operand, index)
+    if not extents:
         return (_dead(site, CALLER_FIELD_UNKNOWN),)
-    return tuple(
-        _aliased(site, index.extent_of(cell), callee, returns) for cell in cells
-    )
+    return tuple(_aliased(site, extent, callee, returns) for extent in extents)
 
 
 def _aliased(

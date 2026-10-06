@@ -895,9 +895,10 @@ defect this unit removed when a fallback-to-operand-text read fabricated
 `PROGRAM` nodes named after variables.
 
 On the CardDemo corpus, most resolved sites are `*_CANDIDATE`, not proven: of
-29 dynamic call sites, 17 resolve to exactly one program and 12 to several, but
-only 3 of the 17 singletons carry no doubt. 23 of the 29 carry both
-`inbound-linkage` and the `from-callee` reason, because `cobble/dataflow/fields/transfer.py` models an
+24 dynamic call sites, 12 resolve to exactly one program and 12 to several, and
+6 of the 12 singletons carry no doubt. 11 of the 24 carry `inbound-linkage`,
+which linking (below) answers from the callers. One also carries `from-callee`,
+because `cobble/dataflow/fields/transfer.py` models an
 `EXEC CICS XCTL`'s COMMAREA the same way as `LINK`'s — a callee write-back —
 even though `XCTL` does not return control to the site that issued it. The CFG
 already says so: after an `XCTL` or `RETURN`, only the failure path continues —
@@ -905,9 +906,9 @@ to the armed handler, or under `RESP`/`NOHANDLE` to the next statement — and
 `ABEND` ends the path outright. But the write-back still rides that failure
 path, where the callee never ran. Dropping it is a follow-up, not done here: it
 is also an exact write that kills older values, so removing it alone widens
-candidate sets; a reader comparing 45 `XCTL_CANDIDATE` edges against 5
+candidate sets; a reader comparing 42 `XCTL_CANDIDATE` edges against 6
 proven `XCTL` edges should read this as "resolved, mostly with acknowledged
-doubt," not "only 5 sites resolved."
+doubt," not "only 6 sites resolved."
 
 Every row this corpus produces is a `CICS_XCTL`. It contains no dynamic COBOL
 `CALL` — every `CALL` in it names a literal — and no `EXEC CICS LINK` in any
@@ -976,8 +977,11 @@ uv run cobble-dataflow-combine --config corpus.toml --fixpoint-dir out-fields --
 
 `cobble-dataflow-fixpoint` settles each program alone, so a target read from the
 commarea is only ever `inbound-linkage`. This command reads that output (every
-`members/<program>/` table), the corpus TOML's `asg_dir` for each callee's received area
-and its `csd_files` for transaction-to-program names, and lets values cross programs.
+`members/<program>/` table, whose ENTRY rows give each linked callee's received area),
+the corpus TOML's `asg_dir` only for a callee outside the linked set, each one read once
+per run, and its `csd_files` for transaction-to-program names, and lets values cross
+programs. A missing corpus config, fixpoint `members/` directory or parse cache refuses
+the run with exit 2, writing nothing.
 It links in rounds: a target found only after values arrive adds edges, which can
 deliver more values, until the edges stop growing.
 
