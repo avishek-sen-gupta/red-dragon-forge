@@ -399,7 +399,9 @@ def test_a_clamped_write_or_a_clamped_entry_is_never_split():
     new = frozenset({_source("WS-NEW")})
     exact_record = _extent(0, 12, name="WS-REC")
     clamped_record = _extent(0, 12, precision=Precision.CLAMPED, name="WS-REC")
-    clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-MID")
+    clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-REC")
+    child = _extent(4, 4, name="WS-MID")
+    redefined = _extent(0, 12, name="WS-ALT")
     exact_part = _extent(4, 4, name="WS-MID")
     doubted = ValueSet(frozenset(), frozenset({UnresolvedReason.NOT_A_LITERAL}))
 
@@ -434,17 +436,23 @@ def test_a_clamped_write_or_a_clamped_entry_is_never_split():
     ) == because(UnresolvedReason.FROM_CALLEE)
 
 
-def test_a_join_keeps_one_canonical_key_set_however_paths_split_a_record():
+def test_a_join_collapses_one_fields_pieces_however_paths_split_it():
     old = frozenset({_source("WS-OLD")})
     new = frozenset({_source("WS-NEW")})
     other = frozenset({_source("WS-OTHER")})
     record = _extent(0, 12, name="WS-REC")
     middle_part = _extent(4, 4, name="WS-MID")
-    clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-MID")
+    clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-REC")
+    child = _extent(4, 4, name="WS-MID")
+    redefined = _extent(0, 12, name="WS-ALT")
     whole = write(EMPTY, record, old)
     middle = write(whole, middle_part, new)
     high = write(whole, _extent(8, 4, name="WS-HI"), other)
     maybe = write(whole, clamped_part, old)
+    with_child = write(whole, child, old)
+    alternate = write(
+        write(EMPTY, redefined, old), _extent(4, 4, name="WS-ALT-MID"), new
+    )
     valued = write(EMPTY, record, old, of_value(b"ABCDEFGHIJKL"))
     valued_middle = write(valued, middle_part, new, of_value(b"WXYZ"))
 
@@ -458,6 +466,13 @@ def test_a_join_keeps_one_canonical_key_set_however_paths_split_a_record():
         _extent(8, 4, name="WS-HI"): other,
     }
     assert join(whole, maybe).sources == {record: old, clamped_part: old}
+    assert join(whole, with_child).sources == {record: old, child: old}
+    assert join(whole, alternate).sources == {
+        record: old,
+        _extent(0, 4, name="WS-ALT"): old,
+        _extent(4, 4, name="WS-ALT-MID"): new,
+        _extent(8, 4, name="WS-ALT"): old,
+    }
     assert set(join(valued, valued_middle).values) == {
         record,
         _extent(0, 4, name="WS-REC"),
