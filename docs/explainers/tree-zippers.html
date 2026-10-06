@@ -23,10 +23,18 @@
 <div class="kicker">Graph algorithms · a data structure, not an analysis</div>
 <h1>Tree zippers</h1>
 <p class="lede">A cursor into an immutable tree that remembers the way back up, so editing one node deep inside does not mean redoing the walk that found it.</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-tree">The tree</a></li><li><a href="#going-down-the-trail-grows">Going down: the trail grows</a></li><li><a href="#going-up-free-because-it-was-already-remembered">Going up: free, because it was already remembered</a></li><li><a href="#editing-rebuild-on-the-way-back-up">Editing: rebuild on the way back up</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-tree">The tree</a></li><li><a href="#going-down-the-trail-grows">Going down: the trail grows</a></li><li><a href="#going-up-free-because-it-was-already-remembered">Going up: free, because it was already remembered</a></li><li><a href="#editing-rebuild-on-the-way-back-up">Editing: rebuild on the way back up</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li><li><a href="#references">References</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Any tool that rewrites an AST recovered from legacy or compiled source — rather than one it generated itself — has this exact shape of problem: find one node deep inside a large tree, change it, climb back out, then do it again for the next one.</p>
+<ul>
+<li><strong>A GOTO-elimination pass</strong> over a parsed COBOL program is the concrete case this page builds toward: walk down to a jump that needs restructuring, turn it into a conditional block, climb back out — and the next jump needing attention is somewhere else in the same tree, reached the same way, with none of the first edit's work redone.</li>
+<li><strong>A decompiler reconstructing source from a recovered AST</strong> faces the identical problem at every control-flow fixup it makes: an AST with thousands of nodes and a handful of places that need rewriting should cost work proportional to the handful, not to the thousands, every single time one of them is touched.</li>
+<li><strong>Why "just mutate the tree" is the wrong comparison:</strong> a zipper is not primarily about avoiding mutation — it is about not re-walking from the root to find out which ancestors need rebuilding. A tool that already knows "I am three levels deep, here is my path back up" because it just walked there, instead of re-deriving that path after the fact, is already most of the way to a zipper whether or not it calls it one.</li>
+</ul>
 
 <h2 id="the-problem">The problem</h2>
-<p>The tree never changes in place — a new node is built, never overwritten. So changing one node three levels down means building a new copy of it, then a new copy of its parent pointing at the new copy, then a new copy of <em>its</em> parent, up to the root. Nothing above the edit can be reused; the whole path has to be rebuilt.</p>
+<p>The data structure this page walks through is Huet's zipper.<sup>[1]</sup> The tree never changes in place — a new node is built, never overwritten. So changing one node three levels down means building a new copy of it, then a new copy of its parent pointing at the new copy, then a new copy of <em>its</em> parent, up to the root. Nothing above the edit can be reused; the whole path has to be rebuilt.</p>
 <p>Walking down to find the node in the first place already visits every statement on that path. Thrown away once the node is found, that walk has to happen a second time, backward, just to know which nodes need rebuilding. The zipper is what remembers the first walk, so there is no second one.</p>
 
 <h2 id="the-tree">The tree</h2>
@@ -188,6 +196,11 @@ flowchart TD
 
 <h2 id="where-this-is-used">Where this is used</h2>
 <p>Rewriting an AST without arbitrary jumps: walk down into the tree to a jump that needs restructuring, turn it into a conditional block, climb back out — each climb rebuilding only the handful of ancestors on that one path, every sibling subtree reused untouched. An AST with thousands of nodes and one jump somewhere inside it rebuilds a few nodes per fix, not thousands.</p>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>G. Huet. "The Zipper." <em>Journal of Functional Programming</em>, 7(5), September 1997, pp. 549–554. Names and popularizes the data structure this page walks through.</li>
+</ol>
 </main>
 </body>
 </html>

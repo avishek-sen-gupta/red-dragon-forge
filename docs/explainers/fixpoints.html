@@ -12,7 +12,15 @@
 <div class="kicker">Explainer 2 of 5</div>
 <h1>Fixpoints and worklists</h1>
 <p class="lede">How a program analysis handles loops: keep applying the rules until nothing changes.</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>This is the central technique a static dataflow tool for a legacy corpus is built on: a byte-level fixpoint over every field, run once per program, that answers which writes reach each read and what values a field can hold — everything else in this series of pages is a refinement of that one loop.</p>
+<ul>
+<li><strong>A paragraph that <code>PERFORM</code>s itself, or a field whose value loops back into its own computation,</strong> needs the worklist to revisit it until nothing changes. Stopping after one pass over such a program does not produce an approximate answer — it produces a specific wrong one, silently, on exactly the programs with enough real control flow to be worth analysing in the first place.</li>
+<li><strong>The same shape appears on the Java side</strong> in call-graph construction: resolving every virtual call's possible targets is itself a worklist that "drains" once nothing new is discovered, for the same reason — a class hierarchy with its own cycles of interface implementations needs the same keep-going-until-stable discipline, not a single top-to-bottom pass.</li>
+<li><strong>Why it has to be a fixpoint and not a cache:</strong> a legacy program's fields are exactly the place self-referential logic accumulates over decades of maintenance — a running total updated from itself, a flag a loop both reads and sets. Those are the cases a one-pass analysis gets wrong first.</li>
+</ul>
 
 <h2 id="the-problem">The problem</h2>
 <p>You want to know, at every statement in a program, which statements may have last written each field — not on one run, but on <em>any</em> run, whatever the input data. You cannot run the program on every input, so you reason about it instead.</p>

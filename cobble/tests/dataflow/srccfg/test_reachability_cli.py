@@ -1,4 +1,4 @@
-"""cobble-srccfg-walk: a CFG file in, the reached subgraph and its outcomes out."""
+"""cobble-srccfg-reachability-walk: a CFG file in, the reached subgraph and its outcomes out."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from cobble.dataflow.srccfg.closure import main as build_main
 from cobble.dataflow.srccfg.dot import dot_of
 from cobble.dataflow.srccfg.dot import main as dot_main
 from cobble.dataflow.srccfg.program import program_cfg
-from cobble.dataflow.srccfg.reach.cli import main
+from cobble.dataflow.srccfg.reach.reachability_cli import main
 from cobble.dataflow.srccfg.rows.cfg_row import CFG_ROWS
 from cobble.dataflow.srccfg.rows.cfg_row_type import CfgRowType
 from cobble.dataflow.srccfg.rows.node_row import CfgNodeRow
@@ -158,7 +158,7 @@ def test_a_reader_that_stops_early_ends_the_command_quietly(tmp_path: Path) -> N
     path = tmp_path / "long.jsonl"
     path.write_text(bundle_jsonl(Bundle(seed="PROGA", cfgs=(cfg,))), encoding="utf-8")
     command = (
-        "import sys; from cobble.dataflow.srccfg.reach.cli import main; "
+        "import sys; from cobble.dataflow.srccfg.reach.reachability_cli import main; "
         f"sys.exit(main(['--cfg', {str(path)!r}, '--from', 'MAIN/0']))"
     )
     reading, writing = os.pipe()

@@ -1,8 +1,15 @@
-"""cobble-srccfg-walk: what can run from one PERFORM until it returns, as src-cfg rows.
+"""cobble-srccfg-reachability-walk: what can run from one PERFORM until it
+returns, as src-cfg rows.
 
 Reads a CFG file cobble-srccfg-build wrote, walks the first program in it from the
 PERFORM node named by --from, and writes the reached subgraph and what it found to
 stdout as JSONL, as the walk goes. cobble-srccfg-dot and -webgl render the output.
+
+This is reachability, level by level from the seed -- not execution order
+(a node closer to the seed in graph distance can print before one that
+actually runs first). For "what executes, in order", see
+cobble-srccfg-dfs-walk (``reach/dfs_cli.py``), which drives the exact same
+stepper depth-first instead.
 """
 
 from __future__ import annotations
@@ -26,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cobble-srccfg-walk",
+        prog="cobble-srccfg-reachability-walk",
         description="Everything that can run from one PERFORM until it returns.",
     )
     parser.add_argument(

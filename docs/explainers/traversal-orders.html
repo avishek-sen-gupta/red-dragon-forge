@@ -12,7 +12,15 @@
 <div class="kicker">Explainer 1 of 5</div>
 <h1>Visiting a graph: BFS, DFS and reverse postorder</h1>
 <p class="lede">Three ways to walk the statements of a program, and why one of them hands every statement its input complete.</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#the-example">The example</a></li><li><a href="#breadth-first-nearest-first">Breadth-first: nearest first</a></li><li><a href="#depth-first-as-far-as-you-can-then-back-up">Depth-first: as far as you can, then back up</a></li><li><a href="#reverse-postorder">Reverse postorder</a></li><li><a href="#with-a-loop">With a loop</a></li><li><a href="#in-short">In short</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-example">The example</a></li><li><a href="#breadth-first-nearest-first">Breadth-first: nearest first</a></li><li><a href="#depth-first-as-far-as-you-can-then-back-up">Depth-first: as far as you can, then back up</a></li><li><a href="#reverse-postorder">Reverse postorder</a></li><li><a href="#with-a-loop">With a loop</a></li><li><a href="#in-short">In short</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Before anything else can be asked about an unfamiliar program, something has to walk it. The order chosen is not incidental — it decides whether a later analysis finishes in one pass or many.</p>
+<ul>
+<li><strong>"What does this paragraph reach?"</strong> — a reachability query from a single <code>PERFORM</code>, answered by exactly the depth-first walk this page builds, is how a corpus-wide tool finds every statement a change to one paragraph could possibly affect, without reading the rest of the program.</li>
+<li><strong>The same question on the Java side.</strong> A call graph seeded from one entry point — a controller method, a batch job's <code>main</code> — and walked forward is how a tool finds everything a web action can call into, cheaply: on one real codebase, seeding from a single root cut call-graph construction from minutes to under two seconds, because the cost tracks what is actually reachable, not the whole program.</li>
+<li><strong>Reverse postorder specifically</strong> is what the next two pages, <a href="fixpoints.html">fixpoints</a> and <a href="reaching-definitions.html">reaching definitions</a>, need to converge in one pass instead of several — the difference that matters once a method's control-flow graph runs into the thousands of statements, not the handful on this page.</li>
+</ul>
 
 <h2 id="the-problem">The problem</h2>
 <p>A program's statements form a graph: an arrow from each statement to every statement that can run next. An <code>IF</code> has two arrows out, one per arm. The statement after the <code>IF</code> has two arrows in. A loop has an arrow from the end of its body back to its test.</p>

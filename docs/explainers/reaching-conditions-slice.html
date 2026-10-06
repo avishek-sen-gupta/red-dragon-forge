@@ -23,7 +23,15 @@
 <div class="kicker">Graph algorithms · how did I get here</div>
 <h1>Reaching conditions</h1>
 <p class="lede">Not "can execution reach this statement" but "what has to be true about the data for it to." Built up one statement at a time, with the two spots where the real implementation's shortcuts show.</p>
-<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#the-problem">The problem</a></li><li><a href="#first-slice-away-the-dead-ends">First, slice away the dead ends</a></li><li><a href="#building-the-condition-one-statement-at-a-time">Building the condition, one statement at a time</a></li><li><a href="#a-branch-that-merges-back">A branch that merges back</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li></ol></nav>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#first-slice-away-the-dead-ends">First, slice away the dead ends</a></li><li><a href="#building-the-condition-one-statement-at-a-time">Building the condition, one statement at a time</a></li><li><a href="#a-branch-that-merges-back">A branch that merges back</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#where-this-is-used">Where this is used</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Reachability answers "can execution get here at all." This page answers the sharper question underneath almost every real investigation into an unfamiliar program: under what condition on the data does it.</p>
+<ul>
+<li><strong>Triaging a crash report or an unexplained log line</strong> that points at one specific statement in a program nobody currently reading it wrote: slicing away everything that cannot reach that line, then building the boolean condition over what is left, turns "is this reachable" into "exactly what has to be true about the input for this to run" — a condition that can be checked against the actual input that triggered the problem.</li>
+<li><strong>Deciding whether a dangerous statement is really reachable</strong> under realistic input, for a security review of legacy code: a statement being structurally present in the source is not the same as it being reachable under any condition a real caller could satisfy — this page's technique is what turns "it's in there somewhere" into a specific, checkable boolean expression.</li>
+<li><strong>The control-side counterpart to a backward data slice:</strong> where reaching definitions and its Java-side analogs ask "what value reached this read," this page asks the same kind of backward question about control instead of data — same slice-then-combine shape, a different graph underneath it.</li>
+</ul>
 
 <h2 id="the-problem">The problem</h2>
 <p><a href="dominance-and-reachability.html">Reachability</a> answers yes or no: can execution get from here to there at all. A sharper question, for a statement guarded by one or more <code>IF</code>s: not just that it can be reached, but <strong>under what condition on the data</strong> — spelled out as a boolean expression over the program's own fields, true exactly when some path to the statement is the one actually taken.</p>
