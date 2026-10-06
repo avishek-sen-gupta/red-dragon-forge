@@ -62,7 +62,7 @@ Cobble has no Makefile: each stage is an entry point run with `uv run` from
 | `cobble-depgraph --config <depgraph>` | Which variables feed which, by name, over the whole ASG cache |
 | `cobble-depgraph-render --config <depgraph>` | That graph as a WebGL page |
 | **Source control-flow graphs** | |
-| `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>] [--output <file>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given the fixpoint's targets, as JSONL rows |
+| `cobble-srccfg-build PROGRAM --config <corpus> [--dynamic-call-targets <targets.jsonl>] [--output <file>]` | Build one program's source CFG **and every program it transitively calls**, through dynamic calls too when given a targets file (the combine's, or the fixpoint's), as JSONL rows |
 | `cobble-srccfg-dot` / `cobble-srccfg-webgl --cfg <jsonl> --output <file>` | Draw that CFG as Graphviz DOT / a self-contained WebGL page |
 | `cobble-srccfg-query {guards,provenance,coassign} <subject> --cfg <jsonl>` | A node's guards, a field's provenance by name, or the fields assigned together with one |
 | `cobble-srccfg-reachability-walk --cfg <jsonl> --from <node-id>` | What can run from one PERFORM until control returns, and every other way it ends, as rows `cobble-srccfg-dot`/`-webgl` render |
@@ -155,8 +155,9 @@ but is kept reachable on purpose — the graph can be wrong about that (an `ALTE
 `GO TO`, control flow the parse dropped), and dead code loses every flow after it.
 
 **Dynamic calls.** A `CALL`/`XCTL`/`LINK` through a field names no program, so by
-default it pulls nothing into the closure. Given the fixpoint's
-`--dynamic-call-targets <out-dir>/targets.jsonl` (the flag `cobble-build` takes), each
+default it pulls nothing into the closure. Given
+`--dynamic-call-targets <targets.jsonl>` (the flag `cobble-build` takes) — the
+combine's, or the fixpoint's when no combine was run — each
 such site's candidates are built like any callee — transitively, so a candidate's own
 dynamic calls are followed too — and the site becomes one call per candidate, joined
 to that candidate's entry. `expression` names the field the site calls through,
@@ -172,7 +173,7 @@ the analysis is unsure of looks unsure. A site with no candidates draws nothing.
 
 ```bash
 uv run cobble-srccfg-build COSGN00C --config config/srccfg.toml \
-  --dynamic-call-targets out-fields/targets.jsonl --output closure.jsonl
+  --dynamic-call-targets out-combined/targets.jsonl --output closure.jsonl
 ```
 
 Every CFG file has one shape — JSONL rows, as above — whether it holds a whole
@@ -883,7 +884,9 @@ their reason and no value, so a name that only such a write could have supplied
 stays unresolved.
 
 `cobble-build --dynamic-call-targets <file>` reads that `targets.jsonl` and turns
-each row into one of three edge forms, by a three-way rule. Without the flag the
+each row into one of three edge forms, by a three-way rule. `cobble-dataflow-combine`
+writes rows of the same shape, plus an `outside` column the build ignores, with
+targets resolved across programs; pass its file to build from those. Without the flag the
 build adds no dynamic-target edges; a named file that does not exist stops the
 build before it starts.
 
@@ -1023,6 +1026,7 @@ uv run cobble-dataflow-fixpoint-query readers    PROGA.WS-TOTAL --fixpoint-dir o
 uv run cobble-dataflow-fixpoint-query reaches    WS-TOTAL --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl --depth 4
 uv run cobble-dataflow-fixpoint-query contains   SOME-REC --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl
 uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl --across-calls --max-hops 2
+uv run cobble-dataflow-fixpoint-query reaches    PROGA.WS-KEY --fixpoint-dir out-fields --extents out-fields/extents-input.jsonl --across-calls --links out-combined/links.jsonl
 ```
 
 Joins the graph, defs and aliases tables with the `--extents` table and answers in bytes. The
@@ -1074,6 +1078,11 @@ such steps one route may take. Off by default, because the call graph reaches mo
 of itself within a few hops, so an unbounded provenance answer names half the system
 and tells a reader nothing. Refused rather than ignored on the other six questions,
 which this analysis does not answer across a call.
+
+The crossings come from the fixpoint's `aliases.jsonl`, which cannot cross a site
+whose target it could not resolve. `--links <links.jsonl>` reads
+`cobble-dataflow-combine`'s links instead: the same rows plus the ones linking
+discovered, so the walk also crosses into callees the combine resolved.
 
 A hop is not an edge: the two windows are the same storage, so a crossing is a byte
 identity rebased to the other side's offsets. `LINK` returns, so its window is
