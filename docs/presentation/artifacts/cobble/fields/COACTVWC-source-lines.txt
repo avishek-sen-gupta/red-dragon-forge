@@ -1,0 +1,15 @@
+78:           10  WS-CARD-RID-ACCT-ID                 PIC 9(11).
+79:           10  WS-CARD-RID-ACCT-ID-X REDEFINES
+80:                  WS-CARD-RID-ACCT-ID              PIC X(11).
+268:           INITIALIZE CC-WORK-AREA
+269:                      WS-MISC-STORAGE
+288:              MOVE DFHCOMMAREA (1:LENGTH OF CARDDEMO-COMMAREA)  TO
+475:                 MOVE ACCT-CURR-BAL       TO ACURBALO OF CACTVWAO
+691:           MOVE CDEMO-ACCT-ID TO WS-CARD-RID-ACCT-ID
+729:                RIDFLD    (WS-CARD-RID-ACCT-ID-X)
+730:                KEYLENGTH (LENGTH OF WS-CARD-RID-ACCT-ID-X)
+749:                     WS-CARD-RID-ACCT-ID-X
+778:                RIDFLD    (WS-CARD-RID-ACCT-ID-X)
+779:                KEYLENGTH (LENGTH OF WS-CARD-RID-ACCT-ID-X)
+780:                INTO      (ACCOUNT-RECORD)
+798:                     WS-CARD-RID-ACCT-ID-X

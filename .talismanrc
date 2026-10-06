@@ -382,7 +382,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/jcl/FACTS.md
   checksum: c84edee2f45a93c0acc30339ffe6e528c5181d9a4db5f7e0748686c80ba324c6
 - filename: docs/presentation/artifacts/cics/turns.jsonl
-  checksum: e88eb2c1fa10a57c28a68cc3ecc2c753c3de612f02d63eefbc6406563285651a
+  checksum: 641d44c186e546c9aaf91293354db041279e02b1ceffe51e075df44002c5268c
 - filename: docs/presentation/artifacts/jcl/acctfile-readacct.log.txt
   checksum: ce5c13e01d72723540879dae253bdee97435b6e0c02a381c72d8de093ddd1e72
 - filename: docs/presentation/artifacts/cobble/dataflow/aliases.jsonl
@@ -396,7 +396,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/srccfg/guards-COSGN00C-xctl.txt
   checksum: 5b2b189652f2e9637c0dfdee73a68ba8a315107a91a30484635e68aaf0139a50
 - filename: docs/presentation/index.html
-  checksum: 2a1fb1e90589f7e8ac3218d6a62e392d1a16408e8159988d2da1abf7696538bd
+  checksum: c6eb8ba88f3d8049d16c699441c662c75e2865a6eed314d06c2d7c9ed7a9c743
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.dot
   checksum: 8ea2f45359e73ab3dc56502cbd6e3c3d7b225e8e58aebe55cd69875b7e7e4b4a
 - filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
@@ -529,4 +529,8 @@ fileignoreconfig:
   checksum: a881632af83f40c117236ed10704f0860342eab363bec500300d63827f0d1234
 - filename: docs/superpowers/plans/2026-10-06-cross-program-dataflow-combine.md
   checksum: a8fb734914598b1b86a212f271a343858707089cc74da4747acd5e60e1c44847
+- filename: docs/presentation/artifacts/cics/headless-tests.txt
+  checksum: 14d888b7effd355d617a1210a9b9bb4e71fd2712bb2efe8121189915874b0205
+- filename: docs/presentation/artifacts/cobble/pathwalk/COACTVWC-pathwalk.html
+  checksum: 1cb7b44b9c26b5b596b29d0055820c976e231a42f930e450fbced2c7c5f5844d
 version: "1.0"

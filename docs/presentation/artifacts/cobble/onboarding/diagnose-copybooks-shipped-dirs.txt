@@ -1,0 +1,36 @@
+$ diagnose-copybooks --config carddemo-shipped-copybooks.toml   # copybook_dirs: app/cpy, app/cpy-bms, stubs/
+Wrote docs/presentation/artifacts/cobble/onboarding/missing-copybooks-shipped-dirs.json
+==============================================================================
+  2 distinct copybook name(s) will not resolve
+  17 of 29 program(s) reference at least one -- each will FAIL to parse
+==============================================================================
+  Cumulative programs unblocked by fixing the commonest names:
+    top     1  ->      17 of 17 (100%)
+    top     2  ->      17 of 17 (100%)
+==============================================================================
+  Why:
+         2  not on disk in any configured copybook dir -- member must be staged
+         0  ON DISK but under a suffix copybook_extensions does not list
+  configured copybook_extensions: ['', 'cpy', 'CPY', 'cob', 'cbl', 'copy', 'COPY']
+==============================================================================
+
+$ diagnose-copybooks --config carddemo-shipped-copybooks.toml --fix stubs/
+==============================================================================
+  Wrote 2 empty stub(s) to stubs
+  !! A stubbed COPY parses but declares nothing: the records, fields and any PROCEDURE
+  !! text the real member carried are ABSENT from the graph. This buys a parse, not data.
+==============================================================================
+
+$ cat stubs/DFHAID.cpy
+      * GENERATED EMPTY STUB -- cobble diagnose-copybooks
+      * The real member was not staged in any configured copybook dir.
+      * Anything it declared is ABSENT from the parse and the graph.
+$ cat stubs/DFHBMSCA.cpy
+      * GENERATED EMPTY STUB -- cobble diagnose-copybooks
+      * The real member was not staged in any configured copybook dir.
+      * Anything it declared is ABSENT from the parse and the graph.
+
+$ diagnose-copybooks --config carddemo-shipped-copybooks.toml
+==============================================================================
+  No missing copybooks. 29 members scanned.
+==============================================================================

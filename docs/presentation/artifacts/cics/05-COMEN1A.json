@@ -1,25 +1,35 @@
 {
   "map": "COMEN1A",
+  "mapset": "COMEN01",
+  "mode": "full",
+  "erase": true,
+  "alarm": false,
+  "frset": false,
+  "freekb": false,
+  "cursor": {
+    "kind": "none"
+  },
   "fields": {
     "TRNNAME": "CM00",
     "TITLE01": "      AWS Mainframe Modernization",
-    "CURDATE": "09/14/26",
+    "CURDATE": "10/06/26",
     "PGMNAME": "COMEN01C",
     "TITLE02": "              CardDemo",
-    "CURTIME": "15:31:53",
-    "OPTN001": "1. Account View",
-    "OPTN002": "2. Account Update",
-    "OPTN003": "3. Credit Card List",
-    "OPTN004": "4. Credit Card View",
-    "OPTN005": "5. Credit Card Update",
-    "OPTN006": "6. Transaction List",
-    "OPTN007": "7. Transaction View",
-    "OPTN008": "8. Transaction Add",
-    "OPTN009": "9. Transaction Reports",
+    "CURTIME": "19:03:28",
+    "OPTN001": "01. Account View",
+    "OPTN002": "02. Account Update",
+    "OPTN003": "03. Credit Card List",
+    "OPTN004": "04. Credit Card View",
+    "OPTN005": "05. Credit Card Update",
+    "OPTN006": "06. Transaction List",
+    "OPTN007": "07. Transaction View",
+    "OPTN008": "08. Transaction Add",
+    "OPTN009": "09. Transaction Reports",
     "OPTN010": "10. Bill Payment",
     "OPTN011": "11. Pending Authorization View",
     "OPTN012": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "OPTION": "\u0000\u0000",
     "ERRMSG": ""
-  }
+  },
+  "attrs": {}
 }

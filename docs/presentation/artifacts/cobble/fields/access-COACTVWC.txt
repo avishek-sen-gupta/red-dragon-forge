@@ -1,0 +1,9 @@
+$ grep -c '"field":"WS-CARD-RID-ACCT-ID"' access-COACTVWC.jsonl   # sites naming it
+0
+$ cobble-access-query COACTVWC.WS-CARD-RID-ACCT-ID --accesses access-COACTVWC.jsonl --extents out-presentation/extents-input.jsonl
+WS-CARD-RID-ACCT-ID@working_storage[41:52]
+  COACTVWC/9200-GETCARDXREF-BYACCT/1.when.1.2.then.2  (9200-GETCARDXREF-BYACCT)
+  COACTVWC/9300-GETACCTDATA-BYACCT/1.when.1.2.then.2  (9300-GETACCTDATA-BYACCT)
+$ cobble-access-query COACTVWC.ACCT-CURR-BAL --accesses access-COACTVWC.jsonl --extents out-presentation/extents-input.jsonl
+ACCT-CURR-BAL@working_storage[4967:4979]
+  COACTVWC/1200-SETUP-SCREEN-VARS/0.else.1.then.1  (1200-SETUP-SCREEN-VARS)

@@ -1,16 +1,27 @@
 {
   "map": "COSGN0A",
+  "mapset": "COSGN00",
+  "mode": "full",
+  "erase": true,
+  "alarm": false,
+  "frset": false,
+  "freekb": false,
+  "cursor": {
+    "kind": "symbolic",
+    "field": "USERID"
+  },
   "fields": {
     "TRNNAME": "CC00",
     "TITLE01": "      AWS Mainframe Modernization",
-    "CURDATE": "09/14/26",
+    "CURDATE": "10/06/26",
     "PGMNAME": "COSGN00C",
     "TITLE02": "              CardDemo",
-    "CURTIME": "15:31:52",
+    "CURTIME": "19:03:28",
     "APPLID": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "SYSID": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "USERID": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "PASSWD": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "ERRMSG": ""
-  }
+  },
+  "attrs": {}
 }

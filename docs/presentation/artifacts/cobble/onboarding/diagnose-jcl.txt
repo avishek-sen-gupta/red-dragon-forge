@@ -1,0 +1,7 @@
+$ diagnose-jcl --config config/carddemo.toml
+Wrote docs/presentation/artifacts/cobble/onboarding/unparseable-jcl.json
+==============================================================================
+  38 of 38 member(s) parsed
+  0 failed
+  101 steps and 327 DDs across the members that parsed
+==============================================================================

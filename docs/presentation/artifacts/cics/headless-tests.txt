@@ -1,0 +1,20 @@
+$ cd cicada && uv run --no-sync python -m pytest tests/integration/cics/test_carddemo_terminal_screen.py -v -n0 --color=yes
+tests/integration/cics/test_carddemo_terminal_screen.py::test_signon_screen_positions_cursor_and_menu PASSED [ 50%]
+tests/integration/cics/test_carddemo_terminal_screen.py::test_menu_reselects_a_second_option_after_pf3 PASSED [100%]
+============================== 2 passed in 14.68s ==============================
+
+$ uv run --no-sync python -m pytest tests/integration/test_carddemo_db2_headless.py -v --color=yes
+tests/integration/test_carddemo_db2_headless.py::test_admin_six_updates_a_transaction_type PASSED [  7%]
+tests/integration/test_carddemo_db2_headless.py::test_the_update_is_committed_before_the_task_returns PASSED [ 15%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_six_inserts_a_new_transaction_type PASSED [ 23%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_six_delete_reports_the_real_minus_532 PASSED [ 30%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_lists_every_seeded_type_on_one_page PASSED [ 38%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_f7_on_the_first_page_says_so PASSED [ 46%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_needs_two_f8_presses_to_report_the_last_page PASSED [ 53%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_type_filter_narrows_to_one_row PASSED [ 61%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_rejects_a_non_numeric_type_filter_without_any_sql PASSED [ 69%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_updates_the_highlighted_row PASSED [ 76%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_backward_fetch_exhaustion_misreports_end_of_data_as_a_db2_error PASSED [ 84%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_six_insert_failure_reports_the_update_s_stale_sqlcode PASSED [ 92%]
+tests/integration/test_carddemo_db2_headless.py::test_admin_five_delete_failure_after_an_update_selection PASSED [100%]
+======================== 13 passed in 63.51s (0:01:03) =========================

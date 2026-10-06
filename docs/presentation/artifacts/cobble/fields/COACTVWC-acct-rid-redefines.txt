@@ -1,0 +1,38 @@
+$ cobble-dataflow-fixpoint-query extents COACTVWC.WS-CARD-RID-ACCT-ID-X --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.WS-CARD-RID-ACCT-ID-X  level 10  usage DISPLAY
+  declared at WS-CARD-RID-ACCT-ID-X@working_storage[41:52]
+
+
+$ cobble-dataflow-fixpoint-query writers COACTVWC.WS-CARD-RID-ACCT-ID-X --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.WS-CARD-RID-ACCT-ID-X  level 10  usage DISPLAY
+  declared at WS-CARD-RID-ACCT-ID-X@working_storage[41:52]
+writers (2):
+  0000-MAIN/1    COACTVWC.LITERAL                         (not storage) -> WS-MISC-STORAGE@working_storage[0:749]  [defined at -]
+    of which COACTVWC.WS-CARD-RID-ACCT-ID-X took (not storage)
+  9000-READ-ACCT/1 COACTVWC.CDEMO-ACCT-ID                   CDEMO-ACCT-ID@working_storage[1408:1419] -> WS-CARD-RID-ACCT-ID@working_storage[41:52]  [defined at 2210-EDIT-ACCOUNT/1.then.3, 2210-EDIT-ACCOUNT/2.else.0, 2210-EDIT-ACCOUNT/2.then.3]
+
+$ cobble-dataflow-fixpoint-query readers COACTVWC.WS-CARD-RID-ACCT-ID --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.WS-CARD-RID-ACCT-ID  level 10  usage DISPLAY
+  declared at WS-CARD-RID-ACCT-ID@working_storage[41:52]
+readers (2):
+  9200-GETCARDXREF-BYACCT/1.when.1.2.then.2 COACTVWC.WS-RETURN-MSG                   WS-CARD-RID-ACCT-ID-X@working_storage[41:52] -> WS-RETURN-MSG@working_storage[674:749]  [defined at 9000-READ-ACCT/1]
+  9300-GETACCTDATA-BYACCT/1.when.1.2.then.2 COACTVWC.WS-RETURN-MSG                   WS-CARD-RID-ACCT-ID-X@working_storage[41:52] -> WS-RETURN-MSG@working_storage[674:749]  [defined at 9000-READ-ACCT/1]
+
+$ cobble-dataflow-fixpoint-query overlapping COACTVWC.WS-CARD-RID-ACCT-ID-X --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.WS-CARD-RID-ACCT-ID-X  level 10  usage DISPLAY
+  declared at WS-CARD-RID-ACCT-ID-X@working_storage[41:52]
+shares bytes with (3):
+  level 01  COACTVWC.WS-MISC-STORAGE                 WS-MISC-STORAGE@working_storage[0:749]
+  level 05  COACTVWC.WS-XREF-RID                     WS-XREF-RID@working_storage[16:52]
+  level 10  COACTVWC.WS-CARD-RID-ACCT-ID             WS-CARD-RID-ACCT-ID@working_storage[41:52]
+
+$ cobble-dataflow-fixpoint-query contains COACTVWC.WS-XREF-RID --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.WS-XREF-RID  level 05  usage DISPLAY
+  declared at WS-XREF-RID@working_storage[16:52]
+contains (5):
+  level 10  COACTVWC.WS-CARD-RID-CARDNUM             WS-CARD-RID-CARDNUM@working_storage[16:32]
+  level 10  COACTVWC.WS-CARD-RID-CUST-ID             WS-CARD-RID-CUST-ID@working_storage[32:41]
+  level 10  COACTVWC.WS-CARD-RID-CUST-ID-X           WS-CARD-RID-CUST-ID-X@working_storage[32:41]
+  level 10  COACTVWC.WS-CARD-RID-ACCT-ID             WS-CARD-RID-ACCT-ID@working_storage[41:52]
+  level 10  COACTVWC.WS-CARD-RID-ACCT-ID-X           WS-CARD-RID-ACCT-ID-X@working_storage[41:52]
+
