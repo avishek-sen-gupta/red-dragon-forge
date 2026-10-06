@@ -16,7 +16,6 @@ from cobble.dataflow.srccfg.conditions import CLASS, IN
 from cobble.dataflow.srccfg.dataflow import (
     Definition,
     condition_operands,
-    def_use,
     definitions_of,
     reaching_definitions,
     readers_of,
@@ -51,10 +50,6 @@ def _rel(left: str, op: str, right: str) -> dict:
             "right": {"kind": "lit", "value": right},
         },
     }
-
-
-def _fields_of(uses, field: str):
-    return next(use for use in uses if use.field == field)
 
 
 def test_a_write_is_a_definition_at_its_own_node() -> None:
@@ -270,37 +265,6 @@ def test_a_loop_reaches_a_fixpoint_rather_than_iterating_forever() -> None:
     }
 
 
-def test_def_use_pairs_name_the_field_and_every_definition_that_reaches_it() -> None:
-    cfg = build_program(
-        _asg(
-            [
-                {
-                    "name": "MAIN",
-                    "statements": [
-                        _move("'A'", "WS-FLAG-A"),
-                        _move("WS-FLAG-A", "WS-RESULT"),
-                    ],
-                }
-            ]
-        )
-    )
-
-    use = _fields_of(def_use(cfg), "WS-FLAG-A")
-
-    assert use.node == "MAIN/1"
-    assert use.definitions == frozenset({Definition(node="MAIN/0", field="WS-FLAG-A")})
-
-
-def test_a_read_with_no_definition_is_still_a_use_with_an_empty_set() -> None:
-    """An empty set is the answer for a field written by the caller, by a file read,
-    or in a copybook VALUE clause -- and dropping the use would hide it entirely."""
-    cfg = build_program(
-        _asg([{"name": "MAIN", "statements": [_move("WS-FROM-CALLER", "WS-RESULT")]}])
-    )
-
-    assert _fields_of(def_use(cfg), "WS-FROM-CALLER").definitions == frozenset()
-
-
 def test_writers_of_lists_every_node_that_writes_a_field_in_source_order() -> None:
     """The first query anyone asks. Source order, because a reader compares it
     against the listing."""
@@ -429,7 +393,7 @@ def test_a_long_straight_line_reaches_fixpoint_without_exhausting_time() -> None
 
 def test_a_subscripted_write_is_visible_to_a_read_of_the_base_name() -> None:
     """I1: MOVE 'A' TO WS-TAB(1) generates a definition that writers_of('WS-TAB')
-    finds and that a read of WS-TAB sees."""
+    finds and that reaches the read of WS-TAB."""
     cfg = build_program(
         _asg(
             [
@@ -445,15 +409,14 @@ def test_a_subscripted_write_is_visible_to_a_read_of_the_base_name() -> None:
     )
 
     assert writers_of(cfg, "WS-TAB") == ("MAIN/0",)
-    uses = [u for u in def_use(cfg) if u.field == "WS-TAB"]
-    assert len(uses) == 1
-    assert len(uses[0].definitions) == 1
-    assert next(iter(uses[0].definitions)).field == "WS-TAB(1)"
+    assert reaching_definitions(cfg)["MAIN/1"] == frozenset(
+        {Definition(node="MAIN/0", field="WS-TAB(1)")}
+    )
 
 
 def test_a_reference_modified_write_is_visible_to_a_read_of_the_base_name() -> None:
-    """I1: MOVE 'X' TO WS-FIELD(1:4) generates a definition that writers_of and
-    def_use both find via base-name matching."""
+    """I1: MOVE 'X' TO WS-FIELD(1:4) generates a definition that writers_of finds
+    by base name and that reaches the read of WS-FIELD."""
     cfg = build_program(
         _asg(
             [
@@ -469,9 +432,9 @@ def test_a_reference_modified_write_is_visible_to_a_read_of_the_base_name() -> N
     )
 
     assert writers_of(cfg, "WS-FIELD") == ("MAIN/0",)
-    uses = [u for u in def_use(cfg) if u.field == "WS-FIELD"]
-    assert len(uses[0].definitions) == 1
-    assert next(iter(uses[0].definitions)).field == "WS-FIELD(1:4)"
+    assert reaching_definitions(cfg)["MAIN/1"] == frozenset(
+        {Definition(node="MAIN/0", field="WS-FIELD(1:4)")}
+    )
 
 
 def test_a_subscripted_write_does_not_kill_the_base_name() -> None:
@@ -492,8 +455,9 @@ def test_a_subscripted_write_does_not_kill_the_base_name() -> None:
         )
     )
 
-    uses = [u for u in def_use(cfg) if u.field == "WS-TAB"]
-    fields_reaching = {d.field for d in uses[0].definitions}
-    assert "WS-TAB" in fields_reaching
-    assert "WS-TAB(1)" in fields_reaching
-    assert len(fields_reaching) == 2
+    assert reaching_definitions(cfg)["MAIN/2"] == frozenset(
+        {
+            Definition(node="MAIN/0", field="WS-TAB"),
+            Definition(node="MAIN/1", field="WS-TAB(1)"),
+        }
+    )
