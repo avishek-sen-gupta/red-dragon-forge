@@ -400,8 +400,6 @@ def test_a_clamped_write_or_a_clamped_entry_is_never_split():
     exact_record = _extent(0, 12, name="WS-REC")
     clamped_record = _extent(0, 12, precision=Precision.CLAMPED, name="WS-REC")
     clamped_part = _extent(4, 4, precision=Precision.CLAMPED, name="WS-REC")
-    child = _extent(4, 4, name="WS-MID")
-    redefined = _extent(0, 12, name="WS-ALT")
     exact_part = _extent(4, 4, name="WS-MID")
     doubted = ValueSet(frozenset(), frozenset({UnresolvedReason.NOT_A_LITERAL}))
 

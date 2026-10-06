@@ -254,7 +254,9 @@ def _doubted(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
 
 
 def join(left: State, right: State) -> State:
-    """Union of both components, extent by extent. Order does not matter.
+    """Union of both components, extent by extent. What ``reaching`` answers does not
+    depend on the order; the map itself can, because a nested key the union already
+    covers is dropped.
 
     ``left is right`` is the fixpoint's own common case -- a node joined against
     itself once its in-state has settled -- and short-circuits before either
