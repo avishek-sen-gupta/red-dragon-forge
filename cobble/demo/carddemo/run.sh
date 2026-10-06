@@ -19,7 +19,7 @@ run cobble-extents --asg-dir "$OUT/parsed" \
   --out "$OUT/fixpoint/extents.jsonl"
 run cobble-dataflow-fixpoint --asg-dir "$OUT/parsed" \
   --out-dir "$OUT/fixpoint" \
-  --extents "$OUT/fixpoint/extents.jsonl" --all
+  --extents "$OUT/fixpoint/extents.jsonl" --all --force
 
 run cobble-dataflow-combine --config "$COBBLE_DEMO/carddemo.toml" \
   --fixpoint-dir "$OUT/fixpoint" \
@@ -40,4 +40,4 @@ run cobble-srccfg-webgl --cfg "$OUT/srccfg/$SRCCFG_PROGRAM-closure.jsonl" \
 mkdir -p "$OUT/trace"
 run cobble-fields-trace "$TRACE_PROGRAM" --asg-dir "$OUT/parsed" \
   --out "$OUT/trace/$TRACE_PROGRAM-trace.jsonl" \
-  --record-paths "$OUT/trace/$TRACE_PROGRAM-paths.jsonl"
+  --record-paths "$OUT/trace/$TRACE_PROGRAM-paths.jsonl" --force
