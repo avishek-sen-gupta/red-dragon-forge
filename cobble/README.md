@@ -577,11 +577,35 @@ Reading all 29 members of CardDemo back takes under 3s in total, against 34.6s t
 lay the same members' DATA DIVISIONs out again — 1.2s per member, 2.2s for the
 worst.
 
-The walk runs over the same control-flow graph `cobble-srccfg-build` writes: both
-build it through `srccfg/program.py:program_cfg`, which joins every CICS command
-that can raise a condition to the `HANDLE CONDITION` paragraphs armed where it runs.
-A paragraph reached only through such a handler is walked like any other, so its
-writes appear in every output.
+The walk runs over the control-flow graph `cobble-srccfg-build` writes, less the
+fall-throughs described next: both build it through
+`srccfg/program.py:program_cfg`, which joins every CICS command that can raise a
+condition to the `HANDLE CONDITION` paragraphs armed where it runs. A paragraph
+reached only through such a handler is walked like any other, so its writes appear
+in every output.
+
+**A performed paragraph does not fall through.** The walk keys on the node and
+keeps no call stack, so it follows every edge out of a paragraph's end, including
+the `FALLTHRU` into the next paragraph. A paragraph entered only by `PERFORM` never
+takes that edge: it returns. Followed anyway, it let a write that every performer
+makes before `PERFORM X` fail to dominate `X`, and on CardDemo it gave seven
+return-to-previous-screen `XCTL`s their own program as a candidate. So before
+walking, `fixpoint/fallthrough.py` drops a paragraph end's (or a section end's)
+`FALLTHRU` unless control can reach that end where it falls through. It is kept
+when the end is reached:
+
+- from the program's entry with no `PERFORM` active, stepping over each `PERFORM`
+  to where it resumes and following every other edge but `RETURN`;
+- inside a `PERFORM` range that does not end there: a `THRU` range running through
+  it, a `GO TO` into it from another performed paragraph, or a paragraph inside a
+  performed `SECTION`, whose range ends at the section's end;
+- in the overlap of two `PERFORM` ranges that overlap without nesting.
+
+A program with any transfer the graph could not resolve keeps every edge: a
+`GO TO` or `PERFORM` whose target is not a declared paragraph or section, an
+`ALTER`, or a `HANDLE CONDITION` naming a paragraph that does not exist. Only the
+fixpoint's copy is pruned: `cobble-srccfg-build`, the srccfg queries and
+`cobble-fields-trace` see the graph unchanged.
 
 **A write kills what it overwrites, and only that.** An exact write drops every
 entry it fully covers, in both the provenance and the value map. An exact write

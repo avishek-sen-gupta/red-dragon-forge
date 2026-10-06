@@ -77,6 +77,7 @@ from cobble.dataflow.fields.transfer import (
 from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
+from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.jumps.discover import jumps_of
@@ -701,7 +702,7 @@ def analyse(
     ``entry_state`` is what reaches the program before any statement runs -- the
     initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.
     """
-    cfg = program_cfg(asg)
+    cfg = fallthroughs_pruned(program_cfg(asg), paragraph_order(asg))
     statements = with_unmodelled(statement_index(asg), cfg, condition_index(asg))
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
