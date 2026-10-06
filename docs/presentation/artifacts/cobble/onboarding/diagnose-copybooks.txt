@@ -1,0 +1,5 @@
+$ diagnose-copybooks --config config/carddemo.toml
+Wrote docs/presentation/artifacts/cobble/onboarding/missing-copybooks.json
+==============================================================================
+  No missing copybooks. 29 members scanned.
+==============================================================================

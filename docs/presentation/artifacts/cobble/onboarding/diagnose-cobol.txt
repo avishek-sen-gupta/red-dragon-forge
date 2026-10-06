@@ -1,0 +1,6 @@
+$ diagnose-cobol --config config/carddemo.toml
+Wrote docs/presentation/artifacts/cobble/onboarding/unparseable-cobol.json
+==============================================================================
+  29 of 29 program(s) parsed
+  0 failed
+==============================================================================

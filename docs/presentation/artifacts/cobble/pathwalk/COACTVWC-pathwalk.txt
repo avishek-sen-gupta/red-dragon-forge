@@ -1,0 +1,2 @@
+$ cobble-viz-pathwalk --cfg cfg-COACTVWC.jsonl --paths COACTVWC-paths.jsonl --vars CARDDEMO-COMMAREA,CDEMO-ACCT-ID,CDEMO-TO-PROGRAM --output COACTVWC-pathwalk.html
+written: COACTVWC-pathwalk.html (84 KB)

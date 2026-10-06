@@ -38,7 +38,6 @@ from `cobble/`: `uv run --no-sync python -m cobble.bms_render --config config/ca
 - Explicit no-ops: HANDLE AID, UNLOCK (single-task emulation) (`strategy.py:73-79`). Any other verb lowers to `__cics_abend_unsupported` — a loud ABEND, not a silent skip (`strategy.py:1302-1316`).
 
 ## Limitations (honest)
-- **Wrong value on screen 04:** SSN renders `209-73-888`; CUST-SSN in the data is `020973888`, and COACTVWC builds it with `STRING CUST-SSN(1:3) '-' CUST-SSN(4:2) '-' CUST-SSN(6:4)` (`COACTVWC.cbl:496-504`), so the correct value is `020-97-3888`. Reference modification on this `PIC 9(09)` field appears to be shifted by one position. Not investigated or fixed here (a RedDragon issue).
 - This capture's screen renderings are field values only, from the same `bms_render` used before TN3270 shipped. `TerminalScreen` (`cicada/cics/screen/terminal_screen.py`) now models cursor position, attribute overrides and DATAONLY/MAPONLY, and `cicada-tn3270` shows all three live in a real 3270 emulator (see the cicada README); a caption under an overlapping field still inherits that field's colour, and a shorter field still clips characters it carries over — both need per-character attributes, not modelled yet.
 - `CURDATE`/`CURTIME` are the capture run's wall clock; APPLID/SYSID/USERID/PASSWD print as LOW-VALUES (NUL) in the JSON, blank on screen.
 - The region pads each follow-on COMMAREA to 400 bytes (`min_commarea_len=400`, `dispatcher.py:305-311`) so EIBCALEN covers CARDDEMO-COMMAREA — a harness setting, same as the in-repo test.

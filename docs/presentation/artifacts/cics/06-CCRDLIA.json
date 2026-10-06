@@ -1,12 +1,22 @@
 {
   "map": "CCRDLIA",
+  "mapset": "COCRDLI",
+  "mode": "full",
+  "erase": true,
+  "alarm": false,
+  "frset": false,
+  "freekb": true,
+  "cursor": {
+    "kind": "symbolic",
+    "field": "ACCTSID"
+  },
   "fields": {
     "TRNNAME": "CCLI",
     "TITLE01": "      AWS Mainframe Modernization",
-    "CURDATE": "09/14/26",
+    "CURDATE": "10/06/26",
     "PGMNAME": "COCRDLIC",
     "TITLE02": "              CardDemo",
-    "CURTIME": "15:31:53",
+    "CURTIME": "19:03:28",
     "PAGENO": "1",
     "ACCTSID": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "CARDSID": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
@@ -46,5 +56,47 @@
     "CRDSTS7": "Y",
     "INFOMSG": "TYPE S FOR DETAIL, U TO UPDATE ANY RECORD",
     "ERRMSG": ""
+  },
+  "attrs": {
+    "CRDSEL1": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "CRDSEL2": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "CRDSEL3": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "CRDSEL4": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "CRDSEL5": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "CRDSEL6": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "CRDSEL7": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "INFOMSG": {
+      "attr": 0,
+      "color": 7,
+      "hilight": 0
+    }
   }
 }

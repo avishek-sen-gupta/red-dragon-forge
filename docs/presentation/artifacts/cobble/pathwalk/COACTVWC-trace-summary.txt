@@ -1,0 +1,2 @@
+trace: 79 paths, 159/166 branches (96%), every plan left re-flips a branch edge already taken
+trace: 1 dead ends, 159/166 branches (96%) over 79 paths in 0.1s

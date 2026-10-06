@@ -1,0 +1,27 @@
+$ cobble-dataflow-fixpoint-query writers COACTVWC.ACCT-CURR-BAL --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.ACCT-CURR-BAL  level 05  usage DISPLAY
+  declared at ACCT-CURR-BAL@working_storage[4967:4979]
+writers (1):
+  9300-GETACCTDATA-BYACCT/0 COACTVWC.FILE:                           (not storage) -> ACCOUNT-RECORD@working_storage[4955:5255]  [defined at -]
+    of which COACTVWC.ACCT-CURR-BAL took (not storage)
+
+$ cobble-dataflow-fixpoint-query readers COACTVWC.ACCT-CURR-BAL --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.ACCT-CURR-BAL  level 05  usage DISPLAY
+  declared at ACCT-CURR-BAL@working_storage[4967:4979]
+readers (1):
+  1200-SETUP-SCREEN-VARS/0.else.1.then.1 COACTVWC.ACURBALO                        ACCT-CURR-BAL@working_storage[4967:4979] -> ACURBALO@working_storage[3918:3933]  [defined at 9300-GETACCTDATA-BYACCT/0]
+
+$ cobble-dataflow-fixpoint-query writers COACTVWC.CDEMO-ACCT-ID --fixpoint-dir out-presentation/fields-all --extents out-presentation/extents-input.jsonl
+COACTVWC.CDEMO-ACCT-ID  level 10  usage DISPLAY
+  declared at CDEMO-ACCT-ID@working_storage[1408:1419]
+writers (6):
+  0000-MAIN/4.then.0 COACTVWC.LITERAL                         (not storage) -> CARDDEMO-COMMAREA@working_storage[1290:1450]  [defined at -]
+    of which COACTVWC.CDEMO-ACCT-ID took (not storage)
+  0000-MAIN/4.else.0 COACTVWC.DFHCOMMAREA                     DFHCOMMAREA@linkage[0:32767] may -> CARDDEMO-COMMAREA@working_storage[1290:1450]  [defined at -]
+    of which COACTVWC.CDEMO-ACCT-ID took DFHCOMMAREA@linkage[118:129] may
+  0000-MAIN/9.when.0.8 COACTVWC.%CALL:CDEMO-TO-PROGRAM          (not storage) -> CARDDEMO-COMMAREA@working_storage[1290:1450]  [defined at -]
+    of which COACTVWC.CDEMO-ACCT-ID took (not storage)
+  2210-EDIT-ACCOUNT/1.then.3 COACTVWC.LITERAL                         (not storage) -> CDEMO-ACCT-ID@working_storage[1408:1419]  [defined at -]
+  2210-EDIT-ACCOUNT/2.then.3 COACTVWC.LITERAL                         (not storage) -> CDEMO-ACCT-ID@working_storage[1408:1419]  [defined at -]
+  2210-EDIT-ACCOUNT/2.else.0 COACTVWC.CC-ACCT-ID                      CC-ACCT-ID@working_storage[1254:1265] -> CDEMO-ACCT-ID@working_storage[1408:1419]  [defined at 2200-EDIT-MAP-INPUTS/2.else.0, 2200-EDIT-MAP-INPUTS/2.then.0]
+

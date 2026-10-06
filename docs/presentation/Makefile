@@ -8,7 +8,7 @@ export CARDDEMO_HOME ?= $(ROOT)/vendor/carddemo/app
 
 REVEAL_VERSION := 6.0.2
 
-.PHONY: vendor artifacts cobble srccfg cics jcl db2 serve
+.PHONY: vendor artifacts cobble srccfg cobble-features cics headless jcl db2 serve
 
 # reveal.js is fetched rather than versioned; the deck needs only these dist files.
 vendor: vendor/reveal.js/reveal.js
@@ -20,7 +20,7 @@ vendor/reveal.js/reveal.js:
 	cp .reveal-pkg/package/dist/plugin/notes.js vendor/reveal.js/plugin/
 	rm -rf .reveal-pkg
 
-artifacts: cobble srccfg cics jcl db2
+artifacts: cobble srccfg cobble-features cics headless jcl db2
 
 cobble:
 	cd $(ROOT) && bash docs/presentation/capture/cobble.sh
@@ -28,9 +28,15 @@ cobble:
 srccfg: cobble
 	cd $(ROOT) && bash docs/presentation/capture/srccfg.sh
 
+cobble-features: cobble
+	cd $(ROOT) && bash docs/presentation/capture/cobble_features.sh
+
 cics:
 	cd $(ROOT) && uv run --no-sync python docs/presentation/capture/cics_flow.py
 	cd $(ROOT)/cobble && for f in html text; do uv run --no-sync python -m cobble.bms_render --config config/carddemo.toml --values ../docs/presentation/artifacts/cics/0*.json --format $$f --out-dir ../docs/presentation/artifacts/cics; done
+
+headless:
+	cd $(ROOT) && bash docs/presentation/capture/headless.sh
 
 jcl:
 	cd $(ROOT) && bash docs/presentation/capture/jcl.sh

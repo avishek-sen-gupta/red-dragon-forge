@@ -219,3 +219,23 @@
 
 .reveal .progress { color: var(--phosphor); height: 4px; }
 .reveal .slide-number { background: transparent; font-family: var(--mono); color: var(--muted); font-size: 13px; }
+
+/* Technique families on the analysis-techniques slide. */
+.techniques td:first-child { border-left: 4px solid var(--fam); padding-left: 0.6em; }
+.techniques td:first-child strong { color: var(--fam); }
+.techniques tr.fam-data { --fam: var(--phosphor); }
+.techniques tr.fam-control { --fam: var(--blue); }
+.techniques tr.fam-exec { --fam: var(--amber); }
+.techniques td:last-child { color: var(--text); }
+.techniques td:nth-child(2) { color: var(--muted); }
+.fam-legend { display: flex; gap: 1.6em; font-family: var(--mono); font-size: 0.42em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0.2em 0 0.5em; }
+.fam-legend span::before { content: ""; display: inline-block; width: 0.9em; height: 0.9em; margin-right: 0.5em; vertical-align: -0.1em; background: var(--fam); border-radius: 2px; }
+.fam-legend .fam-data { --fam: var(--phosphor); }
+.fam-legend .fam-control { --fam: var(--blue); }
+.fam-legend .fam-exec { --fam: var(--amber); }
+
+/* Repository links on the title and closing slides. */
+.repos { display: grid; gap: 0.5em; margin-top: 1.4em; font-family: var(--mono); font-size: 0.6em; }
+.repos a { color: var(--phosphor); text-decoration: none; border-bottom: 1px solid var(--phosphor-dim); }
+.repos a:hover { border-bottom-color: var(--phosphor); }
+.repos .what { color: var(--muted); margin-left: 0.8em; font-family: var(--sans); }

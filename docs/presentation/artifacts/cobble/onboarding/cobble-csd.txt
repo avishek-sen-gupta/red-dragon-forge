@@ -1,0 +1,8 @@
+$ cobble-csd --config config/carddemo.toml --out synthetic.csd
+no transid_rules configured: every CICS member gets a synthetic transid, so the graph will hold no TRANSACTION nodes
+synthetic CSD: 17 definition(s)
+       0  corroborated (the convention and the member's own source agree)
+       0  convention (named elsewhere in the corpus, not by the member itself)
+      17  synthetic (no recoverable transaction: UNKNOWN.<member>)
+       0  transaction(s) no member claims
+wrote synthetic.csd -- add it to the config's csd_files to use it

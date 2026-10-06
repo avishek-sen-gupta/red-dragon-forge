@@ -1,12 +1,22 @@
 {
   "map": "CACTVWA",
+  "mapset": "COACTVW",
+  "mode": "full",
+  "erase": true,
+  "alarm": false,
+  "frset": false,
+  "freekb": true,
+  "cursor": {
+    "kind": "symbolic",
+    "field": "ACCTSID"
+  },
   "fields": {
     "TRNNAME": "CAVW",
     "TITLE01": "      AWS Mainframe Modernization",
-    "CURDATE": "09/14/26",
+    "CURDATE": "10/06/26",
     "PGMNAME": "COACTVWC",
     "TITLE02": "              CardDemo",
-    "CURTIME": "15:31:53",
+    "CURTIME": "19:03:28",
     "ACCTSID": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
     "ACSTTUS": "\u0000",
     "ADTOPEN": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
@@ -38,5 +48,17 @@
     "ACSPFLG": "\u0000",
     "INFOMSG": "Enter or update id of account to display",
     "ERRMSG": ""
+  },
+  "attrs": {
+    "ACCTSID": {
+      "attr": 193,
+      "color": 0,
+      "hilight": 0
+    },
+    "INFOMSG": {
+      "attr": 0,
+      "color": 7,
+      "hilight": 0
+    }
   }
 }

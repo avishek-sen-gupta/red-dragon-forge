@@ -1,0 +1,108 @@
+{
+  "DFHAID": {
+    "COACTUPC": [
+      616
+    ],
+    "COACTVWC": [
+      222
+    ],
+    "COADM01C": [
+      60
+    ],
+    "COBIL00C": [
+      84
+    ],
+    "COCRDLIC": [
+      268
+    ],
+    "COCRDSLC": [
+      209
+    ],
+    "COCRDUPC": [
+      328
+    ],
+    "COMEN01C": [
+      60
+    ],
+    "CORPT00C": [
+      148
+    ],
+    "COSGN00C": [
+      57
+    ],
+    "COTRN00C": [
+      80
+    ],
+    "COTRN01C": [
+      71
+    ],
+    "COTRN02C": [
+      92
+    ],
+    "COUSR00C": [
+      83
+    ],
+    "COUSR01C": [
+      55
+    ],
+    "COUSR02C": [
+      67
+    ],
+    "COUSR03C": [
+      67
+    ]
+  },
+  "DFHBMSCA": {
+    "COACTUPC": [
+      615
+    ],
+    "COACTVWC": [
+      221
+    ],
+    "COADM01C": [
+      61
+    ],
+    "COBIL00C": [
+      85
+    ],
+    "COCRDLIC": [
+      267
+    ],
+    "COCRDSLC": [
+      208
+    ],
+    "COCRDUPC": [
+      327
+    ],
+    "COMEN01C": [
+      61
+    ],
+    "CORPT00C": [
+      149
+    ],
+    "COSGN00C": [
+      58
+    ],
+    "COTRN00C": [
+      81
+    ],
+    "COTRN01C": [
+      72
+    ],
+    "COTRN02C": [
+      93
+    ],
+    "COUSR00C": [
+      84
+    ],
+    "COUSR01C": [
+      56
+    ],
+    "COUSR02C": [
+      68
+    ],
+    "COUSR03C": [
+      68
+    ]
+  }
+}

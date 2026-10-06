@@ -142,7 +142,7 @@ viz render_cmd --input "$ART/viz/COSGN00C-sequences.json" --mode program --progr
 viz render_cmd --input "$ART/viz/COACTVWC-sequences.json" --mode program --program COACTVWC --out "$ART/viz/COACTVWC-sequence-program.html"
 
 echo "== field-level dataflow"
-uv run --no-sync cobble-fields-trace COACTVWC --asg-dir out-parsed --out "$WORK/trace-COACTVWC.jsonl" 2> "$WORK/trace-COACTVWC.log"
+uv run --no-sync cobble-fields-trace COACTVWC --asg-dir out-parsed --out "$WORK/trace-COACTVWC.jsonl" --force 2> "$WORK/trace-COACTVWC.log"
 tail -2 "$WORK/trace-COACTVWC.log" | tee "$ART/dataflow/trace-COACTVWC-summary.txt"
 uv run --no-sync cobble-trace-query backward WS-CARD-RID-ACCT-ID --trace "$WORK/trace-COACTVWC.jsonl" --depth 5 \
   | tee "$ART/dataflow/COACTVWC-acct-rid-backward.txt"
