@@ -1,0 +1,22 @@
+# CardDemo corpus for the demo: config/carddemo.toml with every generated
+# directory moved under ${COBBLE_DEMO}/output. Paths resolve from cobble/; run.sh
+# sets COBBLE_DEMO and the working directory.
+[corpus]
+cobol_dir = "../vendor/carddemo/app/cbl"
+cobol_globs = ["*.cbl"]
+jcl_dir = "../vendor/carddemo/app/jcl"
+jcl_globs = ["*.jcl", "*.JCL"]
+proclib_dirs = ["../vendor/carddemo/app/proc"]
+csd_files = ["../vendor/carddemo/app/csd/CARDDEMO.CSD"]
+copybook_dirs = [
+  "${COBBLE_DEMO}/output/sym",
+  "../vendor/carddemo/app/cpy",
+  "../vendor/carddemo/app/cpy-bms",
+  "cics-copybooks",
+]
+asg_dir = "${COBBLE_DEMO}/output/parsed"
+
+[bms]
+bms_dir = "../vendor/carddemo/app/bms"
+macros_dir = "bms-macros"
+sym_dir = "${COBBLE_DEMO}/output/sym"

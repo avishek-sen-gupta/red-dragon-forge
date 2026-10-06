@@ -97,6 +97,13 @@ uv run cobble-compare --graph out/carddemo.jsonl             # identity-diff aga
 uv run cobble-render --graph out/carddemo.jsonl              # -> out/carddemo.html
 ```
 
+`demo/carddemo/run.sh`, run from the forge root, does all of this and more in one
+go: the fixpoint, the combine, the graph and its WebGL page, one program's source-CFG
+closure (`SRCCFG_PROGRAM`, default `COSGN00C`) and one field trace (`TRACE_PROGRAM`,
+default `CBACT01C`). Every artefact lands under `demo/carddemo/output/`, which is
+git-ignored; its configs (`carddemo.toml`, `srccfg.toml`) are `config/carddemo.toml`
+with the generated directories moved there.
+
 ### Source CFGs, and drawing a call closure
 
 `cobble-srccfg-build` walks out from one program through its calls, building the CFG
