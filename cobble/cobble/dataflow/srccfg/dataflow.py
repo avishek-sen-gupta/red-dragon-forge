@@ -823,44 +823,13 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
     }
 
 
-@dataclass(frozen=True)
-class Use:
-    """One read: the node and field, and every definition reaching it."""
-
-    node: str
-    field: str
-    definitions: Defs = frozenset()
-
-
-def def_use(cfg: Cfg) -> tuple[Use, ...]:
-    """Every read and the definitions reaching it.
-
-    Matches on both exact field name and base name: a read of WS-TAB sees definitions
-    of both WS-TAB and WS-TAB(1). Handler reads (%HANDLER[ANY]) are NOT resolved here;
-    use live_handlers for those."""
-    incoming = reaching_definitions(cfg)
-    return tuple(
-        Use(
-            node=node.id,
-            field=name,
-            definitions=frozenset(
-                d
-                for d in incoming.get(node.id, frozenset())
-                if base_field(d.field) == base_field(name)
-            ),
-        )
-        for node in cfg.nodes
-        for name in node.reads
-    )
-
-
 def writers_of(cfg: Cfg, field: str) -> tuple[str, ...]:
     """Every node that writes this field, in source order.
 
     Matches on both exact field name and base name: writers_of("WS-TAB") returns nodes
     writing WS-TAB, WS-TAB(1), WS-TAB(WS-I), and WS-TAB(1:4). A subscripted query is
-    answered by base name, so writers_of("WS-TAB(1)") also returns nodes writing WS-TAB(2);
-    use def_use if you need the qualifier."""
+    answered by base name, so writers_of("WS-TAB(1)") also returns nodes writing WS-TAB(2).
+    """
     base = base_field(field)
     return tuple(
         node.id

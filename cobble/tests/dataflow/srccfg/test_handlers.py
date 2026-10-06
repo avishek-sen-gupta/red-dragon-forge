@@ -11,7 +11,7 @@ from cobol_asg.asg_types import CobolASG
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.cfg import EdgeKind
-from cobble.dataflow.srccfg.dataflow import def_use, live_handlers, with_handler_edges
+from cobble.dataflow.srccfg.dataflow import live_handlers, with_handler_edges
 
 
 def _asg(paragraphs: list[dict]) -> CobolASG:
@@ -228,29 +228,6 @@ def test_a_handler_paragraph_the_program_does_not_declare_gets_no_edge() -> None
 
     assert cfg.successors(dispatch) == ()
     assert cfg.node(dispatch).target == "H-GONE"
-
-
-def test_handler_any_is_not_resolved_by_def_use() -> None:
-    """M4: def_use reports %HANDLER[ANY] as empty even when live_handlers resolves it.
-    This is not a bug: handler reads are resolved by live_handlers, not by def_use."""
-    cfg = build_program(
-        _asg(
-            [
-                {
-                    "name": "MAIN",
-                    "statements": [_arm("MAPFAIL", "H-MAPFAIL"), _receive()],
-                },
-                {"name": "H-MAPFAIL", "statements": []},
-            ]
-        )
-    )
-    dispatch = _dispatch_of(cfg)
-
-    handler_uses = [u for u in def_use(cfg) if u.node == dispatch]
-    assert len(handler_uses) == 1
-    assert handler_uses[0].field == "%HANDLER[ANY]"
-    assert handler_uses[0].definitions == frozenset()
-    assert live_handlers(cfg)[dispatch] == ("H-MAPFAIL",)
 
 
 def test_resolving_a_cfg_with_no_cics_returns_it_unchanged() -> None:
