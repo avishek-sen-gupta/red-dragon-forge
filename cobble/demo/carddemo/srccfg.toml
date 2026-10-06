@@ -1,0 +1,3 @@
+[srccfg]
+asg_dir = "${COBBLE_DEMO}/output/parsed"
+out_dir = "${COBBLE_DEMO}/output/srccfg"
