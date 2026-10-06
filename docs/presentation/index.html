@@ -761,6 +761,40 @@ c3270 -model <span class="hl">3279-2-E</span> localhost:3271     <span class="ok
 </section>
 
 <section>
+  <div class="kicker">CICS · recorded 3270 session</div>
+  <h2>CardDemo in c3270, as a user and as an admin</h2>
+  <div class="cols" style="grid-template-columns:1040px 1fr; gap:32px">
+    <div>
+      <div class="screen-frame" style="padding:8px">
+        <video controls preload="metadata" poster="artifacts/cics/carddemo-3270-poster.png" style="display:block; width:100%">
+          <source src="artifacts/cics/carddemo-3270.mp4" type="video/mp4">
+        </video>
+      </div>
+      <div class="caption">2 min 32 s. Unmodified CardDemo programs served over TN3270 to c3270, keys sent by a script.</div>
+    </div>
+    <div>
+<pre class="log" style="font-size:0.4em; white-space:pre-wrap"><span class="hl">USER0001</span>
+0:10  01  view account 00000000001
+0:20  02  update account: Phone 2,
+          FICO and zip, ENTER, PF5
+0:50  01  view again: the change is saved
+1:02  PF3 sign off
+
+<span class="hl">ADMIN001</span>
+1:20  1   list users
+1:26  2   add USER0006
+1:38  1   list: USER0006 is there
+1:48  3   rename USER0006, PF5
+2:06  4   delete USER0006, PF5
+2:20  1   list: USER0006 is gone</pre>
+      <p class="small" style="margin-top:0.8em">Updates and deletes write to a temporary copy of the VSAM data, seeded from CardDemo's own files at start-up.</p>
+    </div>
+  </div>
+  <div class="source">artifacts/cics/carddemo-3270.mp4 · capture/carddemo-3270.tape · capture/carddemo_3270_video.sh · cicada/config/carddemo-tn3270.toml</div>
+  <aside class="notes">Recorded with vhs driving c3270 against cicada-tn3270; make video regenerates it. The account update shows a real validation error first: account 1's seed data fails CardDemo's own FICO check, so the script fixes FICO and zip before saving. That is CardDemo's data, not the runtime. Sign-off is PF3 to the thank-you screen, then Clear and CC00 to sign on again.</aside>
+</section>
+
+<section>
   <div class="kicker">CICS · surface</div>
   <h2>CICS commands CardDemo uses; an ABEND for the rest</h2>
   <div class="cols three">
