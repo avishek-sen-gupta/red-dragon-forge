@@ -594,17 +594,24 @@ walking, `fixpoint/fallthrough.py` drops a paragraph end's (or a section end's)
 `FALLTHRU` unless control can reach that end where it falls through. It is kept
 when the end is reached:
 
-- from the program's entry with no `PERFORM` active, stepping over each `PERFORM`
-  to where it resumes and following every other edge but `RETURN`;
+- with no `PERFORM` active, from the program's entry, from each `ENTRY` statement
+  and from each paragraph a CICS `HANDLE ABEND LABEL` names, stepping over each
+  `PERFORM` to where it resumes and following every other edge but `RETURN`;
 - inside a `PERFORM` range that does not end there: a `THRU` range running through
   it, a `GO TO` into it from another performed paragraph, or a paragraph inside a
   performed `SECTION`, whose range ends at the section's end;
 - in the overlap of two `PERFORM` ranges that overlap without nesting.
 
-A program with any transfer the graph could not resolve keeps every edge: a
-`GO TO` or `PERFORM` whose target is not a declared paragraph or section, an
-`ALTER`, or a `HANDLE CONDITION` naming a paragraph that does not exist. Only the
-fixpoint's copy is pruned: `cobble-srccfg-build`, the srccfg queries and
+A program keeps every edge when it has any of these: a `GO TO` (including a
+`GO TO DEPENDING` branch and a `WHENEVER … GO TO`) or a `PERFORM` whose target is
+not a declared paragraph or section; a `PERFORM … THRU` whose end is undeclared or
+declared before its start, which the graph narrows to the start alone; an `ALTER`;
+or a `HANDLE CONDITION` or `HANDLE ABEND LABEL` naming a paragraph that does not
+exist. Control the graph does not show at all is not detected: `DECLARATIVES`
+are absent from it, and an unqualified name declared in two sections resolves to
+its first. An activation always returns at its own range end, even when an
+enclosing `PERFORM` shares that end; that holds for IBM's and GnuCOBOL's return
+handling, and the standard forbids two active `PERFORM`s sharing an end. Only the fixpoint's copy is pruned: `cobble-srccfg-build`, the srccfg queries and
 `cobble-fields-trace` see the graph unchanged.
 
 **A write kills what it overwrites, and only that.** An exact write drops every

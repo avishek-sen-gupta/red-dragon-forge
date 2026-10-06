@@ -702,8 +702,9 @@ def analyse(
     ``entry_state`` is what reaches the program before any statement runs -- the
     initial image of WORKING-STORAGE's VALUE clauses, when the caller has one.
     """
-    cfg = fallthroughs_pruned(program_cfg(asg), paragraph_order(asg))
-    statements = with_unmodelled(statement_index(asg), cfg, condition_index(asg))
+    unpruned = program_cfg(asg)
+    statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
+    cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
     walk = _walked(cfg, statements, index, _entry_node(asg), options, entry_state)
