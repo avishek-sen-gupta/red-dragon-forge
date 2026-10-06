@@ -1275,17 +1275,10 @@
 {"type":"edge","source":"COUSR02C","source_kind":"PROGRAM","target":"COSGN00C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COUSR03C","source_kind":"PROGRAM","target":"COADM01C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COUSR03C","source_kind":"PROGRAM","target":"COSGN00C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
-{"type":"edge","source":"COADM01C","source_kind":"PROGRAM","target":"COADM01C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COCRDSLC","source_kind":"PROGRAM","target":"COCRDLIC","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COCRDUPC","source_kind":"PROGRAM","target":"COCRDLIC","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
-{"type":"edge","source":"COMEN01C","source_kind":"PROGRAM","target":"COMEN01C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
-{"type":"edge","source":"COTRN00C","source_kind":"PROGRAM","target":"COTRN00C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COTRN00C","source_kind":"PROGRAM","target":"COTRN01C","target_kind":"PROGRAM","kind":"XCTL","attrs":{}}
-{"type":"edge","source":"COTRN01C","source_kind":"PROGRAM","target":"COTRN01C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
-{"type":"edge","source":"COUSR00C","source_kind":"PROGRAM","target":"COUSR00C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COUSR00C","source_kind":"PROGRAM","target":"COUSR02C","target_kind":"PROGRAM","kind":"XCTL","attrs":{}}
 {"type":"edge","source":"COUSR00C","source_kind":"PROGRAM","target":"COUSR03C","target_kind":"PROGRAM","kind":"XCTL","attrs":{}}
 {"type":"edge","source":"COUSR02C","source_kind":"PROGRAM","target":"COUSR00C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
-{"type":"edge","source":"COUSR02C","source_kind":"PROGRAM","target":"COUSR02C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
 {"type":"edge","source":"COUSR03C","source_kind":"PROGRAM","target":"COUSR00C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
-{"type":"edge","source":"COUSR03C","source_kind":"PROGRAM","target":"COUSR03C","target_kind":"PROGRAM","kind":"XCTL_CANDIDATE","attrs":{}}
