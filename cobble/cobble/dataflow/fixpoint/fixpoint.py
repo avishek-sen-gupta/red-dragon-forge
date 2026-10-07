@@ -733,7 +733,7 @@ def analyse(
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
-    relevant = _relevant(asg, cfg, statements, found, index, options.scope)
+    relevant = _relevant(asg, cfg, statements, found, index, options.scope, entry_state)
     walk = _walked(
         cfg, statements, index, relevant, _entry_node(asg), options, entry_state
     )
@@ -781,10 +781,21 @@ def _relevant(
     found: tuple[tuple[str, Statement], ...],
     index: CellIndex,
     scope: Scope,
+    entry_state: State,
 ) -> Relevant:
     if scope is Scope.WHOLE:
         return EVERYTHING
-    return closed(fact_extents(asg, cfg, statements, index), _written(found, index))
+    return closed(
+        fact_extents(asg, cfg, statements, index),
+        (*_written(found, index), *_imaged(entry_state)),
+    )
+
+
+def _imaged(entry_state: State) -> tuple[Write, ...]:
+    return tuple(
+        Write(target=extent, sources=frozenset(), values=VALUES_EMPTY)
+        for extent in entry_state.values
+    )
 
 
 def _laid_out(asg, layout: ProgramLayout) -> ProgramLayout:

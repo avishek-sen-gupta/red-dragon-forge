@@ -45,9 +45,10 @@ def test_the_set_follows_writes_into_the_target_and_nothing_beside_it() -> None:
 
     found = closed((pgm,), writes)
 
-    assert found == Relevant(extents=frozenset({pgm, staged, part, origin}))
-    assert found.touches(head)
-    assert found.touches(record)
+    assert found == Relevant(
+        extents=frozenset({pgm, head, staged, part, record, origin})
+    )
+    assert found.touches(_ws(30, 2, "WS-REC-TAIL"))
     assert not found.touches(sibling)
     assert not found.touches(
         FieldExtent(RegionId.LINKAGE, 0, 8, Precision.EXACT, "WS-PGM")
