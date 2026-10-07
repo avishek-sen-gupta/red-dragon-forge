@@ -81,11 +81,11 @@ repos:
         files: ^(jackal/|vendor/red-dragon(/|$))
 
       - id: tests-forge
-        name: red-dragon-forge test suite
-        entry: make test PYTEST_ARGS="-x -q"
+        name: red-dragon-forge test suite (root and cobble)
+        entry: bash -c 'make test PYTEST_ARGS="-x -q" && cd cobble && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(red_dragon_forge/|cicada/|squall/|vendor/)
+        files: ^(red_dragon_forge/|cicada/|squall/|cobble/|vendor/)
 
   # Talisman was installed as a bare git hook, which pre-commit demoted to
   # .git/hooks/pre-commit.legacy on taking over pre-commit. Talisman derives its

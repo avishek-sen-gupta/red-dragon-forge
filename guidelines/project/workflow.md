@@ -110,8 +110,9 @@ report changed files, validation run, and the commands you would have run.
 ### The commit hooks are the gate
 
 `.pre-commit-config.yaml` runs, blocking: python-fp-lint, Black (auto-fix and re-stage),
-Pyright, import-linter, all four test suites, the terminology guard on both the diff and the
-commit message, and Talisman.
+Pyright, import-linter, the test suites (cicada, squall and jackal on their own changes; the
+root suite and cobble's together, on changes to either), the terminology guard on both the diff
+and the commit message, and Talisman.
 
 **`--no-verify` is never used** unless the user explicitly instructs it. When a hook fails: fix
 the code, fix the test, or rewrite the commit message. A timeout in an e2e suite is an
