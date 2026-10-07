@@ -3,6 +3,8 @@
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+import shutil
+
 import pytest
 
 from cobble.dataflow.combine.cli import cli as combine_cli
@@ -292,3 +294,37 @@ def test_a_sibling_write_inside_a_record_the_target_was_read_from_counts_the_sam
         ("PROGT", (), ("not-a-literal",)),
         ("PROGV", (), ("not-a-literal",)),
     ]
+
+
+def _restricted_again(out: Path) -> int:
+    return cli(
+        [
+            "--asg-dir",
+            str(out.parent / "parsed"),
+            "--out-dir",
+            str(out),
+            "--extents",
+            str(out.parent / "extents.jsonl"),
+            "--all",
+            "--max-workers",
+            "1",
+            "--call-targets-only",
+        ]
+    )
+
+
+def test_a_member_that_fails_in_a_restricted_run_is_recorded_in_that_scope(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+) -> None:
+    out = fixpoint_corpus_with(
+        {"PROGL": LOCAL, "PROGQ": LOCAL.replace("PROGL", "PROGQ")},
+        ("--call-targets-only",),
+    )
+    (out.parent / "parsed" / "PROGQ.json").write_text("not json", encoding="utf-8")
+    shutil.rmtree(out / "members" / "PROGQ")
+
+    first = _restricted_again(out)
+    failed = _counts(out, "PROGQ")
+
+    assert (failed.skipped[:12], failed.scope) == ("unreadable: ", Scope.CALL_TARGETS)
+    assert (first, _restricted_again(out)) == (3, 3)

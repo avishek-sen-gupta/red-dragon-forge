@@ -394,7 +394,11 @@ def _member_result(
     try:
         return _analysed_member(published, path, options, locations)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
-        return MemberResult(member=published.member, skipped=f"unreadable: {error!r}")
+        return MemberResult(
+            member=published.member,
+            skipped=f"unreadable: {error!r}",
+            scope=options.scope,
+        )
 
 
 def _skipped(counts: MemberCounts) -> tuple[tuple[str, str], ...]:
