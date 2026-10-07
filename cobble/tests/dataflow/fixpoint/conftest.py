@@ -27,7 +27,7 @@ def fixpoint_out(
     """Parse ``source`` as ``member``, lay it out, run the fixpoint; the out-dir."""
 
     def run(member: str, source: str) -> Path:
-        return _fixpoint(tmp_path_factory, ("--member", member), {member: source})
+        return _fixpoint(tmp_path_factory, ("--member", member), {member: source}, ())
 
     return run
 
@@ -40,7 +40,19 @@ def fixpoint_corpus(
     out-dir, whose parent holds the extents."""
 
     def run(sources: Mapping[str, str]) -> Path:
-        return _fixpoint(tmp_path_factory, ("--all",), sources)
+        return _fixpoint(tmp_path_factory, ("--all",), sources, ())
+
+    return run
+
+
+@pytest.fixture(scope="session")
+def fixpoint_corpus_with(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Callable[[Mapping[str, str], tuple[str, ...]], Path]:
+    """``fixpoint_corpus`` with extra fixpoint arguments."""
+
+    def run(sources: Mapping[str, str], extra: tuple[str, ...]) -> Path:
+        return _fixpoint(tmp_path_factory, ("--all",), sources, extra)
 
     return run
 
@@ -49,6 +61,7 @@ def _fixpoint(
     tmp_path_factory: pytest.TempPathFactory,
     selection: tuple[str, ...],
     sources: Mapping[str, str],
+    extra: tuple[str, ...],
 ) -> Path:
     from cobble.parsing.parse_corpus import Job, parse_one
 
@@ -76,6 +89,7 @@ def _fixpoint(
             *selection,
             "--max-workers",
             "1",
+            *extra,
         ]
     )
     return out

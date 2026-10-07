@@ -130,6 +130,7 @@ from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
 from cobble.dataflow.fixpoint.rows import Row
+from cobble.dataflow.fixpoint.scope import Scope
 from cobble.dataflow.fixpoint.targets import ResolvedTarget
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.rows import jump_identity, jump_row
@@ -176,6 +177,9 @@ class MemberResult:
     sweeps: int = 0
     settled: bool = True
     skipped: str = ""
+    scope: Scope = Scope.WHOLE
+    tracked: int = 0
+    relevant: int = 0
 
 
 @dataclass(frozen=True)
@@ -284,6 +288,8 @@ def _tables(
         unmodelled=flow.unmodelled,
         sweeps=flow.sweeps,
         settled=flow.settled,
+        tracked=flow.tracked,
+        relevant=flow.relevant,
     )
 
 
@@ -353,7 +359,10 @@ def _analysed_member(
     """
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
     flow, index = analysed(asg, options, published.layout)
-    tables = _tables(published.member, flow, published.layout, locations)
+    tables = replace(
+        _tables(published.member, flow, published.layout, locations),
+        scope=options.scope,
+    )
     return _aliased_member(tables, asg, index, path.parent)
 
 
@@ -464,6 +473,9 @@ def counts_of(result: MemberResult) -> MemberCounts:
         resolved_one=_resolved_one(result),
         resolved_several=_resolved_several(result),
         unresolved_reasons=_unresolved_reasons(result),
+        scope=result.scope,
+        tracked=result.tracked,
+        relevant=result.relevant,
     )
 
 
@@ -726,7 +738,14 @@ def _reported_member(numbered: tuple[int, _Finished], total: int) -> _Finished:
     if member.reused:
         logger.info("fields: [%d/%d] %s reused", finished, total, member.counts.member)
         return member
-    logger.info("fields: [%d/%d] %s", finished, total, member.counts.member)
+    logger.info(
+        "fields: [%d/%d] %s (%d of %d extents tracked)",
+        finished,
+        total,
+        member.counts.member,
+        member.counts.relevant,
+        member.counts.tracked,
+    )
     _log_result(member.counts, member.seconds)
     return member
 
@@ -947,6 +966,7 @@ def _options(arguments: argparse.Namespace) -> AnalysisOptions:
     return AnalysisOptions(
         sweeps=arguments.sweeps,
         factor=arguments.iteration_factor,
+        scope=Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE,
     )
 
 
@@ -983,6 +1003,21 @@ def _inputs(
 
 
 def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
+    members = arguments.out_dir / MEMBERS_DIR
+    if arguments.force:
+        shutil.rmtree(members, ignore_errors=True)
+    ensure_dir(members)
+    mixed = _other_scope(members, _options(arguments).scope)
+    if mixed:
+        sys.stderr.write(
+            f"fields: !! members analysed in another scope: {', '.join(mixed)};"
+            " rerun with --force\n"
+        )
+        return 2
+    return _members_run(paths, arguments)
+
+
+def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     """One index for both halves: the nodes emit builds and the ones the writer
     synthesises from an edge must carry the same location for the same id.
 
@@ -990,10 +1025,6 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     ASG cache and never the corpus tree, so it has nothing to index. FIELD
     resolves NOT_INDEXED whatever the index holds; see corpus_index's table.
     """
-    members = arguments.out_dir / MEMBERS_DIR
-    if arguments.force:
-        shutil.rmtree(members, ignore_errors=True)
-    ensure_dir(members)
     locations = CorpusIndex()
     with ProcessPoolExecutor(
         max_workers=arguments.max_workers, initializer=configure_cli_logging
@@ -1002,6 +1033,17 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     _publish(arguments, locations, totals)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
+
+
+def _other_scope(members: Path, scope: Scope) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            path.parent.name
+            for path in members.glob(f"*/{COUNTS_FILE}")
+            if MemberCounts.model_validate_json(path.read_text(encoding="utf-8")).scope
+            is not scope
+        )
+    )
 
 
 def _publish(
@@ -1073,6 +1115,11 @@ def _add_inputs(parser: argparse.ArgumentParser) -> None:
 
 def _add_walk_budget(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--min-coverage", type=float, default=DEFAULT_FLOOR)
+    parser.add_argument(
+        "--call-targets-only",
+        action="store_true",
+        help="track only the bytes call targets and jump areas depend on",
+    )
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
         "--iteration-factor",
