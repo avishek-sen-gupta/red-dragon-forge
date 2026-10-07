@@ -93,10 +93,8 @@ from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import (
     accumulate,
-    count,
     groupby,
     islice,
-    pairwise,
     repeat,
     takewhile,
 )
@@ -133,10 +131,9 @@ from cobble.dataflow.fields.side_tables import (
     target_identity,
     target_row,
 )
-from cobble.dataflow.fields.spans import pairs_of
 from cobble.dataflow.fixpoint import rows
-from cobble.dataflow.fixpoint.area_need import AreaNeed, joined
-from cobble.dataflow.fixpoint.area_needs import need_found
+from cobble.dataflow.fixpoint.area_need import AreaNeed
+from cobble.dataflow.fixpoint.area_need_file import AreaNeedFile
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
@@ -1044,92 +1041,39 @@ def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
         max_workers=arguments.max_workers, initializer=configure_cli_logging
     ) as pool:
         inputs = _inputs(paths, arguments, locations)
-        totals = _run(_narrowed(inputs, arguments, pool), pool)
+        totals = _run(_narrowed(inputs, arguments), pool)
     _publish(arguments, locations, totals)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
 
 
-def _need_in_worker(job: tuple[str, tuple[Row, ...], Path, AreaNeed]) -> AreaNeed:
-    """One member's share of the area need. A member that cannot be read adds
-    nothing: its own targets go unresolved anyway, and it says so in its counts."""
-    member, block, path, need = job
-    try:
-        with cached_asg_dialect_parsers_registered():
-            asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-            return need_found(asg, member_layout(member, block).layout, need)
-    except Exception as error:  # noqa: BLE001 - one member must not end the pre-pass
-        logger.warning("fields: area need: %s unreadable: %r", member, error)
-        return AreaNeed()
-
-
-def _need_bytes(bounds: tuple[tuple[int, tuple[int, ...]], ...]) -> int:
-    return sum(high - low for _, one in bounds for low, high in pairs_of(one))
-
-
-def _noted(numbered: tuple[int, AreaNeed], total: int, number: int) -> AreaNeed:
-    done, found = numbered
-    if not done % 50 or done == total:
-        logger.info("fields: area need round %d: [%d/%d] members", number, done, total)
-    return found
-
-
-def _progressed(
-    results: Iterator[AreaNeed], total: int, number: int
-) -> Iterator[AreaNeed]:
-    """The area-need results, with a line every 50 members and at the last."""
-    return map(lambda numbered: _noted(numbered, total, number), enumerate(results, 1))
-
-
-def _need_round(
-    need: AreaNeed,
-    number: int,
-    arguments: argparse.Namespace,
-    pool: ProcessPoolExecutor,
-) -> AreaNeed:
-    present = tuple(
-        (member, block)
-        for member, block in member_rows(arguments.extents)
-        if (arguments.asg_dir / f"{member}.json").is_file()
-    )
-    jobs = (
-        (member, block, arguments.asg_dir / f"{member}.json", need)
-        for member, block in present
-    )
-    found = reduce(
-        joined,
-        _progressed(pool.map(_need_in_worker, jobs, chunksize=8), len(present), number),
-        need,
-    )
-    logger.info(
-        "fields: area need round %d: %d bytes needed on entry, %d read back",
-        number,
-        _need_bytes(found.entry),
-        _need_bytes(found.back),
-    )
-    return found
-
-
-def _narrowed(
-    inputs: _Inputs, arguments: argparse.Namespace, pool: ProcessPoolExecutor
-) -> _Inputs:
-    """With --narrow-areas, the area need over every member in the extents table --
-    not just the selected ones, since any of them may be a callee -- iterated until
-    a round adds nothing, then handed to every member's walk."""
+def _narrowed(inputs: _Inputs, arguments: argparse.Namespace) -> _Inputs:
+    """With --narrow-areas, the area need cobble-dataflow-area-need wrote, handed
+    to every member's walk."""
     if not arguments.narrow_areas:
         return inputs
-    rounds = accumulate(
-        count(1),
-        lambda need, number: _need_round(need, number, arguments, pool),
-        initial=AreaNeed(),
+    stored = AreaNeedFile.model_validate_json(
+        Path(arguments.narrow_areas).read_text(encoding="utf-8")
     )
-    settled = next(after for before, after in pairwise(rounds) if before == after)
-    return replace(inputs, options=replace(inputs.options, areas=settled))
+    need = AreaNeed(entry=stored.entry, back=stored.back)
+    return replace(inputs, options=replace(inputs.options, areas=need))
+
+
+def _narrow_problem(arguments: argparse.Namespace) -> str:
+    if arguments.narrow_areas and not arguments.call_targets_only:
+        return "fields: !! --narrow-areas needs --call-targets-only\n"
+    if arguments.narrow_areas and not Path(arguments.narrow_areas).is_file():
+        return (
+            f"fields: !! no area need at {arguments.narrow_areas}:"
+            " run cobble-dataflow-area-need first\n"
+        )
+    return ""
 
 
 def _refusal(arguments: argparse.Namespace, members: Path) -> str:
-    if arguments.narrow_areas and not arguments.call_targets_only:
-        return "fields: !! --narrow-areas needs --call-targets-only\n"
+    problem = _narrow_problem(arguments)
+    if problem:
+        return problem
     mixed = _other_scope(members, _options(arguments).scope)
     if mixed:
         return (
@@ -1226,9 +1170,10 @@ def _add_walk_budget(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--narrow-areas",
-        action="store_true",
+        default="",
+        metavar="FILE",
         help="with --call-targets-only: of each handed-over area, track only the bytes"
-        " some program's targets read after receiving it, found by a pre-pass",
+        " the area need in FILE says some program reads (cobble-dataflow-area-need)",
     )
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
