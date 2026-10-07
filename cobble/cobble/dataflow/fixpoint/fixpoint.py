@@ -854,7 +854,7 @@ def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Ste
     runs = accumulate(repeat(None), advanced, initial=start)
     return cfg, (
         Stepped(
-            node=order.ordered[min(before.queue)],
+            node=order.ordered[_next(before.queue, before.cursor)],
             before=before.states,
             after=after.states,
             queued=len(after.queue),

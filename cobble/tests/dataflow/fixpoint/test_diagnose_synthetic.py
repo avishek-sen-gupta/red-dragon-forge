@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from cobble.dataflow.fixpoint.diagnose import cli, report
+from cobble.dataflow.fixpoint.fixpoint import stepwise
+from cobble.dataflow.fixpoint.options import AnalysisOptions
+from cobble.parsing.asg_cache import cached_asg
 from cobble.dataflow.fixpoint.scope import Scope
 
 LOOPING = """\
@@ -55,3 +58,31 @@ def test_the_report_names_where_the_steps_went(
     assert capsys.readouterr().err == (
         f"fields: !! no cached ASG at {parsed / 'PROGX.json'}\n"
     )
+
+
+def test_every_step_names_the_node_whose_successors_it_changed(
+    fixpoint_out: Callable[[str, str], Path],
+) -> None:
+    source = (Path(__file__).parent / "data" / "perf" / "SYNPERFA.cbl").read_text(
+        encoding="utf-8"
+    )
+    out = fixpoint_out("SYNPERFA", source)
+    parsed = out.parent / "parsed"
+    cfg, walk = stepwise(
+        cached_asg(parsed, parsed / "SYNPERFA.json"), AnalysisOptions(), 50000
+    )
+
+    strays = [
+        (step.node, changed)
+        for step in walk
+        for changed in (
+            {
+                node
+                for node, state in step.after.items()
+                if step.before.get(node) is not state
+            },
+        )
+        if not changed <= {edge.target for edge in cfg.successors(step.node)}
+    ]
+
+    assert strays == []
