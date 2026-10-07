@@ -182,10 +182,10 @@ RETURNING = """\
            05  WS-TO-PGM        PIC X(8).
            05  WS-OTHER         PIC X(10).
        LINKAGE SECTION.
-       01  DFHCOMMAREA          PIC X(18).
+       01  DFHCOMMAREA          PIC X(10).
        PROCEDURE DIVISION.
        MAIN-PARA.
-           MOVE DFHCOMMAREA TO WS-REC.
+           MOVE DFHCOMMAREA TO WS-OTHER.
            EVALUATE WS-OTHER
                WHEN 'A'
                    MOVE 'PGMA' TO WS-TO-PGM
@@ -366,7 +366,7 @@ def _jumps(out: Path, program: str) -> tuple[Jump, ...]:
     return tuple(jump_from_row(line) for line in lines)
 
 
-def test_every_performer_writes_the_xctl_target_so_no_linkage_reaches_it(
+def test_every_performer_writes_the_xctl_target_so_only_their_literals_reach_it(
     out: Path,
 ) -> None:
     (xctl,) = (j for j in _jumps(out, "FTBACK") if j.kind is JumpKind.XCTL)

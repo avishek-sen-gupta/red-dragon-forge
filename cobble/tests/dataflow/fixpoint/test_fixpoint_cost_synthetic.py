@@ -1,0 +1,198 @@
+"""The fixpoint's cost on three invented programs, against the costs recorded around the partial-overwrite split."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from cobble.dataflow.fixpoint.fixpoint import analysed
+from cobble.parsing.asg_cache import cached_asg
+from tests.dataflow.fixpoint.fixpoint_baseline import FixpointBaseline
+from tests.dataflow.fixpoint.fixpoint_cost import FixpointCost
+
+FORGE = Path(__file__).resolve().parents[4]
+BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
+PROGRAMS = Path(__file__).parent / "data" / "perf"
+
+BASELINES = (
+    FixpointBaseline(
+        program="SYNPERFA",
+        pre_split=FixpointCost(
+            commit="c413b60",
+            nodes=1016,
+            dequeues=25_810,
+            settled=True,
+            source_extents=156_658,
+            largest_state=207,
+            value_extents=97_188,
+            peak_rss_mb=257,
+            seconds=3.6,
+        ),
+        split=FixpointCost(
+            commit="df6d6a6",
+            nodes=1016,
+            dequeues=104_078,
+            settled=True,
+            source_extents=310_875,
+            largest_state=506,
+            value_extents=137_583,
+            peak_rss_mb=434,
+            seconds=42.8,
+        ),
+        atoms=FixpointCost(
+            commit="df6d6a6 with atom cuts",
+            nodes=1016,
+            dequeues=36_146,
+            settled=True,
+            source_extents=467_182,
+            largest_state=604,
+            value_extents=137_583,
+            peak_rss_mb=602,
+            seconds=29.0,
+        ),
+        reverted=FixpointCost(
+            commit="df6d6a6 with the split reverted",
+            nodes=1016,
+            dequeues=25_810,
+            settled=True,
+            source_extents=156_658,
+            largest_state=207,
+            value_extents=97_188,
+            peak_rss_mb=257,
+            seconds=3.6,
+        ),
+    ),
+    FixpointBaseline(
+        program="SYNPERFB",
+        pre_split=FixpointCost(
+            commit="c413b60",
+            nodes=1014,
+            dequeues=49_670,
+            settled=True,
+            source_extents=176_327,
+            largest_state=220,
+            value_extents=122_415,
+            peak_rss_mb=282,
+            seconds=8.3,
+        ),
+        split=FixpointCost(
+            commit="df6d6a6",
+            nodes=1014,
+            dequeues=152_100,
+            settled=False,
+            source_extents=349_410,
+            largest_state=533,
+            value_extents=186_722,
+            peak_rss_mb=484,
+            seconds=74.4,
+        ),
+        atoms=FixpointCost(
+            commit="df6d6a6 with atom cuts",
+            nodes=1014,
+            dequeues=63_725,
+            settled=True,
+            source_extents=467_689,
+            largest_state=608,
+            value_extents=197_001,
+            peak_rss_mb=674,
+            seconds=52.4,
+        ),
+        reverted=FixpointCost(
+            commit="df6d6a6 with the split reverted",
+            nodes=1014,
+            dequeues=49_670,
+            settled=True,
+            source_extents=176_327,
+            largest_state=220,
+            value_extents=122_415,
+            peak_rss_mb=281,
+            seconds=7.9,
+        ),
+    ),
+    FixpointBaseline(
+        program="SYNPERFC",
+        pre_split=FixpointCost(
+            commit="c413b60",
+            nodes=4778,
+            dequeues=52_209,
+            settled=True,
+            source_extents=3_703_073,
+            largest_state=942,
+            value_extents=2_354_085,
+            peak_rss_mb=1573,
+            seconds=164.8,
+        ),
+        split=FixpointCost(
+            commit="00e8aa7",
+            nodes=4778,
+            dequeues=60_949,
+            settled=True,
+            source_extents=6_643_830,
+            largest_state=1779,
+            value_extents=2_661_089,
+            peak_rss_mb=2622,
+            seconds=285.3,
+        ),
+        atoms=FixpointCost(
+            commit="df6d6a6 with atom cuts",
+            nodes=4778,
+            dequeues=57_849,
+            settled=True,
+            source_extents=13_100_687,
+            largest_state=3033,
+            value_extents=2_661_089,
+            peak_rss_mb=4412,
+            seconds=342.6,
+        ),
+        reverted=FixpointCost(
+            commit="df6d6a6 with the split reverted",
+            nodes=4778,
+            dequeues=49_026,
+            settled=True,
+            source_extents=3_703_073,
+            largest_state=942,
+            value_extents=2_354_085,
+            peak_rss_mb=2086,
+            seconds=72.8,
+        ),
+    ),
+)
+
+
+def _bridge_jar() -> Path:
+    found = sorted(FORGE.glob(BRIDGE_GLOB))
+    if not found:
+        pytest.skip(f"no bridge JAR at {BRIDGE_GLOB}; run `make jar`")
+    return found[-1]
+
+
+@pytest.fixture(scope="module")
+def parsed(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    from cobble.parsing.parse_corpus import Job, parse_one
+
+    cache = tmp_path_factory.mktemp("perf")
+    jar = str(_bridge_jar())
+    results = tuple(
+        parse_one(
+            Job(PROGRAMS / f"{one.program}.cbl", cache / f"{one.program}.json"),
+            jar,
+            (),
+            ("cpy",),
+        )
+        for one in BASELINES
+    )
+    assert [result.error for result in results] == ["" for _ in BASELINES]
+    return cache
+
+
+@pytest.mark.parametrize("baseline", BASELINES, ids=lambda one: one.program)
+def test_the_fixpoint_settles_at_the_recorded_reverted_cost(
+    parsed: Path, baseline: FixpointBaseline
+) -> None:
+    flow, _ = analysed(cached_asg(parsed, PROGRAMS / f"{baseline.program}.cbl"))
+
+    assert (flow.nodes, flow.dequeues, flow.settled) == (
+        baseline.reverted.nodes,
+        baseline.reverted.dequeues,
+        baseline.reverted.settled,
+    )

@@ -1324,6 +1324,13 @@ def test_the_callee_reads_bytes_the_caller_defined(crossed):
 
     assert str(dep.source).startswith("DFHCOMMAREA@linkage[0:8]")
     assert [one for one in dep.definers if one.startswith("TPROGA/")]
+
+
+@pytest.mark.xfail(
+    reason="partial-overwrite split reverted for unbounded keys; red-dragon-forge-daj",
+    strict=True,
+)
+def test_a_narrow_write_in_the_callee_forgets_the_callers_bytes_it_overwrote(crossed):
     (overwritten,) = {
         (str(one.source), one.definers)
         for one in crossed.deps
