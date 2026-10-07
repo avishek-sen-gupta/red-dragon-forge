@@ -89,6 +89,7 @@ uv run cobble-parse-corpus --config config/carddemo.toml     # parse the corpus 
 uv run cobble-extents --asg-dir out-parsed --out out-fields/extents-input.jsonl   # every member's declared layout
 uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields \
   --extents out-fields/extents-input.jsonl --all             # -> out-fields/targets.jsonl, among others
+                                                             # (--call-targets-only when targets are all you need)
 uv run cobble-dataflow-combine --config config/carddemo.toml --fixpoint-dir out-fields \
   --out-dir out-combined --all                               # link the programs -> out-combined/targets.jsonl
 uv run cobble-build --config config/carddemo.toml --output out/carddemo.jsonl \
@@ -567,7 +568,20 @@ uv run cobble-extents --asg-dir out-parsed --out out-fields/extents-input.jsonl 
 uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --extents out-fields/extents-input.jsonl --member PROGA PROGB
 uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --extents out-fields/extents-input.jsonl --all
 uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --extents out-fields/extents-input.jsonl --member PROGA --sweeps 3
+uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-targets --extents out-fields/extents-input.jsonl --all --call-targets-only
 ```
+
+`--call-targets-only` tracks only the bytes the call targets and jump areas depend
+on. Before each member's walk, the seeds are found from the program itself: every
+dynamic `CALL`/`XCTL`/`LINK` target, every area a jump hands over, and the
+LINKAGE areas read at an exit. They are then closed over the program's writes. A
+write that misses the set is dropped, so `targets.jsonl` and the combine's results
+are the same as a full run's, while `graph` and `defs` cover only that set. Each
+member's `counts.json` records the scope and both sizes (`relevant` of `tracked`
+extents). An out-dir holds one scope: rerunning in the other one stops and asks for
+`--force`. `cobble-dataflow-fixpoint-query` refuses a restricted out-dir. The
+saving depends on how much of a program its targets reach. Programs that copy
+whole records into each other keep most of their bytes in the set.
 
 `--extents` is required and is the table `cobble-extents` writes: this stage
 computes no extent of its own. A member's records come out of that file, and the

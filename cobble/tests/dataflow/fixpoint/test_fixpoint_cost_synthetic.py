@@ -6,9 +6,12 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.fixpoint.fixpoint import analysed
+from cobble.dataflow.fixpoint.options import AnalysisOptions
+from cobble.dataflow.fixpoint.scope import Scope
 from cobble.parsing.asg_cache import cached_asg
 from tests.dataflow.fixpoint.fixpoint_baseline import FixpointBaseline
 from tests.dataflow.fixpoint.fixpoint_cost import FixpointCost
+from tests.dataflow.fixpoint.fixpoint_scope_baseline import FixpointScopeBaseline
 
 FORGE = Path(__file__).resolve().parents[4]
 BRIDGE_GLOB = "vendor/red-dragon/proleap-bridge/target/proleap-bridge-*-shaded.jar"
@@ -192,6 +195,35 @@ BASELINES = (
 )
 
 
+SCOPE_BASELINES = (
+    FixpointScopeBaseline(
+        program="SYNPERFD",
+        whole=FixpointCost(
+            commit="55a21b1",
+            nodes=1056,
+            dequeues=36_730,
+            settled=True,
+            source_extents=261_726,
+            largest_state=349,
+            value_extents=143_397,
+            peak_rss_mb=421,
+            seconds=14.5,
+        ),
+        call_targets=FixpointCost(
+            commit="55a21b1",
+            nodes=1056,
+            dequeues=35_512,
+            settled=True,
+            source_extents=253_302,
+            largest_state=341,
+            value_extents=143_397,
+            peak_rss_mb=417,
+            seconds=13.6,
+        ),
+    ),
+)
+
+
 def _bridge_jar() -> Path:
     found = sorted(FORGE.glob(BRIDGE_GLOB))
     if not found:
@@ -212,9 +244,11 @@ def parsed(tmp_path_factory: pytest.TempPathFactory) -> Path:
             (),
             ("cpy",),
         )
-        for one in BASELINES
+        for one in (*BASELINES, *SCOPE_BASELINES)
     )
-    assert [result.error for result in results] == ["" for _ in BASELINES]
+    assert [result.error for result in results] == [
+        "" for _ in (*BASELINES, *SCOPE_BASELINES)
+    ]
     return cache
 
 
@@ -229,3 +263,24 @@ def test_the_fixpoint_settles_at_the_recorded_coalesced_cost(
         baseline.coalesced.dequeues,
         baseline.coalesced.settled,
     )
+
+
+@pytest.mark.parametrize("baseline", SCOPE_BASELINES, ids=lambda one: one.program)
+def test_each_scope_settles_at_its_recorded_cost(
+    parsed: Path, baseline: FixpointScopeBaseline
+) -> None:
+    asg = cached_asg(parsed, PROGRAMS / f"{baseline.program}.cbl")
+    whole, _ = analysed(asg, AnalysisOptions(scope=Scope.WHOLE))
+    restricted, _ = analysed(asg, AnalysisOptions(scope=Scope.CALL_TARGETS))
+
+    assert (whole.nodes, whole.dequeues, whole.settled) == (
+        baseline.whole.nodes,
+        baseline.whole.dequeues,
+        baseline.whole.settled,
+    )
+    assert (restricted.nodes, restricted.dequeues, restricted.settled) == (
+        baseline.call_targets.nodes,
+        baseline.call_targets.dequeues,
+        baseline.call_targets.settled,
+    )
+    assert restricted.targets == whole.targets
