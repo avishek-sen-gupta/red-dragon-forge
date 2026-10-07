@@ -558,6 +558,25 @@ def weak_write(
     )
 
 
+def _kept(
+    entries: Mapping[FieldExtent, _Held], keep: Callable[[FieldExtent], bool]
+) -> Mapping[FieldExtent, _Held]:
+    if all(keep(extent) for extent in entries):
+        return entries
+    return MappingProxyType(
+        {extent: held for extent, held in entries.items() if keep(extent)}
+    )
+
+
+def pruned(state: State, keep: Callable[[FieldExtent], bool]) -> State:
+    """``state`` without the entries ``keep`` rejects, or ``state`` itself if none."""
+    sources = _kept(state.sources, keep)
+    values = _kept(state.values, keep)
+    if sources is state.sources and values is state.values:
+        return state
+    return State(sources=sources, values=values)
+
+
 def reaching(state: State, read: FieldExtent) -> frozenset[Source]:
     """Every source held at an extent this read might overlap."""
     return frozenset(

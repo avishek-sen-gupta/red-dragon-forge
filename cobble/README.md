@@ -571,17 +571,21 @@ uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-fields --exte
 uv run cobble-dataflow-fixpoint --asg-dir out-parsed --out-dir out-targets --extents out-fields/extents-input.jsonl --all --call-targets-only
 ```
 
-`--call-targets-only` tracks only the bytes the call targets and jump areas depend
-on. Before each member's walk, the seeds are found from the program itself: every
-dynamic `CALL`/`XCTL`/`LINK` target, every area a jump hands over, and the
-LINKAGE areas read at an exit. They are then closed over the program's writes. A
-write that misses the set is dropped, so `targets.jsonl` and the combine's results
-are the same as a full run's, while `graph` and `defs` cover only that set. Each
-member's `counts.json` records the scope and both sizes (`relevant` of `tracked`
-extents). An out-dir holds one scope: rerunning in the other one stops and asks for
-`--force`. `cobble-dataflow-fixpoint-query` refuses a restricted out-dir. The
-saving depends on how much of a program its targets reach. Programs that copy
-whole records into each other keep most of their bytes in the set.
+`--call-targets-only` keeps, at each node, only the entries some later read can still
+need. Before each member's walk, the demand is found from the program itself: every
+dynamic `CALL`/`XCTL`/`LINK` target, every area a jump hands over, and the LINKAGE
+areas read at an exit or a CICS `RETURN`, each at the node it is read at. A backward
+liveness pass carries that demand over the program's writes. A write overlapping
+something live makes its sources live before it, and only an exact strong write that
+covers a range kills it. Every write still runs. Entries that overlap nothing live at
+the next node are dropped, so `targets.jsonl`, `jumps.jsonl` and the combine's
+results equal a full run's, while `graph` and `defs` keep only rows for writes that
+are live afterwards. Each member's `counts.json` records the scope and both sizes:
+`relevant` of `tracked` written extents. An out-dir holds one scope: rerunning in the
+other one stops and asks for `--force`. `cobble-dataflow-fixpoint-query` refuses a
+restricted out-dir. The saving depends on how long records stay live. Programs that
+fill a record, use it and move on shrink most; programs that copy whole records
+around a loop that reaches a call keep most of them.
 
 `--extents` is required and is the table `cobble-extents` writes: this stage
 computes no extent of its own. A member's records come out of that file, and the

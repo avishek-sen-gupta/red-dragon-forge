@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from functools import reduce
-
 import pytest
 from cobble.dataflow.fields.extent import operand_extents
-from cobble.dataflow.fields.relevant import EVERYTHING, Relevant
 from cobble.dataflow.fields.state import EMPTY, reaching, values_at
 from cobble.dataflow.fields.transfer import transfer
 from cobble.dataflow.fields.values import of_value
@@ -37,7 +34,7 @@ def after(index_of):
         index = index_of(asg)
         state = EMPTY
         for position, statement in enumerate(asg.paragraphs[0].statements):
-            state = transfer(statement, f"MAIN/{position}", state, index, EVERYTHING)
+            state = transfer(statement, f"MAIN/{position}", state, index)
         return state, index
 
     return run
@@ -625,37 +622,7 @@ def test_a_literal_move_carries_its_text_fitted_to_the_target(
     )
     index = index_of(asg)
     statement = statement_index(asg)[next(iter(statement_index(asg)))]
-    after = transfer(statement, "n1", EMPTY, index, EVERYTHING)
+    after = transfer(statement, "n1", EMPTY, index)
     target = index.extent_of(index.cells_named("WS-PGM", (), 0)[0])
 
     assert values_at(after, target) == of_value(b"COSGN00C")
-
-
-def test_a_restricted_transfer_drops_writes_outside_the_set(
-    program_of, field, index_of, names_reaching
-):
-    asg = program_of(
-        [_move("WS-A", "WS-B"), _move("WS-A", "WS-C")],
-        data_fields=[
-            field(
-                1,
-                "REC",
-                children=[
-                    field(5, "WS-A", "X(4)", offset=0),
-                    field(5, "WS-B", "X(4)", offset=4),
-                    field(5, "WS-C", "X(4)", offset=8),
-                ],
-            )
-        ],
-    )
-    index = index_of(asg)
-    (b,) = operand_extents(RefModOperand(name="WS-B"), index).extents
-    kept = Relevant(extents=frozenset({b}))
-    state = reduce(
-        lambda held, pair: transfer(pair[1], f"MAIN/{pair[0]}", held, index, kept),
-        enumerate(asg.paragraphs[0].statements),
-        EMPTY,
-    )
-
-    assert names_reaching(state, index, "WS-B") == {"WS-A"}
-    assert names_reaching(state, index, "WS-C") == set()

@@ -105,6 +105,10 @@ CALLEE = """\
 """
 
 
+def _jumps(out: Path) -> list[str]:
+    return (out / "jumps.jsonl").read_text(encoding="utf-8").splitlines()
+
+
 def _combined(out: Path, tmp_path: Path, name: str) -> Path:
     config = tmp_path / f"{name}.toml"
     config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
@@ -167,10 +171,12 @@ def test_a_target_through_a_commarea_resolves_the_same(
     fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
     tmp_path: Path,
 ) -> None:
-    _, _, full_combined, restricted_combined = _both(
+    full, restricted, full_combined, restricted_combined = _both(
         fixpoint_corpus_with, {"PROGA": PROGA, "PROGB": PROGB}, tmp_path
     )
     (row,) = target_rows(restricted_combined / "targets.jsonl")
+
+    assert _jumps(restricted) == _jumps(full)
 
     assert row.candidates == ("PROGA", "PROGM")
     assert target_rows(restricted_combined / "targets.jsonl") == target_rows(
@@ -185,10 +191,12 @@ def test_a_target_handed_back_by_a_callee_resolves_the_same(
     fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
     tmp_path: Path,
 ) -> None:
-    _, _, full_combined, restricted_combined = _both(
+    full, restricted, full_combined, restricted_combined = _both(
         fixpoint_corpus_with, {"PROGC": CALLER, "PROGW": CALLEE}, tmp_path
     )
     (row,) = target_rows(full_combined / "targets.jsonl")
+
+    assert _jumps(restricted) == _jumps(full)
 
     assert (row.candidates, row.reasons) == (("PROGZ",), ())
     assert target_rows(restricted_combined / "targets.jsonl") == target_rows(
@@ -275,6 +283,20 @@ SIBLING_IMAGED = """\
            GOBACK.
 """
 
+WEAKLY_OVERWRITTEN = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGU.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-PGM               PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGA' TO WS-PGM.
+           ACCEPT WS-PGM.
+           CALL WS-PGM.
+           GOBACK.
+"""
+
 
 def test_a_sibling_write_inside_a_record_the_target_was_read_from_counts_the_same(
     fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
@@ -283,15 +305,18 @@ def test_a_sibling_write_inside_a_record_the_target_was_read_from_counts_the_sam
         "PROGF": SIBLING_WEAK,
         "PROGT": SIBLING_CLAMPED,
         "PROGV": SIBLING_IMAGED,
+        "PROGU": WEAKLY_OVERWRITTEN,
     }
     full = fixpoint_corpus_with(sources, ())
     restricted = fixpoint_corpus_with(sources, ("--call-targets-only",))
     rows = target_rows(restricted / "targets.jsonl")
 
     assert rows == target_rows(full / "targets.jsonl")
+    assert _jumps(restricted) == _jumps(full)
     assert [(row.caller, row.candidates, row.reasons) for row in rows] == [
         ("PROGF", (), ("from-file", "unmodelled")),
         ("PROGT", (), ("not-a-literal",)),
+        ("PROGU", ("PROGA",), ("unmodelled",)),
         ("PROGV", (), ("not-a-literal",)),
     ]
 
