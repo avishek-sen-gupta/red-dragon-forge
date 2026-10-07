@@ -276,3 +276,78 @@ def _exit(
             for param, extent in received_areas(asg, index)
         ),
     )
+
+
+def fact_extents(
+    asg: CobolASG,
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+) -> frozenset[FieldExtent]:
+    """Every extent the jumps and targets tables read a fact at, in any state."""
+    return frozenset(
+        (
+            *(extent for _, extent in received_areas(asg, index)),
+            *(
+                extent
+                for node in cfg.nodes
+                if node.transfer in CALL_TRANSFERS
+                for extent in _call_extents(node, index)
+            ),
+            *(
+                extent
+                for node in cfg.nodes
+                if node.transfer not in CALL_TRANSFERS
+                for statement in (statements.get(node.id),)
+                if isinstance(statement, ExecCicsStatement)
+                for extent in _cics_extents(statement, index)
+            ),
+        )
+    )
+
+
+def _call_extents(node: Node, index: CellIndex) -> tuple[FieldExtent, ...]:
+    target = (
+        ()
+        if node.target_resolved
+        else operand_occurrence_extents(node.target_operand, index)
+    )
+    if _KINDS[CALL_TRANSFERS[node.transfer]] is JumpKind.CALL:
+        return (
+            *target,
+            *(
+                extent
+                for argument in node.using
+                for extent in _named(argument.name, index)
+            ),
+        )
+    return (*target, *_named(commarea_field(node), index))
+
+
+def _named(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:
+    if not operand:
+        return ()
+    return area_extents(operand, index)
+
+
+def _cics_extents(
+    statement: ExecCicsStatement, index: CellIndex
+) -> tuple[FieldExtent, ...]:
+    return tuple(
+        extent
+        for kind in _cics_kind(statement)
+        if kind is not JumpKind.EXIT
+        for extent in (
+            *_transid_extents(statement, kind, index),
+            *_named(_option(statement, _CICS_OPTION[kind]).text, index),
+        )
+    )
+
+
+def _transid_extents(
+    statement: ExecCicsStatement, kind: JumpKind, index: CellIndex
+) -> tuple[FieldExtent, ...]:
+    operand = _option(statement, "TRANSID")
+    if kind is JumpKind.RETRIEVE or operand.is_literal:
+        return ()
+    return _named(operand.text, index)
