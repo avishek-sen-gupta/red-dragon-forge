@@ -386,3 +386,87 @@ def test_relevant_and_tracked_count_the_same_written_extents(
     counts = _counts(out, "PROGK")
 
     assert (counts.tracked, counts.relevant) == (3, 2)
+
+
+CHAIN_START = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGH.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-FROM          PIC X(8).
+           05  WS-NEXT          PIC X(8).
+           05  WS-NOTE          PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGH' TO WS-FROM.
+           MOVE 'PROGK' TO WS-NEXT.
+           MOVE 'NOTE' TO WS-NOTE.
+           EXEC CICS XCTL PROGRAM('PROGI') COMMAREA(WS-AREA) END-EXEC.
+"""
+
+CHAIN_MIDDLE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGI.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-COPY              PIC X(24).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA          PIC X(24).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA TO WS-COPY.
+           EXEC CICS XCTL PROGRAM('PROGJ') COMMAREA(WS-COPY) END-EXEC.
+"""
+
+CHAIN_END = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGJ.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-TARGET            PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FROM          PIC X(8).
+           05  LK-NEXT          PIC X(8).
+           05  LK-NOTE          PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE LK-NEXT TO WS-TARGET.
+           EXEC CICS XCTL PROGRAM(WS-TARGET) END-EXEC.
+"""
+
+
+def test_narrowed_areas_resolve_the_same_through_the_combine(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    tmp_path: Path,
+) -> None:
+    sources = {
+        "PROGA": PROGA,
+        "PROGB": PROGB,
+        "PROGC": CALLER,
+        "PROGW": CALLEE,
+        "PROGL": LOCAL,
+        "PROGF": SIBLING_WEAK,
+        "PROGT": SIBLING_CLAMPED,
+        "PROGV": SIBLING_IMAGED,
+        "PROGU": WEAKLY_OVERWRITTEN,
+        "PROGH": CHAIN_START,
+        "PROGI": CHAIN_MIDDLE,
+        "PROGJ": CHAIN_END,
+    }
+    full = fixpoint_corpus_with(sources, ())
+    narrow = fixpoint_corpus_with(sources, ("--call-targets-only", "--narrow-areas"))
+    full_combined = _combined(full, tmp_path, "full")
+    narrow_combined = _combined(narrow, tmp_path, "narrow")
+    combined = target_rows(narrow_combined / "targets.jsonl")
+
+    assert target_rows(narrow / "targets.jsonl") == target_rows(full / "targets.jsonl")
+    assert combined == target_rows(full_combined / "targets.jsonl")
+    assert link_rows(narrow_combined / "links.jsonl") == link_rows(
+        full_combined / "links.jsonl"
+    )
+    assert [
+        (row.caller, row.candidates) for row in combined if row.caller == "PROGJ"
+    ] == [("PROGJ", ("PROGK",))]
+    assert _counts(narrow, "PROGH").scope is Scope.NARROW_CALL_TARGETS

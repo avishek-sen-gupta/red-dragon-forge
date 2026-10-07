@@ -39,7 +39,7 @@ def _merged(
     return (*spans, span)
 
 
-def _bounds(pairs: Iterable[tuple[int, int]]) -> tuple[int, ...]:
+def merged(pairs: Iterable[tuple[int, int]]) -> tuple[int, ...]:
     return tuple(
         bound
         for pair in reduce(
@@ -49,7 +49,7 @@ def _bounds(pairs: Iterable[tuple[int, int]]) -> tuple[int, ...]:
     )
 
 
-def _pairs(bounds: tuple[int, ...]) -> tuple[tuple[int, int], ...]:
+def pairs_of(bounds: tuple[int, ...]) -> tuple[tuple[int, int], ...]:
     return tuple(zip(bounds[::2], bounds[1::2], strict=True))
 
 
@@ -61,7 +61,7 @@ def spans_of(extents: Iterable[FieldExtent]) -> Spans:
     )
     return MappingProxyType(
         {
-            rows[0][3]: _bounds((start, end) for _order, start, end, _region in rows)
+            rows[0][3]: merged((start, end) for _order, start, end, _region in rows)
             for _, grouped in groupby(ordered, itemgetter(0))
             for rows in (tuple(grouped),)
         }
@@ -75,8 +75,8 @@ def union(left: Spans, right: Spans) -> Spans:
         return right
     return MappingProxyType(
         {
-            region: _bounds(
-                (*_pairs(left.get(region, ())), *_pairs(right.get(region, ())))
+            region: merged(
+                (*pairs_of(left.get(region, ())), *pairs_of(right.get(region, ())))
             )
             for region in (*left, *(region for region in right if region not in left))
         }
@@ -91,9 +91,9 @@ def without(spans: Spans, extent: FieldExtent) -> Spans:
     return MappingProxyType(
         {
             **spans,
-            extent.region: _bounds(
+            extent.region: merged(
                 piece
-                for low, high in _pairs(spans[extent.region])
+                for low, high in pairs_of(spans[extent.region])
                 for piece in ((low, min(high, start)), (max(low, end), high))
             ),
         }

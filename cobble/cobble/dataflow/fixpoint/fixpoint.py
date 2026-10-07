@@ -766,7 +766,7 @@ def analyse(
         edges=extracted.edges,
         defs=extracted.defs,
         targets=resolved_targets(cfg, index, walk.states, walk.settled),
-        jumps=jumps_of(asg, cfg, statements, index, walk.states, walk.settled),
+        jumps=jumps_of(asg, cfg, statements, index, walk.states, walk.settled, live),
         writes=tally.writes,
         covered=tally.covered,
         unhandled=tally.unhandled,
@@ -812,8 +812,22 @@ def _live(
     if options.scope is Scope.WHOLE:
         return EVERYTHING
     return live_ranges(
-        cfg, statements, index, call_target_demand(asg, cfg, statements, index)
+        cfg,
+        statements,
+        index,
+        call_target_demand(asg, cfg, statements, index, options.areas),
     )
+
+
+def program_graph(asg) -> tuple[Cfg, Mapping[str, Statement]]:
+    """The pruned CFG a walk runs over, and the statements at its nodes."""
+    unpruned = program_cfg(asg)
+    statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
+    return fallthroughs_pruned(unpruned, paragraph_order(asg), statements), statements
+
+
+def entry_of(asg) -> str:
+    return _entry_node(asg)
 
 
 def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Stepped]]:

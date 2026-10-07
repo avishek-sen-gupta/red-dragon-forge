@@ -1272,7 +1272,7 @@ def _restricted(fixpoint_dir: Path) -> tuple[str, ...]:
             path.parent.name
             for path in (fixpoint_dir / MEMBERS_DIR).glob(f"*/{COUNTS_FILE}")
             if MemberCounts.model_validate_json(path.read_text(encoding="utf-8")).scope
-            is Scope.CALL_TARGETS
+            is not Scope.WHOLE
         )
     )
 

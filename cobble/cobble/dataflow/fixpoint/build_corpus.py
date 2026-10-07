@@ -91,7 +91,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wai
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import accumulate, groupby, islice, repeat, takewhile
+from itertools import accumulate, groupby, islice, pairwise, repeat, takewhile
 from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
@@ -125,7 +125,10 @@ from cobble.dataflow.fields.side_tables import (
     target_identity,
     target_row,
 )
+from cobble.dataflow.fields.spans import pairs_of
 from cobble.dataflow.fixpoint import rows
+from cobble.dataflow.fixpoint.area_need import AreaNeed, joined
+from cobble.dataflow.fixpoint.area_needs import need_found
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
@@ -962,11 +965,17 @@ def _absent(paths: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(path for path in paths if not path.is_file())
 
 
+def _scope(arguments: argparse.Namespace) -> Scope:
+    if arguments.narrow_areas:
+        return Scope.NARROW_CALL_TARGETS
+    return Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE
+
+
 def _options(arguments: argparse.Namespace) -> AnalysisOptions:
     return AnalysisOptions(
         sweeps=arguments.sweeps,
         factor=arguments.iteration_factor,
-        scope=Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE,
+        scope=_scope(arguments),
     )
 
 
@@ -1007,12 +1016,9 @@ def _analysed_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     if arguments.force:
         shutil.rmtree(members, ignore_errors=True)
     ensure_dir(members)
-    mixed = _other_scope(members, _options(arguments).scope)
-    if mixed:
-        sys.stderr.write(
-            f"fields: !! members analysed in another scope: {', '.join(mixed)};"
-            " rerun with --force\n"
-        )
+    problem = _refusal(arguments, members)
+    if problem:
+        sys.stderr.write(problem)
         return 2
     return _members_run(paths, arguments)
 
@@ -1029,10 +1035,70 @@ def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
     with ProcessPoolExecutor(
         max_workers=arguments.max_workers, initializer=configure_cli_logging
     ) as pool:
-        totals = _run(_inputs(paths, arguments, locations), pool)
+        inputs = _inputs(paths, arguments, locations)
+        totals = _run(_narrowed(inputs, arguments, pool), pool)
     _publish(arguments, locations, totals)
     _report(totals)
     return _exit_code(totals, arguments.min_coverage)
+
+
+def _need_in_worker(job: tuple[str, tuple[Row, ...], Path, AreaNeed]) -> AreaNeed:
+    """One member's share of the area need. A member that cannot be read adds
+    nothing: its own targets go unresolved anyway, and it says so in its counts."""
+    member, block, path, need = job
+    try:
+        with cached_asg_dialect_parsers_registered():
+            asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            return need_found(asg, member_layout(member, block).layout, need)
+    except Exception as error:  # noqa: BLE001 - one member must not end the pre-pass
+        logger.warning("fields: area need: %s unreadable: %r", member, error)
+        return AreaNeed()
+
+
+def _need_round(
+    need: AreaNeed, arguments: argparse.Namespace, pool: ProcessPoolExecutor
+) -> AreaNeed:
+    jobs = (
+        (member, block, arguments.asg_dir / f"{member}.json", need)
+        for member, block in member_rows(arguments.extents)
+        if (arguments.asg_dir / f"{member}.json").is_file()
+    )
+    found = reduce(joined, pool.map(_need_in_worker, jobs, chunksize=8), need)
+    logger.info(
+        "fields: area need: %d bytes needed on entry, %d read back",
+        sum(high - low for _, bounds in found.entry for low, high in pairs_of(bounds)),
+        sum(high - low for _, bounds in found.back for low, high in pairs_of(bounds)),
+    )
+    return found
+
+
+def _narrowed(
+    inputs: _Inputs, arguments: argparse.Namespace, pool: ProcessPoolExecutor
+) -> _Inputs:
+    """With --narrow-areas, the area need over every member in the extents table --
+    not just the selected ones, since any of them may be a callee -- iterated until
+    a round adds nothing, then handed to every member's walk."""
+    if not arguments.narrow_areas:
+        return inputs
+    rounds = accumulate(
+        repeat(None),
+        lambda need, _: _need_round(need, arguments, pool),
+        initial=AreaNeed(),
+    )
+    settled = next(after for before, after in pairwise(rounds) if before == after)
+    return replace(inputs, options=replace(inputs.options, areas=settled))
+
+
+def _refusal(arguments: argparse.Namespace, members: Path) -> str:
+    if arguments.narrow_areas and not arguments.call_targets_only:
+        return "fields: !! --narrow-areas needs --call-targets-only\n"
+    mixed = _other_scope(members, _options(arguments).scope)
+    if mixed:
+        return (
+            f"fields: !! members analysed in another scope: {', '.join(mixed)};"
+            " rerun with --force\n"
+        )
+    return ""
 
 
 def _other_scope(members: Path, scope: Scope) -> tuple[str, ...]:
@@ -1119,6 +1185,12 @@ def _add_walk_budget(parser: argparse.ArgumentParser) -> None:
         "--call-targets-only",
         action="store_true",
         help="track only the bytes call targets and jump areas depend on",
+    )
+    parser.add_argument(
+        "--narrow-areas",
+        action="store_true",
+        help="with --call-targets-only: of each handed-over area, track only the bytes"
+        " some program's targets read after receiving it, found by a pre-pass",
     )
     walk = parser.add_mutually_exclusive_group()
     walk.add_argument(
