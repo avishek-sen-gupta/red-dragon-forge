@@ -27,6 +27,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
+from itertools import groupby
+from operator import itemgetter
 
 from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobol_asg.ref_mod import RefModOperand
@@ -183,9 +185,18 @@ class Cfg:
         return self._in.get(node_id, ())
 
 
-def _group(edges: Sequence[Edge], key) -> dict[str, tuple[Edge, ...]]:
-    keys = tuple(dict.fromkeys(key(edge) for edge in edges))
-    return {k: tuple(edge for edge in edges if key(edge) == k) for k in keys}
+def _group(edges: Sequence[Edge], by) -> dict[str, tuple[Edge, ...]]:
+    """Edges grouped ``by`` one end, groups in first-appearance order and each in
+    edge order, in one sorted pass rather than one scan of every edge per group."""
+    names = tuple(dict.fromkeys(by(edge) for edge in edges))
+    rank = {name: position for position, name in enumerate(names)}
+    ordered = sorted(
+        (rank[by(edge)], position, edge) for position, edge in enumerate(edges)
+    )
+    return {
+        names[group_rank]: tuple(edge for _rank, _position, edge in group)
+        for group_rank, group in groupby(ordered, itemgetter(0))
+    }
 
 
 def merge(fragments: Sequence[Fragment]) -> Fragment:

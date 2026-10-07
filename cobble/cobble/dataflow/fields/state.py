@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from functools import reduce
+from functools import lru_cache, reduce
 from itertools import pairwise
 from types import MappingProxyType
 from typing import TypeVar
@@ -122,6 +122,27 @@ class State:
 
 EMPTY = State()
 
+# Every state the walk holds shares most of its sets, values and keys with its
+# neighbours; built anew per join they ran to 200x their distinct count. Each of
+# these hands back the first equal object it saw. Bounded, because a worker meets
+# member after member and an unbounded table would keep them all.
+_SHARED = 1 << 15
+
+
+@lru_cache(maxsize=_SHARED)
+def _shared_sources(held: frozenset[Source]) -> frozenset[Source]:
+    return held
+
+
+@lru_cache(maxsize=_SHARED)
+def _shared_value(held: ValueSet) -> ValueSet:
+    return held
+
+
+@lru_cache(maxsize=_SHARED)
+def _shared_extent(extent: FieldExtent) -> FieldExtent:
+    return extent
+
 
 def _covers(prior: ValueSet, held: ValueSet) -> bool:
     """Whether merging ``held`` into ``prior`` would add nothing to it."""
@@ -147,7 +168,7 @@ def _joined_sources(
     if not left:
         return right
     grown = {
-        extent: held | prior
+        extent: _shared_sources(held | prior)
         for extent, held in right.items()
         for prior in (left.get(extent, _NO_SOURCE_SET),)
         if (prior is not held and not held <= prior)
@@ -182,7 +203,7 @@ def _canonical(
     rebuilt = tuple(
         (group, runs)
         for group in groups
-        if len(group) > 1
+        if len(group) > 1 and not _already_canonical(joined, group)
         for runs in (_runs(joined, group),)
         if set(runs) != set(group)
     )
@@ -194,6 +215,23 @@ def _canonical(
             **{e: held for e, held in joined.items() if e not in doomed},
             **{e: held for _, runs in rebuilt for e, held in runs.items()},
         }
+    )
+
+
+def _already_canonical(
+    joined: Mapping[FieldExtent, frozenset[Source]],
+    group: tuple[FieldExtent, ...],
+) -> bool:
+    """Whether ``_runs`` would hand ``group`` back unchanged: no two pieces overlap,
+    and no two that touch hold the same sources, so there is nothing to cut or merge.
+    """
+    ordered = sorted((one.start, one.end, one) for one in group)
+    return all(
+        left_end <= right_start
+        and not (left_end == right_start and joined[left] == joined[right])
+        for (_left_start, left_end, left), (right_start, _right_end, right) in pairwise(
+            ordered
+        )
     )
 
 
@@ -218,11 +256,10 @@ def _covering(
     start: int,
     end: int,
 ) -> frozenset[Source]:
-    return frozenset(
-        source
-        for one in group
-        if one.start <= start and end <= one.end
-        for source in joined[one]
+    return _shared_sources(
+        frozenset().union(
+            *(joined[one] for one in group if one.start <= start and end <= one.end)
+        )
     )
 
 
@@ -269,14 +306,14 @@ def _arriving_value(
     left: State, extent: FieldExtent, prior: ValueSet, held: ValueSet
 ) -> ValueSet:
     if prior is _UNHELD:
-        return merged(values_at(left, extent), held)
-    return merged(prior, held)
+        return _shared_value(merged(values_at(left, extent), held))
+    return _shared_value(merged(prior, held))
 
 
 def _doubted(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
     """``left``'s entries ``right`` has none for, with ``right``'s view added."""
     return {
-        extent: merged(held, other)
+        extent: _shared_value(merged(held, other))
         for extent, held in left.values.items()
         if extent not in right.values
         for other in (values_at(right, extent),)
@@ -303,8 +340,8 @@ def join(left: State, right: State) -> State:
 def _disjoint(target: FieldExtent, extent: FieldExtent) -> bool:
     return (
         target.region is not extent.region
-        or extent.end <= target.start
-        or target.end <= extent.start
+        or extent.start + extent.length <= target.start
+        or target.start + target.length <= extent.start
     )
 
 
@@ -312,7 +349,19 @@ def _range_contains(target: FieldExtent, extent: FieldExtent) -> bool:
     return (
         target.region is extent.region
         and target.start <= extent.start
-        and extent.end <= target.end
+        and extent.start + extent.length <= target.start + target.length
+    )
+
+
+def _touching(target: FieldExtent) -> Callable[[FieldExtent], bool]:
+    """Whether an entry shares a byte with ``target``: the cheap test every kill,
+    split and invalidation implies, so the full predicate runs only on the few
+    entries a write can touch rather than on the whole map."""
+    region, start, end = target.region, target.start, target.start + target.length
+    return lambda extent: (
+        extent.region is region
+        and extent.start < end
+        and start < extent.start + extent.length
     )
 
 
@@ -343,12 +392,14 @@ def _splits(target: FieldExtent, extent: FieldExtent) -> bool:
 
 
 def _piece(extent: FieldExtent, start: int, end: int) -> FieldExtent:
-    return FieldExtent(
-        region=extent.region,
-        start=start,
-        length=end - start,
-        precision=extent.precision,
-        field_name=extent.field_name,
+    return _shared_extent(
+        FieldExtent(
+            region=extent.region,
+            start=start,
+            length=end - start,
+            precision=extent.precision,
+            field_name=extent.field_name,
+        )
     )
 
 
@@ -398,7 +449,10 @@ def _split(
 ) -> Mapping[FieldExtent, _Held]:
     if target.precision is not Precision.EXACT:
         return entries
-    struck = frozenset(extent for extent in entries if _splits(target, extent))
+    touches = _touching(target)
+    struck = frozenset(
+        extent for extent in entries if touches(extent) and _splits(target, extent)
+    )
     if not struck:
         return entries
     pieces = tuple(
@@ -417,7 +471,7 @@ def _whole(
 
 
 def _united(left: frozenset[Source], right: frozenset[Source]) -> frozenset[Source]:
-    return left | right
+    return _shared_sources(left | right)
 
 
 def _invalidated(held: ValueSet) -> ValueSet:
@@ -442,7 +496,9 @@ def _invalidated(held: ValueSet) -> ValueSet:
     """
     if not held.values:
         return held
-    return ValueSet(reasons=held.reasons | {UnresolvedReason.NOT_A_LITERAL})
+    return _shared_value(
+        ValueSet(reasons=held.reasons | {UnresolvedReason.NOT_A_LITERAL})
+    )
 
 
 def _after_write(target: FieldExtent, extent: FieldExtent, held: ValueSet) -> ValueSet:
@@ -480,15 +536,19 @@ def _kept_values(
     worth_storing = bool(values.values) or not values.reasons <= _UNINFORMATIVE
     if not state.values and not worth_storing:
         return _NO_VALUES
+    touches = _touching(target)
     surviving = {
-        extent: _after_write(target, extent, held)
+        extent: _after_write(target, extent, held) if touches(extent) else held
         for extent, held in _split(target, state.values, _sliced, merged).items()
-        if not target.must_cover(extent)
+        if not (touches(extent) and target.must_cover(extent))
     }
     if not worth_storing:
         return MappingProxyType(surviving) if surviving else _NO_VALUES
     return MappingProxyType(
-        {**surviving, target: merged(surviving.get(target, VALUES_EMPTY), values)}
+        {
+            **surviving,
+            target: _shared_value(merged(surviving.get(target, VALUES_EMPTY), values)),
+        }
     )
 
 
@@ -510,16 +570,25 @@ def write(
     go, because ``_invalidated`` says a partly overwritten value is a false claim
     rather than an imprecise one.
     """
+    return _stored(state, _shared_extent(target), sources, values)
+
+
+def _stored(
+    state: State, target: FieldExtent, sources: frozenset[Source], values: ValueSet
+) -> State:
+    touches = _touching(target)
     kept_sources = {
         extent: held
         for extent, held in _split(target, state.sources, _whole, _united).items()
-        if not target.must_cover(extent)
+        if not (touches(extent) and target.must_cover(extent))
     }
     return State(
         sources=MappingProxyType(
             {
                 **kept_sources,
-                target: kept_sources.get(target, frozenset()) | sources,
+                target: _shared_sources(
+                    kept_sources.get(target, frozenset()) | sources
+                ),
             }
         ),
         values=_kept_values(state, target, values),
@@ -542,7 +611,9 @@ def weak_write(
     """
     marked = {
         extent: (
-            ValueSet(values=held.values, reasons=held.reasons | doubt.reasons)
+            _shared_value(
+                ValueSet(values=held.values, reasons=held.reasons | doubt.reasons)
+            )
             if extent.may_alias(target)
             else held
         )
@@ -550,10 +621,15 @@ def weak_write(
     }
     return State(
         sources=MappingProxyType(
-            {**state.sources, target: state.sources.get(target, frozenset()) | sources}
+            {
+                **state.sources,
+                target: _shared_sources(
+                    state.sources.get(target, frozenset()) | sources
+                ),
+            }
         ),
         values=MappingProxyType(
-            {**marked, target: merged(values_at(state, target), doubt)}
+            {**marked, target: _shared_value(merged(values_at(state, target), doubt))}
         ),
     )
 
@@ -589,9 +665,11 @@ def reaching(state: State, read: FieldExtent) -> frozenset[Source]:
 
 def _sliced(held: ValueSet, extent: FieldExtent, read: FieldExtent) -> ValueSet:
     at = read.start - extent.start
-    return ValueSet(
-        values=frozenset(value[at : at + read.length] for value in held.values),
-        reasons=held.reasons,
+    return _shared_value(
+        ValueSet(
+            values=frozenset(value[at : at + read.length] for value in held.values),
+            reasons=held.reasons,
+        )
     )
 
 
@@ -620,8 +698,19 @@ def _missing(state: State, read: FieldExtent) -> ValueSet:
 
 
 def _written(state: State, read: FieldExtent) -> bool:
-    return read in state.sources or any(
-        read.may_alias(extent) for extent in state.sources
+    """``read.may_alias`` against every entry, with its arithmetic inlined: this runs
+    on every read that finds no value, which is most of them."""
+    if read in state.sources:
+        return True
+    if read.length <= 0:
+        return False
+    region, start, end = read.region, read.start, read.start + read.length
+    return any(
+        extent.region is region
+        and extent.length > 0
+        and extent.start < end
+        and start < extent.start + extent.length
+        for extent in state.sources
     )
 
 
