@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from cobble.dataflow.fixpoint.scope import Scope
+
 ITERATION_FACTOR = 150
 
 
@@ -24,6 +26,7 @@ class AnalysisOptions:
 
     sweeps: int = 0
     factor: int = ITERATION_FACTOR
+    scope: Scope = Scope.WHOLE
 
 
 DEFAULT_OPTIONS = AnalysisOptions()
