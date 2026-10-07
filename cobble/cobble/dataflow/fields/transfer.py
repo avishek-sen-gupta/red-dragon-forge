@@ -32,7 +32,6 @@ from types import MappingProxyType
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
 from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
-from cobble.dataflow.fields.relevant import Relevant
 from cobble.dataflow.fields.state import (
     CICS_STATE,
     EMPTY,
@@ -602,27 +601,14 @@ def writes_of(
     return tuple(handler(statement, node, index, state))
 
 
-def transfer(
-    statement: Statement,
-    node: str,
-    state: State,
-    index: CellIndex,
-    relevant: Relevant,
-) -> State:
+def transfer(statement: Statement, node: str, state: State, index: CellIndex) -> State:
     """The state after ``statement``, given the state before it.
 
     An unhandled statement class returns the state unchanged. ``HANDLED`` names
     what this does dispatch on, so a coverage measurement can subtract the rest
     rather than credit it as analysed.
     """
-    return _applied(
-        state,
-        (
-            write
-            for write in writes_of(statement, node, index, state)
-            if relevant.touches(write.target)
-        ),
-    )
+    return _applied(state, iter(writes_of(statement, node, index, state)))
 
 
 def write_operands(statement: Statement) -> tuple[RefModOperand, ...]:

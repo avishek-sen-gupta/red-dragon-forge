@@ -1,6 +1,7 @@
 """Every jump, exit, RETRIEVE and entry in one program, and what each hands over."""
 
 from collections.abc import Mapping
+from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.fields.aliases import area_extents, received_areas
@@ -10,6 +11,7 @@ from cobble.dataflow.fields.state import EMPTY as STATE_EMPTY
 from cobble.dataflow.fields.state import State
 from cobble.dataflow.fields.transfer import Statement
 from cobble.dataflow.fields.values import UnresolvedReason
+from cobble.dataflow.fixpoint.demand import Demand
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.facts import fact_at, merged
 from cobble.dataflow.jumps.jump import Jump
@@ -278,31 +280,69 @@ def _exit(
     )
 
 
-def fact_extents(
+def call_target_demand(
     asg: CobolASG,
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-) -> frozenset[FieldExtent]:
-    """Every extent the jumps and targets tables read a fact at, in any state."""
-    return frozenset(
-        (
-            *(extent for _, extent in received_areas(asg, index)),
-            *(
-                extent
+) -> Demand:
+    """Every extent the jumps and targets tables read a fact at, by the node it is read at."""
+    received = tuple(extent for _, extent in received_areas(asg, index))
+    return Demand(
+        at=MappingProxyType(
+            {
+                node.id: extents
                 for node in cfg.nodes
-                if node.transfer in CALL_TRANSFERS
-                for extent in _call_extents(node, index)
-            ),
-            *(
-                extent
-                for node in cfg.nodes
-                if node.transfer not in CALL_TRANSFERS
-                for statement in (statements.get(node.id),)
-                if isinstance(statement, ExecCicsStatement)
-                for extent in _cics_extents(statement, index)
-            ),
+                for extents in (
+                    frozenset(_demanded(node, statements, index, received)),
+                )
+                if extents
+            }
         )
+    )
+
+
+def _demanded(
+    node: Node,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    received: tuple[FieldExtent, ...],
+) -> tuple[FieldExtent, ...]:
+    if node.transfer in CALL_TRANSFERS:
+        return _call_extents(node, index)
+    return _statement_demand(statements, node, index, received)
+
+
+def _statement_demand(
+    statements: Mapping[str, Statement],
+    node: Node,
+    index: CellIndex,
+    received: tuple[FieldExtent, ...],
+) -> tuple[FieldExtent, ...]:
+    match statements.get(node.id):
+        case ExecCicsStatement() as statement:
+            return tuple(
+                extent
+                for kind in _cics_kind(statement)
+                for extent in _kind_extents(statement, kind, index, received)
+            )
+        case GobackStatement() | ExitProgramStatement() | StopRunStatement():
+            return received
+        case _:
+            return ()
+
+
+def _kind_extents(
+    statement: ExecCicsStatement,
+    kind: JumpKind,
+    index: CellIndex,
+    received: tuple[FieldExtent, ...],
+) -> tuple[FieldExtent, ...]:
+    if kind is JumpKind.EXIT:
+        return received
+    return (
+        *_transid_extents(statement, kind, index),
+        *_named(_option(statement, _CICS_OPTION[kind]).text, index),
     )
 
 
@@ -328,20 +368,6 @@ def _named(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:
     if not operand:
         return ()
     return area_extents(operand, index)
-
-
-def _cics_extents(
-    statement: ExecCicsStatement, index: CellIndex
-) -> tuple[FieldExtent, ...]:
-    return tuple(
-        extent
-        for kind in _cics_kind(statement)
-        if kind is not JumpKind.EXIT
-        for extent in (
-            *_transid_extents(statement, kind, index),
-            *_named(_option(statement, _CICS_OPTION[kind]).text, index),
-        )
-    )
 
 
 def _transid_extents(

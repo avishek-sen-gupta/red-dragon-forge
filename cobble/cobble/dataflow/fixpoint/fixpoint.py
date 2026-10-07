@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import accumulate, repeat
 from types import MappingProxyType
@@ -66,8 +66,7 @@ from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
 from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.program_layout import NO_LAYOUT, ProgramLayout, layout_of
-from cobble.dataflow.fields.relevant import EVERYTHING, Relevant
-from cobble.dataflow.fields.state import EMPTY, State, join, reaching, values_at
+from cobble.dataflow.fields.state import EMPTY, State, join, pruned, reaching, values_at
 from cobble.dataflow.fields.transfer import (
     HANDLED,
     Statement,
@@ -79,12 +78,13 @@ from cobble.dataflow.fields.transfer import (
 from cobble.dataflow.fields.unmodelled_write import UnmodelledWrite
 from cobble.dataflow.fields.values import EMPTY as VALUES_EMPTY
 from cobble.dataflow.fields.values import ValueSet
-from cobble.dataflow.fixpoint.closure import closed
 from cobble.dataflow.fixpoint.fallthrough import fallthroughs_pruned
+from cobble.dataflow.fixpoint.live import EVERYTHING, Live
+from cobble.dataflow.fixpoint.liveness import live as live_ranges
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.scope import Scope
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
-from cobble.dataflow.jumps.discover import fact_extents, jumps_of
+from cobble.dataflow.jumps.discover import call_target_demand, jumps_of
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.build import label_id, paragraph_order
@@ -337,12 +337,11 @@ def _after(
     node_id: str,
     before: State,
     index: CellIndex,
-    relevant: Relevant,
 ) -> State:
     statement = statements.get(node_id)
     if not statement:
         return before
-    return transfer(statement, node_id, before, index, relevant)
+    return transfer(statement, node_id, before, index)
 
 
 def _arriving(states: Mapping[str, State], target: str, after: State) -> State:
@@ -356,11 +355,11 @@ def _arriving(states: Mapping[str, State], target: str, after: State) -> State:
 
 
 def _grown(
-    cfg: Cfg, node_id: str, after: State, states: Mapping[str, State]
+    cfg: Cfg, node_id: str, after: State, states: Mapping[str, State], live: Live
 ) -> Mapping[str, State]:
     """Successors whose entry state the state leaving ``node_id`` enlarges."""
     joined = {
-        edge.target: _arriving(states, edge.target, after)
+        edge.target: _arriving(states, edge.target, _for(after, live, edge.target))
         for edge in cfg.successors(node_id)
     }
     return {
@@ -368,6 +367,12 @@ def _grown(
         for target, state in joined.items()
         if state != states.get(target, EMPTY) or target not in states
     }
+
+
+def _for(state: State, live: Live, node: str) -> State:
+    if live.everything:
+        return state
+    return pruned(state, lambda extent: live.keeps(node, extent))
 
 
 def _eta(run: _Worklist, cap: int) -> str:
@@ -414,7 +419,7 @@ def _step(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    relevant: Relevant,
+    live: Live,
     cap: int,
     order: DepthFirstOrder,
     rank: Mapping[str, int],
@@ -422,8 +427,8 @@ def _step(
 ) -> _Worklist:
     earliest = min(run.queue)
     node_id = order.ordered[earliest]
-    after = _after(statements, node_id, run.states[node_id], index, relevant)
-    grown = _grown(cfg, node_id, after, run.states)
+    after = _after(statements, node_id, run.states[node_id], index)
+    grown = _grown(cfg, node_id, after, run.states, live)
     stepped = _Worklist(
         states=MappingProxyType({**run.states, **grown}),
         queue=(run.queue - {earliest}) | {rank[target] for target in grown},
@@ -449,7 +454,7 @@ def _settled(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    relevant: Relevant,
+    live: Live,
     entry: str,
     cap: int,
     entry_state: State,
@@ -471,7 +476,7 @@ def _settled(
     )
     passes = accumulate(
         repeat(None),
-        lambda run, _: _step(cfg, statements, index, relevant, cap, order, rank, run),
+        lambda run, _: _step(cfg, statements, index, live, cap, order, rank, run),
         initial=start,
     )
     return next(run for run in passes if _done(run, cap))
@@ -512,7 +517,7 @@ def _propagated(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    relevant: Relevant,
+    live: Live,
     order: DepthFirstOrder,
     states: Mapping[str, State],
     sweep: int,
@@ -526,9 +531,11 @@ def _propagated(
     """
     grown = dict(states)
     for visited, node_id in enumerate(order.ordered, start=1):
-        after = _after(statements, node_id, grown[node_id], index, relevant)
+        after = _after(statements, node_id, grown[node_id], index)
         for edge in cfg.successors(node_id):
-            grown[edge.target] = _arriving(grown, edge.target, after)
+            grown[edge.target] = _arriving(
+                grown, edge.target, _for(after, live, edge.target)
+            )
         if not visited % HEARTBEAT:
             _sweep_progress(cfg, sweep, visited, len(order.ordered))
     return MappingProxyType(grown)
@@ -538,7 +545,7 @@ def _swept(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    relevant: Relevant,
+    live: Live,
     entry: str,
     budget: int,
     entry_state: State,
@@ -561,7 +568,7 @@ def _swept(
     states: Mapping[str, State] = MappingProxyType({entry: entry_state})
     sweep, settled = 0, False
     while sweep < budget and not settled:
-        grown = _propagated(cfg, statements, index, relevant, order, states, sweep + 1)
+        grown = _propagated(cfg, statements, index, live, order, states, sweep + 1)
         sweep, settled = sweep + 1, grown == states or not order.back_edges
         states = grown
         _sweep_done(cfg, sweep, budget, states, settled)
@@ -578,13 +585,13 @@ def _worked(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    relevant: Relevant,
+    live: Live,
     entry: str,
     factor: int,
     entry_state: State,
 ) -> _Walk:
     cap = factor * max(len(cfg.nodes), 1)
-    run = _settled(cfg, statements, index, relevant, entry, cap, entry_state)
+    run = _settled(cfg, statements, index, live, entry, cap, entry_state)
     _warn_if_capped(run, cap, cfg.program, len(cfg.nodes))
     return _Walk(states=run.states, dequeues=run.dequeues, settled=not run.queue)
 
@@ -593,7 +600,7 @@ def _walked(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    relevant: Relevant,
+    live: Live,
     entry: str,
     options: AnalysisOptions,
     entry_state: State,
@@ -607,10 +614,8 @@ def _walked(
     if entry not in cfg.node_ids:
         return _Walk()
     if options.sweeps:
-        return _swept(
-            cfg, statements, index, relevant, entry, options.sweeps, entry_state
-        )
-    return _worked(cfg, statements, index, relevant, entry, options.factor, entry_state)
+        return _swept(cfg, statements, index, live, entry, options.sweeps, entry_state)
+    return _worked(cfg, statements, index, live, entry, options.factor, entry_state)
 
 
 def _definers(state: State, extent: FieldExtent) -> frozenset[str]:
@@ -624,7 +629,7 @@ def _at(
     node_id: str,
     state: State,
     index: CellIndex,
-    relevant: Relevant,
+    kept: Callable[[str, FieldExtent], bool],
 ) -> _Extracted:
     """One statement's flows and the definitions reaching what it read.
 
@@ -635,7 +640,7 @@ def _at(
     moved = tuple(
         (write.target, source)
         for write in writes_of(statement, node_id, index)
-        if relevant.touches(write.target)
+        if kept(node_id, write.target)
         for source in write.sources
     )
     return _Extracted(
@@ -665,7 +670,7 @@ def _extracted(
     found: tuple[tuple[str, Statement], ...],
     states: Mapping[str, State],
     index: CellIndex,
-    relevant: Relevant,
+    kept: Callable[[str, FieldExtent], bool],
 ) -> _Extracted:
     """Every statement the CFG can reach, read once at its settled entry state.
 
@@ -679,7 +684,7 @@ def _extracted(
     order a reader compares against the listing.
     """
     parts = tuple(
-        _at(statement, node_id, states[node_id], index, relevant)
+        _at(statement, node_id, states[node_id], index, kept)
         for node_id, statement in found
         if node_id in states
     )
@@ -733,13 +738,14 @@ def analyse(
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
-    written = _written(found, index)
-    relevant = _relevant(asg, cfg, statements, written, index, options, entry_state)
+    live = _live(asg, cfg, statements, index, options)
+    entry = _entry_node(asg)
     walk = _walked(
-        cfg, statements, index, relevant, _entry_node(asg), options, entry_state
+        cfg, statements, index, live, entry, options, _for(entry_state, live, entry)
     )
-    extracted = _extracted(found, walk.states, index, relevant)
-    targets = frozenset(write.target for write in written)
+    kept = _kept_after(cfg, live)
+    extracted = _extracted(found, walk.states, index, kept)
+    written = _written(found, index)
     return ProgramFlow(
         program=cfg.program,
         edges=extracted.edges,
@@ -756,42 +762,42 @@ def analyse(
         back_edges=walk.back_edges,
         settled=walk.settled,
         skipped=walk.skipped,
-        tracked=len(targets),
-        relevant=sum(1 for target in targets if relevant.touches(target)),
+        tracked=len({write.target for _, write in written}),
+        relevant=len(
+            {write.target for node, write in written if kept(node, write.target)}
+        ),
     )
 
 
 def _written(
     found: tuple[tuple[str, Statement], ...], index: CellIndex
-) -> tuple[Write, ...]:
+) -> tuple[tuple[str, Write], ...]:
     return tuple(
-        write
+        (node_id, write)
         for node_id, statement in found
         for write in writes_of(statement, node_id, index)
     )
 
 
-def _relevant(
-    asg,
-    cfg: Cfg,
-    statements: Mapping[str, Statement],
-    written: tuple[Write, ...],
-    index: CellIndex,
-    options: AnalysisOptions,
-    entry_state: State,
-) -> Relevant:
-    if options.scope is Scope.WHOLE:
-        return EVERYTHING
-    return closed(
-        fact_extents(asg, cfg, statements, index),
-        (*written, *_imaged(entry_state)),
+def _kept_after(cfg: Cfg, live: Live) -> Callable[[str, FieldExtent], bool]:
+    if live.everything:
+        return lambda node, extent: True
+    return lambda node, extent: any(
+        live.keeps(edge.target, extent) for edge in cfg.successors(node)
     )
 
 
-def _imaged(entry_state: State) -> tuple[Write, ...]:
-    return tuple(
-        Write(target=extent, sources=frozenset(), values=VALUES_EMPTY)
-        for extent in entry_state.values
+def _live(
+    asg,
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+    options: AnalysisOptions,
+) -> Live:
+    if options.scope is Scope.WHOLE:
+        return EVERYTHING
+    return live_ranges(
+        cfg, statements, index, call_target_demand(asg, cfg, statements, index)
     )
 
 
