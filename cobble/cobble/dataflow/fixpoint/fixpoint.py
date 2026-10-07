@@ -733,12 +733,13 @@ def analyse(
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
     found = _statements_at(cfg, statements)
     tally = _tally(found, index)
-    relevant = _relevant(asg, cfg, statements, found, index, options.scope, entry_state)
+    written = _written(found, index)
+    relevant = _relevant(asg, cfg, statements, written, index, options, entry_state)
     walk = _walked(
         cfg, statements, index, relevant, _entry_node(asg), options, entry_state
     )
     extracted = _extracted(found, walk.states, index, relevant)
-    tracked = _tracked(found, index)
+    targets = frozenset(write.target for write in written)
     return ProgramFlow(
         program=cfg.program,
         edges=extracted.edges,
@@ -755,8 +756,8 @@ def analyse(
         back_edges=walk.back_edges,
         settled=walk.settled,
         skipped=walk.skipped,
-        tracked=tracked,
-        relevant=tracked if relevant.everything else len(relevant.extents),
+        tracked=len(targets),
+        relevant=sum(1 for target in targets if relevant.touches(target)),
     )
 
 
@@ -770,24 +771,20 @@ def _written(
     )
 
 
-def _tracked(found: tuple[tuple[str, Statement], ...], index: CellIndex) -> int:
-    return len({write.target for write in _written(found, index)})
-
-
 def _relevant(
     asg,
     cfg: Cfg,
     statements: Mapping[str, Statement],
-    found: tuple[tuple[str, Statement], ...],
+    written: tuple[Write, ...],
     index: CellIndex,
-    scope: Scope,
+    options: AnalysisOptions,
     entry_state: State,
 ) -> Relevant:
-    if scope is Scope.WHOLE:
+    if options.scope is Scope.WHOLE:
         return EVERYTHING
     return closed(
         fact_extents(asg, cfg, statements, index),
-        (*_written(found, index), *_imaged(entry_state)),
+        (*written, *_imaged(entry_state)),
     )
 
 
