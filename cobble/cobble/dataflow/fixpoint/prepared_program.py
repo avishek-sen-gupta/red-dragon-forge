@@ -11,9 +11,10 @@ from cobol_memory.field_extent import FieldExtent
 
 @dataclass(frozen=True)
 class PreparedProgram:
-    """The liveness graph and demand parts, the entry node, the received areas by
+    """The member, its liveness graph and demand parts, the entry node, the received areas by
     position, and each returning call's handed-over areas by position."""
 
+    member: str
     graph: LiveGraph
     parts: DemandParts
     entry: str

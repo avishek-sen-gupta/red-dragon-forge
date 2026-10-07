@@ -13,6 +13,7 @@ from cobble.dataflow.fields.transfer import Statement, Write, writes_of
 from cobble.dataflow.fixpoint.demand import Demand
 from cobble.dataflow.fixpoint.live import Live
 from cobble.dataflow.fixpoint.live_graph import LiveGraph
+from cobble.dataflow.fixpoint.live_write import LiveWrite
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_memory.field_extent import FieldExtent, Precision
 
@@ -33,12 +34,12 @@ def _overlap(left: FieldExtent, right: FieldExtent) -> bool:
     )
 
 
-def _strong(write: Write) -> bool:
+def _strong(write: LiveWrite) -> bool:
     return not write.weak and write.target.precision is Precision.EXACT
 
 
 def entered(
-    writes: Sequence[Write],
+    writes: Sequence[LiveWrite],
     demanded: frozenset[FieldExtent],
     exiting: frozenset[FieldExtent],
 ) -> frozenset[FieldExtent]:
@@ -53,12 +54,7 @@ def entered(
             for one in exiting
             if not any(target.must_cover(one) for target in killers)
         )
-        | frozenset(
-            source.extent
-            for write in touching
-            for source in write.sources
-            if not source.origin
-        )
+        | frozenset(extent for write in touching for extent in write.sources)
         | frozenset(write.target for write in touching if not _strong(write))
     )
 
@@ -101,10 +97,42 @@ def graph_of(
             tuple(rank[edge.source] for edge in cfg.predecessors(node))
             for node in order
         ),
-        writes=tuple(
-            writes_of(statements[node], node, index) if node in statements else ()
-            for node in order
+        writes=_slim(
+            tuple(
+                writes_of(statements[node], node, index) if node in statements else ()
+                for node in order
+            )
         ),
+    )
+
+
+def _slim(
+    writes: tuple[tuple[Write, ...], ...],
+) -> tuple[tuple[LiveWrite, ...], ...]:
+    """Each write cut to what liveness reads, every equal extent one object."""
+    extents = {
+        extent: extent
+        for per_node in writes
+        for write in per_node
+        for extent in (
+            write.target,
+            *(source.extent for source in write.sources if not source.origin),
+        )
+    }
+    return tuple(
+        tuple(
+            LiveWrite(
+                target=extents[write.target],
+                weak=write.weak,
+                sources=tuple(
+                    extents[source.extent]
+                    for source in write.sources
+                    if not source.origin
+                ),
+            )
+            for write in per_node
+        )
+        for per_node in writes
     )
 
 
