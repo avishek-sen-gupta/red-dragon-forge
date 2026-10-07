@@ -1,5 +1,7 @@
 """Link programs: values cross programs over a call graph grown from those values, in rounds."""
 
+import logging
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from functools import partial, reduce
@@ -24,6 +26,8 @@ from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_area import JumpArea
 from cobble.dataflow.jumps.jump_kind import JumpKind
+
+logger = logging.getLogger(__name__)
 
 _ENTERING = frozenset(
     {JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL, JumpKind.RETURN_TRANSID}
@@ -67,23 +71,73 @@ def link(
 
 def _rounds(world: _World, round_: int) -> Linked:
     found = frozenset(_edges(world))
+    new = found - world.edges
+    logger.info(
+        "combine:   round %d, %d edges total, %d new, %d programs",
+        round_,
+        len(found),
+        len(new),
+        len(world.tables),
+    )
     if found <= world.edges:
         return _linked(world, round_)
     return _rounds(_answered_in(replace(world, edges=world.edges | found)), round_ + 1)
 
 
-def _answered_in(world: _World) -> _World:
-    return replace(
-        world,
-        answers=MappingProxyType(
-            {
-                (program, jump.node, fact): _fact_held(world, program, jump.node, fact)
-                for program, tables in world.tables.items()
-                for jump in tables.jumps.values()
-                for fact in (jump.target, jump.transid)
-            }
-        ),
+def _program_answers(
+    world: _World,
+    program: str,
+    tables: ProgramTables,
+) -> tuple[tuple[_Start, Held], ...]:
+    return tuple(
+        ((program, jump.node, fact), _fact_held(world, program, jump.node, fact))
+        for jump in tables.jumps.values()
+        for fact in (jump.target, jump.transid)
     )
+
+
+def _collect_answers(
+    world: _World,
+    items: tuple[tuple[str, ProgramTables], ...],
+    index: int,
+    started: float,
+    last_log: float,
+) -> tuple[tuple[_Start, Held], ...]:
+    if index >= len(items):
+        return ()
+    program, tables = items[index]
+    batch = _program_answers(world, program, tables)
+    now = time.monotonic()
+    if now - last_log >= 5.0:
+        logger.info(
+            "combine:   answering %s [%d/%d] programs (%.1fs)",
+            program,
+            index + 1,
+            len(items),
+            now - started,
+        )
+        return batch + _collect_answers(world, items, index + 1, started, now)
+    return batch + _collect_answers(world, items, index + 1, started, last_log)
+
+
+def _answered_in(world: _World) -> _World:
+    total_programs = len(world.tables)
+    total_jumps = sum(len(t.jumps) for t in world.tables.values())
+    logger.info(
+        "combine:   answering %d programs (%d jumps, %d edges)...",
+        total_programs,
+        total_jumps,
+        len(world.edges),
+    )
+    started = time.monotonic()
+    pairs = _collect_answers(world, tuple(world.tables.items()), 0, started, started)
+    logger.info(
+        "combine:   answered %d programs, %d jumps in %.1fs",
+        total_programs,
+        total_jumps,
+        time.monotonic() - started,
+    )
+    return replace(world, answers=MappingProxyType(dict(pairs)))
 
 
 def _answer(world: _World, program: str, node: str, fact: Fact) -> Held:
