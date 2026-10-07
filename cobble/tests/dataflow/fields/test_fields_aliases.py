@@ -14,8 +14,11 @@ from cobble.dataflow.fields.aliases import (
     UNREADABLE,
     commarea_aliases,
 )
+from cobble.dataflow.fields import aliases
 from cobble.dataflow.fields.side_tables import alias_row
 from cobol_asg.asg_types import CobolASG
+from cobol_memory.field_extent import FieldExtent, Precision
+from cobol_memory.region_id import RegionId
 
 
 def _link(program: str, area: str) -> dict:
@@ -376,3 +379,29 @@ def test_a_callee_the_deserialiser_rejects_is_a_named_dead_end(
     assert row.reason.startswith(UNREADABLE)
     assert row.callee == "XPROGB"
     assert (row.caller_extent, row.callee_extent) == ("", "")
+
+
+def test_the_cache_keeps_a_callees_windows_and_not_its_layout(tmp_path, field):
+    _callee_linkage(
+        tmp_path,
+        "XPROGT",
+        [
+            {
+                **field(1, "DFHCOMMAREA"),
+                "children": [
+                    field(5, "LK-NAME", pic="X(8)", offset=0),
+                    {**field(5, "LK-ROW", pic="X(4)", offset=8), "occurs": 1000},
+                ],
+            },
+            field(1, "LK-PARM", pic="X(6)"),
+        ],
+    )
+
+    assert aliases._callee_linkage(tmp_path, "XPROGT") == aliases._Linkage(
+        commarea=aliases._Callee(
+            extent=FieldExtent(
+                RegionId.LINKAGE, 0, 4008, Precision.EXACT, "DFHCOMMAREA"
+            )
+        ),
+        parameters=(),
+    )
