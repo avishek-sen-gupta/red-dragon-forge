@@ -614,15 +614,14 @@ enclosing `PERFORM` shares that end; that holds for IBM's and GnuCOBOL's return
 handling, and the standard forbids two active `PERFORM`s sharing an end. Only the fixpoint's copy is pruned: `cobble-srccfg-build`, the srccfg queries and
 `cobble-fields-trace` see the graph unchanged.
 
-**A write kills what it overwrites, and only that.** An exact write drops every
-entry it fully covers, in both the provenance and the value map. An exact write
-into part of an exact entry splits that entry: the bytes left untouched keep its
-writers, values (sliced to them) and reasons, and the overwritten bytes hold only
-the new write. So `MOVE WS-PGMNAME TO CDEMO-FROM-PROGRAM` after a whole-record copy
-of the commarea leaves `CDEMO-FROM-PROGRAM` with one writer and no
-`inbound-linkage`, while its untouched neighbours keep both. A read straddling two
-pieces finds no value. Where either side is CLAMPED (a computed subscript), nothing
-is split: the entry keeps its writers whole and loses its values to `not-a-literal`.
+**A write kills only what it fully covers.** An exact write drops every entry it
+fully covers. An exact write into part of a wider entry leaves that entry whole, old
+writers included, so a sub-field overwritten after a whole-record copy still lists
+the copy as a writer. Splitting the entry was tried and reverted: it let the key set
+grow until large programs stopped settling (red-dragon-forge-daj).
+`tests/dataflow/fixpoint/test_fixpoint_cost_synthetic.py` records the fixpoint's cost
+on three invented programs before the split, with it, with an atom-cut variant and
+reverted, and fails when the current cost moves.
 
 **Statements with no transfer of their own.** The transfer models `MOVE`,
 `INITIALIZE`, arithmetic, `COMPUTE`, `STRING`, `READ`, `CALL` and `EXEC CICS`. Any
