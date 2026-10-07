@@ -49,11 +49,11 @@ paragraph performed from everywhere be walked without limit.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import accumulate, chain, groupby, repeat
-from operator import attrgetter, or_
+from operator import attrgetter, itemgetter, or_
 from types import MappingProxyType
 
 from cobble.dataflow.srccfg.build import label_id
@@ -784,28 +784,30 @@ def _gen_mask(defs: frozenset[Definition], index: Mapping[Definition, int]) -> i
     return sum(1 << index[d] for d in defs if d in index)
 
 
-def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
-    """A gen/kill fixpoint using integer bitmasks.
+def _reaching_masks(
+    cfg: Cfg, wanted: Callable[[str], bool]
+) -> tuple[Mapping[str, int], tuple[Definition, ...]]:
+    """Each node's IN set as a bitmask over the definitions of ``wanted`` fields.
 
-    Each Defs set is represented as a Python int where bit k is set when
-    Definition k is present.  Union becomes ``|``, comparison becomes ``==``,
-    and gen/kill becomes ``(in_mask & ~kill_mask) | gen_mask`` — word
-    operations rather than per-element Python object allocations.
-
-    ``field_to_mask`` is built in O(D log D) via groupby rather than O(D²)
-    by filtering all_defs per field.
+    Kills are per field, so the definitions of one set of fields reach exactly as
+    they would among every definition: leaving the rest out changes nothing for
+    these, and costs nothing for the others.
     """
-    generated = definitions_of(cfg)
-    all_defs = _def_index(cfg)
+    all_defs = tuple(d for d in _def_index(cfg) if wanted(d.field))
     idx: dict[Definition, int] = {d: i for i, d in enumerate(all_defs)}
+    generated = {
+        node_id: frozenset(d for d in defs if d in idx)
+        for node_id, defs in definitions_of(cfg).items()
+    }
     gen_masks: dict[str, int] = {
         node_id: reduce(or_, (1 << idx[d] for d in defs), 0)
         for node_id, defs in generated.items()
     }
     field_to_mask: dict[str, int] = {
-        field: reduce(or_, (1 << idx[d] for d in group), 0)
+        field: reduce(or_, (1 << position for _field, position in group), 0)
         for field, group in groupby(
-            sorted(all_defs, key=lambda d: d.field), key=lambda d: d.field
+            sorted((d.field, position) for position, d in enumerate(all_defs)),
+            itemgetter(0),
         )
     }
     kill_masks: dict[str, int] = {
@@ -817,10 +819,27 @@ def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
         node.id: reduce(or_, (outs[e.source] for e in cfg.predecessors(node.id)), 0)
         for node in cfg.nodes
     }
-    return {
-        node_id: frozenset(all_defs[i] for i in range(len(all_defs)) if mask >> i & 1)
-        for node_id, mask in in_masks.items()
-    }
+    return in_masks, all_defs
+
+
+def _defs_in(mask: int, all_defs: tuple[Definition, ...]) -> Defs:
+    return frozenset(
+        all_defs[position]
+        for position, bit in enumerate(reversed(bin(mask)[2:]))
+        if bit == "1"
+    )
+
+
+def reaching_definitions(cfg: Cfg) -> Mapping[str, Defs]:
+    """A gen/kill fixpoint using integer bitmasks.
+
+    Each Defs set is represented as a Python int where bit k is set when
+    Definition k is present.  Union becomes ``|``, comparison becomes ``==``,
+    and gen/kill becomes ``(in_mask & ~kill_mask) | gen_mask`` — word
+    operations rather than per-element Python object allocations.
+    """
+    in_masks, all_defs = _reaching_masks(cfg, lambda field: True)
+    return {node_id: _defs_in(mask, all_defs) for node_id, mask in in_masks.items()}
 
 
 def writers_of(cfg: Cfg, field: str) -> tuple[str, ...]:
@@ -881,11 +900,17 @@ def live_handlers(cfg: Cfg) -> Mapping[str, tuple[str, ...]]:
     Any %HANDLER[...] definition reaching the dispatch is a candidate, whatever the
     condition: the dispatch reads %HANDLER[ANY] because the CFG does not model which
     condition a command raises."""
-    incoming = reaching_definitions(cfg)
+    dispatches = tuple(
+        node for node in cfg.nodes if node.transfer == DISPATCH_TRANSFER_CICS
+    )
+    if not dispatches:
+        return {}
+    in_masks, handler_defs = _reaching_masks(
+        cfg, lambda field: field.startswith(HANDLER_PREFIX)
+    )
     return {
-        node.id: _targets(cfg, incoming.get(node.id, frozenset()))
-        for node in cfg.nodes
-        if node.transfer == DISPATCH_TRANSFER_CICS
+        node.id: _targets(cfg, _defs_in(in_masks[node.id], handler_defs))
+        for node in dispatches
     }
 
 
