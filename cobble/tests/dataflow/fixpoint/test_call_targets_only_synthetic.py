@@ -328,3 +328,36 @@ def test_a_member_that_fails_in_a_restricted_run_is_recorded_in_that_scope(
 
     assert (failed.skipped[:12], failed.scope) == ("unreadable: ", Scope.CALL_TARGETS)
     assert (first, _restricted_again(out)) == (3, 3)
+
+
+COUNTED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGK.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-SRC.
+           05  WS-SRC-A         PIC X(8).
+       01  WS-DST.
+           05  WS-PGM           PIC X(8).
+       01  WS-OTHER             PIC X(8).
+       01  WS-SIB               PIC X(8).
+       01  WS-NOISE             PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'X' TO WS-NOISE.
+           MOVE WS-SRC TO WS-DST.
+           CALL WS-PGM.
+           GOBACK.
+       DEAD-PARA.
+           MOVE WS-OTHER TO WS-SIB.
+           CALL WS-SIB.
+"""
+
+
+def test_relevant_and_tracked_count_the_same_written_extents(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+) -> None:
+    out = fixpoint_corpus_with({"PROGK": COUNTED}, ("--call-targets-only",))
+    counts = _counts(out, "PROGK")
+
+    assert (counts.tracked, counts.relevant) == (3, 2)
