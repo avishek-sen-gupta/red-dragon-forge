@@ -3,9 +3,13 @@
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from cobble.dataflow.combine.cli import cli as combine_cli
 from cobble.dataflow.fixpoint.build_corpus import cli
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.scope import Scope
+from tests.dataflow.combine.corpus_toml import CONFIG
+from tests.dataflow.combine.linked_rows import link_rows, target_rows
+from tests.dataflow.fixpoint.test_combine_synthetic import PROGA, PROGB
 
 LOCAL = """\
        IDENTIFICATION DIVISION.
@@ -61,4 +65,130 @@ def test_a_restricted_run_records_its_scope_and_refuses_a_full_one_beside_it(
             ]
         )
         == 2
+    )
+
+
+CALLER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGC.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-NEXT          PIC X(8).
+           05  WS-PAD           PIC X(12).
+       01  WS-NOISE             PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'ABC' TO WS-NOISE.
+           EXEC CICS LINK PROGRAM('PROGW') COMMAREA(WS-AREA) END-EXEC.
+           CALL WS-NEXT.
+           GOBACK.
+"""
+
+CALLEE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGW.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-NEXT          PIC X(8).
+           05  LK-PAD           PIC X(12).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGZ' TO LK-NEXT.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+def _combined(out: Path, tmp_path: Path, name: str) -> Path:
+    config = tmp_path / f"{name}.toml"
+    config.write_text(CONFIG.format(asg=out.parent / "parsed"), encoding="utf-8")
+    combined = tmp_path / name
+    assert (
+        combine_cli(
+            [
+                "--config",
+                str(config),
+                "--fixpoint-dir",
+                str(out),
+                "--out-dir",
+                str(combined),
+                "--all",
+            ]
+        )
+        == 0
+    )
+    return combined
+
+
+def _both(
+    run: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    sources: Mapping[str, str],
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, Path]:
+    full = run(sources, ())
+    restricted = run(sources, ("--call-targets-only",))
+    return (
+        full,
+        restricted,
+        _combined(full, tmp_path, "full"),
+        _combined(restricted, tmp_path, "restricted"),
+    )
+
+
+def test_a_local_target_resolves_the_same_from_fewer_extents(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    tmp_path: Path,
+) -> None:
+    full, restricted, full_combined, restricted_combined = _both(
+        fixpoint_corpus_with, {"PROGL": LOCAL}, tmp_path
+    )
+    (row,) = target_rows(restricted / "targets.jsonl")
+
+    assert target_rows(restricted / "targets.jsonl") == target_rows(
+        full / "targets.jsonl"
+    )
+    assert row.candidates == ("PROGX", "PROGY")
+    assert target_rows(restricted_combined / "targets.jsonl") == target_rows(
+        full_combined / "targets.jsonl"
+    )
+    assert (_counts(restricted, "PROGL").relevant, _counts(full, "PROGL").relevant) == (
+        1,
+        2,
+    )
+
+
+def test_a_target_through_a_commarea_resolves_the_same(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    tmp_path: Path,
+) -> None:
+    _, _, full_combined, restricted_combined = _both(
+        fixpoint_corpus_with, {"PROGA": PROGA, "PROGB": PROGB}, tmp_path
+    )
+    (row,) = target_rows(restricted_combined / "targets.jsonl")
+
+    assert row.candidates == ("PROGA", "PROGM")
+    assert target_rows(restricted_combined / "targets.jsonl") == target_rows(
+        full_combined / "targets.jsonl"
+    )
+    assert link_rows(restricted_combined / "links.jsonl") == link_rows(
+        full_combined / "links.jsonl"
+    )
+
+
+def test_a_target_handed_back_by_a_callee_resolves_the_same(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    tmp_path: Path,
+) -> None:
+    _, _, full_combined, restricted_combined = _both(
+        fixpoint_corpus_with, {"PROGC": CALLER, "PROGW": CALLEE}, tmp_path
+    )
+    (row,) = target_rows(full_combined / "targets.jsonl")
+
+    assert (row.candidates, row.reasons) == (("PROGZ",), ())
+    assert target_rows(restricted_combined / "targets.jsonl") == target_rows(
+        full_combined / "targets.jsonl"
+    )
+    assert link_rows(restricted_combined / "links.jsonl") == link_rows(
+        full_combined / "links.jsonl"
     )
