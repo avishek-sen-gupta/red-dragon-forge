@@ -497,5 +497,5 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
     ] == [("PROGJ", ("PROGK",))]
     assert _counts(narrow, "PROGH").scope is Scope.NARROW_CALL_TARGETS
     assert AreaNeedFile.model_validate_json(stored.read_text(encoding="utf-8")) == (
-        AreaNeedFile(entry=((0, (0, 24)),), back=((0, (0, 8)),))
+        AreaNeedFile(entry=((0, (0, 16)),), back=((0, (0, 8)),))
     )

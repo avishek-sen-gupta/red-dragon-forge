@@ -16,6 +16,7 @@ from cobble.dataflow.fixpoint.live_graph import LiveGraph
 from cobble.dataflow.fixpoint.live_write import LiveWrite
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_memory.field_extent import FieldExtent, Precision
+from cobol_memory.region_id import RegionId
 
 
 @dataclass(frozen=True)
@@ -54,8 +55,57 @@ def entered(
             for one in exiting
             if not any(target.must_cover(one) for target in killers)
         )
-        | frozenset(extent for write in touching for extent in write.sources)
+        | frozenset(extent for write in touching for extent in _read(write, exiting))
         | frozenset(write.target for write in touching if not _strong(write))
+    )
+
+
+def _read(write: LiveWrite, exiting: frozenset[FieldExtent]) -> tuple[FieldExtent, ...]:
+    """The source bytes a write needs, given what is live after it.
+
+    A byte copy out of LINKAGE needs only the source bytes lined up with the live
+    target bytes. Only LINKAGE: a miss there always answers inbound-linkage, so no
+    reason depends on the source bytes left out. Elsewhere a miss's reasons look at
+    every byte of the source, which is why the whole source stays live.
+    """
+    if not write.copy_start:
+        return write.sources
+    return tuple(
+        piece
+        for source in write.sources
+        for piece in (
+            _lined_up(write.target, source, write.copy_start[0], exiting)
+            if source.region is RegionId.LINKAGE
+            else (source,)
+        )
+    )
+
+
+def _lined_up(
+    target: FieldExtent,
+    source: FieldExtent,
+    first: int,
+    exiting: frozenset[FieldExtent],
+) -> tuple[FieldExtent, ...]:
+    """Source bytes from ``first`` on that land on live target bytes, kept within
+    the source extent, which is the whole area when its length is a run-time value."""
+    return tuple(
+        FieldExtent(
+            region=source.region,
+            start=start,
+            length=end - start,
+            precision=source.precision,
+            field_name=source.field_name,
+        )
+        for one in exiting
+        if _overlap(target, one)
+        for start, end in (
+            (
+                max(first + max(one.start, target.start) - target.start, source.start),
+                min(first + min(one.end, target.end) - target.start, source.end),
+            ),
+        )
+        if start < end
     )
 
 
@@ -124,6 +174,7 @@ def _slim(
             LiveWrite(
                 target=extents[write.target],
                 weak=write.weak,
+                copy_start=write.copy_start,
                 sources=tuple(
                     extents[source.extent]
                     for source in write.sources

@@ -15,3 +15,4 @@ class LiveWrite:
     target: FieldExtent
     weak: bool
     sources: tuple[FieldExtent, ...]
+    copy_start: tuple[int, ...] = ()

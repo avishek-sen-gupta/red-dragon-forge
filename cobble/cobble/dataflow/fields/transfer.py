@@ -32,6 +32,7 @@ from types import MappingProxyType
 from cics.statements import CicsOperand, ExecCicsStatement, operand_reference
 from cobble.asg_walk import descend
 from cobble.dataflow.fields.extent import CellIndex, OperandExtents, operand_extents
+from cobble.dataflow.fields.move_kind import MoveKind
 from cobble.dataflow.fields.state import (
     CICS_STATE,
     EMPTY,
@@ -56,6 +57,7 @@ from cobble.dataflow.fields.values import (
     of_value,
     refitted,
 )
+from cobble.dataflow.layout import Cell
 from cobble.dataflow.srccfg.literals import is_literal
 from cobol_asg.cobol_expression import ExprNode, FieldRefNode, RefModNode
 from cobol_asg.cobol_statements import (
@@ -69,7 +71,15 @@ from cobol_asg.cobol_statements import (
     ReadStatement,
     StringStatement,
 )
-from cobol_asg.ref_mod import RefModOperand
+from cobol_asg.ref_mod import (
+    RefModBinOp,
+    RefModExpr,
+    RefModFunction,
+    RefModLengthOf,
+    RefModLiteral,
+    RefModOperand,
+    RefModReference,
+)
 from cobol_memory.field_extent import FieldExtent
 
 # cobol_asg has no statement base class, and its own union leaves out the
@@ -89,6 +99,7 @@ class Write:
     sources: frozenset[Source]
     values: ValueSet
     weak: bool = False
+    copy_start: tuple[int, ...] = ()
 
 
 def _applied(state: State, writes: Iterator[Write]) -> State:
@@ -149,6 +160,7 @@ def _one_move(
     target: FieldExtent,
     node: str,
     state: State,
+    copy_start: tuple[int, ...],
 ) -> Iterator[Write]:
     """The whole target from the whole source, or from a named origin.
 
@@ -174,6 +186,7 @@ def _one_move(
                 target,
                 _from_extents(sources.extents, node),
                 values=_carried(state, sources.extents, target.length),
+                copy_start=copy_start,
             ),
         )
     )
@@ -197,9 +210,107 @@ def _move_writes(
     return (
         entry
         for target_operand in _move_targets(statement)
+        for copy_start in (_copy_start(operand, target_operand, index),)
         for target in operand_extents(target_operand, index).extents
-        for entry in _one_move(operand, sources, target, node, state)
+        for entry in _one_move(operand, sources, target, node, state, copy_start)
     )
+
+
+_REF_MODS = (
+    RefModLiteral,
+    RefModReference,
+    RefModLengthOf,
+    RefModFunction,
+    RefModBinOp,
+)
+
+
+def _kind(operand: RefModOperand, index: CellIndex) -> MoveKind:
+    if isinstance(operand.ref_mod_start, _REF_MODS):
+        return MoveKind.ALPHANUMERIC
+    cells = index.cells_named(operand.name, operand.qualifiers, len(operand.subscripts))
+    if not cells:
+        return MoveKind.OTHER
+    return _cell_kind(cells[0])
+
+
+def _cell_kind(cell: Cell) -> MoveKind:
+    if cell.is_group:
+        return MoveKind.GROUP
+    if _alphanumeric(cell.pic.upper()):
+        return MoveKind.ALPHANUMERIC
+    return MoveKind.OTHER
+
+
+def _alphanumeric(pic: str) -> bool:
+    symbols = set(pic.replace("(", "").replace(")", "").strip("0123456789"))
+    return bool(pic) and symbols <= {"X", "A"}
+
+
+def _constant(expression: RefModExpr, index: CellIndex) -> tuple[int, ...]:
+    """A reference-modification bound's value when the compiler knows it -- a
+    literal, LENGTH OF, or arithmetic over those -- or nothing when it does not."""
+    if isinstance(expression, RefModBinOp):
+        return _combined(
+            expression.op,
+            _constant(expression.left, index),
+            _constant(expression.right, index),
+        )
+    return _leaf(expression, index)
+
+
+def _leaf(expression: RefModExpr, index: CellIndex) -> tuple[int, ...]:
+    match expression:
+        case RefModLiteral(value=value):
+            return _number(value)
+        case RefModLengthOf(name=name):
+            return tuple(cell.length for cell in index.cells_named(name, (), 0)[:1])
+        case _:
+            return ()
+
+
+def _number(value: str) -> tuple[int, ...]:
+    return (int(value),) if value.strip().lstrip("+-").isdigit() else ()
+
+
+_ARITHMETIC: Mapping[str, Callable[[int, int], int]] = MappingProxyType(
+    {
+        "+": int.__add__,
+        "-": int.__sub__,
+        "*": int.__mul__,
+        "/": int.__floordiv__,
+    }
+)
+
+
+def _combined(
+    op: str, left: tuple[int, ...], right: tuple[int, ...]
+) -> tuple[int, ...]:
+    if not left or not right or op not in _ARITHMETIC or (op == "/" and not right[0]):
+        return ()
+    return (_ARITHMETIC[op](left[0], right[0]),)
+
+
+def _copy_start(
+    source: RefModOperand, target: RefModOperand, index: CellIndex
+) -> tuple[int, ...]:
+    """The source byte that lands on the target's first byte, when the MOVE copies
+    byte for byte from a fixed place: a group on either side, or both alphanumeric,
+    with no subscript on the source and a reference-modification start the
+    compiler knows. Nothing otherwise."""
+    kinds = (_kind(source, index), _kind(target, index))
+    copying = MoveKind.GROUP in kinds or kinds == (
+        MoveKind.ALPHANUMERIC,
+        MoveKind.ALPHANUMERIC,
+    )
+    cells = index.cells_named(source.name, source.qualifiers, 0)
+    if source.subscripts or not copying or not cells:
+        return ()
+    base = index.extent_of(cells[0]).start
+    if not isinstance(source.ref_mod_start, _REF_MODS):
+        return (base,)
+    offset = _constant(source.ref_mod_start, index)
+    return (base + offset[0] - 1,) if offset else ()
 
 
 def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, ...]:
