@@ -3,9 +3,12 @@
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+import pytest
+
 from cobble.dataflow.combine.cli import cli as combine_cli
 from cobble.dataflow.fixpoint.build_corpus import cli
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
+from cobble.dataflow.fixpoint.query import cli as query_cli
 from cobble.dataflow.fixpoint.scope import Scope
 from tests.dataflow.combine.corpus_toml import CONFIG
 from tests.dataflow.combine.linked_rows import link_rows, target_rows
@@ -191,4 +194,29 @@ def test_a_target_handed_back_by_a_callee_resolves_the_same(
     )
     assert link_rows(restricted_combined / "links.jsonl") == link_rows(
         full_combined / "links.jsonl"
+    )
+
+
+def test_the_query_refuses_a_restricted_run(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out = fixpoint_corpus_with({"PROGL": LOCAL}, ("--call-targets-only",))
+
+    assert (
+        query_cli(
+            [
+                "writers",
+                "PROGL.WS-NOISE",
+                "--fixpoint-dir",
+                str(out),
+                "--extents",
+                str(out.parent / "extents.jsonl"),
+            ]
+        )
+        == 2
+    )
+    assert capsys.readouterr().err == (
+        f"fields: !! {out} holds a run restricted to call targets (PROGL);"
+        " rerun cobble-dataflow-fixpoint without --call-targets-only to query it\n"
     )
