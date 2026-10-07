@@ -14,11 +14,13 @@ def _grown(relevant: Relevant, writes: Sequence[Write]) -> Relevant:
     return Relevant(
         extents=relevant.extents
         | frozenset(
-            source.extent
+            extent
             for write in writes
             if relevant.touches(write.target)
-            for source in write.sources
-            if not source.origin
+            for extent in (
+                write.target,
+                *(source.extent for source in write.sources if not source.origin),
+            )
         )
     )
 

@@ -220,3 +220,75 @@ def test_the_query_refuses_a_restricted_run(
         f"fields: !! {out} holds a run restricted to call targets (PROGL);"
         " rerun cobble-dataflow-fixpoint without --call-targets-only to query it\n"
     )
+
+
+SIBLING_WEAK = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGF.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC.
+           05  WS-PGM           PIC X(8).
+           05  WS-FLAG          PIC X(1).
+               88  FLAG-ON      VALUE 'Y'.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS READ FILE('F') INTO(WS-REC) END-EXEC.
+           SET FLAG-ON TO TRUE.
+           CALL WS-PGM.
+           GOBACK.
+"""
+
+SIBLING_CLAMPED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGT.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC.
+           05  WS-PGM           PIC X(8).
+           05  WS-TAB           PIC X(1) OCCURS 4.
+       01  WS-I                 PIC 9(1).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGXXXX1234' TO WS-REC.
+           MOVE 'Z' TO WS-TAB(WS-I).
+           CALL WS-PGM.
+           GOBACK.
+"""
+
+SIBLING_IMAGED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGV.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-NAME              PIC X(12) VALUE 'PROGXXXX1234'.
+       01  WS-PARTS REDEFINES WS-NAME.
+           05  WS-PGM           PIC X(8).
+           05  WS-TAB           PIC X(1) OCCURS 4.
+       01  WS-I                 PIC 9(1).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'Z' TO WS-TAB(WS-I).
+           CALL WS-PGM.
+           GOBACK.
+"""
+
+
+def test_a_sibling_write_inside_a_record_the_target_was_read_from_counts_the_same(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+) -> None:
+    sources = {
+        "PROGF": SIBLING_WEAK,
+        "PROGT": SIBLING_CLAMPED,
+        "PROGV": SIBLING_IMAGED,
+    }
+    full = fixpoint_corpus_with(sources, ())
+    restricted = fixpoint_corpus_with(sources, ("--call-targets-only",))
+    rows = target_rows(restricted / "targets.jsonl")
+
+    assert rows == target_rows(full / "targets.jsonl")
+    assert [(row.caller, row.candidates, row.reasons) for row in rows] == [
+        ("PROGF", (), ("from-file", "unmodelled")),
+        ("PROGT", (), ("not-a-literal",)),
+        ("PROGV", (), ("not-a-literal",)),
+    ]
