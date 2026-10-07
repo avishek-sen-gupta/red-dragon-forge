@@ -75,6 +75,17 @@ BASELINES = (
             peak_rss_mb=408,
             seconds=13.7,
         ),
+        round_robin=FixpointCost(
+            commit="97fd4b6 with round-robin and additive reasons",
+            nodes=1016,
+            dequeues=8_221,
+            settled=True,
+            source_extents=250_043,
+            largest_state=348,
+            value_extents=137_583,
+            peak_rss_mb=153,
+            seconds=4.0,
+        ),
     ),
     FixpointBaseline(
         program="SYNPERFB",
@@ -132,6 +143,17 @@ BASELINES = (
             value_extents=197_001,
             peak_rss_mb=485,
             seconds=27.9,
+        ),
+        round_robin=FixpointCost(
+            commit="97fd4b6 with round-robin and additive reasons",
+            nodes=1014,
+            dequeues=8_329,
+            settled=True,
+            source_extents=280_037,
+            largest_state=358,
+            value_extents=197_001,
+            peak_rss_mb=160,
+            seconds=5.4,
         ),
     ),
     FixpointBaseline(
@@ -191,6 +213,17 @@ BASELINES = (
             peak_rss_mb=2633,
             seconds=125.2,
         ),
+        round_robin=FixpointCost(
+            commit="97fd4b6 with round-robin and additive reasons",
+            nodes=4778,
+            dequeues=30_712,
+            settled=True,
+            source_extents=6_073_018,
+            largest_state=1608,
+            value_extents=2_661_089,
+            peak_rss_mb=544,
+            seconds=94.5,
+        ),
     ),
 )
 
@@ -199,26 +232,26 @@ SCOPE_BASELINES = (
     FixpointScopeBaseline(
         program="SYNPERFD",
         whole=FixpointCost(
-            commit="55a21b1",
+            commit="97fd4b6 with round-robin and additive reasons",
             nodes=1056,
-            dequeues=36_730,
+            dequeues=8_551,
             settled=True,
             source_extents=261_726,
             largest_state=349,
             value_extents=143_397,
-            peak_rss_mb=421,
-            seconds=14.5,
+            peak_rss_mb=154,
+            seconds=4.1,
         ),
         call_targets=FixpointCost(
-            commit="e88c8a2 with liveness pruning",
+            commit="97fd4b6 with round-robin and additive reasons",
             nodes=1056,
-            dequeues=31_632,
+            dequeues=8_144,
             settled=True,
-            source_extents=214_643,
+            source_extents=214_621,
             largest_state=321,
             value_extents=121_208,
-            peak_rss_mb=372,
-            seconds=12.7,
+            peak_rss_mb=154,
+            seconds=4.3,
         ),
     ),
 )
@@ -253,15 +286,15 @@ def parsed(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("baseline", BASELINES, ids=lambda one: one.program)
-def test_the_fixpoint_settles_at_the_recorded_coalesced_cost(
+def test_the_fixpoint_settles_at_the_recorded_round_robin_cost(
     parsed: Path, baseline: FixpointBaseline
 ) -> None:
     flow, _ = analysed(cached_asg(parsed, PROGRAMS / f"{baseline.program}.cbl"))
 
     assert (flow.nodes, flow.dequeues, flow.settled) == (
-        baseline.coalesced.nodes,
-        baseline.coalesced.dequeues,
-        baseline.coalesced.settled,
+        baseline.round_robin.nodes,
+        baseline.round_robin.dequeues,
+        baseline.round_robin.settled,
     )
 
 

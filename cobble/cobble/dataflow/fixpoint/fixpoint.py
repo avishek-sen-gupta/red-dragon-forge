@@ -217,6 +217,7 @@ class _Worklist:
     queue: frozenset[int]
     dequeues: int = 0
     progress: _Progress = _Progress()
+    cursor: int = 0
 
 
 @dataclass(frozen=True)
@@ -426,7 +427,7 @@ def _step(
     rank: Mapping[str, int],
     run: _Worklist,
 ) -> _Worklist:
-    earliest = min(run.queue)
+    earliest = _next(run.queue, run.cursor)
     node_id = order.ordered[earliest]
     after = _after(statements, node_id, run.states[node_id], index)
     grown = _grown(cfg, node_id, after, run.states, live)
@@ -435,6 +436,7 @@ def _step(
         queue=(run.queue - {earliest}) | {rank[target] for target in grown},
         dequeues=run.dequeues + 1,
         progress=run.progress,
+        cursor=earliest + 1,
     )
     if stepped.dequeues % HEARTBEAT:
         return stepped
@@ -445,6 +447,18 @@ def _step(
             stepped.progress, dequeues=stepped.dequeues, queued=len(stepped.queue)
         ),
     )
+
+
+def _next(queue: frozenset[int], cursor: int) -> int:
+    """The first queued position at or after ``cursor``, wrapping to the earliest.
+
+    Round-robin over reverse postorder rather than always the earliest: a change
+    that flows back around a loop waits for the pass in progress to reach the end,
+    so writers found further on are carried back together in one pass instead of
+    each restarting the walk at the loop head.
+    """
+    ahead = tuple(position for position in queue if position >= cursor)
+    return min(ahead) if ahead else min(queue)
 
 
 def _done(run: _Worklist, cap: int) -> bool:
