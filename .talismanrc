@@ -535,4 +535,6 @@ fileignoreconfig:
   checksum: 1cb7b44b9c26b5b596b29d0055820c976e231a42f930e450fbced2c7c5f5844d
 - filename: docs/presentation/capture/carddemo_3270_video.sh
   checksum: 32a1ebcfbb9686d0567719dac8288b43d8d80fc9c323ab556b005ad50fdedda2
+- filename: docs/analysis/2026-10-07-dataflow-fixpoint-oom-diagnosis.md
+  checksum: 7b59bd160243a9f6c2666eda6c2a069c9f8725e97eb9805816b73189b0e28f78
 version: "1.0"
