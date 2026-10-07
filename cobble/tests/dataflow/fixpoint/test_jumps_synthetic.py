@@ -206,10 +206,6 @@ MENU = """\
 """
 
 
-@pytest.mark.xfail(
-    reason="partial-overwrite split reverted for unbounded keys; red-dragon-forge-daj",
-    strict=True,
-)
 def test_a_sub_field_overwritten_after_a_record_copy_forgets_the_copy(
     fixpoint_corpus: Callable[[Mapping[str, str]], Path],
 ) -> None:
