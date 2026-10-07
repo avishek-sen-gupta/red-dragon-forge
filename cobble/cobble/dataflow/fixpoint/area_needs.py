@@ -6,39 +6,45 @@ from functools import reduce
 
 from cobble.dataflow.fields.aliases import received_areas
 from cobble.dataflow.fields.program_layout import ProgramLayout
-from cobble.dataflow.fields.spans import NO_SPANS, Spans, union
+from cobble.dataflow.fields.spans import Spans, spans_of
 from cobble.dataflow.fixpoint.area_need import AreaNeed, joined, relative
 from cobble.dataflow.fixpoint.fixpoint import entry_of, program_graph
-from cobble.dataflow.fixpoint.live import Live
-from cobble.dataflow.fixpoint.liveness import live as live_ranges
-from cobble.dataflow.jumps.discover import call_areas, call_target_demand, returns
-from cobble.dataflow.srccfg.cfg import Cfg
+from cobble.dataflow.fixpoint.liveness import graph_of, live_sets
+from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
+from cobble.dataflow.jumps.discover import call_areas, demand_parts, returns
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFERS
 from cobol_asg.asg_types import CobolASG
+from cobol_memory.field_extent import FieldExtent
 
 
-def _after(cfg: Cfg, live: Live, node: str) -> Spans:
-    return reduce(
-        union,
-        (live.entry.get(edge.target, NO_SPANS) for edge in cfg.successors(node)),
-        NO_SPANS,
+def prepared(asg: CobolASG, layout: ProgramLayout) -> PreparedProgram:
+    """Everything the rounds need, built from the ASG once."""
+    cfg, statements = program_graph(asg)
+    index = layout.index
+    return PreparedProgram(
+        graph=graph_of(cfg, statements, index),
+        parts=demand_parts(asg, cfg, statements, index),
+        entry=entry_of(asg),
+        received=received_areas(asg, index),
+        returning=tuple(
+            (node.id, call_areas(node, index))
+            for node in cfg.nodes
+            if node.transfer in CALL_TRANSFERS and returns(node)
+        ),
     )
 
 
-def need_found(asg: CobolASG, layout: ProgramLayout, need: AreaNeed) -> AreaNeed:
+def need_found(program: PreparedProgram, need: AreaNeed) -> AreaNeed:
     """The received bytes this program's targets depend on at entry, and the bytes
     of each area it hands to a LINK or CALL that it reads again afterwards, given
     what the rest of the corpus is known to need so far."""
-    cfg, statements = program_graph(asg)
-    index = layout.index
-    live = live_ranges(
-        cfg, statements, index, call_target_demand(asg, cfg, statements, index, need)
-    )
-    at_entry = live.entry.get(entry_of(asg), NO_SPANS)
+    sets = live_sets(program.graph, program.parts.demand(need))
+    rank = {node: position for position, node in enumerate(program.graph.order)}
+    at_entry = spans_of(sets[rank[program.entry]]) if program.entry in rank else {}
     entry = AreaNeed(
         entry=tuple(
             (position, bounds)
-            for position, area in received_areas(asg, index)
+            for position, area in program.received
             for bounds in (relative(at_entry, area),)
             if bounds
         )
@@ -47,11 +53,23 @@ def need_found(asg: CobolASG, layout: ProgramLayout, need: AreaNeed) -> AreaNeed
         joined,
         (
             AreaNeed(back=((position, bounds),))
-            for node in cfg.nodes
-            if node.transfer in CALL_TRANSFERS and returns(node)
-            for position, area in call_areas(node, index)
-            for bounds in (relative(_after(cfg, live, node.id), area),)
+            for node, areas in program.returning
+            for after in (_after(program, sets, rank[node]),)
+            for position, area in areas
+            for bounds in (relative(after, area),)
             if bounds
         ),
         entry,
+    )
+
+
+def _after(
+    program: PreparedProgram,
+    sets: tuple[frozenset[FieldExtent], ...],
+    position: int,
+) -> Spans:
+    return spans_of(
+        extent
+        for successor in program.graph.successors[position]
+        for extent in sets[successor]
     )

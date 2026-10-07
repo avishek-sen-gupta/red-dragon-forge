@@ -12,15 +12,16 @@ from cobble.dataflow.fields.spans import spans_of
 from cobble.dataflow.fields.transfer import Statement, Write, writes_of
 from cobble.dataflow.fixpoint.demand import Demand
 from cobble.dataflow.fixpoint.live import Live
+from cobble.dataflow.fixpoint.live_graph import LiveGraph
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_memory.field_extent import FieldExtent, Precision
 
 
 @dataclass(frozen=True)
 class _Backward:
-    """Live ranges on entry to each node so far, and the node positions to revisit."""
+    """Live ranges on entry to each node position so far, and the positions to revisit."""
 
-    entry: Mapping[str, frozenset[FieldExtent]]
+    entry: tuple[frozenset[FieldExtent], ...]
     queue: frozenset[int]
 
 
@@ -63,45 +64,60 @@ def entered(
 
 
 def _exiting(
-    cfg: Cfg, node: str, entry: Mapping[str, frozenset[FieldExtent]]
+    graph: LiveGraph, position: int, entry: tuple[frozenset[FieldExtent], ...]
 ) -> frozenset[FieldExtent]:
-    return frozenset(one for edge in cfg.successors(node) for one in entry[edge.target])
+    return frozenset(
+        one for successor in graph.successors[position] for one in entry[successor]
+    )
 
 
-def _step(
-    cfg: Cfg,
-    order: tuple[str, ...],
-    rank: Mapping[str, int],
-    writes: Mapping[str, tuple[Write, ...]],
-    demand: Demand,
-    run: _Backward,
-) -> _Backward:
+def _step(graph: LiveGraph, demand: Demand, run: _Backward) -> _Backward:
     latest = max(run.queue)
-    node = order[latest]
     now = entered(
-        writes.get(node, ()),
-        demand.at.get(node, frozenset()),
-        _exiting(cfg, node, run.entry),
+        graph.writes[latest],
+        demand.at.get(graph.order[latest], frozenset()),
+        _exiting(graph, latest, run.entry),
     )
     rest = run.queue - {latest}
-    if now == run.entry[node]:
+    if now == run.entry[latest]:
         return _Backward(entry=run.entry, queue=rest)
     return _Backward(
-        entry=MappingProxyType({**run.entry, node: now}),
-        queue=rest | {rank[edge.source] for edge in cfg.predecessors(node)},
+        entry=(*run.entry[:latest], now, *run.entry[latest + 1 :]),
+        queue=rest | frozenset(graph.predecessors[latest]),
     )
 
 
-def _writes(
+def graph_of(
     cfg: Cfg, statements: Mapping[str, Statement], index: CellIndex
-) -> Mapping[str, tuple[Write, ...]]:
-    return MappingProxyType(
-        {
-            node.id: writes_of(statements[node.id], node.id, index)
-            for node in cfg.nodes
-            if node.id in statements
-        }
+) -> LiveGraph:
+    order = tuple(node.id for node in cfg.nodes)
+    rank = {one: position for position, one in enumerate(order)}
+    return LiveGraph(
+        order=order,
+        successors=tuple(
+            tuple(rank[edge.target] for edge in cfg.successors(node)) for node in order
+        ),
+        predecessors=tuple(
+            tuple(rank[edge.source] for edge in cfg.predecessors(node))
+            for node in order
+        ),
+        writes=tuple(
+            writes_of(statements[node], node, index) if node in statements else ()
+            for node in order
+        ),
     )
+
+
+def live_sets(graph: LiveGraph, demand: Demand) -> tuple[frozenset[FieldExtent], ...]:
+    """The ranges live on entry to each node, in ``graph.order``."""
+    start = _Backward(
+        entry=tuple(demand.at.get(node, frozenset()) for node in graph.order),
+        queue=frozenset(range(len(graph.order))),
+    )
+    steps: Iterable[_Backward] = accumulate(
+        repeat(None), lambda run, _: _step(graph, demand, run), initial=start
+    )
+    return next(run for run in steps if not run.queue).entry
 
 
 def live(
@@ -110,23 +126,14 @@ def live(
     index: CellIndex,
     demand: Demand,
 ) -> Live:
-    order = tuple(node.id for node in cfg.nodes)
-    rank = MappingProxyType({one: position for position, one in enumerate(order)})
-    writes = _writes(cfg, statements, index)
-    start = _Backward(
-        entry=MappingProxyType(
-            {node: demand.at.get(node, frozenset()) for node in order}
-        ),
-        queue=frozenset(range(len(order))),
-    )
-    steps: Iterable[_Backward] = accumulate(
-        repeat(None),
-        lambda run, _: _step(cfg, order, rank, writes, demand, run),
-        initial=start,
-    )
-    settled = next(run for run in steps if not run.queue)
+    graph = graph_of(cfg, statements, index)
     return Live(
         entry=MappingProxyType(
-            {node: spans_of(ranges) for node, ranges in settled.entry.items()}
+            {
+                node: spans_of(ranges)
+                for node, ranges in zip(
+                    graph.order, live_sets(graph, demand), strict=True
+                )
+            }
         )
     )

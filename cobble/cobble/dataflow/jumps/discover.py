@@ -1,7 +1,6 @@
 """Every jump, exit, RETRIEVE and entry in one program, and what each hands over."""
 
 from collections.abc import Callable, Mapping
-from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement
 from cobble.dataflow.fields.aliases import area_extents, received_areas
@@ -13,6 +12,7 @@ from cobble.dataflow.fields.transfer import Statement
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint.area_need import AreaNeed
 from cobble.dataflow.fixpoint.demand import Demand
+from cobble.dataflow.fixpoint.demand_parts import DemandParts
 from cobble.dataflow.fixpoint.live import Live
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.facts import fact_at, merged
@@ -318,75 +318,89 @@ def call_target_demand(
 ) -> Demand:
     """Every extent the jumps and targets tables read a fact at, by the node it is
     read at; of a handed-over area, only the bytes ``need`` says someone reads."""
-    received = tuple(
-        piece
-        for position, extent in received_areas(asg, index)
-        for piece in need.read_back(position, extent)
+    return demand_parts(asg, cfg, statements, index).demand(need)
+
+
+_Areas = tuple[tuple[int, FieldExtent], ...]
+_Parts = tuple[tuple[FieldExtent, ...], _Areas, _Areas]
+_NO_PARTS: _Parts = ((), (), ())
+
+
+def demand_parts(
+    asg: CobolASG,
+    cfg: Cfg,
+    statements: Mapping[str, Statement],
+    index: CellIndex,
+) -> DemandParts:
+    received = received_areas(asg, index)
+    rows = tuple(
+        (node.id, _parts(node, statements, index, received)) for node in cfg.nodes
     )
-    return Demand(
-        at=MappingProxyType(
-            {
-                node.id: extents
-                for node in cfg.nodes
-                for extents in (
-                    frozenset(_demanded(node, statements, index, received, need)),
-                )
-                if extents
-            }
-        )
+    return DemandParts(
+        local=tuple((node, parts[0]) for node, parts in rows if parts[0]),
+        entry=tuple((node, parts[1]) for node, parts in rows if parts[1]),
+        back=tuple((node, parts[2]) for node, parts in rows if parts[2]),
     )
 
 
-def _demanded(
+def _parts(
     node: Node,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    received: tuple[FieldExtent, ...],
-    need: AreaNeed,
-) -> tuple[FieldExtent, ...]:
+    received: _Areas,
+) -> _Parts:
     if node.transfer in CALL_TRANSFERS:
-        return _call_extents(node, index, need)
-    return _statement_demand(statements, node, index, received, need)
+        return (_target_extents(node, index), call_areas(node, index), ())
+    return _statement_parts(statements, node.id, index, received)
 
 
-def _statement_demand(
+def _statement_parts(
     statements: Mapping[str, Statement],
-    node: Node,
+    node: str,
     index: CellIndex,
-    received: tuple[FieldExtent, ...],
-    need: AreaNeed,
-) -> tuple[FieldExtent, ...]:
-    match statements.get(node.id):
-        case ExecCicsStatement() as statement:
-            return tuple(
-                extent
-                for kind in _cics_kind(statement)
-                for extent in _kind_extents(statement, kind, index, received, need)
-            )
+    received: _Areas,
+) -> _Parts:
+    match statements.get(node):
+        case ExecCicsStatement() as cics:
+            return _cics_parts(cics, index, received)
         case GobackStatement() | ExitProgramStatement() | StopRunStatement():
-            return received
+            return ((), (), received)
         case _:
-            return ()
+            return _NO_PARTS
 
 
-def _kind_extents(
-    statement: ExecCicsStatement,
-    kind: JumpKind,
-    index: CellIndex,
-    received: tuple[FieldExtent, ...],
-    need: AreaNeed,
-) -> tuple[FieldExtent, ...]:
-    if kind is JumpKind.EXIT:
-        return received
-    areas = _named(_option(statement, _CICS_OPTION[kind]).text, index)
-    return (
-        *_transid_extents(statement, kind, index),
-        *(
-            areas
-            if kind is not JumpKind.RETURN_TRANSID
-            else tuple(piece for area in areas for piece in need.at_entry(0, area))
-        ),
+def _cics_parts(
+    statement: ExecCicsStatement, index: CellIndex, received: _Areas
+) -> _Parts:
+    kinds = _cics_kind(statement)
+    handed = tuple(
+        (kind, _named(_option(statement, _CICS_OPTION[kind]).text, index))
+        for kind in kinds
+        if kind is not JumpKind.EXIT
     )
+    return (
+        tuple(
+            extent
+            for kind, areas in handed
+            for extent in (
+                *_transid_extents(statement, kind, index),
+                *(areas if kind is not JumpKind.RETURN_TRANSID else ()),
+            )
+        ),
+        tuple(
+            (0, area)
+            for kind, areas in handed
+            if kind is JumpKind.RETURN_TRANSID
+            for area in areas
+        ),
+        received if JumpKind.EXIT in kinds else (),
+    )
+
+
+def _target_extents(node: Node, index: CellIndex) -> tuple[FieldExtent, ...]:
+    if node.target_resolved:
+        return ()
+    return operand_occurrence_extents(node.target_operand, index)
 
 
 def call_areas(node: Node, index: CellIndex) -> tuple[tuple[int, FieldExtent], ...]:
@@ -402,24 +416,6 @@ def call_areas(node: Node, index: CellIndex) -> tuple[tuple[int, FieldExtent], .
 
 def returns(node: Node) -> bool:
     return _KINDS[CALL_TRANSFERS[node.transfer]] in _RETURNS
-
-
-def _call_extents(
-    node: Node, index: CellIndex, need: AreaNeed
-) -> tuple[FieldExtent, ...]:
-    target = (
-        ()
-        if node.target_resolved
-        else operand_occurrence_extents(node.target_operand, index)
-    )
-    return (
-        *target,
-        *(
-            piece
-            for position, area in call_areas(node, index)
-            for piece in need.at_entry(position, area)
-        ),
-    )
 
 
 def _named(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:

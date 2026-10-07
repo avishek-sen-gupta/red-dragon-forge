@@ -1,13 +1,13 @@
 """A run restricted to call targets, compiled by the real bridge, against a full run."""
 
+import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-import shutil
-
 import pytest
-
 from cobble.dataflow.combine.cli import cli as combine_cli
+from cobble.dataflow.fixpoint.area_need_cli import cli as area_cli
+from cobble.dataflow.fixpoint.area_need_file import AreaNeedFile
 from cobble.dataflow.fixpoint.build_corpus import cli
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.query import cli as query_cli
@@ -437,6 +437,25 @@ CHAIN_END = """\
 """
 
 
+def _narrow_run(parsed: Path, extents: Path, out: Path, stored: Path) -> int:
+    return cli(
+        [
+            "--asg-dir",
+            str(parsed),
+            "--out-dir",
+            str(out),
+            "--extents",
+            str(extents),
+            "--all",
+            "--max-workers",
+            "1",
+            "--call-targets-only",
+            "--narrow-areas",
+            str(stored),
+        ]
+    )
+
+
 def test_narrowed_areas_resolve_the_same_through_the_combine(
     fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
     tmp_path: Path,
@@ -456,7 +475,14 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         "PROGJ": CHAIN_END,
     }
     full = fixpoint_corpus_with(sources, ())
-    narrow = fixpoint_corpus_with(sources, ("--call-targets-only", "--narrow-areas"))
+    parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
+    stored = tmp_path / "area-need.json"
+    missing = _narrow_run(parsed, extents, full.parent / "early", stored)
+    area_cli(
+        ["--asg-dir", str(parsed), "--extents", str(extents), "--out", str(stored)]
+    )
+    narrow = full.parent / "narrow"
+    assert (missing, _narrow_run(parsed, extents, narrow, stored)) == (2, 0)
     full_combined = _combined(full, tmp_path, "full")
     narrow_combined = _combined(narrow, tmp_path, "narrow")
     combined = target_rows(narrow_combined / "targets.jsonl")
@@ -470,3 +496,6 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         (row.caller, row.candidates) for row in combined if row.caller == "PROGJ"
     ] == [("PROGJ", ("PROGK",))]
     assert _counts(narrow, "PROGH").scope is Scope.NARROW_CALL_TARGETS
+    assert AreaNeedFile.model_validate_json(stored.read_text(encoding="utf-8")) == (
+        AreaNeedFile(entry=((0, (0, 24)),), back=((0, (0, 8)),))
+    )
