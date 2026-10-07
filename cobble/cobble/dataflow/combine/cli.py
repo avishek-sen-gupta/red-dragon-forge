@@ -24,6 +24,7 @@ from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.table_callee_areas import TableCalleeAreas
 
 _LOG = logging.getLogger(__name__)
+_PROGRESS = logging.getLogger(f"{__name__}.progress")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -111,7 +112,7 @@ def _outside(
 
 def _load_one(fixpoint_dir: Path, program: str, n: int, total: int) -> ProgramTables:
     tables = load_tables(fixpoint_dir, program)
-    _LOG.info(
+    _PROGRESS.info(
         "combine:   [%d/%d] %s (%d jumps, %d sites)",
         n,
         total,
@@ -126,14 +127,14 @@ def _load_all(
     fixpoint_dir: Path,
     inside: frozenset[str],
 ) -> Mapping[str, ProgramTables]:
-    _LOG.info("combine: loading %d programs", len(inside))
+    _PROGRESS.info("combine: loading %d programs", len(inside))
     started = time.monotonic()
     programs = sorted(inside)
     tables = {
         program: _load_one(fixpoint_dir, program, n, len(programs))
         for n, program in enumerate(programs, 1)
     }
-    _LOG.info("combine: loaded in %.1fs", time.monotonic() - started)
+    _PROGRESS.info("combine: loaded in %.1fs", time.monotonic() - started)
     return tables
 
 
@@ -152,9 +153,9 @@ def _link_and_write(
         _outside(arguments, config, inside, transactions),
         MemoResolve(tables, resolve),
     )
-    _LOG.info("combine: linked in %.1fs", time.monotonic() - started)
+    _PROGRESS.info("combine: linked in %.1fs", time.monotonic() - started)
     write_outputs(arguments.out_dir, linked)
-    _LOG.info(
+    _PROGRESS.info(
         "combine: wrote %d targets, %d edges to %s",
         len(linked.targets),
         len(linked.edges),
@@ -167,7 +168,7 @@ def _combine(
     arguments: argparse.Namespace, config: CorpusConfig, inside: frozenset[str]
 ) -> None:
     transactions = _transactions(config.csd_files)
-    _LOG.info("combine: %d transactions from CSD", len(transactions))
+    _PROGRESS.info("combine: %d transactions from CSD", len(transactions))
     tables = _load_all(arguments.fixpoint_dir, inside)
     linked = _link_and_write(arguments, config, tables, transactions, inside)
     _report(linked.report, arguments.all)

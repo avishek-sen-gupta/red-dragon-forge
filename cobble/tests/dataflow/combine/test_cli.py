@@ -42,7 +42,11 @@ def _arguments(tmp_path: Path, *selection: str) -> list[str]:
 
 
 def _messages(caplog: pytest.LogCaptureFixture) -> list[str]:
-    return [record.getMessage() for record in caplog.records]
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "cobble.dataflow.combine.cli"
+    ]
 
 
 def test_a_member_with_no_results_is_refused_and_nothing_is_written(
