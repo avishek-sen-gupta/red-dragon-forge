@@ -8,9 +8,10 @@ from itertools import accumulate, repeat
 from types import MappingProxyType
 
 from cobble.dataflow.fields.extent import CellIndex
+from cobble.dataflow.fields.spans import spans_of
 from cobble.dataflow.fields.transfer import Statement, Write, writes_of
 from cobble.dataflow.fixpoint.demand import Demand
-from cobble.dataflow.fixpoint.live import Live, spans_of
+from cobble.dataflow.fixpoint.live import Live
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_memory.field_extent import FieldExtent, Precision
 

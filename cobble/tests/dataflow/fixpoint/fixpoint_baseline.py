@@ -9,7 +9,7 @@ from tests.dataflow.fixpoint.fixpoint_cost import FixpointCost
 
 @dataclass(frozen=True)
 class FixpointBaseline:
-    """Before the split, with it, cut at fixed atoms, reverted, and with its pieces coalesced."""
+    """Before the split, with it, cut at fixed atoms, reverted, coalesced, and round-robin."""
 
     program: str
     pre_split: FixpointCost
@@ -17,3 +17,4 @@ class FixpointBaseline:
     atoms: FixpointCost
     reverted: FixpointCost
     coalesced: FixpointCost
+    round_robin: FixpointCost

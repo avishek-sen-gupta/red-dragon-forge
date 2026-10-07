@@ -4,7 +4,8 @@ from cobble.dataflow.fields.state import NOWHERE, Source, State, pruned
 from cobble.dataflow.fields.transfer import Write
 from cobble.dataflow.fields.values import EMPTY as NO_VALUE
 from cobble.dataflow.fields.values import of_value
-from cobble.dataflow.fixpoint.live import EVERYTHING, Live, spans_of
+from cobble.dataflow.fields.spans import spans_of
+from cobble.dataflow.fixpoint.live import EVERYTHING, Live
 from cobble.dataflow.fixpoint.liveness import entered
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId

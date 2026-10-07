@@ -41,6 +41,7 @@ from itertools import pairwise
 from types import MappingProxyType
 from typing import TypeVar
 
+from cobble.dataflow.fields.spans import EVERY_BYTE, Spans, overlaps, union, without
 from cobble.dataflow.fields.values import (
     EMPTY as VALUES_EMPTY,
 )
@@ -118,6 +119,7 @@ class State:
 
     sources: Mapping[FieldExtent, frozenset[Source]] = _NO_SOURCES
     values: Mapping[FieldExtent, ValueSet] = _NO_VALUES
+    unwritten: Spans = EVERY_BYTE
 
 
 EMPTY = State()
@@ -334,6 +336,7 @@ def join(left: State, right: State) -> State:
     return State(
         sources=_joined_sources(left.sources, right.sources),
         values=_joined_values(left, right),
+        unwritten=union(left.unwritten, right.unwritten),
     )
 
 
@@ -592,6 +595,11 @@ def _stored(
             }
         ),
         values=_kept_values(state, target, values),
+        unwritten=(
+            without(state.unwritten, target)
+            if target.precision is Precision.EXACT
+            else state.unwritten
+        ),
     )
 
 
@@ -631,6 +639,7 @@ def weak_write(
         values=MappingProxyType(
             {**marked, target: _shared_value(merged(values_at(state, target), doubt))}
         ),
+        unwritten=state.unwritten,
     )
 
 
@@ -650,7 +659,7 @@ def pruned(state: State, keep: Callable[[FieldExtent], bool]) -> State:
     values = _kept(state.values, keep)
     if sources is state.sources and values is state.values:
         return state
-    return State(sources=sources, values=values)
+    return State(sources=sources, values=values, unwritten=state.unwritten)
 
 
 def reaching(state: State, read: FieldExtent) -> frozenset[Source]:
@@ -681,10 +690,14 @@ def _missing(state: State, read: FieldExtent) -> ValueSet:
     that the writer is outside the analysis -- which is what Unit 2's
     interprocedural pass will answer and ``UNINITIALISED`` would have hidden.
 
-    Elsewhere a miss is uninitialised only when nothing wrote the bytes. A write
-    whose content the walk cannot name -- a numeric MOVE, any arithmetic -- stores
-    no value but does record its provenance, so a miss on bytes a write reached is
-    content the walk cannot name, not content nobody set.
+    Elsewhere the two reasons are facts in their own right, and a miss reports
+    each that holds. ``not-a-literal``: some write reached the bytes with content
+    the walk cannot name -- a numeric MOVE, any arithmetic -- which stores no value
+    but does record its provenance. ``uninitialised``: some path reaches here with
+    the bytes still in ``state.unwritten``, which only an exact write removes.
+    Both only grow as paths join, so the walk's answer does not depend on the
+    order it visits nodes; inferring ``uninitialised`` from the absence of a
+    writer did, because a state joined before its writers arrived kept it.
 
     Answered at read time and never stored. Storing it would put an entry in
     ``state.values`` for every byte range any statement reads, which is the
@@ -692,9 +705,18 @@ def _missing(state: State, read: FieldExtent) -> ValueSet:
     """
     if read.region is RegionId.LINKAGE:
         return because(UnresolvedReason.INBOUND_LINKAGE)
-    if _written(state, read):
-        return because(UnresolvedReason.NOT_A_LITERAL)
-    return because(UnresolvedReason.UNINITIALISED)
+    return _shared_value(
+        ValueSet(
+            reasons=frozenset(
+                reason
+                for reason, holds in (
+                    (UnresolvedReason.NOT_A_LITERAL, _written(state, read)),
+                    (UnresolvedReason.UNINITIALISED, overlaps(state.unwritten, read)),
+                )
+                if holds
+            )
+        )
+    )
 
 
 def _written(state: State, read: FieldExtent) -> bool:
