@@ -57,9 +57,9 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
-from itertools import accumulate, repeat
+from itertools import accumulate, pairwise, repeat, takewhile
 from types import MappingProxyType
 
 from cobble.dataflow.depgraph.flows import IDENTITY_PREFIXES
@@ -83,6 +83,7 @@ from cobble.dataflow.fixpoint.live import EVERYTHING, Live
 from cobble.dataflow.fixpoint.liveness import live as live_ranges
 from cobble.dataflow.fixpoint.options import DEFAULT_OPTIONS, AnalysisOptions
 from cobble.dataflow.fixpoint.scope import Scope
+from cobble.dataflow.fixpoint.stepped import Stepped
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, resolved_targets
 from cobble.dataflow.jumps.discover import call_target_demand, jumps_of
 from cobble.dataflow.jumps.jump import Jump
@@ -798,6 +799,56 @@ def _live(
         return EVERYTHING
     return live_ranges(
         cfg, statements, index, call_target_demand(asg, cfg, statements, index)
+    )
+
+
+def stepwise(asg, options: AnalysisOptions, cap: int) -> tuple[Cfg, Iterator[Stepped]]:
+    """The worklist walk ``analysed`` runs, one step at a time, for a diagnostic.
+
+    Laid out and seeded exactly as ``analysed`` does it, and stopped after ``cap``
+    dequeues or when the queue empties.
+    """
+    built = _laid_out(asg, NO_LAYOUT)
+    unpruned = program_cfg(asg)
+    statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
+    cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)
+    live = _live(asg, cfg, statements, built.index, options)
+    entry = _entry_node(asg)
+    if entry not in cfg.node_ids:
+        return cfg, iter(())
+    order = depth_first_order(cfg, entry)
+    rank = MappingProxyType({node_id: n for n, node_id in enumerate(order.ordered)})
+    start = _Worklist(
+        states=MappingProxyType(
+            {
+                entry: _for(
+                    State(values=initial_image(built.records, built.index)),
+                    live,
+                    entry,
+                )
+            }
+        ),
+        queue=frozenset({rank[entry]}),
+        progress=_Progress(started=time.monotonic()),
+    )
+
+    def advanced(run: _Worklist, _: None) -> _Worklist:
+        if _done(run, cap):
+            return run
+        return _step(cfg, statements, built.index, live, cap, order, rank, run)
+
+    runs = accumulate(repeat(None), advanced, initial=start)
+    return cfg, (
+        Stepped(
+            node=order.ordered[min(before.queue)],
+            before=before.states,
+            after=after.states,
+            queued=len(after.queue),
+            dequeues=after.dequeues,
+        )
+        for before, after in takewhile(
+            lambda pair: not _done(pair[0], cap), pairwise(runs)
+        )
     )
 
 
