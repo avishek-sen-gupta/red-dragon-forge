@@ -91,7 +91,15 @@ from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wai
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import accumulate, groupby, islice, pairwise, repeat, takewhile
+from itertools import (
+    accumulate,
+    count,
+    groupby,
+    islice,
+    pairwise,
+    repeat,
+    takewhile,
+)
 from operator import itemgetter
 from pathlib import Path
 from types import MappingProxyType
@@ -1055,19 +1063,49 @@ def _need_in_worker(job: tuple[str, tuple[Row, ...], Path, AreaNeed]) -> AreaNee
         return AreaNeed()
 
 
+def _need_bytes(bounds: tuple[tuple[int, tuple[int, ...]], ...]) -> int:
+    return sum(high - low for _, one in bounds for low, high in pairs_of(one))
+
+
+def _noted(numbered: tuple[int, AreaNeed], total: int, number: int) -> AreaNeed:
+    done, found = numbered
+    if not done % 50 or done == total:
+        logger.info("fields: area need round %d: [%d/%d] members", number, done, total)
+    return found
+
+
+def _progressed(
+    results: Iterator[AreaNeed], total: int, number: int
+) -> Iterator[AreaNeed]:
+    """The area-need results, with a line every 50 members and at the last."""
+    return map(lambda numbered: _noted(numbered, total, number), enumerate(results, 1))
+
+
 def _need_round(
-    need: AreaNeed, arguments: argparse.Namespace, pool: ProcessPoolExecutor
+    need: AreaNeed,
+    number: int,
+    arguments: argparse.Namespace,
+    pool: ProcessPoolExecutor,
 ) -> AreaNeed:
-    jobs = (
-        (member, block, arguments.asg_dir / f"{member}.json", need)
+    present = tuple(
+        (member, block)
         for member, block in member_rows(arguments.extents)
         if (arguments.asg_dir / f"{member}.json").is_file()
     )
-    found = reduce(joined, pool.map(_need_in_worker, jobs, chunksize=8), need)
+    jobs = (
+        (member, block, arguments.asg_dir / f"{member}.json", need)
+        for member, block in present
+    )
+    found = reduce(
+        joined,
+        _progressed(pool.map(_need_in_worker, jobs, chunksize=8), len(present), number),
+        need,
+    )
     logger.info(
-        "fields: area need: %d bytes needed on entry, %d read back",
-        sum(high - low for _, bounds in found.entry for low, high in pairs_of(bounds)),
-        sum(high - low for _, bounds in found.back for low, high in pairs_of(bounds)),
+        "fields: area need round %d: %d bytes needed on entry, %d read back",
+        number,
+        _need_bytes(found.entry),
+        _need_bytes(found.back),
     )
     return found
 
@@ -1081,8 +1119,8 @@ def _narrowed(
     if not arguments.narrow_areas:
         return inputs
     rounds = accumulate(
-        repeat(None),
-        lambda need, _: _need_round(need, arguments, pool),
+        count(1),
+        lambda need, number: _need_round(need, number, arguments, pool),
         initial=AreaNeed(),
     )
     settled = next(after for before, after in pairwise(rounds) if before == after)
