@@ -1,6 +1,6 @@
 """Every jump, exit, RETRIEVE and entry in one program, and what each hands over."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from types import MappingProxyType
 
 from cics.statements import CicsOperand, ExecCicsStatement
@@ -11,7 +11,9 @@ from cobble.dataflow.fields.state import EMPTY as STATE_EMPTY
 from cobble.dataflow.fields.state import State
 from cobble.dataflow.fields.transfer import Statement
 from cobble.dataflow.fields.values import UnresolvedReason
+from cobble.dataflow.fixpoint.area_need import AreaNeed
 from cobble.dataflow.fixpoint.demand import Demand
+from cobble.dataflow.fixpoint.live import Live
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.facts import fact_at, merged
 from cobble.dataflow.jumps.jump import Jump
@@ -37,6 +39,12 @@ _CICS_OPTION = {
 _CICS_VERBS = (("START", JumpKind.START), ("RETRIEVE", JumpKind.RETRIEVE))
 _NO_TARGET = Fact(reasons=(UnresolvedReason.NO_EXTENT,))
 
+Keep = Callable[[FieldExtent], bool]
+
+
+def _keeper(live: Live, node: str) -> Keep:
+    return lambda extent: live.keeps(node, extent)
+
 
 def jumps_of(
     asg: CobolASG,
@@ -45,6 +53,7 @@ def jumps_of(
     index: CellIndex,
     states: Mapping[str, State],
     settled: bool,
+    live: Live,
 ) -> tuple[Jump, ...]:
     return (
         _entry(asg, cfg, index),
@@ -59,6 +68,7 @@ def jumps_of(
                 statements[node.id],
                 index,
                 states.get(node.id, STATE_EMPTY),
+                _keeper(live, node.id),
             )
         ),
     )
@@ -126,10 +136,11 @@ def _at(
     statement: Statement,
     index: CellIndex,
     state: State,
+    keep: Keep,
 ) -> tuple[Jump, ...]:
     if node.transfer in CALL_TRANSFERS:
-        return (_cfg_jump(program, node, index, state),)
-    return _statement_jumps(asg, program, node, statement, index, state)
+        return (_cfg_jump(program, node, index, state, keep),)
+    return _statement_jumps(asg, program, node, statement, index, state, keep)
 
 
 def _statement_jumps(
@@ -139,15 +150,16 @@ def _statement_jumps(
     statement: Statement,
     index: CellIndex,
     state: State,
+    keep: Keep,
 ) -> tuple[Jump, ...]:
     match statement:
         case ExecCicsStatement():
             return tuple(
-                _cics_jump(asg, program, node, statement, kind, index, state)
+                _cics_jump(asg, program, node, statement, kind, index, state, keep)
                 for kind in _cics_kind(statement)
             )
         case GobackStatement() | ExitProgramStatement() | StopRunStatement():
-            return (_exit(asg, program, node, index, state),)
+            return (_exit(asg, program, node, index, state, keep),)
         case _:
             return ()
 
@@ -162,7 +174,9 @@ def _base(program: str, node: Node, kind: JumpKind) -> Jump:
     )
 
 
-def _cfg_jump(program: str, node: Node, index: CellIndex, state: State) -> Jump:
+def _cfg_jump(
+    program: str, node: Node, index: CellIndex, state: State, keep: Keep
+) -> Jump:
     kind = _KINDS[CALL_TRANSFERS[node.transfer]]
     base = _base(program, node, kind)
     return Jump(
@@ -172,7 +186,7 @@ def _cfg_jump(program: str, node: Node, index: CellIndex, state: State) -> Jump:
         base.kind,
         base.returns,
         target=_target(node, index, state),
-        areas=_cfg_areas(node, kind, index, state),
+        areas=_cfg_areas(node, kind, index, state, keep),
     )
 
 
@@ -186,35 +200,47 @@ def _target(node: Node, index: CellIndex, state: State) -> Fact:
 
 
 def _cfg_areas(
-    node: Node, kind: JumpKind, index: CellIndex, state: State
+    node: Node, kind: JumpKind, index: CellIndex, state: State, keep: Keep
 ) -> tuple[JumpArea, ...]:
     if kind is JumpKind.CALL:
         return tuple(
             area
             for position, argument in enumerate(node.using)
-            for area in _areas(position, argument.name, index, state)
+            for area in _areas(position, argument.name, index, state, keep)
         )
-    return _areas(0, commarea_field(node), index, state)
+    return _areas(0, commarea_field(node), index, state, keep)
 
 
 def _areas(
-    param: int, operand: str, index: CellIndex, state: State
+    param: int, operand: str, index: CellIndex, state: State, keep: Keep
 ) -> tuple[JumpArea, ...]:
     if not operand:
         return ()
     return tuple(
         dict.fromkeys(
-            JumpArea(param, extent_text(extent), _fields(extent, index, state))
+            JumpArea(param, extent_text(extent), _fields(extent, index, state, keep))
             for extent in area_extents(operand, index)
         )
     )
 
 
-def _fields(extent: FieldExtent, index: CellIndex, state: State) -> tuple[Fact, ...]:
+def _fields(
+    extent: FieldExtent, index: CellIndex, state: State, keep: Keep
+) -> tuple[Fact, ...]:
+    """Facts at each elementary cell of an area the walk kept live here.
+
+    A cell no demand reaches at this node held only pruned state, so a fact read
+    from it would be invented; it is left out rather than reported wrong.
+    """
     cells = index.elementary_within(extent)
     if not cells:
-        return (fact_at(state, extent),)
-    return tuple(fact_at(state, index.extent_of(cell)) for cell in cells)
+        return (fact_at(state, extent),) if keep(extent) else ()
+    return tuple(
+        fact_at(state, cell_extent)
+        for cell in cells
+        for cell_extent in (index.extent_of(cell),)
+        if keep(cell_extent)
+    )
 
 
 def _option(statement: ExecCicsStatement, name: str) -> CicsOperand:
@@ -244,9 +270,10 @@ def _cics_jump(
     kind: JumpKind,
     index: CellIndex,
     state: State,
+    keep: Keep,
 ) -> Jump:
     if kind is JumpKind.EXIT:
-        return _exit(asg, program, node, index, state)
+        return _exit(asg, program, node, index, state, keep)
     base = _base(program, node, kind)
     return Jump(
         base.program,
@@ -259,12 +286,14 @@ def _cics_jump(
             if kind is not JumpKind.RETRIEVE
             else Fact()
         ),
-        areas=_areas(0, _option(statement, _CICS_OPTION[kind]).text, index, state),
+        areas=_areas(
+            0, _option(statement, _CICS_OPTION[kind]).text, index, state, keep
+        ),
     )
 
 
 def _exit(
-    asg: CobolASG, program: str, node: Node, index: CellIndex, state: State
+    asg: CobolASG, program: str, node: Node, index: CellIndex, state: State, keep: Keep
 ) -> Jump:
     base = _base(program, node, JumpKind.EXIT)
     return Jump(
@@ -274,7 +303,7 @@ def _exit(
         base.kind,
         base.returns,
         areas=tuple(
-            JumpArea(param, extent_text(extent), _fields(extent, index, state))
+            JumpArea(param, extent_text(extent), _fields(extent, index, state, keep))
             for param, extent in received_areas(asg, index)
         ),
     )
@@ -285,16 +314,22 @@ def call_target_demand(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
+    need: AreaNeed,
 ) -> Demand:
-    """Every extent the jumps and targets tables read a fact at, by the node it is read at."""
-    received = tuple(extent for _, extent in received_areas(asg, index))
+    """Every extent the jumps and targets tables read a fact at, by the node it is
+    read at; of a handed-over area, only the bytes ``need`` says someone reads."""
+    received = tuple(
+        piece
+        for position, extent in received_areas(asg, index)
+        for piece in need.read_back(position, extent)
+    )
     return Demand(
         at=MappingProxyType(
             {
                 node.id: extents
                 for node in cfg.nodes
                 for extents in (
-                    frozenset(_demanded(node, statements, index, received)),
+                    frozenset(_demanded(node, statements, index, received, need)),
                 )
                 if extents
             }
@@ -307,10 +342,11 @@ def _demanded(
     statements: Mapping[str, Statement],
     index: CellIndex,
     received: tuple[FieldExtent, ...],
+    need: AreaNeed,
 ) -> tuple[FieldExtent, ...]:
     if node.transfer in CALL_TRANSFERS:
-        return _call_extents(node, index)
-    return _statement_demand(statements, node, index, received)
+        return _call_extents(node, index, need)
+    return _statement_demand(statements, node, index, received, need)
 
 
 def _statement_demand(
@@ -318,13 +354,14 @@ def _statement_demand(
     node: Node,
     index: CellIndex,
     received: tuple[FieldExtent, ...],
+    need: AreaNeed,
 ) -> tuple[FieldExtent, ...]:
     match statements.get(node.id):
         case ExecCicsStatement() as statement:
             return tuple(
                 extent
                 for kind in _cics_kind(statement)
-                for extent in _kind_extents(statement, kind, index, received)
+                for extent in _kind_extents(statement, kind, index, received, need)
             )
         case GobackStatement() | ExitProgramStatement() | StopRunStatement():
             return received
@@ -337,31 +374,52 @@ def _kind_extents(
     kind: JumpKind,
     index: CellIndex,
     received: tuple[FieldExtent, ...],
+    need: AreaNeed,
 ) -> tuple[FieldExtent, ...]:
     if kind is JumpKind.EXIT:
         return received
+    areas = _named(_option(statement, _CICS_OPTION[kind]).text, index)
     return (
         *_transid_extents(statement, kind, index),
-        *_named(_option(statement, _CICS_OPTION[kind]).text, index),
+        *(
+            areas
+            if kind is not JumpKind.RETURN_TRANSID
+            else tuple(piece for area in areas for piece in need.at_entry(0, area))
+        ),
     )
 
 
-def _call_extents(node: Node, index: CellIndex) -> tuple[FieldExtent, ...]:
+def call_areas(node: Node, index: CellIndex) -> tuple[tuple[int, FieldExtent], ...]:
+    """The areas a CALL, LINK or XCTL hands over, with their parameter positions."""
+    if _KINDS[CALL_TRANSFERS[node.transfer]] is JumpKind.CALL:
+        return tuple(
+            (position, extent)
+            for position, argument in enumerate(node.using)
+            for extent in _named(argument.name, index)
+        )
+    return tuple((0, extent) for extent in _named(commarea_field(node), index))
+
+
+def returns(node: Node) -> bool:
+    return _KINDS[CALL_TRANSFERS[node.transfer]] in _RETURNS
+
+
+def _call_extents(
+    node: Node, index: CellIndex, need: AreaNeed
+) -> tuple[FieldExtent, ...]:
     target = (
         ()
         if node.target_resolved
         else operand_occurrence_extents(node.target_operand, index)
     )
-    if _KINDS[CALL_TRANSFERS[node.transfer]] is JumpKind.CALL:
-        return (
-            *target,
-            *(
-                extent
-                for argument in node.using
-                for extent in _named(argument.name, index)
-            ),
-        )
-    return (*target, *_named(commarea_field(node), index))
+    return (
+        *target,
+        *(
+            piece
+            for position, area in call_areas(node, index)
+            for piece in need.at_entry(position, area)
+        ),
+    )
 
 
 def _named(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:

@@ -8,3 +8,4 @@ class Scope(Enum):
 
     WHOLE = "whole"
     CALL_TARGETS = "call-targets"
+    NARROW_CALL_TARGETS = "call-targets-narrow"
