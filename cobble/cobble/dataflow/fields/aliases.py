@@ -61,7 +61,6 @@ COMMAREA_LEVEL = 1
 
 _QUALIFIERS = frozenset({"OF", "IN"})
 
-EMPTY_INDEX = cell_index(())
 
 NO_EXTENT = FieldExtent(
     region=RegionId.LINKAGE,
@@ -82,11 +81,12 @@ class _Callee:
 
 @dataclass(frozen=True)
 class _Linkage:
-    """A callee's LINKAGE laid out, and the parameters its PROCEDURE DIVISION USING
-    names in order; or why the callee could not be read."""
+    """A callee's commarea window and the window at each USING position; or why the
+    callee could not be read. Only these, never the layout they came from: this is
+    what a worker caches for every callee it meets."""
 
-    index: CellIndex = EMPTY_INDEX
-    using: tuple[str, ...] = ()
+    commarea: _Callee = _Callee()
+    parameters: tuple[_Callee, ...] = ()
     reason: str = ""
 
 
@@ -153,7 +153,7 @@ def _callee_rows(
 def _commarea_rows(
     site: CallSite, index: CellIndex, linkage: _Linkage
 ) -> tuple[CommareaAlias, ...]:
-    callee = _linkage_commarea(linkage.index)
+    callee = linkage.commarea
     if callee.reason:
         return (_dead(site, callee.reason),)
     return _windows(site, site.commarea, index, callee.extent, _returns(site))
@@ -205,9 +205,9 @@ def _argument_window(
 
 def _parameter(linkage: _Linkage, position: int) -> _Callee:
     """The level-01 LINKAGE record the callee's USING names at ``position``."""
-    if position >= len(linkage.using):
+    if position >= len(linkage.parameters):
         return _Callee(reason=CALLEE_HAS_NO_PARAMETER)
-    return _record_named(linkage.index, linkage.using[position])
+    return linkage.parameters[position]
 
 
 def _refused(site: CallSite) -> str:
@@ -330,9 +330,12 @@ def _asg_at(path: Path) -> CobolASG:
 
 
 def _linkage_of(asg: CobolASG) -> _Linkage:
+    index = cell_index(section_records(LINKAGE_ORIGIN, tuple(asg.linkage_fields)))
     return _Linkage(
-        index=cell_index(section_records(LINKAGE_ORIGIN, tuple(asg.linkage_fields))),
-        using=tuple(param.name for param in asg.procedure_using),
+        commarea=_linkage_commarea(index),
+        parameters=tuple(
+            _record_named(index, param.name) for param in asg.procedure_using
+        ),
     )
 
 
@@ -389,7 +392,5 @@ def callee_received_area(
     linkage = _callee_linkage(asg_dir, callee)
     if linkage.reason:
         return NO_EXTENT
-    found = (
-        _parameter(linkage, param) if by_position else _linkage_commarea(linkage.index)
-    )
+    found = _parameter(linkage, param) if by_position else linkage.commarea
     return NO_EXTENT if found.reason else found.extent
