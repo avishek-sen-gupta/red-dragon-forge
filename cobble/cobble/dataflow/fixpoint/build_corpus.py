@@ -597,13 +597,16 @@ def _log_result(result: MemberCounts, seconds: float) -> None:
         )
         return
     logger.info(
-        "fields:   %s %d/%d writes covered, %d unhandled, %d unmodelled, %d edges, %.1fs%s",
+        "fields:   %s %d/%d writes covered, %d unhandled, %d unmodelled, %d edges,"
+        " %d of %d extents tracked, %.1fs%s",
         result.program,
         result.covered,
         result.writes,
         result.unhandled,
         result.unmodelled,
         result.edges,
+        result.relevant,
+        result.tracked,
         seconds,
         _walk_note(result),
     )
@@ -738,14 +741,7 @@ def _reported_member(numbered: tuple[int, _Finished], total: int) -> _Finished:
     if member.reused:
         logger.info("fields: [%d/%d] %s reused", finished, total, member.counts.member)
         return member
-    logger.info(
-        "fields: [%d/%d] %s (%d of %d extents tracked)",
-        finished,
-        total,
-        member.counts.member,
-        member.counts.relevant,
-        member.counts.tracked,
-    )
+    logger.info("fields: [%d/%d] %s", finished, total, member.counts.member)
     _log_result(member.counts, member.seconds)
     return member
 
