@@ -61,6 +61,17 @@ BASELINES = (
             peak_rss_mb=257,
             seconds=3.6,
         ),
+        coalesced=FixpointCost(
+            commit="249193b with coalesced pieces",
+            nodes=1016,
+            dequeues=34_323,
+            settled=True,
+            source_extents=250_043,
+            largest_state=348,
+            value_extents=137_583,
+            peak_rss_mb=408,
+            seconds=13.7,
+        ),
     ),
     FixpointBaseline(
         program="SYNPERFB",
@@ -107,6 +118,17 @@ BASELINES = (
             value_extents=122_415,
             peak_rss_mb=281,
             seconds=7.9,
+        ),
+        coalesced=FixpointCost(
+            commit="249193b with coalesced pieces",
+            nodes=1014,
+            dequeues=61_234,
+            settled=True,
+            source_extents=280_037,
+            largest_state=358,
+            value_extents=197_001,
+            peak_rss_mb=485,
+            seconds=27.9,
         ),
     ),
     FixpointBaseline(
@@ -155,6 +177,17 @@ BASELINES = (
             peak_rss_mb=2086,
             seconds=72.8,
         ),
+        coalesced=FixpointCost(
+            commit="249193b with coalesced pieces",
+            nodes=4778,
+            dequeues=55_089,
+            settled=True,
+            source_extents=6_073_018,
+            largest_state=1608,
+            value_extents=2_661_089,
+            peak_rss_mb=2633,
+            seconds=125.2,
+        ),
     ),
 )
 
@@ -186,13 +219,13 @@ def parsed(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("baseline", BASELINES, ids=lambda one: one.program)
-def test_the_fixpoint_settles_at_the_recorded_reverted_cost(
+def test_the_fixpoint_settles_at_the_recorded_coalesced_cost(
     parsed: Path, baseline: FixpointBaseline
 ) -> None:
     flow, _ = analysed(cached_asg(parsed, PROGRAMS / f"{baseline.program}.cbl"))
 
     assert (flow.nodes, flow.dequeues, flow.settled) == (
-        baseline.reverted.nodes,
-        baseline.reverted.dequeues,
-        baseline.reverted.settled,
+        baseline.coalesced.nodes,
+        baseline.coalesced.dequeues,
+        baseline.coalesced.settled,
     )

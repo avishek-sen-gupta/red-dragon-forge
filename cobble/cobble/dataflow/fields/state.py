@@ -7,14 +7,25 @@ extent -- a computed subscript -- adds provenance without ever removing any. Get
 that round the wrong way would drop real edges rather than keep spurious ones, and a
 dropped edge is invisible in the output.
 
-The value half is killed further, and it has to be: a write that changes part of a
-valued extent invalidates the values there without covering the extent, so
-``must_cover`` alone leaves them standing (``_invalidated``). A value is an
-assertion about bytes and the graph promotes a site to a proven edge on the strength
-of one, so a partly overwritten value kept whole is not caution -- it is a call the
-program may never make, asserted as a fact. Doubt is never killed that way: only the
-values go, and the reasons stay, because a write says nothing about the bytes
-outside it.
+An EXACT write into part of an EXACT entry splits it (``_split``): the untouched
+pieces keep its sources and its values sliced to them, and the overwritten bytes are
+the write's alone. Where either side is CLAMPED nothing can be cut, and the value
+half is killed further instead: a write that changes part of a valued extent
+invalidates the values there without covering the extent, so ``must_cover`` alone
+leaves them standing (``_invalidated``). A value is an assertion about bytes and the
+graph promotes a site to a proven edge on the strength of one, so a partly
+overwritten value kept whole is not caution -- it is a call the program may never
+make, asserted as a fact. Doubt is never killed that way: only the values go, and
+the reasons stay, because a write says nothing about the bytes outside it.
+
+A join rewrites the EXACT provenance entries of each field name it changed into one
+canonical form (``_canonical``): cut at every boundary they have, each piece holding
+the union of the sources over it, adjacent pieces with equal sources merged. Two
+paths that cut one record differently then land on the same keys for the same
+content. Keeping each path's cuts instead let the key set grow with the square of a
+record's write boundaries, and large programs stopped settling. Entries of other
+names, a child field or a REDEFINES, and CLAMPED entries are left as they are. The
+value map is never rewritten so, because ``exact_values`` looks up exactly.
 
 A state is keyed by extent rather than by field name because a name is not an
 address: two names over one piece of storage are one key here, which is the whole
@@ -23,10 +34,12 @@ reason for working in bytes.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import reduce
+from itertools import pairwise
 from types import MappingProxyType
+from typing import TypeVar
 
 from cobble.dataflow.fields.values import (
     EMPTY as VALUES_EMPTY,
@@ -94,11 +107,13 @@ class State:
     program cannot hold. Joining one and forgetting the other has to be
     impossible, not merely discouraged.
 
-    The two halves are killed by related but different rules. ``sources`` keeps
-    whatever the write does not ``must_cover``, so an over-approximated
-    provenance survives. ``values`` additionally invalidates what the write only
-    partly overwrote, because a value is a claim about bytes and a partly
-    overwritten claim is false rather than merely uncertain. See ``_invalidated``.
+    The two halves are killed by related but different rules. Both drop what the
+    write ``must_cover``s and split an EXACT entry an EXACT write partly
+    overwrote. Past that, ``sources`` keeps whatever is left, so an
+    over-approximated provenance survives, while ``values`` invalidates what a
+    CLAMPED side only partly overwrote, because a value is a claim about bytes and
+    a partly overwritten claim is false rather than merely uncertain. See
+    ``_split`` and ``_invalidated``.
     """
 
     sources: Mapping[FieldExtent, frozenset[Source]] = _NO_SOURCES
@@ -138,7 +153,86 @@ def _joined_sources(
         if (prior is not held and not held <= prior)
         or (not held and extent not in left)
     }
-    return MappingProxyType({**left, **grown}) if grown else left
+    return _with_grown(left, grown)
+
+
+def _with_grown(
+    left: Mapping[FieldExtent, frozenset[Source]],
+    grown: Mapping[FieldExtent, frozenset[Source]],
+) -> Mapping[FieldExtent, frozenset[Source]]:
+    if not grown:
+        return left
+    return _canonical({**left, **grown}, grown)
+
+
+def _canonical(
+    joined: Mapping[FieldExtent, frozenset[Source]],
+    grown: Mapping[FieldExtent, frozenset[Source]],
+) -> Mapping[FieldExtent, frozenset[Source]]:
+    names = {changed.field_name for changed in grown}
+    near = tuple(
+        extent
+        for extent in joined
+        if extent.field_name in names and extent.precision is Precision.EXACT
+    )
+    groups = tuple(
+        tuple(extent for extent in near if (extent.field_name, extent.region) == one)
+        for one in {(extent.field_name, extent.region) for extent in near}
+    )
+    rebuilt = tuple(
+        (group, runs)
+        for group in groups
+        if len(group) > 1
+        for runs in (_runs(joined, group),)
+        if set(runs) != set(group)
+    )
+    if not rebuilt:
+        return MappingProxyType(joined)
+    doomed = {extent for group, _ in rebuilt for extent in group}
+    return MappingProxyType(
+        {
+            **{e: held for e, held in joined.items() if e not in doomed},
+            **{e: held for _, runs in rebuilt for e, held in runs.items()},
+        }
+    )
+
+
+def _runs(
+    joined: Mapping[FieldExtent, frozenset[Source]],
+    group: tuple[FieldExtent, ...],
+) -> Mapping[FieldExtent, frozenset[Source]]:
+    marks = sorted({offset for one in group for offset in (one.start, one.end)})
+    spans = tuple(
+        (start, end, held)
+        for start, end in pairwise(marks)
+        for held in (_covering(joined, group, start, end),)
+        if held
+    )
+    merged_spans = reduce(_extended, spans, ())
+    return {_piece(group[0], start, end): held for start, end, held in merged_spans}
+
+
+def _covering(
+    joined: Mapping[FieldExtent, frozenset[Source]],
+    group: tuple[FieldExtent, ...],
+    start: int,
+    end: int,
+) -> frozenset[Source]:
+    return frozenset(
+        source
+        for one in group
+        if one.start <= start and end <= one.end
+        for source in joined[one]
+    )
+
+
+_Span = tuple[int, int, frozenset[Source]]
+
+
+def _extended(spans: tuple[_Span, ...], span: _Span) -> tuple[_Span, ...]:
+    if spans and spans[-1][1] == span[0] and spans[-1][2] == span[2]:
+        return (*spans[:-1], (spans[-1][0], span[1], span[2]))
+    return (*spans, span)
 
 
 def _joined_values(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
@@ -191,7 +285,8 @@ def _doubted(left: State, right: State) -> Mapping[FieldExtent, ValueSet]:
 
 
 def join(left: State, right: State) -> State:
-    """Union of both components, extent by extent. Order does not matter.
+    """Union of both components, extent by extent, one field name's EXACT provenance
+    entries rewritten to their canonical pieces.
 
     ``left is right`` is the fixpoint's own common case -- a node joined against
     itself once its in-state has settled -- and short-circuits before either
@@ -236,10 +331,100 @@ def _partly_overwritten(target: FieldExtent, extent: FieldExtent) -> bool:
     return not _disjoint(target, extent) and not _range_contains(target, extent)
 
 
+_Held = TypeVar("_Held", frozenset[Source], ValueSet)
+
+
+def _splits(target: FieldExtent, extent: FieldExtent) -> bool:
+    return (
+        target.precision is Precision.EXACT
+        and extent.precision is Precision.EXACT
+        and _partly_overwritten(target, extent)
+    )
+
+
+def _piece(extent: FieldExtent, start: int, end: int) -> FieldExtent:
+    return FieldExtent(
+        region=extent.region,
+        start=start,
+        length=end - start,
+        precision=extent.precision,
+        field_name=extent.field_name,
+    )
+
+
+def _remainders(target: FieldExtent, extent: FieldExtent) -> tuple[FieldExtent, ...]:
+    return tuple(
+        piece
+        for piece in (
+            _piece(extent, extent.start, target.start),
+            _piece(extent, target.end, extent.end),
+        )
+        if piece.length > 0
+    )
+
+
+def _gathered(
+    pieces: tuple[tuple[FieldExtent, _Held], ...],
+    into: Mapping[FieldExtent, _Held],
+    combine: Callable[[_Held, _Held], _Held],
+) -> dict[FieldExtent, _Held]:
+    touched: dict[FieldExtent, _Held] = reduce(
+        lambda held, one: {**held, one[0]: _added(held, into, one, combine)},
+        pieces,
+        {},
+    )
+    return {**into, **touched}
+
+
+def _added(
+    held: Mapping[FieldExtent, _Held],
+    into: Mapping[FieldExtent, _Held],
+    one: tuple[FieldExtent, _Held],
+    combine: Callable[[_Held, _Held], _Held],
+) -> _Held:
+    extent, piece = one
+    if extent in held:
+        return combine(held[extent], piece)
+    if extent in into:
+        return combine(into[extent], piece)
+    return piece
+
+
+def _split(
+    target: FieldExtent,
+    entries: Mapping[FieldExtent, _Held],
+    cut: Callable[[_Held, FieldExtent, FieldExtent], _Held],
+    combine: Callable[[_Held, _Held], _Held],
+) -> Mapping[FieldExtent, _Held]:
+    if target.precision is not Precision.EXACT:
+        return entries
+    struck = frozenset(extent for extent in entries if _splits(target, extent))
+    if not struck:
+        return entries
+    pieces = tuple(
+        (piece, cut(entries[extent], extent, piece))
+        for extent in struck
+        for piece in _remainders(target, extent)
+    )
+    kept = {extent: held for extent, held in entries.items() if extent not in struck}
+    return _gathered(pieces, kept, combine)
+
+
+def _whole(
+    held: frozenset[Source], extent: FieldExtent, piece: FieldExtent
+) -> frozenset[Source]:
+    return held
+
+
+def _united(left: frozenset[Source], right: frozenset[Source]) -> frozenset[Source]:
+    return left | right
+
+
 def _invalidated(held: ValueSet) -> ValueSet:
     """What an entry still says once a write overwrote part of the bytes it claims.
 
-    The values go. They named the content of a byte range the write has since
+    Only where ``_split`` could not cut the entry, because one side is CLAMPED. The
+    values go. They named the content of a byte range the write has since
     changed, so keeping them reports a value the program cannot hold -- and with
     empty reasons, which is what promotes a dynamic call site to a proven edge:
     ``MOVE X TO WS-PGM(1:1)`` over a field declared ``VALUE 'COSGN00C'`` used to
@@ -297,7 +482,7 @@ def _kept_values(
         return _NO_VALUES
     surviving = {
         extent: _after_write(target, extent, held)
-        for extent, held in state.values.items()
+        for extent, held in _split(target, state.values, _sliced, merged).items()
         if not target.must_cover(extent)
     }
     if not worth_storing:
@@ -317,14 +502,17 @@ def write(
 
     An EXACT target must_covers itself, so it drops its own prior entry in both maps
     -- a strong update. A CLAMPED one covers nothing, so both are kept and this is a
-    weak update. A target narrower than an entry is where the two halves part: the
-    provenance is kept, because a read of the untouched bytes still depends on the
-    write that placed them, while the values go, because ``_value_survives`` says a
-    partly overwritten value is a false claim rather than an imprecise one.
+    weak update. An EXACT target narrower than an EXACT entry splits it in both
+    maps (``_split``): the untouched bytes keep the entry's provenance and values,
+    and the overwritten ones hold only this write. Where either side is CLAMPED the
+    two halves part instead: the provenance is kept whole, because a read of the
+    untouched bytes still depends on the write that placed them, while the values
+    go, because ``_invalidated`` says a partly overwritten value is a false claim
+    rather than an imprecise one.
     """
     kept_sources = {
         extent: held
-        for extent, held in state.sources.items()
+        for extent, held in _split(target, state.sources, _whole, _united).items()
         if not target.must_cover(extent)
     }
     return State(
