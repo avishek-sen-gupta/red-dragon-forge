@@ -17,11 +17,12 @@ from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent
 
 
-def prepared(asg: CobolASG, layout: ProgramLayout) -> PreparedProgram:
+def prepared(member: str, asg: CobolASG, layout: ProgramLayout) -> PreparedProgram:
     """Everything the rounds need, built from the ASG once."""
     cfg, statements = program_graph(asg)
     index = layout.index
     return PreparedProgram(
+        member=member,
         graph=graph_of(cfg, statements, index),
         parts=demand_parts(asg, cfg, statements, index),
         entry=entry_of(asg),

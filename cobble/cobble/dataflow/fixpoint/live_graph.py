@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cobble.dataflow.fields.transfer import Write
+from cobble.dataflow.fixpoint.live_write import LiveWrite
 
 
 @dataclass(frozen=True)
@@ -14,4 +14,4 @@ class LiveGraph:
     order: tuple[str, ...]
     successors: tuple[tuple[int, ...], ...]
     predecessors: tuple[tuple[int, ...], ...]
-    writes: tuple[tuple[Write, ...], ...]
+    writes: tuple[tuple[LiveWrite, ...], ...]
