@@ -226,6 +226,17 @@ directory or cache is exit 2, writing nothing.
 The run report goes to stderr. `cobble-build --dynamic-call-targets` and
 `cobble-srccfg-build --dynamic-call-targets` read this `targets.jsonl`.
 
+Each round walks back from every jump's target bytes, through copies within a program and across
+links. A place is a program, a node and a byte range, told apart by its bytes alone, so the same bytes
+under a group, elementary or `REDEFINES` name are one place. Every place is answered once per
+round, and within a program once per run, however many walks reach it. The progress log names
+the jump being answered and how many places are done.
+
+On a large corpus the walks across links can join into one cyclic group spanning most of the
+corpus, and the unlimited run may not finish. Pick `--max-hops` by raising it until
+`targets.jsonl` stops changing between N and N+1. Only targets with `hop-limit` were cut; every
+other row is what the unlimited run gives. Each extra hop costs more than the last.
+
 ## cobble-dataflow-fixpoint-query
 
 ```

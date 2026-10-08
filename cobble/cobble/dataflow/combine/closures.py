@@ -21,7 +21,9 @@ class Closures(Generic[_V, _C]):
     stops there instead of walking everything behind it again.
 
     The graph is fixed for as long as one of these lives: a combine round builds
-    one and drops it, since the edges change between rounds. Strongly connected
+    one for the walk across programs and drops it, since the edges change between
+    rounds; MemoResolve keeps one per program for the run, since a program's own
+    facts and flows never change. Strongly connected
     components are solved together, Tarjan's algorithm with an explicit stack:
     every vertex in a component reaches every other, so all of them get one
     answer. Mutable by design, and the only mutation in the combine: the memo and
