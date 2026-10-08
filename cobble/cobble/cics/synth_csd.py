@@ -64,6 +64,9 @@ _COMMENT_INDICATORS = ("*", "/")
 
 _EXEC_CICS = re.compile(r"EXEC\s+CICS\b")
 _TRANSID_LITERAL = re.compile(r"TRANSID\s*\(\s*(['\"])(?P<transid>[^'\"]{1,4})\1\s*\)")
+_RETURN_TRANSID = re.compile(
+    r"RETURN\s[^.]*TRANSID\s*\(\s*(['\"])(?P<transid>[^'\"]{1,4})\1\s*\)"
+)
 
 
 class Tier(StrEnum):
@@ -71,6 +74,7 @@ class Tier(StrEnum):
 
     CORROBORATED = "corroborated"
     CONVENTION = "convention"
+    RETURN_TRANSID = "return-transid"
     SYNTHETIC = "synthetic"
 
 
@@ -111,6 +115,7 @@ class SynthesisedCsd:
 class _CicsMember:
     name: str
     own_transids: frozenset[str]
+    return_transids: frozenset[str]
     derived: str
 
 
@@ -138,6 +143,11 @@ def _literal_transids(text: str) -> frozenset[str]:
     return frozenset(
         match.group("transid") for match in _TRANSID_LITERAL.finditer(text)
     )
+
+
+def _return_transids(text: str) -> frozenset[str]:
+    """Transaction ids this member names in EXEC CICS RETURN TRANSID('...')."""
+    return frozenset(match.group("transid") for match in _RETURN_TRANSID.finditer(text))
 
 
 def _by_rule(member: str, rule: TransidRule) -> str:
@@ -173,6 +183,7 @@ def _scanned(
         _CicsMember(
             name=upper,
             own_transids=_literal_transids(text),
+            return_transids=_return_transids(text),
             derived=_derived_transid(upper, rules),
         ),
     )
@@ -220,6 +231,9 @@ def _define(
 ) -> Define:
     if _may_claim(member, claimants, literals):
         return Define(member.derived, member.name, _evidence_tier(member))
+    own_return = member.return_transids & literals
+    if own_return:
+        return Define(sorted(own_return)[0], member.name, Tier.RETURN_TRANSID)
     return Define(
         f"{SYNTHETIC_TRANSID_PREFIX}{member.name}", member.name, Tier.SYNTHETIC
     )
@@ -284,6 +298,7 @@ def tier_counts(csd: SynthesisedCsd) -> Mapping[Tier, int]:
 _TIER_MEANING = {
     Tier.CORROBORATED: "the convention and the member's own source agree",
     Tier.CONVENTION: "named elsewhere in the corpus, not by the member itself",
+    Tier.RETURN_TRANSID: "the member's own RETURN TRANSID names its transaction",
     Tier.SYNTHETIC: f"no recoverable transaction: {SYNTHETIC_TRANSID_PREFIX}<member>",
 }
 

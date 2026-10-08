@@ -140,7 +140,8 @@ def test_a_transaction_no_member_claims_is_reported_not_invented() -> None:
 def test_two_members_the_convention_maps_to_one_transaction_are_both_reported() -> None:
     """The convention is only useful while it is unambiguous. A collision means
     the rule does not fit this corpus, which the report has to say -- and both
-    members fall back to a synthetic transid rather than one silently winning."""
+    members fall back. A member that also does RETURN TRANSID still recovers
+    under that tier; only the convention is discredited, not the self-declaration."""
     result = _synthesise(
         {
             "PGM006": _cics_member("EXEC CICS RETURN TRANSID('T006') END-EXEC."),
@@ -152,7 +153,10 @@ def test_two_members_the_convention_maps_to_one_transaction_are_both_reported() 
     )
 
     assert result.collisions == (("T006", ("PGM006", "PGM006X")),)
-    assert [d.tier for d in result.defines] == [Tier.SYNTHETIC, Tier.SYNTHETIC]
+    assert [d.tier for d in result.defines] == [
+        Tier.RETURN_TRANSID,
+        Tier.SYNTHETIC,
+    ]
 
 
 def test_a_collision_on_a_transaction_the_corpus_never_names_is_not_reported() -> None:
@@ -211,6 +215,7 @@ def test_the_report_counts_every_tier_and_names_what_it_could_not_place() -> Non
     assert tier_counts(result) == {
         Tier.CORROBORATED: 1,
         Tier.CONVENTION: 1,
+        Tier.RETURN_TRANSID: 0,
         Tier.SYNTHETIC: 1,
     }
     assert "T999" in "\n".join(report_lines(result))
