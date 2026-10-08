@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 from cobble.dataflow.combine.cli import cli as combine_cli
+from cobble.dataflow.fixpoint.area_kind import AreaKind
 from cobble.dataflow.fixpoint.area_need_cli import cli as area_cli
-from cobble.dataflow.fixpoint.area_need_file import AreaNeedFile
+from cobble.dataflow.fixpoint.area_need_file import read_rows
 from cobble.dataflow.fixpoint.build_corpus import cli
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.query import cli as query_cli
@@ -437,6 +438,42 @@ CHAIN_END = """\
 """
 
 
+SLICE_CALLER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-FIRST         PIC X(8).
+           05  WS-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGP' TO WS-FIRST.
+           MOVE 'PROGQ' TO WS-SECOND.
+           EXEC CICS LINK PROGRAM('PROGN') COMMAREA(WS-AREA) END-EXEC.
+           EXEC CICS LINK PROGRAM('PROGO') COMMAREA(WS-AREA) END-EXEC.
+           GOBACK.
+"""
+
+
+def _slice_callee(name: str, read: str) -> str:
+    return f"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. {name}.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-TARGET            PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE {read} TO WS-TARGET.
+           EXEC CICS XCTL PROGRAM(WS-TARGET) END-EXEC.
+"""
+
+
 def _narrow_run(parsed: Path, extents: Path, out: Path, stored: Path) -> int:
     return cli(
         [
@@ -473,10 +510,13 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         "PROGH": CHAIN_START,
         "PROGI": CHAIN_MIDDLE,
         "PROGJ": CHAIN_END,
+        "PROGM": SLICE_CALLER,
+        "PROGN": _slice_callee("PROGN", "LK-FIRST"),
+        "PROGO": _slice_callee("PROGO", "LK-SECOND"),
     }
     full = fixpoint_corpus_with(sources, ())
     parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
-    stored = tmp_path / "area-need.json"
+    stored = tmp_path / "area-need.jsonl"
     missing = _narrow_run(parsed, extents, full.parent / "early", stored)
     area_cli(
         ["--asg-dir", str(parsed), "--extents", str(extents), "--out", str(stored)]
@@ -496,6 +536,19 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         (row.caller, row.candidates) for row in combined if row.caller == "PROGJ"
     ] == [("PROGJ", ("PROGK",))]
     assert _counts(narrow, "PROGH").scope is Scope.NARROW_CALL_TARGETS
-    assert AreaNeedFile.model_validate_json(stored.read_text(encoding="utf-8")) == (
-        AreaNeedFile(entry=((0, (0, 16)),), back=((0, (0, 8)),))
-    )
+    commarea = ((AreaKind.COMMAREA, 0),)
+    assert {
+        row.member: (row.receives, row.entry, row.back)
+        for row in read_rows(stored)
+        if row.member in {"PROGI", "PROGJ", "PROGN", "PROGO", "PROGW"}
+    } == {
+        "PROGI": (commarea, (((AreaKind.COMMAREA, 0), (8, 16)),), ()),
+        "PROGJ": (commarea, (((AreaKind.COMMAREA, 0), (8, 16)),), ()),
+        "PROGN": (
+            commarea,
+            (((AreaKind.COMMAREA, 0), (0, 8)),),
+            (((AreaKind.COMMAREA, 0), (8, 16)),),
+        ),
+        "PROGO": (commarea, (((AreaKind.COMMAREA, 0), (8, 16)),), ()),
+        "PROGW": (commarea, (), (((AreaKind.COMMAREA, 0), (0, 8)),)),
+    }

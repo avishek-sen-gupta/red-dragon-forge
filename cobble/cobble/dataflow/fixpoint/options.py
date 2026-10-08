@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cobble.dataflow.fixpoint.area_need import WHOLE_AREAS, AreaNeed
+from cobble.dataflow.fixpoint.area_table import WHOLE_TABLE, AreaTable
 from cobble.dataflow.fixpoint.scope import Scope
 
 ITERATION_FACTOR = 150
@@ -28,7 +28,7 @@ class AnalysisOptions:
     sweeps: int = 0
     factor: int = ITERATION_FACTOR
     scope: Scope = Scope.WHOLE
-    areas: AreaNeed = WHOLE_AREAS
+    areas: AreaTable = WHOLE_TABLE
 
 
 DEFAULT_OPTIONS = AnalysisOptions()

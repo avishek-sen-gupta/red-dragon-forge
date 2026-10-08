@@ -132,8 +132,7 @@ from cobble.dataflow.fields.side_tables import (
     target_row,
 )
 from cobble.dataflow.fixpoint import rows
-from cobble.dataflow.fixpoint.area_need import AreaNeed
-from cobble.dataflow.fixpoint.area_need_file import AreaNeedFile
+from cobble.dataflow.fixpoint.area_need_file import read_rows, table_of
 from cobble.dataflow.fixpoint.fixpoint import NO_INDEX, ProgramFlow, analysed
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.options import ITERATION_FACTOR, AnalysisOptions
@@ -147,6 +146,7 @@ from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +366,11 @@ def _analysed_member(
     seeded from are the same ones ``cobble-extents`` published.
     """
     asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    flow, index = analysed(asg, options, published.layout)
+    flow, index = analysed(
+        asg,
+        replace(options, areas=options.areas.seen_from(published.member)),
+        published.layout,
+    )
     tables = replace(
         _tables(published.member, flow, published.layout, locations),
         scope=options.scope,
@@ -1048,26 +1052,41 @@ def _members_run(paths: Sequence[Path], arguments: argparse.Namespace) -> int:
 
 
 def _narrowed(inputs: _Inputs, arguments: argparse.Namespace) -> _Inputs:
-    """With --narrow-areas, the area need cobble-dataflow-area-need wrote, handed
-    to every member's walk."""
+    """With --narrow-areas, the per-member table cobble-dataflow-area-need wrote,
+    handed to every member's walk, which looks up its callees and itself in it."""
     if not arguments.narrow_areas:
         return inputs
-    stored = AreaNeedFile.model_validate_json(
-        Path(arguments.narrow_areas).read_text(encoding="utf-8")
-    )
-    need = AreaNeed(entry=stored.entry, back=stored.back)
-    return replace(inputs, options=replace(inputs.options, areas=need))
+    table = table_of(read_rows(Path(arguments.narrow_areas)))
+    return replace(inputs, options=replace(inputs.options, areas=table))
 
 
 def _narrow_problem(arguments: argparse.Namespace) -> str:
     if arguments.narrow_areas and not arguments.call_targets_only:
         return "fields: !! --narrow-areas needs --call-targets-only\n"
-    if arguments.narrow_areas and not Path(arguments.narrow_areas).is_file():
+    if arguments.narrow_areas:
+        return _stored_problem(Path(arguments.narrow_areas))
+    return ""
+
+
+def _stored_problem(path: Path) -> str:
+    if not path.is_file():
         return (
-            f"fields: !! no area need at {arguments.narrow_areas}:"
-            " run cobble-dataflow-area-need first\n"
+            f"fields: !! no area need at {path}: run cobble-dataflow-area-need first\n"
+        )
+    if not _rows_readable(path):
+        return (
+            f"fields: !! {path} is not a per-member area need:"
+            " rerun cobble-dataflow-area-need\n"
         )
     return ""
+
+
+def _rows_readable(path: Path) -> bool:
+    try:
+        read_rows(path)
+    except ValidationError:
+        return False
+    return True
 
 
 def _refusal(arguments: argparse.Namespace, members: Path) -> str:
