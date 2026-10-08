@@ -426,9 +426,15 @@ def test_a_run_resolves_each_program_node_and_range_once_across_rounds() -> None
     assert memoised.report.rounds == 3
     assert Counter(counted.calls) == Counter(
         {
-            ("A", ("X", byte_range("WS-AREA@working_storage[0:8]", "A"))): 1,
-            ("B", ("X", byte_range("WS-NEXT@working_storage[0:8]", "B"))): 1,
-            ("B", ("M2", byte_range("LK-FROM@linkage[0:8]", "B"))): 1,
+            (
+                "A",
+                ("X", byte_range("WS-AREA@working_storage[0:8]", "A").bytes_only()),
+            ): 1,
+            (
+                "B",
+                ("X", byte_range("WS-NEXT@working_storage[0:8]", "B").bytes_only()),
+            ): 1,
+            ("B", ("M2", byte_range("LK-FROM@linkage[0:8]", "B").bytes_only())): 1,
         }
     )
     assert len(plain.calls) == 5

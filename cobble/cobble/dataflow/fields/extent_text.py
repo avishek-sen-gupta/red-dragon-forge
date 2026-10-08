@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from cobol_memory.field_extent import FieldExtent, Precision
 
@@ -84,6 +84,9 @@ class ByteRange:
             and self.start <= other.start
             and other.end <= self.end
         )
+
+    def bytes_only(self) -> ByteRange:
+        return replace(self, name="", exact=True)
 
     def __str__(self) -> str:
         if not self.known:
