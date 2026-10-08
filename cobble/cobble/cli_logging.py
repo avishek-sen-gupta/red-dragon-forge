@@ -7,10 +7,13 @@ their own copy of the same three arguments.
 
 Two choices worth stating, because both are deliberate rather than default:
 
-  - Message-only format. These summaries are bracketed, multi-line reports meant
-    for whoever is watching a corpus build; an 'INFO:cobble.build_graph:' on all
-    twenty lines of one makes it unreadable. The cost is that severity no longer
-    shows in the output, so the warnings cobble raises mark themselves with '!!'.
+  - Message-only format, prefixed with the time the process has been running
+    (``[1h02m03s]``). These summaries are bracketed, multi-line reports meant for
+    whoever is watching a corpus build; an 'INFO:cobble.build_graph:' on all
+    twenty lines of one makes it unreadable, but how long the run has taken is
+    what that reader wants on every line. Severity does not show, so the warnings
+    cobble raises mark themselves with '!!'. A worker process counts from its own
+    start.
   - stderr. The tqdm progress bars are already there, so a per-stage count and
     the bar it followed interleave in the order they happened; and it leaves
     stdout for the one thing that is machine-readable, cobble.diagnosis' JSON.
@@ -25,6 +28,8 @@ from __future__ import annotations
 import logging
 import sys
 
+from cobble.elapsed_formatter import ElapsedFormatter
+
 
 def configure_cli_logging(level: int = logging.INFO) -> None:
     """Configure the root logger for a console entry point.
@@ -32,4 +37,6 @@ def configure_cli_logging(level: int = logging.INFO) -> None:
     Call this from main() and nowhere else -- a library that configures logging
     takes the choice away from the program importing it.
     """
-    logging.basicConfig(level=level, format="%(message)s", stream=sys.stderr)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(ElapsedFormatter("%(message)s"))
+    logging.basicConfig(level=level, handlers=[handler])
