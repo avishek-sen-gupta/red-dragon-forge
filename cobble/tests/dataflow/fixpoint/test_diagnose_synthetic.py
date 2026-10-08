@@ -37,7 +37,9 @@ def test_the_report_names_where_the_steps_went(
     out = fixpoint_out("PROGD", LOOPING)
     parsed = out.parent / "parsed"
 
-    lines = report(parsed / "PROGD.json", Scope.WHOLE, 50000, 5, True).splitlines()
+    lines = report(
+        parsed / "PROGD.json", AnalysisOptions(scope=Scope.WHOLE), 50000, 5, True
+    ).splitlines()
 
     assert lines[:2] == [
         "nodes 10, reached 9, steps 15, queue left 0 (settled)",
@@ -86,3 +88,66 @@ def test_every_step_names_the_node_whose_successors_it_changed(
     ]
 
     assert strays == []
+
+
+FILLING_CALLER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGQ.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-NEXT          PIC X(8).
+           05  WS-PAD           PIC X(12).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'FILLER' TO WS-PAD.
+           EXEC CICS LINK PROGRAM('PROGW') COMMAREA(WS-AREA) END-EXEC.
+           CALL WS-NEXT.
+           GOBACK.
+"""
+
+CALLEE_NEEDS_NOTHING = (
+    '{"member":"PROGQ","receives":[],"entry":[],"back":[],"sites":[]}\n'
+    '{"member":"PROGW","receives":[["commarea",0]],"entry":[],'
+    '"back":[[["commarea",0],[0,8]]],"sites":[]}\n'
+)
+
+
+def test_a_narrowed_diagnosis_walks_as_the_narrowed_fixpoint_does(
+    fixpoint_out: Callable[[str, str], Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parsed = fixpoint_out("PROGQ", FILLING_CALLER).parent / "parsed"
+    need = tmp_path / "need.jsonl"
+    need.write_text(CALLEE_NEEDS_NOTHING, encoding="utf-8")
+    common = ["--asg-dir", str(parsed), "--member", "PROGQ", "--every", "100"]
+    capsys.readouterr()
+
+    runs = [
+        (cli([*common, *flags]), capsys.readouterr())
+        for flags in (
+            ["--call-targets-only"],
+            ["--call-targets-only", "--narrow-areas", str(need)],
+            ["--narrow-areas", str(need)],
+        )
+    ]
+
+    assert [
+        (code, out.out.splitlines()[:1], out.out.splitlines()[-1:], out.err)
+        for code, out in runs
+    ] == [
+        (
+            0,
+            ["nodes 8, reached 7, steps 7, queue left 0 (settled)"],
+            ["         7      7      0          3      1"],
+            "",
+        ),
+        (
+            0,
+            ["nodes 8, reached 7, steps 7, queue left 0 (settled)"],
+            ["         7      7      0          2      1"],
+            "",
+        ),
+        (2, [], [], "fields: !! --narrow-areas needs --call-targets-only\n"),
+    ]

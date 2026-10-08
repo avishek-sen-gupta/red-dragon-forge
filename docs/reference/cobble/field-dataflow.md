@@ -291,14 +291,16 @@ says how many were walked and how many come next.
 
 ```
 cobble-dataflow-fixpoint-diagnose --asg-dir DIR --member MEMBER
-    [--max-steps N] [--every N] [--call-targets-only] [--anonymise]
+    [--max-steps N] [--every N] [--call-targets-only [--narrow-areas FILE]] [--anonymise]
 ```
 
 Walks one member as the fixpoint does, stopping after `--max-steps` dequeues (default 50000),
 and reports: the most-dequeued nodes and how often a dequeue grew a successor, the cycle each
 sits in, the fields that keep gaining writers, the tallest writer sets, and a timeline every
 `--every` steps (default 5000). `--anonymise` replaces paragraph and field names with stable
-aliases (`PARA-001`, `FIELD-001`).
+aliases (`PARA-001`, `FIELD-001`). `--narrow-areas FILE`, with `--call-targets-only`, walks the member as
+`cobble-dataflow-fixpoint --narrow-areas FILE` does, tracking only the handed-over bytes the
+area-need file says some program needs.
 
 ## cobble-fields-access
 
