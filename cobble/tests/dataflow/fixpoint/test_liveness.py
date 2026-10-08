@@ -42,6 +42,32 @@ def test_a_write_kills_only_what_it_must_cover_and_makes_its_sources_live() -> N
     assert entered((literal,), frozenset(), frozenset({_ws(80, 4, "WS-LIT")})) == set()
 
 
+def test_a_byte_copy_narrows_the_source_to_the_live_target_bytes() -> None:
+    source = _ws(0, 500, "WS-SOURCE")
+    target = _ws(1000, 500, "WS-TARGET")
+    live_piece = _ws(1100, 8, "WS-PIECE")
+    copy = LiveWrite(target=target, weak=False, sources=(source,), copy_start=(0,))
+
+    result = entered((copy,), frozenset(), frozenset({live_piece}))
+
+    assert result == {
+        FieldExtent(RegionId.WORKING_STORAGE, 100, 8, Precision.EXACT, "WS-SOURCE"),
+    }
+
+
+def test_a_byte_copy_from_linkage_narrows_the_same_way() -> None:
+    linkage = FieldExtent(RegionId.LINKAGE, 0, 950, Precision.EXACT, "DFHCOMMAREA")
+    target = _ws(0, 950, "WS-COMMAREA")
+    live_piece = _ws(20, 8, "WS-PGM-NAME")
+    copy = LiveWrite(target=target, weak=False, sources=(linkage,), copy_start=(0,))
+
+    result = entered((copy,), frozenset(), frozenset({live_piece}))
+
+    assert result == {
+        FieldExtent(RegionId.LINKAGE, 20, 8, Precision.EXACT, "DFHCOMMAREA"),
+    }
+
+
 def test_a_live_set_keeps_exactly_the_extents_that_overlap_it() -> None:
     live = Live(
         entry={"N": spans_of((_ws(0, 4, "A"), _ws(4, 4, "B"), _ws(20, 2, "C")))}
