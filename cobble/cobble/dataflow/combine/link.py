@@ -69,7 +69,7 @@ def link(
     resolver: Resolve = resolve,
 ) -> Linked:
     world = _World(tables, frozenset(), outside, areas, transactions, resolver)
-    return _rounds(_answered_in(world))
+    return _rounds(_answered_in(world, 1))
 
 
 _Round = tuple[_World, bool, int]
@@ -95,17 +95,45 @@ def _round(run: _Round, number: int) -> _Round:
     )
     if found <= world.edges:
         return world, True, number
-    return _answered_in(replace(world, edges=world.edges | found)), False, number
+    return (
+        _answered_in(replace(world, edges=world.edges | found), number + 1),
+        False,
+        number,
+    )
+
+
+def position(
+    round_: int, jump: int, jumps: int, index: int, programs: int, program: str
+) -> str:
+    """Where an answer sits in its round: the jump among every jump the round
+    answers, so the fraction left is always on screen."""
+    return (
+        f"round {round_}: jump {jump}/{jumps} ({100 * jump // max(jumps, 1)}%),"
+        f" program {index}/{programs} {program}"
+    )
+
+
+_Place = tuple[int, int, int, int, int]
 
 
 def _program_answers(
-    world: _World,
-    program: str,
-    tables: ProgramTables,
+    world: _World, program: str, tables: ProgramTables, place: _Place
 ) -> tuple[tuple[_Start, Held], ...]:
+    """``place`` is the round, the jumps answered before this program, every jump
+    in the round, this program's number and every program in the round."""
+    round_, before, jumps, index, programs = place
     return tuple(
-        ((program, jump.node, fact), _fact_held(world, program, jump.node, fact))
-        for jump in tables.jumps.values()
+        (
+            (program, jump.node, fact),
+            _fact_held(
+                world,
+                program,
+                jump.node,
+                fact,
+                position(round_, before + number, jumps, index, programs, program),
+            ),
+        )
+        for number, jump in enumerate(tables.jumps.values(), 1)
         for fact in (jump.target, jump.transid)
     )
 
@@ -114,55 +142,61 @@ def _collect_answers(
     world: _World,
     items: tuple[tuple[str, ProgramTables], ...],
     started: float,
+    round_: int,
 ) -> tuple[tuple[_Start, Held], ...]:
-    """Every program's answers, with a heartbeat at most every five seconds.
-    Iterated, not recursed: a corpus has thousands of programs, and a stack frame
-    each is past the interpreter's limit."""
+    """Every program's answers, with a heartbeat at most every five seconds naming
+    the position in the round. Iterated, not recursed: a corpus has thousands of
+    programs, and a stack frame each is past the interpreter's limit."""
+    befores = tuple(accumulate((len(tables.jumps) for _, tables in items), initial=0))
+    jumps = befores[-1]
+    places = tuple(
+        (round_, befores[index - 1], jumps, index, len(items))
+        for index in range(1, len(items) + 1)
+    )
     stamps = accumulate(
-        enumerate(items, 1),
-        lambda last, numbered: _heartbeat(numbered, len(items), started, last),
+        zip(items, places, strict=True),
+        lambda last, pair: _heartbeat(pair, started, last),
         initial=started,
     )
     return tuple(
         answer
-        for (program, tables), _ in zip(items, islice(stamps, 1, None), strict=True)
-        for answer in _program_answers(world, program, tables)
+        for ((program, tables), place), _ in zip(
+            zip(items, places, strict=True), islice(stamps, 1, None), strict=True
+        )
+        for answer in _program_answers(world, program, tables, place)
     )
 
 
 def _heartbeat(
-    numbered: tuple[int, tuple[str, ProgramTables]],
-    total: int,
-    started: float,
-    last: float,
+    pair: tuple[tuple[str, ProgramTables], _Place], started: float, last: float
 ) -> float:
-    index, (program, _) = numbered
+    (program, _), (round_, before, jumps, index, programs) = pair
     now = time.monotonic()
     if now - last < _ANSWER_HEARTBEAT:
         return last
     logger.info(
-        "combine:   answering %s [%d/%d] programs (%.1fs)",
-        program,
-        index,
-        total,
+        "combine:   %s (%.1fs)",
+        position(round_, before + 1, jumps, index, programs, program),
         now - started,
     )
     return now
 
 
-def _answered_in(world: _World) -> _World:
+def _answered_in(world: _World, round_: int) -> _World:
     total_programs = len(world.tables)
     total_jumps = sum(len(t.jumps) for t in world.tables.values())
     logger.info(
-        "combine:   answering %d programs (%d jumps, %d edges)...",
+        "combine:   round %d: answering %d programs (%d jumps, %d edges)...",
+        round_,
         total_programs,
         total_jumps,
         len(world.edges),
     )
     started = time.monotonic()
-    pairs = _collect_answers(world, tuple(world.tables.items()), started)
+    pairs = _collect_answers(world, tuple(world.tables.items()), started, round_)
     logger.info(
-        "combine:   answered %d programs, %d jumps in %.1fs",
+        "combine:   round %d: answered %d programs, %d jumps in %.1fs",
+        round_,
         total_programs,
         total_jumps,
         time.monotonic() - started,
@@ -178,10 +212,12 @@ def _names(values: frozenset[str]) -> tuple[str, ...]:
     return tuple(sorted({v.rstrip() for v in values if is_program_name(v.rstrip())}))
 
 
-def _fact_held(world: _World, program: str, node: str, fact: Fact) -> Held:
+def _fact_held(
+    world: _World, program: str, node: str, fact: Fact, label: str = ""
+) -> Held:
     if not fact.extent:
         return Held(values=frozenset(fact.values), reasons=frozenset(fact.reasons))
-    return _held(world, (program, node, byte_range(fact.extent, program)))
+    return _held(world, (program, node, byte_range(fact.extent, program)), label)
 
 
 def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> ByteRange:
@@ -195,8 +231,25 @@ def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> Byt
     )
 
 
-def _held(world: _World, start: _Vertex) -> Held:
-    walk = walked(start, partial(_expanded, world), held_join, Held())
+def _programs_reached(total: int, seen: frozenset[_Vertex]) -> str:
+    """How many of the corpus's programs a walk has reached, bounded, so it shows
+    whether the walk is crossing most of the corpus or going deep through a few;
+    and how many program-and-node places, so many more vertices than places shows
+    the same places being reached under different byte ranges."""
+    places = len({(vertex[0], vertex[1]) for vertex in seen})
+    programs = len({vertex[0] for vertex in seen})
+    return f" across {programs}/{total} programs, {places} places"
+
+
+def _held(world: _World, start: _Vertex, label: str = "") -> Held:
+    walk = walked(
+        start,
+        partial(_expanded, world),
+        held_join,
+        Held(),
+        label=label,
+        spread=partial(_programs_reached, len(world.tables)),
+    )
     return held_join(walk.found, Held(cycled=walk.revisited))
 
 
