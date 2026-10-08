@@ -31,10 +31,6 @@ _EDGES = {
 }
 
 
-def _no_spread(seen: frozenset[int]) -> str:
-    return ""
-
-
 def _found(vertex: int) -> frozenset[int]:
     return frozenset({vertex}) if vertex % 3 == 0 else frozenset()
 
@@ -59,7 +55,6 @@ def test_one_memo_answers_every_start_as_its_own_walk_and_expands_each_vertex_on
             lambda vertex: (_found(vertex), _EDGES[vertex]),
             lambda left, right: left | right,
             frozenset[int](),
-            spread=_no_spread,
         )
         for start in starts
     ]

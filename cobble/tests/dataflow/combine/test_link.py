@@ -588,3 +588,27 @@ def test_skipping_readbacks_leaves_a_link_write_back_unfollowed_and_says_so() ->
         for r in (True, False)
     )
     assert rows == ((("Q",), (), ()), ((), ("readback-skipped",), ()))
+
+
+def test_two_names_for_the_same_bytes_at_one_jump_are_one_place_across_programs() -> (
+    None
+):
+    named = Fact("WS-NEXT@working_storage[0:8]", values=("M".ljust(8),))
+    alias = Fact("WS-NEXT-R@working_storage[0:8]", values=("M".ljust(8),))
+    jump = Jump("N", "X", 9, JumpKind.XCTL, False, target=named, transid=alias)
+    tables = ProgramTables(
+        "N",
+        facts={"X": _facts("N", (named, alias))},
+        flows={},
+        jumps={"X": jump},
+        received=(),
+        sites={"X": TargetSite("CICS_XCTL", "WS-NEXT")},
+    )
+    counted = CountingResolve()
+
+    linked = link({"N": tables}, areas(), {}, OutsideJumps(), counted)
+
+    assert _row(linked, "N") == (("M",), (), ())
+    assert counted.calls == [
+        ("N", "X", byte_range("WS-NEXT@working_storage[0:8]", "N").bytes_only())
+    ]
