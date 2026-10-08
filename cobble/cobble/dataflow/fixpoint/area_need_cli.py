@@ -26,11 +26,13 @@ from cobble.dataflow.fixpoint.area_need import AreaNeed, Slotted
 from cobble.dataflow.fixpoint.area_need_file import rows_of, write_rows
 from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
+from cobble.dataflow.fixpoint.explain_request import ExplainRequest
 from cobble.dataflow.fixpoint.fixpoint import program_graph
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.shared_count import SharedCount
 from cobble.dataflow.fixpoint.target_site import Sites, resolved_sites
+from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
@@ -95,14 +97,45 @@ def _shard(
 ) -> None:
     """One worker process: its share of the members, loaded once and kept for every
     round, so only the table and the reports cross between processes, never a
-    program. What its members receive and the callees they name go first."""
+    program. What its members receive and the callees they name go first; an
+    explain request, after the last round, is answered for its own members."""
     configure_cli_logging()
     programs = tuple(held for job in jobs for held in _loaded(job, total, done))
     connection.send(_receiving(programs))
-    for round_ in iter(connection.recv, _STOP):
-        connection.send(
-            tuple(_walked(program, round_, done) for _, program in programs)
-        )
+    for message in iter(connection.recv, _STOP):
+        connection.send(_answer(message, programs, jobs, done))
+
+
+def _answer(
+    message: _Round | ExplainRequest,
+    programs: tuple[_Held, ...],
+    jobs: tuple[_Job, ...],
+    done: SharedCount,
+) -> tuple[AreaFound, ...] | tuple[tuple[str, str], ...]:
+    match message:
+        case ExplainRequest(table=table, over=over):
+            return _explained_over(programs, jobs, table, over)
+        case round_:
+            return tuple(_walked(program, round_, done) for _, program in programs)
+
+
+def _explained_over(
+    programs: tuple[_Held, ...], jobs: tuple[_Job, ...], table: AreaTable, over: int
+) -> tuple[tuple[str, str], ...]:
+    needs = dict(table.needs)
+    paths = {job[1]: job[3] for job in jobs}
+    return tuple(
+        (program.member, explained(program, _cfg_of(paths[program.member]), table))
+        for _, program in programs
+        if _need_bytes(needs[program.member].entry) >= over
+    )
+
+
+def _cfg_of(path: Path) -> Cfg:
+    with cached_asg_dialect_parsers_registered():
+        asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    cfg, _ = program_graph(asg)
+    return cfg
 
 
 def _need_bytes(bounds: Slotted) -> int:
@@ -224,7 +257,7 @@ def _sites(arguments: argparse.Namespace) -> Sites:
     return sites
 
 
-def computed(arguments: argparse.Namespace) -> AreaTable:
+def computed(arguments: argparse.Namespace) -> tuple[AreaTable, str]:
     """Rounds of liveness over every member in the extents table until the table
     stops changing: what a callee reads can make its caller forward more, which
     that caller's callers then read. Every member starts needing nothing, so the
@@ -232,11 +265,24 @@ def computed(arguments: argparse.Namespace) -> AreaTable:
     members for the whole run."""
     jobs = _jobs(arguments)
     if not jobs:
-        return AreaTable()
+        return AreaTable(), ""
     shards = _started(jobs, arguments.max_workers)
     table = _settled(shards[0], len(jobs), _sites(arguments))
+    report = _over_report(shards[0], table, arguments.explain_over)
     _stopped(shards)
-    return table
+    return table, report
+
+
+def _over_report(parents: tuple[Connection, ...], table: AreaTable, over: int) -> str:
+    """Every member needing at least ``over`` bytes explained, in member order."""
+    if over <= 0:
+        return ""
+    for parent in parents:
+        parent.send(ExplainRequest(table, over))
+    found: tuple[tuple[str, str], ...] = tuple(
+        pair for parent in parents for pair in parent.recv()
+    )
+    return "".join(text for _, text in sorted(found))
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
@@ -254,6 +300,14 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         metavar="MEMBER",
         help="after the rounds, print why MEMBER needs the bytes it does: each"
         " demand source alone, and the writes that read more than they keep live",
+    )
+    parser.add_argument(
+        "--explain-over",
+        type=int,
+        default=0,
+        metavar="BYTES",
+        help="after the rounds, explain every member needing at least BYTES bytes"
+        " on entry, in member order; each worker explains its own members",
     )
     parser.add_argument(
         "--fixpoint-dir",
@@ -285,9 +339,8 @@ def _explanation(arguments: argparse.Namespace, table: AreaTable) -> str:
     path = arguments.asg_dir / f"{member}.json"
     with cached_asg_dialect_parsers_registered():
         asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    cfg, _ = program_graph(asg)
     program = prepared(member, asg, member_layout(member, block).layout)
-    return explained(program, cfg, table)
+    return explained(program, _cfg_of(path), table)
 
 
 def _refusal(arguments: argparse.Namespace) -> str:
@@ -322,9 +375,10 @@ def cli(argv: Sequence[str]) -> int:
     if refusal:
         sys.stderr.write(refusal)
         return 2
-    table = computed(arguments)
+    table, report = computed(arguments)
     write_rows(rows_of(table), arguments.out)
     logger.info("area need written to %s", arguments.out)
+    sys.stdout.write(report)
     if arguments.explain:
         sys.stdout.write(_explanation(arguments, table))
     return 0
