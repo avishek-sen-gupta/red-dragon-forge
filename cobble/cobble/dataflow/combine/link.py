@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from functools import partial, reduce
+from itertools import accumulate, count, islice
 from types import MappingProxyType
 
 from cobble.dataflow.combine.callee_areas import CalleeAreas
@@ -28,6 +29,8 @@ from cobble.dataflow.jumps.jump_area import JumpArea
 from cobble.dataflow.jumps.jump_kind import JumpKind
 
 logger = logging.getLogger(__name__)
+
+_ANSWER_HEARTBEAT = 5.0
 
 _ENTERING = frozenset(
     {JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL, JumpKind.RETURN_TRANSID}
@@ -66,22 +69,33 @@ def link(
     resolver: Resolve = resolve,
 ) -> Linked:
     world = _World(tables, frozenset(), outside, areas, transactions, resolver)
-    return _rounds(_answered_in(world), 1)
+    return _rounds(_answered_in(world))
 
 
-def _rounds(world: _World, round_: int) -> Linked:
+_Round = tuple[_World, bool, int]
+
+
+def _rounds(world: _World) -> Linked:
+    """Rounds until one finds no edge the world does not already hold. Iterated,
+    not recursed: a stack frame per round is a limit the corpus can reach."""
+    runs = accumulate(count(1), _round, initial=(world, False, 0))
+    settled, _, number = next(run for run in runs if run[1])
+    return _linked(settled, number)
+
+
+def _round(run: _Round, number: int) -> _Round:
+    world = run[0]
     found = frozenset(_edges(world))
-    new = found - world.edges
     logger.info(
         "combine:   round %d, %d edges total, %d new, %d programs",
-        round_,
+        number,
         len(found),
-        len(new),
+        len(found - world.edges),
         len(world.tables),
     )
     if found <= world.edges:
-        return _linked(world, round_)
-    return _rounds(_answered_in(replace(world, edges=world.edges | found)), round_ + 1)
+        return world, True, number
+    return _answered_in(replace(world, edges=world.edges | found)), False, number
 
 
 def _program_answers(
@@ -99,25 +113,41 @@ def _program_answers(
 def _collect_answers(
     world: _World,
     items: tuple[tuple[str, ProgramTables], ...],
-    index: int,
     started: float,
-    last_log: float,
 ) -> tuple[tuple[_Start, Held], ...]:
-    if index >= len(items):
-        return ()
-    program, tables = items[index]
-    batch = _program_answers(world, program, tables)
+    """Every program's answers, with a heartbeat at most every five seconds.
+    Iterated, not recursed: a corpus has thousands of programs, and a stack frame
+    each is past the interpreter's limit."""
+    stamps = accumulate(
+        enumerate(items, 1),
+        lambda last, numbered: _heartbeat(numbered, len(items), started, last),
+        initial=started,
+    )
+    return tuple(
+        answer
+        for (program, tables), _ in zip(items, islice(stamps, 1, None), strict=True)
+        for answer in _program_answers(world, program, tables)
+    )
+
+
+def _heartbeat(
+    numbered: tuple[int, tuple[str, ProgramTables]],
+    total: int,
+    started: float,
+    last: float,
+) -> float:
+    index, (program, _) = numbered
     now = time.monotonic()
-    if now - last_log >= 5.0:
-        logger.info(
-            "combine:   answering %s [%d/%d] programs (%.1fs)",
-            program,
-            index + 1,
-            len(items),
-            now - started,
-        )
-        return batch + _collect_answers(world, items, index + 1, started, now)
-    return batch + _collect_answers(world, items, index + 1, started, last_log)
+    if now - last < _ANSWER_HEARTBEAT:
+        return last
+    logger.info(
+        "combine:   answering %s [%d/%d] programs (%.1fs)",
+        program,
+        index,
+        total,
+        now - started,
+    )
+    return now
 
 
 def _answered_in(world: _World) -> _World:
@@ -130,7 +160,7 @@ def _answered_in(world: _World) -> _World:
         len(world.edges),
     )
     started = time.monotonic()
-    pairs = _collect_answers(world, tuple(world.tables.items()), 0, started, started)
+    pairs = _collect_answers(world, tuple(world.tables.items()), started)
     logger.info(
         "combine:   answered %d programs, %d jumps in %.1fs",
         total_programs,

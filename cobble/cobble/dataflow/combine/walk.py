@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Callable
 from functools import reduce
+from itertools import accumulate, count
 from typing import TypeVar
 
 from cobble.dataflow.combine.walk_state import WalkState
@@ -57,22 +58,28 @@ def walked(
     join: Callable[[_C, _C], _C],
     empty: _C,
 ) -> WalkState[_V, _C]:
+    """Steps until the frontier is empty, with a heartbeat at most every few
+    seconds. Iterated, not recursed: a walk across a corpus can take more steps
+    than the interpreter allows stack frames."""
     first = WalkState(frozenset({start}), frozenset({start}), empty)
-    return _walk_loop(first, expand, join, 0, time.monotonic())
+    runs = accumulate(
+        count(1),
+        lambda run, steps: _stepped(run, steps, expand, join),
+        initial=(first, time.monotonic()),
+    )
+    return next(state for state, _ in runs if not state.frontier)
 
 
-def _walk_loop(
-    state: WalkState[_V, _C],
+def _stepped(
+    run: tuple[WalkState[_V, _C], float],
+    steps: int,
     expand: Callable[[_V], tuple[_C, tuple[_V, ...]]],
     join: Callable[[_C, _C], _C],
-    steps: int,
-    last_log: float,
-) -> WalkState[_V, _C]:
-    if not state.frontier:
-        return state
+) -> tuple[WalkState[_V, _C], float]:
+    state, last = run
     stepped = _step(state, expand, join)
     now = time.monotonic()
-    due = now - last_log >= _WALK_HEARTBEAT
-    if due:
-        _log_heartbeat(steps + 1, stepped)
-    return _walk_loop(stepped, expand, join, steps + 1, now if due else last_log)
+    if now - last < _WALK_HEARTBEAT:
+        return stepped, last
+    _log_heartbeat(steps, stepped)
+    return stepped, now

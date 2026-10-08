@@ -12,6 +12,7 @@ from types import MappingProxyType
 import networkx as nx
 from cobble.cli_logging import configure_cli_logging
 from cobble.dataflow.fields.state import State
+from cobble.dataflow.fixpoint.area_need_file import read_rows, table_of
 from cobble.dataflow.fixpoint.fixpoint import stepwise
 from cobble.dataflow.fixpoint.options import AnalysisOptions
 from cobble.dataflow.fixpoint.scope import Scope
@@ -181,14 +182,14 @@ def _tallest(
 
 def report(
     asg_path: Path,
-    scope: Scope,
+    options: AnalysisOptions,
     max_steps: int,
     every: int,
     anonymise: bool,
 ) -> str:
     """The diagnostic report for one member's walk, ``max_steps`` dequeues at most."""
     asg = cached_asg(asg_path.parent, asg_path)
-    cfg, walk = stepwise(asg, AnalysisOptions(scope=scope), max_steps)
+    cfg, walk = stepwise(asg, options, max_steps)
     facts = tuple(_fact(cfg, step, every, max_steps) for step in walk)
     if not facts:
         return "no steps taken: the entry paragraph is not in the CFG\n"
@@ -226,20 +227,48 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=50000)
     parser.add_argument("--every", type=int, default=5000)
     parser.add_argument("--call-targets-only", action="store_true")
+    parser.add_argument(
+        "--narrow-areas",
+        default="",
+        metavar="FILE",
+        help="with --call-targets-only: walk as cobble-dataflow-fixpoint"
+        " --narrow-areas FILE does, tracking only the handed-over bytes the"
+        " area-need file says some program needs",
+    )
     parser.add_argument("--anonymise", action="store_true")
     return parser.parse_args(argv)
+
+
+def _refusal(arguments: argparse.Namespace, path: Path) -> str:
+    if not path.is_file():
+        return f"fields: !! no cached ASG at {path}\n"
+    if arguments.narrow_areas and not arguments.call_targets_only:
+        return "fields: !! --narrow-areas needs --call-targets-only\n"
+    return ""
+
+
+def _options(arguments: argparse.Namespace) -> AnalysisOptions:
+    """The options cobble-dataflow-fixpoint walks this member with, for the same flags."""
+    if arguments.narrow_areas:
+        table = table_of(read_rows(Path(arguments.narrow_areas)))
+        return AnalysisOptions(
+            scope=Scope.NARROW_CALL_TARGETS, areas=table.seen_from(arguments.member)
+        )
+    scope = Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE
+    return AnalysisOptions(scope=scope)
 
 
 def cli(argv: Sequence[str]) -> int:
     arguments = _parsed(argv)
     path = arguments.asg_dir / f"{arguments.member}.json"
-    if not path.is_file():
-        sys.stderr.write(f"fields: !! no cached ASG at {path}\n")
+    refusal = _refusal(arguments, path)
+    if refusal:
+        sys.stderr.write(refusal)
         return 2
     sys.stdout.write(
         report(
             path,
-            Scope.CALL_TARGETS if arguments.call_targets_only else Scope.WHOLE,
+            _options(arguments),
             arguments.max_steps,
             arguments.every,
             arguments.anonymise,
