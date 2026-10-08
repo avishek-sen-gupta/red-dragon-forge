@@ -259,6 +259,11 @@ def _option(statement: ExecCicsStatement, name: str) -> CicsOperand:
     )
 
 
+def transid_operand(statement: ExecCicsStatement) -> CicsOperand:
+    """A CICS command's TRANSID: a literal, a data name, or empty when it has none."""
+    return _option(statement, "TRANSID")
+
+
 def _transid(statement: ExecCicsStatement, index: CellIndex, state: State) -> Fact:
     operand = _option(statement, "TRANSID")
     if operand.is_literal:

@@ -508,6 +508,42 @@ NEXT_TRANSACTION = """\
 """
 
 
+VALUE_TRANSACTION = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGY.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-TRANID            PIC X(4) VALUE 'PETX'.
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS RETURN TRANSID(WS-TRANID)
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+"""
+
+CALLER_NAMED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGR.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-PGM               PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGN' TO WS-PGM.
+           MOVE LK-FIRST TO WS-PGM.
+           EXEC CICS LINK PROGRAM(WS-PGM)
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
 def _combined_with_csd(out: Path, tmp_path: Path, name: str) -> Path:
     csd = tmp_path / "PROGS.CSD"
     csd.write_text(
@@ -577,6 +613,8 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         "PROGO": _slice_callee("PROGO", "LK-SECOND"),
         "PROGD": DYNAMIC_FORWARDER,
         "PROGE": NEXT_TRANSACTION,
+        "PROGY": VALUE_TRANSACTION,
+        "PROGR": CALLER_NAMED,
     }
     full = fixpoint_corpus_with(sources, ())
     parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
@@ -642,12 +680,16 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         (stored_rows.member, stored_rows.entry)
         for path in (stored, targeted)
         for stored_rows in read_rows(path)
-        if stored_rows.member in {"PROGD", "PROGE"}
+        if stored_rows.member in {"PROGD", "PROGE", "PROGR", "PROGY"}
     ] == [
-        ("PROGD", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGD", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGE", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGR", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGY", (((AreaKind.COMMAREA, 0), (0, 16)),)),
         ("PROGD", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGE", (((AreaKind.COMMAREA, 0), (0, 8)),)),
+        ("PROGR", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGY", (((AreaKind.COMMAREA, 0), (0, 8)),)),
     ]
 
 
@@ -688,7 +730,7 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
         "PROGX: 16 bytes needed on entry\n"
         "  by source, each alone:\n"
         "      16  call-target reads\n"
-        "      16  MAIN-PARA line 16 LINK, dynamic, unresolved: every member's need\n"
+        "       8  MAIN-PARA line 16 LINK, dynamic, resolved: PROGN\n"
         "  writes that read more than their target keeps live:\n"
         "    MAIN-PARA line 13: WS-TARGET@working_storage[0:8] keeps 8 bytes live,"
         " reads 16 from LK-FIRST@linkage[0:8], LK-SECOND@linkage[8:16]\n"

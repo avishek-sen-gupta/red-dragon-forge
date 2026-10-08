@@ -11,7 +11,6 @@ from cobble.dataflow.fixpoint.demand_parts import DemandParts
 from cobble.dataflow.fixpoint.live_write import LiveWrite
 from cobble.dataflow.fixpoint.liveness import live_sets, needed_sources, strong
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
-from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_memory.field_extent import FieldExtent
 
 _Sets = tuple[frozenset[FieldExtent], ...]
@@ -47,36 +46,50 @@ def _named(table: AreaTable, callee: str) -> str:
     return f"{callee}, outside the corpus: every byte"
 
 
-def _place(cfg: Cfg, node: str) -> str:
-    found = cfg.node(node)
-    return f"{found.paragraph} line {found.span.line_start}"
+def _place(program: PreparedProgram, node: str) -> str:
+    return program.places.at(program.graph.order.index(node))
 
 
-def _site_label(cfg: Cfg, table: AreaTable, node: str, site: CallSite) -> str:
-    return f"{_place(cfg, node)} {cfg.node(node).transfer.removeprefix('CICS_')}, {_charged(table, node, site)}"
+def _site_label(
+    program: PreparedProgram, table: AreaTable, node: str, site: CallSite
+) -> str:
+    return f"{_place(program, node)} {program.places.transfer(node)}, {_charged(table, node, site)}"
 
 
 def _sources(
-    program: PreparedProgram, cfg: Cfg, table: AreaTable
-) -> tuple[tuple[str, DemandParts], ...]:
+    program: PreparedProgram, table: AreaTable
+) -> tuple[tuple[str, DemandParts, AreaTable], ...]:
     parts = program.parts
     return (
         *(
-            (("call-target reads", DemandParts(local=parts.local)),)
+            (("call-target reads", DemandParts(local=parts.local), table),)
             if parts.local
             else ()
         ),
         *(
             (
-                _site_label(cfg, table, node, site),
+                _site_label(program, table, node, site),
                 DemandParts(entry=((node, site, slots),)),
+                table,
             )
             for node, site, slots in parts.entry
         ),
-        *(
-            (("callers' read-back at exits", DemandParts(back=parts.back)),)
-            if parts.back
-            else ()
+        *(_read_backs(parts, table) if parts.back else ()),
+    )
+
+
+def _read_backs(
+    parts: DemandParts, table: AreaTable
+) -> tuple[tuple[str, DemandParts, AreaTable], ...]:
+    """What every caller reads back, and the part of it that calls no definition
+    resolved read back -- charged to every member, whoever its callers are."""
+    back = DemandParts(back=parts.back)
+    return (
+        ("callers' read-back at exits, all of it", back, table),
+        (
+            "  of which after unresolved dynamic calls, charged to every member",
+            back,
+            table.backed_by(table.dynamic_back),
         ),
     )
 
@@ -139,17 +152,18 @@ def _wider(write: LiveWrite, kept: int, read: tuple[FieldExtent, ...]) -> int:
 
 
 def _widening_line(
-    cfg: Cfg, found: tuple[int, str, LiveWrite, int, tuple[FieldExtent, ...]]
+    program: PreparedProgram,
+    found: tuple[int, str, LiveWrite, int, tuple[FieldExtent, ...]],
 ) -> str:
     _, node, write, kept, read = found
     held = "" if strong(write) else ", may keep its old bytes so all stay live"
     return (
-        f"    {_place(cfg, node)}: {extent_text(write.target)} keeps {kept} bytes live{held},"
+        f"    {_place(program, node)}: {extent_text(write.target)} keeps {kept} bytes live{held},"
         f" reads {_bytes(read)} from {', '.join(ranked[2] for ranked in sorted((one.region.value, one.start, extent_text(one)) for one in read))}"
     )
 
 
-def explained(program: PreparedProgram, cfg: Cfg, table: AreaTable) -> str:
+def explained(program: PreparedProgram, table: AreaTable) -> str:
     """The member's entry need; what each demand source alone pins of it; and the
     writes whose sources need more bytes than their target keeps live, widest first."""
     seen = table.seen_from(program.member)
@@ -162,11 +176,11 @@ def explained(program: PreparedProgram, cfg: Cfg, table: AreaTable) -> str:
             f"{program.member}: {_entry_bytes(program, sets)} bytes needed on entry",
             "  by source, each alone:",
             *(
-                f"  {_alone(program, seen, parts):6}  {label}"
-                for label, parts in _sources(program, cfg, seen)
+                f"  {_alone(program, charged, parts):6}  {label}"
+                for label, parts, charged in _sources(program, seen)
             ),
             "  writes that read more than their target keeps live:",
-            *(_widening_line(cfg, one) for one in widest),
+            *(_widening_line(program, one) for one in widest),
             "",
         )
     )

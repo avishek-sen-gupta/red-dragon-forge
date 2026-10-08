@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import reduce
 from itertools import groupby
 from operator import itemgetter
@@ -16,6 +16,8 @@ from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
 from cobble.dataflow.fixpoint.call_site import CallSite
 from cobble.dataflow.fixpoint.fixpoint import entry_of, program_graph
 from cobble.dataflow.fixpoint.liveness import graph_of, live_sets
+from cobble.dataflow.fixpoint.local_sites import local_sites
+from cobble.dataflow.fixpoint.places import places_of
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.target_site import Sites
 from cobble.dataflow.jumps.discover import (
@@ -30,21 +32,35 @@ from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent
 
 
-def prepared(member: str, asg: CobolASG, layout: ProgramLayout) -> PreparedProgram:
-    """Everything the rounds need, built from the ASG once."""
+def prepared(
+    member: str, asg: CobolASG, layout: ProgramLayout, programs: Mapping[str, str]
+) -> PreparedProgram:
+    """Everything the rounds and a report need, built from the ASG once.
+    ``programs`` maps a transaction id to the program the CSD runs for it."""
     cfg, statements = program_graph(asg)
     index = layout.index
+    parts = demand_parts(asg, cfg, statements, index)
+    returning = tuple(
+        (node.id, call_site(node), call_areas(node, index))
+        for node in cfg.nodes
+        if node.transfer in CALL_TRANSFERS and returns(node)
+    )
+    entry = entry_of(asg)
+    calls = (
+        *((node, site) for node, site, _ in parts.entry),
+        *((node, site) for node, site, _ in returning),
+    )
     return PreparedProgram(
         member=member,
         graph=graph_of(cfg, statements, index),
-        parts=demand_parts(asg, cfg, statements, index),
-        entry=entry_of(asg),
+        parts=parts,
+        entry=entry,
         received=received_slots(asg, index),
-        returning=tuple(
-            (node.id, call_site(node), call_areas(node, index))
-            for node in cfg.nodes
-            if node.transfer in CALL_TRANSFERS and returns(node)
+        returning=returning,
+        sites=local_sites(
+            cfg, statements, index, layout.records, entry, calls, programs
         ),
+        places=places_of(cfg, tuple(sorted({node for node, _ in calls}))),
     )
 
 
@@ -140,4 +156,5 @@ def resolved(found: Sequence[AreaFound], receives: Receives, sites: Sites) -> Ar
         ),
         receives,
         sites,
+        dynamic.back,
     )
