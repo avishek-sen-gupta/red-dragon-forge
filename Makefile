@@ -110,9 +110,11 @@ db2-seed:
 db2-status:
 	@FORGE_ROOT=$(CURDIR) SQUALL_DIR=squall sh -c '. ./bridge-env.sh >/dev/null 2>&1; . squall/db2/dsn-env.sh >/dev/null 2>&1; uv run --no-sync python -m red_dragon_forge.db2_status'
 
-# Rebind DB2's TCP listener without re-initialising. Under emulation the listener
-# can occasionally drop (port 50000 stops accepting inside the container) while a
-# local connect still works — tests then fail with SQL30081N. This rebinds it.
+# Restart the Db2 instance without re-initialising. Under emulation db2sysc's
+# private memory grows past INSTANCE_MEMORY until the VM kills it, leaving the
+# container up and tests failing with SQL30081N (docs/db2-container-memory.md).
+# A restart revives a killed instance and resets the growth; the forge test hook
+# runs it before the root suite.
 db2-restart:
 	docker exec squall-db2 bash -lc "su - db2inst1 -c 'db2 force applications all >/dev/null 2>&1; db2stop force; db2start'"
 	@echo "DB2 restarted; verifying TCP listener..."

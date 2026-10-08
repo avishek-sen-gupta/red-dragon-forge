@@ -82,7 +82,7 @@ repos:
 
       - id: tests-forge
         name: red-dragon-forge test suite (root and cobble)
-        entry: bash -c 'make test PYTEST_ARGS="-x -q" && cd cobble && uv run --no-sync python -m pytest -x -q'
+        entry: bash -c 'make db2-restart && make test PYTEST_ARGS="-x -q" && cd cobble && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
         files: ^(red_dragon_forge/|cicada/|squall/|cobble/|vendor/)

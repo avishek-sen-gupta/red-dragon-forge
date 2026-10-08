@@ -37,8 +37,11 @@ docker exec squall-db2 bash -lc \
 make db2-restart
 ```
 
-262144 pages is 1 GiB, ample for these test databases. The setting lives in the
-container's `dbm cfg`, so `make db2-clean` or a rebuilt container loses it.
+262144 pages is 1 GiB, ample for these test databases. `squall/db2/custom-init`
+sets it when a fresh volume is initialised, so `make db2-clean` no longer loses it.
+The `dbm cfg` lives in the `squall_db2_data` volume: a volume created before the
+init script set the cap stays `AUTOMATIC` until the `db2 update dbm cfg` line above
+is run against it once. `db2 get dbm cfg | grep INSTANCE_MEMORY` shows which you have.
 
 **The cap alone is still not sufficient** — it bounds database manager shared
 memory, not agent private memory or the process's total footprint, which is what
@@ -48,4 +51,6 @@ resident / ~9 GiB mapped after 23 hours, with the container still reporting
 see bead forge-zka.
 
 `make db2-restart` revives a killed instance in about fifteen seconds without a
-re-init, which is the fast way out when it happens mid-run.
+re-init, and resets the private-memory growth the cap does not bound. The forge
+test hook runs it before the root suite, so a commit never inherits a session's
+worth of growth.
