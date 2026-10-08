@@ -29,6 +29,7 @@ from cobble.dataflow.jumps.discover import (
     call_site,
     demand_parts,
     received_slots,
+    retrieved_areas,
     returns,
 )
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFERS
@@ -66,13 +67,20 @@ def prepared(
         entry=entry,
         received=received_slots(asg, index),
         returning=returning,
+        retrieving=tuple(
+            (node.id, areas)
+            for node in cfg.nodes
+            if node.id in statements
+            for areas in (retrieved_areas(statements[node.id], index),)
+            if areas
+        ),
         sites=tuple(
-            (node, answer.callees) for node, answer in answers if answer.callees
+            (node, answer.callees) for node, answer in answers if answer.resolved
         ),
         unresolved=tuple(
             (node, replace(answer, definitions=()))
             for node, answer in answers
-            if not answer.callees
+            if not answer.resolved
         ),
         places=places,
     )
@@ -86,6 +94,7 @@ def _site_rows(
     return tuple(
         SiteRow(
             member=program.member,
+            resolved=answer.resolved,
             place=program.places.at(rank[node]),
             transfer=program.places.transfer(node),
             operand=answer.operand,
@@ -119,10 +128,13 @@ def need_found(program: PreparedProgram, table: AreaTable) -> AreaFound:
         entry=reduce(
             joined,
             (
-                AreaNeed(entry=((slot, bounds),))
-                for slot, area in program.received
-                for bounds in (relative(at_entry, area),)
-                if bounds
+                *(
+                    AreaNeed(entry=((slot, bounds),))
+                    for slot, area in program.received
+                    for bounds in (relative(at_entry, area),)
+                    if bounds
+                ),
+                *_retrieve_needs(program, sets, rank),
             ),
             AreaNeed(),
         ),
@@ -138,12 +150,40 @@ def need_found(program: PreparedProgram, table: AreaTable) -> AreaFound:
     )
 
 
+def _retrieve_needs(
+    program: PreparedProgram,
+    sets: tuple[frozenset[FieldExtent], ...],
+    rank: Mapping[str, int],
+) -> tuple[AreaNeed, ...]:
+    """The bytes of each RETRIEVE's INTO area live right after it: what a START
+    handing this program its FROM area must supply."""
+    return tuple(
+        AreaNeed(entry=((slot, bounds),))
+        for node, areas in program.retrieving
+        for after in (_after(program, sets, rank[node]),)
+        for slot, area in areas
+        for bounds in (relative(after, area),)
+        if bounds
+    )
+
+
+def receiving_slots(program: PreparedProgram) -> tuple[AreaSlot, ...]:
+    """Every slot the program is handed an area in: on entry, and by RETRIEVE."""
+    return tuple(
+        sorted(
+            {
+                *(slot for slot, _ in program.received),
+                *(pair[0] for one in program.retrieving for pair in one[1]),
+            }
+        )
+    )
+
+
 def _reached(table: AreaTable, node: str, site: CallSite) -> tuple[CallSite, ...]:
-    """The call as each program it can reach, or as itself when none is known."""
-    callees = table.callees_at(node, site)
-    if not callees:
+    """The call as each program it can reach, or as itself when they are unknown."""
+    if not table.resolved_at(node, site):
         return (site,)
-    return tuple(CallSite(callee, site.kind) for callee in callees)
+    return tuple(CallSite(callee, site.kind) for callee in table.callees_at(node, site))
 
 
 def _after(

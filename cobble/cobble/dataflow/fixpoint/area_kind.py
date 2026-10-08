@@ -4,7 +4,9 @@ from enum import StrEnum
 
 
 class AreaKind(StrEnum):
-    """LINK and XCTL hand over a commarea; CALL hands over its USING arguments."""
+    """LINK and XCTL hand over a commarea; CALL hands over its USING arguments;
+    START hands over its FROM area, which the started program RETRIEVEs."""
 
     COMMAREA = "commarea"
     USING = "using"
+    RETRIEVED = "retrieved"

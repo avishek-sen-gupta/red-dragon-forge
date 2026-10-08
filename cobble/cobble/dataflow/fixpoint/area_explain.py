@@ -38,7 +38,7 @@ def _alone(program: PreparedProgram, table: AreaTable, parts: DemandParts) -> in
 
 
 def _resolution(table: AreaTable, node: str, site: CallSite) -> SiteResolution:
-    if not table.callees_at(node, site):
+    if not table.resolved_at(node, site):
         return SiteResolution.UNRESOLVED
     if site.dynamic:
         return SiteResolution.RESOLVED
@@ -72,7 +72,7 @@ def _sites(program: PreparedProgram, table: AreaTable) -> tuple[ExplainSite, ...
 def _reasons(
     program: PreparedProgram, table: AreaTable, node: str, site: CallSite
 ) -> tuple[str, ...]:
-    if table.callees_at(node, site):
+    if table.resolved_at(node, site):
         return ()
     return tuple(doubt.value for doubt in dict(program.unresolved)[node].doubts)
 

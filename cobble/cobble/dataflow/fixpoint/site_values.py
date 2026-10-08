@@ -102,9 +102,14 @@ def _after(held: ValueSet, write: Write, operand: FieldExtent) -> ValueSet:
 def _unknown(write: Write) -> ValueSet:
     """Why a write that does not replace the operand with literals leaves it
     unknown: the reasons its own values carry -- inbound-linkage for a copy out of
-    the commarea -- or, when it carries none, that it is not a literal."""
-    if write.values.reasons:
-        return ValueSet(reasons=write.values.reasons)
+    the commarea, from-callee for an argument a call may overwrite -- and never
+    uninitialised. The writes are computed without a state, so a copy from this
+    program's own storage reports its source unwritten; the source may well be
+    written, and the combine follows the copy to whatever was, so such a write
+    is not a literal rather than storage nothing wrote."""
+    reasons = write.values.reasons - {UnresolvedReason.UNINITIALISED}
+    if reasons:
+        return ValueSet(reasons=reasons)
     return _UNKNOWN
 
 

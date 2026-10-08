@@ -553,10 +553,84 @@ CALLER_NAMED = """\
 """
 
 
+STARTER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGS.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-COMMAREA          PIC X(16).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA          PIC X(16).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA TO WS-COMMAREA.
+           EXEC CICS START TRANSID('PSTX') FROM(WS-COMMAREA)
+               LENGTH(16) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+STARTED = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGG.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-DATA.
+           05  WS-NOTE          PIC X(8).
+           05  WS-NEXT          PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS RETRIEVE INTO(WS-DATA) LENGTH(16) END-EXEC.
+           EXEC CICS XCTL PROGRAM(WS-NEXT) END-EXEC.
+"""
+
+
+SOME_PATHS = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGUI.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-PGM               PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           IF LK-FIRST = 'A'
+               MOVE 'PROGN' TO WS-PGM
+           END-IF.
+           EXEC CICS LINK PROGRAM(WS-PGM)
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+COPIED_NAME = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGCP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-OTHER             PIC X(8).
+       01  WS-PGM               PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGN' TO WS-OTHER.
+           MOVE WS-OTHER TO WS-PGM.
+           EXEC CICS LINK PROGRAM(WS-PGM)
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
 def _combined_with_csd(out: Path, tmp_path: Path, name: str) -> Path:
     csd = tmp_path / "PROGS.CSD"
     csd.write_text(
-        "DEFINE TRANSACTION(PETX) PROGRAM(PROGN) GROUP(TEST)\n", encoding="utf-8"
+        "DEFINE TRANSACTION(PETX) PROGRAM(PROGN) GROUP(TEST)\n"
+        "DEFINE TRANSACTION(PSTX) PROGRAM(PROGG) GROUP(TEST)\n",
+        encoding="utf-8",
     )
     config = tmp_path / f"{name}.toml"
     config.write_text(
@@ -624,6 +698,10 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         "PROGE": NEXT_TRANSACTION,
         "PROGY": VALUE_TRANSACTION,
         "PROGR": CALLER_NAMED,
+        "PROGS": STARTER,
+        "PROGG": STARTED,
+        "PROGUI": SOME_PATHS,
+        "PROGCP": COPIED_NAME,
     }
     full = fixpoint_corpus_with(sources, ())
     parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
@@ -689,15 +767,24 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         (stored_rows.member, stored_rows.entry)
         for path in (stored, targeted)
         for stored_rows in read_rows(path)
-        if stored_rows.member in {"PROGD", "PROGE", "PROGR", "PROGY"}
+        if stored_rows.member
+        in {"PROGCP", "PROGD", "PROGE", "PROGG", "PROGR", "PROGS", "PROGUI", "PROGY"}
     ] == [
+        ("PROGCP", (((AreaKind.COMMAREA, 0), (0, 16)),)),
         ("PROGD", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGE", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGG", (((AreaKind.RETRIEVED, 0), (8, 16)),)),
         ("PROGR", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGS", (((AreaKind.COMMAREA, 0), (8, 16)),)),
+        ("PROGUI", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGY", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGCP", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGD", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGE", (((AreaKind.COMMAREA, 0), (0, 8)),)),
+        ("PROGG", (((AreaKind.RETRIEVED, 0), (8, 16)),)),
         ("PROGR", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGS", (((AreaKind.COMMAREA, 0), (8, 16)),)),
+        ("PROGUI", (((AreaKind.COMMAREA, 0), (0, 8)),)),
         ("PROGY", (((AreaKind.COMMAREA, 0), (0, 8)),)),
     ]
 
@@ -813,6 +900,7 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
     } == {
         "PROGR": SiteRow(
             member="PROGR",
+            resolved=False,
             place="MAIN-PARA line 14",
             transfer="LINK",
             operand="WS-PGM@working_storage[0:8]",
@@ -834,6 +922,7 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
         ),
         "PROGX": SiteRow(
             member="PROGX",
+            resolved=True,
             place="MAIN-PARA line 16",
             transfer="LINK",
             operand="WS-PGM@working_storage[8:16]",
