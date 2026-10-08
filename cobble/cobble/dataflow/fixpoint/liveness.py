@@ -16,7 +16,6 @@ from cobble.dataflow.fixpoint.live_graph import LiveGraph
 from cobble.dataflow.fixpoint.live_write import LiveWrite
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_memory.field_extent import FieldExtent, Precision
-from cobol_memory.region_id import RegionId
 
 
 @dataclass(frozen=True)
@@ -63,21 +62,15 @@ def entered(
 def _read(write: LiveWrite, exiting: frozenset[FieldExtent]) -> tuple[FieldExtent, ...]:
     """The source bytes a write needs, given what is live after it.
 
-    A byte copy out of LINKAGE needs only the source bytes lined up with the live
-    target bytes. Only LINKAGE: a miss there always answers inbound-linkage, so no
-    reason depends on the source bytes left out. Elsewhere a miss's reasons look at
-    every byte of the source, which is why the whole source stays live.
+    A byte-for-byte copy needs only the source bytes lined up with the live
+    target bytes. The bytes left out cannot affect any live byte downstream.
     """
     if not write.copy_start:
         return write.sources
     return tuple(
         piece
         for source in write.sources
-        for piece in (
-            _lined_up(write.target, source, write.copy_start[0], exiting)
-            if source.region is RegionId.LINKAGE
-            else (source,)
-        )
+        for piece in _lined_up(write.target, source, write.copy_start[0], exiting)
     )
 
 
