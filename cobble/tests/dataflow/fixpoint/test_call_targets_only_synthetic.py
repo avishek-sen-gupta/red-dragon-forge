@@ -1,5 +1,6 @@
 """A run restricted to call targets, compiled by the real bridge, against a full run."""
 
+import logging
 import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -937,3 +938,46 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
             ),
         ),
     }
+
+
+def test_a_round_cap_stops_early_and_says_how_many_members_it_left(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    full = fixpoint_corpus_with(
+        {"PROGH": CHAIN_START, "PROGI": CHAIN_MIDDLE, "PROGJ": CHAIN_END}, ()
+    )
+    parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
+    common = ["--asg-dir", str(parsed), "--extents", str(extents)]
+    capped, settled = tmp_path / "capped.jsonl", tmp_path / "settled.jsonl"
+
+    with caplog.at_level(logging.WARNING):
+        codes = (
+            area_cli([*common, "--out", str(capped), "--max-rounds", "1"]),
+            area_cli([*common, "--out", str(settled)]),
+        )
+
+    assert codes == (0, 0)
+    assert [
+        {row.member: row.entry for row in read_rows(path)} for path in (capped, settled)
+    ] == [
+        {
+            "PROGH": (),
+            "PROGI": (),
+            "PROGJ": (((AreaKind.COMMAREA, 0), (8, 16)),),
+        },
+        {
+            "PROGH": (),
+            "PROGI": (((AreaKind.COMMAREA, 0), (8, 16)),),
+            "PROGJ": (((AreaKind.COMMAREA, 0), (8, 16)),),
+        },
+    ]
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    ] == [
+        "area need: stopped after 1 round with 1 member still to walk:"
+        " the need may be short of what a settled run finds"
+    ]

@@ -63,6 +63,7 @@ cobble-dataflow-fixpoint --asg-dir ASG_DIR --out-dir OUT_DIR --extents EXTENTS
 | `--narrow-areas` | with `--call-targets-only`: of each handed-over area, track only the bytes the area-need file says some program reads |
 | `--force` | discard every finished member directory and analyse again |
 | `--max-workers` | worker processes (default 4) |
+| `--max-rounds` | stop after N rounds even if the need has not settled (default 0: until it settles). A capped run warns how many members were still to walk; its need can miss bytes that only arrive through longer call chains, and a fixpoint narrowed by it can then miss candidates the settled need would keep |
 
 The walk runs over each program's CFG from `program_cfg`, seeded from the `VALUE` image of the
 member's records. Before walking, it removes a paragraph end's `FALLTHRU` edge unless control
@@ -255,7 +256,7 @@ streamed, so memory stays near one program's declarations.
 ## cobble-dataflow-area-need
 
 ```
-cobble-dataflow-area-need --asg-dir DIR --extents EXTENTS --out OUT [--max-workers N]
+cobble-dataflow-area-need --asg-dir DIR --extents EXTENTS --out OUT [--max-workers N] [--max-rounds N]
     [--config CONFIG] [--fixpoint-dir DIR --combined-dir DIR]
     [--sites FILE] [--explain MEMBER] [--explain-over BYTES]
 ```
@@ -272,6 +273,7 @@ entry (`entry`), and which its callers read back after it returns (`back`). The 
 | `--explain` | after the rounds, write a JSONL row to stdout for MEMBER: what each demand source accounts for, and the writes that make more live than their target keeps |
 | `--explain-over` | the same for every member needing at least BYTES on entry |
 | `--max-workers` | worker processes (default 4) |
+| `--max-rounds` | stop after N rounds even if the need has not settled (default 0: until it settles). A capped run warns how many members were still to walk; its need can miss bytes that only arrive through longer call chains, and a fixpoint narrowed by it can then miss candidates the settled need would keep |
 
 A call naming its program by a literal is charged with that callee's row; a callee not in the
 corpus is charged every byte. A `START` hands over its `FROM` area like a `LINK` hands over a

@@ -362,11 +362,17 @@ def _dependencies(receives: Receives, sites: Sites, calls: _Calls) -> _Dependenc
 
 
 def _settled(
-    parents: tuple[Connection, ...], total: int, combined: Sites, sites_out: str
+    parents: tuple[Connection, ...],
+    total: int,
+    combined: Sites,
+    sites_out: str,
+    max_rounds: int,
 ) -> AreaTable:
-    """Rounds until no member is dirty. Every member is walked in the first; after
-    that only those whose callees' entry rows, own back row, or -- with a site
-    nothing resolved -- the union of every member's entry need changed."""
+    """Rounds until no member is dirty, or until ``max_rounds`` when it is positive.
+    Every member is walked in the first; after that only those whose callees'
+    entry rows, own back row, or -- with a site nothing resolved -- the union of
+    every member's entry need changed. A run stopped by the cap says so: its table
+    can be short of the settled one by what longer call chains would have added."""
     receives, local, calls = _received(parents, sites_out)
     dependencies = _dependencies(receives, (*local, *combined), calls)
     start = _Progress(
@@ -384,7 +390,26 @@ def _settled(
         lambda progress, number: _round(progress, number, parents, dependencies),
         initial=start,
     )
-    return next(progress for progress in rounds if not progress.dirty).table
+    number, last = next(
+        (number, progress)
+        for number, progress in enumerate(rounds)
+        if not progress.dirty or 0 < max_rounds <= number
+    )
+    _capped(number, last.dirty)
+    return last.table
+
+
+def _capped(rounds: int, dirty: frozenset[str]) -> None:
+    if not dirty:
+        return
+    logger.warning(
+        "area need: stopped after %d %s with %d %s still to walk:"
+        " the need may be short of what a settled run finds",
+        rounds,
+        "round" if rounds == 1 else "rounds",
+        len(dirty),
+        "member" if len(dirty) == 1 else "members",
+    )
 
 
 def _programs(arguments: argparse.Namespace) -> Mapping[str, str]:
@@ -423,7 +448,13 @@ def computed(arguments: argparse.Namespace, out: TextIO) -> AreaTable:
         return AreaTable()
     programs = _programs(arguments)
     shards = _started(jobs, arguments.max_workers, programs)
-    table = _settled(shards[0], len(jobs), _sites(arguments, programs), arguments.sites)
+    table = _settled(
+        shards[0],
+        len(jobs),
+        _sites(arguments, programs),
+        arguments.sites,
+        arguments.max_rounds,
+    )
     request = ExplainRequest(table, arguments.explain_over, _named_members(arguments))
     _report(shards[0], request, out)
     _stopped(shards)
@@ -497,6 +528,15 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--extents", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--max-workers", type=worker_count, default=4)
+    parser.add_argument(
+        "--max-rounds",
+        type=int,
+        default=0,
+        metavar="N",
+        help="stop after N rounds even if the need has not settled, warning how many"
+        " members were still to walk; 0, the default, runs until it settles. A capped"
+        " need can miss bytes that only arrive through longer call chains",
+    )
     _reporting_arguments(parser)
     _resolution_arguments(parser)
     return parser.parse_args(argv)
