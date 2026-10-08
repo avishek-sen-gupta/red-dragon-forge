@@ -171,6 +171,8 @@ against the corpus's program names.
 | `over-budget` | more than 32 values reached it; the first 32 in sorted order are kept |
 | `incomplete-walk` | the member did not settle |
 | `unmodelled` | a statement with no transfer of its own may have written the bytes |
+| `hop-limit` | combine only: a walk stopped at `--max-hops` crossings |
+| `readback-skipped` | combine only: `--skip-readbacks` left a `LINK` write-back unfollowed |
 
 The bridge does not serialise nested programs, so a `CALL` inside a nested `PROGRAM-ID` is not
 seen.
@@ -198,6 +200,7 @@ seen.
 
 ```
 cobble-dataflow-combine --config CONFIG --fixpoint-dir DIR --out-dir DIR (--all | --member NAME [NAME ...])
+    [--max-hops N] [--skip-readbacks]
 ```
 
 | Flag | Meaning |
@@ -207,6 +210,8 @@ cobble-dataflow-combine --config CONFIG --fixpoint-dir DIR --out-dir DIR (--all 
 | `--out-dir` | where `targets.jsonl` and `links.jsonl` go |
 | `--all` | link every program with results |
 | `--member` | link only these (case-insensitive). One with no results refuses the run |
+| `--max-hops` | program crossings one walk may make: into a caller, into a `LINK`ed callee's exits, or into a `START`er. A walk that would cross more stops there, keeps what it found, and its target gains `hop-limit`. Default: no limit. Each walk is then bounded by the programs within N crossings, not by the corpus |
+| `--skip-readbacks` | do not walk into a `LINK`ed program for bytes it may have written back. Those bytes give `readback-skipped` |
 
 Lets values cross programs, in rounds, until the set of links stops growing. Where a target
 field lies inside the bytes handed over on a link, those bytes hold the callee's name. A target

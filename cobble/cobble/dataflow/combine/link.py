@@ -1,6 +1,7 @@
 """Link programs: values cross programs over a call graph grown from those values, in rounds."""
 
 import logging
+import sys
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -35,11 +36,16 @@ _ANSWER_HEARTBEAT = 5.0
 
 _NAMED = frozenset({JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL})
 _OUTSIDE = Held(reasons=frozenset({UnresolvedReason.OUTSIDE_ANALYSED_SET}))
+_HOP_LIMIT = Held(reasons=frozenset({UnresolvedReason.HOP_LIMIT}))
+_READBACK_SKIPPED = Held(reasons=frozenset({UnresolvedReason.READBACK_SKIPPED}))
 _INBOUND = Held(reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}))
 _FROM_CALLEE = Held(reasons=frozenset({UnresolvedReason.FROM_CALLEE}))
 _NOT_A_LITERAL = Held(reasons=frozenset({UnresolvedReason.NOT_A_LITERAL}))
-_Vertex = tuple[str, str, ByteRange]
+_Landing = tuple[str, str, ByteRange]
+_Crossing = tuple[Held, tuple[_Landing, ...]]
+_Vertex = tuple[str, str, ByteRange, int]
 _Expansion = tuple[Held, tuple[_Vertex, ...]]
+UNLIMITED_HOPS = sys.maxsize
 _Start = tuple[str, str, Fact]
 _EdgeOrder = tuple[str, str, str, int, str, str, int, int, str, int, int, bool]
 
@@ -53,10 +59,12 @@ class _World:
     transactions: Mapping[str, str]
     resolver: Resolve
     index: EdgeIndex
+    max_hops: int
+    readbacks: bool
     answers: Mapping[_Start, Held] = MappingProxyType({})
 
 
-_Follow = Callable[[_World, str, Stop], _Expansion]
+_Follow = Callable[[_World, str, Stop], _Crossing]
 _Callees = Callable[[_World, str, Jump], tuple[tuple[str, bool], ...]]
 
 
@@ -66,6 +74,8 @@ def link(
     transactions: Mapping[str, str],
     outside: OutsideJumps,
     resolver: Resolve = resolve,
+    max_hops: int = UNLIMITED_HOPS,
+    readbacks: bool = True,
 ) -> Linked:
     world = _World(
         tables,
@@ -75,6 +85,8 @@ def link(
         transactions,
         resolver,
         edge_index(frozenset()),
+        max_hops,
+        readbacks,
     )
     return _rounds(_answered_in(world, 1))
 
@@ -241,7 +253,7 @@ def _fact_held(
     if not fact.extent:
         return Held(values=frozenset(fact.values), reasons=frozenset(fact.reasons))
     at = byte_range(fact.extent, program).bytes_only()
-    return _held((program, node, at), label, closures)
+    return _held((program, node, at, 0), label, closures)
 
 
 def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> ByteRange:
@@ -261,26 +273,29 @@ def _held(start: _Vertex, label: str, closures: Closures[_Vertex, Held]) -> Held
     return held_join(closures.of(start, label), Held(cycled=closures.revisits(start)))
 
 
-def _joined(left: _Expansion, right: _Expansion) -> _Expansion:
+def _joined(left: _Crossing, right: _Crossing) -> _Crossing:
     return held_join(left[0], right[0]), left[1] + right[1]
 
 
-def _ending(held: Held) -> _Expansion:
+def _ending(held: Held) -> _Crossing:
     return held, ()
 
 
 def _expanded(world: _World, vertex: _Vertex) -> _Expansion:
-    program, node, at = vertex
+    program, node, at, hops = vertex
     found = world.resolver(world.tables[program], node, at)
-    held, nexts = reduce(
+    held, crossed = reduce(
         _joined,
         (_FOLLOW[stop.kind](world, program, stop) for stop in found.stops),
         _ending(Held(values=found.values)),
     )
-    return held, tuple((p, n, a.bytes_only()) for p, n, a in nexts)
+    if crossed and hops >= world.max_hops:
+        return held_join(held, _HOP_LIMIT), ()
+    counted = hops + 1 if world.max_hops < UNLIMITED_HOPS else hops
+    return held, tuple((p, n, a.bytes_only(), counted) for p, n, a in crossed)
 
 
-def _unknown(world: _World, program: str, stop: Stop) -> _Expansion:
+def _unknown(world: _World, program: str, stop: Stop) -> _Crossing:
     return _ending(Held(reasons=frozenset(stop.reasons)))
 
 
@@ -291,7 +306,7 @@ def _outside_callers(world: _World, program: str) -> Held:
     return replace(_OUTSIDE, outside=frozenset(callers))
 
 
-def _from_caller(edge: Edge, stop: Stop) -> _Expansion:
+def _from_caller(edge: Edge, stop: Stop) -> _Crossing:
     if not edge.callee_window.covers(stop.at):
         return _ending(_INBOUND)
     at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
@@ -310,7 +325,7 @@ def _with_edges(world: _World, edges: frozenset[Edge]) -> _World:
     return replace(world, edges=edges, index=edge_index(edges))
 
 
-def _received(world: _World, program: str, stop: Stop) -> _Expansion:
+def _received(world: _World, program: str, stop: Stop) -> _Crossing:
     into = world.index.into.get((program, stop.param), ())
     from_callers = reduce(
         _joined, (_from_caller(e, stop) for e in into), _ending(Held())
@@ -321,14 +336,20 @@ def _received(world: _World, program: str, stop: Stop) -> _Expansion:
     )
 
 
-def _returned(world: _World, program: str, stop: Stop) -> _Expansion:
+def _read_back(world: _World, program: str, stop: Stop) -> _Crossing:
+    if not world.readbacks:
+        return _ending(_READBACK_SKIPPED)
+    return _returned(world, program, stop)
+
+
+def _returned(world: _World, program: str, stop: Stop) -> _Crossing:
     out = world.index.out.get((program, stop.node, stop.param), ())
     if not out:
         return _ending(_FROM_CALLEE)
     return reduce(_joined, (_left_by(world, e, stop) for e in out), _ending(Held()))
 
 
-def _left_by(world: _World, edge: Edge, stop: Stop) -> _Expansion:
+def _left_by(world: _World, edge: Edge, stop: Stop) -> _Crossing:
     exits = _exits(world, edge.callee)
     if not exits or not edge.caller_window.covers(stop.at):
         return _ending(_FROM_CALLEE)
@@ -344,14 +365,14 @@ def _exits(world: _World, program: str) -> tuple[Jump, ...]:
     )
 
 
-def _from_starter(edge: Edge, stop: Stop) -> _Expansion:
+def _from_starter(edge: Edge, stop: Stop) -> _Crossing:
     if not edge.callee_window.covers(stop.at):
         return _ending(_NOT_A_LITERAL)
     at = _shifted(stop.at, edge.callee_window, edge.caller_window, edge.caller)
     return Held(), ((edge.caller, edge.node, at),)
 
 
-def _retrieved(world: _World, program: str, stop: Stop) -> _Expansion:
+def _retrieved(world: _World, program: str, stop: Stop) -> _Crossing:
     starts = world.index.started.get((program, stop.node), ())
     if not starts:
         return _ending(_NOT_A_LITERAL)
@@ -361,7 +382,7 @@ def _retrieved(world: _World, program: str, stop: Stop) -> _Expansion:
 _FOLLOW: Mapping[StopKind, _Follow] = {
     StopKind.UNKNOWN: _unknown,
     StopKind.RECEIVED: _received,
-    StopKind.RETURNED: _returned,
+    StopKind.RETURNED: _read_back,
     StopKind.RETRIEVED: _retrieved,
 }
 

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 from cobble.dataflow.combine.callee_areas import CalleeAreas
 from cobble.dataflow.combine.flow import Flow
-from cobble.dataflow.combine.link import link
+from cobble.dataflow.combine.link import UNLIMITED_HOPS, link
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.memo_resolve import MemoResolve
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
@@ -561,3 +561,30 @@ def test_bytes_straddling_the_naming_field_keep_every_value_the_caller_held() ->
         ("B", "A", True),
         ("B", "M", True),
     }
+
+
+def test_a_hop_limit_stops_a_walk_at_that_many_programs_and_says_so() -> None:
+    tables = {
+        "C": caller("C", "Q", "P"),
+        "P": returner("P", "T"),
+        "T": returner("T", "M"),
+    }
+    linked = tuple(
+        link(tables, areas("C", "P", "T"), {}, OutsideJumps(), max_hops=h)
+        for h in (UNLIMITED_HOPS, 2, 1, 0)
+    )
+    assert tuple((_row(run, "T"), _row(run, "P")) for run in linked) == (
+        ((("M", "Q"), (), ()), (("Q", "T"), (), ())),
+        ((("M", "Q"), (), ()), (("Q", "T"), (), ())),
+        ((("M",), ("hop-limit",), ()), (("Q", "T"), (), ())),
+        ((("M",), ("hop-limit",), ()), (("T",), ("hop-limit",), ())),
+    )
+
+
+def test_skipping_readbacks_leaves_a_link_write_back_unfollowed_and_says_so() -> None:
+    tables = {"A": _linker("A"), "W": _writer("Q       ", True)}
+    rows = tuple(
+        _row(link(tables, areas("A", "W"), {}, OutsideJumps(), readbacks=r), "A")
+        for r in (True, False)
+    )
+    assert rows == ((("Q",), (), ()), ((), ("readback-skipped",), ()))
