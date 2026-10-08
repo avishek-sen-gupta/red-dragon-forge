@@ -9,7 +9,7 @@ import multiprocessing
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from itertools import accumulate, count, pairwise, repeat, takewhile
+from itertools import accumulate, count, repeat, takewhile
 from multiprocessing.connection import Connection, wait
 from multiprocessing.process import BaseProcess
 from pathlib import Path
@@ -33,6 +33,7 @@ from cobble.dataflow.fixpoint.area_needs import (
     resolved,
 )
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
+from cobble.dataflow.fixpoint.area_worklist import callers, dirtied
 from cobble.dataflow.fixpoint.explain_end import ExplainEnd
 from cobble.dataflow.fixpoint.explain_request import ExplainRequest
 from cobble.dataflow.fixpoint.explain_row import ExplainRow
@@ -47,9 +48,10 @@ logger = logging.getLogger(__name__)
 
 _Job = tuple[int, str, tuple[Row, ...], Path]
 _Held = tuple[int, PreparedProgram]
-_Round = tuple[int, AreaTable, int, int]
-_STOP: _Round = (0, AreaTable(), 0, 0)
-_Loaded = tuple[Receives, tuple[str, ...], Sites, tuple[SiteRow, ...]]
+_Round = tuple[int, AreaTable, int, int, frozenset[str]]
+_STOP: _Round = (0, AreaTable(), 0, 0, frozenset())
+_Calls = tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]
+_Loaded = tuple[Receives, tuple[str, ...], Sites, tuple[SiteRow, ...], _Calls]
 _Prepared = tuple[int, PreparedProgram, tuple[SiteRow, ...]]
 
 
@@ -87,7 +89,7 @@ def _logged(program: PreparedProgram) -> PreparedProgram:
 
 
 def _walked(program: PreparedProgram, round_: _Round, done: SharedCount) -> AreaFound:
-    number, table, base, total = round_
+    number, table, base, total, _ = round_
     found = need_found(program, table)
     logger.info(
         "area need round %d: [%d/%d] %s, %d bytes on entry",
@@ -116,7 +118,16 @@ def _receiving(programs: tuple[_Held, ...], rows: tuple[SiteRow, ...]) -> _Loade
             for node, callees in program.sites
         ),
         rows,
+        tuple(
+            (program.member, _named(program), _dynamic_nodes(program))
+            for _, program in programs
+        ),
     )
+
+
+def _dynamic_nodes(program: PreparedProgram) -> tuple[str, ...]:
+    """The call sites that hand over an area and name their program by a data item."""
+    return tuple(node for node, site, _ in program.parts.entry if site.dynamic)
 
 
 def _shard(
@@ -149,7 +160,11 @@ def _handled(
             _explained(programs, request, connection)
         case round_:
             connection.send(
-                tuple(_walked(program, round_, done) for _, program in programs)
+                tuple(
+                    _walked(program, round_, done)
+                    for _, program in programs
+                    if program.member in round_[4]
+                )
             )
 
 
@@ -174,28 +189,65 @@ def _need_bytes(bounds: Slotted) -> int:
     return sum(high - low for _, one in bounds for low, high in pairs_of(one))
 
 
+@dataclass(frozen=True)
+class _Progress:
+    """The table so far, each member's last report, the members to walk next, and
+    how many walks every round before has made, for numbering the log."""
+
+    table: AreaTable
+    found: Mapping[str, AreaFound]
+    dirty: frozenset[str]
+    walked: int
+
+
+@dataclass(frozen=True)
+class _Dependencies:
+    """What the rounds need besides the reports: what members receive, the sites
+    resolved, who can reach each program, and who has a site nothing resolved."""
+
+    receives: Receives
+    sites: Sites
+    callers_of: Mapping[str, frozenset[str]]
+    unresolved: frozenset[str]
+
+
 def _round(
-    table: AreaTable,
+    progress: _Progress,
     number: int,
     pipes: Sequence[Connection],
-    receives: Receives,
-    sites: Sites,
-    total: int,
-) -> AreaTable:
-    walked = len(receives)
+    dependencies: _Dependencies,
+) -> _Progress:
+    """Only the dirty members are walked; every other member's last report stands,
+    since nothing it reads from the table changed."""
     for pipe in pipes:
-        pipe.send((number, table, total + (number - 1) * walked, walked))
-    found: tuple[AreaFound, ...] = tuple(one for pipe in pipes for one in pipe.recv())
-    after = resolved(found, receives, sites)
+        pipe.send(
+            (
+                number,
+                progress.table,
+                progress.walked,
+                len(progress.dirty),
+                progress.dirty,
+            )
+        )
+    fresh: tuple[AreaFound, ...] = tuple(one for pipe in pipes for one in pipe.recv())
+    found = {**progress.found, **{one.member: one for one in fresh}}
+    after = resolved(tuple(found.values()), dependencies.receives, dependencies.sites)
+    dirty = dirtied(
+        progress.table, after, dependencies.callers_of, dependencies.unresolved
+    )
     logger.info(
-        "area need round %d: %d bytes needed on entry, %d read back,"
-        " summed over %d members",
+        "area need round %d: walked %d members; %d bytes needed on entry, %d read"
+        " back, summed over %d members; %d to walk next",
         number,
+        len(fresh),
         sum(_need_bytes(need.entry) for _, need in after.needs),
         sum(_need_bytes(need.back) for _, need in after.needs),
         len(after.needs),
+        len(dirty),
     )
-    return after
+    return _Progress(
+        table=after, found=found, dirty=dirty, walked=progress.walked + len(fresh)
+    )
 
 
 def _jobs(arguments: argparse.Namespace) -> tuple[_Job, ...]:
@@ -248,7 +300,7 @@ def _stopped(shards: _Shards) -> None:
 
 def _received(
     parents: tuple[Connection, ...], sites_out: str
-) -> tuple[Receives, Sites]:
+) -> tuple[Receives, Sites, _Calls]:
     loaded: tuple[_Loaded, ...] = tuple(parent.recv() for parent in parents)
     _sites_written(tuple(row for one in loaded for row in one[3]), sites_out)
     receives = tuple(pair for one in loaded for pair in one[0])
@@ -263,7 +315,7 @@ def _received(
         len(named - members),
         len(sites),
     )
-    return receives, sites
+    return receives, sites, tuple(call for one in loaded for call in one[4])
 
 
 def _sites_written(rows: tuple[SiteRow, ...], sites_out: str) -> None:
@@ -281,19 +333,58 @@ def _sites_written(rows: tuple[SiteRow, ...], sites_out: str) -> None:
     )
 
 
+def _dependencies(receives: Receives, sites: Sites, calls: _Calls) -> _Dependencies:
+    resolved_at = {(member, node): callees for member, node, callees in sites}
+    return _Dependencies(
+        receives=receives,
+        sites=sites,
+        callers_of=callers(
+            {
+                member: frozenset(
+                    (
+                        *named,
+                        *(
+                            callee
+                            for node in nodes
+                            for callee in resolved_at.get((member, node), ())
+                        ),
+                    )
+                )
+                for member, named, nodes in calls
+            }
+        ),
+        unresolved=frozenset(
+            member
+            for member, _, nodes in calls
+            if any((member, node) not in resolved_at for node in nodes)
+        ),
+    )
+
+
 def _settled(
     parents: tuple[Connection, ...], total: int, combined: Sites, sites_out: str
 ) -> AreaTable:
-    receives, local = _received(parents, sites_out)
-    sites = (*local, *combined)
+    """Rounds until no member is dirty. Every member is walked in the first; after
+    that only those whose callees' entry rows, own back row, or -- with a site
+    nothing resolved -- the union of every member's entry need changed."""
+    receives, local, calls = _received(parents, sites_out)
+    dependencies = _dependencies(receives, (*local, *combined), calls)
+    start = _Progress(
+        table=area_table(
+            tuple((member, AreaNeed()) for member, _ in receives),
+            receives,
+            dependencies.sites,
+        ),
+        found={},
+        dirty=frozenset(member for member, _ in receives),
+        walked=total,
+    )
     rounds = accumulate(
         count(1),
-        lambda table, number: _round(table, number, parents, receives, sites, total),
-        initial=area_table(
-            tuple((member, AreaNeed()) for member, _ in receives), receives, sites
-        ),
+        lambda progress, number: _round(progress, number, parents, dependencies),
+        initial=start,
     )
-    return next(after for before, after in pairwise(rounds) if before == after)
+    return next(progress for progress in rounds if not progress.dirty).table
 
 
 def _programs(arguments: argparse.Namespace) -> Mapping[str, str]:
