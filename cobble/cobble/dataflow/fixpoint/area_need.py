@@ -5,31 +5,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cobble.dataflow.fields.spans import Spans, merged, pairs_of
+from cobble.dataflow.fixpoint.area_slot import AreaSlot
 from cobol_memory.field_extent import FieldExtent
 
 Bounds = tuple[int, ...]
+Slotted = tuple[tuple[AreaSlot, Bounds], ...]
 
 
 @dataclass(frozen=True)
 class AreaNeed:
-    """Area-relative bytes per parameter position that some callee needs on entry,
-    and that some caller reads back after a LINK or CALL. ``whole`` keeps every byte
-    of every area, which is what a run that did not work this out has to assume."""
+    """Area-relative bytes per slot needed on entry, and read back after a LINK or
+    CALL returns. ``whole`` keeps every byte of every area."""
 
-    entry: tuple[tuple[int, Bounds], ...] = ()
-    back: tuple[tuple[int, Bounds], ...] = ()
+    entry: Slotted = ()
+    back: Slotted = ()
     whole: bool = False
 
-    def at_entry(self, position: int, area: FieldExtent) -> tuple[FieldExtent, ...]:
-        return self._within(self.entry, position, area)
+    def at_entry(self, slot: AreaSlot, area: FieldExtent) -> tuple[FieldExtent, ...]:
+        return self._within(self.entry, slot, area)
 
-    def read_back(self, position: int, area: FieldExtent) -> tuple[FieldExtent, ...]:
-        return self._within(self.back, position, area)
+    def read_back(self, slot: AreaSlot, area: FieldExtent) -> tuple[FieldExtent, ...]:
+        return self._within(self.back, slot, area)
 
     def _within(
         self,
-        table: tuple[tuple[int, Bounds], ...],
-        position: int,
+        table: Slotted,
+        slot: AreaSlot,
         area: FieldExtent,
     ) -> tuple[FieldExtent, ...]:
         if self.whole:
@@ -42,7 +43,7 @@ class AreaNeed:
                 precision=area.precision,
                 field_name=area.field_name,
             )
-            for low, high in pairs_of(dict(table).get(position, ()))
+            for low, high in pairs_of(dict(table).get(slot, ()))
             if low < area.length
         )
 
@@ -60,22 +61,20 @@ def relative(spans: Spans, area: FieldExtent) -> Bounds:
     )
 
 
-def _union(
-    left: tuple[tuple[int, Bounds], ...], right: tuple[tuple[int, Bounds], ...]
-) -> tuple[tuple[int, Bounds], ...]:
+def _union(left: Slotted, right: Slotted) -> Slotted:
     """Pairs, not a mapping, so the need pickles into the worker processes."""
     lefts, rights = dict(left), dict(right)
     return tuple(
         (
-            position,
+            slot,
             merged(
                 (
-                    *pairs_of(lefts.get(position, ())),
-                    *pairs_of(rights.get(position, ())),
+                    *pairs_of(lefts.get(slot, ())),
+                    *pairs_of(rights.get(slot, ())),
                 )
             ),
         )
-        for position in sorted({*lefts, *rights})
+        for slot in sorted({*lefts, *rights})
     )
 
 

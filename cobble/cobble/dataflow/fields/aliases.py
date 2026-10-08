@@ -371,6 +371,11 @@ def area_extents(operand: str, index: CellIndex) -> tuple[FieldExtent, ...]:
     )
 
 
+def receives_commarea(index: CellIndex) -> bool:
+    """Whether the program is entered with a ``DFHCOMMAREA`` rather than USING parameters."""
+    return not _linkage_commarea(index).reason
+
+
 def received_areas(
     asg: CobolASG, index: CellIndex
 ) -> tuple[tuple[int, FieldExtent], ...]:

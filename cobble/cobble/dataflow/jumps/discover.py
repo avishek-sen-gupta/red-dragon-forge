@@ -3,16 +3,23 @@
 from collections.abc import Callable, Mapping
 
 from cics.statements import CicsOperand, ExecCicsStatement
-from cobble.dataflow.fields.aliases import area_extents, received_areas
+from cobble.dataflow.fields.aliases import (
+    area_extents,
+    received_areas,
+    receives_commarea,
+)
 from cobble.dataflow.fields.extent import CellIndex, operand_occurrence_extents
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.state import EMPTY as STATE_EMPTY
 from cobble.dataflow.fields.state import State
 from cobble.dataflow.fields.transfer import Statement
 from cobble.dataflow.fields.values import UnresolvedReason
-from cobble.dataflow.fixpoint.area_need import AreaNeed
+from cobble.dataflow.fixpoint.area_kind import AreaKind
+from cobble.dataflow.fixpoint.area_slot import AreaSlot
+from cobble.dataflow.fixpoint.area_table import AreaTable
+from cobble.dataflow.fixpoint.call_site import CallSite
 from cobble.dataflow.fixpoint.demand import Demand
-from cobble.dataflow.fixpoint.demand_parts import DemandParts
+from cobble.dataflow.fixpoint.demand_parts import DemandParts, Slots
 from cobble.dataflow.fixpoint.live import Live
 from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.facts import fact_at, merged
@@ -314,16 +321,27 @@ def call_target_demand(
     cfg: Cfg,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    need: AreaNeed,
+    table: AreaTable,
 ) -> Demand:
     """Every extent the jumps and targets tables read a fact at, by the node it is
-    read at; of a handed-over area, only the bytes ``need`` says someone reads."""
-    return demand_parts(asg, cfg, statements, index).demand(need)
+    read at; of a handed-over area, only the bytes ``table`` says someone reads."""
+    return demand_parts(asg, cfg, statements, index).demand(table)
 
 
-_Areas = tuple[tuple[int, FieldExtent], ...]
-_Parts = tuple[tuple[FieldExtent, ...], _Areas, _Areas]
+_Handed = tuple[tuple[CallSite, Slots], ...]
+_Parts = tuple[tuple[FieldExtent, ...], _Handed, Slots]
 _NO_PARTS: _Parts = ((), (), ())
+_NEXT_TRANSACTION = CallSite("", AreaKind.COMMAREA)
+_COMMAREA_SLOT = AreaSlot(AreaKind.COMMAREA, 0)
+
+
+def received_slots(asg: CobolASG, index: CellIndex) -> Slots:
+    """The areas a program receives, each in its slot."""
+    kind = AreaKind.COMMAREA if receives_commarea(index) else AreaKind.USING
+    return tuple(
+        (AreaSlot(kind, position), extent)
+        for position, extent in received_areas(asg, index)
+    )
 
 
 def demand_parts(
@@ -332,13 +350,18 @@ def demand_parts(
     statements: Mapping[str, Statement],
     index: CellIndex,
 ) -> DemandParts:
-    received = received_areas(asg, index)
+    received = received_slots(asg, index)
     rows = tuple(
         (node.id, _parts(node, statements, index, received)) for node in cfg.nodes
     )
     return DemandParts(
         local=tuple((node, parts[0]) for node, parts in rows if parts[0]),
-        entry=tuple((node, parts[1]) for node, parts in rows if parts[1]),
+        entry=tuple(
+            (node, site, areas)
+            for node, parts in rows
+            for site, areas in parts[1]
+            if areas
+        ),
         back=tuple((node, parts[2]) for node, parts in rows if parts[2]),
     )
 
@@ -347,10 +370,14 @@ def _parts(
     node: Node,
     statements: Mapping[str, Statement],
     index: CellIndex,
-    received: _Areas,
+    received: Slots,
 ) -> _Parts:
     if node.transfer in CALL_TRANSFERS:
-        return (_target_extents(node, index), call_areas(node, index), ())
+        return (
+            _target_extents(node, index),
+            ((call_site(node), call_areas(node, index)),),
+            (),
+        )
     return _statement_parts(statements, node.id, index, received)
 
 
@@ -358,7 +385,7 @@ def _statement_parts(
     statements: Mapping[str, Statement],
     node: str,
     index: CellIndex,
-    received: _Areas,
+    received: Slots,
 ) -> _Parts:
     match statements.get(node):
         case ExecCicsStatement() as cics:
@@ -370,7 +397,7 @@ def _statement_parts(
 
 
 def _cics_parts(
-    statement: ExecCicsStatement, index: CellIndex, received: _Areas
+    statement: ExecCicsStatement, index: CellIndex, received: Slots
 ) -> _Parts:
     kinds = _cics_kind(statement)
     handed = tuple(
@@ -387,11 +414,16 @@ def _cics_parts(
                 *(areas if kind is not JumpKind.RETURN_TRANSID else ()),
             )
         ),
-        tuple(
-            (0, area)
-            for kind, areas in handed
-            if kind is JumpKind.RETURN_TRANSID
-            for area in areas
+        (
+            (
+                _NEXT_TRANSACTION,
+                tuple(
+                    (_COMMAREA_SLOT, area)
+                    for kind, areas in handed
+                    if kind is JumpKind.RETURN_TRANSID
+                    for area in areas
+                ),
+            ),
         ),
         received if JumpKind.EXIT in kinds else (),
     )
@@ -403,15 +435,27 @@ def _target_extents(node: Node, index: CellIndex) -> tuple[FieldExtent, ...]:
     return operand_occurrence_extents(node.target_operand, index)
 
 
-def call_areas(node: Node, index: CellIndex) -> tuple[tuple[int, FieldExtent], ...]:
-    """The areas a CALL, LINK or XCTL hands over, with their parameter positions."""
+def call_areas(node: Node, index: CellIndex) -> Slots:
+    """The areas a CALL, LINK or XCTL hands over, each in its slot."""
     if _KINDS[CALL_TRANSFERS[node.transfer]] is JumpKind.CALL:
         return tuple(
-            (position, extent)
+            (AreaSlot(AreaKind.USING, position), extent)
             for position, argument in enumerate(node.using)
             for extent in _named(argument.name, index)
         )
-    return tuple((0, extent) for extent in _named(commarea_field(node), index))
+    return tuple(
+        (_COMMAREA_SLOT, extent) for extent in _named(commarea_field(node), index)
+    )
+
+
+def call_site(node: Node) -> CallSite:
+    """The program a CALL, LINK or XCTL names, empty when a data item names it."""
+    kind = (
+        AreaKind.USING
+        if _KINDS[CALL_TRANSFERS[node.transfer]] is JumpKind.CALL
+        else AreaKind.COMMAREA
+    )
+    return CallSite(node.target if node.target_resolved else "", kind)
 
 
 def returns(node: Node) -> bool:

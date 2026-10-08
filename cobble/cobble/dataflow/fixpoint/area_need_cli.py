@@ -8,7 +8,6 @@ import logging
 import multiprocessing
 import sys
 from collections.abc import Sequence
-from functools import reduce
 from itertools import accumulate, count, pairwise
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
@@ -19,9 +18,11 @@ from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_regis
 from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fields.extents_input import member_layout, member_rows
 from cobble.dataflow.fields.spans import pairs_of
-from cobble.dataflow.fixpoint.area_need import AreaNeed, joined
-from cobble.dataflow.fixpoint.area_need_file import AreaNeedFile
-from cobble.dataflow.fixpoint.area_needs import need_found, prepared
+from cobble.dataflow.fixpoint.area_found import AreaFound
+from cobble.dataflow.fixpoint.area_need import AreaNeed, Slotted
+from cobble.dataflow.fixpoint.area_need_file import rows_of, write_rows
+from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
+from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.rows import Row
 from cobol_asg.asg_types import CobolASG
@@ -30,8 +31,9 @@ logger = logging.getLogger(__name__)
 
 _Job = tuple[int, str, tuple[Row, ...], Path]
 _Held = tuple[int, PreparedProgram]
-_Round = tuple[int, AreaNeed]
-_STOP: _Round = (0, AreaNeed())
+_Round = tuple[int, AreaTable]
+_STOP: _Round = (0, AreaTable())
+_Loaded = tuple[Receives, tuple[str, ...]]
 
 
 def _loaded(job: _Job, total: int) -> tuple[_Held, ...]:
@@ -50,44 +52,67 @@ def _loaded(job: _Job, total: int) -> tuple[_Held, ...]:
         return ()
 
 
-def _walked(held: _Held, need: AreaNeed, number: int, total: int) -> AreaNeed:
+def _walked(held: _Held, table: AreaTable, number: int, total: int) -> AreaFound:
     position, program = held
+    found = need_found(program, table)
     logger.info(
-        "area need round %d: [%d/%d] %s", number, position, total, program.member
+        "area need round %d: [%d/%d] %s, %d bytes on entry",
+        number,
+        position,
+        total,
+        program.member,
+        _need_bytes(found.entry.entry),
     )
-    return need_found(program, need)
+    return found
+
+
+def _named(program: PreparedProgram) -> tuple[str, ...]:
+    return tuple(
+        entry[1].callee for entry in program.parts.entry if not entry[1].dynamic
+    )
+
+
+def _receiving(programs: tuple[_Held, ...]) -> _Loaded:
+    return (
+        tuple(
+            (program.member, tuple(slot for slot, _ in program.received))
+            for _, program in programs
+        ),
+        tuple(callee for _, program in programs for callee in _named(program)),
+    )
 
 
 def _shard(connection: Connection, jobs: tuple[_Job, ...], total: int) -> None:
     """One worker process: its share of the members, loaded once and kept for every
-    round, so only the need crosses between processes, never a program."""
+    round, so only the table and the reports cross between processes, never a
+    program. What its members receive and the callees they name go first."""
     configure_cli_logging()
     programs = tuple(held for job in jobs for held in _loaded(job, total))
-    for number, need in iter(connection.recv, _STOP):
-        connection.send(
-            reduce(
-                joined,
-                (_walked(held, need, number, total) for held in programs),
-                AreaNeed(),
-            )
-        )
+    connection.send(_receiving(programs))
+    for number, table in iter(connection.recv, _STOP):
+        connection.send(tuple(_walked(held, table, number, total) for held in programs))
 
 
-def _need_bytes(bounds: tuple[tuple[int, tuple[int, ...]], ...]) -> int:
+def _need_bytes(bounds: Slotted) -> int:
     return sum(high - low for _, one in bounds for low, high in pairs_of(one))
 
 
-def _round(need: AreaNeed, number: int, pipes: Sequence[Connection]) -> AreaNeed:
+def _round(
+    table: AreaTable, number: int, pipes: Sequence[Connection], receives: Receives
+) -> AreaTable:
     for pipe in pipes:
-        pipe.send((number, need))
-    found = reduce(joined, (pipe.recv() for pipe in pipes), need)
+        pipe.send((number, table))
+    found: tuple[AreaFound, ...] = tuple(one for pipe in pipes for one in pipe.recv())
+    after = resolved(found, receives)
     logger.info(
-        "area need round %d: %d bytes needed on entry, %d read back",
+        "area need round %d: %d bytes needed on entry, %d read back,"
+        " summed over %d members",
         number,
-        _need_bytes(found.entry),
-        _need_bytes(found.back),
+        sum(_need_bytes(need.entry) for _, need in after.needs),
+        sum(_need_bytes(need.back) for _, need in after.needs),
+        len(after.needs),
     )
-    return found
+    return after
 
 
 def _jobs(arguments: argparse.Namespace) -> tuple[_Job, ...]:
@@ -131,26 +156,45 @@ def _stopped(shards: _Shards) -> None:
         process.join()
 
 
-def _settled(parents: tuple[Connection, ...]) -> AreaNeed:
+def _received(parents: tuple[Connection, ...]) -> Receives:
+    loaded: tuple[_Loaded, ...] = tuple(parent.recv() for parent in parents)
+    receives = tuple(pair for held, _ in loaded for pair in held)
+    members = {member for member, _ in receives}
+    named = {callee for _, callees in loaded for callee in callees}
+    logger.info(
+        "area need: %d members loaded; %d named callees are not among them,"
+        " and every byte handed to one counts",
+        len(members),
+        len(named - members),
+    )
+    return receives
+
+
+def _settled(parents: tuple[Connection, ...]) -> AreaTable:
+    receives = _received(parents)
     rounds = accumulate(
         count(1),
-        lambda need, number: _round(need, number, parents),
-        initial=AreaNeed(),
+        lambda table, number: _round(table, number, parents, receives),
+        initial=area_table(
+            tuple((member, AreaNeed()) for member, _ in receives), receives
+        ),
     )
     return next(after for before, after in pairwise(rounds) if before == after)
 
 
-def computed(arguments: argparse.Namespace) -> AreaNeed:
-    """Rounds of liveness over every member in the extents table until one adds
-    nothing: what a callee reads can make its caller forward more, which a callee
-    then reads. Each worker keeps its share of the members for the whole run."""
+def computed(arguments: argparse.Namespace) -> AreaTable:
+    """Rounds of liveness over every member in the extents table until the table
+    stops changing: what a callee reads can make its caller forward more, which
+    that caller's callers then read. Every member starts needing nothing, so the
+    table grows to the least one that holds. Each worker keeps its share of the
+    members for the whole run."""
     jobs = _jobs(arguments)
     if not jobs:
-        return AreaNeed()
+        return AreaTable()
     shards = _started(jobs, arguments.max_workers)
-    need = _settled(shards[0])
+    table = _settled(shards[0])
     _stopped(shards)
-    return need
+    return table
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
@@ -170,11 +214,7 @@ def cli(argv: Sequence[str]) -> int:
     if not arguments.extents.is_file():
         sys.stderr.write(f"area need: !! no extents table at {arguments.extents}\n")
         return 2
-    need = computed(arguments)
-    arguments.out.write_text(
-        AreaNeedFile(entry=need.entry, back=need.back).model_dump_json(),
-        encoding="utf-8",
-    )
+    write_rows(rows_of(computed(arguments)), arguments.out)
     logger.info("area need written to %s", arguments.out)
     return 0
 
