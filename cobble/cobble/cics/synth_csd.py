@@ -16,13 +16,18 @@ What is recoverable from the members alone:
     That convention is a property of the site, so it arrives as a config-supplied
     regex plus a template (``TransidRule``) and never appears in cobble's source.
 
-Which yields three tiers of definition, and the report says how many of each:
+Which yields four tiers of definition, and the report says how many of each:
 
   * ``CORROBORATED`` -- the convention names a member for the transaction AND that
     member's own source names the transaction. Two independent signals agreeing.
   * ``CONVENTION`` -- the transaction is named somewhere in the corpus and the
     convention places it on exactly one member, but that member is silent about
     it. Weaker, and countable separately for that reason.
+  * ``RETURN_TRANSID`` -- the convention places nothing on the member, and its own
+    ``EXEC CICS RETURN TRANSID('...')`` names exactly one id that no other member
+    returns to and the convention places on no member. Pseudo-conversational code
+    returns to its own transaction; a member returning to another's -- a menu --
+    shares that id with the others doing the same, and none of them is placed.
   * ``SYNTHETIC`` -- a CICS member no transaction can be tied to. It still gets a
     definition, under ``UNKNOWN.<member>``, because the point is to get the member
     into the flow stage's worklist; its literal LINK/XCTL edges are real
@@ -34,8 +39,9 @@ Which yields three tiers of definition, and the report says how many of each:
 
 Nothing else is asserted. A transaction the corpus names but the convention
 cannot place is reported as unclaimed, not given an invented program; two members
-whose names claim one real transaction are reported as a collision and both fall
-back to synthetic, because a convention that collides does not fit this corpus.
+whose names claim one real transaction, or that both return to one, are reported as a
+collision and fall back, because evidence that names two programs names neither. No
+transaction is ever defined twice: ``parse_csd`` keeps the last of a repeated id.
 """
 
 from __future__ import annotations
@@ -65,7 +71,8 @@ _COMMENT_INDICATORS = ("*", "/")
 _EXEC_CICS = re.compile(r"EXEC\s+CICS\b")
 _TRANSID_LITERAL = re.compile(r"TRANSID\s*\(\s*(['\"])(?P<transid>[^'\"]{1,4})\1\s*\)")
 _RETURN_TRANSID = re.compile(
-    r"RETURN\s[^.]*TRANSID\s*\(\s*(['\"])(?P<transid>[^'\"]{1,4})\1\s*\)"
+    r"EXEC\s+CICS\s+RETURN\b(?:(?!END-EXEC).)*?"
+    r"TRANSID\s*\(\s*(['\"])(?P<transid>[^'\"]{1,4})\1\s*\)"
 )
 
 
@@ -146,7 +153,9 @@ def _literal_transids(text: str) -> frozenset[str]:
 
 
 def _return_transids(text: str) -> frozenset[str]:
-    """Transaction ids this member names in EXEC CICS RETURN TRANSID('...')."""
+    """Transaction ids this member names in EXEC CICS RETURN TRANSID('...'), inside
+    the one RETURN command: a sentence can run through a whole IF, and a START's
+    TRANSID later in it is not the RETURN's."""
     return frozenset(match.group("transid") for match in _RETURN_TRANSID.finditer(text))
 
 
@@ -224,16 +233,53 @@ def _evidence_tier(member: _CicsMember) -> Tier:
     return Tier.CONVENTION
 
 
+def _declared(member: _CicsMember) -> str:
+    """The one transaction the member returns to, or "" when it returns to none or
+    to several -- two ids are two candidates, and nothing says which is its own."""
+    return (
+        next(iter(member.return_transids)) if len(member.return_transids) == 1 else ""
+    )
+
+
+def _returners(
+    members: Sequence[_CicsMember],
+    claimants: Mapping[str, tuple[str, ...]],
+    literals: frozenset[str],
+) -> Mapping[str, tuple[str, ...]]:
+    """Declared transid -> the members, not placed by the convention, that return
+    to it. A transaction the convention places on a member is that member's, so
+    returning to it hands control over rather than claiming it."""
+    placed = tuple(
+        member for member in members if _may_claim(member, claimants, literals)
+    )
+    owned = frozenset(member.derived for member in placed)
+    declared = sorted(
+        (transid, member.name)
+        for member in members
+        if member not in placed
+        for transid in (_declared(member),)
+        if transid and transid not in owned
+    )
+    return {
+        transid: tuple(name for _, name in group)
+        for transid, group in groupby(declared, itemgetter(0))
+    }
+
+
 def _define(
     member: _CicsMember,
     claimants: Mapping[str, tuple[str, ...]],
     literals: frozenset[str],
+    returners: Mapping[str, tuple[str, ...]],
 ) -> Define:
+    """The convention's transaction when it may claim one; else the transaction the
+    member alone returns to; else a synthetic one. No transaction is defined twice:
+    a convention collision and a shared RETURN target both fall back."""
     if _may_claim(member, claimants, literals):
         return Define(member.derived, member.name, _evidence_tier(member))
-    own_return = member.return_transids & literals
-    if own_return:
-        return Define(sorted(own_return)[0], member.name, Tier.RETURN_TRANSID)
+    declared = _declared(member)
+    if declared and returners.get(declared, ()) == (member.name,):
+        return Define(declared, member.name, Tier.RETURN_TRANSID)
     return Define(
         f"{SYNTHETIC_TRANSID_PREFIX}{member.name}", member.name, Tier.SYNTHETIC
     )
@@ -281,11 +327,21 @@ def synthesise_csd(
     )
     literals = frozenset(chain.from_iterable(member.own_transids for member in scanned))
     claimants = _claimants(scanned)
-    defines = tuple(_define(member, claimants, literals) for member in scanned)
+    returners = _returners(scanned, claimants, literals)
+    defines = tuple(
+        _define(member, claimants, literals, returners) for member in scanned
+    )
     return SynthesisedCsd(
         defines=defines,
         unclaimed=_unclaimed(literals, defines),
-        collisions=_collisions(claimants, literals),
+        collisions=tuple(
+            sorted(
+                (
+                    *_collisions(claimants, literals),
+                    *((t, names) for t, names in returners.items() if len(names) > 1),
+                )
+            )
+        ),
     )
 
 

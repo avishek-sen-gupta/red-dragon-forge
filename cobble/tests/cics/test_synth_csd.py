@@ -159,6 +159,88 @@ def test_two_members_the_convention_maps_to_one_transaction_are_both_reported() 
     ]
 
 
+def _tiers(result) -> dict[str, tuple[str, Tier]]:
+    return {define.program: (define.transid, define.tier) for define in result.defines}
+
+
+def test_a_return_transid_is_evidence_only_for_the_one_member_returning_to_it() -> None:
+    """Pseudo-conversational code returns to its own transaction, but a member can
+    also return to another's -- a menu, say. Two members returning to one id is
+    that case, and neither is its program: both fall back and the id is reported
+    as a collision, so no transaction is ever defined twice."""
+    result = _synthesise(
+        {
+            "ZZC003": _cics_member("EXEC CICS RETURN TRANSID('MENU') END-EXEC."),
+            "ZZD004": _cics_member("EXEC CICS RETURN TRANSID('MENU') END-EXEC."),
+            "ZZE005": _cics_member("EXEC CICS RETURN TRANSID('ZE05') END-EXEC."),
+        }
+    )
+
+    assert _tiers(result) == {
+        "ZZC003": (f"{SYNTHETIC_TRANSID_PREFIX}ZZC003", Tier.SYNTHETIC),
+        "ZZD004": (f"{SYNTHETIC_TRANSID_PREFIX}ZZD004", Tier.SYNTHETIC),
+        "ZZE005": ("ZE05", Tier.RETURN_TRANSID),
+    }
+    assert result.collisions == (("MENU", ("ZZC003", "ZZD004")),)
+    assert result.unclaimed == ("MENU",)
+
+
+def test_a_return_transid_never_takes_a_transaction_the_convention_places() -> None:
+    """Returning to a transaction the convention gives another member is handing
+    control to that member, not declaring ownership."""
+    result = _synthesise(
+        {
+            "PGM007": _cics_member("EXEC CICS RETURN TRANSID('T007') END-EXEC."),
+            "ZZF006": _cics_member("EXEC CICS RETURN TRANSID('T007') END-EXEC."),
+        }
+    )
+
+    assert _tiers(result) == {
+        "PGM007": ("T007", Tier.CORROBORATED),
+        "ZZF006": (f"{SYNTHETIC_TRANSID_PREFIX}ZZF006", Tier.SYNTHETIC),
+    }
+    assert result.collisions == ()
+
+
+def test_only_a_transid_inside_the_return_command_is_a_return_transid() -> None:
+    """A sentence can run through a whole IF: a RETURN with no TRANSID and a START
+    naming one sit in the same sentence, and the START's id is not the RETURN's."""
+    result = _synthesise(
+        {
+            "ZZA001": _cics_member(
+                "IF WS-X = 'Y'",
+                "   EXEC CICS RETURN END-EXEC",
+                "ELSE",
+                "   EXEC CICS START TRANSID('ZB01') END-EXEC",
+                "END-IF.",
+            ),
+            "ZZB002": _cics_member("EXEC CICS RETURN TRANSID('ZB01') END-EXEC."),
+        }
+    )
+
+    assert _tiers(result) == {
+        "ZZA001": (f"{SYNTHETIC_TRANSID_PREFIX}ZZA001", Tier.SYNTHETIC),
+        "ZZB002": ("ZB01", Tier.RETURN_TRANSID),
+    }
+
+
+def test_a_member_returning_to_two_transactions_declares_neither() -> None:
+    """Two ids are two candidates, and nothing says which one is the member's own."""
+    result = _synthesise(
+        {
+            "ZZG007": _cics_member(
+                "EXEC CICS RETURN TRANSID('ZG01') END-EXEC.",
+                "EXEC CICS RETURN TRANSID('ZG02') END-EXEC.",
+            ),
+        }
+    )
+
+    assert _tiers(result) == {
+        "ZZG007": (f"{SYNTHETIC_TRANSID_PREFIX}ZZG007", Tier.SYNTHETIC),
+    }
+    assert result.unclaimed == ("ZG01", "ZG02")
+
+
 def test_a_collision_on_a_transaction_the_corpus_never_names_is_not_reported() -> None:
     """A collision is only news when the transaction is real.
 

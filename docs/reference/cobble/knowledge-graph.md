@@ -39,10 +39,12 @@ This command reconstructs `DEFINE TRANSACTION(...) PROGRAM(...)` pairs from the 
 |---|---|
 | `corroborated` | `transid_rules` places a transaction id on the member, the member's source names that id literally, and no other member claims it |
 | `convention` | `transid_rules` places it and nothing contradicts it |
+| `return-transid` | the convention places nothing on the member, and the member's own `EXEC CICS RETURN TRANSID('...')` names exactly one id, which no other member returns to and the convention places on no member |
 | `synthetic` | nothing establishes a transaction; the member gets `UNKNOWN.<member>` |
 
-A transaction id two members claim demotes both and is reported. A literal id no member
-claims is reported. With no `transid_rules`, every member is synthetic.
+A transaction id two members claim, by convention or by both returning to it, demotes both
+and is reported. A literal id no member claims is reported. With no `transid_rules`, only
+`return-transid` can place a member; every other member is synthetic.
 
 A synthetic entry gets the member onto the CICS worklist. `cobble-build` then drops the
 placeholder `TRANSACTION` node and every edge touching it. `DEFINE FILE` cannot be
