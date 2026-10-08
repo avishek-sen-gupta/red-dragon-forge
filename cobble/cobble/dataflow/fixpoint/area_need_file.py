@@ -16,8 +16,9 @@ _Bounded = tuple[tuple[_Slot, tuple[int, ...]], ...]
 
 
 class AreaNeedRow(BaseModel):
-    """One member: the slots it receives, and per slot the area-relative bounds
-    read on entry and read back by its callers."""
+    """One member: the slots it receives, per slot the area-relative bounds read on
+    entry and read back by its callers, and the candidates of each of its dynamic
+    call sites that resolved, by node."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -25,6 +26,7 @@ class AreaNeedRow(BaseModel):
     receives: tuple[_Slot, ...] = ()
     entry: _Bounded = ()
     back: _Bounded = ()
+    sites: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 def _plain(slotted: Slotted) -> _Bounded:
@@ -43,6 +45,11 @@ def rows_of(table: AreaTable) -> tuple[AreaNeedRow, ...]:
             receives=tuple((slot.kind, slot.position) for slot in receiving[member]),
             entry=_plain(need.entry),
             back=_plain(need.back),
+            sites=tuple(
+                (node, callees)
+                for caller, node, callees in table.sites
+                if caller == member
+            ),
         )
         for member, need in table.needs
     )
@@ -72,5 +79,8 @@ def table_of(rows: Iterable[AreaNeedRow]) -> AreaTable:
         tuple(
             (row.member, tuple(AreaSlot(*slot) for slot in row.receives))
             for row in held
+        ),
+        tuple(
+            (row.member, node, callees) for row in held for node, callees in row.sites
         ),
     )

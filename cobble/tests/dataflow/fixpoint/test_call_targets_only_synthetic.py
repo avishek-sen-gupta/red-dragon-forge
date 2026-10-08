@@ -474,6 +474,68 @@ def _slice_callee(name: str, read: str) -> str:
 """
 
 
+DYNAMIC_FORWARDER = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGD.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-PGM               PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGN' TO WS-PGM.
+           EXEC CICS LINK PROGRAM(WS-PGM)
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+"""
+
+
+NEXT_TRANSACTION = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGE.
+       DATA DIVISION.
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           EXEC CICS RETURN TRANSID('PETX')
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+"""
+
+
+def _combined_with_csd(out: Path, tmp_path: Path, name: str) -> Path:
+    csd = tmp_path / "PROGS.CSD"
+    csd.write_text(
+        "DEFINE TRANSACTION(PETX) PROGRAM(PROGN) GROUP(TEST)\n", encoding="utf-8"
+    )
+    config = tmp_path / f"{name}.toml"
+    config.write_text(
+        CONFIG.format(asg=out.parent / "parsed") + f'csd_files = ["{csd}"]\n',
+        encoding="utf-8",
+    )
+    combined = tmp_path / name
+    assert (
+        combine_cli(
+            [
+                "--config",
+                str(config),
+                "--fixpoint-dir",
+                str(out),
+                "--out-dir",
+                str(combined),
+                "--all",
+            ]
+        )
+        == 0
+    )
+    return combined
+
+
 def _narrow_run(parsed: Path, extents: Path, out: Path, stored: Path) -> int:
     return cli(
         [
@@ -513,6 +575,8 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         "PROGM": SLICE_CALLER,
         "PROGN": _slice_callee("PROGN", "LK-FIRST"),
         "PROGO": _slice_callee("PROGO", "LK-SECOND"),
+        "PROGD": DYNAMIC_FORWARDER,
+        "PROGE": NEXT_TRANSACTION,
     }
     full = fixpoint_corpus_with(sources, ())
     parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
@@ -523,8 +587,8 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
     )
     narrow = full.parent / "narrow"
     assert (missing, _narrow_run(parsed, extents, narrow, stored)) == (2, 0)
-    full_combined = _combined(full, tmp_path, "full")
-    narrow_combined = _combined(narrow, tmp_path, "narrow")
+    full_combined = _combined_with_csd(full, tmp_path, "full")
+    narrow_combined = _combined_with_csd(narrow, tmp_path, "narrow")
     combined = target_rows(narrow_combined / "targets.jsonl")
 
     assert target_rows(narrow / "targets.jsonl") == target_rows(full / "targets.jsonl")
@@ -552,3 +616,95 @@ def test_narrowed_areas_resolve_the_same_through_the_combine(
         "PROGO": (commarea, (((AreaKind.COMMAREA, 0), (8, 16)),), ()),
         "PROGW": (commarea, (), (((AreaKind.COMMAREA, 0), (0, 8)),)),
     }
+    targeted = tmp_path / "area-need-targeted.jsonl"
+    area_cli(
+        [
+            "--asg-dir",
+            str(parsed),
+            "--extents",
+            str(extents),
+            "--out",
+            str(targeted),
+            "--fixpoint-dir",
+            str(full),
+            "--combined-dir",
+            str(full_combined),
+            "--config",
+            str(tmp_path / "full.toml"),
+        ]
+    )
+    retargeted = full.parent / "retargeted"
+    assert _narrow_run(parsed, extents, retargeted, targeted) == 0
+    assert target_rows(retargeted / "targets.jsonl") == target_rows(
+        full / "targets.jsonl"
+    )
+    assert [
+        (stored_rows.member, stored_rows.entry)
+        for path in (stored, targeted)
+        for stored_rows in read_rows(path)
+        if stored_rows.member in {"PROGD", "PROGE"}
+    ] == [
+        ("PROGD", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGE", (((AreaKind.COMMAREA, 0), (0, 16)),)),
+        ("PROGD", (((AreaKind.COMMAREA, 0), (0, 8)),)),
+        ("PROGE", (((AreaKind.COMMAREA, 0), (0, 8)),)),
+    ]
+
+
+STRUNG = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGX.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-TARGET            PIC X(8).
+       01  WS-PGM               PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  LK-FIRST         PIC X(8).
+           05  LK-SECOND        PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           STRING LK-FIRST LK-SECOND DELIMITED BY SIZE
+               INTO WS-TARGET.
+           MOVE 'PROGN' TO WS-PGM.
+           EXEC CICS LINK PROGRAM(WS-PGM)
+               COMMAREA(DFHCOMMAREA) END-EXEC.
+           EXEC CICS XCTL PROGRAM(WS-TARGET) END-EXEC.
+"""
+
+
+def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
+    fixpoint_corpus_with: Callable[[Mapping[str, str], tuple[str, ...]], Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    full = fixpoint_corpus_with(
+        {"PROGX": STRUNG, "PROGN": _slice_callee("PROGN", "LK-FIRST")}, ()
+    )
+    parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
+    capsys.readouterr()
+
+    assert (
+        area_cli(
+            [
+                "--asg-dir",
+                str(parsed),
+                "--extents",
+                str(extents),
+                "--out",
+                str(tmp_path / "need.jsonl"),
+                "--explain",
+                "PROGX",
+            ]
+        ),
+        capsys.readouterr().out,
+    ) == (
+        0,
+        "PROGX: 16 bytes needed on entry\n"
+        "  by source, each alone:\n"
+        "      16  call-target reads\n"
+        "      16  MAIN-PARA line 16 LINK, dynamic, unresolved: every member's need\n"
+        "  writes that read more than their target keeps live:\n"
+        "    MAIN-PARA line 13: WS-TARGET@working_storage[0:8] keeps 8 bytes live,"
+        " reads 16 from LK-FIRST@linkage[0:8], LK-SECOND@linkage[8:16]\n",
+    )

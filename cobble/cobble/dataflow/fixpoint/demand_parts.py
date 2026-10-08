@@ -31,7 +31,7 @@ class DemandParts:
                 (node, piece)
                 for node, site, areas in self.entry
                 for slot, area in areas
-                for piece in table.entry_at(site, slot, area)
+                for piece in table.entry_at(node, site, slot, area)
             ),
             *(
                 (node, piece)

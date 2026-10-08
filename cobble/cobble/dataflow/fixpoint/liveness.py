@@ -34,7 +34,7 @@ def _overlap(left: FieldExtent, right: FieldExtent) -> bool:
     )
 
 
-def _strong(write: LiveWrite) -> bool:
+def strong(write: LiveWrite) -> bool:
     return not write.weak and write.target.precision is Precision.EXACT
 
 
@@ -46,7 +46,7 @@ def entered(
     touching = tuple(
         write for write in writes if any(_overlap(write.target, one) for one in exiting)
     )
-    killers = tuple(write.target for write in writes if _strong(write))
+    killers = tuple(write.target for write in writes if strong(write))
     return (
         demanded
         | frozenset(
@@ -54,12 +54,16 @@ def entered(
             for one in exiting
             if not any(target.must_cover(one) for target in killers)
         )
-        | frozenset(extent for write in touching for extent in _read(write, exiting))
-        | frozenset(write.target for write in touching if not _strong(write))
+        | frozenset(
+            extent for write in touching for extent in needed_sources(write, exiting)
+        )
+        | frozenset(write.target for write in touching if not strong(write))
     )
 
 
-def _read(write: LiveWrite, exiting: frozenset[FieldExtent]) -> tuple[FieldExtent, ...]:
+def needed_sources(
+    write: LiveWrite, exiting: frozenset[FieldExtent]
+) -> tuple[FieldExtent, ...]:
     """The source bytes a write needs, given what is live after it.
 
     A byte-for-byte copy needs only the source bytes lined up with the live

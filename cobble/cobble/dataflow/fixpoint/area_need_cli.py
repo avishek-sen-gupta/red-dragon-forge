@@ -13,19 +13,24 @@ from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 from pathlib import Path
 
+from cics.csd_parse import parse_csd
 from cobble.cli_logging import configure_cli_logging
+from cobble.corpus_config import load_corpus_config
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
 from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fields.extents_input import member_layout, member_rows
 from cobble.dataflow.fields.spans import pairs_of
+from cobble.dataflow.fixpoint.area_explain import explained
 from cobble.dataflow.fixpoint.area_found import AreaFound
 from cobble.dataflow.fixpoint.area_need import AreaNeed, Slotted
 from cobble.dataflow.fixpoint.area_need_file import rows_of, write_rows
 from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
+from cobble.dataflow.fixpoint.fixpoint import program_graph
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.shared_count import SharedCount
+from cobble.dataflow.fixpoint.target_site import Sites, resolved_sites
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
@@ -109,13 +114,14 @@ def _round(
     number: int,
     pipes: Sequence[Connection],
     receives: Receives,
+    sites: Sites,
     total: int,
 ) -> AreaTable:
     walked = len(receives)
     for pipe in pipes:
         pipe.send((number, table, total + (number - 1) * walked, walked))
     found: tuple[AreaFound, ...] = tuple(one for pipe in pipes for one in pipe.recv())
-    after = resolved(found, receives)
+    after = resolved(found, receives, sites)
     logger.info(
         "area need round %d: %d bytes needed on entry, %d read back,"
         " summed over %d members",
@@ -187,16 +193,35 @@ def _received(parents: tuple[Connection, ...]) -> Receives:
     return receives
 
 
-def _settled(parents: tuple[Connection, ...], total: int) -> AreaTable:
+def _settled(parents: tuple[Connection, ...], total: int, sites: Sites) -> AreaTable:
     receives = _received(parents)
     rounds = accumulate(
         count(1),
-        lambda table, number: _round(table, number, parents, receives, total),
+        lambda table, number: _round(table, number, parents, receives, sites, total),
         initial=area_table(
-            tuple((member, AreaNeed()) for member, _ in receives), receives
+            tuple((member, AreaNeed()) for member, _ in receives), receives, sites
         ),
     )
     return next(after for before, after in pairwise(rounds) if before == after)
+
+
+def _sites(arguments: argparse.Namespace) -> Sites:
+    if not arguments.combined_dir:
+        return ()
+    programs = {
+        transid: program
+        for csd in load_corpus_config(Path(arguments.config)).csd_files
+        for transid, program in parse_csd(csd).items()
+    }
+    sites = resolved_sites(
+        Path(arguments.fixpoint_dir), Path(arguments.combined_dir), programs
+    )
+    logger.info(
+        "area need: %d resolved dynamic sites read from %s",
+        len(sites),
+        arguments.combined_dir,
+    )
+    return sites
 
 
 def computed(arguments: argparse.Namespace) -> AreaTable:
@@ -209,7 +234,7 @@ def computed(arguments: argparse.Namespace) -> AreaTable:
     if not jobs:
         return AreaTable()
     shards = _started(jobs, arguments.max_workers)
-    table = _settled(shards[0], len(jobs))
+    table = _settled(shards[0], len(jobs), _sites(arguments))
     _stopped(shards)
     return table
 
@@ -223,16 +248,85 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--extents", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--max-workers", type=worker_count, default=4)
+    parser.add_argument(
+        "--explain",
+        default="",
+        metavar="MEMBER",
+        help="after the rounds, print why MEMBER needs the bytes it does: each"
+        " demand source alone, and the writes that read more than they keep live",
+    )
+    parser.add_argument(
+        "--fixpoint-dir",
+        default="",
+        help="the cobble-dataflow-fixpoint output --combined-dir was combined from",
+    )
+    parser.add_argument(
+        "--config",
+        default="",
+        help="the corpus config whose CSD files map a RETURN TRANSID's transaction"
+        " to the program it runs",
+    )
+    parser.add_argument(
+        "--combined-dir",
+        default="",
+        help="a cobble-dataflow-combine output: a dynamic XCTL, LINK or CALL it"
+        " resolved completely, and a RETURN TRANSID whose transaction resolved, are"
+        " charged with the needs of the programs they reach instead of every"
+        " member's",
+    )
     return parser.parse_args(argv)
+
+
+def _explanation(arguments: argparse.Namespace, table: AreaTable) -> str:
+    member = arguments.explain
+    block = next(
+        rows for name, rows in member_rows(arguments.extents) if name == member
+    )
+    path = arguments.asg_dir / f"{member}.json"
+    with cached_asg_dialect_parsers_registered():
+        asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    cfg, _ = program_graph(asg)
+    program = prepared(member, asg, member_layout(member, block).layout)
+    return explained(program, cfg, table)
+
+
+def _refusal(arguments: argparse.Namespace) -> str:
+    if not arguments.extents.is_file():
+        return f"area need: !! no extents table at {arguments.extents}\n"
+    return _explain_refusal(arguments) or _resolution_refusal(arguments)
+
+
+def _explain_refusal(arguments: argparse.Namespace) -> str:
+    if (
+        arguments.explain
+        and not (arguments.asg_dir / f"{arguments.explain}.json").is_file()
+    ):
+        return f"area need: !! no cached ASG for {arguments.explain}\n"
+    return ""
+
+
+def _resolution_refusal(arguments: argparse.Namespace) -> str:
+    given = {
+        bool(arguments.fixpoint_dir),
+        bool(arguments.combined_dir),
+        bool(arguments.config),
+    }
+    if len(given) > 1:
+        return "area need: !! --fixpoint-dir, --combined-dir and --config go together\n"
+    return ""
 
 
 def cli(argv: Sequence[str]) -> int:
     arguments = _parsed(argv)
-    if not arguments.extents.is_file():
-        sys.stderr.write(f"area need: !! no extents table at {arguments.extents}\n")
+    refusal = _refusal(arguments)
+    if refusal:
+        sys.stderr.write(refusal)
         return 2
-    write_rows(rows_of(computed(arguments)), arguments.out)
+    table = computed(arguments)
+    write_rows(rows_of(table), arguments.out)
     logger.info("area need written to %s", arguments.out)
+    if arguments.explain:
+        sys.stdout.write(_explanation(arguments, table))
     return 0
 
 
