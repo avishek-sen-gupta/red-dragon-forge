@@ -11,7 +11,7 @@ from cics.csd_parse import parse_csd
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.dataflow.combine.asg_callee_areas import AsgCalleeAreas
-from cobble.dataflow.combine.link import link
+from cobble.dataflow.combine.link import UNLIMITED_HOPS, link
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.load import load_tables
 from cobble.dataflow.combine.memo_resolve import MemoResolve
@@ -49,6 +49,20 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="where targets.jsonl and links.jsonl go",
     )
+    parser.add_argument(
+        "--max-hops",
+        type=_hops,
+        default=UNLIMITED_HOPS,
+        metavar="N",
+        help="program crossings a walk may make; one that would cross more stops "
+        "and its target says hop-limit. Default: no limit",
+    )
+    parser.add_argument(
+        "--skip-readbacks",
+        action="store_true",
+        help="do not walk into a LINKed program for bytes it may have written back; "
+        "those bytes say readback-skipped",
+    )
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument(
         "--all", action="store_true", help="link every program with results"
@@ -61,6 +75,14 @@ def _parser() -> argparse.ArgumentParser:
         help="link these programs only",
     )
     return parser
+
+
+def _hops(text: str) -> int:
+    """A negative crossing count limits nothing a walk can do, so it is a usage error."""
+    count = int(text)
+    if count < 0:
+        raise argparse.ArgumentTypeError(f"needs zero or more hops, got {count}")
+    return count
 
 
 def _transactions(csd_files: Sequence[Path]) -> Mapping[str, str]:
@@ -152,6 +174,8 @@ def _link_and_write(
         transactions,
         _outside(arguments, config, inside, transactions),
         MemoResolve(tables, step),
+        arguments.max_hops,
+        not arguments.skip_readbacks,
     )
     _PROGRESS.info("combine: linked in %.1fs", time.monotonic() - started)
     write_outputs(arguments.out_dir, linked)

@@ -22,6 +22,8 @@ class UnresolvedReason(Enum):
     UNMODELLED = "unmodelled"
     OUTSIDE_ANALYSED_SET = "outside-analysed-set"
     NOT_RECORDED = "not-recorded"
+    HOP_LIMIT = "hop-limit"
+    READBACK_SKIPPED = "readback-skipped"
 
 
 @dataclass(frozen=True)

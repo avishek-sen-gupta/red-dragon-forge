@@ -135,3 +135,18 @@ def test_a_missing_config_is_refused_not_a_traceback(
         f"combine: !! no corpus config at {tmp_path / 'corpus.toml'}"
     ]
     assert not (tmp_path / "out").exists()
+
+
+def test_the_approximation_flags_run_and_a_negative_hop_limit_is_refused(
+    tmp_path: Path,
+) -> None:
+    _member(tmp_path / "fx", "B")
+
+    limited = cli(_arguments(tmp_path, "--all", "--max-hops", "0", "--skip-readbacks"))
+    with pytest.raises(SystemExit) as refused:
+        cli(_arguments(tmp_path, "--all", "--max-hops", "-1"))
+
+    assert (limited, refused.value.code) == (0, 2)
+    assert [
+        row.candidates for row in target_rows(tmp_path / "out" / "targets.jsonl")
+    ] == [("M",)]
