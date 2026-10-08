@@ -7,11 +7,13 @@ import json
 import logging
 import multiprocessing
 import sys
-from collections.abc import Mapping, Sequence
-from itertools import accumulate, count, pairwise
-from multiprocessing.connection import Connection
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from itertools import accumulate, count, pairwise, repeat, takewhile
+from multiprocessing.connection import Connection, wait
 from multiprocessing.process import BaseProcess
 from pathlib import Path
+from typing import TextIO
 
 from cics.csd_parse import parse_csd
 from cobble.cli_logging import configure_cli_logging
@@ -26,10 +28,13 @@ from cobble.dataflow.fixpoint.area_need import AreaNeed, Slotted
 from cobble.dataflow.fixpoint.area_need_file import rows_of, write_rows
 from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
+from cobble.dataflow.fixpoint.explain_end import ExplainEnd
 from cobble.dataflow.fixpoint.explain_request import ExplainRequest
+from cobble.dataflow.fixpoint.explain_row import ExplainRow
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.shared_count import SharedCount
+from cobble.dataflow.fixpoint.site_row import SiteRow
 from cobble.dataflow.fixpoint.target_site import Sites, resolved_sites
 from cobol_asg.asg_types import CobolASG
 
@@ -39,12 +44,13 @@ _Job = tuple[int, str, tuple[Row, ...], Path]
 _Held = tuple[int, PreparedProgram]
 _Round = tuple[int, AreaTable, int, int]
 _STOP: _Round = (0, AreaTable(), 0, 0)
-_Loaded = tuple[Receives, tuple[str, ...], Sites]
+_Loaded = tuple[Receives, tuple[str, ...], Sites, tuple[SiteRow, ...]]
+_Prepared = tuple[int, PreparedProgram, tuple[SiteRow, ...]]
 
 
 def _loaded(
     job: _Job, total: int, done: SharedCount, programs: Mapping[str, str]
-) -> tuple[_Held, ...]:
+) -> tuple[_Prepared, ...]:
     """One member loaded and prepared. A member that cannot be read adds nothing:
     its own targets go unresolved in the fixpoint anyway."""
     position, member, block, path = job
@@ -53,12 +59,26 @@ def _loaded(
             asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
             logger.info("area need: loading [%d/%d] %s", done.next(), total, member)
             layout = member_layout(member, block).layout
-            return ((position, prepared(member, asg, layout, programs)),)
+            program, rows = prepared(member, asg, layout, programs)
+            return ((position, _logged(program), rows),)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         logger.warning(
             "area need: [%d/%d] %s unreadable: %r", done.next(), total, member, error
         )
         return ()
+
+
+def _logged(program: PreparedProgram) -> PreparedProgram:
+    """Every dynamic site the member could not resolve, named with its reasons."""
+    for node, answer in program.unresolved:
+        logger.info(
+            "area need: %s %s %s unresolved: %s",
+            program.member,
+            program.places.at(program.graph.order.index(node)),
+            program.places.transfer(node),
+            ", ".join(doubt.value for doubt in answer.doubts),
+        )
+    return program
 
 
 def _walked(program: PreparedProgram, round_: _Round, done: SharedCount) -> AreaFound:
@@ -81,7 +101,7 @@ def _named(program: PreparedProgram) -> tuple[str, ...]:
     )
 
 
-def _receiving(programs: tuple[_Held, ...]) -> _Loaded:
+def _receiving(programs: tuple[_Held, ...], rows: tuple[SiteRow, ...]) -> _Loaded:
     return (
         tuple(
             (program.member, tuple(slot for slot, _ in program.received))
@@ -93,6 +113,7 @@ def _receiving(programs: tuple[_Held, ...]) -> _Loaded:
             for _, program in programs
             for node, callees in program.sites
         ),
+        rows,
     )
 
 
@@ -108,35 +129,43 @@ def _shard(
     program. What its members receive and the callees they name go first; an
     explain request, after the last round, is answered for its own members."""
     configure_cli_logging()
-    held = tuple(one for job in jobs for one in _loaded(job, total, done, programs))
-    connection.send(_receiving(held))
+    loaded = tuple(one for job in jobs for one in _loaded(job, total, done, programs))
+    held = tuple((position, program) for position, program, _ in loaded)
+    connection.send(_receiving(held, tuple(row for one in loaded for row in one[2])))
     for message in iter(connection.recv, _STOP):
-        connection.send(_answer(message, held, done))
+        _handled(message, held, done, connection)
 
 
-def _answer(
+def _handled(
     message: _Round | ExplainRequest,
     programs: tuple[_Held, ...],
     done: SharedCount,
-) -> tuple[AreaFound, ...] | tuple[tuple[str, str], ...]:
+    connection: Connection,
+) -> None:
     match message:
         case ExplainRequest() as request:
-            return _explained(programs, request)
+            _explained(programs, request, connection)
         case round_:
-            return tuple(_walked(program, round_, done) for _, program in programs)
+            connection.send(
+                tuple(_walked(program, round_, done) for _, program in programs)
+            )
 
 
 def _explained(
-    programs: tuple[_Held, ...], request: ExplainRequest
-) -> tuple[tuple[str, str], ...]:
-    """Each held member the request names, or that needs at least its bytes."""
+    programs: tuple[_Held, ...], request: ExplainRequest, connection: Connection
+) -> None:
+    """Each held member the request names, or that needs at least its bytes, sent
+    the moment it is explained; then the end of this worker's rows."""
     needs = dict(request.table.needs)
-    return tuple(
-        (program.member, explained(program, request.table))
+    chosen = (
+        program
         for _, program in programs
         if program.member in request.members
         or 0 < request.over <= _need_bytes(needs[program.member].entry)
     )
+    for program in chosen:
+        connection.send(explained(program, request.table))
+    connection.send(ExplainEnd())
 
 
 def _need_bytes(bounds: Slotted) -> int:
@@ -215,8 +244,11 @@ def _stopped(shards: _Shards) -> None:
         process.join()
 
 
-def _received(parents: tuple[Connection, ...]) -> tuple[Receives, Sites]:
+def _received(
+    parents: tuple[Connection, ...], sites_out: str
+) -> tuple[Receives, Sites]:
     loaded: tuple[_Loaded, ...] = tuple(parent.recv() for parent in parents)
+    _sites_written(tuple(row for one in loaded for row in one[3]), sites_out)
     receives = tuple(pair for one in loaded for pair in one[0])
     members = {member for member, _ in receives}
     named = {callee for one in loaded for callee in one[1]}
@@ -232,8 +264,25 @@ def _received(parents: tuple[Connection, ...]) -> tuple[Receives, Sites]:
     return receives, sites
 
 
-def _settled(parents: tuple[Connection, ...], total: int, combined: Sites) -> AreaTable:
-    receives, local = _received(parents)
+def _sites_written(rows: tuple[SiteRow, ...], sites_out: str) -> None:
+    """Every dynamic site in the corpus, one JSONL row each, before the first round."""
+    if not sites_out:
+        return
+    Path(sites_out).write_text(
+        "".join(f"{row.model_dump_json()}\n" for row in rows), encoding="utf-8"
+    )
+    logger.info(
+        "area need: %d dynamic sites written to %s, %d unresolved",
+        len(rows),
+        sites_out,
+        sum(1 for row in rows if not row.callees),
+    )
+
+
+def _settled(
+    parents: tuple[Connection, ...], total: int, combined: Sites, sites_out: str
+) -> AreaTable:
+    receives, local = _received(parents, sites_out)
     sites = (*local, *combined)
     rounds = accumulate(
         count(1),
@@ -270,7 +319,7 @@ def _sites(arguments: argparse.Namespace, programs: Mapping[str, str]) -> Sites:
     return sites
 
 
-def computed(arguments: argparse.Namespace) -> tuple[AreaTable, str]:
+def computed(arguments: argparse.Namespace, out: TextIO) -> AreaTable:
     """Rounds of liveness over every member in the extents table until the table
     stops changing: what a callee reads can make its caller forward more, which
     that caller's callers then read. Every member starts needing nothing, so the
@@ -278,30 +327,72 @@ def computed(arguments: argparse.Namespace) -> tuple[AreaTable, str]:
     members for the whole run."""
     jobs = _jobs(arguments)
     if not jobs:
-        return AreaTable(), ""
+        return AreaTable()
     programs = _programs(arguments)
     shards = _started(jobs, arguments.max_workers, programs)
-    table = _settled(shards[0], len(jobs), _sites(arguments, programs))
+    table = _settled(shards[0], len(jobs), _sites(arguments, programs), arguments.sites)
     request = ExplainRequest(table, arguments.explain_over, _named_members(arguments))
-    report = _report(shards[0], request)
+    _report(shards[0], request, out)
     _stopped(shards)
-    return table, report
+    return table
 
 
 def _named_members(arguments: argparse.Namespace) -> tuple[str, ...]:
     return (arguments.explain,) if arguments.explain else ()
 
 
-def _report(parents: tuple[Connection, ...], request: ExplainRequest) -> str:
-    """The members the request names or that need its bytes, explained, in member order."""
+@dataclass(frozen=True)
+class _Draining:
+    """The workers still sending rows, and the row the last message carried."""
+
+    pending: frozenset[Connection]
+    rows: tuple[ExplainRow, ...] = ()
+
+
+def _drained(state: _Draining) -> _Draining:
+    ready = _ready(state.pending)
+    match ready.recv():
+        case ExplainEnd():
+            return _Draining(pending=state.pending - {ready})
+        case row:
+            return _Draining(pending=state.pending, rows=(row,))
+
+
+def _ready(pending: frozenset[Connection]) -> Connection:
+    waiting = wait(tuple(pending))
+    return next(parent for parent in pending if parent in waiting)
+
+
+def _arrivals(parents: tuple[Connection, ...]) -> Iterator[ExplainRow]:
+    """Each row as whichever worker has one ready sends it, until every worker ends."""
+    states = accumulate(
+        repeat(None),
+        lambda state, _: _drained(state),
+        initial=_Draining(pending=frozenset(parents)),
+    )
+    return (
+        row
+        for state in takewhile(lambda state: bool(state.pending), states)
+        for row in state.rows
+    )
+
+
+def _report(
+    parents: tuple[Connection, ...], request: ExplainRequest, out: TextIO
+) -> None:
+    """The members the request names or that need its bytes, one JSONL row each,
+    written and flushed as each arrives."""
     if request.over <= 0 and not request.members:
-        return ""
+        return
     for parent in parents:
         parent.send(request)
-    found: tuple[tuple[str, str], ...] = tuple(
-        pair for parent in parents for pair in parent.recv()
-    )
-    return "".join(text for _, text in sorted(found))
+    _written(_arrivals(parents), out)
+
+
+def _written(rows: Iterator[ExplainRow], out: TextIO) -> None:
+    for row in rows:
+        out.write(f"{row.model_dump_json()}\n")
+        out.flush()
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
@@ -313,21 +404,39 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--extents", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--max-workers", type=worker_count, default=4)
+    _reporting_arguments(parser)
+    _resolution_arguments(parser)
+    return parser.parse_args(argv)
+
+
+def _reporting_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--explain",
         default="",
         metavar="MEMBER",
-        help="after the rounds, print why MEMBER needs the bytes it does: each"
-        " demand source alone, and the writes that read more than they keep live",
+        help="after the rounds, write a JSONL row to stdout saying why MEMBER needs"
+        " the bytes it does: each demand source alone, and the writes that make more"
+        " live than their target keeps",
     )
     parser.add_argument(
         "--explain-over",
         type=int,
         default=0,
         metavar="BYTES",
-        help="after the rounds, explain every member needing at least BYTES bytes"
-        " on entry, in member order; each worker explains its own members",
+        help="after the rounds, write a JSONL row to stdout for every member needing"
+        " at least BYTES bytes on entry, each as soon as its worker finishes it",
     )
+    parser.add_argument(
+        "--sites",
+        default="",
+        metavar="FILE",
+        help="right after loading, before the first round, write every dynamic site"
+        " in the corpus to FILE as JSONL: how its own program resolved it, or why"
+        " not, and every write in the program touching its operand",
+    )
+
+
+def _resolution_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--fixpoint-dir",
         default="",
@@ -347,7 +456,6 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         " charged with the needs of the programs they reach instead of every"
         " member's",
     )
-    return parser.parse_args(argv)
 
 
 def _refusal(arguments: argparse.Namespace) -> str:
@@ -379,10 +487,9 @@ def cli(argv: Sequence[str]) -> int:
     if refusal:
         sys.stderr.write(refusal)
         return 2
-    table, report = computed(arguments)
+    table = computed(arguments, sys.stdout)
     write_rows(rows_of(table), arguments.out)
     logger.info("area need written to %s", arguments.out)
-    sys.stdout.write(report)
     return 0
 
 

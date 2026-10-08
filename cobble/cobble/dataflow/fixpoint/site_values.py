@@ -96,6 +96,15 @@ def _after(held: ValueSet, write: Write, operand: FieldExtent) -> ValueSet:
         return held
     if _replaces(write, operand):
         return _sliced(write.values, write.target, operand)
+    return _unknown(write)
+
+
+def _unknown(write: Write) -> ValueSet:
+    """Why a write that does not replace the operand with literals leaves it
+    unknown: the reasons its own values carry -- inbound-linkage for a copy out of
+    the commarea -- or, when it carries none, that it is not a literal."""
+    if write.values.reasons:
+        return ValueSet(reasons=write.values.reasons)
     return _UNKNOWN
 
 
@@ -168,3 +177,17 @@ def values_at(
         if not run.queue
     )
     return _arriving(graph, settled, graph.order.index(site), initial)
+
+
+def touching(graph: SiteGraph, operand: FieldExtent) -> tuple[tuple[str, Write], ...]:
+    """Every write in the program that touches any byte of ``operand``, with its node."""
+    return tuple(
+        (graph.order[position], write)
+        for position, writes in enumerate(graph.writes)
+        for write in writes
+        if _overlapping(write.target, operand)
+    )
+
+
+def replaces(write: Write, operand: FieldExtent) -> bool:
+    return _replaces(write, operand)

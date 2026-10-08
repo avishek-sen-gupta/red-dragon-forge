@@ -1,4 +1,4 @@
-"""Why one member needs the received bytes it does: each demand source alone, and the writes that widen."""
+"""Why one member needs the received bytes it does, as one row: each demand source alone, and the writes that widen."""
 
 from __future__ import annotations
 
@@ -8,9 +8,15 @@ from cobble.dataflow.fixpoint.area_need import relative
 from cobble.dataflow.fixpoint.area_table import AreaTable
 from cobble.dataflow.fixpoint.call_site import CallSite
 from cobble.dataflow.fixpoint.demand_parts import DemandParts
+from cobble.dataflow.fixpoint.explain_row import ExplainRow
+from cobble.dataflow.fixpoint.explain_site import ExplainSite
+from cobble.dataflow.fixpoint.explain_source import ExplainSource
+from cobble.dataflow.fixpoint.explain_source_kind import ExplainSourceKind
+from cobble.dataflow.fixpoint.explain_widening import ExplainWidening
 from cobble.dataflow.fixpoint.live_write import LiveWrite
 from cobble.dataflow.fixpoint.liveness import live_sets, needed_sources, strong
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
+from cobble.dataflow.fixpoint.site_resolution import SiteResolution
 from cobol_memory.field_extent import FieldExtent
 
 _Sets = tuple[frozenset[FieldExtent], ...]
@@ -31,65 +37,76 @@ def _alone(program: PreparedProgram, table: AreaTable, parts: DemandParts) -> in
     return _entry_bytes(program, live_sets(program.graph, parts.demand(table)))
 
 
-def _charged(table: AreaTable, node: str, site: CallSite) -> str:
-    callees = table.callees_at(node, site)
-    if not callees:
-        return "dynamic, unresolved: every member's need"
+def _resolution(table: AreaTable, node: str, site: CallSite) -> SiteResolution:
+    if not table.callees_at(node, site):
+        return SiteResolution.UNRESOLVED
     if site.dynamic:
-        return f"dynamic, resolved: {', '.join(callees)}"
+        return SiteResolution.RESOLVED
     return _named(table, site.callee)
 
 
-def _named(table: AreaTable, callee: str) -> str:
+def _named(table: AreaTable, callee: str) -> SiteResolution:
     if callee in dict(table.receives):
-        return callee
-    return f"{callee}, outside the corpus: every byte"
+        return SiteResolution.STATIC
+    return SiteResolution.OUTSIDE
 
 
 def _place(program: PreparedProgram, node: str) -> str:
     return program.places.at(program.graph.order.index(node))
 
 
-def _site_label(
+def _sites(program: PreparedProgram, table: AreaTable) -> tuple[ExplainSite, ...]:
+    return tuple(
+        ExplainSite(
+            place=_place(program, node),
+            transfer=program.places.transfer(node),
+            resolution=_resolution(table, node, site),
+            callees=table.callees_at(node, site),
+            bytes=_alone(program, table, DemandParts(entry=((node, site, slots),))),
+            reasons=_reasons(program, table, node, site),
+        )
+        for node, site, slots in program.parts.entry
+    )
+
+
+def _reasons(
     program: PreparedProgram, table: AreaTable, node: str, site: CallSite
-) -> str:
-    return f"{_place(program, node)} {program.places.transfer(node)}, {_charged(table, node, site)}"
+) -> tuple[str, ...]:
+    if table.callees_at(node, site):
+        return ()
+    return tuple(doubt.value for doubt in dict(program.unresolved)[node].doubts)
 
 
-def _sources(
-    program: PreparedProgram, table: AreaTable
-) -> tuple[tuple[str, DemandParts, AreaTable], ...]:
+def _sources(program: PreparedProgram, table: AreaTable) -> tuple[ExplainSource, ...]:
     parts = program.parts
     return (
         *(
-            (("call-target reads", DemandParts(local=parts.local), table),)
+            (
+                ExplainSource(
+                    kind=ExplainSourceKind.CALL_TARGETS,
+                    bytes=_alone(program, table, DemandParts(local=parts.local)),
+                ),
+            )
             if parts.local
             else ()
         ),
-        *(
-            (
-                _site_label(program, table, node, site),
-                DemandParts(entry=((node, site, slots),)),
-                table,
-            )
-            for node, site, slots in parts.entry
-        ),
-        *(_read_backs(parts, table) if parts.back else ()),
+        *(_read_backs(program, table) if parts.back else ()),
     )
 
 
 def _read_backs(
-    parts: DemandParts, table: AreaTable
-) -> tuple[tuple[str, DemandParts, AreaTable], ...]:
+    program: PreparedProgram, table: AreaTable
+) -> tuple[ExplainSource, ...]:
     """What every caller reads back, and the part of it that calls no definition
     resolved read back -- charged to every member, whoever its callers are."""
-    back = DemandParts(back=parts.back)
+    back = DemandParts(back=program.parts.back)
     return (
-        ("callers' read-back at exits, all of it", back, table),
-        (
-            "  of which after unresolved dynamic calls, charged to every member",
-            back,
-            table.backed_by(table.dynamic_back),
+        ExplainSource(
+            kind=ExplainSourceKind.READ_BACK, bytes=_alone(program, table, back)
+        ),
+        ExplainSource(
+            kind=ExplainSourceKind.READ_BACK_UNRESOLVED,
+            bytes=_alone(program, table.backed_by(table.dynamic_back), back),
         ),
     )
 
@@ -151,36 +168,39 @@ def _wider(write: LiveWrite, kept: int, read: tuple[FieldExtent, ...]) -> int:
     return _bytes(read) + held - kept
 
 
-def _widening_line(
+def _widening_row(
     program: PreparedProgram,
     found: tuple[int, str, LiveWrite, int, tuple[FieldExtent, ...]],
-) -> str:
+) -> ExplainWidening:
     _, node, write, kept, read = found
-    held = "" if strong(write) else ", may keep its old bytes so all stay live"
-    return (
-        f"    {_place(program, node)}: {extent_text(write.target)} keeps {kept} bytes live{held},"
-        f" reads {_bytes(read)} from {', '.join(ranked[2] for ranked in sorted((one.region.value, one.start, extent_text(one)) for one in read))}"
+    return ExplainWidening(
+        place=_place(program, node),
+        target=extent_text(write.target),
+        kept=kept,
+        keeps_old=not strong(write),
+        read=_bytes(read),
+        sources=tuple(
+            ranked[2]
+            for ranked in sorted(
+                (one.region.value, one.start, extent_text(one)) for one in read
+            )
+        ),
     )
 
 
-def explained(program: PreparedProgram, table: AreaTable) -> str:
-    """The member's entry need; what each demand source alone pins of it; and the
-    writes whose sources need more bytes than their target keeps live, widest first."""
+def explained(program: PreparedProgram, table: AreaTable) -> ExplainRow:
+    """The member's entry need; what each demand source alone needs of it; and the
+    writes that make more live than their target keeps, widest first."""
     seen = table.seen_from(program.member)
     sets = live_sets(program.graph, program.parts.demand(seen))
     found = _widening(program, sets)
     order = sorted((-one[0], one[1], at) for at, one in enumerate(found))
-    widest = tuple(found[ranked[2]] for ranked in order[:_WIDEST])
-    return "\n".join(
-        (
-            f"{program.member}: {_entry_bytes(program, sets)} bytes needed on entry",
-            "  by source, each alone:",
-            *(
-                f"  {_alone(program, charged, parts):6}  {label}"
-                for label, parts, charged in _sources(program, seen)
-            ),
-            "  writes that read more than their target keeps live:",
-            *(_widening_line(program, one) for one in widest),
-            "",
-        )
+    return ExplainRow(
+        member=program.member,
+        needed=_entry_bytes(program, sets),
+        sources=_sources(program, seen),
+        sites=_sites(program, seen),
+        widening=tuple(
+            _widening_row(program, found[ranked[2]]) for ranked in order[:_WIDEST]
+        ),
     )

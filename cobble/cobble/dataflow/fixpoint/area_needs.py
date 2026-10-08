@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from functools import reduce
 from itertools import groupby
 from operator import itemgetter
@@ -19,6 +20,9 @@ from cobble.dataflow.fixpoint.liveness import graph_of, live_sets
 from cobble.dataflow.fixpoint.local_sites import local_sites
 from cobble.dataflow.fixpoint.places import places_of
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
+from cobble.dataflow.fixpoint.site_answer import SiteAnswer
+from cobble.dataflow.fixpoint.site_row import SiteRow
+from cobble.dataflow.fixpoint.site_row_definition import SiteRowDefinition
 from cobble.dataflow.fixpoint.target_site import Sites
 from cobble.dataflow.jumps.discover import (
     call_areas,
@@ -34,9 +38,10 @@ from cobol_memory.field_extent import FieldExtent
 
 def prepared(
     member: str, asg: CobolASG, layout: ProgramLayout, programs: Mapping[str, str]
-) -> PreparedProgram:
-    """Everything the rounds and a report need, built from the ASG once.
-    ``programs`` maps a transaction id to the program the CSD runs for it."""
+) -> tuple[PreparedProgram, tuple[SiteRow, ...]]:
+    """Everything the rounds and a report need, built from the ASG once, and a row
+    for each of its dynamic sites. ``programs`` maps a transaction id to the program
+    the CSD runs for it."""
     cfg, statements = program_graph(asg)
     index = layout.index
     parts = demand_parts(asg, cfg, statements, index)
@@ -50,17 +55,54 @@ def prepared(
         *((node, site) for node, site, _ in parts.entry),
         *((node, site) for node, site, _ in returning),
     )
-    return PreparedProgram(
+    answers = local_sites(
+        cfg, statements, index, layout.records, entry, calls, programs
+    )
+    places = places_of(cfg, tuple(sorted({node for node, _ in calls})))
+    program = PreparedProgram(
         member=member,
         graph=graph_of(cfg, statements, index),
         parts=parts,
         entry=entry,
         received=received_slots(asg, index),
         returning=returning,
-        sites=local_sites(
-            cfg, statements, index, layout.records, entry, calls, programs
+        sites=tuple(
+            (node, answer.callees) for node, answer in answers if answer.callees
         ),
-        places=places_of(cfg, tuple(sorted({node for node, _ in calls}))),
+        unresolved=tuple(
+            (node, replace(answer, definitions=()))
+            for node, answer in answers
+            if not answer.callees
+        ),
+        places=places,
+    )
+    return program, _site_rows(program, answers)
+
+
+def _site_rows(
+    program: PreparedProgram, answers: tuple[tuple[str, SiteAnswer], ...]
+) -> tuple[SiteRow, ...]:
+    rank = {node: position for position, node in enumerate(program.graph.order)}
+    return tuple(
+        SiteRow(
+            member=program.member,
+            place=program.places.at(rank[node]),
+            transfer=program.places.transfer(node),
+            operand=answer.operand,
+            callees=answer.callees,
+            reasons=tuple(doubt.value for doubt in answer.doubts),
+            definitions=tuple(
+                SiteRowDefinition(
+                    place=program.places.at(rank[one.node]),
+                    kind=one.kind,
+                    values=one.values,
+                    sources=one.sources,
+                    reasons=one.reasons,
+                )
+                for one in answer.definitions
+            ),
+        )
+        for node, answer in answers
     )
 
 
