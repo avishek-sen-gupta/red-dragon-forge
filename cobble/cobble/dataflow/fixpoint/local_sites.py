@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import reduce
 
 from cics.statements import ExecCicsStatement
 from cobble.dataflow.fields.aliases import area_extents
@@ -11,7 +12,7 @@ from cobble.dataflow.fields.extent import CellIndex, operand_extents
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fields.image import initial_image
 from cobble.dataflow.fields.transfer import Statement, Write
-from cobble.dataflow.fields.values import UnresolvedReason, ValueSet
+from cobble.dataflow.fields.values import EMPTY, UnresolvedReason, ValueSet, merged
 from cobble.dataflow.fixpoint.call_site import CallSite
 from cobble.dataflow.fixpoint.definition_kind import DefinitionKind
 from cobble.dataflow.fixpoint.site_answer import SiteAnswer
@@ -30,6 +31,8 @@ from cobble.dataflow.layout import Record
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFERS
 from cobol_memory.field_extent import FieldExtent, Precision
+
+_OWN_STORAGE = frozenset({UnresolvedReason.UNINITIALISED})
 
 
 def _one_exact(extents: tuple[FieldExtent, ...]) -> tuple[FieldExtent, ...]:
@@ -58,18 +61,28 @@ def _names(values: ValueSet) -> tuple[str, ...]:
 
 
 def _answered(found: tuple[ValueSet, ...]) -> SiteAnswer:
-    """The program names the operand's values spell, or why there are none."""
+    """The program names the operand's values spell, or why they are unknown.
+
+    Uninitialised doubt does not leave a site unknown. It is storage of this
+    program's own that no write reached on some path, so it holds no name another
+    program supplied, and the combine links such a site to the names its values
+    spell and to nothing else. Any other doubt -- a copy from LINKAGE, a value a
+    callee wrote -- means some other program may supply a name."""
     if not found:
         return SiteAnswer(doubts=(SiteDoubt.OPERAND_NOT_ONE_EXTENT,))
-    if not found[0].complete:
-        return SiteAnswer(doubts=_doubts(found[0]))
-    return _named(_names(found[0]))
+    held = reduce(merged, found, EMPTY)
+    if not held.reasons <= _OWN_STORAGE:
+        return SiteAnswer(doubts=_doubts(held))
+    return _named(_names(held), _doubts(held))
 
 
-def _named(names: tuple[str, ...]) -> SiteAnswer:
+def _named(
+    names: tuple[str, ...], doubts: tuple[UnresolvedReason | SiteDoubt, ...]
+) -> SiteAnswer:
+    """Resolved to these names; no name at all is reported, and reaches nothing."""
     if not names:
-        return SiteAnswer(doubts=(SiteDoubt.NO_PROGRAM_NAME,))
-    return SiteAnswer(callees=names)
+        return SiteAnswer(resolved=True, doubts=(*doubts, SiteDoubt.NO_PROGRAM_NAME))
+    return SiteAnswer(resolved=True, callees=names, doubts=doubts)
 
 
 def _called(
@@ -141,7 +154,9 @@ def _transaction_ids(
     operand = transid_operand(statement)
     if operand.is_literal:
         return SiteAnswer(
-            callees=(operand.text.strip("'\"").rstrip(),), operand=operand.text
+            resolved=True,
+            callees=(operand.text.strip("'\"").rstrip(),),
+            operand=operand.text,
         )
     extents = _one_exact(area_extents(operand.text, index))
     return _described(
@@ -152,13 +167,23 @@ def _transaction_ids(
 
 
 def _run_by(ids: SiteAnswer, programs: Mapping[str, str]) -> SiteAnswer:
-    """The programs the CSD runs for these transaction ids."""
-    if not ids.callees:
+    """The programs the CSD runs for these transaction ids. One the CSD does not
+    define runs no program, and the combine, reading the same CSD, links it to
+    none. Without a CSD nothing says which program a transaction runs."""
+    if not ids.resolved:
         return ids
+    if not programs:
+        return replace(ids, resolved=False, callees=(), doubts=(SiteDoubt.NO_CSD,))
+    return _mapped(ids, programs)
+
+
+def _mapped(ids: SiteAnswer, programs: Mapping[str, str]) -> SiteAnswer:
     run = tuple(sorted({programs[one] for one in ids.callees if one in programs}))
-    if run:
+    if len(run) == len(ids.callees):
         return replace(ids, callees=run)
-    return replace(ids, callees=(), doubts=(SiteDoubt.TRANSACTION_NOT_IN_CSD,))
+    return replace(
+        ids, callees=run, doubts=(*ids.doubts, SiteDoubt.TRANSACTION_NOT_IN_CSD)
+    )
 
 
 def _started(

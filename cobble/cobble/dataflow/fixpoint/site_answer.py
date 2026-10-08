@@ -11,10 +11,13 @@ from cobble.dataflow.fixpoint.site_doubt import SiteDoubt
 
 @dataclass(frozen=True)
 class SiteAnswer:
-    """Resolved when ``callees`` is not empty; otherwise ``doubts`` says why.
-    ``operand`` names what the site reads its program from, and ``definitions``
-    are every write in the program touching it, wherever they are."""
+    """``resolved`` when every program the site can reach is in ``callees`` -- which
+    may be none, for a site whose operand never names a program the combine could
+    link -- otherwise unknown, ``doubts`` saying why. ``operand`` names what the
+    site reads its program from, and ``definitions`` are every write in the program
+    touching it, wherever they are."""
 
+    resolved: bool = False
     callees: tuple[str, ...] = ()
     doubts: tuple[UnresolvedReason | SiteDoubt, ...] = ()
     operand: str = ""

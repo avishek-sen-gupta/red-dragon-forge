@@ -58,9 +58,14 @@ class AreaTable:
             ),
         )
 
+    def resolved_at(self, node: str, site: CallSite) -> bool:
+        """Whether every program the call at ``node`` in this member can reach is known."""
+        return not site.dynamic or (self.member, node) in self._resolved
+
     def callees_at(self, node: str, site: CallSite) -> tuple[str, ...]:
         """The programs the call at ``node`` in this member can reach: the one it
-        names, the candidates its dynamic site resolved to, or none known."""
+        names, or those its dynamic site resolved to -- none, for a site resolved to
+        nothing, and none for one not resolved, which ``resolved_at`` tells apart."""
         if not site.dynamic:
             return (site.callee,)
         return self._resolved.get((self.member, node), ())
@@ -73,12 +78,11 @@ class AreaTable:
         slot, every byte."""
         if self.whole:
             return (area,)
-        callees = self.callees_at(node, site)
-        if not callees:
+        if not self.resolved_at(node, site):
             return self.dynamic.at_entry(slot, area)
         return tuple(
             piece
-            for callee in callees
+            for callee in self.callees_at(node, site)
             for piece in self._callee(callee, slot).at_entry(slot, area)
         )
 

@@ -338,6 +338,29 @@ _Parts = tuple[tuple[FieldExtent, ...], _Handed, Slots]
 _NO_PARTS: _Parts = ((), (), ())
 _NEXT_TRANSACTION = CallSite("", AreaKind.COMMAREA)
 _COMMAREA_SLOT = AreaSlot(AreaKind.COMMAREA, 0)
+_RETRIEVED_SLOT = AreaSlot(AreaKind.RETRIEVED, 0)
+_HANDED: Mapping[JumpKind, CallSite] = {
+    JumpKind.RETURN_TRANSID: _NEXT_TRANSACTION,
+    JumpKind.START: CallSite("", AreaKind.RETRIEVED),
+}
+_SLOT_OF: Mapping[JumpKind, AreaSlot] = {
+    JumpKind.RETURN_TRANSID: _COMMAREA_SLOT,
+    JumpKind.START: _RETRIEVED_SLOT,
+}
+
+
+def retrieved_areas(statement: Statement, index: CellIndex) -> Slots:
+    """A RETRIEVE's INTO area, in the slot a START's FROM area is handed to."""
+    if not isinstance(
+        statement, ExecCicsStatement
+    ) or JumpKind.RETRIEVE not in _cics_kind(statement):
+        return ()
+    return tuple(
+        (_RETRIEVED_SLOT, area)
+        for area in _named(
+            _option(statement, _CICS_OPTION[JumpKind.RETRIEVE]).text, index
+        )
+    )
 
 
 def received_slots(asg: CobolASG, index: CellIndex) -> Slots:
@@ -404,6 +427,9 @@ def _statement_parts(
 def _cics_parts(
     statement: ExecCicsStatement, index: CellIndex, received: Slots
 ) -> _Parts:
+    """A transaction id is read where it is named. A RETURN TRANSID's commarea and
+    a START's FROM area are handed over, charged by what the program the
+    transaction runs needs of them; a RETRIEVE's INTO area is written, not read."""
     kinds = _cics_kind(statement)
     handed = tuple(
         (kind, _named(_option(statement, _CICS_OPTION[kind]).text, index))
@@ -413,22 +439,13 @@ def _cics_parts(
     return (
         tuple(
             extent
-            for kind, areas in handed
-            for extent in (
-                *_transid_extents(statement, kind, index),
-                *(areas if kind is not JumpKind.RETURN_TRANSID else ()),
-            )
+            for kind, _ in handed
+            for extent in _transid_extents(statement, kind, index)
         ),
-        (
-            (
-                _NEXT_TRANSACTION,
-                tuple(
-                    (_COMMAREA_SLOT, area)
-                    for kind, areas in handed
-                    if kind is JumpKind.RETURN_TRANSID
-                    for area in areas
-                ),
-            ),
+        tuple(
+            (_HANDED[kind], tuple((_SLOT_OF[kind], area) for area in areas))
+            for kind, areas in handed
+            if kind in _HANDED
         ),
         received if JumpKind.EXIT in kinds else (),
     )

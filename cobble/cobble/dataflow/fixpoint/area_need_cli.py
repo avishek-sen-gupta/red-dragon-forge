@@ -26,7 +26,12 @@ from cobble.dataflow.fixpoint.area_explain import explained
 from cobble.dataflow.fixpoint.area_found import AreaFound
 from cobble.dataflow.fixpoint.area_need import AreaNeed, Slotted
 from cobble.dataflow.fixpoint.area_need_file import rows_of, write_rows
-from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
+from cobble.dataflow.fixpoint.area_needs import (
+    need_found,
+    prepared,
+    receiving_slots,
+    resolved,
+)
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
 from cobble.dataflow.fixpoint.explain_end import ExplainEnd
 from cobble.dataflow.fixpoint.explain_request import ExplainRequest
@@ -103,10 +108,7 @@ def _named(program: PreparedProgram) -> tuple[str, ...]:
 
 def _receiving(programs: tuple[_Held, ...], rows: tuple[SiteRow, ...]) -> _Loaded:
     return (
-        tuple(
-            (program.member, tuple(slot for slot, _ in program.received))
-            for _, program in programs
-        ),
+        tuple((program.member, receiving_slots(program)) for _, program in programs),
         tuple(callee for _, program in programs for callee in _named(program)),
         tuple(
             (program.member, node, callees)
@@ -275,7 +277,7 @@ def _sites_written(rows: tuple[SiteRow, ...], sites_out: str) -> None:
         "area need: %d dynamic sites written to %s, %d unresolved",
         len(rows),
         sites_out,
-        sum(1 for row in rows if not row.callees),
+        sum(1 for row in rows if not row.resolved),
     )
 
 
@@ -445,8 +447,9 @@ def _resolution_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
         default="",
-        help="the corpus config whose CSD files map a RETURN TRANSID's transaction"
-        " to the program it runs; without it no RETURN TRANSID resolves",
+        help="the corpus config whose CSD files map a RETURN TRANSID's or START's"
+        " transaction to the program it runs -- the same config the combine reads;"
+        " without it no transaction resolves",
     )
     parser.add_argument(
         "--combined-dir",
