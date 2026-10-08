@@ -508,15 +508,21 @@ def _report(
     written and flushed as each arrives."""
     if request.over <= 0 and not request.members:
         return
+    logger.info("area need: explaining members over %d bytes", request.over)
     for parent in parents:
         parent.send(request)
     _written(_arrivals(parents), out)
 
 
 def _written(rows: Iterator[ExplainRow], out: TextIO) -> None:
+    written = 0
     for row in rows:
         out.write(f"{row.model_dump_json()}\n")
         out.flush()
+        written += 1
+        if written % 100 == 0:
+            logger.info("area need: %d members explained", written)
+    logger.info("area need: %d members explained (done)", written)
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:
