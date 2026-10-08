@@ -9,6 +9,7 @@ from itertools import accumulate, count, islice
 from types import MappingProxyType
 
 from cobble.dataflow.combine.callee_areas import CalleeAreas
+from cobble.dataflow.combine.closures import Closures
 from cobble.dataflow.combine.edge import Edge
 from cobble.dataflow.combine.held import Held, held_join
 from cobble.dataflow.combine.linked import Linked
@@ -19,7 +20,6 @@ from cobble.dataflow.combine.resolve import Resolve, resolve
 from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.stop import Stop
 from cobble.dataflow.combine.stop_kind import StopKind
-from cobble.dataflow.combine.walk import walked
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
 from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint.targets import ResolvedTarget, is_program_name
@@ -117,7 +117,11 @@ _Place = tuple[int, int, int, int, int]
 
 
 def _program_answers(
-    world: _World, program: str, tables: ProgramTables, place: _Place
+    world: _World,
+    program: str,
+    tables: ProgramTables,
+    place: _Place,
+    closures: Closures[_Vertex, Held],
 ) -> tuple[tuple[_Start, Held], ...]:
     """``place`` is the round, the jumps answered before this program, every jump
     in the round, this program's number and every program in the round."""
@@ -131,6 +135,7 @@ def _program_answers(
                 jump.node,
                 fact,
                 position(round_, before + number, jumps, index, programs, program),
+                closures,
             ),
         )
         for number, jump in enumerate(tables.jumps.values(), 1)
@@ -143,6 +148,7 @@ def _collect_answers(
     items: tuple[tuple[str, ProgramTables], ...],
     started: float,
     round_: int,
+    closures: Closures[_Vertex, Held],
 ) -> tuple[tuple[_Start, Held], ...]:
     """Every program's answers, with a heartbeat at most every five seconds naming
     the position in the round. Iterated, not recursed: a corpus has thousands of
@@ -163,7 +169,7 @@ def _collect_answers(
         for ((program, tables), place), _ in zip(
             zip(items, places, strict=True), islice(stamps, 1, None), strict=True
         )
-        for answer in _program_answers(world, program, tables, place)
+        for answer in _program_answers(world, program, tables, place, closures)
     )
 
 
@@ -193,13 +199,18 @@ def _answered_in(world: _World, round_: int) -> _World:
         len(world.edges),
     )
     started = time.monotonic()
-    pairs = _collect_answers(world, tuple(world.tables.items()), started, round_)
+    closures = Closures(partial(_expanded, world), held_join, Held())
+    pairs = _collect_answers(
+        world, tuple(world.tables.items()), started, round_, closures
+    )
     logger.info(
-        "combine:   round %d: answered %d programs, %d jumps in %.1fs",
+        "combine:   round %d: answered %d programs, %d jumps in %.1fs; %d vertices"
+        " answered once each",
         round_,
         total_programs,
         total_jumps,
         time.monotonic() - started,
+        closures.answered,
     )
     return replace(world, answers=MappingProxyType(dict(pairs)))
 
@@ -213,11 +224,16 @@ def _names(values: frozenset[str]) -> tuple[str, ...]:
 
 
 def _fact_held(
-    world: _World, program: str, node: str, fact: Fact, label: str = ""
+    world: _World,
+    program: str,
+    node: str,
+    fact: Fact,
+    label: str,
+    closures: Closures[_Vertex, Held],
 ) -> Held:
     if not fact.extent:
         return Held(values=frozenset(fact.values), reasons=frozenset(fact.reasons))
-    return _held(world, (program, node, byte_range(fact.extent, program)), label)
+    return _held((program, node, byte_range(fact.extent, program)), label, closures)
 
 
 def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> ByteRange:
@@ -231,26 +247,10 @@ def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> Byt
     )
 
 
-def _programs_reached(total: int, seen: frozenset[_Vertex]) -> str:
-    """How many of the corpus's programs a walk has reached, bounded, so it shows
-    whether the walk is crossing most of the corpus or going deep through a few;
-    and how many program-and-node places, so many more vertices than places shows
-    the same places being reached under different byte ranges."""
-    places = len({(vertex[0], vertex[1]) for vertex in seen})
-    programs = len({vertex[0] for vertex in seen})
-    return f" across {programs}/{total} programs, {places} places"
-
-
-def _held(world: _World, start: _Vertex, label: str = "") -> Held:
-    walk = walked(
-        start,
-        partial(_expanded, world),
-        held_join,
-        Held(),
-        label=label,
-        spread=partial(_programs_reached, len(world.tables)),
-    )
-    return held_join(walk.found, Held(cycled=walk.revisited))
+def _held(start: _Vertex, label: str, closures: Closures[_Vertex, Held]) -> Held:
+    """What a walk from ``start`` would find -- everything reachable joined -- and
+    whether it would reach some vertex twice, both from the round's memo."""
+    return held_join(closures.of(start, label), Held(cycled=closures.revisits(start)))
 
 
 def _joined(left: _Expansion, right: _Expansion) -> _Expansion:
