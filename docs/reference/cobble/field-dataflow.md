@@ -280,7 +280,10 @@ program when every definition reaching it overwrites all of it with a literal, o
 program's own storage that no write reached. A resolved site is charged with the programs it
 reaches. Any other dynamic site is charged with the union over every member for that kind of
 area. A byte-for-byte `MOVE` counts only the bytes it copies. Liveness reruns in rounds until no
-row changes.
+row changes: the first walks every member, each later one only the members whose callees' entry
+rows, own back row, or -- with a site nothing resolved -- union of every member's entry need
+changed. That reaches the same rows as walking every member every round. The log's round line
+says how many were walked and how many come next.
 
 ## cobble-dataflow-fixpoint-diagnose
 
