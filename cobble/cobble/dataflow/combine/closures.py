@@ -173,7 +173,7 @@ class Closures(Generic[_V, _C]):
             return
         self._last = now
         logger.info(
-            "combine:     %s%d vertices answered this round, %d on the stack",
+            "combine:     %s%d vertices answered, %d on the stack",
             f"{label}: " if label else "",
             len(self._answers),
             depth,

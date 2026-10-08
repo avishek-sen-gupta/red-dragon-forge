@@ -26,12 +26,12 @@ _WRITER_EXPLAINED = frozenset(
     }
 )
 Resolve = Callable[[ProgramTables, str, ByteRange], Resolution]
-_Vertex = tuple[str, ByteRange]
-_Step = tuple[Resolution, tuple[_Vertex, ...]]
+Vertex = tuple[str, ByteRange]
+Step = tuple[Resolution, tuple[Vertex, ...]]
 
 
 def resolve(tables: ProgramTables, node: str, at: ByteRange) -> Resolution:
-    return walked((node, at), partial(_expanded, tables), joined, Resolution()).found
+    return walked((node, at), partial(step, tables), joined, Resolution()).found
 
 
 def _unknown_stop(reasons: tuple[UnresolvedReason, ...]) -> Resolution:
@@ -44,11 +44,11 @@ def _overlap(a: ByteRange, b: ByteRange) -> ByteRange:
     return replace(a, start=max(a.start, b.start), end=min(a.end, b.end))
 
 
-def _stepped(left: _Step, right: _Step) -> _Step:
+def _stepped(left: Step, right: Step) -> Step:
     return joined(left[0], right[0]), left[1] + right[1]
 
 
-def _expanded(tables: ProgramTables, vertex: _Vertex) -> _Step:
+def step(tables: ProgramTables, vertex: Vertex) -> Step:
     node, at = vertex
     facts = tables.facts_at(node, at)
     if not facts:
@@ -67,7 +67,7 @@ def _sliced(fact: Fact, where: ByteRange, part: ByteRange) -> frozenset[str]:
 
 def _from_fact(
     tables: ProgramTables, at: ByteRange, where: ByteRange, fact: Fact
-) -> _Step:
+) -> Step:
     part = _overlap(at, where)
     values = Resolution(values=_sliced(fact, where, part))
     return reduce(
@@ -124,7 +124,7 @@ def _through(
     flow: Flow,
     part: ByteRange,
     fact: Fact,
-) -> _Step:
+) -> Step:
     written = _overlap(part, flow.target)
     if not flow.source.known:
         return _synthetic(tables, writer, written, fact), ()

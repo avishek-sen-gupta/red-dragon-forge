@@ -12,6 +12,7 @@ from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.program_tables import ProgramTables
 from cobble.dataflow.combine.resolution import Resolution
 from cobble.dataflow.combine.resolve import resolve
+from tests.dataflow.combine.test_memo_resolve import CountingStep
 from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.target_site import TargetSite
 from cobble.dataflow.fields.extent_text import NO_RANGE, ByteRange, byte_range
@@ -414,7 +415,7 @@ class CountingResolve:
 
 def test_a_run_resolves_each_program_node_and_range_once_across_rounds() -> None:
     tables = {"A": caller("A", "A", "B"), "B": returner("B", "M")}
-    plain, counted = CountingResolve(), CountingResolve()
+    plain, counted = CountingResolve(), CountingStep()
 
     unmemoised = link(tables, areas("A", "B"), {}, OutsideJumps(), plain)
     memoised = link(
@@ -425,11 +426,11 @@ def test_a_run_resolves_each_program_node_and_range_once_across_rounds() -> None
     assert memoised.report.rounds == 3
     assert Counter(counted.calls) == Counter(
         {
-            ("A", "X", byte_range("WS-AREA@working_storage[0:8]", "A")): 1,
-            ("B", "X", byte_range("WS-NEXT@working_storage[0:8]", "B")): 1,
+            ("A", ("X", byte_range("WS-AREA@working_storage[0:8]", "A"))): 1,
+            ("B", ("X", byte_range("WS-NEXT@working_storage[0:8]", "B"))): 1,
+            ("B", ("M2", byte_range("LK-FROM@linkage[0:8]", "B"))): 1,
         }
     )
-    assert set(plain.calls) == set(counted.calls)
     assert len(plain.calls) == 5
 
 
