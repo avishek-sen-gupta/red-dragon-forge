@@ -12,6 +12,7 @@ from cobol_asg.cobol_expression import FieldRefNode, LiteralNode
 from cobol_asg.ref_mod import (
     FunctionCallOperand,
     RefModBinOp,
+    RefModLengthOf,
     RefModLiteral,
     RefModOperand,
     RefModReference,
@@ -124,6 +125,33 @@ def test_an_arithmetic_reference_modification_start_still_folds(
     (extent,) = operand_extents(operand, index_of(asg)).extents
     assert _bytes(extent) == (2, 2)
     assert extent.precision is Precision.EXACT
+
+
+def test_length_of_in_a_reference_modification_folds_to_the_named_length(
+    program_of, index_of, field
+):
+    asg = _one(
+        program_of,
+        [
+            field(
+                1,
+                "REC-A",
+                children=[
+                    field(5, "WS-HEAD", "X(3)"),
+                    field(5, "WS-A", "X(10)", offset=3),
+                ],
+            )
+        ],
+    )
+    operand = RefModOperand(
+        name="WS-A",
+        ref_mod_start=RefModBinOp(
+            op="+", left=RefModLengthOf(name="WS-HEAD"), right=RefModLiteral(value="1")
+        ),
+        ref_mod_length=RefModLengthOf(name="WS-HEAD"),
+    )
+    (extent,) = operand_extents(operand, index_of(asg)).extents
+    assert (_bytes(extent), extent.precision) == ((6, 3), Precision.EXACT)
 
 
 def test_a_computed_reference_modification_clamps_to_the_whole_field(

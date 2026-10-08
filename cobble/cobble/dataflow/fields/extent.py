@@ -38,6 +38,7 @@ from cobol_asg.ref_mod import (
     FunctionCallOperand,
     RefModBinOp,
     RefModExpr,
+    RefModLengthOf,
     RefModLiteral,
     RefModOperand,
 )
@@ -345,17 +346,32 @@ def _narrowed(extent: FieldExtent, start: int, size: int) -> FieldExtent:
     return replace(extent, start=absolute, length=remainder if size == 0 else size)
 
 
-def _slice_length(operand: RefModOperand) -> _Folded:
+def _bound(expression: RefModExpr, index: CellIndex) -> _Folded:
+    """A reference-modification bound, folded: ``_const``'s literals and arithmetic,
+    and ``LENGTH OF`` a field, which the compiler knows from its declaration."""
+    match expression:
+        case RefModLengthOf(name=name):
+            return _length_of(name, index)
+        case RefModBinOp(op=op, left=left, right=right):
+            return _combine(op, _bound(left, index), _bound(right, index))
+        case _:
+            return _const(expression)
+
+
+def _length_of(name: str, index: CellIndex) -> _Folded:
+    cells = index.cells_named(name, (), 0)
+    return _Folded(cells[0].length, True) if cells else _UNFOLDED
+
+
+def _slice_length(operand: RefModOperand, index: CellIndex) -> _Folded:
     match operand.ref_mod_length:
         case None:
             return _TO_END
         case length:
-            return _const(length)
+            return _bound(length, index)
 
 
-def _ref_modified(
-    extent: FieldExtent, start_of: RefModExpr, size: _Folded
-) -> FieldExtent:
+def _ref_modified(extent: FieldExtent, start: _Folded, size: _Folded) -> FieldExtent:
     """COBOL reference modification is 1-based: WS-F(2:3) starts one byte in.
 
     Only an EXACT extent narrows. A CLAMPED base already stands for every
@@ -363,7 +379,7 @@ def _ref_modified(
     claim to know which one; a non-constant start or length knows even less. Both
     therefore keep the whole base extent, at CLAMPED.
     """
-    match (extent.precision, _const(start_of), size):
+    match (extent.precision, start, size):
         case (Precision.EXACT, _Folded(known=True) as start, _Folded(known=True)):
             return _narrowed(extent, start.value, size.value)
         case _:
@@ -371,14 +387,14 @@ def _ref_modified(
 
 
 def _sliced(
-    extents: tuple[FieldExtent, ...], operand: RefModOperand
+    extents: tuple[FieldExtent, ...], operand: RefModOperand, index: CellIndex
 ) -> tuple[FieldExtent, ...]:
     match operand.ref_mod_start:
         case None:
             return extents
         case start_of:
-            size = _slice_length(operand)
-            return tuple(_ref_modified(extent, start_of, size) for extent in extents)
+            start, size = _bound(start_of, index), _slice_length(operand, index)
+            return tuple(_ref_modified(extent, start, size) for extent in extents)
 
 
 def _unresolved_reason(name: str) -> str:
@@ -395,7 +411,7 @@ def _field_extents(operand: RefModOperand, index: CellIndex) -> OperandExtents:
     if not candidates:
         return OperandExtents(reason=_unresolved_reason(operand.name))
     base = _base_extents(operand, candidates, index)
-    return OperandExtents(extents=_sliced(base, operand))
+    return OperandExtents(extents=_sliced(base, operand, index))
 
 
 def _every_occurrence(
@@ -430,9 +446,11 @@ def operand_occurrence_extents(
     if not candidates:
         return ()
     if not operand.subscripts:
-        return _sliced(tuple(index.extent_of(cell) for cell in candidates), operand)
+        return _sliced(
+            tuple(index.extent_of(cell) for cell in candidates), operand, index
+        )
     selected = _selected(operand.subscripts, candidates, index)
-    return _sliced(selected or _every_occurrence(candidates, index), operand)
+    return _sliced(selected or _every_occurrence(candidates, index), operand, index)
 
 
 def operand_extents(

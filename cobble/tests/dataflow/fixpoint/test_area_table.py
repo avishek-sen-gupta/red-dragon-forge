@@ -38,21 +38,33 @@ def test_a_call_site_is_charged_with_its_own_callee_and_an_exit_with_its_own_cal
             ("PROGO", (COMMAREA,)),
             ("PROGU", (USING,)),
         ),
+        (("PROGN", "N7", ("PROGO", "PROGU")), ("PROGO", "N7", ("PROGN",))),
     )
     caller = table.seen_from("PROGN")
 
     assert [
-        _bytes(caller.entry_at(CallSite("PROGN", AreaKind.COMMAREA), COMMAREA, AREA)),
-        _bytes(caller.entry_at(CallSite("PROGO", AreaKind.COMMAREA), COMMAREA, AREA)),
-        _bytes(caller.entry_at(CallSite("", AreaKind.COMMAREA), COMMAREA, AREA)),
-        _bytes(caller.entry_at(CallSite("", AreaKind.USING), USING, AREA)),
-        _bytes(caller.entry_at(CallSite("PROGQ", AreaKind.COMMAREA), COMMAREA, AREA)),
-        _bytes(caller.entry_at(CallSite("PROGU", AreaKind.COMMAREA), COMMAREA, AREA)),
+        _bytes(
+            caller.entry_at("N1", CallSite("PROGN", AreaKind.COMMAREA), COMMAREA, AREA)
+        ),
+        _bytes(
+            caller.entry_at("N1", CallSite("PROGO", AreaKind.COMMAREA), COMMAREA, AREA)
+        ),
+        _bytes(caller.entry_at("N1", CallSite("", AreaKind.COMMAREA), COMMAREA, AREA)),
+        _bytes(caller.entry_at("N1", CallSite("", AreaKind.USING), USING, AREA)),
+        _bytes(
+            caller.entry_at("N1", CallSite("PROGQ", AreaKind.COMMAREA), COMMAREA, AREA)
+        ),
+        _bytes(
+            caller.entry_at("N1", CallSite("PROGU", AreaKind.COMMAREA), COMMAREA, AREA)
+        ),
+        _bytes(caller.entry_at("N7", CallSite("", AreaKind.COMMAREA), COMMAREA, AREA)),
         _bytes(caller.back_at(COMMAREA, AREA)),
         _bytes(table.seen_from("PROGO").back_at(COMMAREA, AREA)),
         _bytes(table.seen_from("PROGQ").back_at(COMMAREA, AREA)),
         _bytes(
-            WHOLE_TABLE.entry_at(CallSite("PROGO", AreaKind.COMMAREA), COMMAREA, AREA)
+            WHOLE_TABLE.entry_at(
+                "N1", CallSite("PROGO", AreaKind.COMMAREA), COMMAREA, AREA
+            )
         ),
         _bytes(WHOLE_TABLE.seen_from("PROGN").back_at(COMMAREA, AREA)),
     ] == [
@@ -62,6 +74,7 @@ def test_a_call_site_is_charged_with_its_own_callee_and_an_exit_with_its_own_cal
         [(102, 103)],
         [(100, 120)],
         [(100, 120)],
+        [(108, 116), (100, 120)],
         [(104, 106)],
         [],
         [(100, 120)],

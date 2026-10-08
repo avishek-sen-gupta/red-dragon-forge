@@ -13,9 +13,11 @@ from cobble.dataflow.fixpoint.area_found import AreaFound
 from cobble.dataflow.fixpoint.area_need import AreaNeed, Bounds, joined, relative
 from cobble.dataflow.fixpoint.area_slot import AreaSlot
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
+from cobble.dataflow.fixpoint.call_site import CallSite
 from cobble.dataflow.fixpoint.fixpoint import entry_of, program_graph
 from cobble.dataflow.fixpoint.liveness import graph_of, live_sets
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
+from cobble.dataflow.fixpoint.target_site import Sites
 from cobble.dataflow.jumps.discover import (
     call_areas,
     call_site,
@@ -50,9 +52,8 @@ def need_found(program: PreparedProgram, table: AreaTable) -> AreaFound:
     """The received bytes this program's targets depend on at entry, and the bytes
     of each area it hands to a LINK or CALL that it reads again afterwards, given
     what the table says its callees read and its callers read back."""
-    sets = live_sets(
-        program.graph, program.parts.demand(table.seen_from(program.member))
-    )
+    seen = table.seen_from(program.member)
+    sets = live_sets(program.graph, program.parts.demand(seen))
     rank = {node: position for position, node in enumerate(program.graph.order)}
     at_entry = spans_of(sets[rank[program.entry]]) if program.entry in rank else {}
     return AreaFound(
@@ -68,14 +69,23 @@ def need_found(program: PreparedProgram, table: AreaTable) -> AreaFound:
             AreaNeed(),
         ),
         read_backs=tuple(
-            (site, slot, bounds)
+            (reached, slot, bounds)
             for node, site, areas in program.returning
             for after in (_after(program, sets, rank[node]),)
             for slot, area in areas
             for bounds in (relative(after, area),)
             if bounds
+            for reached in _reached(seen, node, site)
         ),
     )
+
+
+def _reached(table: AreaTable, node: str, site: CallSite) -> tuple[CallSite, ...]:
+    """The call as each program it can reach, or as itself when none is known."""
+    callees = table.callees_at(node, site)
+    if not callees:
+        return (site,)
+    return tuple(CallSite(callee, site.kind) for callee in callees)
 
 
 def _after(
@@ -96,9 +106,9 @@ def _backs(pairs: Sequence[tuple[AreaSlot, Bounds]]) -> AreaNeed:
     )
 
 
-def resolved(found: Sequence[AreaFound], receives: Receives) -> AreaTable:
-    """Each member's own entry need, and as its back need what the static calls
-    naming it read back, with what every dynamic call reads back."""
+def resolved(found: Sequence[AreaFound], receives: Receives, sites: Sites) -> AreaTable:
+    """Each member's own entry need, and as its back need what the calls that can
+    reach it read back, with what every unresolved dynamic call reads back."""
     dynamic = _backs(
         tuple(
             (slot, bounds)
@@ -129,4 +139,5 @@ def resolved(found: Sequence[AreaFound], receives: Receives) -> AreaTable:
             for one in found
         ),
         receives,
+        sites,
     )
