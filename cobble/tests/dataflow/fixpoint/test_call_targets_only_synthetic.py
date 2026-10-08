@@ -10,9 +10,18 @@ from cobble.dataflow.fixpoint.area_kind import AreaKind
 from cobble.dataflow.fixpoint.area_need_cli import cli as area_cli
 from cobble.dataflow.fixpoint.area_need_file import read_rows
 from cobble.dataflow.fixpoint.build_corpus import cli
+from cobble.dataflow.fixpoint.definition_kind import DefinitionKind
+from cobble.dataflow.fixpoint.explain_row import ExplainRow
+from cobble.dataflow.fixpoint.explain_site import ExplainSite
+from cobble.dataflow.fixpoint.explain_source import ExplainSource
+from cobble.dataflow.fixpoint.explain_source_kind import ExplainSourceKind
+from cobble.dataflow.fixpoint.explain_widening import ExplainWidening
 from cobble.dataflow.fixpoint.member_counts import MemberCounts
 from cobble.dataflow.fixpoint.query import cli as query_cli
 from cobble.dataflow.fixpoint.scope import Scope
+from cobble.dataflow.fixpoint.site_resolution import SiteResolution
+from cobble.dataflow.fixpoint.site_row import SiteRow
+from cobble.dataflow.fixpoint.site_row_definition import SiteRowDefinition
 from tests.dataflow.combine.corpus_toml import CONFIG
 from tests.dataflow.combine.linked_rows import link_rows, target_rows
 from tests.dataflow.fixpoint.test_combine_synthetic import PROGA, PROGB
@@ -721,19 +730,59 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     full = fixpoint_corpus_with(
-        {"PROGX": STRUNG, "PROGN": _slice_callee("PROGN", "LK-FIRST")}, ()
+        {
+            "PROGX": STRUNG,
+            "PROGN": _slice_callee("PROGN", "LK-FIRST"),
+            "PROGR": CALLER_NAMED,
+        },
+        (),
     )
     parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
     capsys.readouterr()
 
-    report = (
-        "PROGX: 16 bytes needed on entry\n"
-        "  by source, each alone:\n"
-        "      16  call-target reads\n"
-        "       8  MAIN-PARA line 16 LINK, dynamic, resolved: PROGN\n"
-        "  writes that read more than their target keeps live:\n"
-        "    MAIN-PARA line 13: WS-TARGET@working_storage[0:8] keeps 8 bytes live,"
-        " reads 16 from LK-FIRST@linkage[0:8], LK-SECOND@linkage[8:16]\n"
+    report = ExplainRow(
+        member="PROGX",
+        needed=16,
+        sources=(ExplainSource(kind=ExplainSourceKind.CALL_TARGETS, bytes=16),),
+        sites=(
+            ExplainSite(
+                place="MAIN-PARA line 16",
+                transfer="LINK",
+                resolution=SiteResolution.RESOLVED,
+                callees=("PROGN",),
+                bytes=8,
+            ),
+        ),
+        widening=(
+            ExplainWidening(
+                place="MAIN-PARA line 13",
+                target="WS-TARGET@working_storage[0:8]",
+                kept=8,
+                keeps_old=False,
+                read=16,
+                sources=("LK-FIRST@linkage[0:8]", "LK-SECOND@linkage[8:16]"),
+            ),
+        ),
+    )
+    named = ExplainRow(
+        member="PROGR",
+        needed=16,
+        sources=(
+            ExplainSource(kind=ExplainSourceKind.CALL_TARGETS, bytes=8),
+            ExplainSource(kind=ExplainSourceKind.READ_BACK, bytes=0),
+            ExplainSource(kind=ExplainSourceKind.READ_BACK_UNRESOLVED, bytes=0),
+        ),
+        sites=(
+            ExplainSite(
+                place="MAIN-PARA line 14",
+                transfer="LINK",
+                resolution=SiteResolution.UNRESOLVED,
+                callees=(),
+                bytes=16,
+                reasons=("inbound-linkage",),
+            ),
+        ),
+        widening=(),
     )
     common = [
         "--asg-dir",
@@ -742,9 +791,60 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
         str(extents),
         "--out",
         str(tmp_path / "need.jsonl"),
+        "--sites",
+        str(tmp_path / "sites.jsonl"),
     ]
 
     assert [
-        (area_cli([*common, *chosen]), capsys.readouterr().out)
+        (
+            area_cli([*common, *chosen]),
+            {
+                row.member: row
+                for line in capsys.readouterr().out.splitlines()
+                for row in (ExplainRow.model_validate_json(line),)
+            },
+        )
         for chosen in (["--explain", "PROGX"], ["--explain-over", "9"])
-    ] == [(0, report), (0, report)]
+    ] == [(0, {"PROGX": report}), (0, {"PROGR": named, "PROGX": report})]
+    assert {
+        row.member: row
+        for line in (tmp_path / "sites.jsonl").read_text(encoding="utf-8").splitlines()
+        for row in (SiteRow.model_validate_json(line),)
+    } == {
+        "PROGR": SiteRow(
+            member="PROGR",
+            place="MAIN-PARA line 14",
+            transfer="LINK",
+            operand="WS-PGM@working_storage[0:8]",
+            callees=(),
+            reasons=("inbound-linkage",),
+            definitions=(
+                SiteRowDefinition(
+                    place="MAIN-PARA line 12",
+                    kind=DefinitionKind.LITERAL,
+                    values=("PROGN   ",),
+                ),
+                SiteRowDefinition(
+                    place="MAIN-PARA line 13",
+                    kind=DefinitionKind.COPY,
+                    sources=("LK-FIRST@linkage[0:8]",),
+                    reasons=("inbound-linkage",),
+                ),
+            ),
+        ),
+        "PROGX": SiteRow(
+            member="PROGX",
+            place="MAIN-PARA line 16",
+            transfer="LINK",
+            operand="WS-PGM@working_storage[8:16]",
+            callees=("PROGN",),
+            reasons=(),
+            definitions=(
+                SiteRowDefinition(
+                    place="MAIN-PARA line 15",
+                    kind=DefinitionKind.LITERAL,
+                    values=("PROGN   ",),
+                ),
+            ),
+        ),
+    }
