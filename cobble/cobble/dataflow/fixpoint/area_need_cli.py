@@ -7,7 +7,7 @@ import json
 import logging
 import multiprocessing
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from itertools import accumulate, count, pairwise
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
@@ -27,12 +27,10 @@ from cobble.dataflow.fixpoint.area_need_file import rows_of, write_rows
 from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
 from cobble.dataflow.fixpoint.explain_request import ExplainRequest
-from cobble.dataflow.fixpoint.fixpoint import program_graph
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.shared_count import SharedCount
 from cobble.dataflow.fixpoint.target_site import Sites, resolved_sites
-from cobble.dataflow.srccfg.cfg import Cfg
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
@@ -41,10 +39,12 @@ _Job = tuple[int, str, tuple[Row, ...], Path]
 _Held = tuple[int, PreparedProgram]
 _Round = tuple[int, AreaTable, int, int]
 _STOP: _Round = (0, AreaTable(), 0, 0)
-_Loaded = tuple[Receives, tuple[str, ...]]
+_Loaded = tuple[Receives, tuple[str, ...], Sites]
 
 
-def _loaded(job: _Job, total: int, done: SharedCount) -> tuple[_Held, ...]:
+def _loaded(
+    job: _Job, total: int, done: SharedCount, programs: Mapping[str, str]
+) -> tuple[_Held, ...]:
     """One member loaded and prepared. A member that cannot be read adds nothing:
     its own targets go unresolved in the fixpoint anyway."""
     position, member, block, path = job
@@ -52,9 +52,8 @@ def _loaded(job: _Job, total: int, done: SharedCount) -> tuple[_Held, ...]:
         with cached_asg_dialect_parsers_registered():
             asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
             logger.info("area need: loading [%d/%d] %s", done.next(), total, member)
-            return (
-                (position, prepared(member, asg, member_layout(member, block).layout)),
-            )
+            layout = member_layout(member, block).layout
+            return ((position, prepared(member, asg, layout, programs)),)
     except Exception as error:  # noqa: BLE001 - one member must not end the run
         logger.warning(
             "area need: [%d/%d] %s unreadable: %r", done.next(), total, member, error
@@ -89,53 +88,55 @@ def _receiving(programs: tuple[_Held, ...]) -> _Loaded:
             for _, program in programs
         ),
         tuple(callee for _, program in programs for callee in _named(program)),
+        tuple(
+            (program.member, node, callees)
+            for _, program in programs
+            for node, callees in program.sites
+        ),
     )
 
 
 def _shard(
-    connection: Connection, jobs: tuple[_Job, ...], total: int, done: SharedCount
+    connection: Connection,
+    jobs: tuple[_Job, ...],
+    total: int,
+    done: SharedCount,
+    programs: Mapping[str, str],
 ) -> None:
     """One worker process: its share of the members, loaded once and kept for every
     round, so only the table and the reports cross between processes, never a
     program. What its members receive and the callees they name go first; an
     explain request, after the last round, is answered for its own members."""
     configure_cli_logging()
-    programs = tuple(held for job in jobs for held in _loaded(job, total, done))
-    connection.send(_receiving(programs))
+    held = tuple(one for job in jobs for one in _loaded(job, total, done, programs))
+    connection.send(_receiving(held))
     for message in iter(connection.recv, _STOP):
-        connection.send(_answer(message, programs, jobs, done))
+        connection.send(_answer(message, held, done))
 
 
 def _answer(
     message: _Round | ExplainRequest,
     programs: tuple[_Held, ...],
-    jobs: tuple[_Job, ...],
     done: SharedCount,
 ) -> tuple[AreaFound, ...] | tuple[tuple[str, str], ...]:
     match message:
-        case ExplainRequest(table=table, over=over):
-            return _explained_over(programs, jobs, table, over)
+        case ExplainRequest() as request:
+            return _explained(programs, request)
         case round_:
             return tuple(_walked(program, round_, done) for _, program in programs)
 
 
-def _explained_over(
-    programs: tuple[_Held, ...], jobs: tuple[_Job, ...], table: AreaTable, over: int
+def _explained(
+    programs: tuple[_Held, ...], request: ExplainRequest
 ) -> tuple[tuple[str, str], ...]:
-    needs = dict(table.needs)
-    paths = {job[1]: job[3] for job in jobs}
+    """Each held member the request names, or that needs at least its bytes."""
+    needs = dict(request.table.needs)
     return tuple(
-        (program.member, explained(program, _cfg_of(paths[program.member]), table))
+        (program.member, explained(program, request.table))
         for _, program in programs
-        if _need_bytes(needs[program.member].entry) >= over
+        if program.member in request.members
+        or 0 < request.over <= _need_bytes(needs[program.member].entry)
     )
-
-
-def _cfg_of(path: Path) -> Cfg:
-    with cached_asg_dialect_parsers_registered():
-        asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    cfg, _ = program_graph(asg)
-    return cfg
 
 
 def _need_bytes(bounds: Slotted) -> int:
@@ -184,7 +185,9 @@ def _jobs(arguments: argparse.Namespace) -> tuple[_Job, ...]:
 _Shards = tuple[tuple[Connection, ...], tuple[BaseProcess, ...], SharedCount]
 
 
-def _started(jobs: tuple[_Job, ...], workers: int) -> _Shards:
+def _started(
+    jobs: tuple[_Job, ...], workers: int, programs: Mapping[str, str]
+) -> _Shards:
     shards = min(workers, len(jobs))
     context = multiprocessing.get_context("spawn")
     pipes = tuple(context.Pipe() for _ in range(shards))
@@ -192,7 +195,7 @@ def _started(jobs: tuple[_Job, ...], workers: int) -> _Shards:
     processes = tuple(
         context.Process(
             target=_shard,
-            args=(child, jobs[shard::shards], len(jobs), done),
+            args=(child, jobs[shard::shards], len(jobs), done, programs),
             daemon=True,
         )
         for shard, (_, child) in enumerate(pipes)
@@ -212,22 +215,26 @@ def _stopped(shards: _Shards) -> None:
         process.join()
 
 
-def _received(parents: tuple[Connection, ...]) -> Receives:
+def _received(parents: tuple[Connection, ...]) -> tuple[Receives, Sites]:
     loaded: tuple[_Loaded, ...] = tuple(parent.recv() for parent in parents)
-    receives = tuple(pair for held, _ in loaded for pair in held)
+    receives = tuple(pair for one in loaded for pair in one[0])
     members = {member for member, _ in receives}
-    named = {callee for _, callees in loaded for callee in callees}
+    named = {callee for one in loaded for callee in one[1]}
+    sites = tuple(site for one in loaded for site in one[2])
     logger.info(
         "area need: %d members loaded; %d named callees are not among them,"
-        " and every byte handed to one counts",
+        " and every byte handed to one counts; %d dynamic sites resolved by"
+        " reaching definitions in their own program",
         len(members),
         len(named - members),
+        len(sites),
     )
-    return receives
+    return receives, sites
 
 
-def _settled(parents: tuple[Connection, ...], total: int, sites: Sites) -> AreaTable:
-    receives = _received(parents)
+def _settled(parents: tuple[Connection, ...], total: int, combined: Sites) -> AreaTable:
+    receives, local = _received(parents)
+    sites = (*local, *combined)
     rounds = accumulate(
         count(1),
         lambda table, number: _round(table, number, parents, receives, sites, total),
@@ -238,14 +245,20 @@ def _settled(parents: tuple[Connection, ...], total: int, sites: Sites) -> AreaT
     return next(after for before, after in pairwise(rounds) if before == after)
 
 
-def _sites(arguments: argparse.Namespace) -> Sites:
-    if not arguments.combined_dir:
-        return ()
-    programs = {
+def _programs(arguments: argparse.Namespace) -> Mapping[str, str]:
+    """Each transaction id the corpus config's CSD files define, to its program."""
+    if not arguments.config:
+        return {}
+    return {
         transid: program
         for csd in load_corpus_config(Path(arguments.config)).csd_files
         for transid, program in parse_csd(csd).items()
     }
+
+
+def _sites(arguments: argparse.Namespace, programs: Mapping[str, str]) -> Sites:
+    if not arguments.combined_dir:
+        return ()
     sites = resolved_sites(
         Path(arguments.fixpoint_dir), Path(arguments.combined_dir), programs
     )
@@ -266,19 +279,25 @@ def computed(arguments: argparse.Namespace) -> tuple[AreaTable, str]:
     jobs = _jobs(arguments)
     if not jobs:
         return AreaTable(), ""
-    shards = _started(jobs, arguments.max_workers)
-    table = _settled(shards[0], len(jobs), _sites(arguments))
-    report = _over_report(shards[0], table, arguments.explain_over)
+    programs = _programs(arguments)
+    shards = _started(jobs, arguments.max_workers, programs)
+    table = _settled(shards[0], len(jobs), _sites(arguments, programs))
+    request = ExplainRequest(table, arguments.explain_over, _named_members(arguments))
+    report = _report(shards[0], request)
     _stopped(shards)
     return table, report
 
 
-def _over_report(parents: tuple[Connection, ...], table: AreaTable, over: int) -> str:
-    """Every member needing at least ``over`` bytes explained, in member order."""
-    if over <= 0:
+def _named_members(arguments: argparse.Namespace) -> tuple[str, ...]:
+    return (arguments.explain,) if arguments.explain else ()
+
+
+def _report(parents: tuple[Connection, ...], request: ExplainRequest) -> str:
+    """The members the request names or that need its bytes, explained, in member order."""
+    if request.over <= 0 and not request.members:
         return ""
     for parent in parents:
-        parent.send(ExplainRequest(table, over))
+        parent.send(request)
     found: tuple[tuple[str, str], ...] = tuple(
         pair for parent in parents for pair in parent.recv()
     )
@@ -318,7 +337,7 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         "--config",
         default="",
         help="the corpus config whose CSD files map a RETURN TRANSID's transaction"
-        " to the program it runs",
+        " to the program it runs; without it no RETURN TRANSID resolves",
     )
     parser.add_argument(
         "--combined-dir",
@@ -329,18 +348,6 @@ def _parsed(argv: Sequence[str]) -> argparse.Namespace:
         " member's",
     )
     return parser.parse_args(argv)
-
-
-def _explanation(arguments: argparse.Namespace, table: AreaTable) -> str:
-    member = arguments.explain
-    block = next(
-        rows for name, rows in member_rows(arguments.extents) if name == member
-    )
-    path = arguments.asg_dir / f"{member}.json"
-    with cached_asg_dialect_parsers_registered():
-        asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    program = prepared(member, asg, member_layout(member, block).layout)
-    return explained(program, _cfg_of(path), table)
 
 
 def _refusal(arguments: argparse.Namespace) -> str:
@@ -359,13 +366,10 @@ def _explain_refusal(arguments: argparse.Namespace) -> str:
 
 
 def _resolution_refusal(arguments: argparse.Namespace) -> str:
-    given = {
-        bool(arguments.fixpoint_dir),
-        bool(arguments.combined_dir),
-        bool(arguments.config),
-    }
-    if len(given) > 1:
-        return "area need: !! --fixpoint-dir, --combined-dir and --config go together\n"
+    if bool(arguments.fixpoint_dir) != bool(arguments.combined_dir):
+        return "area need: !! --fixpoint-dir and --combined-dir go together\n"
+    if arguments.combined_dir and not arguments.config:
+        return "area need: !! --combined-dir needs --config for its CSD\n"
     return ""
 
 
@@ -379,8 +383,6 @@ def cli(argv: Sequence[str]) -> int:
     write_rows(rows_of(table), arguments.out)
     logger.info("area need written to %s", arguments.out)
     sys.stdout.write(report)
-    if arguments.explain:
-        sys.stdout.write(_explanation(arguments, table))
     return 0
 
 

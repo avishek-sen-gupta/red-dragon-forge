@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import cached_property, reduce
 
-from cobble.dataflow.fixpoint.area_need import WHOLE_AREAS, AreaNeed, joined
+from cobble.dataflow.fixpoint.area_need import WHOLE_AREAS, AreaNeed, Slotted, joined
 from cobble.dataflow.fixpoint.area_slot import AreaSlot
 from cobble.dataflow.fixpoint.call_site import CallSite
 from cobble.dataflow.fixpoint.target_site import Sites
@@ -21,13 +21,15 @@ class AreaTable:
     """Per member, its need and the slots it receives; ``sites`` the dynamic call
     sites the combined targets resolved, by caller and node, with their candidates;
     ``dynamic`` the entry need of every member together, for a dynamic site that did
-    not resolve; ``member`` the program whose walk asks. ``whole`` keeps every byte
+    not resolve; ``dynamic_back`` what calls that did not resolve read back, which
+    every member's back need includes; ``member`` the program whose walk asks. ``whole`` keeps every byte
     of every area. Pairs, not mappings, so the table pickles into worker processes."""
 
     needs: tuple[tuple[str, AreaNeed], ...] = ()
     receives: Receives = ()
     sites: Sites = ()
     dynamic: AreaNeed = NO_NEED
+    dynamic_back: Slotted = ()
     member: str = ""
     whole: bool = False
 
@@ -45,6 +47,16 @@ class AreaTable:
 
     def seen_from(self, member: str) -> AreaTable:
         return replace(self, member=member)
+
+    def backed_by(self, back: Slotted) -> AreaTable:
+        """This table with the asking member's back need replaced by ``back``."""
+        return replace(
+            self,
+            needs=tuple(
+                (name, replace(need, back=back) if name == self.member else need)
+                for name, need in self.needs
+            ),
+        )
 
     def callees_at(self, node: str, site: CallSite) -> tuple[str, ...]:
         """The programs the call at ``node`` in this member can reach: the one it
@@ -89,6 +101,7 @@ def area_table(
     needs: Sequence[tuple[str, AreaNeed]],
     receives: Sequence[tuple[str, tuple[AreaSlot, ...]]],
     sites: Sites,
+    dynamic_back: Slotted = (),
 ) -> AreaTable:
     """The table in member order, so two tables holding the same needs are equal."""
     by_member, receiving = dict(needs), dict(receives)
@@ -96,6 +109,7 @@ def area_table(
         needs=tuple((member, by_member[member]) for member in sorted(by_member)),
         receives=tuple((member, receiving[member]) for member in sorted(receiving)),
         sites=tuple(sorted(sites)),
+        dynamic_back=dynamic_back,
         dynamic=reduce(
             joined,
             (AreaNeed(entry=need.entry) for need in by_member.values()),

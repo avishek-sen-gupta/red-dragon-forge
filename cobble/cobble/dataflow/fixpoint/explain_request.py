@@ -9,7 +9,9 @@ from cobble.dataflow.fixpoint.area_table import AreaTable
 
 @dataclass(frozen=True)
 class ExplainRequest:
-    """Explain every held member whose settled entry need is at least ``over`` bytes."""
+    """Explain every held member in ``members``, and, when ``over`` is positive,
+    every one whose settled entry need is at least ``over`` bytes."""
 
     table: AreaTable
     over: int
+    members: tuple[str, ...] = ()
