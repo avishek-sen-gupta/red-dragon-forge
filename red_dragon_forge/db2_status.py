@@ -6,8 +6,8 @@ wrong (forge-zka). Only a real connect-and-query distinguishes the two, which is
 what this does. The remedy for a dead instance is ``make db2-restart``, NOT
 ``make db2-up`` -- the container is already up, so ``up`` is a no-op.
 
-Also reports the seeded row count, which is what you want to know before running
-``carddemo-db2-cli`` without ``--reset-schema``. An absent schema is a state to
+Also reports the seeded row count, which says whether ``make db2-seed`` has run.
+An absent schema is a state to
 report, not an error: Db2 up with nothing seeded is what a first run looks like.
 
 Exit codes are distinct so this can gate a script: 0 up, 1 down, 2 DSN unset.
@@ -67,9 +67,7 @@ def _report_schema(conn) -> None:
         f"WHERE TABSCHEMA = '{_SCHEMA}' AND TABNAME = '{_TABLE}'",
     )
     if not exists:
-        logger.info(
-            "Db2 UP -- %s absent; run carddemo-db2-cli --reset-schema", _QUALIFIED
-        )
+        logger.info("Db2 UP -- %s absent; run make db2-seed", _QUALIFIED)
         return
     logger.info(
         "Db2 UP -- %s has %d rows",

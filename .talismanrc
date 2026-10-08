@@ -537,4 +537,28 @@ fileignoreconfig:
   checksum: 32a1ebcfbb9686d0567719dac8288b43d8d80fc9c323ab556b005ad50fdedda2
 - filename: docs/analysis/2026-10-07-dataflow-fixpoint-oom-diagnosis.md
   checksum: 7b59bd160243a9f6c2666eda6c2a069c9f8725e97eb9805816b73189b0e28f78
+- filename: docs/how-to/run-jcl-job.md
+  checksum: 057c240081ea454157f6a93c1fbbfe73fc21a8b92131df08d96ed9f4ccbc2d97
+- filename: docs/how-to/run-carddemo.md
+  checksum: 88840f9cb4d9397cd4cca8bbb548bfc13370f6dba68936b361434d659a143777
+- filename: docs/roadmaps/cicada.md
+  checksum: dafddaccc13096ad9a609f42eecfef8b4fb11e8d6fec750c4285a0f00b463a0a
+- filename: docs/how-to/run-tests.md
+  checksum: 8d3ae487f569ff814d7ca4b1ff30aedd9edd115e007c69307ce53ce496f7c0f1
+- filename: docs/how-to/setup.md
+  checksum: ac85976bae534797b4171f4e3949466c67a0c3f18033dbfaad4817f9d2127471
+- filename: docs/how-to/analyse-a-corpus.md
+  checksum: 8283d647dafad09623f096a7034408a24cdca75a24bc50ec7f8214e0f5254bbd
+- filename: docs/roadmaps/jackal.md
+  checksum: a79ae66254d5f7b960ac462ddffdf3800e561c1b4ed69cf9bbd1f4dee38e2789
+- filename: docs/reference/cobble/config.md
+  checksum: d9c0bd9e47fbf8c7179eb1f16ac736bdc06d292918de10c4237998f4fe69292b
+- filename: docs/reference/cicada/architecture.md
+  checksum: b0a21d4fb313a811d933a09d9f97280b9826acbe2b80a32fbebf1c3173694bcb
+- filename: docs/reference/squall/architecture.md
+  checksum: 617c99944b7edec89262544a4614edcd83da3bd390a7d889457e240884b0617b
+- filename: docs/superpowers/specs/2026-10-08-docs-consolidation-design.md
+  checksum: 8f7db65aae8f90a9ac8352e2c23d4ebc83ec141edf3e4665709fb52383fe29aa
+- filename: docs/reference/cobble/field-dataflow.md
+  checksum: 5517172d14630198f6aa7ae74b6c03f57f305db67fca0cdba01bca79cb98d88f
 version: "1.0"

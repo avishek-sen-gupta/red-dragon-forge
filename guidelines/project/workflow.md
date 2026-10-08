@@ -69,9 +69,13 @@ import more than one, and `cobble` is held to the static surface: it must not re
 runtime, and nothing may import it. The contract is `.importlinter`, checked by
 `uv run lint-imports`, and it is the enforcement — this paragraph is the rationale.
 
-`cicada`, `squall` and `jackal` arrived by `git subtree` with history preserved. They stay
-independent at the import level and are built and set up only from the forge root.
-`vendor/red-dragon` is never modified here; interpreter changes go upstream.
+`cicada`, `squall` and `jackal` stay independent at the import level and are built and set up
+only from the forge root. `vendor/red-dragon` is never modified here; interpreter changes go
+upstream, and interpreter issues are filed in red-dragon's own beads DB
+(`bd -C <red-dragon clone> create …`), not the forge's.
+
+jackal parses JCL and IDCAMS by grammar, never by regex: a new JCL surface feature is a grammar
+production plus a transformer case, not a string scan.
 
 ### Issue tracking — beads, manual-export model
 

@@ -1,6 +1,6 @@
 # Regenerate the deck's evidence under artifacts/. Run from this directory.
 # Needs the bridge JARs (root `make jar`), hlasm_export, and for db2 a running Db2
-# (`make -C ../../squall db2-up`). Artifacts are committed, so presenting needs none of this.
+# (`make -C ../.. db2-up`). Artifacts are committed, so presenting needs none of this.
 
 ROOT := $(abspath ../..)
 export PROLEAP_BRIDGE_JAR ?= $(ROOT)/vendor/red-dragon/proleap-bridge/target/proleap-bridge-0.1.0-shaded.jar

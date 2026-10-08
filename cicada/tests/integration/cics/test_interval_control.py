@@ -2,7 +2,7 @@
 
 Each scenario drives complete COBOL through the real compile + region path and
 asserts DECODED DATA, never that a branch ran (see
-docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md).
+docs/records/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md).
 """
 
 # ruff: noqa: I001
