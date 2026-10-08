@@ -240,7 +240,8 @@ def _fact_held(
 ) -> Held:
     if not fact.extent:
         return Held(values=frozenset(fact.values), reasons=frozenset(fact.reasons))
-    return _held((program, node, byte_range(fact.extent, program)), label, closures)
+    at = byte_range(fact.extent, program).bytes_only()
+    return _held((program, node, at), label, closures)
 
 
 def _shifted(at: ByteRange, src: ByteRange, dst: ByteRange, program: str) -> ByteRange:
@@ -271,11 +272,12 @@ def _ending(held: Held) -> _Expansion:
 def _expanded(world: _World, vertex: _Vertex) -> _Expansion:
     program, node, at = vertex
     found = world.resolver(world.tables[program], node, at)
-    return reduce(
+    held, nexts = reduce(
         _joined,
         (_FOLLOW[stop.kind](world, program, stop) for stop in found.stops),
         _ending(Held(values=found.values)),
     )
+    return held, tuple((p, n, a.bytes_only()) for p, n, a in nexts)
 
 
 def _unknown(world: _World, program: str, stop: Stop) -> _Expansion:

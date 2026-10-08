@@ -22,10 +22,14 @@ class MemoResolve:
 
     def __call__(self, tables: ProgramTables, node: str, at: ByteRange) -> Resolution:
         return self._closures(tables.program).of(
-            (node, at), f"resolve {tables.program}"
+            (node, at.bytes_only()), f"resolve {tables.program}"
         )
 
     def _fresh(self, program: str) -> Closures[Vertex, Resolution]:
         return Closures(
-            partial(self._step, self._tables[program]), joined, Resolution()
+            partial(self._bare_step, self._tables[program]), joined, Resolution()
         )
+
+    def _bare_step(self, tables: ProgramTables, vertex: Vertex) -> Step:
+        found, nexts = self._step(tables, vertex)
+        return found, tuple((node, at.bytes_only()) for node, at in nexts)
