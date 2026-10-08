@@ -19,7 +19,7 @@ from cobble.dataflow.combine.outputs import write_outputs
 from cobble.dataflow.combine.outside import outside_jumps
 from cobble.dataflow.combine.outside_jumps import OutsideJumps
 from cobble.dataflow.combine.program_tables import ProgramTables
-from cobble.dataflow.combine.resolve import resolve
+from cobble.dataflow.combine.resolve import step
 from cobble.dataflow.combine.run_report import RunReport
 from cobble.dataflow.combine.table_callee_areas import TableCalleeAreas
 
@@ -151,7 +151,7 @@ def _link_and_write(
         TableCalleeAreas(tables, AsgCalleeAreas(config.asg_dir)),
         transactions,
         _outside(arguments, config, inside, transactions),
-        MemoResolve(tables, resolve),
+        MemoResolve(tables, step),
     )
     _PROGRESS.info("combine: linked in %.1fs", time.monotonic() - started)
     write_outputs(arguments.out_dir, linked)
