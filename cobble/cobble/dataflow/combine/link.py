@@ -11,6 +11,7 @@ from types import MappingProxyType
 from cobble.dataflow.combine.callee_areas import CalleeAreas
 from cobble.dataflow.combine.closures import Closures
 from cobble.dataflow.combine.edge import Edge
+from cobble.dataflow.combine.edge_index import EdgeIndex, edge_index
 from cobble.dataflow.combine.held import Held, held_join
 from cobble.dataflow.combine.linked import Linked
 from cobble.dataflow.combine.linked_target import LinkedTarget
@@ -32,9 +33,6 @@ logger = logging.getLogger(__name__)
 
 _ANSWER_HEARTBEAT = 5.0
 
-_ENTERING = frozenset(
-    {JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL, JumpKind.RETURN_TRANSID}
-)
 _NAMED = frozenset({JumpKind.XCTL, JumpKind.LINK, JumpKind.CALL})
 _OUTSIDE = Held(reasons=frozenset({UnresolvedReason.OUTSIDE_ANALYSED_SET}))
 _INBOUND = Held(reasons=frozenset({UnresolvedReason.INBOUND_LINKAGE}))
@@ -54,6 +52,7 @@ class _World:
     areas: CalleeAreas
     transactions: Mapping[str, str]
     resolver: Resolve
+    index: EdgeIndex
     answers: Mapping[_Start, Held] = MappingProxyType({})
 
 
@@ -68,7 +67,15 @@ def link(
     outside: OutsideJumps,
     resolver: Resolve = resolve,
 ) -> Linked:
-    world = _World(tables, frozenset(), outside, areas, transactions, resolver)
+    world = _World(
+        tables,
+        frozenset(),
+        outside,
+        areas,
+        transactions,
+        resolver,
+        edge_index(frozenset()),
+    )
     return _rounds(_answered_in(world, 1))
 
 
@@ -96,7 +103,7 @@ def _round(run: _Round, number: int) -> _Round:
     if found <= world.edges:
         return world, True, number
     return (
-        _answered_in(replace(world, edges=world.edges | found), number + 1),
+        _answered_in(_with_edges(world, world.edges | found), number + 1),
         False,
         number,
     )
@@ -282,12 +289,6 @@ def _outside_callers(world: _World, program: str) -> Held:
     return replace(_OUTSIDE, outside=frozenset(callers))
 
 
-def _entering(edge: Edge, program: str, stop: Stop) -> bool:
-    return (
-        edge.callee == program and edge.kind in _ENTERING and edge.param == stop.param
-    )
-
-
 def _from_caller(edge: Edge, stop: Stop) -> _Expansion:
     if not edge.callee_window.covers(stop.at):
         return _ending(_INBOUND)
@@ -303,8 +304,12 @@ def _callee_name(edge: Edge, at: ByteRange) -> str:
     return padded[at.start - named.start : at.end - named.start]
 
 
+def _with_edges(world: _World, edges: frozenset[Edge]) -> _World:
+    return replace(world, edges=edges, index=edge_index(edges))
+
+
 def _received(world: _World, program: str, stop: Stop) -> _Expansion:
-    into = tuple(e for e in world.edges if _entering(e, program, stop))
+    into = world.index.into.get((program, stop.param), ())
     from_callers = reduce(
         _joined, (_from_caller(e, stop) for e in into), _ending(Held())
     )
@@ -315,11 +320,7 @@ def _received(world: _World, program: str, stop: Stop) -> _Expansion:
 
 
 def _returned(world: _World, program: str, stop: Stop) -> _Expansion:
-    out = tuple(
-        e
-        for e in world.edges
-        if e.caller == program and e.node == stop.node and e.param == stop.param
-    )
+    out = world.index.out.get((program, stop.node, stop.param), ())
     if not out:
         return _ending(_FROM_CALLEE)
     return reduce(_joined, (_left_by(world, e, stop) for e in out), _ending(Held()))
@@ -349,13 +350,7 @@ def _from_starter(edge: Edge, stop: Stop) -> _Expansion:
 
 
 def _retrieved(world: _World, program: str, stop: Stop) -> _Expansion:
-    starts = tuple(
-        e
-        for e in world.edges
-        if e.kind is JumpKind.START
-        and e.callee == program
-        and e.callee_node == stop.node
-    )
+    starts = world.index.started.get((program, stop.node), ())
     if not starts:
         return _ending(_NOT_A_LITERAL)
     return reduce(_joined, (_from_starter(e, stop) for e in starts), _ending(Held()))
