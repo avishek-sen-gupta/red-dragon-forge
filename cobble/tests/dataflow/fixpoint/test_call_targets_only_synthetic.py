@@ -684,27 +684,25 @@ def test_explain_names_what_each_source_pins_and_the_writes_that_widen(
     parsed, extents = full.parent / "parsed", full.parent / "extents.jsonl"
     capsys.readouterr()
 
-    assert (
-        area_cli(
-            [
-                "--asg-dir",
-                str(parsed),
-                "--extents",
-                str(extents),
-                "--out",
-                str(tmp_path / "need.jsonl"),
-                "--explain",
-                "PROGX",
-            ]
-        ),
-        capsys.readouterr().out,
-    ) == (
-        0,
+    report = (
         "PROGX: 16 bytes needed on entry\n"
         "  by source, each alone:\n"
         "      16  call-target reads\n"
         "      16  MAIN-PARA line 16 LINK, dynamic, unresolved: every member's need\n"
         "  writes that read more than their target keeps live:\n"
         "    MAIN-PARA line 13: WS-TARGET@working_storage[0:8] keeps 8 bytes live,"
-        " reads 16 from LK-FIRST@linkage[0:8], LK-SECOND@linkage[8:16]\n",
+        " reads 16 from LK-FIRST@linkage[0:8], LK-SECOND@linkage[8:16]\n"
     )
+    common = [
+        "--asg-dir",
+        str(parsed),
+        "--extents",
+        str(extents),
+        "--out",
+        str(tmp_path / "need.jsonl"),
+    ]
+
+    assert [
+        (area_cli([*common, *chosen]), capsys.readouterr().out)
+        for chosen in (["--explain", "PROGX"], ["--explain-over", "9"])
+    ] == [(0, report), (0, report)]
