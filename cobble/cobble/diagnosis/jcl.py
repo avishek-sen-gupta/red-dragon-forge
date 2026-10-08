@@ -9,8 +9,6 @@ failed, steps, DDs -- are buried in the same run's output.
 This runs that phase and stops. It is the sweep the onboarding grammar work ran by
 hand, over and over, once per candidate fix: parse the whole JCL library, count
 what came back, and list what did not parse with what the bridge said about it.
-The numbers it prints are exactly the columns of the table in
-docs/corpus-onboarding-blockers.md.
 
 Steps and DDs are here rather than left to the build because they are the
 regression check. A grammar change that recovers members must leave every member
@@ -40,8 +38,8 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json, member_label
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
-from jackal.jcl.parser import bridge_parser
 from cobble.matching_files import matching_files
+from jackal.jcl.parser import bridge_parser
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,20 @@
+# Records
+
+Dated design records and analyses. Frozen: never edited after they are written.
+
+## Design
+
+- 2026-06-13 — [EXEC SQL Support for RedDragon COBOL — Design](design/2026-06-13-exec-sql-support-design.md)
+- 2026-07-04 — [red-dragon-forge: Composing CICS + EXEC SQL Coprocessors — Design](design/2026-07-04-cics-sql-composition-design.md)
+- 2026-09-09 — [red-dragon-forge: Package Boundaries — Decision Record](design/2026-09-09-package-boundaries.md)
+- 2026-09-16 — [cobble: Consolidate Build Dependencies into Forge](design/2026-09-16-cobble-dep-consolidation.md)
+- 2026-09-16 — [cicada, squall, jackal: Remove Per-Package Makefiles](design/2026-09-16-package-makefile-removal.md)
+- 2026-10-05 — [jackal: To-Be JCL Execution Architecture](design/2026-10-05-jcl-to-be-architecture.md)
+
+## Analysis
+
+- 2026-07-09 — [CardDemo Whole-Job Executability Analysis (jackal)](analysis/2026-07-09-carddemo-job-executability.md)
+- 2026-09-01 — [Runtime gaps found by executing a production CICS program](analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md)
+- 2026-09-02 — [What a production JCL corpus actually asks a batch engine to do](analysis/2026-09-02-jcl-utility-and-argument-frequency.md)
+- 2026-10-07 — [Dataflow Fixpoint OOM & Non-Convergence Diagnosis](analysis/2026-10-07-dataflow-fixpoint-oom-diagnosis.md)
+- 2026-10-08 — [Per-Program Area Need](analysis/2026-10-08-per-program-area-need.md)

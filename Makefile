@@ -19,13 +19,13 @@ help:
 	@echo "make jar       - build ProLeap + JCL bridge JARs (skipped if already built)"
 	@echo "make jar-force - force-rebuild both bridge JARs"
 	@echo "make python    - uv sync (all workspace members)"
-	@echo "make test      - full test suite (needs jar)"
+	@echo "make test      - root composition-layer suite (needs jar, Db2 DSN)"
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
 	@echo "make db2-seed  - create and seed CardDemo's Db2 schema (the only DROP TABLE)"
 	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
-	@echo "make db2-restart - rebind Db2's TCP listener without re-initialising"
+	@echo "make db2-restart - restart the Db2 instance without re-initialising (revives a killed instance)"
 	@echo "make db2-stop  - stop Db2, keeping container and volume"
 	@echo "make db2-clean - remove Db2 container and volume (next up re-inits)"
 
@@ -105,14 +105,14 @@ db2-seed:
 
 # Connect-and-query, because `docker ps` reports the container healthy while the
 # instance inside is dead -- every Db2 test then fails SQL30081N with nothing
-# obviously wrong (forge-zka). Also reports the seeded row count, which is what
-# you want before running carddemo-db2-cli without --reset-schema.
+# obviously wrong (forge-zka). Also reports the seeded row count, which says
+# whether `make db2-seed` has run.
 db2-status:
 	@FORGE_ROOT=$(CURDIR) SQUALL_DIR=squall sh -c '. ./bridge-env.sh >/dev/null 2>&1; . squall/db2/dsn-env.sh >/dev/null 2>&1; uv run --no-sync python -m red_dragon_forge.db2_status'
 
 # Restart the Db2 instance without re-initialising. Under emulation db2sysc's
 # private memory grows past INSTANCE_MEMORY until the VM kills it, leaving the
-# container up and tests failing with SQL30081N (docs/db2-container-memory.md).
+# container up and tests failing with SQL30081N (docs/how-to/db2.md).
 # A restart revives a killed instance and resets the growth; the forge test hook
 # runs it before the root suite.
 db2-restart:

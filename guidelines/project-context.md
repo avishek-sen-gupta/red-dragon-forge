@@ -14,14 +14,15 @@
   directory. The root suite and cicada/squall/jackal need `. ./bridge-env.sh` sourced first;
   `cobble` does not. See `project/workflow.md` for the gate.
 - **Formatter:** Black, line length 88, `target-version = py311`. `make fmt` at the root.
-- **Architecture:** see `README.md` (the package table, and the `CoprocessorSpec` seam at
-  `interpreter.project.coprocessor_compile`) and `cobble/README.md` (pipeline stages, in corpus
-  order). Boundary rationale: `docs/design/2026-09-09-package-boundaries.md`. Do not restate any
-  of it here — a second copy drifts, and the README is the living one.
-- **Specs (immutable):** `docs/superpowers/specs/` and `docs/design/` — dated design records,
-  never edited after the fact. `docs/superpowers/plans/` holds dated TDD execution records and
-  is equally point-in-time. `vendor/red-dragon` is a submodule and is never modified from here;
-  changes to the interpreter go upstream.
+- **Architecture:** see `docs/reference/forge/architecture.md` (the packages and the
+  `CoprocessorSpec` seam at `interpreter.project.coprocessor_compile`) and the per-package pages
+  under `docs/reference/`. Boundary rationale: `docs/records/design/2026-09-09-package-boundaries.md`.
+  Do not restate any of it here — a second copy drifts.
+- **Docs:** everything for people is under `docs/`, indexed from `docs/README.md`.
+- **Specs (immutable):** `docs/superpowers/specs/` and `docs/records/` — dated design records and
+  analyses, never edited after the fact. `docs/superpowers/plans/` holds dated TDD execution
+  records and is equally point-in-time. `vendor/red-dragon` is a submodule and is never modified
+  from here; changes to the interpreter go upstream.
 
 ## External Dependencies
 
