@@ -25,40 +25,43 @@ from cobble.dataflow.fixpoint.area_needs import need_found, prepared, resolved
 from cobble.dataflow.fixpoint.area_table import AreaTable, Receives, area_table
 from cobble.dataflow.fixpoint.prepared_program import PreparedProgram
 from cobble.dataflow.fixpoint.rows import Row
+from cobble.dataflow.fixpoint.shared_count import SharedCount
 from cobol_asg.asg_types import CobolASG
 
 logger = logging.getLogger(__name__)
 
 _Job = tuple[int, str, tuple[Row, ...], Path]
 _Held = tuple[int, PreparedProgram]
-_Round = tuple[int, AreaTable]
-_STOP: _Round = (0, AreaTable())
+_Round = tuple[int, AreaTable, int, int]
+_STOP: _Round = (0, AreaTable(), 0, 0)
 _Loaded = tuple[Receives, tuple[str, ...]]
 
 
-def _loaded(job: _Job, total: int) -> tuple[_Held, ...]:
+def _loaded(job: _Job, total: int, done: SharedCount) -> tuple[_Held, ...]:
     """One member loaded and prepared. A member that cannot be read adds nothing:
     its own targets go unresolved in the fixpoint anyway."""
     position, member, block, path = job
-    logger.info("area need: loading [%d/%d] %s", position, total, member)
     try:
         with cached_asg_dialect_parsers_registered():
             asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            logger.info("area need: loading [%d/%d] %s", done.next(), total, member)
             return (
                 (position, prepared(member, asg, member_layout(member, block).layout)),
             )
     except Exception as error:  # noqa: BLE001 - one member must not end the run
-        logger.warning("area need: %s unreadable: %r", member, error)
+        logger.warning(
+            "area need: [%d/%d] %s unreadable: %r", done.next(), total, member, error
+        )
         return ()
 
 
-def _walked(held: _Held, table: AreaTable, number: int, total: int) -> AreaFound:
-    position, program = held
+def _walked(program: PreparedProgram, round_: _Round, done: SharedCount) -> AreaFound:
+    number, table, base, total = round_
     found = need_found(program, table)
     logger.info(
         "area need round %d: [%d/%d] %s, %d bytes on entry",
         number,
-        position,
+        done.next() - base,
         total,
         program.member,
         _need_bytes(found.entry.entry),
@@ -82,15 +85,19 @@ def _receiving(programs: tuple[_Held, ...]) -> _Loaded:
     )
 
 
-def _shard(connection: Connection, jobs: tuple[_Job, ...], total: int) -> None:
+def _shard(
+    connection: Connection, jobs: tuple[_Job, ...], total: int, done: SharedCount
+) -> None:
     """One worker process: its share of the members, loaded once and kept for every
     round, so only the table and the reports cross between processes, never a
     program. What its members receive and the callees they name go first."""
     configure_cli_logging()
-    programs = tuple(held for job in jobs for held in _loaded(job, total))
+    programs = tuple(held for job in jobs for held in _loaded(job, total, done))
     connection.send(_receiving(programs))
-    for number, table in iter(connection.recv, _STOP):
-        connection.send(tuple(_walked(held, table, number, total) for held in programs))
+    for round_ in iter(connection.recv, _STOP):
+        connection.send(
+            tuple(_walked(program, round_, done) for _, program in programs)
+        )
 
 
 def _need_bytes(bounds: Slotted) -> int:
@@ -98,10 +105,15 @@ def _need_bytes(bounds: Slotted) -> int:
 
 
 def _round(
-    table: AreaTable, number: int, pipes: Sequence[Connection], receives: Receives
+    table: AreaTable,
+    number: int,
+    pipes: Sequence[Connection],
+    receives: Receives,
+    total: int,
 ) -> AreaTable:
+    walked = len(receives)
     for pipe in pipes:
-        pipe.send((number, table))
+        pipe.send((number, table, total + (number - 1) * walked, walked))
     found: tuple[AreaFound, ...] = tuple(one for pipe in pipes for one in pipe.recv())
     after = resolved(found, receives)
     logger.info(
@@ -130,26 +142,31 @@ def _jobs(arguments: argparse.Namespace) -> tuple[_Job, ...]:
     return jobs
 
 
-_Shards = tuple[tuple[Connection, ...], tuple[BaseProcess, ...]]
+_Shards = tuple[tuple[Connection, ...], tuple[BaseProcess, ...], SharedCount]
 
 
 def _started(jobs: tuple[_Job, ...], workers: int) -> _Shards:
     shards = min(workers, len(jobs))
     context = multiprocessing.get_context("spawn")
     pipes = tuple(context.Pipe() for _ in range(shards))
+    done = SharedCount(context.Value("i", 0))
     processes = tuple(
         context.Process(
-            target=_shard, args=(child, jobs[shard::shards], len(jobs)), daemon=True
+            target=_shard,
+            args=(child, jobs[shard::shards], len(jobs), done),
+            daemon=True,
         )
         for shard, (_, child) in enumerate(pipes)
     )
     for process in processes:
         process.start()
-    return tuple(parent for parent, _ in pipes), processes
+    return tuple(parent for parent, _ in pipes), processes, done
 
 
 def _stopped(shards: _Shards) -> None:
-    parents, processes = shards
+    """The count is held until here: a started process lets go of its arguments,
+    and a count nothing in this process holds takes its lock with it."""
+    parents, processes, _ = shards
     for parent in parents:
         parent.send(_STOP)
     for process in processes:
@@ -170,11 +187,11 @@ def _received(parents: tuple[Connection, ...]) -> Receives:
     return receives
 
 
-def _settled(parents: tuple[Connection, ...]) -> AreaTable:
+def _settled(parents: tuple[Connection, ...], total: int) -> AreaTable:
     receives = _received(parents)
     rounds = accumulate(
         count(1),
-        lambda table, number: _round(table, number, parents, receives),
+        lambda table, number: _round(table, number, parents, receives, total),
         initial=area_table(
             tuple((member, AreaNeed()) for member, _ in receives), receives
         ),
@@ -192,7 +209,7 @@ def computed(arguments: argparse.Namespace) -> AreaTable:
     if not jobs:
         return AreaTable()
     shards = _started(jobs, arguments.max_workers)
-    table = _settled(shards[0])
+    table = _settled(shards[0], len(jobs))
     _stopped(shards)
     return table
 
