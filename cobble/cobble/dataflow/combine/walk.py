@@ -43,11 +43,22 @@ def _step(
     )
 
 
-def _log_heartbeat(steps: int, state: WalkState[_V, _C]) -> None:
+def _no_spread(seen: frozenset[_V]) -> str:
+    return ""
+
+
+def _log_heartbeat(
+    label: str,
+    spread: Callable[[frozenset[_V]], str],
+    steps: int,
+    state: WalkState[_V, _C],
+) -> None:
     logger.info(
-        "combine:     walk step %d, %d seen, %d frontier",
+        "combine:     %swalk step %d, %d seen%s, %d frontier",
+        f"{label}: " if label else "",
         steps,
         len(state.seen),
+        spread(state.seen),
         len(state.frontier),
     )
 
@@ -57,14 +68,21 @@ def walked(
     expand: Callable[[_V], tuple[_C, tuple[_V, ...]]],
     join: Callable[[_C, _C], _C],
     empty: _C,
+    label: str = "",
+    heartbeat: float = _WALK_HEARTBEAT,
+    spread: Callable[[frozenset[_V]], str] = _no_spread,
 ) -> WalkState[_V, _C]:
-    """Steps until the frontier is empty, with a heartbeat at most every few
-    seconds. Iterated, not recursed: a walk across a corpus can take more steps
-    than the interpreter allows stack frames."""
+    """Steps until the frontier is empty, with a heartbeat at most every
+    ``heartbeat`` seconds naming ``label`` -- where the walk sits in its round --
+    and what ``spread`` says of the vertices seen so far.
+    Iterated, not recursed: a walk across a corpus can take more steps than the
+    interpreter allows stack frames."""
     first = WalkState(frozenset({start}), frozenset({start}), empty)
     runs = accumulate(
         count(1),
-        lambda run, steps: _stepped(run, steps, expand, join),
+        lambda run, steps: _stepped(
+            run, steps, expand, join, (label, heartbeat, spread)
+        ),
         initial=(first, time.monotonic()),
     )
     return next(state for state, _ in runs if not state.frontier)
@@ -75,11 +93,13 @@ def _stepped(
     steps: int,
     expand: Callable[[_V], tuple[_C, tuple[_V, ...]]],
     join: Callable[[_C, _C], _C],
+    beat: tuple[str, float, Callable[[frozenset[_V]], str]],
 ) -> tuple[WalkState[_V, _C], float]:
     state, last = run
+    label, heartbeat, spread = beat
     stepped = _step(state, expand, join)
     now = time.monotonic()
-    if now - last < _WALK_HEARTBEAT:
+    if now - last < heartbeat:
         return stepped, last
-    _log_heartbeat(steps, stepped)
+    _log_heartbeat(label, spread, steps, stepped)
     return stepped, now
