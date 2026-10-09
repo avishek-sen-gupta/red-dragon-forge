@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
@@ -45,6 +44,7 @@ from cobble.knowledge_graph.graph_types import (
     GraphNode,
     NodeKind,
 )
+from cobble.ordered_work import consumed_in_order
 from tqdm import tqdm
 
 if TYPE_CHECKING:
@@ -149,6 +149,13 @@ def _written(
     return result
 
 
+def _program_read(
+    item: tuple[str, Path], read_asg: AsgReader, bms_mapsets: Mapping[str, BmsMapSet]
+) -> VerbStreamResult:
+    prog_name, member = item
+    return program_verbs(prog_name, member, read_asg, bms_mapsets)
+
+
 def _read_programs(
     programs: Sequence[str],
     members: Mapping[str, Path],
@@ -159,33 +166,17 @@ def _read_programs(
     max_workers: int,
 ) -> tuple[VerbStreamResult, ...]:
     """Every program's CICS verbs, written into the sink in CSD order; one result
-    each.
-
-    With more than one worker, programs are read in worker processes and ``map``
-    hands their results back in submission order, so the sink sees exactly what a
-    serial run writes. One worker reads in this process.
-    """
-    reader = partial(program_verbs, read_asg=read_asg, bms_mapsets=bms_mapsets)
-    paths = tuple(members[program] for program in programs)
-    if max_workers == 1:
-        return _streamed(
-            map(reader, programs, paths), len(programs), sink, corpus_index
-        )
-    with ProcessPoolExecutor(max_workers=max_workers) as pool:
-        return _streamed(
-            pool.map(reader, programs, paths), len(programs), sink, corpus_index
-        )
-
-
-def _streamed(
-    results: Iterable[VerbStreamResult],
-    total: int,
-    sink: GraphSink,
-    corpus_index: CorpusIndex,
-) -> tuple[VerbStreamResult, ...]:
-    return tuple(
-        _written(result, sink, corpus_index)
-        for result in tqdm(results, total=total, desc="CICS verbs", unit="program")
+    each, whatever order the workers finish in."""
+    return consumed_in_order(
+        partial(_program_read, read_asg=read_asg, bms_mapsets=bms_mapsets),
+        tuple((program, members[program]) for program in programs),
+        max_workers,
+        lambda results: tuple(
+            _written(result, sink, corpus_index)
+            for result in tqdm(
+                results, total=len(programs), desc="CICS verbs", unit="program"
+            )
+        ),
     )
 
 

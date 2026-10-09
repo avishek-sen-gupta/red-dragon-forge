@@ -9,15 +9,9 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING
 
-from cobol_asg.asg_types import (
-    CobolASG,
-    CobolParagraph,
-    CobolSection,
-)
-from cobol_asg.cobol_statements import OpenStatement
-from cobol_asg.file_enums import OpenMode
+from cobble.jcl.file_accesses import FileAccesses
 from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,
@@ -25,10 +19,16 @@ from cobble.knowledge_graph.graph_types import (
     GraphNode,
     NodeKind,
 )
+from cobol_asg.asg_types import (
+    CobolASG,
+    CobolParagraph,
+    CobolSection,
+)
+from cobol_asg.cobol_statements import CobolStatementType, OpenStatement
+from cobol_asg.file_enums import OpenMode
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
-
     from cobble.corpus_index import FileLocationResolver
 
 _OPEN_MODE_TO_EDGE_KIND: dict[OpenMode, EdgeKind] = {
@@ -39,25 +39,22 @@ _OPEN_MODE_TO_EDGE_KIND: dict[OpenMode, EdgeKind] = {
 }
 
 
-def _is_dataclass_instance(value: object) -> TypeGuard[DataclassInstance]:
-    """An instance of some dataclass — not a dataclass type itself.
-
-    dataclasses.is_dataclass() is true of both, and the walk below only ever
-    means the instances.
-    """
-    return dataclasses.is_dataclass(value) and not isinstance(value, type)
-
-
-def _field_values(stmt: DataclassInstance) -> Iterator[object]:
-    """Each of stmt's own field values, with lists flattened into their items.
+def _nested(stmt: DataclassInstance) -> Iterator[DataclassInstance]:
+    """The dataclass instances among stmt's own field values, lists flattened.
 
     A nesting statement holds its children either directly (a PERFORM body) or
-    in a list (THEN/ELSE branches, AT END handlers), and this makes the two the
-    same shape so the caller need not care which it got.
+    in a list (THEN/ELSE branches, AT END handlers); flattening makes the two the
+    same shape. ``is_dataclass`` is true of dataclass types as well as instances,
+    and only instances are statements.
     """
-    return chain.from_iterable(
-        value if isinstance(value, list) else (value,)
-        for value in (getattr(stmt, f.name) for f in dataclasses.fields(stmt))
+    values = (getattr(stmt, f.name) for f in dataclasses.fields(stmt))
+    flat = chain.from_iterable(
+        value if isinstance(value, list) else (value,) for value in values
+    )
+    return (
+        value
+        for value in flat
+        if dataclasses.is_dataclass(value) and not isinstance(value, type)
     )
 
 
@@ -66,24 +63,17 @@ def _walk(stmt: DataclassInstance) -> Iterator[DataclassInstance]:
     PERFORM/EVALUATE bodies, AT END handlers, ...), found generically by
     walking the statement dataclass's own fields rather than hand-enumerating
     every nesting point — new statement types need no changes here."""
-    return chain(
-        (stmt,),
-        chain.from_iterable(
-            _walk(value)
-            for value in _field_values(stmt)
-            if _is_dataclass_instance(value)
-        ),
-    )
+    return chain((stmt,), chain.from_iterable(_walk(value) for value in _nested(stmt)))
 
 
 def _own_statements(
     containers: Iterable[CobolSection | CobolParagraph],
-) -> Iterator[object]:
+) -> Iterator[CobolStatementType]:
     """The statements held directly by each container, in container order."""
     return chain.from_iterable(container.statements for container in containers)
 
 
-def _section_statements(section: CobolSection) -> Iterator[object]:
+def _section_statements(section: CobolSection) -> Iterator[CobolStatementType]:
     """A section's own statements, then those of its paragraphs, in that order."""
     return chain(section.statements, _own_statements(section.paragraphs))
 
@@ -100,9 +90,7 @@ def _all_statements(asg: CobolASG) -> Iterator[DataclassInstance]:
         _own_statements(asg.paragraphs),
         chain.from_iterable(_section_statements(section) for section in asg.sections),
     )
-    return chain.from_iterable(
-        _walk(stmt) for stmt in top_level if _is_dataclass_instance(stmt)
-    )
+    return chain.from_iterable(_walk(stmt) for stmt in top_level)
 
 
 def _select_to_dd(asg: CobolASG) -> Mapping[str, str]:
@@ -195,6 +183,28 @@ def _access_edges(
     ]
 
 
+def file_accesses(asg: CobolASG) -> FileAccesses:
+    """What the program OPENs, by DD name: the part of the file graph that needs
+    the ASG, small enough to hand back from a worker process."""
+    return FileAccesses(asg.program_id.upper(), tuple(_accesses(asg)))
+
+
+def file_graph(
+    found: FileAccesses, corpus_index: FileLocationResolver
+) -> tuple[list[GraphNode], list[GraphEdge]]:
+    """The PROGRAM and COBOL_FILE nodes and the access edges for what a program
+    OPENs, with node locations resolved against the corpus index."""
+    program_node = GraphNode(
+        id=found.program_id,
+        kind=NodeKind.PROGRAM,
+        location=corpus_index.resolve_file_path(NodeKind.PROGRAM, found.program_id),
+    )
+    return (
+        [program_node, *_file_nodes(found.accesses, corpus_index)],
+        _access_edges(found.program_id, found.accesses),
+    )
+
+
 def extract_cobol_file_graph(
     asg: CobolASG,
     corpus_index: FileLocationResolver,
@@ -214,14 +224,4 @@ def extract_cobol_file_graph(
     an OPEN naming a file with no matching SELECT, contributes no edge — this
     pass only knows what FILE-CONTROL and OPEN both agree on.
     """
-    program_id = asg.program_id.upper()
-    accesses = _accesses(asg)
-    program_node = GraphNode(
-        id=program_id,
-        kind=NodeKind.PROGRAM,
-        location=corpus_index.resolve_file_path(NodeKind.PROGRAM, program_id),
-    )
-    return (
-        [program_node, *_file_nodes(accesses, corpus_index)],
-        _access_edges(program_id, accesses),
-    )
+    return file_graph(file_accesses(asg), corpus_index)

@@ -57,7 +57,8 @@ from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fixpoint.rows import Row, strings, text
 from cobble.dataflow.fixpoint.rows import read as read_targets
 from cobble.dynamic_call_targets import NO_DYNAMIC_CALL_TARGETS, DynamicCallTargets
-from cobble.jcl.cobol_file_graph import extract_cobol_file_graph
+from cobble.jcl.cobol_file_graph import file_accesses, file_graph
+from cobble.jcl.file_accesses import FileAccesses
 from cobble.jcl.jcl_graph import jcl_graph_from_job
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
 from cobble.knowledge_graph.graph_file import read_graph
@@ -70,6 +71,7 @@ from cobble.knowledge_graph.graph_types import (
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
+from cobble.ordered_work import consumed_in_order
 from cobble.parsing.asg_cache import asg_of, cached_asg
 from cobble.path_utils import ensure_parent
 from cobol_asg.cobol_imports import extract_cobol_imports
@@ -877,6 +879,36 @@ def _cics_flow_or_skip(
 
 # ── extractor 4: batch FILE-CONTROL ──────────────────────────────
 
+_NO_ACCESSES = FileAccesses("")
+
+
+@dataclass(frozen=True)
+class _FileControlRead:
+    """One batch member as a worker read it: what it OPENs, or why it could not
+    be read. Locations are resolved by the process that writes the graph."""
+
+    found: FileAccesses = _NO_ACCESSES
+    failures: tuple[str, ...] = ()
+
+
+def _file_control_read(path: Path, asg_dir: Path) -> _FileControlRead:
+    try:
+        with asg_dialect_parsers_registered():
+            asg = asg_of(asg_dir, path)
+        return _FileControlRead(found=file_accesses(asg))
+    except Exception as exc:
+        logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
+        return _FileControlRead(failures=(f"FILE-CONTROL {path.name}: {exc}",))
+
+
+def _file_control_written(
+    read: _FileControlRead, corpus_index: FileLocationResolver, writer: GraphWriter
+) -> tuple[str, ...]:
+    if read.failures:
+        return read.failures
+    writer.add_all(*file_graph(read.found, corpus_index))
+    return ()
+
 
 def _file_control_failures(
     path: Path,
@@ -884,36 +916,37 @@ def _file_control_failures(
     corpus_index: FileLocationResolver,
     writer: GraphWriter,
 ) -> tuple[str, ...]:
-    try:
-        with asg_dialect_parsers_registered():
-            asg = asg_of(asg_dir, path)
-        nodes, edges = extract_cobol_file_graph(asg, corpus_index)
-    except Exception as exc:
-        logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
-        return (f"FILE-CONTROL {path.name}: {exc}",)
-    writer.add_all(nodes, edges)
-    return ()
+    return _file_control_written(
+        _file_control_read(path, asg_dir), corpus_index, writer
+    )
 
 
 def _build_batch_file_graph(
     config: CorpusConfig,
-    corpus_index: CorpusIndex,
+    corpus_index: FileLocationResolver,
     cics_program_names: frozenset[str],
     writer: GraphWriter,
+    max_workers: int,
 ) -> tuple[str, ...]:
     cbl_files = tuple(
         path
         for path in matching_files(config.cobol_dir, config.cobol_globs)
         if path.stem.upper() not in cics_program_names
     )
-    # One ASG at a time, out of the cache cobble-parse-corpus wrote. The stage used
-    # to parse these itself into a temporary store, which meant every member's
-    # source in RAM at once and 4-7 seconds of JVM per member re-paid on every run.
-    failures = tuple(
-        chain.from_iterable(
-            _file_control_failures(path, config.asg_dir, corpus_index, writer)
-            for path in tqdm(cbl_files, desc="FILE-CONTROL", unit="program")
-        )
+    # One ASG at a time per worker, out of the cache cobble-parse-corpus wrote,
+    # written to the graph in member order whatever order the workers finish in.
+    failures = consumed_in_order(
+        partial(_file_control_read, asg_dir=config.asg_dir),
+        cbl_files,
+        max_workers,
+        lambda reads: tuple(
+            chain.from_iterable(
+                _file_control_written(read, corpus_index, writer)
+                for read in tqdm(
+                    reads, total=len(cbl_files), desc="FILE-CONTROL", unit="program"
+                )
+            )
+        ),
     )
     logger.info("FILE-CONTROL: %d batch programs", len(cbl_files))
     return failures
@@ -958,7 +991,9 @@ def _extract_all(
                 writer,
                 max_workers,
             )
-            + _build_batch_file_graph(config, corpus_index, cics_program_names, writer)
+            + _build_batch_file_graph(
+                config, corpus_index, cics_program_names, writer, max_workers
+            )
         )
         writer.add_all(*_build_dynamic_targets(targets, corpus_index))
         return failures
