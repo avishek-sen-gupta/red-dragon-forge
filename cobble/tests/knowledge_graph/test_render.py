@@ -1,5 +1,6 @@
 import json
 import logging
+import shutil
 from pathlib import Path
 
 import networkx as nx
@@ -98,6 +99,30 @@ def test_the_page_lands_beside_the_graph_and_is_titled_by_its_stem(
     written = render_graph._render(_graph_file(tmp_path / "carddemo.jsonl"))
 
     assert written == tmp_path / "carddemo.html"
+    assert "<title>carddemo Knowledge Graph</title>" in written.read_text()
+
+
+@pytest.mark.skipif(
+    shutil.which("sfdp") is None, reason="the layout needs graphviz's sfdp"
+)
+def test_webgl_lands_beside_the_graph_by_default(tmp_path: Path) -> None:
+    written = render_graph_webgl._render(_graph_file(tmp_path / "carddemo.jsonl"))
+
+    assert written == tmp_path / "carddemo-webgl.html"
+    assert "<title>carddemo Knowledge Graph</title>" in written.read_text()
+
+
+@pytest.mark.skipif(
+    shutil.which("sfdp") is None, reason="the layout needs graphviz's sfdp"
+)
+def test_webgl_out_overrides_the_default_location(tmp_path: Path) -> None:
+    requested = tmp_path / "report.html"
+
+    written = render_graph_webgl._render(
+        _graph_file(tmp_path / "carddemo.jsonl"), requested
+    )
+
+    assert written == requested
     assert "<title>carddemo Knowledge Graph</title>" in written.read_text()
 
 

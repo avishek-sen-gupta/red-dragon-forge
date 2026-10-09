@@ -1,6 +1,7 @@
 """render_graph_webgl.py — render the graph file cobble.build_graph wrote
-(--graph) as one self-contained WebGL HTML view beside it, named for the graph
-file's stem: out/carddemo.jsonl -> out/carddemo-webgl.html.
+(--graph) as one self-contained WebGL HTML view, named for the graph file's
+stem and written beside it by default: out/carddemo.jsonl ->
+out/carddemo-webgl.html. Pass --out to write it somewhere else instead.
 
 The sibling of cobble.render_graph, for a different job: render_graph's
 vis-network page is for navigating a graph, this one is for showing a whole
@@ -12,7 +13,7 @@ The layout is computed here rather than in the browser, by graphviz's sfdp, so
 graphviz has to be installed for this target (and only for this target). It is
 the slow part: about a minute for a graph of tens of thousands of nodes.
 
-Invoke as: uv run python -m cobble.render_graph_webgl --graph <file>
+Invoke as: uv run python -m cobble.render_graph_webgl --graph <file> [--out <file>]
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from cobble.knowledge_graph.render_webgl import render_webgl_html
 logger = logging.getLogger(__name__)
 
 
-def _render(graph_path: Path) -> Path:
+def _render(graph_path: Path, output_path: Path = Path()) -> Path:
     graph = merge_graph(*read_graph(graph_path))
     logger.info(
         "Laying out %d nodes / %d edges with sfdp — this is the slow part",
@@ -40,17 +41,21 @@ def _render(graph_path: Path) -> Path:
         graph.number_of_edges(),
     )
     positions = sfdp_positions(graph)
-    output_path = graph_path.with_name(f"{graph_path.stem}-webgl.html")
+    resolved_output = (
+        graph_path.with_name(f"{graph_path.stem}-webgl.html")
+        if output_path == Path()
+        else output_path
+    )
     render_webgl_html(
-        graph, positions, output_path, title=f"{graph_path.stem} Knowledge Graph"
+        graph, positions, resolved_output, title=f"{graph_path.stem} Knowledge Graph"
     )
     logger.info(
         "Rendered %d nodes, %d edges -> %s",
         graph.number_of_nodes(),
         graph.number_of_edges(),
-        output_path,
+        resolved_output,
     )
-    return output_path
+    return resolved_output
 
 
 def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -61,6 +66,12 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         type=Path,
         help="The graph file cobble-build wrote",
     )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path(),
+        help="Output .html file (default: <graph stem>-webgl.html beside --graph)",
+    )
     return parser.parse_args(argv)
 
 
@@ -70,7 +81,7 @@ def _run(args: argparse.Namespace) -> int:
             "error: %s not found — run `cobble-build --output` first", args.graph
         )
         return 1
-    _render(args.graph)
+    _render(args.graph, args.out)
     return 0
 
 
