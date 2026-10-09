@@ -105,7 +105,7 @@ call through f     : candidates = trimmed values of f, reasons = f's reasons
 </ul>
 
 <h2 id="in-cobble">In cobble</h2>
-<p>The value set, its budget and its reasons are in <a href="../../cobble/cobble/dataflow/fields/values.py"><code>values.py</code></a>; call sites are turned into <code>targets.jsonl</code> rows in <a href="../../cobble/cobble/dataflow/fixpoint/targets.py"><code>targets.py</code></a>; the three-way rule is <code>_row_target</code> in <a href="../../cobble/cobble/build_graph.py"><code>build_graph.py</code></a>.</p>
+<p>The fixpoint stage (<code>cobble-dataflow-fixpoint</code>) builds the value sets, applies the budget and records the reasons. It writes each dynamic call site as a <code>targets.jsonl</code> row. The graph build (<code>cobble-build</code>) reads those rows and applies the three-way rule.</p>
 </main>
 
 </body>

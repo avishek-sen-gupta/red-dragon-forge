@@ -105,7 +105,7 @@ definers(read of v at s) = { d | (d, v) ∈ in(s) }
 </ul>
 
 <h2 id="in-cobble">In cobble</h2>
-<p>The per-read definers are collected during the fixpoint in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a> and written one row per read by <a href="../../cobble/cobble/dataflow/fields/side_tables.py"><code>side_tables.py</code></a> into <code>defs.jsonl</code>. Its definitions are kept per byte range, not per variable name; the next page shows why.</p>
+<p>The fixpoint stage (<code>cobble-dataflow-fixpoint</code>) collects each read's definers as it walks and writes one row per read into <code>defs.jsonl</code>. Its definitions are kept per byte range, not per variable name; the next page shows why.</p>
 </main>
 
 </body>
