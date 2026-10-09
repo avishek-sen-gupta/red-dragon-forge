@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memoised reachability</title>
+<link rel="stylesheet" href="explainer.css">
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Explainer 10 of 11</div>
+<h1>Answering every walk once: strongly connected components and a memo</h1>
+<p class="lede">Thousands of jumps each ask what their target bytes can hold, and their walks back through the programs keep reaching the same places. Answer each place once, and let every walk that reaches it stop there.</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>The last stage of cobble's field dataflow, the combine, resolves dynamic call targets across programs: <code>CALL WS-PGM</code>, <code>EXEC CICS XCTL PROGRAM(WS-NEXT-PGM)</code>. When the name was put into the field in another program and handed over in a commarea, the answer is only found by walking back through the program that sent it, and the one that sent it there.</p>
+<ul>
+<li><strong>CICS programs hand control in rings.</strong> A menu transfers to a screen, the screen transfers back to the menu, and the commarea goes round with them. Walked backwards, the graph of "where could these bytes have come from" is full of cycles, and every program on a ring sees the same handful of commarea bytes.</li>
+<li><strong>Many questions, one graph.</strong> On a large CICS corpus (about 3,800 programs, about 19,000 jumps) each jump started its own walk. One walk alone reached about 311,000 vertices at about 850 program positions, and the jumps next to it walked the same commarea chains again.</li>
+<li><strong>The same shape appears whenever many starts ask a reachability question of one fixed graph</strong>: which sources can taint this sink, which allocation sites can this variable point to. Solving the graph once and sharing the answers is the standard way out.</li>
+</ul>
+
+<h2 id="the-problem">The problem</h2>
+<p>A <strong>place</strong> is a program, a node in it (a statement), and a byte range. The combine's question for a jump is: what values can the jump's target bytes hold? It answers by walking back from the jump's place. Each step looks at one place, collects any literal values written there, and lists the places the bytes were copied from: a <code>MOVE</code> inside the program, or, at the top of a program's linkage section, the caller that handed the commarea in.</p>
+<p>The walk's answer is everything found at every place it reaches, joined. Done once per jump, the cost is the number of jumps times the number of places each one reaches. When most jumps reach the same few hundred places, almost all of that work is repeated.</p>
+
+<h2 id="the-intuition">The intuition</h2>
+<p>A place's answer does not depend on who is asking. It is the join of what the place finds itself and the answers of every place it leads to. So work it out once, keep it, and when another walk arrives at an answered place, take the answer and go no further.</p>
+<p>Cycles get in the way of "work out the successors first". If <code>A</code> leads to <code>C</code>, <code>C</code> to <code>B</code>, and <code>B</code> back to <code>A</code>, none of them can be finished before the others. But they do not need to be: every place on a cycle reaches every other, so they all reach exactly the same set of places and all have the same answer. A maximal set of places that all reach each other is a <strong>strongly connected component</strong>. Solve the component as one unit: its answer is the join of what each member finds itself, plus the answers of the places the component leads out to.</p>
+<p><strong>Tarjan's algorithm</strong> finds the components during one <a href="traversal-orders.html#depth-first-as-far-as-you-can-then-back-up">depth-first walk</a>, and it finishes each component only after every component it leads to. That is exactly the order the answers need. It numbers places in the order it first visits them (the <em>index</em>), and keeps for each the lowest index it can get back to through places still in play (the <em>low</em> value). Visited places go on a stack. When the walk backs out of a place whose low equals its own index, nothing below it reaches anything older, so that place and everything above it on the stack form one component. Pop them, give them their shared answer, and move on.</p>
+<p>The textbook version is recursive, one call per place on the current path. Cobble keeps the path in explicit lists instead: the combine had already crashed once on Python's recursion limit when it recursed once per program, and a walk across a corpus can be millions of places deep.</p>
+<p>Two smaller changes make each step cheaper. A step that reaches the top of a program asks which links lead into it; it used to scan every link the round knew, and a profiler showed every sample inside that scan. The links are now indexed by what each step looks them up by. And a place is told apart by its <em>bytes</em> alone: the same bytes reached under a group name, an elementary name or a <code>REDEFINES</code> name are one place, since the walk never reads the name.</p>
+
+<h2 id="the-example">The example</h2>
+<p>Four programs hand an 8-byte commarea round. <code>PROGA</code> transfers to <code>PROGB</code>, <code>PROGB</code> to <code>PROGC</code>, <code>PROGC</code> back to <code>PROGA</code>: a 3-program ring. <code>PROGD</code> enters the ring from outside, with <code>'PROGE'</code> in the first 8 bytes. <code>PROGB</code> and <code>PROGC</code> each have a dynamic <code>XCTL</code> to whatever name the commarea carries. Those two dynamic jumps are what the combine has to answer.</p>
+<pre class="cobol">       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-NEXT-PGM      PIC X(8).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05  CA-NEXT-PGM      PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA TO WS-AREA.
+           EXEC CICS XCTL PROGRAM('PROGB') COMMAREA(WS-AREA) END-EXEC.
+
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGB.
+      *    Same data division as PROGA.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA TO WS-AREA.
+           IF CA-NEXT-PGM NOT = SPACES
+               EXEC CICS XCTL PROGRAM(CA-NEXT-PGM) END-EXEC
+           END-IF.
+           EXEC CICS XCTL PROGRAM('PROGC') COMMAREA(WS-AREA) END-EXEC.
+
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGC.
+      *    Same data division as PROGA.
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA TO WS-AREA.
+           IF CA-NEXT-PGM NOT = SPACES
+               EXEC CICS XCTL PROGRAM(CA-NEXT-PGM) END-EXEC
+           END-IF.
+           EXEC CICS XCTL PROGRAM('PROGA') COMMAREA(WS-AREA) END-EXEC.
+
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGD.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-AREA.
+           05  WS-NEXT-PGM      PIC X(8).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'PROGE' TO WS-NEXT-PGM.
+           EXEC CICS XCTL PROGRAM('PROGA') COMMAREA(WS-AREA) END-EXEC.</pre>
+<p>The literal transfers resolve on their own, so by the round shown here the combine knows four links: A→B, B→C, C→A and D→A. Six places matter. Each dynamic jump starts at its own node, on <code>CA-NEXT-PGM</code> (linkage bytes 0 to 8). Each literal transfer is a place on <code>WS-AREA</code> (working-storage bytes 0 to 8) at that <code>XCTL</code>.</p>
+<table class="state"><tr><th>place</th><th>program, node, bytes</th><th>finds itself</th><th>leads to</th></tr>
+<tr><td>B-jump</td><td>PROGB, MAIN-PARA/1.then.0, linkage[0:8]</td><td>nothing</td><td>A-xctl</td></tr>
+<tr><td>C-jump</td><td>PROGC, MAIN-PARA/1.then.0, linkage[0:8]</td><td>nothing</td><td>B-xctl</td></tr>
+<tr><td>A-xctl</td><td>PROGA, MAIN-PARA/1, working_storage[0:8]</td><td>nothing</td><td>C-xctl, D-xctl</td></tr>
+<tr><td>B-xctl</td><td>PROGB, MAIN-PARA/2, working_storage[0:8]</td><td>nothing</td><td>A-xctl</td></tr>
+<tr><td>C-xctl</td><td>PROGC, MAIN-PARA/2, working_storage[0:8]</td><td>nothing</td><td>B-xctl</td></tr>
+<tr><td>D-xctl</td><td>PROGD, MAIN-PARA/1, working_storage[0:8]</td><td>{PROGE}</td><td>none</td></tr></table>
+<p>Read a row like this: the bytes at B-xctl were copied from <code>DFHCOMMAREA</code> by the <code>MOVE</code>, and <code>PROGB</code>'s commarea is handed in by <code>PROGA</code>'s transfer, so B-xctl leads to A-xctl. The ring of places A-xctl → C-xctl → B-xctl → A-xctl runs the opposite way to the ring of transfers, because the walk goes backwards. The jump at <code>PROGB</code> reads <code>CA-NEXT-PGM</code> and the link from <code>PROGA</code> hands over <code>DFHCOMMAREA</code>: two names, the same bytes, so one place.</p>
+
+<h2 id="step-by-step">Step by step</h2>
+<p>The combine answers programs in name order, so <code>PROGB</code>'s jump goes first. Two naive walks would expand 5 places each: B-jump, A-xctl, C-xctl, D-xctl, B-xctl, then C-jump, B-xctl, A-xctl, C-xctl, D-xctl. That is 10 expansions. The memo makes 6.</p>
+<p>The <em>path</em> is the depth-first walk's current route; the <em>stack</em> is Tarjan's stack of places not yet in a finished component. A-xctl's two successors are taken C-xctl first here; the other order changes the visits, not the answers.</p>
+<details class="walk">
+<summary>Tarjan's walk and the memo, one move at a time <span class="dim">(12 steps)</span></summary>
+<ol class="steps">
+<li class="before">
+<p class="note">The round's memo is empty. B-jump is asked for its answer, and it has none, so a solve starts from it.</p>
+<p class="dim">Path</p><div class="chips"><span class="dim">empty</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="dim">empty</span></div>
+<p class="dim">Answered</p><div class="chips"><span class="dim">none</span></div>
+</li>
+<li>
+<p class="note">Visit B-jump: give it index 0, low 0, and expand it (expansion 1). It finds nothing and leads to A-xctl.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td class="changed">0</td><td class="changed">0</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span></div>
+</li>
+<li>
+<p class="note">A-xctl is not answered and not visited: visit it, index 1, expansion 2. It leads to C-xctl and D-xctl.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td>0</td><td>0</td></tr><tr><td>A-xctl</td><td class="changed">1</td><td class="changed">1</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span></div>
+</li>
+<li>
+<p class="note">A-xctl's first successor, C-xctl: visit it, index 2, expansion 3. It leads to B-xctl.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td>0</td><td>0</td></tr><tr><td>A-xctl</td><td>1</td><td>1</td></tr><tr><td>C-xctl</td><td class="changed">2</td><td class="changed">2</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span></div>
+</li>
+<li>
+<p class="note">Visit B-xctl, index 3, expansion 4. It leads to A-xctl.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td>0</td><td>0</td></tr><tr><td>A-xctl</td><td>1</td><td>1</td></tr><tr><td>C-xctl</td><td>2</td><td>2</td></tr><tr><td>B-xctl</td><td class="changed">3</td><td class="changed">3</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+</li>
+<li>
+<p class="note">B-xctl's successor A-xctl is already visited and still on the stack: the walk has come back round the ring. B-xctl's low drops to A-xctl's index, 1. Nothing is expanded.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td>0</td><td>0</td></tr><tr><td>A-xctl</td><td>1</td><td>1</td></tr><tr><td>C-xctl</td><td>2</td><td>2</td></tr><tr><td>B-xctl</td><td>3</td><td class="changed">1</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+</li>
+<li>
+<p class="note">B-xctl has no successors left. Back out to C-xctl, which takes the lower low: 1. B-xctl's low (1) is not its index (3), so it stays on the stack: it belongs to an older place's component.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td>0</td><td>0</td></tr><tr><td>A-xctl</td><td>1</td><td>1</td></tr><tr><td>C-xctl</td><td>2</td><td class="changed">1</td></tr><tr><td>B-xctl</td><td>3</td><td>1</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+</li>
+<li>
+<p class="note">C-xctl is done too. Back out to A-xctl, whose low stays 1. C-xctl's low (1) is not its index (2), so it stays on the stack as well.</p>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+</li>
+<li>
+<p class="note">A-xctl's second successor, D-xctl: visit it, index 4, expansion 5. It finds <code>'PROGE'</code>, from the <code>MOVE</code> in <code>PROGD</code>, and leads nowhere.</p>
+<table class="state"><tr><th>place</th><th>index</th><th>low</th></tr><tr><td>B-jump</td><td>0</td><td>0</td></tr><tr><td>A-xctl</td><td>1</td><td>1</td></tr><tr><td>C-xctl</td><td>2</td><td>1</td></tr><tr><td>B-xctl</td><td>3</td><td>1</td></tr><tr><td>D-xctl</td><td class="changed">4</td><td class="changed">4</td></tr></table>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">D-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span><span class="chip">D-xctl</span></div>
+</li>
+<li>
+<p class="note">D-xctl is done and its low equals its index: it is a component on its own. Pop it. Its answer is what it found, {PROGE}. It has no successors, so a walk from it reaches nothing twice: revisits is false.</p>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span><span class="chip">A-xctl</span><span class="chip">C-xctl</span><span class="chip">B-xctl</span></div>
+<table class="state"><tr><th>answered</th><th>answer</th><th>revisits</th></tr><tr><td>D-xctl</td><td class="changed">{PROGE}</td><td class="changed">false</td></tr></table>
+</li>
+<li>
+<p class="note">A-xctl is done and its low (1) equals its index (1). Pop the stack down to it: B-xctl, C-xctl, A-xctl are one component, the ring. None finds anything itself. The one edge leaving the component goes A-xctl → D-xctl, already answered {PROGE}. So all three get {PROGE}. A component of more than one place is a cycle, so all three revisit.</p>
+<p class="dim">Path</p><div class="chips"><span class="chip">B-jump</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="chip">B-jump</span></div>
+<table class="state"><tr><th>answered</th><th>answer</th><th>revisits</th></tr><tr><td>D-xctl</td><td>{PROGE}</td><td>false</td></tr><tr><td>B-xctl</td><td class="changed">{PROGE}</td><td class="changed">true</td></tr><tr><td>C-xctl</td><td class="changed">{PROGE}</td><td class="changed">true</td></tr><tr><td>A-xctl</td><td class="changed">{PROGE}</td><td class="changed">true</td></tr></table>
+</li>
+<li>
+<p class="note">B-jump is done, low 0 equals index 0: a component on its own. Its answer is its own (nothing) joined with A-xctl's: {PROGE}. A-xctl revisits, so B-jump does. The path is empty and the solve ends after 5 expansions. The jump's answer is {PROGE}, marked cycled.</p>
+<p class="dim">Path</p><div class="chips"><span class="dim">empty</span></div>
+<p class="dim">Stack</p><div class="chips"><span class="dim">empty</span></div>
+<table class="state"><tr><th>answered</th><th>answer</th><th>revisits</th></tr><tr><td>D-xctl</td><td>{PROGE}</td><td>false</td></tr><tr><td>B-xctl</td><td>{PROGE}</td><td>true</td></tr><tr><td>C-xctl</td><td>{PROGE}</td><td>true</td></tr><tr><td>A-xctl</td><td>{PROGE}</td><td>true</td></tr><tr><td>B-jump</td><td class="changed">{PROGE}</td><td class="changed">true</td></tr></table>
+</li>
+<li>
+<p class="note">Now <code>PROGC</code>'s jump. C-jump is not answered, so a new solve starts: index 0, expansion 6. Its only successor, B-xctl, is already answered, so the walk does not go there. C-jump backs out at once, a component on its own: answer {PROGE}, revisits true because B-xctl does. The ring and <code>PROGD</code> were not expanded again.</p>
+<table class="state"><tr><th>answered</th><th>answer</th><th>revisits</th></tr><tr><td>D-xctl</td><td>{PROGE}</td><td>false</td></tr><tr><td>B-xctl</td><td>{PROGE}</td><td>true</td></tr><tr><td>C-xctl</td><td>{PROGE}</td><td>true</td></tr><tr><td>A-xctl</td><td>{PROGE}</td><td>true</td></tr><tr><td>B-jump</td><td>{PROGE}</td><td>true</td></tr><tr><td>C-jump</td><td class="changed">{PROGE}</td><td class="changed">true</td></tr></table>
+</li>
+</ol>
+</details>
+<p>A third jump starting at any of these six places would expand nothing: <code>of</code> returns the stored answer straight away. Both answers are what the naive walks give: {PROGE}, and both walks would meet a place twice going round the ring.</p>
+<p>The gap grows with the ring. A walk from inside a ring of <em>n</em> places expands all <em>n</em>; <em>n</em> jumps on it expand about <em>n</em>² between them. With the memo the ring is expanded once. On a test of a 15-program <code>XCTL</code> ring, vertex expansions went from 480 to 60, with identical output.</p>
+
+<h2 id="the-rule">The rule</h2>
+<div class="rule">
+answer(v) = own(v) ⊔ ⨆ answer(w) for every successor w of v<br>
+for a component C: answer(v) = ⨆ own(u) for u ∈ C ⊔ ⨆ answer(w) for edges u → w, u ∈ C, w ∉ C<br>
+settle C when Tarjan backs out of a place r with low(r) = index(r): C = the stack down to r<br>
+a successor already answered is not entered; each place is expanded once per memo<br>
+revisits(v) ⟺ edges out of the places v reaches ≠ (places v reaches) − 1
+</div>
+<p>The first line is the naive walk's answer written per place. It holds for every member of a component at once, because they all reach the same places. Tarjan settles a component only after every component it leads to, so the answers the second line needs are always there.</p>
+<p>The join has to be the walk's join, and it must not care about order or repetition: here, set unions of values, reasons and outside callers, and an "or" of the cycled flag. That is what lets a stored answer stand in for walking again.</p>
+<p><strong>The revisit flag.</strong> Besides values, the combine asks whether a walk from a place would reach some place twice. That is true exactly when what the place reaches is not a tree hanging from it: a tree on <em>k</em> places has <em>k</em> − 1 edges. Most places settle it when their component settles. A component of two or more places is a cycle, so every member revisits. A single place with an edge to itself, the same successor twice, or a successor that revisits, revisits. A single place with at most one successor, which does not revisit, does not. What is left is a single place with several successors that do not revisit, like the top of a diamond: their reach may overlap. That one is decided on demand by walking the successor lists the memo already keeps, counting edges against places. Nothing is expanded.</p>
+<p>The combine reads the flag in one case only: when a jump's answer has no values and no reasons. A walk that went round a ring and found nothing is reporting that the bytes come from whoever first started the ring, so the target is marked as received from outside (<code>inbound-linkage</code>) rather than left empty with no explanation. In the example, without <code>PROGD</code>, both jumps would end that way.</p>
+
+<h2 id="what-goes-wrong">What goes wrong</h2>
+<ul>
+<li><strong>The graph must not change while the memo lives.</strong> A stored answer is only right for the links it was computed with. Each round of the combine finds new links (see <a href="interprocedural-rounds.html">rounds across programs</a>), so the cross-program memo is built per round and dropped. Inside one program the facts and copies never change, so the second memo, over positions inside a program, lives for the whole run. Keeping the cross-program memo across rounds would give stale answers.</li>
+<li><strong>The memo only shares places that are equal.</strong> The same node reached under bytes 0 to 8 and under bytes 0 to 4 is two places, each expanded. Copies that move part of a field, and links whose windows line up on different lengths, narrow the range, so one node can turn into many places. Telling places apart by bytes rather than field name removed the duplicates that were only names; it does nothing for real <a href="byte-extents.html">byte-range</a> fragmentation.</li>
+<li><strong>One component can be most of the corpus.</strong> On the large corpus the links joined into one cyclic group, and one solve grew past a million places on the stack before anything settled. The memo makes each place cost once; it does not make the set of places small. <a href="hop-limits.html">Hop limits</a> bound that. A hop limit also puts the crossing count into the place, so the same bytes reached after 1 crossing and after 2 are separate places, and the memo shares less.</li>
+<li><strong>A component's answer is all-or-nothing.</strong> Every member gets the full join. That is exact for reachability, since every member does reach it all, but it means one wide entry into a ring widens every jump on the ring.</li>
+<li><strong>The revisit check can still walk.</strong> For diamond-shaped starts it walks the stored successor lists. That is cheap compared to expanding, but it is not free on a large reach, and its result is cached per start.</li>
+<li><strong>The memo is mutable.</strong> It is the one place in the combine that mutates state, and is excluded from the functional-style lint for that reason: threading the memo and the stack through as values would copy them at every step.</li>
+</ul>
+
+<h2 id="in-cobble">In cobble</h2>
+<p><a href="../../cobble/cobble/dataflow/combine/closures.py"><code>closures.py</code></a> is the memo: <code>Closures.of</code> answers a start, <code>_solve</code> is the iterative Tarjan with its explicit path, positions and stack, <code>_settle</code> joins a component, <code>_mark</code> sets the revisit flags a component settles, and <code>_walked_revisits</code> decides the rest. The naive walk it replaced is <code>walked</code> in <a href="../../cobble/cobble/dataflow/combine/walk.py"><code>walk.py</code></a>, still behind the plain <code>resolve</code> in <code>resolve.py</code> and used as the reference the tests compare the memo against.</p>
+<p>In <a href="../../cobble/cobble/dataflow/combine/link.py"><code>link.py</code></a>, <code>_answered_in</code> builds one <code>Closures</code> per round over <code>_expanded</code>, which resolves a place inside its program and follows each stop across links; <code>_held</code> joins the answer with <code>revisits</code> as the cycled flag; <code>_answered</code> turns an empty, cycled answer into <code>inbound-linkage</code>. The followers <code>_received</code>, <code>_returned</code> and <code>_retrieved</code> look links up in <a href="../../cobble/cobble/dataflow/combine/edge_index.py"><code>edge_index.py</code></a>, looked up by (callee, parameter), (caller, node, parameter) and (callee, node).</p>
+<p><a href="../../cobble/cobble/dataflow/combine/memo_resolve.py"><code>memo_resolve.py</code></a> is the second memo: one <code>Closures</code> per program for the run, over <code>step</code> in <a href="../../cobble/cobble/dataflow/combine/resolve.py"><code>resolve.py</code></a>. Both memos compare byte ranges through <code>ByteRange.bytes_only()</code> in <a href="../../cobble/cobble/dataflow/fields/extent_text.py"><code>extent_text.py</code></a>, which drops the field name and the clamp mark. The join is <code>held_join</code> in <a href="../../cobble/cobble/dataflow/combine/held.py"><code>held.py</code></a>.</p>
+<p>The tests: <a href="../../cobble/tests/dataflow/combine/test_closures.py"><code>test_closures.py</code></a> checks that one memo gives every start, on a ring with a tail, a diamond, a self-loop, a tree and a repeated edge, exactly what its own walk gives, revisit flag included, and expands each vertex once. <a href="../../cobble/tests/dataflow/combine/test_memo_resolve.py"><code>test_memo_resolve.py</code></a> does the same inside a program, including two field names for the same bytes walked once, and <a href="../../cobble/tests/dataflow/combine/test_edge_index.py"><code>test_edge_index.py</code></a> checks the index finds the same links a scan would. The command and its options are in the <a href="../reference/cobble/field-dataflow.md">field dataflow reference</a>. Related pages: <a href="fixpoints.html">fixpoints</a>, <a href="traversal-orders.html">traversal orders</a>, <a href="hop-limits.html">hop limits</a>.</p>
+</main>
+
+</body>
+</html>
