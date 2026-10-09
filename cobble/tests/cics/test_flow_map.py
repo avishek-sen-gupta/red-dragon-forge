@@ -61,6 +61,7 @@ def _run(reader: _Reader, sink: _CollectingSink, csd: str = _CSD, members=_MEMBE
         read_asg=reader,
         sink=sink,
         corpus_index=CorpusIndex(),
+        max_workers=1,
     )
 
 
@@ -136,7 +137,8 @@ def test_each_program_is_named_before_it_is_read(caplog) -> None:
     assert [
         record.getMessage()
         for record in caplog.records
-        if record.name == "cobble.cics.flow_map" and "PROGTWO" in record.getMessage()
+        if record.name == "cobble.cics.verb_source_asg"
+        and "PROGTWO" in record.getMessage()
     ] == ["CICS flow: reading PROGTWO"]
 
 
@@ -179,6 +181,7 @@ def test_a_program_read_from_the_parse_cache_yields_its_cics_verb_edges(
         read_asg=partial(cached_asg, tmp_path),
         sink=sink,
         corpus_index=CorpusIndex(),
+        max_workers=1,
     )
 
     assert (extraction.programs_read, extraction.failures) == (1, ())
@@ -186,3 +189,69 @@ def test_a_program_read_from_the_parse_cache_yields_its_cics_verb_edges(
         ("AAAA", "PROGONE", "STARTS"),
         ("PROGONE", "PROGTWO", "XCTL"),
     ]
+
+
+def _cached_xctl(asg_dir: Path, program: str, target: str) -> Path:
+    source = asg_dir / f"{program}.cbl"
+    cached = cache_path(asg_dir, source)
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    statement = {
+        "type": "EXEC_CICS",
+        "verb": "XCTL",
+        "options": {"PROGRAM": {"text": target, "is_literal": True}},
+    }
+    cached.write_text(
+        json.dumps(
+            {
+                "program_id": program,
+                "paragraphs": [{"name": "MAIN", "statements": [statement]}],
+            }
+        )
+    )
+    return source
+
+
+def test_programs_read_across_worker_processes_stream_as_one_process_reads_them(
+    tmp_path: Path,
+) -> None:
+    """Workers finish in any order; the graph must not. Each program's edges are
+    written in CSD order whatever the worker count, so the graph file is the one a
+    serial run writes."""
+    members = {
+        program: _cached_xctl(tmp_path, program, target)
+        for program, target in (
+            ("PROGA", "PROGX"),
+            ("PROGB", "PROGY"),
+            ("PROGC", "PROGZ"),
+        )
+    }
+    csd = "".join(
+        f"DEFINE TRANSACTION(T{n}) GROUP(GRP) PROGRAM({program})\n"
+        for n, program in enumerate(members)
+    )
+
+    def edges_with(workers: int) -> tuple[tuple[str, str, str], ...]:
+        sink = _CollectingSink()
+        extract_transaction_flow_graph(
+            csd,
+            {},
+            members,
+            read_asg=partial(cached_asg, tmp_path),
+            sink=sink,
+            corpus_index=CorpusIndex(),
+            max_workers=workers,
+        )
+        return tuple((e.source, e.target, e.kind.value) for e in sink.edges)
+
+    assert (
+        edges_with(1)
+        == edges_with(3)
+        == (
+            ("T0", "PROGA", "STARTS"),
+            ("T1", "PROGB", "STARTS"),
+            ("T2", "PROGC", "STARTS"),
+            ("PROGA", "PROGX", "XCTL"),
+            ("PROGB", "PROGY", "XCTL"),
+            ("PROGC", "PROGZ", "XCTL"),
+        )
+    )

@@ -22,29 +22,26 @@ typed-ASG walk instead, so the port pulls in no VM:
     algorithm strategy.py uses over ``ctx._asg.data_fields``, honouring figurative
     constants by treating ``value_is_figurative`` fields as unresolved).
   * Feed each ``CicsVerb`` through the byte-for-byte ported ``flow_graph_core.
-    _verb_edge`` → ``graph_sink``, exactly as production's ``GraphEmittingObserver``.
+    _verb_edge`` and return the edges; ``flow_map`` writes them, with their
+    endpoints, in program order, as production's ``GraphEmittingObserver`` does.
 
-Kept to the smallest faithful reproduction of the strategy's observer path; the
-ported ``flow_map.py`` swaps only its ``stream_program_verbs`` import to point here.
+Kept to the smallest faithful reproduction of the strategy's observer path.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from bms_copybook_gen.models import BmsMapSet
 from cics.statements import ExecCicsStatement
 from cobble.cics.exec_cics_walk import exec_cics_statements
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb, DynamicSite
-from cobble.knowledge_graph.graph_types import GraphNode
+from cobble.knowledge_graph.graph_types import GraphEdge
 from cobol_asg.asg_types import CobolASG
-
-if TYPE_CHECKING:
-    from cobble.corpus_index import CorpusIndex
 
 logger = logging.getLogger(__name__)
 
@@ -227,57 +224,42 @@ def _program_dynamic_sites(verbs) -> tuple[DynamicSite, ...]:
     )
 
 
-def _endpoint(node_id, kind, corpus_index: CorpusIndex) -> GraphNode:
-    return GraphNode(
-        id=node_id,
-        kind=kind,
-        location=corpus_index.resolve_file_path(kind, node_id),
-    )
-
-
-def _emit(edge, sink, corpus_index: CorpusIndex) -> None:
-    """An edge and both its endpoints, exactly as GraphEmittingObserver emits them."""
-    sink.add_node(_endpoint(edge.source, edge.source_kind, corpus_index))
-    sink.add_node(_endpoint(edge.target, edge.target_kind, corpus_index))
-    sink.add_edge(edge)
-
-
 @dataclasses.dataclass(frozen=True)
 class VerbStreamResult:
-    """One program's contribution: what failed, and the dynamic sites it named.
+    """One program's contribution: its edges, what failed, and the dynamic sites
+    it named.
 
-    Not folded into a plain tuple of failures: build_graph needs the dynamic
-    sites whether or not targets.jsonl exists, to say a site is merely
+    The edges come back rather than going straight into a sink, so a program can be
+    read in a worker process and its edges written by the one process that owns the
+    graph file, in the order a serial run writes them. build_graph needs the
+    dynamic sites whether or not targets.jsonl exists, to say a site is merely
     not-attempted rather than reporting nothing for it at all.
     """
 
+    edges: tuple[GraphEdge, ...] = ()
     failures: tuple[str, ...] = ()
     dynamic_sites: tuple[DynamicSite, ...] = ()
 
 
-def stream_program_verbs(
+def program_verbs(
     prog_name: str,
     member: Path,
     read_asg: AsgReader,
-    bms_mapsets,
-    sink,
-    corpus_index: CorpusIndex,
+    bms_mapsets: Mapping[str, BmsMapSet],
 ) -> VerbStreamResult:
-    """Read one program's ASG and stream its CICS-verb graph edges into ``sink``.
+    """Read one program's ASG and return its CICS-verb graph edges.
 
     Isolates + loudly warns on failure, exactly as production does, and returns the
-    failure rather than appending it to a list the caller handed down: what one
-    program did is this function's result, not an effect it had on its caller's
-    state. Production's ``cics.verb_source_lowering.stream_program_verbs`` takes a
-    ``failures`` list instead; the ported ``flow_map`` folds what comes back here,
-    so the two differ by that argument alone.
+    failure rather than appending it to a list the caller handed down. Named in the
+    log before the read: on a corpus where one member takes minutes, the name is the
+    only thing that tells a working run from a stuck one.
     """
+    logger.debug("CICS flow: reading %s", prog_name)
     try:
         asg = read_asg(member)
         verbs = _program_verbs(asg, prog_name)
-        for edge in _program_edges(verbs, bms_mapsets):
-            _emit(edge, sink, corpus_index)
+        edges = tuple(_program_edges(verbs, bms_mapsets))
     except Exception as exc:  # one bad program must not abort the run
         logger.warning("CICS program %s failed: %s", prog_name, exc, exc_info=True)
         return VerbStreamResult(failures=(f"CICS program {prog_name}: {exc}",))
-    return VerbStreamResult(dynamic_sites=_program_dynamic_sites(verbs))
+    return VerbStreamResult(edges=edges, dynamic_sites=_program_dynamic_sites(verbs))
