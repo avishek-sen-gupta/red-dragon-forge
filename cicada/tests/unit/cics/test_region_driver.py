@@ -14,13 +14,22 @@ from tests.covers import NotLanguageFeature, covers
 
 
 class _Region:
+    """Fakes just enough of CicsRegion's shape for PseudoConversationalDriver:
+    ``done`` mirrors the real property (true only once a RETURN/ABEND is NOT
+    masking an adopted next task) -- none of these tests exercise adoption,
+    so a plain RETURN/ABEND is always genuinely final here, same as the real
+    thing when ``_settle_terminal``'s ``pop_runnable``/``_resume_pending``
+    find nothing queued."""
+
     def __init__(self, channel, results):
         self.channel, self.results, self.calls = channel, list(results), []
+        self.done = False
 
     def _next(self, call):
         self.calls.append(call)
         kind, text = self.results.pop(0)
         self.channel.put({"type": "text", "text": text})
+        self.done = kind in (DispatchKind.RETURN, DispatchKind.ABEND)
         return DispatchResult(
             kind=kind, abcode="ASRA" if kind is DispatchKind.ABEND else None
         )
