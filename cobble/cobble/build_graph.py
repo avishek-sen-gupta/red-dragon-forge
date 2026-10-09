@@ -53,6 +53,7 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.corpus_index import CorpusIndex, FileLocationResolver
 from cobble.corpus_index_builder import build_corpus_index
+from cobble.dataflow.fields.emit_extents import worker_count
 from cobble.dataflow.fixpoint.rows import Row, strings, text
 from cobble.dataflow.fixpoint.rows import read as read_targets
 from cobble.dynamic_call_targets import NO_DYNAMIC_CALL_TARGETS, DynamicCallTargets
@@ -687,6 +688,7 @@ def _build_cics_flow_graph(
     transid_to_program: Mapping[str, str],
     targets: DynamicCallTargets,
     writer: GraphWriter,
+    max_workers: int,
 ) -> tuple[str, ...]:
     stems = {
         path.stem.upper(): path
@@ -702,7 +704,7 @@ def _build_cics_flow_graph(
         len(found.paths),
     )
     return found.failures + _run_flow_extractor(
-        config, corpus_index, found, targets, writer
+        config, corpus_index, found, targets, writer, max_workers
     )
 
 
@@ -805,6 +807,7 @@ def _flow_extraction_attempt(
     corpus_index: CorpusIndex,
     found: _CicsSources,
     writer: GraphWriter,
+    max_workers: int,
 ) -> tuple[FlowExtraction, tuple[str, ...]]:
     """What the whole-CSD pass produced, or a blank FlowExtraction paired with
     a single abort message when it raised.
@@ -823,6 +826,7 @@ def _flow_extraction_attempt(
             read_asg=partial(cached_asg, config.asg_dir),
             sink=sink,
             corpus_index=corpus_index,
+            max_workers=max_workers,
         )
     except Exception as exc:
         logger.warning("CICS flow graph (whole CSD) failed: %s", exc, exc_info=True)
@@ -838,9 +842,12 @@ def _run_flow_extractor(
     found: _CicsSources,
     targets: DynamicCallTargets,
     writer: GraphWriter,
+    max_workers: int,
 ) -> tuple[str, ...]:
     """Run the flow extractor over the whole CSD and return what it skipped."""
-    extraction, abort = _flow_extraction_attempt(config, corpus_index, found, writer)
+    extraction, abort = _flow_extraction_attempt(
+        config, corpus_index, found, writer, max_workers
+    )
     if abort:
         return abort
     logger.info(
@@ -858,12 +865,13 @@ def _cics_flow_or_skip(
     transid_to_program: Mapping[str, str],
     targets: DynamicCallTargets,
     writer: GraphWriter,
+    max_workers: int,
 ) -> tuple[str, ...]:
     if not config.csd_files:
         logger.info("CICS flow: skipped (no csd_files configured)")
         return ()
     return _build_cics_flow_graph(
-        config, corpus_index, transid_to_program, targets, writer
+        config, corpus_index, transid_to_program, targets, writer, max_workers
     )
 
 
@@ -934,6 +942,7 @@ def _extract_all(
     corpus_index: CorpusIndex,
     csd: _CsdRead,
     store: JclStore,
+    max_workers: int,
 ) -> tuple[str, ...]:
     """Run the four extractors into one writer, returning everything they skipped."""
     cics_program_names = frozenset(csd.transid_to_program.values())
@@ -942,7 +951,12 @@ def _extract_all(
             _build_jcl_graph(config, corpus_index, writer, store)
             + _build_call_copy_graph(config, corpus_index, cics_program_names, writer)
             + _cics_flow_or_skip(
-                config, corpus_index, csd.transid_to_program, targets, writer
+                config,
+                corpus_index,
+                csd.transid_to_program,
+                targets,
+                writer,
+                max_workers,
             )
             + _build_batch_file_graph(config, corpus_index, cics_program_names, writer)
         )
@@ -1005,11 +1019,18 @@ def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="The targets.jsonl cobble-dataflow-fixpoint wrote: which programs each "
         "dynamic CALL/XCTL/LINK site can reach. Without it, no dynamic-target edges",
     )
+    parser.add_argument(
+        "--max-workers",
+        type=worker_count,
+        default=4,
+        help="Worker processes for the CICS verbs, and threads for the JCL bridge "
+        "(default 4). The graph is the same for any count",
+    )
     return parser.parse_args(argv)
 
 
 def _corpus_failures(
-    config: CorpusConfig, output: Path, targets: DynamicCallTargets
+    config: CorpusConfig, output: Path, targets: DynamicCallTargets, max_workers: int
 ) -> tuple[str, ...]:
     """One full pass over the corpus, returning everything it skipped.
 
@@ -1019,7 +1040,7 @@ def _corpus_failures(
     scale to a corpus. Its cache dies with the store, so no run can be served
     output from a different grammar.
     """
-    with temp_jcl_store() as store:
+    with temp_jcl_store(max_workers) as store:
         store.parse_all(
             matching_files(config.jcl_dir, config.jcl_globs), bridge_parser()
         )
@@ -1031,7 +1052,9 @@ def _corpus_failures(
         return (
             corpus_index.failures
             + csd.failures
-            + _extract_all(config, output, targets, corpus_index, csd, store)
+            + _extract_all(
+                config, output, targets, corpus_index, csd, store, max_workers
+            )
         )
 
 
@@ -1049,7 +1072,9 @@ def main() -> int:
     unusable_csd = _unusable_csd_paths(config)
     if unusable_csd:
         sys.exit(_unusable_csd_message(unusable_csd))
-    failures = _corpus_failures(config, args.output, args.dynamic_call_targets)
+    failures = _corpus_failures(
+        config, args.output, args.dynamic_call_targets, args.max_workers
+    )
     _report_merged(args.output)
     _report_failures(failures)
     return 0

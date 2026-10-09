@@ -20,7 +20,9 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,7 +37,7 @@ from cobble.cics.graph_sink import GraphSink
 from cobble.cics.verb_source_asg import (  # SEAM: VM-free verb source
     AsgReader,
     VerbStreamResult,
-    stream_program_verbs,
+    program_verbs,
 )
 from cobble.knowledge_graph.graph_types import (
     EdgeKind,
@@ -140,24 +142,11 @@ def _programs_to_read(
     return tuple(prog_name for prog_name in named if prog_name in members)
 
 
-def _read_program(
-    prog_name: str,
-    member: Path,
-    read_asg: AsgReader,
-    bms_mapsets: Mapping[str, BmsMapSet],
-    sink: GraphSink,
-    corpus_index: CorpusIndex,
+def _written(
+    result: VerbStreamResult, sink: GraphSink, corpus_index: CorpusIndex
 ) -> VerbStreamResult:
-    """One program's verb edges into the sink; what could not be read, and the
-    dynamic sites it named.
-
-    Named before the read, not after: on a corpus where one member takes minutes,
-    this line is the only thing that distinguishes a working run from a stuck one.
-    """
-    logger.debug("CICS flow: reading %s", prog_name)
-    return stream_program_verbs(
-        prog_name, member, read_asg, bms_mapsets, sink, corpus_index
-    )
+    _emit(result.edges, sink, corpus_index)
+    return result
 
 
 def _read_programs(
@@ -167,18 +156,36 @@ def _read_programs(
     bms_mapsets: Mapping[str, BmsMapSet],
     sink: GraphSink,
     corpus_index: CorpusIndex,
+    max_workers: int,
 ) -> tuple[VerbStreamResult, ...]:
-    """Stream every program's CICS verbs into the sink; one result each."""
-    return tuple(
-        _read_program(
-            prog_name,
-            members[prog_name],
-            read_asg,
-            bms_mapsets,
-            sink,
-            corpus_index,
+    """Every program's CICS verbs, written into the sink in CSD order; one result
+    each.
+
+    With more than one worker, programs are read in worker processes and ``map``
+    hands their results back in submission order, so the sink sees exactly what a
+    serial run writes. One worker reads in this process.
+    """
+    reader = partial(program_verbs, read_asg=read_asg, bms_mapsets=bms_mapsets)
+    paths = tuple(members[program] for program in programs)
+    if max_workers == 1:
+        return _streamed(
+            map(reader, programs, paths), len(programs), sink, corpus_index
         )
-        for prog_name in tqdm(programs, desc="CICS verbs", unit="program")
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        return _streamed(
+            pool.map(reader, programs, paths), len(programs), sink, corpus_index
+        )
+
+
+def _streamed(
+    results: Iterable[VerbStreamResult],
+    total: int,
+    sink: GraphSink,
+    corpus_index: CorpusIndex,
+) -> tuple[VerbStreamResult, ...]:
+    return tuple(
+        _written(result, sink, corpus_index)
+        for result in tqdm(results, total=total, desc="CICS verbs", unit="program")
     )
 
 
@@ -190,6 +197,7 @@ def extract_transaction_flow_graph(
     read_asg: AsgReader,
     sink: GraphSink,
     corpus_index: CorpusIndex,
+    max_workers: int,
 ) -> FlowExtraction:
     """Emit the CSD's structural edges and every program's CICS verb edges into
     ``sink``, and report what was read."""
@@ -197,7 +205,7 @@ def extract_transaction_flow_graph(
     _emit(_starts_edges(csd.transid_to_program), sink, corpus_index)
     programs = _programs_to_read(csd.transid_to_program, members)
     results = _read_programs(
-        programs, members, read_asg, bms_mapsets, sink, corpus_index
+        programs, members, read_asg, bms_mapsets, sink, corpus_index, max_workers
     )
     failures = tuple(chain.from_iterable(result.failures for result in results))
     dynamic_sites = tuple(
