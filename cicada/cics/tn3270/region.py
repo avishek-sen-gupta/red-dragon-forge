@@ -172,12 +172,40 @@ def build_region(
 ) -> ServedRegion:
     wiring = _wiring()
     vsam_engine = _vsam_engine(config, work_dir / "vsam")
+    # Pre-created and passed by reference, NOT left to build_cics_spec's own
+    # `program_cache=None` default: CicsLoweringStrategy falls back to a
+    # FRESH, unconnected `{}` per compile when it isn't a MutableMapping
+    # (cics/strategy.py:1140), so every compiled program's own EXEC CICS
+    # LINK builtin ends up resolving against its own private empty dict,
+    # never the real one _compiled() builds -- every LINK silently no-ops
+    # as "unknown program" regardless of what's in config.programs
+    # (reproduced directly: one program LINKing to a correctly-configured,
+    # successfully-compiled callee still logged "unknown program").
     program_cache: dict[str, LinkedProgram] = {}
+    # `transid_to_program` needs NO populate-after dance (unlike
+    # program_cache above): config.transactions is already fully loaded
+    # from TOML before build_region runs, so it can be passed complete,
+    # right now. But it DOES need to be passed AT ALL: build_cics_spec's
+    # own default (`_NO_TRANSIDS`, cics/strategy.py:1186) is empty, and
+    # every compiled program's own EXEC CICS START builtin bakes in
+    # WHATEVER mapping it got at compile time -- completely separate from
+    # the dict `_region()` below builds for CicsRegion's OWN routing.
+    # Omitting this kwarg (as this function did until 2026-10-09) means
+    # every EXEC CICS START TRANSID on ANY TN3270-served region rejects
+    # with RejectReason.UNKNOWN_TRANSID unconditionally, regardless of
+    # config -- reproduced directly against a real multi-program COBOL/
+    # CICS corpus: a program's own compiled START TRANSID rejected even
+    # though config.toml's [transactions] correctly mapped the target
+    # transid to its program. Not specific to any one corpus: this is the
+    # engine's own wiring, so it broke every program on every TN3270
+    # region that uses START, same root cause and same fix shape as the
+    # program_cache bug above.
     spec = build_cics_spec(
         start_queue=wiring.start_queue,
         context_holder=wiring.context_holder,
         result_holder=wiring.result_holder,
         program_cache=program_cache,
+        transid_to_program=dict(config.transactions),
         vsam_engine=vsam_engine,
         screen_queue=wiring.screen_channel,
         input_queue=wiring.input_channel,
