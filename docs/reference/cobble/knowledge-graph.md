@@ -151,7 +151,8 @@ and highlights a clicked node's neighbours. A missing graph file exits 1.
 cobble-render-webgl --graph GRAPH [--out FILE]
 ```
 
-Writes `<stem>-webgl.html` beside the graph file, or to `FILE` if `--out` is given. The layout
+Writes `<stem>-webgl.html` beside the graph file, or to `FILE` if `--out` is given, creating
+its directory if missing. The layout
 is computed with Graphviz `sfdp` when the page is built, so the browser does no simulation. Use
 it for graphs too large for `cobble-render`.
 
