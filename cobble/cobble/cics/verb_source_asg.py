@@ -14,7 +14,8 @@ typed-ASG walk instead, so the port pulls in no VM:
     ``_dialect_parsers`` ContextVar so EXEC CICS blocks materialise as
     ``ExecCicsStatement`` (verb + options) and EXEC SQL blocks as opaque
     ``ExecSqlStatement`` text rather than aborting the program.
-  * Recursively walk the ASG for every ``ExecCicsStatement``.
+  * Walk the ASG for every ``ExecCicsStatement`` (``exec_cics_walk``), in source
+    order and in time linear in the ASG's size.
   * For each, build a ``CicsVerb`` exactly as ``CicsLoweringStrategy.lower``'s
     ``self._observer.on_verb(...)`` calls do — resolving each data-name operand to
     its static VALUE clause via ``_resolve_operand`` / ``_field_value`` (the same
@@ -32,11 +33,11 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections.abc import Callable
-from functools import reduce
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cics.statements import ExecCicsStatement
+from cobble.cics.exec_cics_walk import exec_cics_statements
 from cobble.cics.flow_graph_core import _verb_edge
 from cobble.cics.flow_observer import CicsVerb, DynamicSite
 from cobble.knowledge_graph.graph_types import GraphNode
@@ -76,49 +77,6 @@ def _resolve_operand(opt, data_fields):
             return opt.text
         case _:
             return _field_value(opt.text, data_fields) or opt.text
-
-
-# ── ASG walk: collect every ExecCicsStatement (including nested in IF/PERFORM/…) ──
-def _container_values(obj):
-    match obj:
-        case list() | tuple():
-            return list(obj)
-        case dict():
-            return list(obj.values())
-        case _:
-            return []
-
-
-def _child_values(obj):
-    """What a walk descends into: a dataclass's fields, or a container's items."""
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return [getattr(obj, f.name) for f in dataclasses.fields(obj)]
-    return _container_values(obj)
-
-
-def _descend(acc, child):
-    """One fold step over a node's children: acc is (statements, ids visited)."""
-    found, seen = acc
-    child_found, child_seen = _exec_cics_in(child, seen)
-    return (*found, *child_found), child_seen
-
-
-def _exec_cics_in(obj, seen):
-    """The statements under ``obj``, and the object ids visited reaching them.
-
-    Memoised on id() so an object reachable by two paths is walked once; the
-    visited set is threaded through the fold rather than mutated.
-    """
-    if id(obj) in seen:
-        return (), seen
-    if isinstance(obj, ExecCicsStatement):
-        return (obj,), seen | {id(obj)}
-    return reduce(_descend, _child_values(obj), ((), seen | {id(obj)}))
-
-
-def _iter_exec_cics(asg):
-    found, _ = _exec_cics_in(asg, frozenset())
-    return list(found)
 
 
 # Which CicsVerb the strategy's observer emits for each EXEC CICS verb — a faithful
@@ -242,7 +200,7 @@ def _program_verbs(asg, prog_name):
         verb
         for verb in (
             _statement_to_verb(stmt, prog_name, asg.data_fields)
-            for stmt in _iter_exec_cics(asg)
+            for stmt in exec_cics_statements(asg)
         )
         if verb
     )
