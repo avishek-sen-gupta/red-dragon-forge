@@ -2099,7 +2099,6 @@ db2 = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "antlr4-python3-runtime" },
     { name = "black" },
     { name = "grimp" },
     { name = "ibm-db" },
@@ -2119,7 +2118,6 @@ provides-extras = ["db2"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "antlr4-python3-runtime", specifier = "==4.13.2" },
     { name = "black", specifier = ">=26.0.0" },
     { name = "grimp", specifier = ">=3.0" },
     { name = "ibm-db", specifier = ">=3.2.0" },

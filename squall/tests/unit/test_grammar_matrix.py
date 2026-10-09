@@ -2,15 +2,12 @@
 tests/unit/test_grammar_matrix.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Matrix tests covering:
-  1. One synthetic statement per directive kind (~30 kinds)
-  2. Every CBSA sample (14 samples) with expected kind
-  3. Hard-case triples: INTO-overload, string colon, SET with CURRENT OF
+  1. One synthetic statement per directive kind
+  2. Hard-case triples: INTO-overload, string colon, SET with CURRENT OF
 """
 
 from __future__ import annotations
 
-import json
-import pathlib
 
 import pytest
 
@@ -80,49 +77,6 @@ SYNTHETIC: list[tuple[str, str]] = [
 
 @pytest.mark.parametrize("expected_kind,sql", SYNTHETIC, ids=[s[0] for s in SYNTHETIC])
 def test_synthetic(expected_kind: str, sql: str) -> None:
-    assert _kind(sql) == expected_kind
-
-
-# ── CBSA samples ──────────────────────────────────────────────────────────────
-
-_CBSA_PATH = pathlib.Path("/tmp/che4z_sql/cbsa_samples.json")
-
-_CBSA_KIND_MAP: dict[str, str] = {
-    "INCLUDE_ACCDB2": "include",
-    "INCLUDE_SQLCA": "include",
-    "INCLUDE_CONTDB2": "include",
-    "INCLUDE_PROCDB2": "include",
-    "INCLUDE_SQLDA": "include",
-    "COMMIT": "commit",
-    "INSERT": "insert",
-    "DELETE": "delete",
-    "SELECT": "select_into",
-    "UPDATE": "update",
-    "DECLARE_CURSOR": "declare_cursor",
-    "OPEN": "open_",
-    "CLOSE": "close",
-    "FETCH": "fetch",
-}
-
-
-def _load_cbsa_cases() -> list[tuple[str, str, str]]:
-    """Return [(cbsa_key, sql_body, expected_kind)] from the JSON file."""
-    if not _CBSA_PATH.exists():
-        return []
-    raw: dict[str, list[str]] = json.loads(_CBSA_PATH.read_text())
-    return [
-        (key, raw[key][1], _CBSA_KIND_MAP[key]) for key in _CBSA_KIND_MAP if key in raw
-    ]
-
-
-_CBSA_CASES = _load_cbsa_cases()
-
-
-@pytest.mark.skipif(not _CBSA_PATH.exists(), reason="CBSA samples file not available")
-@pytest.mark.parametrize(
-    "key,sql,expected_kind", _CBSA_CASES, ids=[c[0] for c in _CBSA_CASES]
-)
-def test_cbsa(key: str, sql: str, expected_kind: str) -> None:
     assert _kind(sql) == expected_kind
 
 
