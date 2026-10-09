@@ -16,6 +16,20 @@ them, and a static analyser for the same code.
 | [`red_dragon_forge/`](red_dragon_forge/) | Composition layer |
 | [`cobble/`](cobble/) | Static analyser: knowledge graph, control flow, field dataflow |
 
+CardDemo's online tier served by cicada to a stock `c3270`: a user updates an account, an admin
+adds, updates and deletes a user.
+
+<p align="center">
+  <img src="docs/presentation/artifacts/cics/carddemo-3270.gif" alt="CardDemo screens in c3270" width="800">
+</p>
+
+CardDemo's knowledge graph from cobble, zoomed in on the online programs: programs (blue)
+linked to the copybooks (green), maps, transactions and files they use.
+
+<p align="center">
+  <img src="docs/assets/carddemo-graph.png" alt="CardDemo knowledge graph, zoomed in" width="100%">
+</p>
+
 ## Quick start
 
 ```bash
