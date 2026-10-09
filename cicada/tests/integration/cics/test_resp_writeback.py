@@ -101,6 +101,7 @@ def test_inquire_resp_writeback_round_trips(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
+        transid_to_program={},
         program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,

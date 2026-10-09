@@ -260,7 +260,10 @@ class CompiledInqcust:
 def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInqcust:
     context_holder, result_holder = [None], [None]
     inq_cics = build_cics_spec(
-        context_holder=context_holder, result_holder=result_holder, program_cache={}
+        transid_to_program={},
+        context_holder=context_holder,
+        result_holder=result_holder,
+        program_cache={},
     )
     inq_sql = build_sql_spec(
         connections={"SAMPLE": recorder},
@@ -272,6 +275,7 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
         INQCUST_CBL.read_bytes(), parser, [inq_cics, inq_sql]
     )
     wrap_spec = build_cics_spec(
+        transid_to_program={},
         context_holder=context_holder,
         result_holder=result_holder,
         program_cache={"INQCUST": inq_linked},
@@ -454,6 +458,7 @@ def _db2_backend(dsn: str, case: CompositionCase) -> Iterator[Db2Backend]:
 def _run_composed(source: str, backend: SqlBackend, transid: str):
     context_holder, result_holder = [None], [None]
     cics_spec = build_cics_spec(
+        transid_to_program={},
         program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,

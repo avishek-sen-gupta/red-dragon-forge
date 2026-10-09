@@ -89,6 +89,7 @@ def test_link_commarea_written_back(cobol_parser):
 
     start_queue = StartQueue()
     spec = build_cics_spec(
+        transid_to_program={},
         start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,

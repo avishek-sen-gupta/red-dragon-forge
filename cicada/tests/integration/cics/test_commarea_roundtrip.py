@@ -82,7 +82,10 @@ def test_commarea_carries_bytes(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(
-        program_cache={}, context_holder=context_holder, result_holder=result_holder
+        transid_to_program={},
+        program_cache={},
+        context_holder=context_holder,
+        result_holder=result_holder,
     )
     program = compile_cics_program(COBOL_COMMAREA.encode(), cobol_parser, spec)
 
@@ -114,6 +117,7 @@ def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
+        transid_to_program={},
         program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
@@ -154,6 +158,7 @@ def test_return_commarea_literal_falls_back_to_const(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
+        transid_to_program={},
         program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,

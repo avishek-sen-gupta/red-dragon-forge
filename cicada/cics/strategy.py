@@ -1146,7 +1146,6 @@ def _wiring(
 
 
 OWN_START_QUEUE = StartQueue()
-NO_TRANSIDS: Mapping[str, str] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -1181,11 +1180,11 @@ class CicsLoweringStrategy:
         receive_timeout: float = 30.0,
         conversational: bool = False,
         start_queue: StartQueue = OWN_START_QUEUE,
-        transid_to_program: Mapping[str, str] = NO_TRANSIDS,
         region_termid: str = DEFAULT_TERMID,
         on_abend: Callable[[], None] = _default_on_abend,
         *,
         program_cache: MutableMapping[str, LinkedProgram],
+        transid_to_program: Mapping[str, str],
         handler_source: MutableSequence[ExecCicsStatement],
         unsupported_verbs: set[str],
     ) -> None:

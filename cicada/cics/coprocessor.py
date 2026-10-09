@@ -12,7 +12,6 @@ from cics.le_stubs import LE_STUBS_DIR
 from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
 from cics.strategy import (
-    NO_TRANSIDS,
     NOT_SUPPLIED,
     OWN_START_QUEUE,
     Absent,
@@ -36,6 +35,7 @@ def build_cics_spec(
     context_holder: Holder[CicsContext],
     *,
     program_cache: MutableMapping[str, LinkedProgram],
+    transid_to_program: Mapping[str, str],
     result_holder: Holder[DispatchResult] | Absent = NOT_SUPPLIED,
     td_queue: MutableSequence[str] | Absent = NOT_SUPPLIED,
     applid: str = "CARDDEMO",
@@ -47,7 +47,6 @@ def build_cics_spec(
     receive_timeout: float = 30.0,
     conversational: bool = False,
     start_queue: StartQueue = OWN_START_QUEUE,
-    transid_to_program: Mapping[str, str] = NO_TRANSIDS,
     region_termid: str = DEFAULT_TERMID,
     unsupported_verbs: set[str] = _OWN_UNSUPPORTED,
     on_abend: Callable[[], None] = _noop,
@@ -60,7 +59,9 @@ def build_cics_spec(
     that LINK to each other within one region. ``program_cache`` is required:
     every EXEC CICS LINK resolves against it, so it must be the cache the
     region fills with its compiled programs, and an empty one of the
-    runtime's own would make every LINK fail silently.
+    runtime's own would make every LINK fail silently. ``transid_to_program``
+    is required for the same reason: every EXEC CICS START resolves its
+    transaction against it, and an empty one rejects every START.
 
     ``unsupported_verbs`` is the caller's cell for the same reason: it collects
     every EXEC CICS verb this runtime dropped while lowering, so a harness can
