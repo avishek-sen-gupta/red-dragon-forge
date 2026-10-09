@@ -93,7 +93,11 @@ in the summary, and its call targets carry `incomplete-walk`. The heartbeat esti
 remaining work from the queue's drain rate; `past the N cap` means raise the factor.
 
 `--sweeps N` stops early on a pass that changes nothing, and then the member is settled.
-A member still growing after N passes is unsettled, as above. Two is the useful floor.
+A member still growing after N sweeps is unsettled, as above. Two is the useful floor: one sweep
+misses what a loop body wrote for every reader after the loop. Settling takes one sweep more than
+finding, since only a sweep that changes nothing settles a member: a loop's write is found on the
+second sweep and the member is settled on the third. A paragraph `PERFORM`ed from two places is a
+back edge too.
 
 ### Output
 
@@ -234,8 +238,11 @@ the jump being answered and how many places are done.
 
 On a large corpus the walks across links can join into one cyclic group spanning most of the
 corpus, and the unlimited run may not finish. Pick `--max-hops` by raising it until
-`targets.jsonl` stops changing between N and N+1. Only targets with `hop-limit` were cut; every
-other row is what the unlimited run gives. Each extra hop costs more than the last.
+`targets.jsonl` and `links.jsonl` stop changing between N and N+1. Within one round, a target
+without `hop-limit` is what the unlimited walk gives over the same links. Across rounds it may not
+be: a cut walk can miss a program name, the link to that program is then never found, and walks
+that would have crossed it see fewer callers without being marked. Comparing N with N+1 catches
+that too. Each extra hop costs more than the last.
 
 ## cobble-dataflow-fixpoint-query
 

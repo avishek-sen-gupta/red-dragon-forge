@@ -29,7 +29,9 @@ What each package supports and what is open, by issue ID: [cicada](roadmaps/cica
 ## Explainers
 
 [Explainers](explainers/index.html) teach the program-analysis ideas behind cobble's dataflow:
-reaching definitions, fixpoints, dominance, loops, and related topics.
+reaching definitions, fixpoints, dominance, loops, and related topics, and the techniques that
+make the dynamic-call-target pipeline finish on a large corpus: area need, local site resolution,
+rounds, sweeps, memoised reachability and hop limits.
 
 ## Presentation
 

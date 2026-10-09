@@ -19,6 +19,15 @@
 <li><a href="byte-extents.html">Byte-extent aliasing</a> — fields as byte ranges: how groups, <code>REDEFINES</code> and partial writes alias, and why overlapping is not the same as covering.</li>
 <li><a href="value-sets.html">Value sets and dynamic calls</a> — resolving <code>CALL WS-PGM</code> statically by tracking the values a field can hold, and the reasons that set may be incomplete.</li>
 </ol>
+<p>Making it finish on a large corpus — the techniques that took the dynamic-call-target pipeline from not finishing to finishing, continuing the numbering above:</p>
+<ol start="6">
+<li><a href="area-need.html">Area need</a> — which bytes of a commarea, <code>USING</code> or <code>RETRIEVE INTO</code> area anyone actually reads, so the fixpoint tracks those and not the whole area.</li>
+<li><a href="local-site-resolution.html">Resolving a dynamic call site inside its own program</a> — reaching definitions of literals decide where a site can go, so its program is charged only those callees' needs instead of everyone's.</li>
+<li><a href="interprocedural-rounds.html">Rounds across programs</a> — area need settles in rounds, and each round after the first walks only the programs whose inputs changed.</li>
+<li><a href="bounded-sweeps.html">Sweeps</a> — a fixpoint with a budget of reverse-postorder sweeps, and a mark on every result that did not settle within it.</li>
+<li><a href="memoised-reachability.html">Answering every walk once</a> — strongly connected components and a memo, so thousands of walks over the same places cost one walk; plus place identity and an edge index.</li>
+<li><a href="hop-limits.html">Bounding walks by crossings</a> — a limit on program crossings per walk that marks every result it cut, and how to pick the limit.</li>
+</ol>
 <p>Related — not part of cobble's own build-up, each pulled from wherever it actually came from:</p>
 <ul>
 <li><a href="dominance-and-reachability.html">Dominance and reachability</a> — used by a different tool in the forge; where a branch's arms come back together, exactly which statements are inside a loop, and why carrying one pointer per statement instead of a whole candidate set turns an impractically slow computation into a fast one.</li>

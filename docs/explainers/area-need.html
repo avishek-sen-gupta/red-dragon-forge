@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Area need</title>
+<link rel="stylesheet" href="explainer.css">
+</head>
+<body>
+<main>
+<nav class="back"><a href="index.html">← All explainers</a></nav>
+<div class="kicker">Explainer 6 of 11</div>
+<h1>Area need: which handed-over bytes anyone reads</h1>
+<p class="lede">A commarea is handed from program to program, but most of its bytes never decide where control goes next. Work out, per program, which bytes do, and track only those.</p>
+<nav class="toc"><p class="dim">On this page</p><ol><li><a href="#reverse-engineering">Where this shows up in reverse engineering</a></li><li><a href="#the-problem">The problem</a></li><li><a href="#the-intuition">The intuition</a></li><li><a href="#the-example">The example</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#the-rule">The rule</a></li><li><a href="#what-goes-wrong">What goes wrong</a></li><li><a href="#in-cobble">In cobble</a></li></ol></nav>
+
+<h2 id="reverse-engineering">Where this shows up in reverse engineering</h2>
+<p>Recovering a CICS application's call graph means resolving its dynamic transfers: <code>CALL WS-PGM</code>, <code>EXEC CICS XCTL PROGRAM(WS-NEXT-PGM)</code>. On a large CICS corpus (about 3,800 programs and 19,000 jumps) the target names come in three shapes: a literal <code>VALUE</code> in working storage, a <code>MOVE 'LITERAL' TO WS-FIELD</code>, and, for about 5% of sites, a field the program reads out of its <code>DFHCOMMAREA</code> and then transfers to. That last shape is the reason to follow values across programs at all.</p>
+<ul>
+<li><strong>Following a value across programs means tracking the handed-over area in every caller.</strong> A commarea is often hundreds or thousands of bytes. Tracking all of it in every program that hands one over is most of the cost of the whole analysis, and almost none of those bytes ever name a program.</li>
+<li><strong>The question to ask first is cheap:</strong> of each program's commarea, which bytes does anything downstream read to pick a call target? That is a liveness question, asked once per corpus, before the expensive forward analysis runs.</li>
+<li><strong>The answer narrows the expensive run.</strong> Cobble runs <code>cobble-dataflow-area-need</code>, then <code>cobble-dataflow-fixpoint --call-targets-only --narrow-areas</code>, then the cross-program combine. On CardDemo the summed entry need fell from 4,394 bytes to 92, and the narrowed run gave the same targets, links and graph as the run over whole areas.</li>
+</ul>
+
+<h2 id="the-problem">The problem</h2>
+<p>A caller writes a few fields of a 100-byte commarea and transfers to a callee. The callee reads one 8-byte field of it and uses it as the next program name. To resolve that name, the forward analysis has to carry the caller's writes into the callee. If it carries every byte of every commarea, it does work for 92 bytes it will never need. You want to know, for each program, which bytes of what it is handed actually feed a call target, so the forward analysis can drop the rest.</p>
+<p>The catch is that "feeds a call target" crosses programs. A callee's need on entry decides what its caller must keep live at the call; that can make the caller's own commarea live on <em>its</em> entry, which its own callers must then keep. The need has to flow backward along call chains until it stops changing.</p>
+
+<h2 id="the-intuition">The intuition</h2>
+<p>Inside one program this is ordinary <strong>backward liveness</strong>: start from the reads you care about and walk the control flow graph backward, asking at each statement which bytes are still needed. A write that fully covers a needed byte satisfies it, so that byte is no longer needed above the write; the bytes the write copied from become needed instead. Where paths split, anything needed on either path is needed. It is the mirror image of <a href="reaching-definitions.html">reaching definitions</a>, run with the same <a href="fixpoints.html">worklist</a>, over <a href="byte-extents.html">byte extents</a> rather than whole fields.</p>
+<p>What makes it an <em>area</em> need is the seed and the summary.</p>
+<ul>
+<li><strong>Seed:</strong> the operand of every dynamic call site is needed at that site. So is a <code>TRANSID</code> data name. At a call that hands over an area, the bytes of that area the callee reads on entry are needed at the call.</li>
+<li><strong>Summary:</strong> the bytes of the program's own received areas still live at its entry are its <code>entry</code> row. For a <code>LINK</code> or <code>CALL</code>, which returns, the bytes of the handed area live right after the call are what the caller reads back; collected per callee, they become that callee's <code>back</code> row, which is needed at the callee's <code>GOBACK</code>, <code>EXIT PROGRAM</code>, <code>STOP RUN</code> or <code>EXEC CICS RETURN</code>.</li>
+</ul>
+<p>Each row is indexed by a <strong>slot</strong>: the kind of area and its position. <code>COMMAREA</code> is what <code>LINK</code> and <code>XCTL</code> hand over (always position 0); <code>USING</code> is a <code>CALL</code>'s arguments, by position; <code>RETRIEVED</code> is what a <code>START</code> hands over in its <code>FROM</code> area and the started program gets back with <code>RETRIEVE INTO</code>. Bytes are stored relative to the start of the area, so a caller's 100-byte group and the callee's <code>DFHCOMMAREA</code> line up by offset, not by field name.</p>
+<p>Every program starts needing nothing. Walk all of them, rebuild the table from what they report, and walk again the ones whose inputs changed. Rows only ever grow, so this stops. How the rounds pick which programs to walk again is on <a href="interprocedural-rounds.html">its own page</a>.</p>
+
+<h2 id="the-example">The example</h2>
+<p><code>PROGA</code> fills two fields of a 100-byte commarea and transfers to <code>PROGB</code>. <code>PROGB</code> copies its whole <code>DFHCOMMAREA</code> into working storage and transfers to whatever program name sits in bytes 8 to 16.</p>
+<pre class="cobol">       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGA.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-COMMAREA.
+           05  WS-USER-ID       PIC X(8).
+           05  WS-NEXT-PGM      PIC X(8).
+           05  WS-REST          PIC X(84).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE 'USER0001' TO WS-USER-ID.
+           MOVE 'PROGC' TO WS-NEXT-PGM.
+           EXEC CICS XCTL PROGRAM('PROGB')
+                COMMAREA(WS-COMMAREA) END-EXEC.</pre>
+<pre class="cobol">       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROGB.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-COMMAREA.
+           05  WS-USER-ID       PIC X(8).
+           05  WS-NEXT-PGM      PIC X(8).
+           05  WS-REST          PIC X(84).
+       LINKAGE SECTION.
+       01  DFHCOMMAREA          PIC X(100).
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           MOVE DFHCOMMAREA TO WS-COMMAREA.
+           EXEC CICS XCTL PROGRAM(WS-NEXT-PGM) END-EXEC.</pre>
+<p>Byte ranges are written <code>region[start:end)</code>, counted from 0: <code>ws[8:16)</code> is <code>WS-NEXT-PGM</code>, <code>linkage[0:100)</code> is <code>DFHCOMMAREA</code>. Only statements are shown; the graph's other nodes write nothing and hand their live set on unchanged. Both <code>XCTL</code>s transfer for good, so neither program reads anything back and both <code>back</code> rows stay empty.</p>
+
+<h2 id="step-by-step">Step by step</h2>
+<p>Within a program the walk visits statements last to first (the worklist takes the highest position each time). Each table shows what is live on entry to the statement, that is, just above it.</p>
+<details class="walk">
+<summary>Two rounds of area need over PROGA and PROGB <span class="dim">(6 steps)</span></summary>
+<ol class="steps">
+<li class="before">
+<p class="note">Every program starts with an empty row. PROGA receives no area; PROGB receives one in slot COMMAREA/0. Both programs are dirty, so round 1 walks both.</p>
+<table class="state"><tbody><tr><th>member</th><th>receives</th><th>entry</th><th>back</th></tr><tr><td>PROGA</td><td>none</td><td>{}</td><td>{}</td></tr><tr><td>PROGB</td><td>COMMAREA/0</td><td>{}</td><td>{}</td></tr></tbody></table>
+<p class="dim">To walk</p><div class="chips"><span class="chip">PROGA</span><span class="chip">PROGB</span></div>
+</li>
+<li>
+<p class="note">Round 1, PROGA. The XCTL names PROGB by a literal, so its target reads no storage. It hands over ws[0:100) in slot COMMAREA/0, and is charged PROGB's entry row for that slot: empty. Nothing is live anywhere.</p>
+<table class="state"><tbody><tr><th>statement</th><th>demanded here</th><th>live on entry</th></tr><tr><td>XCTL PROGRAM('PROGB')</td><td>PROGB's entry row on ws[0:100): none</td><td>{}</td></tr><tr><td>MOVE 'PROGC' TO WS-NEXT-PGM</td><td>none</td><td>{}</td></tr><tr><td>MOVE 'USER0001' TO WS-USER-ID</td><td>none</td><td>{}</td></tr></tbody></table>
+<p class="dim">PROGA's report</p><div class="chips"><span class="chip">entry: none (receives nothing)</span></div>
+</li>
+<li>
+<p class="note">Round 1, PROGB. The dynamic XCTL demands its operand, ws[8:16). The MOVE above it writes all of ws[0:100), which covers ws[8:16), so that range is no longer live above it. The MOVE is a byte-for-byte group copy that starts at linkage byte 0, so only the source bytes lined up with the live target bytes become live: linkage[8:16), not all 100.</p>
+<table class="state"><tbody><tr><th>statement</th><th>demanded here</th><th>live on entry</th></tr><tr><td>XCTL PROGRAM(WS-NEXT-PGM)</td><td>ws[8:16)</td><td class="changed">{ws[8:16)}</td></tr><tr><td>MOVE DFHCOMMAREA TO WS-COMMAREA</td><td>none</td><td class="changed">{linkage[8:16)}</td></tr></tbody></table>
+<p class="dim">PROGB's report: live at entry, relative to DFHCOMMAREA = linkage[0:100)</p><div class="chips"><span class="chip">entry COMMAREA/0: [8, 16)</span></div>
+</li>
+<li>
+<p class="note">End of round 1. PROGB's entry row changed. PROGA's call site reaches PROGB, so PROGA is walked again. PROGB is not: nothing it reads from the table changed. Its one dynamic site hands over no area, so it is not charged the union of every member's need either.</p>
+<table class="state"><tbody><tr><th>member</th><th>receives</th><th>entry</th><th>back</th></tr><tr><td>PROGA</td><td>none</td><td>{}</td><td>{}</td></tr><tr><td>PROGB</td><td>COMMAREA/0</td><td class="changed">{COMMAREA/0: [8, 16)}</td><td>{}</td></tr></tbody></table>
+<p class="dim">To walk</p><div class="chips"><span class="chip">PROGA</span></div>
+</li>
+<li>
+<p class="note">Round 2, PROGA. The XCTL is now charged PROGB's entry row: offsets [8, 16) of ws[0:100), which is ws[8:16). The MOVE of 'PROGC' fully covers it and reads only a literal, so above it nothing is live. MOVE 'USER0001' writes bytes nobody needs.</p>
+<table class="state"><tbody><tr><th>statement</th><th>demanded here</th><th>live on entry</th></tr><tr><td>XCTL PROGRAM('PROGB')</td><td>ws[8:16)</td><td class="changed">{ws[8:16)}</td></tr><tr><td>MOVE 'PROGC' TO WS-NEXT-PGM</td><td>none</td><td>{}</td></tr><tr><td>MOVE 'USER0001' TO WS-USER-ID</td><td>none</td><td>{}</td></tr></tbody></table>
+<p class="dim">PROGA's report</p><div class="chips"><span class="chip">entry: none (receives nothing)</span></div>
+</li>
+<li>
+<p class="note">End of round 2. No row changed, so no program is dirty: the need has settled. This is the file <code>cobble-dataflow-area-need</code> writes, one JSON row per member.</p>
+<table class="state"><tbody><tr><th>member</th><th>row on disk</th></tr><tr><td>PROGA</td><td>{"member":"PROGA","receives":[],"entry":[],"back":[],"sites":[]}</td></tr><tr><td>PROGB</td><td>{"member":"PROGB","receives":[["commarea",0]],"entry":[[["commarea",0],[8,16]]],"back":[],"sites":[]}</td></tr></tbody></table>
+<p class="dim">To walk</p><div class="chips"><span class="dim">empty — settled after 2 rounds</span></div>
+</li>
+</ol>
+</details>
+<p>Fed this file, <code>cobble-dataflow-fixpoint --call-targets-only --narrow-areas</code> demands only ws[8:16) at PROGA's XCTL instead of all of ws[0:100). PROGA then keeps one write target (<code>WS-NEXT-PGM</code>) instead of two, and its edge count drops from 2 to 1. The cross-program combine still follows linkage[8:16) in PROGB back to <code>'PROGC'</code> in PROGA. These rows and counts are what cobble produced on these two programs.</p>
+<p>Without the byte-for-byte copy rule, the MOVE in PROGB would make all of linkage[0:100) live, PROGB's entry row would be [0, 100), and PROGA would have to keep <code>MOVE 'USER0001'</code> too, along with whatever wrote the other 84 bytes.</p>
+
+<h2 id="the-rule">The rule</h2>
+<div class="rule">
+live_in(s) = demand(s) ∪ (live_out(s) − bytes s certainly overwrites)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;∪ needed_sources(s, live_out(s)) ∪ targets of s's weak writes that touch live_out(s)<br>
+live_out(s) = ⋃ live_in(t) for every successor t of s<br>
+<br>
+demand(s) = operand of a dynamic call at s, and a TRANSID data name<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;∪ for each area s hands over: what the callee reads of it on entry<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;∪ at GOBACK / EXIT PROGRAM / STOP RUN / CICS RETURN: this member's back row on its received areas<br>
+<br>
+callee reads on entry = literal callee in the corpus that receives the slot: its entry row<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;callee outside the corpus, or not receiving the slot: every byte<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;resolved dynamic site: the union of its candidates' rows (none if it resolved to nothing)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;unresolved dynamic site: the union of every member's entry row<br>
+<br>
+entry(m)[slot] = live_in(entry of m) ∩ m's received area, as offsets into the area<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;∪ for each RETRIEVE INTO: live_out(RETRIEVE) ∩ the INTO area, in slot RETRIEVED/0<br>
+back(c)[slot]  = ⋃ over LINK/CALL sites reaching c: live_out(site) ∩ the handed area<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;∪ what every unresolved LINK/CALL reads back<br>
+<br>
+repeat rounds from all-empty rows until no row changes
+</div>
+<p><strong>Byte-for-byte copies.</strong> A <code>MOVE</code> copies byte for byte when either side is a group, or both are alphanumeric, the source has no subscript, and its reference-modification start (if any) is known to the compiler. For such a write, <code>needed_sources</code> maps each live target byte back to the one source byte that landed on it, and keeps only those. Any other write needs all its sources.</p>
+<p><strong>LENGTH OF in bounds.</strong> A reference-modification bound such as <code>WS-AREA(LENGTH OF WS-HDR + 1 : LENGTH OF WS-BODY)</code> is folded to a number, because the compiler knows each field's length from its declaration. Literals, <code>LENGTH OF</code> and <code>+ - * /</code> over them fold. With both bounds known the extent is exact and narrow. Without folding it would be a clamped extent over the whole base field.</p>
+<p><strong>START and RETRIEVE.</strong> A <code>START</code> hands over its <code>FROM</code> area the way a <code>LINK</code> hands over a commarea, in slot <code>RETRIEVED/0</code>. Its transaction id is resolved to a program through the CSD, as a <code>RETURN TRANSID</code>'s is. The started program's need in that slot is the bytes of its <code>RETRIEVE INTO</code> area live right after the <code>RETRIEVE</code>. The <code>RETRIEVE</code> itself demands nothing: it writes the area, it does not read it.</p>
+<p><strong>How the result narrows the fixpoint.</strong> <code>--call-targets-only</code> keeps only the writes a dynamic call target or a handed-over area depends on. Without <code>--narrow-areas</code> every handed-over area counts whole. With it, each call is charged only the bytes the area-need file says its callees read, so the forward run tracks those bytes and nothing else of the area.</p>
+
+<h2 id="what-goes-wrong">What goes wrong</h2>
+<ul>
+<li><strong>One unresolved site charges everyone.</strong> A dynamic call site that hands over an area and is not resolved is charged the union of every member's entry row. In a corpus where some programs need thousands of bytes, that union is thousands of bytes, and it then makes the caller's own commarea live, which spreads to its callers. Before narrowing on the large CICS corpus, rows such as 4,500 bytes needed on entry appeared, mostly for this reason. Resolving as many sites as possible inside their own program, before the rounds start, is the fix; see <a href="local-site-resolution.html">resolving a dynamic site locally</a>. A site resolved to no program at all charges nothing.</li>
+<li><strong>Clamped extents keep whole areas live.</strong> A write whose target is not exact (a computed subscript, a reference-modification bound that does not fold) is weak: it kills nothing, and its whole target becomes live wherever it touches a live byte. Before <code>LENGTH OF</code> folded, a program that moved its saved state into part of a 2,000-byte commarea with <code>LENGTH OF</code> bounds made the whole area live, and its <code>RETURN TRANSID</code> to itself grew an 8-byte need to 2,000. That one fix took CardDemo from 4,394 bytes to 140; resolving sites through the combine took it to 92.</li>
+<li><strong>Copies that are not byte-for-byte need everything.</strong> A <code>MOVE</code> into a numeric field, a subscripted source, or a source whose reference-modification start is a run-time value all fall back to needing the whole source. That is safe but wide. Before the copy rule, CardDemo's summed entry need was 32,767 bytes; with it, 1,033.</li>
+<li><strong>A capped run can be short.</strong> <code>--max-rounds N</code> stops after N rounds and warns how many members were still to walk. A need that has not settled can miss bytes that only arrive through longer call chains, and a fixpoint narrowed by it can then miss candidates. An uncapped run always settles, since rows only grow and are bounded by the areas' sizes.</li>
+<li><strong>It is only as good as the corpus.</strong> A callee that is not in the corpus, or is but does not receive that slot, is charged every byte of the area: nothing is known about what it reads. An unreadable member adds nothing, so its own targets go unresolved later.</li>
+</ul>
+
+<h2 id="in-cobble">In cobble</h2>
+<p>The per-member walk and the round's table are in <a href="../../cobble/cobble/dataflow/fixpoint/area_needs.py"><code>area_needs.py</code></a> (<code>need_found</code>, <code>resolved</code>). The table that charges a call is <a href="../../cobble/cobble/dataflow/fixpoint/area_table.py"><code>area_table.py</code></a> (<code>entry_at</code>, <code>back_at</code>), over the rows and slots in <a href="../../cobble/cobble/dataflow/fixpoint/area_need.py"><code>area_need.py</code></a>, <a href="../../cobble/cobble/dataflow/fixpoint/area_slot.py"><code>area_slot.py</code></a> and <a href="../../cobble/cobble/dataflow/fixpoint/area_kind.py"><code>area_kind.py</code></a>. Which demand comes from where is <a href="../../cobble/cobble/dataflow/fixpoint/demand_parts.py"><code>demand_parts.py</code></a>, built by <code>demand_parts</code> in <a href="../../cobble/cobble/dataflow/jumps/discover.py"><code>discover.py</code></a>. The backward walk and <code>needed_sources</code> are in <a href="../../cobble/cobble/dataflow/fixpoint/liveness.py"><code>liveness.py</code></a>; the copy start is <code>_copy_start</code> in <a href="../../cobble/cobble/dataflow/fields/transfer.py"><code>transfer.py</code></a>, and <code>LENGTH OF</code> folding is <code>_bound</code> in <a href="../../cobble/cobble/dataflow/fields/extent.py"><code>extent.py</code></a>. The file format is <a href="../../cobble/cobble/dataflow/fixpoint/area_need_file.py"><code>area_need_file.py</code></a>; the command and its rounds are <a href="../../cobble/cobble/dataflow/fixpoint/area_need_cli.py"><code>area_need_cli.py</code></a>, with the re-walk choice in <a href="../../cobble/cobble/dataflow/fixpoint/area_worklist.py"><code>area_worklist.py</code></a>. <a href="../../cobble/cobble/dataflow/fixpoint/places.py"><code>places.py</code></a> only names where each site sits in the source, for the <code>--sites</code> report. The command is documented in <a href="../reference/cobble/field-dataflow.md#cobble-dataflow-area-need">field dataflow</a>.</p>
+<p>Next: <a href="local-site-resolution.html">resolving a dynamic call site inside its own program</a>, and <a href="interprocedural-rounds.html">rounds across programs, and walking only what changed</a>.</p>
+</main>
+
+</body>
+</html>
