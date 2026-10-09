@@ -69,6 +69,7 @@ def _run(source: bytes, cobol_parser, unsupported: set):
     context_holder = [CicsContext(transid="UNS1", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(
+        transid_to_program={},
         program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,

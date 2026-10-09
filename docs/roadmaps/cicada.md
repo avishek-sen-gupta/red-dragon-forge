@@ -31,6 +31,7 @@ are listed in [the cicada architecture page](../reference/cicada/architecture.md
 | Conversational programs served over TN3270 | — | not started |
 | Channels and containers; `WEB`/`DOCUMENT`; `SIGNON`/`SIGNOFF`/`VERIFY PASSWORD`; `WAIT`/`POST`/`CONVERSE`; `DUMP TRANSACTION` | — | not started |
 | A spec built without the region's `program_cache` made every `EXEC CICS LINK` silently do nothing: the strategy fell back to an empty cache of its own. `build_cics_spec` and `CicsLoweringStrategy` now require the cache, so a caller that forgets it is refused | `red-dragon-forge-q6d` | **fixed** 2026-10-09 |
+| A spec built without the region's transaction map rejected every `EXEC CICS START` as an unknown transaction; the TN3270 region did. Both now require the map too | `red-dragon-forge-7pb` | **fixed** 2026-10-09 |
 | A dataset whose record identifier does not start at offset 0, browsed with `STARTBR`: `NotImplementedError` is unhandled, crashes the whole served region (not a clean ABEND) -- same family as `dbk.7` | `red-dragon-forge-dbk.7` | partial |
 | Duplicate sibling-group COBOL names in one `OCCURS` entry crash field resolution (`KeyError`) even when every child name is unique | `red-dragon-forge-5h7` | not started; the repro was not recorded |
 | A single non-UTF-8 byte anywhere in source (even in a comment) crashes the whole compile with no line context | `red-dragon-forge-5h7` | not started; the repro was not recorded |

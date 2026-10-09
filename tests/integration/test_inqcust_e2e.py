@@ -220,6 +220,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
         # time. NamedDbConnector("SAMPLE") models the CICS Db2 attachment
         # facility: INQCUST never issues EXEC SQL CONNECT itself.
         inqcust_cics_spec = build_cics_spec(
+            transid_to_program={},
             context_holder=context_holder,
             result_holder=result_holder,
             program_cache=program_cache,
@@ -238,6 +239,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
         # Compile WRAPPER (CICS only -- it never touches SQL) sharing the SAME
         # context_holder/result_holder/program_cache.
         wrapper_spec = build_cics_spec(
+            transid_to_program={},
             context_holder=context_holder,
             result_holder=result_holder,
             program_cache=program_cache,

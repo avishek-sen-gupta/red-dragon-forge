@@ -145,6 +145,7 @@ def _drive_to_user_update(tmp_path: Path, bridge_jar):
     result_holder: list = [None]
     start_queue = StartQueue()
     spec = build_cics_spec(
+        transid_to_program={},
         program_cache={},
         start_queue=start_queue,
         context_holder=context_holder,

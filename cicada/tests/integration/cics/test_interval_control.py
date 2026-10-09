@@ -70,7 +70,10 @@ def test_eibterm_is_readable_by_the_program(cobol_parser):
     ]
     result_holder: list = [None]
     spec = build_cics_spec(
-        program_cache={}, context_holder=context_holder, result_holder=result_holder
+        transid_to_program={},
+        program_cache={},
+        context_holder=context_holder,
+        result_holder=result_holder,
     )
     program = compile_cics_program(COBOL_EIBTRMID.encode(), cobol_parser, spec)
 
