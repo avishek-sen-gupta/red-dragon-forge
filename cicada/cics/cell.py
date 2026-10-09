@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import MutableSequence
+from collections.abc import Mapping, MutableMapping, MutableSequence
 from typing import Generic, Never, Protocol, TypeVar, cast
 
 T = TypeVar("T")
@@ -41,3 +41,11 @@ def hold(holder: Holder[T], value: T | None) -> None:
 def held_or(holder: Holder[T], default: T) -> T:
     value = holder[0]
     return default if value is None else value
+
+
+def fill(cache: MutableMapping[str, T], entries: Mapping[str, T]) -> None:
+    """Fill a cache the builtins already close over. The region's program cache
+    is handed to the CICS spec before the programs exist -- compiling them needs
+    the spec -- and every EXEC CICS LINK resolves against that same object, so it
+    is filled in place, never replaced."""
+    cache.update(entries)

@@ -17,13 +17,14 @@ from pathlib import Path
 
 import pytest
 
-from cics.bootstrap import compile_cics_program
+from cics.bootstrap import compile_cics_program, run_carddemo_region
 from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import CicsContext, DispatchKind
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
+from tests.integration.cics.channel_drain import drain
 from tests.integration.cobol_helpers import bridge_jar
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
@@ -124,3 +125,49 @@ def test_link_commarea_written_back(cobol_parser):
     assert (
         ca[:4].decode("cp037", errors="replace").strip() == "DONE"
     ), f"expected 'DONE' in commarea, got {ca[:4]!r}"
+
+
+_SHOWER_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. SHOWER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 LNKMAP.
+          05 RESULTO PIC X(4).
+       01 WS-CA PIC X(4) VALUE 'INIT'.
+       PROCEDURE DIVISION.
+           EXEC CICS LINK PROGRAM('MUTATOR')
+               COMMAREA(WS-CA) LENGTH(LENGTH OF WS-CA)
+           END-EXEC.
+           MOVE WS-CA TO RESULTO.
+           EXEC CICS SEND MAP('LNKMAP') FROM(LNKMAP) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_link_between_programs_of_a_bootstrapped_region_reaches_the_callee(
+    cobol_parser,
+):
+    """run_carddemo_region compiles every program the region names; a LINK from
+    one to another must find the callee in the same cache the dispatcher runs
+    from, not in an empty one of its own."""
+    screen_q: queue.Queue = queue.Queue()
+
+    result = run_carddemo_region(
+        program_sources={
+            "SHOWER": _SHOWER_SRC.encode(),
+            "MUTATOR": _MUTATOR_SRC.encode(),
+        },
+        parser=cobol_parser,
+        entry_transid="SH00",
+        screen_queue=screen_q,
+        input_queue=queue.Queue(),
+        transid_to_program={"SH00": "SHOWER", "MU00": "MUTATOR"},
+    )
+
+    assert result.kind == DispatchKind.RETURN
+    assert [(s["map"], s["fields"].get("RESULT")) for s in drain(screen_q)] == [
+        ("LNKMAP", "DONE")
+    ]
