@@ -14,12 +14,9 @@ from tests.covers import NotLanguageFeature, covers
 
 
 class _Region:
-    """Fakes just enough of CicsRegion's shape for PseudoConversationalDriver:
-    ``done`` mirrors the real property (true only once a RETURN/ABEND is NOT
-    masking an adopted next task) -- none of these tests exercise adoption,
-    so a plain RETURN/ABEND is always genuinely final here, same as the real
-    thing when ``_settle_terminal``'s ``pop_runnable``/``_resume_pending``
-    find nothing queued."""
+    """Fakes just enough of CicsRegion for PseudoConversationalDriver. Each
+    result names its kind, the screen it sends, and whether the region is done
+    after it: a RETURN that adopted a started task leaves the region not done."""
 
     def __init__(self, channel, results):
         self.channel, self.results, self.calls = channel, list(results), []
@@ -27,9 +24,11 @@ class _Region:
 
     def _next(self, call):
         self.calls.append(call)
-        kind, text = self.results.pop(0)
+        kind, text, *done = self.results.pop(0)
         self.channel.put({"type": "text", "text": text})
-        self.done = kind in (DispatchKind.RETURN, DispatchKind.ABEND)
+        self.done = (
+            done[0] if done else kind in (DispatchKind.RETURN, DispatchKind.ABEND)
+        )
         return DispatchResult(
             kind=kind, abcode="ASRA" if kind is DispatchKind.ABEND else None
         )
@@ -71,3 +70,17 @@ def test_respond_passes_the_event_and_reports_endings():
 def test_knows_configured_transids():
     driver, _ = _driver()
     assert (driver.knows("CC00"), driver.knows("ZZZZ")) == (True, False)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_return_that_adopted_a_started_task_runs_it_before_the_terminal():
+    """A task's own START for this terminal, then RETURN: the region adopts the
+    started transaction and is not done, so the driver runs it with no terminal
+    input, as it would after an XCTL, instead of reporting the task ended."""
+    driver, region = _driver(
+        (DispatchKind.RETURN, "a", False), (DispatchKind.RETURN_TRANSID, "b")
+    )
+    assert driver.start("CC00") == AwaitingInput(
+        (SendTextPayload("a"), SendTextPayload("b"))
+    )
+    assert region.calls == [("start", "CC00"), ("step", None)]

@@ -69,30 +69,10 @@ def _finished(result: DispatchResult, screens: Screens) -> Turn:
 @dataclass(frozen=True)
 class PseudoConversationalDriver:
     """XCTL continues the task with no terminal input; RETURN TRANSID waits for
-    the terminal; RETURN or an abend ends the task -- UNLESS the ending task's
-    own RETURN (not RETURN TRANSID) also had a START queued for this same
-    terminal: ``CicsRegion._settle_terminal`` silently adopts it (position
-    advances, ``region.done`` stays False) without changing ``result.kind``
-    away from RETURN, so a RETURN alone is not sufficient to tell "truly
-    idle" apart from "a freshly adopted task is positioned and ready, same
-    as an XCTL, needing no terminal input before its first step." Confirmed
-    by reproducing it directly against a real multi-program COBOL/CICS
-    region served over TN3270: a program's ``EXEC CICS START
-    TRANSID('XXXX') ... EXEC CICS RETURN`` adopted the started transaction
-    (``region.transid`` changed, ``region.done`` stayed False) while this
-    method, checking only ``result.kind is XCTL``, still called
-    ``_finished`` and reported `Ended` -- which the TN3270 session layer
-    (``session.py``'s ``_after``) then reads as "no longer in a task," so
-    the NEXT physical keystroke gets treated as a fresh transid typed on a
-    blank screen instead of continuing the adopted task, and the operator's
-    screen goes blank. ``region.done`` (true only once
-    ``CicsRegion._terminate`` actually runs -- never set by ``_adopt``/
-    ``_adopt_started``/``_adopt_next_transid``) is the authoritative signal,
-    checked in addition to ``result.kind``, not instead of it: RETURN_TRANSID
-    always stops to await real terminal input regardless of ``done``
-    (``_adopt_next_transid`` doesn't set it either), while a RETURN/ABEND
-    that leaves ``done`` False means a task was adopted and must run before
-    anything goes back to the terminal."""
+    the terminal; RETURN or an abend ends the task unless the region adopted a
+    task its last program STARTed for this terminal. Adoption leaves the result
+    a RETURN but the region not done, and the adopted task runs at once, as
+    after an XCTL."""
 
     region: CicsRegion
     screen_channel: ScreenChannel
