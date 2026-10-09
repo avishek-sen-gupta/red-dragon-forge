@@ -454,7 +454,10 @@ def _db2_backend(dsn: str, case: CompositionCase) -> Iterator[Db2Backend]:
 def _run_composed(source: str, backend: SqlBackend, transid: str):
     context_holder, result_holder = [None], [None]
     cics_spec = build_cics_spec(
-        context_holder=context_holder, result_holder=result_holder, applid="FORGEAPP"
+        program_cache={},
+        context_holder=context_holder,
+        result_holder=result_holder,
+        applid="FORGEAPP",
     )
     sql_spec = build_sql_spec(connections={"SAMPLE": backend})
     _f, linked = compile_program(

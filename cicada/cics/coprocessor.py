@@ -3,15 +3,26 @@ interpreter.project.coprocessor_compile.compile_program composes."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Mapping, MutableMapping, MutableSequence
 
+from cics.builtins.system import DEFAULT_USERID
+from cics.cell import Holder
+from cics.interval import StartQueue
 from cics.le_stubs import LE_STUBS_DIR
 from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
-from cics.strategy import CicsLoweringStrategy
-
+from cics.strategy import (
+    NO_TRANSIDS,
+    NOT_SUPPLIED,
+    OWN_START_QUEUE,
+    Absent,
+    CicsLoweringStrategy,
+)
+from cics.terminal import InputChannel, ScreenChannel
+from cics.types import DEFAULT_TERMID, CicsContext, DispatchResult
+from cics.vsam.engine import VsamEngine
 from interpreter.project.coprocessor_compile import CoprocessorSpec
+from interpreter.project.types import LinkedProgram
 
 _OWN_UNSUPPORTED: set[str] = set()
 
@@ -22,22 +33,34 @@ def _noop() -> None:
 
 
 def build_cics_spec(
-    context_holder: list,
-    result_holder: list | None = None,
-    program_cache: dict | None = None,
-    vsam_engine: Any = None,
-    screen_queue: Any = None,
-    input_queue: Any = None,
+    context_holder: Holder[CicsContext],
+    *,
+    program_cache: MutableMapping[str, LinkedProgram],
+    result_holder: Holder[DispatchResult] | Absent = NOT_SUPPLIED,
+    td_queue: MutableSequence[str] | Absent = NOT_SUPPLIED,
+    applid: str = "CARDDEMO",
+    sysid: str = "SYS1",
+    userid: str = DEFAULT_USERID,
+    screen_queue: ScreenChannel | Absent = NOT_SUPPLIED,
+    input_queue: InputChannel | Absent = NOT_SUPPLIED,
+    vsam_engine: VsamEngine | Absent = NOT_SUPPLIED,
+    receive_timeout: float = 30.0,
+    conversational: bool = False,
+    start_queue: StartQueue = OWN_START_QUEUE,
+    transid_to_program: Mapping[str, str] = NO_TRANSIDS,
+    region_termid: str = DEFAULT_TERMID,
     unsupported_verbs: set[str] = _OWN_UNSUPPORTED,
     on_abend: Callable[[], None] = _noop,
-    **kwargs: Any,
 ) -> CoprocessorSpec:
     """Build the EXEC CICS CoprocessorSpec.
 
     ``context_holder``/``result_holder``/``program_cache`` are the same
     mutable cells CicsLoweringStrategy already uses internally -- pass the
     SAME dicts/lists across multiple compile_program() calls for programs
-    that LINK to each other within one region.
+    that LINK to each other within one region. ``program_cache`` is required:
+    every EXEC CICS LINK resolves against it, so it must be the cache the
+    region fills with its compiled programs, and an empty one of the
+    runtime's own would make every LINK fail silently.
 
     ``unsupported_verbs`` is the caller's cell for the same reason: it collects
     every EXEC CICS verb this runtime dropped while lowering, so a harness can
@@ -59,21 +82,25 @@ def build_cics_spec(
     dialect_parser = CicsDialectParser()
 
     def _make_strategy() -> CicsLoweringStrategy:
-        # One dialect_parser instance is shared across every module compile_cobol
-        # lowers (main + subprograms); CicsLoweringStrategy.on_procedure_entry
-        # consumes-and-clears dialect_parser.statements per module, so no clear
-        # belongs here.
         return CicsLoweringStrategy(
             context_holder=context_holder,
             result_holder=result_holder,
             program_cache=program_cache,
-            vsam_engine=vsam_engine,
+            td_queue=td_queue,
+            applid=applid,
+            sysid=sysid,
+            userid=userid,
             screen_queue=screen_queue,
             input_queue=input_queue,
+            vsam_engine=vsam_engine,
+            receive_timeout=receive_timeout,
+            conversational=conversational,
+            start_queue=start_queue,
+            transid_to_program=transid_to_program,
+            region_termid=region_termid,
             handler_source=dialect_parser.statements,
             unsupported_verbs=collected,
             on_abend=on_abend,
-            **kwargs,
         )
 
     return CoprocessorSpec(

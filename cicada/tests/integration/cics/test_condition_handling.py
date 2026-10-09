@@ -125,7 +125,9 @@ def test_the_injected_table_is_visible_to_the_program(cobol_parser):
     count would run past."""
     context_holder = [CicsContext(transid="HND0", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(
         COBOL_READS_ITS_OWN_TABLE.encode(), cobol_parser, spec
     )
@@ -177,7 +179,9 @@ def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
     three different pairings, so a write shifted by one slot reads back 0."""
     context_holder = [CicsContext(transid="HND1", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(
         COBOL_HANDLE_WRITES_THE_SLOT.encode(), cobol_parser, spec
     )
@@ -229,7 +233,9 @@ def test_one_statement_naming_several_conditions_writes_each_slot(cobol_parser):
     its neighbouring slot must stay 0."""
     context_holder = [CicsContext(transid="HND4", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(
         COBOL_MULTI_CONDITION_HANDLE.encode(), cobol_parser, spec
     )
@@ -287,7 +293,9 @@ def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
     raised at all; then PARA-A registered again (index 1, raisable restored)."""
     context_holder = [CicsContext(transid="HND2", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(
         COBOL_OVERRIDE_AND_IGNORE.encode(), cobol_parser, spec
     )
@@ -347,7 +355,9 @@ def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
     to show the subscripted writes land on one slot and do not smear."""
     context_holder = [CicsContext(transid="HND3", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(COBOL_RAISABLE_FLAG.encode(), cobol_parser, spec)
 
     result = run_cics(
@@ -422,7 +432,9 @@ def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
 
     context_holder = [CicsContext(transid="HND5", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(
         HNDLINKA_SRC.encode(),
         cobol_parser,
@@ -463,6 +475,7 @@ def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
     context_holder = [CicsContext(transid="HND6", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=vsam_engine_with_acctfile,
@@ -510,6 +523,7 @@ def test_a_registered_handler_takes_control(cobol_parser, vsam_engine_with_acctf
     context_holder = [CicsContext(transid="HND7", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=vsam_engine_with_acctfile,
@@ -579,6 +593,7 @@ def _run_source(source, transid, cobol_parser, vsam_engine):
     context_holder = [CicsContext(transid=transid, commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=vsam_engine,
@@ -742,7 +757,9 @@ def test_a_handler_naming_no_paragraph_is_rejected_at_compile_time(cobol_parser)
     handle nor abend, it would simply end. The compile must refuse instead."""
     context_holder = [CicsContext(transid="HNDD", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
 
     with pytest.raises(NotImplementedError) as excinfo:
         compile_cics_program(COBOL_HANDLER_TARGET_MISSING.encode(), cobol_parser, spec)
@@ -810,7 +827,9 @@ def test_a_handler_for_an_unraised_condition_is_reported(cobol_parser, caplog):
     READNEXT loop written against it would loop past the end of the file."""
     context_holder = [CicsContext(transid="HNDF", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
 
     with caplog.at_level(logging.WARNING, logger="cics.strategy"):
         compile_cics_program(
@@ -851,6 +870,7 @@ def _conversational_region(cobol_parser, transid):
     result_holder: list = [None]
     screen_queue: queue.Queue = queue.Queue()
     spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         screen_queue=screen_queue,

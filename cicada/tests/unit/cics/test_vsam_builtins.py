@@ -302,6 +302,7 @@ def _make_strategy():
     engine = _engine_with_records([])
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     return CicsLoweringStrategy(
+        program_cache={},
         context_holder=holder,
         vsam_engine=engine,
         handler_source=[],

@@ -1129,7 +1129,7 @@ def _register_core_builtins(
 def _wiring(
     context_holder: Holder[CicsContext],
     result_holder: Holder[DispatchResult] | Absent,
-    program_cache: MutableMapping[str, LinkedProgram] | Absent,
+    program_cache: MutableMapping[str, LinkedProgram],
     td_queue: MutableSequence[str] | Absent,
 ) -> _Wiring:
     results: Holder[DispatchResult] = (
@@ -1137,17 +1137,16 @@ def _wiring(
         if not result_holder
         else cast("Holder[DispatchResult]", result_holder)
     )
-    cache = program_cache if isinstance(program_cache, MutableMapping) else {}
     return _Wiring(
         context_holder=_as_builtin_list(context_holder),
         result_holder=_as_builtin_list(results),
-        program_cache=cache,
+        program_cache=program_cache,
         td_queue=td_queue if isinstance(td_queue, MutableSequence) else [],
     )
 
 
-_OWN_START_QUEUE = StartQueue()  # sentinel: "I was not given one — make my own"
-_NO_TRANSIDS: Mapping[str, str] = MappingProxyType({})
+OWN_START_QUEUE = StartQueue()
+NO_TRANSIDS: Mapping[str, str] = MappingProxyType({})
 
 
 @dataclass(frozen=True)
@@ -1172,7 +1171,6 @@ class CicsLoweringStrategy:
         self,
         context_holder: Holder[CicsContext],
         result_holder: Holder[DispatchResult] | Absent = NOT_SUPPLIED,
-        program_cache: MutableMapping[str, LinkedProgram] | Absent = NOT_SUPPLIED,
         td_queue: MutableSequence[str] | Absent = NOT_SUPPLIED,
         applid: str = "CARDDEMO",
         sysid: str = "SYS1",
@@ -1182,11 +1180,12 @@ class CicsLoweringStrategy:
         vsam_engine: VsamEngine | Absent = NOT_SUPPLIED,
         receive_timeout: float = 30.0,
         conversational: bool = False,
-        start_queue: StartQueue = _OWN_START_QUEUE,
-        transid_to_program: Mapping[str, str] = _NO_TRANSIDS,
+        start_queue: StartQueue = OWN_START_QUEUE,
+        transid_to_program: Mapping[str, str] = NO_TRANSIDS,
         region_termid: str = DEFAULT_TERMID,
         on_abend: Callable[[], None] = _default_on_abend,
         *,
+        program_cache: MutableMapping[str, LinkedProgram],
         handler_source: MutableSequence[ExecCicsStatement],
         unsupported_verbs: set[str],
     ) -> None:
@@ -1196,7 +1195,7 @@ class CicsLoweringStrategy:
             _ModuleScan(HandlerLabels(indices={}, conditions={}), frozenset())
         )
         self._start_queue = (
-            StartQueue() if start_queue is _OWN_START_QUEUE else start_queue
+            StartQueue() if start_queue is OWN_START_QUEUE else start_queue
         )
         # Conversational mode lowers EXEC CICS RECEIVE MAP to a SUSPEND (yielding
         # to a run_resumable/resume driver) instead of a blocking input-queue read.

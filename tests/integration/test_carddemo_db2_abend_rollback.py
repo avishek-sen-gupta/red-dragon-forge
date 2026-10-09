@@ -102,6 +102,7 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
     context_holder = [None]
     result_holder = [None]
     cics_spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         on_abend=backend.rollback,

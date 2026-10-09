@@ -363,6 +363,7 @@ def run_region(
     result_holder: list = [None]
     start_queue = StartQueue()
     spec = build_cics_spec(
+        program_cache={},
         start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,

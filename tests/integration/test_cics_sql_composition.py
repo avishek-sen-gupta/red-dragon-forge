@@ -46,7 +46,10 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
     context_holder = [None]
     result_holder = [None]
     cics_spec = build_cics_spec(
-        context_holder=context_holder, result_holder=result_holder, applid="FORGEAPP"
+        program_cache={},
+        context_holder=context_holder,
+        result_holder=result_holder,
+        applid="FORGEAPP",
     )
     sql_spec = build_sql_spec(connections={"SAMPLE": backend})
     parser = make_parser(bridge_jar)
@@ -107,7 +110,10 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
     context_holder = [None]
     result_holder = [None]
     cics_spec = build_cics_spec(
-        context_holder=context_holder, result_holder=result_holder, applid="FORGEAPP"
+        program_cache={},
+        context_holder=context_holder,
+        result_holder=result_holder,
+        applid="FORGEAPP",
     )
     sql_spec = build_sql_spec(connections={"SAMPLE": backend})
     parser = make_parser(bridge_jar)

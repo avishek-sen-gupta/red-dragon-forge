@@ -92,6 +92,7 @@ def test_return_lowers_to_call_and_return(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         handler_source=[],

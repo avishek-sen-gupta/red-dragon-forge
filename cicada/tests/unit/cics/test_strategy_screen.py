@@ -37,6 +37,7 @@ class _Ctx:
 
 def _strategy():
     return CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -51,6 +52,7 @@ def test_strategy_registers_screen_builtins():
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
     CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         screen_queue=screen_q,
@@ -67,6 +69,7 @@ def test_strategy_registers_screen_builtins():
 def test_strategy_without_bms_still_constructs():
     # No screen_queue/input_queue -> screen builtins simply not registered, no error.
     CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -193,6 +196,7 @@ def test_send_map_lowering_passes_base_field_names():
         },
     )
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -281,6 +285,7 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
         },  # no INTO -> derive COSGN0AI from the literal map name
     )
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -328,6 +333,7 @@ def test_syncpoint_rollback_lowers_to_the_rollback_hook():
 
     unsupported: set = set()
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -491,6 +497,7 @@ def test_writeq_td_lowers_with_real_args():
         },
     )
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -597,6 +604,7 @@ def test_writeq_td_lowers_with_resp_writeback():
         },
     )
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=[None],
         handler_source=[],
@@ -637,6 +645,7 @@ class _MinimalHolder:
 def test_non_list_result_holder_still_receives_dispatch_results():
     holder = _MinimalHolder([None])
     CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=holder,
         handler_source=[],
@@ -657,6 +666,7 @@ def test_none_result_holder_falls_back_without_crashing():
     A caller passing it must still get a working internal holder, not a
     bare ``None`` the builtins try to subscript."""
     CicsLoweringStrategy(
+        program_cache={},
         context_holder=[None],
         result_holder=None,
         handler_source=[],
@@ -672,7 +682,7 @@ def test_none_result_holder_falls_back_without_crashing():
 def test_build_cics_spec_default_result_holder_does_not_crash():
     from cics.coprocessor import build_cics_spec
 
-    spec = build_cics_spec(context_holder=[None])
+    spec = build_cics_spec(program_cache={}, context_holder=[None])
     spec.make_strategy()
 
     abend = Builtins.TABLE[FuncName("__cics_abend")]
