@@ -30,6 +30,10 @@ are listed in [the cicada architecture page](../reference/cicada/architecture.md
 | Interval scheduling: `START INTERVAL`/`AFTER`/`AT` are parsed and recorded, not scheduled; `CANCEL` | — | partial |
 | Conversational programs served over TN3270 | — | not started |
 | Channels and containers; `WEB`/`DOCUMENT`; `SIGNON`/`SIGNOFF`/`VERIFY PASSWORD`; `WAIT`/`POST`/`CONVERSE`; `DUMP TRANSACTION` | — | not started |
+| `cics/tn3270/region.py`: `build_region()` never threaded `program_cache` into `build_cics_spec`, so every `EXEC CICS LINK` on a TN3270-served region silently no-op'd regardless of config | — | **fixed** 2026-10-09, see [records/analysis/2026-10-09-tn3270-link-cache-runtime-gaps.md](../records/analysis/2026-10-09-tn3270-link-cache-runtime-gaps.md) |
+| Non-zero-`key_offset` dataset + `STARTBR`: `NotImplementedError` is unhandled, crashes the whole served region (not a clean ABEND) -- same family as `dbk.7`, see the same doc | `red-dragon-forge-dbk.7` | partial |
+| Duplicate sibling-group COBOL names in one `OCCURS` entry crash field resolution (`KeyError`) even when every child name is unique | — | not started, repro in the same doc |
+| A single non-UTF-8 byte anywhere in source (even in a comment) crashes the whole compile with no line context | — | not started, repro in the same doc |
 
 The terminal table (`dbk.6`), alternate-index model (`dbk.7`) and VSAM unit of work (`forge-s10`)
 each change a model, not a builtin. jackal's batch alternate index (`jackal-1o2.22`) needs the
