@@ -69,7 +69,9 @@ def test_eibterm_is_readable_by_the_program(cobol_parser):
         CicsContext(transid="TRM0", commarea=b"", eibaid="\x7d", termid="T001")
     ]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(COBOL_EIBTRMID.encode(), cobol_parser, spec)
 
     result = run_cics(
@@ -109,6 +111,7 @@ COBOL_START_A = """\
 
 def _spec_with_queue(context_holder, result_holder, start_queue, transid_map):
     return build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         start_queue=start_queue,
@@ -159,6 +162,7 @@ def test_start_lowering_emits_no_return(cobol_parser):
         CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001")
     ]
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=context_holder,
         result_holder=[None],
         start_queue=StartQueue(),
@@ -641,6 +645,7 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
     screen_queue: queue.Queue = queue.Queue()
     input_queue: queue.Queue = queue.Queue()
     spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         start_queue=start_queue,
@@ -704,6 +709,7 @@ def test_a_non_terminal_send_map_without_resp_abends(cobol_parser):
     screen_queue: queue.Queue = queue.Queue()
     input_queue: queue.Queue = queue.Queue()
     spec = build_cics_spec(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         start_queue=start_queue,

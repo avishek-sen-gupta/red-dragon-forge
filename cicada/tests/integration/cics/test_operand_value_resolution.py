@@ -79,7 +79,9 @@ def _run(source: str, parser) -> "object":
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(context_holder=context_holder, result_holder=result_holder)
+    spec = build_cics_spec(
+        program_cache={}, context_holder=context_holder, result_holder=result_holder
+    )
     program = compile_cics_program(source.encode(), parser, spec)
     return run_cics(
         program,

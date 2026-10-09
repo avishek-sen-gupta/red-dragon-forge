@@ -106,7 +106,9 @@ def _compile(bridge_jar: str, program_name: str):
     conn = sqlite3.connect(":memory:")
     backend = SqliteBackend(conn)
 
-    cics_spec = build_cics_spec(context_holder=[None], result_holder=[None])
+    cics_spec = build_cics_spec(
+        program_cache={}, context_holder=[None], result_holder=[None]
+    )
     sql_spec = build_sql_spec(
         connections={"CARDDEMO": backend},
         copybook_dirs=_copybook_dirs(),

@@ -257,6 +257,7 @@ def _make_strategy():
 
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     return CicsLoweringStrategy(
+        program_cache={},
         context_holder=holder,
         applid="CARDDEMO",
         sysid="SYS1",

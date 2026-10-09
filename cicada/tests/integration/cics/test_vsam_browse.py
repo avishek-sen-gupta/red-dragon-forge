@@ -128,6 +128,7 @@ def test_vsam_browse_forward_round_trips(cobol_parser):
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     strategy = CicsLoweringStrategy(
+        program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_engine(),

@@ -52,6 +52,7 @@ def _driver(
     inputs: queue.Queue = queue.Queue()
     context_holder, result_holder, start_queue = [None], [None], StartQueue()
     spec = build_cics_spec(
+        program_cache={},
         start_queue=start_queue,
         context_holder=context_holder,
         result_holder=result_holder,
