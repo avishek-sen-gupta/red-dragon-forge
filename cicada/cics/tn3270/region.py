@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from cics.bms.catalog import MapCatalog, load_catalog
 from cics.bms.generate import generate_symbolic_copybooks
+from cics.cell import fill
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion
 from cics.interval import StartQueue
@@ -171,17 +172,6 @@ def build_region(
 ) -> ServedRegion:
     wiring = _wiring()
     vsam_engine = _vsam_engine(config, work_dir / "vsam")
-    # Pre-created and passed by reference, NOT left to build_cics_spec's own
-    # `program_cache=None` default: CicsLoweringStrategy falls back to a
-    # FRESH, unconnected `{}` per compile when it isn't a MutableMapping
-    # (cics/strategy.py:1140), so every compiled program's own EXEC CICS
-    # LINK builtin ends up resolving against its own private empty dict,
-    # never the real one _compiled() builds -- every LINK silently no-ops
-    # as "unknown program" regardless of what's in config.programs
-    # (reproduced directly: one program LINKing to a correctly-configured,
-    # successfully-compiled callee still logged "unknown program").
-    # Same mutable-cell pattern as transid_to_program in
-    # cobol_harness/region.py: build once, populate in place after.
     program_cache: dict[str, LinkedProgram] = {}
     spec = build_cics_spec(
         start_queue=wiring.start_queue,
@@ -194,7 +184,7 @@ def build_region(
         on_abend=on_abend,
     )
     parser = _parser(config, bridge_jar, work_dir / "sym")
-    program_cache.update(_compiled(config, parser, spec, extra_specs))
+    fill(program_cache, _compiled(config, parser, spec, extra_specs))
     region = _region(config, wiring, program_cache)
     driver = PseudoConversationalDriver(
         region, wiring.screen_channel, frozenset(config.transactions)

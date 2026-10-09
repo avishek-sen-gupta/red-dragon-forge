@@ -13,6 +13,7 @@ import queue
 import pytest
 
 from cics import bootstrap
+from cics.dispatcher import parse_csd
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from tests.covers import covers, NotLanguageFeature
 
@@ -84,7 +85,7 @@ def test_run_region_builds_program_cache_keyed_by_program_name(monkeypatch):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_run_region_from_csd_wires_transid_mapping(monkeypatch, tmp_path):
-    """The csd_path convenience path parses the CSD into transid_to_program."""
+    """A CSD parsed by parse_csd names the programs the region compiles and runs."""
     csd = tmp_path / "region.csd"
     csd.write_text(
         "DEFINE TRANSACTION(CC00) PROGRAM(SGNPGM)\n"
@@ -109,7 +110,7 @@ def test_run_region_from_csd_wires_transid_mapping(monkeypatch, tmp_path):
     monkeypatch.setattr(bootstrap, "_run_dispatcher_with_runner", _fake_loop)
 
     bootstrap.run_carddemo_region(
-        csd_path=csd,
+        transid_to_program=parse_csd(csd),
         program_sources={"SGNPGM": b"a", "MENUPGM": b"b"},
         parser=object(),
         entry_transid="CC00",
