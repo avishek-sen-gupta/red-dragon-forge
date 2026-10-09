@@ -96,7 +96,7 @@ definers(read r at s) = { d ∈ in(s) | may_alias(d, r) }
 </ul>
 
 <h2 id="in-cobble">In cobble</h2>
-<p>Every field's extent comes from its declaration alone — level, usage, <code>OCCURS</code>, <code>REDEFINES</code> — in <a href="../../cobble/cobble/dataflow/fields/extent.py"><code>extent.py</code></a>. The two tests are <code>may_alias</code> and <code>must_cover</code> on the extent type in red-dragon's <a href="../../vendor/red-dragon/cobol_memory/field_extent.py"><code>field_extent.py</code></a>. A move of a literal has no source field, so cobble names its source <code>LITERAL</code>.</p>
+<p>Every dataflow stage works on these extents. Each field's extent comes from its declaration alone — level, usage, <code>OCCURS</code>, <code>REDEFINES</code>. The two tests are the ones above: whether two extents may overlap, and whether one covers all of the other. A move of a literal has no source field, so cobble names its source <code>LITERAL</code>.</p>
 </main>
 
 </body>

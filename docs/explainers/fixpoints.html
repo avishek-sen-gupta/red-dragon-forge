@@ -116,7 +116,7 @@ until the worklist is empty
 </ul>
 
 <h2 id="in-cobble">In cobble</h2>
-<p>The worklist and its reverse-postorder queue live in <a href="../../cobble/cobble/dataflow/fixpoint/fixpoint.py"><code>fixpoint.py</code></a>; the per-field notes and their union are in <a href="../../cobble/cobble/dataflow/fields/state.py"><code>state.py</code></a>. Cobble's notes are kept per byte range rather than whole fields — see <a href="byte-extents.html">byte extents</a> — but the loop is this one.</p>
+<p>The fixpoint stage (<code>cobble-dataflow-fixpoint</code>) runs this worklist over each member, queued in reverse postorder. Cobble's notes are kept per byte range rather than whole fields — see <a href="byte-extents.html">byte extents</a> — but the loop is this one.</p>
 </main>
 
 </body>

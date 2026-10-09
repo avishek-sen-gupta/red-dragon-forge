@@ -409,7 +409,7 @@ L2 → T        X1 → X2</pre>
 </table>
 
 <h2 id="in-cobble">In cobble</h2>
-<p>Cobble's depth-first search, its reverse postorder and its back edges are in <a href="../../cobble/cobble/dataflow/srccfg/order.py"><code>order.py</code></a>. It tries a statement's arrows in the order the control-flow graph lists them. The search keeps its own stack rather than calling itself, because a real program's paths are thousands of statements long and Python allows a thousand nested calls.</p>
+<p>Cobble's fixpoint stage orders its walks by this depth-first search, its reverse postorder and its back edges. It tries a statement's arrows in the order the control-flow graph lists them. The search keeps its own stack rather than calling itself, because a real program's paths are thousands of statements long and Python allows a thousand nested calls.</p>
 </main>
 </body>
 </html>
