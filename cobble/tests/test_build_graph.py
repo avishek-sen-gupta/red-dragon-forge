@@ -12,6 +12,7 @@ from cobble.build_graph import (
     RULE,
     _edge_kind_lines,
     _failure_report_lines,
+    _build_batch_file_graph,
     _file_control_failures,
     _load_transid_to_program,
     _parse_args,
@@ -442,3 +443,53 @@ def test_dynamic_call_targets_are_the_named_table_or_none(
         _parse_args([*base, "--dynamic-call-targets", str(absent)])
     assert refused.value.code == 2
     assert f"{absent} not found" in capsys.readouterr().err
+
+
+def _batch_member(config: CorpusConfig, program: str, dd_name: str) -> None:
+    _touch(config.cobol_dir / f"{program}.cbl", "")
+    asg = {
+        "program_id": program,
+        "file_control": [{"file_name": "IN-FILE", "assign_to": dd_name}],
+        "paragraphs": [
+            {
+                "name": "MAIN",
+                "statements": [
+                    {
+                        "type": "OPEN",
+                        "mode_groups": [{"mode": "INPUT", "files": ["IN-FILE"]}],
+                    }
+                ],
+            }
+        ],
+    }
+    _touch(config.asg_dir / f"{program}.json", json.dumps(asg))
+
+
+def test_file_control_across_worker_processes_writes_what_one_process_writes(
+    tmp_path: Path,
+) -> None:
+    """Workers finish in any order; the graph file must not change with their
+    number. A member missing from the cache is still one named failure."""
+    config = _config(tmp_path)
+    for program, dd_name in (("PROGA", "DDA"), ("PROGB", "DDB"), ("PROGC", "DDC")):
+        _batch_member(config, program, dd_name)
+    _touch(config.cobol_dir / "GONE.cbl", "")
+
+    def built(workers: int) -> tuple[tuple[str, ...], str]:
+        graph = tmp_path / f"graph-{workers}.jsonl"
+        with graph_writer(graph, _NoFilePaths()) as writer:
+            failures = _build_batch_file_graph(
+                config, _NoFilePaths(), frozenset(), writer, workers
+            )
+        return failures, graph.read_text()
+
+    serial, parallel = built(1), built(3)
+
+    assert parallel == serial
+    assert serial[0] == (
+        "FILE-CONTROL GONE.cbl: GONE.cbl: no cached ASG at "
+        f"{config.asg_dir / 'GONE.json'} (run cobble-parse-corpus first)",
+    )
+    assert [
+        (edge.source, edge.target) for edge in read_graph(tmp_path / "graph-1.jsonl")[1]
+    ] == [("PROGA", "DDA"), ("PROGB", "DDB"), ("PROGC", "DDC")]
