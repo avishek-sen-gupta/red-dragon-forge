@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from jackal.catalog import DatasetCatalog
-from jackal.dsn import DirectDSN
+from jackal.dsn import DdName, DirectDSN
 from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro, SetMaxcc
 from jackal.model import DD, Disp, DispNormal, DispStatus
 from jackal.value_parts import literal
@@ -25,12 +25,12 @@ def test_repro_loads_ps_into_ksds(tmp_path):
     (tmp_path / "wd").mkdir()
     dds = (
         DD(
-            "INF",
+            DdName("INF"),
             DirectDSN(literal("IN.PS")),
             Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
         ),
         DD(
-            "OUT",
+            DdName("OUT"),
             DirectDSN(literal("OUT.KSDS")),
             Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP),
         ),
@@ -117,17 +117,23 @@ def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_if_maxcc_all_operators():
-    from jackal.idcams.executor import _handle_if_maxcc
+def test_if_maxcc_all_operators(tmp_path):
+    from jackal.idcams.executor import run_idcams
 
-    # predicate true -> set_value
-    assert _handle_if_maxcc(IfMaxcc(op="GE", value=8, set_value=0), 8) == 0
-    assert _handle_if_maxcc(IfMaxcc(op="GT", value=4, set_value=0), 8) == 0
-    assert _handle_if_maxcc(IfMaxcc(op="EQ", value=8, set_value=0), 8) == 0
-    assert _handle_if_maxcc(IfMaxcc(op="NE", value=0, set_value=0), 8) == 0
-    # predicate false -> maxcc unchanged
-    assert _handle_if_maxcc(IfMaxcc(op="GT", value=8, set_value=0), 8) == 8
-    assert _handle_if_maxcc(IfMaxcc(op="EQ", value=4, set_value=0), 8) == 8
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+
+    def after_rc_8(op: str, value: int) -> int:
+        cmds = (Delete(dsn="GHOST.DS"), IfMaxcc(op=op, value=value, set_value=0))
+        return run_idcams(cmds, (), cat)
+
+    assert [
+        after_rc_8("GE", 8),
+        after_rc_8("GT", 4),
+        after_rc_8("EQ", 8),
+        after_rc_8("NE", 0),
+        after_rc_8("GT", 8),
+        after_rc_8("EQ", 4),
+    ] == [0, 0, 0, 0, 8, 8]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

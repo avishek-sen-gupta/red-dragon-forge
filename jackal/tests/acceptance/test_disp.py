@@ -1,10 +1,8 @@
 """Acceptance: DISP values and their defaults."""
 
-from tests.acceptance.markers import PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_disp_parses(parse_fixture):
     from jackal.model import Job

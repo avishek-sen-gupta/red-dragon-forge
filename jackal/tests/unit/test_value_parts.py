@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
-from jackal.value_parts import Literal, Symbol, literal, resolve
+from jackal.value_parts import Literal, Symbol, SymbolName, literal, resolve
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -31,14 +31,14 @@ def test_resolve_empty_tuple_is_empty_string():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_resolve_raises_on_unresolved_symbol():
-    value = (Symbol("CNTLLIB"),)
+    value = (Symbol(SymbolName("CNTLLIB")),)
     with pytest.raises(ValueError, match="CNTLLIB"):
         resolve(value)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_resolve_raises_on_symbol_mixed_with_literal():
-    value = (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+    value = (Symbol(SymbolName("CNTLLIB")), Literal("(REPROCT)"))
     with pytest.raises(ValueError, match="CNTLLIB"):
         resolve(value)
 
@@ -46,5 +46,5 @@ def test_resolve_raises_on_symbol_mixed_with_literal():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_literal_and_symbol_are_frozen_and_hashable():
     assert hash(Literal("A")) == hash(Literal("A"))
-    assert hash(Symbol("A")) == hash(Symbol("A"))
-    assert Literal("A") != Symbol("A")
+    assert hash(Symbol(SymbolName("A"))) == hash(Symbol(SymbolName("A")))
+    assert Literal("A") != Symbol(SymbolName("A"))

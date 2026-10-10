@@ -2,6 +2,7 @@
 
 from jackal.dsn import (
     BackwardRef,
+    DdName,
     DirectDSN,
     DummyDSN,
     InStreamDSN,
@@ -21,6 +22,8 @@ from jackal.model import (
     DispNormal,
     DispStatus,
     OwnScope,
+    ProcRef,
+    ProgramRef,
     ProgramStep,
     RcComparison,
     StepCondition,
@@ -35,6 +38,14 @@ NO_COND = StepCondition((), AbendMode.NORMAL)
 
 def name(text: str) -> StepName:
     return StepName(text)
+
+
+def proc(text: str) -> ProcRef:
+    return ProcRef(text)
+
+
+def dd_name(text: str) -> DdName:
+    return DdName(text)
 
 
 def ref(step: str) -> StepRef:
@@ -55,31 +66,31 @@ DEFAULT_DISP = disp("NEW", "DELETE", "DELETE")
 
 
 def dataset(ddname: str, dsn: str, d: Disp = SHR) -> DD:
-    return DD(ddname, DirectDSN(literal(dsn)), d)
+    return DD(DdName(ddname), DirectDSN(literal(dsn)), d)
 
 
 def temp(ddname: str, temp_name: str, d: Disp) -> DD:
-    return DD(ddname, TempRef(temp_name), d)
+    return DD(DdName(ddname), TempRef(temp_name), d)
 
 
 def in_stream(ddname: str, lines: tuple[str, ...]) -> DD:
-    return DD(ddname, InStreamDSN(), DEFAULT_DISP, in_stream=lines)
+    return DD(DdName(ddname), InStreamDSN(), DEFAULT_DISP, in_stream=lines)
 
 
 def dummy(ddname: str) -> DD:
-    return DD(ddname, DummyDSN(), DEFAULT_DISP)
+    return DD(DdName(ddname), DummyDSN(), DEFAULT_DISP)
 
 
 def sysout(ddname: str) -> DD:
-    return DD(ddname, NoDSN(), DEFAULT_DISP, sysout=True)
+    return DD(DdName(ddname), NoDSN(), DEFAULT_DISP, sysout=True)
 
 
 def backref(ddname: str, step: object, target_dd: str, d: Disp = SHR) -> DD:
-    return DD(ddname, BackwardRef(step, target_dd), d)
+    return DD(DdName(ddname), BackwardRef(step, DdName(target_dd)), d)
 
 
 def concat(ddname: str, first: str, rest: tuple[ConcatMember, ...]) -> DD:
-    return DD(ddname, DirectDSN(literal(first)), SHR, concatenated=rest)
+    return DD(DdName(ddname), DirectDSN(literal(first)), SHR, concatenated=rest)
 
 
 def member(dsn: str) -> ConcatMember:
@@ -107,7 +118,7 @@ def pgm(
 ) -> ProgramStep:
     return ProgramStep(
         StepName(label) if label else Unnamed(),
-        program,
+        ProgramRef(program),
         dds,
         condition,
         literal(parm) if parm else (),

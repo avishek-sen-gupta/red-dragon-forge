@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from cobol_asg.file_enums import FileOrganization, OpenMode
-from jackal.dsn import DirectDSN, TempRef, dsn_key
-from jackal.model import DD, DatasetOrg, DispNormal, DispStatus
-from jackal.value_parts import literal
+from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
+from jackal.catalog_stores import Table
+from jackal.dsn import DSN, DirectDSN, TempRef
+from jackal.model import DD, DatasetOrg, DispNormal, DispStatus, QualifiedStep
 
 
 @dataclass(frozen=True)
@@ -37,139 +37,137 @@ _ORG_MAP: dict[DatasetOrg, FileOrganization] = {
 }
 
 
+def _require_positive(value: int, what: str, dsn: str) -> None:
+    if value == 0:
+        raise ValueError(f"KSDS {what} must be > 0: {dsn}")
+
+
+def _check_spec(spec: DatasetSpec) -> None:
+    if spec.org is not DatasetOrg.KSDS:
+        return
+    _require_positive(spec.record_size, "record_size", spec.dsn)
+    _require_positive(spec.key_length, "key_length", spec.dsn)
+
+
 class DatasetCatalog:
     """Imperative shell: owns the job workdir and the DSN->file mapping."""
 
     def __init__(self, workdir: Path, data_dir: Path):
         self._workdir = workdir
         self._data_dir = data_dir
-        self._datasets: dict[str, Dataset] = {}
-        self._temp_registry: dict[str, DirectDSN] = {}
+        self._datasets: Table[str, Dataset] = Table()
+        self._temps: Table[str, Dataset] = Table()
 
     def seed(self, dsn: str, path: Path) -> None:
-        self._datasets[dsn] = Dataset(dsn=dsn, path=path)
+        self._datasets.put(dsn, Dataset(dsn=dsn, path=path))
 
     def resolve(self, dsn: str) -> Dataset:
-        return self._datasets[dsn]
+        return self._datasets.get(dsn)
 
-    def allocate(self, dd: DD) -> Dataset:
+    def allocate(self, dd: DD[QualifiedStep]) -> Dataset:
         match dd.dsn:
-            case TempRef(alias=alias):
-                return self._allocate_temp(alias, dd.disp.status)
-            case DirectDSN():
-                return self._allocate_direct(dsn_key(dd.dsn), dd)
+            case TempRef(name=name):
+                return self._allocate_temp(name, dd.disp.status)
             case _:
-                raise TypeError(f"Unhandled DSN type: {dd.dsn!r}")
+                return self._allocate_direct(dd.dsn.dataset_name(), dd.disp.status)
 
-    def _allocate_temp(self, alias: str, status: DispStatus) -> Dataset:
-        if status is DispStatus.NEW:
-            if alias in self._temp_registry:
-                raise ValueError(f"TempRef already allocated: {alias}")
-            name = alias[2:]  # strip exactly the two leading &&
-            path = self._workdir / name
-            path.write_bytes(b"")
-            self._temp_registry[alias] = DirectDSN(literal(name))
-            ds = Dataset(dsn=name, path=path)
-            self._datasets[name] = ds
-            return ds
-        if status in (DispStatus.OLD, DispStatus.SHR, DispStatus.MOD):
-            if alias not in self._temp_registry:
-                raise KeyError(alias)
-            return self._datasets[dsn_key(self._temp_registry[alias])]
-        raise ValueError(f"Unexpected DispStatus for TempRef: {status}")
+    def _work_path(self, name: str) -> Path:
+        return self._workdir / name.replace(".", "_")
 
-    def _allocate_direct(self, name: str, dd: DD) -> Dataset:
-        if dd.disp.status in (DispStatus.OLD, DispStatus.SHR):
-            if name in self._datasets:
-                return self._datasets[name]
-            candidate = self._data_dir / name
-            if candidate.exists():
-                ds = Dataset(dsn=name, path=candidate)
-                self._datasets[name] = ds
-                return ds
-            raise KeyError(name)
-        if dd.disp.status is DispStatus.MOD:
-            # MOD: extend if exists, create if not
-            if name in self._datasets:
-                return self._datasets[name]
-            candidate = self._data_dir / name
-            if candidate.exists():
-                ds = Dataset(dsn=name, path=candidate)
-                self._datasets[name] = ds
-                return ds
-            path = self._workdir / name.replace(".", "_")
-            path.write_bytes(b"")
-            ds = Dataset(dsn=name, path=path)
-            self._datasets[name] = ds
-            return ds
-        # NEW
-        path = self._workdir / name.replace(".", "_")
+    def _created(self, dsn: str, path: Path) -> Dataset:
         path.write_bytes(b"")
-        ds = Dataset(dsn=name, path=path)
-        self._datasets[name] = ds
-        return ds
+        return self._datasets.put(dsn, Dataset(dsn=dsn, path=path))
+
+    def _allocate_temp(self, name: str, status: DispStatus) -> Dataset:
+        if status is DispStatus.NEW:
+            return self._new_temp(name)
+        return self._datasets.get(self._temps.get(name).dsn)
+
+    def _new_temp(self, name: str) -> Dataset:
+        if self._temps.has(name):
+            raise ValueError(f"TempRef already allocated: &&{name}")
+        return self._temps.put(name, self._created(name, self._workdir / name))
+
+    def _allocate_direct(self, name: str, status: DispStatus) -> Dataset:
+        if status is DispStatus.NEW:
+            return self._created(name, self._work_path(name))
+        return self._existing(name, status)
+
+    def _existing(self, name: str, status: DispStatus) -> Dataset:
+        if self._datasets.has(name):
+            return self._datasets.get(name)
+        candidate = self._data_dir / name
+        if candidate.exists():
+            return self._datasets.put(name, Dataset(dsn=name, path=candidate))
+        return self._missing(name, status)
+
+    def _missing(self, name: str, status: DispStatus) -> Dataset:
+        if status is DispStatus.MOD:
+            return self._created(name, self._work_path(name))
+        raise KeyError(name)
 
     def allocate_new(self, spec: DatasetSpec) -> Dataset:
-        if spec.dsn in self._datasets:
+        if self._datasets.has(spec.dsn):
             raise ValueError(f"DSN already allocated: {spec.dsn}")
-        if spec.org is DatasetOrg.KSDS:
-            if spec.record_size == 0:
-                raise ValueError(f"KSDS record_size must be > 0: {spec.dsn}")
-            if spec.key_length == 0:
-                raise ValueError(f"KSDS key_length must be > 0: {spec.dsn}")
-        path = self._workdir / spec.dsn.replace(".", "_")
+        _check_spec(spec)
+        path = self._work_path(spec.dsn)
         path.write_bytes(b"")
-        ds = Dataset(
-            dsn=spec.dsn,
-            path=path,
-            org=spec.org,
-            key_offset=spec.key_offset,
-            key_length=spec.key_length,
-            record_size=spec.record_size,
+        return self._datasets.put(
+            spec.dsn,
+            Dataset(
+                dsn=spec.dsn,
+                path=path,
+                org=spec.org,
+                key_offset=spec.key_offset,
+                key_length=spec.key_length,
+                record_size=spec.record_size,
+            ),
         )
-        self._datasets[spec.dsn] = ds
-        return ds
 
-    def open_dataset(
-        self, dsn: str, mode: OpenMode, record_size: int | None = None
+    def open_dataset(self, dsn: str, mode: OpenMode) -> FileOrganizationDriver:
+        return self.open_dataset_with_record_size(
+            dsn, mode, self._datasets.get(dsn).record_size
+        )
+
+    def open_dataset_with_record_size(
+        self, dsn: str, mode: OpenMode, record_size: int
     ) -> FileOrganizationDriver:
-        # record_size override exists solely as a jackal-ifq workaround: PS inputs
-        # allocated via allocate(dd) carry record_size=0; callers that know the true
-        # record size (e.g. REPRO borrowing the output KSDS value) pass it here.
-        # Remove this parameter and all call sites that supply it when jackal-ifq is fixed.
-        ds = self._datasets[dsn]
-        rl = record_size if record_size is not None else ds.record_size
+        ds = self._datasets.get(dsn)
         return open_driver(
-            _ORG_MAP[ds.org], ds.path, mode, rl, ds.key_offset, ds.key_length
+            _ORG_MAP[ds.org], ds.path, mode, record_size, ds.key_offset, ds.key_length
         )
 
     def delete_dsn(self, dsn: str) -> bool:
-        """Remove a dataset from the catalog and delete its backing file.
-
-        Returns True if the dataset existed and was deleted, False if not found.
-        """
-        if dsn not in self._datasets:
+        if not self._datasets.has(dsn):
             return False
-        ds = self._datasets.pop(dsn)
-        ds.path.unlink(missing_ok=True)
+        self._datasets.take(dsn).path.unlink(missing_ok=True)
         return True
 
-    def dispose(self, dd: DD) -> None:
-        if dd.disp.normal is not DispNormal.DELETE:
-            return
-        match dd.dsn:
-            case TempRef(alias=alias):
-                if alias in self._temp_registry:
-                    direct = self._temp_registry.pop(alias)
-                    self.delete_dsn(dsn_key(direct))
+    def dispose(self, dd: DD[QualifiedStep]) -> None:
+        if dd.disp.normal is DispNormal.DELETE:
+            self._delete(dd.dsn)
+
+    def _delete(self, dsn: DSN[QualifiedStep]) -> None:
+        match dsn:
+            case TempRef(name=name):
+                self._delete_temp(name)
+            case _:
+                self._delete_direct(dsn)
+
+    def _delete_direct(self, dsn: DSN[QualifiedStep]) -> None:
+        match dsn:
             case DirectDSN():
-                self.delete_dsn(dsn_key(dd.dsn))
+                self.delete_dsn(dsn.dataset_name())
+            case _:
+                return
+
+    def _delete_temp(self, name: str) -> None:
+        if self._temps.has(name):
+            self.delete_dsn(self._temps.take(name).dsn)
 
     def cleanup_temps(self) -> None:
-        """Delete all surviving temp datasets and clear the registry. Called at job end."""
-        for direct in list(self._temp_registry.values()):
-            self.delete_dsn(dsn_key(direct))
-        self._temp_registry.clear()
+        for ds in self._temps.drain():
+            self.delete_dsn(ds.dsn)
 
     @property
     def workdir(self) -> Path:

@@ -1,10 +1,8 @@
 """Acceptance: DD concatenation."""
 
-from tests.acceptance.markers import PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_concatenation_parses(parse_fixture):
     from jackal.dsn import DummyDSN, InStreamDSN

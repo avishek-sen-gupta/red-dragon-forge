@@ -7,10 +7,11 @@ from __future__ import annotations
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DirectDSN
+from jackal.dsn import DdName, DirectDSN
+from jackal.expansion import DirectoryProcLibrary, ExpandedJob, expand_or_fail
 from jackal.jcl.parser import parse_jcl
-from jackal.jcl.proc_expand import expand_procs
-from jackal.value_parts import literal
+from jackal.model import ProcCall, ProcRef, ProgramRef, ProgramStep, StepName
+from jackal.value_parts import SymbolName, literal
 
 
 @pytest.fixture(autouse=True)
@@ -18,62 +19,47 @@ def _require_jcl_bridge(jcl_bridge_jar):
     """parse_jcl/parse_proc shell to the bridge; ensure JCL_BRIDGE_JAR is set."""
 
 
+def _tranrept(carddemo_home) -> ExpandedJob:
+    job = parse_jcl((carddemo_home / "jcl" / "TRANREPT.jcl").read_text())
+    return expand_or_fail(job, DirectoryProcLibrary((carddemo_home / "proc",)))
+
+
+def _program(expanded: ExpandedJob, name: str) -> ProgramStep:
+    return next(
+        q.step
+        for q in expanded.steps
+        if q.rendered() == name and isinstance(q.step, ProgramStep)
+    )
+
+
 @pytest.mark.carddemo_e2e
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_tranrept_jcl_expands_reproc_call(carddemo_home):
-    jcl_text = (carddemo_home / "jcl" / "TRANREPT.jcl").read_text()
-    job = parse_jcl(jcl_text)
-
-    # Before expansion: STEP05R's pgm is literally "REPROC" (the bug this
-    # feature fixes — a graph/runner consumer would treat REPROC as if it
-    # were a real executable).
-    step05r = next(s for s in job.steps if s.name == "STEP05R")
-    assert step05r.pgm == "REPROC"
-    assert step05r.proc_parms == {"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")}
-
-    expanded = expand_procs(job, proclib_dirs=[carddemo_home / "proc"])
-
-    # After expansion: the PROC-call step is gone, replaced by its real
-    # qualified inner step running the real program (IDCAMS). No step's pgm
-    # is the bare literal "REPROC" any more (the exact bug this feature
-    # fixes: a graph/runner consumer treating REPROC as a real executable).
-    #
-    # Note: real TRANREPT.jcl reuses the literal step name "STEP05R" twice —
-    # once for `EXEC PROC=REPROC` (the call this feature expands) and,
-    # entirely unrelated, again for a later plain `EXEC PGM=SORT` step. That
-    # second STEP05R is not a PROC call and must be left untouched by
-    # expand_procs, so "STEP05R" legitimately still appears in `names`
-    # afterwards — it just no longer has pgm == "REPROC".
-    names = [s.name for s in expanded.steps]
-    assert "STEP05R.PRC001" in names
-    assert "STEP10R" in names
-    assert all(s.pgm != "REPROC" for s in expanded.steps)
-
-    prc001 = next(s for s in expanded.steps if s.name == "STEP05R.PRC001")
-    assert prc001.pgm == "IDCAMS"
-
-    sort_step = next(
-        s for s in expanded.steps if s.name == "STEP05R" and s.pgm == "SORT"
+    job = parse_jcl((carddemo_home / "jcl" / "TRANREPT.jcl").read_text())
+    call = next(
+        s
+        for s in job.steps
+        if isinstance(s, ProcCall) and s.label == StepName("STEP05R")
     )
-    assert sort_step.pgm == "SORT"
+    assert (call.proc, call.symbol_overrides) == (
+        ProcRef("REPROC"),
+        ((SymbolName("CNTLLIB"), literal("AWS.M2.CARDDEMO.CNTL")),),
+    )
 
-    step10r = next(s for s in expanded.steps if s.name == "STEP10R")
-    assert step10r.pgm == "CBTRN03C"
+    expanded = _tranrept(carddemo_home)
+    assert _program(expanded, "STEP05R.PRC001").pgm == ProgramRef("IDCAMS")
+    assert _program(expanded, "STEP10R").pgm == ProgramRef("CBTRN03C")
+    assert [q.step.pgm for q in expanded.steps if q.rendered() == "STEP05R"] == [
+        ProgramRef("SORT")
+    ]
 
 
 @pytest.mark.carddemo_e2e
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_tranrept_jcl_dd_overrides_reach_the_real_datasets(carddemo_home):
-    jcl_text = (carddemo_home / "jcl" / "TRANREPT.jcl").read_text()
-    job = parse_jcl(jcl_text)
-    expanded = expand_procs(job, proclib_dirs=[carddemo_home / "proc"])
-
-    prc001 = next(s for s in expanded.steps if s.name == "STEP05R.PRC001")
-    filein = next(d for d in prc001.dds if d.ddname == "FILEIN")
-    fileout = next(d for d in prc001.dds if d.ddname == "FILEOUT")
-
-    # These come from TRANREPT.jcl's own //PRC001.FILEIN / //PRC001.FILEOUT
-    # qualified DD overrides — replacing REPROC.prc's own NULLFILE
-    # placeholders, proving the override mechanism against real JCL text.
-    assert filein.dsn == DirectDSN(literal("AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS"))
-    assert fileout.dsn != DirectDSN(literal("NULLFILE"))
+    prc001 = _program(_tranrept(carddemo_home), "STEP05R.PRC001")
+    dsns = {dd.ddname: dd.dsn for dd in prc001.dds}
+    assert dsns[DdName("FILEIN")] == DirectDSN(
+        literal("AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS")
+    )
+    assert dsns[DdName("FILEOUT")] != DirectDSN(literal("NULLFILE"))

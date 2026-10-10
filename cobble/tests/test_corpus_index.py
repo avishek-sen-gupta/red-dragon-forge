@@ -6,10 +6,25 @@ from cobble.corpus_index_builder import build_corpus_index
 from cobble.corpus_table import DEFAULT_COPYBOOK_EXTENSIONS
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import NodeKind
-from jackal.dsn import DirectDSN, InStreamDSN
+from dataclasses import dataclass
+
+from jackal.dsn import DdName, DirectDSN, InStreamDSN
+from jackal.expansion import CircularProc, ExpansionFailed, ProcLibrary, ProcNotFound
 from jackal.jcl.bridge_parser import JclParseError
-from jackal.jcl.proc_expand import ProcExpansionError
-from jackal.model import DD, Disp, DispNormal, DispStatus, Job, Step
+from jackal.model import (
+    DD,
+    Disp,
+    DispAbnormal,
+    DispNormal,
+    DispStatus,
+    Job,
+    ProcCall,
+    ProcDef,
+    ProcRef,
+    ProgramRef,
+    ProgramStep,
+    StepName,
+)
 from jackal.value_parts import Literal
 
 
@@ -166,17 +181,17 @@ def test_cics_file_resolves_to_its_csd_file(tmp_path: Path) -> None:
 
 def _simple_dd(ddname: str, name: str) -> DD:
     return DD(
-        ddname=ddname,
+        ddname=DdName(ddname),
         dsn=DirectDSN((Literal(name),)),
-        disp=Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
+        disp=Disp(DispStatus.SHR, DispNormal.KEEP, DispAbnormal.KEEP),
     )
 
 
 def _instream_dd(ddname: str) -> DD:
     return DD(
-        ddname=ddname,
+        ddname=DdName(ddname),
         dsn=InStreamDSN(),
-        disp=Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE),
+        disp=Disp(DispStatus.NEW, DispNormal.DELETE, DispAbnormal.DELETE),
         in_stream=("  DELETE CLUSTER",),
     )
 
@@ -191,7 +206,11 @@ def test_job_and_step_resolve_to_owning_jcl_file(
     job = Job(
         name="ACCTFILE",
         steps=(
-            Step(name="STEP05", pgm="IDCAMS", dds=(_simple_dd("SYSIN", "SOME.DSN"),)),
+            ProgramStep(
+                StepName("STEP05"),
+                ProgramRef("IDCAMS"),
+                (_simple_dd("SYSIN", "SOME.DSN"),),
+            ),
         ),
     )
     monkeypatch.setattr("cobble.corpus_index_builder.parse_jcl", lambda text: job)
@@ -301,7 +320,11 @@ def test_instream_data_resolves_to_owning_jcl_file(
 
     job = Job(
         name="ACCTFILE",
-        steps=(Step(name="STEP05", pgm="IDCAMS", dds=(_instream_dd("SYSIN"),)),),
+        steps=(
+            ProgramStep(
+                StepName("STEP05"), ProgramRef("IDCAMS"), (_instream_dd("SYSIN"),)
+            ),
+        ),
     )
     monkeypatch.setattr("cobble.corpus_index_builder.parse_jcl", lambda text: job)
 
@@ -310,96 +333,97 @@ def test_instream_data_resolves_to_owning_jcl_file(
     assert resolved == jcl_path
 
 
-def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """``expand_procs`` sat outside the per-member try/except, so one unbound
-    symbol, one circular PROC or one non-UTF-8 .prc file aborted the whole index
-    build — every member after it never indexed at all."""
-    _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
-    _touch(tmp_path / "jcl" / "LATER.jcl", "//LATER JOB ...\n")
-    _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
-    config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    _patch(
-        monkeypatch,
-        parse_jcl=lambda text: Job(name=text.split()[0].lstrip("/"), steps=()),
-        expand_procs=lambda job, proclib_dirs: (
-            job
-            if job.name != "RUNSORT"
-            else _raise(ProcExpansionError("Unbound symbol '&HLQ'"))
-        ),
-    )
+@dataclass(frozen=True)
+class _Library(ProcLibrary):
+    procs: tuple[ProcDef, ...] = ()
 
-    index = build_corpus_index(config)
-    assert index.failures == ("index JCL RUNSORT.jcl: Unbound symbol '&HLQ'",)
-    # The member after the failing one still got indexed.
-    assert (
-        index.resolve_file_path(NodeKind.JOB, "LATER") == tmp_path / "jcl" / "LATER.jcl"
+    def find(self, proc: ProcRef) -> ProcDef | ProcNotFound:
+        found = tuple(p for p in self.procs if p.name == proc.name)
+        return found[0] if found else ProcNotFound()
+
+
+class _BrokenLibrary(ProcLibrary):
+    def find(self, proc: ProcRef) -> ProcDef | ProcNotFound:
+        raise TypeError("'NoneType' object is not iterable")
+
+
+_SORTPROC = ProcRef("SORTPROC")
+_CIRCULAR = _Library(
+    (ProcDef("SORTPROC", (), (ProcCall(StepName("AGAIN"), _SORTPROC),)),)
+)
+
+
+def _calls_sortproc(path: Path) -> Job:
+    return Job(path.stem, (ProcCall(StepName("STEP01"), _SORTPROC),))
+
+
+def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(
+    tmp_path: Path,
+) -> None:
+    """One member whose PROCs do not expand must not abort the index build:
+    every member after it still gets indexed."""
+    _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
+    later = _touch(tmp_path / "jcl" / "LATER.jcl", "//LATER JOB ...\n")
+    config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
+
+    index = build_corpus_index(
+        config,
+        read_job=lambda path: (
+            _calls_sortproc(path) if path.stem == "RUNSORT" else Job(path.stem, ())
+        ),
+        libraries=lambda dirs: _CIRCULAR,
     )
+    circular = ExpansionFailed(CircularProc((_SORTPROC, _SORTPROC)))
+    assert index.failures == (f"index JCL RUNSORT.jcl: {circular}",)
+    assert index.resolve_file_path(NodeKind.JOB, "LATER") == later
 
 
 def test_a_member_whose_procs_do_not_expand_keeps_its_unexpanded_steps(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     """The outer job parsed; only the inlining failed. Its own steps are exactly
     what the JCL says, so they stay in the index rather than vanishing with the
     PROC's."""
     jcl_path = _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
-    _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
     config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    job = Job(name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),))
-    _patch(
-        monkeypatch,
-        parse_jcl=lambda text: job,
-        expand_procs=lambda job, proclib_dirs: _raise(
-            ProcExpansionError("Circular PROC reference: SORTPROC -> SORTPROC")
-        ),
-    )
 
-    index = build_corpus_index(config)
+    index = build_corpus_index(
+        config, read_job=_calls_sortproc, libraries=lambda dirs: _CIRCULAR
+    )
     assert index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01") == jcl_path
 
 
 def test_a_bug_in_proc_expansion_is_not_filed_as_a_corpus_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
-    """Guards the new handler's width: PROC resolution failures are corpus shape,
-    a TypeError in cobble's own expansion code is not."""
+    """Guards the handler's width: expansion failures are corpus shape, a
+    TypeError in the code doing the expanding is not."""
     _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
-    _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
     config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    _patch(
-        monkeypatch,
-        parse_jcl=lambda text: Job(name="RUNSORT", steps=()),
-        expand_procs=lambda job, proclib_dirs: _raise(
-            TypeError("'NoneType' object is not iterable")
-        ),
-    )
 
     with pytest.raises(TypeError) as raised:
-        build_corpus_index(config)
+        build_corpus_index(
+            config, read_job=_calls_sortproc, libraries=lambda dirs: _BrokenLibrary()
+        )
     assert str(raised.value) == "'NoneType' object is not iterable"
 
 
-def test_step_from_proc_resolves_to_the_proc_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_step_from_proc_resolves_to_the_proc_file(tmp_path: Path) -> None:
     _touch(tmp_path / "jcl" / "RUNSORT.jcl", "//RUNSORT JOB ...\n")
     proc_path = _touch(tmp_path / "proc" / "SORTPROC.prc", "//SORTPROC PROC\n")
     config = _prepared(tmp_path, proclib_dirs=(tmp_path / "proc",))
-    outer_job = Job(
-        name="RUNSORT", steps=(Step(name="STEP01", pgm="SORTPROC", dds=()),)
-    )
-    expanded_job = Job(
-        name="RUNSORT", steps=(Step(name="STEP01.SORTSTEP", pgm="SORT", dds=()),)
-    )
-    _patch(
-        monkeypatch,
-        parse_jcl=lambda text: outer_job,
-        expand_procs=lambda job, proclib_dirs: expanded_job,
-        step_proc_provenance=lambda job, expanded: {"STEP01.SORTSTEP": "SORTPROC"},
+    library = _Library(
+        (
+            ProcDef(
+                "SORTPROC",
+                (),
+                (ProgramStep(StepName("SORTSTEP"), ProgramRef("SORT")),),
+            ),
+        )
     )
 
-    index = build_corpus_index(config)
+    index = build_corpus_index(
+        config, read_job=_calls_sortproc, libraries=lambda dirs: library
+    )
     resolved = index.resolve_file_path(NodeKind.STEP, "RUNSORT.STEP01.SORTSTEP")
     assert resolved == proc_path

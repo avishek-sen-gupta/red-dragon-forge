@@ -21,16 +21,16 @@ from interpreter.run import run, run_linked
 from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.catalog import DatasetCatalog
-from jackal.model import Step
+from jackal.dsn import DdName
+from jackal.model import ProgramStep, QualifiedStep
 from jackal.parm import build_parm_region
-from jackal.results import StepDisposition, StepResult
 from jackal.value_parts import resolve
 
 # DDs whose absence is expected in the emulated environment and should be skipped
 # silently rather than raising an error.
 #   STEPLIB / JOBLIB — load-library DDs: real mainframe load libraries are never
 #   present in the local file tree; the emulator finds programs via source_dir instead.
-OPTIONAL_DDS: frozenset[str] = frozenset({"STEPLIB", "JOBLIB"})
+OPTIONAL_DDS: frozenset[DdName] = frozenset({DdName("STEPLIB"), DdName("JOBLIB")})
 
 MAX_STEPS = 500_000
 
@@ -39,24 +39,26 @@ def _file_control(source: str, parser: ProLeapCobolParser) -> list:
     return parser.parse(source.encode("utf-8")).file_control
 
 
-def _overrides(step: Step, catalog: DatasetCatalog) -> dict[str, Path]:
+def _overrides(
+    step: ProgramStep[QualifiedStep], catalog: DatasetCatalog
+) -> dict[str, Path]:
     return {
-        dd.ddname: catalog.allocate(dd).path
+        dd.ddname.text: catalog.allocate(dd).path
         for dd in step.dds
         if not dd.sysout and dd.ddname not in OPTIONAL_DDS
     }
 
 
 def run_cobol_step(
-    step: Step,
+    step: ProgramStep[QualifiedStep],
     source: str,
     catalog: DatasetCatalog,
     bridge_jar: str,
     copybook_dirs: Sequence[Path],
-) -> StepResult:
+) -> int:
     if not bridge_jar:
         raise ValueError(
-            f"PROLEAP_BRIDGE_JAR not set; required to run COBOL step {step.name!r}"
+            f"PROLEAP_BRIDGE_JAR not set; required to run COBOL program {step.pgm.name!r}"
         )
     parser = ProLeapCobolParser(
         runner=RealSubprocessRunner(),
@@ -75,16 +77,11 @@ def run_cobol_step(
     )
     for dd in step.dds:
         catalog.dispose(dd)
-    return StepResult(
-        name=step.name,
-        return_code=read_return_code(vm),
-        ran=True,
-        disposition=StepDisposition.EXECUTED,
-    )
+    return read_return_code(vm)
 
 
 def _run_with_parm(
-    step: Step,
+    step: ProgramStep[QualifiedStep],
     source: str,
     parser: ProLeapCobolParser,
     provider: RealFileIOProvider,
@@ -116,7 +113,7 @@ def _run_without_parm(
     )
 
 
-def _parm_vm(step: Step) -> VMState:
+def _parm_vm(step: ProgramStep[QualifiedStep]) -> VMState:
     """A VM whose entry frame hands the program the PARM area as its first
     argument, which binds the first LINKAGE 01."""
     parm_addr = Address("rgn_parm")

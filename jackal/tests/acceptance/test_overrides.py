@@ -1,10 +1,8 @@
 """Acceptance: COND, PARM and DD overrides on a PROC call."""
 
-from tests.acceptance.markers import EXPANDED, PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_overrides_parse(parse_fixture):
     from jackal.model import Job, ProcCall, ProcStepOverrides
@@ -15,30 +13,36 @@ def test_overrides_parse(parse_fixture):
     assert parse_fixture("overrides/overrides.jcl") == Job(
         "ACCEPT",
         (
-            ProcCall(b.name("S1"), "TWO", parm_for_first_step=literal("X")),
+            ProcCall(b.name("S1"), b.proc("TWO"), parm_for_first_step=literal("X")),
             ProcCall(
                 b.name("S2"),
-                "TWO",
+                b.proc("TWO"),
                 per_step=((p2, ProcStepOverrides(parm=literal("Y"))),),
             ),
             ProcCall(
                 b.name("S3"),
-                "TWO",
+                b.proc("TWO"),
                 parm_for_first_step=literal("X"),
                 per_step=((p2, ProcStepOverrides(parm=literal("Y"))),),
             ),
             ProcCall(
-                b.name("S4"), "TWO", cond_for_every_step=b.cond(b.all_prior(4, "LT"))
+                b.name("S4"),
+                b.proc("TWO"),
+                cond_for_every_step=b.cond(b.all_prior(4, "LT")),
             ),
             ProcCall(
                 b.name("S5"),
-                "TWO",
+                b.proc("TWO"),
                 per_step=((p2, ProcStepOverrides(cond=b.cond(b.all_prior(0, "NE")))),),
             ),
-            ProcCall(b.name("S6"), "TWO", per_step=((p1, ProcStepOverrides(parm=())),)),
+            ProcCall(
+                b.name("S6"),
+                b.proc("TWO"),
+                per_step=((p1, ProcStepOverrides(parm=())),),
+            ),
             ProcCall(
                 b.name("S7"),
-                "TWO",
+                b.proc("TWO"),
                 dds_for_first_step=(b.dataset("IN", "T.NEWIN"),),
                 per_step=(
                     (
@@ -56,7 +60,6 @@ def test_overrides_parse(parse_fixture):
     )
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_overrides_expand(expand_fixture, parse_fixture):
     from jackal.expansion import ExpandedJob

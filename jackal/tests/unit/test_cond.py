@@ -1,61 +1,105 @@
 from tests.covers import NotLanguageFeature, covers
+from tests.model_build import ran
 from jackal.cond import should_bypass
-from jackal.model import Cond, CondOp
-from jackal.results import StepResult
+from jackal.model import (
+    AbendMode,
+    AllPriorSteps,
+    BypassTest,
+    CondOp,
+    QualifiedStep,
+    RcComparison,
+    StepCondition,
+)
+from jackal.results import StepDisposition, StepResult
+
+A, B = ran("A"), ran("B")
 
 
-def _r(name: str, rc: int) -> StepResult:
-    return StepResult(name=name, return_code=rc, ran=True)
+def _r(step: QualifiedStep, rc: int) -> StepResult:
+    return StepResult(step, rc)
+
+
+def _cond(
+    *tests: tuple[int, CondOp, QualifiedStep | AllPriorSteps],
+    mode: AbendMode = AbendMode.NORMAL,
+) -> StepCondition[QualifiedStep]:
+    return StepCondition(
+        tuple(BypassTest(RcComparison(code, op), t) for code, op, t in tests), mode
+    )
+
+
+def _bypass(condition: StepCondition[QualifiedStep], *history: StepResult) -> bool:
+    return should_bypass(condition, (), history)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_no_conditions_never_bypasses():
-    assert should_bypass((), (_r("A", 8),)) is False
+    assert _bypass(_cond(), _r(A, 8)) is False
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_0_ne_bypasses_when_any_prior_failed():
-    # COND=(0,NE): bypass if 0 NE rc, i.e. any prior rc != 0
-    cond = (Cond(code=0, op=CondOp.NE),)
-    assert should_bypass(cond, (_r("A", 0),)) is False
-    assert should_bypass(cond, (_r("A", 0), _r("B", 8))) is True
+def test_a_test_with_no_step_checks_every_prior_step():
+    ne = _cond((0, CondOp.NE, AllPriorSteps()))
+    lt = _cond((4, CondOp.LT, AllPriorSteps()))
+    assert [
+        _bypass(ne, _r(A, 0)),
+        _bypass(ne, _r(A, 0), _r(B, 8)),
+        _bypass(lt, _r(A, 4)),
+        _bypass(lt, _r(A, 8)),
+    ] == [False, True, False, True]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_4_lt_bypasses_when_prior_rc_above_4():
-    # COND=(4,LT): bypass if 4 LT rc, i.e. rc > 4
-    cond = (Cond(code=4, op=CondOp.LT),)
-    assert should_bypass(cond, (_r("A", 4),)) is False
-    assert should_bypass(cond, (_r("A", 8),)) is True
+def test_a_named_step_tests_only_that_step_and_a_step_that_did_not_run_is_false():
+    on_a = _cond((0, CondOp.NE, A))
+    on_z = _cond((0, CondOp.NE, ran("ZZZ")))
+    bypassed_a = StepResult(A, 8, StepDisposition.BYPASSED)
+    assert [
+        _bypass(on_a, _r(A, 0), _r(B, 8)),
+        _bypass(on_a, _r(A, 8), _r(B, 0)),
+        _bypass(on_z, _r(A, 8)),
+        _bypass(on_a, bypassed_a),
+    ] == [False, True, False, False]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_named_step_only_tests_that_step():
-    cond = (Cond(code=0, op=CondOp.NE, step="A"),)
-    assert should_bypass(cond, (_r("A", 0), _r("B", 8))) is False  # A is 0
-    assert should_bypass(cond, (_r("A", 8), _r("B", 0))) is True  # A is 8
+def test_any_true_test_bypasses():
+    both = _cond((4, CondOp.LT, AllPriorSteps()), (8, CondOp.EQ, AllPriorSteps()))
+    assert [_bypass(both, _r(A, 8)), _bypass(both, _r(A, 0))] == [True, False]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_named_step_not_run_is_false():
-    cond = (Cond(code=0, op=CondOp.NE, step="ZZZ"),)
-    assert should_bypass(cond, (_r("A", 8),)) is False  # ZZZ never ran
+def test_all_six_operators_compare_code_to_rc():
+    history = (_r(A, 5),)
+
+    def holds(code: int, op: CondOp) -> bool:
+        return _bypass(_cond((code, op, AllPriorSteps())), *history)
+
+    assert [
+        holds(6, CondOp.GT),
+        holds(6, CondOp.GE),
+        holds(5, CondOp.EQ),
+        holds(4, CondOp.NE),
+        holds(4, CondOp.LT),
+        holds(5, CondOp.LE),
+        holds(4, CondOp.GT),
+    ] == [True, True, True, True, True, True, False]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_multiple_conditions_bypass_if_any():
-    cond = (Cond(code=4, op=CondOp.LT), Cond(code=8, op=CondOp.EQ))
-    assert should_bypass(cond, (_r("A", 8),)) is True  # 8 EQ 8
-    assert should_bypass(cond, (_r("A", 0),)) is False  # neither
+def test_even_reads_as_normal_and_only_always_bypasses_since_nothing_abends():
+    lt = (4, CondOp.LT, AllPriorSteps())
+    assert [
+        _bypass(_cond(lt, mode=AbendMode.EVEN), _r(A, 0)),
+        _bypass(_cond(lt, mode=AbendMode.EVEN), _r(A, 8)),
+        _bypass(_cond(mode=AbendMode.ONLY), _r(A, 0)),
+    ] == [False, True, True]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_all_six_operators():
-    rc = (_r("A", 5),)
-    assert should_bypass((Cond(6, CondOp.GT),), rc) is True  # 6 > 5
-    assert should_bypass((Cond(6, CondOp.GE),), rc) is True
-    assert should_bypass((Cond(5, CondOp.EQ),), rc) is True
-    assert should_bypass((Cond(4, CondOp.NE),), rc) is True
-    assert should_bypass((Cond(4, CondOp.LT),), rc) is True  # 4 < 5
-    assert should_bypass((Cond(5, CondOp.LE),), rc) is True
-    assert should_bypass((Cond(4, CondOp.GT),), rc) is False  # 4 > 5 false
+def test_job_cond_tests_every_prior_step():
+    job_tests = (RcComparison(8, CondOp.LE),)
+    assert [
+        should_bypass(_cond(), job_tests, (_r(A, 4),)),
+        should_bypass(_cond(), job_tests, (_r(A, 12),)),
+    ] == [False, True]

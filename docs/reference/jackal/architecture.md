@@ -19,17 +19,27 @@ cicada or squall; `.importlinter` enforces this.
    qualifiers, IF blocks with their expression as a tree), and per DD its DSN kind, DISP and
    concatenated members. `jackal.jcl.bridge_parser` validates it as the Pydantic models in
    `jackal.jcl.wire`, which build an immutable `Job` (`jackal.model`).
-2. Expand procedures. `JobRunner` calls `jackal.jcl.proc_expand.expand_procs` when it is given
-   proclib directories. It inlines `EXEC PROC=` calls, substitutes symbolic parameters, applies
-   DD overrides and handles nesting. `.prc` files are parsed by the same JAR. The CLI does not
-   pass proclib directories.
+2. Expand. `jackal.expansion.expand_procs(job, library)` returns an `ExpandedJob` or a
+   `JclError` value, before anything runs. It inlines each PROC call found in the `ProcLibrary`
+   (`DirectoryProcLibrary` reads `<dir>/<PROC>.prc` through the same JAR), resolving symbolic
+   parameters in the caller's scope and applying the call's `COND`, `PARM` and DD overrides by
+   the JCL Reference's rules. It then resolves every step reference (in `COND`, referbacks and
+   IF terms) to the `QualifiedStep` it names: the chain of PROC calls that led to a step, plus
+   the step. A reference to no step, to a later step, to a PROC call, or to a DD the step lacks
+   is a `JclError`, as are an override naming no step and a PROC that calls itself. A name used
+   by more than one run of a PROC resolves to the same run, with a logged warning. A call to a
+   PROC in no library is kept as an `UnresolvedProcCall`. `expand_or_fail` raises the error as
+   `ExpansionFailed` for callers that want an exception.
 3. Run steps in order (`jackal.runner.JobRunner`). For each step:
-   - `COND=` from the JOB card and the step is evaluated by `jackal.cond` against the return
-     codes of steps that ran. A true condition bypasses the step.
+   - A step under an IF, or an unresolved PROC call, is refused (`UnsupportedStep`): guards are
+     parsed and attached but not yet evaluated.
+   - `COND=` is evaluated by `jackal.cond` against the return codes of steps that ran; a JOB
+     card's `COND` tests are checked the same way. A true test bypasses the step. jackal records
+     no abends, so `COND=EVEN` reads as no `EVEN` and a `COND=ONLY` step is bypassed.
    - Referbacks (`DSN=*.STEP.DD`) are resolved to the DSN recorded for that earlier step. If
      the referenced step did not run, the referencing step is bypassed.
-   - The step is dispatched. A `PGM=` in the utility table runs the emulated utility.
-     Any other `PGM=` is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
+   - The step is dispatched. A program in the utility table runs the emulated utility.
+     Any other program is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
 4. At job end, surviving temporary datasets are deleted. The result is a `JobResult` holding
    one `StepResult` per step.
 
@@ -54,7 +64,8 @@ red-dragon VM. `PARM=` is passed in as an OS halfword-prefixed parameter region
 | `DISP=(…,DELETE)` | The dataset and its file are removed when the step ends. |
 | `--dataset DSN=path` | Seeds the catalog before the job starts. |
 
-Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`.
+Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`;
+the catalog's one in-place table is `jackal.catalog_stores`.
 
 ## Utilities
 

@@ -21,7 +21,8 @@ from jackal.catalog import DatasetCatalog
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
 from jackal.jcl.parser import parse_jcl
-from jackal.model import DatasetOrg
+from jackal.dsn import DdName
+from jackal.model import DatasetOrg, ProgramRef, ProgramStep
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -29,10 +30,10 @@ def _idcams_sysin_blocks(job) -> list[str]:
     """Every IDCAMS step's SYSIN in-stream text, in job order."""
     blocks: list[str] = []
     for step in job.steps:
-        if step.pgm != "IDCAMS":
+        if not isinstance(step, ProgramStep) or step.pgm != ProgramRef("IDCAMS"):
             continue
         for dd in step.dds:
-            if dd.ddname == "SYSIN" and dd.in_stream:
+            if dd.ddname == DdName("SYSIN") and dd.in_stream:
                 blocks.append("\n".join(dd.in_stream) + "\n")
     return blocks
 

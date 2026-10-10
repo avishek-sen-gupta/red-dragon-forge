@@ -9,6 +9,9 @@ from pathlib import Path
 import lark.exceptions
 import pytest
 
+from jackal.dsn import DdName
+from jackal.model import ProgramRef, ProgramStep
+
 from jackal.idcams.parser_comprehensive import parse_ams
 from jackal.jcl.parser import parse_jcl
 from tests.covers import NotLanguageFeature, covers
@@ -53,11 +56,15 @@ def test_real_idcams_sysin_parses_with_comprehensive_grammar(
     jcl_filename: str, carddemo_home: Path, jcl_bridge_jar: str
 ):
     job = parse_jcl((carddemo_home / "jcl" / jcl_filename).read_text())
-    idcams_steps = [s for s in job.steps if s.pgm == "IDCAMS"]
+    idcams_steps = [
+        s
+        for s in job.steps
+        if isinstance(s, ProgramStep) and s.pgm == ProgramRef("IDCAMS")
+    ]
     assert idcams_steps, f"{jcl_filename} has no IDCAMS steps -- check the list above"
     for step in idcams_steps:
         for dd in step.dds:
-            if dd.ddname == "SYSIN" and dd.in_stream:
+            if dd.ddname == DdName("SYSIN") and dd.in_stream:
                 text = "\n".join(dd.in_stream) + "\n"
                 if _OUT_OF_SCOPE_ABBREVIATION_MARKER in text:
                     # Pre-approved out-of-scope exclusion: keyword
@@ -80,6 +87,6 @@ def test_real_reproc_prc_parses_with_comprehensive_grammar(
     proc = parse_proc((carddemo_home / "proc" / "REPROC.prc").read_text())
     for step in proc.steps:
         for dd in step.dds:
-            if dd.ddname == "SYSIN" and dd.in_stream:
+            if dd.ddname == DdName("SYSIN") and dd.in_stream:
                 text = "\n".join(dd.in_stream) + "\n"
                 parse_ams(text)

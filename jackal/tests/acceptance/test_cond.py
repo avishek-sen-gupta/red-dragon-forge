@@ -1,10 +1,8 @@
 """Acceptance: EXEC and JOB COND."""
 
-from tests.acceptance.markers import PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cond_parses(parse_fixture):
     from jackal.model import CondOp, Job, RcComparison

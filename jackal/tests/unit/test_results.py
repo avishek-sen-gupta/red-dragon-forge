@@ -1,17 +1,15 @@
 from tests.covers import NotLanguageFeature, covers
-from jackal.results import StepResult, StepDisposition, JobResult
+from tests.model_build import ran
+from jackal.results import JobResult, StepDisposition, StepResult
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_stepresult_defaults_to_executed():
-    r = StepResult(name="A", return_code=0, ran=True)
-    assert r.disposition is StepDisposition.EXECUTED
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_stepresult_bypassed_is_explicit():
-    r = StepResult(
-        name="B", return_code=0, ran=False, disposition=StepDisposition.BYPASSED
-    )
-    assert r.disposition is StepDisposition.BYPASSED and r.ran is False
-    JobResult(steps=(r,))  # still composes
+def test_a_step_result_renders_its_step_and_says_whether_it_ran():
+    executed = StepResult(ran("A"), 0)
+    bypassed = StepResult(ran("B"), 0, StepDisposition.BYPASSED)
+    assert [
+        (r.name, r.ran, r.disposition) for r in JobResult((executed, bypassed)).steps
+    ] == [
+        ("A", True, StepDisposition.EXECUTED),
+        ("B", False, StepDisposition.BYPASSED),
+    ]

@@ -1,10 +1,8 @@
 """Acceptance: every DCB form parses, and the job around it is intact."""
 
-from tests.acceptance.markers import PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dcb_forms_parse(parse_fixture):
     from jackal.model import Job

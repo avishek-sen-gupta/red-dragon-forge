@@ -6,10 +6,10 @@ existing parse_jcl — this module adds no new JCL parsing).
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import accumulate, takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeAlias
 
+from cobble.jcl.job_steps import NamedDd, StepView, expanded_steps
 from cobble.knowledge_graph.graph_types import (
     AttrValue,
     EdgeKind,
@@ -17,10 +17,10 @@ from cobble.knowledge_graph.graph_types import (
     GraphNode,
     NodeKind,
 )
-from jackal.dsn import DSN, DirectDSN, InStreamDSN, dsn_key, temp_if_unresolved
+from jackal.dsn import DirectDSN, InStreamDSN
+from jackal.expansion import DirectoryProcLibrary, ProcLibrary, expand_or_fail
 from jackal.jcl.parser import parse_jcl
-from jackal.jcl.proc_expand import expand_procs
-from jackal.model import DD, DispStatus, Job, Step
+from jackal.model import DispStatus, Job
 from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 
 if TYPE_CHECKING:
@@ -48,49 +48,49 @@ def _node(kind: NodeKind, node_id: str, corpus_index: CorpusIndex) -> GraphNode:
     )
 
 
-def _step_id(job: Job, step: Step) -> str:
-    return f"{job.name.upper()}.{step.name.upper()}"
+def _step_id(job_name: str, step: StepView) -> str:
+    return f"{job_name.upper()}.{step.rendered_name.upper()}"
 
 
-def _instream_graph(job: Job, step: Step, dd: DD, corpus_index: CorpusIndex) -> Graph:
+def _instream_graph(step_id: str, named: NamedDd, corpus_index: CorpusIndex) -> Graph:
     """A DD fed by inline content: its own node, scoped to this occurrence."""
     node = _node(
         NodeKind.INSTREAM_DATA,
-        f"{_step_id(job, step)}.{dd.ddname.upper()}",
+        f"{step_id}.{named.rendered_name.upper()}",
         corpus_index,
     )
     edge = GraphEdge(
-        source=_step_id(job, step),
+        source=step_id,
         source_kind=NodeKind.STEP,
         target=node.id,
         target_kind=NodeKind.INSTREAM_DATA,
         kind=EdgeKind.READS,
-        attrs={"ddname": dd.ddname, "text": "\n".join(dd.in_stream)},
+        attrs={"ddname": named.rendered_name, "text": "\n".join(named.dd.in_stream)},
     )
     return ((node,), (edge,))
 
 
-def _tso_edge_attrs(step: Step, run: TsoRun) -> dict[str, AttrValue]:
+def _tso_edge_attrs(step: StepView, run: TsoRun) -> dict[str, AttrValue]:
     """What the edge says about itself: which monitor ran the program, out of
     which DD, and under which DB2 plan. An absent plan is omitted rather than
     empty — RUN without PLAN named none, which is not the same as unknown."""
     return {
-        "monitor": step.pgm.upper(),
+        "monitor": step.program.upper(),
         "ddname": TSO_COMMAND_DD,
         **({"plan": run.plan} if run.plan else {}),
     }
 
 
-def _command_stream_runs(step: Step) -> tuple[TsoRun, ...]:
+def _command_stream_runs(step: StepView) -> tuple[TsoRun, ...]:
     """Every RUN subcommand in the step's command stream, in the order the
     monitor would execute them. Only out of SYSTSIN: a SYSIN alongside it
     belongs to the program the monitor runs, so a RUN subcommand written there
     is that program's data and nothing executes it."""
     return tuple(
         run
-        for dd in step.dds
-        if dd.ddname.upper() == TSO_COMMAND_DD
-        for run in tso_runs(dd.in_stream)
+        for named in step.dds
+        if named.rendered_name.upper() == TSO_COMMAND_DD
+        for run in tso_runs(named.dd.in_stream)
     )
 
 
@@ -107,7 +107,7 @@ def _one_run_per_program(runs: Sequence[TsoRun]) -> tuple[TsoRun, ...]:
     )
 
 
-def _tso_graph(job: Job, step: Step, corpus_index: CorpusIndex) -> Graph:
+def _tso_graph(step_id: str, step: StepView, corpus_index: CorpusIndex) -> Graph:
     """The programs a TSO monitor step runs, named in its own SYSTSIN stream.
 
     Nothing at all for any other step. For a monitor step it is the one place
@@ -116,14 +116,14 @@ def _tso_graph(job: Job, step: Step, corpus_index: CorpusIndex) -> Graph:
     stopping there. The INSTREAM_DATA node the same DD produces carries the
     command text verbatim, but as an opaque string no traversal can follow.
     """
-    if not is_tso_monitor(step.pgm):
+    if not is_tso_monitor(step.program):
         return ((), ())
     runs = _one_run_per_program(_command_stream_runs(step))
     return (
         tuple(_node(NodeKind.PROGRAM, run.program, corpus_index) for run in runs),
         tuple(
             GraphEdge(
-                source=_step_id(job, step),
+                source=step_id,
                 source_kind=NodeKind.STEP,
                 target=run.program,
                 target_kind=NodeKind.PROGRAM,
@@ -136,38 +136,34 @@ def _tso_graph(job: Job, step: Step, corpus_index: CorpusIndex) -> Graph:
 
 
 def _dataset_graph(
-    step_id: str, dd: DD, dsn: DirectDSN, corpus_index: CorpusIndex
+    step_id: str, named: NamedDd, dsn: DirectDSN, corpus_index: CorpusIndex
 ) -> Graph:
-    node = _node(NodeKind.DATASET, dsn_key(dsn).upper(), corpus_index)
+    status = named.dd.disp.status
+    node = _node(NodeKind.DATASET, dsn.dataset_name().upper(), corpus_index)
     edge = GraphEdge(
         source=step_id,
         source_kind=NodeKind.STEP,
         target=node.id,
         target_kind=NodeKind.DATASET,
-        kind=_DISP_TO_EDGE_KIND[dd.disp.status],
-        attrs={"ddname": dd.ddname, "disp": dd.disp.status.value},
+        kind=_DISP_TO_EDGE_KIND[status],
+        attrs={"ddname": named.rendered_name, "disp": status.value},
     )
     return ((node,), (edge,))
 
 
-def _has_dataset_identity(dd: DD, dsn: DSN) -> bool:
-    """Whether this DD names a dataset other jobs can name too.
-
-    SYSOUT does not, and neither does any DSN that is not a resolvable name:
-    TempRef (&&NAME and its one-ampersand spelling), BackwardRef (*.STEP.DD)
-    and DummyDSN all live and die inside a single job.
-    """
-    return not dd.sysout and isinstance(dsn, DirectDSN)
+def _dataset_dd_graph(step_id: str, named: NamedDd, corpus_index: CorpusIndex) -> Graph:
+    match named.dd.dsn:
+        case DirectDSN() as dsn if not named.dd.sysout:
+            return _dataset_graph(step_id, named, dsn, corpus_index)
+        case _:
+            return ((), ())
 
 
-def _dd_graph(job: Job, step: Step, dd: DD, corpus_index: CorpusIndex) -> Graph:
+def _dd_graph(step_id: str, named: NamedDd, corpus_index: CorpusIndex) -> Graph:
     """What one DD contributes — nothing at all, for a DD with no identity."""
-    if isinstance(dd.dsn, InStreamDSN):
-        return _instream_graph(job, step, dd, corpus_index)
-    dsn = temp_if_unresolved(dd.dsn)
-    if _has_dataset_identity(dd, dsn):
-        return _dataset_graph(_step_id(job, step), dd, dsn, corpus_index)
-    return ((), ())
+    if isinstance(named.dd.dsn, InStreamDSN):
+        return _instream_graph(step_id, named, corpus_index)
+    return _dataset_dd_graph(step_id, named, corpus_index)
 
 
 def _nodes_of(graphs: Iterable[Graph]) -> tuple[GraphNode, ...]:
@@ -178,19 +174,17 @@ def _edges_of(graphs: Iterable[Graph]) -> tuple[GraphEdge, ...]:
     return tuple(edge for _nodes, edges in graphs for edge in edges)
 
 
-def _step_graph(
-    job: Job, step: Step, step_proc: Mapping[str, str], corpus_index: CorpusIndex
-) -> Graph:
-    step_node = _node(NodeKind.STEP, _step_id(job, step), corpus_index)
-    program_node = _node(NodeKind.PROGRAM, step.pgm.upper(), corpus_index)
-    proc_name = step_proc.get(step.name.upper())
+def _step_graph(job_name: str, step: StepView, corpus_index: CorpusIndex) -> Graph:
+    step_id = _step_id(job_name, step)
+    step_node = _node(NodeKind.STEP, step_id, corpus_index)
+    program_node = _node(NodeKind.PROGRAM, step.program.upper(), corpus_index)
     runs_step = GraphEdge(
-        source=job.name.upper(),
+        source=job_name.upper(),
         source_kind=NodeKind.JOB,
         target=step_node.id,
         target_kind=NodeKind.STEP,
         kind=EdgeKind.JCL_STEP_RUNS,
-        attrs={"proc": proc_name} if proc_name else {},
+        attrs={"proc": step.procs[0].name.upper()} if step.procs else {},
     )
     runs_program = GraphEdge(
         source=step_node.id,
@@ -199,8 +193,8 @@ def _step_graph(
         target_kind=NodeKind.PROGRAM,
         kind=EdgeKind.JCL_STEP_RUNS,
     )
-    dd_graphs = tuple(_dd_graph(job, step, dd, corpus_index) for dd in step.dds)
-    tso_nodes, tso_edges = _tso_graph(job, step, corpus_index)
+    dd_graphs = tuple(_dd_graph(step_id, named, corpus_index) for named in step.dds)
+    tso_nodes, tso_edges = _tso_graph(step_id, step, corpus_index)
     return (
         (step_node, program_node, *_nodes_of(dd_graphs), *tso_nodes),
         (runs_step, runs_program, *_edges_of(dd_graphs), *tso_edges),
@@ -215,75 +209,14 @@ def _one_per_identity(nodes: Iterable[GraphNode]) -> list[GraphNode]:
 
 
 def _job_to_graph(
-    job: Job, step_proc: Mapping[str, str], corpus_index: CorpusIndex
+    job_name: str, steps: Sequence[StepView], corpus_index: CorpusIndex
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
-    job_node = _node(NodeKind.JOB, job.name.upper(), corpus_index)
-    step_graphs = tuple(
-        _step_graph(job, step, step_proc, corpus_index) for step in job.steps
-    )
+    job_node = _node(NodeKind.JOB, job_name.upper(), corpus_index)
+    step_graphs = tuple(_step_graph(job_name, step, corpus_index) for step in steps)
     return (
         _one_per_identity((job_node, *_nodes_of(step_graphs))),
         list(_edges_of(step_graphs)),
     )
-
-
-def _is_unexpanded(outer_step: Step, expanded: Sequence[Step], at: int) -> bool:
-    """Whether the expanded list carries this outer step through unchanged."""
-    return at < len(expanded) and expanded[at].name.upper() == outer_step.name.upper()
-
-
-def _expansion_of(
-    outer_step: Step, expanded: Sequence[Step], at: int
-) -> tuple[Step, ...]:
-    """The contiguous run of "OUTERNAME.INNERNAME" steps this outer step became.
-
-    Empty when the step was no PROC call at all, and empty as well when nothing
-    at this position carries its name — a PROC that resolved to no steps.
-    """
-    if _is_unexpanded(outer_step, expanded, at):
-        return ()
-    prefix = f"{outer_step.name.upper()}."
-    return tuple(
-        takewhile(lambda step: step.name.upper().startswith(prefix), expanded[at:])
-    )
-
-
-def _consumed(outer_step: Step, expanded: Sequence[Step], at: int) -> int:
-    """How many expanded steps this outer step accounts for: the length of its
-    expansion, the single slot it occupies unchanged, or nothing."""
-    expansion = _expansion_of(outer_step, expanded, at)
-    if expansion:
-        return len(expansion)
-    return 1 if _is_unexpanded(outer_step, expanded, at) else 0
-
-
-def _walk_positions(job: Job, expanded: Sequence[Step]) -> Iterable[int]:
-    """Where each outer step's own share of the expanded list starts."""
-    return accumulate(
-        job.steps, lambda at, step: at + _consumed(step, expanded, at), initial=0
-    )
-
-
-def step_proc_provenance(job: Job, expanded_job: Job) -> dict[str, str]:
-    """Map each expanded step's uppercased name to the PROC name it came
-    from. expand_procs() replaces each outer step, in place, with either
-    itself unchanged or a contiguous run of qualified "OUTERNAME.INNERNAME"
-    inner steps — so a single left-to-right walk of both step lists in
-    lockstep attributes each expanded step to its true originating outer
-    step, rather than to whichever same-named outer step happened to be last
-    (as real CardDemo JCL has — see forge-c53).
-
-    The walk reads position, not name, but an expanded name carries the outer
-    step's name and not which occurrence of it: two same-named outer steps
-    that both call PROCs are still told apart only by where their runs start,
-    so the first one takes both runs.
-    """
-    expanded = expanded_job.steps
-    return {
-        inner.name.upper(): outer.pgm.upper()
-        for outer, at in zip(job.steps, _walk_positions(job, expanded), strict=False)
-        for inner in _expansion_of(outer, expanded, at)
-    }
 
 
 def extract_jcl_graph(
@@ -316,29 +249,30 @@ def extract_jcl_graph(
     represented as nodes at all. A DSN that is one lone unresolved symbol is
     a TempRef in the reading z/OS gives it, and is skipped the same way.
 
-    proclib_dirs (default empty — no-op) resolves and inlines EXEC PROC=
-    calls via expand_procs before building the graph. An expanded step's
-    JOB -> STEP edge carries attrs["proc"] naming the PROC it came from, so
-    it's visibly distinguishable from a step written directly in the job —
-    following the same "opaque discriminant on the edge" precedent as
-    attrs["text"] (SYSIN) and attrs["select_name"] (COBOL_FILE).
+    The job is expanded against proclib_dirs before it is drawn: each PROC
+    call found there is replaced by its steps, and one found in none stays a
+    step whose program is the PROC's name, with the call's override DDs. An
+    expanded step's JOB -> STEP edge carries attrs["proc"] naming the
+    outermost PROC it came from, so it's visibly distinguishable from a step
+    written directly in the job — following the same "opaque discriminant on
+    the edge" precedent as attrs["text"] (SYSIN) and attrs["select_name"]
+    (COBOL_FILE). A job whose references do not resolve raises
+    ExpansionFailed.
     """
-    return jcl_graph_from_job(parse_jcl(jcl_source), corpus_index, proclib_dirs)
+    return jcl_graph_from_job(
+        parse_jcl(jcl_source), corpus_index, DirectoryProcLibrary(tuple(proclib_dirs))
+    )
 
 
 def jcl_graph_from_job(
-    job: Job, corpus_index: CorpusIndex, proclib_dirs: Sequence[Path] = ()
+    job: Job, corpus_index: CorpusIndex, library: ProcLibrary
 ) -> tuple[list[GraphNode], list[GraphEdge]]:
-    """``extract_jcl_graph`` for a member already parsed.
+    """``extract_jcl_graph`` for a member already parsed, expanded against ``library``.
 
     A corpus build parses each member once into a JclStore and reaches the graph
     through here; ``extract_jcl_graph`` above is the entry point for a caller
     holding text rather than a Job. Same graph either way — the split exists only
     so the parse can be hoisted out of the pass.
     """
-    if not proclib_dirs:
-        return _job_to_graph(job, {}, corpus_index)
-    expanded_job = expand_procs(job, proclib_dirs)
-    return _job_to_graph(
-        expanded_job, step_proc_provenance(job, expanded_job), corpus_index
-    )
+    expanded = expand_or_fail(job, library)
+    return _job_to_graph(expanded.name, expanded_steps(expanded), corpus_index)

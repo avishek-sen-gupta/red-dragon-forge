@@ -1,7 +1,8 @@
 from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DirectDSN, TempRef
+from jackal.dsn import DdName, DirectDSN, TempRef
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
-from jackal.value_parts import Literal, Symbol, literal
+from jackal.model import ProcCall, ProcRef, ProgramRef, StepName, StepRef, OwnScope
+from jackal.value_parts import Literal, Symbol, SymbolName, literal
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -9,7 +10,7 @@ def test_real_jar_parses_simple_job(jcl_bridge_jar):
     jcl = "//PIPE JOB 1\n//STEP1 EXEC PGM=UPCASE\n//INDD DD DSN=J.IN,DISP=SHR\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     assert job.name == "PIPE"
-    assert job.steps[0].pgm == "UPCASE"
+    assert job.steps[0].pgm == ProgramRef("UPCASE")
     assert job.steps[0].dds[0].dsn == DirectDSN(literal("J.IN"))
 
 
@@ -17,7 +18,7 @@ def test_real_jar_parses_simple_job(jcl_bridge_jar):
 def test_real_jar_parses_proc_step(jcl_bridge_jar):
     jcl = "//J JOB 1\n//STEP1 EXEC PROC=MYPROC\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    assert job.steps[0].pgm == "MYPROC"
+    assert job.steps[0] == ProcCall(StepName("STEP1"), ProcRef("MYPROC"))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -39,7 +40,7 @@ def test_real_jar_parses_symbolic_dsn(jcl_bridge_jar):
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=IDCAMS\n//D DD DISP=SHR,\n//   DSN=&CNTLLIB(REPROCT)\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     assert job.steps[0].dds[0].dsn == DirectDSN(
-        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+        (Symbol(SymbolName("CNTLLIB")), Literal("(REPROCT)"))
     )
 
 
@@ -50,7 +51,7 @@ def test_real_jar_parses_temp_dsn_as_literal_not_symbol(jcl_bridge_jar):
     # win the lexer tie over SYMBOLIC, or this would misclassify as a Symbol.
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=IEFBR14\n//W DD DSN=&&TEMP,DISP=(NEW,PASS)\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    assert job.steps[0].dds[0].dsn == TempRef("&&TEMP")
+    assert job.steps[0].dds[0].dsn == TempRef("TEMP")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -67,8 +68,7 @@ def test_real_jar_parses_backward_ref(jcl_bridge_jar):
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     dd = job.steps[1].dds[0]
     assert isinstance(dd.dsn, BackwardRef)
-    assert dd.dsn.step == "STEP1"
-    assert dd.dsn.ddname == "WRK"
+    assert dd.dsn == BackwardRef(StepRef(OwnScope(), StepName("STEP1")), DdName("WRK"))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -82,10 +82,10 @@ def test_real_jar_parses_proc_document(jcl_bridge_jar):
     )
     proc = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse_proc(jcl)
     assert proc.name == "REPROC"
-    assert proc.defaults == {}
-    assert [s.name for s in proc.steps] == ["PRC001"]
+    assert proc.defaults == ()
+    assert [s.label for s in proc.steps] == [StepName("PRC001")]
     assert proc.steps[0].dds[1].dsn == DirectDSN(
-        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+        (Symbol(SymbolName("CNTLLIB")), Literal("(REPROCT)"))
     )
 
 
@@ -93,4 +93,6 @@ def test_real_jar_parses_proc_document(jcl_bridge_jar):
 def test_real_jar_parses_exec_proc_parm_override(jcl_bridge_jar):
     jcl = "//J JOB 1\n//STEP1 EXEC PROC=REPROC,CNTLLIB=AWS.M2.CARDDEMO.CNTL\n"
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    assert job.steps[0].proc_parms == {"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")}
+    assert job.steps[0].symbol_overrides == (
+        (SymbolName("CNTLLIB"), literal("AWS.M2.CARDDEMO.CNTL")),
+    )

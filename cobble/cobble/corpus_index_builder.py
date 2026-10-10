@@ -23,30 +23,36 @@ from itertools import chain
 from pathlib import Path
 from types import MappingProxyType
 
-from tqdm import tqdm
-
 from cics.csd_parse import CsdParseError, parse_csd, parse_csd_files
 from cobble.corpus_config import CorpusConfig
 from cobble.corpus_index import CorpusIndex
+from cobble.jcl.job_steps import StepView, expanded_steps, written_steps
+from cobble.matching_files import matching_files
 from cobol_asg.source_text import decode_source
 from jackal.dsn import InStreamDSN
+from jackal.expansion import (
+    DirectoryProcLibrary,
+    ExpansionFailed,
+    ProcLibrary,
+    expand_or_fail,
+)
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
-from jackal.jcl.proc_expand import ProcExpansionError, expand_procs
-from cobble.jcl.jcl_graph import step_proc_provenance
-from jackal.model import Job, Step
-from cobble.matching_files import matching_files
+from jackal.model import Job
+from tqdm import tqdm
 
 # How the index turns a member's path into a Job: parse it now, or take it from a
 # store that already has. Named because both halves of a corpus build need the
 # same members and the second must not pay for them again.
 ReadJob = Callable[[Path], Job]
 
+# How the index finds a PROC: the configured proclib directories, read through
+# the bridge, unless a caller hands in another library.
+Libraries = Callable[[Sequence[Path]], ProcLibrary]
+
 logger = logging.getLogger(__name__)
 
 _Pair = tuple[str, Path]
-
-_NO_PROVENANCE: Mapping[str, str] = MappingProxyType({})
 
 
 def _first_wins(pairs: Iterable[_Pair]) -> Mapping[str, Path]:
@@ -91,67 +97,55 @@ def _proc_files(name: str, proclib_dirs: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(candidate for candidate in candidates if candidate.is_file())
 
 
+def _directory_library(proclib_dirs: Sequence[Path]) -> ProcLibrary:
+    return DirectoryProcLibrary(tuple(proclib_dirs))
+
+
 @dataclass(frozen=True)
 class _Expansion:
-    """A job with its PROCs inlined, or the unexpanded job and why not."""
+    """A job's steps with its PROCs inlined, or its steps as written and why not."""
 
-    job: Job
-    proc_of_step: Mapping[str, str] = _NO_PROVENANCE
+    steps: tuple[StepView, ...]
     failures: tuple[str, ...] = ()
 
 
-def _expand(job: Job, path: Path, proclib_dirs: Sequence[Path]) -> _Expansion:
+def _expand(job: Job, path: Path, library: ProcLibrary) -> _Expansion:
     """Inline the job's PROC calls, or report why not and carry on.
 
-    PROC resolution fails on corpus shape the same way parsing does — an
-    unbound symbol, a circular reference, a .prc that is not valid UTF-8, a
-    .prc the grammar rejects. This used to run outside the caller's
-    try/except, so ONE such member aborted the entire index build and every
-    member after it was never indexed at all.
-
-    The outer job itself parsed, so on failure its own steps stay indexed
-    unexpanded: those are exactly what the JCL states. Only the PROC's inner
-    steps are lost, and they are lost from the graph too — the JCL extractor
-    expands through this same function and reports the same member.
+    Expansion fails on corpus shape the same way parsing does — a reference
+    that resolves to no step, a circular PROC, a .prc that is not valid UTF-8,
+    a .prc the grammar rejects. One such member must not abort the index
+    build, so the failure is reported and the job's own steps, exactly what
+    the JCL states, stay indexed; only the PROCs' inner steps are lost, and
+    they are lost from the graph too.
 
     Narrow on purpose: anything outside this handler is a bug in cobble and must
     surface rather than be filed as a corpus problem and skipped.
     """
-    if not proclib_dirs:
-        return _Expansion(job=job)
     try:
-        expanded_job = expand_procs(job, proclib_dirs)
-    except (ProcExpansionError, JclParseError, UnicodeDecodeError, OSError) as exc:
+        expanded = expand_or_fail(job, library)
+    except (ExpansionFailed, JclParseError, UnicodeDecodeError, OSError) as exc:
         logger.warning(
             "CorpusIndex: JCL %s failed to expand its PROCs: %s", path.name, exc
         )
-        return _Expansion(job=job, failures=(f"index JCL {path.name}: {exc}",))
-    return _Expansion(
-        job=expanded_job, proc_of_step=step_proc_provenance(job, expanded_job)
-    )
+        return _Expansion(written_steps(job), (f"index JCL {path.name}: {exc}",))
+    return _Expansion(expanded_steps(expanded))
 
 
-def _step_file(
-    step: Step,
-    proc_of_step: Mapping[str, str],
-    proclib_dirs: Sequence[Path],
-    path: Path,
-) -> Path:
+def _step_file(step: StepView, proclib_dirs: Sequence[Path], path: Path) -> Path:
     """The file a step is written in: its PROC's .prc, else the JCL itself."""
-    proc_name = proc_of_step.get(step.name.upper(), "")
-    if not proc_name:
-        return path
-    return next(iter(_proc_files(proc_name, proclib_dirs)), path)
+    procs = tuple(_proc_files(proc.name, proclib_dirs) for proc in step.procs)
+    return next(iter(chain.from_iterable(procs)), path)
 
 
-def _instream_pairs(step_id: str, step: Step, path: Path) -> tuple[_Pair, ...]:
+def _instream_pairs(step_id: str, step: StepView, path: Path) -> tuple[_Pair, ...]:
     """Instream content is literal text in the JCL source itself, even when the
     step is proc-expanded — a PROC cannot carry DD * content of its own, only DD
     overrides."""
     return tuple(
-        (f"{step_id}.{dd.ddname.upper()}", path)
-        for dd in step.dds
-        if isinstance(dd.dsn, InStreamDSN)
+        (f"{step_id}.{named.rendered_name.upper()}", path)
+        for named in step.dds
+        if isinstance(named.dd.dsn, InStreamDSN)
     )
 
 
@@ -165,18 +159,19 @@ class _JclEntries:
     failures: tuple[str, ...] = ()
 
 
-def _entries_for(job: Job, path: Path, proclib_dirs: Sequence[Path]) -> _JclEntries:
+def _entries_for(
+    job: Job, path: Path, proclib_dirs: Sequence[Path], library: ProcLibrary
+) -> _JclEntries:
     """One parsed job's jobs, steps and instream data, keyed as the graph keys them."""
     job_name = job.name.upper()
-    expansion = _expand(job, path, proclib_dirs)
+    expansion = _expand(job, path, library)
     steps = tuple(
-        (f"{job_name}.{step.name.upper()}", step) for step in expansion.job.steps
+        (f"{job_name}.{step.rendered_name.upper()}", step) for step in expansion.steps
     )
     return _JclEntries(
         jobs=((job_name, path),),
         steps=tuple(
-            (step_id, _step_file(step, expansion.proc_of_step, proclib_dirs, path))
-            for step_id, step in steps
+            (step_id, _step_file(step, proclib_dirs, path)) for step_id, step in steps
         ),
         instream=tuple(
             chain.from_iterable(
@@ -193,7 +188,7 @@ def _read_member(path: Path) -> Job:
 
 
 def _index_jcl_file(
-    path: Path, proclib_dirs: Sequence[Path], read_job: ReadJob
+    path: Path, proclib_dirs: Sequence[Path], read_job: ReadJob, library: ProcLibrary
 ) -> _JclEntries:
     """Index one JCL member, reporting a member cobble cannot read rather than
     raising.
@@ -207,10 +202,12 @@ def _index_jcl_file(
     except (JclParseError, OSError) as exc:
         logger.warning("CorpusIndex: JCL %s failed to parse: %s", path.name, exc)
         return _JclEntries(failures=(f"index JCL {path.name}: {exc}",))
-    return _entries_for(job, path, proclib_dirs)
+    return _entries_for(job, path, proclib_dirs, library)
 
 
-def _index_jcl(config: CorpusConfig, read_job: ReadJob) -> tuple[_JclEntries, ...]:
+def _index_jcl(
+    config: CorpusConfig, read_job: ReadJob, library: ProcLibrary
+) -> tuple[_JclEntries, ...]:
     """Every JCL member, with a progress bar.
 
     The bar matters here more than anywhere else in the run: with the default
@@ -223,7 +220,7 @@ def _index_jcl(config: CorpusConfig, read_job: ReadJob) -> tuple[_JclEntries, ..
     parsed every member in parallel, so the bar there tracks deserialization.
     """
     return tuple(
-        _index_jcl_file(path, config.proclib_dirs, read_job)
+        _index_jcl_file(path, config.proclib_dirs, read_job, library)
         for path in tqdm(
             matching_files(config.jcl_dir, config.jcl_globs),
             desc="index JCL",
@@ -258,7 +255,9 @@ def _index_csd_file(csd_file: Path) -> _CsdEntries:
 
 
 def build_corpus_index(
-    config: CorpusConfig, read_job: ReadJob = _read_member
+    config: CorpusConfig,
+    read_job: ReadJob = _read_member,
+    libraries: Libraries = _directory_library,
 ) -> CorpusIndex:
     """Read the corpus once and return the index every extractor resolves against.
 
@@ -274,7 +273,7 @@ def build_corpus_index(
     today (see BmsConfig), so BMS_MAP resolution stays UNRESOLVED until that is
     threaded through too.
     """
-    jcl = _index_jcl(config, read_job)
+    jcl = _index_jcl(config, read_job, libraries(config.proclib_dirs))
     csd = tuple(map(_index_csd_file, config.csd_files))
     return CorpusIndex(
         programs=_first_wins(_program_pairs(config)),

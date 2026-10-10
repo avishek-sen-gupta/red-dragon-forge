@@ -2,11 +2,9 @@
 
 from pathlib import Path
 
-from tests.acceptance.markers import EXPANDED
 from tests.covers import NotLanguageFeature, covers
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_nested_procs_expand(expand_fixture):
     from jackal.expansion import ExpandedJob
@@ -14,10 +12,10 @@ def test_nested_procs_expand(expand_fixture):
     from jackal.value_parts import literal
     from tests.acceptance import build as b
 
-    s1 = ProcCall(b.name("S1"), "OUTER")
+    s1 = ProcCall(b.name("S1"), b.proc("OUTER"))
     p1 = ProcCall(
         b.name("P1"),
-        "INNER",
+        b.proc("INNER"),
         per_step=((b.name("Q1"), ProcStepOverrides(parm=literal("SET"))),),
     )
     assert expand_fixture("nesting/nesting.jcl") == ExpandedJob(
@@ -29,7 +27,6 @@ def test_nested_procs_expand(expand_fixture):
     )
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_fifteen_levels_expand(tmp_path: Path, jcl_bridge_jar: str):
     from jackal.expansion import DirectoryProcLibrary, ExpandedJob, expand_procs
@@ -43,8 +40,8 @@ def test_fifteen_levels_expand(tmp_path: Path, jcl_bridge_jar: str):
         )
     (tmp_path / "L15.prc").write_text("//L15      PROC\n//DEEP     EXEC PGM=PGMD\n")
     job = parse_jcl("//ACCEPT   JOB (A),'ACCEPT',CLASS=A\n//S1       EXEC L1\n")
-    calls = (ProcCall(b.name("S1"), "L1"),) + tuple(
-        ProcCall(b.name(f"C{level}"), f"L{level + 1}") for level in range(1, 15)
+    calls = (ProcCall(b.name("S1"), b.proc("L1")),) + tuple(
+        ProcCall(b.name(f"C{level}"), b.proc(f"L{level + 1}")) for level in range(1, 15)
     )
     assert expand_procs(job, DirectoryProcLibrary((tmp_path,))) == ExpandedJob(
         "ACCEPT", (b.qualified(calls, b.pgm("DEEP", "PGMD")),)

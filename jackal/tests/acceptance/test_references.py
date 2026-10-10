@@ -1,10 +1,8 @@
 """Acceptance: how references resolve in each scope."""
 
-from tests.acceptance.markers import EXPANDED
 from tests.covers import NotLanguageFeature, covers
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_reference_inside_proc_expands(expand_fixture, parse_fixture):
     from jackal.expansion import ExpandedJob
@@ -39,3 +37,15 @@ def test_reference_inside_proc_expands(expand_fixture, parse_fixture):
     assert expand_fixture("refs/refs.jcl") == ExpandedJob(
         "ACCEPT", (s0, first_p1, first_p2, s2, second_p1, second_p2)
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_name_reused_across_runs_of_a_proc_is_logged(expand_fixture, caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="jackal.expansion"):
+        expand_fixture("refs/refs.jcl")
+    assert [r.getMessage() for r in caplog.records] == [
+        "S3.P2 names P1, which more than one run of PROC TWO has; "
+        "resolved to this run (blueprint D6)"
+    ]

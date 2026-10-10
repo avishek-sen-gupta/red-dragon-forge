@@ -3,9 +3,9 @@
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DirectDSN
+from jackal.dsn import DdName, DirectDSN
 from jackal.jcl.parser import parse_jcl
-from jackal.model import DispNormal, DispStatus
+from jackal.model import DispAbnormal, DispNormal, DispStatus, ProgramRef, StepName
 from jackal.value_parts import literal
 
 
@@ -28,13 +28,13 @@ JCL = """//PIPE JOB 'demo'
 def test_parse_job_steps_and_dds():
     job = parse_jcl(JCL)
     assert job.name == "PIPE"
-    assert [s.name for s in job.steps] == ["STEP1", "STEP2"]
-    assert [s.pgm for s in job.steps] == ["UPCASE", "STARRER"]
+    assert [s.label for s in job.steps] == [StepName("STEP1"), StepName("STEP2")]
+    assert [s.pgm for s in job.steps] == [ProgramRef("UPCASE"), ProgramRef("STARRER")]
     s1 = job.steps[0]
-    assert [d.ddname for d in s1.dds] == ["INDD", "WORKDD"]
+    assert [d.ddname for d in s1.dds] == [DdName("INDD"), DdName("WORKDD")]
     assert s1.dds[1].disp.status is DispStatus.NEW
     assert s1.dds[1].disp.normal is DispNormal.PASS
-    assert s1.dds[1].disp.abnormal is DispNormal.DELETE
+    assert s1.dds[1].disp.abnormal is DispAbnormal.DELETE
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -43,7 +43,7 @@ def test_disp_shr_shorthand_defaults_keep():
     indd = job.steps[0].dds[0]
     assert indd.disp.status is DispStatus.SHR
     assert indd.disp.normal is DispNormal.KEEP
-    assert indd.disp.abnormal is DispNormal.KEEP
+    assert indd.disp.abnormal is DispAbnormal.KEEP
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -60,7 +60,7 @@ def test_dd_star_instream_captured():
         "   DELETE A.B CLUSTER\n   DEFINE CLUSTER (NAME(A.B))\n/*\n"
     )
     dd = parse_jcl(jcl).steps[0].dds[0]
-    assert dd.ddname == "SYSIN"
+    assert dd.ddname == DdName("SYSIN")
     assert dd.in_stream == ("   DELETE A.B CLUSTER", "   DEFINE CLUSTER (NAME(A.B))")
 
 
@@ -78,7 +78,7 @@ def test_dd_star_instream_data_containing_slash_slash_mid_line():
         "//S2 EXEC PGM=BAR\n"
     )
     job = parse_jcl(jcl)
-    assert [s.name for s in job.steps] == ["S", "S2"]
+    assert [s.label for s in job.steps] == [StepName("S"), StepName("S2")]
     dd = job.steps[0].dds[0]
     assert dd.in_stream == ("HELLO //WORLD", "MORE DATA /* not a real terminator")
 
@@ -104,7 +104,7 @@ def test_disp_omitted_trailing_positional():
     disp = parse_jcl(jcl).steps[0].dds[0].disp
     assert disp.status is DispStatus.NEW
     assert disp.normal is DispNormal.CATLG
-    assert disp.abnormal is DispNormal.CATLG
+    assert disp.abnormal is DispAbnormal.CATLG
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -124,4 +124,4 @@ def test_dd_without_disp_defaults_new_delete_delete():
     disp = parse_jcl(jcl).steps[0].dds[0].disp
     assert disp.status is DispStatus.NEW
     assert disp.normal is DispNormal.DELETE
-    assert disp.abnormal is DispNormal.DELETE
+    assert disp.abnormal is DispAbnormal.DELETE

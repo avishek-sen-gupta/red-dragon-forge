@@ -5,7 +5,7 @@ import pytest
 from tests.covers import NotLanguageFeature, covers
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
-from jackal.model import Step
+from tests.model_build import program
 
 _PGM = """\
        IDENTIFICATION DIVISION.
@@ -24,6 +24,4 @@ def _require_bridge(bridge_jar):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cobol_step_returns_real_return_code(tmp_path: Path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    step = Step(name="S", pgm="SETRC", dds=())
-    res = run_cobol_step(step, _PGM, cat, bridge_jar, [])
-    assert res.return_code == 8 and res.ran is True
+    assert run_cobol_step(program("S", "SETRC"), _PGM, cat, bridge_jar, []) == 8
