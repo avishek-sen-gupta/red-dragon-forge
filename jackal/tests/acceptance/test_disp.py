@@ -6,6 +6,7 @@ from tests.covers import NotLanguageFeature, covers
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_disp_parses(parse_fixture):
     from jackal.model import Job
+    from jackal.model import NotCoded
     from tests.acceptance import build as b
 
     d = b.disp
@@ -25,7 +26,7 @@ def test_disp_parses(parse_fixture):
                     b.dataset("G", "T.G", d("NEW", "PASS", "DELETE")),
                     b.dataset("H", "T.H", d("OLD", "PASS", "KEEP")),
                     b.dataset("I", "T.I", d("OLD", "DELETE", "KEEP")),
-                    b.dataset("J", "T.J", d("NEW", "DELETE", "DELETE")),
+                    b.dataset("J", "T.J", NotCoded()),
                     b.dataset("K", "T.K", d("NEW", "KEEP", "UNCATLG")),
                 ),
             ),

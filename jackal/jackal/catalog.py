@@ -75,9 +75,11 @@ class DatasetCatalog:
     def allocate(self, dd: DD[StepReference]) -> Dataset:
         match dd.dsn:
             case TempRef(name=name):
-                return self._allocate_temp(name, dd.disp.status)
+                return self._allocate_temp(name, dd.disposition().status)
             case _:
-                return self._allocate_direct(dd.dsn.dataset_name(), dd.disp.status)
+                return self._allocate_direct(
+                    dd.dsn.dataset_name(), dd.disposition().status
+                )
 
     def _work_path(self, name: str) -> Path:
         return self._workdir / name.replace(".", "_")
@@ -152,7 +154,7 @@ class DatasetCatalog:
         return True
 
     def dispose(self, dd: DD[StepReference]) -> None:
-        if dd.disp.normal is DispNormal.DELETE:
+        if dd.disposition().normal is DispNormal.DELETE:
             self._delete(dd.dsn)
 
     def _delete(self, dsn: DSN[StepReference]) -> None:

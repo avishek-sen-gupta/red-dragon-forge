@@ -55,10 +55,11 @@ public class ParseFixesTest {
         assertEquals(2, steps(job));
         assertEquals(
                 "[{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"IN\",\"dsn\":{\"kind\":\"name\","
-                        + "\"value\":[{\"kind\":\"literal\",\"text\":\"T.X\"}]},\"disp\":[],"
+                        + "\"value\":[{\"kind\":\"literal\",\"text\":\"T.X\"}]},\"disp\":[],\"nullified\":[],"
                         + "\"in_stream\":[],\"sysout\":false,\"concatenated\":[]}},"
                         + "{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"OUT\",\"dsn\":{\"kind\":\"none\"},"
-                        + "\"disp\":[],\"in_stream\":[],\"sysout\":false,\"concatenated\":[]}}]",
+                        + "\"disp\":[],\"nullified\":[\"disp\",\"dsn\"],\"in_stream\":[],\"sysout\":false,"
+                        + "\"concatenated\":[]}}]",
                 job.getAsJsonArray("statements").get(0).getAsJsonObject()
                         .getAsJsonArray("dd_overrides").toString());
     }

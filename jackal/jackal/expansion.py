@@ -27,6 +27,8 @@ from jackal.model import (
     Job,
     JobStatement,
     Negated,
+    NoDSN,
+    NotCoded,
     NotOverridden,
     OwnScope,
     ProcCall,
@@ -162,9 +164,19 @@ def _merged(
     by_name = {dd.ddname: dd for dd in overrides}
     own_names = frozenset(dd.ddname for dd in own)
     return (
-        *(by_name.get(dd.ddname, dd) for dd in own),
-        *(dd for dd in overrides if dd.ddname not in own_names),
+        *(_overridden(dd, by_name) for dd in own),
+        *(_added(dd) for dd in overrides if dd.ddname not in own_names),
     )
+
+
+def _overridden(
+    dd: DD[StepRef], overrides: Mapping[DdName, DD[StepRef]]
+) -> DD[StepRef]:
+    return dd.overridden_by(overrides[dd.ddname]) if dd.ddname in overrides else dd
+
+
+def _added(dd: DD[StepRef]) -> DD[StepRef]:
+    return DD[StepRef](dd.ddname, NoDSN(), NotCoded()).overridden_by(dd)
 
 
 @dataclass(frozen=True)

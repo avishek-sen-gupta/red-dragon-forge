@@ -5,9 +5,11 @@ from jackal.jcl.parser import parse_jcl
 from jackal.model import (
     DdName,
     DirectDSN,
+    Disp,
     DispAbnormal,
     DispNormal,
     DispStatus,
+    NotCoded,
     ProgramRef,
     StepName,
 )
@@ -127,7 +129,8 @@ def test_dd_without_disp_defaults_new_delete_delete():
     """No DISP= at all takes the same positional defaults: the data set is
     created by this step, so it is deleted at the end of it."""
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B\n"
-    disp = parse_jcl(jcl).steps[0].dds[0].disp
-    assert disp.status is DispStatus.NEW
-    assert disp.normal is DispNormal.DELETE
-    assert disp.abnormal is DispAbnormal.DELETE
+    dd = parse_jcl(jcl).steps[0].dds[0]
+    assert (dd.disp, dd.disposition()) == (
+        NotCoded(),
+        Disp(DispStatus.NEW, DispNormal.DELETE, DispAbnormal.DELETE),
+    )

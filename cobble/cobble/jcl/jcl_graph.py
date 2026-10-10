@@ -137,7 +137,7 @@ def _tso_graph(step_id: str, step: StepView, corpus_index: CorpusIndex) -> Graph
 def _dataset_graph(
     step_id: str, named: NamedDd, dsn: DirectDSN, corpus_index: CorpusIndex
 ) -> Graph:
-    status = named.dd.disp.status
+    status = named.dd.disposition().status
     node = _node(NodeKind.DATASET, dsn.dataset_name().upper(), corpus_index)
     edge = GraphEdge(
         source=step_id,

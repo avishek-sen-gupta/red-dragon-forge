@@ -5,7 +5,7 @@ from tests.covers import NotLanguageFeature, covers
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_concatenation_parses(parse_fixture):
-    from jackal.model import ConcatMember, DummyDSN, InStreamDSN, Job
+    from jackal.model import ConcatMember, DummyDSN, InStreamDSN, Job, NotCoded
     from tests.acceptance import build as b
 
     assert parse_fixture("concat/concat.jcl") == Job(
@@ -21,8 +21,8 @@ def test_concatenation_parses(parse_fixture):
                         "MIXED",
                         "T.F",
                         (
-                            ConcatMember(InStreamDSN(), b.DEFAULT_DISP, (" CARD",)),
-                            ConcatMember(DummyDSN(), b.DEFAULT_DISP),
+                            ConcatMember(InStreamDSN(), NotCoded(), (" CARD",)),
+                            ConcatMember(DummyDSN(), NotCoded()),
                         ),
                     ),
                     b.dataset("LAST", "T.G"),

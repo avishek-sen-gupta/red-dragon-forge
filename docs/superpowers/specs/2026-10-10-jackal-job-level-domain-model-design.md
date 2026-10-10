@@ -638,7 +638,7 @@ an abnormal disposition).
 | `DISP=SHR` | `(SHR, KEEP, KEEP)` |
 | `DISP=(,PASS)` | `(NEW, PASS, DELETE)` |
 | `DISP=(OLD,UNCATLG)` | `(OLD, UNCATLG, UNCATLG)` |
-| no `DISP=` | `(NEW, DELETE, DELETE)` |
+| no `DISP=` | `NotCoded`, whose disposition is `(NEW, DELETE, DELETE)` |
 
 ### 4.5 DSN and DD
 
@@ -648,19 +648,25 @@ class BackwardRef[R: Stage]:
     step: R
     dd: DdCoordinate
 
-type DSN[R: Stage] = DirectDSN | TempRef | BackwardRef[R] | InStreamDSN | DummyDSN | NoDSN
+type DSN[R: Stage] = (
+    DirectDSN | TempRef | BackwardRef[R] | InStreamDSN | DummyDSN | NoDSN | NullifiedDSN
+)
+
+@dataclass(frozen=True)
+class NotCoded:
+    def disposition(self) -> Disp: ...
 
 @dataclass(frozen=True)
 class ConcatMember[R: Stage]:
     dsn: DSN[R]
-    disp: Disp
+    disp: Disp | NotCoded
     in_stream: tuple[str, ...] = ()
 
 @dataclass(frozen=True)
 class DD[R: Stage]:
     ddname: DdName
     dsn: DSN[R]
-    disp: Disp
+    disp: Disp | NotCoded
     in_stream: tuple[str, ...] = ()
     sysout: bool = False
     concatenated: tuple[ConcatMember[R], ...] = ()
@@ -668,6 +674,18 @@ class DD[R: Stage]:
 
 The other `DSN` variants are unchanged. `concatenated` is owned by `2cy.3`; the allocator needs
 only this shape. cobble reads `in_stream` and `sysout` today, so they stay.
+
+`NotCoded` records that no `DISP=` was written; `disposition()` gives the default for readers that
+need one. It lets an override DD merge with the PROC's DD per parameter (JCL Reference pp. 28–29):
+
+- A parameter the override does not write keeps the PROC's value: no DSN (`NoDSN`), no DISP
+  (`NotCoded`), each concatenation member left blank.
+- A parameter written with no value nullifies it: `DISP=` is the default `Disp`; `DSN=` is
+  `NullifiedDSN`, which the merge turns into `NoDSN`. `NullifiedDSN` appears only in a parsed
+  override; on any other DD, `DSN=` reads as `NoDSN`.
+- `DUMMY` nullifies everything else. `SYSOUT`, a DSN or `*` nullifies a PROC's `DUMMY`.
+- `SYSOUT` and `DISP` exclude each other: writing one nullifies the PROC's other.
+- Concatenation members merge by position; extra members on either side are kept.
 
 A referback is a reference to a step plus a DD on it. Parsed, its DD is always `UnresolvedDd`: it is
 only a name until expansion looks at the step. Expanded, it is resolved only when its step reference
@@ -683,6 +701,8 @@ entity was missing.
 | `InStreamDSN` | `//SYSIN DD *` followed by cards |
 | `DummyDSN` | `//IN DD DUMMY`, `DSN=NULLFILE` |
 | `NoDSN` | `//REPORT DD SYSOUT=*` (with `sysout=True`) |
+| `NullifiedDSN` | `//P1.IN DD DSN=,DISP=OLD`, removing the PROC's DSN |
+| `NotCoded` | the DISP of `//IN DD DSN=A.DATA` |
 | `DD` | one `//ddname DD …` statement, with any concatenation |
 | `ConcatMember` | each unnamed DD after a named one: `//IN DD DSN=A.DATA,DISP=SHR` then `//   DD DSN=B.DATA,DISP=SHR` |
 

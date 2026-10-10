@@ -18,6 +18,7 @@ from jackal.model import (
     DummyDSN,
     InStreamDSN,
     NoDSN,
+    NotCoded,
     OwnScope,
     ProcCall,
     ProcRef,
@@ -71,7 +72,7 @@ OLD = disp("OLD", "KEEP", "KEEP")
 DEFAULT_DISP = disp("NEW", "DELETE", "DELETE")
 
 
-def dataset(ddname: str, dsn: str, d: Disp = SHR) -> DD:
+def dataset(ddname: str, dsn: str, d: Disp | NotCoded = SHR) -> DD:
     return DD(DdName(ddname), DirectDSN(literal(dsn)), d)
 
 
@@ -80,15 +81,15 @@ def temp(ddname: str, temp_name: str, d: Disp) -> DD:
 
 
 def in_stream(ddname: str, lines: tuple[str, ...]) -> DD:
-    return DD(DdName(ddname), InStreamDSN(), DEFAULT_DISP, in_stream=lines)
+    return DD(DdName(ddname), InStreamDSN(), NotCoded(), in_stream=lines)
 
 
 def dummy(ddname: str) -> DD:
-    return DD(DdName(ddname), DummyDSN(), DEFAULT_DISP)
+    return DD(DdName(ddname), DummyDSN(), NotCoded())
 
 
 def sysout(ddname: str) -> DD:
-    return DD(DdName(ddname), NoDSN(), DEFAULT_DISP, sysout=True)
+    return DD(DdName(ddname), NoDSN(), NotCoded(), sysout=True)
 
 
 def backref(ddname: str, step: StepRef, target_dd: str, d: Disp = SHR) -> DD:

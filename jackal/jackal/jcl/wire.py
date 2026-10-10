@@ -1,13 +1,16 @@
 """The JCL bridge's JSON contract as Pydantic models, each building its part of the parsed job model."""
 
 from collections.abc import Sequence
+from enum import Enum
 from itertools import accumulate
 from typing import Annotated, Literal
 
 from jackal.model import (
+    DD,
     DSN,
     AbendMode,
     BackwardRef,
+    ConcatMember,
     CondOp,
     DdName,
     DirectDSN,
@@ -18,6 +21,8 @@ from jackal.model import (
     DummyDSN,
     InStreamDSN,
     NoDSN,
+    NotCoded,
+    NullifiedDSN,
     StepRef,
     TempRef,
 )
@@ -203,14 +208,43 @@ Dsn = Annotated[
 ]
 
 
+class Nullified(Enum):
+    DSN = "dsn"
+    DISP = "disp"
+
+
+def _disp(words: tuple[str, ...]) -> Disp | NotCoded:
+    return disp_from_words(words) if words else NotCoded()
+
+
+def _override_disp(
+    words: tuple[str, ...], nullified: tuple[Nullified, ...]
+) -> Disp | NotCoded:
+    if Nullified.DISP in nullified:
+        return NotCoded().disposition()
+    return _disp(words)
+
+
+def _override_dsn(dsn: Dsn, nullified: tuple[Nullified, ...]) -> DSN[StepRef]:
+    if Nullified.DSN in nullified:
+        return NullifiedDSN()
+    return dsn.model()
+
+
 class Member(Wire):
     dsn: Dsn
     disp: tuple[str, ...]
+    nullified: tuple[Nullified, ...]
     in_stream: tuple[str, ...]
 
-    def model(self) -> model.ConcatMember[StepRef]:
-        return model.ConcatMember(
-            self.dsn.model(), disp_from_words(self.disp), self.in_stream
+    def model(self) -> ConcatMember[StepRef]:
+        return ConcatMember(self.dsn.model(), _disp(self.disp), self.in_stream)
+
+    def override(self) -> ConcatMember[StepRef]:
+        return ConcatMember(
+            _override_dsn(self.dsn, self.nullified),
+            _override_disp(self.disp, self.nullified),
+            self.in_stream,
         )
 
 
@@ -218,18 +252,29 @@ class Dd(Wire):
     ddname: str
     dsn: Dsn
     disp: tuple[str, ...]
+    nullified: tuple[Nullified, ...]
     in_stream: tuple[str, ...]
     sysout: bool
     concatenated: tuple[Member, ...]
 
-    def model(self) -> model.DD[StepRef]:
-        return model.DD(
+    def model(self) -> DD[StepRef]:
+        return DD(
             DdName(self.ddname),
             self.dsn.model(),
-            disp_from_words(self.disp),
+            _disp(self.disp),
             self.in_stream,
             self.sysout,
             tuple(m.model() for m in self.concatenated),
+        )
+
+    def override(self) -> DD[StepRef]:
+        return DD(
+            DdName(self.ddname),
+            _override_dsn(self.dsn, self.nullified),
+            _override_disp(self.disp, self.nullified),
+            self.in_stream,
+            self.sysout,
+            tuple(m.override() for m in self.concatenated),
         )
 
 
@@ -391,7 +436,7 @@ class ProcCall(Wire):
 
     def _dds_for(self, procstep: str) -> tuple[model.DD[StepRef], ...]:
         return tuple(
-            o.dd.model()
+            o.dd.override()
             for o, target in zip(self.dd_overrides, self._dd_targets(), strict=True)
             if target == procstep
         )

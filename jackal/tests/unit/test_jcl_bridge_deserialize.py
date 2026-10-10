@@ -1,6 +1,7 @@
 from jackal.jcl import wire
 from jackal.jcl.bridge_parser import job_from_bridge_json
 from jackal.model import (
+    NotCoded,
     UnresolvedDd,
     DD,
     AbendMode,
@@ -80,9 +81,9 @@ def test_a_program_step_with_each_dsn_kind():
                         disp("SHR"),
                     ),
                     _dd("WRK", TempRef("WORK"), disp("NEW", "PASS", "DELETE")),
-                    _dd("SYSIN", InStreamDSN(), disp(), in_stream=(" CARD",)),
-                    _dd("NULL", DummyDSN(), disp()),
-                    _dd("REPORT", NoDSN(), disp(), sysout=True),
+                    _dd("SYSIN", InStreamDSN(), NotCoded(), in_stream=(" CARD",)),
+                    _dd("NULL", DummyDSN(), NotCoded()),
+                    _dd("REPORT", NoDSN(), NotCoded(), sysout=True),
                     _dd(
                         "PCOPY",
                         BackwardRef(p1, UnresolvedDd(DdName("IN"))),
@@ -155,7 +156,7 @@ def test_a_proc_calls_overrides_group_by_step_and_unqualified_dds_follow_the_las
     )
 
     def written(name: str) -> object:
-        return _dd(name, DirectDSN(literal(f"T.{name}")), disp())
+        return _dd(name, DirectDSN(literal(f"T.{name}")), NotCoded())
 
     assert job_from_bridge_json(job_json("J", (call,))).steps == (
         ProcCall(

@@ -229,7 +229,21 @@ class NoDSN:
         return self
 
 
-DSN: TypeAlias = DirectDSN | TempRef | BackwardRef[R] | InStreamDSN | DummyDSN | NoDSN
+@dataclass(frozen=True)
+class NullifiedDSN:
+    def dataset_name(self) -> str:
+        raise TypeError("a nullified DSN names no dataset")
+
+    def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
+        return self
+
+    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+        return self
+
+
+DSN: TypeAlias = (
+    DirectDSN | TempRef | BackwardRef[R] | InStreamDSN | DummyDSN | NoDSN | NullifiedDSN
+)
 
 
 class CondOp(Enum):
@@ -319,12 +333,58 @@ class Disp:
     normal: DispNormal
     abnormal: DispAbnormal
 
+    def disposition(self) -> Disp:
+        return self
+
+
+@dataclass(frozen=True)
+class NotCoded:
+    def disposition(self) -> Disp:
+        return Disp(DispStatus.NEW, DispNormal.DELETE, DispAbnormal.DELETE)
+
+
+def _dsn_written(
+    dsn: DSN[R], in_stream: tuple[str, ...]
+) -> tuple[DSN[R], tuple[str, ...]]:
+    match dsn:
+        case NullifiedDSN():
+            return NoDSN(), ()
+        case _:
+            return dsn, in_stream
+
+
+def _dsn_over(
+    own: tuple[DSN[R], tuple[str, ...]], override: tuple[DSN[R], tuple[str, ...]]
+) -> tuple[DSN[R], tuple[str, ...]]:
+    match override[0]:
+        case NoDSN():
+            return own
+        case _:
+            return _dsn_written(*override)
+
+
+def _disp_over(own: Disp | NotCoded, override: Disp | NotCoded) -> Disp | NotCoded:
+    match override:
+        case NotCoded():
+            return own
+        case _:
+            return override
+
 
 @dataclass(frozen=True)
 class ConcatMember(Generic[R]):
     dsn: DSN[R]
-    disp: Disp
+    disp: Disp | NotCoded
     in_stream: tuple[str, ...] = ()
+
+    def disposition(self) -> Disp:
+        return self.disp.disposition()
+
+    def overridden_by(self, override: ConcatMember[R]) -> ConcatMember[R]:
+        dsn, in_stream = _dsn_over(
+            (self.dsn, self.in_stream), (override.dsn, override.in_stream)
+        )
+        return ConcatMember(dsn, _disp_over(self.disp, override.disp), in_stream)
 
     def mapped(
         self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]
@@ -339,10 +399,53 @@ class ConcatMember(Generic[R]):
 class DD(Generic[R]):
     ddname: DdName
     dsn: DSN[R]
-    disp: Disp
+    disp: Disp | NotCoded
     in_stream: tuple[str, ...] = ()
     sysout: bool = False
     concatenated: tuple[ConcatMember[R], ...] = ()
+
+    def disposition(self) -> Disp:
+        return self.disp.disposition()
+
+    def overridden_by(self, override: DD[R]) -> DD[R]:
+        match override.dsn:
+            case DummyDSN():
+                return DD(
+                    self.ddname,
+                    override.dsn,
+                    NotCoded(),
+                    concatenated=self._members(override),
+                )
+            case _:
+                return self._merged(override)
+
+    def _members(self, override: DD[R]) -> tuple[ConcatMember[R], ...]:
+        own, over = self.concatenated, override.concatenated
+        paired = tuple(m.overridden_by(o) for m, o in zip(own, over, strict=False))
+        return (*paired, *own[len(over) :], *over[len(own) :])
+
+    def _kept(self, override: DD[R]) -> tuple[DSN[R], tuple[str, ...]]:
+        if override.sysout and isinstance(self.dsn, DummyDSN):
+            return NoDSN(), ()
+        return self.dsn, self.in_stream
+
+    def _merged(self, override: DD[R]) -> DD[R]:
+        dsn, in_stream = _dsn_over(
+            self._kept(override), (override.dsn, override.in_stream)
+        )
+        excluded = override.sysout and isinstance(override.disp, NotCoded)
+        disp = NotCoded() if excluded else _disp_over(self.disp, override.disp)
+        sysout = override.sysout or (
+            self.sysout and isinstance(override.disp, NotCoded)
+        )
+        return DD(
+            self.ddname,
+            dsn,
+            disp,
+            in_stream,
+            sysout,
+            self._members(override),
+        )
 
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DD[S]:
         return DD(
