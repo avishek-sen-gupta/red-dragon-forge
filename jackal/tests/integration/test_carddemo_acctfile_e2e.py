@@ -11,6 +11,7 @@ from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
 from jackal.jcl.parser import parse_jcl
 from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -33,6 +34,7 @@ def test_acctfile_then_readacct_e2e(
     data_dir = carddemo_home / "data" / "EBCDIC"
 
     runner = JobRunner(
+        unresolved=RaiseErrorStrategy(),
         source_dir=cbl_dir,
         bridge_jar=bridge_jar,
         data_dir=data_dir,

@@ -6,6 +6,7 @@ from tests.covers import NotLanguageFeature, covers
 from jackal.jcl.parser import parse_jcl
 from jackal.results import StepDisposition
 from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
 
 _FAIL_PGM = """\
        IDENTIFICATION DIVISION.
@@ -36,7 +37,11 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
     jcl = "//J JOB 1\n//A EXEC PGM=FAILS\n//B EXEC PGM=OK,COND=(0,NE)\n"
     job = parse_jcl(jcl)
     runner = JobRunner(
-        source_dir=src, bridge_jar=bridge_jar, data_dir=tmp_path, copybook_dir=tmp_path
+        unresolved=RaiseErrorStrategy(),
+        source_dir=src,
+        bridge_jar=bridge_jar,
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
     )
     res = runner.run(job, workdir=tmp_path, seeds={})
     a, b = res.steps

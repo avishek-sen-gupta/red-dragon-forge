@@ -11,6 +11,7 @@ from jackal.model import QualifiedStep, UnexpandedCall
 class StepDisposition(Enum):
     EXECUTED = "EXECUTED"
     BYPASSED = "BYPASSED"
+    SKIPPED_UNRESOLVED = "SKIPPED_UNRESOLVED"
 
 
 @dataclass(frozen=True)

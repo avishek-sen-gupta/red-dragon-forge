@@ -32,10 +32,18 @@ cicada or squall; `.importlinter` enforces this.
    program step; an override naming no step; a PROC that calls itself. A name used by more than
    one run of a PROC resolves to the same run, with a warning. `expand_or_fail` raises the error
    as `ExpansionFailed` for callers that want an exception.
-3. Run steps in order (`jackal.runner.JobRunner`). For each step:
-   - These are refused with `UnsupportedStep` until each is supported: an `UnexpandedCall`, a
-     step under an IF (guards are parsed and attached but not yet evaluated), a concatenated DD,
-     and a step whose `COND` or referback holds an unresolved reference (blueprint D7).
+3. Run steps in order (`jackal.runner.JobRunner`). The runner is given an
+   `UnresolvedReferenceStrategy` (`jackal.unresolved`, blueprint D7); both behaviours are
+   jackal's own, since z/OS rejects a job with an unresolved reference at conversion:
+   - `RaiseErrorStrategy` raises `UnresolvedReference` before any step runs, naming the first
+     `UnexpandedCall` or step whose `COND` or referback holds an unresolved reference.
+   - `IgnoreStrategy` runs the job. A `COND` test naming an unresolved step is false, as for a
+     step that did not run. An `UnexpandedCall`, and a step with an unresolved referback, are
+     recorded as `SKIPPED_UNRESOLVED`; later `COND` tests skip them as they skip a bypassed step.
+
+   For each step:
+   - These are refused with `UnsupportedStep` until each is supported: a step under an IF
+     (guards are parsed and attached but not yet evaluated) and a concatenated DD.
    - `COND=` is evaluated by `jackal.cond` against the return codes of steps that ran; a JOB
      card's `COND` tests are checked the same way. A true test bypasses the step. jackal records
      no abends, so `COND=EVEN` reads as no `EVEN` and a `COND=ONLY` step is bypassed.
