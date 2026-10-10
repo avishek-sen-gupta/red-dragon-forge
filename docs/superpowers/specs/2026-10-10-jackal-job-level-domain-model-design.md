@@ -255,6 +255,8 @@ classDiagram
     ddname
     error
   }
+  class SkippedUnresolved {
+  }
   class JobOutcome {
     <<one of>>
     JobCompleted
@@ -272,6 +274,7 @@ classDiagram
   StepOutcome <|-- Bypassed
   StepOutcome <|-- Flushed
   StepOutcome <|-- AllocationFailed
+  StepOutcome <|-- SkippedUnresolved
 ```
 
 - Every step that the job reached gets a `StepResult` with one `StepOutcome`.
@@ -280,7 +283,9 @@ classDiagram
 - The other outcomes come from outside the program. The gate decides `Bypassed` (one of the
   step's own COND tests was true) and `Flushed` (something earlier ended the job: an abend, an
   allocation failure, or the JOB card's `COND`). The lifecycle decides `AllocationFailed` (a DD
-  could not be allocated, so the program never started).
+  could not be allocated, so the program never started). Under `IgnoreStrategy` the executor
+  records `SkippedUnresolved` for a call to a PROC in no library and for a step with an
+  unresolved referback (D7); it has no IBM equivalent.
 - `JobOutcome` is computed from the step outcomes: the first abend, allocation failure or halt
   decides it, otherwise the job completed with the highest return code.
 
@@ -866,8 +871,9 @@ def expand_procs(job: Job, library: ProcLibrary) -> ExpandedJob | JclError: ...
 - A name that matches nothing is not an error: it is an unresolved coordinate, and `expand_procs`
   logs a warning for every reference or referback that is not fully resolved (D6). How the
   executor treats such a reference is D7.
-- An `UnexpandedCall` reaches the executor, which gives it `Halted(ProcNotInLibrary(proc))`, under
-  D2 like any other halt. cobble keeps drawing it as a node, as it does today.
+- An `UnexpandedCall` reaches the executor, which treats it under D7: the job is rejected before
+  any step runs, or the call is recorded as `SkippedUnresolved`. cobble keeps drawing it as a
+  node, as it does today.
 - A `JclError` holds an `ErrorSite`: the coordinates and the step as written, since a step whose
   reference is in error has no expanded form.
 - After expansion, the gate and the allocator meet only `StepReference`s, and can read off each
@@ -968,11 +974,7 @@ class UnsupportedProgram:
 class StepBudgetExhausted:
     steps: int
 
-@dataclass(frozen=True)
-class ProcNotInLibrary:
-    proc: ProcRef
-
-type SimulatorHalt = UnsupportedProgram | ProcNotInLibrary | StepBudgetExhausted
+type SimulatorHalt = UnsupportedProgram | StepBudgetExhausted
 
 @dataclass(frozen=True)
 class Halted:
@@ -1016,7 +1018,13 @@ class AllocationFailed:
     ddname: DdName
     error: AllocationError
 
-type StepOutcome = Completed | Abended | Halted | Bypassed | Flushed | AllocationFailed
+@dataclass(frozen=True)
+class SkippedUnresolved:
+    pass
+
+type StepOutcome = (
+    Completed | Abended | Halted | Bypassed | Flushed | AllocationFailed | SkippedUnresolved
+)
 
 @dataclass(frozen=True)
 class StepResult:
@@ -1039,7 +1047,7 @@ class JobAllocationFailed:
 
 @dataclass(frozen=True)
 class JobHalted:
-    step: QualifiedStep | UnexpandedCall
+    step: QualifiedStep
     halt: SimulatorHalt
 
 type JobOutcome = JobCompleted | JobAbended | JobAllocationFailed | JobHalted
@@ -1056,7 +1064,8 @@ class JobResult:
 - `Halted` is the simulator's limit, kept apart from the job's own behaviour. z/OS would give
   `S806` for a missing program and `S322` for a runaway; mapping them is decision D1.
 - `JobOutcome` is derived by a pure function over `steps`: the first `Abended`, `AllocationFailed`
-  or `Halted` decides it, else `JobCompleted(max rc over Completed)`.
+  or `Halted` decides it, else `JobCompleted(max rc over Completed)`. `SkippedUnresolved` never
+  decides it, and later bypass tests skip it as they skip a step that did not run.
 - `results.py` stays a leaf (`.importlinter` `model-results-are-leaves`).
 
 | Outcome | JCL situation that produces it |
@@ -1065,7 +1074,7 @@ class JobResult:
 | `Abended(UserAbend(4038))` | a COBOL program calls `CEE3ABD` with 4038 (D4) |
 | `Abended(SystemAbend(0x0C7))` | a data exception in the program (D1) |
 | `Halted(UnsupportedProgram("SORT"))` | `//S1 EXEC PGM=SORT` before SORT exists |
-| `Halted(ProcNotInLibrary("FTPPROC"))` | `//S3 EXEC FTPPROC`, no such PROC |
+| `SkippedUnresolved()` | `//S3 EXEC FTPPROC`, no such PROC, under `IgnoreStrategy` (D7) |
 | `Halted(StepBudgetExhausted(n))` | a `PERFORM` loop that never ends |
 | `Bypassed(COND_SATISFIED)` | `COND=(4,LT)` after an earlier step's RC 8 |
 | `Bypassed(ONLY_WITHOUT_ABEND)` | `COND=ONLY` when nothing abended |
@@ -1077,8 +1086,8 @@ class JobResult:
 | `AllocationFailed(IN, TEMP_NOT_CREATED)` | `//IN DD DSN=&&X,DISP=OLD` with no earlier `NEW` |
 
 For the worked example in §5, with every program ending RC 0: `P1`, `P2` and `S2` are
-`Completed(0)`, `S3` is `Halted(ProcNotInLibrary("FTPPROC"))`, and the job is
-`JobHalted(<unexpanded S3>, ProcNotInLibrary("FTPPROC"))`.
+`Completed(0)`, `S3` is `SkippedUnresolved()`, and the job is `JobCompleted(0)`, under
+`IgnoreStrategy`. Under `RaiseErrorStrategy` the job is rejected before `P1` runs (D7).
 
 ## 7. Executor (component [3])
 
@@ -1089,13 +1098,15 @@ class JobExecutor(Protocol):
 def run_job(job: Job, library: ProcLibrary, executor: JobExecutor) -> JobResult | JclError: ...
 ```
 
-`run_job` is the entry point: expand, and if that yields a `JclError`, no step runs. Otherwise the
+`run_job` is the entry point: expand, and if that yields a `JclError`, no step runs. The executor
+is given an `UnresolvedReferenceStrategy` (D7) and applies it to the expanded job before the
+first step; `RaiseErrorStrategy` rejects a job holding an unresolved reference there. Otherwise the
 executor folds over `job.steps` in order, carrying a `StepHistory` and a `JobContext`, starting
 from an empty context. For each `QualifiedStep` or `UnexpandedCall`:
 
 1. Ask the gate (§8). A `Skip` records its `Bypassed` or `Flushed` outcome.
-2. On `Run`, match the entry. An `UnexpandedCall` records `Halted(ProcNotInLibrary(proc))`. A
-   `QualifiedStep`'s `ProgramStep` goes to the lifecycle (§9.4), which returns the outcome and the
+2. On `Run`, match the entry. An `UnexpandedCall`, and a step with an unresolved referback,
+   record `SkippedUnresolved` (D7). A `QualifiedStep`'s `ProgramStep` goes to the lifecycle (§9.4), which returns the outcome and the
    next `JobContext`.
 3. Append the `StepResult` to the history.
 
@@ -1143,8 +1154,8 @@ def decide(
 
 `decide` reads the entry's step. An `UnexpandedCall` has no bypass tests or abend mode of its own,
 so it is gated as `NORMAL` with none; when the decision is `Run`, the executor records
-`Halted(ProcNotInLibrary(proc))` without entering the lifecycle. A bypass test whose reference is
-not fully resolved is decided by D7.
+`SkippedUnresolved` without entering the lifecycle. A bypass test whose reference is not fully
+resolved is false, as for a step that did not run (D7).
 
 Rules, in order; the first that applies decides:
 
