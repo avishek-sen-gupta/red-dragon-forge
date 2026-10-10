@@ -16,10 +16,19 @@ from jackal.dsn import (
     NoDSN,
     TempRef,
 )
+from jackal.expansion import DirectoryProcLibrary, ExpansionFailed, expand_or_fail
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
-from jackal.jcl.proc_expand import ProcExpansionError, expand_procs
-from jackal.model import DD, Step
+from jackal.model import (
+    DD,
+    AllPriorSteps,
+    BypassTest,
+    NotOverridden,
+    ProgramStep,
+    QualifiedStep,
+    StepCondition,
+    UnresolvedProcCall,
+)
 from jackal.value_parts import Literal, Symbol, Value
 
 logger = logging.getLogger(__name__)
@@ -30,8 +39,13 @@ PROC_DIRS = ("app/proc", "samples/proc")
 EXPECTED_CHANGES: dict[str, str] = {
     "app/app-transaction-type-db2/jcl/CREADB21.jcl": "red-dragon-forge-18j",
     "app/app-transaction-type-db2/jcl/TRANEXTR.jcl": "red-dragon-forge-z76",
-    "samples/jcl/CICDBCMP.jcl": "red-dragon-forge-18j",
-    "samples/jcl/IMSMQCMP.jcl": "red-dragon-forge-18j",
+    "samples/jcl/BATCMP.jcl": "red-dragon-forge-2cy.9, red-dragon-forge-2cy.10",
+    "samples/jcl/BMSCMP.jcl": "red-dragon-forge-2cy.9",
+    "samples/jcl/CICCMP.jcl": "red-dragon-forge-2cy.9",
+    "samples/jcl/CICDBCMP.jcl": (
+        "red-dragon-forge-18j, red-dragon-forge-2cy.9, red-dragon-forge-2cy.10"
+    ),
+    "samples/jcl/IMSMQCMP.jcl": "red-dragon-forge-18j, red-dragon-forge-2cy.9",
 }
 
 
@@ -76,7 +90,7 @@ def _part_text(part: Literal | Symbol) -> str:
         case Literal(text=text):
             return text
         case Symbol(name=symbol):
-            return f"&{symbol}"
+            return f"&{symbol.text}"
 
 
 def _text(value: Value) -> str:
@@ -87,10 +101,10 @@ def _dsn_text(dsn: DSN, sysout: bool) -> str:
     match dsn:
         case DirectDSN(name=n):
             return _text(n)
-        case TempRef(alias=a):
-            return a
+        case TempRef(name=name):
+            return f"&&{name}"
         case BackwardRef(step=s, ddname=d):
-            return f"*.{s}.{d}"
+            return f"*.{s.rendered()}.{d.text}"
         case InStreamDSN():
             return "*"
         case DummyDSN():
@@ -99,32 +113,75 @@ def _dsn_text(dsn: DSN, sysout: bool) -> str:
             return "SYSOUT" if sysout else ""
 
 
-def _dd_facts(dd: DD) -> DdFacts:
+def _dd_facts(dd: DD, ddname: str = "") -> DdFacts:
     return DdFacts(
-        ddname=dd.ddname,
+        ddname=ddname or dd.ddname.text,
         dsn=_dsn_text(dd.dsn, dd.sysout),
         disp=(dd.disp.status.value, dd.disp.normal.value, dd.disp.abnormal.value),
     )
 
 
-def _step_facts(step: Step) -> StepFacts:
+def _cond_facts(test: BypassTest) -> tuple[int, str, str]:
+    target = "" if isinstance(test.target, AllPriorSteps) else test.target.rendered()
+    return (test.comparison.code, test.comparison.op.value, target)
+
+
+def _condition(condition: StepCondition | NotOverridden) -> tuple:
+    match condition:
+        case NotOverridden():
+            return ()
+        case _:
+            return tuple(_cond_facts(t) for t in condition.bypass_tests)
+
+
+def _parm(parm: Value | NotOverridden) -> str:
+    match parm:
+        case NotOverridden():
+            return ""
+        case _:
+            return _text(parm)
+
+
+def _program_facts(name: str, step: ProgramStep) -> StepFacts:
     return StepFacts(
-        step=step.name,
-        pgm=step.pgm,
+        step=name,
+        pgm=step.pgm.name,
         parm=_text(step.parm),
-        cond=tuple((c.code, c.op.value, c.step) for c in step.conds),
+        cond=_condition(step.cond),
         dds=tuple(_dd_facts(dd) for dd in step.dds),
     )
 
 
+def _unresolved_facts(name: str, step: UnresolvedProcCall) -> StepFacts:
+    call = step.call
+    qualified = tuple(
+        _dd_facts(dd, f"{procstep.text}.{dd.ddname.text}")
+        for procstep, overrides in call.per_step
+        for dd in overrides.dds
+    )
+    return StepFacts(
+        step=name,
+        pgm=call.proc.name,
+        parm=_parm(call.parm_for_first_step),
+        cond=_condition(call.cond_for_every_step),
+        dds=(*(_dd_facts(dd) for dd in call.dds_for_first_step), *qualified),
+    )
+
+
+def _step_facts(qualified: QualifiedStep) -> StepFacts:
+    match qualified.step:
+        case UnresolvedProcCall():
+            return _unresolved_facts(qualified.rendered(), qualified.step)
+        case _:
+            return _program_facts(qualified.rendered(), qualified.step)
+
+
 def facts_for_job(carddemo_root: Path, path: Path) -> ReadJob | UnreadJob:
     rel = str(path.relative_to(carddemo_root))
+    library = DirectoryProcLibrary(tuple(carddemo_root / d for d in PROC_DIRS))
     try:
-        job = expand_procs(
-            parse_jcl(path.read_text(errors="replace")),
-            tuple(carddemo_root / d for d in PROC_DIRS),
-        )
-    except (JclParseError, ProcExpansionError) as error:
+        job = expand_or_fail(parse_jcl(path.read_text(errors="replace")), library)
+    except (JclParseError, ExpansionFailed) as error:
         return UnreadJob(file=rel, error=type(error).__name__)
     return ReadJob(
         file=rel, job=job.name, steps=tuple(_step_facts(s) for s in job.steps)

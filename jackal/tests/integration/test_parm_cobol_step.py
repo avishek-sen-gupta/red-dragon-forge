@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
-from jackal.model import Step
-from jackal.value_parts import literal
+from tests.model_build import program
 from tests.covers import NotLanguageFeature, covers
 
 # Minimal COBOL program that reads PARM-DATA and signals receipt via RETURN-CODE.
@@ -42,14 +41,14 @@ _NO_PARM_PROGRAM = """\
 def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     # Pad to 10 chars so the region exactly fills PARM-DATA PIC X(10)
-    step = Step(name="S", pgm="TESTPARM", dds=(), parm=literal("HELLO     "))
-    result = run_cobol_step(step, _PARM_PROGRAM, cat, bridge_jar, [])
-    assert result.return_code == 42
+    step = program("S", "TESTPARM", parm="HELLO     ")
+    assert run_cobol_step(step, _PARM_PROGRAM, cat, bridge_jar, []) == 42
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    step = Step(name="S", pgm="NOPARM", dds=())
-    result = run_cobol_step(step, _NO_PARM_PROGRAM, cat, bridge_jar, [])
-    assert result.return_code == 7
+    assert (
+        run_cobol_step(program("S", "NOPARM"), _NO_PARM_PROGRAM, cat, bridge_jar, [])
+        == 7
+    )

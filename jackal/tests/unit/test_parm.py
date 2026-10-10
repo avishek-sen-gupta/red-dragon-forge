@@ -45,22 +45,6 @@ def test_build_parm_region_too_long_raises():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_step_parm_field_default():
-    from jackal.model import Step
-
-    step = Step(name="S", pgm="P", dds=())
-    assert step.parm == ()
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_step_parm_field_set():
-    from jackal.model import Step
-
-    step = Step(name="S", pgm="P", dds=(), parm=literal("2022071800"))
-    assert step.parm == literal("2022071800")
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_deserializer_parm_present_and_absent():
     from jackal.jcl.bridge_parser import job_from_bridge_json
     from tests.wire_build import job_json, lit, program

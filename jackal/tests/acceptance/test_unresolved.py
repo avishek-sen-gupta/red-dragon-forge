@@ -1,10 +1,8 @@
 """Acceptance: a call to a PROC in no library."""
 
-from tests.acceptance.markers import EXPANDED
 from tests.covers import NotLanguageFeature, covers
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_unresolved_proc_expands(expand_fixture):
     from jackal.expansion import ExpandedJob, UnresolvedProcCall
@@ -15,6 +13,8 @@ def test_unresolved_proc_expands(expand_fixture):
         "ACCEPT",
         (
             b.qualified((), b.pgm("S1", "PGMA")),
-            b.qualified((), UnresolvedProcCall(ProcCall(b.name("S2"), "NOSUCHP"))),
+            b.qualified(
+                (), UnresolvedProcCall(ProcCall(b.name("S2"), b.proc("NOSUCHP")))
+            ),
         ),
     )

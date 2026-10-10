@@ -2,35 +2,35 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from jackal.catalog import DatasetCatalog
+from jackal.dsn import DdName
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
-from jackal.model import Step
-from jackal.results import StepResult
+from jackal.model import ProgramRef, ProgramStep, QualifiedStep
+
+Utility = Callable[[ProgramStep[QualifiedStep], DatasetCatalog], int]
+
+_SYSIN = DdName("SYSIN")
 
 
-def iefbr14(step: Step, catalog: DatasetCatalog) -> StepResult:
-    """No-op program: its only effect is the DD allocate/dispose lifecycle."""
-    for dd in step.dds:
-        if not dd.sysout:
-            catalog.allocate(dd)
-    for dd in step.dds:
-        if not dd.sysout:
-            catalog.dispose(dd)
-    return StepResult(name=step.name, return_code=0, ran=True)
+def iefbr14(step: ProgramStep[QualifiedStep], catalog: DatasetCatalog) -> int:
+    datasets = tuple(dd for dd in step.dds if not dd.sysout)
+    for dd in datasets:
+        catalog.allocate(dd)
+    for disposed in datasets:
+        catalog.dispose(disposed)
+    return 0
 
 
-def idcams(step: Step, catalog: DatasetCatalog) -> StepResult:
-    """IDCAMS utility: parse SYSIN in-stream and execute IDCAMS commands."""
-    sysin = next(d for d in step.dds if d.ddname == "SYSIN")
+def idcams(step: ProgramStep[QualifiedStep], catalog: DatasetCatalog) -> int:
+    sysin = next(d for d in step.dds if d.ddname == _SYSIN)
     commands = parse_idcams("\n".join(sysin.in_stream) + "\n")
-    rc = run_idcams(commands, step.dds, catalog)
-    return StepResult(name=step.name, return_code=rc, ran=True)
+    return run_idcams(commands, step.dds, catalog)
 
 
-UTILITIES: dict[str, Callable[[Step, DatasetCatalog], StepResult]] = {
-    "IEFBR14": iefbr14,
-    "IDCAMS": idcams,
+UTILITIES: Mapping[ProgramRef, Utility] = {
+    ProgramRef("IEFBR14"): iefbr14,
+    ProgramRef("IDCAMS"): idcams,
 }

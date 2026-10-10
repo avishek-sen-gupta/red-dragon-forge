@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from jackal.model import QualifiedStep
+
 
 class StepDisposition(Enum):
     EXECUTED = "EXECUTED"
@@ -13,10 +15,17 @@ class StepDisposition(Enum):
 
 @dataclass(frozen=True)
 class StepResult:
-    name: str
+    step: QualifiedStep
     return_code: int
-    ran: bool
     disposition: StepDisposition = StepDisposition.EXECUTED
+
+    @property
+    def name(self) -> str:
+        return self.step.rendered()
+
+    @property
+    def ran(self) -> bool:
+        return self.disposition is StepDisposition.EXECUTED
 
 
 @dataclass(frozen=True)

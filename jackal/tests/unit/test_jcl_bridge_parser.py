@@ -14,7 +14,8 @@ from tests.wire_build import (
 from jackal.dsn import DirectDSN
 from jackal.jcl import wire
 from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
-from jackal.value_parts import Literal, Symbol, literal
+from jackal.model import ProcCall, ProcRef, StepName
+from jackal.value_parts import Literal, Symbol, SymbolName, literal
 
 
 class _FakeRunner:
@@ -52,7 +53,7 @@ def test_parse_builds_model_from_bridge_json():
     job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
     assert [d.dsn for d in job.steps[0].dds] == [
         DirectDSN(literal("A.B")),
-        DirectDSN((Symbol("CNTLLIB"), Literal("(REPROCT)"))),
+        DirectDSN((Symbol(SymbolName("CNTLLIB")), Literal("(REPROCT)"))),
     ]
     assert runner.command == ["java", "-jar", "jcl.jar"]
 
@@ -101,15 +102,15 @@ def test_parse_proc_builds_procdef_from_bridge_json():
     runner = _FakeRunner(out=out)
     proc = JclBridgeParser(runner, "jcl.jar").parse_proc("//REPROC PROC\n")
     assert proc.name == "REPROC"
-    assert proc.defaults == {"CNTLLIB": literal("DEFAULT.LIB")}
-    assert proc.steps[0].name == "PRC001"
+    assert proc.defaults == ((SymbolName("CNTLLIB"), literal("DEFAULT.LIB")),)
+    assert proc.steps[0].label == StepName("PRC001")
     assert proc.steps[0].dds[0].dsn == DirectDSN(
-        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
+        (Symbol(SymbolName("CNTLLIB")), Literal("(REPROCT)"))
     )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_proc_call_carries_its_symbol_overrides_as_proc_parms():
+def test_a_proc_call_carries_its_symbol_overrides():
     out = job_json(
         "J",
         (
@@ -126,7 +127,8 @@ def test_a_proc_call_carries_its_symbol_overrides_as_proc_parms():
     )
     runner = _FakeRunner(out=out)
     job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
-    assert (job.steps[0].pgm, job.steps[0].proc_parms) == (
-        "REPROC",
-        {"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")},
+    assert job.steps[0] == ProcCall(
+        StepName("S"),
+        ProcRef("REPROC"),
+        ((SymbolName("CNTLLIB"), literal("AWS.M2.CARDDEMO.CNTL")),),
     )

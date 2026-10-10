@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 
-from jackal.model import Cond, CondOp
+from jackal.model import (
+    AbendMode,
+    AllPriorSteps,
+    BypassTest,
+    CondOp,
+    QualifiedStep,
+    RcComparison,
+    StepCondition,
+)
 from jackal.results import StepResult
 
-_OPS: dict[CondOp, Callable[[int, int], bool]] = {
+_OPS: Mapping[CondOp, Callable[[int, int], bool]] = {
     CondOp.GT: operator.gt,
     CondOp.GE: operator.ge,
     CondOp.EQ: operator.eq,
@@ -18,18 +26,29 @@ _OPS: dict[CondOp, Callable[[int, int], bool]] = {
 }
 
 
-def _condition_true(cond: Cond, prior_executed: tuple[StepResult, ...]) -> bool:
-    # Reversed operands: bypass if `code <op> rc` for any relevant prior RC.
-    if cond.step:
-        rcs = [r.return_code for r in prior_executed if r.name == cond.step]
-    else:
-        rcs = [r.return_code for r in prior_executed]
-    test = _OPS[cond.op]
-    return any(test(cond.code, rc) for rc in rcs)
+def _tested(test: BypassTest[QualifiedStep], result: StepResult) -> bool:
+    return isinstance(test.target, AllPriorSteps) or test.target == result.step
+
+
+def _true(test: BypassTest[QualifiedStep], executed: Sequence[StepResult]) -> bool:
+    compare = _OPS[test.comparison.op]
+    return any(
+        compare(test.comparison.code, r.return_code)
+        for r in executed
+        if _tested(test, r)
+    )
 
 
 def should_bypass(
-    conds: tuple[Cond, ...], prior_executed: tuple[StepResult, ...]
+    condition: StepCondition[QualifiedStep],
+    end_job_tests: Sequence[RcComparison],
+    history: Sequence[StepResult],
 ) -> bool:
-    """True if this step should be bypassed — i.e. ANY condition is true."""
-    return any(_condition_true(c, prior_executed) for c in conds)
+    if condition.abend_mode is AbendMode.ONLY:
+        return True
+    executed = tuple(r for r in history if r.ran)
+    tests = (
+        *condition.bypass_tests,
+        *(BypassTest[QualifiedStep](c, AllPriorSteps()) for c in end_job_tests),
+    )
+    return any(_true(t, executed) for t in tests)

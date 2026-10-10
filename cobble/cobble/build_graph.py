@@ -77,6 +77,7 @@ from cobble.path_utils import ensure_parent
 from cobol_asg.cobol_imports import extract_cobol_imports
 from cobol_asg.import_types import ImportKind, ImportRef
 from cobol_asg.source_text import decode_source
+from jackal.expansion import DirectoryProcLibrary
 from jackal.jcl.parser import bridge_parser
 from tqdm import tqdm
 
@@ -234,7 +235,7 @@ def _jcl_file_failures(
         nodes, edges = jcl_graph_from_job(
             store.get(path),
             corpus_index,
-            proclib_dirs=config.proclib_dirs,
+            DirectoryProcLibrary(tuple(config.proclib_dirs)),
         )
     except Exception as exc:
         logger.warning("JCL %s failed: %s", path.name, exc, exc_info=True)

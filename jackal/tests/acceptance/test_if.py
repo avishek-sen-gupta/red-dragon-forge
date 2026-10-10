@@ -1,10 +1,8 @@
 """Acceptance: IF/THEN/ELSE/ENDIF as structure, then as guards."""
 
-from tests.acceptance.markers import EXPANDED, PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_structure_parses(parse_fixture):
     from jackal.model import CondOp, IfBlock, Job, RcTest
@@ -32,7 +30,6 @@ def test_if_structure_parses(parse_fixture):
     )
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_terms_parse(parse_fixture):
     from jackal.model import (
@@ -95,7 +92,6 @@ def test_if_terms_parse(parse_fixture):
     )
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_guards_expand(expand_fixture):
     from jackal.expansion import ExpandedJob
@@ -127,14 +123,13 @@ def test_if_guards_expand(expand_fixture):
     )
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_inside_proc_expands(expand_fixture):
     from jackal.expansion import ExpandedJob
     from jackal.model import CondOp, ProcCall, ProgramStep, RcTest
     from tests.acceptance import build as b
 
-    call = ProcCall(b.name("S1"), "IFP")
+    call = ProcCall(b.name("S1"), b.proc("IFP"))
     p1 = b.qualified((call,), b.pgm("P1", "PGMA"))
     plain = b.pgm("P2", "PGMB")
     assert expand_fixture("if/in_proc.jcl") == ExpandedJob(

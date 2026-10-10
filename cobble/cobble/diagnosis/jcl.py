@@ -38,6 +38,7 @@ from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import load_corpus_config
 from cobble.diagnosis.report import RULE, emit_json, member_label
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
+from cobble.jcl.job_steps import written_steps
 from cobble.matching_files import matching_files
 from jackal.jcl.parser import bridge_parser
 
@@ -120,10 +121,9 @@ def _swept(path: Path, store: JclStore) -> SweepResult:
         job = store.get(path)
     except Exception as exc:  # noqa: BLE001
         return SweepResult(path=path, kind=type(exc).__name__, message=str(exc))
+    steps = written_steps(job)
     return SweepResult(
-        path=path,
-        steps=len(job.steps),
-        dds=sum(len(step.dds) for step in job.steps),
+        path=path, steps=len(steps), dds=sum(len(step.dds) for step in steps)
     )
 
 

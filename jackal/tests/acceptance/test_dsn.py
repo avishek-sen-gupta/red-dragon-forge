@@ -1,10 +1,8 @@
 """Acceptance: every DSN kind, and temps and referbacks after expansion."""
 
-from tests.acceptance.markers import EXPANDED, PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dsn_kinds_parse(parse_fixture):
     from jackal.model import Job
@@ -38,7 +36,6 @@ def test_dsn_kinds_parse(parse_fixture):
     )
 
 
-@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_lone_symbol_dsn_expands_to_temp(expand_fixture):
     from jackal.expansion import ExpandedJob

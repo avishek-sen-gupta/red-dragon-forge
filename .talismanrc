@@ -244,13 +244,13 @@ fileignoreconfig:
 - filename: cobble/tests/cics/test_flow_map.py
   checksum: d526f5817ca7317c48fcddccf8ba97f9ad25b03a4305c434a968be373dd97945
 - filename: cobble/tests/jackal/test_bridge_parser.py
-  checksum: bea623529979e29ad723c843e93ad6b8651fbf9676f8e77e640be8634162a3d7
+  checksum: 8f5cbadcabef9e14759709c510aed7e9e57ced4aa76f6af046039bd944d1ff47
 - filename: cobble/tests/jackal/test_dsn.py
   checksum: ecb7303ffe4f99e549afd3662ef16255df2987d8ac3dd618a6b8ef8c9475af80
 - filename: cobble/tests/jackal/test_proc_expand.py
   checksum: 0f7f15006244582930d217c82ca1578fcaf1d77d07cf7dc46e8fc766cf7b6ebe
 - filename: cobble/tests/jcl/test_jcl_graph.py
-  checksum: a9ac1c486debc74b4cfc5112f5c381bad06b8573ee97b75e65643406124dc2c6
+  checksum: 210bc98a4de79ba8ee8ee606ce8daa7bf9c53a573f22901cb0881a63b23b7136
 - filename: cobble/tests/jcl/test_jcl_store.py
   checksum: c615111b422ea068c9480261cb765e5ed3cfed310440ddfc3e0217e68f326384
 - filename: cobble/tests/knowledge_graph/test_graph_writer.py
@@ -574,5 +574,27 @@ fileignoreconfig:
 - filename: jackal/tests/acceptance/test_symbols.py
   checksum: 5f5b6be07e18a808b3491bfe7e7fc94529a89ce2bc206e958bcc263d007b9d91
 - filename: jackal/tests/unit/test_jcl_bridge_deserialize.py
-  checksum: 2807b9df4e7525aa8b32d8125e20233d78c06aa9254d9cc5ddb611cc46ad02a2
+  checksum: 0d4f57346b8f4afffa7e075a14f77e8c6afec800c4fcd50c30478f66dabc7c24
+- filename: jackal/tests/integration/test_temp_datasets.py
+  checksum: f8b6b279daa9f465639fac91a9b2b6b92cb77772b0fc725b6868b48c4034a8bb
+- filename: jackal/jackal/catalog.py
+  checksum: 09ac32ac9bc48c4b3a4cf075f937c797a74dfad043e28109d943017e58aa4860
+- filename: jackal/jackal/cond.py
+  checksum: e6d29837792a45e40b692ee57afe7a6b64f744ca75050deae0d72efafe09c16c
+- filename: docs/superpowers/plans/2026-10-10-jcl-object-model-units3-4-model-and-expansion.md
+  checksum: 26e4523a848bab55f3dc987aec7a4b679b3f3a3d9b39460d61f0bfa7c92d5c8b
+- filename: jackal/tests/unit/test_cond.py
+  checksum: 261d8f1ac7834033e6b40e0dcd88879b8b16731266a8c7af32601f27a17257c2
+- filename: jackal/jackal/jcl/wire.py
+  checksum: 77587c2c06aba1dc4fad80818c97ace0f337cc523107e5831d47d0b66dbb680e
+- filename: jackal/tests/acceptance/carddemo_facts.py
+  checksum: dc6aa3933b7b47ade57267eb172811ffb8b42490a9a5d6c6327b6620da498986
+- filename: jackal/jackal/runner.py
+  checksum: 4330ad81973335d656b49487bd40512c389ab53d84383ec9510f61d4e0120ff7
+- filename: jackal/jackal/model.py
+  checksum: 6276cc606efac3fd88b0d953149b878c7a51941bfca3e8bc5b2f597e99172acf
+- filename: jackal/tests/unit/test_results.py
+  checksum: 8e326a7a22b0a8bf9b2230448e5d6f968373ebbf19717944c4f9493e303305e3
+- filename: jackal/tests/unit/test_runner.py
+  checksum: 81752e9a6493b749db0ec48bdecf7dc03b9931ff8a0ffd0af96fa0046cbcf514
 version: "1.0"

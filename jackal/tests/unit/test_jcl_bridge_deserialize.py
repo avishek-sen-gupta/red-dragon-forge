@@ -1,14 +1,9 @@
-import pytest
 from tests.covers import NotLanguageFeature, covers
-from tests.wire_build import (
-    cond_test,
-    dd,
-    job_json,
-    name_dsn,
-    program,
-)
+from tests.model_build import disp
+from tests.wire_build import cond_test, dd, job_json, lit, name_dsn, program, sym
 from jackal.dsn import (
     BackwardRef,
+    DdName,
     DirectDSN,
     DummyDSN,
     InStreamDSN,
@@ -16,13 +11,36 @@ from jackal.dsn import (
     TempRef,
 )
 from jackal.jcl import wire
-from jackal.jcl.bridge_parser import JclParseError, job_from_bridge_json
-from jackal.model import Cond, CondOp, DispNormal, DispStatus
-from jackal.value_parts import literal
+from jackal.jcl.bridge_parser import job_from_bridge_json
+from jackal.model import (
+    DD,
+    AbendMode,
+    AllPriorSteps,
+    BypassTest,
+    CalledProcScope,
+    CondOp,
+    Job,
+    NotOverridden,
+    OwnScope,
+    ProcCall,
+    ProcRef,
+    ProcStepOverrides,
+    ProgramRef,
+    ProgramStep,
+    RcComparison,
+    StepCondition,
+    StepName,
+    StepRef,
+)
+from jackal.value_parts import Literal, Symbol, SymbolName, literal
+
+
+def _dd(name: str, dsn: object, d: object, **rest: object) -> object:
+    return DD(DdName(name), dsn, d, **rest)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_deserialize_job_steps_dds():
+def test_a_program_step_with_each_dsn_kind():
     out = job_json(
         "PIPE",
         (
@@ -30,53 +48,17 @@ def test_deserialize_job_steps_dds():
                 "STEP1",
                 "UPCASE",
                 (
-                    dd("INDD", name_dsn("J.IN"), ("SHR",)),
-                    dd("WORKDD", name_dsn("J.WORK"), ("NEW", "PASS", "DELETE")),
-                ),
-            ),
-            program("STEP2", "STARRER"),
-        ),
-    )
-    job = job_from_bridge_json(out)
-    assert job.name == "PIPE"
-    assert [s.name for s in job.steps] == ["STEP1", "STEP2"]
-    assert [s.pgm for s in job.steps] == ["UPCASE", "STARRER"]
-    w = job.steps[0].dds[1]
-    assert (w.disp.status, w.disp.normal, w.disp.abnormal) == (
-        DispStatus.NEW,
-        DispNormal.PASS,
-        DispNormal.DELETE,
-    )
-    d = job.steps[0].dds[0]
-    assert (d.disp.status, d.disp.normal, d.disp.abnormal) == (
-        DispStatus.SHR,
-        DispNormal.KEEP,
-        DispNormal.KEEP,
-    )
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_deserialize_each_dsn_kind():
-    out = job_json(
-        "J",
-        (
-            program(
-                "S",
-                "IDCAMS",
-                (
-                    dd(
-                        "SYSIN",
-                        wire.InStreamDsn(),
-                        in_stream=("   DELETE A.B CLUSTER",),
-                    ),
-                    dd("SYSPRINT", sysout=True),
-                    dd("WRK", wire.TempDsn(name="WORKIN"), ("NEW", "PASS")),
-                    dd("IN", name_dsn("MY.DATA"), ("SHR",)),
+                    dd("IN", name_dsn("J.IN"), ("SHR",)),
+                    dd("HLQ", wire.NameDsn(value=(sym("HLQ"), lit(".X"))), ("SHR",)),
+                    dd("WRK", wire.TempDsn(name="WORK"), ("NEW", "PASS")),
+                    dd("SYSIN", wire.InStreamDsn(), in_stream=(" CARD",)),
                     dd("NULL", wire.DummyDsn()),
+                    dd("REPORT", sysout=True),
                     dd(
-                        "INPUT",
+                        "PCOPY",
                         wire.BackrefDsn(
-                            target=wire.StepTarget(step="STEP1"), ddname="WRK"
+                            target=wire.ProcStepTarget(call="S0", step="P1"),
+                            ddname="IN",
                         ),
                         ("OLD", "DELETE"),
                     ),
@@ -84,58 +66,111 @@ def test_deserialize_each_dsn_kind():
             ),
         ),
     )
-    dds = job_from_bridge_json(out).steps[0].dds
-    assert [(d.ddname, d.dsn, d.in_stream, d.sysout) for d in dds] == [
-        ("SYSIN", InStreamDSN(), ("   DELETE A.B CLUSTER",), False),
-        ("SYSPRINT", NoDSN(), (), True),
-        ("WRK", TempRef("&&WORKIN"), (), False),
-        ("IN", DirectDSN(literal("MY.DATA")), (), False),
-        ("NULL", DummyDSN(), (), False),
-        ("INPUT", BackwardRef(step="STEP1", ddname="WRK"), (), False),
-    ]
+    p1 = StepRef(CalledProcScope(StepName("S0")), StepName("P1"))
+    assert job_from_bridge_json(out) == Job(
+        "PIPE",
+        (
+            ProgramStep(
+                StepName("STEP1"),
+                ProgramRef("UPCASE"),
+                (
+                    _dd("IN", DirectDSN(literal("J.IN")), disp("SHR")),
+                    _dd(
+                        "HLQ",
+                        DirectDSN((Symbol(SymbolName("HLQ")), Literal(".X"))),
+                        disp("SHR"),
+                    ),
+                    _dd("WRK", TempRef("WORK"), disp("NEW", "PASS", "DELETE")),
+                    _dd("SYSIN", InStreamDSN(), disp(), in_stream=(" CARD",)),
+                    _dd("NULL", DummyDSN(), disp()),
+                    _dd("REPORT", NoDSN(), disp(), sysout=True),
+                    _dd("PCOPY", BackwardRef(p1, DdName("IN")), disp("OLD", "DELETE")),
+                ),
+            ),
+        ),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_deserialize_step_and_job_cond():
+def test_cond_tests_mode_and_end_job_tests():
     out = job_json(
         "J",
         (
             program(
                 "S",
                 "P",
-                cond=wire.Cond(tests=(cond_test(4, "LT", "A"),), mode="NORMAL"),
+                cond=wire.Cond(
+                    tests=(cond_test(4, "LT", "A"), cond_test(8, "EQ")), mode="EVEN"
+                ),
             ),
-            program("T", "P"),
         ),
         end_job_tests=(wire.RcComparison(code=0, op="NE"),),
     )
-    job = job_from_bridge_json(out)
-    assert job.cond == (Cond(0, CondOp.NE),)
-    assert [s.conds for s in job.steps] == [(Cond(4, CondOp.LT, "A"),), ()]
+    assert job_from_bridge_json(out) == Job(
+        "J",
+        (
+            ProgramStep(
+                StepName("S"),
+                ProgramRef("P"),
+                cond=StepCondition(
+                    (
+                        BypassTest(
+                            RcComparison(4, CondOp.LT),
+                            StepRef(OwnScope(), StepName("A")),
+                        ),
+                        BypassTest(RcComparison(8, CondOp.EQ), AllPriorSteps()),
+                    ),
+                    AbendMode.EVEN,
+                ),
+            ),
+        ),
+        end_job_tests=(RcComparison(0, CondOp.NE),),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_deserialize_shapes_the_old_model_cannot_hold_fail_loud():
-    even = job_json("J", (program("S", "P", cond=wire.Cond(tests=(), mode="EVEN")),))
-    three_segment = job_json(
-        "J",
-        (
-            program(
-                "S",
-                "P",
+def test_a_proc_calls_overrides_group_by_step_and_unqualified_dds_follow_the_last_qualifier():
+    def override_dd(procstep: str, name: str) -> wire.DdOverride:
+        return wire.DdOverride(procstep=procstep, dd=dd(name, name_dsn(f"T.{name}")))
+
+    call = wire.ProcCall(
+        label="S1",
+        proc="TWO",
+        symbol_overrides=(wire.SymbolValue(name="HLQ", value=(lit("PROD"),)),),
+        parm_overrides=(
+            wire.ParmOverride(procstep="", parm=(lit("X"),)),
+            wire.ParmOverride(procstep="P2", parm=()),
+        ),
+        cond_overrides=(
+            wire.CondOverride(procstep="P1", cond=wire.Cond(tests=(), mode="NORMAL")),
+        ),
+        dd_overrides=(
+            override_dd("", "FIRST"),
+            override_dd("P2", "OUT"),
+            override_dd("", "EXTRA"),
+        ),
+    )
+
+    def written(name: str) -> object:
+        return _dd(name, DirectDSN(literal(f"T.{name}")), disp())
+
+    assert job_from_bridge_json(job_json("J", (call,))).steps == (
+        ProcCall(
+            StepName("S1"),
+            ProcRef("TWO"),
+            ((SymbolName("HLQ"), literal("PROD")),),
+            NotOverridden(),
+            literal("X"),
+            (written("FIRST"),),
+            (
                 (
-                    dd(
-                        "INPUT",
-                        wire.BackrefDsn(
-                            target=wire.ProcStepTarget(call="STEP1", step="PSTEP"),
-                            ddname="WRK",
-                        ),
-                    ),
+                    StepName("P2"),
+                    ProcStepOverrides(parm=(), dds=(written("OUT"), written("EXTRA"))),
+                ),
+                (
+                    StepName("P1"),
+                    ProcStepOverrides(cond=StepCondition((), AbendMode.NORMAL)),
                 ),
             ),
         ),
     )
-    with pytest.raises(JclParseError, match="jackal-1o2.8"):
-        job_from_bridge_json(even)
-    with pytest.raises(JclParseError, match="jackal-lz8"):
-        job_from_bridge_json(three_segment)

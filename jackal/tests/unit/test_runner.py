@@ -1,50 +1,68 @@
 from pathlib import Path
 
+import pytest
+
 from tests.covers import NotLanguageFeature, covers
+from tests.model_build import cond, dd, disp, job, program, ref
+from jackal.dsn import BackwardRef, DdName, InStreamDSN, NoDSN, TempRef
+from jackal.expansion import DanglingDdReference, ExpansionFailed
+from jackal.model import (
+    DD,
+    IfBlock,
+    Job,
+    ProcCall,
+    ProcRef,
+    RcTest,
+    CondOp,
+    StepName,
+    StepRef,
+)
+from jackal.results import JobResult, StepDisposition
+from jackal.runner import JobRunner, UnsupportedStep
 
-from jackal.dsn import DirectDSN
-from jackal.model import DD, Cond, CondOp, Disp, DispNormal, DispStatus, Job, Step
-from jackal.results import StepDisposition
-from jackal.runner import JobRunner
-from jackal.value_parts import literal
-
-_DUMMY_DISP = Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE)
+EXECUTED, BYPASSED = StepDisposition.EXECUTED, StepDisposition.BYPASSED
 
 
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_runner_runs_all_steps(tmp_path: Path) -> None:
-    job = Job(
-        name="J",
-        steps=(
-            Step(
-                name="A",
-                pgm="IEFBR14",
-                dds=(
-                    DD(
-                        "D",
-                        DirectDSN(literal("J.X")),
-                        Disp(DispStatus.NEW, DispNormal.DELETE, DispNormal.DELETE),
-                    ),
-                ),
-            ),
-            Step(name="B", pgm="IEFBR14", dds=()),
-        ),
-    )
+def _run(tmp_path: Path, j: Job, proclib: tuple[Path, ...] = ()) -> JobResult:
     runner = JobRunner(
         source_dir=tmp_path,
         bridge_jar="unused",
         data_dir=tmp_path,
         copybook_dir=tmp_path,
+        proclib_dirs=proclib,
     )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    assert [s.name for s in res.steps] == ["A", "B"]
-    assert all(s.ran and s.return_code == 0 for s in res.steps)
+    return runner.run(j, workdir=tmp_path, seeds={})
+
+
+def _fresh(tmp_path: Path, name: str) -> Path:
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def _outcomes(result: JobResult) -> list[tuple[str, int, StepDisposition]]:
+    return [(s.name, s.return_code, s.disposition) for s in result.steps]
+
+
+def _sysin(lines: tuple[str, ...]) -> DD[StepRef]:
+    return DD(DdName("SYSIN"), InStreamDSN(), disp(), in_stream=lines)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_runner_runs_every_step_in_order(tmp_path: Path) -> None:
+    j = job(
+        "J",
+        (
+            program("A", "IEFBR14", (dd("D", "J.X", disp("NEW", "DELETE", "DELETE")),)),
+            program("B", "IEFBR14"),
+        ),
+    )
+    assert _outcomes(_run(tmp_path, j)) == [("A", 0, EXECUTED), ("B", 0, EXECUTED)]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
-    """An IDCAMS-only job (in-stream DELETE+DEFINE) creates a KSDS in the catalog."""
-    sysin_lines = (
+    sysin = (
         "DELETE MYAPP.ACCOUNTS CLUSTER",
         "IF MAXCC LE 8 THEN SET MAXCC = 0",
         "DEFINE CLUSTER ( -",
@@ -55,236 +73,103 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
         "  NAME(MYAPP.ACCOUNTS.DATA) -",
         ")",
     )
-    step = Step(
-        name="DEFACCT",
-        pgm="IDCAMS",
-        dds=(
-            DD(
-                ddname="SYSIN",
-                dsn=DirectDSN(()),
-                disp=_DUMMY_DISP,
-                in_stream=sysin_lines,
-            ),
-            DD(
-                ddname="SYSPRINT",
-                dsn=DirectDSN(()),
-                disp=_DUMMY_DISP,
-                sysout=True,
-            ),
-        ),
-    )
-    job = Job(name="DEFTEST", steps=(step,))
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    assert res.steps[0].return_code == 0
-    assert res.steps[0].ran is True
+    sysprint = DD(DdName("SYSPRINT"), NoDSN(), disp(), sysout=True)
+    j = job("DEFTEST", (program("DEFACCT", "IDCAMS", (_sysin(sysin), sysprint)),))
+    assert _outcomes(_run(tmp_path, j)) == [("DEFACCT", 0, EXECUTED)]
     assert (tmp_path / "MYAPP_ACCOUNTS").exists()
 
 
-def _idcams_delete_missing(name: str, conds: tuple[Cond, ...] = ()) -> Step:
-    # DELETE of an uncataloged DSN -> MAXCC 8 (real nonzero RC, no COBOL/bridge).
-    return Step(
-        name=name,
-        pgm="IDCAMS",
-        dds=(
-            DD(
-                ddname="SYSIN",
-                dsn=DirectDSN(()),
-                disp=_DUMMY_DISP,
-                in_stream=("DELETE NOPE.NOPE CLUSTER",),
-            ),
-        ),
-        conds=conds,
-    )
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_step_and_job_cond_bypass_after_a_failure_and_not_after_success(
+    tmp_path: Path,
+) -> None:
+    fails = program("A", "IDCAMS", (_sysin(("DELETE NOPE.NOPE CLUSTER",)),))
+    guarded = program("B", "IEFBR14", condition=cond((0, "NE", "")))
+    clean = job("J", (program("A", "IEFBR14"), guarded))
+    after_failure = job("J", (fails, guarded))
+    job_cond = job("J", (fails, program("B", "IEFBR14")), end_job_tests=((0, "NE"),))
+    assert [
+        _outcomes(_run(_fresh(tmp_path, "clean"), clean)),
+        _outcomes(_run(_fresh(tmp_path, "failure"), after_failure)),
+        _outcomes(_run(_fresh(tmp_path, "job"), job_cond)),
+    ] == [
+        [("A", 0, EXECUTED), ("B", 0, EXECUTED)],
+        [("A", 8, EXECUTED), ("B", 0, BYPASSED)],
+        [("A", 8, EXECUTED), ("B", 0, BYPASSED)],
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cond_bypasses_step_after_failure(tmp_path: Path) -> None:
-    job = Job(
-        name="J",
-        steps=(
-            _idcams_delete_missing("A"),  # MAXCC 8
-            Step(
-                name="B",
-                pgm="IEFBR14",
-                dds=(),
-                conds=(Cond(code=0, op=CondOp.NE),),  # bypass if any prior rc != 0
+def test_a_referback_names_the_earlier_steps_dataset_or_temporary(
+    tmp_path: Path,
+) -> None:
+    j = job(
+        "J",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (
+                    dd("OUT", "MY.FILE", disp("NEW", "CATLG")),
+                    dd("WRK", TempRef("TEMP"), disp("NEW", "PASS")),
+                ),
             ),
-        ),
-    )
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    a, b = res.steps
-    assert a.return_code == 8 and a.disposition is StepDisposition.EXECUTED
-    assert b.disposition is StepDisposition.BYPASSED and b.ran is False
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cond_runs_step_when_clean(tmp_path: Path) -> None:
-    job = Job(
-        name="J",
-        steps=(
-            Step(name="A", pgm="IEFBR14", dds=()),  # RC 0
-            Step(
-                name="B",
-                pgm="IEFBR14",
-                dds=(),
-                conds=(Cond(code=0, op=CondOp.NE),),
+            program(
+                "S2",
+                "IEFBR14",
+                (
+                    dd("IN", BackwardRef(ref("S1"), DdName("OUT")), disp("OLD")),
+                    dd("TMP", BackwardRef(ref("S1"), DdName("WRK")), disp("OLD")),
+                ),
             ),
         ),
     )
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    assert all(s.disposition is StepDisposition.EXECUTED for s in res.steps)
+    assert _outcomes(_run(tmp_path, j)) == [("S1", 0, EXECUTED), ("S2", 0, EXECUTED)]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_job_level_cond_applies_to_all_steps(tmp_path: Path) -> None:
-    job = Job(
-        name="J",
-        steps=(
-            _idcams_delete_missing("A"),  # MAXCC 8
-            Step(name="B", pgm="IEFBR14", dds=()),  # no own COND
+def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> None:
+    j = job(
+        "J",
+        (
+            program("A", "IDCAMS", (_sysin(("DELETE NOPE.NOPE CLUSTER",)),)),
+            program(
+                "B",
+                "IEFBR14",
+                (dd("OUT", "MY.FILE", disp("NEW", "CATLG")),),
+                cond((0, "NE", "")),
+            ),
+            program("C", "IEFBR14", (dd("IN", BackwardRef(ref("B"), DdName("OUT"))),)),
         ),
-        cond=(Cond(code=0, op=CondOp.NE),),  # job-level: bypass all after a failure
     )
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    assert res.steps[1].disposition is StepDisposition.BYPASSED
+    assert _outcomes(_run(tmp_path, j)) == [
+        ("A", 8, EXECUTED),
+        ("B", 0, BYPASSED),
+        ("C", 0, BYPASSED),
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_resolve_step_substitutes_backref(tmp_path: Path) -> None:
-    from jackal.dsn import BackwardRef, DirectDSN
-    from jackal.model import DD, Disp, DispNormal, DispStatus, Step
-
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    resolved_dds = {"STEP1": {"WRK": DirectDSN(literal("MY.FILE"))}}
-    step = Step(
-        name="STEP2",
-        pgm="IEFBR14",
-        dds=(
-            DD(
-                "INPUT",
-                BackwardRef("STEP1", "WRK"),
-                Disp(DispStatus.OLD, DispNormal.DELETE, DispNormal.DELETE),
+def test_a_referback_to_a_dd_the_step_lacks_fails_before_anything_runs(
+    tmp_path: Path,
+) -> None:
+    j = job(
+        "J",
+        (
+            program("S1", "IEFBR14", (dd("WRK", "MY.FILE", disp("NEW", "CATLG")),)),
+            program(
+                "S2", "IEFBR14", (dd("IN", BackwardRef(ref("S1"), DdName("BADDD"))),)
             ),
         ),
     )
-    result = runner._resolve_step(step, resolved_dds)
-    assert result is not None
-    assert result.dds[0].dsn == DirectDSN(literal("MY.FILE"))
+    with pytest.raises(ExpansionFailed) as failure:
+        _run(tmp_path, j)
+    assert isinstance(failure.value.error, DanglingDdReference)
+    assert failure.value.error.ddname == DdName("BADDD")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_resolve_step_returns_none_when_referenced_step_absent(tmp_path: Path) -> None:
-    from jackal.dsn import BackwardRef
-    from jackal.model import DD, Disp, DispNormal, DispStatus, Step
-
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    step = Step(
-        name="STEP2",
-        pgm="IEFBR14",
-        dds=(
-            DD(
-                "INPUT",
-                BackwardRef("MISSING", "WRK"),
-                Disp(DispStatus.OLD, DispNormal.DELETE, DispNormal.DELETE),
-            ),
-        ),
-    )
-    assert runner._resolve_step(step, resolved_dds={}) is None
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_record_dds_stores_temp_ref_as_direct_dsn(tmp_path: Path) -> None:
-    from jackal.dsn import DirectDSN, TempRef
-    from jackal.model import DD, Disp, DispNormal, DispStatus
-
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    dds = (
-        DD(
-            "WRK",
-            TempRef("&&TEMP"),
-            Disp(DispStatus.NEW, DispNormal.PASS, DispNormal.DELETE),
-        ),
-        DD(
-            "OUT",
-            DirectDSN(literal("MY.FILE")),
-            Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE),
-        ),
-    )
-    registry: dict = {}
-    runner._record_dds("STEP1", dds, registry)
-    assert registry["STEP1"]["WRK"] == DirectDSN(literal("TEMP"))  # alias[2:]
-    assert registry["STEP1"]["OUT"] == DirectDSN(literal("MY.FILE"))
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_resolve_step_raises_for_unknown_ddname(tmp_path: Path) -> None:
-    from jackal.dsn import BackwardRef, DirectDSN
-    from jackal.model import DD, Disp, DispNormal, DispStatus, Step
-    import pytest
-
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    resolved_dds = {"STEP1": {"WRK": DirectDSN(literal("MY.FILE"))}}
-    step = Step(
-        name="STEP2",
-        pgm="IEFBR14",
-        dds=(
-            DD(
-                "INPUT",
-                BackwardRef("STEP1", "BADDD"),
-                Disp(DispStatus.OLD, DispNormal.DELETE, DispNormal.DELETE),
-            ),
-        ),
-    )
-    with pytest.raises(KeyError, match="BADDD"):
-        runner._resolve_step(step, resolved_dds)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_runner_expands_proc_call_before_running(tmp_path: Path) -> None:
+def test_runner_expands_a_proc_call_before_running(tmp_path: Path) -> None:
     (tmp_path / "proc").mkdir()
     (tmp_path / "proc" / "WRAPIT.prc").write_text(
         "//WRAPIT PROC\n"
@@ -292,36 +177,29 @@ def test_runner_expands_proc_call_before_running(tmp_path: Path) -> None:
         "//D DD DSN=J.X,DISP=(NEW,DELETE,DELETE)\n"
         "// PEND\n"
     )
-    job = Job(name="J", steps=(Step(name="STEP1", pgm="WRAPIT", dds=()),))
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-        proclib_dirs=[tmp_path / "proc"],
-    )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    assert [s.name for s in res.steps] == ["STEP1.P1"]
-    assert res.steps[0].ran and res.steps[0].return_code == 0
+    j = job("J", (ProcCall(StepName("STEP1"), ProcRef("WRAPIT")),))
+    assert _outcomes(_run(tmp_path, j, (tmp_path / "proc",))) == [
+        ("STEP1.P1", 0, EXECUTED)
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_runner_without_proclib_dirs_is_unchanged(tmp_path: Path) -> None:
-    # Default proclib_dirs=() must produce byte-identical behavior to every
-    # existing call site that predates this feature (this is the exact body
-    # of test_runner_runs_all_steps, re-run with no proclib_dirs argument).
-    job = Job(
-        name="J",
-        steps=(
-            Step(name="A", pgm="IEFBR14", dds=()),
-            Step(name="B", pgm="IEFBR14", dds=()),
+def test_runner_refuses_an_unresolved_proc_and_a_step_under_an_if(
+    tmp_path: Path,
+) -> None:
+    unresolved = job("J", (ProcCall(StepName("S1"), ProcRef("NOSUCHP")),))
+    guarded = job(
+        "J",
+        (
+            program("S1", "IEFBR14"),
+            IfBlock(
+                StepName("C1"),
+                RcTest(ref("S1"), CondOp.EQ, 0),
+                (program("S2", "IEFBR14"),),
+            ),
         ),
     )
-    runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
-        data_dir=tmp_path,
-        copybook_dir=tmp_path,
-    )
-    res = runner.run(job, workdir=tmp_path, seeds={})
-    assert [s.name for s in res.steps] == ["A", "B"]
+    with pytest.raises(UnsupportedStep, match="PROC NOSUCHP is in no proclib"):
+        _run(tmp_path, unresolved)
+    with pytest.raises(UnsupportedStep, match="S2 is under an IF"):
+        _run(tmp_path, guarded)
