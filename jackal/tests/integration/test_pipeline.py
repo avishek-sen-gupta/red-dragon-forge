@@ -5,6 +5,7 @@ import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.jcl.parser import parse_jcl
 from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 
 FIX = Path(__file__).parent / "fixtures"
@@ -26,6 +27,7 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
     seed.write_bytes(_ebcdic(b"applemango"))
     job = parse_jcl((FIX / "pipeline.jcl").read_text())
     runner = JobRunner(
+        unresolved=RaiseErrorStrategy(),
         source_dir=FIX / "cbl",
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

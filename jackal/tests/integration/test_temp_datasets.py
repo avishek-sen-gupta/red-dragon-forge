@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from jackal.model import DD, StepRef, TempRef
 from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, disp, job, program
 
@@ -22,6 +23,7 @@ def _old_delete_dd(name: str) -> DD[StepRef]:
 
 def _runner(tmp_path):
     return JobRunner(
+        unresolved=RaiseErrorStrategy(),
         source_dir=tmp_path,
         bridge_jar="unused",
         data_dir=tmp_path,

@@ -14,6 +14,7 @@ import pytest
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.results import StepDisposition
 from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 
 # Minimal COBOL that reads PARM-DATA and sets RETURN-CODE=42 when it equals 'HELLO     '.
@@ -46,6 +47,7 @@ def _parse(jcl: str, jcl_bridge_jar: str):
 
 def _runner(src: Path, bridge_jar: str, tmp_path: Path) -> JobRunner:
     return JobRunner(
+        unresolved=RaiseErrorStrategy(),
         source_dir=src,
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.covers import covers, NotLanguageFeature
 
-from jackal.cli import main
+from jackal.cli import main, run
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -16,7 +16,7 @@ def test_cli_runs_utility_job(tmp_path, capsys):
     jcl.write_text(
         "//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=J.X,DISP=(NEW,DELETE,DELETE)\n"
     )
-    rc = main(
+    rc = run(
         [
             "run",
             str(jcl),
@@ -73,7 +73,7 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
     monkeypatch.setattr(JobRunner, "run", fake_run)
     jcl = tmp_path / "j.jcl"
     jcl.write_text("//J JOB 1\n//A EXEC PGM=IEFBR14\n")
-    rc = main(
+    rc = run(
         [
             "run",
             str(jcl),

@@ -39,6 +39,7 @@ from jackal.jcl.proc_expand import expand_procs
 from jackal.model import Job, Step
 from jackal.results import JobResult, StepResult
 from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
 from jackal.utilities import UTILITIES
 
 HOME = Path(os.environ["CARDDEMO_HOME"])
@@ -97,6 +98,7 @@ def _staged_data(work: Path) -> Path:
 def _session(work: Path, workdir: Path, proclib: bool) -> Session:
     data_dir = _staged_data(work)
     runner = JobRunner(
+        unresolved=RaiseErrorStrategy(),
         source_dir=CBL_DIR,
         bridge_jar=BRIDGE,
         data_dir=data_dir,

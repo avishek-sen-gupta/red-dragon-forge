@@ -1538,10 +1538,17 @@ Each is one committable unit and keeps the suite green.
   errors.) (b) A name used more than once, as when one PROC is called twice: IBM resolves to the
   first occurrence "in most cases" and calls the result unpredictable. Resolved to the same run of
   the PROC, with a warning.
-- **D7. Running a step whose reference is unresolved.** Open. A bypass test, an IF term or a
-  referback whose `StepReference` or DD coordinate is unresolved: does the gate read the test as
-  false (as for a step that did not run), flush the step, or halt it; and what does the allocator
-  do with an unresolved referback?
+- **D7. Running a step whose reference is unresolved.** Decided: an injected
+  `UnresolvedReferenceStrategy`. z/OS rejects such a job at conversion, so both strategies are
+  jackal's own behaviour.
+  - `RaiseErrorStrategy` scans the expanded job and raises before any step runs, on the first
+    `UnexpandedCall` or step whose bypass test or referback is unresolved.
+  - `IgnoreStrategy` runs the job. A bypass test whose `StepReference` is unresolved is false, as
+    for a step that did not run; the step's other tests still apply. An `UnexpandedCall`, and a
+    step with an unresolved referback, are recorded with the jackal-only disposition
+    `SKIPPED_UNRESOLVED` (no IBM equivalent), which later bypass tests skip as they skip a step
+    that did not run.
+  - IF terms are not covered: steps under an IF do not run yet.
 
 ## Appendix A. What the code does today
 

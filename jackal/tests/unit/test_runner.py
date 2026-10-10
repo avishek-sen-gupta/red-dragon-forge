@@ -20,18 +20,31 @@ from jackal.model import (
 )
 from jackal.results import JobResult, StepDisposition
 from jackal.runner import JobRunner, UnsupportedStep
+from jackal.unresolved import (
+    IgnoreStrategy,
+    RaiseErrorStrategy,
+    UnresolvedReference,
+    UnresolvedReferenceStrategy,
+)
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import cond, dd, disp, job, program, ref
 
 EXECUTED, BYPASSED = StepDisposition.EXECUTED, StepDisposition.BYPASSED
+SKIPPED_UNRESOLVED = StepDisposition.SKIPPED_UNRESOLVED
 
 
-def _run(tmp_path: Path, j: Job, proclib: tuple[Path, ...] = ()) -> JobResult:
+def _run(
+    tmp_path: Path,
+    j: Job,
+    proclib: tuple[Path, ...] = (),
+    unresolved: UnresolvedReferenceStrategy = RaiseErrorStrategy(),
+) -> JobResult:
     runner = JobRunner(
         source_dir=tmp_path,
         bridge_jar="unused",
         data_dir=tmp_path,
         copybook_dir=tmp_path,
+        unresolved=unresolved,
         proclib_dirs=proclib,
     )
     return runner.run(j, workdir=tmp_path, seeds={})
@@ -165,13 +178,14 @@ def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> Non
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_step_with_an_unresolved_reference_is_refused_until_d7_is_decided(
+def test_raise_strategy_rejects_an_unresolved_reference_before_any_step_runs(
     tmp_path: Path,
 ) -> None:
+    first = program("S1", "NOSOURCE")
     referback = job(
         "J",
         (
-            program("S1", "IEFBR14", (dd("WRK", "MY.FILE", disp("NEW", "CATLG")),)),
+            first,
             program(
                 "S2",
                 "IEFBR14",
@@ -180,20 +194,45 @@ def test_a_step_with_an_unresolved_reference_is_refused_until_d7_is_decided(
         ),
     )
     test = job(
+        "J", (first, program("S2", "IEFBR14", condition=cond((4, "LT", "NOPE"))))
+    )
+    call = job("J", (first, ProcCall(StepName("S2"), ProcRef("NOSUCHP"))))
+    messages = (
+        "S2 refers to a step or DD that is not resolved (blueprint D7)",
+        "S2 refers to a step or DD that is not resolved (blueprint D7)",
+        "S2: PROC NOSUCHP is in no proclib (blueprint D7)",
+    )
+    for j, message in zip((referback, test, call), messages):
+        with pytest.raises(UnresolvedReference) as raised:
+            _run(tmp_path, j)
+        assert str(raised.value) == message
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_ignore_strategy_drops_unresolved_tests_and_skips_what_cannot_run(
+    tmp_path: Path,
+) -> None:
+    j = job(
         "J",
         (
-            program("S1", "IEFBR14"),
+            program("S1", "IEFBR14", (dd("WRK", "MY.FILE", disp("NEW", "CATLG")),)),
             program("S2", "IEFBR14", condition=cond((4, "LT", "NOPE"))),
+            program(
+                "S3",
+                "IEFBR14",
+                (dd("IN", BackwardRef(ref("S1"), UnresolvedDd(DdName("BADDD")))),),
+            ),
+            ProcCall(StepName("S4"), ProcRef("NOSUCHP")),
+            program("S5", "IEFBR14", condition=cond((0, "EQ", "S3"))),
         ),
     )
-    with pytest.raises(
-        UnsupportedStep, match="S2 refers to a step or DD that is not resolved"
-    ):
-        _run(_fresh(tmp_path, "referback"), referback)
-    with pytest.raises(
-        UnsupportedStep, match="S2 refers to a step or DD that is not resolved"
-    ):
-        _run(_fresh(tmp_path, "test"), test)
+    assert _outcomes(_run(tmp_path, j, unresolved=IgnoreStrategy())) == [
+        ("S1", 0, EXECUTED),
+        ("S2", 0, EXECUTED),
+        ("S3", 0, SKIPPED_UNRESOLVED),
+        ("S4", 0, SKIPPED_UNRESOLVED),
+        ("S5", 0, EXECUTED),
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -212,10 +251,7 @@ def test_runner_expands_a_proc_call_before_running(tmp_path: Path) -> None:
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_runner_refuses_an_unresolved_proc_and_a_step_under_an_if(
-    tmp_path: Path,
-) -> None:
-    unresolved = job("J", (ProcCall(StepName("S1"), ProcRef("NOSUCHP")),))
+def test_runner_refuses_a_step_under_an_if(tmp_path: Path) -> None:
     guarded = job(
         "J",
         (
@@ -227,8 +263,6 @@ def test_runner_refuses_an_unresolved_proc_and_a_step_under_an_if(
             ),
         ),
     )
-    with pytest.raises(UnsupportedStep, match="PROC NOSUCHP is in no proclib"):
-        _run(tmp_path, unresolved)
     with pytest.raises(UnsupportedStep, match="S2 is under an IF"):
         _run(tmp_path, guarded)
 

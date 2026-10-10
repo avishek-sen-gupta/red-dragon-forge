@@ -14,23 +14,20 @@ from jackal.expansion import DirectoryProcLibrary, expand_or_fail
 from jackal.model import (
     DD,
     DSN,
-    AllPriorSteps,
     Always,
     BackwardRef,
-    BypassTest,
     DdName,
     DirectDSN,
     Job,
     ProgramStep,
     QualifiedStep,
     RcComparison,
-    ResolvedDd,
-    ResolvedProgramStep,
     StepReference,
     TempRef,
     UnexpandedCall,
 )
 from jackal.results import JobResult, StepDisposition, StepResult
+from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 from jackal.value_parts import literal
 
@@ -39,13 +36,17 @@ Entry = QualifiedStep | UnexpandedCall
 
 
 class UnsupportedStep(Exception):
-    """A step jackal cannot run yet: an unexpanded PROC call, a guard, a concatenation, an unresolved reference."""
+    """A step jackal cannot run yet: a step under an IF, or a concatenated DD."""
 
 
 @dataclass(frozen=True)
 class _History:
     results: tuple[StepResult, ...]
     datasets: Mapping[StepReference, Recorded]
+
+    def skipped(self, entry: Entry) -> _History:
+        result = StepResult(entry, 0, StepDisposition.SKIPPED_UNRESOLVED)
+        return _History((*self.results, result), self.datasets)
 
     def bypassed(self, step: QualifiedStep) -> _History:
         result = StepResult(step, 0, StepDisposition.BYPASSED)
@@ -96,39 +97,6 @@ def _resolved_dd(
     )
 
 
-def _fully_resolved(reference: StepReference) -> bool:
-    return isinstance(reference.target, ResolvedProgramStep)
-
-
-def _test_resolved(test: BypassTest[StepReference]) -> bool:
-    match test.target:
-        case AllPriorSteps():
-            return True
-        case _:
-            return _fully_resolved(test.target)
-
-
-def _referback_resolved(dd: DD[StepReference]) -> bool:
-    match dd.dsn:
-        case BackwardRef(dd=coordinate):
-            return isinstance(coordinate, ResolvedDd)
-        case _:
-            return True
-
-
-def _unresolved(
-    qualified: QualifiedStep, step: ProgramStep[StepReference]
-) -> ProgramStep[StepReference]:
-    tests = all(_test_resolved(t) for t in step.cond.bypass_tests)
-    referbacks = all(_referback_resolved(dd) for dd in step.dds)
-    if not (tests and referbacks):
-        raise UnsupportedStep(
-            f"{qualified.rendered()} refers to a step or DD that is not resolved; "
-            "running such a step is undecided (blueprint D7)"
-        )
-    return step
-
-
 def _concatenated(
     qualified: QualifiedStep, step: ProgramStep[StepReference]
 ) -> ProgramStep[StepReference]:
@@ -142,7 +110,7 @@ def _concatenated(
             f"{qualified.rendered()} concatenates DD {names[0]}; concatenated "
             "reads are not supported yet (jackal-1o2.5)"
         )
-    return _unresolved(qualified, step)
+    return step
 
 
 def _unguarded(qualified: QualifiedStep) -> ProgramStep[StepReference]:
@@ -154,16 +122,6 @@ def _unguarded(qualified: QualifiedStep) -> ProgramStep[StepReference]:
     return _concatenated(qualified, qualified.step)
 
 
-def _runnable(entry: Entry) -> QualifiedStep:
-    match entry:
-        case UnexpandedCall():
-            raise UnsupportedStep(
-                f"{entry.rendered()}: PROC {entry.call().proc.name} is in no proclib"
-            )
-        case QualifiedStep():
-            return entry
-
-
 class JobRunner:
     def __init__(
         self,
@@ -171,12 +129,14 @@ class JobRunner:
         bridge_jar: str,
         data_dir: Path,
         copybook_dir: Path,
+        unresolved: UnresolvedReferenceStrategy,
         proclib_dirs: Sequence[Path] = (),
     ):
         self._source_dir = source_dir
         self._bridge_jar = bridge_jar
         self._data_dir = data_dir
         self._copybook_dir = copybook_dir
+        self._unresolved = unresolved
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
     def run(self, job: Job, workdir: Path, seeds: Mapping[str, Path]) -> JobResult:
@@ -186,7 +146,7 @@ class JobRunner:
         return self.run_job(job, catalog)
 
     def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
-        expanded = expand_or_fail(job, self._library)
+        expanded = self._unresolved.admit(expand_or_fail(job, self._library))
         try:
             history = reduce(
                 lambda done, entry: self._next(
@@ -206,8 +166,32 @@ class JobRunner:
         history: _History,
         entry: Entry,
     ) -> _History:
-        qualified = _runnable(entry)
+        match entry:
+            case UnexpandedCall():
+                return history.skipped(entry)
+            case QualifiedStep():
+                return self._step(catalog, end_job_tests, history, entry)
+
+    def _step(
+        self,
+        catalog: DatasetCatalog,
+        end_job_tests: Sequence[RcComparison],
+        history: _History,
+        qualified: QualifiedStep,
+    ) -> _History:
         step = _unguarded(qualified)
+        if not referbacks_resolved(step):
+            return history.skipped(qualified)
+        return self._gated(catalog, end_job_tests, history, qualified, step)
+
+    def _gated(
+        self,
+        catalog: DatasetCatalog,
+        end_job_tests: Sequence[RcComparison],
+        history: _History,
+        qualified: QualifiedStep,
+        step: ProgramStep[StepReference],
+    ) -> _History:
         if should_bypass(step.cond, end_job_tests, history.results):
             return history.bypassed(qualified)
         if any(s not in history.datasets for s in _referenced(step)):
