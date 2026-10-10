@@ -1,7 +1,9 @@
 # jackal: job-level domain model (blueprint)
 
 **Date:** 2026-10-10
-**Status:** reviewed 2026-10-10. No code written against it yet.
+**Status:** reviewed 2026-10-10; amended 2026-10-10: a reference after expansion is a path of
+coordinates, each PROC, PROC call, program step and DD resolved or unresolved (§4.1, §4.2, §4.5,
+§5, D6, D7). The JCL object model (parsed model and expansion) is built against it.
 **Scope:** the types and interfaces for jackal's job-level execution, in the agreed order:
 step outcomes (`red-dragon-forge-5fu`) → step lifecycle and allocator (`red-dragon-forge-lrk`) →
 program dispatch (`red-dragon-forge-xkk`, `red-dragon-forge-355`) → job dataset context
@@ -40,9 +42,11 @@ implemented in order without changing a type an earlier issue introduced.
 ## 2. The design in brief
 
 A JCL job is parsed into a `Job`: a list of EXEC statements, each either a program step
-(`EXEC PGM=`) or a call to a PROC (`EXEC <proc>`). `expand_procs` inlines every PROC call, applies
-the call's overrides, and resolves every reference one step makes to another. The result is an
-`ExpandedJob`: the flat, ordered list of steps that will run, each a `QualifiedStep`.
+(`EXEC PGM=`) or a call to a PROC (`EXEC <proc>`). `expand_procs` inlines every PROC call it can
+find, applies the call's overrides, and resolves every reference one step makes to another as far
+as it can, recording for each entity on the way whether it was found. The result is an
+`ExpandedJob`: the flat, ordered list of steps that will run, each a `QualifiedStep`, with an
+`UnexpandedCall` standing in for each call whose PROC is in no library.
 
 JCL has no loops and no jumps, so the executor walks that list once, front to back. For each step
 the gate looks at what happened to earlier steps and decides whether this one runs. If it runs,
@@ -59,8 +63,10 @@ What lives for one job (temporary datasets and passed datasets) is an immutable 
 | PROC | a named, reusable list of EXEC statements | `//EXTR PROC` … |
 | reference | one step naming another | `COND=(4,LT,S1)`, `DSN=*.S1.OUT` |
 | `StepRef` | a reference as written: a scope and a step name | `S1.P2` |
-| `QualifiedStep` | a step that will run, with the PROC calls that led to it | `P2` of the `EXTR` run by `S1` |
-| stage | whether a type's references are still `StepRef`s or already `QualifiedStep`s | — |
+| coordinate | one entity on the way to a step (a PROC, a PROC call, a program step, a DD), resolved or unresolved | the `S1` in `S1.P2` |
+| `StepReference` | a reference after expansion: a path of PROC-call coordinates and a target step coordinate | `S1.P2`, looked up |
+| `QualifiedStep` | a step that will run, with the coordinates of the PROC calls that led to it | `P2` of the `EXTR` run by `S1` |
+| stage | whether a type's references are still `StepRef`s or already `StepReference`s | — |
 | gate | decides whether a step runs, from earlier outcomes | `COND=`, `EVEN`/`ONLY`, JOB `COND=` |
 | allocation | a DD made ready for the program | `DSN=…,DISP=SHR`, `DD *`, `DD DUMMY` |
 | disposition | what happens to a dataset when the step ends | the 2nd and 3rd `DISP` values |
@@ -144,10 +150,17 @@ classDiagram
     steps
   }
   class QualifiedStep {
-    calls
+    coordinates
     step
   }
-  class PS2["ProgramStep [QualifiedStep]"] {
+  class UnexpandedCall {
+    coordinates
+  }
+  class StepReference {
+    path
+    target
+  }
+  class PS2["ProgramStep [StepReference]"] {
     label
     pgm
     parm
@@ -160,24 +173,31 @@ classDiagram
     overrides
   }
   ExpandedJob --> "*" QualifiedStep : steps
-  QualifiedStep --> "0..15" ProcCall : calls
+  ExpandedJob --> "*" UnexpandedCall : steps
+  QualifiedStep --> "0..15" ProcCall : coordinates
   QualifiedStep --> "1" PS2 : step
-  PS2 --> "*" QualifiedStep : cond, referbacks
+  PS2 --> "*" StepReference : cond, referbacks
+  StepReference --> "0..15" ProcCall : path, resolved or not
+  StepReference --> "1" PS2 : target, resolved or not
 ```
 
-- An `ExpandedJob` is the list of steps that will run, in order. Each is a `QualifiedStep`: the PROC
-  calls that led to the step (none for a step written directly in the job), plus the step.
-- `[QualifiedStep]` marks that this step's references are now the steps they name.
+- An `ExpandedJob` is the list of steps that will run, in order. Each is a `QualifiedStep`: the
+  coordinates of the PROC calls that led to the step (none for a step written directly in the
+  job), plus the step. A call whose PROC is in no library stays as an `UnexpandedCall`.
+- `[StepReference]` marks that this step's references have been looked up. Each `StepReference`
+  is a path of PROC-call coordinates and a target program-step coordinate, and every coordinate is
+  either resolved (holding the entity found) or unresolved (holding the name it was looked up by).
 
 **How stage 1 becomes stage 2**
 
 | Stage 1 | Stage 2 |
 |---|---|
 | `Job` | `ExpandedJob` |
-| `ProgramStep [StepRef]` directly in the job | a new `ProgramStep [QualifiedStep]`, in a `QualifiedStep` with no calls |
-| `ProgramStep [StepRef]` inside a `ProcDef` | the call's overrides applied, then a new `ProgramStep [QualifiedStep]`, in a `QualifiedStep` whose calls include that call |
-| `ProcCall` | replaced by its PROC's steps; kept in each of their `QualifiedStep.calls` |
-| `StepRef` | the `QualifiedStep` it names |
+| `ProgramStep [StepRef]` directly in the job | a new `ProgramStep [StepReference]`, in a `QualifiedStep` with no coordinates |
+| `ProgramStep [StepRef]` inside a `ProcDef` | the call's overrides applied, then a new `ProgramStep [StepReference]`, in a `QualifiedStep` whose coordinates include that call |
+| `ProcCall` whose PROC is found | replaced by its PROC's steps; kept, as a `ResolvedProcCall`, in each of their coordinates |
+| `ProcCall` whose PROC is in no library | an `UnexpandedCall` whose coordinates end at it |
+| `StepRef` | a `StepReference`, each coordinate resolved or unresolved |
 
 **Example**
 
@@ -191,11 +211,11 @@ classDiagram
 //P2      EXEC PGM=SRTPGM,COND=(0,NE,P1)
 ```
 
-| Step that runs | `QualifiedStep.calls` | `QualifiedStep.step` | Its reference: parsed → expanded |
+| Step that runs | `QualifiedStep.coordinates` | `QualifiedStep.step` | Its reference: parsed → expanded |
 |---|---|---|---|
 | `P1` | `[S1 call]` | `P1` | none |
-| `P2` | `[S1 call]` | `P2` | `StepRef(OwnScope, P1)` → qualified `P1` |
-| `S2` | `[]` | `S2` | `StepRef(CalledProcScope(S1), P2)` → qualified `P2` |
+| `P2` | `[S1 call]` | `P2` | `StepRef(OwnScope, P1)` → path `[S1 call]`, target resolved `P1` |
+| `S2` | `[]` | `S2` | `StepRef(CalledProcScope(S1), P2)` → path `[S1 call]`, target resolved `P2` |
 
 ### 3.2 Outcomes
 
@@ -207,7 +227,7 @@ classDiagram
     outcome
   }
   class StepResult {
-    step : QualifiedStep
+    step : QualifiedStep or UnexpandedCall
     outcome
   }
   class StepOutcome {
@@ -355,10 +375,11 @@ classDiagram
 Only where a feature in scope needs it. Every type here is a frozen dataclass whose fields are
 tuples, so every value is hashable and can be a key.
 
-### 4.1 Names, references and qualified steps
+### 4.1 Names, references and coordinates
 
 A step is reached through a chain of statements: zero or more `EXEC PROC=` calls, then the step
-itself. Its identity is that chain of objects, not a dotted name.
+itself. That chain is the step's coordinates. A reference names a step by such a chain; after
+expansion, each entity on it records whether it was found.
 
 ```python
 @dataclass(frozen=True)
@@ -383,46 +404,110 @@ type RefScope = OwnScope | CalledProcScope
 class StepRef:
     scope: RefScope
     step: StepName
-
-@dataclass(frozen=True)
-class QualifiedStep:
-    calls: tuple[ProcCall, ...]
-    step: ExpandedStep
 ```
 
 - **`StepLabel`** is what a statement is called. JCL allows an unnamed `// EXEC`; `Unnamed` is its
   null object. Nothing can refer to an unnamed step.
-- **`StepRef`** is a reference as written: a step name and the scope to look it up in. A step
-  name is the same name wherever it appears; the scope says where to look.
+- **`StepRef`** is a reference as written: a step name and the scope to look it up in. It holds
+  names only, never a step.
   - `OwnScope`: a bare name. At job level it names a job step. Inside a PROC it names a step of
-    the same PROC, or, failing that, a job-level program step outside it (the JCL Reference allows
-    both).
+    the same PROC, or, failing that, a step of an enclosing PROC run or of the job (the JCL
+    Reference allows a PROC step to name a job-level program step).
   - `CalledProcScope(S1)`: the steps of the PROC run by call `S1`. `S1.P1` is
     `StepRef(CalledProcScope(S1), P1)`. This is the longest form JCL has: no reference reaches
     two PROC levels down.
-  - The named step must run a program. A bare name of a step that calls a PROC is not a valid
-    target (`ReferenceToProcCall`); JCL requires `S1.P1` there.
   - JCL resolves a name used more than once (one PROC called twice) to its first occurrence "in
     most cases", and calls the result unpredictable. The blueprint resolves an `OwnScope` name
-    inside a PROC to the same run of that PROC; see D6.
-- **`QualifiedStep`** has the same shape, resolved: `calls` is the resolved scope, `step` the step.
-  `OwnScope` resolves to the calls of wherever the reference was written; `CalledProcScope(S1)` to
-  those calls plus the `S1` call.
-- **`QualifiedStep` element types.** Every element of `calls` is a PROC call, because only a PROC
-  call has steps under it; `step` is the step reached. Typing by position rules out a qualified step that
-  continues past a program step. z/OS nests PROCs up to 15 levels, so `calls` has 0–15 elements.
-  The `ProcCall`s in `calls` are as written, with their overrides, so a qualified step also records how
-  the step was reached.
-- **Always finite.** A `ProgramStep [QualifiedStep]` holds `QualifiedStep`s, each of which holds a
-  `ProgramStep`. JCL lets a reference name only an earlier step (`COND=` and `*.step.dd` alike),
-  and `expand_procs` rejects any other with `ForwardReference`, so references point only
-  backwards and the structure never loops. Equality and hashing therefore terminate. JCL has
-  one same-step form, `DSN=*.ddname`, naming an earlier DD of the same step; it points backwards
-  too, and is not modelled until a corpus needs it. PROCs cannot
-  loop either: a PROC that calls itself, directly or through others, is `CircularProc`.
-- **Uniqueness.** Two unnamed, identical steps under the same calls compare equal. No reference
-  can name either, so nothing resolves ambiguously; the executor tells them apart by position in
-  `ExpandedJob`.
+    inside a PROC to the same run of that PROC, with a warning; see D6.
+
+**Coordinates.** Every entity on the way a reference goes is a coordinate, and each kind of entity
+has its own resolved and unresolved form. An unresolved coordinate holds only the name it was
+looked up by.
+
+```python
+@dataclass(frozen=True)
+class ResolvedProc:
+    proc: ProcDef
+
+@dataclass(frozen=True)
+class UnresolvedProc:
+    proc: ProcRef
+
+type ProcCoordinate = ResolvedProc | UnresolvedProc
+
+@dataclass(frozen=True)
+class ResolvedProcCall:
+    call: ProcCall
+    proc: ProcCoordinate
+
+@dataclass(frozen=True)
+class UnresolvedProcCall:
+    name: StepName
+
+type ProcCallCoordinate = ResolvedProcCall | UnresolvedProcCall
+
+@dataclass(frozen=True)
+class ResolvedProgramStep:
+    step: ProgramStep[StepReference]
+
+@dataclass(frozen=True)
+class UnresolvedProgramStep:
+    name: StepName
+
+type ProgramStepCoordinate = ResolvedProgramStep | UnresolvedProgramStep
+
+@dataclass(frozen=True)
+class ResolvedDd:
+    dd: DD[StepReference]
+
+@dataclass(frozen=True)
+class UnresolvedDd:
+    name: DdName
+
+type DdCoordinate = ResolvedDd | UnresolvedDd
+
+@dataclass(frozen=True)
+class StepReference:
+    path: tuple[ProcCallCoordinate, ...]
+    target: ProgramStepCoordinate
+
+@dataclass(frozen=True)
+class QualifiedStep:
+    coordinates: tuple[ResolvedProcCall, ...]
+    step: ProgramStep[StepReference]
+
+@dataclass(frozen=True)
+class UnexpandedCall:
+    coordinates: tuple[ResolvedProcCall, ...]
+```
+
+- **Each entity has its own resolution.** A call is resolved when the call exists, whatever its
+  PROC: `//S1 EXEC SORTPROC` with SORTPROC in no library is `ResolvedProcCall(S1,
+  UnresolvedProc(SORTPROC))`. Only the PROC is unresolved, and a step named inside it is an
+  `UnresolvedProgramStep`.
+- **Kind by position.** The kind of a name is known from where it stands, found or not: every name
+  before the last in a reference is a PROC call, because only a call has steps under it, and the
+  last is a program step, the only valid target.
+- **`StepReference`** is a reference after expansion. It is fully resolved when every coordinate on
+  it is resolved; otherwise its first unresolved coordinate says where the lookup stopped. A fully
+  resolved reference names a `QualifiedStep`: its path is that step's coordinates and its target
+  holds that step's `ProgramStep`.
+- **`QualifiedStep`** is a step that will run: the coordinates of the PROC calls that led to it,
+  each a call whose PROC was found, and the `ProgramStep`. z/OS nests PROCs up to 15 levels, so
+  there are 0–15 coordinates. The `ProcCall`s in them are as written, with their overrides, so a
+  qualified step also records how the step was reached.
+- **`UnexpandedCall`** stands in the `ExpandedJob` for a call whose PROC is in no library. Its
+  coordinates end at that call, whose PROC coordinate is `UnresolvedProc`; its steps are unknown.
+- **Always finite.** A `ProgramStep [StepReference]` holds references to earlier steps only: JCL
+  lets a reference name only an earlier step (`COND=` and `*.step.dd` alike), and `expand_procs`
+  rejects any other with `ForwardReference`. References point only backwards and the structure
+  never loops, so equality and hashing terminate. JCL has one same-step form, `DSN=*.ddname`,
+  naming an earlier DD of the same step; it points backwards too, and is not modelled until a
+  corpus needs it. PROCs cannot loop either: a PROC that calls itself, directly or through others,
+  is `CircularProc`.
+- **Uniqueness.** Two unnamed, identical steps under the same coordinates compare equal. No
+  reference can name either, so nothing resolves ambiguously; the executor tells them apart by
+  position in `ExpandedJob`.
 - Rendering `S1.P1` happens only where text leaves: CLI output, cobble's graph node ids.
 
 | Class | JCL it represents |
@@ -432,21 +517,38 @@ class QualifiedStep:
 | `OwnScope` | `COND=(4,LT,S1)`, `DSN=*.S1.OUT`; inside a PROC, `COND=(0,NE,P1)` |
 | `CalledProcScope` | the `S1.` in `COND=(4,LT,S1.P1)`, `DSN=*.S1.P1.OUT` |
 | `StepRef` | `S1` → `StepRef(OwnScope(), S1)`; `S1.P1` → `StepRef(CalledProcScope(S1), P1)` |
-| `QualifiedStep` | job step `//S2 EXEC PGM=RPT` → `QualifiedStep(calls=(), step=<S2>)`; step `P1` of the PROC called by `//S1 EXEC EXTR` → `QualifiedStep(calls=(<S1 call>,), step=<P1>)` |
+| `ResolvedProc` / `UnresolvedProc` | the PROC that `//S1 EXEC EXTR` names, found in a library / in none |
+| `ResolvedProcCall` / `UnresolvedProcCall` | the `S1` in `S1.P1`, when a call `S1` exists / when no step `S1` does |
+| `ResolvedProgramStep` / `UnresolvedProgramStep` | the `P1` in `S1.P1`, found / not found or inside an unresolved PROC |
+| `ResolvedDd` / `UnresolvedDd` | the `OUT` in `DSN=*.S1.OUT`, found on `S1` / not |
+| `StepReference` | `COND=(4,LT,S1.P1)` after expansion |
+| `QualifiedStep` | job step `//S2 EXEC PGM=RPT` → `QualifiedStep(coordinates=(), step=<S2>)`; step `P1` of the PROC called by `//S1 EXEC EXTR` → `QualifiedStep(coordinates=(<S1 call>,), step=<P1>)` |
+| `UnexpandedCall` | `//S3 EXEC FTPPROC`, FTPPROC in no library |
+
+How each kind of reference expands, in a job whose `//S1 EXEC SORTPROC` names a PROC in no library:
+
+| JCL | `StepReference` after expansion |
+|---|---|
+| `COND=(4,LT,S1.SORT)` | path `(ResolvedProcCall(S1, UnresolvedProc(SORTPROC)),)`, target `UnresolvedProgramStep(SORT)` |
+| `COND=(4,LT,S9.SORT)`, no step `S9` | path `(UnresolvedProcCall(S9),)`, target `UnresolvedProgramStep(SORT)` |
+| `COND=(4,LT,NOPE)`, no step `NOPE` | path `()`, target `UnresolvedProgramStep(NOPE)` |
+| `COND=(4,LT,S0)`, `S0` an earlier program step | path `()`, target `ResolvedProgramStep(<S0>)` |
+| `DSN=*.S0.NOPE`, `S0` has no DD `NOPE` | a referback whose step is resolved and whose DD is `UnresolvedDd(NOPE)` (§4.5) |
 
 ### 4.2 Two stages, one parameter
 
-A reference is a `StepRef` in the parsed `Job` and a `QualifiedStep` once `expand_procs` has resolved it.
-Every type that holds a reference takes that stage as a parameter, so the checker rejects a
-resolved type holding an unresolved reference:
+A reference is a `StepRef` in the parsed `Job` and a `StepReference` once `expand_procs` has looked
+it up. Every type that holds a reference takes that stage as a parameter, so the checker rejects an
+expanded type holding a reference that was never looked up:
 
 ```python
-type Stage = StepRef | QualifiedStep
+type Stage = StepRef | StepReference
 ```
 
-`R` below is bound to `Stage`. The parsed model is `[StepRef]`; `ExpandedJob` holds `[QualifiedStep]`.
-The parameter reaches `BypassTest`, `StepCondition`, `ProgramStep`, `DSN` (through `BackwardRef`)
-and `DD`. Aliases keep call sites readable: `WrittenDD = DD[StepRef]`, `ResolvedDD = DD[QualifiedStep]`.
+`R` below is bound to `Stage`. The parsed model is `[StepRef]`; `ExpandedJob` holds
+`[StepReference]`. The parameter reaches `BypassTest`, `StepCondition`, `ProgramStep`, the IF
+guards, `DSN` (through `BackwardRef`) and `DD`. Aliases keep call sites readable:
+`WrittenDD = DD[StepRef]`, `ExpandedDD = DD[StepReference]`.
 
 ### 4.3 COND
 
@@ -539,7 +641,7 @@ an abnormal disposition).
 @dataclass(frozen=True)
 class BackwardRef[R: Stage]:
     step: R
-    ddname: str
+    dd: DdCoordinate
 
 type DSN[R: Stage] = DirectDSN | TempRef | BackwardRef[R] | InStreamDSN | DummyDSN | NoDSN
 
@@ -551,7 +653,7 @@ class ConcatMember[R: Stage]:
 
 @dataclass(frozen=True)
 class DD[R: Stage]:
-    ddname: str
+    ddname: DdName
     dsn: DSN[R]
     disp: Disp
     in_stream: tuple[str, ...] = ()
@@ -561,6 +663,12 @@ class DD[R: Stage]:
 
 The other `DSN` variants are unchanged. `concatenated` is owned by `2cy.3`; the allocator needs
 only this shape. cobble reads `in_stream` and `sysout` today, so they stay.
+
+A referback is a reference to a step plus a DD on it. Parsed, its DD is always `UnresolvedDd`: it is
+only a name until expansion looks at the step. Expanded, it is resolved only when its step reference
+is fully resolved and that step has the DD; anything short of that (the step unresolved, or the step
+found without the DD) leaves the DD coordinate `UnresolvedDd`, with the step reference showing which
+entity was missing.
 
 | Class | JCL it represents |
 |---|---|
@@ -591,7 +699,7 @@ class Symbol:
 @dataclass(frozen=True)
 class ProgramStep[R: Stage]:
     label: StepLabel
-    pgm: str
+    pgm: ProgramRef
     dds: tuple[DD[R], ...]
     cond: StepCondition[R]
     parm: Value = ()
@@ -608,7 +716,7 @@ class ProcStepOverrides:
 @dataclass(frozen=True)
 class ProcCall:
     label: StepLabel
-    proc: str
+    proc: ProcRef
     symbol_overrides: tuple[tuple[SymbolName, Value], ...] = ()
     cond_for_every_step: StepCondition[StepRef] | NotOverridden = NotOverridden()
     parm_for_first_step: Value | NotOverridden = NotOverridden()
@@ -616,6 +724,18 @@ class ProcCall:
     per_step: tuple[tuple[StepName, ProcStepOverrides], ...] = ()
 
 type JobStep = ProgramStep[StepRef] | ProcCall
+
+@dataclass(frozen=True)
+class ProgramRef:
+    name: str
+
+@dataclass(frozen=True)
+class ProcRef:
+    name: str
+
+@dataclass(frozen=True)
+class DdName:
+    text: str
 
 @dataclass(frozen=True)
 class ProcDef:
@@ -682,78 +802,76 @@ refers to and a PROC's defaults declare. Indirection lives on the value side: a 
 
 ```python
 @dataclass(frozen=True)
-class UnresolvedProcCall:
-    call: ProcCall
-
-type ExpandedStep = ProgramStep[QualifiedStep] | UnresolvedProcCall
-
-@dataclass(frozen=True)
 class ExpandedJob:
     name: str
-    steps: tuple[QualifiedStep, ...]
+    steps: tuple[QualifiedStep | UnexpandedCall, ...]
     end_job_tests: tuple[RcComparison, ...] = ()
 
 @dataclass(frozen=True)
-class DanglingReference:
-    written_in: QualifiedStep
-    ref: StepRef
-
-@dataclass(frozen=True)
-class OverrideNamesNoStep:
-    call: QualifiedStep
-    step: StepName
-
-@dataclass(frozen=True)
-class DanglingDdReference:
-    written_in: QualifiedStep
-    ref: StepRef
-    ddname: str
+class ErrorSite:
+    coordinates: tuple[ResolvedProcCall, ...]
+    step: ProgramStep[StepRef]
 
 @dataclass(frozen=True)
 class ForwardReference:
-    written_in: QualifiedStep
+    site: ErrorSite
     ref: StepRef
 
 @dataclass(frozen=True)
 class ReferenceToProcCall:
-    written_in: QualifiedStep
+    site: ErrorSite
     ref: StepRef
 
 @dataclass(frozen=True)
+class PathThroughProgramStep:
+    site: ErrorSite
+    ref: StepRef
+
+@dataclass(frozen=True)
+class OverrideNamesNoStep:
+    call: ProcCall
+    step: StepName
+
+@dataclass(frozen=True)
 class CircularProc:
-    procs: tuple[str, ...]
+    procs: tuple[ProcRef, ...]
 
 type JclError = (
-    DanglingReference
-    | DanglingDdReference
-    | ForwardReference
+    ForwardReference
     | ReferenceToProcCall
+    | PathThroughProgramStep
     | OverrideNamesNoStep
     | CircularProc
 )
 
 class ProcLibrary(Protocol):
-    def find(self, proc: str) -> ProcDef | ProcNotFound: ...
+    def find(self, proc: ProcRef) -> ProcDef | ProcNotFound: ...
 
 def expand_procs(job: Job, library: ProcLibrary) -> ExpandedJob | JclError: ...
 ```
 
-`expand_procs` is the only place a `StepRef` becomes a `QualifiedStep`, and it does four things:
+`expand_procs` is the only place a `StepRef` becomes a `StepReference`, and it does four things:
 
-1. Inlines each `ProcCall`, recursively, applying symbol overrides then the §4.6 keyword overrides.
+1. Inlines each `ProcCall` whose PROC the library has, recursively, applying symbol overrides then
+   the §4.6 keyword overrides. A call whose PROC is in no library becomes an `UnexpandedCall`.
 2. Gives every resulting step its `QualifiedStep`.
-3. Resolves every `StepRef` relative to the scope it was written in. That covers `BypassTest`
-   targets and `BackwardRef` steps.
-4. Returns a `JclError` value, before any step runs, for a reference that resolves to nothing,
-   a reference to the current step or a later one, a reference to a step that calls a PROC,
-   a referback naming a DD its step does not have, an override naming a step the PROC does not
+3. Looks up every `StepRef` relative to the scope it was written in, recording each coordinate on
+   the way as resolved or unresolved (§4.1). That covers `BypassTest` targets, IF guard terms and
+   `BackwardRef` steps and DDs.
+4. Returns a `JclError` value, before any step runs, only for mistakes in the JCL itself: a
+   reference to the current step or a later one, a reference whose target is a PROC call, a
+   reference whose path goes through a program step, an override naming a step the PROC does not
    have, or a PROC that calls itself.
 
-- A PROC call whose PROC is not in the library becomes `UnresolvedProcCall`. The executor gives it
-  `Halted(UnresolvedProc(proc))`, under D2 like any other halt. cobble keeps drawing it as a node,
-  as it does today.
-- The executor takes `ExpandedJob`, so it can never receive an unexpanded PROC call. After
-  expansion, the gate and the allocator compare `QualifiedStep`s that are guaranteed to exist.
+- A name that matches nothing is not an error: it is an unresolved coordinate, and `expand_procs`
+  logs a warning for every reference or referback that is not fully resolved (D6). How the
+  executor treats such a reference is D7.
+- An `UnexpandedCall` reaches the executor, which gives it `Halted(ProcNotInLibrary(proc))`, under
+  D2 like any other halt. cobble keeps drawing it as a node, as it does today.
+- A `JclError` holds an `ErrorSite`: the coordinates and the step as written, since a step whose
+  reference is in error has no expanded form.
+- After expansion, the gate and the allocator meet only `StepReference`s, and can read off each
+  one whether, and where, it is unresolved.
 - `ProcLibrary` is injected; today it is a list of directories read with `Path`.
 
 Blast radius: the deserializer, `proc_expand`, the runner, `cond.py`, and cobble's readers of
@@ -769,6 +887,7 @@ Blast radius: the deserializer, `proc_expand`, the runner, `cond.py`, and cobble
 //IN      DD DSN=&&SORTED,DISP=(OLD,DELETE)
 //REPORT  DD SYSOUT=*
 //S3      EXEC FTPPROC
+//S4      EXEC PGM=CHK,COND=(0,NE,S3.SEND)
 
 //EXTR    PROC HLQ=TEST
 //P1      EXEC PGM=EXTPGM
@@ -791,26 +910,34 @@ Job(name=PAYJOB, end_job_tests=(RcComparison(8, LE),), steps=(
   ProgramStep(label=S2, pgm=RPT,
               cond=StepCondition((BypassTest((4,LT), StepRef(CalledProcScope(S1), P2)),), NORMAL),
               dds=(DD IN &&SORTED (OLD,DELETE,DELETE), DD REPORT SYSOUT)),
-  ProcCall(label=S3, proc=FTPPROC)))
+  ProcCall(label=S3, proc=FTPPROC),
+  ProgramStep(label=S4, pgm=CHK,
+              cond=StepCondition((BypassTest((0,NE), StepRef(CalledProcScope(S3), SEND)),), NORMAL))))
 ```
 
-Expanded (`ExpandedJob`, references resolved), with `C1` the `S1` call above:
+Expanded (`ExpandedJob`, references looked up), with `C1` = `ResolvedProcCall(<S1 call>,
+ResolvedProc(EXTR))` and `C3` = `ResolvedProcCall(<S3 call>, UnresolvedProc(FTPPROC))`:
 
 ```
-QualifiedStep(calls=(C1,), step=ProgramStep(P1, EXTPGM, parm=FULL,
+QualifiedStep(coordinates=(C1,), step=ProgramStep(P1, EXTPGM, parm=FULL,
          dds=(IN PROD.TRANS SHR, OUT &&RAW (NEW,PASS,DELETE))))
-QualifiedStep(calls=(C1,), step=ProgramStep(P2, SRTPGM,
-         cond=BypassTest((0,NE), <qualified P1>),
+QualifiedStep(coordinates=(C1,), step=ProgramStep(P2, SRTPGM,
+         cond=BypassTest((0,NE), StepReference(path=(C1,), target=ResolvedProgramStep(<P1>))),
          dds=(IN &&RAW (OLD,DELETE,DELETE), OUT &&SORTED (NEW,PASS,DELETE))))
-QualifiedStep(calls=(), step=ProgramStep(S2, RPT, cond=BypassTest((4,LT), <qualified P2>), …))
-QualifiedStep(calls=(), step=UnresolvedProcCall(<S3 call>))
+QualifiedStep(coordinates=(), step=ProgramStep(S2, RPT,
+         cond=BypassTest((4,LT), StepReference(path=(C1,), target=ResolvedProgramStep(<P2>))), …))
+UnexpandedCall(coordinates=(C3,))
+QualifiedStep(coordinates=(), step=ProgramStep(S4, CHK,
+         cond=BypassTest((0,NE), StepReference(path=(C3,), target=UnresolvedProgramStep(SEND)))))
 ```
 
 - `&HLQ..TRANS` became `PROD.TRANS`: the call's `HLQ=PROD` beat the PROC's default `TEST`.
 - `PARM.P1='FULL'` reached `P1`. `//P2.OUT` replaced `P2`'s own `OUT`, so `&&TMP` is gone.
 - `P1` inside the PROC and `S1.P2` at job level were written in different scopes; each resolved to
-  the one `QualifiedStep` of the step it names.
-- `FTPPROC` is in no library, so `S3` is `UnresolvedProcCall`.
+  the one step it names.
+- `FTPPROC` is in no library, so `S3` is an `UnexpandedCall`. The call itself is resolved; only its
+  PROC is not, so `S4`'s `S3.SEND` keeps the resolved `S3` call on its path and an unresolved
+  `SEND` as its target, and expansion logs a warning for it.
 
 ## 6. Outcomes (`5fu`, component [13])
 
@@ -842,10 +969,10 @@ class StepBudgetExhausted:
     steps: int
 
 @dataclass(frozen=True)
-class UnresolvedProc:
-    proc: str
+class ProcNotInLibrary:
+    proc: ProcRef
 
-type SimulatorHalt = UnsupportedProgram | UnresolvedProc | StepBudgetExhausted
+type SimulatorHalt = UnsupportedProgram | ProcNotInLibrary | StepBudgetExhausted
 
 @dataclass(frozen=True)
 class Halted:
@@ -886,14 +1013,14 @@ class AllocationError(Enum):
 
 @dataclass(frozen=True)
 class AllocationFailed:
-    ddname: str
+    ddname: DdName
     error: AllocationError
 
 type StepOutcome = Completed | Abended | Halted | Bypassed | Flushed | AllocationFailed
 
 @dataclass(frozen=True)
 class StepResult:
-    step: QualifiedStep
+    step: QualifiedStep | UnexpandedCall
     outcome: StepOutcome
 
 @dataclass(frozen=True)
@@ -912,7 +1039,7 @@ class JobAllocationFailed:
 
 @dataclass(frozen=True)
 class JobHalted:
-    step: QualifiedStep
+    step: QualifiedStep | UnexpandedCall
     halt: SimulatorHalt
 
 type JobOutcome = JobCompleted | JobAbended | JobAllocationFailed | JobHalted
@@ -938,7 +1065,7 @@ class JobResult:
 | `Abended(UserAbend(4038))` | a COBOL program calls `CEE3ABD` with 4038 (D4) |
 | `Abended(SystemAbend(0x0C7))` | a data exception in the program (D1) |
 | `Halted(UnsupportedProgram("SORT"))` | `//S1 EXEC PGM=SORT` before SORT exists |
-| `Halted(UnresolvedProc("FTPPROC"))` | `//S3 EXEC FTPPROC`, no such PROC |
+| `Halted(ProcNotInLibrary("FTPPROC"))` | `//S3 EXEC FTPPROC`, no such PROC |
 | `Halted(StepBudgetExhausted(n))` | a `PERFORM` loop that never ends |
 | `Bypassed(COND_SATISFIED)` | `COND=(4,LT)` after an earlier step's RC 8 |
 | `Bypassed(ONLY_WITHOUT_ABEND)` | `COND=ONLY` when nothing abended |
@@ -950,8 +1077,8 @@ class JobResult:
 | `AllocationFailed(IN, TEMP_NOT_CREATED)` | `//IN DD DSN=&&X,DISP=OLD` with no earlier `NEW` |
 
 For the worked example in §5, with every program ending RC 0: `P1`, `P2` and `S2` are
-`Completed(0)`, `S3` is `Halted(UnresolvedProc("FTPPROC"))`, and the job is
-`JobHalted(<qualified S3>, UnresolvedProc("FTPPROC"))`.
+`Completed(0)`, `S3` is `Halted(ProcNotInLibrary("FTPPROC"))`, and the job is
+`JobHalted(<unexpanded S3>, ProcNotInLibrary("FTPPROC"))`.
 
 ## 7. Executor (component [3])
 
@@ -964,12 +1091,12 @@ def run_job(job: Job, library: ProcLibrary, executor: JobExecutor) -> JobResult 
 
 `run_job` is the entry point: expand, and if that yields a `JclError`, no step runs. Otherwise the
 executor folds over `job.steps` in order, carrying a `StepHistory` and a `JobContext`, starting
-from an empty context. For each `QualifiedStep`:
+from an empty context. For each `QualifiedStep` or `UnexpandedCall`:
 
 1. Ask the gate (§8). A `Skip` records its `Bypassed` or `Flushed` outcome.
-2. On `Run`, match `qualified.step`. An `UnresolvedProcCall` records
-   `Halted(UnresolvedProc(proc))`. A `ProgramStep` goes to the lifecycle (§9.4), which returns the
-   outcome and the next `JobContext`.
+2. On `Run`, match the entry. An `UnexpandedCall` records `Halted(ProcNotInLibrary(proc))`. A
+   `QualifiedStep`'s `ProgramStep` goes to the lifecycle (§9.4), which returns the outcome and the
+   next `JobContext`.
 3. Append the `StepResult` to the history.
 
 After the last step, the executor deletes, through `DatasetStore`, every temporary dataset and
@@ -1001,20 +1128,23 @@ type GateDecision = Run | Skip
 class StepHistory:
     results: tuple[StepResult, ...]
 
-    def completed_rcs(self, target: CondTarget[QualifiedStep]) -> tuple[int, ...]: ...
+    def completed_rcs(self, target: CondTarget[StepReference]) -> tuple[int, ...]: ...
     def first_abend(self) -> StepResult | NoAbend: ...
     def first_allocation_failure(self) -> StepResult | NoAllocationFailure: ...
     def first_job_cond_hit(self, end_job_tests: Sequence[RcComparison]) -> StepResult | NoJobCondHit: ...
-    def ran(self, step: QualifiedStep) -> bool: ...
+    def ran(self, step: StepReference) -> bool: ...
 
 def decide(
-    qualified: QualifiedStep, end_job_tests: Sequence[RcComparison], history: StepHistory
+    entry: QualifiedStep | UnexpandedCall,
+    end_job_tests: Sequence[RcComparison],
+    history: StepHistory,
 ) -> GateDecision: ...
 ```
 
-`decide` reads `qualified.step`. An `UnresolvedProcCall` has no bypass tests or abend mode of its own,
+`decide` reads the entry's step. An `UnexpandedCall` has no bypass tests or abend mode of its own,
 so it is gated as `NORMAL` with none; when the decision is `Run`, the executor records
-`Halted(UnresolvedProc(proc))` without entering the lifecycle.
+`Halted(ProcNotInLibrary(proc))` without entering the lifecycle. A bypass test whose reference is
+not fully resolved is decided by D7.
 
 Rules, in order; the first that applies decides:
 
@@ -1164,12 +1294,12 @@ def disposition_for(disp: Disp, result: ProgramResult) -> DispAction: ...
 ```python
 class StepLifecycle(Protocol):
     def run(
-        self, qualified: QualifiedStep, step: ProgramStep[QualifiedStep], context: JobContext
+        self, qualified: QualifiedStep, step: ProgramStep[StepReference], context: JobContext
     ) -> tuple[StepOutcome, JobContext]: ...
 ```
 
 Allocate every DD → resolve and run the program → dispose by result. `step` is `qualified.step`, already matched as a
-program step by the executor, so the lifecycle never sees an `UnresolvedProcCall`.
+program step by the executor, so the lifecycle never sees an `UnexpandedCall`.
 
 ## 10. Programs (`xkk`, `355`, component [10])
 
@@ -1255,8 +1385,9 @@ class JobContext:
   `&&EXTR` cannot collide with a dataset named `EXTR`.
 - `PASS` puts the dataset on `passed`; a later `OLD`/`SHR` DD naming it receives it. At job end
   the executor deletes every temp and every unreceived passed dataset created in this job.
-- Referbacks need no job state. A `BackwardRef[QualifiedStep]` holds the referenced step itself,
-  and that step's DDs are fixed by expansion, so the allocator reads the name from there.
+- Referbacks need no job state. A resolved `BackwardRef[StepReference]` holds the referenced step
+  and DD themselves (`ResolvedProgramStep`, `ResolvedDd`), fixed by expansion, so the allocator
+  reads the name from there. An unresolved one is D7.
 
 | Class | JCL it represents |
 |---|---|
@@ -1355,7 +1486,7 @@ One test per behaviour.
 
 - Unit (pure): `proc_expand` producing `ExpandedJob`: each §4.6 override rule (bare and
   procstep-qualified `COND`/`PARM`), `dds_for_first_step` and `per_step` DD overrides, nested PROCs, and an
-  unknown PROC becoming `UnresolvedProcCall`; and a symbol override resolving through a `Symbol` in its value;
+  unknown PROC becoming `UnexpandedCall`; each kind of unresolved coordinate with its warning; and a symbol override resolving through a `Symbol` in its value;
   the gate's decision table (§8 rules 1–7, and the first-step rule), including a JOB `COND` hit flushing the rest;
   `disposition_for` for each outcome;
   allocation planning for each DSN × status row in §9.2; `JobOutcome` derivation;
@@ -1372,7 +1503,7 @@ One test per behaviour.
 
 Each is one committable unit and keeps the suite green.
 
-1. **`5fu`:** §6 types, §7 executor loop, §8 gate, `QualifiedStep`/`StepRef`, the stage parameter and the COND model (§4.1–§4.3), `DispAbnormal`/`UNCATLG`
+1. **`5fu`:** §6 types, §7 executor loop, §8 gate, `QualifiedStep`/`StepRef`/`StepReference` and the coordinates, the stage parameter and the COND model (§4.1–§4.3), `DispAbnormal`/`UNCATLG`
    (§4.4), the step-kind split, `SymbolName` and PROC-call overrides with their bridge change (§4.6),
    and `expand_procs` returning `ExpandedJob | JclError` (§5). The runner still allocates as today but returns `JobResult` with outcomes.
 2. **`lrk`:** §9 allocations, allocator, disposition, lifecycle; programs receive a
@@ -1400,11 +1531,17 @@ Each is one committable unit and keeps the suite green.
   `DEFINE`s a cluster and `REPRO`s into it through an `OUTFILE` DD fails allocation, as on z/OS.
   If any existing test or CardDemo job relies on today's lenient order, keep z/OS behaviour and
   fix the job, or keep the leniency?
-- **D6. References the JCL Reference leaves undefined.** (a) A `COND` naming a step that does not
-  exist: no IBM text or message covers it. Drafted as `DanglingReference`, a JCL error; the
-  alternative is to ignore the test. (b) A name used more than once, as when one PROC is called
-  twice: IBM resolves to the first occurrence "in most cases" and calls the result
-  unpredictable. Drafted as the same run of the PROC; the alternative is first occurrence.
+- **D6. References the JCL Reference leaves undefined.** Settled 2026-10-10. (a) A reference to a
+  step or DD that does not exist, and a reference into a PROC that is in no library: no IBM text
+  covers either. Each is an unresolved coordinate (§4.1), and expansion logs a warning; it is not a
+  JCL error. (This replaced the first draft's `DanglingReference` and `DanglingDdReference`
+  errors.) (b) A name used more than once, as when one PROC is called twice: IBM resolves to the
+  first occurrence "in most cases" and calls the result unpredictable. Resolved to the same run of
+  the PROC, with a warning.
+- **D7. Running a step whose reference is unresolved.** Open. A bypass test, an IF term or a
+  referback whose `StepReference` or DD coordinate is unresolved: does the gate read the test as
+  false (as for a step that did not run), flush the step, or halt it; and what does the allocator
+  do with an unresolved referback?
 
 ## Appendix A. What the code does today
 
