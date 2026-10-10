@@ -37,19 +37,6 @@ def _default_abnormal(status: DispStatus, normal: DispNormal) -> DispAbnormal:
 
 
 def disp_from_words(words: tuple[str, ...]) -> Disp:
-    """``DISP=(status,normal,abnormal)``, with any subparameter omissible.
-
-    An omitted positional subparameter arrives as ``""`` (the bridge keeps the
-    slot); a DD with no ``DISP=`` at all arrives as ``()``. The status defaults to
-    NEW; the normal disposition to DELETE for a data set this step creates and
-    KEEP for one that already existed; the abnormal disposition to the normal
-    one, except that PASS is not an abnormal disposition, so after PASS it is
-    DELETE for a NEW data set and KEEP otherwise.
-
-    MOD is read as already-existing. It can be either — MOD creates the data set
-    when it is absent and appends when it is present — and JCL alone cannot say
-    which.
-    """
 
     def slot(i: int) -> str:
         return words[i] if i < len(words) else ""

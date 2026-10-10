@@ -291,6 +291,17 @@ public class ContractTest {
     }
 
     @Test
+    public void aProcDefaultMayHoldASymbolOrATemporaryName() {
+        assertEquals(
+                json("[{'name':'HLQ','value':[" + literal("TEST") + "]},"
+                        + "{'name':'DS','value':[{'kind':'symbol','name':'HLQ'}," + literal(".DATA") + "]},"
+                        + "{'name':'T','value':[" + literal("&&TMP") + "]},"
+                        + "{'name':'B','value':[{'kind':'symbol','name':'A'}]}]"),
+                serialize("//P PROC HLQ=TEST,DS=&HLQ..DATA,T=&&TMP,B=&A", "//S1 EXEC PGM=X")
+                        .get("defaults"));
+    }
+
+    @Test
     public void aProcDocumentCarriesItsDefaultsAndStatements() {
         assertEquals(
                 json("{'kind':'proc','name':'SYMP',"

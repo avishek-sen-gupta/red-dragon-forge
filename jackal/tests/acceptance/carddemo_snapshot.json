@@ -806,7 +806,7 @@
       },
       {
        "ddname": "SYSTSIN",
-       "dsn": "&LBNM..CNTL(DB2FREE)",
+       "dsn": "&LBNM.CNTL(DB2FREE)",
        "disp": [
         "SHR",
         "KEEP",
@@ -823,7 +823,7 @@
      "dds": [
       {
        "ddname": "STEPLIB",
-       "dsn": "OEM.DB2.&DB2S..RUNLIB.LOAD",
+       "dsn": "OEM.DB2.&DB2S.RUNLIB.LOAD",
        "disp": [
         "SHR",
         "KEEP",
@@ -859,7 +859,7 @@
       },
       {
        "ddname": "SYSTSIN",
-       "dsn": "&LBNM..CNTL(DB2TIAD1)",
+       "dsn": "&LBNM.CNTL(DB2TIAD1)",
        "disp": [
         "SHR",
         "KEEP",
@@ -868,7 +868,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&LBNM..CNTL(DB2CREAT)",
+       "dsn": "&LBNM.CNTL(DB2CREAT)",
        "disp": [
         "SHR",
         "KEEP",
@@ -898,7 +898,7 @@
      "dds": [
       {
        "ddname": "STEPLIB",
-       "dsn": "OEM.DB2.&DB2S..RUNLIB.LOAD",
+       "dsn": "OEM.DB2.&DB2S.RUNLIB.LOAD",
        "disp": [
         "SHR",
         "KEEP",
@@ -934,7 +934,7 @@
       },
       {
        "ddname": "SYSTSIN",
-       "dsn": "&LBNM..CNTL(DB2TEP41)",
+       "dsn": "&LBNM.CNTL(DB2TEP41)",
        "disp": [
         "SHR",
         "KEEP",
@@ -943,7 +943,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&LBNM..CNTL(DB2LTTYP)",
+       "dsn": "&LBNM.CNTL(DB2LTTYP)",
        "disp": [
         "SHR",
         "KEEP",
@@ -966,7 +966,7 @@
      "dds": [
       {
        "ddname": "STEPLIB",
-       "dsn": "OEM.DB2.&DB2S..RUNLIB.LOAD",
+       "dsn": "OEM.DB2.&DB2S.RUNLIB.LOAD",
        "disp": [
         "SHR",
         "KEEP",
@@ -1002,7 +1002,7 @@
       },
       {
        "ddname": "SYSTSIN",
-       "dsn": "&LBNM..CNTL(DB2TEP41)",
+       "dsn": "&LBNM.CNTL(DB2TEP41)",
        "disp": [
         "SHR",
         "KEEP",
@@ -1011,7 +1011,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&LBNM..CNTL(DB2LTCAT)",
+       "dsn": "&LBNM.CNTL(DB2LTCAT)",
        "disp": [
         "SHR",
         "KEEP",
@@ -1083,9 +1083,309 @@
    ]
   },
   {
-   "kind": "unread",
+   "kind": "read",
    "file": "app/app-transaction-type-db2/jcl/TRANEXTR.jcl",
-   "error": "JclParseError"
+   "job": "TRANEXTR",
+   "steps": [
+    {
+     "step": "STEP10",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "&HLQ.TRANTYPE.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&HLQ.TRANTYPE.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "CATLG"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP20",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "&HLQ.TRANCATG.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&HLQ.TRANCATG.PS.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "CATLG"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP30",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "DD01",
+       "dsn": "&HLQ.TRANTYPE.PS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DD02",
+       "dsn": "&HLQ.TRANCATG.PS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP40",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPUNCH",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSREC00",
+       "dsn": "&HLQ.TRANTYPE.PS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP50",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPUNCH",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSREC00",
+       "dsn": "&HLQ.TRANCATG.PS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
   },
   {
    "kind": "read",
@@ -5234,7 +5534,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&HLQ..CARDDEMO.CBL(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.CBL(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5243,7 +5543,7 @@
       },
       {
        "ddname": "SYSLIB",
-       "dsn": "&HLQ..CARDDEMO.CPY",
+       "dsn": "&HLQ.CARDDEMO.CPY",
        "disp": [
         "SHR",
         "KEEP",
@@ -5252,7 +5552,7 @@
       },
       {
        "ddname": "SYSPRINT",
-       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.LST(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5265,7 +5565,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "PASS"
+        "KEEP"
        ]
       },
       {
@@ -5431,7 +5731,7 @@
       },
       {
        "ddname": "SYSUT1",
-       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.LST(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5466,7 +5766,7 @@
       [
        8,
        "LT",
-       "COMPILE"
+       "BATCMP.COMPILE"
       ]
      ],
      "dds": [
@@ -5499,7 +5799,7 @@
       },
       {
        "ddname": "SYSLMOD",
-       "dsn": "&HLQ..CARDDEMO.LOADLIB(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.LOADLIB(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5545,7 +5845,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
@@ -5559,7 +5859,7 @@
       },
       {
        "ddname": "SYSUT1",
-       "dsn": "&HLQ..CARDDEMO.BMS(CICSMAP)",
+       "dsn": "&HLQ.CARDDEMO.BMS(CICSMAP)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5625,7 +5925,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
@@ -5634,7 +5934,7 @@
        "disp": [
         "OLD",
         "PASS",
-        "PASS"
+        "KEEP"
        ]
       },
       {
@@ -5665,7 +5965,7 @@
       },
       {
        "ddname": "SYSLMOD",
-       "dsn": "&HLQ..CARDDEMO.LOADLIB(CICSMAP)",
+       "dsn": "&HLQ.CARDDEMO.LOADLIB(CICSMAP)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5700,7 +6000,7 @@
      "dds": [
       {
        "ddname": "SYSPRINT",
-       "dsn": "&HLQ..CARDDEMO.LST(CICSMAP)",
+       "dsn": "&HLQ.CARDDEMO.LST(CICSMAP)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5745,7 +6045,7 @@
       },
       {
        "ddname": "SYSPUNCH",
-       "dsn": "&HLQ..CARDDEMO.CPY(CICSMAP)",
+       "dsn": "&HLQ.CARDDEMO.CPY(CICSMAP)",
        "disp": [
         "OLD",
         "KEEP",
@@ -5758,7 +6058,7 @@
        "disp": [
         "OLD",
         "PASS",
-        "PASS"
+        "KEEP"
        ]
       },
       {
@@ -5789,7 +6089,7 @@
       },
       {
        "ddname": "SYSUT1",
-       "dsn": "&HLQ..CARDDEMO.LST(CICSMAP)",
+       "dsn": "&HLQ.CARDDEMO.LST(CICSMAP)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5901,7 +6201,7 @@
       },
       {
        "ddname": "SYSLIB",
-       "dsn": "&HLQ..CARDDEMO.CPY",
+       "dsn": "&HLQ.CARDDEMO.CPY",
        "disp": [
         "SHR",
         "KEEP",
@@ -5910,7 +6210,7 @@
       },
       {
        "ddname": "SYSPRINT",
-       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.LST(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5919,7 +6219,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&HLQ..CARDDEMO.CBL(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.CBL(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -5932,7 +6232,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "PASS"
+        "KEEP"
        ]
       },
       {
@@ -6098,7 +6398,7 @@
       },
       {
        "ddname": "SYSUT1",
-       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.LST(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6164,7 +6464,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
@@ -6222,7 +6522,7 @@
       },
       {
        "ddname": "SYSLMOD",
-       "dsn": "&HLQ..CARDDEMO.LOADLIB(&MEMNAME)",
+       "dsn": "&HLQ.CARDDEMO.LOADLIB(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6296,7 +6596,7 @@
      "dds": [
       {
        "ddname": "STEPLIB",
-       "dsn": "OEM.DB2.&SSID..SDSNEXIT",
+       "dsn": "OEM.DB2.&SSID.SDSNEXIT",
        "disp": [
         "SHR",
         "KEEP",
@@ -6305,7 +6605,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&HLQ..CBL(&MEMNAME)",
+       "dsn": "&HLQ.CBL(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6318,12 +6618,12 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
        "ddname": "DBRMLIB",
-       "dsn": "&HLQ..DBRMLIB(&MEMNAME)",
+       "dsn": "&HLQ.DBRMLIB(&MEMNAME)",
        "disp": [
         "OLD",
         "KEEP",
@@ -6332,7 +6632,7 @@
       },
       {
        "ddname": "SYSLIB",
-       "dsn": "&DCLLIB",
+       "dsn": "&&DCLLIB",
        "disp": [
         "SHR",
         "KEEP",
@@ -6394,7 +6694,7 @@
       [
        0,
        "NE",
-       "PRECMP"
+       "CICSCMP.PRECMP"
       ]
      ],
      "dds": [
@@ -6431,7 +6731,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       }
      ]
@@ -6459,7 +6759,7 @@
       },
       {
        "ddname": "SYSLIB",
-       "dsn": "&DCLLIB",
+       "dsn": "&&DCLLIB",
        "disp": [
         "SHR",
         "KEEP",
@@ -6490,7 +6790,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "PASS"
+        "KEEP"
        ]
       },
       {
@@ -6653,7 +6953,7 @@
      "dds": [
       {
        "ddname": "SYSLIB",
-       "dsn": "CEE..SCEELKEX",
+       "dsn": "CEE.SCEELKEX",
        "disp": [
         "SHR",
         "KEEP",
@@ -6680,7 +6980,7 @@
       },
       {
        "ddname": "SYSLMOD",
-       "dsn": "&HLQ..LOADLIB(&MEMNAME)",
+       "dsn": "&HLQ.LOADLIB(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6730,7 +7030,7 @@
       },
       {
        "ddname": "DBRMLIB",
-       "dsn": "&HLQ..DBRMLIB(&MEMNAME)",
+       "dsn": "&HLQ.DBRMLIB(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6783,7 +7083,7 @@
       [
        4,
        "LT",
-       "BINDPK"
+       "CICSCMP.BINDPK"
       ]
      ],
      "dds": [
@@ -6798,7 +7098,7 @@
       },
       {
        "ddname": "DBRMLIB",
-       "dsn": "&HLQ..DBRMLIB(&MEMNAME)",
+       "dsn": "&HLQ.DBRMLIB(&MEMNAME)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6867,7 +7167,7 @@
      "dds": [
       {
        "ddname": "STEPLIB",
-       "dsn": "&CICSHLQ..CICS.SDFHLOAD",
+       "dsn": "&CICSHLQ.CICS.SDFHLOAD",
        "disp": [
         "SHR",
         "KEEP",
@@ -6876,7 +7176,7 @@
       },
       {
        "ddname": "SYSIN",
-       "dsn": "&HLQ..COBOL.SRC(IMSMQPGM)",
+       "dsn": "&HLQ.COBOL.SRC(IMSMQPGM)",
        "disp": [
         "SHR",
         "KEEP",
@@ -6898,7 +7198,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       }
      ]
@@ -6939,7 +7239,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "PASS"
+        "KEEP"
        ]
       },
       {
@@ -7142,7 +7442,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
@@ -7192,7 +7492,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
@@ -7242,7 +7542,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "PASS"
+        "DELETE"
        ]
       },
       {
@@ -7279,7 +7579,7 @@
      "dds": [
       {
        "ddname": "SYSLIB",
-       "dsn": "&MQHLQ..SCSQLOAD",
+       "dsn": "&MQHLQ.SCSQLOAD",
        "disp": [
         "SHR",
         "KEEP",
@@ -7288,7 +7588,7 @@
       },
       {
        "ddname": "CSQSTUB",
-       "dsn": "&MQHLQ..SCSQLOAD",
+       "dsn": "&MQHLQ.SCSQLOAD",
        "disp": [
         "SHR",
         "KEEP",
@@ -7315,7 +7615,7 @@
       },
       {
        "ddname": "SYSLMOD",
-       "dsn": "&HLQ..CICSLOAD(IMSMQPGM)",
+       "dsn": "&HLQ.CICSLOAD(IMSMQPGM)",
        "disp": [
         "SHR",
         "KEEP",

@@ -203,3 +203,44 @@ def test_runner_refuses_an_unresolved_proc_and_a_step_under_an_if(
         _run(tmp_path, unresolved)
     with pytest.raises(UnsupportedStep, match="S2 is under an IF"):
         _run(tmp_path, guarded)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_concatenated_dd_is_refused_rather_than_read_as_its_first_dataset(
+    tmp_path: Path,
+) -> None:
+    from jackal.dsn import DirectDSN
+    from jackal.model import ConcatMember
+    from jackal.value_parts import literal
+
+    member = ConcatMember(DirectDSN(literal("T.B")), disp("SHR"))
+    concatenated = DD(
+        DdName("IN"), DirectDSN(literal("T.A")), disp("SHR"), concatenated=(member,)
+    )
+    steplib = DD(
+        DdName("STEPLIB"),
+        DirectDSN(literal("T.L")),
+        disp("NEW"),
+        concatenated=(member,),
+    )
+    refused = job("J", (program("S1", "IEFBR14", (concatenated,)),))
+    library_only = job("J", (program("S1", "IEFBR14", (steplib,)),))
+    with pytest.raises(UnsupportedStep, match="S1 concatenates DD IN"):
+        _run(tmp_path, refused)
+    assert _outcomes(_run(_fresh(tmp_path, "lib"), library_only)) == [
+        ("S1", 0, EXECUTED)
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_referback_to_a_dummy_dd_names_dummy(tmp_path: Path) -> None:
+    from jackal.dsn import DummyDSN
+
+    j = job(
+        "J",
+        (
+            program("S1", "IEFBR14", (DD(DdName("A"), DummyDSN(), disp()),)),
+            program("S2", "IEFBR14", (dd("B", BackwardRef(ref("S1"), DdName("A"))),)),
+        ),
+    )
+    assert _outcomes(_run(tmp_path, j)) == [("S1", 0, EXECUTED), ("S2", 0, EXECUTED)]

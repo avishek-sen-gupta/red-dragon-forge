@@ -77,3 +77,123 @@ def test_symbols_resolve_against_the_call_then_the_defaults_and_unbound_ones_sta
             ),
         ),
     )
+
+
+def _named(label: str, pgm: str, dds=()) -> object:
+    return program(label, pgm, dds)
+
+
+def _ref(step: str) -> object:
+    from jackal.model import OwnScope, StepRef
+
+    return StepRef(OwnScope(), StepName(step))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_if_guard_resolves_where_the_if_was_written():
+    from jackal.model import CondOp, IfBlock, ProgramStep, RcTest
+
+    proc = ProcDef(
+        "MYP", (), (_named("STEP0", "P0"), _named("STEP1", "P1"), _named("STEP2", "P2"))
+    )
+    call = ProcCall(StepName("CALL"), ProcRef("MYP"))
+    j = job(
+        "J",
+        (
+            _named("STEP1", "A"),
+            IfBlock(StepName("C1"), RcTest(_ref("STEP1"), CondOp.EQ, 0), (call,)),
+        ),
+    )
+    expanded = expand_procs(j, _Library((proc,)))
+    job_step1 = expanded.steps[0]
+    guard = RcTest(job_step1, CondOp.EQ, 0)
+    assert [q.step.guard for q in expanded.steps[1:]] == [guard, guard, guard]
+    assert isinstance(expanded.steps[1].step, ProgramStep)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_reference_written_in_a_proc_reaches_its_steps_from_a_nested_proc():
+    from jackal.dsn import BackwardRef, DdName
+    from jackal.model import CondOp, IfBlock, ProcStepOverrides, RcTest
+
+    inner = ProcDef("B", (), (_named("BS1", "PB"),))
+    nested_call = ProcCall(
+        StepName("CB"),
+        ProcRef("B"),
+        per_step=(
+            (
+                StepName("BS1"),
+                ProcStepOverrides(
+                    dds=(dd("IN", BackwardRef(_ref("AS1"), DdName("DD1"))),)
+                ),
+            ),
+        ),
+    )
+    outer = ProcDef(
+        "A",
+        (),
+        (
+            _named("AS1", "PA", (dd("DD1", "T.A"),)),
+            IfBlock(StepName("I1"), RcTest(_ref("AS1"), CondOp.EQ, 0), (nested_call,)),
+        ),
+    )
+    j = job("J", (ProcCall(StepName("C1"), ProcRef("A")),))
+    expanded = expand_procs(j, _Library((outer, inner)))
+    as1, bs1 = expanded.steps
+    assert bs1.step.guard == RcTest(as1, CondOp.EQ, 0)
+    assert bs1.step.dds[0].dsn == BackwardRef(as1, DdName("DD1"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_override_that_lands_on_a_nested_proc_call_is_an_error():
+    from jackal.expansion import OverrideNamesNoStep
+    from jackal.model import ProcStepOverrides
+
+    inner = ProcDef("B", (), (_named("BS1", "PB"),))
+    outer = ProcDef(
+        "A", (), (ProcCall(StepName("CB"), ProcRef("B")), _named("AS2", "Z"))
+    )
+    library = _Library((outer, inner))
+    qualified = ProcCall(
+        StepName("C1"),
+        ProcRef("A"),
+        per_step=((StepName("CB"), ProcStepOverrides(parm=literal("X"))),),
+    )
+    first = ProcCall(StepName("C1"), ProcRef("A"), parm_for_first_step=literal("HELLO"))
+    assert [
+        expand_procs(job("J", (qualified,)), library),
+        expand_procs(job("J", (first,)), library),
+    ] == [
+        OverrideNamesNoStep(qualified, StepName("CB")),
+        OverrideNamesNoStep(first, StepName("CB")),
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_default_that_names_another_default_resolves_through_it():
+    proc = ProcDef(
+        "P",
+        ((SymbolName("A"), literal("REAL.DS")), (SymbolName("B"), (_symbol("A"),))),
+        (_named("S", "PGMA", (dd("IN", DirectDSN((_symbol("B"),))),)),),
+    )
+    expanded = expand_procs(
+        job("J", (ProcCall(StepName("C1"), ProcRef("P")),)), _Library((proc,))
+    )
+    assert expanded.steps[0].step.dds[0].dsn == DirectDSN(literal("REAL.DS"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_only_the_first_step_by_position_takes_the_first_step_parm():
+    from jackal.model import ProgramRef, ProgramStep, Unnamed
+
+    proc = ProcDef(
+        "P",
+        (),
+        (
+            ProgramStep(Unnamed(), ProgramRef("PGMA")),
+            ProgramStep(Unnamed(), ProgramRef("PGMB")),
+        ),
+    )
+    call = ProcCall(StepName("C1"), ProcRef("P"), parm_for_first_step=literal("HELLO"))
+    expanded = expand_procs(job("J", (call,)), _Library((proc,)))
+    assert [q.step.parm for q in expanded.steps] == [literal("HELLO"), ()]
