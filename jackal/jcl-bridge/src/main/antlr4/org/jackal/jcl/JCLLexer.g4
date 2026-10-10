@@ -875,7 +875,7 @@ IF_NL
 	: ((N L) | (NOT_SYMBOL_DFLT '<'))
 	;
 IF_NOT
-	: NOT_SYMBOL_DFLT
+	: (NOT_SYMBOL_DFLT | (N O T))
 	->type(NOT_SYMBOL)
 	;
 
@@ -3978,6 +3978,18 @@ DCB_NEWLINE
 	;
 
 /*
+A model data set name, DCB=T.MODEL or DCB=(CODES.X,RECFM=FB). One token, because
+KEYWORD_VALUE is non-greedy and the subparameter rules below would otherwise claim
+the start of a qualifier: MODEL lexed as MODE followed by L, and the parse broke.
+A dotted name is longer than any subparameter name, so the longest match picks
+it; a subparameter never has a dot before its equals sign.
+*/
+DCB_DATASET_NAME
+	: NM_PART? (DOT_DFLT+ NM_PART)+
+	->type(KEYWORD_VALUE)
+	;
+
+/*
 
 Note how the mode switching works.  In DCB_MODE modes are switched via
 the mode command.  In DCB_PAREN_MODE modes are switched via the pushMode
@@ -4188,6 +4200,12 @@ DCB_PAREN_COMMENT_FLAG_INLINE
 DCB_PAREN_NEWLINE
 	: NEWLINE
 	->channel(HIDDEN),pushMode(COMMA_NEWLINE_MODE)
+	;
+
+/* A model data set name inside the parentheses; see DCB_DATASET_NAME. */
+DCB_PAREN_DATASET_NAME
+	: NM_PART? (DOT_DFLT+ NM_PART)+
+	->type(KEYWORD_VALUE)
 	;
 
 DCB_PAREN_BFALN
@@ -4546,7 +4564,7 @@ JOB_ACCT1_MODE_COMMA_WS
 	;
 JOB_ACCT1_MODE_COMMA_NEWLINE
 	: COMMA_DFLT NEWLINE
-	->mode(JOB_ACCT_COMMA_NEWLINE_MODE)
+	->channel(HIDDEN),mode(JOB_ACCT_COMMA_NEWLINE_MODE)
 	;
 JOB_ACCT1_MODE_LPAREN
 	: LPAREN_DFLT

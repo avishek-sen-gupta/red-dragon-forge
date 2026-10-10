@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 SNAPSHOT = Path(__file__).parent / "carddemo_snapshot.json"
 PROC_DIRS = ("app/proc", "samples/proc")
 
-EXPECTED_CHANGES: dict[str, str] = {}
+EXPECTED_CHANGES: dict[str, str] = {
+    "app/app-transaction-type-db2/jcl/TRANEXTR.jcl": "red-dragon-forge-z76",
+}
 
 
 class DdFacts(BaseModel):
