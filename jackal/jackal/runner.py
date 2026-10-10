@@ -8,7 +8,7 @@ from functools import reduce
 from pathlib import Path
 
 from jackal.catalog import DatasetCatalog
-from jackal.cobol_step import run_cobol_step
+from jackal.cobol_step import OPTIONAL_DDS, run_cobol_step
 from jackal.cond import should_bypass
 from jackal.dsn import DSN, BackwardRef, DdName, DirectDSN, TempRef
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
@@ -25,11 +25,11 @@ from jackal.results import JobResult, StepDisposition, StepResult
 from jackal.utilities import UTILITIES
 from jackal.value_parts import literal
 
-Recorded = Mapping[DdName, DirectDSN]
+Recorded = Mapping[DdName, DSN[QualifiedStep]]
 
 
 class UnsupportedStep(Exception):
-    """A step jackal cannot run yet: an unresolved PROC call, or one under an IF."""
+    """A step jackal cannot run yet: an unresolved PROC call, a guard, a concatenation."""
 
 
 @dataclass(frozen=True)
@@ -46,24 +46,16 @@ class _History:
         return _History((*self.results, result), {**self.datasets, step: recorded})
 
 
-def _recorded_dsn(dsn: DSN[QualifiedStep]) -> tuple[DirectDSN, ...]:
-    match dsn:
-        case DirectDSN():
-            return (dsn,)
-        case _:
-            return _recorded_temp(dsn)
-
-
-def _recorded_temp(dsn: DSN[QualifiedStep]) -> tuple[DirectDSN, ...]:
+def _recorded_dsn(dsn: DSN[QualifiedStep]) -> DSN[QualifiedStep]:
     match dsn:
         case TempRef(name=name):
-            return (DirectDSN(literal(name)),)
+            return DirectDSN(literal(name))
         case _:
-            return ()
+            return dsn
 
 
 def _recorded(step: ProgramStep[QualifiedStep]) -> Recorded:
-    return {dd.ddname: dsn for dd in step.dds for dsn in _recorded_dsn(dd.dsn)}
+    return {dd.ddname: _recorded_dsn(dd.dsn) for dd in step.dds}
 
 
 def _referenced(step: ProgramStep[QualifiedStep]) -> tuple[QualifiedStep, ...]:
@@ -103,6 +95,22 @@ def _runnable(qualified: QualifiedStep) -> ProgramStep[QualifiedStep]:
             return _unguarded(qualified, qualified.step)
 
 
+def _concatenated(
+    qualified: QualifiedStep, step: ProgramStep[QualifiedStep]
+) -> ProgramStep[QualifiedStep]:
+    names = tuple(
+        dd.ddname.text
+        for dd in step.dds
+        if dd.concatenated and dd.ddname not in OPTIONAL_DDS
+    )
+    if names:
+        raise UnsupportedStep(
+            f"{qualified.rendered()} concatenates DD {names[0]}; concatenated "
+            "reads are not supported yet (jackal-1o2.5)"
+        )
+    return step
+
+
 def _unguarded(
     qualified: QualifiedStep, step: ProgramStep[QualifiedStep]
 ) -> ProgramStep[QualifiedStep]:
@@ -111,7 +119,7 @@ def _unguarded(
             f"{qualified.rendered()} is under an IF; IF/THEN/ELSE does not run yet "
             "(jackal-1o2.8)"
         )
-    return step
+    return _concatenated(qualified, step)
 
 
 class JobRunner:

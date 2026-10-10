@@ -2054,8 +2054,13 @@ PROC_PARM_VALUE_SYMBOLIC
 	: SYMBOLIC
 	->type(SYMBOLIC)
 	;
+/*
+No & in the character class: a symbol inside a default (DS=&HLQ..DATA) must
+lex as SYMBOLIC, which the greedy class would otherwise swallow. A temporary
+data set name (&&TMP) is the one place two ampersands start a value.
+*/
 PROC_PARM_VALUE
-	: SET_PARM_VALUE
+	: ((AMPERSAND AMPERSAND [A-Z0-9@#$]+) | [)(A-Z0-9@#$*\-+./%[_])+
 	->type(KEYWORD_VALUE)
 	;
 PROC_PARM_VALUE_SQUOTE

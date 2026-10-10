@@ -24,6 +24,13 @@ final class DocumentBuilder {
             block.add("condition", IfExpressionReader.read(ctx));
         }
 
+        void enterElse() {
+            if (inElse) {
+                throw new JclSerializer.SyntaxErrorException("ELSE twice in one IF");
+            }
+            inElse = true;
+        }
+
         JsonArray current() {
             return inElse ? otherwise : then;
         }
@@ -97,7 +104,7 @@ final class DocumentBuilder {
             switch (child) {
                 case JCLParser.JclStepContext step -> current(open, top).add(step(step));
                 case JCLParser.IfStatementContext ifStatement -> open.push(new OpenIf(ifStatement));
-                case JCLParser.ElseStatementContext e -> innermost(open, "ELSE").inElse = true;
+                case JCLParser.ElseStatementContext e -> innermost(open, "ELSE").enterElse();
                 case JCLParser.EndifStatementContext e -> {
                     JsonObject block = innermost(open, "ENDIF").close();
                     open.pop();

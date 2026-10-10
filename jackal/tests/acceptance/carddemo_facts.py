@@ -36,17 +36,7 @@ logger = logging.getLogger(__name__)
 SNAPSHOT = Path(__file__).parent / "carddemo_snapshot.json"
 PROC_DIRS = ("app/proc", "samples/proc")
 
-EXPECTED_CHANGES: dict[str, str] = {
-    "app/app-transaction-type-db2/jcl/CREADB21.jcl": "red-dragon-forge-18j",
-    "app/app-transaction-type-db2/jcl/TRANEXTR.jcl": "red-dragon-forge-z76",
-    "samples/jcl/BATCMP.jcl": "red-dragon-forge-2cy.9, red-dragon-forge-2cy.10",
-    "samples/jcl/BMSCMP.jcl": "red-dragon-forge-2cy.9",
-    "samples/jcl/CICCMP.jcl": "red-dragon-forge-2cy.9",
-    "samples/jcl/CICDBCMP.jcl": (
-        "red-dragon-forge-18j, red-dragon-forge-2cy.9, red-dragon-forge-2cy.10"
-    ),
-    "samples/jcl/IMSMQCMP.jcl": "red-dragon-forge-18j, red-dragon-forge-2cy.9",
-}
+EXPECTED_CHANGES: dict[str, str] = {}
 
 
 class DdFacts(BaseModel):

@@ -13,6 +13,8 @@ final class ConditionReader {
 
     private static final Set<String> MODES = Set.of("EVEN", "ONLY");
 
+    private static final Set<String> OPERATORS = Set.of("GT", "GE", "EQ", "NE", "LT", "LE");
+
     private sealed interface Item permits Open, Close, Word {
     }
 
@@ -105,6 +107,10 @@ final class ConditionReader {
                     .map(w -> ((Word) w).text())
                     .toList();
             if (words.size() == 1 && MODES.contains(words.get(0))) {
+                if (!mode.equals("NORMAL")) {
+                    throw new JclSerializer.SyntaxErrorException(
+                            "COND names more than one of EVEN and ONLY");
+                }
                 mode = words.get(0);
             } else {
                 tests.add(test(words));
@@ -116,6 +122,13 @@ final class ConditionReader {
     private static JsonObject test(List<String> words) {
         if (words.size() < 2 || words.size() > 3) {
             throw new JclSerializer.SyntaxErrorException("COND test is not (code,operator[,step]): " + words);
+        }
+        if (!words.get(0).matches("[0-9]+")) {
+            throw new JclSerializer.SyntaxErrorException("COND return code is not a number: " + words.get(0));
+        }
+        if (!OPERATORS.contains(words.get(1))) {
+            throw new JclSerializer.SyntaxErrorException(
+                    "COND operator is not GT, GE, EQ, NE, LT or LE: " + words.get(1));
         }
         JsonObject test = new JsonObject();
         test.addProperty("code", Integer.parseInt(words.get(0)));

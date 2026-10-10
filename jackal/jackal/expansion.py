@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import chain
+from itertools import chain, islice
 from pathlib import Path
 from typing import Protocol, TypeAlias, TypeVar
 
@@ -33,7 +33,6 @@ from jackal.model import (
     StepLabel,
     StepName,
     StepRef,
-    Unnamed,
 )
 from jackal.model import (
     QualifiedStep as QualifiedStep,
@@ -159,14 +158,16 @@ def _merged(
 
 @dataclass(frozen=True)
 class _NoOverrides:
-    def applied(self, step: ProgramStep[StepRef]) -> ProgramStep[StepRef]:
+    def applied(
+        self, step: ProgramStep[StepRef], position: Run
+    ) -> ProgramStep[StepRef]:
         return step
 
 
 @dataclass(frozen=True)
 class _Overrides:
     call: ProcCall
-    first: StepLabel
+    first: Run
 
     def _per_step(self, label: StepLabel) -> ProcStepOverrides:
         return next(
@@ -182,9 +183,11 @@ class _Overrides:
             case _:
                 return unqualified if first else ()
 
-    def applied(self, step: ProgramStep[StepRef]) -> ProgramStep[StepRef]:
+    def applied(
+        self, step: ProgramStep[StepRef], position: Run
+    ) -> ProgramStep[StepRef]:
         per = self._per_step(step.label)
-        first = step.label == self.first
+        first = position == self.first
         first_dds = self.call.dds_for_first_step if first else ()
         return ProgramStep(
             step.label,
@@ -197,11 +200,18 @@ class _Overrides:
 
 
 @dataclass(frozen=True)
+class _WrittenGuard:
+    guard: Guard[StepRef]
+    calls: tuple[ProcCall, ...]
+    runs: Runs
+
+
+@dataclass(frozen=True)
 class _Scope:
     calls: tuple[ProcCall, ...]
     runs: Runs
     symbols: Mapping[SymbolName, Value]
-    guard: Guard[StepRef]
+    guards: tuple[_WrittenGuard, ...]
     stack: tuple[ProcRef, ...]
     overrides: _Overrides | _NoOverrides
     library: ProcLibrary
@@ -212,12 +222,14 @@ class _Placed:
     calls: tuple[ProcCall, ...]
     runs: Runs
     step: ProgramStep[StepRef] | UnresolvedProcCall
+    guards: tuple[_WrittenGuard, ...] = ()
 
 
 def _part_value(part: ValuePart, symbols: Mapping[SymbolName, Value]) -> Value:
     match part:
         case Symbol(name=name) if name in symbols:
-            return symbols[name]
+            rest = {k: v for k, v in symbols.items() if k != name}
+            return _substitute(symbols[name], rest)
         case _:
             return (part,)
 
@@ -295,38 +307,53 @@ def _substituted_step(
     )
 
 
-def _and(outer: Guard[StepRef], guard: Guard[StepRef]) -> Guard[StepRef]:
-    match outer:
-        case AllOf(guards=guards):
-            return AllOf((*guards, guard))
-        case _:
-            return AllOf((outer, guard))
+def _combined(guards: Sequence[Guard[QualifiedStep]]) -> Guard[QualifiedStep]:
+    if len(guards) > 1:
+        return AllOf(tuple(guards))
+    return guards[0] if guards else Always()
 
 
-def _conjoined(outer: Guard[StepRef], guard: Guard[StepRef]) -> Guard[StepRef]:
-    match outer:
-        case Always():
-            return guard
-        case _:
-            return _and(outer, guard)
+def _flat(
+    statements: Sequence[JobStatement], prefix: Run
+) -> tuple[tuple[Run, ProgramStep[StepRef] | ProcCall], ...]:
+    return tuple(
+        chain.from_iterable(
+            _flat_one(s, (*prefix, i)) for i, s in enumerate(statements)
+        )
+    )
 
 
-def _labels(statements: Sequence[JobStatement]) -> tuple[StepLabel, ...]:
-    return tuple(chain.from_iterable(_statement_labels(s) for s in statements))
-
-
-def _statement_labels(statement: JobStatement) -> tuple[StepLabel, ...]:
+def _flat_one(
+    statement: JobStatement, position: Run
+) -> tuple[tuple[Run, ProgramStep[StepRef] | ProcCall], ...]:
     match statement:
         case IfBlock(then=then, otherwise=otherwise):
-            return _labels((*then, *otherwise))
+            return (*_flat(then, (*position, 0)), *_flat(otherwise, (*position, 1)))
         case _:
-            return (statement.label,)
+            return ((position, statement),)
 
 
-def _check_overrides(call: ProcCall, labels: Sequence[StepLabel]) -> None:
-    missing = tuple(name for name, _ in call.per_step if name not in labels)
+def _named_by_overrides(call: ProcCall) -> bool:
+    has_parm = not isinstance(call.parm_for_first_step, NotOverridden)
+    return has_parm or bool(call.dds_for_first_step)
+
+
+def _check_first_step(call: ProcCall, first: ProgramStep[StepRef] | ProcCall) -> None:
+    if isinstance(first, ProcCall) and _named_by_overrides(call):
+        raise ExpansionFailed(
+            OverrideNamesNoStep(call, StepName(first.label.rendered()))
+        )
+
+
+def _check_overrides(
+    call: ProcCall, steps: Sequence[ProgramStep[StepRef] | ProcCall]
+) -> None:
+    programs = tuple(s.label for s in steps if isinstance(s, ProgramStep))
+    missing = tuple(name for name, _ in call.per_step if name not in programs)
     if missing:
         raise ExpansionFailed(OverrideNamesNoStep(call, missing[0]))
+    for first in steps[:1]:
+        _check_first_step(call, first)
 
 
 def _inline(
@@ -334,16 +361,16 @@ def _inline(
 ) -> tuple[_Placed, ...]:
     if call.proc in scope.stack:
         raise ExpansionFailed(CircularProc((*scope.stack, call.proc)))
-    labels = _labels(proc.steps)
-    _check_overrides(call, labels)
+    flat = _flat(proc.steps, ())
+    _check_overrides(call, tuple(s for _, s in flat))
     resolved_call = _substituted_call(call, scope.symbols)
     inner = _Scope(
         (*scope.calls, call),
         (*scope.runs, position),
         {**dict(proc.defaults), **dict(resolved_call.symbol_overrides)},
-        scope.guard,
+        scope.guards,
         (*scope.stack, call.proc),
-        _Overrides(resolved_call, labels[0] if labels else Unnamed()),
+        _Overrides(resolved_call, flat[0][0] if flat else ()),
         scope.library,
     )
     return _place_all(proc.steps, inner, ())
@@ -365,13 +392,19 @@ def _place_step(
         case ProcCall():
             return _place_call(statement, scope, position)
         case _:
-            step = scope.overrides.applied(_substituted_step(statement, scope.symbols))
-            return (_Placed(scope.calls, scope.runs, replace(step, guard=scope.guard)),)
+            step = scope.overrides.applied(
+                _substituted_step(statement, scope.symbols), position
+            )
+            return (_Placed(scope.calls, scope.runs, step, scope.guards),)
 
 
 def _place_if(block: IfBlock, scope: _Scope, position: Run) -> tuple[_Placed, ...]:
-    then = replace(scope, guard=_conjoined(scope.guard, block.condition))
-    otherwise = replace(scope, guard=_conjoined(scope.guard, Negated(block.condition)))
+    def written(guard: Guard[StepRef]) -> _Scope:
+        here = _WrittenGuard(guard, scope.calls, scope.runs)
+        return replace(scope, guards=(*scope.guards, here))
+
+    then = written(block.condition)
+    otherwise = written(Negated(block.condition))
     return (
         *_place_all(block.then, then, (*position, 0)),
         *_place_all(block.otherwise, otherwise, (*position, 1)),
@@ -428,14 +461,14 @@ class _Resolver:
     done: tuple[QualifiedStep, ...]
     at: int
     calls: tuple[ProcCall, ...]
-    runs: Runs
+    bases: tuple[Runs, ...]
     step: ProgramStep[StepRef]
 
     def _site(self) -> ErrorSite:
         return ErrorSite(self.calls, self.step)
 
     def _bases(self) -> tuple[Runs, ...]:
-        return (self.runs, ()) if self.runs else ((),)
+        return self.bases
 
     def _scopes(self, ref: StepRef) -> tuple[Runs, ...]:
         match ref.scope:
@@ -467,7 +500,7 @@ class _Resolver:
             if p.runs != scope
             and len(p.runs) == len(scope)
             and p.step.step_label() == name
-            and _procs(p.calls[-1:]) == _procs(self.calls[-1:])
+            and _procs(p.calls[-1:]) == _procs(self.placed[index].calls[-1:])
         )
         if scope and others:
             logger.warning(
@@ -478,7 +511,7 @@ class _Resolver:
                     for label in (*(c.label for c in self.calls), self.step.label)
                 ),
                 name.text,
-                self.calls[-1].proc.name,
+                self.placed[index].calls[-1].proc.name,
             )
 
     def _found(self, ref: StepRef, scope: Runs, index: int) -> int:
@@ -487,13 +520,19 @@ class _Resolver:
         self._warn_if_reused(scope, ref.step, index)
         return index
 
+    def _decided(self, ref: StepRef, scope: Runs) -> tuple[tuple[Runs, int], ...]:
+        programs = self._programs(scope, ref.step)
+        if programs:
+            return ((scope, programs[0]),)
+        if self._names_a_call(scope, ref.step):
+            raise ExpansionFailed(ReferenceToProcCall(self._site(), ref))
+        return ()
+
     def _index_in(self, ref: StepRef, scopes: Sequence[Runs]) -> int:
-        hits = tuple((scope, self._programs(scope, ref.step)) for scope in scopes)
-        found = tuple((scope, indices[0]) for scope, indices in hits if indices)
+        decisions = chain.from_iterable(self._decided(ref, s) for s in scopes)
+        found = tuple(islice(decisions, 1))
         if found:
             return self._found(ref, *found[0])
-        if any(self._names_a_call(scope, ref.step) for scope in scopes):
-            raise ExpansionFailed(ReferenceToProcCall(self._site(), ref))
         raise ExpansionFailed(DanglingReference(self._site(), ref))
 
     def target(self, ref: StepRef) -> QualifiedStep:
@@ -508,6 +547,27 @@ class _Resolver:
         return BackwardRef(step, ref.ddname)
 
 
+def _enclosing(runs: Runs) -> tuple[Runs, ...]:
+    return tuple(runs[:depth] for depth in range(len(runs), -1, -1))
+
+
+def _program_qualified(
+    placed: tuple[_Placed, ...],
+    done: tuple[QualifiedStep, ...],
+    at: int,
+    step: ProgramStep[StepRef],
+) -> QualifiedStep:
+    entry = placed[at]
+
+    def resolver(runs: Runs) -> _Resolver:
+        return _Resolver(placed, done, at, entry.calls, _enclosing(runs), step)
+
+    own = resolver(entry.runs)
+    guards = tuple(g.guard.mapped(resolver(g.runs).target) for g in entry.guards)
+    resolved = step.mapped(own.target, own.backref)
+    return QualifiedStep(entry.calls, replace(resolved, guard=_combined(guards)))
+
+
 def _qualified(
     placed: tuple[_Placed, ...], done: tuple[QualifiedStep, ...], at: int
 ) -> QualifiedStep:
@@ -516,10 +576,7 @@ def _qualified(
         case UnresolvedProcCall():
             return QualifiedStep(entry.calls, entry.step)
         case _:
-            resolver = _Resolver(placed, done, at, entry.calls, entry.runs, entry.step)
-            return QualifiedStep(
-                entry.calls, entry.step.mapped(resolver.target, resolver.backref)
-            )
+            return _program_qualified(placed, done, at, entry.step)
 
 
 def _resolved(placed: tuple[_Placed, ...]) -> tuple[QualifiedStep, ...]:
@@ -533,7 +590,7 @@ def _resolved(placed: tuple[_Placed, ...]) -> tuple[QualifiedStep, ...]:
 
 
 def expand_or_fail(job: Job, library: ProcLibrary) -> ExpandedJob:
-    scope = _Scope((), (), {}, Always(), (), _NoOverrides(), library)
+    scope = _Scope((), (), {}, (), (), _NoOverrides(), library)
     placed = _place_all(job.steps, scope, ())
     return ExpandedJob(job.name, _resolved(placed), job.end_job_tests)
 
