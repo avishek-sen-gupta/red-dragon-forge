@@ -1,4 +1,4 @@
-"""Acceptance: PROC symbolic parameters."""
+"""Acceptance: PROC symbolic parameters, resolved in the caller's scope."""
 
 from tests.acceptance.markers import EXPANDED
 from tests.covers import NotLanguageFeature, covers
@@ -12,15 +12,11 @@ def test_symbols_expand(expand_fixture):
     from jackal.value_parts import literal
     from tests.acceptance import build as b
 
+    hlq, suffix = b.symbol("HLQ"), b.symbol("SUFFIX")
     s1 = ProcCall(b.name("S1"), "SYMP")
-    s2 = ProcCall(
-        b.name("S2"),
-        "SYMP",
-        symbol_overrides=(
-            (b.symbol("HLQ").name, literal("PROD")),
-            (b.symbol("SUFFIX").name, (b.symbol("HLQ"),)),
-        ),
-    )
+    s2 = ProcCall(b.name("S2"), "SYMP", symbol_overrides=((hlq.name, literal("PROD")),))
+    s3 = ProcCall(b.name("S3"), "WRAP")
+    w1 = ProcCall(b.name("W1"), "SYMP", symbol_overrides=((suffix.name, (hlq,)),))
     out = b.temp("OUT", "OUTNAME", b.disp("NEW", "PASS", "DELETE"))
     assert expand_fixture("symbols/symbols.jcl") == ExpandedJob(
         "ACCEPT",
@@ -30,7 +26,11 @@ def test_symbols_expand(expand_fixture):
             ),
             b.qualified(
                 (s2,),
-                b.pgm("P1", "PGMA", (b.dataset("IN", "PROD.IN"), out), parm="PROD"),
+                b.pgm("P1", "PGMA", (b.dataset("IN", "PROD.IN"), out), parm="DFLT"),
+            ),
+            b.qualified(
+                (s3, w1),
+                b.pgm("P1", "PGMA", (b.dataset("IN", "T.IN"), out), parm="OUT"),
             ),
         ),
     )

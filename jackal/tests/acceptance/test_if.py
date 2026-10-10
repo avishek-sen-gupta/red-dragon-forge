@@ -32,7 +32,7 @@ def test_if_structure_parses(parse_fixture):
     )
 
 
-@bridge_then_parsed("red-dragon-forge-2cy.7")
+@bridge_then_parsed("red-dragon-forge-2cy.7, red-dragon-forge-2cy.14")
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_terms_parse(parse_fixture):
     from jackal.model import (

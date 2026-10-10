@@ -1,10 +1,10 @@
 """Acceptance: every DSN kind, and temps and referbacks after expansion."""
 
-from tests.acceptance.markers import EXPANDED, PARSED
+from tests.acceptance.markers import EXPANDED, bridge_then_parsed
 from tests.covers import NotLanguageFeature, covers
 
 
-@PARSED
+@bridge_then_parsed("red-dragon-forge-2cy.13, jackal-lz8")
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dsn_kinds_parse(parse_fixture):
     from jackal.model import Job
