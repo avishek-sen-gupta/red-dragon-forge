@@ -1,0 +1,3 @@
+//TWO      PROC
+//P1       EXEC PGM=PGMA
+//P2       EXEC PGM=PGMB,COND=((0,NE,P1),(4,LT,S0))

@@ -1,0 +1,5 @@
+//ACCEPT   JOB (A),'ACCEPT',CLASS=A
+//S0       EXEC PGM=PGMZ
+//S1       EXEC TWO
+//S2       EXEC PGM=PGMC,COND=((4,LT,S1.P2),(8,LT,S0))
+//S3       EXEC TWO

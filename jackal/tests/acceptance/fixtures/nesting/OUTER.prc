@@ -1,0 +1,3 @@
+//OUTER    PROC
+//P1       EXEC INNER,PARM.Q1='SET'
+//P2       EXEC PGM=PGMB
