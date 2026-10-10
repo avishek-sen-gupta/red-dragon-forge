@@ -10,6 +10,7 @@ from itertools import chain, islice
 from pathlib import Path
 from typing import Protocol, TypeAlias, TypeVar
 
+from cobol_asg.source_text import decode_source
 from jackal.jcl.parser import parse_proc
 from jackal.model import (
     DD,
@@ -139,7 +140,11 @@ class DirectoryProcLibrary(ProcLibrary):
         paths = tuple(
             path for d in self.dirs if (path := d / f"{proc.name}.prc").is_file()
         )
-        return parse_proc(paths[0].read_text()) if paths else ProcNotFound()
+        return (
+            parse_proc(decode_source(paths[0].read_bytes()))
+            if paths
+            else ProcNotFound()
+        )
 
 
 def _or_own(override: T | NotOverridden, own: T) -> T:
