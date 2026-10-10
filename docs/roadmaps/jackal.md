@@ -12,6 +12,7 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | Parse `DCB=dsn` and `DCB=(dsn,…)` | `red-dragon-forge-2cy.2` | not started |
 | Keep concatenated DDs after the first in the parsed job | `red-dragon-forge-2cy.3` | not started |
 | Keep `IF/THEN/ELSE/ENDIF` structure in the parsed job | `red-dragon-forge-2cy.7` | not started |
+| JCL object model per the 2026-10-10 blueprint: parsed model and expansion, pinned by an acceptance suite | `red-dragon-forge-2cy.9`, `red-dragon-forge-2cy.10` | not started |
 | Step outcome as a sum type: RC, abend, bypassed, flushed, unsupported | `red-dragon-forge-5fu` | not started |
 | Runner owns the step lifecycle: allocate DDs, dispatch, dispose | `red-dragon-forge-lrk` | not started |
 | Datasets own their record attributes, with a variable-record codec | `red-dragon-forge-8in` | not started |
