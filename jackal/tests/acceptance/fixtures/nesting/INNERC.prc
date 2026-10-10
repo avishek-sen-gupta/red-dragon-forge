@@ -1,0 +1,3 @@
+//INNERC   PROC
+//Q1       EXEC PGM=PGMQ,COND=(8,EQ)
+//Q2       EXEC PGM=PGMR

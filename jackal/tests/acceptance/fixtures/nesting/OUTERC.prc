@@ -1,0 +1,3 @@
+//OUTERC   PROC
+//P1       EXEC INNERC,COND=(0,NE)
+//P2       EXEC PGM=PGMB
