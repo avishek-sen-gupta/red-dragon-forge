@@ -97,6 +97,7 @@ New specs go in `specs/`, new plans in `plans/`, in the package subfolder when t
 - 2026-10-02 — [Reachability from a PERFORM site Implementation Plan](plans/2026-10-02-srccfg-reach.md)
 - 2026-10-06 — [Cross-program Dataflow Combine Implementation Plan](plans/2026-10-06-cross-program-dataflow-combine.md)
 - 2026-10-07 — [Call-target restricted fixpoint — implementation plan](plans/2026-10-07-call-target-restricted-fixpoint.md)
+- 2026-10-10 — [JCL object model, unit 1: acceptance suite and CardDemo snapshot — implementation plan](plans/2026-10-10-jcl-object-model-unit1-acceptance.md)
 
 ### cicada
 
