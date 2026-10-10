@@ -1,0 +1,6 @@
+//ACCEPT   JOB (A),'ACCEPT',CLASS=A
+//S1       EXEC PGM=PGMA,PARM='A=(,255)'
+//S2       EXEC MYP
+//S3       EXEC PROC=MYP
+//         EXEC PGM=PGMB,PARM='X (Y'
+//S5       EXEC PGM=PGMC,PARM=PLAIN

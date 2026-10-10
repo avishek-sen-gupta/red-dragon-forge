@@ -565,4 +565,6 @@ fileignoreconfig:
   checksum: 1a8fb3f3991dc97da85fddf09448fa4dfa8f56b13552de454d9c52c99d35f84d
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-unit1-acceptance.md
   checksum: 5e537151a14b741996f46f6c8014dd3a8103609e81c43461fec4139bf6a3850d
+- filename: jackal/tests/acceptance/build.py
+  checksum: 2cce5d7d662043abd624c51411989b9739b44f9e6df41f24befd3435937716db
 version: "1.0"
