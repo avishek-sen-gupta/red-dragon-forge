@@ -294,13 +294,13 @@ execParmCOND : EXEC_COND EQUAL (
         )+
       RPAREN?
     )
-  ) ;
+  )? ;
 
 execParmDYNAMNBR : EXEC_DYNAMNBR EQUAL keywordOrSymbolic ;
 
 execParmMEMLIMIT : EXEC_MEMLIMIT EQUAL keywordOrSymbolic ;
 
-execParmPARM : EXEC_PARM EQUAL singleOrMultipleValue ;
+execParmPARM : EXEC_PARM EQUAL singleOrMultipleValue? ;
 
 execParmPARMDD : EXEC_PARMDD EQUAL keywordOrSymbolic ;
 
@@ -574,7 +574,7 @@ jobParmCCSID : CCSID EQUAL keywordOrSymbolic ;
 jobParmCLASS : CLASS EQUAL keywordOrSymbolic ;
 
 jobParmCOND : COND EQUAL (
-    (LPAREN parenList RPAREN) |
+    (LPAREN parenList (COMMA parenList)* RPAREN) |
     parenList
   ) ;
 
