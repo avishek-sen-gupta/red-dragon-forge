@@ -1,0 +1,2 @@
+//WRAP     PROC HLQ=OUT
+//W1       EXEC SYMP,SUFFIX=&HLQ

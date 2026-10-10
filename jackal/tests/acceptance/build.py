@@ -8,7 +8,6 @@ from jackal.dsn import (
     NoDSN,
     TempRef,
 )
-from jackal.expansion import QualifiedStep
 from jackal.model import (
     DD,
     AbendMode,
@@ -119,5 +118,7 @@ def symbol(sym: str) -> Symbol:
     return Symbol(SymbolName(sym))
 
 
-def qualified(calls: tuple[object, ...], step: object) -> QualifiedStep:
+def qualified(calls: tuple[object, ...], step: object) -> object:
+    from jackal.expansion import QualifiedStep
+
     return QualifiedStep(calls, step)
