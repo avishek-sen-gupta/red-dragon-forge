@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from jackal.allocation import DdEnvironment
 from jackal.catalog import DatasetCatalog
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
@@ -51,7 +52,7 @@ def test_cbexport_step01_builds_export_cluster_end_to_end(
     assert len(blocks) == 1, "CBEXPORT.jcl is expected to have exactly one IDCAMS step"
 
     catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    rc = run_idcams(parse_idcams(blocks[0]), (), catalog)
+    rc = run_idcams(parse_idcams(blocks[0]), DdEnvironment(()), catalog)
     assert rc == 0
 
     ds = catalog.resolve("AWS.M2.CARDDEMO.EXPORT.DATA")

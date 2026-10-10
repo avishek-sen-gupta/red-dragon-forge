@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
+from jackal.allocation import LOAD_LIBRARIES, DdEnvironment, allocate, dispose
 from jackal.catalog import DatasetCatalog
-from jackal.cobol_step import OPTIONAL_DDS, run_cobol_step
+from jackal.cobol_step import run_cobol_step
 from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
 from jackal.model import (
@@ -107,7 +108,7 @@ def _concatenated(
     names = tuple(
         dd.ddname.text
         for dd in step.dds
-        if dd.concatenated and dd.ddname not in OPTIONAL_DDS
+        if dd.concatenated and dd.ddname not in LOAD_LIBRARIES
     )
     if names:
         raise UnsupportedStep(
@@ -220,15 +221,20 @@ class JobRunner:
             step.parm,
             step.guard,
         )
-        rc = self._run_program(resolved, catalog)
+        env = allocate(qualified, resolved, catalog)
+        rc = self._run_program(resolved, env, catalog)
+        dispose(resolved, env, catalog)
         return history.ran(qualified, rc, _recorded(resolved))
 
     def _run_program(
-        self, step: ProgramStep[StepReference], catalog: DatasetCatalog
+        self,
+        step: ProgramStep[StepReference],
+        env: DdEnvironment,
+        catalog: DatasetCatalog,
     ) -> int:
         if step.pgm in UTILITIES:
-            return UTILITIES[step.pgm](step, catalog)
+            return UTILITIES[step.pgm](step, env, catalog)
         source = (self._source_dir / f"{step.pgm.name}.cbl").read_text()
         return run_cobol_step(
-            step, source, catalog, self._bridge_jar, [self._copybook_dir]
+            step, source, env, catalog.workdir, self._bridge_jar, [self._copybook_dir]
         )

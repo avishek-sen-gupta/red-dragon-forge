@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from jackal.catalog import DatasetCatalog
+from jackal.allocation import DdEnvironment
 from jackal.cobol_step import run_cobol_step
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
@@ -12,6 +12,7 @@ from tests.model_build import program
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_run_cobol_step_empty_bridge_jar_fails_loud(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     with pytest.raises(ValueError, match="PROLEAP_BRIDGE_JAR"):
-        run_cobol_step(program("S", "P"), "irrelevant", cat, "", [])
+        run_cobol_step(
+            program("S", "P"), "irrelevant", DdEnvironment(()), tmp_path, "", []
+        )

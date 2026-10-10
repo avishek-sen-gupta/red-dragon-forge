@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from jackal.allocation import DdEnvironment
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
 from tests.model_build import program
@@ -42,13 +43,25 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     # Pad to 10 chars so the region exactly fills PARM-DATA PIC X(10)
     step = program("S", "TESTPARM", parm="HELLO     ")
-    assert run_cobol_step(step, _PARM_PROGRAM, cat, bridge_jar, []) == 42
+    assert (
+        run_cobol_step(
+            step, _PARM_PROGRAM, DdEnvironment(()), cat.workdir, bridge_jar, []
+        )
+        == 42
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     assert (
-        run_cobol_step(program("S", "NOPARM"), _NO_PARM_PROGRAM, cat, bridge_jar, [])
+        run_cobol_step(
+            program("S", "NOPARM"),
+            _NO_PARM_PROGRAM,
+            DdEnvironment(()),
+            cat.workdir,
+            bridge_jar,
+            [],
+        )
         == 7
     )

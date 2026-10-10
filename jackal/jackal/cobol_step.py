@@ -20,16 +20,10 @@ from interpreter.project.types import LinkedProgram
 from interpreter.run import run, run_linked
 from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
-from jackal.catalog import DatasetCatalog
-from jackal.model import DdName, ProgramStep, StepReference
+from jackal.allocation import DdEnvironment
+from jackal.model import ProgramStep, StepReference
 from jackal.parm import build_parm_region
 from jackal.value_parts import resolve
-
-# DDs whose absence is expected in the emulated environment and should be skipped
-# silently rather than raising an error.
-#   STEPLIB / JOBLIB — load-library DDs: real mainframe load libraries are never
-#   present in the local file tree; the emulator finds programs via source_dir instead.
-OPTIONAL_DDS: frozenset[DdName] = frozenset({DdName("STEPLIB"), DdName("JOBLIB")})
 
 MAX_STEPS = 500_000
 
@@ -38,20 +32,11 @@ def _file_control(source: str, parser: ProLeapCobolParser) -> list:
     return parser.parse(source.encode("utf-8")).file_control
 
 
-def _overrides(
-    step: ProgramStep[StepReference], catalog: DatasetCatalog
-) -> dict[str, Path]:
-    return {
-        dd.ddname.text: catalog.allocate(dd).path
-        for dd in step.dds
-        if not dd.sysout and dd.ddname not in OPTIONAL_DDS
-    }
-
-
 def run_cobol_step(
     step: ProgramStep[StepReference],
     source: str,
-    catalog: DatasetCatalog,
+    env: DdEnvironment,
+    workdir: Path,
     bridge_jar: str,
     copybook_dirs: Sequence[Path],
 ) -> int:
@@ -65,17 +50,15 @@ def run_cobol_step(
         copybook_dirs=list(copybook_dirs),
     )
     provider = RealFileIOProvider(
-        base_dir=catalog.workdir,
+        base_dir=workdir,
         file_control=_file_control(source, parser),
-        path_overrides=_overrides(step, catalog),
+        path_overrides=dict(env.paths()),
     )
     vm = (
         _run_with_parm(step, source, parser, provider, copybook_dirs)
         if step.parm
         else _run_without_parm(source, provider, copybook_dirs)
     )
-    for dd in step.dds:
-        catalog.dispose(dd)
     return read_return_code(vm)
 
 
