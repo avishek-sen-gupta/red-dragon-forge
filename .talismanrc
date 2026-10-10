@@ -562,7 +562,7 @@ fileignoreconfig:
 - filename: docs/reference/cobble/field-dataflow.md
   checksum: 5517172d14630198f6aa7ae74b6c03f57f305db67fca0cdba01bca79cb98d88f
 - filename: docs/superpowers/specs/2026-10-10-jackal-job-level-domain-model-design.md
-  checksum: 1a8fb3f3991dc97da85fddf09448fa4dfa8f56b13552de454d9c52c99d35f84d
+  checksum: 6b9547d80899fcbedf983f33873b3a13e6b75dc7eaae6dd18914f2d45034567b
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-unit1-acceptance.md
   checksum: 5e537151a14b741996f46f6c8014dd3a8103609e81c43461fec4139bf6a3850d
 - filename: jackal/tests/acceptance/build.py
