@@ -23,7 +23,7 @@ cicada or squall; `.importlinter` enforces this.
    `JclError` value, before anything runs. It inlines each PROC call found in the `ProcLibrary`
    (`DirectoryProcLibrary` reads `<dir>/<PROC>.prc` through the same JAR), resolving symbolic
    parameters in the caller's scope and applying the call's `COND`, `PARM` and DD overrides by
-   the JCL Reference's rules; an override DD merges with the PROC's DD per parameter, keeping
+   the JCL Reference's rules (an unqualified `COND` reaches nested PROCs' steps too); an override DD merges with the PROC's DD per parameter, keeping
    what it does not write (an unwritten DISP is `NotCoded`). A `SET` statement defines symbols for the statements after it,
    job-level steps included, whichever IF branch it sits in; a value on the calling `EXEC` or a
    PROC default takes precedence over it. A call whose PROC is in no library stays an `UnexpandedCall`. Every

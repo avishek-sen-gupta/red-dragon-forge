@@ -186,6 +186,9 @@ class _NoOverrides:
     ) -> ProgramStep[StepRef]:
         return step
 
+    def called(self, call: ProcCall) -> ProcCall:
+        return call
+
 
 @dataclass(frozen=True)
 class _Overrides:
@@ -205,6 +208,10 @@ class _Overrides:
                 return own
             case _:
                 return unqualified if first else ()
+
+    def called(self, call: ProcCall) -> ProcCall:
+        every = _or_own(self.call.cond_for_every_step, call.cond_for_every_step)
+        return replace(call, cond_for_every_step=every)
 
     def applied(
         self, step: ProgramStep[StepRef], position: Run
@@ -414,7 +421,7 @@ def _inline(
         scope.set_symbols,
         scope.guards,
         (*scope.stack, call.proc),
-        _Overrides(resolved_call, flat[0][0] if flat else ()),
+        _Overrides(scope.overrides.called(resolved_call), flat[0][0] if flat else ()),
         scope.library,
     )
     return _place_all(proc.steps, inner, ()).placed

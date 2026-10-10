@@ -30,6 +30,32 @@ def test_nested_procs_expand(expand_fixture):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_calls_cond_reaches_every_level_of_nesting(expand_fixture, parse_fixture):
+    from jackal.expansion import ExpandedJob
+    from jackal.model import ProcCall
+    from tests.acceptance import build as b
+
+    s1, s2 = parse_fixture("nesting/cond.jcl").steps
+    p1 = ProcCall(
+        b.name("P1"), b.proc("INNERC"), cond_for_every_step=b.cond(b.all_prior(0, "NE"))
+    )
+    outer = b.cond(b.all_prior(4, "LT"))
+    own = b.cond(b.all_prior(0, "NE"))
+
+    def run(call: object, q: object, p2: object) -> tuple[object, ...]:
+        o, i = b.called(call, "nesting/OUTERC.prc"), b.called(p1, "nesting/INNERC.prc")
+        return (
+            b.qualified((o, i), b.pgm("Q1", "PGMQ", condition=q)),
+            b.qualified((o, i), b.pgm("Q2", "PGMR", condition=q)),
+            b.qualified((o,), b.pgm("P2", "PGMB", condition=p2)),
+        )
+
+    assert expand_fixture("nesting/cond.jcl") == ExpandedJob(
+        "ACCEPT", (*run(s1, outer, outer), *run(s2, own, b.NO_COND))
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_fifteen_levels_expand(tmp_path: Path, jcl_bridge_jar: str):
     from jackal.expansion import DirectoryProcLibrary, ExpandedJob, expand_procs
     from jackal.jcl.parser import parse_jcl, parse_proc

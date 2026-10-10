@@ -785,7 +785,7 @@ refers to and a PROC's defaults declare. Indirection lives on the value side: a 
 
 | JCL | Field | Rule |
 |---|---|---|
-| `COND=` | `cond_for_every_step` | replaces the COND of every step in the PROC |
+| `COND=` | `cond_for_every_step` | replaces the COND of every step in the PROC, and of every nested PROC's steps (below) |
 | `COND.P1=` | `per_step[P1].cond` | replaces the COND of `P1` only |
 | `PARM=` | `parm_for_first_step` | sets the first step's PARM; nullifies PARM on every later step |
 | `PARM.P1=` | `per_step[P1].parm` | replaces the PARM of `P1` only |
@@ -802,6 +802,11 @@ refers to and a PROC's defaults declare. Indirection lives on the value side: a 
   depends only on statement order.
 - `PARM=` and `PARM.P1=` may both appear on one call; the unqualified one comes first and applies
   first, then each qualified one. When one step gets the same keyword twice, the last wins.
+- An unqualified `COND=` reaches every level of nesting. The JCL Reference (p.326) says a calling
+  EXEC's COND replaces the COND on every EXEC statement in the procedure; a nested call is one
+  of those statements, and is itself a calling EXEC, so its replaced COND replaces its own PROC's
+  steps in turn. Derived from that text: IBM gives no nested example, and it is not verified on
+  z/OS.
 - A keyword with an empty value nullifies it: `COND=` clears COND on every step,
   `PARM.P1=` clears `P1`'s PARM. An empty `StepCondition` and an empty `Value` represent these.
 - An override names a step of the PROC this call invokes, never of a PROC nested inside it.
