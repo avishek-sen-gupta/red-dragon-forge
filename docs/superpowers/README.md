@@ -36,6 +36,7 @@ New specs go in `specs/`, new plans in `plans/`, in the package subfolder when t
 - 2026-10-08 — [Docs consolidation — design](specs/2026-10-08-docs-consolidation-design.md)
 - 2026-10-08 — [Per-Program Area Need — Design](specs/2026-10-08-per-program-area-need-design.md)
 - 2026-10-10 — [jackal: job-level domain model (blueprint)](specs/2026-10-10-jackal-job-level-domain-model-design.md)
+- 2026-10-10 — [Building jackal's JCL object model](specs/2026-10-10-jackal-jcl-object-model-build-design.md)
 
 ### cicada
 
