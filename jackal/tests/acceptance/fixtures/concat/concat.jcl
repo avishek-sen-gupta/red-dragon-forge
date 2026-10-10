@@ -1,0 +1,13 @@
+//ACCEPT   JOB (A),'ACCEPT',CLASS=A
+//S1       EXEC PGM=PGMA
+//TWO      DD DSN=T.A,DISP=SHR
+//         DD DSN=T.B,DISP=SHR
+//THREE    DD DSN=T.C,DISP=SHR
+//         DD DSN=T.D,DISP=SHR
+//         DD DSN=T.E,DISP=SHR
+//MIXED    DD DSN=T.F,DISP=SHR
+//         DD *
+ CARD
+/*
+//         DD DUMMY
+//LAST     DD DSN=T.G,DISP=SHR
