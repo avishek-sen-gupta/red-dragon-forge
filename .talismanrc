@@ -152,7 +152,7 @@ fileignoreconfig:
 - filename: tests/integration/test_mainframe_inventory_carddemo.py
   checksum: d200d7552d4e98bbad54174fb06304554861352f193df0ff43f8baccf1341b45
 - filename: jackal/jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
-  checksum: c9245dcb129368906838e7686d2011f4e6da3a11388a66508e6036af9c7a43ec
+  checksum: 566ae24a6749948e9daa206747efdca4bf800cd0ac9337f88c50e8c21233851b
 - filename: jackal/jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
   checksum: 45571209d7e9b9da8fb827bb6be8bf7423f3f377cf9dcc5399d7520722c7ef9c
 - filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java

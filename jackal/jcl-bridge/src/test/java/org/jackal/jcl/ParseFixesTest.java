@@ -45,6 +45,25 @@ public class ParseFixesTest {
     }
 
     @Test
+    public void aDdParameterWithNoValueParses() {
+        JsonObject job = job(
+                "//J JOB (A),CLASS=A",
+                "//S1 EXEC P",
+                "//P1.IN DD DSN=T.X,UNIT=,VOL=,SPACE=,DCB=,EXPDT=",
+                "//P1.OUT DD DISP=,DSN=",
+                "//S2 EXEC PGM=Y");
+        assertEquals(2, steps(job));
+        assertEquals(
+                "[{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"IN\",\"dsn\":{\"kind\":\"name\","
+                        + "\"value\":[{\"kind\":\"literal\",\"text\":\"T.X\"}]},\"disp\":[],"
+                        + "\"in_stream\":[],\"sysout\":false,\"concatenated\":[]}},"
+                        + "{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"OUT\",\"dsn\":{\"kind\":\"none\"},"
+                        + "\"disp\":[],\"in_stream\":[],\"sysout\":false,\"concatenated\":[]}}]",
+                job.getAsJsonArray("statements").get(0).getAsJsonObject()
+                        .getAsJsonArray("dd_overrides").toString());
+    }
+
+    @Test
     public void theWordNotInAnIfParses() {
         assertEquals(2, steps(job(
                 "//J JOB (A),CLASS=A",
