@@ -58,9 +58,9 @@ def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
 
 def _report(result: JobResult) -> int:
     sys.stdout.write(
-        "".join(f"{s.name}: RC={s.return_code} ran={s.ran}\n" for s in result.steps)
+        "".join(f"{s.name}: {s.outcome.rendered()}\n" for s in result.steps)
     )
-    return 0 if all(s.return_code == 0 for s in result.steps) else 1
+    return 0 if result.outcome.max_rc == 0 else 1
 
 
 def run(argv: Sequence[str]) -> int:

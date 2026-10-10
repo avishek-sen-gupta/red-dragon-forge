@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from jackal.model import (
     AbendMode,
@@ -16,7 +17,7 @@ from jackal.model import (
     StepReference,
     UnexpandedCall,
 )
-from jackal.results import StepResult
+from jackal.results import AfterJobCond, Bypassed, BypassReason, Flushed, StepResult
 
 _OPS: Mapping[CondOp, Callable[[int, int], bool]] = {
     CondOp.GT: operator.gt,
@@ -28,41 +29,61 @@ _OPS: Mapping[CondOp, Callable[[int, int], bool]] = {
 }
 
 
-def _names(reference: StepReference, entry: QualifiedStep | UnexpandedCall) -> bool:
-    match entry:
+@dataclass(frozen=True)
+class Run:
+    pass
+
+
+@dataclass(frozen=True)
+class _Completed:
+    step: QualifiedStep
+    rc: int
+
+
+def _completions(result: StepResult) -> tuple[_Completed, ...]:
+    match result.step:
         case QualifiedStep():
-            return entry.reference() == reference
+            return tuple(_Completed(result.step, rc) for rc in result.outcome.rcs())
         case UnexpandedCall():
-            return False
+            return ()
 
 
-def _tested(test: BypassTest[StepReference], result: StepResult) -> bool:
+def _tested(test: BypassTest[StepReference], completed: _Completed) -> bool:
     match test.target:
         case AllPriorSteps():
             return True
         case _:
-            return _names(test.target, result.step)
+            return completed.step.reference() == test.target
 
 
-def _true(test: BypassTest[StepReference], executed: Sequence[StepResult]) -> bool:
+def _true(test: BypassTest[StepReference], completed: Sequence[_Completed]) -> bool:
     compare = _OPS[test.comparison.op]
     return any(
-        compare(test.comparison.code, r.return_code)
-        for r in executed
-        if _tested(test, r)
+        compare(test.comparison.code, c.rc) for c in completed if _tested(test, c)
     )
 
 
-def should_bypass(
+def _meets(tests: Sequence[RcComparison], completed: _Completed) -> bool:
+    return any(_OPS[t.op](t.code, completed.rc) for t in tests)
+
+
+def _own(
+    condition: StepCondition[StepReference], completed: Sequence[_Completed]
+) -> Run | Bypassed:
+    if condition.abend_mode is AbendMode.ONLY:
+        return Bypassed(BypassReason.ONLY_WITHOUT_ABEND)
+    if any(_true(t, completed) for t in condition.bypass_tests):
+        return Bypassed(BypassReason.COND_SATISFIED)
+    return Run()
+
+
+def gate(
     condition: StepCondition[StepReference],
     end_job_tests: Sequence[RcComparison],
     history: Sequence[StepResult],
-) -> bool:
-    if condition.abend_mode is AbendMode.ONLY:
-        return True
-    executed = tuple(r for r in history if r.ran)
-    tests = (
-        *condition.bypass_tests,
-        *(BypassTest[StepReference](c, AllPriorSteps()) for c in end_job_tests),
-    )
-    return any(_true(t, executed) for t in tests)
+) -> Run | Bypassed | Flushed:
+    completed = tuple(c for r in history for c in _completions(r))
+    met = tuple(c for c in completed if _meets(end_job_tests, c))
+    if met:
+        return Flushed(AfterJobCond(met[0].step))
+    return _own(condition, completed)

@@ -42,16 +42,22 @@ cicada or squall; `.importlinter` enforces this.
      `UnexpandedCall` or step whose `COND` or referback holds an unresolved reference.
    - `IgnoreStrategy` runs the job. A `COND` test naming an unresolved step is false, as for a
      step that did not run. An `UnexpandedCall`, and a step with an unresolved referback, are
-     recorded as `SKIPPED_UNRESOLVED`; later `COND` tests skip them as they skip a bypassed step.
+     recorded as `SkippedUnresolved`; later `COND` tests skip them as they skip a bypassed step.
 
    For each step:
    - These are refused with `UnsupportedStep` until each is supported: a step under an IF
      (guards are parsed and attached but not yet evaluated) and a concatenated DD.
-   - `COND=` is evaluated by `jackal.cond` against the return codes of steps that ran; a JOB
-     card's `COND` tests are checked the same way. A true test bypasses the step. jackal records
-     no abends, so `COND=EVEN` reads as no `EVEN` and a `COND=ONLY` step is bypassed.
+   - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Bypassed(reason)`,
+     `Flushed(cause)` or `SkippedUnresolved`. `JobResult.outcome` is `JobCompleted` with the
+     highest return code among completed steps.
+   - `jackal.cond.gate` decides whether a step runs, reading only completed steps' return codes.
+     Once a JOB card's `COND` test is met, this step and every later one are
+     `Flushed(AfterJobCond(step))`, naming the step that met it. Otherwise a true test of the
+     step's own `COND` is `Bypassed(COND_SATISFIED)`. jackal records no abends, so `COND=EVEN`
+     reads as no `EVEN` and a `COND=ONLY` step is `Bypassed(ONLY_WITHOUT_ABEND)`.
    - Referbacks (`DSN=*.STEP.DD`) are resolved to the DSN recorded for that earlier step. If
-     the referenced step did not run, the referencing step is bypassed.
+     the referenced step did not run, the referencing step is `Bypassed(REFERENCED_STEP_NOT_RUN)`,
+     a jackal-only reason that `AllocationFailed` replaces (red-dragon-forge-552).
    - The step is dispatched. A program in the utility table runs the emulated utility.
      Any other program is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
 4. At job end, surviving temporary datasets are deleted. The result is a `JobResult` holding

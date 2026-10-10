@@ -1,12 +1,11 @@
 from pathlib import Path
 
 import pytest
-
-from tests.covers import NotLanguageFeature, covers
 from jackal.jcl.parser import parse_jcl
-from jackal.results import StepDisposition
+from jackal.results import Bypassed, BypassReason, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
+from tests.covers import NotLanguageFeature, covers
 
 _FAIL_PGM = """\
        IDENTIFICATION DIVISION.
@@ -45,5 +44,5 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
     )
     res = runner.run(job, workdir=tmp_path, seeds={})
     a, b = res.steps
-    assert a.return_code == 8 and a.disposition is StepDisposition.EXECUTED
-    assert b.disposition is StepDisposition.BYPASSED  # COND=(0,NE) bypassed after RC 8
+    assert a.outcome == Completed(8)
+    assert b.outcome == Bypassed(BypassReason.COND_SATISFIED)

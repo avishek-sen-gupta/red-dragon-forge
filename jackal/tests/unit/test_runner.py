@@ -18,7 +18,16 @@ from jackal.model import (
     StepRef,
     TempRef,
 )
-from jackal.results import JobResult, StepDisposition
+from jackal.results import (
+    AfterJobCond,
+    BypassReason,
+    Bypassed,
+    Completed,
+    Flushed,
+    JobResult,
+    SkippedUnresolved,
+    StepOutcome,
+)
 from jackal.runner import JobRunner, UnsupportedStep
 from jackal.unresolved import (
     IgnoreStrategy,
@@ -29,8 +38,9 @@ from jackal.unresolved import (
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import cond, dd, disp, job, program, ref
 
-EXECUTED, BYPASSED = StepDisposition.EXECUTED, StepDisposition.BYPASSED
-SKIPPED_UNRESOLVED = StepDisposition.SKIPPED_UNRESOLVED
+OK = Completed(0)
+COND_MET = Bypassed(BypassReason.COND_SATISFIED)
+NOT_RUN = Bypassed(BypassReason.REFERENCED_STEP_NOT_RUN)
 
 
 def _run(
@@ -56,8 +66,8 @@ def _fresh(tmp_path: Path, name: str) -> Path:
     return path
 
 
-def _outcomes(result: JobResult) -> list[tuple[str, int, StepDisposition]]:
-    return [(s.name, s.return_code, s.disposition) for s in result.steps]
+def _outcomes(result: JobResult) -> list[tuple[str, StepOutcome]]:
+    return [(s.name, s.outcome) for s in result.steps]
 
 
 def _sysin(lines: tuple[str, ...]) -> DD[StepRef]:
@@ -73,7 +83,7 @@ def test_runner_runs_every_step_in_order(tmp_path: Path) -> None:
             program("B", "IEFBR14"),
         ),
     )
-    assert _outcomes(_run(tmp_path, j)) == [("A", 0, EXECUTED), ("B", 0, EXECUTED)]
+    assert _outcomes(_run(tmp_path, j)) == [("A", OK), ("B", OK)]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -91,7 +101,7 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
     )
     sysprint = DD(DdName("SYSPRINT"), NoDSN(), disp(), sysout=True)
     j = job("DEFTEST", (program("DEFACCT", "IDCAMS", (_sysin(sysin), sysprint)),))
-    assert _outcomes(_run(tmp_path, j)) == [("DEFACCT", 0, EXECUTED)]
+    assert _outcomes(_run(tmp_path, j)) == [("DEFACCT", OK)]
     assert (tmp_path / "MYAPP_ACCOUNTS").exists()
 
 
@@ -104,14 +114,15 @@ def test_step_and_job_cond_bypass_after_a_failure_and_not_after_success(
     clean = job("J", (program("A", "IEFBR14"), guarded))
     after_failure = job("J", (fails, guarded))
     job_cond = job("J", (fails, program("B", "IEFBR14")), end_job_tests=((0, "NE"),))
+    flushed = _run(_fresh(tmp_path, "job"), job_cond)
     assert [
         _outcomes(_run(_fresh(tmp_path, "clean"), clean)),
         _outcomes(_run(_fresh(tmp_path, "failure"), after_failure)),
-        _outcomes(_run(_fresh(tmp_path, "job"), job_cond)),
+        _outcomes(flushed),
     ] == [
-        [("A", 0, EXECUTED), ("B", 0, EXECUTED)],
-        [("A", 8, EXECUTED), ("B", 0, BYPASSED)],
-        [("A", 8, EXECUTED), ("B", 0, BYPASSED)],
+        [("A", OK), ("B", OK)],
+        [("A", Completed(8)), ("B", COND_MET)],
+        [("A", Completed(8)), ("B", Flushed(AfterJobCond(flushed.steps[0].step)))],
     ]
 
 
@@ -148,7 +159,7 @@ def test_a_referback_names_the_earlier_steps_dataset_or_temporary(
             ),
         ),
     )
-    assert _outcomes(_run(tmp_path, j)) == [("S1", 0, EXECUTED), ("S2", 0, EXECUTED)]
+    assert _outcomes(_run(tmp_path, j)) == [("S1", OK), ("S2", OK)]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -171,9 +182,9 @@ def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> Non
         ),
     )
     assert _outcomes(_run(tmp_path, j)) == [
-        ("A", 8, EXECUTED),
-        ("B", 0, BYPASSED),
-        ("C", 0, BYPASSED),
+        ("A", Completed(8)),
+        ("B", COND_MET),
+        ("C", NOT_RUN),
     ]
 
 
@@ -227,11 +238,11 @@ def test_ignore_strategy_drops_unresolved_tests_and_skips_what_cannot_run(
         ),
     )
     assert _outcomes(_run(tmp_path, j, unresolved=IgnoreStrategy())) == [
-        ("S1", 0, EXECUTED),
-        ("S2", 0, EXECUTED),
-        ("S3", 0, SKIPPED_UNRESOLVED),
-        ("S4", 0, SKIPPED_UNRESOLVED),
-        ("S5", 0, EXECUTED),
+        ("S1", OK),
+        ("S2", OK),
+        ("S3", SkippedUnresolved()),
+        ("S4", SkippedUnresolved()),
+        ("S5", OK),
     ]
 
 
@@ -245,9 +256,7 @@ def test_runner_expands_a_proc_call_before_running(tmp_path: Path) -> None:
         "// PEND\n"
     )
     j = job("J", (ProcCall(StepName("STEP1"), ProcRef("WRAPIT")),))
-    assert _outcomes(_run(tmp_path, j, (tmp_path / "proc",))) == [
-        ("STEP1.P1", 0, EXECUTED)
-    ]
+    assert _outcomes(_run(tmp_path, j, (tmp_path / "proc",))) == [("STEP1.P1", OK)]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -288,9 +297,7 @@ def test_a_concatenated_dd_is_refused_rather_than_read_as_its_first_dataset(
     library_only = job("J", (program("S1", "IEFBR14", (steplib,)),))
     with pytest.raises(UnsupportedStep, match="S1 concatenates DD IN"):
         _run(tmp_path, refused)
-    assert _outcomes(_run(_fresh(tmp_path, "lib"), library_only)) == [
-        ("S1", 0, EXECUTED)
-    ]
+    assert _outcomes(_run(_fresh(tmp_path, "lib"), library_only)) == [("S1", OK)]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -308,4 +315,4 @@ def test_a_referback_to_a_dummy_dd_names_dummy(tmp_path: Path) -> None:
             ),
         ),
     )
-    assert _outcomes(_run(tmp_path, j)) == [("S1", 0, EXECUTED), ("S2", 0, EXECUTED)]
+    assert _outcomes(_run(tmp_path, j)) == [("S1", OK), ("S2", OK)]

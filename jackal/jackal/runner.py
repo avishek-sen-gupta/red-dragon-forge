@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import OPTIONAL_DDS, run_cobol_step
-from jackal.cond import should_bypass
+from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
 from jackal.model import (
     DD,
@@ -26,13 +26,22 @@ from jackal.model import (
     TempRef,
     UnexpandedCall,
 )
-from jackal.results import JobResult, StepDisposition, StepResult
+from jackal.results import (
+    Bypassed,
+    BypassReason,
+    Completed,
+    JobResult,
+    SkippedUnresolved,
+    StepOutcome,
+    StepResult,
+)
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 from jackal.value_parts import literal
 
 Recorded = Mapping[DdName, DSN[StepReference]]
 Entry = QualifiedStep | UnexpandedCall
+_REFERENCED_STEP_NOT_RUN = Bypassed(BypassReason.REFERENCED_STEP_NOT_RUN)
 
 
 class UnsupportedStep(Exception):
@@ -44,16 +53,11 @@ class _History:
     results: tuple[StepResult, ...]
     datasets: Mapping[StepReference, Recorded]
 
-    def skipped(self, entry: Entry) -> _History:
-        result = StepResult(entry, 0, StepDisposition.SKIPPED_UNRESOLVED)
-        return _History((*self.results, result), self.datasets)
-
-    def bypassed(self, step: QualifiedStep) -> _History:
-        result = StepResult(step, 0, StepDisposition.BYPASSED)
-        return _History((*self.results, result), self.datasets)
+    def recorded(self, entry: Entry, outcome: StepOutcome) -> _History:
+        return _History((*self.results, StepResult(entry, outcome)), self.datasets)
 
     def ran(self, step: QualifiedStep, rc: int, recorded: Recorded) -> _History:
-        result = StepResult(step, rc)
+        result = StepResult(step, Completed(rc))
         datasets = {**self.datasets, step.reference(): recorded}
         return _History((*self.results, result), datasets)
 
@@ -168,7 +172,7 @@ class JobRunner:
     ) -> _History:
         match entry:
             case UnexpandedCall():
-                return history.skipped(entry)
+                return history.recorded(entry, SkippedUnresolved())
             case QualifiedStep():
                 return self._step(catalog, end_job_tests, history, entry)
 
@@ -181,7 +185,7 @@ class JobRunner:
     ) -> _History:
         step = _unguarded(qualified)
         if not referbacks_resolved(step):
-            return history.skipped(qualified)
+            return history.recorded(qualified, SkippedUnresolved())
         return self._gated(catalog, end_job_tests, history, qualified, step)
 
     def _gated(
@@ -192,10 +196,22 @@ class JobRunner:
         qualified: QualifiedStep,
         step: ProgramStep[StepReference],
     ) -> _History:
-        if should_bypass(step.cond, end_job_tests, history.results):
-            return history.bypassed(qualified)
+        decision = gate(step.cond, end_job_tests, history.results)
+        match decision:
+            case Run():
+                return self._started(catalog, history, qualified, step)
+            case _:
+                return history.recorded(qualified, decision)
+
+    def _started(
+        self,
+        catalog: DatasetCatalog,
+        history: _History,
+        qualified: QualifiedStep,
+        step: ProgramStep[StepReference],
+    ) -> _History:
         if any(s not in history.datasets for s in _referenced(step)):
-            return history.bypassed(qualified)
+            return history.recorded(qualified, _REFERENCED_STEP_NOT_RUN)
         resolved = ProgramStep(
             step.label,
             step.pgm,
