@@ -561,4 +561,6 @@ fileignoreconfig:
   checksum: 8f7db65aae8f90a9ac8352e2c23d4ebc83ec141edf3e4665709fb52383fe29aa
 - filename: docs/reference/cobble/field-dataflow.md
   checksum: 5517172d14630198f6aa7ae74b6c03f57f305db67fca0cdba01bca79cb98d88f
+- filename: docs/superpowers/specs/2026-10-10-jackal-job-level-domain-model-design.md
+  checksum: 1a8fb3f3991dc97da85fddf09448fa4dfa8f56b13552de454d9c52c99d35f84d
 version: "1.0"

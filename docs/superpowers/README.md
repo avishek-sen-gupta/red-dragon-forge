@@ -35,6 +35,7 @@ New specs go in `specs/`, new plans in `plans/`, in the package subfolder when t
 - 2026-10-07 — [Fixpoint restricted to call targets — design](specs/2026-10-07-call-target-restricted-fixpoint-design.md)
 - 2026-10-08 — [Docs consolidation — design](specs/2026-10-08-docs-consolidation-design.md)
 - 2026-10-08 — [Per-Program Area Need — Design](specs/2026-10-08-per-program-area-need-design.md)
+- 2026-10-10 — [jackal: job-level domain model (blueprint)](specs/2026-10-10-jackal-job-level-domain-model-design.md)
 
 ### cicada
 
