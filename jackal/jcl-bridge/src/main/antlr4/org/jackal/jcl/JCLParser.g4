@@ -337,8 +337,8 @@ ddName : (NAME | NAME_FIELD) (DOT (NAME | NAME_FIELD))? ;
 
 ddParameter : ddParmACCODE | ddParmAMP | ddParmASTERISK | ddParmAVGREC | ddParmBLKSZLIM | ddParmBURST | ddParmCCSID | ddParmCHARS | ddParmCHKPT | ddParmCNTL | ddParmCOPIES | ddParmDATA | ddParmDATACLAS | ddParmDCB | ddParmDDNAME | ddParmDEST | ddParmDISP | ddParmDLM | ddParmDSID | ddParmDSKEYLBL | ddParmDSNAME | ddParmDSNTYPE | ddParmDUMMY | ddParmDYNAM | ddParmEATTR | ddParmEXPDT | ddParmFCB | ddParmFILEDATA | ddParmFLASH | ddParmFREE | ddParmFREEVOL | ddParmGDGORDER | ddParmHOLD | ddParmKEYLABL1 | ddParmKEYLABL2 | ddParmKEYENCD1 | ddParmKEYENCD2 | ddParmKEYOFF | ddParmLABEL | ddParmLGSTREAM | ddParmLIKE | ddParmMAXGENS | ddParmMGMTCLAS | ddParmMODIFY | ddParmNULLOVRD | ddParmOUTLIM | ddParmOUTPUT | ddParmPATH | ddParmPATHDISP | ddParmPATHMODE | ddParmPATHOPTS | ddParmPROTECT | ddParmRECORG | ddParmREFDD | ddParmRETPD | ddParmRLS | ddParmROACCESS | ddParmSECMODEL | ddParmSEGMENT | ddParmSEP | ddParmSPACE | ddParmSPIN | ddParmSTORCLAS | ddParmSUBSYS | ddParmSYMBOLS | ddParmSYMLIST | ddParmSYSOUT | ddParmTERM | ddParmUCS | ddParmUNIT | ddParmVOLUME | ddParmDCB_Parameter | errorChars;
 
-ddParmACCODE : ACCODE EQUAL keywordOrSymbolic;
-ddParmAMP : AMP EQUAL singleOrMultipleValue ;
+ddParmACCODE : ACCODE EQUAL keywordOrSymbolic? ;
+ddParmAMP : AMP EQUAL singleOrMultipleValue? ;
 ddParmASTERISK : ASTERISK ;
 /*
 An in-stream data block is allowed to be empty: `//SYSIN DD *` immediately
@@ -354,32 +354,32 @@ ddParmASTERISK_DATA
 	: DD_ASTERISK_DATA+ (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)?
 	| (DATA_MODE_TERMINATOR3 | DATA_MODE_TERMINATORX)
 	;
-ddParmAVGREC : AVGREC EQUAL keywordOrSymbolic ;
-ddParmBFALN : BFALN EQUAL keywordOrSymbolic ;
-ddParmBFTEK : BFTEK EQUAL keywordOrSymbolic ;
+ddParmAVGREC : AVGREC EQUAL keywordOrSymbolic? ;
+ddParmBFALN : BFALN EQUAL keywordOrSymbolic? ;
+ddParmBFTEK : BFTEK EQUAL keywordOrSymbolic? ;
 // The value is optional, as it is for DATACLAS below: the lexer already lets a
 // keyword subparameter be null on purpose (see KYWD_VAL_MODE), and cobble records
 // no block size anywhere, so a null one costs nothing to accept and cost two
 // corpus members every DD edge they had to reject.
 ddParmBLKSIZE : BLKSIZE EQUAL keywordOrSymbolic? ;
-ddParmBLKSZLIM : BLKSZLIM EQUAL keywordOrSymbolic ;
-ddParmBUFIN : BUFIN EQUAL keywordOrSymbolic ;
-ddParmBUFL : BUFL EQUAL keywordOrSymbolic ;
-ddParmBUFMAX : BUFMAX EQUAL keywordOrSymbolic ;
-ddParmBUFNO : BUFNO EQUAL keywordOrSymbolic ;
-ddParmBUFOFF : BUFOFF EQUAL keywordOrSymbolic ;
-ddParmBUFOUT : BUFOUT EQUAL keywordOrSymbolic ;
-ddParmBUFRQ : BUFRQ EQUAL keywordOrSymbolic ;
-ddParmBUFSIZE : BUFSIZE EQUAL keywordOrSymbolic ;
-ddParmBURST : BURST EQUAL keywordOrSymbolic ;
-ddParmCCSID : CCSID EQUAL keywordOrSymbolic ;
-ddParmCHARS : CHARS EQUAL singleOrMultipleValue ;
-ddParmCHKPT : CHKPT EQUAL keywordOrSymbolic ;
-ddParmCNTL : CNTL EQUAL keywordOrSymbolic ;
-ddParmCODE : CODE EQUAL keywordOrSymbolic ;
-ddParmCOPIES : COPIES EQUAL singleOrMultipleValue ;
-ddParmCPRI : CPRI EQUAL keywordOrSymbolic ;
-ddParmCYLOFL : CYLOFL EQUAL keywordOrSymbolic ;
+ddParmBLKSZLIM : BLKSZLIM EQUAL keywordOrSymbolic? ;
+ddParmBUFIN : BUFIN EQUAL keywordOrSymbolic? ;
+ddParmBUFL : BUFL EQUAL keywordOrSymbolic? ;
+ddParmBUFMAX : BUFMAX EQUAL keywordOrSymbolic? ;
+ddParmBUFNO : BUFNO EQUAL keywordOrSymbolic? ;
+ddParmBUFOFF : BUFOFF EQUAL keywordOrSymbolic? ;
+ddParmBUFOUT : BUFOUT EQUAL keywordOrSymbolic? ;
+ddParmBUFRQ : BUFRQ EQUAL keywordOrSymbolic? ;
+ddParmBUFSIZE : BUFSIZE EQUAL keywordOrSymbolic? ;
+ddParmBURST : BURST EQUAL keywordOrSymbolic? ;
+ddParmCCSID : CCSID EQUAL keywordOrSymbolic? ;
+ddParmCHARS : CHARS EQUAL singleOrMultipleValue? ;
+ddParmCHKPT : CHKPT EQUAL keywordOrSymbolic? ;
+ddParmCNTL : CNTL EQUAL keywordOrSymbolic? ;
+ddParmCODE : CODE EQUAL keywordOrSymbolic? ;
+ddParmCOPIES : COPIES EQUAL singleOrMultipleValue? ;
+ddParmCPRI : CPRI EQUAL keywordOrSymbolic? ;
+ddParmCYLOFL : CYLOFL EQUAL keywordOrSymbolic? ;
 ddParmDATA : DATA ;
 ddParmDATACLAS : DATACLAS EQUAL keywordOrSymbolic? ;
 
@@ -401,45 +401,36 @@ DCB parameter...
 ...which was a surprise to me.
 
 */
-ddParmDCB : DCB EQUAL (
-    ddParmDCB_Parameter | 
-    (LPAREN 
-        ddParmDCB_Parameter+
-    RPAREN) 
-  ) ;
+ddParmDCB : DCB EQUAL ( ddParmDCB_Parameter | (LPAREN ddParmDCB_Parameter+ RPAREN) )? ;
 
 ddParmDCB_Parameter : ddParmBFALN | ddParmBFTEK | ddParmBLKSIZE | ddParmBUFIN | ddParmBUFL | ddParmBUFMAX | ddParmBUFNO | ddParmBUFOFF | ddParmBUFOUT | ddParmBUFRQ | ddParmBUFSIZE | ddParmCODE | ddParmCPRI | ddParmCYLOFL | ddParmDEN | ddParmDIAGNS | ddParmDSORG | ddParmEROPT | ddParmFUNC | ddParmGNCP | ddParmHIARCHY | ddParmINTVL | ddParmIPLTXID | ddParmKEYLEN | ddParmLIMCT| ddParmLRECL | ddParmMODE |  ddParmNCP | ddParmNTM | ddParmOPTCD | ddParmPCI | ddParmPRTSP | ddParmRECFM | ddParmRESERVE | ddParmRKP | ddParmSOWA | ddParmSTACK | ddParmTHRESH | ddParmTRTCH | datasetName ;
 
 
 ddParmDDNAME : DDNAME EQUAL keywordOrSymbolic? ;
-ddParmDEN : DEN EQUAL keywordOrSymbolic ;
-ddParmDEST : DEST EQUAL  (
-    keywordOrSymbolic |
-    (LPAREN keywordOrSymbolic RPAREN)
-  )
-  ;
-ddParmDIAGNS : DIAGNS EQUAL keywordOrSymbolic ;
-ddParmDISP : DISP EQUAL singleOrMultipleValue ;
-ddParmDLM : DLM EQUAL keywordOrSymbolic ;
-ddParmDSID : DSID EQUAL singleOrMultipleValue ;
-ddParmDSKEYLBL : DSKEYLBL EQUAL keywordOrSymbolic ;
-ddParmDSNAME : (DSNAME | DSN) EQUAL datasetName ;
-ddParmDSNTYPE : DSNTYPE EQUAL singleOrMultipleValue ;
+ddParmDEN : DEN EQUAL keywordOrSymbolic? ;
+ddParmDEST : DEST EQUAL ( keywordOrSymbolic | (LPAREN keywordOrSymbolic RPAREN) )? ;
+ddParmDIAGNS : DIAGNS EQUAL keywordOrSymbolic? ;
+ddParmDISP : DISP EQUAL singleOrMultipleValue? ;
+ddParmDLM : DLM EQUAL keywordOrSymbolic? ;
+ddParmDSID : DSID EQUAL singleOrMultipleValue? ;
+ddParmDSKEYLBL : DSKEYLBL EQUAL keywordOrSymbolic? ;
+ddParmDSNAME : (DSNAME | DSN) EQUAL datasetName? ;
+ddParmDSNTYPE : DSNTYPE EQUAL singleOrMultipleValue? ;
 
-ddParmDSORG : DSORG EQUAL keywordOrSymbolic ;
+ddParmDSORG : DSORG EQUAL keywordOrSymbolic? ;
 ddParmDUMMY : DUMMY ;
 ddParmDYNAM : DYNAM ;
-ddParmEATTR : EATTR EQUAL keywordOrSymbolic ;
-ddParmEROPT : EROPT EQUAL keywordOrSymbolic ;
-ddParmEXPDT : EXPDT EQUAL keywordOrSymbolic ;
-ddParmFCB : FCB EQUAL singleOrMultipleValue ;
-ddParmFILEDATA : FILEDATA EQUAL keywordOrSymbolic ;
-ddParmFLASH : FLASH EQUAL singleOrMultipleValue ;
-ddParmFREE : FREE EQUAL keywordOrSymbolic ;
-ddParmFREEVOL : FREEVOL EQUAL keywordOrSymbolic ;
-ddParmFUNC : FUNC EQUAL keywordOrSymbolic ;
-ddParmGDGORDER : GDGORDER EQUAL keywordOrSymbolic ;
-ddParmGNCP : GNCP EQUAL keywordOrSymbolic ;
+ddParmEATTR : EATTR EQUAL keywordOrSymbolic? ;
+ddParmEROPT : EROPT EQUAL keywordOrSymbolic? ;
+ddParmEXPDT : EXPDT EQUAL keywordOrSymbolic? ;
+ddParmFCB : FCB EQUAL singleOrMultipleValue? ;
+ddParmFILEDATA : FILEDATA EQUAL keywordOrSymbolic? ;
+ddParmFLASH : FLASH EQUAL singleOrMultipleValue? ;
+ddParmFREE : FREE EQUAL keywordOrSymbolic? ;
+ddParmFREEVOL : FREEVOL EQUAL keywordOrSymbolic? ;
+ddParmFUNC : FUNC EQUAL keywordOrSymbolic? ;
+ddParmGDGORDER : GDGORDER EQUAL keywordOrSymbolic? ;
+ddParmGNCP : GNCP EQUAL keywordOrSymbolic? ;
 /*
 HIARCHY is obsolete but probably still tolerated.
 syntax: HIARCHY={0|1}
@@ -448,79 +439,75 @@ example: DCB=(DSORG=DA,HIARCHY=0)
 Whether or not HIARCHY=1 on its own (without an associated DCB=
 would be tolerated by JES is currently unknown.
 */
-ddParmHIARCHY : HIARCHY EQUAL keywordOrSymbolic ;
-ddParmHOLD : HOLD EQUAL keywordOrSymbolic ;
-ddParmINTVL : INTVL EQUAL keywordOrSymbolic ;
-ddParmIPLTXID : IPLTXID EQUAL keywordOrSymbolic ;
-ddParmKEYLABL1 : KEYLABL1 EQUAL keywordOrSymbolic ;
-ddParmKEYLABL2 : KEYLABL2 EQUAL keywordOrSymbolic ;
-ddParmKEYENCD1 : KEYENCD1 EQUAL keywordOrSymbolic ;
-ddParmKEYENCD2 : KEYENCD2 EQUAL keywordOrSymbolic ;
-ddParmKEYLEN : KEYLEN EQUAL keywordOrSymbolic ;
-ddParmKEYOFF : KEYOFF EQUAL keywordOrSymbolic ;
-ddParmLABEL : LABEL EQUAL singleOrMultipleValue ;
+ddParmHIARCHY : HIARCHY EQUAL keywordOrSymbolic? ;
+ddParmHOLD : HOLD EQUAL keywordOrSymbolic? ;
+ddParmINTVL : INTVL EQUAL keywordOrSymbolic? ;
+ddParmIPLTXID : IPLTXID EQUAL keywordOrSymbolic? ;
+ddParmKEYLABL1 : KEYLABL1 EQUAL keywordOrSymbolic? ;
+ddParmKEYLABL2 : KEYLABL2 EQUAL keywordOrSymbolic? ;
+ddParmKEYENCD1 : KEYENCD1 EQUAL keywordOrSymbolic? ;
+ddParmKEYENCD2 : KEYENCD2 EQUAL keywordOrSymbolic? ;
+ddParmKEYLEN : KEYLEN EQUAL keywordOrSymbolic? ;
+ddParmKEYOFF : KEYOFF EQUAL keywordOrSymbolic? ;
+ddParmLABEL : LABEL EQUAL singleOrMultipleValue? ;
 /*
 It's not really a dataset name in the LGSTREAM parameter, but it
 does match the same pattern.
 */
-ddParmLGSTREAM : LGSTREAM EQUAL datasetName ;
-ddParmLIKE : LIKE EQUAL datasetName ;
-ddParmLIMCT: LIMCT EQUAL keywordOrSymbolic ;
-ddParmLRECL : LRECL EQUAL keywordOrSymbolic ;
-ddParmMAXGENS : MAXGENS EQUAL keywordOrSymbolic ;
+ddParmLGSTREAM : LGSTREAM EQUAL datasetName? ;
+ddParmLIKE : LIKE EQUAL datasetName? ;
+ddParmLIMCT : LIMCT EQUAL keywordOrSymbolic? ;
+ddParmLRECL : LRECL EQUAL keywordOrSymbolic? ;
+ddParmMAXGENS : MAXGENS EQUAL keywordOrSymbolic? ;
 ddParmMGMTCLAS : MGMTCLAS EQUAL keywordOrSymbolic? ;
-ddParmMODE : MODE EQUAL keywordOrSymbolic ; 
-ddParmMODIFY : MODIFY EQUAL singleOrMultipleValue ;
-ddParmNCP : NCP EQUAL keywordOrSymbolic ;
-ddParmNTM : NTM EQUAL keywordOrSymbolic ;
+ddParmMODE : MODE EQUAL keywordOrSymbolic? ; 
+ddParmMODIFY : MODIFY EQUAL singleOrMultipleValue? ;
+ddParmNCP : NCP EQUAL keywordOrSymbolic? ;
+ddParmNTM : NTM EQUAL keywordOrSymbolic? ;
 ddParmNULLOVRD : NULLOVRD ;
-ddParmOPTCD : OPTCD EQUAL keywordOrSymbolic ;
-ddParmOUTLIM : OUTLIM EQUAL keywordOrSymbolic ;
-ddParmOUTPUT : OUTPUT EQUAL singleOrMultipleValue ;
-ddParmPATH : PATH EQUAL keywordOrSymbolic ;
-ddParmPATHDISP : PATHDISP EQUAL singleOrMultipleValue ;
-ddParmPATHMODE : PATHMODE EQUAL singleOrMultipleValue ;
-ddParmPATHOPTS : PATHOPTS EQUAL singleOrMultipleValue ;
-ddParmPCI : PCI EQUAL singleOrMultipleValue ;
-ddParmPROTECT : PROTECT EQUAL keywordOrSymbolic ;
-ddParmPRTSP : PRTSP EQUAL keywordOrSymbolic ;
-ddParmRECFM : RECFM EQUAL keywordOrSymbolic ;
-ddParmRECORG : RECORG EQUAL keywordOrSymbolic ;
-ddParmREFDD : REFDD EQUAL keywordOrSymbolic ;
-ddParmRESERVE : RESERVE EQUAL parenList ;
-ddParmRETPD : RETPD EQUAL keywordOrSymbolic ;
-ddParmRKP : RKP EQUAL keywordOrSymbolic ;
-ddParmRLS : RLS EQUAL keywordOrSymbolic ;
-ddParmROACCESS : ROACCESS EQUAL singleOrMultipleValue ;
-ddParmSECMODEL : SECMODEL EQUAL singleOrMultipleValue ;
-ddParmSEGMENT : SEGMENT EQUAL keywordOrSymbolic ;
-ddParmSEP : SEP EQUAL singleOrMultipleValue ;
-ddParmSOWA : SOWA EQUAL keywordOrSymbolic ;
-ddParmSPACE : SPACE EQUAL singleOrMultipleValue ; 
+ddParmOPTCD : OPTCD EQUAL keywordOrSymbolic? ;
+ddParmOUTLIM : OUTLIM EQUAL keywordOrSymbolic? ;
+ddParmOUTPUT : OUTPUT EQUAL singleOrMultipleValue? ;
+ddParmPATH : PATH EQUAL keywordOrSymbolic? ;
+ddParmPATHDISP : PATHDISP EQUAL singleOrMultipleValue? ;
+ddParmPATHMODE : PATHMODE EQUAL singleOrMultipleValue? ;
+ddParmPATHOPTS : PATHOPTS EQUAL singleOrMultipleValue? ;
+ddParmPCI : PCI EQUAL singleOrMultipleValue? ;
+ddParmPROTECT : PROTECT EQUAL keywordOrSymbolic? ;
+ddParmPRTSP : PRTSP EQUAL keywordOrSymbolic? ;
+ddParmRECFM : RECFM EQUAL keywordOrSymbolic? ;
+ddParmRECORG : RECORG EQUAL keywordOrSymbolic? ;
+ddParmREFDD : REFDD EQUAL keywordOrSymbolic? ;
+ddParmRESERVE : RESERVE EQUAL parenList? ;
+ddParmRETPD : RETPD EQUAL keywordOrSymbolic? ;
+ddParmRKP : RKP EQUAL keywordOrSymbolic? ;
+ddParmRLS : RLS EQUAL keywordOrSymbolic? ;
+ddParmROACCESS : ROACCESS EQUAL singleOrMultipleValue? ;
+ddParmSECMODEL : SECMODEL EQUAL singleOrMultipleValue? ;
+ddParmSEGMENT : SEGMENT EQUAL keywordOrSymbolic? ;
+ddParmSEP : SEP EQUAL singleOrMultipleValue? ;
+ddParmSOWA : SOWA EQUAL keywordOrSymbolic? ;
+ddParmSPACE : SPACE EQUAL singleOrMultipleValue? ; 
 
-ddParmSPIN : SPIN EQUAL singleOrMultipleValue ;
+ddParmSPIN : SPIN EQUAL singleOrMultipleValue? ;
 
-ddParmSTACK : STACK EQUAL keywordOrSymbolic ;
+ddParmSTACK : STACK EQUAL keywordOrSymbolic? ;
 ddParmSTORCLAS : STORCLAS EQUAL keywordOrSymbolic? ;
-ddParmSUBSYS : SUBSYS EQUAL singleOrMultipleValue ;
+ddParmSUBSYS : SUBSYS EQUAL singleOrMultipleValue? ;
 
-ddParmSYMBOLS : SYMBOLS EQUAL singleOrMultipleValue ;
+ddParmSYMBOLS : SYMBOLS EQUAL singleOrMultipleValue? ;
 
-ddParmSYMLIST : SYMLIST EQUAL singleOrMultipleValue ;
-ddParmSYSOUT : SYSOUT EQUAL singleOrMultipleValue ;
+ddParmSYMLIST : SYMLIST EQUAL singleOrMultipleValue? ;
+ddParmSYSOUT : SYSOUT EQUAL singleOrMultipleValue? ;
 
-ddParmTERM : TERM EQUAL keywordOrSymbolic ;
-ddParmTHRESH : THRESH EQUAL keywordOrSymbolic ;
-ddParmTRTCH : TRTCH EQUAL keywordOrSymbolic ;
-ddParmUCS : UCS EQUAL singleOrMultipleValue ;
+ddParmTERM : TERM EQUAL keywordOrSymbolic? ;
+ddParmTHRESH : THRESH EQUAL keywordOrSymbolic? ;
+ddParmTRTCH : TRTCH EQUAL keywordOrSymbolic? ;
+ddParmUCS : UCS EQUAL singleOrMultipleValue? ;
 
-ddParmUNIT : UNIT EQUAL 
-    singleOrMultipleValue
-  ;
+ddParmUNIT : UNIT EQUAL singleOrMultipleValue? ;
 
-ddParmVOLUME : (VOL | VOLUME) EQUAL
-    singleOrMultipleValue
-  ;
+ddParmVOLUME : (VOL | VOLUME) EQUAL singleOrMultipleValue? ;
 
 
 
