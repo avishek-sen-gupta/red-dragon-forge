@@ -1,5 +1,10 @@
 import json
+
 import pytest
+from jackal.jcl import wire
+from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
+from jackal.model import DirectDSN, ProcCall, ProcRef, StepName
+from jackal.value_parts import Literal, Symbol, SymbolName, literal
 from tests.covers import NotLanguageFeature, covers
 from tests.wire_build import (
     dd,
@@ -11,11 +16,6 @@ from tests.wire_build import (
     program,
     sym,
 )
-from jackal.dsn import DirectDSN
-from jackal.jcl import wire
-from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
-from jackal.model import ProcCall, ProcRef, StepName
-from jackal.value_parts import Literal, Symbol, SymbolName, literal
 
 
 class _FakeRunner:

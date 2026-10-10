@@ -8,8 +8,16 @@ from pathlib import Path
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from jackal.catalog_stores import Table
-from jackal.dsn import DSN, DirectDSN, TempRef
-from jackal.model import DD, DatasetOrg, DispNormal, DispStatus, QualifiedStep
+from jackal.model import (
+    DD,
+    DSN,
+    DatasetOrg,
+    DirectDSN,
+    DispNormal,
+    DispStatus,
+    StepReference,
+    TempRef,
+)
 
 
 @dataclass(frozen=True)
@@ -64,7 +72,7 @@ class DatasetCatalog:
     def resolve(self, dsn: str) -> Dataset:
         return self._datasets.get(dsn)
 
-    def allocate(self, dd: DD[QualifiedStep]) -> Dataset:
+    def allocate(self, dd: DD[StepReference]) -> Dataset:
         match dd.dsn:
             case TempRef(name=name):
                 return self._allocate_temp(name, dd.disp.status)
@@ -143,18 +151,18 @@ class DatasetCatalog:
         self._datasets.take(dsn).path.unlink(missing_ok=True)
         return True
 
-    def dispose(self, dd: DD[QualifiedStep]) -> None:
+    def dispose(self, dd: DD[StepReference]) -> None:
         if dd.disp.normal is DispNormal.DELETE:
             self._delete(dd.dsn)
 
-    def _delete(self, dsn: DSN[QualifiedStep]) -> None:
+    def _delete(self, dsn: DSN[StepReference]) -> None:
         match dsn:
             case TempRef(name=name):
                 self._delete_temp(name)
             case _:
                 self._delete_direct(dsn)
 
-    def _delete_direct(self, dsn: DSN[QualifiedStep]) -> None:
+    def _delete_direct(self, dsn: DSN[StepReference]) -> None:
         match dsn:
             case DirectDSN():
                 self.delete_dsn(dsn.dataset_name())

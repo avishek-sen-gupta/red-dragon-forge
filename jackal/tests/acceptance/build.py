@@ -1,37 +1,43 @@
 """Short constructors for expected model values in the acceptance suite."""
 
-from jackal.dsn import (
-    BackwardRef,
-    DdName,
-    DirectDSN,
-    DummyDSN,
-    InStreamDSN,
-    NoDSN,
-    TempRef,
-)
 from jackal.model import (
     DD,
     AbendMode,
     AllPriorSteps,
+    BackwardRef,
     BypassTest,
     CalledProcScope,
     ConcatMember,
     CondOp,
+    DdName,
+    DirectDSN,
     Disp,
     DispAbnormal,
     DispNormal,
     DispStatus,
+    DummyDSN,
+    InStreamDSN,
+    NoDSN,
     OwnScope,
+    ProcCall,
     ProcRef,
     ProgramRef,
     ProgramStep,
+    QualifiedStep,
     RcComparison,
+    ResolvedDd,
+    ResolvedProc,
+    ResolvedProcCall,
     StepCondition,
     StepName,
     StepRef,
+    TempRef,
+    UnexpandedCall,
     Unnamed,
+    UnresolvedDd,
 )
 from jackal.value_parts import Symbol, SymbolName, literal
+from tests.acceptance.conftest import FIXTURES
 
 NO_COND = StepCondition((), AbendMode.NORMAL)
 
@@ -85,8 +91,15 @@ def sysout(ddname: str) -> DD:
     return DD(DdName(ddname), NoDSN(), DEFAULT_DISP, sysout=True)
 
 
-def backref(ddname: str, step: object, target_dd: str, d: Disp = SHR) -> DD:
-    return DD(DdName(ddname), BackwardRef(step, DdName(target_dd)), d)
+def backref(ddname: str, step: StepRef, target_dd: str, d: Disp = SHR) -> DD:
+    return DD(DdName(ddname), BackwardRef(step, UnresolvedDd(DdName(target_dd))), d)
+
+
+def resolved_backref(
+    ddname: str, step: QualifiedStep, target_dd: str, d: Disp = SHR
+) -> DD:
+    found = next(dd for dd in step.step.dds if dd.ddname == DdName(target_dd))
+    return DD(DdName(ddname), BackwardRef(step.reference(), ResolvedDd(found)), d)
 
 
 def concat(ddname: str, first: str, rest: tuple[ConcatMember, ...]) -> DD:
@@ -129,7 +142,19 @@ def symbol(sym: str) -> Symbol:
     return Symbol(SymbolName(sym))
 
 
-def qualified(calls: tuple[object, ...], step: object) -> object:
-    from jackal.expansion import QualifiedStep
+def qualified(
+    coordinates: tuple[ResolvedProcCall, ...], step: ProgramStep
+) -> QualifiedStep:
+    return QualifiedStep(coordinates, step)
 
-    return QualifiedStep(calls, step)
+
+def called(call: ProcCall, prc: str) -> ResolvedProcCall:
+    from jackal.jcl.parser import parse_proc
+
+    return ResolvedProcCall(
+        call, ResolvedProc(parse_proc((FIXTURES / prc).read_text()))
+    )
+
+
+def unexpanded(coordinates: tuple[ResolvedProcCall, ...]) -> UnexpandedCall:
+    return UnexpandedCall(coordinates)

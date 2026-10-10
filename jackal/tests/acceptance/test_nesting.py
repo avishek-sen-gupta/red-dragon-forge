@@ -18,11 +18,13 @@ def test_nested_procs_expand(expand_fixture):
         b.proc("INNER"),
         per_step=((b.name("Q1"), ProcStepOverrides(parm=literal("SET"))),),
     )
+    outer = b.called(s1, "nesting/OUTER.prc")
+    inner = b.called(p1, "nesting/INNER.prc")
     assert expand_fixture("nesting/nesting.jcl") == ExpandedJob(
         "ACCEPT",
         (
-            b.qualified((s1, p1), b.pgm("Q1", "PGMQ", parm="SET")),
-            b.qualified((s1,), b.pgm("P2", "PGMB")),
+            b.qualified((outer, inner), b.pgm("Q1", "PGMQ", parm="SET")),
+            b.qualified((outer,), b.pgm("P2", "PGMB")),
         ),
     )
 
@@ -30,8 +32,8 @@ def test_nested_procs_expand(expand_fixture):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_fifteen_levels_expand(tmp_path: Path, jcl_bridge_jar: str):
     from jackal.expansion import DirectoryProcLibrary, ExpandedJob, expand_procs
-    from jackal.jcl.parser import parse_jcl
-    from jackal.model import ProcCall
+    from jackal.jcl.parser import parse_jcl, parse_proc
+    from jackal.model import ProcCall, ResolvedProc, ResolvedProcCall
     from tests.acceptance import build as b
 
     for level in range(1, 15):
@@ -43,6 +45,13 @@ def test_fifteen_levels_expand(tmp_path: Path, jcl_bridge_jar: str):
     calls = (ProcCall(b.name("S1"), b.proc("L1")),) + tuple(
         ProcCall(b.name(f"C{level}"), b.proc(f"L{level + 1}")) for level in range(1, 15)
     )
+    coordinates = tuple(
+        ResolvedProcCall(
+            call,
+            ResolvedProc(parse_proc((tmp_path / f"{call.proc.name}.prc").read_text())),
+        )
+        for call in calls
+    )
     assert expand_procs(job, DirectoryProcLibrary((tmp_path,))) == ExpandedJob(
-        "ACCEPT", (b.qualified(calls, b.pgm("DEEP", "PGMD")),)
+        "ACCEPT", (b.qualified(coordinates, b.pgm("DEEP", "PGMD")),)
     )

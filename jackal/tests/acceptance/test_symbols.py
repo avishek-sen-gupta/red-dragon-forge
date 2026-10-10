@@ -24,14 +24,15 @@ def test_symbols_expand(expand_fixture):
         "ACCEPT",
         (
             b.qualified(
-                (s1,), b.pgm("P1", "PGMA", (b.dataset("IN", "T.IN"), out), parm="DFLT")
+                (b.called(s1, "symbols/SYMP.prc"),),
+                b.pgm("P1", "PGMA", (b.dataset("IN", "T.IN"), out), parm="DFLT"),
             ),
             b.qualified(
-                (s2,),
+                (b.called(s2, "symbols/SYMP.prc"),),
                 b.pgm("P1", "PGMA", (b.dataset("IN", "PROD.IN"), out), parm="DFLT"),
             ),
             b.qualified(
-                (s3, w1),
+                (b.called(s3, "symbols/WRAP.prc"), b.called(w1, "symbols/SYMP.prc")),
                 b.pgm("P1", "PGMA", (b.dataset("IN", "T.IN"), out), parm="OUT"),
             ),
         ),

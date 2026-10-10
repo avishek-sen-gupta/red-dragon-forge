@@ -23,16 +23,19 @@ cicada or squall; `.importlinter` enforces this.
    `JclError` value, before anything runs. It inlines each PROC call found in the `ProcLibrary`
    (`DirectoryProcLibrary` reads `<dir>/<PROC>.prc` through the same JAR), resolving symbolic
    parameters in the caller's scope and applying the call's `COND`, `PARM` and DD overrides by
-   the JCL Reference's rules. It then resolves every step reference (in `COND`, referbacks and
-   IF terms) to the `QualifiedStep` it names: the chain of PROC calls that led to a step, plus
-   the step. A reference to no step, to a later step, to a PROC call, or to a DD the step lacks
-   is a `JclError`, as are an override naming no step and a PROC that calls itself. A name used
-   by more than one run of a PROC resolves to the same run, with a logged warning. A call to a
-   PROC in no library is kept as an `UnresolvedProcCall`. `expand_or_fail` raises the error as
-   `ExpansionFailed` for callers that want an exception.
+   the JCL Reference's rules. A call whose PROC is in no library stays an `UnexpandedCall`. Every
+   step reference (in `COND`, referbacks and IF terms) becomes a `StepReference`: a path of
+   PROC-call coordinates and a target step, each coordinate resolved (holding what was found) or
+   unresolved (holding the name). A name that matches nothing, or a step inside a PROC in no
+   library, is an unresolved coordinate and a logged warning, not an error. The `JclError`s are
+   the mistakes in the JCL itself: a reference to a later step, to a PROC call, or through a
+   program step; an override naming no step; a PROC that calls itself. A name used by more than
+   one run of a PROC resolves to the same run, with a warning. `expand_or_fail` raises the error
+   as `ExpansionFailed` for callers that want an exception.
 3. Run steps in order (`jackal.runner.JobRunner`). For each step:
-   - A step under an IF, or an unresolved PROC call, is refused (`UnsupportedStep`): guards are
-     parsed and attached but not yet evaluated.
+   - These are refused with `UnsupportedStep` until each is supported: an `UnexpandedCall`, a
+     step under an IF (guards are parsed and attached but not yet evaluated), a concatenated DD,
+     and a step whose `COND` or referback holds an unresolved reference (blueprint D7).
    - `COND=` is evaluated by `jackal.cond` against the return codes of steps that ran; a JOB
      card's `COND` tests are checked the same way. A true test bypasses the step. jackal records
      no abends, so `COND=EVEN` reads as no `EVEN` and a `COND=ONLY` step is bypassed.

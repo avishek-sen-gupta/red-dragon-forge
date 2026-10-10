@@ -79,9 +79,14 @@ def test_overrides_expand(expand_fixture, parse_fixture):
         p1_dds: tuple[object, ...] = (p1_in,),
         p2_dds_: tuple[object, ...] = p2_dds,
     ) -> tuple[object, ...]:
+        coordinate = b.called(call, "overrides/TWO.prc")
         return (
-            b.qualified((call,), b.pgm("P1", "PGMA", p1_dds, p1_condition, p1_parm)),
-            b.qualified((call,), b.pgm("P2", "PGMB", p2_dds_, p2_condition, p2_parm)),
+            b.qualified(
+                (coordinate,), b.pgm("P1", "PGMA", p1_dds, p1_condition, p1_parm)
+            ),
+            b.qualified(
+                (coordinate,), b.pgm("P2", "PGMB", p2_dds_, p2_condition, p2_parm)
+            ),
         )
 
     every = b.cond(b.all_prior(4, "LT"))

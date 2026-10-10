@@ -1,24 +1,27 @@
 from pathlib import Path
 
 import pytest
-
-from tests.covers import NotLanguageFeature, covers
-from tests.model_build import cond, dd, disp, job, program, ref
-from jackal.dsn import BackwardRef, DdName, InStreamDSN, NoDSN, TempRef
-from jackal.expansion import DanglingDdReference, ExpansionFailed
 from jackal.model import (
+    UnresolvedDd,
     DD,
+    BackwardRef,
+    CondOp,
+    DdName,
     IfBlock,
+    InStreamDSN,
     Job,
+    NoDSN,
     ProcCall,
     ProcRef,
     RcTest,
-    CondOp,
     StepName,
     StepRef,
+    TempRef,
 )
 from jackal.results import JobResult, StepDisposition
 from jackal.runner import JobRunner, UnsupportedStep
+from tests.covers import NotLanguageFeature, covers
+from tests.model_build import cond, dd, disp, job, program, ref
 
 EXECUTED, BYPASSED = StepDisposition.EXECUTED, StepDisposition.BYPASSED
 
@@ -118,8 +121,16 @@ def test_a_referback_names_the_earlier_steps_dataset_or_temporary(
                 "S2",
                 "IEFBR14",
                 (
-                    dd("IN", BackwardRef(ref("S1"), DdName("OUT")), disp("OLD")),
-                    dd("TMP", BackwardRef(ref("S1"), DdName("WRK")), disp("OLD")),
+                    dd(
+                        "IN",
+                        BackwardRef(ref("S1"), UnresolvedDd(DdName("OUT"))),
+                        disp("OLD"),
+                    ),
+                    dd(
+                        "TMP",
+                        BackwardRef(ref("S1"), UnresolvedDd(DdName("WRK"))),
+                        disp("OLD"),
+                    ),
                 ),
             ),
         ),
@@ -139,7 +150,11 @@ def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> Non
                 (dd("OUT", "MY.FILE", disp("NEW", "CATLG")),),
                 cond((0, "NE", "")),
             ),
-            program("C", "IEFBR14", (dd("IN", BackwardRef(ref("B"), DdName("OUT"))),)),
+            program(
+                "C",
+                "IEFBR14",
+                (dd("IN", BackwardRef(ref("B"), UnresolvedDd(DdName("OUT")))),),
+            ),
         ),
     )
     assert _outcomes(_run(tmp_path, j)) == [
@@ -150,22 +165,35 @@ def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> Non
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_referback_to_a_dd_the_step_lacks_fails_before_anything_runs(
+def test_a_step_with_an_unresolved_reference_is_refused_until_d7_is_decided(
     tmp_path: Path,
 ) -> None:
-    j = job(
+    referback = job(
         "J",
         (
             program("S1", "IEFBR14", (dd("WRK", "MY.FILE", disp("NEW", "CATLG")),)),
             program(
-                "S2", "IEFBR14", (dd("IN", BackwardRef(ref("S1"), DdName("BADDD"))),)
+                "S2",
+                "IEFBR14",
+                (dd("IN", BackwardRef(ref("S1"), UnresolvedDd(DdName("BADDD")))),),
             ),
         ),
     )
-    with pytest.raises(ExpansionFailed) as failure:
-        _run(tmp_path, j)
-    assert isinstance(failure.value.error, DanglingDdReference)
-    assert failure.value.error.ddname == DdName("BADDD")
+    test = job(
+        "J",
+        (
+            program("S1", "IEFBR14"),
+            program("S2", "IEFBR14", condition=cond((4, "LT", "NOPE"))),
+        ),
+    )
+    with pytest.raises(
+        UnsupportedStep, match="S2 refers to a step or DD that is not resolved"
+    ):
+        _run(_fresh(tmp_path, "referback"), referback)
+    with pytest.raises(
+        UnsupportedStep, match="S2 refers to a step or DD that is not resolved"
+    ):
+        _run(_fresh(tmp_path, "test"), test)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -209,8 +237,7 @@ def test_runner_refuses_an_unresolved_proc_and_a_step_under_an_if(
 def test_a_concatenated_dd_is_refused_rather_than_read_as_its_first_dataset(
     tmp_path: Path,
 ) -> None:
-    from jackal.dsn import DirectDSN
-    from jackal.model import ConcatMember
+    from jackal.model import ConcatMember, DirectDSN
     from jackal.value_parts import literal
 
     member = ConcatMember(DirectDSN(literal("T.B")), disp("SHR"))
@@ -234,13 +261,17 @@ def test_a_concatenated_dd_is_refused_rather_than_read_as_its_first_dataset(
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_referback_to_a_dummy_dd_names_dummy(tmp_path: Path) -> None:
-    from jackal.dsn import DummyDSN
+    from jackal.model import DummyDSN
 
     j = job(
         "J",
         (
             program("S1", "IEFBR14", (DD(DdName("A"), DummyDSN(), disp()),)),
-            program("S2", "IEFBR14", (dd("B", BackwardRef(ref("S1"), DdName("A"))),)),
+            program(
+                "S2",
+                "IEFBR14",
+                (dd("B", BackwardRef(ref("S1"), UnresolvedDd(DdName("A")))),),
+            ),
         ),
     )
     assert _outcomes(_run(tmp_path, j)) == [("S1", 0, EXECUTED), ("S2", 0, EXECUTED)]

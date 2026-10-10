@@ -2,6 +2,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.model_build import ran
 from jackal.cond import should_bypass
 from jackal.model import (
+    StepReference,
     AbendMode,
     AllPriorSteps,
     BypassTest,
@@ -20,15 +21,15 @@ def _r(step: QualifiedStep, rc: int) -> StepResult:
 
 
 def _cond(
-    *tests: tuple[int, CondOp, QualifiedStep | AllPriorSteps],
+    *tests: tuple[int, CondOp, StepReference | AllPriorSteps],
     mode: AbendMode = AbendMode.NORMAL,
-) -> StepCondition[QualifiedStep]:
+) -> StepCondition[StepReference]:
     return StepCondition(
         tuple(BypassTest(RcComparison(code, op), t) for code, op, t in tests), mode
     )
 
 
-def _bypass(condition: StepCondition[QualifiedStep], *history: StepResult) -> bool:
+def _bypass(condition: StepCondition[StepReference], *history: StepResult) -> bool:
     return should_bypass(condition, (), history)
 
 
@@ -51,8 +52,8 @@ def test_a_test_with_no_step_checks_every_prior_step():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_named_step_tests_only_that_step_and_a_step_that_did_not_run_is_false():
-    on_a = _cond((0, CondOp.NE, A))
-    on_z = _cond((0, CondOp.NE, ran("ZZZ")))
+    on_a = _cond((0, CondOp.NE, A.reference()))
+    on_z = _cond((0, CondOp.NE, ran("ZZZ").reference()))
     bypassed_a = StepResult(A, 8, StepDisposition.BYPASSED)
     assert [
         _bypass(on_a, _r(A, 0), _r(B, 8)),

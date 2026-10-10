@@ -12,14 +12,16 @@ from dataclasses import dataclass
 from cobble.corpus_index import CorpusIndex
 from cobble.jcl.jcl_graph import jcl_graph_from_job
 from cobble.knowledge_graph.graph_types import EdgeKind, GraphEdge, NodeKind
-from jackal.dsn import DdName, DirectDSN, InStreamDSN, TempRef
 from jackal.expansion import ProcLibrary, ProcNotFound
 from jackal.model import (
     DD,
+    DdName,
+    DirectDSN,
     Disp,
     DispAbnormal,
     DispNormal,
     DispStatus,
+    InStreamDSN,
     Job,
     ProcCall,
     ProcDef,
@@ -27,6 +29,7 @@ from jackal.model import (
     ProgramRef,
     ProgramStep,
     StepName,
+    TempRef,
 )
 from jackal.value_parts import Symbol, SymbolName, literal
 

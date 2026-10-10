@@ -11,7 +11,6 @@ from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
 from jackal.catalog import DatasetCatalog, DatasetSpec
-from jackal.dsn import DdName
 from jackal.idcams.commands import (
     Command,
     DefineCluster,
@@ -20,7 +19,7 @@ from jackal.idcams.commands import (
     Repro,
     SetMaxcc,
 )
-from jackal.model import DD, DatasetOrg, QualifiedStep
+from jackal.model import DD, DatasetOrg, DdName, StepReference
 
 _OPS: Mapping[str, Callable[[int, int], bool]] = {
     "LE": lambda maxcc, value: maxcc <= value,
@@ -31,7 +30,7 @@ _OPS: Mapping[str, Callable[[int, int], bool]] = {
     "NE": lambda maxcc, value: maxcc != value,
 }
 
-Dds = Mapping[DdName, DD[QualifiedStep]]
+Dds = Mapping[DdName, DD[StepReference]]
 
 
 @dataclass(frozen=True)
@@ -133,7 +132,7 @@ def _step(dds: Dds, catalog: DatasetCatalog, codes: _Codes, cmd: Command) -> _Co
 
 def run_idcams(
     commands: Sequence[Command],
-    step_dds: Sequence[DD[QualifiedStep]],
+    step_dds: Sequence[DD[StepReference]],
     catalog: DatasetCatalog,
 ) -> int:
     dds = {dd.ddname: dd for dd in step_dds}

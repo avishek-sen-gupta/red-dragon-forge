@@ -1,12 +1,18 @@
 """Parity tests for the bridge-backed JCL parser."""
 
 import pytest
-
-from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DdName, DirectDSN
 from jackal.jcl.parser import parse_jcl
-from jackal.model import DispAbnormal, DispNormal, DispStatus, ProgramRef, StepName
+from jackal.model import (
+    DdName,
+    DirectDSN,
+    DispAbnormal,
+    DispNormal,
+    DispStatus,
+    ProgramRef,
+    StepName,
+)
 from jackal.value_parts import literal
+from tests.covers import NotLanguageFeature, covers
 
 
 @pytest.fixture(autouse=True)

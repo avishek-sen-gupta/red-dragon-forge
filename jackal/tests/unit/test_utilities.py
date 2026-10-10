@@ -1,8 +1,6 @@
 import pytest
-
 from jackal.catalog import DatasetCatalog
-from jackal.dsn import DdName, NoDSN
-from jackal.model import DD, ProgramRef
+from jackal.model import DD, DdName, NoDSN, ProgramRef
 from jackal.utilities import UTILITIES
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, disp, program

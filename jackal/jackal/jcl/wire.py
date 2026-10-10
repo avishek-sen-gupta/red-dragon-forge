@@ -4,24 +4,22 @@ from collections.abc import Sequence
 from itertools import accumulate
 from typing import Annotated, Literal
 
-from jackal.dsn import (
+from jackal.model import (
     DSN,
+    AbendMode,
     BackwardRef,
+    CondOp,
     DdName,
     DirectDSN,
-    DummyDSN,
-    InStreamDSN,
-    NoDSN,
-    TempRef,
-)
-from jackal.model import (
-    AbendMode,
-    CondOp,
     Disp,
     DispAbnormal,
     DispNormal,
     DispStatus,
+    DummyDSN,
+    InStreamDSN,
+    NoDSN,
     StepRef,
+    TempRef,
 )
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
@@ -173,7 +171,9 @@ class BackrefDsn(Wire):
     ddname: str
 
     def model(self) -> DSN[StepRef]:
-        return BackwardRef(self.target.step_ref(), DdName(self.ddname))
+        return BackwardRef(
+            self.target.step_ref(), model.UnresolvedDd(DdName(self.ddname))
+        )
 
 
 class InStreamDsn(Wire):

@@ -17,11 +17,13 @@ from jackal.model import (
     ProcRef,
     ProgramStep,
     QualifiedStep,
+    ResolvedProcCall,
     StepRef,
-    UnresolvedProcCall,
+    StepReference,
+    UnexpandedCall,
 )
 
-AnyDD: TypeAlias = DD[StepRef] | DD[QualifiedStep]
+AnyDD: TypeAlias = DD[StepRef] | DD[StepReference]
 
 
 @dataclass(frozen=True)
@@ -55,20 +57,27 @@ def _call_view(name: str, procs: tuple[ProcRef, ...], call: ProcCall) -> StepVie
     return StepView(name, call.proc.name, procs, override_dds(call))
 
 
-def _expanded_view(qualified: QualifiedStep) -> StepView:
-    procs = tuple(c.proc for c in qualified.calls[:1])
-    match qualified.step:
-        case UnresolvedProcCall(call=call):
-            return _call_view(qualified.rendered(), procs, call)
-        case _:
-            step = qualified.step
+def _outermost(coordinates: tuple[ResolvedProcCall, ...]) -> tuple[ProcRef, ...]:
+    return tuple(c.call.proc for c in coordinates[:1])
+
+
+def _expanded_view(entry: QualifiedStep | UnexpandedCall) -> StepView:
+    match entry:
+        case UnexpandedCall():
+            return _call_view(
+                entry.rendered(), _outermost(entry.coordinates[:-1]), entry.call()
+            )
+        case QualifiedStep(coordinates=coordinates, step=step):
             return StepView(
-                qualified.rendered(), step.pgm.name, procs, _own_dds(step.dds)
+                entry.rendered(),
+                step.pgm.name,
+                _outermost(coordinates),
+                _own_dds(step.dds),
             )
 
 
 def expanded_steps(job: ExpandedJob) -> tuple[StepView, ...]:
-    return tuple(_expanded_view(q) for q in job.steps)
+    return tuple(_expanded_view(entry) for entry in job.steps)
 
 
 def _written(statement: JobStatement) -> tuple[ProgramStep[StepRef] | ProcCall, ...]:

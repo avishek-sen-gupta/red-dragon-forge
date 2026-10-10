@@ -1,22 +1,26 @@
-"""expand_procs: a parsed Job with its PROC calls inlined and every step reference resolved to the QualifiedStep it names."""
+"""expand_procs: a parsed Job with its PROC calls inlined and every step reference looked up, each coordinate resolved or unresolved."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import chain, islice
 from pathlib import Path
 from typing import Protocol, TypeAlias, TypeVar
 
-from jackal.dsn import DSN, BackwardRef, DdName, DirectDSN, TempRef
 from jackal.jcl.parser import parse_proc
 from jackal.model import (
     DD,
+    DSN,
     AllOf,
     Always,
+    BackwardRef,
     CalledProcScope,
+    DdCoordinate,
+    DdName,
+    DirectDSN,
     Guard,
     IfBlock,
     Job,
@@ -25,20 +29,27 @@ from jackal.model import (
     NotOverridden,
     OwnScope,
     ProcCall,
+    ProcCallCoordinate,
     ProcDef,
     ProcRef,
     ProcStepOverrides,
     ProgramStep,
+    QualifiedStep,
     RcComparison,
+    ResolvedDd,
+    ResolvedProc,
+    ResolvedProcCall,
+    ResolvedProgramStep,
     StepLabel,
     StepName,
     StepRef,
-)
-from jackal.model import (
-    QualifiedStep as QualifiedStep,
-)
-from jackal.model import (
-    UnresolvedProcCall as UnresolvedProcCall,
+    StepReference,
+    TempRef,
+    UnexpandedCall,
+    UnresolvedDd,
+    UnresolvedProc,
+    UnresolvedProcCall,
+    UnresolvedProgramStep,
 )
 from jackal.value_parts import Literal, Symbol, SymbolName, Value, ValuePart
 
@@ -50,32 +61,21 @@ T = TypeVar("T")
 
 Run: TypeAlias = tuple[int, ...]
 Runs: TypeAlias = tuple[Run, ...]
+Coordinates: TypeAlias = tuple[ResolvedProcCall, ...]
+Entry: TypeAlias = QualifiedStep | UnexpandedCall
 
 
 @dataclass(frozen=True)
 class ExpandedJob:
     name: str
-    steps: tuple[QualifiedStep, ...]
+    steps: tuple[Entry, ...]
     end_job_tests: tuple[RcComparison, ...] = ()
 
 
 @dataclass(frozen=True)
 class ErrorSite:
-    calls: tuple[ProcCall, ...]
+    coordinates: Coordinates
     step: ProgramStep[StepRef]
-
-
-@dataclass(frozen=True)
-class DanglingReference:
-    site: ErrorSite
-    ref: StepRef
-
-
-@dataclass(frozen=True)
-class DanglingDdReference:
-    site: ErrorSite
-    ref: StepRef
-    ddname: DdName
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,12 @@ class ForwardReference:
 
 @dataclass(frozen=True)
 class ReferenceToProcCall:
+    site: ErrorSite
+    ref: StepRef
+
+
+@dataclass(frozen=True)
+class PathThroughProgramStep:
     site: ErrorSite
     ref: StepRef
 
@@ -102,10 +108,9 @@ class CircularProc:
 
 
 JclError: TypeAlias = (
-    DanglingReference
-    | DanglingDdReference
-    | ForwardReference
+    ForwardReference
     | ReferenceToProcCall
+    | PathThroughProgramStep
     | OverrideNamesNoStep
     | CircularProc
 )
@@ -202,13 +207,13 @@ class _Overrides:
 @dataclass(frozen=True)
 class _WrittenGuard:
     guard: Guard[StepRef]
-    calls: tuple[ProcCall, ...]
+    coordinates: Coordinates
     runs: Runs
 
 
 @dataclass(frozen=True)
 class _Scope:
-    calls: tuple[ProcCall, ...]
+    coordinates: Coordinates
     runs: Runs
     symbols: Mapping[SymbolName, Value]
     guards: tuple[_WrittenGuard, ...]
@@ -219,9 +224,9 @@ class _Scope:
 
 @dataclass(frozen=True)
 class _Placed:
-    calls: tuple[ProcCall, ...]
+    coordinates: Coordinates
     runs: Runs
-    step: ProgramStep[StepRef] | UnresolvedProcCall
+    step: ProgramStep[StepRef] | UnexpandedCall
     guards: tuple[_WrittenGuard, ...] = ()
 
 
@@ -307,7 +312,7 @@ def _substituted_step(
     )
 
 
-def _combined(guards: Sequence[Guard[QualifiedStep]]) -> Guard[QualifiedStep]:
+def _combined(guards: Sequence[Guard[StepReference]]) -> Guard[StepReference]:
     if len(guards) > 1:
         return AllOf(tuple(guards))
     return guards[0] if guards else Always()
@@ -365,7 +370,7 @@ def _inline(
     _check_overrides(call, tuple(s for _, s in flat))
     resolved_call = _substituted_call(call, scope.symbols)
     inner = _Scope(
-        (*scope.calls, call),
+        (*scope.coordinates, ResolvedProcCall(call, ResolvedProc(proc))),
         (*scope.runs, position),
         {**dict(proc.defaults), **dict(resolved_call.symbol_overrides)},
         scope.guards,
@@ -380,7 +385,12 @@ def _place_call(call: ProcCall, scope: _Scope, position: Run) -> tuple[_Placed, 
     found = scope.library.find(call.proc)
     match found:
         case ProcNotFound():
-            return (_Placed(scope.calls, scope.runs, UnresolvedProcCall(call)),)
+            here = (
+                *scope.coordinates,
+                ResolvedProcCall(call, UnresolvedProc(call.proc)),
+            )
+            unexpanded = UnexpandedCall(here)
+            return (_Placed(here, (*scope.runs, position), unexpanded, scope.guards),)
         case _:
             return _inline(call, found, scope, position)
 
@@ -395,12 +405,12 @@ def _place_step(
             step = scope.overrides.applied(
                 _substituted_step(statement, scope.symbols), position
             )
-            return (_Placed(scope.calls, scope.runs, step, scope.guards),)
+            return (_Placed(scope.coordinates, scope.runs, step, scope.guards),)
 
 
 def _place_if(block: IfBlock, scope: _Scope, position: Run) -> tuple[_Placed, ...]:
     def written(guard: Guard[StepRef]) -> _Scope:
-        here = _WrittenGuard(guard, scope.calls, scope.runs)
+        here = _WrittenGuard(guard, scope.coordinates, scope.runs)
         return replace(scope, guards=(*scope.guards, here))
 
     then = written(block.condition)
@@ -431,120 +441,183 @@ def _place_all(
     )
 
 
-def _procs(calls: Sequence[ProcCall]) -> tuple[ProcRef, ...]:
-    return tuple(c.proc for c in calls)
+def _procs(coordinates: Coordinates) -> tuple[ProcRef, ...]:
+    return tuple(c.call.proc for c in coordinates)
 
 
-def _in_run(placed: _Placed, scope: Runs, name: StepName) -> bool:
-    return placed.runs == scope and placed.step.step_label() == name
+def _is_program(placed: _Placed, scope: Runs, name: StepName) -> bool:
+    match placed.step:
+        case ProgramStep(label=label):
+            return placed.runs == scope and label == name
+        case _:
+            return False
 
 
 def _under_call(placed: _Placed, scope: Runs, name: StepName) -> bool:
     depth = len(scope)
     return (
         placed.runs[:depth] == scope
-        and len(placed.calls) > depth
-        and placed.calls[depth].label == name
+        and len(placed.coordinates) > depth
+        and placed.coordinates[depth].call.label == name
     )
 
 
-def _call_scopes(
-    placed: Sequence[_Placed], base: Runs, call: StepName
-) -> tuple[Runs, ...]:
-    runs = tuple(p.runs[len(base)] for p in placed if _under_call(p, base, call))
-    return ((*base, runs[0]),) if runs else ()
+def _program(entry: Entry) -> ProgramStep[StepReference]:
+    match entry:
+        case QualifiedStep(step=step):
+            return step
+        case UnexpandedCall():
+            raise TypeError("a program step's index named an unexpanded call")
 
 
 @dataclass(frozen=True)
 class _Resolver:
     placed: tuple[_Placed, ...]
-    done: tuple[QualifiedStep, ...]
+    done: tuple[Entry, ...]
     at: int
-    calls: tuple[ProcCall, ...]
+    site_coordinates: Coordinates
+    written: Coordinates
     bases: tuple[Runs, ...]
     step: ProgramStep[StepRef]
 
     def _site(self) -> ErrorSite:
-        return ErrorSite(self.calls, self.step)
+        return ErrorSite(self.site_coordinates, self.step)
 
-    def _bases(self) -> tuple[Runs, ...]:
-        return self.bases
-
-    def _scopes(self, ref: StepRef) -> tuple[Runs, ...]:
-        match ref.scope:
-            case CalledProcScope(call=call):
-                return tuple(
-                    chain.from_iterable(
-                        _call_scopes(self.placed, base, call) for base in self._bases()
-                    )
-                )
-            case OwnScope():
-                return self._bases()
+    def _rendered_site(self) -> str:
+        labels = (*(c.call.label for c in self.site_coordinates), self.step.label)
+        return ".".join(label.rendered() for label in labels)
 
     def _programs(self, scope: Runs, name: StepName) -> tuple[int, ...]:
         return tuple(
-            i
-            for i, p in enumerate(self.placed)
-            if _in_run(p, scope, name) and p.step.runs_program()
+            i for i, p in enumerate(self.placed) if _is_program(p, scope, name)
         )
 
-    def _names_a_call(self, scope: Runs, name: StepName) -> bool:
-        return any(
-            _under_call(p, scope, name) or _in_run(p, scope, name) for p in self.placed
+    def _calls(self, scope: Runs, name: StepName) -> tuple[int, ...]:
+        return tuple(
+            i for i, p in enumerate(self.placed) if _under_call(p, scope, name)
         )
 
     def _warn_if_reused(self, scope: Runs, name: StepName, index: int) -> None:
+        found = self.placed[index].coordinates
         others = tuple(
             p
             for p in self.placed[:index]
             if p.runs != scope
             and len(p.runs) == len(scope)
-            and p.step.step_label() == name
-            and _procs(p.calls[-1:]) == _procs(self.placed[index].calls[-1:])
+            and isinstance(p.step, ProgramStep)
+            and p.step.label == name
+            and _procs(p.coordinates[-1:]) == _procs(found[-1:])
         )
         if scope and others:
             logger.warning(
                 "%s names %s, which more than one run of PROC %s has; "
                 "resolved to this run (blueprint D6)",
-                ".".join(
-                    label.rendered()
-                    for label in (*(c.label for c in self.calls), self.step.label)
-                ),
+                self._rendered_site(),
                 name.text,
-                self.placed[index].calls[-1].proc.name,
+                found[-1].call.proc.name,
             )
 
-    def _found(self, ref: StepRef, scope: Runs, index: int) -> int:
-        if index >= self.at:
-            raise ExpansionFailed(ForwardReference(self._site(), ref))
-        self._warn_if_reused(scope, ref.step, index)
-        return index
+    def _unresolved(
+        self, ref: StepRef, path: tuple[ProcCallCoordinate, ...]
+    ) -> StepReference:
+        reference = StepReference(path, UnresolvedProgramStep(ref.step))
+        logger.warning(
+            "%s refers to %s, which is not resolved (blueprint D6)",
+            self._rendered_site(),
+            reference.rendered(),
+        )
+        return reference
 
-    def _decided(self, ref: StepRef, scope: Runs) -> tuple[tuple[Runs, int], ...]:
+    def _resolved(self, ref: StepRef, scope: Runs, index: int) -> StepReference:
+        self._earlier(ref, index)
+        self._warn_if_reused(scope, ref.step, index)
+        found = self.placed[index].coordinates
+        return StepReference(found, ResolvedProgramStep(_program(self.done[index])))
+
+    def _in_scope(self, ref: StepRef, scope: Runs) -> tuple[StepReference, ...]:
         programs = self._programs(scope, ref.step)
         if programs:
-            return ((scope, programs[0]),)
-        if self._names_a_call(scope, ref.step):
+            return (self._resolved(ref, scope, programs[0]),)
+        if self._calls(scope, ref.step):
             raise ExpansionFailed(ReferenceToProcCall(self._site(), ref))
         return ()
 
-    def _index_in(self, ref: StepRef, scopes: Sequence[Runs]) -> int:
-        decisions = chain.from_iterable(self._decided(ref, s) for s in scopes)
-        found = tuple(islice(decisions, 1))
-        if found:
-            return self._found(ref, *found[0])
-        raise ExpansionFailed(DanglingReference(self._site(), ref))
+    def _own(self, ref: StepRef) -> StepReference:
+        found = chain.from_iterable(self._in_scope(ref, base) for base in self.bases)
+        return self._first(found, ref, self.written)
 
-    def target(self, ref: StepRef) -> QualifiedStep:
-        return self.done[self._index_in(ref, self._scopes(ref))]
+    def _first(
+        self,
+        found: Iterable[StepReference],
+        ref: StepRef,
+        path: tuple[ProcCallCoordinate, ...],
+    ) -> StepReference:
+        first = tuple(islice(found, 1))
+        return first[0] if first else self._unresolved(ref, path)
 
-    def backref(self, ref: BackwardRef[StepRef]) -> BackwardRef[QualifiedStep]:
-        step = self.target(ref.step)
-        if ref.ddname not in step.step.dd_names():
-            raise ExpansionFailed(
-                DanglingDdReference(self._site(), ref.step, ref.ddname)
-            )
-        return BackwardRef(step, ref.ddname)
+    def _earlier(self, ref: StepRef, index: int) -> int:
+        if index >= self.at:
+            raise ExpansionFailed(ForwardReference(self._site(), ref))
+        return index
+
+    def _in_call(self, ref: StepRef, base: Runs, index: int) -> StepReference:
+        self._earlier(ref, index)
+        coordinates = self.placed[index].coordinates[: len(base) + 1]
+        run = self.placed[index].runs[: len(base) + 1]
+        match coordinates[-1].proc:
+            case UnresolvedProc():
+                return self._unresolved(ref, coordinates)
+            case ResolvedProc():
+                return self._first(self._in_scope(ref, run), ref, coordinates)
+
+    def _through(
+        self, ref: StepRef, call: StepName, base: Runs
+    ) -> tuple[StepReference, ...]:
+        calls = self._calls(base, call)
+        if calls:
+            return (self._in_call(ref, base, calls[0]),)
+        if self._programs(base, call):
+            raise ExpansionFailed(PathThroughProgramStep(self._site(), ref))
+        return ()
+
+    def _called(self, ref: StepRef, call: StepName) -> StepReference:
+        found = chain.from_iterable(self._through(ref, call, b) for b in self.bases)
+        return self._first(found, ref, (*self.written, UnresolvedProcCall(call)))
+
+    def target(self, ref: StepRef) -> StepReference:
+        match ref.scope:
+            case CalledProcScope(call=call):
+                return self._called(ref, call)
+            case OwnScope():
+                return self._own(ref)
+
+    def _dd(self, reference: StepReference, ddname: DdName) -> DdCoordinate:
+        match reference.target:
+            case ResolvedProgramStep(step=step):
+                return self._dd_on(step, reference, ddname)
+            case UnresolvedProgramStep():
+                return UnresolvedDd(ddname)
+
+    def _dd_on(
+        self,
+        step: ProgramStep[StepReference],
+        reference: StepReference,
+        ddname: DdName,
+    ) -> DdCoordinate:
+        dds = tuple(dd for dd in step.dds if dd.ddname == ddname)
+        if dds:
+            return ResolvedDd(dds[0])
+        logger.warning(
+            "%s refers to DD %s of %s, which has no such DD (blueprint D6)",
+            self._rendered_site(),
+            ddname.text,
+            reference.rendered(),
+        )
+        return UnresolvedDd(ddname)
+
+    def backref(self, ref: BackwardRef[StepRef]) -> BackwardRef[StepReference]:
+        reference = self.target(ref.step)
+        return BackwardRef(reference, self._dd(reference, ref.dd.ddname()))
 
 
 def _enclosing(runs: Runs) -> tuple[Runs, ...]:
@@ -553,46 +626,46 @@ def _enclosing(runs: Runs) -> tuple[Runs, ...]:
 
 def _program_qualified(
     placed: tuple[_Placed, ...],
-    done: tuple[QualifiedStep, ...],
+    done: tuple[Entry, ...],
     at: int,
     step: ProgramStep[StepRef],
 ) -> QualifiedStep:
     entry = placed[at]
 
-    def resolver(runs: Runs) -> _Resolver:
-        return _Resolver(placed, done, at, entry.calls, _enclosing(runs), step)
+    def resolver(written: Coordinates, runs: Runs) -> _Resolver:
+        return _Resolver(
+            placed, done, at, entry.coordinates, written, _enclosing(runs), step
+        )
 
-    own = resolver(entry.runs)
-    guards = tuple(g.guard.mapped(resolver(g.runs).target) for g in entry.guards)
+    own = resolver(entry.coordinates, entry.runs)
+    guards = tuple(
+        g.guard.mapped(resolver(g.coordinates, g.runs).target) for g in entry.guards
+    )
     resolved = step.mapped(own.target, own.backref)
-    return QualifiedStep(entry.calls, replace(resolved, guard=_combined(guards)))
+    return QualifiedStep(entry.coordinates, replace(resolved, guard=_combined(guards)))
 
 
-def _qualified(
-    placed: tuple[_Placed, ...], done: tuple[QualifiedStep, ...], at: int
-) -> QualifiedStep:
-    entry = placed[at]
-    match entry.step:
-        case UnresolvedProcCall():
-            return QualifiedStep(entry.calls, entry.step)
+def _entry(placed: tuple[_Placed, ...], done: tuple[Entry, ...], at: int) -> Entry:
+    step = placed[at].step
+    match step:
+        case UnexpandedCall():
+            return step
         case _:
-            return _program_qualified(placed, done, at, entry.step)
+            return _program_qualified(placed, done, at, step)
 
 
-def _resolved(placed: tuple[_Placed, ...]) -> tuple[QualifiedStep, ...]:
-    def resolve_next(
-        done: tuple[QualifiedStep, ...], at: int
-    ) -> tuple[QualifiedStep, ...]:
-        return (*done, _qualified(placed, done, at))
+def _resolved_entries(placed: tuple[_Placed, ...]) -> tuple[Entry, ...]:
+    def resolve_next(done: tuple[Entry, ...], at: int) -> tuple[Entry, ...]:
+        return (*done, _entry(placed, done, at))
 
-    none: tuple[QualifiedStep, ...] = ()
+    none: tuple[Entry, ...] = ()
     return reduce(resolve_next, range(len(placed)), none)
 
 
 def expand_or_fail(job: Job, library: ProcLibrary) -> ExpandedJob:
     scope = _Scope((), (), {}, (), (), _NoOverrides(), library)
     placed = _place_all(job.steps, scope, ())
-    return ExpandedJob(job.name, _resolved(placed), job.end_job_tests)
+    return ExpandedJob(job.name, _resolved_entries(placed), job.end_job_tests)
 
 
 def expand_procs(job: Job, library: ProcLibrary) -> ExpandedJob | JclError:

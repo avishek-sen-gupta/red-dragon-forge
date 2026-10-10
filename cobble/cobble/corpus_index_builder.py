@@ -29,7 +29,6 @@ from cobble.corpus_index import CorpusIndex
 from cobble.jcl.job_steps import StepView, expanded_steps, written_steps
 from cobble.matching_files import matching_files
 from cobol_asg.source_text import decode_source
-from jackal.dsn import InStreamDSN
 from jackal.expansion import (
     DirectoryProcLibrary,
     ExpansionFailed,
@@ -38,7 +37,7 @@ from jackal.expansion import (
 )
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
-from jackal.model import Job
+from jackal.model import InStreamDSN, Job
 from tqdm import tqdm
 
 # How the index turns a member's path into a Job: parse it now, or take it from a

@@ -17,10 +17,9 @@ from cobble.knowledge_graph.graph_types import (
     GraphNode,
     NodeKind,
 )
-from jackal.dsn import DirectDSN, InStreamDSN
 from jackal.expansion import DirectoryProcLibrary, ProcLibrary, expand_or_fail
 from jackal.jcl.parser import parse_jcl
-from jackal.model import DispStatus, Job
+from jackal.model import DirectDSN, DispStatus, InStreamDSN, Job
 from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 
 if TYPE_CHECKING:

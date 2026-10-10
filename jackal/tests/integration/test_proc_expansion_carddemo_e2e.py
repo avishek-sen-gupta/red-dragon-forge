@@ -5,13 +5,19 @@ CARDDEMO_HOME (see jackal/tests/conftest.py's carddemo_home fixture)."""
 from __future__ import annotations
 
 import pytest
-
-from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DdName, DirectDSN
 from jackal.expansion import DirectoryProcLibrary, ExpandedJob, expand_or_fail
 from jackal.jcl.parser import parse_jcl
-from jackal.model import ProcCall, ProcRef, ProgramRef, ProgramStep, StepName
+from jackal.model import (
+    DdName,
+    DirectDSN,
+    ProcCall,
+    ProcRef,
+    ProgramRef,
+    ProgramStep,
+    StepName,
+)
 from jackal.value_parts import SymbolName, literal
+from tests.covers import NotLanguageFeature, covers
 
 
 @pytest.fixture(autouse=True)

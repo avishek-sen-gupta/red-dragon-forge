@@ -35,7 +35,7 @@ example under `~/jcl-census-<date>/`. Do not commit anything from this run.
 
 ```bash
 cd <red-dragon-forge clone>
-git checkout main && git pull           # needs commit c86ac96 or later
+git checkout main && git pull           # needs the coordinate-model commit or later
 make setup                              # builds both bridge JARs and syncs Python
 . ./bridge-env.sh
 ```
@@ -71,12 +71,21 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from jackal.dsn import BackwardRef, DirectDSN, DummyDSN, InStreamDSN, NoDSN, TempRef
 from jackal.expansion import DirectoryProcLibrary, ExpandedJob, expand_procs
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import bridge_parser
 from jackal.model import (
+    AllPriorSteps,
     Always,
+    BackwardRef,
+    DirectDSN,
+    DummyDSN,
+    InStreamDSN,
+    NoDSN,
+    ResolvedDd,
+    ResolvedProgramStep,
+    TempRef,
+    UnexpandedCall,
     CalledProcScope,
     IfBlock,
     Job,
@@ -84,7 +93,6 @@ from jackal.model import (
     ProcCall,
     ProgramStep,
     StepRef,
-    UnresolvedProcCall,
 )
 from jackal.value_parts import Symbol
 
@@ -251,10 +259,16 @@ def _expanded_counts(job: ExpandedJob) -> Counter[str]:
     c: Counter[str] = Counter()
     for q in job.steps:
         c["expanded: steps"] += 1
-        c[f"expanded: steps at PROC depth {len(q.calls)}"] += 1
-        if isinstance(q.step, UnresolvedProcCall):
-            c["expanded: unresolved PROC calls"] += 1
+        c[f"expanded: steps at PROC depth {len(q.coordinates)}"] += 1
+        if isinstance(q, UnexpandedCall):
+            c["expanded: unexpanded PROC calls (PROC in no library)"] += 1
             continue
+        for t in q.step.cond.bypass_tests:
+            if not isinstance(t.target, AllPriorSteps) and not isinstance(t.target.target, ResolvedProgramStep):
+                c["expanded: COND tests naming an unresolved step"] += 1
+        for dd in q.step.dds:
+            if isinstance(dd.dsn, BackwardRef) and not isinstance(dd.dsn.dd, ResolvedDd):
+                c["expanded: referbacks naming an unresolved step or DD"] += 1
         if q.step.guard != Always():
             c["expanded: steps under an IF (runner refuses)"] += 1
         _cond_counts(c, q.step.cond, "expanded:")
@@ -350,7 +364,7 @@ def main() -> int:
     with ThreadPoolExecutor(args.workers) as pool:
         list(pool.map(lambda p: census_member(p, library, tally), members))
     counts = dict(sorted(tally.counts.items()))
-    counts["expanded: same-run resolutions of a reused name (D6 warnings)"] = warnings.count
+    counts["expanded: warnings (unresolved references and reused names, D6)"] = warnings.count
     summary = {
         "counts": counts,
         "parse_seconds": _seconds(tally.parse_seconds),

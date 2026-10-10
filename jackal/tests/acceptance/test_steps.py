@@ -32,8 +32,8 @@ def test_steps_expand(expand_fixture):
         "ACCEPT",
         (
             b.qualified((), b.pgm("S1", "PGMA", parm="A=(,255)")),
-            b.qualified((s2,), b.pgm("P1", "PGMP")),
-            b.qualified((s3,), b.pgm("P1", "PGMP")),
+            b.qualified((b.called(s2, "steps/MYP.prc"),), b.pgm("P1", "PGMP")),
+            b.qualified((b.called(s3, "steps/MYP.prc"),), b.pgm("P1", "PGMP")),
             b.qualified((), b.pgm("", "PGMB", parm="X (Y")),
             b.qualified((), b.pgm("S5", "PGMC", parm="PLAIN")),
         ),

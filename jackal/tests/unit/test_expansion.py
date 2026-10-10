@@ -2,12 +2,21 @@
 
 from dataclasses import dataclass
 
+from jackal.expansion import ExpandedJob, ProcLibrary, ProcNotFound, expand_procs
+from jackal.model import (
+    ResolvedProc,
+    ResolvedProcCall,
+    DirectDSN,
+    ProcCall,
+    ProcDef,
+    ProcRef,
+    QualifiedStep,
+    StepName,
+    TempRef,
+)
+from jackal.value_parts import Literal, Symbol, SymbolName, literal
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, job, program
-from jackal.dsn import DirectDSN, TempRef
-from jackal.expansion import ExpandedJob, ProcLibrary, ProcNotFound, expand_procs
-from jackal.model import ProcCall, ProcDef, ProcRef, QualifiedStep, StepName
-from jackal.value_parts import Literal, Symbol, SymbolName, literal
 
 
 @dataclass(frozen=True)
@@ -65,7 +74,7 @@ def test_symbols_resolve_against_the_call_then_the_defaults_and_unbound_ones_sta
         "J",
         (
             QualifiedStep(
-                (call,),
+                (ResolvedProcCall(call, ResolvedProc(proc)),),
                 program(
                     "P1",
                     "PGMA",
@@ -106,15 +115,23 @@ def test_an_if_guard_resolves_where_the_if_was_written():
     )
     expanded = expand_procs(j, _Library((proc,)))
     job_step1 = expanded.steps[0]
-    guard = RcTest(job_step1, CondOp.EQ, 0)
+    guard = RcTest(job_step1.reference(), CondOp.EQ, 0)
     assert [q.step.guard for q in expanded.steps[1:]] == [guard, guard, guard]
     assert isinstance(expanded.steps[1].step, ProgramStep)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_reference_written_in_a_proc_reaches_its_steps_from_a_nested_proc():
-    from jackal.dsn import BackwardRef, DdName
-    from jackal.model import CondOp, IfBlock, ProcStepOverrides, RcTest
+    from jackal.model import (
+        BackwardRef,
+        CondOp,
+        DdName,
+        IfBlock,
+        ProcStepOverrides,
+        RcTest,
+        ResolvedDd,
+        UnresolvedDd,
+    )
 
     inner = ProcDef("B", (), (_named("BS1", "PB"),))
     nested_call = ProcCall(
@@ -124,7 +141,12 @@ def test_a_reference_written_in_a_proc_reaches_its_steps_from_a_nested_proc():
             (
                 StepName("BS1"),
                 ProcStepOverrides(
-                    dds=(dd("IN", BackwardRef(_ref("AS1"), DdName("DD1"))),)
+                    dds=(
+                        dd(
+                            "IN",
+                            BackwardRef(_ref("AS1"), UnresolvedDd(DdName("DD1"))),
+                        ),
+                    )
                 ),
             ),
         ),
@@ -140,8 +162,10 @@ def test_a_reference_written_in_a_proc_reaches_its_steps_from_a_nested_proc():
     j = job("J", (ProcCall(StepName("C1"), ProcRef("A")),))
     expanded = expand_procs(j, _Library((outer, inner)))
     as1, bs1 = expanded.steps
-    assert bs1.step.guard == RcTest(as1, CondOp.EQ, 0)
-    assert bs1.step.dds[0].dsn == BackwardRef(as1, DdName("DD1"))
+    assert bs1.step.guard == RcTest(as1.reference(), CondOp.EQ, 0)
+    assert bs1.step.dds[0].dsn == BackwardRef(
+        as1.reference(), ResolvedDd(as1.step.dds[0])
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
