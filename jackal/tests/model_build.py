@@ -2,6 +2,8 @@
 
 from collections.abc import Sequence
 
+from jackal.allocation import DdEnvironment, allocate
+from jackal.catalog import DatasetCatalog
 from jackal.jcl.wire import disp_from_words
 from jackal.model import (
     DD,
@@ -23,6 +25,7 @@ from jackal.model import (
     StepCondition,
     StepName,
     StepRef,
+    StepReference,
 )
 from jackal.value_parts import literal
 
@@ -86,3 +89,9 @@ def job(
 
 def ran(label: str, pgm: str = "PGM") -> QualifiedStep:
     return QualifiedStep((), ProgramStep(StepName(label), ProgramRef(pgm)))
+
+
+def allocated(
+    step: ProgramStep[StepReference], catalog: DatasetCatalog
+) -> DdEnvironment:
+    return allocate(QualifiedStep((), step), step, catalog)

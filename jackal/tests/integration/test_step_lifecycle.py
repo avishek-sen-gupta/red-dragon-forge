@@ -1,0 +1,62 @@
+"""The runner allocates every DD before a program runs and disposes after it."""
+
+from pathlib import Path
+
+import pytest
+
+from interpreter.cobol.ebcdic_table import EbcdicTable
+from jackal.catalog import DatasetCatalog
+from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
+from jackal.results import Completed
+from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
+from tests.covers import NotLanguageFeature, covers
+
+CBL = Path(__file__).parent / "fixtures" / "cbl"
+
+
+@pytest.fixture(autouse=True)
+def _require(bridge_jar, jcl_bridge_jar):
+    """Both JARs are required for every test in this module."""
+
+
+def _ebcdic(text: str) -> bytes:
+    return bytes(EbcdicTable.ascii_to_ebcdic(text.encode("ascii")))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_cobol_step_reads_in_stream_cards_and_a_dummy_input(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    jcl = (
+        "//J JOB 1\n"
+        "//S1 EXEC PGM=CARDCOPY\n"
+        "//SYSIN DD *\n"
+        " HELLO\n"
+        " WORLD\n"
+        "/*\n"
+        "//OUTDD DD DSN=J.CARDS,DISP=(NEW,CATLG)\n"
+        "//S2 EXEC PGM=CARDCOPY\n"
+        "//STEPLIB DD DSN=PROD.LOADLIB,DISP=SHR\n"
+        "//SYSIN DD DUMMY\n"
+        "//OUTDD DD DSN=J.EMPTY,DISP=(NEW,CATLG)\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    runner = JobRunner(
+        source_dir=CBL,
+        bridge_jar=bridge_jar,
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+        unresolved=RaiseErrorStrategy(),
+    )
+    result = runner.run_job(job, catalog)
+    assert (
+        [s.outcome for s in result.steps],
+        catalog.resolve("J.CARDS").path.read_bytes(),
+        catalog.resolve("J.EMPTY").path.read_bytes(),
+    ) == (
+        [Completed(0), Completed(0)],
+        _ebcdic(" HELLO".ljust(80) + " WORLD".ljust(80)),
+        b"",
+    )

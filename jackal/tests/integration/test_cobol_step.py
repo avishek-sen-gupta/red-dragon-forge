@@ -5,7 +5,7 @@ import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
-from tests.model_build import dd, disp, program
+from tests.model_build import allocated, dd, disp, program
 from tests.covers import NotLanguageFeature, covers
 
 CBL = Path(__file__).parent / "fixtures" / "cbl"
@@ -33,7 +33,12 @@ def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
         (dd("INDD", "J.IN", disp("SHR")), dd("OUTDD", "J.OUT", disp("NEW", "PASS"))),
     )
     rc = run_cobol_step(
-        step, (CBL / "COPYUP.cbl").read_text(), cat, bridge_jar, copybook_dirs=[]
+        step,
+        (CBL / "COPYUP.cbl").read_text(),
+        allocated(step, cat),
+        cat.workdir,
+        bridge_jar,
+        copybook_dirs=[],
     )
     assert rc == 0
     assert cat.resolve("J.OUT").path.read_bytes() == _ebcdic(b"APPLEMANGO")

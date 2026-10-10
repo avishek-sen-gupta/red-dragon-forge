@@ -10,6 +10,7 @@ from itertools import count, takewhile
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
+from jackal.allocation import DdEnvironment
 from jackal.catalog import DatasetCatalog, DatasetSpec
 from jackal.idcams.commands import (
     Command,
@@ -19,7 +20,7 @@ from jackal.idcams.commands import (
     Repro,
     SetMaxcc,
 )
-from jackal.model import DD, DatasetOrg, DdName, StepReference
+from jackal.model import DatasetOrg, DdName
 
 _OPS: Mapping[str, Callable[[int, int], bool]] = {
     "LE": lambda maxcc, value: maxcc <= value,
@@ -29,8 +30,6 @@ _OPS: Mapping[str, Callable[[int, int], bool]] = {
     "EQ": lambda maxcc, value: maxcc == value,
     "NE": lambda maxcc, value: maxcc != value,
 }
-
-Dds = Mapping[DdName, DD[StepReference]]
 
 
 @dataclass(frozen=True)
@@ -75,9 +74,9 @@ def _records(driver: FileOrganizationDriver) -> Iterator[bytes]:
     )
 
 
-def _handle_repro(cmd: Repro, dds: Dds, catalog: DatasetCatalog) -> int:
-    in_ds = catalog.allocate(dds[DdName(cmd.infile_dd)])
-    out_ds = catalog.resolve(dds[DdName(cmd.outfile_dd)].dsn.dataset_name())
+def _handle_repro(cmd: Repro, dds: DdEnvironment, catalog: DatasetCatalog) -> int:
+    in_ds = dds.dataset(DdName(cmd.infile_dd))
+    out_ds = dds.dataset(DdName(cmd.outfile_dd))
     in_drv = catalog.open_dataset_with_record_size(
         in_ds.dsn, OpenMode.INPUT, out_ds.record_size
     )
@@ -90,7 +89,7 @@ def _handle_repro(cmd: Repro, dds: Dds, catalog: DatasetCatalog) -> int:
 
 
 def _functional_rc(
-    cmd: Delete | DefineCluster | Repro, dds: Dds, catalog: DatasetCatalog
+    cmd: Delete | DefineCluster | Repro, dds: DdEnvironment, catalog: DatasetCatalog
 ) -> int:
     match cmd:
         case Repro():
@@ -121,7 +120,9 @@ def _control(cmd: IfMaxcc | SetMaxcc, codes: _Codes) -> _Codes:
             return _Codes(codes.lastcc, cmd.value)
 
 
-def _step(dds: Dds, catalog: DatasetCatalog, codes: _Codes, cmd: Command) -> _Codes:
+def _step(
+    dds: DdEnvironment, catalog: DatasetCatalog, codes: _Codes, cmd: Command
+) -> _Codes:
     match cmd:
         case IfMaxcc() | SetMaxcc():
             return _control(cmd, codes)
@@ -132,10 +133,9 @@ def _step(dds: Dds, catalog: DatasetCatalog, codes: _Codes, cmd: Command) -> _Co
 
 def run_idcams(
     commands: Sequence[Command],
-    step_dds: Sequence[DD[StepReference]],
+    dds: DdEnvironment,
     catalog: DatasetCatalog,
 ) -> int:
-    dds = {dd.ddname: dd for dd in step_dds}
     return reduce(
         lambda codes, cmd: _step(dds, catalog, codes, cmd), commands, _Codes(0, 0)
     ).maxcc

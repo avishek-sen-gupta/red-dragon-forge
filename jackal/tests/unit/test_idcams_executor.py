@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+from jackal.allocation import DdEnvironment
 from jackal.catalog import DatasetCatalog
 from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro, SetMaxcc
-from jackal.model import DD, DdName, DirectDSN, Disp, DispNormal, DispStatus
+from jackal.model import (
+    DD,
+    DdName,
+    DirectDSN,
+    Disp,
+    DispNormal,
+    DispStatus,
+    ProgramRef,
+    ProgramStep,
+    StepName,
+)
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
+from tests.model_build import allocated
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -30,12 +42,13 @@ def test_repro_loads_ps_into_ksds(tmp_path):
             Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP),
         ),
     )
-    cmds = (
+    define = (
         DefineCluster(name="OUT.KSDS", key_length=3, key_offset=0, record_size=9),
-        Repro(infile_dd="INF", outfile_dd="OUT"),
     )
-    rc = run_idcams(cmds, dds, cat)
-    assert rc == 0
+    defined = run_idcams(define, DdEnvironment(()), cat)
+    env = allocated(ProgramStep(StepName("S2"), ProgramRef("IDCAMS"), dds), cat)
+    copied = run_idcams((Repro(infile_dd="INF", outfile_dd="OUT"),), env, cat)
+    assert (defined, copied) == (0, 0)
     # read OUT.KSDS back via the IndexedDriver and confirm BBB record present
     from cobol_asg.file_enums import OpenMode
     from interpreter.cobol.file_drivers import IndexedDriver
@@ -54,7 +67,7 @@ def test_delete_existing_dsn_returns_0(tmp_path):
     (tmp_path / "MY_DS").write_bytes(b"")
     cat.seed("MY.DS", tmp_path / "MY_DS")
     cmds = (Delete(dsn="MY.DS"),)
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
 
 
@@ -64,7 +77,7 @@ def test_delete_missing_dsn_returns_8(tmp_path):
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     cmds = (Delete(dsn="GHOST.DS"),)
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 8
 
 
@@ -75,7 +88,7 @@ def test_define_cluster_registers_in_catalog(tmp_path):
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     cmds = (DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),)
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
     ds = cat.resolve("MY.KSDS")
     assert ds.org is DatasetOrg.KSDS
@@ -93,7 +106,7 @@ def test_if_maxcc_sets_value_when_condition_met(tmp_path):
         Delete(dsn="GHOST.DS"),
         IfMaxcc(op="LE", value=8, set_value=0),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
 
 
@@ -107,7 +120,7 @@ def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
         Delete(dsn="GHOST.DS"),
         IfMaxcc(op="LT", value=8, set_value=0),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 8
 
 
@@ -119,7 +132,7 @@ def test_if_maxcc_all_operators(tmp_path):
 
     def after_rc_8(op: str, value: int) -> int:
         cmds = (Delete(dsn="GHOST.DS"), IfMaxcc(op=op, value=value, set_value=0))
-        return run_idcams(cmds, (), cat)
+        return run_idcams(cmds, DdEnvironment(()), cat)
 
     assert [
         after_rc_8("GE", 8),
@@ -143,7 +156,7 @@ def test_set_maxcc_overrides_accumulated_rc(tmp_path):
         Delete(dsn="GHOST.DS"),
         SetMaxcc(value=0),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
 
 
@@ -156,7 +169,7 @@ def test_if_lastcc_tests_immediately_preceding_command_rc(tmp_path):
         Delete(dsn="GHOST.DS"),  # missing -> rc 8, lastcc=8, maxcc=8
         IfMaxcc(op="EQ", value=8, set_value=0, test_field="LASTCC"),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
 
 
@@ -176,7 +189,7 @@ def test_if_lastcc_reflects_only_the_most_recent_command_not_running_maxcc(tmp_p
         ),  # succeeds -> rc 0; lastcc=0, maxcc stays 8 (max(8,0))
         IfMaxcc(op="EQ", value=0, set_value=99, test_field="LASTCC"),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 99
 
 
@@ -193,7 +206,7 @@ def test_set_maxcc_does_not_change_lastcc(tmp_path):
         SetMaxcc(value=0),  # maxcc forced to 0; lastcc still 8
         IfMaxcc(op="EQ", value=8, set_value=99, test_field="LASTCC"),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 99
 
 
@@ -208,7 +221,7 @@ def test_delete_purge_flag_deletes_existing_dsn_same_as_without_purge(tmp_path):
     (tmp_path / "MY_DS").write_bytes(b"")
     cat.seed("MY.DS", tmp_path / "MY_DS")
     cmds = (Delete(dsn="MY.DS", purge=True),)
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
 
 
@@ -239,7 +252,7 @@ def test_delete_purge_set_define_sequence_executes(tmp_path):
     )
     cmds = parse_idcams(text)
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
     ds = cat.resolve("AWS.M2.CARDDEMO.EXPORT.DATA")
     assert ds.key_length == 4
@@ -256,5 +269,5 @@ def test_define_cluster_duplicate_dsn_returns_12(tmp_path):
         DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),
         DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),
     )
-    rc = run_idcams(cmds, (), cat)
+    rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 12

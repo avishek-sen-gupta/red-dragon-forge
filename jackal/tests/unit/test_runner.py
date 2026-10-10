@@ -247,6 +247,48 @@ def test_ignore_strategy_drops_unresolved_tests_and_skips_what_cannot_run(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_the_runner_allocates_before_and_disposes_after_every_program(
+    tmp_path: Path,
+) -> None:
+    sysout = DD(DdName("SYSPRINT"), NoDSN(), disp(), sysout=True)
+    kept = dd("K", "J.KEEP", disp("NEW", "CATLG"))
+    j = job(
+        "J",
+        (
+            program(
+                "S1", "IEFBR14", (dd("D", "J.TMP", disp("NEW", "DELETE")), kept, sysout)
+            ),
+        ),
+    )
+    assert (
+        _outcomes(_run(tmp_path, j)),
+        sorted(p.name for p in tmp_path.rglob("*") if p.is_file()),
+    ) == ([("S1", OK)], ["J_KEEP"])
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_the_runner_applies_disp_to_an_idcams_steps_dds(tmp_path: Path) -> None:
+    j = job(
+        "J",
+        (
+            program("S1", "IEFBR14", (dd("OLDF", "MY.FILE", disp("NEW", "CATLG")),)),
+            program(
+                "S2",
+                "IDCAMS",
+                (
+                    _sysin(("DELETE NOPE.NOPE CLUSTER",)),
+                    dd("OLDF", "MY.FILE", disp("OLD", "DELETE")),
+                ),
+            ),
+        ),
+    )
+    assert (
+        _outcomes(_run(tmp_path, j)),
+        (tmp_path / "MY_FILE").exists(),
+    ) == ([("S1", OK), ("S2", Completed(8))], False)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_runner_expands_a_proc_call_before_running(tmp_path: Path) -> None:
     (tmp_path / "proc").mkdir()
     (tmp_path / "proc" / "WRAPIT.prc").write_text(

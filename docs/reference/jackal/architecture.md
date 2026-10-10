@@ -58,15 +58,21 @@ cicada or squall; `.importlinter` enforces this.
    - Referbacks (`DSN=*.STEP.DD`) are resolved to the DSN recorded for that earlier step. If
      the referenced step did not run, the referencing step is `Bypassed(REFERENCED_STEP_NOT_RUN)`,
      a jackal-only reason that `AllocationFailed` replaces (red-dragon-forge-552).
+   - The runner allocates every DD before the program starts (`jackal.allocation`): a dataset
+     through the catalog, `DD *` cards written out as 80-byte EBCDIC records, `DUMMY` and
+     `SYSOUT` as empty sinks. STEPLIB and JOBLIB are skipped: jackal finds programs as source,
+     not in load libraries. The program receives the allocations as a `DdEnvironment`.
    - The step is dispatched. A program in the utility table runs the emulated utility.
      Any other program is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
+   - After the program, the runner applies each DD's normal DISP and releases the sinks.
+     Programs never allocate or dispose themselves.
 4. At job end, surviving temporary datasets are deleted. The result is a `JobResult` holding
    one `StepResult` per step.
 
 ## COBOL steps
 
 `jackal.cobol_step.run_cobol_step` parses the program with the ProLeap bridge JAR, maps each
-`FILE-CONTROL` entry to the file the step's DD resolves to in the catalog, and runs it on the
+`FILE-CONTROL` entry to the file of the step's DD allocation, and runs it on the
 red-dragon VM. `PARM=` is passed in as an OS halfword-prefixed parameter region
 (`jackal.parm`). The step's return code is read back from the VM.
 
@@ -93,8 +99,8 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 
 | Program | Behaviour |
 |---|---|
-| `IEFBR14` | Allocates and disposes each non-SYSOUT DD. Return code 0. |
-| `IDCAMS` | Parses the in-stream `SYSIN` and executes it. Return code is the final MAXCC. |
+| `IEFBR14` | Does nothing; the runner's allocation and disposition do its work. Return code 0. |
+| `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated. Return code is the final MAXCC. |
 
 The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`, `REPRO`,
 `IF MAXCC … THEN` and `SET MAXCC`. The parser it uses (`jackal.idcams.parser`) is a Lark
@@ -118,6 +124,7 @@ needed. The grammar's source and licence are recorded in
 |---|---|
 | `jackal/jackal/cli.py` | The `jackal` command. |
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
+| `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/catalog.py` | Job-scoped DSN-to-file catalog with DISP lifecycle. |
