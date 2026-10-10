@@ -17,10 +17,20 @@ final class DdBuilder {
             JsonArray disp,
             boolean sysout,
             boolean dummy,
-            boolean inStream) {
+            boolean inStream,
+            List<String> nullified) {
 
         static Fields empty() {
-            return new Fields(Optional.empty(), new JsonArray(), false, false, false);
+            return new Fields(Optional.empty(), new JsonArray(), false, false, false, List.of());
+        }
+
+        Fields withNullified(boolean empty, String keyword) {
+            if (!empty) {
+                return this;
+            }
+            List<String> more = new ArrayList<>(nullified);
+            more.add(keyword);
+            return new Fields(dsn, disp, sysout, dummy, inStream, List.copyOf(more));
         }
     }
 
@@ -48,6 +58,7 @@ final class DdBuilder {
         Fields fields = fields(statement);
         dd.add("dsn", dsn(fields));
         dd.add("disp", fields.disp());
+        dd.add("nullified", nullified(fields));
         dd.add("in_stream", cards(statement));
         dd.addProperty("sysout", fields.sysout());
         JsonArray members = new JsonArray();
@@ -61,6 +72,7 @@ final class DdBuilder {
         JsonObject member = new JsonObject();
         member.add("dsn", dsn(fields));
         member.add("disp", fields.disp());
+        member.add("nullified", nullified(fields));
         member.add("in_stream", cards(ctx));
         return member;
     }
@@ -75,16 +87,22 @@ final class DdBuilder {
         return switch (inner) {
             case JCLParser.DdParmDSNAMEContext c -> new Fields(
                     Trees.first(c, JCLParser.DatasetNameContext.class), acc.disp(), acc.sysout(),
-                    acc.dummy(), acc.inStream());
+                    acc.dummy(), acc.inStream(), acc.nullified())
+                    .withNullified(c.datasetName() == null, "dsn");
             case JCLParser.DdParmDISPContext c -> new Fields(
                     acc.dsn(),
                     Trees.first(c, JCLParser.SingleOrMultipleValueContext.class)
                             .map(DdBuilder::dispWords).orElseGet(JsonArray::new),
-                    acc.sysout(), acc.dummy(), acc.inStream());
-            case JCLParser.DdParmSYSOUTContext c -> new Fields(acc.dsn(), acc.disp(), true, acc.dummy(), acc.inStream());
-            case JCLParser.DdParmDUMMYContext c -> new Fields(acc.dsn(), acc.disp(), acc.sysout(), true, acc.inStream());
-            case JCLParser.DdParmASTERISKContext c -> new Fields(acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true);
-            case JCLParser.DdParmDATAContext c -> new Fields(acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true);
+                    acc.sysout(), acc.dummy(), acc.inStream(), acc.nullified())
+                    .withNullified(c.singleOrMultipleValue() == null, "disp");
+            case JCLParser.DdParmSYSOUTContext c -> new Fields(
+                    acc.dsn(), acc.disp(), true, acc.dummy(), acc.inStream(), acc.nullified());
+            case JCLParser.DdParmDUMMYContext c -> new Fields(
+                    acc.dsn(), acc.disp(), acc.sysout(), true, acc.inStream(), acc.nullified());
+            case JCLParser.DdParmASTERISKContext c -> new Fields(
+                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified());
+            case JCLParser.DdParmDATAContext c -> new Fields(
+                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified());
             default -> acc;
         };
     }
@@ -97,6 +115,12 @@ final class DdBuilder {
             return named(fields.dsn().get());
         }
         return kind(fields.inStream() ? "in_stream" : "none");
+    }
+
+    private static JsonArray nullified(Fields fields) {
+        JsonArray names = new JsonArray();
+        fields.nullified().forEach(names::add);
+        return names;
     }
 
     private static JsonObject named(JCLParser.DatasetNameContext datasetName) {

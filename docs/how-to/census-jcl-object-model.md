@@ -206,7 +206,7 @@ def _dd_counts(c: Counter[str], dds: Iterable[object], ids: set[str], where: str
             c[f"{where} concatenation members"] += len(dd.concatenated)
         if dd.sysout:
             c[f"{where} DD sysout"] += 1
-        d = dd.disp
+        d = dd.disposition()
         c[f"{where} DISP {d.status.value},{d.normal.value},{d.abnormal.value}"] += 1
 
 

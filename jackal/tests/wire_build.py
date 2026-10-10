@@ -30,6 +30,7 @@ def dd(
         ddname=ddname,
         dsn=dsn,
         disp=disp,
+        nullified=(),
         in_stream=in_stream,
         sysout=sysout,
         concatenated=(),

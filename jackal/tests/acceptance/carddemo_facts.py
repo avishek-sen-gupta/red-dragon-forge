@@ -10,6 +10,7 @@ from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
 from jackal.model import (
     DD,
+    Disp,
     DSN,
     AllPriorSteps,
     BackwardRef,
@@ -100,11 +101,15 @@ def _dsn_text(dsn: DSN, sysout: bool) -> str:
             return "SYSOUT" if sysout else ""
 
 
+def _disp_facts(disp: Disp) -> tuple[str, str, str]:
+    return (disp.status.value, disp.normal.value, disp.abnormal.value)
+
+
 def _dd_facts(dd: DD, ddname: str = "") -> DdFacts:
     return DdFacts(
         ddname=ddname or dd.ddname.text,
         dsn=_dsn_text(dd.dsn, dd.sysout),
-        disp=(dd.disp.status.value, dd.disp.normal.value, dd.disp.abnormal.value),
+        disp=_disp_facts(dd.disposition()),
     )
 
 

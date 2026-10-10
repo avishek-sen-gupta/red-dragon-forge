@@ -112,3 +112,30 @@ def test_overrides_expand(expand_fixture, parse_fixture):
             ),
         ),
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_override_dd_merges_with_the_procs_dd_per_parameter(
+    expand_fixture, parse_fixture
+):
+    from jackal.expansion import ExpandedJob
+    from jackal.model import DD, DummyDSN, NoDSN, NotCoded
+    from tests.acceptance import build as b
+
+    call = parse_fixture("overrides/merge.jcl").steps[0]
+    merged = (
+        b.dataset("IN", "T.IN", b.OLD),
+        DD(b.dd_name("OUT"), DummyDSN(), NotCoded()),
+        b.dataset("LOG", "T.LOG"),
+        DD(b.dd_name("GONE"), NoDSN(), b.DEFAULT_DISP),
+        DD(b.dd_name("NULL"), NoDSN(), NotCoded(), sysout=True),
+        b.concat("LIB", "T.NEWLIB1", (b.member("T.LIB2"), b.member("T.NEWLIB3"))),
+    )
+    assert expand_fixture("overrides/merge.jcl") == ExpandedJob(
+        "ACCEPT",
+        (
+            b.qualified(
+                (b.called(call, "overrides/MERGE.prc"),), b.pgm("M1", "PGMM", merged)
+            ),
+        ),
+    )
