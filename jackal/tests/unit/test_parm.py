@@ -61,28 +61,11 @@ def test_step_parm_field_set():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_deserializer_parm_present():
-    from jackal.jcl.bridge_parser import _job_from_json
+def test_deserializer_parm_present_and_absent():
+    from jackal.jcl.bridge_parser import job_from_bridge_json
+    from tests.wire_build import job_json, lit, program
 
-    data = {
-        "name": "J",
-        "steps": [
-            {
-                "name": "S",
-                "pgm": "P",
-                "parm": [{"type": "Literal", "name": "HELLO"}],
-                "dds": [],
-            }
-        ],
-    }
-    job = _job_from_json(data)
-    assert job.steps[0].parm == literal("HELLO")
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_deserializer_parm_absent_defaults_empty():
-    from jackal.jcl.bridge_parser import _job_from_json
-
-    data = {"name": "J", "steps": [{"name": "S", "pgm": "P", "dds": []}]}
-    job = _job_from_json(data)
-    assert job.steps[0].parm == ()
+    job = job_from_bridge_json(
+        job_json("J", (program("S", "P", parm=(lit("HELLO"),)), program("T", "P")))
+    )
+    assert [s.parm for s in job.steps] == [literal("HELLO"), ()]

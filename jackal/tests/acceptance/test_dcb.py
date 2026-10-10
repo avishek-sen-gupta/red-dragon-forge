@@ -1,10 +1,10 @@
 """Acceptance: every DCB form parses, and the job around it is intact."""
 
-from tests.acceptance.markers import bridge_then_parsed
+from tests.acceptance.markers import PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@bridge_then_parsed("red-dragon-forge-2cy.2")
+@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dcb_forms_parse(parse_fixture):
     from jackal.model import Job

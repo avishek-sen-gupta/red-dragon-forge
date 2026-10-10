@@ -30,13 +30,13 @@ public class JclSerializerTest {
                         + "//OUT      DD DSN=A.B.C" + ddParameters + "\n";
         JsonObject job = JclSerializer.serialize(jcl);
         JsonObject dd =
-                job.getAsJsonArray("steps")
+                job.getAsJsonArray("statements")
                         .get(0)
                         .getAsJsonObject()
                         .getAsJsonArray("dds")
                         .get(0)
                         .getAsJsonObject();
-        JsonArray words = dd.getAsJsonArray("disp_words");
+        JsonArray words = dd.getAsJsonArray("disp");
         List<String> result = new ArrayList<>();
         words.forEach(w -> result.add(w.getAsString()));
         return result;

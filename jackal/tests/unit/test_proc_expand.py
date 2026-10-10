@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DirectDSN
+from jackal.dsn import DirectDSN, DummyDSN
 from jackal.jcl.proc_expand import ProcExpansionError, expand_procs
 from jackal.model import DD, Cond, CondOp, Disp, DispNormal, DispStatus, Job, Step
 from jackal.value_parts import Literal, Symbol, literal
@@ -104,7 +104,7 @@ def test_dd_qualified_override_unmatched_step_name_is_not_applied():
     job = Job(name="TRANREPT", steps=(step,))
     result = expand_procs(job, proclib_dirs=[_FIXTURES])
     filein = next(d for d in result.steps[0].dds if d.ddname == "FILEIN")
-    assert filein.dsn == DirectDSN(literal("NULLFILE"))  # unchanged placeholder
+    assert filein.dsn == DummyDSN()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

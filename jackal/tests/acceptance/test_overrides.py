@@ -1,10 +1,10 @@
 """Acceptance: COND, PARM and DD overrides on a PROC call."""
 
-from tests.acceptance.markers import bridge_then_expanded, bridge_then_parsed
+from tests.acceptance.markers import EXPANDED, PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@bridge_then_parsed("red-dragon-forge-2cy.12")
+@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_overrides_parse(parse_fixture):
     from jackal.model import Job, ProcCall, ProcStepOverrides
@@ -56,7 +56,7 @@ def test_overrides_parse(parse_fixture):
     )
 
 
-@bridge_then_expanded("red-dragon-forge-2cy.12")
+@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_overrides_expand(expand_fixture, parse_fixture):
     from jackal.expansion import ExpandedJob

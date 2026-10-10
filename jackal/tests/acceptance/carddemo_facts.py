@@ -28,7 +28,10 @@ SNAPSHOT = Path(__file__).parent / "carddemo_snapshot.json"
 PROC_DIRS = ("app/proc", "samples/proc")
 
 EXPECTED_CHANGES: dict[str, str] = {
+    "app/app-transaction-type-db2/jcl/CREADB21.jcl": "red-dragon-forge-18j",
     "app/app-transaction-type-db2/jcl/TRANEXTR.jcl": "red-dragon-forge-z76",
+    "samples/jcl/CICDBCMP.jcl": "red-dragon-forge-18j",
+    "samples/jcl/IMSMQCMP.jcl": "red-dragon-forge-18j",
 }
 
 

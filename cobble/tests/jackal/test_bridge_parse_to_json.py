@@ -12,7 +12,7 @@ import pytest
 
 from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
 
-_MINIMAL_JOB = '{"name": "PAYROLL", "steps": []}'
+_MINIMAL_JOB = '{"kind":"job","name":"PAYROLL","end_job_tests":[],"statements":[]}'
 
 
 class RecordingRunner:

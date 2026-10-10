@@ -36,10 +36,15 @@ public class ProcSequenceNumberTest {
     }
 
     /** The one literal part of a symbolic parameter's default value. */
-    private static String literalValue(JsonObject defaults, String parameter) {
-        JsonArray parts = defaults.getAsJsonArray(parameter);
+    private static String literalValue(JsonArray defaults, String parameter) {
+        JsonArray parts = new JsonArray();
+        for (var d : defaults) {
+            if (d.getAsJsonObject().get("name").getAsString().equals(parameter)) {
+                parts = d.getAsJsonObject().getAsJsonArray("value");
+            }
+        }
         assertEquals("expected a single value part for " + parameter, 1, parts.size());
-        return parts.get(0).getAsJsonObject().get("name").getAsString();
+        return parts.get(0).getAsJsonObject().get("text").getAsString();
     }
 
     /** The JSON for a bare PROC member: {@code //NAME PROC ... // PEND}, no JOB card. */
@@ -55,8 +60,8 @@ public class ProcSequenceNumberTest {
                         "//STEP1    EXEC PGM=IEFBR14",
                         "//         PEND");
         assertEquals("TESTPROC", proc.get("name").getAsString());
-        assertEquals(0, proc.getAsJsonObject("defaults").size());
-        assertEquals(1, proc.getAsJsonArray("steps").size());
+        assertEquals(0, proc.getAsJsonArray("defaults").size());
+        assertEquals(1, proc.getAsJsonArray("statements").size());
     }
 
     /** A sequence number shorter than the full eight columns. */
@@ -68,7 +73,7 @@ public class ProcSequenceNumberTest {
                         "//STEP1    EXEC PGM=IEFBR14",
                         "//         PEND");
         assertEquals("TESTPROC", proc.get("name").getAsString());
-        assertEquals(1, proc.getAsJsonArray("steps").size());
+        assertEquals(1, proc.getAsJsonArray("statements").size());
     }
 
     /** The shape that always worked: no sequence field at all. */
@@ -77,8 +82,8 @@ public class ProcSequenceNumberTest {
         JsonObject proc =
                 proc("//TESTPROC PROC", "//STEP1    EXEC PGM=IEFBR14", "//         PEND");
         assertEquals("TESTPROC", proc.get("name").getAsString());
-        assertEquals(0, proc.getAsJsonObject("defaults").size());
-        assertEquals(1, proc.getAsJsonArray("steps").size());
+        assertEquals(0, proc.getAsJsonArray("defaults").size());
+        assertEquals(1, proc.getAsJsonArray("statements").size());
     }
 
     /**
@@ -93,10 +98,10 @@ public class ProcSequenceNumberTest {
                         "//STEP1    EXEC PGM=IEFBR14",
                         "//         PEND");
         assertEquals("TESTPROC", proc.get("name").getAsString());
-        JsonObject defaults = proc.getAsJsonObject("defaults");
+        JsonArray defaults = proc.getAsJsonArray("defaults");
         assertEquals(2, defaults.size());
         assertEquals("A", literalValue(defaults, "MEMBER"));
         assertEquals("B", literalValue(defaults, "LIB"));
-        assertEquals(1, proc.getAsJsonArray("steps").size());
+        assertEquals(1, proc.getAsJsonArray("statements").size());
     }
 }

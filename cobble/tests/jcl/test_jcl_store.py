@@ -16,15 +16,22 @@ from pathlib import Path
 
 import pytest
 
+from jackal.jcl import wire
 from jackal.jcl.bridge_parser import JclParseError
 from cobble.jcl.jcl_store import JclStore, temp_jcl_store
 
 
 def _job_json(name: str, step: str = "STEP1", pgm: str = "IEFBR14") -> str:
-    return (
-        '{"name": "' + name + '", "steps": [{"name": "' + step + '", '
-        '"pgm": "' + pgm + '", "dds": []}]}'
+    program = wire.Program(
+        label=step,
+        pgm=pgm,
+        parm=(),
+        cond=wire.Cond(tests=(), mode="NORMAL"),
+        dds=(),
     )
+    return wire.Document(
+        wire.JobDoc(name=name, end_job_tests=(), statements=(program,))
+    ).model_dump_json()
 
 
 class CountingParser:

@@ -41,12 +41,12 @@ public class EndOfInputTest {
     }
 
     private static int steps(String... lines) {
-        return job(lines).getAsJsonArray("steps").size();
+        return job(lines).getAsJsonArray("statements").size();
     }
 
     /** The in-stream lines of the first step's first DD. */
     private static JsonArray inStream(String... lines) {
-        return job(lines).getAsJsonArray("steps").get(0).getAsJsonObject()
+        return job(lines).getAsJsonArray("statements").get(0).getAsJsonObject()
                 .getAsJsonArray("dds").get(0).getAsJsonObject()
                 .getAsJsonArray("in_stream");
     }

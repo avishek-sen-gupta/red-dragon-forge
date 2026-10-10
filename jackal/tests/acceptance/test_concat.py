@@ -1,10 +1,10 @@
 """Acceptance: DD concatenation."""
 
-from tests.acceptance.markers import bridge_then_parsed
+from tests.acceptance.markers import PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@bridge_then_parsed("red-dragon-forge-2cy.3")
+@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_concatenation_parses(parse_fixture):
     from jackal.dsn import DummyDSN, InStreamDSN
