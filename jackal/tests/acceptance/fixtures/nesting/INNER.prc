@@ -1,0 +1,2 @@
+//INNER    PROC
+//Q1       EXEC PGM=PGMQ,PARM='INNER'

@@ -1,0 +1,2 @@
+//ACCEPT   JOB (A),'ACCEPT',CLASS=A
+//S1       EXEC TWO,PARM.P9='X'

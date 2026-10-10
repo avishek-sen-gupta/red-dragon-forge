@@ -1,0 +1,3 @@
+//ACCEPT   JOB (A),'ACCEPT',CLASS=A
+//S1       EXEC PGM=PGMA
+//S2       EXEC NOSUCHP
