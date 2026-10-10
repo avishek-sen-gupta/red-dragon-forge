@@ -7,10 +7,10 @@ from dataclasses import replace
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
-from interpreter.cobol.real_file_provider import RealFileIOProvider
 from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.constants import Language
 from interpreter.func_name import FuncName
@@ -21,6 +21,7 @@ from interpreter.run import run, run_linked
 from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
+from jackal.cobol_files import AllocatedFileIOProvider
 from jackal.model import ProgramStep, StepReference
 from jackal.parm import build_parm_region
 from jackal.value_parts import resolve
@@ -28,7 +29,9 @@ from jackal.value_parts import resolve
 MAX_STEPS = 500_000
 
 
-def _file_control(source: str, parser: ProLeapCobolParser) -> list:
+def _file_control(
+    source: str, parser: ProLeapCobolParser
+) -> Sequence[FileControlEntry]:
     return parser.parse(source.encode("utf-8")).file_control
 
 
@@ -49,11 +52,7 @@ def run_cobol_step(
         bridge_jar=bridge_jar,
         copybook_dirs=list(copybook_dirs),
     )
-    provider = RealFileIOProvider(
-        base_dir=workdir,
-        file_control=_file_control(source, parser),
-        path_overrides=dict(env.paths()),
-    )
+    provider = AllocatedFileIOProvider(workdir, _file_control(source, parser), env)
     vm = (
         _run_with_parm(step, source, parser, provider, copybook_dirs)
         if step.parm
@@ -66,7 +65,7 @@ def _run_with_parm(
     step: ProgramStep[StepReference],
     source: str,
     parser: ProLeapCobolParser,
-    provider: RealFileIOProvider,
+    provider: AllocatedFileIOProvider,
     copybook_dirs: Sequence[Path],
 ) -> VMState:
     _, linked = compile_cobol(
@@ -84,7 +83,7 @@ def _run_with_parm(
 
 
 def _run_without_parm(
-    source: str, provider: RealFileIOProvider, copybook_dirs: Sequence[Path]
+    source: str, provider: AllocatedFileIOProvider, copybook_dirs: Sequence[Path]
 ) -> VMState:
     return run(
         source,

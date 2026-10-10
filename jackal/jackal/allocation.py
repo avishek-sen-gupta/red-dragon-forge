@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
 
@@ -12,6 +13,7 @@ from jackal.catalog import Dataset, DatasetCatalog
 from jackal.model import (
     DD,
     DdName,
+    DispStatus,
     DummyDSN,
     InStreamDSN,
     NoDSN,
@@ -25,12 +27,21 @@ LOAD_LIBRARIES: frozenset[DdName] = frozenset({DdName("STEPLIB"), DdName("JOBLIB
 _CARD = 80
 
 
+class Positioning(Enum):
+    START = "START"
+    END = "END"
+
+
 @dataclass(frozen=True)
 class DatasetAllocation:
     dataset: Dataset
+    positioning: Positioning
 
     def path(self) -> Path:
         return self.dataset.path
+
+    def appends(self) -> bool:
+        return self.positioning is Positioning.END
 
 
 @dataclass(frozen=True)
@@ -41,6 +52,9 @@ class InStreamAllocation:
     def path(self) -> Path:
         return self.cards
 
+    def appends(self) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class DummyAllocation:
@@ -49,6 +63,9 @@ class DummyAllocation:
     def path(self) -> Path:
         return self.sink
 
+    def appends(self) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class SysoutAllocation:
@@ -56,6 +73,9 @@ class SysoutAllocation:
 
     def path(self) -> Path:
         return self.sink
+
+    def appends(self) -> bool:
+        return False
 
 
 Allocation: TypeAlias = (
@@ -79,6 +99,11 @@ class DdEnvironment:
 
     def paths(self) -> Mapping[str, Path]:
         return {name.text: allocation.path() for name, allocation in self.entries}
+
+    def appended(self) -> frozenset[DdName]:
+        return frozenset(
+            name for name, allocation in self.entries if allocation.appends()
+        )
 
 
 def _sink(qualified: QualifiedStep, dd: DD[StepReference], kind: str) -> Path:
@@ -113,6 +138,12 @@ def _allocated(
             return _named(qualified, dd, catalog)
 
 
+def _positioning(dd: DD[StepReference]) -> Positioning:
+    if dd.disposition().status is DispStatus.MOD:
+        return Positioning.END
+    return Positioning.START
+
+
 def _named(
     qualified: QualifiedStep, dd: DD[StepReference], catalog: DatasetCatalog
 ) -> Allocation:
@@ -120,7 +151,7 @@ def _named(
         return SysoutAllocation(
             _written(catalog.workdir / _sink(qualified, dd, "sysout"), b"")
         )
-    return DatasetAllocation(catalog.allocate(dd))
+    return DatasetAllocation(catalog.allocate(dd), _positioning(dd))
 
 
 def allocate(

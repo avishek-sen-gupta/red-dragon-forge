@@ -64,6 +64,8 @@ cicada or squall; `.importlinter` enforces this.
      not in load libraries. The program receives the allocations as a `DdEnvironment`.
    - The step is dispatched. A program in the utility table runs the emulated utility.
      Any other program is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
+   - A dataset allocated `DISP=MOD` is positioned at its end: a COBOL `OPEN OUTPUT` on it
+     appends, through jackal's own file handler over red-dragon's file drivers.
    - After the program, the runner applies each DD's normal DISP and releases the sinks.
      Programs never allocate or dispose themselves.
 4. At job end, surviving temporary datasets are deleted. The result is a `JobResult` holding
@@ -126,6 +128,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
+| `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append. |
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/catalog.py` | Job-scoped DSN-to-file catalog with DISP lifecycle. |
 | `jackal/jackal/cond.py` | `COND=` evaluation. |
