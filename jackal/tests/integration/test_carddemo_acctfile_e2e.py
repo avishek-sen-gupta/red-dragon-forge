@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 
 import pytest
-
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
 from jackal.jcl.parser import parse_jcl
+from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
@@ -49,8 +49,8 @@ def test_acctfile_then_readacct_e2e(
 
     assert [s.name for s in acctfile_result.steps] == ["STEP05", "STEP10", "STEP15"]
     assert all(
-        s.ran and s.return_code == 0 for s in acctfile_result.steps
-    ), f"ACCTFILE steps failed: {[(s.name, s.return_code) for s in acctfile_result.steps]}"
+        s.outcome == Completed(0) for s in acctfile_result.steps
+    ), f"ACCTFILE steps failed: {[(s.name, s.outcome) for s in acctfile_result.steps]}"
 
     # KSDS backing file must exist and be non-empty after REPRO
     ksds_dsn = "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
@@ -68,8 +68,8 @@ def test_acctfile_then_readacct_e2e(
         "STEP05" in step_names
     ), f"Expected STEP05 in READACCT steps, got {step_names}"
     assert all(
-        s.ran and s.return_code == 0 for s in readacct_result.steps
-    ), f"READACCT steps failed: {[(s.name, s.return_code) for s in readacct_result.steps]}"
+        s.outcome == Completed(0) for s in readacct_result.steps
+    ), f"READACCT steps failed: {[(s.name, s.outcome) for s in readacct_result.steps]}"
 
     # CBACT01C writes OUTFILE (DSN=AWS.M2.CARDDEMO.ACCTDATA.PSCOMP)
     outfile_dsn = "AWS.M2.CARDDEMO.ACCTDATA.PSCOMP"

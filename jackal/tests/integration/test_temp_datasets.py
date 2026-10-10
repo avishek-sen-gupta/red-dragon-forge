@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from jackal.model import DD, StepRef, TempRef
+from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
@@ -42,7 +43,7 @@ def test_two_step_temp_dataset(tmp_path):
         ),
     )
     result = _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
-    assert all(s.ran and s.return_code == 0 for s in result.steps)
+    assert all(s.outcome == Completed(0) for s in result.steps)
     assert not (tmp_path / "TEMP").exists()
 
 
@@ -58,7 +59,7 @@ def test_three_step_pass_chain(tmp_path):
         ),
     )
     result = _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
-    assert all(s.ran and s.return_code == 0 for s in result.steps)
+    assert all(s.outcome == Completed(0) for s in result.steps)
     assert not (tmp_path / "TEMP").exists()
 
 
@@ -102,5 +103,5 @@ def test_job_end_cleanup_removes_undeleted_temp(tmp_path):
         (program("S1", "IEFBR14", (_pass_dd("TEMP"),)),),
     )
     result = _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
-    assert result.steps[0].ran
+    assert result.steps[0].outcome == Completed(0)
     assert not (tmp_path / "TEMP").exists()

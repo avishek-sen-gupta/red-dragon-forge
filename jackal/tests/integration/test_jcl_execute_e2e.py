@@ -10,9 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
-from jackal.results import StepDisposition
+from jackal.results import Bypassed, BypassReason, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
@@ -72,8 +71,7 @@ def test_parm_passed_through_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_jar):
     result = _runner(src, bridge_jar, tmp_path).run(job, workdir=tmp_path, seeds={})
 
     assert len(result.steps) == 1
-    assert result.steps[0].ran
-    assert result.steps[0].return_code == 42
+    assert result.steps[0].outcome == Completed(42)
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +94,7 @@ def test_temp_dataset_lifecycle_via_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_
         job, workdir=tmp_path, seeds={}
     )
 
-    assert all(s.ran and s.return_code == 0 for s in result.steps)
+    assert all(s.outcome == Completed(0) for s in result.steps)
     assert not (tmp_path / "TEMP").exists()
 
 
@@ -121,8 +119,7 @@ def test_backward_ref_resolves_via_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_j
     )
 
     step1, step2 = result.steps
-    assert step1.ran and step1.return_code == 0
-    assert step2.ran and step2.return_code == 0
+    assert (step1.outcome, step2.outcome) == (Completed(0), Completed(0))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -144,6 +141,8 @@ def test_backward_ref_bypass_propagation_via_jcl_bridge(
     )
 
     step0, step1, step2 = result.steps
-    assert step0.ran
-    assert step1.disposition is StepDisposition.BYPASSED
-    assert step2.disposition is StepDisposition.BYPASSED
+    assert (step0.outcome, step1.outcome, step2.outcome) == (
+        Completed(0),
+        Bypassed(BypassReason.COND_SATISFIED),
+        Bypassed(BypassReason.REFERENCED_STEP_NOT_RUN),
+    )

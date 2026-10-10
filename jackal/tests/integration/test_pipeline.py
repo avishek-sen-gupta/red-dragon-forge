@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
-
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.jcl.parser import parse_jcl
+from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
@@ -36,7 +36,7 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
     result = runner.run(job, workdir=tmp_path, seeds={"J.IN": seed})
 
     assert [s.name for s in result.steps] == ["STEP1", "STEP2"]
-    assert all(s.ran and s.return_code == 0 for s in result.steps)
+    assert all(s.outcome == Completed(0) for s in result.steps)
     # STEP1 transform (intermediate, PASSed): uppercased — EBCDIC byte image
     assert (tmp_path / "J_WORK").read_bytes() == _ebcdic(b"APPLEMANGO")
     # STEP2 transform (final): first byte of each 5-byte record starred — EBCDIC

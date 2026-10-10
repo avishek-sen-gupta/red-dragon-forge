@@ -1010,6 +1010,7 @@ type ProgramResult = Completed | Abended | Halted
 class BypassReason(Enum):
     COND_SATISFIED = "COND_SATISFIED"
     ONLY_WITHOUT_ABEND = "ONLY_WITHOUT_ABEND"
+    REFERENCED_STEP_NOT_RUN = "REFERENCED_STEP_NOT_RUN"
 
 @dataclass(frozen=True)
 class Bypassed:
@@ -1091,6 +1092,12 @@ class JobResult:
 - `JobOutcome` is derived by a pure function over `steps`: the first `Abended`, `AllocationFailed`
   or `Halted` decides it, else `JobCompleted(max rc over Completed)`. `SkippedUnresolved` never
   decides it, and later bypass tests skip it as they skip a step that did not run.
+- `REFERENCED_STEP_NOT_RUN` is interim and jackal-only: a referback to a step that did not run is
+  an allocation failure on z/OS, recorded as `Bypassed` until the lifecycle allocates DDs
+  (`lrk`) and `AllocationFailed` replaces it (`red-dragon-forge-552`).
+- The outcomes arrive with the issues that produce them: `5fu` brings `Completed`, `Bypassed`,
+  `Flushed(AfterJobCond)`, `SkippedUnresolved` and `JobCompleted`; abends (`jackal-1o2.19`),
+  allocation failures (`552`, `8u3`) and halts (`xkk`, `w0e`) bring the rest.
 - `results.py` stays a leaf (`.importlinter` `model-results-are-leaves`).
 
 | Outcome | JCL situation that produces it |
