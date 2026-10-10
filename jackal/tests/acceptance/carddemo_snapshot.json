@@ -1,0 +1,7511 @@
+{
+ "jobs": [
+  {
+   "kind": "read",
+   "file": "app/app-authorization-ims-db2-mq/jcl/CBPAUP0J.jcl",
+   "job": "CBPAUP0J",
+   "steps": [
+    {
+     "step": "STEP01",
+     "pgm": "DFSRRC00",
+     "parm": "BMP,CBPAUP0C,PSBPAUTB",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "IMS.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSRESLB",
+       "dsn": "IMS.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "PROCLIB",
+       "dsn": "IMS.PROCLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSSEL",
+       "dsn": "IMS.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMS",
+       "dsn": "IMS.PSBLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUX",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSABOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ABENDAID",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IEFRDER",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IMSLOGR",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IMSERR",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/app-authorization-ims-db2-mq/jcl/DBPAUTP0.jcl",
+   "job": "DBPAUTP0",
+   "steps": [
+    {
+     "step": "STEPDEL",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "AWS.M2.CARDDEMO.IMSDATA.DBPAUTP0",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "UNLOAD",
+     "pgm": "DFSRRC00",
+     "parm": "ULU",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSRESLB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMS",
+       "dsn": "OEM.IMS.IMSP.PSBLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DFSURGU1",
+       "dsn": "AWS.M2.CARDDEMO.IMSDATA.DBPAUTP0",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DDPAUTP0",
+       "dsn": "OEM.IMS.IMSP.PAUTHDB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DDPAUTX0",
+       "dsn": "OEM.IMS.IMSP.PAUTHDBX",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSVSAMP",
+       "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSCTL",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "RECON1",
+       "dsn": "OEM.IMS.IMSP.RECON1",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "RECON2",
+       "dsn": "OEM.IMS.IMSP.RECON2",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "RECON3",
+       "dsn": "OEM.IMS.IMSP.RECON3",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSWRK01",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DFSSRT01",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/app-authorization-ims-db2-mq/jcl/LOADPADB.JCL",
+   "job": "LOADPADB",
+   "steps": [
+    {
+     "step": "STEP01",
+     "pgm": "DFSRRC00",
+     "parm": "BMP,PAUDBLOD,PSBPAUTB",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSRESLB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMS",
+       "dsn": "OEM.IMS.IMSP.PSBLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "INFILE1",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.ROOT.FILEO",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "INFILE2",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.CHILD.FILEO",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSVSAMP",
+       "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMSLOGR",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IEFRDER",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IMSERR",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/app-authorization-ims-db2-mq/jcl/UNLDGSAM.JCL",
+   "job": "UNLDGSAM",
+   "steps": [
+    {
+     "step": "STEP01",
+     "pgm": "DFSRRC00",
+     "parm": "DLI,DBUNLDGS,DLIGSAMP,,,,,,,,,,,N",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSRESLB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMS",
+       "dsn": "OEM.IMS.IMSP.PSBLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "PASFILOP",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.ROOT.GSAM",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "PADFILOP",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.CHILD.GSAM",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DDPAUTP0",
+       "dsn": "OEM.IMS.IMSP.PAUTHDB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DDPAUTX0",
+       "dsn": "OEM.IMS.IMSP.PAUTHDBX",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSVSAMP",
+       "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMSLOGR",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IEFRDER",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IMSERR",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/app-authorization-ims-db2-mq/jcl/UNLDPADB.JCL",
+   "job": "UNLDPADB",
+   "steps": [
+    {
+     "step": "STEP0",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DD1",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.ROOT.FILEO",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DD2",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.CHILD.FILEO",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP01",
+     "pgm": "DFSRRC00",
+     "parm": "DLI,PAUDBUNL,PAUTBUNL,,,,,,,,,,,N",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSRESLB",
+       "dsn": "OEMA.IMS.IMSP.SDFSRESL",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMS",
+       "dsn": "OEM.IMS.IMSP.PSBLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUTFIL1",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.ROOT.FILEO",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "OUTFIL2",
+       "dsn": "AWS.M2.CARDDEMO.PAUTDB.CHILD.FILEO",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DDPAUTP0",
+       "dsn": "OEM.IMS.IMSP.PAUTHDB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DDPAUTX0",
+       "dsn": "OEM.IMS.IMSP.PAUTHDBX",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFSVSAMP",
+       "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "IMSLOGR",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IEFRDER",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IMSERR",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/app-transaction-type-db2/jcl/CREADB21.jcl",
+   "job": "CREADB2",
+   "steps": [
+    {
+     "step": "FREEPLN",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "&LBNM..CNTL(DB2FREE)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CRCRDDB",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.&DB2S..RUNLIB.LOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "&LBNM..CNTL(DB2TIAD1)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&LBNM..CNTL(DB2CREAT)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "LDTTYPE",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": []
+    },
+    {
+     "step": "RUNTEP2",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.&DB2S..RUNLIB.LOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "&LBNM..CNTL(DB2TEP41)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&LBNM..CNTL(DB2LTTYP)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "LDTCCAT",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.&DB2S..RUNLIB.LOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "&LBNM..CNTL(DB2TEP41)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&LBNM..CNTL(DB2LTCAT)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/app-transaction-type-db2/jcl/MNTTRDB2.jcl",
+   "job": "MNTTRDB2",
+   "steps": [
+    {
+     "step": "STEP1",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DBRMLIB",
+       "dsn": "AWS.M2.CARDDEMO.DBRMLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "INPFILE",
+       "dsn": "INPFILE",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "unread",
+   "file": "app/app-transaction-type-db2/jcl/TRANEXTR.jcl",
+   "error": "JclParseError"
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/ACCTFILE.jcl",
+   "job": "ACCTFILE",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ACCTDATA",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "ACCTVSAM",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CARDFILE.jcl",
+   "job": "CARDFILE",
+   "steps": [
+    {
+     "step": "CLCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CARDDATA",
+       "dsn": "AWS.M2.CARDDEMO.CARDDATA.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CARDVSAM",
+       "dsn": "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP40",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP50",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP60",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "OPCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CBADMCDJ.jcl",
+   "job": "CBADMCDJ",
+   "steps": [
+    {
+     "step": "STEP1",
+     "pgm": "DFHCSDUP",
+     "parm": "CSD(READWRITE),PAGESIZE(60),NOCOMPAT",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHLOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DFHCSD",
+       "dsn": "OEM.CICSTS.DFHCSD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUTDD",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CBEXPORT.jcl",
+   "job": "CBEXPORT",
+   "steps": [
+    {
+     "step": "STEP01",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP02",
+     "pgm": "CBEXPORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CUSTFILE",
+       "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "ACCTFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANSACT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CARDFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "EXPFILE",
+       "dsn": "AWS.M2.CARDDEMO.EXPORT.DATA",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CBIMPORT.jcl",
+   "job": "CBIMPORT",
+   "steps": [
+    {
+     "step": "STEP01",
+     "pgm": "CBIMPORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "EXPFILE",
+       "dsn": "AWS.M2.CARDDEMO.EXPORT.DATA",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CUSTOUT",
+       "dsn": "AWS.M2.CARDDEMO.CUSTDATA.IMPORT",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ACCTOUT",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.IMPORT",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "XREFOUT",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.IMPORT",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRNXOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.IMPORT",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ERROUT",
+       "dsn": "AWS.M2.CARDDEMO.IMPORT.ERRORS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CLOSEFIL.jcl",
+   "job": "CLOSEFIL",
+   "steps": [
+    {
+     "step": "CLCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/COMBTRAN.jcl",
+   "job": "COMBTRAN",
+   "steps": [
+    {
+     "step": "STEP05R",
+     "pgm": "SORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SORTIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(0)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYMNAMES",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SORTOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.COMBINED(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRANSACT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.COMBINED(+1)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANVSAM",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CREASTMT.JCL",
+   "job": "CREASTMT",
+   "steps": [
+    {
+     "step": "DELDEF01",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP010",
+     "pgm": "SORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SORTIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SORTOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRXFL.SEQ",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP020",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "INFILE",
+       "dsn": "AWS.M2.CARDDEMO.TRXFL.SEQ",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUTFILE",
+       "dsn": "AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP030",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "HTMLFILE",
+       "dsn": "AWS.M2.CARDDEMO.STATEMNT.HTML",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "STMTFILE",
+       "dsn": "AWS.M2.CARDDEMO.STATEMNT.PS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP040",
+     "pgm": "CBSTM03A",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRNXFILE",
+       "dsn": "AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "ACCTFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CUSTFILE",
+       "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "STMTFILE",
+       "dsn": "AWS.M2.CARDDEMO.STATEMNT.PS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "HTMLFILE",
+       "dsn": "AWS.M2.CARDDEMO.STATEMNT.HTML",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/CUSTFILE.jcl",
+   "job": "CUSTFILE",
+   "steps": [
+    {
+     "step": "CLCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CUSTDATA",
+       "dsn": "AWS.M2.CARDDEMO.CUSTDATA.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CUSTVSAM",
+       "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "OPCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/DALYREJS.jcl",
+   "job": "DALYREJS",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/DEFCUST.jcl",
+   "job": "DEFCUST",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/DEFGDGB.jcl",
+   "job": "DEFGDGB",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/DEFGDGD.jcl",
+   "job": "DEFGDGD",
+   "steps": [
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP20",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "AWS.M2.CARDDEMO.TRANTYPE.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "AWS.M2.CARDDEMO.TRANTYPE.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "CATLG"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP30",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP40",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "AWS.M2.CARDDEMO.TRANCATG.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "AWS.M2.CARDDEMO.TRANCATG.PS.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "CATLG"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP50",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP60",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "AWS.M2.CARDDEMO.DISCGRP.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "AWS.M2.CARDDEMO.DISCGRP.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "CATLG"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/DISCGRP.jcl",
+   "job": "DISCGRP",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DISCGRP",
+       "dsn": "AWS.M2.CARDDEMO.DISCGRP.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DISCVSAM",
+       "dsn": "AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/DUSRSECJ.jcl",
+   "job": "DUSRSECJ",
+   "steps": [
+    {
+     "step": "PREDEL",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "DD01",
+       "dsn": "AWS.M2.CARDDEMO.USRSEC.PS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP01",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSUT1",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "AWS.M2.CARDDEMO.USRSEC.PS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP02",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP03",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "IN",
+       "dsn": "AWS.M2.CARDDEMO.USRSEC.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUT",
+       "dsn": "AWS.M2.CARDDEMO.USRSEC.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/ESDSRRDS.jcl",
+   "job": "ESDSRRDS",
+   "steps": [
+    {
+     "step": "PREDEL",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "DD01",
+       "dsn": "AWS.M2.CARDDEMO.ESDSRRDS.PS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP01",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSUT1",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "AWS.M2.CARDDEMO.ESDSRRDS.PS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP02",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP03",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "IN",
+       "dsn": "AWS.M2.CARDDEMO.ESDSRRDS.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUT",
+       "dsn": "AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP04",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "IN",
+       "dsn": "AWS.M2.CARDDEMO.ESDSRRDS.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUT",
+       "dsn": "AWS.M2.CARDDEMO.USRSEC.VSAM.RRDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/FTPJCL.JCL",
+   "job": "FTPJCLS",
+   "steps": [
+    {
+     "step": "STEP1",
+     "pgm": "FTP",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/INTCALC.jcl",
+   "job": "INTCALC",
+   "steps": [
+    {
+     "step": "STEP15",
+     "pgm": "CBACT04C",
+     "parm": "2022071800",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TCATBALF",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFFIL1",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX.PATH",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "ACCTFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DISCGRP",
+       "dsn": "AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANSACT",
+       "dsn": "AWS.M2.CARDDEMO.SYSTRAN(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/INTRDRJ1.JCL",
+   "job": "INTRDRJ1",
+   "steps": [
+    {
+     "step": "IDCAMS",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IN",
+       "dsn": "AWS.M2.CARDEMO.FTP.TEST",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUT",
+       "dsn": "AWS.M2.CARDEMO.FTP.TEST.BKUP",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP01",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "AWS.M2.CARDDEMO.JCL(INTRDRJ2)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/INTRDRJ2.JCL",
+   "job": "INTRDRJ2",
+   "steps": [
+    {
+     "step": "IDCAMS",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "IN",
+       "dsn": "AWS.M2.CARDEMO.FTP.TEST.BKUP",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUT",
+       "dsn": "AWS.M2.CARDEMO.FTP.TEST.BKUP.INTRDR",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/OPENFIL.jcl",
+   "job": "OPENFIL",
+   "steps": [
+    {
+     "step": "OPCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/POSTTRAN.jcl",
+   "job": "POSTTRAN",
+   "steps": [
+    {
+     "step": "STEP15",
+     "pgm": "CBTRN02C",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRANFILE",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DALYTRAN",
+       "dsn": "AWS.M2.CARDDEMO.DALYTRAN.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DALYREJS",
+       "dsn": "AWS.M2.CARDDEMO.DALYREJS(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ACCTFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TCATBALF",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/PRTCATBL.jcl",
+   "job": "PRTCATBL",
+   "steps": [
+    {
+     "step": "DELDEF",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "THEFILE",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.REPT",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05R.PRC001",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "FILEIN",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "FILEOUT",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10R",
+     "pgm": "SORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SORTIN",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.BKUP(+1)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYMNAMES",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SORTOUT",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.REPT",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/READACCT.jcl",
+   "job": "READACCT",
+   "steps": [
+    {
+     "step": "PREDEL",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "DD01",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.PSCOMP",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DD02",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.ARRYPS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DD03",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VBPS",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "CBACT01C",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "ACCTFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "OUTFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.PSCOMP",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ARRYFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.ARRYPS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "VBRCFILE",
+       "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VBPS",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/READCARD.jcl",
+   "job": "READCARD",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "CBACT02C",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CARDFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/READCUST.jcl",
+   "job": "READCUST",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "CBCUS01C",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CUSTFILE",
+       "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/READXREF.jcl",
+   "job": "READXREF",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "CBACT03C",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFFILE",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/REPTFILE.jcl",
+   "job": "REPTFILE",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TCATBALF.jcl",
+   "job": "TCATBALF",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TCATBAL",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TCATBALV",
+       "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TRANBKP.jcl",
+   "job": "TRANBKP",
+   "steps": [
+    {
+     "step": "STEP05R.PRC001",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "FILEIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "FILEOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TRANCATG.jcl",
+   "job": "TRANCATG",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRANCATG",
+       "dsn": "AWS.M2.CARDDEMO.TRANCATG.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TCATVSAM",
+       "dsn": "AWS.M2.CARDDEMO.TRANCATG.VSAM.KSDS",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TRANFILE.jcl",
+   "job": "TRANFILE",
+   "steps": [
+    {
+     "step": "CLCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRANSACT",
+       "dsn": "AWS.M2.CARDDEMO.DALYTRAN.PS.INIT",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANVSAM",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP20",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP25",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP30",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "OPCIFIL",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TRANIDX.jcl",
+   "job": "TRANIDX",
+   "steps": [
+    {
+     "step": "STEP20",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP25",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP30",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TRANREPT.jcl",
+   "job": "TRANREPT",
+   "steps": [
+    {
+     "step": "STEP05R.PRC001",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "FILEIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "FILEOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05R",
+     "pgm": "SORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SORTIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(+1)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYMNAMES",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SORTOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.DALY(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10R",
+     "pgm": "CBTRN03C",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRANFILE",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.DALY(+1)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CARDXREF",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANTYPE",
+       "dsn": "AWS.M2.CARDDEMO.TRANTYPE.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANCATG",
+       "dsn": "AWS.M2.CARDDEMO.TRANCATG.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DATEPARM",
+       "dsn": "AWS.M2.CARDDEMO.DATEPARM",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TRANREPT",
+       "dsn": "AWS.M2.CARDDEMO.TRANREPT(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TRANTYPE.jcl",
+   "job": "TRANTYPE",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "TRANTYPE",
+       "dsn": "AWS.M2.CARDDEMO.TRANTYPE.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "TTYPVSAM",
+       "dsn": "AWS.M2.CARDDEMO.TRANTYPE.VSAM.KSDS",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/TXT2PDF1.JCL",
+   "job": "TXT2PDF1",
+   "steps": [
+    {
+     "step": "TXT2PDF",
+     "pgm": "IKJEFT1B",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.LBD.TXT2PDF.LOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSEXEC",
+       "dsn": "AWS.M2.LBD.TXT2PDF.EXEC",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "INDD",
+       "dsn": "AWS.M2.CARDDEMO.STATEMNT.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/WAITSTEP.jcl",
+   "job": "WAITSTEP",
+   "steps": [
+    {
+     "step": "WAIT",
+     "pgm": "COBSWAIT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "AWS.M2.CARDDEMO.LOADLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "app/jcl/XREFFILE.jcl",
+   "job": "XREFFILE",
+   "steps": [
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP10",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP15",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "XREFDATA",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.PS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "XREFVSAM",
+       "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP20",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP25",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP30",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/BATCMP.jcl",
+   "job": "CNJBATMP",
+   "steps": [
+    {
+     "step": "BATCMP.COMPILE",
+     "pgm": "IGYCRCTL",
+     "parm": "APOST",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "IGY.SIGYCOMP.V63",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&HLQ..CARDDEMO.CBL(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "&HLQ..CARDDEMO.CPY",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&LOADSET",
+       "disp": [
+        "MOD",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT3",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT4",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT5",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT6",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT7",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT8",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT9",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT10",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT11",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT12",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT13",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT14",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT15",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSMDECK",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "BATCMP.CBLPRINT",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "BATCMP.LKED",
+     "pgm": "HEWL",
+     "parm": "LIST,XREF",
+     "cond": [
+      [
+       8,
+       "LT",
+       "COMPILE"
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "SYS1.LINKLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&LOADSET",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLMOD",
+       "dsn": "&HLQ..CARDDEMO.LOADLIB(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/BMSCMP.jcl",
+   "job": "CBLDBMS",
+   "steps": [
+    {
+     "step": "STEP1.PRINT",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&&TEMPM",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "&HLQ..CARDDEMO.BMS(CICSMAP)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP1.MAP",
+     "pgm": "ASMA90",
+     "parm": "SYSPARM(MAP),DECK,NOLOAD",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHMAC",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT3",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPUNCH",
+       "dsn": "&&MAP",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&&TEMPM",
+       "disp": [
+        "OLD",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP1.LKED",
+     "pgm": "HEWL",
+     "parm": "LIST,LET,XREF",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLMOD",
+       "dsn": "&HLQ..CARDDEMO.LOADLIB(CICSMAP)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&MAP",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP1.DSECT",
+     "pgm": "ASMA90",
+     "parm": "SYSPARM(DSECT),DECK,NOLOAD",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "&HLQ..CARDDEMO.LST(CICSMAP)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHMAC",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT3",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPUNCH",
+       "dsn": "&HLQ..CARDDEMO.CPY(CICSMAP)",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&&TEMPM",
+       "disp": [
+        "OLD",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP1.DISPLIST",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "&HLQ..CARDDEMO.LST(CICSMAP)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP1.DELTEMP",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "TEMPM",
+       "dsn": "&&TEMPM",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "SDSF1",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/CICCMP.jcl",
+   "job": "CICCMP",
+   "steps": [
+    {
+     "step": "CICSCMP.COB",
+     "pgm": "IGYCRCTL",
+     "parm": "CICS",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "IGY.SIGYCOMP.V63",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "&HLQ..CARDDEMO.CPY",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&HLQ..CARDDEMO.CBL(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&LOADSET",
+       "disp": [
+        "MOD",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT3",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT4",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT5",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT6",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT7",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT8",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT9",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT10",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT11",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT12",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT13",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT14",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT15",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSMDECK",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.DISPLIST",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "&HLQ..CARDDEMO.LST(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.COPYLINK",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHSAMP(DFHEILID)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&&COPYLINK",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.LKED",
+     "pgm": "HEWL",
+     "parm": "LIST,XREF,LET,MAP,AMODE(31),                      RMODE(ANY)",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHLOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&LOADSET",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLMOD",
+       "dsn": "&HLQ..CARDDEMO.LOADLIB(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "NEWCOPY",
+     "pgm": "SDSF",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "ISFOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "CMDOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "ISFIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/CICDBCMP.jcl",
+   "job": "CIDBCMP",
+   "steps": [
+    {
+     "step": "CICSCMP.PRECMP",
+     "pgm": "DSNHPC",
+     "parm": "HOST(IBMCOB),XREF,SOURCE,FLAG(I),APOST",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.&SSID..SDSNEXIT",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&HLQ..CBL(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSCIN",
+       "dsn": "&&DSNHOUT",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "DBRMLIB",
+       "dsn": "&HLQ..DBRMLIB(&MEMNAME)",
+       "disp": [
+        "OLD",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "&DCLLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTERM",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.TRN",
+     "pgm": "DFHECP1$",
+     "parm": "NOSEQ",
+     "cond": [
+      [
+       0,
+       "NE",
+       "PRECMP"
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHLOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&&DSNHOUT",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPUNCH",
+       "dsn": "&&SYSCIN",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.COBOL",
+     "pgm": "IGYCRCTL",
+     "parm": "RENT,NODYNAM,NOSEQ",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "IGY.SIGYCOMP.V63",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "&DCLLIB",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&&SYSCIN",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&LOADSET",
+       "disp": [
+        "MOD",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT3",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT4",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT5",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT6",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT7",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT8",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT9",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT10",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT11",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT12",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT13",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT14",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT15",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSMDECK",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.LKED",
+     "pgm": "HEWL",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSLIB",
+       "dsn": "CEE..SCEELKEX",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHCOB(DFHEILIC)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLMOD",
+       "dsn": "&HLQ..LOADLIB(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.BINDPK",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DBRMLIB",
+       "dsn": "&HLQ..DBRMLIB(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "CICSCMP.BINDPL",
+     "pgm": "IKJEFT01",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       "BINDPK"
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "DBRMLIB",
+       "dsn": "&HLQ..DBRMLIB(&MEMNAME)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSPRT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "DEBUGLST",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUDUMP",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSTSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/IMSMQCMP.jcl",
+   "job": "IMSMQCMP",
+   "steps": [
+    {
+     "step": "TRN",
+     "pgm": "DFHECP1$",
+     "parm": "CICS,DLI,COBOL3",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "&CICSHLQ..CICS.SDFHLOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&HLQ..COBOL.SRC(IMSMQPGM)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPUNCH",
+       "dsn": "&&SYSCIN",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "COBOL",
+     "pgm": "IGYCRCTL",
+     "parm": "NODYNAM,OBJECT,RENT,APOST,MAP,XREF",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "STEPLIB",
+       "dsn": "IGY.SIGYCOMP.V63",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&LOADSET",
+       "disp": [
+        "MOD",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT3",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT4",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT5",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT6",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT7",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT8",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT9",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT10",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT11",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT12",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT13",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT14",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT15",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSMDECK",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLIB",
+       "dsn": "CEE.SCEESAMP",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "&&SYSCIN",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "COPYIMS",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&&COPYIMS",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "COPYLINK",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSUT1",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&&COPYLINK",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "COPYMQ",
+     "pgm": "IEBGENER",
+     "parm": "",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSUT1",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSUT2",
+       "dsn": "&&COPYMQ",
+       "disp": [
+        "NEW",
+        "PASS",
+        "PASS"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "DUMMY",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "LKED",
+     "pgm": "IEWL",
+     "parm": "LIST,XREF",
+     "cond": [
+      [
+       4,
+       "LT",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSLIB",
+       "dsn": "&MQHLQ..SCSQLOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "CSQSTUB",
+       "dsn": "&MQHLQ..SCSQLOAD",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSLIN",
+       "dsn": "&&COPYLINK",
+       "disp": [
+        "OLD",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSLMOD",
+       "dsn": "&HLQ..CICSLOAD(IMSMQPGM)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYSUT1",
+       "dsn": "",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/LISTCAT.jcl",
+   "job": "LISTFILS",
+   "steps": [
+    {
+     "step": "STEP01",
+     "pgm": "IEFBR14",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "DD1",
+       "dsn": "AWS.M2.CARDDEMO.LISTCAT",
+       "disp": [
+        "MOD",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    },
+    {
+     "step": "STEP05",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [
+      [
+       0,
+       "NE",
+       ""
+      ]
+     ],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "AWS.M2.CARDDEMO.LISTCAT",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "unread",
+   "file": "samples/jcl/RACFCMDS.jcl",
+   "error": "JclParseError"
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/REPRTEST.jcl",
+   "job": "REPRTEST",
+   "steps": [
+    {
+     "step": "STEP05.PRC001",
+     "pgm": "IDCAMS",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SYSPRINT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "FILEIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "FILEOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "read",
+   "file": "samples/jcl/SORTTEST.jcl",
+   "job": "SORTTEST",
+   "steps": [
+    {
+     "step": "STEP05R",
+     "pgm": "SORT",
+     "parm": "",
+     "cond": [],
+     "dds": [
+      {
+       "ddname": "SORTIN",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(0)",
+       "disp": [
+        "SHR",
+        "KEEP",
+        "KEEP"
+       ]
+      },
+      {
+       "ddname": "SYMNAMES",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSIN",
+       "dsn": "*",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SYSOUT",
+       "dsn": "SYSOUT",
+       "disp": [
+        "NEW",
+        "DELETE",
+        "DELETE"
+       ]
+      },
+      {
+       "ddname": "SORTOUT",
+       "dsn": "AWS.M2.CARDDEMO.TRANSACT.DALY(+1)",
+       "disp": [
+        "NEW",
+        "CATLG",
+        "DELETE"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
