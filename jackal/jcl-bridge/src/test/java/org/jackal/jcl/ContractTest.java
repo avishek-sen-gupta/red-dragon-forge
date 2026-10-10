@@ -231,6 +231,32 @@ public class ContractTest {
                         "//S5 EXEC PGM=PGME"));
     }
 
+    @Test
+    public void aSetStatementKeepsItsAssignmentsInOrderWhereverItSits() {
+        String set = "{'kind':'set','assignments':[{'name':'HLQ','value':[" + literal("T1") + "]},"
+                + "{'name':'LIB','value':[{'kind':'symbol','name':'HLQ'}," + literal(".LIB") + "]},"
+                + "{'name':'SFX','value':[]}]}";
+        String s1rc = "{'kind':'rc','target':{'kind':'step','step':'S1'},'op':'EQ','code':0}";
+        assertEquals(
+                json("[" + set + "," + program("S1", "PGMA") + ","
+                        + "{'kind':'if','label':'C1','condition':" + s1rc + ",'then':["
+                        + program("S2", "PGMB") + "],'otherwise':["
+                        + "{'kind':'set','assignments':[{'name':'HLQ','value':[" + literal("T4") + "]}]}]}]"),
+                statements(
+                        "// SET HLQ=T1,LIB=&HLQ..LIB,SFX=",
+                        "//S1 EXEC PGM=PGMA",
+                        "//C1 IF (S1.RC = 0) THEN",
+                        "//S2 EXEC PGM=PGMB",
+                        "// ELSE",
+                        "// SET HLQ=T4",
+                        "// ENDIF"));
+        assertEquals(
+                json("[{'kind':'set','assignments':[{'name':'MODE','value':[" + literal("P") + "]}]},"
+                        + program("P1", "PGMA") + "]"),
+                serialize("//SETP PROC LIB=X", "// SET MODE=P", "//P1 EXEC PGM=PGMA")
+                        .get("statements"));
+    }
+
     private static JsonElement condition(String expression) {
         return statements("//T IF " + expression + " THEN", "//S EXEC PGM=PGMA", "// ENDIF")
                 .getAsJsonArray().get(0).getAsJsonObject().get("condition");

@@ -24,9 +24,10 @@ from jackal.model import (
     ProcRef,
     ProgramRef,
     ProgramStep,
+    SetStatement,
     StepName,
 )
-from jackal.value_parts import Literal
+from jackal.value_parts import Literal, SymbolName, literal
 
 
 def _config(tmp_path: Path, **overrides) -> CorpusConfig:
@@ -355,7 +356,10 @@ _CIRCULAR = _Library(
 
 
 def _calls_sortproc(path: Path) -> Job:
-    return Job(path.stem, (ProcCall(StepName("STEP01"), _SORTPROC),))
+    hlq = (SymbolName("HLQ"), literal("PROD"))
+    return Job(
+        path.stem, (SetStatement((hlq,)), ProcCall(StepName("STEP01"), _SORTPROC))
+    )
 
 
 def test_a_member_whose_procs_do_not_expand_is_reported_not_fatal(

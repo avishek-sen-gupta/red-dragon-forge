@@ -103,6 +103,7 @@ final class DocumentBuilder {
         for (ParseTree child : Trees.children(container)) {
             switch (child) {
                 case JCLParser.JclStepContext step -> current(open, top).add(step(step));
+                case JCLParser.SetStatementContext set -> current(open, top).add(set(set));
                 case JCLParser.IfStatementContext ifStatement -> open.push(new OpenIf(ifStatement));
                 case JCLParser.ElseStatementContext e -> innermost(open, "ELSE").enterElse();
                 case JCLParser.EndifStatementContext e -> {
@@ -129,6 +130,16 @@ final class DocumentBuilder {
 
     private static JsonArray current(Deque<OpenIf> open, JsonArray top) {
         return open.isEmpty() ? top : open.peek().current();
+    }
+
+    private static JsonObject set(JCLParser.SetStatementContext ctx) {
+        JsonObject set = new JsonObject();
+        set.addProperty("kind", "set");
+        JsonArray assignments = new JsonArray();
+        ctx.setOperation().forEach(o -> assignments.add(symbolValue(
+                o.SET_PARM_NAME().getText(), Optional.ofNullable(o.keywordOrSymbolic()))));
+        set.add("assignments", assignments);
+        return set;
     }
 
     private JsonObject step(JCLParser.JclStepContext ctx) {

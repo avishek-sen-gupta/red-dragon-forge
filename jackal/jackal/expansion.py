@@ -41,6 +41,7 @@ from jackal.model import (
     ResolvedProc,
     ResolvedProcCall,
     ResolvedProgramStep,
+    SetStatement,
     StepLabel,
     StepName,
     StepRef,
@@ -221,10 +222,14 @@ class _Scope:
     coordinates: Coordinates
     runs: Runs
     symbols: Mapping[SymbolName, Value]
+    set_symbols: Mapping[SymbolName, Value]
     guards: tuple[_WrittenGuard, ...]
     stack: tuple[ProcRef, ...]
     overrides: _Overrides | _NoOverrides
     library: ProcLibrary
+
+    def visible(self) -> Mapping[SymbolName, Value]:
+        return {**self.set_symbols, **self.symbols}
 
 
 @dataclass(frozen=True)
@@ -233,6 +238,12 @@ class _Placed:
     runs: Runs
     step: ProgramStep[StepRef] | UnexpandedCall
     guards: tuple[_WrittenGuard, ...] = ()
+
+
+@dataclass(frozen=True)
+class _Placement:
+    placed: tuple[_Placed, ...]
+    scope: _Scope
 
 
 def _part_value(part: ValuePart, symbols: Mapping[SymbolName, Value]) -> Value:
@@ -340,6 +351,16 @@ def _flat_one(
         case IfBlock(then=then, otherwise=otherwise):
             return (*_flat(then, (*position, 0)), *_flat(otherwise, (*position, 1)))
         case _:
+            return _flat_leaf(statement, position)
+
+
+def _flat_leaf(
+    statement: ProgramStep[StepRef] | ProcCall | SetStatement, position: Run
+) -> tuple[tuple[Run, ProgramStep[StepRef] | ProcCall], ...]:
+    match statement:
+        case SetStatement():
+            return ()
+        case _:
             return ((position, statement),)
 
 
@@ -373,17 +394,18 @@ def _inline(
         raise ExpansionFailed(CircularProc((*scope.stack, call.proc)))
     flat = _flat(proc.steps, ())
     _check_overrides(call, tuple(s for _, s in flat))
-    resolved_call = _substituted_call(call, scope.symbols)
+    resolved_call = _substituted_call(call, scope.visible())
     inner = _Scope(
         (*scope.coordinates, ResolvedProcCall(call, ResolvedProc(proc))),
         (*scope.runs, position),
         {**dict(proc.defaults), **dict(resolved_call.symbol_overrides)},
+        scope.set_symbols,
         scope.guards,
         (*scope.stack, call.proc),
         _Overrides(resolved_call, flat[0][0] if flat else ()),
         scope.library,
     )
-    return _place_all(proc.steps, inner, ())
+    return _place_all(proc.steps, inner, ()).placed
 
 
 def _place_call(call: ProcCall, scope: _Scope, position: Run) -> tuple[_Placed, ...]:
@@ -408,42 +430,73 @@ def _place_step(
             return _place_call(statement, scope, position)
         case _:
             step = scope.overrides.applied(
-                _substituted_step(statement, scope.symbols), position
+                _substituted_step(statement, scope.visible()), position
             )
             return (_Placed(scope.coordinates, scope.runs, step, scope.guards),)
 
 
-def _place_if(block: IfBlock, scope: _Scope, position: Run) -> tuple[_Placed, ...]:
-    def written(guard: Guard[StepRef]) -> _Scope:
+def _place_if(block: IfBlock, scope: _Scope, position: Run) -> _Placement:
+    def written(guard: Guard[StepRef], after: _Scope) -> _Scope:
         here = _WrittenGuard(guard, scope.coordinates, scope.runs)
-        return replace(scope, guards=(*scope.guards, here))
+        return replace(
+            scope, guards=(*scope.guards, here), set_symbols=after.set_symbols
+        )
 
-    then = written(block.condition)
-    otherwise = written(Negated(block.condition))
-    return (
-        *_place_all(block.then, then, (*position, 0)),
-        *_place_all(block.otherwise, otherwise, (*position, 1)),
+    then = _place_all(block.then, written(block.condition, scope), (*position, 0))
+    otherwise = _place_all(
+        block.otherwise,
+        written(Negated(block.condition), then.scope),
+        (*position, 1),
+    )
+    return _Placement(
+        (*then.placed, *otherwise.placed),
+        replace(scope, set_symbols=otherwise.scope.set_symbols),
     )
 
 
-def _place(
-    statement: JobStatement, scope: _Scope, position: Run
-) -> tuple[_Placed, ...]:
+def _set(statement: SetStatement, scope: _Scope) -> _Scope:
+    def assign(
+        symbols: Mapping[SymbolName, Value], assignment: tuple[SymbolName, Value]
+    ) -> Mapping[SymbolName, Value]:
+        name, value = assignment
+        return {**symbols, name: _substitute(value, {**symbols, **scope.symbols})}
+
+    return replace(
+        scope, set_symbols=reduce(assign, statement.assignments, scope.set_symbols)
+    )
+
+
+def _place_leaf(
+    statement: ProgramStep[StepRef] | ProcCall | SetStatement,
+    scope: _Scope,
+    position: Run,
+) -> _Placement:
+    match statement:
+        case SetStatement():
+            return _Placement((), _set(statement, scope))
+        case _:
+            return _Placement(_place_step(statement, scope, position), scope)
+
+
+def _place(statement: JobStatement, scope: _Scope, position: Run) -> _Placement:
     match statement:
         case IfBlock():
             return _place_if(statement, scope, position)
         case _:
-            return _place_step(statement, scope, position)
+            return _place_leaf(statement, scope, position)
 
 
 def _place_all(
     statements: Sequence[JobStatement], scope: _Scope, position: Run
-) -> tuple[_Placed, ...]:
-    return tuple(
-        chain.from_iterable(
-            _place(s, scope, (*position, i)) for i, s in enumerate(statements)
-        )
-    )
+) -> _Placement:
+    def next_placement(
+        done: _Placement, indexed: tuple[int, JobStatement]
+    ) -> _Placement:
+        index, statement = indexed
+        here = _place(statement, done.scope, (*position, index))
+        return _Placement((*done.placed, *here.placed), here.scope)
+
+    return reduce(next_placement, enumerate(statements), _Placement((), scope))
 
 
 def _procs(coordinates: Coordinates) -> tuple[ProcRef, ...]:
@@ -668,8 +721,8 @@ def _resolved_entries(placed: tuple[_Placed, ...]) -> tuple[Entry, ...]:
 
 
 def expand_or_fail(job: Job, library: ProcLibrary) -> ExpandedJob:
-    scope = _Scope((), (), {}, (), (), _NoOverrides(), library)
-    placed = _place_all(job.steps, scope, ())
+    scope = _Scope((), (), {}, {}, (), (), _NoOverrides(), library)
+    placed = _place_all(job.steps, scope, ()).placed
     return ExpandedJob(job.name, _resolved_entries(placed), job.end_job_tests)
 
 

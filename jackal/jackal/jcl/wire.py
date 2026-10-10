@@ -438,11 +438,21 @@ class IfBlock(Wire):
         )
 
 
-Statement = Annotated[Program | ProcCall | IfBlock, Field(discriminator="kind")]
+class SetStatement(Wire):
+    kind: Literal["set"] = "set"
+    assignments: tuple[SymbolValue, ...]
+
+    def statement(self) -> model.JobStatement:
+        return model.SetStatement(tuple(a.binding() for a in self.assignments))
+
+
+Statement = Annotated[
+    Program | ProcCall | IfBlock | SetStatement, Field(discriminator="kind")
+]
 
 
 def statements(
-    wired: Sequence[Program | ProcCall | IfBlock],
+    wired: Sequence[Program | ProcCall | IfBlock | SetStatement],
 ) -> tuple[model.JobStatement, ...]:
     return tuple(s.statement() for s in wired)
 

@@ -84,6 +84,7 @@ from jackal.model import (
     NoDSN,
     ResolvedDd,
     ResolvedProgramStep,
+    SetStatement,
     TempRef,
     UnexpandedCall,
     CalledProcScope,
@@ -232,6 +233,10 @@ def _parsed_counts(job: Job, ids: set[str]) -> Counter[str]:
             c["parsed: IF blocks"] += 1
             if s.otherwise:
                 c["parsed: IF blocks with ELSE"] += 1
+            continue
+        if isinstance(s, SetStatement):
+            c["parsed: SET statements"] += 1
+            ids.update(name.text.upper() for name, _ in s.assignments)
             continue
         ids.add(s.label.rendered().upper())
         if isinstance(s, ProgramStep):
