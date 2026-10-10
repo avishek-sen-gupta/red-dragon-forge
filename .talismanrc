@@ -567,4 +567,6 @@ fileignoreconfig:
   checksum: 5e537151a14b741996f46f6c8014dd3a8103609e81c43461fec4139bf6a3850d
 - filename: jackal/tests/acceptance/build.py
   checksum: 2cce5d7d662043abd624c51411989b9739b44f9e6df41f24befd3435937716db
+- filename: jackal/tests/acceptance/test_disp.py
+  checksum: 98c09e838cd0941a015db9a6fa85393b8a5dc05a0856d4029700c5d936c4329e
 version: "1.0"

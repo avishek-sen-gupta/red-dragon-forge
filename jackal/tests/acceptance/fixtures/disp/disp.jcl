@@ -1,0 +1,13 @@
+//ACCEPT   JOB (A),'ACCEPT',CLASS=A
+//S1       EXEC PGM=PGMA
+//A        DD DSN=T.A,DISP=NEW
+//B        DD DSN=T.B,DISP=OLD
+//C        DD DSN=T.C,DISP=SHR
+//D        DD DSN=T.D,DISP=MOD
+//E        DD DSN=T.E,DISP=(NEW,CATLG,DELETE)
+//F        DD DSN=T.F,DISP=(OLD,UNCATLG)
+//G        DD DSN=T.G,DISP=(,PASS)
+//H        DD DSN=T.H,DISP=(OLD,PASS)
+//I        DD DSN=T.I,DISP=(OLD,DELETE,KEEP)
+//J        DD DSN=T.J
+//K        DD DSN=T.K,DISP=(NEW,KEEP,UNCATLG)
