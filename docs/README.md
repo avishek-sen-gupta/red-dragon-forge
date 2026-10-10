@@ -10,6 +10,7 @@
 | [Run CardDemo over TN3270](how-to/run-carddemo.md) | Serve CardDemo to a 3270 emulator, with or without Db2 |
 | [Run a JCL job](how-to/run-jcl-job.md) | Run a CardDemo batch job with jackal |
 | [Analyse a corpus with cobble](how-to/analyse-a-corpus.md) | Take a COBOL corpus from source to knowledge graph and dataflow |
+| [Census the JCL object model](how-to/census-jcl-object-model.md) | Measure parse and expansion over a client JCL corpus, returning only anonymised counts |
 
 ## Reference
 
