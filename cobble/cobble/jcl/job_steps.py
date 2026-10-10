@@ -18,6 +18,7 @@ from jackal.model import (
     ProgramStep,
     QualifiedStep,
     ResolvedProcCall,
+    SetStatement,
     StepRef,
     StepReference,
     UnexpandedCall,
@@ -80,12 +81,22 @@ def expanded_steps(job: ExpandedJob) -> tuple[StepView, ...]:
     return tuple(_expanded_view(entry) for entry in job.steps)
 
 
+def _written_leaf(
+    statement: ProgramStep[StepRef] | ProcCall | SetStatement,
+) -> tuple[ProgramStep[StepRef] | ProcCall, ...]:
+    match statement:
+        case SetStatement():
+            return ()
+        case _:
+            return (statement,)
+
+
 def _written(statement: JobStatement) -> tuple[ProgramStep[StepRef] | ProcCall, ...]:
     match statement:
         case IfBlock(then=then, otherwise=otherwise):
             return tuple(chain.from_iterable(_written(s) for s in (*then, *otherwise)))
         case _:
-            return (statement,)
+            return _written_leaf(statement)
 
 
 def _written_view(statement: ProgramStep[StepRef] | ProcCall) -> StepView:

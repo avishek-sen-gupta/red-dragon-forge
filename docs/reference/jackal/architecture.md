@@ -23,7 +23,9 @@ cicada or squall; `.importlinter` enforces this.
    `JclError` value, before anything runs. It inlines each PROC call found in the `ProcLibrary`
    (`DirectoryProcLibrary` reads `<dir>/<PROC>.prc` through the same JAR), resolving symbolic
    parameters in the caller's scope and applying the call's `COND`, `PARM` and DD overrides by
-   the JCL Reference's rules. A call whose PROC is in no library stays an `UnexpandedCall`. Every
+   the JCL Reference's rules. A `SET` statement defines symbols for the statements after it,
+   job-level steps included, whichever IF branch it sits in; a value on the calling `EXEC` or a
+   PROC default takes precedence over it. A call whose PROC is in no library stays an `UnexpandedCall`. Every
    step reference (in `COND`, referbacks and IF terms) becomes a `StepReference`: a path of
    PROC-call coordinates and a target step, each coordinate resolved (holding what was found) or
    unresolved (holding the name). A name that matches nothing, or a step inside a PROC in no
@@ -113,8 +115,9 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/catalog.py` | Job-scoped DSN-to-file catalog with DISP lifecycle. |
 | `jackal/jackal/cond.py` | `COND=` evaluation. |
-| `jackal/jackal/model.py`, `results.py` | Immutable job model and step results. |
-| `jackal/jackal/dsn.py`, `value_parts.py` | DSN types; literal and symbolic value parts. |
+| `jackal/jackal/model.py`, `results.py` | Immutable job model, DSN types and step results. |
+| `jackal/jackal/value_parts.py` | Literal and symbolic value parts. |
+| `jackal/jackal/unresolved.py` | What the runner does with unresolved references (D7). |
 | `jackal/jackal/parm.py` | `PARM=` region for COBOL `LINKAGE`. |
 | `jackal/jackal/tso.py` | Reads the programs a TSO batch step runs from its `SYSTSIN`. Used by cobble. |
 | `jackal/jackal/jcl/` | JCL parsing through the bridge JAR; procedure expansion. |

@@ -2229,7 +2229,7 @@ SET_PARM_VALUE_SYMBOLIC
 	->type(SYMBOLIC)
 	;
 SET_PARM_VALUE
-	: (KEYWORD_VALUE | [)(A-Z0-9@#$*\-+&./%[_]+)
+	: ((AMPERSAND AMPERSAND [A-Z0-9@#$]+) | [)(A-Z0-9@#$*\-+./%[_])+
 	->type(KEYWORD_VALUE)
 	;
 SET_PARM_VALUE_SQUOTE

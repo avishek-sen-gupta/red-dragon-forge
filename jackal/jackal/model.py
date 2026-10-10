@@ -507,7 +507,12 @@ class IfBlock:
     otherwise: tuple[JobStatement, ...] = ()
 
 
-JobStatement: TypeAlias = ProgramStep[StepRef] | ProcCall | IfBlock
+@dataclass(frozen=True)
+class SetStatement:
+    assignments: tuple[tuple[SymbolName, Value], ...]
+
+
+JobStatement: TypeAlias = ProgramStep[StepRef] | ProcCall | IfBlock | SetStatement
 
 
 @dataclass(frozen=True)
