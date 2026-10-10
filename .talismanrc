@@ -571,4 +571,6 @@ fileignoreconfig:
   checksum: 98c09e838cd0941a015db9a6fa85393b8a5dc05a0856d4029700c5d936c4329e
 - filename: jackal/tests/acceptance/test_dsn.py
   checksum: 8ccff7faf8d8cf888532cd038910d2694681f2e819335b3829e7a0d5842329c8
+- filename: jackal/tests/acceptance/test_symbols.py
+  checksum: 5f5b6be07e18a808b3491bfe7e7fc94529a89ce2bc206e958bcc263d007b9d91
 version: "1.0"
