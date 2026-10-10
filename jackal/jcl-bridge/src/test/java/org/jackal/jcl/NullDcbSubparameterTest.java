@@ -60,7 +60,7 @@ public class NullDcbSubparameterTest {
             lines.replaceAll(line -> line + " ".repeat(80 - line.length()));
         }
         JsonObject job = JclSerializer.serialize(String.join("\n", lines) + "\n");
-        JsonArray steps = job.getAsJsonArray("steps");
+        JsonArray steps = job.getAsJsonArray("statements");
         assertEquals("expected exactly one step", 1, steps.size());
         JsonArray dds = steps.get(0).getAsJsonObject().getAsJsonArray("dds");
         assertEquals("expected exactly one DD", 1, dds.size());
@@ -74,9 +74,9 @@ public class NullDcbSubparameterTest {
     }
 
     private static String literalDsn(JsonObject dd) {
-        JsonArray parts = dd.getAsJsonArray("dsn");
+        JsonArray parts = dd.getAsJsonObject("dsn").getAsJsonArray("value");
         assertEquals("expected a single value part", 1, parts.size());
-        return parts.get(0).getAsJsonObject().get("name").getAsString();
+        return parts.get(0).getAsJsonObject().get("text").getAsString();
     }
 
     /**
@@ -92,7 +92,7 @@ public class NullDcbSubparameterTest {
                         "//             DCB=(RECFM=FB,LRECL=2000,BLKSIZE=),",
                         "//             DISP=(NEW,CATLG)");
         assertEquals("A.B", literalDsn(dd));
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /**
@@ -107,7 +107,7 @@ public class NullDcbSubparameterTest {
                         "//OUT      DD  DSN=A.B,",
                         "//             DCB=(BLKSIZE=,LRECL=80,RECFM=FB),",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /**
@@ -122,7 +122,7 @@ public class NullDcbSubparameterTest {
                         "//        UNIT=(SYSDA,3),DCB=(RECFM=FB,LRECL=2000,BLKSIZE=),",
                         "//        SPACE=(CYL,(250,50),RLSE)");
         assertEquals("A.B", literalDsn(dd));
-        assertEquals(Arrays.asList("NEW", "PASS"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "PASS"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /**
@@ -136,7 +136,7 @@ public class NullDcbSubparameterTest {
                         "//OUT      DD  DSN=A.B,",
                         "//             DCB=(BLKSIZE=0,LRECL=3300,RECFM=FB),",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /** An ordinary numeric BLKSIZE, the case the required value was there for. */
@@ -147,6 +147,6 @@ public class NullDcbSubparameterTest {
                         "//OUT      DD  DSN=A.B,",
                         "//             DCB=(RECFM=FB,LRECL=80,BLKSIZE=27920),",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 }

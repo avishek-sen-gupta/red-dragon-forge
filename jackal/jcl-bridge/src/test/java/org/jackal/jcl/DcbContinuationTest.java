@@ -56,7 +56,7 @@ public class DcbContinuationTest {
             lines.replaceAll(line -> line + " ".repeat(80 - line.length()));
         }
         JsonObject job = JclSerializer.serialize(String.join("\n", lines) + "\n");
-        JsonArray steps = job.getAsJsonArray("steps");
+        JsonArray steps = job.getAsJsonArray("statements");
         assertEquals("expected exactly one step", 1, steps.size());
         JsonArray dds = steps.get(0).getAsJsonObject().getAsJsonArray("dds");
         assertEquals("expected exactly one DD", 1, dds.size());
@@ -72,9 +72,9 @@ public class DcbContinuationTest {
 
     /** {@code dsn} is a list of value parts, each a literal run or a symbol. */
     private static String literalDsn(JsonObject dd) {
-        JsonArray parts = dd.getAsJsonArray("dsn");
+        JsonArray parts = dd.getAsJsonObject("dsn").getAsJsonArray("value");
         assertEquals("expected a single value part", 1, parts.size());
-        return parts.get(0).getAsJsonObject().get("name").getAsString();
+        return parts.get(0).getAsJsonObject().get("text").getAsString();
     }
 
     /**
@@ -90,7 +90,7 @@ public class DcbContinuationTest {
                         "//             DCB=*.SORTIN,",
                         "//             DISP=(NEW,CATLG)");
         assertEquals("A.B", literalDsn(dd));
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /** The three-segment form of the same backward reference. */
@@ -101,7 +101,7 @@ public class DcbContinuationTest {
                         "//OUT      DD  DSN=A.B,",
                         "//             DCB=*.STEP0.PROCSTEP.SORTIN,",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /**
@@ -115,7 +115,7 @@ public class DcbContinuationTest {
                         "//OUT      DD  DSN=A.B,",
                         "//             DCB=C.D,",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /**
@@ -134,7 +134,7 @@ public class DcbContinuationTest {
                         "//            SPACE=(TRK,(50,10),RLSE),",
                         "//            DISP=(NEW,CATLG)");
         assertEquals("A.B", literalDsn(dd));
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /** The model-dataset form of the same padded card. */
@@ -145,7 +145,7 @@ public class DcbContinuationTest {
                         "//OUT      DD  DSN=A.B,",
                         "//            DCB=C.D,",
                         "//            DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /** A padded card whose DCB is the last parameter continues nothing. */
@@ -155,7 +155,7 @@ public class DcbContinuationTest {
                 onlyDdOfPaddedCards(
                         "//OUT      DD  DSN=A.B,DISP=(NEW,CATLG),",
                         "//            DCB=*.SORTIN");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /** The shape that always worked: nothing follows the DCB, so nothing continues. */
@@ -165,7 +165,7 @@ public class DcbContinuationTest {
                 onlyDd(
                         "//OUT      DD  DSN=A.B,DISP=(NEW,CATLG),",
                         "//             DCB=*.SORTIN");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /**
@@ -180,7 +180,7 @@ public class DcbContinuationTest {
                         "//OUT      DD  DSN=A.B,",
                         "//             DCB=(RECFM=FB,LRECL=80),",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 
     /** A comma-newline inside the DCB's own parenthesised list. */
@@ -192,6 +192,6 @@ public class DcbContinuationTest {
                         "//             DCB=(RECFM=FB,",
                         "//             LRECL=80),",
                         "//             DISP=(NEW,CATLG)");
-        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp_words")));
+        assertEquals(Arrays.asList("NEW", "CATLG"), stringsOf(dd.getAsJsonArray("disp")));
     }
 }

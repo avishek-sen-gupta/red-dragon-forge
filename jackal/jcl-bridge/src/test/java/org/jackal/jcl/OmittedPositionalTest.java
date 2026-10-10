@@ -35,7 +35,7 @@ public class OmittedPositionalTest {
                                 "//OUT      DD  DSN=A.B," + ddParameters)
                         + "\n";
         JsonObject job = JclSerializer.serialize(src);
-        return job.getAsJsonArray("steps")
+        return job.getAsJsonArray("statements")
                 .get(0)
                 .getAsJsonObject()
                 .getAsJsonArray("dds")

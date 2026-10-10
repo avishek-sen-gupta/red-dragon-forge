@@ -1,7 +1,18 @@
 import json
 import pytest
 from tests.covers import NotLanguageFeature, covers
+from tests.wire_build import (
+    dd,
+    job_json,
+    lit,
+    name_dsn,
+    proc_call,
+    proc_json,
+    program,
+    sym,
+)
 from jackal.dsn import DirectDSN
+from jackal.jcl import wire
 from jackal.jcl.bridge_parser import JclBridgeParser, JclParseError
 from jackal.value_parts import Literal, Symbol, literal
 
@@ -20,65 +31,30 @@ class _FakeRunner:
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_builds_model_from_bridge_json():
-    out = json.dumps(
-        {
-            "name": "J",
-            "steps": [
-                {
-                    "name": "S",
-                    "pgm": "P",
-                    "dds": [
-                        {
-                            "ddname": "D",
-                            "dsn": [{"type": "Literal", "name": "A.B"}],
-                            "disp_words": ["SHR"],
-                            "in_stream": [],
-                            "sysout": False,
-                        }
-                    ],
-                }
-            ],
-        }
+    out = job_json(
+        "J",
+        (
+            program(
+                "S",
+                "P",
+                (
+                    dd("D", name_dsn("A.B"), ("SHR",)),
+                    dd(
+                        "E",
+                        wire.NameDsn(value=(sym("CNTLLIB"), lit("(REPROCT)"))),
+                        ("SHR",),
+                    ),
+                ),
+            ),
+        ),
     )
     runner = _FakeRunner(out=out)
     job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
-    assert job.steps[0].dds[0].dsn == DirectDSN(literal("A.B"))
+    assert [d.dsn for d in job.steps[0].dds] == [
+        DirectDSN(literal("A.B")),
+        DirectDSN((Symbol("CNTLLIB"), Literal("(REPROCT)"))),
+    ]
     assert runner.command == ["java", "-jar", "jcl.jar"]
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_builds_symbol_part_from_bridge_json():
-    out = json.dumps(
-        {
-            "name": "J",
-            "steps": [
-                {
-                    "name": "S",
-                    "pgm": "P",
-                    "dds": [
-                        {
-                            "ddname": "D",
-                            "dsn": [
-                                {"type": "Symbol", "name": "CNTLLIB"},
-                                {"type": "Literal", "name": "(REPROCT)"},
-                            ],
-                            "disp_words": ["SHR"],
-                            "in_stream": [],
-                            "sysout": False,
-                        }
-                    ],
-                }
-            ],
-        }
-    )
-    runner = _FakeRunner(out=out)
-    job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
-    from jackal.dsn import DirectDSN
-    from jackal.value_parts import Literal, Symbol
-
-    assert job.steps[0].dds[0].dsn == DirectDSN(
-        (Symbol("CNTLLIB"), Literal("(REPROCT)"))
-    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -96,9 +72,8 @@ def test_parse_raises_on_malformed_json():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_raises_on_missing_required_key():
-    # step is missing "name" — KeyError in _step_from_json
-    out = json.dumps({"name": "J", "steps": [{"pgm": "P", "dds": []}]})
+def test_parse_raises_on_output_that_breaks_the_contract():
+    out = json.dumps({"kind": "job", "name": "J", "statements": []})
     runner = _FakeRunner(out=out)
     with pytest.raises(JclParseError):
         JclBridgeParser(runner, "jcl.jar").parse("//J JOB\n")
@@ -106,37 +81,27 @@ def test_parse_raises_on_missing_required_key():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_proc_builds_procdef_from_bridge_json():
-    out = json.dumps(
-        {
-            "name": "REPROC",
-            "defaults": {},
-            "steps": [
-                {
-                    "name": "PRC001",
-                    "pgm": "IDCAMS",
-                    "cond": [],
-                    "parm": [],
-                    "dds": [
-                        {
-                            "ddname": "SYSIN",
-                            "dsn": [
-                                {"type": "Symbol", "name": "CNTLLIB"},
-                                {"type": "Literal", "name": "(REPROCT)"},
-                            ],
-                            "disp_words": ["SHR"],
-                            "in_stream": [],
-                            "sysout": False,
-                        }
-                    ],
-                    "proc_parms": {},
-                }
-            ],
-        }
+    out = proc_json(
+        "REPROC",
+        (wire.SymbolValue(name="CNTLLIB", value=(lit("DEFAULT.LIB"),)),),
+        (
+            program(
+                "PRC001",
+                "IDCAMS",
+                (
+                    dd(
+                        "SYSIN",
+                        wire.NameDsn(value=(sym("CNTLLIB"), lit("(REPROCT)"))),
+                        ("SHR",),
+                    ),
+                ),
+            ),
+        ),
     )
     runner = _FakeRunner(out=out)
     proc = JclBridgeParser(runner, "jcl.jar").parse_proc("//REPROC PROC\n")
     assert proc.name == "REPROC"
-    assert proc.defaults == {}
+    assert proc.defaults == {"CNTLLIB": literal("DEFAULT.LIB")}
     assert proc.steps[0].name == "PRC001"
     assert proc.steps[0].dds[0].dsn == DirectDSN(
         (Symbol("CNTLLIB"), Literal("(REPROCT)"))
@@ -144,38 +109,24 @@ def test_parse_proc_builds_procdef_from_bridge_json():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_proc_builds_defaults():
-    out = json.dumps(
-        {
-            "name": "REPROC",
-            "defaults": {"CNTLLIB": [{"type": "Literal", "name": "DEFAULT.LIB"}]},
-            "steps": [],
-        }
-    )
-    runner = _FakeRunner(out=out)
-    proc = JclBridgeParser(runner, "jcl.jar").parse_proc(
-        "//REPROC PROC CNTLLIB=DEFAULT.LIB\n"
-    )
-    assert proc.defaults == {"CNTLLIB": literal("DEFAULT.LIB")}
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_step_from_json_builds_proc_parms():
-    out = json.dumps(
-        {
-            "name": "J",
-            "steps": [
-                {
-                    "name": "S",
-                    "pgm": "REPROC",
-                    "dds": [],
-                    "proc_parms": {
-                        "CNTLLIB": [{"type": "Literal", "name": "AWS.M2.CARDDEMO.CNTL"}]
-                    },
-                }
-            ],
-        }
+def test_a_proc_call_carries_its_symbol_overrides_as_proc_parms():
+    out = job_json(
+        "J",
+        (
+            proc_call(
+                "S",
+                "REPROC",
+                (
+                    wire.SymbolValue(
+                        name="CNTLLIB", value=(lit("AWS.M2.CARDDEMO.CNTL"),)
+                    ),
+                ),
+            ),
+        ),
     )
     runner = _FakeRunner(out=out)
     job = JclBridgeParser(runner, "jcl.jar").parse("//J JOB 1\n")
-    assert job.steps[0].proc_parms == {"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")}
+    assert (job.steps[0].pgm, job.steps[0].proc_parms) == (
+        "REPROC",
+        {"CNTLLIB": literal("AWS.M2.CARDDEMO.CNTL")},
+    )

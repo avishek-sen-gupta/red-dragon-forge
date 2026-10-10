@@ -14,8 +14,11 @@ cicada or squall; `.importlinter` enforces this.
 ## How a job runs
 
 1. Parse. `jackal.jcl.parser.parse_jcl` sends the JCL text to the JCL bridge JAR in a JVM
-   subprocess. The JAR parses it with the ANTLR mapa grammar and returns a JSON AST, which
-   `jackal.jcl.bridge_parser` turns into an immutable `Job` (`jackal.model`).
+   subprocess. The JAR parses it with the ANTLR mapa grammar and returns JSON that mirrors the
+   parsed model: statements (program steps, PROC calls with their overrides split from their
+   qualifiers, IF blocks with their expression as a tree), and per DD its DSN kind, DISP and
+   concatenated members. `jackal.jcl.bridge_parser` validates it as the Pydantic models in
+   `jackal.jcl.wire`, which build an immutable `Job` (`jackal.model`).
 2. Expand procedures. `JobRunner` calls `jackal.jcl.proc_expand.expand_procs` when it is given
    proclib directories. It inlines `EXEC PROC=` calls, substitutes symbolic parameters, applies
    DD overrides and handles nesting. `.prc` files are parsed by the same JAR. The CLI does not

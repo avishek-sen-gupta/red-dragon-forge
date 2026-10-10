@@ -1,10 +1,10 @@
 """Acceptance: IF/THEN/ELSE/ENDIF as structure, then as guards."""
 
-from tests.acceptance.markers import bridge_then_expanded, bridge_then_parsed
+from tests.acceptance.markers import EXPANDED, PARSED
 from tests.covers import NotLanguageFeature, covers
 
 
-@bridge_then_parsed("red-dragon-forge-2cy.7")
+@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_structure_parses(parse_fixture):
     from jackal.model import CondOp, IfBlock, Job, RcTest
@@ -32,7 +32,7 @@ def test_if_structure_parses(parse_fixture):
     )
 
 
-@bridge_then_parsed("red-dragon-forge-2cy.7, red-dragon-forge-2cy.14")
+@PARSED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_terms_parse(parse_fixture):
     from jackal.model import (
@@ -95,7 +95,7 @@ def test_if_terms_parse(parse_fixture):
     )
 
 
-@bridge_then_expanded("red-dragon-forge-2cy.7")
+@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_guards_expand(expand_fixture):
     from jackal.expansion import ExpandedJob
@@ -127,7 +127,7 @@ def test_if_guards_expand(expand_fixture):
     )
 
 
-@bridge_then_expanded("red-dragon-forge-2cy.7")
+@EXPANDED
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_inside_proc_expands(expand_fixture):
     from jackal.expansion import ExpandedJob

@@ -27,13 +27,13 @@ public class DelimiterStatementTest {
     /** Step count for a job built from the given lines. */
     private static int steps(String... lines) {
         JsonObject job = JclSerializer.serialize(String.join("\n", lines) + "\n");
-        return job.getAsJsonArray("steps").size();
+        return job.getAsJsonArray("statements").size();
     }
 
     /** The DD names of the job's only step, so a swallowed DD shows as an absence. */
     private static JsonArray ddNames(String... lines) {
         JsonObject job = JclSerializer.serialize(String.join("\n", lines) + "\n");
-        JsonArray steps = job.getAsJsonArray("steps");
+        JsonArray steps = job.getAsJsonArray("statements");
         assertEquals("expected exactly one step", 1, steps.size());
         JsonArray names = new JsonArray();
         for (var dd : steps.get(0).getAsJsonObject().getAsJsonArray("dds")) {

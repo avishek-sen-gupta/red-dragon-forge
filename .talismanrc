@@ -162,7 +162,7 @@ fileignoreconfig:
 - filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/DcbContinuationTest.java
   checksum: 67ef82a7c319421e6365b47d1765e9c3f88d2149cd53ee959e04592b6c141ad5
 - filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/NullDcbSubparameterTest.java
-  checksum: e950a4e351054bde43e2858ab7783083a41afa7528f2c0f93a6fe9dcb6280bba
+  checksum: 22d10773cf93300bcd4e54175b016b550abfcd20eb600d4b78a4ae3c3e2ac049
 - filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/ProcSequenceNumberTest.java
   checksum: 0e8c1ccc38a02a4b94940fe1db94b2a1b37cbdeccc161b79782ae2a567bae001
 - filename: docs/superpowers/plans/2026-09-01-index-items-and-search.md
@@ -573,4 +573,6 @@ fileignoreconfig:
   checksum: 8ccff7faf8d8cf888532cd038910d2694681f2e819335b3829e7a0d5842329c8
 - filename: jackal/tests/acceptance/test_symbols.py
   checksum: 5f5b6be07e18a808b3491bfe7e7fc94529a89ce2bc206e958bcc263d007b9d91
+- filename: jackal/tests/unit/test_jcl_bridge_deserialize.py
+  checksum: 2807b9df4e7525aa8b32d8125e20233d78c06aa9254d9cc5ddb611cc46ad02a2
 version: "1.0"

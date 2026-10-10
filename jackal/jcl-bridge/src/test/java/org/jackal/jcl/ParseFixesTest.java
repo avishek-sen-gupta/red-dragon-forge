@@ -13,7 +13,7 @@ public class ParseFixesTest {
     }
 
     private static int steps(JsonObject job) {
-        return job.getAsJsonArray("steps").size();
+        return job.getAsJsonArray("statements").size();
     }
 
     @Test
@@ -31,7 +31,7 @@ public class ParseFixesTest {
     public void aJobCondWithTwoTestsParses() {
         assertEquals(2, job(
                 "//J JOB (A),CLASS=A,COND=((8,LE),(12,EQ))",
-                "//S1 EXEC PGM=X").getAsJsonArray("cond").size());
+                "//S1 EXEC PGM=X").getAsJsonArray("end_job_tests").size());
     }
 
     @Test
