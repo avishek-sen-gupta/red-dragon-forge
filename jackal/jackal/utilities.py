@@ -5,17 +5,23 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 
 from jackal.catalog import DatasetCatalog
-from jackal.dsn import DdName, DirectDSN, TempRef
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
-from jackal.model import ProgramRef, ProgramStep, QualifiedStep
+from jackal.model import (
+    DdName,
+    DirectDSN,
+    ProgramRef,
+    ProgramStep,
+    StepReference,
+    TempRef,
+)
 
-Utility = Callable[[ProgramStep[QualifiedStep], DatasetCatalog], int]
+Utility = Callable[[ProgramStep[StepReference], DatasetCatalog], int]
 
 _SYSIN = DdName("SYSIN")
 
 
-def iefbr14(step: ProgramStep[QualifiedStep], catalog: DatasetCatalog) -> int:
+def iefbr14(step: ProgramStep[StepReference], catalog: DatasetCatalog) -> int:
     datasets = tuple(
         dd
         for dd in step.dds
@@ -28,7 +34,7 @@ def iefbr14(step: ProgramStep[QualifiedStep], catalog: DatasetCatalog) -> int:
     return 0
 
 
-def idcams(step: ProgramStep[QualifiedStep], catalog: DatasetCatalog) -> int:
+def idcams(step: ProgramStep[StepReference], catalog: DatasetCatalog) -> int:
     sysin = next(d for d in step.dds if d.ddname == _SYSIN)
     commands = parse_idcams("\n".join(sysin.in_stream) + "\n")
     return run_idcams(commands, step.dds, catalog)

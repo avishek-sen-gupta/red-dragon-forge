@@ -1,25 +1,20 @@
-from tests.covers import NotLanguageFeature, covers
-from tests.model_build import disp
-from tests.wire_build import cond_test, dd, job_json, lit, name_dsn, program, sym
-from jackal.dsn import (
+from jackal.jcl import wire
+from jackal.jcl.bridge_parser import job_from_bridge_json
+from jackal.model import (
+    UnresolvedDd,
+    DD,
+    AbendMode,
+    AllPriorSteps,
     BackwardRef,
+    BypassTest,
+    CalledProcScope,
+    CondOp,
     DdName,
     DirectDSN,
     DummyDSN,
     InStreamDSN,
-    NoDSN,
-    TempRef,
-)
-from jackal.jcl import wire
-from jackal.jcl.bridge_parser import job_from_bridge_json
-from jackal.model import (
-    DD,
-    AbendMode,
-    AllPriorSteps,
-    BypassTest,
-    CalledProcScope,
-    CondOp,
     Job,
+    NoDSN,
     NotOverridden,
     OwnScope,
     ProcCall,
@@ -31,8 +26,12 @@ from jackal.model import (
     StepCondition,
     StepName,
     StepRef,
+    TempRef,
 )
 from jackal.value_parts import Literal, Symbol, SymbolName, literal
+from tests.covers import NotLanguageFeature, covers
+from tests.model_build import disp
+from tests.wire_build import cond_test, dd, job_json, lit, name_dsn, program, sym
 
 
 def _dd(name: str, dsn: object, d: object, **rest: object) -> object:
@@ -84,7 +83,11 @@ def test_a_program_step_with_each_dsn_kind():
                     _dd("SYSIN", InStreamDSN(), disp(), in_stream=(" CARD",)),
                     _dd("NULL", DummyDSN(), disp()),
                     _dd("REPORT", NoDSN(), disp(), sysout=True),
-                    _dd("PCOPY", BackwardRef(p1, DdName("IN")), disp("OLD", "DELETE")),
+                    _dd(
+                        "PCOPY",
+                        BackwardRef(p1, UnresolvedDd(DdName("IN"))),
+                        disp("OLD", "DELETE"),
+                    ),
                 ),
             ),
         ),

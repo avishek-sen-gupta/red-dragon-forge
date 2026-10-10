@@ -13,6 +13,8 @@ from jackal.model import (
     QualifiedStep,
     RcComparison,
     StepCondition,
+    StepReference,
+    UnexpandedCall,
 )
 from jackal.results import StepResult
 
@@ -26,11 +28,23 @@ _OPS: Mapping[CondOp, Callable[[int, int], bool]] = {
 }
 
 
-def _tested(test: BypassTest[QualifiedStep], result: StepResult) -> bool:
-    return isinstance(test.target, AllPriorSteps) or test.target == result.step
+def _names(reference: StepReference, entry: QualifiedStep | UnexpandedCall) -> bool:
+    match entry:
+        case QualifiedStep():
+            return entry.reference() == reference
+        case UnexpandedCall():
+            return False
 
 
-def _true(test: BypassTest[QualifiedStep], executed: Sequence[StepResult]) -> bool:
+def _tested(test: BypassTest[StepReference], result: StepResult) -> bool:
+    match test.target:
+        case AllPriorSteps():
+            return True
+        case _:
+            return _names(test.target, result.step)
+
+
+def _true(test: BypassTest[StepReference], executed: Sequence[StepResult]) -> bool:
     compare = _OPS[test.comparison.op]
     return any(
         compare(test.comparison.code, r.return_code)
@@ -40,7 +54,7 @@ def _true(test: BypassTest[QualifiedStep], executed: Sequence[StepResult]) -> bo
 
 
 def should_bypass(
-    condition: StepCondition[QualifiedStep],
+    condition: StepCondition[StepReference],
     end_job_tests: Sequence[RcComparison],
     history: Sequence[StepResult],
 ) -> bool:
@@ -49,6 +63,6 @@ def should_bypass(
     executed = tuple(r for r in history if r.ran)
     tests = (
         *condition.bypass_tests,
-        *(BypassTest[QualifiedStep](c, AllPriorSteps()) for c in end_job_tests),
+        *(BypassTest[StepReference](c, AllPriorSteps()) for c in end_job_tests),
     )
     return any(_true(t, executed) for t in tests)

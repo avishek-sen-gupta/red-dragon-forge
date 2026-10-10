@@ -56,7 +56,7 @@ def test_lone_symbol_dsn_expands_to_temp(expand_fixture):
                     "PGMB",
                     (
                         b.temp("IN", "WORK", b.disp("OLD", "DELETE", "DELETE")),
-                        b.backref("COPY", s1, "OUT"),
+                        b.resolved_backref("COPY", s1, "OUT"),
                     ),
                 ),
             ),

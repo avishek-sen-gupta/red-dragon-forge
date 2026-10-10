@@ -21,8 +21,7 @@ from interpreter.run import run, run_linked
 from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.catalog import DatasetCatalog
-from jackal.dsn import DdName
-from jackal.model import ProgramStep, QualifiedStep
+from jackal.model import DdName, ProgramStep, StepReference
 from jackal.parm import build_parm_region
 from jackal.value_parts import resolve
 
@@ -40,7 +39,7 @@ def _file_control(source: str, parser: ProLeapCobolParser) -> list:
 
 
 def _overrides(
-    step: ProgramStep[QualifiedStep], catalog: DatasetCatalog
+    step: ProgramStep[StepReference], catalog: DatasetCatalog
 ) -> dict[str, Path]:
     return {
         dd.ddname.text: catalog.allocate(dd).path
@@ -50,7 +49,7 @@ def _overrides(
 
 
 def run_cobol_step(
-    step: ProgramStep[QualifiedStep],
+    step: ProgramStep[StepReference],
     source: str,
     catalog: DatasetCatalog,
     bridge_jar: str,
@@ -81,7 +80,7 @@ def run_cobol_step(
 
 
 def _run_with_parm(
-    step: ProgramStep[QualifiedStep],
+    step: ProgramStep[StepReference],
     source: str,
     parser: ProLeapCobolParser,
     provider: RealFileIOProvider,
@@ -113,7 +112,7 @@ def _run_without_parm(
     )
 
 
-def _parm_vm(step: ProgramStep[QualifiedStep]) -> VMState:
+def _parm_vm(step: ProgramStep[StepReference]) -> VMState:
     """A VM whose entry frame hands the program the PARM area as its first
     argument, which binds the first LINKAGE 01."""
     parm_addr = Address("rgn_parm")

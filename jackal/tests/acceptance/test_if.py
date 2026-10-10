@@ -99,7 +99,7 @@ def test_if_guards_expand(expand_fixture):
     from tests.acceptance import build as b
 
     s1 = b.qualified((), b.pgm("S1", "PGMA"))
-    on_s1 = RcTest(s1, CondOp.EQ, 0)
+    on_s1 = RcTest(s1.reference(), CondOp.EQ, 0)
 
     def guarded(label: str, program: str, guard: object) -> object:
         plain = b.pgm(label, program)
@@ -116,7 +116,7 @@ def test_if_guards_expand(expand_fixture):
         (
             s1,
             s2,
-            guarded("S3", "PGMC", AllOf((on_s1, RcTest(s2, CondOp.GT, 4)))),
+            guarded("S3", "PGMC", AllOf((on_s1, RcTest(s2.reference(), CondOp.GT, 4)))),
             guarded("S4", "PGMD", Negated(on_s1)),
             b.qualified((), b.pgm("S5", "PGME")),
         ),
@@ -129,7 +129,7 @@ def test_if_inside_proc_expands(expand_fixture):
     from jackal.model import CondOp, ProcCall, ProgramStep, RcTest
     from tests.acceptance import build as b
 
-    call = ProcCall(b.name("S1"), b.proc("IFP"))
+    call = b.called(ProcCall(b.name("S1"), b.proc("IFP")), "if/IFP.prc")
     p1 = b.qualified((call,), b.pgm("P1", "PGMA"))
     plain = b.pgm("P2", "PGMB")
     assert expand_fixture("if/in_proc.jcl") == ExpandedJob(
@@ -144,7 +144,7 @@ def test_if_inside_proc_expands(expand_fixture):
                     plain.dds,
                     plain.cond,
                     plain.parm,
-                    RcTest(p1, CondOp.EQ, 0),
+                    RcTest(p1.reference(), CondOp.EQ, 0),
                 ),
             ),
         ),

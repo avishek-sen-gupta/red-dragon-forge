@@ -5,8 +5,7 @@ from tests.covers import NotLanguageFeature, covers
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_concatenation_parses(parse_fixture):
-    from jackal.dsn import DummyDSN, InStreamDSN
-    from jackal.model import ConcatMember, Job
+    from jackal.model import ConcatMember, DummyDSN, InStreamDSN, Job
     from tests.acceptance import build as b
 
     assert parse_fixture("concat/concat.jcl") == Job(

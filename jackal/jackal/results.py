@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from jackal.model import QualifiedStep
+from jackal.model import QualifiedStep, UnexpandedCall
 
 
 class StepDisposition(Enum):
@@ -15,7 +15,7 @@ class StepDisposition(Enum):
 
 @dataclass(frozen=True)
 class StepResult:
-    step: QualifiedStep
+    step: QualifiedStep | UnexpandedCall
     return_code: int
     disposition: StepDisposition = StepDisposition.EXECUTED
 

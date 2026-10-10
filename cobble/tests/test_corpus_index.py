@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -6,17 +7,17 @@ from cobble.corpus_index_builder import build_corpus_index
 from cobble.corpus_table import DEFAULT_COPYBOOK_EXTENSIONS
 from cobble.file_location import FileLocationReason, NoFileLocation
 from cobble.knowledge_graph.graph_types import NodeKind
-from dataclasses import dataclass
-
-from jackal.dsn import DdName, DirectDSN, InStreamDSN
 from jackal.expansion import CircularProc, ExpansionFailed, ProcLibrary, ProcNotFound
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.model import (
     DD,
+    DdName,
+    DirectDSN,
     Disp,
     DispAbnormal,
     DispNormal,
     DispStatus,
+    InStreamDSN,
     Job,
     ProcCall,
     ProcDef,

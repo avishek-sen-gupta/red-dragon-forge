@@ -5,31 +5,28 @@ import logging
 from pathlib import Path
 from typing import Literal as TypeLiteral
 
-from pydantic import BaseModel, ConfigDict
-
-from jackal.dsn import (
-    DSN,
-    BackwardRef,
-    DirectDSN,
-    DummyDSN,
-    InStreamDSN,
-    NoDSN,
-    TempRef,
-)
 from jackal.expansion import DirectoryProcLibrary, ExpansionFailed, expand_or_fail
 from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
 from jackal.model import (
     DD,
+    DSN,
     AllPriorSteps,
+    BackwardRef,
     BypassTest,
+    DirectDSN,
+    DummyDSN,
+    InStreamDSN,
+    NoDSN,
     NotOverridden,
     ProgramStep,
     QualifiedStep,
     StepCondition,
-    UnresolvedProcCall,
+    TempRef,
+    UnexpandedCall,
 )
 from jackal.value_parts import Literal, Symbol, Value
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +90,8 @@ def _dsn_text(dsn: DSN, sysout: bool) -> str:
             return _text(n)
         case TempRef(name=name):
             return f"&&{name}"
-        case BackwardRef(step=s, ddname=d):
-            return f"*.{s.rendered()}.{d.text}"
+        case BackwardRef(step=s, dd=d):
+            return f"*.{s.rendered()}.{d.rendered()}"
         case InStreamDSN():
             return "*"
         case DummyDSN():
@@ -142,8 +139,8 @@ def _program_facts(name: str, step: ProgramStep) -> StepFacts:
     )
 
 
-def _unresolved_facts(name: str, step: UnresolvedProcCall) -> StepFacts:
-    call = step.call
+def _unexpanded_facts(name: str, entry: UnexpandedCall) -> StepFacts:
+    call = entry.call()
     qualified = tuple(
         _dd_facts(dd, f"{procstep.text}.{dd.ddname.text}")
         for procstep, overrides in call.per_step
@@ -158,12 +155,12 @@ def _unresolved_facts(name: str, step: UnresolvedProcCall) -> StepFacts:
     )
 
 
-def _step_facts(qualified: QualifiedStep) -> StepFacts:
-    match qualified.step:
-        case UnresolvedProcCall():
-            return _unresolved_facts(qualified.rendered(), qualified.step)
-        case _:
-            return _program_facts(qualified.rendered(), qualified.step)
+def _step_facts(entry: QualifiedStep | UnexpandedCall) -> StepFacts:
+    match entry:
+        case UnexpandedCall():
+            return _unexpanded_facts(entry.rendered(), entry)
+        case QualifiedStep():
+            return _program_facts(entry.rendered(), entry.step)
 
 
 def facts_for_job(carddemo_root: Path, path: Path) -> ReadJob | UnreadJob:

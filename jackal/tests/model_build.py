@@ -2,17 +2,20 @@
 
 from collections.abc import Sequence
 
-from jackal.dsn import DSN, DdName, DirectDSN
 from jackal.jcl.wire import disp_from_words
 from jackal.model import (
     DD,
+    DSN,
     AbendMode,
     AllPriorSteps,
     BypassTest,
     CondOp,
+    DdName,
+    DirectDSN,
     Disp,
     Job,
     JobStatement,
+    OwnScope,
     ProgramRef,
     ProgramStep,
     QualifiedStep,
@@ -20,7 +23,6 @@ from jackal.model import (
     StepCondition,
     StepName,
     StepRef,
-    OwnScope,
 )
 from jackal.value_parts import literal
 

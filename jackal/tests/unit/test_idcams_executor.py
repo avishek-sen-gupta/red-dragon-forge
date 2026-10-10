@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from jackal.catalog import DatasetCatalog
-from jackal.dsn import DdName, DirectDSN
 from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro, SetMaxcc
-from jackal.model import DD, Disp, DispNormal, DispStatus
+from jackal.model import DD, DdName, DirectDSN, Disp, DispNormal, DispStatus
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 
@@ -42,8 +37,8 @@ def test_repro_loads_ps_into_ksds(tmp_path):
     rc = run_idcams(cmds, dds, cat)
     assert rc == 0
     # read OUT.KSDS back via the IndexedDriver and confirm BBB record present
-    from interpreter.cobol.file_drivers import IndexedDriver
     from cobol_asg.file_enums import OpenMode
+    from interpreter.cobol.file_drivers import IndexedDriver
 
     drv = IndexedDriver()
     drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)
@@ -226,8 +221,8 @@ def test_delete_purge_set_define_sequence_executes(tmp_path):
     read -- the genuine end-to-end test that reads the real CBEXPORT.jcl
     bytes through the jcl-bridge lives in
     tests/integration/test_idcams_execution_carddemo_e2e.py."""
-    from jackal.idcams.parser import parse_idcams
     from jackal.idcams.executor import run_idcams
+    from jackal.idcams.parser import parse_idcams
 
     text = (
         "  DELETE AWS.M2.CARDDEMO.EXPORT.DATA CLUSTER PURGE\n"

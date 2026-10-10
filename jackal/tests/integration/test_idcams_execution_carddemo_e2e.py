@@ -16,13 +16,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from jackal.catalog import DatasetCatalog
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
 from jackal.jcl.parser import parse_jcl
-from jackal.dsn import DdName
-from jackal.model import DatasetOrg, ProgramRef, ProgramStep
+from jackal.model import DatasetOrg, DdName, ProgramRef, ProgramStep
 from tests.covers import NotLanguageFeature, covers
 
 

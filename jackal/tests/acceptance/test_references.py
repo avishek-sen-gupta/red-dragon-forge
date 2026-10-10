@@ -13,13 +13,17 @@ def test_reference_inside_proc_expands(expand_fixture, parse_fixture):
     s0 = b.qualified((), b.pgm("S0", "PGMZ"))
 
     def run(call: object) -> tuple[object, object]:
-        p1 = b.qualified((call,), b.pgm("P1", "PGMA"))
+        coordinate = b.called(call, "refs/TWO.prc")
+        p1 = b.qualified((coordinate,), b.pgm("P1", "PGMA"))
         p2 = b.qualified(
-            (call,),
+            (coordinate,),
             b.pgm(
                 "P2",
                 "PGMB",
-                condition=b.cond(b.on_step(0, "NE", p1), b.on_step(4, "LT", s0)),
+                condition=b.cond(
+                    b.on_step(0, "NE", p1.reference()),
+                    b.on_step(4, "LT", s0.reference()),
+                ),
             ),
         )
         return p1, p2
@@ -31,7 +35,10 @@ def test_reference_inside_proc_expands(expand_fixture, parse_fixture):
         b.pgm(
             "S2",
             "PGMC",
-            condition=b.cond(b.on_step(4, "LT", first_p2), b.on_step(8, "LT", s0)),
+            condition=b.cond(
+                b.on_step(4, "LT", first_p2.reference()),
+                b.on_step(8, "LT", s0.reference()),
+            ),
         ),
     )
     assert expand_fixture("refs/refs.jcl") == ExpandedJob(

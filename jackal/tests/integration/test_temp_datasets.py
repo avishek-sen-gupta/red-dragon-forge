@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from jackal.dsn import TempRef
-from jackal.model import DD, StepRef
+from jackal.model import DD, StepRef, TempRef
 from jackal.runner import JobRunner
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, disp, job, program

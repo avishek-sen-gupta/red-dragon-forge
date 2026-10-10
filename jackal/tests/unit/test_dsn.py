@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import pytest
-
-from tests.covers import NotLanguageFeature, covers
-from tests.model_build import ref
-from jackal.dsn import (
+from jackal.model import (
+    UnresolvedDd,
     BackwardRef,
     DdName,
     DirectDSN,
@@ -16,6 +14,8 @@ from jackal.dsn import (
     TempRef,
 )
 from jackal.value_parts import Literal, Symbol, SymbolName, literal
+from tests.covers import NotLanguageFeature, covers
+from tests.model_build import ref
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -25,7 +25,7 @@ def test_only_a_resolved_direct_dsn_has_a_dataset_name():
         DirectDSN((Symbol(SymbolName("CNTLLIB")),)).dataset_name()
     for dsn, says in (
         (TempRef("WORKIN"), "&&WORKIN"),
-        (BackwardRef(ref("STEP1"), DdName("WRK")), "WRK"),
+        (BackwardRef(ref("STEP1"), UnresolvedDd(DdName("WRK"))), "WRK"),
         (InStreamDSN(), "in-stream"),
         (DummyDSN(), "DUMMY"),
         (NoDSN(), "no DSN"),

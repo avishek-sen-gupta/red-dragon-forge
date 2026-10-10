@@ -8,12 +8,9 @@ from pathlib import Path
 
 import lark.exceptions
 import pytest
-
-from jackal.dsn import DdName
-from jackal.model import ProgramRef, ProgramStep
-
 from jackal.idcams.parser_comprehensive import parse_ams
 from jackal.jcl.parser import parse_jcl
+from jackal.model import DdName, ProgramRef, ProgramStep
 from tests.covers import NotLanguageFeature, covers
 
 _IDCAMS_JCL_FILES = [

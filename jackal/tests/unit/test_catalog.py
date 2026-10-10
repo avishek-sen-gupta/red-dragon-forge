@@ -1,12 +1,16 @@
-from pathlib import Path
-
 import pytest
-
 from jackal.catalog import DatasetCatalog, DatasetSpec
-from jackal.dsn import DirectDSN, TempRef
-from jackal.model import DD, Disp, DispNormal, DispStatus, DatasetOrg
+from jackal.model import (
+    DD,
+    DatasetOrg,
+    DirectDSN,
+    Disp,
+    DispNormal,
+    DispStatus,
+    TempRef,
+)
 from jackal.value_parts import literal
-from tests.covers import covers, NotLanguageFeature
+from tests.covers import NotLanguageFeature, covers
 
 
 def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> DD:
@@ -136,8 +140,8 @@ def test_mod_creates_when_absent(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_open_dataset_ps_empty_returns_eof(tmp_path):
-    from interpreter.cobol.access_result import AccessCondition
     from cobol_asg.file_enums import OpenMode
+    from interpreter.cobol.access_result import AccessCondition
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = DD(
@@ -228,8 +232,8 @@ def test_temp_new_duplicate_alias_raises(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_open_dataset_ksds_write_then_read(tmp_path):
-    from interpreter.cobol.access_result import AccessCondition
     from cobol_asg.file_enums import OpenMode
+    from interpreter.cobol.access_result import AccessCondition
 
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     spec = DatasetSpec(

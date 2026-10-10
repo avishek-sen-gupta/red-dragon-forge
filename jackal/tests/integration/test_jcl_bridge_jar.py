@@ -1,8 +1,18 @@
-from tests.covers import NotLanguageFeature, covers
-from jackal.dsn import DdName, DirectDSN, TempRef
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
-from jackal.model import ProcCall, ProcRef, ProgramRef, StepName, StepRef, OwnScope
+from jackal.model import (
+    UnresolvedDd,
+    DdName,
+    DirectDSN,
+    OwnScope,
+    ProcCall,
+    ProcRef,
+    ProgramRef,
+    StepName,
+    StepRef,
+    TempRef,
+)
 from jackal.value_parts import Literal, Symbol, SymbolName, literal
+from tests.covers import NotLanguageFeature, covers
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -63,12 +73,14 @@ def test_real_jar_parses_backward_ref(jcl_bridge_jar):
         "//STEP2 EXEC PGM=IEFBR14\n"
         "//INPUT DD DSN=*.STEP1.WRK,DISP=(OLD,DELETE)\n"
     )
-    from jackal.dsn import BackwardRef
+    from jackal.model import BackwardRef
 
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     dd = job.steps[1].dds[0]
     assert isinstance(dd.dsn, BackwardRef)
-    assert dd.dsn == BackwardRef(StepRef(OwnScope(), StepName("STEP1")), DdName("WRK"))
+    assert dd.dsn == BackwardRef(
+        StepRef(OwnScope(), StepName("STEP1")), UnresolvedDd(DdName("WRK"))
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
