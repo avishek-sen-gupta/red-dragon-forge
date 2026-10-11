@@ -16,6 +16,7 @@ from jackal.missing_data import MissingDataStrategy
 from jackal.model import (
     DD,
     DSN,
+    AbendMode,
     Always,
     BackwardRef,
     Job,
@@ -23,12 +24,15 @@ from jackal.model import (
     QualifiedStep,
     RcComparison,
     ResolvedDd,
+    StepCondition,
     StepReference,
     UnexpandedCall,
 )
 from jackal.results import (
     AllocationFailed,
+    Bypassed,
     Completed,
+    Flushed,
     JobResult,
     SkippedUnresolved,
     StepOutcome,
@@ -38,6 +42,17 @@ from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 
 Entry = QualifiedStep | UnexpandedCall
+
+
+_NO_CONDITION: StepCondition[StepReference] = StepCondition((), AbendMode.NORMAL)
+
+
+def _unrunnable(decision: Run | Bypassed | Flushed) -> StepOutcome:
+    match decision:
+        case Run():
+            return SkippedUnresolved()
+        case _:
+            return decision
 
 
 class UnsupportedStep(Exception):
@@ -144,21 +159,11 @@ class JobRunner:
     ) -> _History:
         match entry:
             case UnexpandedCall():
-                return history.recorded(entry, SkippedUnresolved())
+                decision = gate(_NO_CONDITION, end_job_tests, history.results)
+                return history.recorded(entry, _unrunnable(decision))
             case QualifiedStep():
-                return self._step(catalog, end_job_tests, history, entry)
-
-    def _step(
-        self,
-        catalog: DatasetCatalog,
-        end_job_tests: Sequence[RcComparison],
-        history: _History,
-        qualified: QualifiedStep,
-    ) -> _History:
-        step = _unguarded(qualified)
-        if not referbacks_resolved(step):
-            return history.recorded(qualified, SkippedUnresolved())
-        return self._gated(catalog, end_job_tests, history, qualified, step)
+                step = _unguarded(entry)
+                return self._gated(catalog, end_job_tests, history, entry, step)
 
     def _gated(
         self,
@@ -170,6 +175,8 @@ class JobRunner:
     ) -> _History:
         decision = gate(step.cond, end_job_tests, history.results)
         match decision:
+            case Run() if not referbacks_resolved(step):
+                return history.recorded(qualified, SkippedUnresolved())
             case Run():
                 return self._started(catalog, history, qualified, step)
             case _:

@@ -17,7 +17,15 @@ from jackal.model import (
     StepReference,
     UnexpandedCall,
 )
-from jackal.results import AfterJobCond, Bypassed, BypassReason, Flushed, StepResult
+from jackal.results import (
+    AfterAllocationFailure,
+    AfterJobCond,
+    AllocationFailed,
+    Bypassed,
+    BypassReason,
+    Flushed,
+    StepResult,
+)
 
 _OPS: Mapping[CondOp, Callable[[int, int], bool]] = {
     CondOp.GT: operator.gt,
@@ -77,7 +85,15 @@ def _own(
     return Run()
 
 
-def gate(
+def _allocation_failed(result: StepResult) -> tuple[QualifiedStep, ...]:
+    match (result.step, result.outcome):
+        case (QualifiedStep(), AllocationFailed()):
+            return (result.step,)
+        case _:
+            return ()
+
+
+def _after_job_cond(
     condition: StepCondition[StepReference],
     end_job_tests: Sequence[RcComparison],
     history: Sequence[StepResult],
@@ -87,3 +103,14 @@ def gate(
     if met:
         return Flushed(AfterJobCond(met[0].step))
     return _own(condition, completed)
+
+
+def gate(
+    condition: StepCondition[StepReference],
+    end_job_tests: Sequence[RcComparison],
+    history: Sequence[StepResult],
+) -> Run | Bypassed | Flushed:
+    failed = tuple(s for r in history for s in _allocation_failed(r))
+    if failed:
+        return Flushed(AfterAllocationFailure(failed[0]))
+    return _after_job_cond(condition, end_job_tests, history)

@@ -1,24 +1,28 @@
-from tests.covers import NotLanguageFeature, covers
-from tests.model_build import ran
 from jackal.cond import Run, gate
 from jackal.model import (
-    StepReference,
     AbendMode,
     AllPriorSteps,
     BypassTest,
     CondOp,
+    DdName,
     QualifiedStep,
     RcComparison,
     StepCondition,
+    StepReference,
 )
 from jackal.results import (
+    AfterAllocationFailure,
     AfterJobCond,
-    BypassReason,
+    AllocationError,
+    AllocationFailed,
     Bypassed,
+    BypassReason,
     Completed,
     Flushed,
     StepResult,
 )
+from tests.covers import NotLanguageFeature, covers
+from tests.model_build import ran
 
 A, B = ran("A"), ran("B")
 
@@ -118,3 +122,19 @@ def test_a_met_job_cond_flushes_naming_the_first_step_that_met_it():
         gate(_cond(), job_tests, (_r(A, 12), _r(B, 16))),
         gate(on_b, job_tests, (_r(A, 4), _r(B, 12))),
     ] == [RUN, Flushed(AfterJobCond(A)), Flushed(AfterJobCond(B))]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_failed_allocation_flushes_ahead_of_job_cond_and_even():
+    failed = StepResult(
+        B, AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)
+    )
+    even = _cond(mode=AbendMode.EVEN)
+    job_cond = (RcComparison(4, CondOp.LE),)
+    assert (
+        gate(even, job_cond, (_r(A, 8), failed)),
+        gate(_cond(), (), (failed, _r(A, 0))),
+    ) == (
+        Flushed(AfterAllocationFailure(B)),
+        Flushed(AfterAllocationFailure(B)),
+    )

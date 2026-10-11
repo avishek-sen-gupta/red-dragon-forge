@@ -9,6 +9,7 @@ from jackal.missing_data import (
 )
 from jackal.model import (
     DD,
+    AbendMode,
     BackwardRef,
     CondOp,
     DdName,
@@ -25,6 +26,7 @@ from jackal.model import (
     UnresolvedDd,
 )
 from jackal.results import (
+    AfterAllocationFailure,
     AfterJobCond,
     AllocationError,
     AllocationFailed,
@@ -177,11 +179,9 @@ def test_a_referback_names_the_earlier_steps_dataset_or_temporary(
     assert _outcomes(_run(tmp_path, j)) == [("S1", OK), ("S2", OK)]
 
 
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_referback_to_a_step_that_did_not_run_allocates_the_name_it_copies(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "OLD.FILE").write_bytes(b"")
+def _after_bypassed(tmp_path: Path, name: str, referencing: DD[StepRef]) -> JobResult:
+    root = _fresh(tmp_path, name)
+    (root / "OLD.FILE").write_bytes(b"")
     j = job(
         "J",
         (
@@ -196,17 +196,34 @@ def test_a_referback_to_a_step_that_did_not_run_allocates_the_name_it_copies(
                 ),
                 cond((0, "NE", "")),
             ),
-            program("C", "IEFBR14", (dd("IN", _back("B", "OUT")),)),
-            program("D", "IEFBR14", (dd("TMP", _back("B", "WRK"), disp("OLD")),)),
-            program("E", "IEFBR14", (dd("IN", _back("B", "PRIOR")),)),
+            program("C", "IEFBR14", (referencing,)),
         ),
     )
-    assert _outcomes(_run(tmp_path, j)) == [
-        ("A", Completed(8)),
-        ("B", COND_MET),
-        ("C", AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)),
-        ("D", AllocationFailed(DdName("TMP"), AllocationError.TEMP_NOT_CREATED)),
-        ("E", OK),
+    return _run(root, j)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_referback_to_a_step_that_did_not_run_allocates_the_name_it_copies(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        ("out", dd("IN", _back("B", "OUT"))),
+        ("wrk", dd("TMP", _back("B", "WRK"), disp("OLD"))),
+        ("prior", dd("IN", _back("B", "PRIOR"))),
+    )
+    assert [
+        _outcomes(_after_bypassed(tmp_path, name, referencing))[1:]
+        for name, referencing in cases
+    ] == [
+        [
+            ("B", COND_MET),
+            ("C", AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)),
+        ],
+        [
+            ("B", COND_MET),
+            ("C", AllocationFailed(DdName("TMP"), AllocationError.TEMP_NOT_CREATED)),
+        ],
+        [("B", COND_MET), ("C", OK)],
     ]
 
 
@@ -238,11 +255,36 @@ def test_strict_allocation_fails_the_step_and_undoes_what_it_allocated(
 ) -> None:
     result = _run(tmp_path, _unallocatable())
     failure = AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)
+    flushed = Flushed(AfterAllocationFailure(result.steps[0].step))
     assert (_outcomes(result), result.outcome, _files(tmp_path)) == (
-        [("S1", failure), ("S2", OK)],
+        [("S1", failure), ("S2", flushed)],
         JobAllocationFailed(result.steps[0].step, failure),
         [],
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_failed_allocation_flushes_every_later_entry_whatever_it_would_do(
+    tmp_path: Path,
+) -> None:
+    unresolved_referback = BackwardRef(ref("S1"), UnresolvedDd(DdName("BADDD")))
+    j = job(
+        "J",
+        (
+            program("S1", "IEFBR14", (dd("IN", "NO.SUCH"),)),
+            program("S2", "IEFBR14", condition=cond(mode=AbendMode.EVEN)),
+            ProcCall(StepName("S3"), ProcRef("NOSUCHP")),
+            program("S4", "IEFBR14", (dd("IN", unresolved_referback),)),
+        ),
+    )
+    result = _run(tmp_path, j, unresolved=IgnoreStrategy())
+    flushed = Flushed(AfterAllocationFailure(result.steps[0].step))
+    assert _outcomes(result) == [
+        ("S1", AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)),
+        ("S2", flushed),
+        ("S3", flushed),
+        ("S4", flushed),
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

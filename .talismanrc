@@ -590,13 +590,13 @@ fileignoreconfig:
 - filename: jackal/tests/acceptance/carddemo_facts.py
   checksum: dc6aa3933b7b47ade57267eb172811ffb8b42490a9a5d6c6327b6620da498986
 - filename: jackal/jackal/runner.py
-  checksum: 4330ad81973335d656b49487bd40512c389ab53d84383ec9510f61d4e0120ff7
+  checksum: cfb709a4d9c1e516027f48580eb87d6b0e3f56c56d24e6266f01db5658f8c9e5
 - filename: jackal/jackal/model.py
   checksum: 6276cc606efac3fd88b0d953149b878c7a51941bfca3e8bc5b2f597e99172acf
 - filename: jackal/tests/unit/test_results.py
   checksum: 8e326a7a22b0a8bf9b2230448e5d6f968373ebbf19717944c4f9493e303305e3
 - filename: jackal/tests/unit/test_runner.py
-  checksum: 81752e9a6493b749db0ec48bdecf7dc03b9931ff8a0ffd0af96fa0046cbcf514
+  checksum: f2db77d4348689a17e2b3cd299aca27fdc90eca883c7a9205b97b457752faef9
 - filename: jackal/tests/integration/test_jcl_execute_e2e.py
   checksum: 268ece0d315e530fb9cffc49b8d297bf2dfd7cd0aee0c1c614fc843cc7574825
 - filename: jackal/tests/integration/test_cond_e2e.py

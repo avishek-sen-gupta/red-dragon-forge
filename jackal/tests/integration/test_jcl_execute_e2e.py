@@ -14,11 +14,13 @@ from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
 from jackal.model import DdName
 from jackal.results import (
+    AfterAllocationFailure,
     AllocationError,
     AllocationFailed,
     Bypassed,
     BypassReason,
     Completed,
+    Flushed,
 )
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
@@ -135,7 +137,7 @@ def test_backward_ref_resolves_via_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_j
 def test_backward_ref_to_a_bypassed_step_fails_allocation_via_jcl_bridge(
     tmp_path, bridge_jar, jcl_bridge_jar
 ):
-    """When step 1 is bypassed, *.STEP1.WRK names a dataset step 1 never made."""
+    """*.STEP1.WRK names a dataset bypassed step 1 never made; the job stops there."""
     jcl = (
         "//J JOB 1\n"
         "//STEP0 EXEC PGM=IEFBR14\n"
@@ -143,15 +145,17 @@ def test_backward_ref_to_a_bypassed_step_fails_allocation_via_jcl_bridge(
         "//WRK    DD DSN=MY.WORK.FILE,DISP=(NEW,PASS,DELETE)\n"
         "//STEP2 EXEC PGM=IEFBR14\n"
         "//INPUT  DD DSN=*.STEP1.WRK,DISP=(OLD,DELETE,DELETE)\n"
+        "//STEP3 EXEC PGM=IEFBR14,COND=EVEN\n"
     )
     job = _parse(jcl, jcl_bridge_jar)
     result = _runner(tmp_path, bridge_jar, tmp_path).run(
         job, workdir=tmp_path, seeds={}
     )
 
-    step0, step1, step2 = result.steps
-    assert (step0.outcome, step1.outcome, step2.outcome) == (
+    step0, step1, step2, step3 = result.steps
+    assert (step0.outcome, step1.outcome, step2.outcome, step3.outcome) == (
         Completed(0),
         Bypassed(BypassReason.COND_SATISFIED),
         AllocationFailed(DdName("INPUT"), AllocationError.DATASET_NOT_FOUND),
+        Flushed(AfterAllocationFailure(step2.step)),
     )
