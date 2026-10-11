@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from jackal.allocation import DdEnvironment
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
+from jackal.program_compiler import ProgramCompiler
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
@@ -27,11 +28,9 @@ def test_cobol_step_returns_real_return_code(tmp_path: Path, bridge_jar):
     cat = job_catalog(tmp_path)
     assert run_cobol_step(
         program("S", "SETRC"),
-        _PGM,
+        ProgramCompiler(bridge_jar, (), (), ()).compiled(_PGM),
         DdEnvironment(()),
         cat.workdir,
-        bridge_jar,
-        [],
         DEFAULT_PROGRAM_STEP_BUDGET,
         cat,
     ) == Completed(8)

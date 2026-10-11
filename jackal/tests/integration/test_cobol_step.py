@@ -4,6 +4,7 @@ import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
 from jackal.labels import RecordFormat, SequentialLabel
+from jackal.program_compiler import ProgramCompiler
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated, dd, disp, program
@@ -35,11 +36,11 @@ def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
     )
     rc = run_cobol_step(
         step,
-        (CBL / "COPYUP.cbl").read_text(),
+        ProgramCompiler(bridge_jar, (), (CBL,), ()).compiled(
+            (CBL / "COPYUP.cbl").read_text()
+        ),
         allocated(step, cat),
         cat.workdir,
-        bridge_jar,
-        copybook_dirs=[],
         budget=DEFAULT_PROGRAM_STEP_BUDGET,
         relabeller=cat,
     )

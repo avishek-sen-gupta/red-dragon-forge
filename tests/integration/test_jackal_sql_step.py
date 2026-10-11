@@ -1,0 +1,48 @@
+"""A jackal batch step whose program has EXEC SQL runs with squall's spec composed in."""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
+from jackal.jcl.parser import parse_jcl
+from jackal.missing_data import StrictAllocation
+from jackal.missing_program import AbendMissingProgram
+from jackal.results import Completed
+from jackal.runner import JobRunner
+from jackal.system_catalog import SystemCatalog
+from jackal.unresolved import RaiseErrorStrategy
+from squall.backends.sqlite import SqliteBackend
+from squall.coprocessor import build_sql_spec
+
+CBL = Path(__file__).parent / "fixtures" / "cbl"
+
+
+def test_a_batch_step_with_exec_sql_writes_what_it_selected(
+    tmp_path: Path, bridge_jar: str
+) -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE ACCOUNT (ACCT_ID INTEGER, ACCT_BAL INTEGER)")
+    conn.execute("INSERT INTO ACCOUNT VALUES (11, 500)")
+    conn.commit()
+    system = SystemCatalog(tmp_path / "system")
+    runner = JobRunner(
+        source_dir=CBL,
+        bridge_jar=bridge_jar,
+        system=system,
+        copybook_dir=tmp_path,
+        unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        coprocessors=(build_sql_spec({"SAMPLE": SqliteBackend(conn)}),),
+    )
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    jcl = "//J JOB 1\n//S1 EXEC PGM=SQLRPT\n//RPTDD DD DSN=J.RPT,DISP=(NEW,CATLG)\n"
+    result = runner.run(parse_jcl(jcl), scratch)
+    assert (
+        [s.outcome for s in result.steps],
+        SystemCatalog(tmp_path / "system").lookup("J.RPT").path.read_bytes(),
+    ) == ([Completed(0)], "000000500 ".encode("cp037"))

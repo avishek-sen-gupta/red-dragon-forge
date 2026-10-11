@@ -100,9 +100,14 @@ cicada or squall; `.importlinter` enforces this.
 
 ## COBOL steps
 
-`jackal.cobol_step.run_cobol_step` parses the program with the ProLeap bridge JAR, maps each
-`FILE-CONTROL` entry to the file of the step's DD allocation, and runs it on the
-red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
+`jackal.program_compiler.ProgramCompiler` compiles a step's program as z/OS links a load
+module: through red-dragon's `compile_program`, with the runner's source directory as the
+search path for every program it CALLs by literal name, and with the `CoprocessorSpec`s
+injected into `JobRunner` (`coprocessors=`). jackal imports no coprocessor: standalone it
+is given none, and the forge composes squall's EXEC SQL spec in. A CALL by data-name does not yet
+reach its target (red-dragon-forge-ua7). `jackal.cobol_step.run_cobol_step` maps every
+`FILE-CONTROL` entry of the program and its callees to the file of the step's DD allocation,
+and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
 (`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
 largest record plus 4) meets the dataset's label: a pending label is written from it on
 `OUTPUT` or `EXTEND`; a label that contradicts it in organization, fixed against variable, or
@@ -181,6 +186,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/cli.py` | The `jackal` command. |
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
+| `jackal/jackal/program_compiler.py` | Compiles a step's program with its callees and injected coprocessors. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
 | `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
 | `jackal/jackal/record_format.py` | The record format a COBOL FD asks for, and its fit with a label. |

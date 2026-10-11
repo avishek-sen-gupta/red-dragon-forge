@@ -1,4 +1,4 @@
-"""Unit guard: a COBOL step must fail loud when PROLEAP_BRIDGE_JAR is unset."""
+"""Unit guards: compiling needs PROLEAP_BRIDGE_JAR; a batch program cannot suspend."""
 
 from __future__ import annotations
 
@@ -6,31 +6,15 @@ import pytest
 from interpreter.ir import CodeLabel
 from interpreter.register import Register
 from interpreter.run import ExecutionState, Suspended, initial_vm_state
-from jackal.allocation import DdEnvironment
-from jackal.cobol_step import (
-    DEFAULT_PROGRAM_STEP_BUDGET,
-    BatchProgramSuspended,
-    program_result,
-    run_cobol_step,
-)
+from jackal.cobol_step import BatchProgramSuspended, program_result
+from jackal.program_compiler import ProgramCompiler
 from tests.covers import NotLanguageFeature, covers
-from tests.model_build import program
-from tests.system_build import job_catalog
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_run_cobol_step_empty_bridge_jar_fails_loud(tmp_path):
+def test_compiling_a_cobol_program_with_an_empty_bridge_jar_fails_loud():
     with pytest.raises(ValueError, match="PROLEAP_BRIDGE_JAR"):
-        run_cobol_step(
-            program("S", "P"),
-            "irrelevant",
-            DdEnvironment(()),
-            tmp_path,
-            "",
-            [],
-            DEFAULT_PROGRAM_STEP_BUDGET,
-            job_catalog(tmp_path),
-        )
+        ProgramCompiler("", (), (), ()).compiled("irrelevant")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

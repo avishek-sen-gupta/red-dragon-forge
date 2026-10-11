@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
+from jackal.program_compiler import ProgramCompiler
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
@@ -46,11 +47,9 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
     step = program("S", "TESTPARM", parm="HELLO     ")
     assert run_cobol_step(
         step,
-        _PARM_PROGRAM,
+        ProgramCompiler(bridge_jar, (), (), ()).compiled(_PARM_PROGRAM),
         DdEnvironment(()),
         cat.workdir,
-        bridge_jar,
-        [],
         DEFAULT_PROGRAM_STEP_BUDGET,
         cat,
     ) == Completed(42)
@@ -61,11 +60,9 @@ def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
     cat = job_catalog(tmp_path)
     assert run_cobol_step(
         program("S", "NOPARM"),
-        _NO_PARM_PROGRAM,
+        ProgramCompiler(bridge_jar, (), (), ()).compiled(_NO_PARM_PROGRAM),
         DdEnvironment(()),
         cat.workdir,
-        bridge_jar,
-        [],
         DEFAULT_PROGRAM_STEP_BUDGET,
         cat,
     ) == Completed(7)

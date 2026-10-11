@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
 
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 from jackal.allocation import LOAD_LIBRARIES, DdEnvironment, allocate, dispose
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
@@ -29,6 +30,7 @@ from jackal.model import (
     StepReference,
     UnexpandedCall,
 )
+from jackal.program_compiler import ProgramCompiler
 from jackal.program_sources import CobolSource, DirectoryProgramSources, SourceNotFound
 from jackal.results import (
     AllocationFailed,
@@ -127,11 +129,13 @@ class JobRunner:
         missing_program: MissingProgramStrategy,
         program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
+        coprocessors: Sequence[CoprocessorSpec] = (),
     ):
         self._sources = DirectoryProgramSources(source_dir)
-        self._bridge_jar = bridge_jar
+        self._compiler = ProgramCompiler(
+            bridge_jar, (copybook_dir,), (source_dir,), tuple(coprocessors)
+        )
         self._system = system
-        self._copybook_dir = copybook_dir
         self._unresolved = unresolved
         self._missing_data = missing_data
         self._missing_program = missing_program
@@ -234,11 +238,9 @@ class JobRunner:
             case CobolSource(text=source):
                 return run_cobol_step(
                     step,
-                    source,
+                    self._compiler.compiled(source),
                     env,
                     catalog.workdir,
-                    self._bridge_jar,
-                    [self._copybook_dir],
                     self._program_step_budget,
                     catalog,
                 )
