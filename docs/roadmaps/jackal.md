@@ -31,7 +31,7 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | `DCB=` attributes (LRECL, RECFM, BLKSIZE) | `jackal-1o2.12` | not started |
 | `PARM=` into the program | `jackal-1o2.13` | supported |
 | Unknown `PGM=`: abend `S806`, or stub with RC 0 | `red-dragon-forge-xkk` | supported |
-| `DD DUMMY` and `DSN=NULLFILE` | `jackal-1o2.14` | not started |
+| `DD DUMMY` and `DSN=NULLFILE` | `jackal-1o2.14` | supported; a test that writes are discarded is pending |
 | System symbols (`&SYSUID`, `&SYSDATE`, JES symbols) | `jackal-1o2.23` | not started |
 | `RESTART=` | `jackal-1o2.25` | not started |
 | `TYPRUN=SCAN` and `HOLD` | `jackal-1o2.26` | not started |
@@ -49,14 +49,13 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | SORT subset and IEBGENER | `jackal-1o2.3` | not started |
 | IEBCOPY | `jackal-1o2.18` | not started |
 | Deeper DFSORT (`INREC`, `OUTREC`, `JOINKEYS`) and ICETOOL | `jackal-1o2.24` | not started |
-| Abend model (Sxxx, Uxxx) distinct from return codes | `jackal-1o2.19` | not started |
+| Abend model (Sxxx, Uxxx) distinct from return codes | `jackal-1o2.19` | partial: system abends (`S806`, `S322`); user abends and program faults not started |
 | Dump DDs (SYSUDUMP, CEEDUMP, SYSABEND) | `jackal-1o2.20` | not started |
 | SYSOUT and SYSPRINT capture | `jackal-1o2.7` | not started |
 | STEPLIB and JOBLIB load-library resolution | `jackal-1o2.17` | not started |
 | `IKJEFT01` DB2 steps through squall, composed in `red_dragon_forge` | `red-dragon-forge-46d` | not started |
 
 Some items depend on others. `bd dep tree jackal-1o2` shows the edges. The main chains: the
-abend model (`jackal-1o2.19`) precedes `COND=EVEN/ONLY` (`jackal-1o2.8`) and dump DDs
-(`jackal-1o2.20`). PDS support (`jackal-1o2.16`) precedes load-library resolution
+abend model (`jackal-1o2.19`) precedes dump DDs (`jackal-1o2.20`). PDS support (`jackal-1o2.16`) precedes load-library resolution
 (`jackal-1o2.17`) and IEBCOPY (`jackal-1o2.18`). The SORT subset (`jackal-1o2.3`) precedes
 deeper DFSORT (`jackal-1o2.24`).
