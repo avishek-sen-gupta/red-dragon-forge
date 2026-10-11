@@ -244,7 +244,7 @@ fileignoreconfig:
 - filename: cobble/tests/cics/test_flow_map.py
   checksum: d526f5817ca7317c48fcddccf8ba97f9ad25b03a4305c434a968be373dd97945
 - filename: cobble/tests/jackal/test_bridge_parser.py
-  checksum: 8f5cbadcabef9e14759709c510aed7e9e57ced4aa76f6af046039bd944d1ff47
+  checksum: 4447c49a31da6aa0cbe993d9ee218c6212725ce95de52dcf35dd3233bcfdc8bd
 - filename: cobble/tests/jackal/test_dsn.py
   checksum: ecb7303ffe4f99e549afd3662ef16255df2987d8ac3dd618a6b8ef8c9475af80
 - filename: cobble/tests/jackal/test_proc_expand.py
