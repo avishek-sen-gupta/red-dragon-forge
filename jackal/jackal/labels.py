@@ -19,6 +19,9 @@ def _positive(value: int, what: str) -> None:
         raise ValueError(f"{what} must be > 0, got {value}")
 
 
+VARIABLE = frozenset({RecordFormat.V, RecordFormat.VB})
+
+
 @dataclass(frozen=True)
 class SequentialLabel:
     recfm: RecordFormat

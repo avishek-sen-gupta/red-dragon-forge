@@ -83,8 +83,8 @@ def _handle_repro(cmd: Repro, dds: DdEnvironment) -> int:
 
 
 def _copied(in_ds: Dataset, out_ds: Dataset) -> int:
-    in_drv = in_ds.opened(OpenMode.INPUT, in_ds.record_size())
-    out_drv = out_ds.opened(OpenMode.OUTPUT, out_ds.record_size())
+    in_drv = in_ds.opened(OpenMode.INPUT)
+    out_drv = out_ds.opened(OpenMode.OUTPUT)
     for record in _records(in_drv):
         out_drv.write(record)
     in_drv.close()
