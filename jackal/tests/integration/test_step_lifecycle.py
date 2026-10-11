@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
@@ -18,8 +17,10 @@ from jackal.results import (
     SystemAbend,
 )
 from jackal.runner import JobRunner
+from jackal.system_catalog import NotCataloged
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.system_build import job_catalog, system
 
 CBL = Path(__file__).parent / "fixtures" / "cbl"
 
@@ -51,11 +52,11 @@ def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_inp
         "//OUTDD DD DSN=J.EMPTY,DISP=(NEW,CATLG)\n"
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    catalog = job_catalog(tmp_path)
     runner = JobRunner(
         source_dir=CBL,
         bridge_jar=bridge_jar,
-        data_dir=tmp_path,
+        system=system(tmp_path),
         copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
@@ -92,11 +93,11 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
         "//OUTDD DD DSN=J.LOG,DISP=MOD\n"
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    catalog = job_catalog(tmp_path)
     runner = JobRunner(
         source_dir=CBL,
         bridge_jar=bridge_jar,
-        data_dir=tmp_path,
+        system=system(tmp_path),
         copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
@@ -124,11 +125,11 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
         "//S2 EXEC PGM=IEFBR14\n"
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
-    catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    catalog = job_catalog(tmp_path)
     runner = JobRunner(
         source_dir=CBL,
         bridge_jar=bridge_jar,
-        data_dir=tmp_path,
+        system=system(tmp_path),
         copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
@@ -140,9 +141,9 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
     assert (
         [s.outcome for s in result.steps],
         result.outcome,
-        sorted(p.name for p in tmp_path.iterdir()),
+        catalog.resolve("J.PARTIAL"),
     ) == (
         [Abended(s322), Flushed(AfterAbend(s1))],
         JobAbended(s1, s322),
-        [],
+        NotCataloged(),
     )

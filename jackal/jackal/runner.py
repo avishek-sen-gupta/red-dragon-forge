@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
@@ -41,6 +41,7 @@ from jackal.results import (
     StepOutcome,
     StepResult,
 )
+from jackal.system_catalog import SystemCatalog
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 
@@ -119,7 +120,7 @@ class JobRunner:
         self,
         source_dir: Path,
         bridge_jar: str,
-        data_dir: Path,
+        system: SystemCatalog,
         copybook_dir: Path,
         unresolved: UnresolvedReferenceStrategy,
         missing_data: MissingDataStrategy,
@@ -129,7 +130,7 @@ class JobRunner:
     ):
         self._sources = DirectoryProgramSources(source_dir)
         self._bridge_jar = bridge_jar
-        self._data_dir = data_dir
+        self._system = system
         self._copybook_dir = copybook_dir
         self._unresolved = unresolved
         self._missing_data = missing_data
@@ -137,11 +138,8 @@ class JobRunner:
         self._program_step_budget = program_step_budget
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
-    def run(self, job: Job, workdir: Path, seeds: Mapping[str, Path]) -> JobResult:
-        catalog = DatasetCatalog(workdir=workdir, data_dir=self._data_dir)
-        for dsn, path in seeds.items():
-            catalog.seed(dsn, path)
-        return self.run_job(job, catalog)
+    def run(self, job: Job, scratch: Path) -> JobResult:
+        return self.run_job(job, DatasetCatalog(scratch, self._system))
 
     def run_job(self, job: Job, catalog: DatasetCatalog) -> JobResult:
         expanded = self._unresolved.admit(expand_or_fail(job, self._library))

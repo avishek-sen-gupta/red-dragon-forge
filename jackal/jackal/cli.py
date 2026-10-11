@@ -11,16 +11,13 @@ from pathlib import Path
 
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
+from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
 from jackal.results import JobResult
 from jackal.runner import JobRunner
+from jackal.system_catalog import SystemCatalog
 from jackal.unresolved import RaiseErrorStrategy
-
-
-def _parse_dataset(spec: str) -> tuple[str, Path]:
-    dsn, path = spec.split("=", 1)
-    return dsn, Path(path)
 
 
 def _resolve_dir(
@@ -37,15 +34,27 @@ def _resolve_dir(
     parser.error(f"{flag_name} is required: supply the flag or set $CARDDEMO_HOME")
 
 
+def _run_command(runp: argparse.ArgumentParser) -> None:
+    runp.add_argument("jcl")
+    runp.add_argument("--system", required=True)
+    runp.add_argument("--source-dir", default="")
+    runp.add_argument("--copybook-dir", default="")
+
+
+def _catalog_add_command(add: argparse.ArgumentParser) -> None:
+    add.add_argument("dsn")
+    add.add_argument("--system", required=True)
+    add.add_argument("--file", required=True)
+    add.add_argument("--recfm", required=True, choices=[f.value for f in RecordFormat])
+    add.add_argument("--lrecl", required=True, type=int)
+
+
 def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="jackal")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    runp = sub.add_parser("run")
-    runp.add_argument("jcl")
-    runp.add_argument("--source-dir", default="")
-    runp.add_argument("--data-dir", default="")
-    runp.add_argument("--copybook-dir", default="")
-    runp.add_argument("--dataset", action="append", default=[])
+    _run_command(sub.add_parser("run"))
+    catalog = sub.add_parser("catalog").add_subparsers(dest="action", required=True)
+    _catalog_add_command(catalog.add_parser("add"))
     return ap
 
 
@@ -53,7 +62,7 @@ def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
     return JobRunner(
         source_dir=_resolve_dir(args.source_dir, "app/cbl", "--source-dir", ap),
         bridge_jar=os.environ.get("PROLEAP_BRIDGE_JAR", ""),
-        data_dir=_resolve_dir(args.data_dir, "app/data/EBCDIC", "--data-dir", ap),
+        system=SystemCatalog(Path(args.system)),
         copybook_dir=_resolve_dir(args.copybook_dir, "app/cpy", "--copybook-dir", ap),
         unresolved=RaiseErrorStrategy(),
         missing_data=LenientAllocation(),
@@ -69,14 +78,28 @@ def _report(result: JobResult) -> int:
     return 0 if result.outcome.succeeded() else 1
 
 
+def _run_job(args: argparse.Namespace, ap: argparse.ArgumentParser) -> int:
+    runner = _runner(args, ap)
+    job = parse_jcl(Path(args.jcl).read_text())
+    with tempfile.TemporaryDirectory(prefix="jackal_") as scratch:
+        return _report(runner.run(job, scratch=Path(scratch)))
+
+
+def _catalog_add(args: argparse.Namespace) -> int:
+    SystemCatalog(Path(args.system)).add(
+        args.dsn,
+        Path(args.file),
+        SequentialLabel(RecordFormat(args.recfm), args.lrecl),
+    )
+    return 0
+
+
 def run(argv: Sequence[str]) -> int:
     ap = _parser()
     args = ap.parse_args(argv)
-    runner = _runner(args, ap)
-    job = parse_jcl(Path(args.jcl).read_text())
-    seeds = dict(_parse_dataset(s) for s in args.dataset)
-    with tempfile.TemporaryDirectory(prefix="jackal_") as wd:
-        return _report(runner.run(job, workdir=Path(wd), seeds=seeds))
+    if args.cmd == "catalog":
+        return _catalog_add(args)
+    return _run_job(args, ap)
 
 
 def main() -> int:

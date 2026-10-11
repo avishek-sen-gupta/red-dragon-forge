@@ -11,7 +11,7 @@ from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
 from jackal.allocation import DdEnvironment
-from jackal.catalog import DatasetCatalog, DatasetSpec
+from jackal.catalog import DatasetCatalog
 from jackal.idcams.commands import (
     Command,
     DefineCluster,
@@ -20,7 +20,8 @@ from jackal.idcams.commands import (
     Repro,
     SetMaxcc,
 )
-from jackal.model import DatasetOrg, DdName
+from jackal.labels import KsdsLabel
+from jackal.model import DdName
 
 _OPS: Mapping[str, Callable[[int, int], bool]] = {
     "LE": lambda maxcc, value: maxcc <= value,
@@ -44,14 +45,8 @@ def _handle_delete(cmd: Delete, catalog: DatasetCatalog) -> int:
 
 def _handle_define_cluster(cmd: DefineCluster, catalog: DatasetCatalog) -> int:
     try:
-        catalog.allocate_new(
-            DatasetSpec(
-                dsn=cmd.name,
-                org=DatasetOrg.KSDS,
-                key_offset=cmd.key_offset,
-                key_length=cmd.key_length,
-                record_size=cmd.record_size,
-            )
+        catalog.define(
+            cmd.name, KsdsLabel(cmd.record_size, cmd.key_offset, cmd.key_length)
         )
     except ValueError:
         return 12
@@ -77,10 +72,8 @@ def _records(driver: FileOrganizationDriver) -> Iterator[bytes]:
 def _handle_repro(cmd: Repro, dds: DdEnvironment, catalog: DatasetCatalog) -> int:
     in_ds = dds.dataset(DdName(cmd.infile_dd))
     out_ds = dds.dataset(DdName(cmd.outfile_dd))
-    in_drv = catalog.open_dataset_with_record_size(
-        in_ds.dsn, OpenMode.INPUT, out_ds.record_size
-    )
-    out_drv = catalog.open_dataset(out_ds.dsn, OpenMode.OUTPUT)
+    in_drv = in_ds.opened(OpenMode.INPUT, out_ds.record_size())
+    out_drv = out_ds.opened(OpenMode.OUTPUT, out_ds.record_size())
     for record in _records(in_drv):
         out_drv.write(record)
     in_drv.close()

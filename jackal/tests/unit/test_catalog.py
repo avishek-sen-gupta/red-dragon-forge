@@ -1,8 +1,13 @@
+from pathlib import Path
+
 import pytest
-from jackal.catalog import Dataset, DatasetCatalog, DatasetSpec, Unallocated
+from cobol_asg.file_enums import OpenMode
+from interpreter.cobol.access_result import AccessCondition
+from jackal.catalog import DatasetCatalog, Unallocated
+from jackal.dataset import Dataset
+from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
     DD,
-    DatasetOrg,
     DirectDSN,
     Disp,
     DispAbnormal,
@@ -11,8 +16,27 @@ from jackal.model import (
     TempRef,
 )
 from jackal.results import AllocationError, Completed
+from jackal.system_catalog import SystemCatalog
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
+
+FB80 = SequentialLabel(RecordFormat.FB, 80)
+
+
+def _system(tmp_path: Path) -> SystemCatalog:
+    return SystemCatalog(tmp_path / "system")
+
+
+def _catalog(tmp_path: Path) -> DatasetCatalog:
+    scratch = tmp_path / "scratch"
+    scratch.mkdir(exist_ok=True)
+    return DatasetCatalog(scratch, _system(tmp_path))
+
+
+def _upload(tmp_path: Path, dsn: str, data: bytes) -> Dataset:
+    source = tmp_path / "upload.dat"
+    source.write_bytes(data)
+    return _system(tmp_path).add(dsn, source, FB80)
 
 
 def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> DD:
@@ -25,24 +49,21 @@ def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> D
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_new_allocates_empty_file(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     ds = cat.allocate(_dd("J.WORK", DispStatus.NEW))
     assert ds.path.exists() and ds.path.read_bytes() == b""
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_seed_then_shr_resolves_same_file(tmp_path):
-    src = tmp_path / "seed.dat"
-    src.write_bytes(b"DATA")
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    cat.seed("J.IN", src)
-    ds = cat.allocate(_dd("J.IN", DispStatus.SHR))
-    assert ds.path == src
+def test_a_dataset_in_the_system_catalog_is_allocated_by_name(tmp_path):
+    added = _upload(tmp_path, "J.IN", b"DATA")
+    ds = _catalog(tmp_path).allocate(_dd("J.IN", DispStatus.SHR))
+    assert (ds, added.path.read_bytes()) == (added, b"DATA")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_pass_retains_delete_removes(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     keep = cat.allocate(_dd("J.A", DispStatus.NEW, DispNormal.PASS))
     cat.dispose(_dd("J.A", DispStatus.NEW, DispNormal.PASS), Completed(0))
     assert keep.path.exists()
@@ -52,100 +73,38 @@ def test_pass_retains_delete_removes(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_shr_resolves_from_data_dir(tmp_path):
-    data = tmp_path / "data"
-    data.mkdir()
-    (data / "A.B.PS").write_bytes(b"REC1")
-    wd = tmp_path / "wd"
-    wd.mkdir()
-    cat = DatasetCatalog(workdir=wd, data_dir=data)
-    dd = DD(
-        "D",
-        DirectDSN(literal("A.B.PS")),
-        Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
-    )
-    assert cat.allocate(dd).path == data / "A.B.PS"
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_allocate_new_ksds(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    spec = DatasetSpec(
-        dsn="A.B.KSDS",
-        org=DatasetOrg.KSDS,
-        key_offset=0,
-        key_length=11,
-        record_size=300,
-    )
-    ds = cat.allocate_new(spec)
-    assert ds.org is DatasetOrg.KSDS and ds.key_length == 11 and ds.record_size == 300
-    assert ds.path.exists()
-    assert cat.resolve("A.B.KSDS").org is DatasetOrg.KSDS
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_allocate_new_duplicate_dsn_raises(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    spec = DatasetSpec(
-        dsn="A.B.KSDS",
-        org=DatasetOrg.KSDS,
-        key_offset=0,
-        key_length=11,
-        record_size=300,
-    )
-    cat.allocate_new(spec)
+def test_define_catalogs_a_labelled_ksds_once(tmp_path):
+    cat = _catalog(tmp_path)
+    ksds = cat.define("A.B.KSDS", KsdsLabel(300, 0, 11))
+    assert (ksds.path.exists(), cat.resolve("A.B.KSDS")) == (True, ksds)
     with pytest.raises(ValueError, match="A.B.KSDS"):
-        cat.allocate_new(spec)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_allocate_new_ksds_zero_record_size_raises(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    spec = DatasetSpec(
-        dsn="A.B.KSDS", org=DatasetOrg.KSDS, key_offset=0, key_length=11, record_size=0
-    )
-    with pytest.raises(ValueError, match="record_size"):
-        cat.allocate_new(spec)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_allocate_new_ksds_zero_key_length_raises(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    spec = DatasetSpec(
-        dsn="A.B.KSDS", org=DatasetOrg.KSDS, key_offset=0, key_length=0, record_size=300
-    )
-    with pytest.raises(ValueError, match="key_length"):
-        cat.allocate_new(spec)
+        cat.define("A.B.KSDS", KsdsLabel(300, 0, 11))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dispose_delete_of_missing_dsn_is_noop(tmp_path):
-    # DISP=(...,DELETE) on a DSN that was never allocated must not raise.
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     cat.dispose(_dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE), Completed(0))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_mod_creates_when_absent(tmp_path):
-    # MOD on a DSN absent from catalog + data_dir creates an empty backing file.
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     ds = cat.allocate(_dd("J.MOD", DispStatus.MOD))
     assert ds.path.exists() and ds.path.read_bytes() == b""
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_open_dataset_ps_empty_returns_eof(tmp_path):
-    from cobol_asg.file_enums import OpenMode
-    from interpreter.cobol.access_result import AccessCondition
-
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+def test_an_empty_sequential_dataset_reads_end_of_file(tmp_path):
+    cat = _catalog(tmp_path)
     dd = DD(
         "D",
         DirectDSN(literal("J.FLAT")),
-        Disp(DispStatus.NEW, DispNormal.KEEP, DispNormal.DELETE),
+        Disp(DispStatus.NEW, DispNormal.KEEP, DispAbnormal.DELETE),
     )
-    cat.allocate(dd)
-    drv = cat.open_dataset_with_record_size("J.FLAT", OpenMode.INPUT, 80)
+    ds = cat.allocate(dd)
+    assert isinstance(ds, Dataset)
+    drv = ds.opened(OpenMode.INPUT, 80)
     result = drv.read_seq()
     drv.close()
     assert result.condition is AccessCondition.END_OF_FILE
@@ -161,7 +120,7 @@ def _temp_dd(
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_new_allocates_backing_file(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     ds = cat.allocate(_temp_dd("WORKIN", DispStatus.NEW))
     assert ds.path.exists()
     assert ds.path.name == "&&WORKIN"
@@ -169,7 +128,7 @@ def test_temp_new_allocates_backing_file(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_old_resolves_same_dataset(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     ds1 = cat.allocate(_temp_dd("WORKIN", DispStatus.NEW))
     ds2 = cat.allocate(_temp_dd("WORKIN", DispStatus.OLD))
     assert ds1.path == ds2.path
@@ -177,7 +136,7 @@ def test_temp_old_resolves_same_dataset(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_dispose_delete_removes_file(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
     ds = cat.allocate(dd)
     cat.dispose(dd, Completed(0))
@@ -186,7 +145,7 @@ def test_temp_dispose_delete_removes_file(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_dispose_pass_retains_file(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS)
     ds = cat.allocate(dd)
     cat.dispose(dd, Completed(0))
@@ -195,7 +154,7 @@ def test_temp_dispose_pass_retains_file(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_end_job_deletes_a_surviving_temp(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     ds = cat.allocate(_temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS))
     cat.end_job()
     assert not ds.path.exists()
@@ -203,16 +162,16 @@ def test_end_job_deletes_a_surviving_temp(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_end_job_is_a_noop_when_every_temp_was_deleted(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
     cat.allocate(dd)
     cat.dispose(dd, Completed(0))
-    cat.end_job()  # must not raise
+    cat.end_job()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_dd_the_catalog_cannot_allocate_comes_back_with_the_reason(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     cat.allocate(_dd("J.HAVE", DispStatus.NEW, DispNormal.CATLG))
     cat.allocate(_temp_dd("TEMP", DispStatus.NEW))
     missing = _dd("J.MISSING", DispStatus.SHR)
@@ -229,9 +188,8 @@ def test_a_dd_the_catalog_cannot_allocate_comes_back_with_the_reason(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_an_unallocated_dd_can_be_given_an_empty_dataset_in_its_place(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    (tmp_path / "J_HAVE").write_bytes(b"OLD")
-    cat.seed("J.HAVE", tmp_path / "J_HAVE")
+    _upload(tmp_path, "J.HAVE", b"OLD")
+    cat = _catalog(tmp_path)
     temp = cat.created_empty(_temp_dd("GHOST", DispStatus.OLD))
     direct = cat.created_empty(_dd("J.HAVE", DispStatus.NEW))
     assert (
@@ -243,20 +201,13 @@ def test_an_unallocated_dd_can_be_given_an_empty_dataset_in_its_place(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_open_dataset_ksds_write_then_read(tmp_path):
-    from cobol_asg.file_enums import OpenMode
-    from interpreter.cobol.access_result import AccessCondition
-
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    spec = DatasetSpec(
-        dsn="MY.KSDS", org=DatasetOrg.KSDS, key_offset=0, key_length=4, record_size=10
-    )
-    cat.allocate_new(spec)
-    record = b"KEY DATA  "  # 10 bytes; key = first 4
-    drv = cat.open_dataset("MY.KSDS", OpenMode.OUTPUT)
+def test_a_ksds_reads_back_by_key_what_was_written(tmp_path):
+    ksds = _catalog(tmp_path).define("MY.KSDS", KsdsLabel(10, 0, 4))
+    record = b"KEY DATA  "
+    drv = ksds.opened(OpenMode.OUTPUT, 10)
     drv.write(record)
     drv.close()
-    drv2 = cat.open_dataset("MY.KSDS", OpenMode.INPUT)
+    drv2 = ksds.opened(OpenMode.INPUT, 10)
     result = drv2.read_key(b"KEY ")
     drv2.close()
     assert result.condition is AccessCondition.OK
@@ -265,7 +216,7 @@ def test_open_dataset_ksds_write_then_read(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_temp_and_a_dataset_of_the_same_name_are_separate_datasets(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = _catalog(tmp_path)
     temp = DD(
         ddname="T",
         dsn=TempRef("EXTR"),

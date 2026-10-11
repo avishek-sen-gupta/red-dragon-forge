@@ -110,18 +110,27 @@ when its budget runs out abends `S322`, as z/OS ends a step that exceeds its CPU
 
 ## Datasets and the catalog
 
-`jackal.catalog.DatasetCatalog` maps DSNs to backing files in a per-run working directory.
+Datasets live in a **system directory** that persists across runs, standing in for a
+mainframe's disks and catalog. `jackal.system_catalog.SystemCatalog` holds it: `catalog.json`
+records every cataloged dataset with its label (`jackal.labels`: RECFM and LRECL for a
+sequential dataset, LRECL and key extent for a KSDS, or pending for a dataset a job created,
+whose label is built at its first `OPEN OUTPUT` in red-dragon-forge-8in), and `datasets/`
+holds the bytes. Data enters only through `jackal catalog add`, which copies the file in with
+its label; no Forge runtime accepts an unlabelled dataset. Labels are stored and checked; I/O
+does not read them yet (8in). `jackal.catalog.DatasetCatalog` is one job's view of it, adding
+the job's temps, passed datasets and a scratch directory. Dispositions follow SMS: `CATLG` and
+`KEEP` leave a dataset cataloged and `UNCATLG` does nothing.
 
 | DD form | Behaviour |
 |---|---|
-| `DISP=OLD` or `SHR` | Resolved from the catalog, then from `<data-dir>/<DSN>`. Missing is an error. |
-| `DISP=MOD` | As above; created empty in the working directory if absent. |
-| `DISP=NEW` | Created empty in the working directory. |
+| `DISP=OLD` or `SHR` | Resolved from the system catalog. Missing is an allocation failure. |
+| `DISP=MOD` | As above; created empty and cataloged if absent. |
+| `DISP=NEW` | Created empty and cataloged, its label pending. A name already cataloged fails allocation. |
 | `DSN=&&NAME` | Job-scoped temporary dataset, kept apart from named datasets (its file is `&&NAME`), deleted at job end. |
 | `DSN=*.STEP.DD` | Referback to an earlier step's DD. |
 | `DISP=(…,DELETE)` | The dataset and its file are removed when the step ends. |
 | `DISP=(…,PASS)` | Handed to later steps; a later DD naming it receives it, and its own disposition then applies. One the job created and never received is deleted at job end. |
-| `--dataset DSN=path` | Seeds the catalog before the job starts. |
+| IDCAMS `DEFINE CLUSTER` | Catalogs a KSDS with the label its `RECORDSIZE` and `KEYS` give. |
 
 Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`;
 the catalog's one in-place table is `jackal.catalog_stores`.
@@ -161,7 +170,9 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
 | `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append. |
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
-| `jackal/jackal/catalog.py` | Job-scoped DSN-to-file catalog with DISP lifecycle. |
+| `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
+| `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |
+| `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label. |
 | `jackal/jackal/cond.py` | `COND=` evaluation. |
 | `jackal/jackal/model.py`, `results.py` | Immutable job model, DSN types and step results. |
 | `jackal/jackal/value_parts.py` | Literal and symbolic value parts. |

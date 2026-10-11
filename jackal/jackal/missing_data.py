@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Protocol
 
-from jackal.catalog import Dataset, DatasetCatalog, Unallocated
+from jackal.catalog import DatasetCatalog, Unallocated
+from jackal.dataset import Dataset
 from jackal.model import QualifiedStep
 from jackal.results import AllocationFailed
 

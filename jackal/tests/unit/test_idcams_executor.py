@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
-from jackal.catalog import DatasetCatalog
 from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro, SetMaxcc
+from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
     DD,
     DdName,
@@ -19,17 +19,20 @@ from jackal.model import (
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated
+from tests.system_build import job_catalog, upload
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_repro_loads_ps_into_ksds(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    data = tmp_path / "data"
-    data.mkdir()
-    (data / "IN.PS").write_bytes(b"AAArec1xxBBBrec2xx")  # two 9-byte records, key=3@0
-    cat = DatasetCatalog(workdir=tmp_path / "wd", data_dir=data)
-    (tmp_path / "wd").mkdir()
+    upload(
+        tmp_path,
+        "IN.PS",
+        b"AAArec1xxBBBrec2xx",
+        SequentialLabel(RecordFormat.FB, 9),
+    )
+    cat = job_catalog(tmp_path)
     dds = (
         DD(
             DdName("INF"),
@@ -49,7 +52,6 @@ def test_repro_loads_ps_into_ksds(tmp_path):
     env = allocated(ProgramStep(StepName("S2"), ProgramRef("IDCAMS"), dds), cat)
     copied = run_idcams((Repro(infile_dd="INF", outfile_dd="OUT"),), env, cat)
     assert (defined, copied) == (0, 0)
-    # read OUT.KSDS back via the IndexedDriver and confirm BBB record present
     from cobol_asg.file_enums import OpenMode
     from interpreter.cobol.file_drivers import IndexedDriver
 
@@ -63,9 +65,8 @@ def test_repro_loads_ps_into_ksds(tmp_path):
 def test_delete_existing_dsn_returns_0(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    (tmp_path / "MY_DS").write_bytes(b"")
-    cat.seed("MY.DS", tmp_path / "MY_DS")
+    upload(tmp_path, "MY.DS", b"")
+    cat = job_catalog(tmp_path)
     cmds = (Delete(dsn="MY.DS"),)
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
@@ -75,7 +76,7 @@ def test_delete_existing_dsn_returns_0(tmp_path):
 def test_delete_missing_dsn_returns_8(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     cmds = (Delete(dsn="GHOST.DS"),)
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 8
@@ -84,23 +85,19 @@ def test_delete_missing_dsn_returns_8(tmp_path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_define_cluster_registers_in_catalog(tmp_path):
     from jackal.idcams.executor import run_idcams
-    from jackal.model import DatasetOrg
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     cmds = (DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),)
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
-    ds = cat.resolve("MY.KSDS")
-    assert ds.org is DatasetOrg.KSDS
-    assert ds.key_length == 5
-    assert ds.record_size == 80
+    assert cat.resolve("MY.KSDS").label == KsdsLabel(80, 0, 5)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_if_maxcc_sets_value_when_condition_met(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     # Delete missing → maxcc=8; IfMaxcc LE 8 → set maxcc=0
     cmds = (
         Delete(dsn="GHOST.DS"),
@@ -114,7 +111,7 @@ def test_if_maxcc_sets_value_when_condition_met(tmp_path):
 def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     # Delete missing → maxcc=8; IfMaxcc LT 8 → not met (8 < 8 is false)
     cmds = (
         Delete(dsn="GHOST.DS"),
@@ -128,7 +125,7 @@ def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
 def test_if_maxcc_all_operators(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
 
     def after_rc_8(op: str, value: int) -> int:
         cmds = (Delete(dsn="GHOST.DS"), IfMaxcc(op=op, value=value, set_value=0))
@@ -148,7 +145,7 @@ def test_if_maxcc_all_operators(tmp_path):
 def test_set_maxcc_overrides_accumulated_rc(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     # Delete missing -> maxcc=8; a bare SET MAXCC=0 forcibly overrides it,
     # same idempotency idiom real CardDemo JCL uses so a missing dataset
     # doesn't fail a step that's about to (re)DEFINE it anyway.
@@ -164,7 +161,7 @@ def test_set_maxcc_overrides_accumulated_rc(tmp_path):
 def test_if_lastcc_tests_immediately_preceding_command_rc(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     cmds = (
         Delete(dsn="GHOST.DS"),  # missing -> rc 8, lastcc=8, maxcc=8
         IfMaxcc(op="EQ", value=8, set_value=0, test_field="LASTCC"),
@@ -181,7 +178,7 @@ def test_if_lastcc_reflects_only_the_most_recent_command_not_running_maxcc(tmp_p
     here instead of 99."""
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     cmds = (
         Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
         DefineCluster(
@@ -200,7 +197,7 @@ def test_set_maxcc_does_not_change_lastcc(tmp_path):
     IF LASTCC test."""
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     cmds = (
         Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
         SetMaxcc(value=0),  # maxcc forced to 0; lastcc still 8
@@ -217,9 +214,8 @@ def test_delete_purge_flag_deletes_existing_dsn_same_as_without_purge(tmp_path):
     must not crash, and behavior matches an equivalent non-PURGE delete."""
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    (tmp_path / "MY_DS").write_bytes(b"")
-    cat.seed("MY.DS", tmp_path / "MY_DS")
+    upload(tmp_path, "MY.DS", b"")
+    cat = job_catalog(tmp_path)
     cmds = (Delete(dsn="MY.DS", purge=True),)
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
@@ -251,20 +247,17 @@ def test_delete_purge_set_define_sequence_executes(tmp_path):
         "         INDEX (NAME(AWS.M2.CARDDEMO.EXPORT.DATA.INDEX))\n"
     )
     cmds = parse_idcams(text)
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
-    ds = cat.resolve("AWS.M2.CARDDEMO.EXPORT.DATA")
-    assert ds.key_length == 4
-    assert ds.key_offset == 28
-    assert ds.record_size == 500
+    assert cat.resolve("AWS.M2.CARDDEMO.EXPORT.DATA").label == KsdsLabel(500, 28, 4)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_define_cluster_duplicate_dsn_returns_12(tmp_path):
     from jackal.idcams.executor import run_idcams
 
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     cmds = (
         DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),
         DefineCluster(name="MY.KSDS", key_length=5, key_offset=0, record_size=80),

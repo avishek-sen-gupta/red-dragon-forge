@@ -4,39 +4,50 @@ The `jackal` command is `jackal.cli:main`, declared in `jackal/pyproject.toml`. 
 the repo root as `uv run --no-sync jackal`. `python -m jackal` does not work: the package has
 no `__main__`.
 
+## `jackal catalog add`
+
+```
+jackal catalog add DSN --system DIR --file PATH --recfm {F,FB,V,VB} --lrecl N
+```
+
+Copies `PATH` into the system directory `DIR` as dataset `DSN`, cataloged with the given label
+(a sequential dataset). This is the mainframe's upload: jobs only ever read the system's copy.
+A dataset is brought in once; later runs against the same `DIR` find it.
+
 ## `jackal run`
 
 ```
-jackal run JCL [--source-dir DIR] [--data-dir DIR] [--copybook-dir DIR] [--dataset DSN=PATH ...]
+jackal run JCL --system DIR [--source-dir DIR] [--copybook-dir DIR]
 ```
 
-Parses `JCL`, runs every step, and prints one line per step:
+Parses `JCL`, runs every step against the system directory, and prints one line per step:
 
 ```
-STEP05: RC=0 ran=True
+STEP05: RC=0
 ```
 
-`ran=False` means the step was bypassed. The exit status is 0 if every step returned 0, and 1
-otherwise. Argument errors exit with 2.
+The exit status is 0 if the job completed with every return code 0, and 1 otherwise (a nonzero
+return code, an abend or a failed allocation). Argument errors exit with 2.
 
 | Argument | Default | Meaning |
 |---|---|---|
 | `JCL` | required | Path to the JCL file. |
 | `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`; a program that is neither there nor a utility is stubbed with RC 0 and a warning. |
-| `--data-dir DIR` | `$CARDDEMO_HOME/app/data/EBCDIC` | Where an `OLD`, `SHR` or `MOD` DSN not in the catalog is looked up, as `DIR/<DSN>`. |
+| `--system DIR` | required | The system directory: `catalog.json` and the cataloged datasets' bytes. Created if absent. |
 | `--copybook-dir DIR` | `$CARDDEMO_HOME/app/cpy` | Copybook directory for COBOL steps. |
-| `--dataset DSN=PATH` | none | Seeds the catalog with a DSN bound to a file. Repeatable. |
 
-Each directory comes from its flag, else from `CARDDEMO_HOME`. If neither is given the command
+`--source-dir` and `--copybook-dir` come from their flag, else from `CARDDEMO_HOME`. If neither is given the command
 fails before parsing:
 
 ```
 jackal: error: --source-dir is required: supply the flag or set $CARDDEMO_HOME
 ```
 
-The run uses a fresh temporary working directory and catalog. Datasets the job creates there
-are deleted when the command exits, so a job that reads another job's output cannot get it from
-an earlier `jackal run`.
+A run changes the system directory in place, as a job changes a mainframe's catalog: datasets
+it catalogs stay for later runs, and datasets it deletes are gone. A DSN not in the catalog is
+not found; the CLI then stands in an empty dataset, with a warning, and catalogs it like any
+dataset the job creates. Temporary datasets, in-stream cards and sinks live in a scratch
+directory that is removed when the command exits.
 
 The CLI does not expand cataloged procedures: it passes no proclib directories to `JobRunner`.
 

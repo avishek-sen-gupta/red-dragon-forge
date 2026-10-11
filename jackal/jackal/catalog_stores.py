@@ -26,6 +26,9 @@ class Table(Generic[K, V]):
     def take(self, name: K) -> V:
         return self._rows.pop(name)
 
+    def values(self) -> tuple[V, ...]:
+        return tuple(self._rows.values())
+
     def drain(self) -> tuple[V, ...]:
         values = tuple(self._rows.values())
         self._rows.clear()

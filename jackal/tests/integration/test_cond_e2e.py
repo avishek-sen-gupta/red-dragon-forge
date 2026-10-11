@@ -9,6 +9,7 @@ from jackal.results import Bypassed, BypassReason, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.system_build import scratch, system
 
 _FAIL_PGM = """\
        IDENTIFICATION DIVISION.
@@ -45,10 +46,10 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=src,
         bridge_jar=bridge_jar,
-        data_dir=tmp_path,
+        system=system(tmp_path),
         copybook_dir=tmp_path,
     )
-    res = runner.run(job, workdir=tmp_path, seeds={})
+    res = runner.run(job, scratch=scratch(tmp_path))
     a, b = res.steps
     assert a.outcome == Completed(8)
     assert b.outcome == Bypassed(BypassReason.COND_SATISFIED)

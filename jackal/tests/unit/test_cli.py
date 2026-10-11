@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 
 from jackal.cli import main, run
+from jackal.dataset import Dataset
+from jackal.labels import LabelPending, RecordFormat, SequentialLabel
+from jackal.system_catalog import SystemCatalog
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -21,14 +24,13 @@ def test_cli_runs_utility_job(tmp_path, capsys):
             str(jcl),
             "--source-dir",
             str(tmp_path),
-            "--data-dir",
-            str(tmp_path),
+            "--system",
+            str(tmp_path / "system"),
             "--copybook-dir",
             str(tmp_path),
         ]
     )
-    assert rc == 0
-    assert "A" in capsys.readouterr().out
+    assert (rc, capsys.readouterr().out) == (0, "A: RC=0\n")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -46,15 +48,14 @@ def test_cli_console_script_entry(tmp_path, capsys, monkeypatch):
             str(jcl),
             "--source-dir",
             str(tmp_path),
-            "--data-dir",
-            str(tmp_path),
+            "--system",
+            str(tmp_path / "system"),
             "--copybook-dir",
             str(tmp_path),
         ],
     )
     rc = main()
-    assert rc == 0
-    assert "A" in capsys.readouterr().out
+    assert (rc, capsys.readouterr().out) == (0, "A: RC=0\n")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -64,8 +65,8 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
 
     captured: dict = {}
 
-    def fake_run(self, job, workdir, seeds):
-        captured["workdir"] = Path(workdir)
+    def fake_run(self, job, scratch):
+        captured["workdir"] = Path(scratch)
         assert captured["workdir"].exists()  # present during the run
         return JobResult(steps=())
 
@@ -78,8 +79,8 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
             str(jcl),
             "--source-dir",
             str(tmp_path),
-            "--data-dir",
-            str(tmp_path),
+            "--system",
+            str(tmp_path / "system"),
             "--copybook-dir",
             str(tmp_path),
         ]
@@ -89,22 +90,59 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cli_runs_past_a_missing_dataset_and_a_missing_program(tmp_path, capsys):
+def test_cli_catalogs_a_dataset_then_runs_a_job_that_changes_the_system(
+    tmp_path, capsys
+):
+    upload = tmp_path / "in.dat"
+    upload.write_bytes(b"x" * 80)
+    system = tmp_path / "system"
+    added = run(
+        [
+            "catalog",
+            "add",
+            "J.IN",
+            "--system",
+            str(system),
+            "--file",
+            str(upload),
+            "--recfm",
+            "FB",
+            "--lrecl",
+            "80",
+        ]
+    )
     jcl = tmp_path / "j.jcl"
     jcl.write_text(
-        "//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=NO.SUCH,DISP=SHR\n"
+        "//J JOB 1\n//A EXEC PGM=IEFBR14\n//I DD DSN=J.IN,DISP=SHR\n"
+        "//O DD DSN=J.OUT,DISP=(NEW,CATLG)\n//M DD DSN=NO.SUCH,DISP=SHR\n"
         "//B EXEC PGM=SORT\n"
     )
-    rc = run(
+    ran = run(
         [
             "run",
             str(jcl),
+            "--system",
+            str(system),
             "--source-dir",
-            str(tmp_path),
-            "--data-dir",
             str(tmp_path),
             "--copybook-dir",
             str(tmp_path),
         ]
     )
-    assert (rc, capsys.readouterr().out) == (0, "A: RC=0\nB: RC=0\n")
+    catalog = SystemCatalog(system)
+    datasets = system / "datasets"
+    assert (
+        added,
+        ran,
+        capsys.readouterr().out,
+        catalog.lookup("J.IN"),
+        catalog.lookup("J.OUT"),
+        catalog.lookup("NO.SUCH"),
+    ) == (
+        0,
+        0,
+        "A: RC=0\nB: RC=0\n",
+        Dataset("J.IN", datasets / "J.IN", SequentialLabel(RecordFormat.FB, 80)),
+        Dataset("J.OUT", datasets / "J.OUT", LabelPending()),
+        Dataset("NO.SUCH", datasets / "NO.SUCH", LabelPending()),
+    )
