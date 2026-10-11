@@ -16,7 +16,7 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | Step outcome as a sum type: RC, abend, bypassed, flushed, unsupported | `red-dragon-forge-5fu` | supported |
 | Runner owns the step lifecycle: allocate DDs, dispatch, dispose | `red-dragon-forge-lrk` | supported |
 | Datasets own their record attributes, with a variable-record codec | `red-dragon-forge-8in` | not started |
-| Split the catalog into a persistent system catalog and a per-job context | `red-dragon-forge-93f` | not started |
+| Split the catalog into a persistent system catalog and a per-job context | `red-dragon-forge-93f` | supported (GDG bindings later, `jackal-1o2.4`) |
 | JOB to EXEC step sequencing | — | supported |
 | DD: DSN, DISP, in-stream, SYSOUT | — | supported |
 | `COND=` step bypass | `jackal-1o2.1` | supported |
