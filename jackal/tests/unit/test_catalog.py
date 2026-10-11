@@ -1,10 +1,11 @@
 import pytest
-from jackal.catalog import DatasetCatalog, DatasetSpec, Unallocated
+from jackal.catalog import Dataset, DatasetCatalog, DatasetSpec, Unallocated
 from jackal.model import (
     DD,
     DatasetOrg,
     DirectDSN,
     Disp,
+    DispAbnormal,
     DispNormal,
     DispStatus,
     TempRef,
@@ -163,7 +164,7 @@ def test_temp_new_allocates_backing_file(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     ds = cat.allocate(_temp_dd("WORKIN", DispStatus.NEW))
     assert ds.path.exists()
-    assert ds.path.name == "WORKIN"
+    assert ds.path.name == "&&WORKIN"
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -193,20 +194,20 @@ def test_temp_dispose_pass_retains_file(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cleanup_temps_deletes_surviving_file(tmp_path):
+def test_end_job_deletes_a_surviving_temp(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     ds = cat.allocate(_temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS))
-    cat.cleanup_temps()
+    cat.end_job()
     assert not ds.path.exists()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cleanup_temps_noop_when_all_deleted(tmp_path):
+def test_end_job_is_a_noop_when_every_temp_was_deleted(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
     cat.allocate(dd)
     cat.dispose(dd, Completed(0))
-    cat.cleanup_temps()  # must not raise
+    cat.end_job()  # must not raise
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -260,3 +261,19 @@ def test_open_dataset_ksds_write_then_read(tmp_path):
     drv2.close()
     assert result.condition is AccessCondition.OK
     assert result.data == record
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_temp_and_a_dataset_of_the_same_name_are_separate_datasets(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    temp = DD(
+        ddname="T",
+        dsn=TempRef("EXTR"),
+        disp=Disp(DispStatus.NEW, DispNormal.PASS, DispAbnormal.DELETE),
+    )
+    named = _dd("EXTR", DispStatus.NEW)
+    t, n = cat.allocate(temp), cat.allocate(named)
+    assert isinstance(t, Dataset) and isinstance(n, Dataset)
+    paths_differ = t.path != n.path
+    cat.end_job()
+    assert (paths_differ, t.path.exists(), n.path.exists()) == (True, False, True)

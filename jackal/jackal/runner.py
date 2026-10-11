@@ -154,7 +154,7 @@ class JobRunner:
                 _History(()),
             )
         finally:
-            catalog.cleanup_temps()
+            catalog.end_job()
         return JobResult(history.results)
 
     def _next(

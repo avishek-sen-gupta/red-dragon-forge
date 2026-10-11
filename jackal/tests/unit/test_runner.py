@@ -372,6 +372,41 @@ def test_a_stubbed_missing_program_completes_with_rc_0_and_warns(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_dataset_the_job_creates_and_passes_but_never_receives_is_deleted_at_job_end(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "J.OLD").write_bytes(b"x")
+    j = job(
+        "J",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (
+                    dd("A", "J.UNRCVD", disp("NEW", "PASS")),
+                    dd("B", "J.KEPT", disp("NEW", "PASS")),
+                    dd("C", "J.REPASS", disp("NEW", "PASS")),
+                    dd("D", "J.OLD", disp("OLD", "PASS")),
+                ),
+            ),
+            program(
+                "S2",
+                "IEFBR14",
+                (
+                    dd("B", "J.KEPT", disp("OLD", "CATLG")),
+                    dd("C", "J.REPASS", disp("OLD", "PASS")),
+                ),
+            ),
+        ),
+    )
+    result = _run(tmp_path, j)
+    assert (_outcomes(result), _files(tmp_path)) == (
+        [("S1", OK), ("S2", OK)],
+        ["J.OLD", "J_KEPT"],
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_raise_strategy_rejects_an_unresolved_reference_before_any_step_runs(
     tmp_path: Path,
 ) -> None:
