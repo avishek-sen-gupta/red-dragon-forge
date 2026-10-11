@@ -41,8 +41,9 @@ cicada or squall; `.importlinter` enforces this.
    - `RaiseErrorStrategy` raises `UnresolvedReference` before any step runs, naming the first
      `UnexpandedCall` or step whose `COND` or referback holds an unresolved reference.
    - `IgnoreStrategy` runs the job. A `COND` test naming an unresolved step is false, as for a
-     step that did not run. An `UnexpandedCall`, and a step with an unresolved referback, are
-     recorded as `SkippedUnresolved`; later `COND` tests skip them as they skip a bypassed step.
+     step that did not run. An `UnexpandedCall`, and a step with an unresolved referback, go
+     through the gate like any step (an `UnexpandedCall` with no `COND`); where the gate would
+     run them they are recorded as `SkippedUnresolved`; later `COND` tests skip them as they skip a bypassed step.
 
    The runner is also given a `MissingDataStrategy` (`jackal.missing_data`) for a DD the
    catalog cannot allocate: a dataset not found, a temporary dataset no earlier step created,
@@ -59,9 +60,11 @@ cicada or squall; `.importlinter` enforces this.
      `Flushed(cause)`, `SkippedUnresolved` or `AllocationFailed(ddname, error)`.
      `JobResult.outcome` is `JobAllocationFailed(step, failure)` for the first step whose
      allocation failed, else `JobCompleted` with the highest return code among completed steps.
-     Steps after a failed allocation still run until red-dragon-forge-8u3 flushes them.
-   - `jackal.cond.gate` decides whether a step runs, reading only completed steps' return codes.
-     Once a JOB card's `COND` test is met, this step and every later one are
+     Once a step fails allocation, every later step, PROC call and step with an unresolved
+     referback is `Flushed(AfterAllocationFailure(step))`, whatever its `COND`, `EVEN` or
+     `ONLY` says, as z/OS ends a job at a JCL error.
+   - `jackal.cond.gate` decides whether a step runs. A failed allocation is checked first;
+     otherwise it reads only completed steps' return codes. Once a JOB card's `COND` test is met, this step and every later one are
      `Flushed(AfterJobCond(step))`, naming the step that met it. Otherwise a true test of the
      step's own `COND` is `Bypassed(COND_SATISFIED)`. jackal records no abends, so `COND=EVEN`
      reads as no `EVEN` and a `COND=ONLY` step is `Bypassed(ONLY_WITHOUT_ABEND)`.

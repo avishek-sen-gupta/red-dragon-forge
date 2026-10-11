@@ -40,16 +40,30 @@ class Bypassed:
 class AfterJobCond:
     step: QualifiedStep
 
+    def rendered(self) -> str:
+        return f"JOB COND met at {self.step.rendered()}"
+
+
+@dataclass(frozen=True)
+class AfterAllocationFailure:
+    step: QualifiedStep
+
+    def rendered(self) -> str:
+        return f"allocation failed at {self.step.rendered()}"
+
+
+FlushCause: TypeAlias = AfterJobCond | AfterAllocationFailure
+
 
 @dataclass(frozen=True)
 class Flushed:
-    cause: AfterJobCond
+    cause: FlushCause
 
     def rcs(self) -> tuple[int, ...]:
         return ()
 
     def rendered(self) -> str:
-        return f"flushed (JOB COND met at {self.cause.step.rendered()})"
+        return f"flushed ({self.cause.rendered()})"
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,6 @@
 from jackal.model import DdName
 from jackal.results import (
+    AfterAllocationFailure,
     AfterJobCond,
     AllocationError,
     AllocationFailed,
@@ -51,12 +52,14 @@ def test_the_first_step_that_could_not_allocate_decides_the_job_outcome():
     assert (
         result.outcome,
         first.rendered(),
+        Flushed(AfterAllocationFailure(b)).rendered(),
         result.outcome.succeeded(),
         JobCompleted(0).succeeded(),
         JobCompleted(4).succeeded(),
     ) == (
         JobAllocationFailed(b, first),
         "allocation failed (DD IN: DATASET_NOT_FOUND)",
+        "flushed (allocation failed at B)",
         False,
         True,
         False,
