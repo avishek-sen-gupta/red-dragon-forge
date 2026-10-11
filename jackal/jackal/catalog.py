@@ -54,6 +54,19 @@ _ORG_MAP: dict[DatasetOrg, FileOrganization] = {
 }
 
 
+def _empty(dataset: Dataset) -> Dataset:
+    dataset.path.write_bytes(b"")
+    return dataset
+
+
+def _passes(disp: Disp, result: ProgramResult) -> bool:
+    match result:
+        case Completed():
+            return disp.normal is DispNormal.PASS
+        case Abended():
+            return False
+
+
 def _deletes(disp: Disp, result: ProgramResult) -> bool:
     match result:
         case Completed():
@@ -82,6 +95,7 @@ class DatasetCatalog:
         self._data_dir = data_dir
         self._datasets: Table[str, Dataset] = Table()
         self._temps: Table[str, Dataset] = Table()
+        self._passed: Table[str, Dataset] = Table()
 
     def seed(self, dsn: str, path: Path) -> None:
         self._datasets.put(dsn, Dataset(dsn=dsn, path=path))
@@ -99,9 +113,13 @@ class DatasetCatalog:
     def created_empty(self, dd: DD[StepReference]) -> Dataset:
         match dd.dsn:
             case TempRef(name=name):
-                return self._temps.put(name, self._created(name, self._workdir / name))
+                return self._temps.put(name, _empty(self._temp_dataset(name)))
             case _:
                 return self._created_direct(dd.dsn.dataset_name())
+
+    def _temp_dataset(self, alias: str) -> Dataset:
+        name = f"&&{alias}"
+        return Dataset(dsn=name, path=self._workdir / name)
 
     def _created_direct(self, name: str) -> Dataset:
         return self._created(name, self._work_path(name))
@@ -118,7 +136,7 @@ class DatasetCatalog:
             return self._new_temp(dd, name)
         if not self._temps.has(name):
             return Unallocated(dd, AllocationError.TEMP_NOT_CREATED)
-        return self._datasets.get(self._temps.get(name).dsn)
+        return self._temps.get(name)
 
     def _new_temp(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
         if self._temps.has(name):
@@ -194,6 +212,30 @@ class DatasetCatalog:
     def dispose(self, dd: DD[StepReference], result: ProgramResult) -> None:
         if _deletes(dd.disposition(), result):
             self._delete(dd.dsn)
+            return
+        self._pass_or_receive(dd, result)
+
+    def _pass_or_receive(self, dd: DD[StepReference], result: ProgramResult) -> None:
+        match dd.dsn:
+            case DirectDSN():
+                self._passed_on(dd, dd.dsn.dataset_name(), result)
+            case _:
+                return
+
+    def _passed_on(
+        self, dd: DD[StepReference], name: str, result: ProgramResult
+    ) -> None:
+        if _passes(dd.disposition(), result) and self._passable(dd, name):
+            self._passed.put(name, self._datasets.get(name))
+            return
+        self._received(name)
+
+    def _passable(self, dd: DD[StepReference], name: str) -> bool:
+        return dd.disposition().status is DispStatus.NEW or self._passed.has(name)
+
+    def _received(self, name: str) -> None:
+        if self._passed.has(name):
+            self._passed.take(name)
 
     def _delete(self, dsn: DSN[StepReference]) -> None:
         match dsn:
@@ -206,16 +248,19 @@ class DatasetCatalog:
         match dsn:
             case DirectDSN():
                 self.delete_dsn(dsn.dataset_name())
+                self._received(dsn.dataset_name())
             case _:
                 return
 
     def _delete_temp(self, name: str) -> None:
         if self._temps.has(name):
-            self.delete_dsn(self._temps.take(name).dsn)
+            self._temps.take(name).path.unlink(missing_ok=True)
 
-    def cleanup_temps(self) -> None:
-        for ds in self._temps.drain():
-            self.delete_dsn(ds.dsn)
+    def end_job(self) -> None:
+        for temp in self._temps.drain():
+            temp.path.unlink(missing_ok=True)
+        for passed in self._passed.drain():
+            self.delete_dsn(passed.dsn)
 
     @property
     def workdir(self) -> Path:

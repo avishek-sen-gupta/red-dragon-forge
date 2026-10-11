@@ -94,7 +94,8 @@ cicada or squall; `.importlinter` enforces this.
    - After the program, the runner applies each DD's normal DISP, or its abnormal DISP if the
      step abended, and releases the sinks.
      Programs never allocate or dispose themselves.
-4. At job end, surviving temporary datasets are deleted. The result is a `JobResult` holding
+4. At job end, surviving temporary datasets are deleted, and so is every dataset the job created
+   with `DISP=(NEW,PASS)` that no later step received with a disposition of its own. The result is a `JobResult` holding
    one `StepResult` per step.
 
 ## COBOL steps
@@ -116,9 +117,10 @@ when its budget runs out abends `S322`, as z/OS ends a step that exceeds its CPU
 | `DISP=OLD` or `SHR` | Resolved from the catalog, then from `<data-dir>/<DSN>`. Missing is an error. |
 | `DISP=MOD` | As above; created empty in the working directory if absent. |
 | `DISP=NEW` | Created empty in the working directory. |
-| `DSN=&&NAME` | Job-scoped temporary dataset, deleted at job end. |
+| `DSN=&&NAME` | Job-scoped temporary dataset, kept apart from named datasets (its file is `&&NAME`), deleted at job end. |
 | `DSN=*.STEP.DD` | Referback to an earlier step's DD. |
 | `DISP=(…,DELETE)` | The dataset and its file are removed when the step ends. |
+| `DISP=(…,PASS)` | Handed to later steps; a later DD naming it receives it, and its own disposition then applies. One the job created and never received is deleted at job end. |
 | `--dataset DSN=path` | Seeds the catalog before the job starts. |
 
 Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`;
