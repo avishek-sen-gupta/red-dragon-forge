@@ -45,6 +45,7 @@ ProgramResult: TypeAlias = Completed | Abended
 class BypassReason(Enum):
     COND_SATISFIED = "COND_SATISFIED"
     ONLY_WITHOUT_ABEND = "ONLY_WITHOUT_ABEND"
+    IF_CONDITION_FALSE = "IF_CONDITION_FALSE"
 
 
 @dataclass(frozen=True)

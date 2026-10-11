@@ -62,7 +62,7 @@ def _unrunnable(decision: Run | Bypassed | Flushed) -> StepOutcome:
 
 
 class UnsupportedStep(Exception):
-    """A step jackal cannot run yet: a step under an IF, or a concatenated DD."""
+    """A step jackal cannot run yet: one with a concatenated DD."""
 
 
 @dataclass(frozen=True)
@@ -106,15 +106,6 @@ def _concatenated(
             "reads are not supported yet (jackal-1o2.5)"
         )
     return step
-
-
-def _unguarded(qualified: QualifiedStep) -> ProgramStep[StepReference]:
-    if qualified.step.guard != Always():
-        raise UnsupportedStep(
-            f"{qualified.rendered()} is under an IF; IF/THEN/ELSE does not run yet "
-            "(jackal-1o2.8)"
-        )
-    return _concatenated(qualified, qualified.step)
 
 
 class JobRunner:
@@ -168,10 +159,10 @@ class JobRunner:
     ) -> _History:
         match entry:
             case UnexpandedCall():
-                decision = gate(_NO_CONDITION, end_job_tests, history.results)
+                decision = gate(_NO_CONDITION, Always(), end_job_tests, history.results)
                 return history.recorded(entry, _unrunnable(decision))
             case QualifiedStep():
-                step = _unguarded(entry)
+                step = _concatenated(entry, entry.step)
                 return self._gated(catalog, end_job_tests, history, entry, step)
 
     def _gated(
@@ -182,7 +173,7 @@ class JobRunner:
         qualified: QualifiedStep,
         step: ProgramStep[StepReference],
     ) -> _History:
-        decision = gate(step.cond, end_job_tests, history.results)
+        decision = gate(step.cond, step.guard, end_job_tests, history.results)
         match decision:
             case Run() if not referbacks_resolved(step):
                 return history.recorded(qualified, SkippedUnresolved())

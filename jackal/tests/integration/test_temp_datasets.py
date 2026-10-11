@@ -13,19 +13,18 @@ from jackal.missing_data import (
 from jackal.missing_program import AbendMissingProgram
 from jackal.model import (
     DD,
-    CondOp,
+    ConcatMember,
     DdName,
-    IfBlock,
-    RcTest,
-    StepName,
+    DirectDSN,
     StepRef,
     TempRef,
 )
 from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner, UnsupportedStep
 from jackal.unresolved import RaiseErrorStrategy
+from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
-from tests.model_build import dd, disp, job, program, ref
+from tests.model_build import dd, disp, job, program
 from tests.system_build import scratch, system
 
 
@@ -109,6 +108,13 @@ def test_a_temp_never_created_fails_its_step_or_is_substituted_when_lenient(
     )
 
 
+def _concatenated_dd() -> DD[StepRef]:
+    member = ConcatMember(DirectDSN(literal("T.B")), disp("SHR"))
+    return DD(
+        DdName("IN"), DirectDSN(literal("T.A")), disp("SHR"), concatenated=(member,)
+    )
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cleanup_runs_after_step_exception(tmp_path):
     """Temp allocated in step 1 is cleaned up even when step 2 is refused."""
@@ -118,11 +124,7 @@ def test_cleanup_runs_after_step_exception(tmp_path):
         "J",
         (
             program("S1", "IEFBR14", (_pass_dd("KEPT"),)),
-            IfBlock(
-                StepName("C1"),
-                RcTest(ref("S1"), CondOp.EQ, 0),
-                (program("S2", "IEFBR14"),),
-            ),
+            program("S2", "IEFBR14", (_concatenated_dd(),)),
         ),
     )
     with pytest.raises(UnsupportedStep):

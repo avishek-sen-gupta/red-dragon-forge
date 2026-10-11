@@ -17,22 +17,32 @@ from jackal.missing_program import (
 )
 from jackal.model import (
     DD,
+    AbendCodeTest,
     AbendMode,
+    AbendTest,
+    AllOf,
+    AllPriorSteps,
+    AnyOf,
     BackwardRef,
     CondOp,
     DdName,
     IfBlock,
     InStreamDSN,
     Job,
+    Negated,
     NoDSN,
     ProcCall,
     ProcRef,
+    ProgramStep,
     RcTest,
+    RunTest,
     StepName,
     StepRef,
     TempRef,
     UnresolvedDd,
+    UserAbend,
 )
+from jackal.model import SystemAbend as ModelSystemAbend
 from jackal.results import (
     Abended,
     AfterAbend,
@@ -618,21 +628,124 @@ def test_runner_expands_a_proc_call_before_running(tmp_path: Path) -> None:
     assert _outcomes(_run(tmp_path, j, (tmp_path / "proc",))) == [("STEP1.P1", OK)]
 
 
+IF_FALSE = Bypassed(BypassReason.IF_CONDITION_FALSE)
+RC8 = Completed(8)
+
+
+def _rc8(label: str) -> ProgramStep[StepRef]:
+    return program(label, "IDCAMS", (_sysin(("DELETE NO.SUCH.DATASET",)),))
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_runner_refuses_a_step_under_an_if(tmp_path: Path) -> None:
-    guarded = job(
+def test_an_if_construct_runs_the_branch_its_return_code_tests_choose(
+    tmp_path: Path,
+) -> None:
+    """z/OS 3.1 JCL Reference, ch. 18: RC is the highest return code of the steps
+    that ran; a test of a step that did not start is false, negated or not."""
+    j = job(
         "J",
         (
             program("S1", "IEFBR14"),
+            _rc8("S2"),
             IfBlock(
-                StepName("C1"),
-                RcTest(ref("S1"), CondOp.EQ, 0),
-                (program("S2", "IEFBR14"),),
+                StepName("T1"),
+                RcTest(AllPriorSteps(), CondOp.GT, 4),
+                (
+                    program("THEN1", "IEFBR14"),
+                    IfBlock(
+                        StepName("T2"),
+                        RcTest(ref("S1"), CondOp.EQ, 0),
+                        (program("NESTED", "IEFBR14"),),
+                    ),
+                ),
+                (program("ELSE1", "IEFBR14"),),
+            ),
+            IfBlock(
+                StepName("T3"),
+                AnyOf(
+                    (
+                        RcTest(ref("ELSE1"), CondOp.EQ, 0),
+                        Negated(RcTest(ref("ELSE1"), CondOp.EQ, 0)),
+                    )
+                ),
+                (program("NOTRUN", "IEFBR14"),),
+            ),
+            IfBlock(
+                StepName("T4"),
+                AllOf((Negated(RunTest(ref("ELSE1"))), RunTest(ref("S2")))),
+                (program("RUNTEST", "IEFBR14"),),
             ),
         ),
     )
-    with pytest.raises(UnsupportedStep, match="S2 is under an IF"):
-        _run(tmp_path, guarded)
+    assert _outcomes(_run(tmp_path, j)) == [
+        ("S1", OK),
+        ("S2", RC8),
+        ("THEN1", OK),
+        ("NESTED", OK),
+        ("ELSE1", IF_FALSE),
+        ("NOTRUN", IF_FALSE),
+        ("RUNTEST", OK),
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_after_an_abend_only_steps_whose_if_tests_an_abend_run(
+    tmp_path: Path,
+) -> None:
+    """z/OS 3.1 JCL Reference, ch. 18, Defaults: after an abend, steps in an IF
+    construct run only when it tests ABEND, ABENDCC or ¬ABEND; the IF and the
+    step's own COND must both allow it."""
+    s806 = SystemAbend(0x806)
+    j = job(
+        "J",
+        (
+            program("S1", "NOSUCHPG"),
+            IfBlock(
+                StepName("T4"),
+                AllOf(
+                    (AbendTest(AllPriorSteps()), RcTest(AllPriorSteps(), CondOp.EQ, 0))
+                ),
+                (program("RCZERO", "IEFBR14"),),
+            ),
+            IfBlock(
+                StepName("T1"),
+                RcTest(AllPriorSteps(), CondOp.EQ, 0),
+                (program("RCONLY", "IEFBR14"),),
+            ),
+            IfBlock(
+                StepName("T2"),
+                AbendTest(AllPriorSteps()),
+                (
+                    program("ONABEND", "IEFBR14"),
+                    program("CONDBYP", "IEFBR14", condition=cond((0, "EQ", ""))),
+                ),
+                (program("NOABEND", "IEFBR14"),),
+            ),
+            IfBlock(
+                StepName("T3"),
+                AllOf(
+                    (
+                        AbendCodeTest(ref("S1"), ModelSystemAbend(0x806)),
+                        Negated(AbendCodeTest(AllPriorSteps(), UserAbend(100))),
+                    )
+                ),
+                (program("CC806", "IEFBR14"),),
+            ),
+            program("AFTER", "IEFBR14"),
+        ),
+    )
+    result = _run(tmp_path, j)
+    flushed = Flushed(AfterAbend(result.steps[0].step))
+    assert _outcomes(result) == [
+        ("S1", Abended(s806)),
+        ("RCZERO", OK),
+        ("RCONLY", flushed),
+        ("ONABEND", OK),
+        ("CONDBYP", COND_MET),
+        ("NOABEND", IF_FALSE),
+        ("CC806", OK),
+        ("AFTER", flushed),
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

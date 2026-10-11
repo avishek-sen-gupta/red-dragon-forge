@@ -6,11 +6,13 @@ import operator
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+from jackal.if_guard import holds, tests_abend
 from jackal.model import (
     AbendMode,
     AllPriorSteps,
     BypassTest,
     CondOp,
+    Guard,
     QualifiedStep,
     RcComparison,
     StepCondition,
@@ -42,6 +44,12 @@ _OPS: Mapping[CondOp, Callable[[int, int], bool]] = {
 @dataclass(frozen=True)
 class Run:
     pass
+
+
+@dataclass(frozen=True)
+class _Gated:
+    condition: StepCondition[StepReference]
+    guard: Guard[StepReference]
 
 
 @dataclass(frozen=True)
@@ -77,6 +85,14 @@ def _meets(tests: Sequence[RcComparison], completed: _Completed) -> bool:
     return any(_OPS[t.op](t.code, completed.rc) for t in tests)
 
 
+def _guarded(
+    step: _Gated, history: Sequence[StepResult], completed: Sequence[_Completed]
+) -> Run | Bypassed:
+    if not holds(step.guard, history):
+        return Bypassed(BypassReason.IF_CONDITION_FALSE)
+    return _own(step.condition, completed)
+
+
 def _own(
     condition: StepCondition[StepReference], completed: Sequence[_Completed]
 ) -> Run | Bypassed:
@@ -94,24 +110,24 @@ def _abended(result: StepResult) -> tuple[QualifiedStep, ...]:
 
 
 def _after_abend(
-    condition: StepCondition[StepReference],
+    step: _Gated,
     history: Sequence[StepResult],
     completed: Sequence[_Completed],
 ) -> Run | Bypassed | Flushed:
     abended = tuple(s for r in history for s in _abended(r))
     if not abended:
-        return _without_abend(condition, completed)
-    if condition.abend_mode is AbendMode.NORMAL:
+        return _without_abend(step, history, completed)
+    if step.condition.abend_mode is AbendMode.NORMAL and not tests_abend(step.guard):
         return Flushed(AfterAbend(abended[0]))
-    return _own(condition, completed)
+    return _guarded(step, history, completed)
 
 
 def _without_abend(
-    condition: StepCondition[StepReference], completed: Sequence[_Completed]
+    step: _Gated, history: Sequence[StepResult], completed: Sequence[_Completed]
 ) -> Run | Bypassed:
-    if condition.abend_mode is AbendMode.ONLY:
+    if step.condition.abend_mode is AbendMode.ONLY:
         return Bypassed(BypassReason.ONLY_WITHOUT_ABEND)
-    return _own(condition, completed)
+    return _guarded(step, history, completed)
 
 
 def _allocation_failed(result: StepResult) -> tuple[QualifiedStep, ...]:
@@ -123,7 +139,7 @@ def _allocation_failed(result: StepResult) -> tuple[QualifiedStep, ...]:
 
 
 def _after_job_cond(
-    condition: StepCondition[StepReference],
+    step: _Gated,
     end_job_tests: Sequence[RcComparison],
     history: Sequence[StepResult],
 ) -> Run | Bypassed | Flushed:
@@ -131,15 +147,16 @@ def _after_job_cond(
     met = tuple(c for c in completed if _meets(end_job_tests, c))
     if met:
         return Flushed(AfterJobCond(met[0].step))
-    return _after_abend(condition, history, completed)
+    return _after_abend(step, history, completed)
 
 
 def gate(
     condition: StepCondition[StepReference],
+    guard: Guard[StepReference],
     end_job_tests: Sequence[RcComparison],
     history: Sequence[StepResult],
 ) -> Run | Bypassed | Flushed:
     failed = tuple(s for r in history for s in _allocation_failed(r))
     if failed:
         return Flushed(AfterAllocationFailure(failed[0]))
-    return _after_job_cond(condition, end_job_tests, history)
+    return _after_job_cond(_Gated(condition, guard), end_job_tests, history)

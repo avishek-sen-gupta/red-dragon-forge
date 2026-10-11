@@ -14,6 +14,7 @@ Dated design records and analyses. Frozen: never edited after they are written.
 - 2026-10-11 — [jackal: A COBOL OPEN and the Dataset's Label — Decision Record](design/2026-10-11-jackal-cobol-open-record-format.md)
 - 2026-10-12 — [jackal: IDCAMS REPRO and Dataset Labels — Decision Record](design/2026-10-12-jackal-idcams-repro-labels.md)
 - 2026-10-12 — [jackal: Variable-Length Records on Disk — Decision Record](design/2026-10-12-jackal-variable-records.md)
+- 2026-10-12 — [jackal: IF/THEN/ELSE/ENDIF Execution — Decision Record](design/2026-10-12-jackal-if-then-else.md)
 
 ## Analysis
 
