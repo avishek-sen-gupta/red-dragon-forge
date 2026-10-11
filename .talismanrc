@@ -562,7 +562,7 @@ fileignoreconfig:
 - filename: docs/reference/cobble/field-dataflow.md
   checksum: 5517172d14630198f6aa7ae74b6c03f57f305db67fca0cdba01bca79cb98d88f
 - filename: docs/superpowers/specs/2026-10-10-jackal-job-level-domain-model-design.md
-  checksum: 6b9547d80899fcbedf983f33873b3a13e6b75dc7eaae6dd18914f2d45034567b
+  checksum: 4a049414ef2aaed6d9b656f825f9e753b27e338d2a0d27a3e3eefdfc126c6851
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-unit1-acceptance.md
   checksum: 5e537151a14b741996f46f6c8014dd3a8103609e81c43461fec4139bf6a3850d
 - filename: jackal/tests/acceptance/build.py
@@ -598,7 +598,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_runner.py
   checksum: 81752e9a6493b749db0ec48bdecf7dc03b9931ff8a0ffd0af96fa0046cbcf514
 - filename: jackal/tests/integration/test_jcl_execute_e2e.py
-  checksum: 5f1161d9259ea7dd5d096b68803457d997ba9d4d6ed6b7cf9fd1af1a63adcd52
+  checksum: 268ece0d315e530fb9cffc49b8d297bf2dfd7cd0aee0c1c614fc843cc7574825
 - filename: jackal/tests/integration/test_cond_e2e.py
   checksum: daffe285d83cdfbc49c2c606533f451b5653b18113d5a6c9c5834570b370309c
 - filename: docs/reference/jackal/architecture.md

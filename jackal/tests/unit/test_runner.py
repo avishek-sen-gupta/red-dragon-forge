@@ -1,8 +1,13 @@
+import logging
 from pathlib import Path
 
 import pytest
+from jackal.missing_data import (
+    LenientAllocation,
+    MissingDataStrategy,
+    StrictAllocation,
+)
 from jackal.model import (
-    UnresolvedDd,
     DD,
     BackwardRef,
     CondOp,
@@ -17,13 +22,18 @@ from jackal.model import (
     StepName,
     StepRef,
     TempRef,
+    UnresolvedDd,
 )
 from jackal.results import (
     AfterJobCond,
-    BypassReason,
+    AllocationError,
+    AllocationFailed,
     Bypassed,
+    BypassReason,
     Completed,
     Flushed,
+    JobAllocationFailed,
+    JobCompleted,
     JobResult,
     SkippedUnresolved,
     StepOutcome,
@@ -40,7 +50,6 @@ from tests.model_build import cond, dd, disp, job, program, ref
 
 OK = Completed(0)
 COND_MET = Bypassed(BypassReason.COND_SATISFIED)
-NOT_RUN = Bypassed(BypassReason.REFERENCED_STEP_NOT_RUN)
 
 
 def _run(
@@ -48,6 +57,7 @@ def _run(
     j: Job,
     proclib: tuple[Path, ...] = (),
     unresolved: UnresolvedReferenceStrategy = RaiseErrorStrategy(),
+    missing_data: MissingDataStrategy = StrictAllocation(),
 ) -> JobResult:
     runner = JobRunner(
         source_dir=tmp_path,
@@ -55,6 +65,7 @@ def _run(
         data_dir=tmp_path,
         copybook_dir=tmp_path,
         unresolved=unresolved,
+        missing_data=missing_data,
         proclib_dirs=proclib,
     )
     return runner.run(j, workdir=tmp_path, seeds={})
@@ -68,6 +79,10 @@ def _fresh(tmp_path: Path, name: str) -> Path:
 
 def _outcomes(result: JobResult) -> list[tuple[str, StepOutcome]]:
     return [(s.name, s.outcome) for s in result.steps]
+
+
+def _back(step: str, ddname: str) -> BackwardRef[StepRef]:
+    return BackwardRef(ref(step), UnresolvedDd(DdName(ddname)))
 
 
 def _sysin(lines: tuple[str, ...]) -> DD[StepRef]:
@@ -163,7 +178,10 @@ def test_a_referback_names_the_earlier_steps_dataset_or_temporary(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> None:
+def test_a_referback_to_a_step_that_did_not_run_allocates_the_name_it_copies(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "OLD.FILE").write_bytes(b"")
     j = job(
         "J",
         (
@@ -171,21 +189,73 @@ def test_a_referback_to_a_bypassed_step_bypasses_its_step(tmp_path: Path) -> Non
             program(
                 "B",
                 "IEFBR14",
-                (dd("OUT", "MY.FILE", disp("NEW", "CATLG")),),
+                (
+                    dd("OUT", "MY.FILE", disp("NEW", "CATLG")),
+                    dd("WRK", TempRef("TEMP"), disp("NEW", "PASS")),
+                    dd("PRIOR", "OLD.FILE"),
+                ),
                 cond((0, "NE", "")),
             ),
-            program(
-                "C",
-                "IEFBR14",
-                (dd("IN", BackwardRef(ref("B"), UnresolvedDd(DdName("OUT")))),),
-            ),
+            program("C", "IEFBR14", (dd("IN", _back("B", "OUT")),)),
+            program("D", "IEFBR14", (dd("TMP", _back("B", "WRK"), disp("OLD")),)),
+            program("E", "IEFBR14", (dd("IN", _back("B", "PRIOR")),)),
         ),
     )
     assert _outcomes(_run(tmp_path, j)) == [
         ("A", Completed(8)),
         ("B", COND_MET),
-        ("C", NOT_RUN),
+        ("C", AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)),
+        ("D", AllocationFailed(DdName("TMP"), AllocationError.TEMP_NOT_CREATED)),
+        ("E", OK),
     ]
+
+
+def _unallocatable() -> Job:
+    return job(
+        "J",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (
+                    _sysin(("CARD",)),
+                    dd("OUT", "J.NEW", disp("NEW", "CATLG")),
+                    dd("IN", "NO.SUCH"),
+                ),
+            ),
+            program("S2", "IEFBR14"),
+        ),
+    )
+
+
+def _files(root: Path) -> list[str]:
+    return sorted(p.name for p in root.rglob("*") if p.is_file())
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_strict_allocation_fails_the_step_and_undoes_what_it_allocated(
+    tmp_path: Path,
+) -> None:
+    result = _run(tmp_path, _unallocatable())
+    failure = AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND)
+    assert (_outcomes(result), result.outcome, _files(tmp_path)) == (
+        [("S1", failure), ("S2", OK)],
+        JobAllocationFailed(result.steps[0].step, failure),
+        [],
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_lenient_allocation_runs_the_step_on_an_empty_dataset_and_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="jackal.missing_data"):
+        result = _run(tmp_path, _unallocatable(), missing_data=LenientAllocation())
+    assert (_outcomes(result), result.outcome, caplog.messages) == (
+        [("S1", OK), ("S2", OK)],
+        JobCompleted(0),
+        ["S1 DD IN: DATASET_NOT_FOUND; allocated an empty dataset in its place"],
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

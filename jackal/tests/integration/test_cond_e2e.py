@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from jackal.jcl.parser import parse_jcl
+from jackal.missing_data import StrictAllocation
 from jackal.results import Bypassed, BypassReason, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
@@ -37,6 +38,7 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
     job = parse_jcl(jcl)
     runner = JobRunner(
         unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
         source_dir=src,
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

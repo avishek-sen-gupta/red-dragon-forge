@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from jackal.allocation import DdEnvironment, allocate
 from jackal.catalog import DatasetCatalog
 from jackal.jcl.wire import disp_from_words
+from jackal.missing_data import StrictAllocation
 from jackal.model import (
     DD,
     DSN,
@@ -94,4 +95,4 @@ def ran(label: str, pgm: str = "PGM") -> QualifiedStep:
 def allocated(
     step: ProgramStep[StepReference], catalog: DatasetCatalog
 ) -> DdEnvironment:
-    return allocate(QualifiedStep((), step), step, catalog)
+    return allocate(QualifiedStep((), step), step, catalog, StrictAllocation())
