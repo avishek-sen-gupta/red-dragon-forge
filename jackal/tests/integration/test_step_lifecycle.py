@@ -198,3 +198,33 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         (SequentialLabel(RecordFormat.V, 104), b"\x00\x68\x00\x00" + VARYING),
         (SequentialLabel(RecordFormat.F, 100), VARYING),
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_cobol_step_writing_to_dummy_or_nullfile_keeps_nothing(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    jcl = (
+        "//J JOB 1\n"
+        "//S1 EXEC PGM=FIXWRITE\n"
+        "//OUTDD DD DUMMY\n"
+        "//S2 EXEC PGM=FIXWRITE\n"
+        "//OUTDD DD DSN=NULLFILE\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    runner = JobRunner(
+        source_dir=CBL,
+        bridge_jar=bridge_jar,
+        system=system(tmp_path),
+        copybook_dir=tmp_path,
+        unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+    )
+    result = runner.run_job(job, job_catalog(tmp_path))
+    kept = sorted(p.name for p in tmp_path.rglob("*") if p.is_file())
+    assert ([s.outcome for s in result.steps], kept) == (
+        [Completed(0), Completed(0)],
+        [],
+    )
