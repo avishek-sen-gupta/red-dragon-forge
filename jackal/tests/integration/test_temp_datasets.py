@@ -13,16 +13,16 @@ from jackal.missing_data import (
 from jackal.missing_program import AbendMissingProgram
 from jackal.model import (
     DD,
-    ConcatMember,
     DdName,
-    DirectDSN,
+    DummyDSN,
+    InStreamDSN,
+    NotCoded,
     StepRef,
     TempRef,
 )
 from jackal.results import AllocationError, AllocationFailed, Completed
-from jackal.runner import JobRunner, UnsupportedStep
+from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
-from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, disp, job, program
 from tests.system_build import scratch, system
@@ -108,28 +108,33 @@ def test_a_temp_never_created_fails_its_step_or_is_substituted_when_lenient(
     )
 
 
-def _concatenated_dd() -> DD[StepRef]:
-    member = ConcatMember(DirectDSN(literal("T.B")), disp("SHR"))
-    return DD(
-        DdName("IN"), DirectDSN(literal("T.A")), disp("SHR"), concatenated=(member,)
+def _repro_from_dummy() -> tuple[DD[StepRef], ...]:
+    sysin = DD(
+        DdName("SYSIN"),
+        InStreamDSN(),
+        NotCoded(),
+        in_stream=(" REPRO INFILE(IN) OUTFILE(OUT)",),
     )
+    dummies = tuple(DD(DdName(n), DummyDSN(), NotCoded()) for n in ("IN", "OUT"))
+    return (sysin, *dummies)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cleanup_runs_after_step_exception(tmp_path):
-    """Temp allocated in step 1 is cleaned up even when step 2 is refused."""
+    """Temp allocated in step 1 is cleaned up even when step 2 raises."""
     import pytest
 
     j = job(
         "J",
         (
             program("S1", "IEFBR14", (_pass_dd("KEPT"),)),
-            program("S2", "IEFBR14", (_concatenated_dd(),)),
+            program("S2", "IDCAMS", _repro_from_dummy()),
         ),
     )
-    with pytest.raises(UnsupportedStep):
+    with pytest.raises(TypeError, match="DD IN is DummyAllocation"):
         _runner(tmp_path).run(j, scratch=scratch(tmp_path))
-    assert _scratch_files(tmp_path) == []
+    left = (tmp_path / "scratch").rglob("*")
+    assert sorted(p.name for p in left if p.is_file()) == []
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

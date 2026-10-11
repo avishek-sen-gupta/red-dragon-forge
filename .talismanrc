@@ -141,6 +141,8 @@ fileignoreconfig:
   checksum: f136a378680c5bad83e81aca552401505119eab971e839190e9151ac14234ac7
 - filename: docs/records/design/2026-10-12-jackal-idcams-repro-labels.md
   checksum: ec1641e126ec15bb059c34b6f276cc4f74bf6292c3882de04c57c2ac4afb42d0
+- filename: jackal/jackal/concatenated_records.py
+  checksum: 319da9d2575e77c0e5c1be0be7a848c83eb1c8d0102aca5a4b3dc24a46fb3dc9
 - filename: jackal/jackal/variable_records.py
   checksum: f9116c5c676e6840f7e14c62c397e19edd4613892c627f7534efe0f86642f124
 - filename: docs/records/design/2026-10-12-jackal-if-then-else.md

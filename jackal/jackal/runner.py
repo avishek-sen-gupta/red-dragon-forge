@@ -8,7 +8,7 @@ from functools import reduce
 from pathlib import Path
 
 from interpreter.project.coprocessor_compile import CoprocessorSpec
-from jackal.allocation import LOAD_LIBRARIES, DdEnvironment, allocate, dispose
+from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
 from jackal.cond import Run, gate
@@ -61,10 +61,6 @@ def _unrunnable(decision: Run | Bypassed | Flushed) -> StepOutcome:
             return decision
 
 
-class UnsupportedStep(Exception):
-    """A step jackal cannot run yet: one with a concatenated DD."""
-
-
 @dataclass(frozen=True)
 class _History:
     results: tuple[StepResult, ...]
@@ -90,22 +86,6 @@ def _resolved_dd(dd: DD[StepReference]) -> DD[StepReference]:
         dd.sysout,
         dd.concatenated,
     )
-
-
-def _concatenated(
-    qualified: QualifiedStep, step: ProgramStep[StepReference]
-) -> ProgramStep[StepReference]:
-    names = tuple(
-        dd.ddname.text
-        for dd in step.dds
-        if dd.concatenated and dd.ddname not in LOAD_LIBRARIES
-    )
-    if names:
-        raise UnsupportedStep(
-            f"{qualified.rendered()} concatenates DD {names[0]}; concatenated "
-            "reads are not supported yet (jackal-1o2.5)"
-        )
-    return step
 
 
 class JobRunner:
@@ -162,8 +142,7 @@ class JobRunner:
                 decision = gate(_NO_CONDITION, Always(), end_job_tests, history.results)
                 return history.recorded(entry, _unrunnable(decision))
             case QualifiedStep():
-                step = _concatenated(entry, entry.step)
-                return self._gated(catalog, end_job_tests, history, entry, step)
+                return self._gated(catalog, end_job_tests, history, entry, entry.step)
 
     def _gated(
         self,
@@ -201,8 +180,11 @@ class JobRunner:
             case AllocationFailed() as failure:
                 return history.recorded(qualified, failure)
             case DdEnvironment() as env:
-                result = self._run_program(qualified, resolved, env, catalog)
-                dispose(resolved, env, catalog, result)
+                try:
+                    result = self._run_program(qualified, resolved, env, catalog)
+                    dispose(resolved, env, catalog, result)
+                finally:
+                    release(resolved, env)
                 return history.recorded(qualified, result)
 
     def _run_program(

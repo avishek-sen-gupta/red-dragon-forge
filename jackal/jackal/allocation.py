@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -84,9 +84,25 @@ class SysoutAllocation:
         return False
 
 
-Allocation: TypeAlias = (
+MemberAllocation: TypeAlias = (
     DatasetAllocation | InStreamAllocation | DummyAllocation | SysoutAllocation
 )
+
+
+@dataclass(frozen=True)
+class ConcatenatedAllocation:
+    """Members read in order as one dataset; the first stands for the whole, as a referback does."""
+
+    members: tuple[MemberAllocation, ...]
+
+    def path(self) -> Path:
+        return self.members[0].path()
+
+    def appends(self) -> bool:
+        return False
+
+
+Allocation: TypeAlias = MemberAllocation | ConcatenatedAllocation
 
 
 @dataclass(frozen=True)
@@ -115,6 +131,31 @@ class DdEnvironment:
         )
 
 
+@dataclass(frozen=True)
+class _Part:
+    dd: DD[StepReference]
+    allocation: MemberAllocation
+
+
+def _member_dds(dd: DD[StepReference]) -> tuple[DD[StepReference], ...]:
+    members = tuple(DD(dd.ddname, m.dsn, m.disp, m.in_stream) for m in dd.concatenated)
+    return (DD(dd.ddname, dd.dsn, dd.disp, dd.in_stream, dd.sysout), *members)
+
+
+def _parts(dd: DD[StepReference], allocation: Allocation) -> tuple[_Part, ...]:
+    match allocation:
+        case ConcatenatedAllocation(members=members):
+            return tuple(map(_Part, _member_dds(dd), members))
+        case _:
+            return (_Part(dd, allocation),)
+
+
+def _all_parts(
+    dds: Sequence[DD[StepReference]], env: DdEnvironment
+) -> tuple[_Part, ...]:
+    return tuple(part for dd in dds for part in _parts(dd, env.get(dd.ddname)))
+
+
 def _sink(qualified: QualifiedStep, dd: DD[StepReference], kind: str) -> Path:
     return Path(kind) / f"{qualified.rendered()}.{dd.ddname.text}"
 
@@ -136,7 +177,9 @@ def _positioning(dd: DD[StepReference]) -> Positioning:
     return Positioning.START
 
 
-def _dataset_allocation(dd: DD[StepReference], allocated: Allocated) -> Allocation:
+def _dataset_allocation(
+    dd: DD[StepReference], allocated: Allocated
+) -> MemberAllocation:
     return DatasetAllocation(
         allocated.dataset,
         _positioning(dd),
@@ -147,7 +190,7 @@ def _dataset_allocation(dd: DD[StepReference], allocated: Allocated) -> Allocati
 
 def _placed(
     dd: DD[StepReference], settled: Dataset | AllocationFailed
-) -> Allocation | AllocationFailed:
+) -> MemberAllocation | AllocationFailed:
     match settled:
         case AllocationFailed():
             return settled
@@ -188,6 +231,23 @@ class _Allocator:
                 )
 
     def _allocated(self, dd: DD[StepReference]) -> Allocation | AllocationFailed:
+        if dd.concatenated:
+            return self._members(_member_dds(dd), ())
+        return self._single(dd)
+
+    def _members(
+        self, dds: tuple[DD[StepReference], ...], done: tuple[_Part, ...]
+    ) -> ConcatenatedAllocation | AllocationFailed:
+        if not dds:
+            return ConcatenatedAllocation(tuple(part.allocation for part in done))
+        match self._single(dds[0]):
+            case AllocationFailed() as failed:
+                _undo_parts(done, self.catalog)
+                return failed
+            case allocation:
+                return self._members(dds[1:], (*done, _Part(dds[0], allocation)))
+
+    def _single(self, dd: DD[StepReference]) -> MemberAllocation | AllocationFailed:
         match dd.dsn:
             case InStreamDSN():
                 cards = _written(self._sink(dd, "instream"), _cards(dd.in_stream))
@@ -200,12 +260,12 @@ class _Allocator:
     def _sink(self, dd: DD[StepReference], kind: str) -> Path:
         return self.catalog.workdir / _sink(self.qualified, dd, kind)
 
-    def _named(self, dd: DD[StepReference]) -> Allocation | AllocationFailed:
+    def _named(self, dd: DD[StepReference]) -> MemberAllocation | AllocationFailed:
         if dd.sysout and isinstance(dd.dsn, NoDSN):
             return SysoutAllocation(_written(self._sink(dd, "sysout"), b""))
         return self._dataset(dd)
 
-    def _dataset(self, dd: DD[StepReference]) -> Allocation | AllocationFailed:
+    def _dataset(self, dd: DD[StepReference]) -> MemberAllocation | AllocationFailed:
         found = self.catalog.allocate(dd)
         match found:
             case Unallocated():
@@ -226,7 +286,7 @@ def allocate(
     return allocator.remaining(dds, (), DdEnvironment(()))
 
 
-def _created(allocation: Allocation) -> bool:
+def _created(allocation: MemberAllocation) -> bool:
     match allocation:
         case DatasetAllocation(existed=existed):
             return not existed
@@ -234,15 +294,20 @@ def _created(allocation: Allocation) -> bool:
             return False
 
 
+def _undo_parts(parts: Sequence[_Part], catalog: DatasetCatalog) -> None:
+    for created in (p for p in parts if _created(p.allocation)):
+        catalog.delete_created(created.dd)
+    for part in parts:
+        _released(part.allocation)
+
+
 def _undo(
     done: tuple[DD[StepReference], ...], env: DdEnvironment, catalog: DatasetCatalog
 ) -> None:
-    for dd in (d for d in done if _created(env.get(d.ddname))):
-        catalog.delete_created(dd)
-    _release_all(env)
+    _undo_parts(_all_parts(done, env), catalog)
 
 
-def _released(allocation: Allocation) -> None:
+def _released(allocation: MemberAllocation) -> None:
     match allocation:
         case DatasetAllocation():
             return
@@ -250,32 +315,12 @@ def _released(allocation: Allocation) -> None:
             allocation.path().unlink(missing_ok=True)
 
 
-def _disposed(
-    dd: DD[StepReference],
-    allocation: Allocation,
-    catalog: DatasetCatalog,
-    result: ProgramResult,
-) -> None:
-    match allocation:
+def _disposed(part: _Part, catalog: DatasetCatalog, result: ProgramResult) -> None:
+    match part.allocation:
         case DatasetAllocation(disposition=disposition, existed=existed):
-            catalog.dispose(dd, disposition, existed, result)
+            catalog.dispose(part.dd, disposition, existed, result)
         case _:
             return
-
-
-def _apply_disp(
-    step: ProgramStep[StepReference],
-    env: DdEnvironment,
-    catalog: DatasetCatalog,
-    result: ProgramResult,
-) -> None:
-    for dd in (d for d in step.dds if d.ddname not in LOAD_LIBRARIES):
-        _disposed(dd, env.get(dd.ddname), catalog, result)
-
-
-def _release_all(env: DdEnvironment) -> None:
-    for _, allocation in env.entries:
-        _released(allocation)
 
 
 def dispose(
@@ -284,5 +329,17 @@ def dispose(
     catalog: DatasetCatalog,
     result: ProgramResult,
 ) -> None:
-    _apply_disp(step, env, catalog, result)
-    _release_all(env)
+    for part in _step_parts(step, env):
+        _disposed(part, catalog, result)
+
+
+def release(step: ProgramStep[StepReference], env: DdEnvironment) -> None:
+    for part in _step_parts(step, env):
+        _released(part.allocation)
+
+
+def _step_parts(
+    step: ProgramStep[StepReference], env: DdEnvironment
+) -> tuple[_Part, ...]:
+    dds = tuple(d for d in step.dds if d.ddname not in LOAD_LIBRARIES)
+    return _all_parts(dds, env)

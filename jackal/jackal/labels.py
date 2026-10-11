@@ -49,3 +49,5 @@ class LabelPending:
 
 Label: TypeAlias = SequentialLabel | KsdsLabel
 DatasetLabel: TypeAlias = Label | LabelPending
+
+CARDS = SequentialLabel(RecordFormat.F, 80)

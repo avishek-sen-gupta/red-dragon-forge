@@ -62,7 +62,7 @@ from jackal.results import (
     StepOutcome,
     SystemAbend,
 )
-from jackal.runner import JobRunner, UnsupportedStep
+from jackal.runner import JobRunner
 from jackal.system_catalog import CATALOG_FILE, NotCataloged, SystemCatalog
 from jackal.unresolved import (
     IgnoreStrategy,
@@ -749,27 +749,38 @@ def test_after_an_abend_only_steps_whose_if_tests_an_abend_run(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_concatenated_dd_is_refused_rather_than_read_as_its_first_dataset(
+def test_a_concatenation_fails_allocation_at_a_missing_member_and_undoes_the_rest(
     tmp_path: Path,
 ) -> None:
     from jackal.model import ConcatMember, DirectDSN
     from jackal.value_parts import literal
 
-    member = ConcatMember(DirectDSN(literal("T.B")), disp("SHR"))
+    missing = ConcatMember(DirectDSN(literal("T.GONE")), disp("SHR"))
     concatenated = DD(
-        DdName("IN"), DirectDSN(literal("T.A")), disp("SHR"), concatenated=(member,)
+        DdName("IN"),
+        DirectDSN(literal("T.NEW")),
+        disp("NEW", "CATLG", "DELETE"),
+        concatenated=(missing,),
     )
     steplib = DD(
         DdName("STEPLIB"),
         DirectDSN(literal("T.L")),
         disp("NEW"),
-        concatenated=(member,),
+        concatenated=(missing,),
     )
-    refused = job("J", (program("S1", "IEFBR14", (concatenated,)),))
+    failed = job("J", (program("S1", "IEFBR14", (concatenated,)),))
     library_only = job("J", (program("S1", "IEFBR14", (steplib,)),))
-    with pytest.raises(UnsupportedStep, match="S1 concatenates DD IN"):
-        _run(tmp_path, refused)
-    assert _outcomes(_run(_fresh(tmp_path, "lib"), library_only)) == [("S1", OK)]
+    assert (
+        _outcomes(_run(tmp_path, failed)),
+        _cataloged(tmp_path, "T.NEW"),
+        _files(tmp_path / "system"),
+        _outcomes(_run(_fresh(tmp_path, "lib"), library_only)),
+    ) == (
+        [("S1", AllocationFailed(DdName("IN"), AllocationError.DATASET_NOT_FOUND))],
+        NotCataloged(),
+        [],
+        [("S1", OK)],
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
