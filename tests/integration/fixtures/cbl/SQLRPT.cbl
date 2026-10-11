@@ -1,0 +1,28 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. SQLRPT.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT RPT-FILE ASSIGN TO RPTDD
+                  ORGANIZATION IS SEQUENTIAL.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  RPT-FILE RECORDING MODE IS F.
+       01  RPT-REC  PIC X(10).
+       WORKING-STORAGE SECTION.
+       01 WS-ID  PIC 9(4) VALUE 11.
+       01 WS-BAL PIC 9(9).
+       01 SQLCODE PIC S9(9).
+       PROCEDURE DIVISION.
+           EXEC SQL CONNECT TO SAMPLE END-EXEC
+           EXEC SQL
+               SELECT ACCT_BAL
+               INTO :WS-BAL
+               FROM ACCOUNT
+               WHERE ACCT_ID = :WS-ID
+           END-EXEC.
+           OPEN OUTPUT RPT-FILE.
+           MOVE WS-BAL TO RPT-REC.
+           WRITE RPT-REC.
+           CLOSE RPT-FILE.
+           GOBACK.

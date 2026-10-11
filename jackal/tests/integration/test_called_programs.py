@@ -1,0 +1,70 @@
+"""A COBOL step runs its program with every program it CALLs, as a z/OS load module does."""
+
+from pathlib import Path
+
+import pytest
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
+from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
+from jackal.missing_data import StrictAllocation
+from jackal.missing_program import AbendMissingProgram
+from jackal.results import Completed
+from jackal.runner import JobRunner
+from jackal.unresolved import RaiseErrorStrategy
+from tests.covers import NotLanguageFeature, covers
+from tests.system_build import job_catalog, system
+
+CBL = Path(__file__).parent / "fixtures" / "cbl"
+MESSAGE = "WRITTEN BY THE CALLED PROGRAM".ljust(80).encode("cp037")
+
+
+@pytest.fixture(autouse=True)
+def _require(bridge_jar, jcl_bridge_jar):
+    """Both JARs are required for every test in this module."""
+
+
+def _ran(tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str, pgm: str):
+    jcl = (
+        "//J JOB 1\n" f"//S1 EXEC PGM={pgm}\n" "//SUBDD DD DSN=J.SUB,DISP=(NEW,CATLG)\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    catalog = job_catalog(tmp_path)
+    runner = JobRunner(
+        source_dir=CBL,
+        bridge_jar=bridge_jar,
+        system=system(tmp_path),
+        copybook_dir=tmp_path,
+        unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+    )
+    result = runner.run_job(job, catalog)
+    return (
+        [s.outcome for s in result.steps],
+        system(tmp_path).lookup("J.SUB").path.read_bytes(),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_statically_called_program_writes_to_its_own_dd(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    assert _ran(tmp_path, bridge_jar, jcl_bridge_jar, "CALLMAIN") == (
+        [Completed(0)],
+        MESSAGE,
+    )
+
+
+@pytest.mark.xfail(
+    reason="a CALL by data-name is resolved at run time against linked programs only, "
+    "and nothing links its target (red-dragon-forge-ua7)",
+    strict=True,
+)
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_dynamically_called_program_writes_to_its_own_dd(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    assert _ran(tmp_path, bridge_jar, jcl_bridge_jar, "DYNMAIN") == (
+        [Completed(0)],
+        MESSAGE,
+    )

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from cobol_asg.cobol_parser import ProLeapCobolParser
-from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
 from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.func_name import FuncName
-from interpreter.project.cobol_compile import compile_cobol
 from interpreter.project.entry_point import EntryPoint
 from interpreter.project.types import LinkedProgram
 from interpreter.run import (
@@ -26,10 +22,11 @@ from interpreter.run import Completed as RunCompleted
 from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
-from jackal.cobol_files import AllocatedFileIOProvider, program_files
+from jackal.cobol_files import AllocatedFileIOProvider
 from jackal.dataset import Relabeller
 from jackal.model import ProgramStep, StepReference
 from jackal.parm import build_parm_region
+from jackal.program_compiler import CompiledProgram
 from jackal.results import Abended, Completed, ProgramResult, SystemAbend
 from jackal.value_parts import resolve
 
@@ -43,33 +40,16 @@ class BatchProgramSuspended(Exception):
 
 def run_cobol_step(
     step: ProgramStep[StepReference],
-    source: str,
+    program: CompiledProgram,
     env: DdEnvironment,
     workdir: Path,
-    bridge_jar: str,
-    copybook_dirs: Sequence[Path],
     budget: int,
     relabeller: Relabeller,
 ) -> ProgramResult:
-    if not bridge_jar:
-        raise ValueError(
-            f"PROLEAP_BRIDGE_JAR not set; required to run COBOL program {step.pgm.name!r}"
-        )
-    parser = ProLeapCobolParser(
-        runner=RealSubprocessRunner(),
-        bridge_jar=bridge_jar,
-        copybook_dirs=list(copybook_dirs),
-    )
-    files = program_files(parser.parse(source.encode("utf-8")))
-    provider = AllocatedFileIOProvider(workdir, files, env, relabeller)
-    _, linked = compile_cobol(
-        source.encode("utf-8"),
-        parser=parser,
-        copybook_dirs=list(copybook_dirs),
-    )
+    provider = AllocatedFileIOProvider(workdir, program.files, env, relabeller)
     outcome = run_linked_resumable(
-        linked,
-        _entry_point(linked),
+        program.linked,
+        _entry_point(program.linked),
         max_steps=budget,
         io_provider=provider,
         initial_vm=_initial_vm(step, provider),
