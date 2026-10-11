@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
@@ -41,6 +42,7 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=src,
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

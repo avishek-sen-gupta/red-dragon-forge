@@ -1,0 +1,10 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. RUNAWAY.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  N PIC 9(4) VALUE 0.
+       PROCEDURE DIVISION.
+           PERFORM UNTIL N = 9999
+               MOVE 0 TO N
+           END-PERFORM.
+           GOBACK.

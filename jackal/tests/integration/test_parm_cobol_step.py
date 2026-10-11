@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
 from jackal.catalog import DatasetCatalog
-from jackal.cobol_step import run_cobol_step
-from tests.model_build import program
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
+from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
+from tests.model_build import program
 
 # Minimal COBOL program that reads PARM-DATA and signals receipt via RETURN-CODE.
 # PARM-LENGTH (S9(04) COMP) is a 2-byte big-endian halfword — matches build_parm_region.
@@ -43,25 +44,26 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     # Pad to 10 chars so the region exactly fills PARM-DATA PIC X(10)
     step = program("S", "TESTPARM", parm="HELLO     ")
-    assert (
-        run_cobol_step(
-            step, _PARM_PROGRAM, DdEnvironment(()), cat.workdir, bridge_jar, []
-        )
-        == 42
-    )
+    assert run_cobol_step(
+        step,
+        _PARM_PROGRAM,
+        DdEnvironment(()),
+        cat.workdir,
+        bridge_jar,
+        [],
+        DEFAULT_PROGRAM_STEP_BUDGET,
+    ) == Completed(42)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    assert (
-        run_cobol_step(
-            program("S", "NOPARM"),
-            _NO_PARM_PROGRAM,
-            DdEnvironment(()),
-            cat.workdir,
-            bridge_jar,
-            [],
-        )
-        == 7
-    )
+    assert run_cobol_step(
+        program("S", "NOPARM"),
+        _NO_PARM_PROGRAM,
+        DdEnvironment(()),
+        cat.workdir,
+        bridge_jar,
+        [],
+        DEFAULT_PROGRAM_STEP_BUDGET,
+    ) == Completed(7)

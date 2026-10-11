@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
@@ -32,6 +33,7 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=FIX / "cbl",
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

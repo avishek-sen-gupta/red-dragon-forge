@@ -102,7 +102,10 @@ cicada or squall; `.importlinter` enforces this.
 `jackal.cobol_step.run_cobol_step` parses the program with the ProLeap bridge JAR, maps each
 `FILE-CONTROL` entry to the file of the step's DD allocation, and runs it on the
 red-dragon VM. `PARM=` is passed in as an OS halfword-prefixed parameter region
-(`jackal.parm`). The step's return code is read back from the VM.
+(`jackal.parm`). Each program runs on red-dragon's resumable entry point with its own budget
+of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000). A program
+that ends gives `Completed` with the return code read back from the VM. One still running
+when its budget runs out abends `S322`, as z/OS ends a step that exceeds its CPU time.
 
 ## Datasets and the catalog
 

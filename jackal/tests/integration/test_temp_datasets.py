@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import (
     LenientAllocation,
     MissingDataStrategy,
@@ -50,6 +51,7 @@ def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
         unresolved=RaiseErrorStrategy(),
         missing_data=missing_data,
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=tmp_path,
         bridge_jar="unused",
         data_dir=tmp_path,
