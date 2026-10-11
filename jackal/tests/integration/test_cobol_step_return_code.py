@@ -33,4 +33,5 @@ def test_cobol_step_returns_real_return_code(tmp_path: Path, bridge_jar):
         bridge_jar,
         [],
         DEFAULT_PROGRAM_STEP_BUDGET,
+        cat,
     ) == Completed(8)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from jackal.catalog_stores import Table
-from jackal.dataset import Dataset
+from jackal.dataset import Dataset, Relabeller
 from jackal.labels import Label, LabelPending
 from jackal.model import (
     DD,
@@ -36,6 +36,10 @@ class Unallocated:
     error: AllocationError
 
 
+def _temp_name(alias: str) -> str:
+    return f"&&{alias}"
+
+
 def _empty(dataset: Dataset) -> Dataset:
     dataset.path.write_bytes(b"")
     return dataset
@@ -57,7 +61,7 @@ def _deletes(disp: ResolvedDisp, result: ProgramResult) -> bool:
             return disp.abnormal is DispAbnormal.DELETE
 
 
-class DatasetCatalog:
+class DatasetCatalog(Relabeller):
     """Imperative shell: one job's view of the system catalog, with its temps, passed datasets and scratch."""
 
     def __init__(self, scratch: Path, system: SystemCatalog):
@@ -79,25 +83,33 @@ class DatasetCatalog:
     def created_empty(self, dd: DD[StepReference]) -> Dataset:
         match dd.dsn:
             case TempRef(name=name):
-                return self._temps.put(name, _empty(self._temp_dataset(name)))
+                temp = _empty(self._temp_dataset(name))
+                return self._temps.put(temp.dsn, temp)
             case _:
                 return self._system.create(dd.dsn.dataset_name(), LabelPending())
 
     def _temp_dataset(self, alias: str) -> Dataset:
-        name = f"&&{alias}"
+        name = _temp_name(alias)
         return Dataset(dsn=name, path=self._scratch / name, label=LabelPending())
+
+    def relabel(self, dataset: Dataset, label: Label) -> None:
+        match self._system.lookup(dataset.dsn):
+            case Dataset():
+                self._system.relabel(dataset.dsn, label)
+            case NotCataloged():
+                self._temps.put(dataset.dsn, Dataset(dataset.dsn, dataset.path, label))
 
     def _allocate_temp(
         self, dd: DD[StepReference], name: str
     ) -> Allocated | Unallocated:
         if dd.disposition().status is DispStatus.NEW:
             return self._new_temp(dd, name)
-        if not self._temps.has(name):
+        if not self._temps.has(_temp_name(name)):
             return Unallocated(dd, AllocationError.TEMP_NOT_CREATED)
-        return Allocated(self._temps.get(name), existed=True)
+        return Allocated(self._temps.get(_temp_name(name)), existed=True)
 
     def _new_temp(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
-        if self._temps.has(name):
+        if self._temps.has(_temp_name(name)):
             return Unallocated(dd, AllocationError.DUPLICATE_NAME)
         return Allocated(self.created_empty(dd), existed=False)
 
@@ -205,8 +217,8 @@ class DatasetCatalog:
                 return
 
     def _delete_temp(self, name: str) -> None:
-        if self._temps.has(name):
-            self._temps.take(name).path.unlink(missing_ok=True)
+        if self._temps.has(_temp_name(name)):
+            self._temps.take(_temp_name(name)).path.unlink(missing_ok=True)
 
     def end_job(self) -> None:
         for temp in self._temps.drain():

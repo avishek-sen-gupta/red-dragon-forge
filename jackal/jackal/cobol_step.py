@@ -7,7 +7,6 @@ from dataclasses import replace
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
-from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
@@ -27,7 +26,8 @@ from interpreter.run import Completed as RunCompleted
 from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
-from jackal.cobol_files import AllocatedFileIOProvider
+from jackal.cobol_files import AllocatedFileIOProvider, program_files
+from jackal.dataset import Relabeller
 from jackal.model import ProgramStep, StepReference
 from jackal.parm import build_parm_region
 from jackal.results import Abended, Completed, ProgramResult, SystemAbend
@@ -41,12 +41,6 @@ class BatchProgramSuspended(Exception):
     """A batch COBOL program reached a SUSPEND, which only a CICS task can."""
 
 
-def _file_control(
-    source: str, parser: ProLeapCobolParser
-) -> Sequence[FileControlEntry]:
-    return parser.parse(source.encode("utf-8")).file_control
-
-
 def run_cobol_step(
     step: ProgramStep[StepReference],
     source: str,
@@ -55,6 +49,7 @@ def run_cobol_step(
     bridge_jar: str,
     copybook_dirs: Sequence[Path],
     budget: int,
+    relabeller: Relabeller,
 ) -> ProgramResult:
     if not bridge_jar:
         raise ValueError(
@@ -65,7 +60,8 @@ def run_cobol_step(
         bridge_jar=bridge_jar,
         copybook_dirs=list(copybook_dirs),
     )
-    provider = AllocatedFileIOProvider(workdir, _file_control(source, parser), env)
+    files = program_files(parser.parse(source.encode("utf-8")))
+    provider = AllocatedFileIOProvider(workdir, files, env, relabeller)
     _, linked = compile_cobol(
         source.encode("utf-8"),
         parser=parser,

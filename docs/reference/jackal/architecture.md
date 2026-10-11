@@ -102,7 +102,13 @@ cicada or squall; `.importlinter` enforces this.
 
 `jackal.cobol_step.run_cobol_step` parses the program with the ProLeap bridge JAR, maps each
 `FILE-CONTROL` entry to the file of the step's DD allocation, and runs it on the
-red-dragon VM. `PARM=` is passed in as an OS halfword-prefixed parameter region
+red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
+(`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
+largest record plus 4) meets the dataset's label: a pending label is written from it on
+`OUTPUT` or `EXTEND`; a label that contradicts it in organization, fixed against variable, or
+length fails the `OPEN` with file status 39. `RECORDING MODE U` and `S` are refused. The
+decisions and their IBM sources are in
+[the COBOL OPEN decision record](../../records/design/2026-10-11-jackal-cobol-open-record-format.md). `PARM=` is passed in as an OS halfword-prefixed parameter region
 (`jackal.parm`). Each program runs on red-dragon's resumable entry point with its own budget
 of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000). A program
 that ends gives `Completed` with the return code read back from the VM. One still running
@@ -172,7 +178,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
-| `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append. |
+| `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
+| `jackal/jackal/record_format.py` | The record format a COBOL FD asks for, and its fit with a label. |
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
 | `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |

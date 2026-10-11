@@ -11,6 +11,7 @@ Dated design records and analyses. Frozen: never edited after they are written.
 - 2026-09-16 — [cicada, squall, jackal: Remove Per-Package Makefiles](design/2026-09-16-package-makefile-removal.md)
 - 2026-10-05 — [jackal: To-Be JCL Execution Architecture](design/2026-10-05-jcl-to-be-architecture.md)
 - 2026-10-11 — [jackal: Datasets, Labels and Dispositions — Decision Record](design/2026-10-11-jackal-dataset-decisions.md)
+- 2026-10-11 — [jackal: A COBOL OPEN and the Dataset's Label — Decision Record](design/2026-10-11-jackal-cobol-open-record-format.md)
 
 ## Analysis
 

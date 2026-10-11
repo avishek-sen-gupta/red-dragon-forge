@@ -240,4 +240,5 @@ class JobRunner:
                     self._bridge_jar,
                     [self._copybook_dir],
                     self._program_step_budget,
+                    catalog,
                 )

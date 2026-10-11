@@ -6,6 +6,7 @@ import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
+from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import (
@@ -146,4 +147,45 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
         [Abended(s322), Flushed(AfterAbend(s1))],
         JobAbended(s1, s322),
         NotCataloged(),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_one(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    """Enterprise COBOL 6.4 Programming Guide, ch. 9: the program's attributes are
+    used for a new file; a mismatch in record format or length with an existing
+    one fails the OPEN with file status 39."""
+    jcl = (
+        "//J JOB 1\n"
+        "//S1 EXEC PGM=FIXWRITE\n"
+        "//OUTDD DD DSN=J.FIX,DISP=(NEW,CATLG)\n"
+        "//S2 EXEC PGM=VARWRITE\n"
+        "//OUTDD DD DSN=J.VAR,DISP=(NEW,CATLG)\n"
+        "//S3 EXEC PGM=SHORTRD\n"
+        "//INDD DD DSN=J.FIX,DISP=SHR\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    catalog = job_catalog(tmp_path)
+    runner = JobRunner(
+        source_dir=CBL,
+        bridge_jar=bridge_jar,
+        system=system(tmp_path),
+        copybook_dir=tmp_path,
+        unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+    )
+    result = runner.run_job(job, catalog)
+    reloaded = system(tmp_path)
+    assert (
+        [s.outcome for s in result.steps],
+        reloaded.lookup("J.FIX").label,
+        reloaded.lookup("J.VAR").label,
+    ) == (
+        [Completed(0), Completed(0), Completed(39)],
+        SequentialLabel(RecordFormat.F, 80),
+        SequentialLabel(RecordFormat.V, 104),
     )
