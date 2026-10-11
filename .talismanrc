@@ -623,4 +623,12 @@ fileignoreconfig:
   checksum: ece97e916b576037d45af880fb3774729d86500c565015c32282fb645f592156
 - filename: jackal/jackal/cobol_files.py
   checksum: 479e8297517fc25a5c5f3661a7a61769cce4593b93f65c8baf8207a7285dcf90
+- filename: cobol_harness/state.py
+  checksum: ea0e23afa4ffef8f96e244a4aef9af14350dcfbd23e71360bf2a61fb1ab9f531
+- filename: tests/integration/test_headless_harness.py
+  checksum: 5179cbf2fb2b5588aa8627219e7a30eabad583e8cb061e57ecfce7d24dd2da29
+- filename: cobol_harness/vsam.py
+  checksum: 7c3edb167b738c169e973305329ec209eb1a6e01b964c2d67f5fd080048fc065
+- filename: cobol_harness/region.py
+  checksum: 6d9fd77ddcd339c7ee311f7167f4e55ff332177b8849d28c3a4e2e1fa75254b6
 version: "1.0"
