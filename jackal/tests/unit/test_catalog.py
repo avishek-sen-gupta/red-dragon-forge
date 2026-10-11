@@ -9,7 +9,7 @@ from jackal.model import (
     DispStatus,
     TempRef,
 )
-from jackal.results import AllocationError
+from jackal.results import AllocationError, Completed
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 
@@ -43,10 +43,10 @@ def test_seed_then_shr_resolves_same_file(tmp_path):
 def test_pass_retains_delete_removes(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     keep = cat.allocate(_dd("J.A", DispStatus.NEW, DispNormal.PASS))
-    cat.dispose(_dd("J.A", DispStatus.NEW, DispNormal.PASS))
+    cat.dispose(_dd("J.A", DispStatus.NEW, DispNormal.PASS), Completed(0))
     assert keep.path.exists()
     drop = cat.allocate(_dd("J.B", DispStatus.NEW, DispNormal.DELETE))
-    cat.dispose(_dd("J.B", DispStatus.NEW, DispNormal.DELETE))
+    cat.dispose(_dd("J.B", DispStatus.NEW, DispNormal.DELETE), Completed(0))
     assert not drop.path.exists()
 
 
@@ -121,7 +121,7 @@ def test_allocate_new_ksds_zero_key_length_raises(tmp_path):
 def test_dispose_delete_of_missing_dsn_is_noop(tmp_path):
     # DISP=(...,DELETE) on a DSN that was never allocated must not raise.
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    cat.dispose(_dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE))
+    cat.dispose(_dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE), Completed(0))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -179,7 +179,7 @@ def test_temp_dispose_delete_removes_file(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
     ds = cat.allocate(dd)
-    cat.dispose(dd)
+    cat.dispose(dd, Completed(0))
     assert not ds.path.exists()
 
 
@@ -188,7 +188,7 @@ def test_temp_dispose_pass_retains_file(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS)
     ds = cat.allocate(dd)
-    cat.dispose(dd)
+    cat.dispose(dd, Completed(0))
     assert ds.path.exists()
 
 
@@ -205,7 +205,7 @@ def test_cleanup_temps_noop_when_all_deleted(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
     cat.allocate(dd)
-    cat.dispose(dd)
+    cat.dispose(dd, Completed(0))
     cat.cleanup_temps()  # must not raise
 
 

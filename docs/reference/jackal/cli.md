@@ -22,7 +22,7 @@ otherwise. Argument errors exit with 2.
 | Argument | Default | Meaning |
 |---|---|---|
 | `JCL` | required | Path to the JCL file. |
-| `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`. |
+| `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`; a program that is neither there nor a utility is stubbed with RC 0 and a warning. |
 | `--data-dir DIR` | `$CARDDEMO_HOME/app/data/EBCDIC` | Where an `OLD`, `SHR` or `MOD` DSN not in the catalog is looked up, as `DIR/<DSN>`. |
 | `--copybook-dir DIR` | `$CARDDEMO_HOME/app/cpy` | Copybook directory for COBOL steps. |
 | `--dataset DSN=PATH` | none | Seeds the catalog with a DSN bound to a file. Repeatable. |

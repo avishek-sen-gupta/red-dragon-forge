@@ -13,6 +13,7 @@ from jackal.cobol_step import run_cobol_step
 from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
 from jackal.missing_data import MissingDataStrategy
+from jackal.missing_program import MissingProgramStrategy
 from jackal.model import (
     DD,
     DSN,
@@ -28,12 +29,14 @@ from jackal.model import (
     StepReference,
     UnexpandedCall,
 )
+from jackal.program_sources import CobolSource, DirectoryProgramSources, SourceNotFound
 from jackal.results import (
     AllocationFailed,
     Bypassed,
     Completed,
     Flushed,
     JobResult,
+    ProgramResult,
     SkippedUnresolved,
     StepOutcome,
     StepResult,
@@ -120,14 +123,16 @@ class JobRunner:
         copybook_dir: Path,
         unresolved: UnresolvedReferenceStrategy,
         missing_data: MissingDataStrategy,
+        missing_program: MissingProgramStrategy,
         proclib_dirs: Sequence[Path] = (),
     ):
-        self._source_dir = source_dir
+        self._sources = DirectoryProgramSources(source_dir)
         self._bridge_jar = bridge_jar
         self._data_dir = data_dir
         self._copybook_dir = copybook_dir
         self._unresolved = unresolved
         self._missing_data = missing_data
+        self._missing_program = missing_program
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
     def run(self, job: Job, workdir: Path, seeds: Mapping[str, Path]) -> JobResult:
@@ -201,19 +206,39 @@ class JobRunner:
             case AllocationFailed() as failure:
                 return history.recorded(qualified, failure)
             case DdEnvironment() as env:
-                rc = self._run_program(resolved, env, catalog)
-                dispose(resolved, env, catalog)
-                return history.recorded(qualified, Completed(rc))
+                result = self._run_program(qualified, resolved, env, catalog)
+                dispose(resolved, env, catalog, result)
+                return history.recorded(qualified, result)
 
     def _run_program(
         self,
+        qualified: QualifiedStep,
         step: ProgramStep[StepReference],
         env: DdEnvironment,
         catalog: DatasetCatalog,
-    ) -> int:
+    ) -> ProgramResult:
         if step.pgm in UTILITIES:
-            return UTILITIES[step.pgm](step, env, catalog)
-        source = (self._source_dir / f"{step.pgm.name}.cbl").read_text()
-        return run_cobol_step(
-            step, source, env, catalog.workdir, self._bridge_jar, [self._copybook_dir]
-        )
+            return Completed(UTILITIES[step.pgm](step, env, catalog))
+        return self._found(qualified, step, env, catalog)
+
+    def _found(
+        self,
+        qualified: QualifiedStep,
+        step: ProgramStep[StepReference],
+        env: DdEnvironment,
+        catalog: DatasetCatalog,
+    ) -> ProgramResult:
+        match self._sources.find(step.pgm):
+            case SourceNotFound():
+                return self._missing_program.settle(qualified, step.pgm)
+            case CobolSource(text=source):
+                return Completed(
+                    run_cobol_step(
+                        step,
+                        source,
+                        env,
+                        catalog.workdir,
+                        self._bridge_jar,
+                        [self._copybook_dir],
+                    )
+                )

@@ -89,9 +89,12 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cli_runs_a_step_whose_input_dataset_is_missing(tmp_path, capsys):
+def test_cli_runs_past_a_missing_dataset_and_a_missing_program(tmp_path, capsys):
     jcl = tmp_path / "j.jcl"
-    jcl.write_text("//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=NO.SUCH,DISP=SHR\n")
+    jcl.write_text(
+        "//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=NO.SUCH,DISP=SHR\n"
+        "//B EXEC PGM=SORT\n"
+    )
     rc = run(
         [
             "run",
@@ -104,4 +107,4 @@ def test_cli_runs_a_step_whose_input_dataset_is_missing(tmp_path, capsys):
             str(tmp_path),
         ]
     )
-    assert (rc, capsys.readouterr().out) == (0, "A: RC=0\n")
+    assert (rc, capsys.readouterr().out) == (0, "A: RC=0\nB: RC=0\n")

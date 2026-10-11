@@ -1568,6 +1568,11 @@ Each is one committable unit and keeps the suite green.
   drafted) or as the abend z/OS would give (`S322`, `S806`)?
 - **D2. Effect of `Halted` and stubs on the job** (open since `xkk`): stop the job, or continue
   as if RC 0 or a configured RC. The same answer sets which disposition `Halted` applies.
+  *Decided (2026-10-11):* a missing program is not `Halted`. An injected
+  `MissingProgramStrategy` settles it: strict gives `Abended(SystemAbend(0x806))`, as z/OS does
+  (abnormal disposition; later steps flushed unless `EVEN`/`ONLY`); lenient stubs every missing
+  program as `Completed(0)` with a warning. No stub list. This also answers D1's missing-program
+  half.
 - **D3. Cataloging semantics.** With SMS (modern z/OS), a `NEW` dataset is cataloged at
   allocation, so `KEEP` behaves like `CATLG`. Without SMS, `NEW,KEEP` leaves it uncataloged and a
   later `DISP=OLD` by name fails. §9.2 is drafted non-SMS.

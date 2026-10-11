@@ -13,12 +13,14 @@ from jackal.model import (
     DSN,
     DatasetOrg,
     DirectDSN,
+    Disp,
+    DispAbnormal,
     DispNormal,
     DispStatus,
     StepReference,
     TempRef,
 )
-from jackal.results import AllocationError
+from jackal.results import Abended, AllocationError, Completed, ProgramResult
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,14 @@ _ORG_MAP: dict[DatasetOrg, FileOrganization] = {
     DatasetOrg.PS: FileOrganization.SEQUENTIAL,
     DatasetOrg.KSDS: FileOrganization.INDEXED,
 }
+
+
+def _deletes(disp: Disp, result: ProgramResult) -> bool:
+    match result:
+        case Completed():
+            return disp.normal is DispNormal.DELETE
+        case Abended():
+            return disp.abnormal is DispAbnormal.DELETE
 
 
 def _require_positive(value: int, what: str, dsn: str) -> None:
@@ -181,8 +191,8 @@ class DatasetCatalog:
         self._datasets.take(dsn).path.unlink(missing_ok=True)
         return True
 
-    def dispose(self, dd: DD[StepReference]) -> None:
-        if dd.disposition().normal is DispNormal.DELETE:
+    def dispose(self, dd: DD[StepReference], result: ProgramResult) -> None:
+        if _deletes(dd.disposition(), result):
             self._delete(dd.dsn)
 
     def _delete(self, dsn: DSN[StepReference]) -> None:

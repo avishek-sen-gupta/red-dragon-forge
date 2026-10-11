@@ -13,14 +13,14 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | Keep concatenated DDs after the first in the parsed job | `red-dragon-forge-2cy.3` | not started |
 | Keep `IF/THEN/ELSE/ENDIF` structure in the parsed job | `red-dragon-forge-2cy.7` | not started |
 | JCL object model per the 2026-10-10 blueprint: parsed model and expansion, pinned by an acceptance suite | `red-dragon-forge-2cy.9`, `red-dragon-forge-2cy.10`, `red-dragon-forge-yv3` | done; the census run (`red-dragon-forge-yv3`) needs the corpus, which is not on this machine |
-| Step outcome as a sum type: RC, abend, bypassed, flushed, unsupported | `red-dragon-forge-5fu` | not started |
-| Runner owns the step lifecycle: allocate DDs, dispatch, dispose | `red-dragon-forge-lrk` | not started |
+| Step outcome as a sum type: RC, abend, bypassed, flushed, unsupported | `red-dragon-forge-5fu` | supported |
+| Runner owns the step lifecycle: allocate DDs, dispatch, dispose | `red-dragon-forge-lrk` | supported |
 | Datasets own their record attributes, with a variable-record codec | `red-dragon-forge-8in` | not started |
 | Split the catalog into a persistent system catalog and a per-job context | `red-dragon-forge-93f` | not started |
 | JOB to EXEC step sequencing | — | supported |
 | DD: DSN, DISP, in-stream, SYSOUT | — | supported |
 | `COND=` step bypass | `jackal-1o2.1` | supported |
-| `IF/THEN/ELSE/ENDIF` and `COND=EVEN/ONLY` | `jackal-1o2.8` | not started |
+| `IF/THEN/ELSE/ENDIF` and `COND=EVEN/ONLY` | `jackal-1o2.8` | partial: `EVEN`/`ONLY` after an `S806`; `IF` not started |
 | PROC expansion and symbolic parameters | `jackal-1o2.2` | partial |
 | `SET` in PROC expansion | `forge-6qr` | not started |
 | Symbolic substrings (`&SYM(1:5)`) | `forge-zmp` | not started |
@@ -30,7 +30,7 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | DD concatenation | `jackal-1o2.5` | not started |
 | `DCB=` attributes (LRECL, RECFM, BLKSIZE) | `jackal-1o2.12` | not started |
 | `PARM=` into the program | `jackal-1o2.13` | supported |
-| Unknown `PGM=`: explicit unsupported result and stubs | `red-dragon-forge-xkk` | not started |
+| Unknown `PGM=`: abend `S806`, or stub with RC 0 | `red-dragon-forge-xkk` | supported |
 | `DD DUMMY` and `DSN=NULLFILE` | `jackal-1o2.14` | not started |
 | System symbols (`&SYSUID`, `&SYSDATE`, JES symbols) | `jackal-1o2.23` | not started |
 | `RESTART=` | `jackal-1o2.25` | not started |

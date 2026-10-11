@@ -53,21 +53,30 @@ cicada or squall; `.importlinter` enforces this.
    - `LenientAllocation` allocates an empty dataset in its place (overwriting, for a duplicate
      name), logs a warning, and runs the step. The CLI uses it.
 
+   And a `MissingProgramStrategy` (`jackal.missing_program`) for a program that is neither a
+   utility nor found as COBOL source (`jackal.program_sources`):
+   - `AbendMissingProgram` abends the step `S806`, as z/OS does when it cannot find the load
+     module.
+   - `StubMissingProgram` completes the step with RC 0 in the program's place and logs a
+     warning. The CLI uses it.
+
    For each step:
    - These are refused with `UnsupportedStep` until each is supported: a step under an IF
      (guards are parsed and attached but not yet evaluated) and a concatenated DD.
-   - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Bypassed(reason)`,
-     `Flushed(cause)`, `SkippedUnresolved` or `AllocationFailed(ddname, error)`.
-     `JobResult.outcome` is `JobAllocationFailed(step, failure)` for the first step whose
-     allocation failed, else `JobCompleted` with the highest return code among completed steps.
+   - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Abended(code)`,
+     `Bypassed(reason)`, `Flushed(cause)`, `SkippedUnresolved` or
+     `AllocationFailed(ddname, error)`. `JobResult.outcome` is decided by the first step that
+     abended (`JobAbended(step, code)`) or failed allocation (`JobAllocationFailed(step,
+     failure)`), else is `JobCompleted` with the highest return code among completed steps.
      Once a step fails allocation, every later step, PROC call and step with an unresolved
      referback is `Flushed(AfterAllocationFailure(step))`, whatever its `COND`, `EVEN` or
      `ONLY` says, as z/OS ends a job at a JCL error.
    - `jackal.cond.gate` decides whether a step runs. A failed allocation is checked first;
      otherwise it reads only completed steps' return codes. Once a JOB card's `COND` test is met, this step and every later one are
      `Flushed(AfterJobCond(step))`, naming the step that met it. Otherwise a true test of the
-     step's own `COND` is `Bypassed(COND_SATISFIED)`. jackal records no abends, so `COND=EVEN`
-     reads as no `EVEN` and a `COND=ONLY` step is `Bypassed(ONLY_WITHOUT_ABEND)`.
+     step's own `COND` is `Bypassed(COND_SATISFIED)`. After an abend, a step without `EVEN`
+     or `ONLY` is `Flushed(AfterAbend(step))`; an `EVEN` or `ONLY` step goes on to its own
+     `COND` tests. With no abend, a `COND=ONLY` step is `Bypassed(ONLY_WITHOUT_ABEND)`.
    - Referbacks (`DSN=*.STEP.DD`) copy the DSN written on the referenced DD, whether or not
      that step ran, as z/OS does. The copied name is then allocated like any other: a dataset
      the referenced step never made is `DATASET_NOT_FOUND` or `TEMP_NOT_CREATED`.
@@ -78,10 +87,12 @@ cicada or squall; `.importlinter` enforces this.
      DD fails under `StrictAllocation`, the step's in-stream and sink files are released and the
      `NEW` datasets it had already created are deleted.
    - The step is dispatched. A program in the utility table runs the emulated utility.
-     Any other program is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
+     Any other program found as `<source-dir>/<PGM>.cbl` is run as COBOL. A program found as
+     neither is settled by the `MissingProgramStrategy`.
    - A dataset allocated `DISP=MOD` is positioned at its end: a COBOL `OPEN OUTPUT` on it
      appends, through jackal's own file handler over red-dragon's file drivers.
-   - After the program, the runner applies each DD's normal DISP and releases the sinks.
+   - After the program, the runner applies each DD's normal DISP, or its abnormal DISP if the
+     step abended, and releases the sinks.
      Programs never allocate or dispose themselves.
 4. At job end, surviving temporary datasets are deleted. The result is a `JobResult` holding
    one `StepResult` per step.
@@ -150,6 +161,9 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/model.py`, `results.py` | Immutable job model, DSN types and step results. |
 | `jackal/jackal/value_parts.py` | Literal and symbolic value parts. |
 | `jackal/jackal/unresolved.py` | What the runner does with unresolved references (D7). |
+| `jackal/jackal/missing_data.py` | What the runner does with a DD it cannot allocate. |
+| `jackal/jackal/missing_program.py` | What the runner does with a program it cannot find. |
+| `jackal/jackal/program_sources.py` | Where the runner finds a program's COBOL source. |
 | `jackal/jackal/parm.py` | `PARM=` region for COBOL `LINKAGE`. |
 | `jackal/jackal/tso.py` | Reads the programs a TSO batch step runs from its `SYSTSIN`. Used by cobble. |
 | `jackal/jackal/jcl/` | JCL parsing through the bridge JAR; procedure expansion. |
