@@ -14,10 +14,15 @@ from cobol_asg.cobol_statements import (
     RecordVarying,
 )
 from cobol_asg.file_enums import RecordingMode
-from jackal.labels import DatasetLabel, LabelPending, RecordFormat, SequentialLabel
+from jackal.labels import (
+    VARIABLE,
+    DatasetLabel,
+    LabelPending,
+    RecordFormat,
+    SequentialLabel,
+)
 
 _RDW = 4
-_VARIABLE = frozenset({RecordFormat.V, RecordFormat.VB})
 
 
 @dataclass(frozen=True)
@@ -112,7 +117,7 @@ def _sequential_conflict(
     fmt: FixedFormat | VariableFormat, label: SequentialLabel
 ) -> bool:
     variable = isinstance(fmt, VariableFormat)
-    return (label.recfm in _VARIABLE) != variable or label.lrecl != fmt.lrecl
+    return (label.recfm in VARIABLE) != variable or label.lrecl != fmt.lrecl
 
 
 def conflicts(fmt: ProgramFormat, label: DatasetLabel) -> bool:

@@ -11,12 +11,20 @@ from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.data_layout import record_length
+from interpreter.cobol.file_drivers import FileOrganizationDriver
 from interpreter.cobol.io_provider import IOResult
 from interpreter.cobol.real_file_provider import RealFileIOProvider, to_ioresult
 from jackal.allocation import DatasetAllocation, DdEnvironment
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset, Relabeller
-from jackal.labels import DatasetLabel, KsdsLabel, Label, LabelPending
+from jackal.labels import (
+    VARIABLE,
+    DatasetLabel,
+    KsdsLabel,
+    Label,
+    LabelPending,
+    SequentialLabel,
+)
 from jackal.record_format import (
     FdRecords,
     FixedFormat,
@@ -27,6 +35,7 @@ from jackal.record_format import (
     label_for,
     program_format,
 )
+from jackal.variable_records import VariableRecordDriver
 
 _LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
 
@@ -62,6 +71,14 @@ def _format(asg: CobolASG, entry: FileControlEntry) -> ProgramFormat:
 
 def program_files(asg: CobolASG) -> tuple[ProgramFile, ...]:
     return tuple(ProgramFile(e, _format(asg, e)) for e in asg.file_control)
+
+
+def _variable(label: DatasetLabel) -> bool:
+    match label:
+        case SequentialLabel():
+            return label.recfm in VARIABLE
+        case _:
+            return False
 
 
 def _indexed_conflict(label: DatasetLabel) -> bool:
@@ -120,6 +137,26 @@ class AllocatedFileIOProvider(RealFileIOProvider):
     def _labelled(self, filename: str, dataset: Dataset, label: Label) -> None:
         self._relabeller.relabel(dataset, label)
         self._datasets.put(filename, Dataset(dataset.dsn, dataset.path, label))
+
+    def _driver(
+        self,
+        org: FileOrganization,
+        path: Path,
+        mode: OpenMode,
+        record_length: int,
+        key_offset: int,
+        key_length: int,
+    ) -> FileOrganizationDriver:
+        if any(d.path == path and _variable(d.label) for d in self._datasets.values()):
+            return VariableRecordDriver(path, mode, record_length)
+        return super()._driver(
+            org,
+            path,
+            mode,
+            record_length,
+            key_offset,
+            key_length,
+        )
 
     def _open_file(
         self,

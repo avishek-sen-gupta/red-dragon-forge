@@ -287,3 +287,44 @@ def test_define_cluster_duplicate_dsn_returns_12(tmp_path):
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 12
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_reads_a_variable_input_record_by_record_at_each_record_length(
+    tmp_path,
+):
+    from cobol_asg.file_enums import OpenMode
+    from interpreter.cobol.file_drivers import IndexedDriver
+    from jackal.idcams.executor import run_idcams
+
+    upload(
+        tmp_path,
+        "IN.V",
+        b"\x00\x08\x00\x00AAA1\x00\x0b\x00\x00BBB2xyz",
+        SequentialLabel(RecordFormat.VB, 104),
+    )
+    cat = job_catalog(tmp_path)
+    run_idcams(
+        (DefineCluster(name="OUT.KSDS", key_length=3, key_offset=0, record_size=9),),
+        DdEnvironment(()),
+        cat,
+    )
+    dds = (
+        DD(
+            DdName("INF"),
+            DirectDSN(literal("IN.V")),
+            Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
+        ),
+        DD(
+            DdName("OUT"),
+            DirectDSN(literal("OUT.KSDS")),
+            Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP),
+        ),
+    )
+    env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
+    copied = run_idcams((Repro(infile_dd="INF", outfile_dd="OUT"),), env, cat)
+    drv = IndexedDriver()
+    drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)
+    loaded = (drv.read_key(b"AAA").data, drv.read_key(b"BBB").data)
+    drv.close()
+    assert (copied, loaded[0][:4], loaded[1][:7]) == (0, b"AAA1", b"BBB2xyz")

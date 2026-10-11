@@ -108,7 +108,11 @@ largest record plus 4) meets the dataset's label: a pending label is written fro
 `OUTPUT` or `EXTEND`; a label that contradicts it in organization, fixed against variable, or
 length fails the `OPEN` with file status 39. `RECORDING MODE U` and `S` are refused. The
 decisions and their IBM sources are in
-[the COBOL OPEN decision record](../../records/design/2026-10-11-jackal-cobol-open-record-format.md). `PARM=` is passed in as an OS halfword-prefixed parameter region
+[the COBOL OPEN decision record](../../records/design/2026-10-11-jackal-cobol-open-record-format.md).
+A dataset labelled V or VB is read and written through `jackal.variable_records`, which keeps
+each record behind its 4-byte record descriptor word as z/OS does, and fails a `REWRITE` that
+changes a record's length with file status 44
+([decision record](../../records/design/2026-10-12-jackal-variable-records.md)). `PARM=` is passed in as an OS halfword-prefixed parameter region
 (`jackal.parm`). Each program runs on red-dragon's resumable entry point with its own budget
 of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000). A program
 that ends gives `Completed` with the return code read back from the VM. One still running
@@ -120,10 +124,10 @@ Datasets live in a **system directory** that persists across runs, standing in f
 mainframe's disks and catalog. `jackal.system_catalog.SystemCatalog` holds it: `catalog.json`
 records every cataloged dataset with its label (`jackal.labels`: RECFM and LRECL for a
 sequential dataset, LRECL and key extent for a KSDS, or pending for a dataset a job created,
-whose label is built at its first `OPEN OUTPUT` in red-dragon-forge-8in), and `datasets/`
+whose label is built at its first `OPEN OUTPUT`), and `datasets/`
 holds the bytes. Data enters only through `jackal catalog add`, which copies the file in with
-its label; no Forge runtime accepts an unlabelled dataset. Labels are stored and checked; I/O
-does not read them yet (8in). `jackal.catalog.DatasetCatalog` is one job's view of it, adding
+its label; no Forge runtime accepts an unlabelled dataset. Every open reads the label: it
+chooses the driver and gives the record length. `jackal.catalog.DatasetCatalog` is one job's view of it, adding
 the job's temps, passed datasets and a scratch directory. Dispositions follow SMS: `CATLG` and
 `KEEP` leave a dataset cataloged and `UNCATLG` does nothing. An omitted normal or abnormal
 disposition is kept as omitted by the parser and defaulted at allocation, once the catalog
@@ -183,7 +187,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
 | `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |
-| `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label. |
+| `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label, opened by its label. |
+| `jackal/jackal/variable_records.py` | RECFM=V/VB records on disk, each behind its record descriptor word. |
 | `jackal/jackal/cond.py` | `COND=` evaluation. |
 | `jackal/jackal/model.py`, `results.py` | Immutable job model, DSN types and step results. |
 | `jackal/jackal/value_parts.py` | Literal and symbolic value parts. |

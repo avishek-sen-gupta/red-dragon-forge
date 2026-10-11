@@ -114,7 +114,7 @@ def test_an_empty_sequential_dataset_reads_end_of_file(tmp_path):
     )
     ds = _given(cat, dd)
     assert isinstance(ds, Dataset)
-    drv = ds.opened(OpenMode.INPUT, 80)
+    drv = ds.opened(OpenMode.INPUT)
     result = drv.read_seq()
     drv.close()
     assert result.condition is AccessCondition.END_OF_FILE
@@ -214,10 +214,10 @@ def test_an_unallocated_dd_can_be_given_an_empty_dataset_in_its_place(tmp_path):
 def test_a_ksds_reads_back_by_key_what_was_written(tmp_path):
     ksds = _catalog(tmp_path).define("MY.KSDS", KsdsLabel(10, 0, 4))
     record = b"KEY DATA  "
-    drv = ksds.opened(OpenMode.OUTPUT, 10)
+    drv = ksds.opened(OpenMode.OUTPUT)
     drv.write(record)
     drv.close()
-    drv2 = ksds.opened(OpenMode.INPUT, 10)
+    drv2 = ksds.opened(OpenMode.INPUT)
     result = drv2.read_key(b"KEY ")
     drv2.close()
     assert result.condition is AccessCondition.OK

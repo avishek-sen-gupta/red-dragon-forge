@@ -150,6 +150,9 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
     )
 
 
+VARYING = "VARYING".ljust(100).encode("cp037")
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_one(
     tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
@@ -165,6 +168,9 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         "//OUTDD DD DSN=J.VAR,DISP=(NEW,CATLG)\n"
         "//S3 EXEC PGM=SHORTRD\n"
         "//INDD DD DSN=J.FIX,DISP=SHR\n"
+        "//S4 EXEC PGM=VARREAD\n"
+        "//INDD DD DSN=J.VAR,DISP=SHR\n"
+        "//OUTDD DD DSN=J.COPY,DISP=(NEW,CATLG)\n"
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     catalog = job_catalog(tmp_path)
@@ -180,12 +186,15 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
     )
     result = runner.run_job(job, catalog)
     reloaded = system(tmp_path)
+    var, copy = reloaded.lookup("J.VAR"), reloaded.lookup("J.COPY")
     assert (
         [s.outcome for s in result.steps],
         reloaded.lookup("J.FIX").label,
-        reloaded.lookup("J.VAR").label,
+        (var.label, var.path.read_bytes()),
+        (copy.label, copy.path.read_bytes()),
     ) == (
-        [Completed(0), Completed(0), Completed(39)],
+        [Completed(0), Completed(0), Completed(39), Completed(0)],
         SequentialLabel(RecordFormat.F, 80),
-        SequentialLabel(RecordFormat.V, 104),
+        (SequentialLabel(RecordFormat.V, 104), b"\x00\x68\x00\x00" + VARYING),
+        (SequentialLabel(RecordFormat.F, 100), VARYING),
     )

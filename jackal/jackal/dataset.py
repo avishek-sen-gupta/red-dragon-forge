@@ -8,7 +8,15 @@ from typing import Protocol
 
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
-from jackal.labels import DatasetLabel, KsdsLabel, Label, LabelPending, SequentialLabel
+from jackal.labels import (
+    VARIABLE,
+    DatasetLabel,
+    KsdsLabel,
+    Label,
+    LabelPending,
+    SequentialLabel,
+)
+from jackal.variable_records import VariableRecordDriver
 
 
 @dataclass(frozen=True)
@@ -17,28 +25,41 @@ class Dataset:
     path: Path
     label: DatasetLabel
 
-    def record_size(self) -> int:
-        match self.label:
-            case SequentialLabel() | KsdsLabel():
-                return self.label.lrecl
-            case LabelPending():
-                return 0
-
-    def opened(self, mode: OpenMode, record_size: int) -> FileOrganizationDriver:
+    def opened(self, mode: OpenMode) -> FileOrganizationDriver:
         match self.label:
             case KsdsLabel():
-                return open_driver(
-                    FileOrganization.INDEXED,
-                    self.path,
-                    mode,
-                    record_size,
-                    self.label.key_offset,
-                    self.label.key_length,
-                )
-            case SequentialLabel() | LabelPending():
-                return open_driver(
-                    FileOrganization.SEQUENTIAL, self.path, mode, record_size, 0, 0
-                )
+                return _indexed(self.path, mode, self.label)
+            case _:
+                return _sequential(self.path, mode, self.label)
+
+
+def _indexed(path: Path, mode: OpenMode, label: KsdsLabel) -> FileOrganizationDriver:
+    return open_driver(
+        FileOrganization.INDEXED,
+        path,
+        mode,
+        label.lrecl,
+        label.key_offset,
+        label.key_length,
+    )
+
+
+def _sequential(
+    path: Path, mode: OpenMode, label: SequentialLabel | LabelPending
+) -> FileOrganizationDriver:
+    match label:
+        case SequentialLabel():
+            return _labelled_sequential(path, mode, label)
+        case LabelPending():
+            return open_driver(FileOrganization.SEQUENTIAL, path, mode, 0, 0, 0)
+
+
+def _labelled_sequential(
+    path: Path, mode: OpenMode, label: SequentialLabel
+) -> FileOrganizationDriver:
+    if label.recfm in VARIABLE:
+        return VariableRecordDriver(path, mode, 0)
+    return open_driver(FileOrganization.SEQUENTIAL, path, mode, label.lrecl, 0, 0)
 
 
 class Relabeller(Protocol):
