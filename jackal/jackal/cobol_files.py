@@ -1,36 +1,125 @@
-"""jackal's COBOL file handler: red-dragon's, opening each file as its DD was allocated."""
+"""jackal's COBOL file handler: red-dragon's, opening each file as its DD was allocated and its label allows."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
+from cobol_asg.asg_types import CobolASG, CobolField
 from cobol_asg.cobol_statements import FileControlEntry
-from cobol_asg.file_enums import OpenMode
+from cobol_asg.file_enums import FileOrganization, OpenMode
+from interpreter.cobol.access_result import AccessCondition, AccessResult
+from interpreter.cobol.data_layout import record_length
 from interpreter.cobol.io_provider import IOResult
-from interpreter.cobol.real_file_provider import RealFileIOProvider
-from jackal.allocation import DdEnvironment
+from interpreter.cobol.real_file_provider import RealFileIOProvider, to_ioresult
+from jackal.allocation import DatasetAllocation, DdEnvironment
+from jackal.catalog_stores import Table
+from jackal.dataset import Dataset, Relabeller
+from jackal.labels import DatasetLabel, KsdsLabel, Label, LabelPending
+from jackal.record_format import (
+    FdRecords,
+    FixedFormat,
+    FormatFromDataset,
+    ProgramFormat,
+    VariableFormat,
+    conflicts,
+    label_for,
+    program_format,
+)
+
+_LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
+
+
+@dataclass(frozen=True)
+class ProgramFile:
+    entry: FileControlEntry
+    fmt: ProgramFormat
+
+
+def _depends(f: CobolField) -> bool:
+    return bool(f.occurs_depending_on) or any(_depends(c) for c in f.children)
+
+
+def _records(asg: CobolASG, fd_name: str) -> FdRecords:
+    roots = tuple(
+        f
+        for f in asg.file_fields
+        if f.level == 1 and asg.file_record_to_select.get(f.name.upper()) == fd_name
+    )
+    return FdRecords(
+        tuple(record_length(f) for f in roots), any(_depends(f) for f in roots)
+    )
+
+
+def _format(asg: CobolASG, entry: FileControlEntry) -> ProgramFormat:
+    fds = {d.fd_name.upper(): d for d in asg.file_descriptions}
+    name = entry.file_name.upper()
+    if name not in fds:
+        return FormatFromDataset()
+    return program_format(fds[name], _records(asg, name))
+
+
+def program_files(asg: CobolASG) -> tuple[ProgramFile, ...]:
+    return tuple(ProgramFile(e, _format(asg, e)) for e in asg.file_control)
+
+
+def _indexed_conflict(label: DatasetLabel) -> bool:
+    match label:
+        case KsdsLabel():
+            return False
+        case _:
+            return True
 
 
 class AllocatedFileIOProvider(RealFileIOProvider):
-    """A file whose DD was allocated with DISP=MOD is opened to append when written."""
+    """Opens a file as its DD was allocated: DISP=MOD appends; a label the FD contradicts fails with status 39."""
 
     def __init__(
         self,
         base_dir: Path,
-        file_control: Sequence[FileControlEntry],
+        files: Sequence[ProgramFile],
         env: DdEnvironment,
+        relabeller: Relabeller,
     ) -> None:
-        super().__init__(base_dir, list(file_control), dict(env.paths()))
+        super().__init__(base_dir, [f.entry for f in files], dict(env.paths()))
         appended = {name.text for name in env.appended()}
         self._appended_files = frozenset(
-            e.file_name for e in file_control if e.assign_to in appended
+            f.entry.file_name for f in files if f.entry.assign_to in appended
         )
+        self._files: Mapping[str, ProgramFile] = {f.entry.file_name: f for f in files}
+        self._relabeller = relabeller
+        self._datasets: Table[str, Dataset] = Table()
+        for name, dataset in _datasets(files, env):
+            self._datasets.put(name, dataset)
 
     def _opened_as(self, filename: str, mode: str) -> str:
         if mode == OpenMode.OUTPUT.value and filename in self._appended_files:
             return OpenMode.EXTEND.value
         return mode
+
+    def _admits(self, filename: str, mode: str) -> bool:
+        if not self._datasets.has(filename):
+            return True
+        file = self._files[filename]
+        if file.entry.organization is FileOrganization.INDEXED:
+            return not _indexed_conflict(self._datasets.get(filename).label)
+        return self._admits_sequential(filename, file.fmt, mode)
+
+    def _admits_sequential(self, filename: str, fmt: ProgramFormat, mode: str) -> bool:
+        dataset = self._datasets.get(filename)
+        match (dataset.label, fmt):
+            case (LabelPending(), FixedFormat() | VariableFormat()) if (
+                mode in _LABELLING
+            ):
+                self._labelled(filename, dataset, label_for(fmt))
+                return True
+            case _:
+                return not conflicts(fmt, dataset.label)
+
+    def _labelled(self, filename: str, dataset: Dataset, label: Label) -> None:
+        self._relabeller.relabel(dataset, label)
+        self._datasets.put(filename, Dataset(dataset.dsn, dataset.path, label))
 
     def _open_file(
         self,
@@ -41,11 +130,22 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         key_offset: int,
         key_length: int,
     ) -> IOResult:
+        opened = self._opened_as(filename, mode)
+        if not self._admits(filename, opened):
+            return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
         return super()._open_file(
-            filename,
-            self._opened_as(filename, mode),
-            record_length,
-            organization,
-            key_offset,
-            key_length,
+            filename, opened, record_length, organization, key_offset, key_length
         )
+
+
+def _datasets(
+    files: Sequence[ProgramFile], env: DdEnvironment
+) -> tuple[tuple[str, Dataset], ...]:
+    allocations = dict(env.entries)
+    return tuple(
+        (f.entry.file_name, allocation.dataset)
+        for f in files
+        for ddname, allocation in allocations.items()
+        if ddname.text == f.entry.assign_to
+        and isinstance(allocation, DatasetAllocation)
+    )

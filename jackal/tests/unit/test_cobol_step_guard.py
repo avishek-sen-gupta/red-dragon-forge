@@ -15,6 +15,7 @@ from jackal.cobol_step import (
 )
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
+from tests.system_build import job_catalog
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -28,6 +29,7 @@ def test_run_cobol_step_empty_bridge_jar_fails_loud(tmp_path):
             "",
             [],
             DEFAULT_PROGRAM_STEP_BUDGET,
+            job_catalog(tmp_path),
         )
 
 

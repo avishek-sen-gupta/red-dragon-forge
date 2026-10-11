@@ -127,6 +127,9 @@ class SystemCatalog:
         self._entries.take(dsn).path.unlink(missing_ok=True)
         self._write()
 
+    def relabel(self, dsn: str, label: Label) -> Dataset:
+        return self._cataloged(self._dataset(dsn, label))
+
     def _cataloged(self, dataset: Dataset) -> Dataset:
         self._entries.put(dataset.dsn, dataset)
         self._write()

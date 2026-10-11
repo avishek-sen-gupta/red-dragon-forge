@@ -52,6 +52,7 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
         bridge_jar,
         [],
         DEFAULT_PROGRAM_STEP_BUDGET,
+        cat,
     ) == Completed(42)
 
 
@@ -66,4 +67,5 @@ def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
         bridge_jar,
         [],
         DEFAULT_PROGRAM_STEP_BUDGET,
+        cat,
     ) == Completed(7)

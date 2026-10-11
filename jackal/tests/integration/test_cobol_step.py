@@ -41,6 +41,7 @@ def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
         bridge_jar,
         copybook_dirs=[],
         budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        relabeller=cat,
     )
     assert rc == Completed(0)
     assert cat.resolve("J.OUT").path.read_bytes() == _ebcdic(b"APPLEMANGO")

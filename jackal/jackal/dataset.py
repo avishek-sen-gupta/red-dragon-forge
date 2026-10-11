@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
-from jackal.labels import DatasetLabel, KsdsLabel, LabelPending, SequentialLabel
+from jackal.labels import DatasetLabel, KsdsLabel, Label, LabelPending, SequentialLabel
 
 
 @dataclass(frozen=True)
@@ -38,3 +39,7 @@ class Dataset:
                 return open_driver(
                     FileOrganization.SEQUENTIAL, self.path, mode, record_size, 0, 0
                 )
+
+
+class Relabeller(Protocol):
+    def relabel(self, dataset: Dataset, label: Label) -> None: ...

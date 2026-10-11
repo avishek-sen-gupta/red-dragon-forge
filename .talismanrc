@@ -615,4 +615,6 @@ fileignoreconfig:
   checksum: af18c929ccef7956db1a21dbdc7c6f997722f5d4572242cc8f98ad2207d38eb6
 - filename: docs/records/design/2026-10-11-jackal-dataset-decisions.md
   checksum: ece97e916b576037d45af880fb3774729d86500c565015c32282fb645f592156
+- filename: jackal/jackal/cobol_files.py
+  checksum: 479e8297517fc25a5c5f3661a7a61769cce4593b93f65c8baf8207a7285dcf90
 version: "1.0"
