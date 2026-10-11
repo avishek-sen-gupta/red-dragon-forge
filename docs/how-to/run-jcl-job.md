@@ -26,15 +26,17 @@ Runs a CardDemo batch job through jackal. Flags are in
 
    Expected: no output.
 
-3. Bring the job's input into a system directory, with the label CardDemo's README gives it
-   (FB, 300). This is the mainframe's upload step; it is done once per system directory.
+3. Install CardDemo's datasets into a system directory. Each is cataloged with the record
+   format and length CardDemo's README declares for it (its "Upload Sample Data" step); do it
+   once per system directory.
 
    ```bash
-   uv run --no-sync jackal catalog add AWS.M2.CARDDEMO.ACCTDATA.PS --system /tmp/jackal-system \
-     --file vendor/carddemo/app/data/EBCDIC/AWS.M2.CARDDEMO.ACCTDATA.PS --recfm FB --lrecl 300
+   make jackal-install SYSTEM=/tmp/jackal-system
    ```
 
-   Expected: no output, exit status 0.
+   Expected: an `installing …` line per dataset, then `installed 11 datasets into /tmp/jackal-system`.
+   A single dataset can be added by hand with `jackal catalog add`; see
+   [the CLI reference](../reference/jackal/cli.md).
 
 4. Run `ACCTFILE.jcl`. It deletes, defines and loads the account VSAM KSDS with IDCAMS.
 
@@ -56,6 +58,6 @@ Runs a CardDemo batch job through jackal. Flags are in
   `--source-dir` and `--copybook-dir`.
 - A step ends `allocation failed (DD …: DATASET_NOT_FOUND)`, or a warning says an empty dataset
   stood in for one: the dataset is not in the system directory. Add it with
-  `jackal catalog add`, as in step 3.
+  `jackal catalog add`, or run step 3.
 - `KeyError: 'JCL_BRIDGE_JAR'`: step 1 was not run in this shell.
 - `No module named jackal.__main__`: use `uv run --no-sync jackal`, not `python -m jackal`.
