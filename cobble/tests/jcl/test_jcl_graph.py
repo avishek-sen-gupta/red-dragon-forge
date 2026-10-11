@@ -21,6 +21,7 @@ from jackal.model import (
     DispAbnormal,
     DispNormal,
     DispStatus,
+    GenerationDSN,
     InStreamDSN,
     Job,
     ProcCall,
@@ -84,6 +85,23 @@ def test_disposition_decides_the_edge_kind() -> None:
     assert [edge.kind for edge in edges if edge.kind is not EdgeKind.JCL_STEP_RUNS] == [
         EdgeKind.WRITES
     ]
+
+
+def test_relative_generations_are_one_gdg_base_node_and_the_edge_names_each() -> None:
+    """Writing (+1) and reading (0) touch the same GDG, so lineage holds across jobs."""
+    job = _job(
+        DD(DdName("NEXT"), GenerationDSN(literal("P.HIST"), 1), _NEW),
+        DD(DdName("CURR"), GenerationDSN(literal("P.HIST"), 0), _SHR),
+    )
+    nodes, edges = _graph(job)
+    data = [e for e in edges if e.kind is not EdgeKind.JCL_STEP_RUNS]
+    assert (
+        [n.id for n in nodes if n.kind is NodeKind.DATASET],
+        [(e.kind, e.target, e.attrs["generation"]) for e in data],
+    ) == (
+        ["P.HIST"],
+        [(EdgeKind.WRITES, "P.HIST", "1"), (EdgeKind.READS, "P.HIST", "0")],
+    )
 
 
 def test_a_double_ampersand_temp_is_not_a_dataset() -> None:

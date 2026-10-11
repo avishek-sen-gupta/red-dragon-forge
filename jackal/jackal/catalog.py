@@ -15,6 +15,7 @@ from jackal.model import (
     DispAbnormal,
     DispNormal,
     DispStatus,
+    GenerationDSN,
     ResolvedDisp,
     StepReference,
     TempRef,
@@ -177,7 +178,7 @@ class DatasetCatalog(Relabeller):
         result: ProgramResult,
     ) -> None:
         match dd.dsn:
-            case DirectDSN():
+            case DirectDSN() | GenerationDSN():
                 self._passed_on(dd.dsn.dataset_name(), disposition, existed, result)
             case _:
                 return
@@ -210,7 +211,7 @@ class DatasetCatalog(Relabeller):
 
     def _delete_direct(self, dsn: DSN[StepReference]) -> None:
         match dsn:
-            case DirectDSN():
+            case DirectDSN() | GenerationDSN():
                 self.delete_dsn(dsn.dataset_name())
                 self._received(dsn.dataset_name())
             case _:

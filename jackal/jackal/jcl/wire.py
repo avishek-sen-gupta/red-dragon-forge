@@ -19,6 +19,7 @@ from jackal.model import (
     DispNormal,
     DispStatus,
     DummyDSN,
+    GenerationDSN,
     InStreamDSN,
     NoDSN,
     NotCoded,
@@ -152,6 +153,15 @@ class NameDsn(Wire):
         return DirectDSN(value(self.value))
 
 
+class GenerationDsn(Wire):
+    kind: Literal["generation"] = "generation"
+    base: tuple[Part, ...]
+    relative: int
+
+    def model(self) -> DSN[StepRef]:
+        return GenerationDSN(value(self.base), self.relative)
+
+
 class TempDsn(Wire):
     kind: Literal["temp"] = "temp"
     name: str
@@ -193,7 +203,7 @@ class NoneDsn(Wire):
 
 
 Dsn = Annotated[
-    NameDsn | TempDsn | BackrefDsn | InStreamDsn | DummyDsn | NoneDsn,
+    NameDsn | GenerationDsn | TempDsn | BackrefDsn | InStreamDsn | DummyDsn | NoneDsn,
     Field(discriminator="kind"),
 ]
 

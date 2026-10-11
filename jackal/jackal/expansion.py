@@ -48,6 +48,7 @@ from jackal.model import (
     StepName,
     StepRef,
     StepReference,
+    Substitution,
     TempRef,
     UnexpandedCall,
     UnresolvedDd,
@@ -298,7 +299,9 @@ def _dataset(value: Value) -> DSN[StepRef]:
 def _substituted_dd(
     dd: DD[StepRef], symbols: Mapping[SymbolName, Value]
 ) -> DD[StepRef]:
-    return dd.substituted(lambda name: _dataset(_substitute(name, symbols)))
+    return dd.substituted(
+        Substitution(lambda value: _substitute(value, symbols), _dataset)
+    )
 
 
 def _substituted_override(

@@ -140,12 +140,24 @@ final class DdBuilder {
         if (raw.equals("NULLFILE")) {
             return kind("dummy");
         }
+        List<JCLParser.KeywordOrSymbolicContext> parts = datasetName.keywordOrSymbolic();
+        if (parts.size() == 2 && isRelativeGeneration(parts.get(1).getText())) {
+            JsonObject generation = kind("generation");
+            generation.add("base", ValueParts.of(parts.get(0)));
+            generation.addProperty("relative", Integer.parseInt(parts.get(1).getText()));
+            return generation;
+        }
         JsonObject name = kind("name");
         name.add("value", ValueParts.of(datasetName));
         return name;
     }
 
-    private static JsonObject kind(String kind) {
+    private static boolean isRelativeGeneration(String text) {
+        return text.matches("[+-][0-9]{1,3}|0[0-9]{0,2}")
+                && Math.abs(Integer.parseInt(text)) <= 255;
+    }
+
+        private static JsonObject kind(String kind) {
         JsonObject dsn = new JsonObject();
         dsn.addProperty("kind", kind);
         return dsn;

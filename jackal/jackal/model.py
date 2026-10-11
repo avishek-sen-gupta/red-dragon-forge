@@ -151,6 +151,14 @@ class StepReference:
 
 
 @dataclass(frozen=True)
+class Substitution(Generic[R]):
+    """Symbol substitution in a DSN: the value substituted, and the kind of DSN a whole substituted name makes."""
+
+    value: Callable[[Value], Value]
+    dataset: Callable[[Value], DSN[R]]
+
+
+@dataclass(frozen=True)
 class DirectDSN:
     name: Value
 
@@ -160,8 +168,29 @@ class DirectDSN:
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return self
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
-        return name(self.name)
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
+        return substitution.dataset(substitution.value(self.name))
+
+
+@dataclass(frozen=True)
+class GenerationDSN:
+    """A generation of a GDG relative to the current one: (+1) the next, (0) the current, (-1) the one before."""
+
+    base: Value
+    relative: int
+
+    def base_name(self) -> str:
+        return resolve(self.base)
+
+    def dataset_name(self) -> str:
+        sign = "+" if self.relative > 0 else ""
+        return f"{self.base_name()}({sign}{self.relative})"
+
+    def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
+        return self
+
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
+        return GenerationDSN(substitution.value(self.base), self.relative)
 
 
 @dataclass(frozen=True)
@@ -174,7 +203,7 @@ class TempRef:
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return self
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
         return self
 
 
@@ -189,7 +218,7 @@ class BackwardRef(Generic[R]):
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return backref(self)
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
         return self
 
 
@@ -201,7 +230,7 @@ class InStreamDSN:
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return self
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
         return self
 
 
@@ -213,7 +242,7 @@ class DummyDSN:
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return self
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
         return self
 
 
@@ -225,7 +254,7 @@ class NoDSN:
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return self
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
         return self
 
 
@@ -237,12 +266,19 @@ class NullifiedDSN:
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DSN[S]:
         return self
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DSN[R]:
+    def substituted(self, substitution: Substitution[R]) -> DSN[R]:
         return self
 
 
 DSN: TypeAlias = (
-    DirectDSN | TempRef | BackwardRef[R] | InStreamDSN | DummyDSN | NoDSN | NullifiedDSN
+    DirectDSN
+    | GenerationDSN
+    | TempRef
+    | BackwardRef[R]
+    | InStreamDSN
+    | DummyDSN
+    | NoDSN
+    | NullifiedDSN
 )
 
 
@@ -430,8 +466,10 @@ class ConcatMember(Generic[R]):
     ) -> ConcatMember[S]:
         return ConcatMember(self.dsn.mapped(backref), self.disp, self.in_stream)
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> ConcatMember[R]:
-        return ConcatMember(self.dsn.substituted(name), self.disp, self.in_stream)
+    def substituted(self, substitution: Substitution[R]) -> ConcatMember[R]:
+        return ConcatMember(
+            self.dsn.substituted(substitution), self.disp, self.in_stream
+        )
 
 
 @dataclass(frozen=True)
@@ -496,14 +534,14 @@ class DD(Generic[R]):
             tuple(m.mapped(backref) for m in self.concatenated),
         )
 
-    def substituted(self, name: Callable[[Value], DSN[R]]) -> DD[R]:
+    def substituted(self, substitution: Substitution[R]) -> DD[R]:
         return DD(
             self.ddname,
-            self.dsn.substituted(name),
+            self.dsn.substituted(substitution),
             self.disp,
             self.in_stream,
             self.sysout,
-            tuple(m.substituted(name) for m in self.concatenated),
+            tuple(m.substituted(substitution) for m in self.concatenated),
         )
 
 

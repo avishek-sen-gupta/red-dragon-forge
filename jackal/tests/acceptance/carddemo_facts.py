@@ -15,6 +15,7 @@ from jackal.model import (
     BackwardRef,
     BypassTest,
     DirectDSN,
+    GenerationDSN,
     Disp,
     DispAbnormal,
     DispNormal,
@@ -92,6 +93,8 @@ def _dsn_text(dsn: DSN, sysout: bool) -> str:
     match dsn:
         case DirectDSN(name=n):
             return _text(n)
+        case GenerationDSN(base=b, relative=r):
+            return f"{_text(b)}({'+' if r > 0 else ''}{r})"
         case TempRef(name=name):
             return f"&&{name}"
         case BackwardRef(step=s, dd=d):
