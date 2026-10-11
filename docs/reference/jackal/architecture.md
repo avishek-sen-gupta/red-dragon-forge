@@ -152,7 +152,7 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 | Program | Behaviour |
 |---|---|
 | `IEFBR14` | Does nothing; the runner's allocation and disposition do its work. Return code 0. |
-| `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated. Return code is the final MAXCC. |
+| `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label; an input whose label is still pending ends that `REPRO` with condition code 12 and the next command runs. Return code is the final MAXCC. |
 
 The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`, `REPRO`,
 `IF MAXCC … THEN` and `SET MAXCC`. The parser it uses (`jackal.idcams.parser`) is a Lark

@@ -23,15 +23,12 @@ from tests.system_build import job_catalog, upload
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_repro_loads_ps_into_ksds(tmp_path):
+def test_repro_reads_its_input_at_the_input_label_and_writes_at_the_output_label(
+    tmp_path,
+):
     from jackal.idcams.executor import run_idcams
 
-    upload(
-        tmp_path,
-        "IN.PS",
-        b"AAArec1xxBBBrec2xx",
-        SequentialLabel(RecordFormat.FB, 9),
-    )
+    upload(tmp_path, "IN.PS", b"AAA1BBB2", SequentialLabel(RecordFormat.FB, 4))
     cat = job_catalog(tmp_path)
     dds = (
         DD(
@@ -57,8 +54,34 @@ def test_repro_loads_ps_into_ksds(tmp_path):
 
     drv = IndexedDriver()
     drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)
-    assert drv.read_key(b"BBB").data[:3] == b"BBB"
+    loaded = (drv.read_key(b"AAA").data, drv.read_key(b"BBB").data)
     drv.close()
+    assert (loaded[0][:4], loaded[1][:4]) == (b"AAA1", b"BBB2")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_from_an_unlabelled_input_ends_with_12_and_idcams_goes_on(tmp_path):
+    from jackal.idcams.executor import run_idcams
+
+    cat = job_catalog(tmp_path)
+    dds = (
+        DD(
+            DdName("INF"),
+            DirectDSN(literal("NEW.PS")),
+            Disp(DispStatus.NEW, DispNormal.CATLG, DispNormal.DELETE),
+        ),
+        DD(
+            DdName("OUT"),
+            DirectDSN(literal("OUT.PS")),
+            Disp(DispStatus.NEW, DispNormal.CATLG, DispNormal.DELETE),
+        ),
+    )
+    env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
+    cmds = (
+        Repro(infile_dd="INF", outfile_dd="OUT"),
+        IfMaxcc(op="EQ", value=12, set_value=99, test_field="LASTCC"),
+    )
+    assert run_idcams(cmds, env, cat) == 99
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
