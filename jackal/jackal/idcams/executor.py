@@ -12,6 +12,7 @@ from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
 from jackal.allocation import DdEnvironment
 from jackal.catalog import DatasetCatalog
+from jackal.dataset import Dataset
 from jackal.idcams.commands import (
     Command,
     DefineCluster,
@@ -20,7 +21,7 @@ from jackal.idcams.commands import (
     Repro,
     SetMaxcc,
 )
-from jackal.labels import KsdsLabel
+from jackal.labels import KsdsLabel, LabelPending
 from jackal.model import DdName
 
 _OPS: Mapping[str, Callable[[int, int], bool]] = {
@@ -31,6 +32,9 @@ _OPS: Mapping[str, Callable[[int, int], bool]] = {
     "EQ": lambda maxcc, value: maxcc == value,
     "NE": lambda maxcc, value: maxcc != value,
 }
+
+
+_OPEN_FAILED = 12
 
 
 @dataclass(frozen=True)
@@ -69,10 +73,17 @@ def _records(driver: FileOrganizationDriver) -> Iterator[bytes]:
     )
 
 
-def _handle_repro(cmd: Repro, dds: DdEnvironment, catalog: DatasetCatalog) -> int:
+def _handle_repro(cmd: Repro, dds: DdEnvironment) -> int:
     in_ds = dds.dataset(DdName(cmd.infile_dd))
-    out_ds = dds.dataset(DdName(cmd.outfile_dd))
-    in_drv = in_ds.opened(OpenMode.INPUT, out_ds.record_size())
+    match in_ds.label:
+        case LabelPending():
+            return _OPEN_FAILED
+        case _:
+            return _copied(in_ds, dds.dataset(DdName(cmd.outfile_dd)))
+
+
+def _copied(in_ds: Dataset, out_ds: Dataset) -> int:
+    in_drv = in_ds.opened(OpenMode.INPUT, in_ds.record_size())
     out_drv = out_ds.opened(OpenMode.OUTPUT, out_ds.record_size())
     for record in _records(in_drv):
         out_drv.write(record)
@@ -86,7 +97,7 @@ def _functional_rc(
 ) -> int:
     match cmd:
         case Repro():
-            return _handle_repro(cmd, dds, catalog)
+            return _handle_repro(cmd, dds)
         case _:
             return _catalog_rc(cmd, catalog)
 
