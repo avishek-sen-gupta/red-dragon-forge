@@ -7,6 +7,11 @@ from jackal.missing_data import (
     MissingDataStrategy,
     StrictAllocation,
 )
+from jackal.missing_program import (
+    AbendMissingProgram,
+    MissingProgramStrategy,
+    StubMissingProgram,
+)
 from jackal.model import (
     DD,
     AbendMode,
@@ -26,6 +31,8 @@ from jackal.model import (
     UnresolvedDd,
 )
 from jackal.results import (
+    Abended,
+    AfterAbend,
     AfterAllocationFailure,
     AfterJobCond,
     AllocationError,
@@ -34,11 +41,13 @@ from jackal.results import (
     BypassReason,
     Completed,
     Flushed,
+    JobAbended,
     JobAllocationFailed,
     JobCompleted,
     JobResult,
     SkippedUnresolved,
     StepOutcome,
+    SystemAbend,
 )
 from jackal.runner import JobRunner, UnsupportedStep
 from jackal.unresolved import (
@@ -60,6 +69,7 @@ def _run(
     proclib: tuple[Path, ...] = (),
     unresolved: UnresolvedReferenceStrategy = RaiseErrorStrategy(),
     missing_data: MissingDataStrategy = StrictAllocation(),
+    missing_program: MissingProgramStrategy = AbendMissingProgram(),
 ) -> JobResult:
     runner = JobRunner(
         source_dir=tmp_path,
@@ -68,6 +78,7 @@ def _run(
         copybook_dir=tmp_path,
         unresolved=unresolved,
         missing_data=missing_data,
+        missing_program=missing_program,
         proclib_dirs=proclib,
     )
     return runner.run(j, workdir=tmp_path, seeds={})
@@ -297,6 +308,64 @@ def test_lenient_allocation_runs_the_step_on_an_empty_dataset_and_warns(
         [("S1", OK), ("S2", OK)],
         JobCompleted(0),
         ["S1 DD IN: DATASET_NOT_FOUND; allocated an empty dataset in its place"],
+    )
+
+
+def _missing_program() -> Job:
+    return job(
+        "J",
+        (
+            program(
+                "S1",
+                "SORT",
+                (
+                    dd("KEPT", "J.KEPT", disp("NEW", "CATLG", "CATLG")),
+                    dd("GONE", "J.GONE", disp("NEW", "CATLG", "DELETE")),
+                ),
+            ),
+            program("S2", "IEFBR14"),
+            program("S3", "IEFBR14", condition=cond(mode=AbendMode.EVEN)),
+            program("S4", "IEFBR14", condition=cond(mode=AbendMode.ONLY)),
+        ),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_missing_program_abends_s806_and_its_datasets_take_their_abnormal_disp(
+    tmp_path: Path,
+) -> None:
+    result = _run(tmp_path, _missing_program())
+    s1, s806 = result.steps[0].step, SystemAbend(0x806)
+    assert (_outcomes(result), result.outcome, _files(tmp_path)) == (
+        [
+            ("S1", Abended(s806)),
+            ("S2", Flushed(AfterAbend(s1))),
+            ("S3", OK),
+            ("S4", OK),
+        ],
+        JobAbended(s1, s806),
+        ["J_KEPT"],
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_stubbed_missing_program_completes_with_rc_0_and_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="jackal.missing_program"):
+        result = _run(
+            tmp_path, _missing_program(), missing_program=StubMissingProgram()
+        )
+    assert (_outcomes(result), result.outcome, caplog.messages, _files(tmp_path)) == (
+        [
+            ("S1", OK),
+            ("S2", OK),
+            ("S3", OK),
+            ("S4", Bypassed(BypassReason.ONLY_WITHOUT_ABEND)),
+        ],
+        JobCompleted(0),
+        ["S1: no program SORT; stubbed with RC 0"],
+        ["J_GONE", "J_KEPT"],
     )
 
 

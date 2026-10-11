@@ -39,6 +39,9 @@ class Abended:
         return f"abended {self.code.rendered()}"
 
 
+ProgramResult: TypeAlias = Completed | Abended
+
+
 class BypassReason(Enum):
     COND_SATISFIED = "COND_SATISFIED"
     ONLY_WITHOUT_ABEND = "ONLY_WITHOUT_ABEND"

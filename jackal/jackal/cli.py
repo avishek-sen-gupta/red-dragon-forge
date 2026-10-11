@@ -11,6 +11,7 @@ from pathlib import Path
 
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import LenientAllocation
+from jackal.missing_program import StubMissingProgram
 from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
@@ -55,6 +56,7 @@ def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
         copybook_dir=_resolve_dir(args.copybook_dir, "app/cpy", "--copybook-dir", ap),
         unresolved=RaiseErrorStrategy(),
         missing_data=LenientAllocation(),
+        missing_program=StubMissingProgram(),
     )
 
 

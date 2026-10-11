@@ -9,6 +9,7 @@ from jackal.missing_data import (
     MissingDataStrategy,
     StrictAllocation,
 )
+from jackal.missing_program import AbendMissingProgram
 from jackal.model import (
     DD,
     CondOp,
@@ -48,6 +49,7 @@ def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
     return JobRunner(
         unresolved=RaiseErrorStrategy(),
         missing_data=missing_data,
+        missing_program=AbendMissingProgram(),
         source_dir=tmp_path,
         bridge_jar="unused",
         data_dir=tmp_path,

@@ -10,6 +10,7 @@ from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
+from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
@@ -37,6 +38,7 @@ def test_acctfile_then_readacct_e2e(
     runner = JobRunner(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
         source_dir=cbl_dir,
         bridge_jar=bridge_jar,
         data_dir=data_dir,

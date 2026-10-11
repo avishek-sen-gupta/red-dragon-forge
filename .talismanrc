@@ -550,7 +550,7 @@ fileignoreconfig:
 - filename: docs/how-to/analyse-a-corpus.md
   checksum: 8283d647dafad09623f096a7034408a24cdca75a24bc50ec7f8214e0f5254bbd
 - filename: docs/roadmaps/jackal.md
-  checksum: a79ae66254d5f7b960ac462ddffdf3800e561c1b4ed69cf9bbd1f4dee38e2789
+  checksum: 38e67b1fa599f873b0e570d0fa98f7246470c53dbd8aa9a91af8b8e9008ebef9
 - filename: docs/reference/cobble/config.md
   checksum: d9c0bd9e47fbf8c7179eb1f16ac736bdc06d292918de10c4237998f4fe69292b
 - filename: docs/reference/cicada/architecture.md
@@ -602,5 +602,7 @@ fileignoreconfig:
 - filename: jackal/tests/integration/test_cond_e2e.py
   checksum: daffe285d83cdfbc49c2c606533f451b5653b18113d5a6c9c5834570b370309c
 - filename: docs/reference/jackal/architecture.md
-  checksum: 71c50520392f38a71e1dfdace139cdaa82140129b04f163c39136ebc7b428c8a
+  checksum: 0db7335b23e7932b492580669e1fd27ac30ece0ea4ae1ad5d5b87d5c2247e262
+- filename: jackal/tests/unit/test_catalog.py
+  checksum: ef3cc367c75c963593595f3cbb3127d6425f8c3634c18ce8ecc624936578aadf
 version: "1.0"

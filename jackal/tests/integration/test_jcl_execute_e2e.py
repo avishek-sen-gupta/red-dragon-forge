@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
+from jackal.missing_program import AbendMissingProgram
 from jackal.model import DdName
 from jackal.results import (
     AfterAllocationFailure,
@@ -58,6 +59,7 @@ def _runner(src: Path, bridge_jar: str, tmp_path: Path) -> JobRunner:
     return JobRunner(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
         source_dir=src,
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

@@ -22,7 +22,7 @@ from jackal.model import (
     QualifiedStep,
     StepReference,
 )
-from jackal.results import AllocationFailed
+from jackal.results import AllocationFailed, ProgramResult
 
 LOAD_LIBRARIES: frozenset[DdName] = frozenset({DdName("STEPLIB"), DdName("JOBLIB")})
 
@@ -229,9 +229,11 @@ def _released(allocation: Allocation) -> None:
             allocation.path().unlink(missing_ok=True)
 
 
-def _apply_disp(step: ProgramStep[StepReference], catalog: DatasetCatalog) -> None:
+def _apply_disp(
+    step: ProgramStep[StepReference], catalog: DatasetCatalog, result: ProgramResult
+) -> None:
     for dd in (d for d in step.dds if d.ddname not in LOAD_LIBRARIES):
-        catalog.dispose(dd)
+        catalog.dispose(dd, result)
 
 
 def _release_all(env: DdEnvironment) -> None:
@@ -240,7 +242,10 @@ def _release_all(env: DdEnvironment) -> None:
 
 
 def dispose(
-    step: ProgramStep[StepReference], env: DdEnvironment, catalog: DatasetCatalog
+    step: ProgramStep[StepReference],
+    env: DdEnvironment,
+    catalog: DatasetCatalog,
+    result: ProgramResult,
 ) -> None:
-    _apply_disp(step, catalog)
+    _apply_disp(step, catalog, result)
     _release_all(env)
