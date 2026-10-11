@@ -140,6 +140,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
 
     def _driver(
         self,
+        filename: str,
         org: FileOrganization,
         path: Path,
         mode: OpenMode,
@@ -150,6 +151,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         if any(d.path == path and _variable(d.label) for d in self._datasets.values()):
             return VariableRecordDriver(path, mode, record_length)
         return super()._driver(
+            filename,
             org,
             path,
             mode,
