@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition
-from jackal.catalog import DatasetCatalog, Unallocated
+from jackal.catalog import Allocated, DatasetCatalog, Unallocated
 from jackal.dataset import Dataset
 from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
@@ -39,6 +39,16 @@ def _upload(tmp_path: Path, dsn: str, data: bytes) -> Dataset:
     return _system(tmp_path).add(dsn, source, FB80)
 
 
+def _given(cat: DatasetCatalog, dd: DD) -> Dataset:
+    found = cat.allocate(dd)
+    assert isinstance(found, Allocated)
+    return found.dataset
+
+
+def _disposed(cat: DatasetCatalog, dd: DD, existed: bool = False) -> None:
+    cat.dispose(dd, dd.disposition().resolved(existed), existed, Completed(0))
+
+
 def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> DD:
     return DD(
         ddname="D",
@@ -50,25 +60,25 @@ def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> D
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_new_allocates_empty_file(tmp_path):
     cat = _catalog(tmp_path)
-    ds = cat.allocate(_dd("J.WORK", DispStatus.NEW))
+    ds = _given(cat, _dd("J.WORK", DispStatus.NEW))
     assert ds.path.exists() and ds.path.read_bytes() == b""
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_dataset_in_the_system_catalog_is_allocated_by_name(tmp_path):
     added = _upload(tmp_path, "J.IN", b"DATA")
-    ds = _catalog(tmp_path).allocate(_dd("J.IN", DispStatus.SHR))
+    ds = _given(_catalog(tmp_path), _dd("J.IN", DispStatus.SHR))
     assert (ds, added.path.read_bytes()) == (added, b"DATA")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_pass_retains_delete_removes(tmp_path):
     cat = _catalog(tmp_path)
-    keep = cat.allocate(_dd("J.A", DispStatus.NEW, DispNormal.PASS))
-    cat.dispose(_dd("J.A", DispStatus.NEW, DispNormal.PASS), Completed(0))
+    keep = _given(cat, _dd("J.A", DispStatus.NEW, DispNormal.PASS))
+    _disposed(cat, _dd("J.A", DispStatus.NEW, DispNormal.PASS))
     assert keep.path.exists()
-    drop = cat.allocate(_dd("J.B", DispStatus.NEW, DispNormal.DELETE))
-    cat.dispose(_dd("J.B", DispStatus.NEW, DispNormal.DELETE), Completed(0))
+    drop = _given(cat, _dd("J.B", DispStatus.NEW, DispNormal.DELETE))
+    _disposed(cat, _dd("J.B", DispStatus.NEW, DispNormal.DELETE))
     assert not drop.path.exists()
 
 
@@ -84,13 +94,13 @@ def test_define_catalogs_a_labelled_ksds_once(tmp_path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dispose_delete_of_missing_dsn_is_noop(tmp_path):
     cat = _catalog(tmp_path)
-    cat.dispose(_dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE), Completed(0))
+    _disposed(cat, _dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_mod_creates_when_absent(tmp_path):
     cat = _catalog(tmp_path)
-    ds = cat.allocate(_dd("J.MOD", DispStatus.MOD))
+    ds = _given(cat, _dd("J.MOD", DispStatus.MOD))
     assert ds.path.exists() and ds.path.read_bytes() == b""
 
 
@@ -102,7 +112,7 @@ def test_an_empty_sequential_dataset_reads_end_of_file(tmp_path):
         DirectDSN(literal("J.FLAT")),
         Disp(DispStatus.NEW, DispNormal.KEEP, DispAbnormal.DELETE),
     )
-    ds = cat.allocate(dd)
+    ds = _given(cat, dd)
     assert isinstance(ds, Dataset)
     drv = ds.opened(OpenMode.INPUT, 80)
     result = drv.read_seq()
@@ -121,7 +131,7 @@ def _temp_dd(
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_new_allocates_backing_file(tmp_path):
     cat = _catalog(tmp_path)
-    ds = cat.allocate(_temp_dd("WORKIN", DispStatus.NEW))
+    ds = _given(cat, _temp_dd("WORKIN", DispStatus.NEW))
     assert ds.path.exists()
     assert ds.path.name == "&&WORKIN"
 
@@ -129,8 +139,8 @@ def test_temp_new_allocates_backing_file(tmp_path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_old_resolves_same_dataset(tmp_path):
     cat = _catalog(tmp_path)
-    ds1 = cat.allocate(_temp_dd("WORKIN", DispStatus.NEW))
-    ds2 = cat.allocate(_temp_dd("WORKIN", DispStatus.OLD))
+    ds1 = _given(cat, _temp_dd("WORKIN", DispStatus.NEW))
+    ds2 = _given(cat, _temp_dd("WORKIN", DispStatus.OLD))
     assert ds1.path == ds2.path
 
 
@@ -138,8 +148,8 @@ def test_temp_old_resolves_same_dataset(tmp_path):
 def test_temp_dispose_delete_removes_file(tmp_path):
     cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
-    ds = cat.allocate(dd)
-    cat.dispose(dd, Completed(0))
+    ds = _given(cat, dd)
+    _disposed(cat, dd)
     assert not ds.path.exists()
 
 
@@ -147,15 +157,15 @@ def test_temp_dispose_delete_removes_file(tmp_path):
 def test_temp_dispose_pass_retains_file(tmp_path):
     cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS)
-    ds = cat.allocate(dd)
-    cat.dispose(dd, Completed(0))
+    ds = _given(cat, dd)
+    _disposed(cat, dd)
     assert ds.path.exists()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_end_job_deletes_a_surviving_temp(tmp_path):
     cat = _catalog(tmp_path)
-    ds = cat.allocate(_temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS))
+    ds = _given(cat, _temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS))
     cat.end_job()
     assert not ds.path.exists()
 
@@ -164,16 +174,16 @@ def test_end_job_deletes_a_surviving_temp(tmp_path):
 def test_end_job_is_a_noop_when_every_temp_was_deleted(tmp_path):
     cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
-    cat.allocate(dd)
-    cat.dispose(dd, Completed(0))
+    _given(cat, dd)
+    _disposed(cat, dd)
     cat.end_job()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_dd_the_catalog_cannot_allocate_comes_back_with_the_reason(tmp_path):
     cat = _catalog(tmp_path)
-    cat.allocate(_dd("J.HAVE", DispStatus.NEW, DispNormal.CATLG))
-    cat.allocate(_temp_dd("TEMP", DispStatus.NEW))
+    _given(cat, _dd("J.HAVE", DispStatus.NEW, DispNormal.CATLG))
+    _given(cat, _temp_dd("TEMP", DispStatus.NEW))
     missing = _dd("J.MISSING", DispStatus.SHR)
     ghost = _temp_dd("GHOST", DispStatus.OLD)
     duplicate = _dd("J.HAVE", DispStatus.NEW)
@@ -194,7 +204,7 @@ def test_an_unallocated_dd_can_be_given_an_empty_dataset_in_its_place(tmp_path):
     direct = cat.created_empty(_dd("J.HAVE", DispStatus.NEW))
     assert (
         temp.path.read_bytes(),
-        cat.allocate(_temp_dd("GHOST", DispStatus.OLD)),
+        _given(cat, _temp_dd("GHOST", DispStatus.OLD)),
         direct.path.read_bytes(),
         cat.resolve("J.HAVE"),
     ) == (b"", temp, b"", direct)
@@ -223,7 +233,7 @@ def test_a_temp_and_a_dataset_of_the_same_name_are_separate_datasets(tmp_path):
         disp=Disp(DispStatus.NEW, DispNormal.PASS, DispAbnormal.DELETE),
     )
     named = _dd("EXTR", DispStatus.NEW)
-    t, n = cat.allocate(temp), cat.allocate(named)
+    t, n = _given(cat, temp), _given(cat, named)
     assert isinstance(t, Dataset) and isinstance(n, Dataset)
     paths_differ = t.path != n.path
     cat.end_job()

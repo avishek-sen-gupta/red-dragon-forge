@@ -10,16 +10,19 @@ from jackal.jcl.bridge_parser import JclParseError
 from jackal.jcl.parser import parse_jcl
 from jackal.model import (
     DD,
-    Disp,
     DSN,
     AllPriorSteps,
     BackwardRef,
     BypassTest,
     DirectDSN,
+    Disp,
+    DispAbnormal,
+    DispNormal,
     DummyDSN,
     InStreamDSN,
     NoDSN,
     NotOverridden,
+    Omitted,
     ProgramStep,
     QualifiedStep,
     StepCondition,
@@ -101,8 +104,16 @@ def _dsn_text(dsn: DSN, sysout: bool) -> str:
             return "SYSOUT" if sysout else ""
 
 
+def _coded(slot: DispNormal | DispAbnormal | Omitted) -> str:
+    match slot:
+        case Omitted():
+            return ""
+        case _:
+            return slot.value
+
+
 def _disp_facts(disp: Disp) -> tuple[str, str, str]:
-    return (disp.status.value, disp.normal.value, disp.abnormal.value)
+    return (disp.status.value, _coded(disp.normal), _coded(disp.abnormal))
 
 
 def _dd_facts(dd: DD, ddname: str = "") -> DdFacts:

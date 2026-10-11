@@ -328,19 +328,58 @@ class DatasetOrg(Enum):
 
 
 @dataclass(frozen=True)
-class Disp:
-    status: DispStatus
+class Omitted:
+    """A DISP subparameter left out; its default depends on whether the data set existed."""
+
+
+@dataclass(frozen=True)
+class ResolvedDisp:
     normal: DispNormal
     abnormal: DispAbnormal
 
+
+def _existing_or_new(existed: bool) -> DispNormal:
+    return DispNormal.KEEP if existed else DispNormal.DELETE
+
+
+def _abnormal_default(normal: DispNormal, existed: bool) -> DispAbnormal:
+    if normal is DispNormal.PASS:
+        return DispAbnormal(_existing_or_new(existed).value)
+    return DispAbnormal(normal.value)
+
+
+@dataclass(frozen=True)
+class Disp:
+    status: DispStatus
+    normal: DispNormal | Omitted
+    abnormal: DispAbnormal | Omitted
+
     def disposition(self) -> Disp:
         return self
+
+    def resolved(self, existed: bool) -> ResolvedDisp:
+        normal = self._normal(existed)
+        return ResolvedDisp(normal, self._abnormal(normal, existed))
+
+    def _normal(self, existed: bool) -> DispNormal:
+        match self.normal:
+            case Omitted():
+                return _existing_or_new(existed)
+            case DispNormal():
+                return self.normal
+
+    def _abnormal(self, normal: DispNormal, existed: bool) -> DispAbnormal:
+        match self.abnormal:
+            case Omitted():
+                return _abnormal_default(normal, existed)
+            case DispAbnormal():
+                return self.abnormal
 
 
 @dataclass(frozen=True)
 class NotCoded:
     def disposition(self) -> Disp:
-        return Disp(DispStatus.NEW, DispNormal.DELETE, DispAbnormal.DELETE)
+        return Disp(DispStatus.NEW, Omitted(), Omitted())
 
 
 def _dsn_written(

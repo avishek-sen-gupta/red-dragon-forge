@@ -10,7 +10,9 @@ from jackal.model import (
     DispNormal,
     DispStatus,
     NotCoded,
+    Omitted,
     ProgramRef,
+    ResolvedDisp,
     StepName,
 )
 from jackal.value_parts import literal
@@ -46,12 +48,12 @@ def test_parse_job_steps_and_dds():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_disp_shr_shorthand_defaults_keep():
-    job = parse_jcl(JCL)
-    indd = job.steps[0].dds[0]
-    assert indd.disp.status is DispStatus.SHR
-    assert indd.disp.normal is DispNormal.KEEP
-    assert indd.disp.abnormal is DispAbnormal.KEEP
+def test_disp_shr_shorthand_keeps_the_existing_dataset():
+    indd = parse_jcl(JCL).steps[0].dds[0]
+    assert (indd.disp, indd.disposition().resolved(existed=True)) == (
+        Disp(DispStatus.SHR, Omitted(), Omitted()),
+        ResolvedDisp(DispNormal.KEEP, DispAbnormal.KEEP),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -110,9 +112,10 @@ def test_disp_omitted_trailing_positional():
     disposition has to fall back rather than be read as the empty string."""
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B,DISP=(NEW,CATLG,)\n"
     disp = parse_jcl(jcl).steps[0].dds[0].disp
-    assert disp.status is DispStatus.NEW
-    assert disp.normal is DispNormal.CATLG
-    assert disp.abnormal is DispAbnormal.CATLG
+    assert (disp, disp.resolved(existed=False)) == (
+        Disp(DispStatus.NEW, DispNormal.CATLG, Omitted()),
+        ResolvedDisp(DispNormal.CATLG, DispAbnormal.CATLG),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -130,7 +133,43 @@ def test_dd_without_disp_defaults_new_delete_delete():
     created by this step, so it is deleted at the end of it."""
     jcl = "//J JOB 1\n//S EXEC PGM=P\n//D DD DSN=A.B\n"
     dd = parse_jcl(jcl).steps[0].dds[0]
-    assert (dd.disp, dd.disposition()) == (
+    assert (dd.disp, dd.disposition().resolved(existed=False)) == (
         NotCoded(),
-        Disp(DispStatus.NEW, DispNormal.DELETE, DispAbnormal.DELETE),
+        ResolvedDisp(DispNormal.DELETE, DispAbnormal.DELETE),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_omitted_disposition_stays_omitted_until_existence_decides_its_default():
+    """IBM MVS JCL Reference, DISP Defaults: an omitted normal disposition is
+    DELETE for a new data set, KEEP for an existing one; an omitted abnormal one
+    follows the normal, except after PASS (DELETE new, KEEP existing)."""
+    jcl = (
+        "//J JOB 1\n//S EXEC PGM=P\n"
+        "//A DD DSN=A.MOD,DISP=MOD\n"
+        "//B DD DSN=A.PASS,DISP=(NEW,PASS)\n"
+        "//C DD DSN=A.RECV,DISP=(OLD,PASS)\n"
+        "//D DD DSN=A.BOTH,DISP=(OLD,DELETE,KEEP)\n"
+    )
+    dds = parse_jcl(jcl).steps[0].dds
+    disps = tuple(dd.disposition() for dd in dds)
+    assert (
+        disps,
+        disps[0].resolved(existed=False),
+        disps[0].resolved(existed=True),
+        disps[1].resolved(existed=False),
+        disps[2].resolved(existed=True),
+        disps[3].resolved(existed=True),
+    ) == (
+        (
+            Disp(DispStatus.MOD, Omitted(), Omitted()),
+            Disp(DispStatus.NEW, DispNormal.PASS, Omitted()),
+            Disp(DispStatus.OLD, DispNormal.PASS, Omitted()),
+            Disp(DispStatus.OLD, DispNormal.DELETE, DispAbnormal.KEEP),
+        ),
+        ResolvedDisp(DispNormal.DELETE, DispAbnormal.DELETE),
+        ResolvedDisp(DispNormal.KEEP, DispAbnormal.KEEP),
+        ResolvedDisp(DispNormal.PASS, DispAbnormal.DELETE),
+        ResolvedDisp(DispNormal.PASS, DispAbnormal.KEEP),
+        ResolvedDisp(DispNormal.DELETE, DispAbnormal.KEEP),
     )

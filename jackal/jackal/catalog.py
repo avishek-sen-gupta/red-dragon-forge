@@ -12,16 +12,22 @@ from jackal.model import (
     DD,
     DSN,
     DirectDSN,
-    Disp,
     DispAbnormal,
     DispNormal,
     DispStatus,
+    ResolvedDisp,
     StepReference,
     TempRef,
 )
 from jackal.results import Abended, AllocationError, Completed, ProgramResult
 from jackal.system_catalog import NotCataloged, SystemCatalog
 from jackal.system_catalog_removal import remove_cataloged
+
+
+@dataclass(frozen=True)
+class Allocated:
+    dataset: Dataset
+    existed: bool
 
 
 @dataclass(frozen=True)
@@ -35,7 +41,7 @@ def _empty(dataset: Dataset) -> Dataset:
     return dataset
 
 
-def _passes(disp: Disp, result: ProgramResult) -> bool:
+def _passes(disp: ResolvedDisp, result: ProgramResult) -> bool:
     match result:
         case Completed():
             return disp.normal is DispNormal.PASS
@@ -43,7 +49,7 @@ def _passes(disp: Disp, result: ProgramResult) -> bool:
             return False
 
 
-def _deletes(disp: Disp, result: ProgramResult) -> bool:
+def _deletes(disp: ResolvedDisp, result: ProgramResult) -> bool:
     match result:
         case Completed():
             return disp.normal is DispNormal.DELETE
@@ -63,7 +69,7 @@ class DatasetCatalog:
     def resolve(self, dsn: str) -> Dataset | NotCataloged:
         return self._system.lookup(dsn)
 
-    def allocate(self, dd: DD[StepReference]) -> Dataset | Unallocated:
+    def allocate(self, dd: DD[StepReference]) -> Allocated | Unallocated:
         match dd.dsn:
             case TempRef(name=name):
                 return self._allocate_temp(dd, name)
@@ -81,47 +87,48 @@ class DatasetCatalog:
         name = f"&&{alias}"
         return Dataset(dsn=name, path=self._scratch / name, label=LabelPending())
 
-    def _allocate_temp(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
+    def _allocate_temp(
+        self, dd: DD[StepReference], name: str
+    ) -> Allocated | Unallocated:
         if dd.disposition().status is DispStatus.NEW:
             return self._new_temp(dd, name)
         if not self._temps.has(name):
             return Unallocated(dd, AllocationError.TEMP_NOT_CREATED)
-        return self._temps.get(name)
+        return Allocated(self._temps.get(name), existed=True)
 
-    def _new_temp(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
+    def _new_temp(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         if self._temps.has(name):
             return Unallocated(dd, AllocationError.DUPLICATE_NAME)
-        return self.created_empty(dd)
+        return Allocated(self.created_empty(dd), existed=False)
 
     def _allocate_direct(
         self, dd: DD[StepReference], name: str
-    ) -> Dataset | Unallocated:
+    ) -> Allocated | Unallocated:
         if dd.disposition().status is DispStatus.NEW:
             return self._new_direct(dd, name)
         return self._existing(dd, name)
 
-    def _new_direct(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
+    def _new_direct(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         match self._system.lookup(name):
             case Dataset():
                 return Unallocated(dd, AllocationError.DUPLICATE_NAME)
             case NotCataloged():
-                return self.created_empty(dd)
+                return Allocated(self.created_empty(dd), existed=False)
 
-    def _existing(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
+    def _existing(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         match self._system.lookup(name):
             case Dataset() as found:
-                return found
+                return Allocated(found, existed=True)
             case NotCataloged():
                 return self._missing(dd)
 
-    def _missing(self, dd: DD[StepReference]) -> Dataset | Unallocated:
+    def _missing(self, dd: DD[StepReference]) -> Allocated | Unallocated:
         if dd.disposition().status is DispStatus.MOD:
-            return self.created_empty(dd)
+            return Allocated(self.created_empty(dd), existed=False)
         return Unallocated(dd, AllocationError.DATASET_NOT_FOUND)
 
-    def delete_if_new(self, dd: DD[StepReference]) -> None:
-        if dd.disposition().status is DispStatus.NEW:
-            self._delete(dd.dsn)
+    def delete_created(self, dd: DD[StepReference]) -> None:
+        self._delete(dd.dsn)
 
     def define(self, dsn: str, label: Label) -> Dataset:
         match self._system.lookup(dsn):
@@ -138,29 +145,45 @@ class DatasetCatalog:
             case NotCataloged():
                 return False
 
-    def dispose(self, dd: DD[StepReference], result: ProgramResult) -> None:
-        if _deletes(dd.disposition(), result):
+    def dispose(
+        self,
+        dd: DD[StepReference],
+        disposition: ResolvedDisp,
+        existed: bool,
+        result: ProgramResult,
+    ) -> None:
+        if _deletes(disposition, result):
             self._delete(dd.dsn)
             return
-        self._pass_or_receive(dd, result)
+        self._pass_or_receive(dd, disposition, existed, result)
 
-    def _pass_or_receive(self, dd: DD[StepReference], result: ProgramResult) -> None:
+    def _pass_or_receive(
+        self,
+        dd: DD[StepReference],
+        disposition: ResolvedDisp,
+        existed: bool,
+        result: ProgramResult,
+    ) -> None:
         match dd.dsn:
             case DirectDSN():
-                self._passed_on(dd, dd.dsn.dataset_name(), result)
+                self._passed_on(dd.dsn.dataset_name(), disposition, existed, result)
             case _:
                 return
 
     def _passed_on(
-        self, dd: DD[StepReference], name: str, result: ProgramResult
+        self,
+        name: str,
+        disposition: ResolvedDisp,
+        existed: bool,
+        result: ProgramResult,
     ) -> None:
-        if _passes(dd.disposition(), result) and self._passable(dd, name):
+        if _passes(disposition, result) and self._passable(name, existed):
             self._passed.put(name, name)
             return
         self._received(name)
 
-    def _passable(self, dd: DD[StepReference], name: str) -> bool:
-        return dd.disposition().status is DispStatus.NEW or self._passed.has(name)
+    def _passable(self, name: str, existed: bool) -> bool:
+        return not existed or self._passed.has(name)
 
     def _received(self, name: str) -> None:
         if self._passed.has(name):

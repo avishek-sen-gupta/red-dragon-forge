@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TypeAlias
 
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from jackal.catalog import DatasetCatalog, Unallocated
+from jackal.catalog import Allocated, DatasetCatalog, Unallocated
 from jackal.dataset import Dataset
 from jackal.missing_data import MissingDataStrategy
 from jackal.model import (
@@ -21,6 +21,7 @@ from jackal.model import (
     NoDSN,
     ProgramStep,
     QualifiedStep,
+    ResolvedDisp,
     StepReference,
 )
 from jackal.results import AllocationFailed, ProgramResult
@@ -39,6 +40,8 @@ class Positioning(Enum):
 class DatasetAllocation:
     dataset: Dataset
     positioning: Positioning
+    existed: bool
+    disposition: ResolvedDisp
 
     def path(self) -> Path:
         return self.dataset.path
@@ -133,6 +136,15 @@ def _positioning(dd: DD[StepReference]) -> Positioning:
     return Positioning.START
 
 
+def _dataset_allocation(dd: DD[StepReference], allocated: Allocated) -> Allocation:
+    return DatasetAllocation(
+        allocated.dataset,
+        _positioning(dd),
+        allocated.existed,
+        dd.disposition().resolved(allocated.existed),
+    )
+
+
 def _placed(
     dd: DD[StepReference], settled: Dataset | AllocationFailed
 ) -> Allocation | AllocationFailed:
@@ -140,7 +152,7 @@ def _placed(
         case AllocationFailed():
             return settled
         case Dataset():
-            return DatasetAllocation(settled, _positioning(dd))
+            return _dataset_allocation(dd, Allocated(settled, existed=True))
 
 
 @dataclass(frozen=True)
@@ -199,8 +211,8 @@ class _Allocator:
             case Unallocated():
                 settled = self.missing_data.settle(self.qualified, found, self.catalog)
                 return _placed(dd, settled)
-            case Dataset():
-                return DatasetAllocation(found, _positioning(dd))
+            case Allocated():
+                return _dataset_allocation(dd, found)
 
 
 def allocate(
@@ -214,11 +226,19 @@ def allocate(
     return allocator.remaining(dds, (), DdEnvironment(()))
 
 
+def _created(allocation: Allocation) -> bool:
+    match allocation:
+        case DatasetAllocation(existed=existed):
+            return not existed
+        case _:
+            return False
+
+
 def _undo(
     done: tuple[DD[StepReference], ...], env: DdEnvironment, catalog: DatasetCatalog
 ) -> None:
-    for dd in done:
-        catalog.delete_if_new(dd)
+    for dd in (d for d in done if _created(env.get(d.ddname))):
+        catalog.delete_created(dd)
     _release_all(env)
 
 
@@ -230,11 +250,27 @@ def _released(allocation: Allocation) -> None:
             allocation.path().unlink(missing_ok=True)
 
 
+def _disposed(
+    dd: DD[StepReference],
+    allocation: Allocation,
+    catalog: DatasetCatalog,
+    result: ProgramResult,
+) -> None:
+    match allocation:
+        case DatasetAllocation(disposition=disposition, existed=existed):
+            catalog.dispose(dd, disposition, existed, result)
+        case _:
+            return
+
+
 def _apply_disp(
-    step: ProgramStep[StepReference], catalog: DatasetCatalog, result: ProgramResult
+    step: ProgramStep[StepReference],
+    env: DdEnvironment,
+    catalog: DatasetCatalog,
+    result: ProgramResult,
 ) -> None:
     for dd in (d for d in step.dds if d.ddname not in LOAD_LIBRARIES):
-        catalog.dispose(dd, result)
+        _disposed(dd, env.get(dd.ddname), catalog, result)
 
 
 def _release_all(env: DdEnvironment) -> None:
@@ -248,5 +284,5 @@ def dispose(
     catalog: DatasetCatalog,
     result: ProgramResult,
 ) -> None:
-    _apply_disp(step, catalog, result)
+    _apply_disp(step, env, catalog, result)
     _release_all(env)

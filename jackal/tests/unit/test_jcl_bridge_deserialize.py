@@ -1,8 +1,6 @@
 from jackal.jcl import wire
 from jackal.jcl.bridge_parser import job_from_bridge_json
 from jackal.model import (
-    NotCoded,
-    UnresolvedDd,
     DD,
     AbendMode,
     AllPriorSteps,
@@ -16,6 +14,7 @@ from jackal.model import (
     InStreamDSN,
     Job,
     NoDSN,
+    NotCoded,
     NotOverridden,
     OwnScope,
     ProcCall,
@@ -28,6 +27,7 @@ from jackal.model import (
     StepName,
     StepRef,
     TempRef,
+    UnresolvedDd,
 )
 from jackal.value_parts import Literal, Symbol, SymbolName, literal
 from tests.covers import NotLanguageFeature, covers
@@ -80,7 +80,7 @@ def test_a_program_step_with_each_dsn_kind():
                         DirectDSN((Symbol(SymbolName("HLQ")), Literal(".X"))),
                         disp("SHR"),
                     ),
-                    _dd("WRK", TempRef("WORK"), disp("NEW", "PASS", "DELETE")),
+                    _dd("WRK", TempRef("WORK"), disp("NEW", "PASS")),
                     _dd("SYSIN", InStreamDSN(), NotCoded(), in_stream=(" CARD",)),
                     _dd("NULL", DummyDSN(), NotCoded()),
                     _dd("REPORT", NoDSN(), NotCoded(), sysout=True),
