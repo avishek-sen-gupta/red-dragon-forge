@@ -61,8 +61,8 @@ cicada or squall; `.importlinter` enforces this.
      warning. The CLI uses it.
 
    For each step:
-   - These are refused with `UnsupportedStep` until each is supported: a step under an IF
-     (guards are parsed and attached but not yet evaluated) and a concatenated DD.
+   - A step with a concatenated DD is refused with `UnsupportedStep` until concatenation is
+     supported.
    - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Abended(code)`,
      `Bypassed(reason)`, `Flushed(cause)`, `SkippedUnresolved` or
      `AllocationFailed(ddname, error)`. `JobResult.outcome` is decided by the first step that
@@ -77,6 +77,12 @@ cicada or squall; `.importlinter` enforces this.
      step's own `COND` is `Bypassed(COND_SATISFIED)`. After an abend, a step without `EVEN`
      or `ONLY` is `Flushed(AfterAbend(step))`; an `EVEN` or `ONLY` step goes on to its own
      `COND` tests. With no abend, a `COND=ONLY` step is `Bypassed(ONLY_WITHOUT_ABEND)`.
+   - A step inside `IF/THEN/ELSE/ENDIF` carries its construct's condition as a guard
+     (`jackal.if_guard`), the ELSE branch negated and nested IFs joined. After an abend such a
+     step also goes on if its guard tests `ABEND`, `ABENDCC` or `¬ABEND`. A false guard is
+     `Bypassed(IF_CONDITION_FALSE)`; the guard and the step's own `COND` must both allow it
+     to run. The rules and their IBM sources are in
+     [the IF/THEN/ELSE decision record](../../records/design/2026-10-12-jackal-if-then-else.md).
    - Referbacks (`DSN=*.STEP.DD`) copy the DSN written on the referenced DD, whether or not
      that step ran, as z/OS does. The copied name is then allocated like any other: a dataset
      the referenced step never made is `DATASET_NOT_FOUND` or `TEMP_NOT_CREATED`.
@@ -195,7 +201,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |
 | `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label, opened by its label. |
 | `jackal/jackal/variable_records.py` | RECFM=V/VB records on disk, each behind its record descriptor word. |
-| `jackal/jackal/cond.py` | `COND=` evaluation. |
+| `jackal/jackal/cond.py` | `COND=` evaluation, and the order of every gate. |
+| `jackal/jackal/if_guard.py` | `IF/THEN/ELSE` condition evaluation. |
 | `jackal/jackal/model.py`, `results.py` | Immutable job model, DSN types and step results. |
 | `jackal/jackal/value_parts.py` | Literal and symbolic value parts. |
 | `jackal/jackal/unresolved.py` | What the runner does with unresolved references (D7). |

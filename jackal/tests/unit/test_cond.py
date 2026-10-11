@@ -2,6 +2,7 @@ from jackal.cond import Run, gate
 from jackal.model import (
     AbendMode,
     AllPriorSteps,
+    Always,
     BypassTest,
     CondOp,
     DdName,
@@ -49,7 +50,7 @@ def _cond(
 def _bypass(
     condition: StepCondition[StepReference], *history: StepResult
 ) -> Run | Bypassed | Flushed:
-    return gate(condition, (), history)
+    return gate(condition, Always(), (), history)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -118,7 +119,7 @@ def test_after_an_abend_only_even_and_only_steps_go_on_to_their_own_tests():
         _bypass(only, abended),
         _bypass(only, _r(B, 0)),
         _bypass(even, _r(B, 0)),
-        gate(even, (RcComparison(8, CondOp.LE),), (abended, _r(B, 8))),
+        gate(even, Always(), (RcComparison(8, CondOp.LE),), (abended, _r(B, 8))),
     ] == [
         Flushed(AfterAbend(A)),
         RUN,
@@ -135,9 +136,9 @@ def test_a_met_job_cond_flushes_naming_the_first_step_that_met_it():
     job_tests = (RcComparison(8, CondOp.LE),)
     on_b = _cond((0, CondOp.NE, B.reference()))
     assert [
-        gate(_cond(), job_tests, (_r(A, 4),)),
-        gate(_cond(), job_tests, (_r(A, 12), _r(B, 16))),
-        gate(on_b, job_tests, (_r(A, 4), _r(B, 12))),
+        gate(_cond(), Always(), job_tests, (_r(A, 4),)),
+        gate(_cond(), Always(), job_tests, (_r(A, 12), _r(B, 16))),
+        gate(on_b, Always(), job_tests, (_r(A, 4), _r(B, 12))),
     ] == [RUN, Flushed(AfterJobCond(A)), Flushed(AfterJobCond(B))]
 
 
@@ -149,8 +150,8 @@ def test_a_failed_allocation_flushes_ahead_of_job_cond_and_even():
     even = _cond(mode=AbendMode.EVEN)
     job_cond = (RcComparison(4, CondOp.LE),)
     assert (
-        gate(even, job_cond, (_r(A, 8), failed)),
-        gate(_cond(), (), (failed, _r(A, 0))),
+        gate(even, Always(), job_cond, (_r(A, 8), failed)),
+        gate(_cond(), Always(), (), (failed, _r(A, 0))),
     ) == (
         Flushed(AfterAllocationFailure(B)),
         Flushed(AfterAllocationFailure(B)),
