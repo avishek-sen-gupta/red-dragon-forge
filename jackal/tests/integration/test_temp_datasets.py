@@ -26,6 +26,7 @@ from jackal.runner import JobRunner, UnsupportedStep
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, disp, job, program, ref
+from tests.system_build import scratch, system
 
 
 def _pass_dd(name: str) -> DD[StepRef]:
@@ -40,10 +41,8 @@ def _old_delete_dd(name: str) -> DD[StepRef]:
     return dd("WRK", TempRef(name), disp("OLD", "DELETE", "DELETE"))
 
 
-def _dir(root: Path, name: str) -> Path:
-    path = root / name
-    path.mkdir(exist_ok=True)
-    return path
+def _scratch_files(root: Path) -> list[str]:
+    return sorted(p.name for p in (root / "scratch").iterdir())
 
 
 def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
@@ -54,7 +53,7 @@ def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=tmp_path,
         bridge_jar="unused",
-        data_dir=tmp_path,
+        system=system(tmp_path),
         copybook_dir=tmp_path,
     )
 
@@ -69,9 +68,9 @@ def test_two_step_temp_dataset(tmp_path):
             program("S2", "IEFBR14", (_old_delete_dd("TEMP"),)),
         ),
     )
-    result = _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
+    result = _runner(tmp_path).run(j, scratch=scratch(tmp_path))
     assert all(s.outcome == Completed(0) for s in result.steps)
-    assert not (tmp_path / "TEMP").exists()
+    assert _scratch_files(tmp_path) == []
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -85,9 +84,9 @@ def test_three_step_pass_chain(tmp_path):
             program("S3", "IEFBR14", (_old_delete_dd("TEMP"),)),
         ),
     )
-    result = _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
+    result = _runner(tmp_path).run(j, scratch=scratch(tmp_path))
     assert all(s.outcome == Completed(0) for s in result.steps)
-    assert not (tmp_path / "TEMP").exists()
+    assert _scratch_files(tmp_path) == []
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -102,8 +101,8 @@ def test_a_temp_never_created_fails_its_step_or_is_substituted_when_lenient(
     strict = _runner(tmp_path / "strict", StrictAllocation())
     lenient = _runner(tmp_path / "lenient", LenientAllocation())
     assert (
-        strict.run(j, workdir=_dir(tmp_path, "strict"), seeds={}).steps[0].outcome,
-        lenient.run(j, workdir=_dir(tmp_path, "lenient"), seeds={}).steps[0].outcome,
+        strict.run(j, scratch=scratch(tmp_path / "strict")).steps[0].outcome,
+        lenient.run(j, scratch=scratch(tmp_path / "lenient")).steps[0].outcome,
     ) == (
         AllocationFailed(DdName("WRK"), AllocationError.TEMP_NOT_CREATED),
         Completed(0),
@@ -127,8 +126,8 @@ def test_cleanup_runs_after_step_exception(tmp_path):
         ),
     )
     with pytest.raises(UnsupportedStep):
-        _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
-    assert not (tmp_path / "KEPT").exists()
+        _runner(tmp_path).run(j, scratch=scratch(tmp_path))
+    assert _scratch_files(tmp_path) == []
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -138,6 +137,6 @@ def test_job_end_cleanup_removes_undeleted_temp(tmp_path):
         "J",
         (program("S1", "IEFBR14", (_pass_dd("TEMP"),)),),
     )
-    result = _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
+    result = _runner(tmp_path).run(j, scratch=scratch(tmp_path))
     assert result.steps[0].outcome == Completed(0)
-    assert not (tmp_path / "TEMP").exists()
+    assert _scratch_files(tmp_path) == []

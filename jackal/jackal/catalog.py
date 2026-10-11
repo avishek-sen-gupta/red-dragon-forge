@@ -1,17 +1,16 @@
-"""Job-scoped dataset catalog: DSN -> backing file, with DISP lifecycle."""
+"""One job's dataset catalog: the system catalog's datasets, plus the job's temps and passed datasets."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-from cobol_asg.file_enums import FileOrganization, OpenMode
-from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from jackal.catalog_stores import Table
+from jackal.dataset import Dataset
+from jackal.labels import Label, LabelPending
 from jackal.model import (
     DD,
     DSN,
-    DatasetOrg,
     DirectDSN,
     Disp,
     DispAbnormal,
@@ -21,37 +20,14 @@ from jackal.model import (
     TempRef,
 )
 from jackal.results import Abended, AllocationError, Completed, ProgramResult
-
-
-@dataclass(frozen=True)
-class DatasetSpec:
-    dsn: str
-    org: DatasetOrg
-    key_offset: int = 0
-    key_length: int = 0
-    record_size: int = 0
-
-
-@dataclass(frozen=True)
-class Dataset:
-    dsn: str
-    path: Path
-    org: DatasetOrg = DatasetOrg.PS
-    key_offset: int = 0
-    key_length: int = 0
-    record_size: int = 0
+from jackal.system_catalog import NotCataloged, SystemCatalog
+from jackal.system_catalog_removal import remove_cataloged
 
 
 @dataclass(frozen=True)
 class Unallocated:
     dd: DD[StepReference]
     error: AllocationError
-
-
-_ORG_MAP: dict[DatasetOrg, FileOrganization] = {
-    DatasetOrg.PS: FileOrganization.SEQUENTIAL,
-    DatasetOrg.KSDS: FileOrganization.INDEXED,
-}
 
 
 def _empty(dataset: Dataset) -> Dataset:
@@ -75,33 +51,17 @@ def _deletes(disp: Disp, result: ProgramResult) -> bool:
             return disp.abnormal is DispAbnormal.DELETE
 
 
-def _require_positive(value: int, what: str, dsn: str) -> None:
-    if value == 0:
-        raise ValueError(f"KSDS {what} must be > 0: {dsn}")
-
-
-def _check_spec(spec: DatasetSpec) -> None:
-    if spec.org is not DatasetOrg.KSDS:
-        return
-    _require_positive(spec.record_size, "record_size", spec.dsn)
-    _require_positive(spec.key_length, "key_length", spec.dsn)
-
-
 class DatasetCatalog:
-    """Imperative shell: owns the job workdir and the DSN->file mapping."""
+    """Imperative shell: one job's view of the system catalog, with its temps, passed datasets and scratch."""
 
-    def __init__(self, workdir: Path, data_dir: Path):
-        self._workdir = workdir
-        self._data_dir = data_dir
-        self._datasets: Table[str, Dataset] = Table()
+    def __init__(self, scratch: Path, system: SystemCatalog):
+        self._scratch = scratch
+        self._system = system
         self._temps: Table[str, Dataset] = Table()
-        self._passed: Table[str, Dataset] = Table()
+        self._passed: Table[str, str] = Table()
 
-    def seed(self, dsn: str, path: Path) -> None:
-        self._datasets.put(dsn, Dataset(dsn=dsn, path=path))
-
-    def resolve(self, dsn: str) -> Dataset:
-        return self._datasets.get(dsn)
+    def resolve(self, dsn: str) -> Dataset | NotCataloged:
+        return self._system.lookup(dsn)
 
     def allocate(self, dd: DD[StepReference]) -> Dataset | Unallocated:
         match dd.dsn:
@@ -115,21 +75,11 @@ class DatasetCatalog:
             case TempRef(name=name):
                 return self._temps.put(name, _empty(self._temp_dataset(name)))
             case _:
-                return self._created_direct(dd.dsn.dataset_name())
+                return self._system.create(dd.dsn.dataset_name(), LabelPending())
 
     def _temp_dataset(self, alias: str) -> Dataset:
         name = f"&&{alias}"
-        return Dataset(dsn=name, path=self._workdir / name)
-
-    def _created_direct(self, name: str) -> Dataset:
-        return self._created(name, self._work_path(name))
-
-    def _work_path(self, name: str) -> Path:
-        return self._workdir / name.replace(".", "_")
-
-    def _created(self, dsn: str, path: Path) -> Dataset:
-        path.write_bytes(b"")
-        return self._datasets.put(dsn, Dataset(dsn=dsn, path=path))
+        return Dataset(dsn=name, path=self._scratch / name, label=LabelPending())
 
     def _allocate_temp(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
         if dd.disposition().status is DispStatus.NEW:
@@ -151,17 +101,18 @@ class DatasetCatalog:
         return self._existing(dd, name)
 
     def _new_direct(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
-        if self._datasets.has(name):
-            return Unallocated(dd, AllocationError.DUPLICATE_NAME)
-        return self.created_empty(dd)
+        match self._system.lookup(name):
+            case Dataset():
+                return Unallocated(dd, AllocationError.DUPLICATE_NAME)
+            case NotCataloged():
+                return self.created_empty(dd)
 
     def _existing(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
-        if self._datasets.has(name):
-            return self._datasets.get(name)
-        candidate = self._data_dir / name
-        if candidate.exists():
-            return self._datasets.put(name, Dataset(dsn=name, path=candidate))
-        return self._missing(dd)
+        match self._system.lookup(name):
+            case Dataset() as found:
+                return found
+            case NotCataloged():
+                return self._missing(dd)
 
     def _missing(self, dd: DD[StepReference]) -> Dataset | Unallocated:
         if dd.disposition().status is DispStatus.MOD:
@@ -172,42 +123,20 @@ class DatasetCatalog:
         if dd.disposition().status is DispStatus.NEW:
             self._delete(dd.dsn)
 
-    def allocate_new(self, spec: DatasetSpec) -> Dataset:
-        if self._datasets.has(spec.dsn):
-            raise ValueError(f"DSN already allocated: {spec.dsn}")
-        _check_spec(spec)
-        path = self._work_path(spec.dsn)
-        path.write_bytes(b"")
-        return self._datasets.put(
-            spec.dsn,
-            Dataset(
-                dsn=spec.dsn,
-                path=path,
-                org=spec.org,
-                key_offset=spec.key_offset,
-                key_length=spec.key_length,
-                record_size=spec.record_size,
-            ),
-        )
-
-    def open_dataset(self, dsn: str, mode: OpenMode) -> FileOrganizationDriver:
-        return self.open_dataset_with_record_size(
-            dsn, mode, self._datasets.get(dsn).record_size
-        )
-
-    def open_dataset_with_record_size(
-        self, dsn: str, mode: OpenMode, record_size: int
-    ) -> FileOrganizationDriver:
-        ds = self._datasets.get(dsn)
-        return open_driver(
-            _ORG_MAP[ds.org], ds.path, mode, record_size, ds.key_offset, ds.key_length
-        )
+    def define(self, dsn: str, label: Label) -> Dataset:
+        match self._system.lookup(dsn):
+            case Dataset():
+                raise ValueError(f"DSN already cataloged: {dsn}")
+            case NotCataloged():
+                return self._system.create(dsn, label)
 
     def delete_dsn(self, dsn: str) -> bool:
-        if not self._datasets.has(dsn):
-            return False
-        self._datasets.take(dsn).path.unlink(missing_ok=True)
-        return True
+        match self._system.lookup(dsn):
+            case Dataset():
+                remove_cataloged(self._system, dsn)
+                return True
+            case NotCataloged():
+                return False
 
     def dispose(self, dd: DD[StepReference], result: ProgramResult) -> None:
         if _deletes(dd.disposition(), result):
@@ -226,7 +155,7 @@ class DatasetCatalog:
         self, dd: DD[StepReference], name: str, result: ProgramResult
     ) -> None:
         if _passes(dd.disposition(), result) and self._passable(dd, name):
-            self._passed.put(name, self._datasets.get(name))
+            self._passed.put(name, name)
             return
         self._received(name)
 
@@ -260,8 +189,8 @@ class DatasetCatalog:
         for temp in self._temps.drain():
             temp.path.unlink(missing_ok=True)
         for passed in self._passed.drain():
-            self.delete_dsn(passed.dsn)
+            self.delete_dsn(passed)
 
     @property
     def workdir(self) -> Path:
-        return self._workdir
+        return self._scratch

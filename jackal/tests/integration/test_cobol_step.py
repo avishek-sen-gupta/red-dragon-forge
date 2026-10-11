@@ -2,11 +2,12 @@ from pathlib import Path
 
 import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
+from jackal.labels import RecordFormat, SequentialLabel
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated, dd, disp, program
+from tests.system_build import job_catalog, upload
 
 CBL = Path(__file__).parent / "fixtures" / "cbl"
 
@@ -23,10 +24,10 @@ def _require_bridge(bridge_jar):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
-    src = tmp_path / "in.dat"
-    src.write_bytes(_ebcdic(b"applemango"))  # two 5-byte records, EBCDIC
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    cat.seed("J.IN", src)
+    upload(
+        tmp_path, "J.IN", _ebcdic(b"applemango"), SequentialLabel(RecordFormat.FB, 5)
+    )
+    cat = job_catalog(tmp_path)
     step = program(
         "S1",
         "COPYUP",

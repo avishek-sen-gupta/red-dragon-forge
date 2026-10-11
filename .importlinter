@@ -60,6 +60,7 @@ layers =
     jackal.runner
     jackal.cobol_step : jackal.utilities
     jackal.catalog
+    jackal.system_catalog
     jackal.model
 
 [importlinter:contract:jcl-idcams-independence]

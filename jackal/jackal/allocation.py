@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import TypeAlias
 
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from jackal.catalog import Dataset, DatasetCatalog, Unallocated
+from jackal.catalog import DatasetCatalog, Unallocated
+from jackal.dataset import Dataset
 from jackal.missing_data import MissingDataStrategy
 from jackal.model import (
     DD,

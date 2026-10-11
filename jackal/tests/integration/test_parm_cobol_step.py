@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
-from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
+from tests.system_build import job_catalog
 
 # Minimal COBOL program that reads PARM-DATA and signals receipt via RETURN-CODE.
 # PARM-LENGTH (S9(04) COMP) is a 2-byte big-endian halfword — matches build_parm_region.
@@ -41,7 +41,7 @@ _NO_PARM_PROGRAM = """\
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     # Pad to 10 chars so the region exactly fills PARM-DATA PIC X(10)
     step = program("S", "TESTPARM", parm="HELLO     ")
     assert run_cobol_step(
@@ -57,7 +57,7 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat = job_catalog(tmp_path)
     assert run_cobol_step(
         program("S", "NOPARM"),
         _NO_PARM_PROGRAM,

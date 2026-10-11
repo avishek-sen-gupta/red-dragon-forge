@@ -2,7 +2,9 @@ import logging
 from pathlib import Path
 
 import pytest
+from jackal.catalog import Dataset
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
+from jackal.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from jackal.missing_data import (
     LenientAllocation,
     MissingDataStrategy,
@@ -51,6 +53,7 @@ from jackal.results import (
     SystemAbend,
 )
 from jackal.runner import JobRunner, UnsupportedStep
+from jackal.system_catalog import CATALOG_FILE, NotCataloged, SystemCatalog
 from jackal.unresolved import (
     IgnoreStrategy,
     RaiseErrorStrategy,
@@ -61,6 +64,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.model_build import cond, dd, disp, job, program, ref
 
 OK = Completed(0)
+FB80 = SequentialLabel(RecordFormat.FB, 80)
 COND_MET = Bypassed(BypassReason.COND_SATISFIED)
 
 
@@ -75,7 +79,7 @@ def _run(
     runner = JobRunner(
         source_dir=tmp_path,
         bridge_jar="unused",
-        data_dir=tmp_path,
+        system=SystemCatalog(tmp_path / "system"),
         copybook_dir=tmp_path,
         unresolved=unresolved,
         missing_data=missing_data,
@@ -83,7 +87,9 @@ def _run(
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         proclib_dirs=proclib,
     )
-    return runner.run(j, workdir=tmp_path, seeds={})
+    scratch = tmp_path / "scratch"
+    scratch.mkdir(exist_ok=True)
+    return runner.run(j, scratch=scratch)
 
 
 def _fresh(tmp_path: Path, name: str) -> Path:
@@ -131,8 +137,14 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
     )
     sysprint = DD(DdName("SYSPRINT"), NoDSN(), disp(), sysout=True)
     j = job("DEFTEST", (program("DEFACCT", "IDCAMS", (_sysin(sysin), sysprint)),))
-    assert _outcomes(_run(tmp_path, j)) == [("DEFACCT", OK)]
-    assert (tmp_path / "MYAPP_ACCOUNTS").exists()
+    assert (_outcomes(_run(tmp_path, j)), _cataloged(tmp_path, "MYAPP.ACCOUNTS")) == (
+        [("DEFACCT", OK)],
+        Dataset(
+            "MYAPP.ACCOUNTS",
+            tmp_path / "system" / "datasets" / "MYAPP.ACCOUNTS",
+            KsdsLabel(300, 0, 10),
+        ),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -194,7 +206,7 @@ def test_a_referback_names_the_earlier_steps_dataset_or_temporary(
 
 def _after_bypassed(tmp_path: Path, name: str, referencing: DD[StepRef]) -> JobResult:
     root = _fresh(tmp_path, name)
-    (root / "OLD.FILE").write_bytes(b"")
+    _uploaded(root, "OLD.FILE", b"")
     j = job(
         "J",
         (
@@ -259,7 +271,20 @@ def _unallocatable() -> Job:
 
 
 def _files(root: Path) -> list[str]:
-    return sorted(p.name for p in root.rglob("*") if p.is_file())
+    return sorted(
+        p.name for p in root.rglob("*") if p.is_file() and p.name != CATALOG_FILE
+    )
+
+
+def _cataloged(root: Path, dsn: str) -> Dataset | NotCataloged:
+    return SystemCatalog(root / "system").lookup(dsn)
+
+
+def _uploaded(root: Path, dsn: str, data: bytes) -> None:
+    upload = root / f"{dsn}.upload"
+    upload.write_bytes(data)
+    SystemCatalog(root / "system").add(dsn, upload, FB80)
+    upload.unlink()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -346,7 +371,7 @@ def test_a_missing_program_abends_s806_and_its_datasets_take_their_abnormal_disp
             ("S4", OK),
         ],
         JobAbended(s1, s806),
-        ["J_KEPT"],
+        ["J.KEPT"],
     )
 
 
@@ -367,7 +392,7 @@ def test_a_stubbed_missing_program_completes_with_rc_0_and_warns(
         ],
         JobCompleted(0),
         ["S1: no program SORT; stubbed with RC 0"],
-        ["J_GONE", "J_KEPT"],
+        ["J.GONE", "J.KEPT"],
     )
 
 
@@ -375,7 +400,7 @@ def test_a_stubbed_missing_program_completes_with_rc_0_and_warns(
 def test_a_dataset_the_job_creates_and_passes_but_never_receives_is_deleted_at_job_end(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "J.OLD").write_bytes(b"x")
+    _uploaded(tmp_path, "J.OLD", b"x" * 80)
     j = job(
         "J",
         (
@@ -402,7 +427,54 @@ def test_a_dataset_the_job_creates_and_passes_but_never_receives_is_deleted_at_j
     result = _run(tmp_path, j)
     assert (_outcomes(result), _files(tmp_path)) == (
         [("S1", OK), ("S2", OK)],
-        ["J.OLD", "J_KEPT"],
+        ["J.KEPT", "J.OLD"],
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_what_one_job_catalogs_or_deletes_is_what_the_next_job_sees(
+    tmp_path: Path,
+) -> None:
+    upload = tmp_path / "gone.dat"
+    upload.write_bytes(b"x" * 80)
+    SystemCatalog(tmp_path / "system").add(
+        "J.GONE", upload, SequentialLabel(RecordFormat.FB, 80)
+    )
+    first = job(
+        "J1",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (
+                    dd("O", "J.OUT", disp("NEW", "CATLG")),
+                    dd("G", "J.GONE", disp("OLD", "DELETE")),
+                ),
+            ),
+        ),
+    )
+    second = job(
+        "J2",
+        (
+            program("S1", "IEFBR14", (dd("O", "J.OUT", disp("SHR")),)),
+            program("S2", "IEFBR14", (dd("G", "J.GONE", disp("SHR")),)),
+        ),
+    )
+    first_result, second_result = _run(tmp_path, first), _run(tmp_path, second)
+    system = SystemCatalog(tmp_path / "system")
+    assert (
+        _outcomes(first_result),
+        _outcomes(second_result),
+        system.lookup("J.OUT"),
+        system.lookup("J.GONE"),
+    ) == (
+        [("S1", OK)],
+        [
+            ("S1", OK),
+            ("S2", AllocationFailed(DdName("G"), AllocationError.DATASET_NOT_FOUND)),
+        ],
+        Dataset("J.OUT", tmp_path / "system" / "datasets" / "J.OUT", LabelPending()),
+        NotCataloged(),
     )
 
 
@@ -480,8 +552,8 @@ def test_the_runner_allocates_before_and_disposes_after_every_program(
     )
     assert (
         _outcomes(_run(tmp_path, j)),
-        sorted(p.name for p in tmp_path.rglob("*") if p.is_file()),
-    ) == ([("S1", OK)], ["J_KEEP"])
+        _files(tmp_path),
+    ) == ([("S1", OK)], ["J.KEEP"])
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -502,8 +574,8 @@ def test_the_runner_applies_disp_to_an_idcams_steps_dds(tmp_path: Path) -> None:
     )
     assert (
         _outcomes(_run(tmp_path, j)),
-        (tmp_path / "MY_FILE").exists(),
-    ) == ([("S1", OK), ("S2", Completed(8))], False)
+        _cataloged(tmp_path, "MY.FILE"),
+    ) == ([("S1", OK), ("S2", Completed(8))], NotCataloged())
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

@@ -7,15 +7,16 @@ from pathlib import Path
 
 import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
+from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.system_build import job_catalog, system, upload
 
 
 @pytest.mark.carddemo_e2e
@@ -25,8 +26,7 @@ def test_acctfile_then_readacct_e2e(
 ) -> None:
     """Run ACCTFILE.jcl (DELETE+DEFINE+REPRO) then READACCT.jcl (CBACT01C).
 
-    Both jobs share a single DatasetCatalog so the KSDS built by ACCTFILE
-    is visible to CBACT01C in READACCT.
+    The KSDS ACCTFILE catalogs is visible to CBACT01C in READACCT.
     """
     # CARDDEMO_HOME already points at the "app" subdirectory of the checkout.
     # Layout: $CARDDEMO_HOME/jcl/, $CARDDEMO_HOME/cbl/, $CARDDEMO_HOME/cpy/,
@@ -34,7 +34,13 @@ def test_acctfile_then_readacct_e2e(
     jcl_dir = carddemo_home / "jcl"
     cbl_dir = carddemo_home / "cbl"
     cpy_dir = carddemo_home / "cpy"
-    data_dir = carddemo_home / "data" / "EBCDIC"
+    acctdata = carddemo_home / "data" / "EBCDIC" / "AWS.M2.CARDDEMO.ACCTDATA.PS"
+    upload(
+        tmp_path,
+        "AWS.M2.CARDDEMO.ACCTDATA.PS",
+        acctdata.read_bytes(),
+        SequentialLabel(RecordFormat.FB, 300),
+    )
 
     runner = JobRunner(
         unresolved=RaiseErrorStrategy(),
@@ -43,11 +49,11 @@ def test_acctfile_then_readacct_e2e(
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=cbl_dir,
         bridge_jar=bridge_jar,
-        data_dir=data_dir,
+        system=system(tmp_path),
         copybook_dir=cpy_dir,
     )
 
-    catalog = DatasetCatalog(workdir=tmp_path, data_dir=data_dir)
+    catalog = job_catalog(tmp_path)
 
     # --- Phase 1: ACCTFILE.jcl -- DELETE old KSDS, DEFINE new KSDS, REPRO PS→KSDS ---
     acctfile_job = parse_jcl((jcl_dir / "ACCTFILE.jcl").read_text())

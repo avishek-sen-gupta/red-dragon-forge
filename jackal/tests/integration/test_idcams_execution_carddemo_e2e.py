@@ -17,12 +17,13 @@ from pathlib import Path
 
 import pytest
 from jackal.allocation import DdEnvironment
-from jackal.catalog import DatasetCatalog
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
 from jackal.jcl.parser import parse_jcl
-from jackal.model import DatasetOrg, DdName, ProgramRef, ProgramStep
+from jackal.labels import KsdsLabel
+from jackal.model import DdName, ProgramRef, ProgramStep
 from tests.covers import NotLanguageFeature, covers
+from tests.system_build import job_catalog
 
 
 def _idcams_sysin_blocks(job) -> list[str]:
@@ -51,12 +52,8 @@ def test_cbexport_step01_builds_export_cluster_end_to_end(
     blocks = _idcams_sysin_blocks(job)
     assert len(blocks) == 1, "CBEXPORT.jcl is expected to have exactly one IDCAMS step"
 
-    catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    catalog = job_catalog(tmp_path)
     rc = run_idcams(parse_idcams(blocks[0]), DdEnvironment(()), catalog)
     assert rc == 0
 
-    ds = catalog.resolve("AWS.M2.CARDDEMO.EXPORT.DATA")
-    assert ds.org is DatasetOrg.KSDS
-    assert ds.key_length == 4
-    assert ds.key_offset == 28
-    assert ds.record_size == 500
+    assert catalog.resolve("AWS.M2.CARDDEMO.EXPORT.DATA").label == KsdsLabel(500, 28, 4)
