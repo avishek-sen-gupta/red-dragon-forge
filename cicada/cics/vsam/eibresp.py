@@ -7,7 +7,8 @@ adapter's translation table.
 Decision A (file-state conditions): in CICS the program never opens/closes files
 -- file state is an FCT/enable concern the adapter decides BEFORE calling a driver
 (returning RESP_DISABLED itself). So a driver-level file-state condition
-(FILE_NOT_FOUND / NOT_OPEN / WRITE_NOT_PERMITTED / ATTRIBUTE_CONFLICT / BOUNDARY_VIOLATION) means an internal inconsistency,
+(FILE_NOT_FOUND / NOT_OPEN / WRITE_NOT_PERMITTED / ATTRIBUTE_CONFLICT / BOUNDARY_VIOLATION /
+OPEN_MODE_NOT_SUPPORTED) means an internal inconsistency,
 not a normal program-visible condition -> RESP_IOERR. Mapping a driver's internal
 lifecycle state to a real CICS condition (NOTOPEN/INVREQ) would mislabel an adapter
 bug as something the program would mishandle.
@@ -35,6 +36,7 @@ _EIBRESP: dict[AccessCondition, int] = {
     AccessCondition.WRITE_NOT_PERMITTED: RESP_IOERR,
     AccessCondition.ATTRIBUTE_CONFLICT: RESP_IOERR,
     AccessCondition.BOUNDARY_VIOLATION: RESP_IOERR,
+    AccessCondition.OPEN_MODE_NOT_SUPPORTED: RESP_IOERR,
 }
 
 
