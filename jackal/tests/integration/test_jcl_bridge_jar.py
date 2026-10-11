@@ -1,3 +1,4 @@
+from jackal.expansion import DirectoryProcLibrary
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.model import (
     UnresolvedDd,
@@ -13,6 +14,8 @@ from jackal.model import (
 )
 from jackal.value_parts import Literal, Symbol, SymbolName, literal
 from tests.covers import NotLanguageFeature, covers
+
+_NO_LIBRARY = DirectoryProcLibrary(())
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -108,3 +111,36 @@ def test_real_jar_parses_exec_proc_parm_override(jcl_bridge_jar):
     assert job.steps[0].symbol_overrides == (
         (SymbolName("CNTLLIB"), literal("AWS.M2.CARDDEMO.CNTL")),
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_a_relative_generation_as_its_gdg_base_and_number(
+    jcl_bridge_jar,
+):
+    """z/OS 3.1 JCL Reference, DD DSNAME, p. 166: a relative generation number
+    starts with +, - or 0 and the rest is numeric; a member name starts with a
+    letter or national character."""
+    from jackal.expansion import expand_or_fail
+    from jackal.model import GenerationDSN
+
+    jcl = (
+        "//J JOB 1\n"
+        "// SET HLQ=PROD\n"
+        "//S1 EXEC PGM=A\n"
+        "//NEXT DD DSN=P.HIST(+1),DISP=(NEW,CATLG)\n"
+        "//CURR DD DSN=P.HIST(0),DISP=SHR\n"
+        "//PREV DD DSN=P.HIST(-002),DISP=SHR\n"
+        "//SYMB DD DSN=&HLQ..HIST(+1),DISP=SHR\n"
+        "//MEMB DD DSN=P.PDS(MEMBER1),DISP=SHR\n"
+        "//ABSL DD DSN=P.HIST.G0001V00,DISP=SHR\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    expanded = expand_or_fail(job, _NO_LIBRARY)
+    assert [dd.dsn for dd in expanded.steps[0].step.dds] == [
+        GenerationDSN(literal("P.HIST"), 1),
+        GenerationDSN(literal("P.HIST"), 0),
+        GenerationDSN(literal("P.HIST"), -2),
+        GenerationDSN(literal("PROD.HIST"), 1),
+        DirectDSN(literal("P.PDS(MEMBER1)")),
+        DirectDSN(literal("P.HIST.G0001V00")),
+    ]

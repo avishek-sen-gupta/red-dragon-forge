@@ -19,7 +19,7 @@ from cobble.knowledge_graph.graph_types import (
 )
 from jackal.expansion import DirectoryProcLibrary, ProcLibrary, expand_or_fail
 from jackal.jcl.parser import parse_jcl
-from jackal.model import DirectDSN, DispStatus, InStreamDSN, Job
+from jackal.model import DirectDSN, DispStatus, GenerationDSN, InStreamDSN, Job
 from jackal.tso import TSO_COMMAND_DD, TsoRun, is_tso_monitor, tso_runs
 
 if TYPE_CHECKING:
@@ -135,17 +135,21 @@ def _tso_graph(step_id: str, step: StepView, corpus_index: CorpusIndex) -> Graph
 
 
 def _dataset_graph(
-    step_id: str, named: NamedDd, dsn: DirectDSN, corpus_index: CorpusIndex
+    step_id: str,
+    named: NamedDd,
+    name: str,
+    attrs: Mapping[str, str],
+    corpus_index: CorpusIndex,
 ) -> Graph:
     status = named.dd.disposition().status
-    node = _node(NodeKind.DATASET, dsn.dataset_name().upper(), corpus_index)
+    node = _node(NodeKind.DATASET, name.upper(), corpus_index)
     edge = GraphEdge(
         source=step_id,
         source_kind=NodeKind.STEP,
         target=node.id,
         target_kind=NodeKind.DATASET,
         kind=_DISP_TO_EDGE_KIND[status],
-        attrs={"ddname": named.rendered_name, "disp": status.value},
+        attrs={"ddname": named.rendered_name, "disp": status.value, **attrs},
     )
     return ((node,), (edge,))
 
@@ -153,7 +157,18 @@ def _dataset_graph(
 def _dataset_dd_graph(step_id: str, named: NamedDd, corpus_index: CorpusIndex) -> Graph:
     match named.dd.dsn:
         case DirectDSN() as dsn if not named.dd.sysout:
-            return _dataset_graph(step_id, named, dsn, corpus_index)
+            return _dataset_graph(step_id, named, dsn.dataset_name(), {}, corpus_index)
+        case _:
+            return _generation_graph(step_id, named, corpus_index)
+
+
+def _generation_graph(step_id: str, named: NamedDd, corpus_index: CorpusIndex) -> Graph:
+    match named.dd.dsn:
+        case GenerationDSN() as dsn:
+            generation = {"generation": str(dsn.relative)}
+            return _dataset_graph(
+                step_id, named, dsn.base_name(), generation, corpus_index
+            )
         case _:
             return ((), ())
 
