@@ -1566,6 +1566,10 @@ Each is one committable unit and keeps the suite green.
   terminal state (ended, budget exhausted, fault) and map from it; (b) catch named exception types
   in the COBOL adapter. Separately: does a runaway or missing program report as `Halted` (as
   drafted) or as the abend z/OS would give (`S322`, `S806`)?
+  *Decided (2026-10-11):* (a) for the budget: red-dragon's `RunOutcome` gained
+  `BudgetExhausted` (red-dragon-lc7c), and a COBOL step that exhausts its per-program step
+  budget is `Abended(SystemAbend(0x322))`. A missing program is `S806` (D2). No `Halted`.
+  Faults raised as exceptions are still open.
 - **D2. Effect of `Halted` and stubs on the job** (open since `xkk`): stop the job, or continue
   as if RC 0 or a configured RC. The same answer sets which disposition `Halted` applies.
   *Decided (2026-10-11):* a missing program is not `Halted`. An injected

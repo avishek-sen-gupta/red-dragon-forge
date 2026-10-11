@@ -9,6 +9,7 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
@@ -57,6 +58,7 @@ def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
         unresolved=RaiseErrorStrategy(),
         missing_data=LenientAllocation(),
         missing_program=StubMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
     )
 
 

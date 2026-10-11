@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
@@ -60,6 +61,7 @@ def _runner(src: Path, bridge_jar: str, tmp_path: Path) -> JobRunner:
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=src,
         bridge_jar=bridge_jar,
         data_dir=tmp_path,

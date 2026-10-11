@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 import pytest
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import (
     LenientAllocation,
     MissingDataStrategy,
@@ -79,6 +80,7 @@ def _run(
         unresolved=unresolved,
         missing_data=missing_data,
         missing_program=missing_program,
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         proclib_dirs=proclib,
     )
     return runner.run(j, workdir=tmp_path, seeds={})

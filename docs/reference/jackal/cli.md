@@ -40,6 +40,9 @@ an earlier `jackal run`.
 
 The CLI does not expand cataloged procedures: it passes no proclib directories to `JobRunner`.
 
+Each COBOL program may run 500,000 interpreter steps. One that has not ended by then abends
+`S322`.
+
 ## Environment
 
 | Variable | Required | Use |

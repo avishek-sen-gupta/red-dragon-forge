@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
@@ -39,6 +40,7 @@ def test_acctfile_then_readacct_e2e(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         source_dir=cbl_dir,
         bridge_jar=bridge_jar,
         data_dir=data_dir,

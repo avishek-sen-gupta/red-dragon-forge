@@ -5,10 +5,18 @@ from pathlib import Path
 import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
+from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
-from jackal.results import Completed
+from jackal.results import (
+    Abended,
+    AfterAbend,
+    Completed,
+    Flushed,
+    JobAbended,
+    SystemAbend,
+)
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
@@ -26,12 +34,12 @@ def _ebcdic(text: str) -> bytes:
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_cobol_step_reads_in_stream_cards_and_a_dummy_input(
+def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_input(
     tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
 ) -> None:
     jcl = (
         "//J JOB 1\n"
-        "//S1 EXEC PGM=CARDCOPY\n"
+        "//S1 EXEC PGM=CARDCOPY,PARM='X'\n"
         "//SYSIN DD *\n"
         " HELLO\n"
         " WORLD\n"
@@ -52,6 +60,7 @@ def test_a_cobol_step_reads_in_stream_cards_and_a_dummy_input(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
     )
     result = runner.run_job(job, catalog)
     assert (
@@ -92,6 +101,7 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
+        program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
     )
     result = runner.run_job(job, catalog)
     assert (
@@ -100,4 +110,39 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
     ) == (
         [Completed(0), Completed(0)],
         _ebcdic(" FIRST".ljust(80) + " SECOND".ljust(80)),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    jcl = (
+        "//J JOB 1\n"
+        "//S1 EXEC PGM=RUNAWAY\n"
+        "//OUTDD DD DSN=J.PARTIAL,DISP=(NEW,CATLG,DELETE)\n"
+        "//S2 EXEC PGM=IEFBR14\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    catalog = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    runner = JobRunner(
+        source_dir=CBL,
+        bridge_jar=bridge_jar,
+        data_dir=tmp_path,
+        copybook_dir=tmp_path,
+        unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
+        missing_program=AbendMissingProgram(),
+        program_step_budget=2_000,
+    )
+    result = runner.run_job(job, catalog)
+    s1, s322 = result.steps[0].step, SystemAbend(0x322)
+    assert (
+        [s.outcome for s in result.steps],
+        result.outcome,
+        sorted(p.name for p in tmp_path.iterdir()),
+    ) == (
+        [Abended(s322), Flushed(AfterAbend(s1))],
+        JobAbended(s1, s322),
+        [],
     )

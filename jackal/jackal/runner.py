@@ -124,6 +124,7 @@ class JobRunner:
         unresolved: UnresolvedReferenceStrategy,
         missing_data: MissingDataStrategy,
         missing_program: MissingProgramStrategy,
+        program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
     ):
         self._sources = DirectoryProgramSources(source_dir)
@@ -133,6 +134,7 @@ class JobRunner:
         self._unresolved = unresolved
         self._missing_data = missing_data
         self._missing_program = missing_program
+        self._program_step_budget = program_step_budget
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
     def run(self, job: Job, workdir: Path, seeds: Mapping[str, Path]) -> JobResult:
@@ -232,13 +234,12 @@ class JobRunner:
             case SourceNotFound():
                 return self._missing_program.settle(qualified, step.pgm)
             case CobolSource(text=source):
-                return Completed(
-                    run_cobol_step(
-                        step,
-                        source,
-                        env,
-                        catalog.workdir,
-                        self._bridge_jar,
-                        [self._copybook_dir],
-                    )
+                return run_cobol_step(
+                    step,
+                    source,
+                    env,
+                    catalog.workdir,
+                    self._bridge_jar,
+                    [self._copybook_dir],
+                    self._program_step_budget,
                 )
