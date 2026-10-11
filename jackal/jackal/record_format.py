@@ -136,3 +136,20 @@ def label_for(fmt: FixedFormat | VariableFormat) -> SequentialLabel:
             return SequentialLabel(RecordFormat.F, fmt.lrecl)
         case VariableFormat():
             return SequentialLabel(RecordFormat.V, fmt.lrecl)
+
+
+def _shorter_variable(fmt: VariableFormat, label: DatasetLabel) -> bool:
+    match label:
+        case SequentialLabel() if label.recfm in VARIABLE:
+            return label.lrecl < fmt.lrecl
+        case _:
+            return False
+
+
+def joins(fmt: ProgramFormat, label: DatasetLabel) -> bool:
+    """A later member of a like concatenation: as the first, or a shorter variable LRECL."""
+    match fmt:
+        case VariableFormat() if _shorter_variable(fmt, label):
+            return True
+        case _:
+            return not conflicts(fmt, label)

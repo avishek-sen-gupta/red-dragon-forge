@@ -22,6 +22,7 @@ from jackal.record_format import (
     UnsupportedRecordingMode,
     VariableFormat,
     conflicts,
+    joins,
     label_for,
     program_format,
 )
@@ -94,3 +95,20 @@ def test_a_format_fits_a_label_of_the_same_kind_and_length_and_writes_one():
         SequentialLabel(RecordFormat.F, 80),
         SequentialLabel(RecordFormat.V, 104),
     ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_later_member_joins_a_like_concatenation_as_the_first_or_shorter_variable():
+    """z/OS 3.1 JCL Reference, "Logical record lengths for concatenated data sets":
+    format-V members may differ in LRECL when the largest comes first."""
+    v104, v50 = SequentialLabel(RecordFormat.VB, 104), SequentialLabel(
+        RecordFormat.V, 50
+    )
+    assert [
+        joins(VariableFormat(104), v104),
+        joins(VariableFormat(104), v50),
+        joins(VariableFormat(104), SequentialLabel(RecordFormat.V, 200)),
+        joins(FixedFormat(80), SequentialLabel(RecordFormat.F, 40)),
+        joins(FixedFormat(80), SequentialLabel(RecordFormat.FB, 80)),
+        joins(VariableFormat(104), SequentialLabel(RecordFormat.F, 50)),
+    ] == [True, True, False, False, True, False]

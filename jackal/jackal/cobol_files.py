@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from cobol_asg.asg_types import CobolASG, CobolField
@@ -11,13 +12,21 @@ from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.data_layout import record_length
-from interpreter.cobol.file_drivers import FileOrganizationDriver
+from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from interpreter.cobol.io_provider import IOResult
 from interpreter.cobol.real_file_provider import RealFileIOProvider, to_ioresult
-from jackal.allocation import DatasetAllocation, DdEnvironment
+from jackal.allocation import (
+    ConcatenatedAllocation,
+    DatasetAllocation,
+    DdEnvironment,
+    InStreamAllocation,
+    MemberAllocation,
+)
 from jackal.catalog_stores import Table
+from jackal.concatenated_records import ConcatenatedDriver
 from jackal.dataset import Dataset, Relabeller
 from jackal.labels import (
+    CARDS,
     VARIABLE,
     DatasetLabel,
     KsdsLabel,
@@ -32,6 +41,7 @@ from jackal.record_format import (
     ProgramFormat,
     VariableFormat,
     conflicts,
+    joins,
     label_for,
     program_format,
 )
@@ -109,6 +119,9 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         self._datasets: Table[str, Dataset] = Table()
         for name, dataset in _datasets(files, env):
             self._datasets.put(name, dataset)
+        self._concatenations: Mapping[str, tuple[MemberAllocation, ...]] = dict(
+            _concatenations(files, env)
+        )
 
     def _opened_as(self, filename: str, mode: str) -> str:
         if mode == OpenMode.OUTPUT.value and filename in self._appended_files:
@@ -116,6 +129,13 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         return mode
 
     def _admits(self, filename: str, mode: str) -> bool:
+        if filename in self._concatenations:
+            return _concatenation_admitted(
+                self._files[filename].fmt, self._concatenations[filename]
+            )
+        return self._admits_dataset(filename, mode)
+
+    def _admits_dataset(self, filename: str, mode: str) -> bool:
         if not self._datasets.has(filename):
             return True
         file = self._files[filename]
@@ -148,7 +168,14 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         key_offset: int,
         key_length: int,
     ) -> FileOrganizationDriver:
-        if any(d.path == path and _variable(d.label) for d in self._datasets.values()):
+        if filename in self._concatenations:
+            members = self._concatenations[filename]
+            return ConcatenatedDriver(
+                tuple(partial(_member_driver, m, record_length) for m in members)
+            )
+        if self._datasets.has(filename) and _variable(
+            self._datasets.get(filename).label
+        ):
             return VariableRecordDriver(path, mode, record_length)
         return super()._driver(
             filename,
@@ -170,6 +197,8 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         key_length: int,
     ) -> IOResult:
         opened = self._opened_as(filename, mode)
+        if filename in self._concatenations and opened != OpenMode.INPUT.value:
+            return to_ioresult(AccessResult(AccessCondition.OPEN_MODE_NOT_SUPPORTED))
         if not self._admits(filename, opened):
             return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
         return super()._open_file(
@@ -187,4 +216,48 @@ def _datasets(
         for ddname, allocation in allocations.items()
         if ddname.text == f.entry.assign_to
         and isinstance(allocation, DatasetAllocation)
+    )
+
+
+def _concatenations(
+    files: Sequence[ProgramFile], env: DdEnvironment
+) -> tuple[tuple[str, tuple[MemberAllocation, ...]], ...]:
+    return tuple(
+        (f.entry.file_name, allocation.members)
+        for f in files
+        for ddname, allocation in env.entries
+        if ddname.text == f.entry.assign_to
+        and isinstance(allocation, ConcatenatedAllocation)
+    )
+
+
+def _member_label(member: MemberAllocation) -> DatasetLabel:
+    match member:
+        case DatasetAllocation(dataset=dataset):
+            return dataset.label
+        case InStreamAllocation():
+            return CARDS
+        case _:
+            return LabelPending()
+
+
+def _concatenation_admitted(
+    fmt: ProgramFormat, members: Sequence[MemberAllocation]
+) -> bool:
+    first, *later = (_member_label(m) for m in members)
+    return not conflicts(fmt, first) and all(joins(fmt, label) for label in later)
+
+
+def _member_driver(
+    member: MemberAllocation, record_length: int
+) -> FileOrganizationDriver:
+    if _variable(_member_label(member)):
+        return VariableRecordDriver(member.path(), OpenMode.INPUT, record_length)
+    return open_driver(
+        FileOrganization.SEQUENTIAL,
+        member.path(),
+        OpenMode.INPUT,
+        record_length,
+        0,
+        0,
     )

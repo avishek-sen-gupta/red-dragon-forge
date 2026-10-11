@@ -61,8 +61,6 @@ cicada or squall; `.importlinter` enforces this.
      warning. The CLI uses it.
 
    For each step:
-   - A step with a concatenated DD is refused with `UnsupportedStep` until concatenation is
-     supported.
    - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Abended(code)`,
      `Bypassed(reason)`, `Flushed(cause)`, `SkippedUnresolved` or
      `AllocationFailed(ddname, error)`. `JobResult.outcome` is decided by the first step that
@@ -92,6 +90,13 @@ cicada or squall; `.importlinter` enforces this.
      not in load libraries. The program receives the allocations as a `DdEnvironment`. If a
      DD fails under `StrictAllocation`, the step's in-stream and sink files are released and the
      `NEW` datasets it had already created are deleted.
+   - A concatenated DD (unnamed DDs after it) allocates and disposes each member with its own
+     `DISP`. A COBOL `OPEN INPUT` reads the members in order as one file
+     (`jackal.concatenated_records`), each checked against the FD like the first (a later V
+     member may be shorter); any other open mode fails with file status 37
+     ([decision record](../../records/design/2026-10-12-jackal-concatenation.md)). IDCAMS
+     `REPRO` cannot read one yet (red-dragon-forge-2dz).
+   - A step's in-stream and sink files are released even when its program raises.
    - The step is dispatched. A program in the utility table runs the emulated utility.
      Any other program found as `<source-dir>/<PGM>.cbl` is run as COBOL. A program found as
      neither is settled by the `MissingProgramStrategy`.
@@ -200,6 +205,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
 | `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |
 | `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label, opened by its label. |
+| `jackal/jackal/concatenated_records.py` | A concatenation read member after member as one file. |
 | `jackal/jackal/variable_records.py` | RECFM=V/VB records on disk, each behind its record descriptor word. |
 | `jackal/jackal/cond.py` | `COND=` evaluation, and the order of every gate. |
 | `jackal/jackal/if_guard.py` | `IF/THEN/ELSE` condition evaluation. |
