@@ -18,6 +18,8 @@ from jackal.model import (
     UnexpandedCall,
 )
 from jackal.results import (
+    Abended,
+    AfterAbend,
     AfterAllocationFailure,
     AfterJobCond,
     AllocationFailed,
@@ -78,11 +80,38 @@ def _meets(tests: Sequence[RcComparison], completed: _Completed) -> bool:
 def _own(
     condition: StepCondition[StepReference], completed: Sequence[_Completed]
 ) -> Run | Bypassed:
-    if condition.abend_mode is AbendMode.ONLY:
-        return Bypassed(BypassReason.ONLY_WITHOUT_ABEND)
     if any(_true(t, completed) for t in condition.bypass_tests):
         return Bypassed(BypassReason.COND_SATISFIED)
     return Run()
+
+
+def _abended(result: StepResult) -> tuple[QualifiedStep, ...]:
+    match (result.step, result.outcome):
+        case (QualifiedStep(), Abended()):
+            return (result.step,)
+        case _:
+            return ()
+
+
+def _after_abend(
+    condition: StepCondition[StepReference],
+    history: Sequence[StepResult],
+    completed: Sequence[_Completed],
+) -> Run | Bypassed | Flushed:
+    abended = tuple(s for r in history for s in _abended(r))
+    if not abended:
+        return _without_abend(condition, completed)
+    if condition.abend_mode is AbendMode.NORMAL:
+        return Flushed(AfterAbend(abended[0]))
+    return _own(condition, completed)
+
+
+def _without_abend(
+    condition: StepCondition[StepReference], completed: Sequence[_Completed]
+) -> Run | Bypassed:
+    if condition.abend_mode is AbendMode.ONLY:
+        return Bypassed(BypassReason.ONLY_WITHOUT_ABEND)
+    return _own(condition, completed)
 
 
 def _allocation_failed(result: StepResult) -> tuple[QualifiedStep, ...]:
@@ -102,7 +131,7 @@ def _after_job_cond(
     met = tuple(c for c in completed if _meets(end_job_tests, c))
     if met:
         return Flushed(AfterJobCond(met[0].step))
-    return _own(condition, completed)
+    return _after_abend(condition, history, completed)
 
 
 def gate(
