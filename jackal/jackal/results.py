@@ -20,6 +20,25 @@ class Completed:
         return f"RC={self.rc}"
 
 
+@dataclass(frozen=True)
+class SystemAbend:
+    code: int
+
+    def rendered(self) -> str:
+        return f"S{self.code:03X}"
+
+
+@dataclass(frozen=True)
+class Abended:
+    code: SystemAbend
+
+    def rcs(self) -> tuple[int, ...]:
+        return ()
+
+    def rendered(self) -> str:
+        return f"abended {self.code.rendered()}"
+
+
 class BypassReason(Enum):
     COND_SATISFIED = "COND_SATISFIED"
     ONLY_WITHOUT_ABEND = "ONLY_WITHOUT_ABEND"
@@ -45,6 +64,14 @@ class AfterJobCond:
 
 
 @dataclass(frozen=True)
+class AfterAbend:
+    step: QualifiedStep
+
+    def rendered(self) -> str:
+        return f"abended at {self.step.rendered()}"
+
+
+@dataclass(frozen=True)
 class AfterAllocationFailure:
     step: QualifiedStep
 
@@ -52,7 +79,7 @@ class AfterAllocationFailure:
         return f"allocation failed at {self.step.rendered()}"
 
 
-FlushCause: TypeAlias = AfterJobCond | AfterAllocationFailure
+FlushCause: TypeAlias = AfterJobCond | AfterAbend | AfterAllocationFailure
 
 
 @dataclass(frozen=True)
@@ -94,7 +121,7 @@ class AllocationFailed:
 
 
 StepOutcome: TypeAlias = (
-    Completed | Bypassed | Flushed | SkippedUnresolved | AllocationFailed
+    Completed | Abended | Bypassed | Flushed | SkippedUnresolved | AllocationFailed
 )
 
 
@@ -125,13 +152,24 @@ class JobAllocationFailed:
         return False
 
 
-JobOutcome: TypeAlias = JobCompleted | JobAllocationFailed
+@dataclass(frozen=True)
+class JobAbended:
+    step: QualifiedStep | UnexpandedCall
+    code: SystemAbend
+
+    def succeeded(self) -> bool:
+        return False
 
 
-def _allocation_failure(result: StepResult) -> tuple[JobAllocationFailed, ...]:
+JobOutcome: TypeAlias = JobCompleted | JobAbended | JobAllocationFailed
+
+
+def _failure(result: StepResult) -> tuple[JobAbended | JobAllocationFailed, ...]:
     match result.outcome:
         case AllocationFailed():
             return (JobAllocationFailed(result.step, result.outcome),)
+        case Abended():
+            return (JobAbended(result.step, result.outcome.code),)
         case _:
             return ()
 
@@ -145,5 +183,5 @@ class JobResult:
         completed = JobCompleted(
             max((rc for s in self.steps for rc in s.outcome.rcs()), default=0)
         )
-        failures = (f for s in self.steps for f in _allocation_failure(s))
+        failures = (f for s in self.steps for f in _failure(s))
         return next(failures, completed)

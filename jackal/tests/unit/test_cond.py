@@ -11,6 +11,8 @@ from jackal.model import (
     StepReference,
 )
 from jackal.results import (
+    Abended,
+    AfterAbend,
     AfterAllocationFailure,
     AfterJobCond,
     AllocationError,
@@ -20,6 +22,7 @@ from jackal.results import (
     Completed,
     Flushed,
     StepResult,
+    SystemAbend,
 )
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import ran
@@ -104,13 +107,27 @@ def test_all_six_operators_compare_code_to_rc():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_even_reads_as_normal_and_only_always_bypasses_since_nothing_abends():
+def test_after_an_abend_only_even_and_only_steps_go_on_to_their_own_tests():
     lt = (4, CondOp.LT, AllPriorSteps())
+    abended = StepResult(A, Abended(SystemAbend(0x806)))
+    even, only = _cond(lt, mode=AbendMode.EVEN), _cond(mode=AbendMode.ONLY)
     assert [
-        _bypass(_cond(lt, mode=AbendMode.EVEN), _r(A, 0)),
-        _bypass(_cond(lt, mode=AbendMode.EVEN), _r(A, 8)),
-        _bypass(_cond(mode=AbendMode.ONLY), _r(A, 0)),
-    ] == [RUN, BYPASS, Bypassed(BypassReason.ONLY_WITHOUT_ABEND)]
+        _bypass(_cond(), abended),
+        _bypass(even, abended),
+        _bypass(even, abended, _r(B, 8)),
+        _bypass(only, abended),
+        _bypass(only, _r(B, 0)),
+        _bypass(even, _r(B, 0)),
+        gate(even, (RcComparison(8, CondOp.LE),), (abended, _r(B, 8))),
+    ] == [
+        Flushed(AfterAbend(A)),
+        RUN,
+        BYPASS,
+        RUN,
+        Bypassed(BypassReason.ONLY_WITHOUT_ABEND),
+        RUN,
+        Flushed(AfterJobCond(B)),
+    ]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

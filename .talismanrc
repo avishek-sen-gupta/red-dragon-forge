@@ -584,7 +584,7 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-units3-4-model-and-expansion.md
   checksum: 26e4523a848bab55f3dc987aec7a4b679b3f3a3d9b39460d61f0bfa7c92d5c8b
 - filename: jackal/tests/unit/test_cond.py
-  checksum: 516a85e9899af908e291f7a351abb547dfa224694ec61f93e76c29870b8e13f9
+  checksum: a7689ba5468894803f04da282e502747f5dfaad3aee928dc918c484f19597867
 - filename: jackal/jackal/jcl/wire.py
   checksum: 77587c2c06aba1dc4fad80818c97ace0f337cc523107e5831d47d0b66dbb680e
 - filename: jackal/tests/acceptance/carddemo_facts.py
