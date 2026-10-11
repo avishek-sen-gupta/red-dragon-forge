@@ -28,6 +28,7 @@ def test_file_state_conditions_map_to_ioerr():
         AccessCondition.FILE_NOT_FOUND,
         AccessCondition.NOT_OPEN,
         AccessCondition.WRITE_NOT_PERMITTED,
+        AccessCondition.ATTRIBUTE_CONFLICT,
     ):
         assert to_eibresp(c) == RESP_IOERR
 
