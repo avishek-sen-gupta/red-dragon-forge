@@ -479,6 +479,33 @@ def test_what_one_job_catalogs_or_deletes_is_what_the_next_job_sees(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_mod_with_no_normal_disposition_deletes_a_dataset_it_created_and_keeps_one_it_found(
+    tmp_path: Path,
+) -> None:
+    _uploaded(tmp_path, "J.FOUND", b"x" * 80)
+    j = job(
+        "J",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (
+                    dd("A", "J.CREATED", disp("MOD")),
+                    dd("B", "J.FOUND", disp("MOD")),
+                    dd("C", "J.CATLGD", disp("MOD", "CATLG")),
+                    dd("D", "J.MODPASS", disp("MOD", "PASS")),
+                ),
+            ),
+        ),
+    )
+    assert (
+        _outcomes(_run(tmp_path, j)),
+        _cataloged(tmp_path, "J.CREATED"),
+        _files(tmp_path / "system"),
+    ) == ([("S1", OK)], NotCataloged(), ["J.CATLGD", "J.FOUND"])
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_raise_strategy_rejects_an_unresolved_reference_before_any_step_runs(
     tmp_path: Path,
 ) -> None:

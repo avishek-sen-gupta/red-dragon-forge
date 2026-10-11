@@ -8,7 +8,7 @@ def test_dcb_forms_parse(parse_fixture):
     from jackal.model import Job
     from tests.acceptance import build as b
 
-    new_catlg = b.disp("NEW", "CATLG", "CATLG")
+    new_catlg = b.disp("NEW", "CATLG")
     assert parse_fixture("dcb/dcb.jcl") == Job(
         "ACCEPT",
         (

@@ -19,7 +19,7 @@ def test_symbols_expand(expand_fixture):
     w1 = ProcCall(
         b.name("W1"), b.proc("SYMP"), symbol_overrides=((suffix.name, (hlq,)),)
     )
-    out = b.temp("OUT", "OUTNAME", b.disp("NEW", "PASS", "DELETE"))
+    out = b.temp("OUT", "OUTNAME", b.disp("NEW", "PASS"))
     assert expand_fixture("symbols/symbols.jcl") == ExpandedJob(
         "ACCEPT",
         (

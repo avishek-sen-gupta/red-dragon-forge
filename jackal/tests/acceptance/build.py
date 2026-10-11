@@ -19,6 +19,7 @@ from jackal.model import (
     InStreamDSN,
     NoDSN,
     NotCoded,
+    Omitted,
     OwnScope,
     ProcCall,
     ProcRef,
@@ -63,13 +64,17 @@ def ref_in(call: str, step: str) -> StepRef:
     return StepRef(CalledProcScope(StepName(call)), StepName(step))
 
 
-def disp(status: str, normal: str, abnormal: str) -> Disp:
-    return Disp(DispStatus[status], DispNormal[normal], DispAbnormal[abnormal])
+def disp(status: str, normal: str = "", abnormal: str = "") -> Disp:
+    return Disp(
+        DispStatus[status],
+        DispNormal[normal] if normal else Omitted(),
+        DispAbnormal[abnormal] if abnormal else Omitted(),
+    )
 
 
-SHR = disp("SHR", "KEEP", "KEEP")
-OLD = disp("OLD", "KEEP", "KEEP")
-DEFAULT_DISP = disp("NEW", "DELETE", "DELETE")
+SHR = disp("SHR")
+OLD = disp("OLD")
+DEFAULT_DISP = disp("NEW")
 
 
 def dataset(ddname: str, dsn: str, d: Disp | NotCoded = SHR) -> DD:

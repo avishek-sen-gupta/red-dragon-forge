@@ -16,7 +16,7 @@ def test_dsn_kinds_parse(parse_fixture):
                 "PGMA",
                 (
                     b.dataset("IN", "T.IN"),
-                    b.temp("OUT", "WORK", b.disp("NEW", "PASS", "DELETE")),
+                    b.temp("OUT", "WORK", b.disp("NEW", "PASS")),
                     b.in_stream("SYSIN", (" CARD ONE", " CARD TWO")),
                     b.in_stream("DATA1", (" DATA LINE",)),
                     b.dummy("NULL1"),
@@ -43,7 +43,7 @@ def test_lone_symbol_dsn_expands_to_temp(expand_fixture):
 
     s1 = b.qualified(
         (),
-        b.pgm("S1", "PGMA", (b.temp("OUT", "WORK", b.disp("NEW", "PASS", "DELETE")),)),
+        b.pgm("S1", "PGMA", (b.temp("OUT", "WORK", b.disp("NEW", "PASS")),)),
     )
     assert expand_fixture("dsn/temps.jcl") == ExpandedJob(
         "ACCEPT",
@@ -55,7 +55,7 @@ def test_lone_symbol_dsn_expands_to_temp(expand_fixture):
                     "S2",
                     "PGMB",
                     (
-                        b.temp("IN", "WORK", b.disp("OLD", "DELETE", "DELETE")),
+                        b.temp("IN", "WORK", b.disp("OLD", "DELETE")),
                         b.resolved_backref("COPY", s1, "OUT"),
                     ),
                 ),

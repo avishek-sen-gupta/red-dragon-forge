@@ -16,8 +16,8 @@
        "dsn": "IMS.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -25,8 +25,8 @@
        "dsn": "IMS.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -34,8 +34,8 @@
        "dsn": "IMS.PROCLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -43,8 +43,8 @@
        "dsn": "IMS.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -52,8 +52,8 @@
        "dsn": "IMS.PSBLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -61,8 +61,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -70,8 +70,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -79,8 +79,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -88,8 +88,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -97,8 +97,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -106,8 +106,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -115,8 +115,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -124,8 +124,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -133,8 +133,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -142,8 +142,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -166,8 +166,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -176,7 +176,7 @@
        "disp": [
         "MOD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -192,8 +192,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -201,8 +201,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -210,8 +210,8 @@
        "dsn": "OEM.IMS.IMSP.PSBLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -219,8 +219,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -237,8 +237,8 @@
        "dsn": "OEM.IMS.IMSP.PAUTHDB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -246,8 +246,8 @@
        "dsn": "OEM.IMS.IMSP.PAUTHDBX",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -255,8 +255,8 @@
        "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -264,8 +264,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -273,8 +273,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -282,8 +282,8 @@
        "dsn": "OEM.IMS.IMSP.RECON1",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -291,8 +291,8 @@
        "dsn": "OEM.IMS.IMSP.RECON2",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -300,8 +300,8 @@
        "dsn": "OEM.IMS.IMSP.RECON3",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -309,8 +309,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -318,8 +318,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -342,8 +342,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -351,8 +351,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -360,8 +360,8 @@
        "dsn": "OEM.IMS.IMSP.PSBLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -369,8 +369,8 @@
        "dsn": "AWS.M2.CARDDEMO.PAUTDB.ROOT.FILEO",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -378,8 +378,8 @@
        "dsn": "AWS.M2.CARDDEMO.PAUTDB.CHILD.FILEO",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -387,8 +387,8 @@
        "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -396,8 +396,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -405,8 +405,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -414,8 +414,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -423,8 +423,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -432,8 +432,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -456,8 +456,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -465,8 +465,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -474,8 +474,8 @@
        "dsn": "OEM.IMS.IMSP.PSBLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -501,8 +501,8 @@
        "dsn": "OEM.IMS.IMSP.PAUTHDB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -510,8 +510,8 @@
        "dsn": "OEM.IMS.IMSP.PAUTHDBX",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -519,8 +519,8 @@
        "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -528,8 +528,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -537,8 +537,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -546,8 +546,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -555,8 +555,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -564,8 +564,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -588,8 +588,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -597,8 +597,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -606,8 +606,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -641,8 +641,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -650,8 +650,8 @@
        "dsn": "OEMA.IMS.IMSP.SDFSRESL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -659,8 +659,8 @@
        "dsn": "OEM.IMS.IMSP.PSBLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -686,8 +686,8 @@
        "dsn": "OEM.IMS.IMSP.PAUTHDB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -695,8 +695,8 @@
        "dsn": "OEM.IMS.IMSP.PAUTHDBX",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -704,8 +704,8 @@
        "dsn": "OEMPP.IMS.V15R01MB.PROCLIB(DFSVSMDB)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -713,8 +713,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -722,8 +722,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -731,8 +731,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -740,8 +740,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -749,8 +749,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -773,8 +773,8 @@
        "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -782,8 +782,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -791,8 +791,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -800,8 +800,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -809,8 +809,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2FREE)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -826,8 +826,8 @@
        "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -835,8 +835,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -844,8 +844,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -853,8 +853,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -862,8 +862,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2TIAD1)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -871,8 +871,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2CREAT)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -901,8 +901,8 @@
        "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -910,8 +910,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -919,8 +919,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -928,8 +928,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -937,8 +937,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2TEP41)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -946,8 +946,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2LTTYP)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -969,8 +969,8 @@
        "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -978,8 +978,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -987,8 +987,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -996,8 +996,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1005,8 +1005,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2TEP41)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1014,8 +1014,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(DB2LTCAT)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -1038,8 +1038,8 @@
        "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1047,8 +1047,8 @@
        "dsn": "AWS.M2.CARDDEMO.DBRMLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1056,8 +1056,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1065,8 +1065,8 @@
        "dsn": "INPFILE",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1074,8 +1074,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1098,8 +1098,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1107,8 +1107,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1116,8 +1116,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANTYPE.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1126,7 +1126,7 @@
        "disp": [
         "NEW",
         "CATLG",
-        "CATLG"
+        ""
        ]
       }
      ]
@@ -1148,8 +1148,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1157,8 +1157,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1166,8 +1166,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANCATG.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1176,7 +1176,7 @@
        "disp": [
         "NEW",
         "CATLG",
-        "CATLG"
+        ""
        ]
       }
      ]
@@ -1230,8 +1230,8 @@
        "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1239,8 +1239,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1248,8 +1248,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1257,8 +1257,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1266,8 +1266,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1284,8 +1284,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1293,8 +1293,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1316,8 +1316,8 @@
        "dsn": "OEM.DB2.DAZ1.RUNLIB.LOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1325,8 +1325,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1334,8 +1334,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1343,8 +1343,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1352,8 +1352,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1370,8 +1370,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1379,8 +1379,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1403,8 +1403,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1412,8 +1412,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1429,8 +1429,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1438,8 +1438,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1455,8 +1455,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1464,8 +1464,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1473,8 +1473,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1482,8 +1482,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1506,8 +1506,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1515,8 +1515,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1524,8 +1524,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1541,8 +1541,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1550,8 +1550,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1567,8 +1567,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1576,8 +1576,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1593,8 +1593,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1602,8 +1602,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDDATA.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1611,8 +1611,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1620,8 +1620,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1637,8 +1637,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1646,8 +1646,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1663,8 +1663,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1672,8 +1672,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1689,8 +1689,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1698,8 +1698,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1715,8 +1715,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1724,8 +1724,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1733,8 +1733,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1757,8 +1757,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHLOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1766,8 +1766,8 @@
        "dsn": "OEM.CICSTS.DFHCSD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1775,8 +1775,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1784,8 +1784,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1793,8 +1793,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1817,8 +1817,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1826,8 +1826,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1843,8 +1843,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1852,8 +1852,8 @@
        "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1861,8 +1861,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1870,8 +1870,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1879,8 +1879,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1888,8 +1888,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1897,8 +1897,8 @@
        "dsn": "AWS.M2.CARDDEMO.EXPORT.DATA",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1906,8 +1906,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -1915,8 +1915,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -1939,8 +1939,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -1948,8 +1948,8 @@
        "dsn": "AWS.M2.CARDDEMO.EXPORT.DATA",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2002,8 +2002,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2011,8 +2011,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2035,8 +2035,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2044,8 +2044,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2053,8 +2053,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2077,8 +2077,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(0)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2086,8 +2086,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2095,8 +2095,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2104,8 +2104,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2130,8 +2130,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2139,8 +2139,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.COMBINED(+1)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2148,8 +2148,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2157,8 +2157,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2181,8 +2181,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2190,8 +2190,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2207,8 +2207,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2216,8 +2216,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2225,8 +2225,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2243,8 +2243,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2266,8 +2266,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2275,8 +2275,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRXFL.SEQ",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2284,8 +2284,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2293,8 +2293,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2348,8 +2348,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2357,8 +2357,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2366,8 +2366,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2375,8 +2375,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRXFL.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2384,8 +2384,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2393,8 +2393,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2402,8 +2402,8 @@
        "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2444,8 +2444,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2453,8 +2453,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2462,8 +2462,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2479,8 +2479,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2488,8 +2488,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2505,8 +2505,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2514,8 +2514,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2531,8 +2531,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2540,8 +2540,8 @@
        "dsn": "AWS.M2.CARDDEMO.CUSTDATA.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2549,8 +2549,8 @@
        "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2558,8 +2558,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2575,8 +2575,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2584,8 +2584,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2593,8 +2593,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2617,8 +2617,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2626,8 +2626,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2650,8 +2650,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2659,8 +2659,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2676,8 +2676,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2685,8 +2685,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2709,8 +2709,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2718,8 +2718,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2742,8 +2742,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2751,8 +2751,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2774,8 +2774,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2783,8 +2783,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2792,8 +2792,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANTYPE.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2802,7 +2802,7 @@
        "disp": [
         "NEW",
         "CATLG",
-        "CATLG"
+        ""
        ]
       }
      ]
@@ -2824,8 +2824,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2833,8 +2833,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2856,8 +2856,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2865,8 +2865,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2874,8 +2874,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANCATG.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2884,7 +2884,7 @@
        "disp": [
         "NEW",
         "CATLG",
-        "CATLG"
+        ""
        ]
       }
      ]
@@ -2900,8 +2900,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2909,8 +2909,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -2932,8 +2932,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2941,8 +2941,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2950,8 +2950,8 @@
        "dsn": "AWS.M2.CARDDEMO.DISCGRP.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -2960,7 +2960,7 @@
        "disp": [
         "NEW",
         "CATLG",
-        "CATLG"
+        ""
        ]
       }
      ]
@@ -2983,8 +2983,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -2992,8 +2992,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3009,8 +3009,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3018,8 +3018,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3035,8 +3035,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3044,8 +3044,8 @@
        "dsn": "AWS.M2.CARDDEMO.DISCGRP.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3053,8 +3053,8 @@
        "dsn": "AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS",
        "disp": [
         "OLD",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3062,8 +3062,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3103,8 +3103,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3121,8 +3121,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3130,8 +3130,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3147,8 +3147,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3156,8 +3156,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3173,8 +3173,8 @@
        "dsn": "AWS.M2.CARDDEMO.USRSEC.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3182,8 +3182,8 @@
        "dsn": "AWS.M2.CARDDEMO.USRSEC.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3191,8 +3191,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3200,8 +3200,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3209,8 +3209,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3250,8 +3250,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3268,8 +3268,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3277,8 +3277,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3294,8 +3294,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3303,8 +3303,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3320,8 +3320,8 @@
        "dsn": "AWS.M2.CARDDEMO.ESDSRRDS.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3329,8 +3329,8 @@
        "dsn": "AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3338,8 +3338,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3347,8 +3347,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3356,8 +3356,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3373,8 +3373,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3382,8 +3382,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3399,8 +3399,8 @@
        "dsn": "AWS.M2.CARDDEMO.ESDSRRDS.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3408,8 +3408,8 @@
        "dsn": "AWS.M2.CARDDEMO.USRSEC.VSAM.RRDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3417,8 +3417,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3426,8 +3426,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3435,8 +3435,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3459,8 +3459,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3483,8 +3483,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3492,8 +3492,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3501,8 +3501,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3510,8 +3510,8 @@
        "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3519,8 +3519,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3528,8 +3528,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX.PATH",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3537,8 +3537,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3546,8 +3546,8 @@
        "dsn": "AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3579,8 +3579,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3588,8 +3588,8 @@
        "dsn": "AWS.M2.CARDEMO.FTP.TEST",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3597,8 +3597,8 @@
        "dsn": "AWS.M2.CARDEMO.FTP.TEST.BKUP",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3606,8 +3606,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3623,8 +3623,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3632,8 +3632,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3641,8 +3641,8 @@
        "dsn": "AWS.M2.CARDDEMO.JCL(INTRDRJ2)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3650,8 +3650,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3674,8 +3674,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3683,8 +3683,8 @@
        "dsn": "AWS.M2.CARDEMO.FTP.TEST.BKUP",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3692,8 +3692,8 @@
        "dsn": "AWS.M2.CARDEMO.FTP.TEST.BKUP.INTRDR",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3701,8 +3701,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3725,8 +3725,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3734,8 +3734,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3743,8 +3743,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -3767,8 +3767,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3776,8 +3776,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3785,8 +3785,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3794,8 +3794,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3803,8 +3803,8 @@
        "dsn": "AWS.M2.CARDDEMO.DALYTRAN.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3812,8 +3812,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3830,8 +3830,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3839,8 +3839,8 @@
        "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -3864,7 +3864,7 @@
        "disp": [
         "MOD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -3880,8 +3880,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3889,8 +3889,8 @@
        "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3907,8 +3907,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -3924,8 +3924,8 @@
        "dsn": "AWS.M2.CARDDEMO.TCATBALF.BKUP(+1)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -3933,8 +3933,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3942,8 +3942,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -3951,8 +3951,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4019,8 +4019,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4028,8 +4028,8 @@
        "dsn": "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4064,8 +4064,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4073,8 +4073,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4097,8 +4097,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4106,8 +4106,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4115,8 +4115,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4124,8 +4124,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4148,8 +4148,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4157,8 +4157,8 @@
        "dsn": "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4166,8 +4166,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4175,8 +4175,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4199,8 +4199,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4208,8 +4208,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4217,8 +4217,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4226,8 +4226,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4250,8 +4250,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4259,8 +4259,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4283,8 +4283,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4292,8 +4292,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4309,8 +4309,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4318,8 +4318,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4335,8 +4335,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4344,8 +4344,8 @@
        "dsn": "AWS.M2.CARDDEMO.TCATBALF.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4353,8 +4353,8 @@
        "dsn": "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS",
        "disp": [
         "OLD",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4362,8 +4362,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4386,8 +4386,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4395,8 +4395,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4413,8 +4413,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -4430,8 +4430,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4439,8 +4439,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4462,8 +4462,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4471,8 +4471,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4495,8 +4495,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4504,8 +4504,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4521,8 +4521,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4530,8 +4530,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4547,8 +4547,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4556,8 +4556,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANCATG.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4565,8 +4565,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANCATG.VSAM.KSDS",
        "disp": [
         "OLD",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4574,8 +4574,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4598,8 +4598,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4607,8 +4607,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4616,8 +4616,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4633,8 +4633,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4642,8 +4642,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4659,8 +4659,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4668,8 +4668,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4685,8 +4685,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4694,8 +4694,8 @@
        "dsn": "AWS.M2.CARDDEMO.DALYTRAN.PS.INIT",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4703,8 +4703,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4712,8 +4712,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4729,8 +4729,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4738,8 +4738,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4755,8 +4755,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4764,8 +4764,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4781,8 +4781,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4790,8 +4790,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4807,8 +4807,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4816,8 +4816,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4825,8 +4825,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4849,8 +4849,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4858,8 +4858,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4875,8 +4875,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4884,8 +4884,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4901,8 +4901,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4910,8 +4910,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -4934,8 +4934,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4943,8 +4943,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4961,8 +4961,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -4978,8 +4978,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(+1)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -4987,8 +4987,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -4996,8 +4996,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5005,8 +5005,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5031,8 +5031,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5040,8 +5040,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5049,8 +5049,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5058,8 +5058,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.DALY(+1)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5067,8 +5067,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5076,8 +5076,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANTYPE.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5085,8 +5085,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANCATG.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5094,8 +5094,8 @@
        "dsn": "AWS.M2.CARDDEMO.DATEPARM",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5127,8 +5127,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5136,8 +5136,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5153,8 +5153,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5162,8 +5162,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5179,8 +5179,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5188,8 +5188,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANTYPE.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5197,8 +5197,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANTYPE.VSAM.KSDS",
        "disp": [
         "OLD",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5206,8 +5206,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5236,8 +5236,8 @@
        "dsn": "AWS.M2.LBD.TXT2PDF.LOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5245,8 +5245,8 @@
        "dsn": "AWS.M2.LBD.TXT2PDF.EXEC",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5254,8 +5254,8 @@
        "dsn": "AWS.M2.CARDDEMO.STATEMNT.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5263,8 +5263,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5272,8 +5272,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5281,8 +5281,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5305,8 +5305,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5314,8 +5314,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5323,8 +5323,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5347,8 +5347,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5356,8 +5356,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5373,8 +5373,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5382,8 +5382,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5399,8 +5399,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5408,8 +5408,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.PS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5417,8 +5417,8 @@
        "dsn": "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5426,8 +5426,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5443,8 +5443,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5452,8 +5452,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5469,8 +5469,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5478,8 +5478,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5495,8 +5495,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5504,8 +5504,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5528,8 +5528,8 @@
        "dsn": "IGY.SIGYCOMP.V63",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5537,8 +5537,8 @@
        "dsn": "AWS.M2.CARDDEMO.CBL(BATCHPGM)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5546,8 +5546,8 @@
        "dsn": "AWS.M2.CARDDEMO.CPY",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5555,8 +5555,8 @@
        "dsn": "AWS.M2.CARDDEMO.LST(BATCHPGM)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5565,7 +5565,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "KEEP"
+        ""
        ]
       },
       {
@@ -5573,8 +5573,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5582,8 +5582,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5591,8 +5591,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5600,8 +5600,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5609,8 +5609,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5618,8 +5618,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5627,8 +5627,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5636,8 +5636,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5645,8 +5645,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5654,8 +5654,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5663,8 +5663,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5672,8 +5672,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5681,8 +5681,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5690,8 +5690,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5699,8 +5699,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5708,8 +5708,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5725,8 +5725,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5734,8 +5734,8 @@
        "dsn": "AWS.M2.CARDDEMO.LST(BATCHPGM)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5743,8 +5743,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5752,8 +5752,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5775,8 +5775,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5784,8 +5784,8 @@
        "dsn": "SYS1.LINKLIB",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5794,7 +5794,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -5802,8 +5802,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB(BATCHPGM)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5811,8 +5811,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5835,8 +5835,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5845,7 +5845,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -5853,8 +5853,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5862,8 +5862,8 @@
        "dsn": "AWS.M2.CARDDEMO.BMS(CICSMAP)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -5879,8 +5879,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5888,8 +5888,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHMAC",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5897,8 +5897,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5906,8 +5906,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5915,8 +5915,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5925,7 +5925,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -5934,7 +5934,7 @@
        "disp": [
         "OLD",
         "PASS",
-        "KEEP"
+        ""
        ]
       },
       {
@@ -5942,8 +5942,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -5959,8 +5959,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5968,8 +5968,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB(CICSMAP)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -5977,8 +5977,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -5987,7 +5987,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -6003,8 +6003,8 @@
        "dsn": "AWS.M2.CARDDEMO.LST(CICSMAP)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6012,8 +6012,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHMAC",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6021,8 +6021,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6030,8 +6030,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6039,8 +6039,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6048,8 +6048,8 @@
        "dsn": "AWS.M2.CARDDEMO.CPY(CICSMAP)",
        "disp": [
         "OLD",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6058,7 +6058,7 @@
        "disp": [
         "OLD",
         "PASS",
-        "KEEP"
+        ""
        ]
       },
       {
@@ -6066,8 +6066,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6083,8 +6083,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6092,8 +6092,8 @@
        "dsn": "AWS.M2.CARDDEMO.LST(CICSMAP)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6101,8 +6101,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6110,8 +6110,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6119,8 +6119,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6137,7 +6137,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -6153,8 +6153,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6162,8 +6162,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6171,8 +6171,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6195,8 +6195,8 @@
        "dsn": "IGY.SIGYCOMP.V63",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6204,8 +6204,8 @@
        "dsn": "AWS.M2.CARDDEMO.CPY",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6213,8 +6213,8 @@
        "dsn": "AWS.M2.CARDDEMO.LST(CICSPGMN)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6222,8 +6222,8 @@
        "dsn": "AWS.M2.CARDDEMO.CBL(CICSPGMN)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6232,7 +6232,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "KEEP"
+        ""
        ]
       },
       {
@@ -6240,8 +6240,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6249,8 +6249,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6258,8 +6258,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6267,8 +6267,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6276,8 +6276,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6285,8 +6285,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6294,8 +6294,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6303,8 +6303,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6312,8 +6312,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6321,8 +6321,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6330,8 +6330,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6339,8 +6339,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6348,8 +6348,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6357,8 +6357,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6366,8 +6366,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6375,8 +6375,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6392,8 +6392,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6401,8 +6401,8 @@
        "dsn": "AWS.M2.CARDDEMO.LST(CICSPGMN)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6410,8 +6410,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6419,8 +6419,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6428,8 +6428,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6445,8 +6445,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6454,8 +6454,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHSAMP(DFHEILID)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6464,7 +6464,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -6472,8 +6472,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6481,8 +6481,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6498,8 +6498,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6507,8 +6507,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHLOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6517,7 +6517,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -6525,8 +6525,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB(CICSPGMN)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6534,8 +6534,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6557,8 +6557,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6566,8 +6566,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6575,8 +6575,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6599,8 +6599,8 @@
        "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6608,8 +6608,8 @@
        "dsn": "AWS.M2.CARDDEMO.CBL(CICSDB2P)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6618,7 +6618,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -6626,8 +6626,8 @@
        "dsn": "AWS.M2.CARDDEMO.DBRMLIB(CICSDB2P)",
        "disp": [
         "OLD",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6635,8 +6635,8 @@
        "dsn": "AWS.M2.CARDDEMO.DCL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6644,8 +6644,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6653,8 +6653,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6662,8 +6662,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6671,8 +6671,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6680,8 +6680,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6703,8 +6703,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHLOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6713,7 +6713,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -6721,8 +6721,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6731,7 +6731,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -6753,8 +6753,8 @@
        "dsn": "IGY.SIGYCOMP.V63",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6762,8 +6762,8 @@
        "dsn": "AWS.M2.CARDDEMO.DCL",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6771,8 +6771,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6781,7 +6781,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -6790,7 +6790,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "KEEP"
+        ""
        ]
       },
       {
@@ -6798,8 +6798,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6807,8 +6807,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6816,8 +6816,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6825,8 +6825,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6834,8 +6834,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6843,8 +6843,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6852,8 +6852,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6861,8 +6861,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6870,8 +6870,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6879,8 +6879,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6888,8 +6888,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6897,8 +6897,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6906,8 +6906,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6915,8 +6915,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6924,8 +6924,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6933,8 +6933,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -6956,8 +6956,8 @@
        "dsn": "CEE.SCEELKEX",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6965,8 +6965,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -6974,8 +6974,8 @@
        "dsn": "OEM.CICSTS.V05R06M0.CICS.SDFHCOB(DFHEILIC)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6983,8 +6983,8 @@
        "dsn": "AWS.M2.CARDDEMO.LOADLIB(CICSDB2P)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -6992,8 +6992,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7001,8 +7001,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7024,8 +7024,8 @@
        "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7033,8 +7033,8 @@
        "dsn": "AWS.M2.CARDDEMO.DBRMLIB(CICSDB2P)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7042,8 +7042,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7051,8 +7051,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7060,8 +7060,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7069,8 +7069,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7092,8 +7092,8 @@
        "dsn": "OEM.DB2.DAZ1.SDSNEXIT",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7101,8 +7101,8 @@
        "dsn": "AWS.M2.CARDDEMO.DBRMLIB(CICSDB2P)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7110,8 +7110,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7119,8 +7119,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7128,8 +7128,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7137,8 +7137,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7146,8 +7146,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7170,8 +7170,8 @@
        "dsn": "CICSTS.CICS.SDFHLOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7179,8 +7179,8 @@
        "dsn": "AWS.M2.COBOL.SRC(IMSMQPGM)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7188,8 +7188,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7198,7 +7198,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -7220,8 +7220,8 @@
        "dsn": "IGY.SIGYCOMP.V63",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7229,8 +7229,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7239,7 +7239,7 @@
        "disp": [
         "MOD",
         "PASS",
-        "KEEP"
+        ""
        ]
       },
       {
@@ -7247,8 +7247,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7256,8 +7256,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7265,8 +7265,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7274,8 +7274,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7283,8 +7283,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7292,8 +7292,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7301,8 +7301,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7310,8 +7310,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7319,8 +7319,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7328,8 +7328,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7337,8 +7337,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7346,8 +7346,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7355,8 +7355,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7364,8 +7364,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7373,8 +7373,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7382,8 +7382,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7391,8 +7391,8 @@
        "dsn": "CEE.SCEESAMP",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7401,7 +7401,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       }
      ]
@@ -7423,8 +7423,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7432,8 +7432,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7442,7 +7442,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -7450,8 +7450,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7459,8 +7459,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7482,8 +7482,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7492,7 +7492,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -7500,8 +7500,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7509,8 +7509,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7532,8 +7532,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7542,7 +7542,7 @@
        "disp": [
         "NEW",
         "PASS",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -7550,8 +7550,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7559,8 +7559,8 @@
        "dsn": "DUMMY",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7582,8 +7582,8 @@
        "dsn": "MQ.SCSQLOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7591,8 +7591,8 @@
        "dsn": "MQ.SCSQLOAD",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7601,7 +7601,7 @@
        "disp": [
         "OLD",
         "DELETE",
-        "DELETE"
+        ""
        ]
       },
       {
@@ -7609,8 +7609,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7618,8 +7618,8 @@
        "dsn": "AWS.M2.CICSLOAD(IMSMQPGM)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7627,8 +7627,8 @@
        "dsn": "",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7683,8 +7683,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       }
      ]
@@ -7712,8 +7712,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7721,8 +7721,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7739,8 +7739,8 @@
        "dsn": "AWS.M2.CARDDEMO.CNTL(REPROCT)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       }
      ]
@@ -7763,8 +7763,8 @@
        "dsn": "AWS.M2.CARDDEMO.TRANSACT.BKUP(0)",
        "disp": [
         "SHR",
-        "KEEP",
-        "KEEP"
+        "",
+        ""
        ]
       },
       {
@@ -7772,8 +7772,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7781,8 +7781,8 @@
        "dsn": "*",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {
@@ -7790,8 +7790,8 @@
        "dsn": "SYSOUT",
        "disp": [
         "NEW",
-        "DELETE",
-        "DELETE"
+        "",
+        ""
        ]
       },
       {

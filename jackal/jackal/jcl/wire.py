@@ -23,20 +23,13 @@ from jackal.model import (
     NoDSN,
     NotCoded,
     NullifiedDSN,
+    Omitted,
     StepRef,
     TempRef,
 )
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from jackal import model, value_parts
-
-_PREEXISTING_STATUSES = frozenset({DispStatus.OLD, DispStatus.SHR, DispStatus.MOD})
-
-
-def _default_abnormal(status: DispStatus, normal: DispNormal) -> DispAbnormal:
-    if normal is DispNormal.PASS:
-        return DispAbnormal.DELETE if status is DispStatus.NEW else DispAbnormal.KEEP
-    return DispAbnormal(normal.value)
 
 
 def disp_from_words(words: tuple[str, ...]) -> Disp:
@@ -45,11 +38,8 @@ def disp_from_words(words: tuple[str, ...]) -> Disp:
         return words[i] if i < len(words) else ""
 
     status = DispStatus(slot(0)) if slot(0) else DispStatus.NEW
-    default_normal = (
-        DispNormal.KEEP if status in _PREEXISTING_STATUSES else DispNormal.DELETE
-    )
-    normal = DispNormal(slot(1)) if slot(1) else default_normal
-    abnormal = DispAbnormal(slot(2)) if slot(2) else _default_abnormal(status, normal)
+    normal = DispNormal(slot(1)) if slot(1) else Omitted()
+    abnormal = DispAbnormal(slot(2)) if slot(2) else Omitted()
     return Disp(status, normal, abnormal)
 
 

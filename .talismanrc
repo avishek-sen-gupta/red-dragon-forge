@@ -578,7 +578,7 @@ fileignoreconfig:
 - filename: jackal/tests/integration/test_temp_datasets.py
   checksum: f8b6b279daa9f465639fac91a9b2b6b92cb77772b0fc725b6868b48c4034a8bb
 - filename: jackal/jackal/catalog.py
-  checksum: 6e2cc619bb86a50a30651485842a9ba13e2e59b8aa44c1f412b73c53a8c37180
+  checksum: a2c1cf21447fb76262026f731c92090108c34cf28c3949b822ff60a5e6632d43
 - filename: jackal/jackal/cond.py
   checksum: 39ca68c8b30147a6ee5bfa81295bf00e022e396960b1e013654f8e9700543e4f
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-units3-4-model-and-expansion.md
@@ -596,7 +596,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_results.py
   checksum: 8e326a7a22b0a8bf9b2230448e5d6f968373ebbf19717944c4f9493e303305e3
 - filename: jackal/tests/unit/test_runner.py
-  checksum: a4ecbd62bbc55d4a4e1be61bd6af5aa09589c6ae6259d1a8754cd82511b393dd
+  checksum: 36182466f6b47d001e8225d60c452b88a975384ea02862da04cf0e7f988f516b
 - filename: jackal/tests/integration/test_jcl_execute_e2e.py
   checksum: 268ece0d315e530fb9cffc49b8d297bf2dfd7cd0aee0c1c614fc843cc7574825
 - filename: jackal/tests/integration/test_cond_e2e.py
@@ -611,4 +611,8 @@ fileignoreconfig:
   checksum: 8401818bbb504819c34d721932d8bf286e85405fac32983e1bf4f79eed5cec96
 - filename: jackal/jackal/system_catalog.py
   checksum: 01acf2aac3d86481d4725749c1992aae8890989dbea2230a03a6b2337ea02127
+- filename: jackal/tests/unit/test_jcl_parser.py
+  checksum: af18c929ccef7956db1a21dbdc7c6f997722f5d4572242cc8f98ad2207d38eb6
+- filename: docs/records/design/2026-10-11-jackal-dataset-decisions.md
+  checksum: ece97e916b576037d45af880fb3774729d86500c565015c32282fb645f592156
 version: "1.0"

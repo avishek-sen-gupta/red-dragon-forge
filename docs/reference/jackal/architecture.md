@@ -119,7 +119,11 @@ holds the bytes. Data enters only through `jackal catalog add`, which copies the
 its label; no Forge runtime accepts an unlabelled dataset. Labels are stored and checked; I/O
 does not read them yet (8in). `jackal.catalog.DatasetCatalog` is one job's view of it, adding
 the job's temps, passed datasets and a scratch directory. Dispositions follow SMS: `CATLG` and
-`KEEP` leave a dataset cataloged and `UNCATLG` does nothing.
+`KEEP` leave a dataset cataloged and `UNCATLG` does nothing. An omitted normal or abnormal
+disposition is kept as omitted by the parser and defaulted at allocation, once the catalog
+knows whether it found the dataset or created it (`DELETE` if created, `KEEP` if found), as
+the JCL Reference's DISP defaults say. The decisions and their IBM sources are in
+[the 2026-10-11 decision record](../../records/design/2026-10-11-jackal-dataset-decisions.md).
 
 | DD form | Behaviour |
 |---|---|
