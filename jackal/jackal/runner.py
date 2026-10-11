@@ -12,24 +12,22 @@ from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import run_cobol_step
 from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
+from jackal.missing_data import MissingDataStrategy
 from jackal.model import (
     DD,
     DSN,
     Always,
     BackwardRef,
-    DdName,
-    DirectDSN,
     Job,
     ProgramStep,
     QualifiedStep,
     RcComparison,
+    ResolvedDd,
     StepReference,
-    TempRef,
     UnexpandedCall,
 )
 from jackal.results import (
-    Bypassed,
-    BypassReason,
+    AllocationFailed,
     Completed,
     JobResult,
     SkippedUnresolved,
@@ -38,11 +36,8 @@ from jackal.results import (
 )
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
-from jackal.value_parts import literal
 
-Recorded = Mapping[DdName, DSN[StepReference]]
 Entry = QualifiedStep | UnexpandedCall
-_REFERENCED_STEP_NOT_RUN = Bypassed(BypassReason.REFERENCED_STEP_NOT_RUN)
 
 
 class UnsupportedStep(Exception):
@@ -52,49 +47,23 @@ class UnsupportedStep(Exception):
 @dataclass(frozen=True)
 class _History:
     results: tuple[StepResult, ...]
-    datasets: Mapping[StepReference, Recorded]
 
     def recorded(self, entry: Entry, outcome: StepOutcome) -> _History:
-        return _History((*self.results, StepResult(entry, outcome)), self.datasets)
-
-    def ran(self, step: QualifiedStep, rc: int, recorded: Recorded) -> _History:
-        result = StepResult(step, Completed(rc))
-        datasets = {**self.datasets, step.reference(): recorded}
-        return _History((*self.results, result), datasets)
+        return _History((*self.results, StepResult(entry, outcome)))
 
 
-def _recorded_dsn(dsn: DSN[StepReference]) -> DSN[StepReference]:
+def _copied(dsn: DSN[StepReference]) -> DSN[StepReference]:
     match dsn:
-        case TempRef(name=name):
-            return DirectDSN(literal(name))
+        case BackwardRef(dd=ResolvedDd(dd=referenced)):
+            return _copied(referenced.dsn)
         case _:
             return dsn
 
 
-def _recorded(step: ProgramStep[StepReference]) -> Recorded:
-    return {dd.ddname: _recorded_dsn(dd.dsn) for dd in step.dds}
-
-
-def _referenced(step: ProgramStep[StepReference]) -> tuple[StepReference, ...]:
-    return tuple(dd.dsn.step for dd in step.dds if isinstance(dd.dsn, BackwardRef))
-
-
-def _resolved_dsn(
-    dsn: DSN[StepReference], datasets: Mapping[StepReference, Recorded]
-) -> DSN[StepReference]:
-    match dsn:
-        case BackwardRef(step=step, dd=dd):
-            return datasets[step][dd.ddname()]
-        case _:
-            return dsn
-
-
-def _resolved_dd(
-    dd: DD[StepReference], datasets: Mapping[StepReference, Recorded]
-) -> DD[StepReference]:
+def _resolved_dd(dd: DD[StepReference]) -> DD[StepReference]:
     return DD(
         dd.ddname,
-        _resolved_dsn(dd.dsn, datasets),
+        _copied(dd.dsn),
         dd.disp,
         dd.in_stream,
         dd.sysout,
@@ -135,6 +104,7 @@ class JobRunner:
         data_dir: Path,
         copybook_dir: Path,
         unresolved: UnresolvedReferenceStrategy,
+        missing_data: MissingDataStrategy,
         proclib_dirs: Sequence[Path] = (),
     ):
         self._source_dir = source_dir
@@ -142,6 +112,7 @@ class JobRunner:
         self._data_dir = data_dir
         self._copybook_dir = copybook_dir
         self._unresolved = unresolved
+        self._missing_data = missing_data
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
     def run(self, job: Job, workdir: Path, seeds: Mapping[str, Path]) -> JobResult:
@@ -158,7 +129,7 @@ class JobRunner:
                     catalog, expanded.end_job_tests, done, entry
                 ),
                 expanded.steps,
-                _History((), {}),
+                _History(()),
             )
         finally:
             catalog.cleanup_temps()
@@ -211,20 +182,21 @@ class JobRunner:
         qualified: QualifiedStep,
         step: ProgramStep[StepReference],
     ) -> _History:
-        if any(s not in history.datasets for s in _referenced(step)):
-            return history.recorded(qualified, _REFERENCED_STEP_NOT_RUN)
         resolved = ProgramStep(
             step.label,
             step.pgm,
-            tuple(_resolved_dd(dd, history.datasets) for dd in step.dds),
+            tuple(_resolved_dd(dd) for dd in step.dds),
             step.cond,
             step.parm,
             step.guard,
         )
-        env = allocate(qualified, resolved, catalog)
-        rc = self._run_program(resolved, env, catalog)
-        dispose(resolved, env, catalog)
-        return history.ran(qualified, rc, _recorded(resolved))
+        match allocate(qualified, resolved, catalog, self._missing_data):
+            case AllocationFailed() as failure:
+                return history.recorded(qualified, failure)
+            case DdEnvironment() as env:
+                rc = self._run_program(resolved, env, catalog)
+                dispose(resolved, env, catalog)
+                return history.recorded(qualified, Completed(rc))
 
     def _run_program(
         self,

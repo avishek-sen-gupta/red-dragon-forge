@@ -1010,7 +1010,6 @@ type ProgramResult = Completed | Abended | Halted
 class BypassReason(Enum):
     COND_SATISFIED = "COND_SATISFIED"
     ONLY_WITHOUT_ABEND = "ONLY_WITHOUT_ABEND"
-    REFERENCED_STEP_NOT_RUN = "REFERENCED_STEP_NOT_RUN"
 
 @dataclass(frozen=True)
 class Bypassed:
@@ -1092,9 +1091,8 @@ class JobResult:
 - `JobOutcome` is derived by a pure function over `steps`: the first `Abended`, `AllocationFailed`
   or `Halted` decides it, else `JobCompleted(max rc over Completed)`. `SkippedUnresolved` never
   decides it, and later bypass tests skip it as they skip a step that did not run.
-- `REFERENCED_STEP_NOT_RUN` is interim and jackal-only: a referback to a step that did not run is
-  an allocation failure on z/OS, recorded as `Bypassed` until the lifecycle allocates DDs
-  (`lrk`) and `AllocationFailed` replaces it (`red-dragon-forge-552`).
+- A referback to a step that did not run is not a bypass reason: the name is copied and
+  allocated, and fails as `AllocationFailed` if the dataset does not exist (`red-dragon-forge-552`).
 - The outcomes arrive with the issues that produce them: `5fu` brings `Completed`, `Bypassed`,
   `Flushed(AfterJobCond)`, `SkippedUnresolved` and `JobCompleted`; abends (`jackal-1o2.19`),
   allocation failures (`552`, `8u3`) and halts (`xkk`, `w0e`) bring the rest.
@@ -1301,6 +1299,12 @@ Planning (which request a DD makes) is pure; materialising it goes through `Data
 
 If any DD fails, the DDs already allocated in that step are released, `NEW` ones deleted, and
 the step's outcome is `AllocationFailed`. The program does not run.
+
+That is `StrictAllocation`, one of two `MissingDataStrategy` implementations injected into the
+runner, separate from D7's `UnresolvedReferenceStrategy`: D7 is about missing code, this about
+missing data. `LenientAllocation` is jackal's own: it allocates an empty dataset in place of
+one not found or never created, overwrites on a duplicate name, logs a warning, and runs the
+step, so a job can be run without all of its input data. The CLI uses it.
 
 ### 9.3 Disposition
 

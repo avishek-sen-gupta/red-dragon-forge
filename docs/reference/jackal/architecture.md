@@ -44,24 +44,36 @@ cicada or squall; `.importlinter` enforces this.
      step that did not run. An `UnexpandedCall`, and a step with an unresolved referback, are
      recorded as `SkippedUnresolved`; later `COND` tests skip them as they skip a bypassed step.
 
+   The runner is also given a `MissingDataStrategy` (`jackal.missing_data`) for a DD the
+   catalog cannot allocate: a dataset not found, a temporary dataset no earlier step created,
+   or a `NEW` dataset whose name already exists in the job.
+   - `StrictAllocation` fails the step, as z/OS does: the program does not run, and the step's
+     outcome is `AllocationFailed(ddname, error)`.
+   - `LenientAllocation` allocates an empty dataset in its place (overwriting, for a duplicate
+     name), logs a warning, and runs the step. The CLI uses it.
+
    For each step:
    - These are refused with `UnsupportedStep` until each is supported: a step under an IF
      (guards are parsed and attached but not yet evaluated) and a concatenated DD.
    - Each step ends with one outcome (`jackal.results`): `Completed(rc)`, `Bypassed(reason)`,
-     `Flushed(cause)` or `SkippedUnresolved`. `JobResult.outcome` is `JobCompleted` with the
-     highest return code among completed steps.
+     `Flushed(cause)`, `SkippedUnresolved` or `AllocationFailed(ddname, error)`.
+     `JobResult.outcome` is `JobAllocationFailed(step, failure)` for the first step whose
+     allocation failed, else `JobCompleted` with the highest return code among completed steps.
+     Steps after a failed allocation still run until red-dragon-forge-8u3 flushes them.
    - `jackal.cond.gate` decides whether a step runs, reading only completed steps' return codes.
      Once a JOB card's `COND` test is met, this step and every later one are
      `Flushed(AfterJobCond(step))`, naming the step that met it. Otherwise a true test of the
      step's own `COND` is `Bypassed(COND_SATISFIED)`. jackal records no abends, so `COND=EVEN`
      reads as no `EVEN` and a `COND=ONLY` step is `Bypassed(ONLY_WITHOUT_ABEND)`.
-   - Referbacks (`DSN=*.STEP.DD`) are resolved to the DSN recorded for that earlier step. If
-     the referenced step did not run, the referencing step is `Bypassed(REFERENCED_STEP_NOT_RUN)`,
-     a jackal-only reason that `AllocationFailed` replaces (red-dragon-forge-552).
-   - The runner allocates every DD before the program starts (`jackal.allocation`): a dataset
-     through the catalog, `DD *` cards written out as 80-byte EBCDIC records, `DUMMY` and
+   - Referbacks (`DSN=*.STEP.DD`) copy the DSN written on the referenced DD, whether or not
+     that step ran, as z/OS does. The copied name is then allocated like any other: a dataset
+     the referenced step never made is `DATASET_NOT_FOUND` or `TEMP_NOT_CREATED`.
+   - The runner allocates every DD before the program starts (`jackal.allocation`), in order: a
+     dataset through the catalog, `DD *` cards written out as 80-byte EBCDIC records, `DUMMY` and
      `SYSOUT` as empty sinks. STEPLIB and JOBLIB are skipped: jackal finds programs as source,
-     not in load libraries. The program receives the allocations as a `DdEnvironment`.
+     not in load libraries. The program receives the allocations as a `DdEnvironment`. If a
+     DD fails under `StrictAllocation`, the step's in-stream and sink files are released and the
+     `NEW` datasets it had already created are deleted.
    - The step is dispatched. A program in the utility table runs the emulated utility.
      Any other program is read as `<source-dir>/<PGM>.cbl` and run as COBOL.
    - A dataset allocated `DISP=MOD` is positioned at its end: a COBOL `OPEN OUTPUT` on it

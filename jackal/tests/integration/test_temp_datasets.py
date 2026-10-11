@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
-from jackal.model import DD, StepRef, TempRef
-from jackal.results import Completed
-from jackal.runner import JobRunner
+from pathlib import Path
+
+from jackal.missing_data import (
+    LenientAllocation,
+    MissingDataStrategy,
+    StrictAllocation,
+)
+from jackal.model import (
+    DD,
+    CondOp,
+    DdName,
+    IfBlock,
+    RcTest,
+    StepName,
+    StepRef,
+    TempRef,
+)
+from jackal.results import AllocationError, AllocationFailed, Completed
+from jackal.runner import JobRunner, UnsupportedStep
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
-from tests.model_build import dd, disp, job, program
+from tests.model_build import dd, disp, job, program, ref
 
 
 def _pass_dd(name: str) -> DD[StepRef]:
@@ -22,9 +38,16 @@ def _old_delete_dd(name: str) -> DD[StepRef]:
     return dd("WRK", TempRef(name), disp("OLD", "DELETE", "DELETE"))
 
 
-def _runner(tmp_path):
+def _dir(root: Path, name: str) -> Path:
+    path = root / name
+    path.mkdir(exist_ok=True)
+    return path
+
+
+def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
     return JobRunner(
         unresolved=RaiseErrorStrategy(),
+        missing_data=missing_data,
         source_dir=tmp_path,
         bridge_jar="unused",
         data_dir=tmp_path,
@@ -64,34 +87,43 @@ def test_three_step_pass_chain(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_missing_temp_raises(tmp_path):
-    """Referencing an unallocated &&GHOST with OLD raises KeyError."""
-    import pytest
-
+def test_a_temp_never_created_fails_its_step_or_is_substituted_when_lenient(
+    tmp_path,
+):
+    """&&GHOST with OLD and no earlier NEW: TEMP_NOT_CREATED, or an empty temp."""
     j = job(
         "J",
         (program("S1", "IEFBR14", (_old_delete_dd("GHOST"),)),),
     )
-    with pytest.raises(KeyError):
-        _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
+    strict = _runner(tmp_path / "strict", StrictAllocation())
+    lenient = _runner(tmp_path / "lenient", LenientAllocation())
+    assert (
+        strict.run(j, workdir=_dir(tmp_path, "strict"), seeds={}).steps[0].outcome,
+        lenient.run(j, workdir=_dir(tmp_path, "lenient"), seeds={}).steps[0].outcome,
+    ) == (
+        AllocationFailed(DdName("WRK"), AllocationError.TEMP_NOT_CREATED),
+        Completed(0),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cleanup_runs_after_step_exception(tmp_path):
-    """Temp allocated in step 1 is cleaned up even when step 2 raises KeyError."""
+    """Temp allocated in step 1 is cleaned up even when step 2 is refused."""
     import pytest
 
     j = job(
         "J",
         (
             program("S1", "IEFBR14", (_pass_dd("KEPT"),)),
-            program("S2", "IEFBR14", (_old_delete_dd("GHOST"),)),
+            IfBlock(
+                StepName("C1"),
+                RcTest(ref("S1"), CondOp.EQ, 0),
+                (program("S2", "IEFBR14"),),
+            ),
         ),
     )
-    with pytest.raises(KeyError):
+    with pytest.raises(UnsupportedStep):
         _runner(tmp_path).run(j, workdir=tmp_path, seeds={})
-    # &&KEPT was allocated by step 1 but never deleted — cleanup_temps() must
-    # have run (via try/finally in runner) to remove it
     assert not (tmp_path / "KEPT").exists()
 
 

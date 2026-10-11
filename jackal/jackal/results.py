@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
-from jackal.model import QualifiedStep, UnexpandedCall
+from jackal.model import DdName, QualifiedStep, UnexpandedCall
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,6 @@ class Completed:
 class BypassReason(Enum):
     COND_SATISFIED = "COND_SATISFIED"
     ONLY_WITHOUT_ABEND = "ONLY_WITHOUT_ABEND"
-    REFERENCED_STEP_NOT_RUN = "REFERENCED_STEP_NOT_RUN"
 
 
 @dataclass(frozen=True)
@@ -62,7 +61,27 @@ class SkippedUnresolved:
         return "skipped (unresolved reference)"
 
 
-StepOutcome: TypeAlias = Completed | Bypassed | Flushed | SkippedUnresolved
+class AllocationError(Enum):
+    DATASET_NOT_FOUND = "DATASET_NOT_FOUND"
+    DUPLICATE_NAME = "DUPLICATE_NAME"
+    TEMP_NOT_CREATED = "TEMP_NOT_CREATED"
+
+
+@dataclass(frozen=True)
+class AllocationFailed:
+    ddname: DdName
+    error: AllocationError
+
+    def rcs(self) -> tuple[int, ...]:
+        return ()
+
+    def rendered(self) -> str:
+        return f"allocation failed (DD {self.ddname.text}: {self.error.value})"
+
+
+StepOutcome: TypeAlias = (
+    Completed | Bypassed | Flushed | SkippedUnresolved | AllocationFailed
+)
 
 
 @dataclass(frozen=True)
@@ -79,13 +98,38 @@ class StepResult:
 class JobCompleted:
     max_rc: int
 
+    def succeeded(self) -> bool:
+        return self.max_rc == 0
+
+
+@dataclass(frozen=True)
+class JobAllocationFailed:
+    step: QualifiedStep | UnexpandedCall
+    failure: AllocationFailed
+
+    def succeeded(self) -> bool:
+        return False
+
+
+JobOutcome: TypeAlias = JobCompleted | JobAllocationFailed
+
+
+def _allocation_failure(result: StepResult) -> tuple[JobAllocationFailed, ...]:
+    match result.outcome:
+        case AllocationFailed():
+            return (JobAllocationFailed(result.step, result.outcome),)
+        case _:
+            return ()
+
 
 @dataclass(frozen=True)
 class JobResult:
     steps: tuple[StepResult, ...]
 
     @property
-    def outcome(self) -> JobCompleted:
-        return JobCompleted(
+    def outcome(self) -> JobOutcome:
+        completed = JobCompleted(
             max((rc for s in self.steps for rc in s.outcome.rcs()), default=0)
         )
+        failures = (f for s in self.steps for f in _allocation_failure(s))
+        return next(failures, completed)

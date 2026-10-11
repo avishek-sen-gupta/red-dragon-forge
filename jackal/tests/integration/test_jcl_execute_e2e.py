@@ -11,7 +11,15 @@ from pathlib import Path
 
 import pytest
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
-from jackal.results import Bypassed, BypassReason, Completed
+from jackal.missing_data import StrictAllocation
+from jackal.model import DdName
+from jackal.results import (
+    AllocationError,
+    AllocationFailed,
+    Bypassed,
+    BypassReason,
+    Completed,
+)
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
@@ -47,6 +55,7 @@ def _parse(jcl: str, jcl_bridge_jar: str):
 def _runner(src: Path, bridge_jar: str, tmp_path: Path) -> JobRunner:
     return JobRunner(
         unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
         source_dir=src,
         bridge_jar=bridge_jar,
         data_dir=tmp_path,
@@ -123,10 +132,10 @@ def test_backward_ref_resolves_via_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_j
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_backward_ref_bypass_propagation_via_jcl_bridge(
+def test_backward_ref_to_a_bypassed_step_fails_allocation_via_jcl_bridge(
     tmp_path, bridge_jar, jcl_bridge_jar
 ):
-    """When step 1 is bypassed, step 2 referencing *.STEP1.WRK is also bypassed."""
+    """When step 1 is bypassed, *.STEP1.WRK names a dataset step 1 never made."""
     jcl = (
         "//J JOB 1\n"
         "//STEP0 EXEC PGM=IEFBR14\n"
@@ -144,5 +153,5 @@ def test_backward_ref_bypass_propagation_via_jcl_bridge(
     assert (step0.outcome, step1.outcome, step2.outcome) == (
         Completed(0),
         Bypassed(BypassReason.COND_SATISFIED),
-        Bypassed(BypassReason.REFERENCED_STEP_NOT_RUN),
+        AllocationFailed(DdName("INPUT"), AllocationError.DATASET_NOT_FOUND),
     )

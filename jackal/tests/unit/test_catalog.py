@@ -1,5 +1,5 @@
 import pytest
-from jackal.catalog import DatasetCatalog, DatasetSpec
+from jackal.catalog import DatasetCatalog, DatasetSpec, Unallocated
 from jackal.model import (
     DD,
     DatasetOrg,
@@ -9,6 +9,7 @@ from jackal.model import (
     DispStatus,
     TempRef,
 )
+from jackal.results import AllocationError
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 
@@ -47,13 +48,6 @@ def test_pass_retains_delete_removes(tmp_path):
     drop = cat.allocate(_dd("J.B", DispStatus.NEW, DispNormal.DELETE))
     cat.dispose(_dd("J.B", DispStatus.NEW, DispNormal.DELETE))
     assert not drop.path.exists()
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_shr_on_unknown_dsn_raises(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    with pytest.raises(KeyError):
-        cat.allocate(_dd("J.MISSING", DispStatus.SHR))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -181,13 +175,6 @@ def test_temp_old_resolves_same_dataset(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_temp_old_unregistered_raises(tmp_path):
-    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
-    with pytest.raises(KeyError):
-        cat.allocate(_temp_dd("GHOST", DispStatus.OLD))
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_temp_dispose_delete_removes_file(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
@@ -223,11 +210,35 @@ def test_cleanup_temps_noop_when_all_deleted(tmp_path):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_temp_new_duplicate_alias_raises(tmp_path):
+def test_a_dd_the_catalog_cannot_allocate_comes_back_with_the_reason(tmp_path):
     cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    cat.allocate(_dd("J.HAVE", DispStatus.NEW, DispNormal.CATLG))
     cat.allocate(_temp_dd("TEMP", DispStatus.NEW))
-    with pytest.raises(ValueError, match="&&TEMP"):
-        cat.allocate(_temp_dd("TEMP", DispStatus.NEW))
+    missing = _dd("J.MISSING", DispStatus.SHR)
+    ghost = _temp_dd("GHOST", DispStatus.OLD)
+    duplicate = _dd("J.HAVE", DispStatus.NEW)
+    duplicate_temp = _temp_dd("TEMP", DispStatus.NEW)
+    assert [cat.allocate(d) for d in (missing, ghost, duplicate, duplicate_temp)] == [
+        Unallocated(missing, AllocationError.DATASET_NOT_FOUND),
+        Unallocated(ghost, AllocationError.TEMP_NOT_CREATED),
+        Unallocated(duplicate, AllocationError.DUPLICATE_NAME),
+        Unallocated(duplicate_temp, AllocationError.DUPLICATE_NAME),
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_unallocated_dd_can_be_given_an_empty_dataset_in_its_place(tmp_path):
+    cat = DatasetCatalog(workdir=tmp_path, data_dir=tmp_path)
+    (tmp_path / "J_HAVE").write_bytes(b"OLD")
+    cat.seed("J.HAVE", tmp_path / "J_HAVE")
+    temp = cat.created_empty(_temp_dd("GHOST", DispStatus.OLD))
+    direct = cat.created_empty(_dd("J.HAVE", DispStatus.NEW))
+    assert (
+        temp.path.read_bytes(),
+        cat.allocate(_temp_dd("GHOST", DispStatus.OLD)),
+        direct.path.read_bytes(),
+        cat.resolve("J.HAVE"),
+    ) == (b"", temp, b"", direct)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

@@ -5,9 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from tests.covers import covers, NotLanguageFeature
-
 from jackal.cli import main, run
+from tests.covers import NotLanguageFeature, covers
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -60,8 +59,8 @@ def test_cli_console_script_entry(tmp_path, capsys, monkeypatch):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
-    from jackal.runner import JobRunner
     from jackal.results import JobResult
+    from jackal.runner import JobRunner
 
     captured: dict = {}
 
@@ -87,3 +86,22 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
     )
     assert rc == 0
     assert not captured["workdir"].exists()  # removed after main returns
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cli_runs_a_step_whose_input_dataset_is_missing(tmp_path, capsys):
+    jcl = tmp_path / "j.jcl"
+    jcl.write_text("//J JOB 1\n//A EXEC PGM=IEFBR14\n//D DD DSN=NO.SUCH,DISP=SHR\n")
+    rc = run(
+        [
+            "run",
+            str(jcl),
+            "--source-dir",
+            str(tmp_path),
+            "--data-dir",
+            str(tmp_path),
+            "--copybook-dir",
+            str(tmp_path),
+        ]
+    )
+    assert (rc, capsys.readouterr().out) == (0, "A: RC=0\n")

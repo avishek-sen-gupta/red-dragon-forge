@@ -18,6 +18,7 @@ from jackal.model import (
     StepReference,
     TempRef,
 )
+from jackal.results import AllocationError
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,12 @@ class Dataset:
     key_offset: int = 0
     key_length: int = 0
     record_size: int = 0
+
+
+@dataclass(frozen=True)
+class Unallocated:
+    dd: DD[StepReference]
+    error: AllocationError
 
 
 _ORG_MAP: dict[DatasetOrg, FileOrganization] = {
@@ -72,14 +79,22 @@ class DatasetCatalog:
     def resolve(self, dsn: str) -> Dataset:
         return self._datasets.get(dsn)
 
-    def allocate(self, dd: DD[StepReference]) -> Dataset:
+    def allocate(self, dd: DD[StepReference]) -> Dataset | Unallocated:
         match dd.dsn:
             case TempRef(name=name):
-                return self._allocate_temp(name, dd.disposition().status)
+                return self._allocate_temp(dd, name)
             case _:
-                return self._allocate_direct(
-                    dd.dsn.dataset_name(), dd.disposition().status
-                )
+                return self._allocate_direct(dd, dd.dsn.dataset_name())
+
+    def created_empty(self, dd: DD[StepReference]) -> Dataset:
+        match dd.dsn:
+            case TempRef(name=name):
+                return self._temps.put(name, self._created(name, self._workdir / name))
+            case _:
+                return self._created_direct(dd.dsn.dataset_name())
+
+    def _created_direct(self, name: str) -> Dataset:
+        return self._created(name, self._work_path(name))
 
     def _work_path(self, name: str) -> Path:
         return self._workdir / name.replace(".", "_")
@@ -88,33 +103,46 @@ class DatasetCatalog:
         path.write_bytes(b"")
         return self._datasets.put(dsn, Dataset(dsn=dsn, path=path))
 
-    def _allocate_temp(self, name: str, status: DispStatus) -> Dataset:
-        if status is DispStatus.NEW:
-            return self._new_temp(name)
+    def _allocate_temp(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
+        if dd.disposition().status is DispStatus.NEW:
+            return self._new_temp(dd, name)
+        if not self._temps.has(name):
+            return Unallocated(dd, AllocationError.TEMP_NOT_CREATED)
         return self._datasets.get(self._temps.get(name).dsn)
 
-    def _new_temp(self, name: str) -> Dataset:
+    def _new_temp(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
         if self._temps.has(name):
-            raise ValueError(f"TempRef already allocated: &&{name}")
-        return self._temps.put(name, self._created(name, self._workdir / name))
+            return Unallocated(dd, AllocationError.DUPLICATE_NAME)
+        return self.created_empty(dd)
 
-    def _allocate_direct(self, name: str, status: DispStatus) -> Dataset:
-        if status is DispStatus.NEW:
-            return self._created(name, self._work_path(name))
-        return self._existing(name, status)
+    def _allocate_direct(
+        self, dd: DD[StepReference], name: str
+    ) -> Dataset | Unallocated:
+        if dd.disposition().status is DispStatus.NEW:
+            return self._new_direct(dd, name)
+        return self._existing(dd, name)
 
-    def _existing(self, name: str, status: DispStatus) -> Dataset:
+    def _new_direct(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
+        if self._datasets.has(name):
+            return Unallocated(dd, AllocationError.DUPLICATE_NAME)
+        return self.created_empty(dd)
+
+    def _existing(self, dd: DD[StepReference], name: str) -> Dataset | Unallocated:
         if self._datasets.has(name):
             return self._datasets.get(name)
         candidate = self._data_dir / name
         if candidate.exists():
             return self._datasets.put(name, Dataset(dsn=name, path=candidate))
-        return self._missing(name, status)
+        return self._missing(dd)
 
-    def _missing(self, name: str, status: DispStatus) -> Dataset:
-        if status is DispStatus.MOD:
-            return self._created(name, self._work_path(name))
-        raise KeyError(name)
+    def _missing(self, dd: DD[StepReference]) -> Dataset | Unallocated:
+        if dd.disposition().status is DispStatus.MOD:
+            return self.created_empty(dd)
+        return Unallocated(dd, AllocationError.DATASET_NOT_FOUND)
+
+    def delete_if_new(self, dd: DD[StepReference]) -> None:
+        if dd.disposition().status is DispStatus.NEW:
+            self._delete(dd.dsn)
 
     def allocate_new(self, spec: DatasetSpec) -> Dataset:
         if self._datasets.has(spec.dsn):

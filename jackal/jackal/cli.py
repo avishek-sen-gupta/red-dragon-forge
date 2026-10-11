@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from jackal.jcl.parser import parse_jcl
+from jackal.missing_data import LenientAllocation
 from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
@@ -53,6 +54,7 @@ def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
         data_dir=_resolve_dir(args.data_dir, "app/data/EBCDIC", "--data-dir", ap),
         copybook_dir=_resolve_dir(args.copybook_dir, "app/cpy", "--copybook-dir", ap),
         unresolved=RaiseErrorStrategy(),
+        missing_data=LenientAllocation(),
     )
 
 
@@ -60,7 +62,7 @@ def _report(result: JobResult) -> int:
     sys.stdout.write(
         "".join(f"{s.name}: {s.outcome.rendered()}\n" for s in result.steps)
     )
-    return 0 if result.outcome.max_rc == 0 else 1
+    return 0 if result.outcome.succeeded() else 1
 
 
 def run(argv: Sequence[str]) -> int:

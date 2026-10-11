@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import TypeAlias
 
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from jackal.catalog import Dataset, DatasetCatalog
+from jackal.catalog import Dataset, DatasetCatalog, Unallocated
+from jackal.missing_data import MissingDataStrategy
 from jackal.model import (
     DD,
     DdName,
@@ -21,6 +22,7 @@ from jackal.model import (
     QualifiedStep,
     StepReference,
 )
+from jackal.results import AllocationFailed
 
 LOAD_LIBRARIES: frozenset[DdName] = frozenset({DdName("STEPLIB"), DdName("JOBLIB")})
 
@@ -97,6 +99,9 @@ class DdEnvironment:
             case other:
                 raise TypeError(f"DD {ddname.text} is {type(other).__name__}")
 
+    def added(self, ddname: DdName, allocation: Allocation) -> DdEnvironment:
+        return DdEnvironment((*self.entries, (ddname, allocation)))
+
     def paths(self) -> Mapping[str, Path]:
         return {name.text: allocation.path() for name, allocation in self.entries}
 
@@ -121,49 +126,99 @@ def _cards(lines: tuple[str, ...]) -> bytes:
     return bytes(EbcdicTable.ascii_to_ebcdic(text.encode("ascii")))
 
 
-def _allocated(
-    qualified: QualifiedStep, dd: DD[StepReference], catalog: DatasetCatalog
-) -> Allocation:
-    match dd.dsn:
-        case InStreamDSN():
-            sink = catalog.workdir / _sink(qualified, dd, "instream")
-            return InStreamAllocation(
-                dd.in_stream, _written(sink, _cards(dd.in_stream))
-            )
-        case DummyDSN():
-            return DummyAllocation(
-                _written(catalog.workdir / _sink(qualified, dd, "dummy"), b"")
-            )
-        case _:
-            return _named(qualified, dd, catalog)
-
-
 def _positioning(dd: DD[StepReference]) -> Positioning:
     if dd.disposition().status is DispStatus.MOD:
         return Positioning.END
     return Positioning.START
 
 
-def _named(
-    qualified: QualifiedStep, dd: DD[StepReference], catalog: DatasetCatalog
-) -> Allocation:
-    if dd.sysout and isinstance(dd.dsn, NoDSN):
-        return SysoutAllocation(
-            _written(catalog.workdir / _sink(qualified, dd, "sysout"), b"")
-        )
-    return DatasetAllocation(catalog.allocate(dd), _positioning(dd))
+def _placed(
+    dd: DD[StepReference], settled: Dataset | AllocationFailed
+) -> Allocation | AllocationFailed:
+    match settled:
+        case AllocationFailed():
+            return settled
+        case Dataset():
+            return DatasetAllocation(settled, _positioning(dd))
+
+
+@dataclass(frozen=True)
+class _Allocator:
+    qualified: QualifiedStep
+    catalog: DatasetCatalog
+    missing_data: MissingDataStrategy
+
+    def remaining(
+        self,
+        dds: tuple[DD[StepReference], ...],
+        done: tuple[DD[StepReference], ...],
+        env: DdEnvironment,
+    ) -> DdEnvironment | AllocationFailed:
+        if not dds:
+            return env
+        return self._then(dds, done, env, self._allocated(dds[0]))
+
+    def _then(
+        self,
+        dds: tuple[DD[StepReference], ...],
+        done: tuple[DD[StepReference], ...],
+        env: DdEnvironment,
+        attempt: Allocation | AllocationFailed,
+    ) -> DdEnvironment | AllocationFailed:
+        match attempt:
+            case AllocationFailed():
+                _undo(done, env, self.catalog)
+                return attempt
+            case _:
+                return self.remaining(
+                    dds[1:], (*done, dds[0]), env.added(dds[0].ddname, attempt)
+                )
+
+    def _allocated(self, dd: DD[StepReference]) -> Allocation | AllocationFailed:
+        match dd.dsn:
+            case InStreamDSN():
+                cards = _written(self._sink(dd, "instream"), _cards(dd.in_stream))
+                return InStreamAllocation(dd.in_stream, cards)
+            case DummyDSN():
+                return DummyAllocation(_written(self._sink(dd, "dummy"), b""))
+            case _:
+                return self._named(dd)
+
+    def _sink(self, dd: DD[StepReference], kind: str) -> Path:
+        return self.catalog.workdir / _sink(self.qualified, dd, kind)
+
+    def _named(self, dd: DD[StepReference]) -> Allocation | AllocationFailed:
+        if dd.sysout and isinstance(dd.dsn, NoDSN):
+            return SysoutAllocation(_written(self._sink(dd, "sysout"), b""))
+        return self._dataset(dd)
+
+    def _dataset(self, dd: DD[StepReference]) -> Allocation | AllocationFailed:
+        found = self.catalog.allocate(dd)
+        match found:
+            case Unallocated():
+                settled = self.missing_data.settle(self.qualified, found, self.catalog)
+                return _placed(dd, settled)
+            case Dataset():
+                return DatasetAllocation(found, _positioning(dd))
 
 
 def allocate(
-    qualified: QualifiedStep, step: ProgramStep[StepReference], catalog: DatasetCatalog
-) -> DdEnvironment:
-    return DdEnvironment(
-        tuple(
-            (dd.ddname, _allocated(qualified, dd, catalog))
-            for dd in step.dds
-            if dd.ddname not in LOAD_LIBRARIES
-        )
-    )
+    qualified: QualifiedStep,
+    step: ProgramStep[StepReference],
+    catalog: DatasetCatalog,
+    missing_data: MissingDataStrategy,
+) -> DdEnvironment | AllocationFailed:
+    dds = tuple(dd for dd in step.dds if dd.ddname not in LOAD_LIBRARIES)
+    allocator = _Allocator(qualified, catalog, missing_data)
+    return allocator.remaining(dds, (), DdEnvironment(()))
+
+
+def _undo(
+    done: tuple[DD[StepReference], ...], env: DdEnvironment, catalog: DatasetCatalog
+) -> None:
+    for dd in done:
+        catalog.delete_if_new(dd)
+    _release_all(env)
 
 
 def _released(allocation: Allocation) -> None:

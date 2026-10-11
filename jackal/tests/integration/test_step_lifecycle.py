@@ -3,10 +3,10 @@
 from pathlib import Path
 
 import pytest
-
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.catalog import DatasetCatalog
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
+from jackal.missing_data import StrictAllocation
 from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
@@ -49,6 +49,7 @@ def test_a_cobol_step_reads_in_stream_cards_and_a_dummy_input(
         data_dir=tmp_path,
         copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
     )
     result = runner.run_job(job, catalog)
     assert (
@@ -87,6 +88,7 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
         data_dir=tmp_path,
         copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
+        missing_data=StrictAllocation(),
     )
     result = runner.run_job(job, catalog)
     assert (
