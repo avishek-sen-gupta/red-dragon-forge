@@ -277,3 +277,22 @@ def test_real_jar_parses_a_null_symbolic_override_on_exec(jcl_bridge_jar):
         (SymbolName("A"), ()),
         (SymbolName("C"), literal("789")),
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_gives_a_nested_procedure_the_symbols_of_the_one_enclosing_it(
+    jcl_bridge_jar, tmp_path
+):
+    """JCL Ref p. 48, rule 5: a symbol a nested procedure does not assign takes its
+    value from the procedure it is nested in. C=789 on the outer call reaches P2."""
+    from jackal.expansion import expand_or_fail
+
+    (tmp_path / "P1.prc").write_text("//P1 PROC C=GHI\n//PS EXEC P2,A=ABC\n// PEND\n")
+    (tmp_path / "P2.prc").write_text(
+        "//P2 PROC\n//S EXEC PGM=A\n//D DD DSN=&A..&C,DISP=SHR\n// PEND\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(
+        "//J JOB 1\n//J1 EXEC P1,C=789\n"
+    )
+    expanded = expand_or_fail(job, DirectoryProcLibrary((tmp_path,)))
+    assert expanded.steps[0].step.dds[0].dsn == DirectDSN(literal("ABC.789"))

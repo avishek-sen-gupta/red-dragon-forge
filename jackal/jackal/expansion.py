@@ -247,9 +247,10 @@ class _Scope:
     stack: tuple[ProcRef, ...]
     overrides: _Overrides | _NoOverrides
     library: ProcLibrary
+    nested: Mapping[SymbolName, Value]
 
     def visible(self) -> Mapping[SymbolName, Value]:
-        return {**self.set_symbols, **self.symbols}
+        return {**self.nested, **self.set_symbols, **self.symbols}
 
 
 @dataclass(frozen=True)
@@ -421,11 +422,12 @@ def _inline(
         (*scope.coordinates, ResolvedProcCall(call, ResolvedProc(proc))),
         (*scope.runs, position),
         {**dict(proc.defaults), **dict(resolved_call.symbol_overrides)},
-        scope.set_symbols,
+        {},
         scope.guards,
         (*scope.stack, call.proc),
         _Overrides(scope.overrides.called(resolved_call), flat[0][0] if flat else ()),
         scope.library,
+        scope.visible(),
     )
     return _place_all(proc.steps, inner, ()).placed
 
@@ -743,7 +745,7 @@ def _resolved_entries(placed: tuple[_Placed, ...]) -> tuple[Entry, ...]:
 
 
 def expand_or_fail(job: Job, library: ProcLibrary) -> ExpandedJob:
-    scope = _Scope((), (), {}, {}, (), (), _NoOverrides(), library)
+    scope = _Scope((), (), {}, {}, (), (), _NoOverrides(), library, {})
     placed = _place_all(job.steps, scope, ()).placed
     return ExpandedJob(job.name, _resolved_entries(placed), job.end_job_tests)
 
