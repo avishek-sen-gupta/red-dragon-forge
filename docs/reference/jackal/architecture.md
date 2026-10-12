@@ -161,6 +161,7 @@ the JCL Reference's DISP defaults say. The decisions and their IBM sources are i
 | `DISP=(…,DELETE)` | The dataset and its file are removed when the step ends. |
 | `DISP=(…,PASS)` | Handed to later steps; a later DD naming it receives it, and its own disposition then applies. One the job created and never received is deleted at job end. |
 | IDCAMS `DEFINE CLUSTER` | Catalogs a KSDS with the label its `RECORDSIZE` and `KEYS` give. |
+| IDCAMS `DEFINE GENERATIONDATAGROUP` | Catalogs a GDG base: its `LIMIT`, `EMPTY`/`NOEMPTY` (default `NOEMPTY`), `SCRATCH`/`NOSCRATCH` (default `NOSCRATCH`) and its active generations, none yet. A name already cataloged, as a dataset or a GDG, ends the command with condition code 12 ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |
 
 Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`;
 the catalog's one in-place table is `jackal.catalog_stores`.
@@ -174,12 +175,13 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 | `IEFBR14` | Does nothing; the runner's allocation and disposition do its work. Return code 0. |
 | `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label; an input whose label is still pending ends that `REPRO` with condition code 12 and the next command runs. Return code is the final MAXCC. |
 
-The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`, `REPRO`,
-`IF MAXCC … THEN` and `SET MAXCC`. The parser it uses (`jackal.idcams.parser`) is a Lark
-grammar, `jackal/jackal/idcams/grammar.lark`. A second, broader Lark grammar,
+The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`,
+`DEFINE GENERATIONDATAGROUP` (`DEF GDG`), `REPRO`, `IF MAXCC … THEN` and `SET MAXCC`. The
+parser it uses (`jackal.idcams.parser`) is a Lark grammar, `jackal/jackal/idcams/grammar.lark`,
+which grows one production per command the executor runs. A second, broader Lark grammar,
 `jackal/jackal/idcams/grammar/ams.lark`, parses all IDCAMS commands into typed ASTs
 (`jackal.idcams.parser_comprehensive` and the `ast_*.py` modules). The executor does not use
-it; see `red-dragon-forge-vqa` in the roadmap. The IDCAMS command reference is
+it. The IDCAMS command reference is
 [idcams-ref.pdf](idcams-ref.pdf).
 
 ## The JCL bridge JAR

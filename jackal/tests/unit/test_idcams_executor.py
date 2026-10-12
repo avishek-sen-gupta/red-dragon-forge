@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
-from jackal.idcams.commands import DefineCluster, Delete, IfMaxcc, Repro, SetMaxcc
+from jackal.gdg import Empty, GdgBase, Scratch
+from jackal.idcams.commands import (
+    DefineCluster,
+    DefineGdg,
+    Delete,
+    IfMaxcc,
+    Repro,
+    SetMaxcc,
+)
+from jackal.system_catalog import NotCataloged
 from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
     DD,
@@ -328,3 +337,35 @@ def test_repro_reads_a_variable_input_record_by_record_at_each_record_length(
     loaded = (drv.read_key(b"AAA").data, drv.read_key(b"BBB").data)
     drv.close()
     assert (copied, loaded[0][:4], loaded[1][:7]) == (0, b"AAA1", b"BBB2xyz")
+
+
+def _gdg(name: str, limit: int, extended: bool = False) -> DefineGdg:
+    return DefineGdg(name, limit, Empty.NOEMPTY, Scratch.SCRATCH, extended)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_define_gdg_catalogs_an_empty_base_once_within_its_limit(tmp_path):
+    """AMS ch. 15: the base is cataloged with no generations and survives the job;
+    a duplicate name (as GDG or cluster) or a LIMIT outside 1-255 (1-999 with
+    EXTENDED) ends the command with condition code 12."""
+    from jackal.idcams.executor import run_idcams
+
+    cat = job_catalog(tmp_path)
+    rcs = tuple(
+        run_idcams((cmd,), DdEnvironment(()), cat)
+        for cmd in (
+            _gdg("A.GDG", 5),
+            _gdg("A.GDG", 5),
+            DefineCluster(name="A.GDG", key_length=1, key_offset=0, record_size=8),
+            _gdg("B.GDG", 0),
+            _gdg("B.GDG", 256),
+            _gdg("B.GDG", 999, extended=True),
+            _gdg("C.GDG", 1000, extended=True),
+        )
+    )
+    assert rcs == (0, 12, 12, 12, 12, 0, 12)
+    later = job_catalog(tmp_path)
+    assert (later.gdg("A.GDG"), later.gdg("C.GDG")) == (
+        GdgBase("A.GDG", 5, Empty.NOEMPTY, Scratch.SCRATCH, ()),
+        NotCataloged(),
+    )

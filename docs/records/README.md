@@ -16,6 +16,7 @@ Dated design records and analyses. Frozen: never edited after they are written.
 - 2026-10-12 — [jackal: Variable-Length Records on Disk — Decision Record](design/2026-10-12-jackal-variable-records.md)
 - 2026-10-12 — [jackal: IF/THEN/ELSE/ENDIF Execution — Decision Record](design/2026-10-12-jackal-if-then-else.md)
 - 2026-10-12 — [jackal: DD Concatenation — Decision Record](design/2026-10-12-jackal-concatenation.md)
+- 2026-10-12 — [jackal: Generation Data Groups — Decision Record](design/2026-10-12-jackal-gdg.md)
 
 ## Analysis
 

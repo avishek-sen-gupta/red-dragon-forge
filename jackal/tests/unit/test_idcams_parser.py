@@ -6,7 +6,15 @@ import pytest
 import lark.exceptions
 
 from jackal.idcams.parser import parse_idcams
-from jackal.idcams.commands import Delete, DefineCluster, Repro, IfMaxcc, SetMaxcc
+from jackal.idcams.commands import (
+    DefineCluster,
+    DefineGdg,
+    Delete,
+    IfMaxcc,
+    Repro,
+    SetMaxcc,
+)
+from jackal.gdg import Empty, Scratch
 from tests.covers import covers, NotLanguageFeature
 
 
@@ -88,12 +96,8 @@ def test_parse_if_maxcc_defaults_test_field_to_maxcc():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_lastcc_line_with_trailing_whitespace():
-    """A hand-written LASTCC line matching the shape DEFGDGB.jcl uses
-    (bare '=', trailing padding). This is NOT a real-file test -- the
-    surrounding DEFINE GENERATIONDATAGROUP verb in that real file isn't
-    supported by this (minimal, execution-wired) grammar, so DEFGDGB's
-    actual SYSIN block cannot be parsed end-to-end here at all. This only
-    pins the isolated LASTCC-line grammar."""
+    """A LASTCC line in the shape DEFGDGB.jcl uses (bare '=', trailing
+    padding), pinned in isolation."""
     cmds = parse_idcams(
         "   IF LASTCC=12 THEN SET MAXCC=0                                            \n"
     )
@@ -129,3 +133,41 @@ def test_parse_real_carddemo_delete_set_idiom():
     cmds = parse_idcams(text)
     assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS")
     assert cmds[1] == SetMaxcc(value=0)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_define_generation_data_group_in_full_and_abbreviated():
+    """AMS ch. 15: DEFINE GENERATIONDATAGROUP, or DEF GDG with LIM/EMP/NSCR.
+    NOEMPTY and NOSCRATCH are the defaults; OWNER, LIFO, PURGE and CATALOG
+    are accepted and not modelled."""
+    full = parse_idcams(
+        "   DEFINE GENERATIONDATAGROUP -\n"
+        "   (NAME(AWS.M2.CARDDEMO.TRANSACT.BKUP) -\n"
+        "    LIMIT(5) -\n"
+        "    SCRATCH -\n"
+        "   )\n"
+        "   IF LASTCC=12 THEN SET MAXCC=0\n"
+    )
+    short = parse_idcams(
+        " DEF GDG (NAME(A.B.HIST) LIM(255) EMP NSCR OWNER(OPS) LIFO PURGE EXT)"
+        " CAT(UCAT.ONE)\n"
+    )
+    assert full == (
+        DefineGdg(
+            name="AWS.M2.CARDDEMO.TRANSACT.BKUP",
+            limit=5,
+            empty=Empty.NOEMPTY,
+            scratch=Scratch.SCRATCH,
+            extended=False,
+        ),
+        IfMaxcc(op="EQ", value=12, set_value=0, test_field="LASTCC"),
+    )
+    assert short == (
+        DefineGdg(
+            name="A.B.HIST",
+            limit=255,
+            empty=Empty.EMPTY,
+            scratch=Scratch.NOSCRATCH,
+            extended=True,
+        ),
+    )
