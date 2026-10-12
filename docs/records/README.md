@@ -22,6 +22,7 @@ Dated design records and analyses. Frozen: never edited after they are written.
 - 2026-10-12 — [jackal: TSO Monitor Steps that Run a Db2 Program — Decision Record](design/2026-10-12-jackal-tso-run-program.md)
 - 2026-10-12 — [jackal: A COBOL User Abend through CEE3ABD — Decision Record](design/2026-10-12-jackal-user-abend.md)
 - 2026-10-12 — [jackal: Invalid Packed-Decimal Data Is Not Detected — Decision Record](design/2026-10-12-jackal-invalid-packed-decimal.md)
+- 2026-10-12 — [jackal: In-Stream Procedures — Decision Record](design/2026-10-12-jackal-in-stream-procs.md)
 
 ## Analysis
 
