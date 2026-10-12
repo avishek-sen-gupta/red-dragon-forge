@@ -107,12 +107,12 @@ def test_a_temp_never_created_fails_its_step_or_is_substituted_when_lenient(
     )
 
 
-def _unsupported_idcams() -> tuple[DD[StepRef], ...]:
+def _unparseable_idcams() -> tuple[DD[StepRef], ...]:
     sysin = DD(
         DdName("SYSIN"),
         InStreamDSN(),
         NotCoded(),
-        in_stream=(" LISTCAT ENTRIES(A.B.C)",),
+        in_stream=(" )THIS IS NOT IDCAMS(",),
     )
     return (sysin,)
 
@@ -127,7 +127,7 @@ def test_cleanup_runs_after_step_exception(tmp_path):
         "J",
         (
             program("S1", "IEFBR14", (_pass_dd("KEPT"),)),
-            program("S2", "IDCAMS", _unsupported_idcams()),
+            program("S2", "IDCAMS", _unparseable_idcams()),
         ),
     )
     with pytest.raises(UnexpectedInput):

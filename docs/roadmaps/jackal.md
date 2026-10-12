@@ -47,7 +47,7 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | IEFBR14 | — | supported |
 | IDCAMS `DELETE`, `DEFINE CLUSTER`, `DEFINE GDG`, `REPRO` (DUMMY, concatenations) | — | supported |
 | IDCAMS `VERIFY` and the modal commands (`IF`/`THEN`/`ELSE`, `DO…END`, `SET`, `CANCEL`) | `red-dragon-forge-vqa` | supported |
-| IDCAMS: execute through the comprehensive parser and retire the narrow grammar | `red-dragon-forge-tsw` | not started; a command outside the narrow grammar ends the run |
+| IDCAMS: one grammar (ams.lark) for every command; commands jackal does not run end with 12 | `red-dragon-forge-tsw`, `red-dragon-forge-rqw` | supported |
 | IDCAMS: bare `DELETE`, standalone `SET`, GDG define, alternate-index toolchain | `jackal-1o2.6` | partial: bare `DELETE`, GDG define and `SET` supported; alternate indexes (`DELETE … ALTERNATEINDEX`, `DEFINE AIX`, `BLDINDEX`, `PATH`) not started |
 | SORT subset and IEBGENER | `jackal-1o2.3` | not started |
 | IEBCOPY | `jackal-1o2.18` | not started |

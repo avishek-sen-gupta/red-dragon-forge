@@ -1,11 +1,10 @@
-"""Tests for IDCAMS control-language parser."""
+"""Tests for the IDCAMS parser over ams.lark: text -> the commands the executor runs."""
 
 from __future__ import annotations
 
-import lark.exceptions
-import pytest
 from jackal.gdg import Empty, GdgOrder, Scratch
 from jackal.idcams.commands import (
+    Cancel,
     Cc,
     CcOp,
     Condition,
@@ -13,26 +12,45 @@ from jackal.idcams.commands import (
     DefineGdg,
     Delete,
     If,
+    NotExecuted,
     Repro,
     SetCc,
+    Verb,
+    Verify,
+    VerifyDataset,
+    VerifyFile,
 )
 from jackal.idcams.parser import parse_idcams
 from tests.covers import NotLanguageFeature, covers
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_delete_and_if():
+def test_parse_delete_in_its_forms():
+    """AMS ch. 20: DELETE (or DEL) one entry or a parenthesised list, with an
+    optional entry type (CLUSTER, CL, AIX, NONVSAM ...) and PURGE (PRG). A
+    record ends the command unless a hyphen continues it."""
     cmds = parse_idcams(
-        "   DELETE A.B.KSDS -\n          CLUSTER\n"
-        "   IF MAXCC LE 08 THEN SET MAXCC = 0\n"
+        "   DELETE A.B.KSDS -\n"
+        "          CLUSTER\n"
+        " DELETE                  AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS\n"
+        "  DEL (A.ONE A.TWO) CL PRG\n"
+        "  DELETE A.B.AIX ALTERNATEINDEX\n"
     )
-    assert cmds[0] == Delete(dsn="A.B.KSDS")
-    assert cmds[1] == If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ())
+    assert cmds == (
+        Delete(("A.B.KSDS",), purge=False),
+        Delete(("AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS",), purge=False),
+        Delete(("A.ONE", "A.TWO"), purge=True),
+        Delete(("A.B.AIX",), purge=False),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_define_cluster():
-    text = (
+def test_parse_define_cluster_reads_its_key_and_record_size_and_drops_storage():
+    """AMS ch. 14: NAME, KEYS and RECORDSIZE (RECSZ) define the KSDS, at the
+    cluster level or in DATA(...); commas are separators (p. xxiv); space,
+    VOLUMES, CISZ, FREESPACE, SHAREOPTIONS, REUSE and the like are storage
+    attributes jackal drops."""
+    cmds = parse_idcams(
         "   DEFINE CLUSTER (NAME(A.B.KSDS) -\n"
         "          KEYS(11 0) -\n"
         "          RECORDSIZE(300 300) -\n"
@@ -40,101 +58,69 @@ def test_parse_define_cluster():
         "          ) -\n"
         "          DATA (NAME(A.B.KSDS.DATA)) -\n"
         "          INDEX (NAME(A.B.KSDS.INDEX))\n"
+        " DEF CL (NAME(A.USRSEC) KEYS(8,0) RECSZ(80,80) REUSE IXD -\n"
+        "         TRK(45,15) FSPC(10,15) CISZ(8192) SHR(2 3) VOL(V1))\n"
+        " DEFINE CLUSTER (NAME(A.TRXFL) INDEXED CYL(1 5)) -\n"
+        "        DATA (NAME(A.TRXFL.DATA) KEYS(32 0) RECORDSIZE(350 350) -\n"
+        "              CISZ(4096))\n"
     )
-    d = parse_idcams(text)[0]
-    assert d == DefineCluster(
-        name="A.B.KSDS", key_length=11, key_offset=0, record_size=300
+    assert cmds == (
+        DefineCluster(name="A.B.KSDS", key_length=11, key_offset=0, record_size=300),
+        DefineCluster(name="A.USRSEC", key_length=8, key_offset=0, record_size=80),
+        DefineCluster(name="A.TRXFL", key_length=32, key_offset=0, record_size=350),
     )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_repro():
-    assert parse_idcams("   REPRO INFILE(ACCTDATA) OUTFILE(ACCTVSAM)\n")[0] == Repro(
-        infile_dd="ACCTDATA", outfile_dd="ACCTVSAM"
-    )
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_unsupported_verb_raises():
-    """Unsupported IDCAMS verbs must fail loud, not silently return empty."""
-    with pytest.raises(lark.exceptions.LarkError):
-        parse_idcams("   LISTCAT ENTRIES(A.B.C)\n")
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_delete_without_cluster_trailer():
-    """Real IDCAMS treats CLUSTER as optional (the default entry type) --
-    e.g. DUSRSECJ.jcl / ESDSRRDS.jcl in the CardDemo corpus delete VSAM
-    entries with no trailing type keyword at all."""
-    cmds = parse_idcams("   DELETE AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS\n")
-    assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS")
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_standalone_set_maxcc():
-    """A bare SET MAXCC = n (not wrapped in IF...THEN) is a common
-    idempotency idiom: DELETE x then unconditionally reset MAXCC so a
-    missing dataset doesn't fail the step."""
-    cmds = parse_idcams("   SET MAXCC = 0\n")
-    assert cmds[0] == SetCc(Cc.MAXCC, 0)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_if_lastcc_bare_equals():
-    """Real DEFGDGB.jcl idiom: IF LASTCC=n (bare '=', not the EQ keyword)
-    tests the immediately-preceding command's own rc, not the running
-    MAXCC."""
-    cmds = parse_idcams("   IF LASTCC=12 THEN SET MAXCC=0\n")
-    assert cmds[0] == If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 0),), ())
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_if_maxcc_defaults_test_field_to_maxcc():
-    """Existing IF MAXCC form must still default test_field to MAXCC --
-    backward compatible with every already-parsed real job."""
-    cmds = parse_idcams("   IF MAXCC LE 08 THEN SET MAXCC = 0\n")
-    assert cmds[0] == If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ())
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_lastcc_line_with_trailing_whitespace():
-    """A LASTCC line in the shape DEFGDGB.jcl uses (bare '=', trailing
-    padding), pinned in isolation."""
+def test_a_command_jackal_does_not_run_parses_as_not_executed():
+    """Record O5: a command jackal does not execute, or one coding a parameter
+    that changes what it does and that jackal does not model, is NotExecuted
+    rather than a parse failure or a silently partial run."""
     cmds = parse_idcams(
-        "   IF LASTCC=12 THEN SET MAXCC=0                                            \n"
+        "   LISTCAT ENTRIES(A.B.C)\n"
+        "   DEFINE ALTERNATEINDEX (NAME(A.AIX) RELATE(A.KSDS) KEYS(8 0))\n"
+        "   REPRO INFILE(IN) OUTFILE(OUT) COUNT(10)\n"
+        "   DEFINE CLUSTER (NAME(A.ESDS) RECORDSIZE(80 80) NONINDEXED)\n"
+        "   DEFINE CLUSTER (NAME(A.COPY) MODEL(A.KSDS))\n"
+        "   DELETE A.B.HIST GENERATIONDATAGROUP\n"
     )
-    assert cmds[0] == If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 0),), ())
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_delete_cluster_purge_trailer():
-    """Real CBEXPORT.jcl idiom: DELETE dsn CLUSTER PURGE -- forces deletion
-    even if the entry's retention period (TO/FOR) hasn't expired."""
-    cmds = parse_idcams("  DELETE AWS.M2.CARDDEMO.EXPORT.DATA CLUSTER PURGE\n")
-    assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.EXPORT.DATA", purge=True)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_delete_without_purge_defaults_false():
-    cmds = parse_idcams("   DELETE A.B.KSDS CLUSTER\n")
-    assert cmds[0] == Delete(dsn="A.B.KSDS", purge=False)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_parse_real_carddemo_delete_set_idiom():
-    """Exact opening of ESDSRRDS.jcl's IDCAMS SYSIN: bare DELETE followed
-    by a standalone SET MAXCC -- two back-to-back top-level statements.
-    (The real file's third statement, DEFINE CLUSTER with comma-separated
-    RECORDSIZE(80,80)/KEYS args, is a separate, already-tracked grammar
-    gap -- comma-separated DEFINE params aren't modeled yet -- and is out
-    of scope for this fix.)"""
-    text = (
-        " DELETE                  AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS\n"
-        " SET       MAXCC = 0\n"
+    assert cmds == (
+        NotExecuted(Verb.LISTCAT),
+        NotExecuted(Verb.DEFINE_ALTERNATEINDEX),
+        NotExecuted(Verb.REPRO),
+        NotExecuted(Verb.DEFINE_CLUSTER),
+        NotExecuted(Verb.DEFINE_CLUSTER),
+        NotExecuted(Verb.DELETE),
     )
-    cmds = parse_idcams(text)
-    assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS")
-    assert cmds[1] == SetCc(Cc.MAXCC, 0)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_repro_by_ddname():
+    """AMS ch. 30: INFILE (IFILE) and OUTFILE (OFILE), in either order."""
+    assert parse_idcams(
+        "   REPRO INFILE(ACCTDATA) OUTFILE(ACCTVSAM)\n   REPRO OFILE(B) IFILE(A)\n"
+    ) == (
+        Repro(infile_dd="ACCTDATA", outfile_dd="ACCTVSAM"),
+        Repro(infile_dd="A", outfile_dd="B"),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_separators_comments_and_continuations():
+    """AMS pp. xxiv and xxvii: blanks, commas and /* */ comments separate; a
+    semicolon ends the command and the rest of its record is a comment; a plus
+    sign continues both the command and a value within it, the next record's
+    first nonseparator character continuing the value."""
+    assert parse_idcams(
+        "   DELETE AWS.M2.CARD+\n"
+        "       DEMO.KSDS\n"
+        "   SET /* comment */ MAXCC=0; ignored garbage $$$ !!!\n"
+        "   CANCEL\n"
+    ) == (
+        Delete(("AWS.M2.CARDDEMO.KSDS",), purge=False),
+        SetCc(Cc.MAXCC, 0),
+        Cancel(),
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -148,7 +134,7 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
         "    LIMIT(5) -\n"
         "    SCRATCH -\n"
         "   )\n"
-        "   IF LASTCC=12 THEN SET MAXCC=0\n"
+        "   IF LASTCC=12 THEN SET MAXCC=0                                   \n"
     )
     short = parse_idcams(
         " DEF GDG (NAME(A.B.HIST) LIM(255) EMP NSCR OWNER(OPS) FIFO PURGE EXT)"
@@ -179,21 +165,10 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_verify_and_modal_blocks_by_record():
-    """AMS ch. 2 and 34: VFY/VERIFY FILE or DATASET; THEN DO ... END; a THEN or
-    ELSE ending its record is null; each ELSE takes the nearest unmatched THEN;
-    SET LASTCC; CANCEL."""
-    from jackal.idcams.commands import (
-        Cancel,
-        Cc,
-        CcOp,
-        Condition,
-        If,
-        SetCc,
-        Verify,
-        VerifyDataset,
-        VerifyFile,
-    )
-
+    """AMS ch. 2 and 34: VFY/VERIFY FILE or DATASET; IF LASTCC/MAXCC with each
+    operator spelling; THEN DO ... END; a THEN or ELSE ending its record is
+    null; each ELSE takes the nearest unmatched THEN; SET MAXCC/LASTCC with =
+    or EQ; CANCEL."""
     cmds = parse_idcams(
         "  VFY FILE(ACCTKSDS)\n"
         "  IF LASTCC=12 THEN DO\n"
@@ -211,6 +186,7 @@ def test_parse_verify_and_modal_blocks_by_record():
         "    THEN IF LASTCC < 12 -\n"
         "      THEN DELETE C.D\n"
         "      ELSE DELETE E.F\n"
+        "  IF MAXCC LE 08 THEN SET MAXCC EQ 0\n"
     )
     assert cmds == (
         Verify(VerifyFile("ACCTKSDS")),
@@ -221,7 +197,7 @@ def test_parse_verify_and_modal_blocks_by_record():
         ),
         If(
             Condition(Cc.MAXCC, CcOp.GT, 4),
-            (If(Condition(Cc.LASTCC, CcOp.LT, 12), (Delete("A.B"),), ()),),
+            (If(Condition(Cc.LASTCC, CcOp.LT, 12), (Delete(("A.B",), False),), ()),),
             (SetCc(Cc.LASTCC, 20),),
         ),
         If(Condition(Cc.LASTCC, CcOp.EQ, 0), (), (Cancel(),)),
@@ -230,10 +206,11 @@ def test_parse_verify_and_modal_blocks_by_record():
             (
                 If(
                     Condition(Cc.LASTCC, CcOp.LT, 12),
-                    (Delete("C.D"),),
-                    (Delete("E.F"),),
+                    (Delete(("C.D",), False),),
+                    (Delete(("E.F",), False),),
                 ),
             ),
             (),
         ),
+        If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )

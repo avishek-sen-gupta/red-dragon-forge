@@ -108,7 +108,7 @@ fileignoreconfig:
 - filename: jackal/jackal/jcl/bridge_parser.py
   checksum: d0dd164ee8152bca2fff7a5aaa4746460d27f8cc505cc9c35842bcfd346c7a3c
 - filename: jackal/tests/unit/test_idcams_parser.py
-  checksum: 9cbfd4ea0c9f7342ae550466d60b15a518c7d76fae3cee29b084398432b13210
+  checksum: 647ee48976472dbb8e818f3cb1c9d12bf7b5c9ae55fa4b61a16a3925329082d2
 - filename: jackal/docs/superpowers/specs/2026-07-08-idcams-comprehensive-grammar-design.md
   checksum: f7e42ba1922031ab4bca18355346e3a3ca89234523d3bc27e4edc0b7903ee276
 - filename: jackal/docs/superpowers/plans/2026-07-08-idcams-comprehensive-grammar.md
@@ -134,7 +134,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_idcams_modal.py
   checksum: 6697ff6181a1ae8ee037b4e21a3d2cabfc6338c2e602768e6cd1ad2649098404
 - filename: jackal/jackal/idcams/grammar/ams.lark
-  checksum: 125e18de4aec5e1d96a0b499d41d9726ab85729c3afcc863a02bc1310f7f537e
+  checksum: 572deced932b0f54454f72fc03c7722635012488bed0a689f970cd2df5a87b67
 - filename: jackal/tests/integration/test_idcams_comprehensive_carddemo_e2e.py
   checksum: 31dc998645f1a3ff4236e242697643868de7b14c23d3cb461b06bbc76f19ab20
 - filename: jackal/tests/unit/test_idcams_define_cluster.py
@@ -154,7 +154,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_idcams_executor.py
   checksum: ea98461dc40a890ed143bcf91c2a812c9b5ad9175e96a0814adbdff843c9c826
 - filename: jackal/jackal/idcams/parser.py
-  checksum: d53b8d9d56bb6f3187320105911bdeaf2c2fa116fafc2f2ad189c2061bd1ea6f
+  checksum: 54bceafdba5ae748d0ea3314983692e58797cb5112f2f8e833d6a384296dffeb
 - filename: jackal/docs/analysis/2026-07-09-carddemo-job-executability.md
   checksum: c2850ccc1efc6df63fd3181abd2f3e23130f4628152ec90a7894153c2c015e6a
 - filename: docs/superpowers/plans/2026-07-09-graph-analysis-core-decoupling.md

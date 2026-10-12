@@ -188,7 +188,7 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 |---|---|
 | `IEFBR14` | Does nothing; the runner's allocation and disposition do its work. Return code 0. |
 | `IKJEFT01`, `IKJEFT1A`, `IKJEFT1B` | The TSO monitor. Each `RUN PROGRAM(p)` in SYSTSIN's DSN session runs `p` as the step's program, with the step's DDs; its EXEC SQL is served by the runner's injected coprocessors (`PLAN` is not used). The step's code is the highest program code. A program abend ends the session: 12 under IKJEFT01, S04C under IKJEFT1A/1B. A monitor step with no RUN keeps the missing-program path ([decision record](../../records/design/2026-10-12-jackal-tso-run-program.md)). |
-| `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label, a concatenated input member after member; an input (or member) whose label is still pending, or an output that is also an input, ends that `REPRO` with condition code 12 and the next command runs; a DUMMY input is an immediate end of file (the output is left empty) and a DUMMY output discards the records. Return code is the final MAXCC. |
+| `IDCAMS` | Parses the in-stream `SYSIN`, each record between columns 2 and 72, and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label, a concatenated input member after member; an input (or member) whose label is still pending, or an output that is also an input, ends that `REPRO` with condition code 12 and the next command runs; a DUMMY input is an immediate end of file (the output is left empty) and a DUMMY output discards the records. Return code is the final MAXCC. |
 
 The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`,
 `DEFINE GENERATIONDATAGROUP` (`DEF GDG`), `REPRO`, `VERIFY` (`VFY`), and the modal commands:
@@ -196,12 +196,19 @@ The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER
 `SET {MAXCC|LASTCC}` and `CANCEL`. A line ends a command unless a `-` continues it, so a THEN or
 ELSE ending its line is null; each ELSE takes the nearest unmatched THEN. SET caps at 16, and a
 16 ends the stream. `VERIFY` of a KSDS (by DD or by name) gives 0, anything else 12
-([decision record](../../records/design/2026-10-12-jackal-idcams-modal.md)). The parser it uses (`jackal.idcams.parser`) is a Lark grammar, `jackal/jackal/idcams/grammar.lark`,
-which grows one production per command the executor runs. A second, broader Lark grammar,
-`jackal/jackal/idcams/grammar/ams.lark`, parses all IDCAMS commands into typed ASTs
-(`jackal.idcams.parser_comprehensive` and the `ast_*.py` modules). The executor does not use
-it. The IDCAMS command reference is
-[idcams-ref.pdf](idcams-ref.pdf).
+([decision record](../../records/design/2026-10-12-jackal-idcams-modal.md)). The parser
+(`jackal.idcams.parser`) reads every IDCAMS command through one Lark grammar,
+`jackal/jackal/idcams/grammar/ams.lark`. A record ends a command unless `-` or `+` continues it.
+Blanks, commas and comments separate, and every keyword accepts its IBM abbreviation. The
+transformer builds only what the executor runs, from the parameters execution reads. Storage
+and performance parameters (space, VOLUMES, CISZ, FREESPACE, SHAREOPTIONS and the like) are
+dropped. A command jackal does not run (LISTCAT, PRINT, ALTER, EXPORT, IMPORT, DEFINE NONVSAM,
+the alternate-index toolchain, a non-KSDS DEFINE CLUSTER), or one coding a parameter that would
+change what it does (REPRO `COUNT`, DEFINE CLUSTER `MODEL`, DELETE of a GDG base, and so on), is
+`NotExecuted` and ends with condition code 12; the next command runs. A DELETE of several entries
+ends with the highest of their codes
+([decision record](../../records/design/2026-10-12-jackal-idcams-one-grammar.md)). The IDCAMS
+command reference is [idcams-ref.pdf](idcams-ref.pdf).
 
 ## The JCL bridge JAR
 
@@ -240,7 +247,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/parm.py` | `PARM=` region for COBOL `LINKAGE`. |
 | `jackal/jackal/tso.py` | Reads the programs a TSO batch step runs from its `SYSTSIN`. Used by cobble. |
 | `jackal/jackal/jcl/` | JCL parsing through the bridge JAR; procedure expansion. |
-| `jackal/jackal/idcams/` | IDCAMS grammars, parsers, typed ASTs and executor. |
+| `jackal/jackal/idcams/` | The IDCAMS grammar (`grammar/ams.lark`), parser, command types and executor. |
 | `jackal/jcl-bridge/` | The Java JCL bridge (Maven project, vendored mapa grammar). |
 | `jackal/tests/` | `unit/` and `integration/`. CardDemo end-to-end tests carry the `carddemo_e2e` marker. |
 

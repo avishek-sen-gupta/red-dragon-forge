@@ -135,15 +135,15 @@ def test_runner_runs_every_step_in_order(tmp_path: Path) -> None:
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
     sysin = (
-        "DELETE MYAPP.ACCOUNTS CLUSTER",
-        "IF MAXCC LE 8 THEN SET MAXCC = 0",
-        "DEFINE CLUSTER ( -",
-        "  NAME(MYAPP.ACCOUNTS) -",
-        "  RECORDSIZE(300 300) -",
-        "  KEYS(10 0) -",
-        ") DATA ( -",
-        "  NAME(MYAPP.ACCOUNTS.DATA) -",
-        ")",
+        " DELETE MYAPP.ACCOUNTS CLUSTER",
+        " IF MAXCC LE 8 THEN SET MAXCC = 0",
+        " DEFINE CLUSTER ( -",
+        "   NAME(MYAPP.ACCOUNTS) -",
+        "   RECORDSIZE(300 300) -",
+        "   KEYS(10 0) -",
+        " ) DATA ( -",
+        "   NAME(MYAPP.ACCOUNTS.DATA) -",
+        " )",
     )
     sysprint = DD(DdName("SYSPRINT"), NoDSN(), disp(), sysout=True)
     j = job("DEFTEST", (program("DEFACCT", "IDCAMS", (_sysin(sysin), sysprint)),))
@@ -161,7 +161,7 @@ def test_runner_idcams_creates_ksds(tmp_path: Path) -> None:
 def test_step_and_job_cond_bypass_after_a_failure_and_not_after_success(
     tmp_path: Path,
 ) -> None:
-    fails = program("A", "IDCAMS", (_sysin(("DELETE NOPE.NOPE CLUSTER",)),))
+    fails = program("A", "IDCAMS", (_sysin((" DELETE NOPE.NOPE CLUSTER",)),))
     guarded = program("B", "IEFBR14", condition=cond((0, "NE", "")))
     clean = job("J", (program("A", "IEFBR14"), guarded))
     after_failure = job("J", (fails, guarded))
@@ -220,7 +220,7 @@ def _after_bypassed(tmp_path: Path, name: str, referencing: DD[StepRef]) -> JobR
     j = job(
         "J",
         (
-            program("A", "IDCAMS", (_sysin(("DELETE NOPE.NOPE CLUSTER",)),)),
+            program("A", "IDCAMS", (_sysin((" DELETE NOPE.NOPE CLUSTER",)),)),
             program(
                 "B",
                 "IEFBR14",
@@ -603,7 +603,7 @@ def test_the_runner_applies_disp_to_an_idcams_steps_dds(tmp_path: Path) -> None:
                 "S2",
                 "IDCAMS",
                 (
-                    _sysin(("DELETE NOPE.NOPE CLUSTER",)),
+                    _sysin((" DELETE NOPE.NOPE CLUSTER",)),
                     dd("OLDF", "MY.FILE", disp("OLD", "DELETE")),
                 ),
             ),
@@ -633,7 +633,7 @@ RC8 = Completed(8)
 
 
 def _rc8(label: str) -> ProgramStep[StepRef]:
-    return program(label, "IDCAMS", (_sysin(("DELETE NO.SUCH.DATASET",)),))
+    return program(label, "IDCAMS", (_sysin((" DELETE NO.SUCH.DATASET",)),))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
