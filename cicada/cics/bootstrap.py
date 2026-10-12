@@ -32,7 +32,7 @@ from cics.interval import StartQueue
 from cics.strategy import NOT_SUPPLIED, Absent
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchResult
 from cics.vsam.engine import VsamEngine
-from cobol_asg.cobol_parser import CobolParser
+from cobol_asg.cobol_parser import ProLeapCobolParser
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from interpreter.project.types import LinkedProgram
 
@@ -47,7 +47,7 @@ def _noop() -> None:
 
 def compile_cics_program(
     source: bytes,
-    parser: CobolParser,
+    parser: ProLeapCobolParser,
     spec: CoprocessorSpec,
     *,
     source_search_dirs: Sequence[Path] = (),
@@ -96,7 +96,7 @@ def _require_sources(
 def _compiled(
     programs: Sequence[str],
     program_sources: Mapping[str, bytes],
-    parser: CobolParser,
+    parser: ProLeapCobolParser,
     spec: CoprocessorSpec,
     source_search_dirs: Sequence[Path],
 ) -> Mapping[str, LinkedProgram]:
@@ -114,7 +114,7 @@ def _compiled(
 def run_carddemo_region(
     *,
     program_sources: Mapping[str, bytes],
-    parser: CobolParser,
+    parser: ProLeapCobolParser,
     entry_transid: str,
     screen_queue: ScreenChannel,
     input_queue: InputChannel,
