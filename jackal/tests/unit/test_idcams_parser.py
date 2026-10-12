@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-import pytest
 import lark.exceptions
-
-from jackal.idcams.parser import parse_idcams
+import pytest
+from jackal.gdg import Empty, Scratch
 from jackal.idcams.commands import (
+    Cc,
+    CcOp,
+    Condition,
     DefineCluster,
     DefineGdg,
     Delete,
-    IfMaxcc,
+    If,
     Repro,
-    SetMaxcc,
+    SetCc,
 )
-from jackal.gdg import Empty, Scratch
-from tests.covers import covers, NotLanguageFeature
+from jackal.idcams.parser import parse_idcams
+from tests.covers import NotLanguageFeature, covers
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -25,7 +27,7 @@ def test_parse_delete_and_if():
         "   IF MAXCC LE 08 THEN SET MAXCC = 0\n"
     )
     assert cmds[0] == Delete(dsn="A.B.KSDS")
-    assert cmds[1] == IfMaxcc(op="LE", value=8, set_value=0)
+    assert cmds[1] == If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ())
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -74,7 +76,7 @@ def test_parse_standalone_set_maxcc():
     idempotency idiom: DELETE x then unconditionally reset MAXCC so a
     missing dataset doesn't fail the step."""
     cmds = parse_idcams("   SET MAXCC = 0\n")
-    assert cmds[0] == SetMaxcc(value=0)
+    assert cmds[0] == SetCc(Cc.MAXCC, 0)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -83,7 +85,7 @@ def test_parse_if_lastcc_bare_equals():
     tests the immediately-preceding command's own rc, not the running
     MAXCC."""
     cmds = parse_idcams("   IF LASTCC=12 THEN SET MAXCC=0\n")
-    assert cmds[0] == IfMaxcc(op="EQ", value=12, set_value=0, test_field="LASTCC")
+    assert cmds[0] == If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 0),), ())
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -91,7 +93,7 @@ def test_parse_if_maxcc_defaults_test_field_to_maxcc():
     """Existing IF MAXCC form must still default test_field to MAXCC --
     backward compatible with every already-parsed real job."""
     cmds = parse_idcams("   IF MAXCC LE 08 THEN SET MAXCC = 0\n")
-    assert cmds[0] == IfMaxcc(op="LE", value=8, set_value=0, test_field="MAXCC")
+    assert cmds[0] == If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ())
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -101,7 +103,7 @@ def test_parse_lastcc_line_with_trailing_whitespace():
     cmds = parse_idcams(
         "   IF LASTCC=12 THEN SET MAXCC=0                                            \n"
     )
-    assert cmds[0] == IfMaxcc(op="EQ", value=12, set_value=0, test_field="LASTCC")
+    assert cmds[0] == If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 0),), ())
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -132,7 +134,7 @@ def test_parse_real_carddemo_delete_set_idiom():
     )
     cmds = parse_idcams(text)
     assert cmds[0] == Delete(dsn="AWS.M2.CARDDEMO.USRSEC.VSAM.ESDS")
-    assert cmds[1] == SetMaxcc(value=0)
+    assert cmds[1] == SetCc(Cc.MAXCC, 0)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -160,7 +162,7 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
             scratch=Scratch.SCRATCH,
             extended=False,
         ),
-        IfMaxcc(op="EQ", value=12, set_value=0, test_field="LASTCC"),
+        If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 0),), ()),
     )
     assert short == (
         DefineGdg(
@@ -169,5 +171,67 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
             empty=Empty.EMPTY,
             scratch=Scratch.NOSCRATCH,
             extended=True,
+        ),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_parse_verify_and_modal_blocks_by_record():
+    """AMS ch. 2 and 34: VFY/VERIFY FILE or DATASET; THEN DO ... END; a THEN or
+    ELSE ending its record is null; each ELSE takes the nearest unmatched THEN;
+    SET LASTCC; CANCEL."""
+    from jackal.idcams.commands import (
+        Cancel,
+        Cc,
+        CcOp,
+        Condition,
+        If,
+        SetCc,
+        Verify,
+        VerifyDataset,
+        VerifyFile,
+    )
+
+    cmds = parse_idcams(
+        "  VFY FILE(ACCTKSDS)\n"
+        "  IF LASTCC=12 THEN DO\n"
+        "     SET MAXCC=0\n"
+        "     VERIFY DATASET(A.B.KSDS) RECOVER\n"
+        "  END\n"
+        "  IF MAXCC > 4 -\n"
+        "    THEN IF LASTCC < 12 -\n"
+        "      THEN DELETE A.B\n"
+        "      ELSE\n"
+        "    ELSE SET LASTCC = 20\n"
+        "  IF LASTCC = 0 THEN\n"
+        "  ELSE CANCEL\n"
+        "  IF MAXCC > 4 -\n"
+        "    THEN IF LASTCC < 12 -\n"
+        "      THEN DELETE C.D\n"
+        "      ELSE DELETE E.F\n"
+    )
+    assert cmds == (
+        Verify(VerifyFile("ACCTKSDS")),
+        If(
+            Condition(Cc.LASTCC, CcOp.EQ, 12),
+            (SetCc(Cc.MAXCC, 0), Verify(VerifyDataset("A.B.KSDS"))),
+            (),
+        ),
+        If(
+            Condition(Cc.MAXCC, CcOp.GT, 4),
+            (If(Condition(Cc.LASTCC, CcOp.LT, 12), (Delete("A.B"),), ()),),
+            (SetCc(Cc.LASTCC, 20),),
+        ),
+        If(Condition(Cc.LASTCC, CcOp.EQ, 0), (), (Cancel(),)),
+        If(
+            Condition(Cc.MAXCC, CcOp.GT, 4),
+            (
+                If(
+                    Condition(Cc.LASTCC, CcOp.LT, 12),
+                    (Delete("C.D"),),
+                    (Delete("E.F"),),
+                ),
+            ),
+            (),
         ),
     )

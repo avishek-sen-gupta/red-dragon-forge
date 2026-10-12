@@ -180,8 +180,12 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 | `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label; an input whose label is still pending ends that `REPRO` with condition code 12 and the next command runs. Return code is the final MAXCC. |
 
 The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`,
-`DEFINE GENERATIONDATAGROUP` (`DEF GDG`), `REPRO`, `IF MAXCC … THEN` and `SET MAXCC`. The
-parser it uses (`jackal.idcams.parser`) is a Lark grammar, `jackal/jackal/idcams/grammar.lark`,
+`DEFINE GENERATIONDATAGROUP` (`DEF GDG`), `REPRO`, `VERIFY` (`VFY`), and the modal commands:
+`IF {LASTCC|MAXCC} op n THEN … ELSE …` with `DO … END` blocks, nesting and null clauses,
+`SET {MAXCC|LASTCC}` and `CANCEL`. A line ends a command unless a `-` continues it, so a THEN or
+ELSE ending its line is null; each ELSE takes the nearest unmatched THEN. SET caps at 16, and a
+16 ends the stream. `VERIFY` of a KSDS (by DD or by name) gives 0, anything else 12
+([decision record](../../records/design/2026-10-12-jackal-idcams-modal.md)). The parser it uses (`jackal.idcams.parser`) is a Lark grammar, `jackal/jackal/idcams/grammar.lark`,
 which grows one production per command the executor runs. A second, broader Lark grammar,
 `jackal/jackal/idcams/grammar/ams.lark`, parses all IDCAMS commands into typed ASTs
 (`jackal.idcams.parser_comprehensive` and the `ast_*.py` modules). The executor does not use

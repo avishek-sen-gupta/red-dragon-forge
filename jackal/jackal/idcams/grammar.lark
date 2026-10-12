@@ -1,14 +1,17 @@
 // IDCAMS control-language grammar
 // Continuation: a trailing "-" before newline joins lines (stripped via %ignore)
 
-start: command+
+// A record (line) ends a command; "-" at a line's end continues it (AMS p. xxvii, ch. 2)
+start: _NL* (command _NL+)* command?
 
-command: delete_cmd
+command: _simple | if_matched | if_open
+_simple: delete_cmd
        | define_cmd
        | define_gdg
        | repro_cmd
-       | if_cmd
+       | verify_cmd
        | set_cmd
+       | cancel_cmd
 
 // DELETE dsname -\n CLUSTER [PURGE]
 // CLUSTER is the default entry type and may be omitted (real IDCAMS
@@ -63,17 +66,30 @@ _ignored_param: IDCAMS_WORD ("(" INNER_TEXT ")")?
 // REPRO INFILE(dd) OUTFILE(dd)
 repro_cmd: "REPRO" "INFILE" "(" NAME ")" "OUTFILE" "(" NAME ")"
 
-// IF {MAXCC|LASTCC} op value THEN SET MAXCC = set_value
-// LASTCC tests the rc of the immediately-preceding functional command
-// (distinct from MAXCC, the running max); real CardDemo JCL (DEFGDGB.jcl)
-// uses LASTCC with a bare "=" operator rather than the EQ keyword.
-if_cmd: "IF" IF_FIELD OP INT "THEN" "SET" "MAXCC" "=" INT
+// IF {LASTCC|MAXCC} op n THEN [command | DO ... END] [ELSE [command | DO ... END]]  (AMS ch. 2)
+// A THEN or ELSE with nothing after it in its record is the null command. Each ELSE takes the
+// nearest unmatched THEN: an IF that has its ELSE ("matched") is the only kind a THEN may hold
+// when an ELSE follows it.
+if_matched: _if_head then_closed else_closed
+if_open: _if_head then_any
+       | _if_head then_closed else_open
+_if_head: "IF" IF_FIELD OP INT "THEN"
+then_closed: _closed?
+then_any: _any?
+else_closed: _NL* "ELSE" _closed?
+else_open: _NL* "ELSE" if_open
+_closed: _simple | if_matched | do_block
+_any: _simple | if_matched | if_open | do_block
+do_block: "DO" _NL+ (command _NL+)* "END"
 IF_FIELD: "MAXCC" | "LASTCC"
 
-// Standalone SET MAXCC = n (not wrapped in IF...THEN) -- a common
-// idempotency idiom: DELETE x then unconditionally reset MAXCC so a
-// missing dataset doesn't fail the step.
-set_cmd: "SET" "MAXCC" "=" INT
+set_cmd: "SET" IF_FIELD ("=" | "EQ") INT
+cancel_cmd: "CANCEL"
+
+// VERIFY {FILE(ddname) | DATASET(entryname)} [RECOVER]  (AMS ch. 34)
+verify_cmd: ("VERIFY" | "VFY") (verify_file | verify_dataset) "RECOVER"?
+verify_file: "FILE" "(" NAME ")"
+verify_dataset: ("DATASET" | "DS") "(" DSNAME ")"
 
 // Trailers: DATA (NAME(dsn)) and INDEX (NAME(dsn))
 // Expanded explicitly: outer paren wraps keyword(dsn) call
@@ -84,7 +100,7 @@ _index_trailer: "INDEX" "(" "NAME" "(" DSNAME ")" ")"
 // One-or-more non-paren characters (content inside simple parentheses)
 INNER_TEXT: /[^)]+/
 
-OP:        "LE" | "LT" | "GE" | "GT" | "EQ" | "NE" | "="
+OP:        "LE" | "LT" | "GE" | "GT" | "EQ" | "NE" | "=" | "¬=" | ">=" | "<=" | ">" | "<"
 
 // A dataset-qualified name: one or more NAME segments separated by dots
 DSNAME:    /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
@@ -99,6 +115,8 @@ INT:       /[0-9]+/
 // Must not match reserved words handled by literal rules above.
 IDCAMS_WORD: /[A-Z][A-Z0-9]*/
 
-// Strip whitespace, newlines, and continuation dashes
-%ignore /[ \t\r\n]+/
-%ignore /-[ \t]*(?=\r?\n)/
+_NL: /[ \t]*\r?\n/
+
+// Strip blanks and continuations (a "-" ending a line joins the next)
+%ignore /[ \t]+/
+%ignore /-[ \t]*\r?\n/

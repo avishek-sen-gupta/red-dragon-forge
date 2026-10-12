@@ -9,17 +9,38 @@ from typing import TypeAlias, TypeVar
 
 from jackal.gdg import Empty, Scratch
 from jackal.idcams.commands import (
+    Cancel,
+    Cc,
+    CcOp,
     Command,
+    Condition,
     DefineCluster,
     DefineGdg,
     Delete,
-    IfMaxcc,
+    If,
     Repro,
-    SetMaxcc,
+    SetCc,
+    Verify,
+    VerifyDataset,
+    VerifyFile,
 )
 from lark import Lark, Token, Transformer
 
 _GRAMMAR = (files("jackal.idcams") / "grammar.lark").read_text()
+_OPS = {
+    "=": CcOp.EQ,
+    "EQ": CcOp.EQ,
+    "¬=": CcOp.NE,
+    "NE": CcOp.NE,
+    ">": CcOp.GT,
+    "GT": CcOp.GT,
+    "<": CcOp.LT,
+    "LT": CcOp.LT,
+    ">=": CcOp.GE,
+    "GE": CcOp.GE,
+    "<=": CcOp.LE,
+    "LE": CcOp.LE,
+}
 _PARSER = Lark(_GRAMMAR, start="start", parser="earley")
 
 
@@ -54,6 +75,49 @@ class _Purge:
     pass
 
 
+@dataclass(frozen=True)
+class _Then:
+    commands: tuple[Command, ...]
+
+
+@dataclass(frozen=True)
+class _Else:
+    commands: tuple[Command, ...]
+
+
+@dataclass(frozen=True)
+class _Block:
+    commands: tuple[Command, ...]
+
+
+def _commands(item: Command | _Block) -> tuple[Command, ...]:
+    match item:
+        case _Block():
+            return item.commands
+        case _:
+            return (item,)
+
+
+def _branch(c: Sequence[Command | _Block]) -> tuple[Command, ...]:
+    return tuple(command for item in c for command in _commands(item))
+
+
+def _if(c: Sequence[_IfPart]) -> If:
+    condition = Condition(_part(c, Cc), _part(c, CcOp), _part(c, int))
+    otherwise = _part(c, _Else, (_Else(()),))
+    return If(condition, _part(c, _Then).commands, otherwise.commands)
+
+
+_IfPart: TypeAlias = Cc | CcOp | int | _Then | _Else
+Part = TypeVar("Part", Cc, CcOp, int, _Then, _Else)
+
+
+def _part(
+    parts: Sequence[_IfPart], kind: type[Part], default: tuple[Part, ...] = ()
+) -> Part:
+    return next(p for p in (*parts, *default) if isinstance(p, kind))
+
+
 _Param: TypeAlias = _Name | _Keys | _RecordSize | _Limit | _Extended | Empty | Scratch
 P = TypeVar("P", _Name, _Keys, _RecordSize, _Limit, _Extended, Empty, Scratch)
 
@@ -76,12 +140,11 @@ class _Build(Transformer[Token, tuple[Command, ...]]):
     def INT(self, t: Token) -> int:
         return int(t)
 
-    def OP(self, t: Token) -> str:
-        text = str(t)
-        return "EQ" if text == "=" else text
+    def OP(self, t: Token) -> CcOp:
+        return _OPS[str(t)]
 
-    def IF_FIELD(self, t: Token) -> str:
-        return str(t)
+    def IF_FIELD(self, t: Token) -> Cc:
+        return Cc(str(t))
 
     def start(self, c: Sequence[Command]) -> tuple[Command, ...]:
         return tuple(c)
@@ -143,17 +206,41 @@ class _Build(Transformer[Token, tuple[Command, ...]]):
     def repro_cmd(self, c: Sequence[str]) -> Repro:
         return Repro(infile_dd=c[0], outfile_dd=c[1])
 
-    def if_cmd(self, c: Sequence[str | int]) -> IfMaxcc:
-        test_field, op, value, set_value = c
-        return IfMaxcc(
-            op=str(op),
-            value=int(value),
-            set_value=int(set_value),
-            test_field=str(test_field),
-        )
+    def if_matched(self, c: Sequence[_IfPart]) -> If:
+        return _if(c)
 
-    def set_cmd(self, c: Sequence[int]) -> SetMaxcc:
-        return SetMaxcc(value=c[0])
+    def if_open(self, c: Sequence[_IfPart]) -> If:
+        return _if(c)
+
+    def then_closed(self, c: Sequence[Command | _Block]) -> _Then:
+        return _Then(_branch(c))
+
+    def then_any(self, c: Sequence[Command | _Block]) -> _Then:
+        return _Then(_branch(c))
+
+    def else_closed(self, c: Sequence[Command | _Block]) -> _Else:
+        return _Else(_branch(c))
+
+    def else_open(self, c: Sequence[Command | _Block]) -> _Else:
+        return _Else(_branch(c))
+
+    def do_block(self, c: Sequence[Command]) -> _Block:
+        return _Block(tuple(c))
+
+    def set_cmd(self, c: Sequence[_IfPart]) -> SetCc:
+        return SetCc(_part(c, Cc), _part(c, int))
+
+    def cancel_cmd(self, c: Sequence[str]) -> Cancel:
+        return Cancel()
+
+    def verify_file(self, c: Sequence[str]) -> VerifyFile:
+        return VerifyFile(c[0])
+
+    def verify_dataset(self, c: Sequence[str]) -> VerifyDataset:
+        return VerifyDataset(c[0])
+
+    def verify_cmd(self, c: Sequence[VerifyFile | VerifyDataset]) -> Verify:
+        return Verify(c[0])
 
 
 def parse_idcams(text: str) -> tuple[Command, ...]:

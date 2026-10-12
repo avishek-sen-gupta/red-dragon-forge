@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TypeAlias
 
 from jackal.gdg import Empty, GdgBase, Scratch
@@ -46,17 +47,60 @@ class Repro:
     outfile_dd: str
 
 
-@dataclass(frozen=True)
-class IfMaxcc:
-    op: str
-    value: int
-    set_value: int
-    test_field: str = "MAXCC"
+class Cc(Enum):
+    MAXCC = "MAXCC"
+    LASTCC = "LASTCC"
+
+
+class CcOp(Enum):
+    EQ = "EQ"
+    NE = "NE"
+    GT = "GT"
+    LT = "LT"
+    GE = "GE"
+    LE = "LE"
 
 
 @dataclass(frozen=True)
-class SetMaxcc:
+class Condition:
+    field: Cc
+    op: CcOp
     value: int
 
 
-Command: TypeAlias = Delete | DefineCluster | DefineGdg | Repro | IfMaxcc | SetMaxcc
+@dataclass(frozen=True)
+class SetCc:
+    field: Cc
+    value: int
+
+
+@dataclass(frozen=True)
+class Cancel:
+    pass
+
+
+@dataclass(frozen=True)
+class VerifyFile:
+    ddname: str
+
+
+@dataclass(frozen=True)
+class VerifyDataset:
+    name: str
+
+
+@dataclass(frozen=True)
+class Verify:
+    target: VerifyFile | VerifyDataset
+
+
+@dataclass(frozen=True)
+class If:
+    condition: Condition
+    then: tuple[Command, ...]
+    otherwise: tuple[Command, ...]
+
+
+Command: TypeAlias = (
+    Delete | DefineCluster | DefineGdg | Repro | Verify | If | SetCc | Cancel
+)

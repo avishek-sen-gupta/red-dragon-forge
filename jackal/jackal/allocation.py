@@ -119,6 +119,13 @@ class DdEnvironment:
             case other:
                 raise TypeError(f"DD {ddname.text} is {type(other).__name__}")
 
+    def datasets(self, ddname: DdName) -> tuple[Dataset, ...]:
+        return tuple(
+            a.dataset
+            for name, a in self.entries
+            if name == ddname and isinstance(a, DatasetAllocation)
+        )
+
     def added(self, ddname: DdName, allocation: Allocation) -> DdEnvironment:
         return DdEnvironment((*self.entries, (ddname, allocation)))
 

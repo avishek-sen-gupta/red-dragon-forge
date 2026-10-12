@@ -5,14 +5,16 @@ from __future__ import annotations
 from jackal.allocation import DdEnvironment
 from jackal.gdg import Empty, GdgBase, Scratch
 from jackal.idcams.commands import (
+    Cc,
+    CcOp,
+    Condition,
     DefineCluster,
     DefineGdg,
     Delete,
-    IfMaxcc,
+    If,
     Repro,
-    SetMaxcc,
+    SetCc,
 )
-from jackal.system_catalog import NotCataloged
 from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
     DD,
@@ -25,6 +27,7 @@ from jackal.model import (
     ProgramStep,
     StepName,
 )
+from jackal.system_catalog import NotCataloged
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated
@@ -88,9 +91,9 @@ def test_repro_from_an_unlabelled_input_ends_with_12_and_idcams_goes_on(tmp_path
     env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
     cmds = (
         Repro(infile_dd="INF", outfile_dd="OUT"),
-        IfMaxcc(op="EQ", value=12, set_value=99, test_field="LASTCC"),
+        If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 5),), ()),
     )
-    assert run_idcams(cmds, env, cat) == 99
+    assert run_idcams(cmds, env, cat) == 5
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -130,10 +133,10 @@ def test_if_maxcc_sets_value_when_condition_met(tmp_path):
     from jackal.idcams.executor import run_idcams
 
     cat = job_catalog(tmp_path)
-    # Delete missing → maxcc=8; IfMaxcc LE 8 → set maxcc=0
+    # Delete missing → maxcc=8; IF MAXCC LE 8 → SET MAXCC=0
     cmds = (
         Delete(dsn="GHOST.DS"),
-        IfMaxcc(op="LE", value=8, set_value=0),
+        If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
@@ -144,10 +147,10 @@ def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
     from jackal.idcams.executor import run_idcams
 
     cat = job_catalog(tmp_path)
-    # Delete missing → maxcc=8; IfMaxcc LT 8 → not met (8 < 8 is false)
+    # Delete missing → maxcc=8; IF MAXCC LT 8 → not met (8 < 8 is false)
     cmds = (
         Delete(dsn="GHOST.DS"),
-        IfMaxcc(op="LT", value=8, set_value=0),
+        If(Condition(Cc.MAXCC, CcOp.LT, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 8
@@ -160,7 +163,10 @@ def test_if_maxcc_all_operators(tmp_path):
     cat = job_catalog(tmp_path)
 
     def after_rc_8(op: str, value: int) -> int:
-        cmds = (Delete(dsn="GHOST.DS"), IfMaxcc(op=op, value=value, set_value=0))
+        cmds = (
+            Delete(dsn="GHOST.DS"),
+            If(Condition(Cc.MAXCC, CcOp(op), value), (SetCc(Cc.MAXCC, 0),), ()),
+        )
         return run_idcams(cmds, DdEnvironment(()), cat)
 
     assert [
@@ -183,7 +189,7 @@ def test_set_maxcc_overrides_accumulated_rc(tmp_path):
     # doesn't fail a step that's about to (re)DEFINE it anyway.
     cmds = (
         Delete(dsn="GHOST.DS"),
-        SetMaxcc(value=0),
+        SetCc(Cc.MAXCC, 0),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
@@ -196,7 +202,7 @@ def test_if_lastcc_tests_immediately_preceding_command_rc(tmp_path):
     cat = job_catalog(tmp_path)
     cmds = (
         Delete(dsn="GHOST.DS"),  # missing -> rc 8, lastcc=8, maxcc=8
-        IfMaxcc(op="EQ", value=8, set_value=0, test_field="LASTCC"),
+        If(Condition(Cc.LASTCC, CcOp.EQ, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
@@ -207,7 +213,7 @@ def test_if_lastcc_reflects_only_the_most_recent_command_not_running_maxcc(tmp_p
     """LASTCC and MAXCC are genuinely distinct: a later, successful command
     resets LASTCC to 0 even though MAXCC still remembers an earlier
     failure. A test asserting against the wrong counter would give 8
-    here instead of 99."""
+    here instead of 5."""
     from jackal.idcams.executor import run_idcams
 
     cat = job_catalog(tmp_path)
@@ -216,10 +222,10 @@ def test_if_lastcc_reflects_only_the_most_recent_command_not_running_maxcc(tmp_p
         DefineCluster(
             name="MY.KSDS", key_length=5, key_offset=0, record_size=80
         ),  # succeeds -> rc 0; lastcc=0, maxcc stays 8 (max(8,0))
-        IfMaxcc(op="EQ", value=0, set_value=99, test_field="LASTCC"),
+        If(Condition(Cc.LASTCC, CcOp.EQ, 0), (SetCc(Cc.MAXCC, 5),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
-    assert rc == 99
+    assert rc == 5
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -232,11 +238,11 @@ def test_set_maxcc_does_not_change_lastcc(tmp_path):
     cat = job_catalog(tmp_path)
     cmds = (
         Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
-        SetMaxcc(value=0),  # maxcc forced to 0; lastcc still 8
-        IfMaxcc(op="EQ", value=8, set_value=99, test_field="LASTCC"),
+        SetCc(Cc.MAXCC, 0),  # maxcc forced to 0; lastcc still 8
+        If(Condition(Cc.LASTCC, CcOp.EQ, 8), (SetCc(Cc.MAXCC, 5),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
-    assert rc == 99
+    assert rc == 5
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -369,3 +375,79 @@ def test_define_gdg_catalogs_an_empty_base_once_within_its_limit(tmp_path):
         GdgBase("A.GDG", 5, Empty.NOEMPTY, Scratch.SCRATCH, ()),
         NotCataloged(),
     )
+
+
+def _verify_env(tmp_path):
+    from jackal.idcams.executor import run_idcams
+
+    upload(tmp_path, "SEQ.PS", b"", SequentialLabel(RecordFormat.FB, 4))
+    cat = job_catalog(tmp_path)
+    run_idcams(
+        (DefineCluster(name="A.KSDS", key_length=3, key_offset=0, record_size=9),),
+        DdEnvironment(()),
+        cat,
+    )
+    dds = (
+        DD(
+            DdName("KSDS"),
+            DirectDSN(literal("A.KSDS")),
+            Disp(DispStatus.SHR, DispNormal.KEEP, DispNormal.KEEP),
+        ),
+    )
+    env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
+    return env, cat
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_verify_succeeds_on_a_vsam_object_and_ends_12_otherwise(tmp_path):
+    """Record V6: a KSDS by DD or by name verifies with 0; a non-VSAM dataset,
+    an uncataloged name or a missing DD ends the command with 12."""
+    from jackal.idcams.executor import run_idcams
+    from jackal.idcams.parser import parse_idcams
+
+    env, cat = _verify_env(tmp_path)
+    rcs = tuple(
+        run_idcams(parse_idcams(text), env, cat)
+        for text in (
+            " VFY FILE(KSDS)\n",
+            " VERIFY DATASET(A.KSDS) RECOVER\n",
+            " VFY DS(SEQ.PS)\n",
+            " VFY DS(NO.SUCH)\n",
+            " VFY FILE(NODD)\n",
+        )
+    )
+    assert rcs == (0, 0, 12, 12, 12)
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_modal_commands_follow_the_condition_codes(tmp_path):
+    """Records V3-V5: the retry idiom recovers; a branch not taken changes
+    nothing; ELSE runs when the test fails; SET caps at 16, a LASTCC above
+    MAXCC raises it, and 16 ends the stream; CANCEL ends it with MAXCC."""
+    from jackal.idcams.executor import run_idcams
+    from jackal.idcams.parser import parse_idcams
+
+    env, cat = _verify_env(tmp_path)
+
+    def rc(text: str) -> int:
+        return run_idcams(parse_idcams(text), env, cat)
+
+    retry = (
+        " VFY FILE(NODD)\n"
+        " IF LASTCC=12 THEN DO\n"
+        "    SET MAXCC=0\n"
+        "    VFY FILE(KSDS)\n"
+        " END\n"
+    )
+    untaken = " DELETE GHOST.DS\n VFY FILE(KSDS)\n IF LASTCC=12 THEN SET MAXCC=0\n"
+    otherwise = " VFY FILE(KSDS)\n IF LASTCC=12 THEN SET MAXCC=5\n ELSE SET MAXCC=7\n"
+    capped = " SET LASTCC=4\n SET LASTCC=20\n DELETE SEQ.PS\n"
+    cancelled = " DELETE GHOST.DS\n CANCEL\n DELETE SEQ.PS\n"
+    assert (rc(retry), rc(untaken), rc(otherwise), rc(capped), rc(cancelled)) == (
+        0,
+        8,
+        7,
+        16,
+        8,
+    )
+    assert cat.resolve("SEQ.PS").dsn == "SEQ.PS"
