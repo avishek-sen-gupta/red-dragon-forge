@@ -256,7 +256,7 @@ execPgmStatement : SS stepName? EXEC PGM EQUAL keywordOrSymbolic execParameter* 
 
 execProcStatement : SS stepName? EXEC (PROC_EX EQUAL)? keywordOrSymbolic (execProcParm | execParameterOverrides)* ;
 
-execProcParm : EXEC_PROC_PARM EQUAL keywordOrSymbolic ;
+execProcParm : EXEC_PROC_PARM EQUAL keywordOrSymbolic? ;
 
 /*
 Some of the parameters for the EXEC statement are identical to those
