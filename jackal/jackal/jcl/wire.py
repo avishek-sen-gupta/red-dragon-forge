@@ -229,6 +229,7 @@ class Nullified(Enum):
     DCB = "dcb"
     RECFM = "recfm"
     LRECL = "lrecl"
+    GDGORDER = "gdgorder"
 
 
 _DCB_CLEARED: model.Dcb[StepRef] = model.Dcb(
@@ -316,6 +317,7 @@ class Dd(Wire):
     sysout: bool
     concatenated: tuple[Member, ...]
     dcb: DcbWire
+    gdg_order: tuple[Part, ...]
 
     def model(self) -> DD[StepRef]:
         return DD(
@@ -326,6 +328,7 @@ class Dd(Wire):
             self.sysout,
             tuple(m.model() for m in self.concatenated),
             self.dcb.dcb(),
+            value(self.gdg_order),
         )
 
     def override(self) -> DD[StepRef]:
@@ -337,6 +340,7 @@ class Dd(Wire):
             self.sysout,
             tuple(m.override() for m in self.concatenated),
             self.dcb.override(self.nullified),
+            _keyword(self.gdg_order, Nullified.GDGORDER, self.nullified),
         )
 
 

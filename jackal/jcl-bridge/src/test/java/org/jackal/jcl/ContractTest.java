@@ -40,11 +40,12 @@ public class ContractTest {
         return "{'kind':'literal','text':'" + text + "'}";
     }
 
-    private static final String NO_DCB = ",'dcb':{'coded':false,'source':{'kind':'none'},'recfm':[],'lrecl':[]}";
+    private static final String UNCODED_ATTRIBUTES =
+            ",'dcb':{'coded':false,'source':{'kind':'none'},'recfm':[],'lrecl':[]},'gdg_order':[]";
 
     private static String named(String ddname, String dsn, String disp) {
         return "{'ddname':'" + ddname + "','dsn':{'kind':'name','value':[" + literal(dsn)
-                + "]},'disp':" + disp + ",'nullified':[],'in_stream':[],'sysout':false,'concatenated':[]" + NO_DCB + "}";
+                + "]},'disp':" + disp + ",'nullified':[],'in_stream':[],'sysout':false,'concatenated':[]" + UNCODED_ATTRIBUTES + "}";
     }
 
     @Test
@@ -139,7 +140,7 @@ public class ContractTest {
 
     @Test
     public void eachDsnKindIsTaggedAndAPeriodAfterASymbolIsDropped() {
-        String none = ",'disp':[],'nullified':[],'in_stream':[],'sysout':false,'concatenated':[]" + NO_DCB + "}";
+        String none = ",'disp':[],'nullified':[],'in_stream':[],'sysout':false,'concatenated':[]" + UNCODED_ATTRIBUTES + "}";
         assertEquals(
                 json("[{'ddname':'A','dsn':{'kind':'name','value':[{'kind':'symbol','name':'HLQ'},"
                         + literal(".X") + "]}" + none + ","
@@ -152,7 +153,7 @@ public class ContractTest {
                         + "{'ddname':'F','dsn':{'kind':'dummy'}" + none + ","
                         + "{'ddname':'G','dsn':{'kind':'dummy'}" + none + ","
                         + "{'ddname':'H','dsn':{'kind':'none'},'disp':[],'nullified':[],'in_stream':[],'sysout':true,"
-                        + "'concatenated':[]" + NO_DCB + "}]"),
+                        + "'concatenated':[]" + UNCODED_ATTRIBUTES + "}]"),
                 onlyDds(
                         "//A DD DSN=&HLQ..X",
                         "//B DD DSN=&T",
@@ -166,7 +167,7 @@ public class ContractTest {
 
     @Test
     public void inStreamAndDataCardsAreBothKept() {
-        String rest = ",'disp':[],'nullified':[],'sysout':false,'concatenated':[]" + NO_DCB + "}";
+        String rest = ",'disp':[],'nullified':[],'sysout':false,'concatenated':[]" + UNCODED_ATTRIBUTES + "}";
         assertEquals(
                 json("[{'ddname':'SYSIN','dsn':{'kind':'in_stream'},'in_stream':[' CARD ONE',' CARD TWO']"
                         + rest + ","
@@ -191,7 +192,7 @@ public class ContractTest {
                         + "{'dsn':{'kind':'name','value':[" + literal("T.G") + "]},'disp':" + shr
                         + ",'nullified':[],'in_stream':[]},"
                         + "{'dsn':{'kind':'in_stream'},'disp':[],'nullified':[],'in_stream':[' CARD']},"
-                        + "{'dsn':{'kind':'dummy'},'disp':[],'nullified':[],'in_stream':[]}]" + NO_DCB + "},"
+                        + "{'dsn':{'kind':'dummy'},'disp':[],'nullified':[],'in_stream':[]}]" + UNCODED_ATTRIBUTES + "},"
                         + named("LAST", "T.H", shr) + "]"),
                 onlyDds(
                         "//MIXED DD DSN=T.F,DISP=SHR",

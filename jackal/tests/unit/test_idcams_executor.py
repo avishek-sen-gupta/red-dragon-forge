@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
-from jackal.gdg import Empty, GdgBase, Scratch
+from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
 from jackal.idcams.commands import (
     Cc,
     CcOp,
@@ -346,7 +346,9 @@ def test_repro_reads_a_variable_input_record_by_record_at_each_record_length(
 
 
 def _gdg(name: str, limit: int, extended: bool = False) -> DefineGdg:
-    return DefineGdg(name, limit, Empty.NOEMPTY, Scratch.SCRATCH, extended)
+    return DefineGdg(
+        name, limit, Empty.NOEMPTY, Scratch.SCRATCH, GdgOrder.LIFO, extended
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -372,7 +374,7 @@ def test_define_gdg_catalogs_an_empty_base_once_within_its_limit(tmp_path):
     assert rcs == (0, 12, 12, 12, 12, 0, 12)
     later = job_catalog(tmp_path)
     assert (later.gdg("A.GDG"), later.gdg("C.GDG")) == (
-        GdgBase("A.GDG", 5, Empty.NOEMPTY, Scratch.SCRATCH, ()),
+        GdgBase("A.GDG", 5, Empty.NOEMPTY, Scratch.SCRATCH, GdgOrder.LIFO, ()),
         NotCataloged(),
     )
 

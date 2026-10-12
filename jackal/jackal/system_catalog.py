@@ -9,7 +9,7 @@ from typing import Literal
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset
-from jackal.gdg import Empty, GdgBase, Scratch
+from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
 from jackal.labels import (
     DatasetLabel,
     KsdsLabel,
@@ -72,11 +72,17 @@ class _GdgWire(_Wire):
     limit: int
     empty: Empty
     scratch: Scratch
+    order: GdgOrder = GdgOrder.LIFO
     generations: tuple[int, ...]
 
     def model(self) -> GdgBase:
         return GdgBase(
-            self.name, self.limit, self.empty, self.scratch, self.generations
+            self.name,
+            self.limit,
+            self.empty,
+            self.scratch,
+            self.order,
+            self.generations,
         )
 
 
@@ -86,6 +92,7 @@ def _gdg_wire(base: GdgBase) -> _GdgWire:
         limit=base.limit,
         empty=base.empty,
         scratch=base.scratch,
+        order=base.order,
         generations=base.generations,
     )
 

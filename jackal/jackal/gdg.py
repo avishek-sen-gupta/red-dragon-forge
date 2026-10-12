@@ -16,6 +16,23 @@ class Scratch(Enum):
     NOSCRATCH = "NOSCRATCH"
 
 
+class GdgOrder(Enum):
+    FIFO = "FIFO"
+    LIFO = "LIFO"
+
+
+class RequestedOrder(Enum):
+    USECATLG = "USECATLG"
+    FIFO = "FIFO"
+    LIFO = "LIFO"
+
+
+_CODED_ORDERS: dict[RequestedOrder, GdgOrder] = {
+    RequestedOrder.FIFO: GdgOrder.FIFO,
+    RequestedOrder.LIFO: GdgOrder.LIFO,
+}
+
+
 def relative_generation(active: tuple[int, ...], relative: int) -> tuple[int, ...]:
     if relative > 0:
         return (max(active, default=0) + relative,)
@@ -29,10 +46,27 @@ class GdgBase:
     limit: int
     empty: Empty
     scratch: Scratch
+    order: GdgOrder
     generations: tuple[int, ...]
 
     def dataset_name(self, number: int) -> str:
         return f"{self.name}.G{number:04d}V00"
+
+    def all_relatives(
+        self, active: tuple[int, ...], requested: RequestedOrder
+    ) -> tuple[int, ...]:
+        oldest_first = tuple(range(1 - len(active), 1))
+        if self._order(requested) is GdgOrder.FIFO:
+            return oldest_first
+        return oldest_first[::-1]
+
+    def _order(self, requested: RequestedOrder) -> GdgOrder:
+        return _CODED_ORDERS.get(requested, self.order)
+
+    def without(self, number: int) -> GdgBase:
+        return replace(
+            self, generations=tuple(g for g in self.generations if g != number)
+        )
 
     def rolled_in(self, number: int) -> tuple[GdgBase, tuple[int, ...]]:
         if number in self.generations:

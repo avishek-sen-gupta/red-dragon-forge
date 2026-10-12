@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import TypeAlias, TypeVar
 
-from jackal.gdg import Empty, Scratch
+from jackal.gdg import Empty, GdgOrder, Scratch
 from jackal.idcams.commands import (
     Cancel,
     Cc,
@@ -118,8 +118,10 @@ def _part(
     return next(p for p in (*parts, *default) if isinstance(p, kind))
 
 
-_Param: TypeAlias = _Name | _Keys | _RecordSize | _Limit | _Extended | Empty | Scratch
-P = TypeVar("P", _Name, _Keys, _RecordSize, _Limit, _Extended, Empty, Scratch)
+_Param: TypeAlias = (
+    _Name | _Keys | _RecordSize | _Limit | _Extended | Empty | Scratch | GdgOrder
+)
+P = TypeVar("P", _Name, _Keys, _RecordSize, _Limit, _Extended, Empty, Scratch, GdgOrder)
 
 
 def _found(params: Sequence[_Param], kind: type[P], default: P) -> P:
@@ -182,6 +184,12 @@ class _Build(Transformer[Token, tuple[Command, ...]]):
     def noscratch_param(self, c: Sequence[str]) -> Scratch:
         return Scratch.NOSCRATCH
 
+    def fifo_param(self, c: Sequence[str]) -> GdgOrder:
+        return GdgOrder.FIFO
+
+    def lifo_param(self, c: Sequence[str]) -> GdgOrder:
+        return GdgOrder.LIFO
+
     def extended_param(self, c: Sequence[str]) -> _Extended:
         return _Extended()
 
@@ -200,6 +208,7 @@ class _Build(Transformer[Token, tuple[Command, ...]]):
             limit=_required(c, _Limit).count,
             empty=_found(c, Empty, Empty.NOEMPTY),
             scratch=_found(c, Scratch, Scratch.NOSCRATCH),
+            order=_found(c, GdgOrder, GdgOrder.LIFO),
             extended=any(isinstance(p, _Extended) for p in c),
         )
 

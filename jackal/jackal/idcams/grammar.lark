@@ -26,7 +26,7 @@ purge_trailer: "PURGE"
 define_cmd: _DEFINE "CLUSTER" "(" _param+ ")" _trailer*
 
 // DEFINE GENERATIONDATAGROUP ( params ) [CATALOG(catname)]  (AMS ch. 15)
-// OWNER, FIFO|LIFO, PURGE|NOPURGE, NOEXTENDED and CATALOG are accepted, not modelled.
+// OWNER, PURGE|NOPURGE, NOEXTENDED and CATALOG are accepted, not modelled.
 define_gdg: _DEFINE ("GENERATIONDATAGROUP" | "GDG") "(" _gdg_param+ ")" _catalog?
 
 _DEFINE: "DEFINE" | "DEF"
@@ -37,6 +37,8 @@ _gdg_param: name_param
           | noempty_param
           | noscratch_param
           | scratch_param
+          | fifo_param
+          | lifo_param
           | extended_param
           | _gdg_ignored
 
@@ -45,9 +47,11 @@ empty_param:     "EMPTY" | "EMP"
 noempty_param:   "NOEMPTY" | "NEMP"
 noscratch_param: "NOSCRATCH" | "NSCR"
 scratch_param:   "SCRATCH" | "SCR"
+fifo_param:      "FIFO"
+lifo_param:      "LIFO"
 extended_param:  "EXTENDED" | "EXT"
 _gdg_ignored:    "OWNER" "(" INNER_TEXT ")"
-             | "FIFO" | "LIFO" | "PURGE" | "NOPURGE" | "NOEXTENDED" | "NEXT"
+             | "PURGE" | "NOPURGE" | "NOEXTENDED" | "NEXT"
 _catalog:        ("CATALOG" | "CAT") "(" INNER_TEXT ")"
 
 _param: name_param

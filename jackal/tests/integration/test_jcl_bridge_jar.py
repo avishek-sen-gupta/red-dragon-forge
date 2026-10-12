@@ -226,6 +226,41 @@ def test_real_jar_overrides_dcb_subparameters_one_by_one(jcl_bridge_jar, tmp_pat
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_carries_gdgorder_through_symbols_and_overrides(
+    jcl_bridge_jar, tmp_path
+):
+    """JCL Ref p. 190: GDGORDER=USECATLG|LIFO|FIFO on a DD naming a GDG base. An
+    override changes it only where it codes it (p. 75), and GDGORDER= with no
+    value nullifies it."""
+    from jackal.expansion import expand_or_fail
+
+    (tmp_path / "P.prc").write_text(
+        "//P PROC ORD=FIFO\n"
+        "//PS EXEC PGM=A\n"
+        "//D1 DD DSN=T.G1,DISP=SHR,GDGORDER=&ORD\n"
+        "//D2 DD DSN=T.G2,DISP=SHR,GDGORDER=LIFO\n"
+        "//D3 DD DSN=T.G3,DISP=SHR\n"
+        "//D4 DD DSN=T.G4,DISP=SHR,GDGORDER=LIFO\n"
+        "// PEND\n"
+    )
+    jcl = (
+        "//J JOB 1\n"
+        "//S EXEC P\n"
+        "//PS.D2 DD GDGORDER=FIFO\n"
+        "//PS.D3 DD GDGORDER=USECATLG\n"
+        "//PS.D4 DD GDGORDER=\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    expanded = expand_or_fail(job, DirectoryProcLibrary((tmp_path,)))
+    assert [dd.gdg_order for dd in expanded.steps[0].step.dds] == [
+        literal("FIFO"),
+        literal("FIFO"),
+        literal("USECATLG"),
+        (),
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_real_jar_parses_a_same_step_referback(jcl_bridge_jar):
     """JCL Ref, DD DSNAME: *.ddname refers to an earlier DD of the same step."""
     from jackal.model import StepDd

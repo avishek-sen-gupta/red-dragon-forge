@@ -47,10 +47,12 @@ final class DdBuilder {
             boolean dummy,
             boolean inStream,
             List<String> nullified,
-            Dcb dcb) {
+            Dcb dcb,
+            Optional<JCLParser.KeywordOrSymbolicContext> gdgOrder) {
 
         static Fields empty() {
-            return new Fields(Optional.empty(), new JsonArray(), false, false, false, List.of(), Dcb.empty());
+            return new Fields(
+                    Optional.empty(), new JsonArray(), false, false, false, List.of(), Dcb.empty(), Optional.empty());
         }
 
         Fields withNullified(boolean empty, String keyword) {
@@ -59,11 +61,15 @@ final class DdBuilder {
             }
             List<String> more = new ArrayList<>(nullified);
             more.add(keyword);
-            return new Fields(dsn, disp, sysout, dummy, inStream, List.copyOf(more), dcb);
+            return new Fields(dsn, disp, sysout, dummy, inStream, List.copyOf(more), dcb, gdgOrder);
         }
 
         Fields withDcb(Dcb changed) {
-            return new Fields(dsn, disp, sysout, dummy, inStream, nullified, changed);
+            return new Fields(dsn, disp, sysout, dummy, inStream, nullified, changed, gdgOrder);
+        }
+
+        Fields withGdgOrder(JCLParser.KeywordOrSymbolicContext value) {
+            return new Fields(dsn, disp, sysout, dummy, inStream, nullified, dcb, Optional.ofNullable(value));
         }
     }
 
@@ -98,6 +104,7 @@ final class DdBuilder {
         ctx.ddStatementConcatenation().forEach(member -> members.add(member(member)));
         dd.add("concatenated", members);
         dd.add("dcb", dcb(fields.dcb()));
+        dd.add("gdg_order", fields.gdgOrder().map(ValueParts::of).orElseGet(JsonArray::new));
         return dd;
     }
 
@@ -121,27 +128,29 @@ final class DdBuilder {
         return switch (inner) {
             case JCLParser.DdParmDSNAMEContext c -> new Fields(
                     Trees.first(c, JCLParser.DatasetNameContext.class), acc.disp(), acc.sysout(),
-                    acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb())
+                    acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb(), acc.gdgOrder())
                     .withNullified(c.datasetName() == null, "dsn");
             case JCLParser.DdParmDISPContext c -> new Fields(
                     acc.dsn(),
                     Trees.first(c, JCLParser.SingleOrMultipleValueContext.class)
                             .map(DdBuilder::dispWords).orElseGet(JsonArray::new),
-                    acc.sysout(), acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb())
+                    acc.sysout(), acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb(), acc.gdgOrder())
                     .withNullified(c.singleOrMultipleValue() == null, "disp");
             case JCLParser.DdParmSYSOUTContext c -> new Fields(
-                    acc.dsn(), acc.disp(), true, acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb());
+                    acc.dsn(), acc.disp(), true, acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb(), acc.gdgOrder());
             case JCLParser.DdParmDUMMYContext c -> new Fields(
-                    acc.dsn(), acc.disp(), acc.sysout(), true, acc.inStream(), acc.nullified(), acc.dcb());
+                    acc.dsn(), acc.disp(), acc.sysout(), true, acc.inStream(), acc.nullified(), acc.dcb(), acc.gdgOrder());
             case JCLParser.DdParmASTERISKContext c -> new Fields(
-                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified(), acc.dcb());
+                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified(), acc.dcb(), acc.gdgOrder());
             case JCLParser.DdParmDATAContext c -> new Fields(
-                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified(), acc.dcb());
+                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified(), acc.dcb(), acc.gdgOrder());
             case JCLParser.DdParmDCBContext c -> c.ddParmDCB_Parameter().stream()
                     .reduce(acc.withDcb(acc.dcb().asCoded()),
                             (f, p) -> dcbParameter(f, p.getChild(0), true), (a, b) -> b)
                     .withNullified(c.ddParmDCB_Parameter().isEmpty(), "dcb");
             case JCLParser.DdParmDCB_ParameterContext c -> dcbParameter(acc, c.getChild(0), false);
+            case JCLParser.DdParmGDGORDERContext c -> acc.withGdgOrder(c.keywordOrSymbolic())
+                    .withNullified(c.keywordOrSymbolic() == null, "gdgorder");
             default -> acc;
         };
     }

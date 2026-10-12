@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import lark.exceptions
 import pytest
-from jackal.gdg import Empty, Scratch
+from jackal.gdg import Empty, GdgOrder, Scratch
 from jackal.idcams.commands import (
     Cc,
     CcOp,
@@ -140,7 +140,7 @@ def test_parse_real_carddemo_delete_set_idiom():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parse_define_generation_data_group_in_full_and_abbreviated():
     """AMS ch. 15: DEFINE GENERATIONDATAGROUP, or DEF GDG with LIM/EMP/NSCR.
-    NOEMPTY and NOSCRATCH are the defaults; OWNER, LIFO, PURGE and CATALOG
+    NOEMPTY, NOSCRATCH and LIFO are the defaults; OWNER, PURGE and CATALOG
     are accepted and not modelled."""
     full = parse_idcams(
         "   DEFINE GENERATIONDATAGROUP -\n"
@@ -151,7 +151,7 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
         "   IF LASTCC=12 THEN SET MAXCC=0\n"
     )
     short = parse_idcams(
-        " DEF GDG (NAME(A.B.HIST) LIM(255) EMP NSCR OWNER(OPS) LIFO PURGE EXT)"
+        " DEF GDG (NAME(A.B.HIST) LIM(255) EMP NSCR OWNER(OPS) FIFO PURGE EXT)"
         " CAT(UCAT.ONE)\n"
     )
     assert full == (
@@ -160,6 +160,7 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
             limit=5,
             empty=Empty.NOEMPTY,
             scratch=Scratch.SCRATCH,
+            order=GdgOrder.LIFO,
             extended=False,
         ),
         If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 0),), ()),
@@ -170,6 +171,7 @@ def test_parse_define_generation_data_group_in_full_and_abbreviated():
             limit=255,
             empty=Empty.EMPTY,
             scratch=Scratch.NOSCRATCH,
+            order=GdgOrder.FIFO,
             extended=True,
         ),
     )
