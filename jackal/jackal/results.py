@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
-from jackal.model import DdName, QualifiedStep, UnexpandedCall
+from jackal.model import DdName, QualifiedStep, SystemAbend, UnexpandedCall, UserAbend
 
 
 @dataclass(frozen=True)
@@ -21,16 +21,8 @@ class Completed:
 
 
 @dataclass(frozen=True)
-class SystemAbend:
-    code: int
-
-    def rendered(self) -> str:
-        return f"S{self.code:03X}"
-
-
-@dataclass(frozen=True)
 class Abended:
-    code: SystemAbend
+    code: SystemAbend | UserAbend
 
     def rcs(self) -> tuple[int, ...]:
         return ()
@@ -160,7 +152,7 @@ class JobAllocationFailed:
 @dataclass(frozen=True)
 class JobAbended:
     step: QualifiedStep | UnexpandedCall
-    code: SystemAbend
+    code: SystemAbend | UserAbend
 
     def succeeded(self) -> bool:
         return False

@@ -645,10 +645,16 @@ class DD(Generic[R]):
 class SystemAbend:
     code: int
 
+    def rendered(self) -> str:
+        return f"S{self.code:03X}"
+
 
 @dataclass(frozen=True)
 class UserAbend:
     code: int
+
+    def rendered(self) -> str:
+        return f"U{self.code:04d}"
 
 
 @dataclass(frozen=True)

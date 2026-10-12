@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Protocol
 
-from jackal.model import ProgramRef, QualifiedStep
-from jackal.results import Abended, Completed, ProgramResult, SystemAbend
+from jackal.model import ProgramRef, QualifiedStep, SystemAbend
+from jackal.results import Abended, Completed, ProgramResult
 
 logger = logging.getLogger(__name__)
 

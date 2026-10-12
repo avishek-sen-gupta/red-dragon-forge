@@ -7,7 +7,8 @@ from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
-from jackal.results import Abended, Completed, SystemAbend
+from jackal.model import SystemAbend
+from jackal.results import Abended, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
