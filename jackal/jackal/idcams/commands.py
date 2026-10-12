@@ -14,8 +14,8 @@ _EXTENDED_LIMIT = 999
 
 @dataclass(frozen=True)
 class Delete:
-    dsn: str
-    purge: bool = False
+    entries: tuple[str, ...]
+    purge: bool
 
 
 @dataclass(frozen=True)
@@ -102,6 +102,38 @@ class If:
     otherwise: tuple[Command, ...]
 
 
+class Verb(Enum):
+    ALTER = "ALTER"
+    BLDINDEX = "BLDINDEX"
+    DEFINE_ALTERNATEINDEX = "DEFINE ALTERNATEINDEX"
+    DEFINE_CLUSTER = "DEFINE CLUSTER"
+    DEFINE_GDG = "DEFINE GENERATIONDATAGROUP"
+    DEFINE_NONVSAM = "DEFINE NONVSAM"
+    DEFINE_PATH = "DEFINE PATH"
+    DELETE = "DELETE"
+    EXPORT = "EXPORT"
+    IMPORT = "IMPORT"
+    LISTCAT = "LISTCAT"
+    PRINT = "PRINT"
+    REPRO = "REPRO"
+    VERIFY = "VERIFY"
+
+
+@dataclass(frozen=True)
+class NotExecuted:
+    """A command jackal parsed but does not run: its verb, or a parameter it codes, is not modelled."""
+
+    verb: Verb
+
+
 Command: TypeAlias = (
-    Delete | DefineCluster | DefineGdg | Repro | Verify | If | SetCc | Cancel
+    Delete
+    | DefineCluster
+    | DefineGdg
+    | Repro
+    | Verify
+    | If
+    | SetCc
+    | Cancel
+    | NotExecuted
 )

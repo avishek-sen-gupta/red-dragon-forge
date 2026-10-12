@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from itertools import chain, count, takewhile
+from typing import TypeAlias
 
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
@@ -30,6 +31,7 @@ from jackal.idcams.commands import (
     DefineGdg,
     Delete,
     If,
+    NotExecuted,
     Repro,
     SetCc,
     Verify,
@@ -52,6 +54,7 @@ _TESTS: Mapping[CcOp, Callable[[int, int], bool]] = {
 
 _OPEN_FAILED = 12
 _LOGICAL_ERROR = 12
+_NOT_FOUND = 8
 _STREAM_ENDED = 16
 
 
@@ -99,8 +102,12 @@ def _handle_verify(cmd: Verify, dds: DdEnvironment, catalog: DatasetCatalog) -> 
             return _verified(_cataloged(catalog, name))
 
 
+def _deleted_rc(entry: str, catalog: DatasetCatalog) -> int:
+    return 0 if catalog.delete_dsn(entry) else _NOT_FOUND
+
+
 def _handle_delete(cmd: Delete, catalog: DatasetCatalog) -> int:
-    return 0 if catalog.delete_dsn(cmd.dsn) else 8
+    return max(_deleted_rc(entry, catalog) for entry in cmd.entries)
 
 
 def _handle_define_cluster(cmd: DefineCluster, catalog: DatasetCatalog) -> int:
@@ -217,7 +224,22 @@ def _filled(records: Iterable[bytes], driver: FileOrganizationDriver) -> int:
     return 0
 
 
+_Functional: TypeAlias = (
+    Delete | DefineCluster | DefineGdg | Repro | Verify | NotExecuted
+)
+
+
 def _functional_rc(
+    cmd: _Functional, dds: DdEnvironment, catalog: DatasetCatalog
+) -> int:
+    match cmd:
+        case NotExecuted():
+            return _LOGICAL_ERROR
+        case _:
+            return _executed_rc(cmd, dds, catalog)
+
+
+def _executed_rc(
     cmd: Delete | DefineCluster | DefineGdg | Repro | Verify,
     dds: DdEnvironment,
     catalog: DatasetCatalog,
@@ -275,22 +297,14 @@ class _Stream:
         taken = cmd.then if _tested(codes, cmd.condition) else cmd.otherwise
         return self.run(taken, codes)
 
-    def _simple(
-        self,
-        codes: _Codes,
-        cmd: Delete | DefineCluster | DefineGdg | Repro | Verify | SetCc | Cancel,
-    ) -> _Codes:
+    def _simple(self, codes: _Codes, cmd: _Functional | SetCc | Cancel) -> _Codes:
         match cmd:
             case SetCc():
                 return _set(codes, cmd)
             case _:
                 return self._ended_or_ran(codes, cmd)
 
-    def _ended_or_ran(
-        self,
-        codes: _Codes,
-        cmd: Delete | DefineCluster | DefineGdg | Repro | Verify | Cancel,
-    ) -> _Codes:
+    def _ended_or_ran(self, codes: _Codes, cmd: _Functional | Cancel) -> _Codes:
         match cmd:
             case Cancel():
                 return _Codes(codes.lastcc, codes.maxcc, True)

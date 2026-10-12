@@ -1,102 +1,55 @@
-// jackal/jackal/idcams/grammar/ams.lark
-// Shared terminals and lexical rules for the comprehensive IDCAMS grammar.
-// Command-specific rules are added here by later tasks (Tasks 2-11), each
-// contributing its own `command:` alternative and rule definitions.
+// IDCAMS (Access Method Services) commands: z/OS 3.1 DFSMS Access Method Services Commands.
+// Keywords accept their IBM abbreviations (each keyword's "Abbreviation:" entry).
 
-start: command+
+// A record ends a command unless "-" or "+" continues it (AMS p. xxvii).
+start: _NL* (command _NL+)* command?
 
-command: modal_command | set_command | cancel_command | define_cluster
+command: _simple | if_matched | if_open
+_simple: set_command | cancel_command | define_cluster
        | define_alternateindex | define_gdg | define_nonvsam | define_path
        | delete | alter | repro | print | listcat | export | import_cmd
        | verify | bldindex
 
-// Not prefixed with "?": as the top-level `start` rule in standalone
-// lexical tests, a "?"-inlined single-child rule collapses to a bare
-// Token with no `.children`, which the tests need. Non-standalone uses
-// (nested inside other rules added by later tasks) still see this as an
-// ordinary one-child Tree, which is equally usable.
 value: NAME | GENERIC_NAME | QUOTED_STRING | HEX_LITERAL | BIN_LITERAL | INT
 
-modal_command: if_command   // Task 1's placeholder ("CANCEL") is replaced by
-                            // the real IF grammar in Task 11; CANCEL now
-                            // has its own top-level command alternative
-                            // (cancel_command, below) instead.
-
-set_command: "SET" cc_name "=" INT  // Task 1's placeholder accepted any
-                                     // bare NAME; Task 11 tightens the
-                                     // left-hand side to the real
-                                     // MAXCC/LASTCC choice.
+// Modal commands (AMS ch. 2).
+set_command: "SET" cc_name ("=" | "EQ") INT
 
 cancel_command: "CANCEL"
 
-// ---------------------------------------------------------------------
-// DEFINE CLUSTER (Task 2)
-//
-// DEFINE CLUSTER ( cluster_param* ) [DATA ( data_param* )] [INDEX ( index_param* )]
-//
-// cluster_param covers the ~50 CLUSTER-level parameters. DATA(...) and
-// INDEX(...) are separate trailer clauses (siblings of the CLUSTER
-// parens, not nested inside them) each with their OWN parameter rule
-// (data_param / index_param) -- deliberately NOT shared, since INDEX(...)
-// rejects SPANNED/NONSPANNED, ERASE/NOERASE, BUFFERSPACE, FREESPACE,
-// KEYS, RECORDSIZE, and SPEED/RECOVERY, which are meaningless for an
-// index component per the IDCAMS manual.
-//
-// CYLINDERS|KILOBYTES|MEGABYTES|RECORDS|TRACKS is one rule (space_choice)
-// with five alternatives -- a genuine mutually-exclusive choice, not five
-// independently-optional rules that could all match at once. Likewise
-// INDEXED|LINEAR|NONINDEXED|NUMBERED|ZFS (organization_param).
-//
-// Real DEFINE CLUSTER/DATA/INDEX syntax lets these mutually-exclusive
-// choices appear in any position relative to the other (freely repeatable)
-// parameters -- so `cluster_param*` alone can't enforce "at most one
-// space_choice" (Lark/Earley repetition has no built-in cardinality limit
-// across alternatives). Instead the sequences below are small right-
-// recursive state machines: `cluster_seq_*` tracks "has a space_choice
-// been consumed yet?" x "has an organization choice been consumed yet?"
-// (four states); `data_seq_*`/`index_seq_*` track only the space_choice
-// dimension (DATA/INDEX have no organization choice). Each state only
-// offers a transition into "that choice consumed" once, so a second
-// CYLINDERS/TRACKS/etc. (or a second INDEXED/LINEAR/etc.) on the same
-// command has no valid parse -- a genuine LarkError, not silent last-wins.
-define_cluster: "DEFINE" "CLUSTER" "(" cluster_seq_00 ")" component_clause*
+// DEFINE CLUSTER (AMS ch. 14)
+define_cluster: ("DEFINE" | "DEF") ("CLUSTER" | "CL") "(" _cluster_seq_00 ")" _component_clause*
 
-component_clause: data_clause | index_clause
-data_clause:  "DATA"  "(" data_seq_0 ")"
-index_clause: "INDEX" "(" index_seq_0 ")"
+_component_clause: data_clause | index_clause
+data_clause:  "DATA"  "(" _data_seq_0 ")"
+index_clause: ("INDEX" | "IX") "(" _index_seq_0 ")"
 
-// state: neither space_choice nor organization_param consumed yet
-cluster_seq_00: cluster_param cluster_seq_00
-              | space_choice cluster_seq_10
-              | organization_param cluster_seq_01
+_cluster_seq_00: _cluster_param _cluster_seq_00
+              | _space_choice _cluster_seq_10
+              | organization_param _cluster_seq_01
               |
-// state: space_choice consumed, organization_param not yet
-cluster_seq_10: cluster_param cluster_seq_10
-              | organization_param cluster_seq_11
+_cluster_seq_10: _cluster_param _cluster_seq_10
+              | organization_param _cluster_seq_11
               |
-// state: organization_param consumed, space_choice not yet
-cluster_seq_01: cluster_param cluster_seq_01
-              | space_choice cluster_seq_11
+_cluster_seq_01: _cluster_param _cluster_seq_01
+              | _space_choice _cluster_seq_11
               |
-// state: both consumed -- only the freely-repeatable params remain
-cluster_seq_11: cluster_param cluster_seq_11
+_cluster_seq_11: _cluster_param _cluster_seq_11
               |
 
-// DATA(...)/INDEX(...) only track the space_choice dimension (no
-// organization choice at the component level).
-data_seq_0: data_param data_seq_0
-          | space_choice data_seq_1
+_data_seq_0: _data_param _data_seq_0
+          | _space_choice _data_seq_1
           |
-data_seq_1: data_param data_seq_1
+_data_seq_1: _data_param _data_seq_1
           |
 
-index_seq_0: index_param index_seq_0
-           | space_choice index_seq_1
+_index_seq_0: _index_param _index_seq_0
+           | _space_choice _index_seq_1
            |
-index_seq_1: index_param index_seq_1
+_index_seq_1: _index_param _index_seq_1
            |
 
-cluster_param: name_param
+_cluster_param: name_param
              | volumes_param
              | account_param
              | bufferspace_param
@@ -133,11 +86,7 @@ cluster_param: name_param
              | writecheck_param
              | obsolete_ignored_param
 
-// DataComponent: CLUSTER-level params minus everything that only makes
-// sense at the cluster/catalog level (ACCOUNT, BWO, CATALOG, DATABASE,
-// DATACLASS, EATTR, FRLOG, organization, KEYLABEL, LOG*, MANAGEMENTCLASS,
-// RECATALOG, RLS*, STORAGECLASS, retention).
-data_param: name_param
+_data_param: name_param
           | volumes_param
           | bufferspace_param
           | cisz_param
@@ -156,9 +105,7 @@ data_param: name_param
           | writecheck_param
           | obsolete_ignored_param
 
-// IndexComponent: strict subset of data_param -- no SPANNED/NONSPANNED,
-// ERASE/NOERASE, BUFFERSPACE, FREESPACE, KEYS, RECORDSIZE, SPEED/RECOVERY.
-index_param: name_param
+_index_param: name_param
            | volumes_param
            | cisz_param
            | exceptionexit_param
@@ -172,62 +119,60 @@ index_param: name_param
 
 name_param: "NAME" "(" NAME ")"
 
-cylinders_alloc: "CYLINDERS" "(" INT (","? INT)? ")"
-kilobytes_alloc: "KILOBYTES" "(" INT (","? INT)? ")"
-megabytes_alloc: "MEGABYTES" "(" INT (","? INT)? ")"
-records_alloc:   "RECORDS"   "(" INT (","? INT)? ")"
-tracks_alloc:    "TRACKS"    "(" INT (","? INT)? ")"
-space_choice: cylinders_alloc | kilobytes_alloc | megabytes_alloc | records_alloc | tracks_alloc
+cylinders_alloc: ("CYLINDERS" | "CYL") "(" INT (INT)? ")"
+kilobytes_alloc: ("KILOBYTES" | "KB") "(" INT (INT)? ")"
+megabytes_alloc: ("MEGABYTES" | "MB") "(" INT (INT)? ")"
+records_alloc:   ("RECORDS" | "REC")   "(" INT (INT)? ")"
+tracks_alloc:    ("TRACKS" | "TRK")    "(" INT (INT)? ")"
+_space_choice: cylinders_alloc | kilobytes_alloc | megabytes_alloc | records_alloc | tracks_alloc
 
-volumes_param: "VOLUMES" "(" NAME+ ")"
+volumes_param: ("VOLUMES" | "VOL") "(" NAME+ ")"
 
-account_param:       "ACCOUNT" "(" NAME ")"
-bufferspace_param:   "BUFFERSPACE" "(" INT ")"
+account_param:       ("ACCOUNT" | "ACCT") "(" NAME ")"
+bufferspace_param:   ("BUFFERSPACE" | "BUFSP" | "BUFSPC") "(" INT ")"
 bwo_param:           "BWO" "(" BWO_VALUE ")"
-catalog_param:       "CATALOG" "(" NAME ")"
-cisz_param:          "CONTROLINTERVALSIZE" "(" INT ")"
+catalog_param:       ("CATALOG" | "CAT") "(" NAME ")"
+cisz_param:          ("CONTROLINTERVALSIZE" | "CISZ" | "CNVSZ") "(" INT ")"
 database_format_param: "DATABASE" "(" DATABASE_FORMAT ")"
 keyname_param:       "KEYNAME" "(" NAME ")"
 keynameu_param:      "KEYNAMEU" "(" NAME ")"
-dataclass_param:     "DATACLASS" "(" NAME ")"
+dataclass_param:     ("DATACLASS" | "DATACLAS") "(" NAME ")"
 eattr_param:         "EATTR" "(" EATTR_VALUE ")"
-erase_param:         "ERASE" -> erase_flag
-                    | "NOERASE" -> noerase_flag
-exceptionexit_param: "EXCEPTIONEXIT" "(" NAME ")"
+erase_param:         ("ERASE" | "ERAS") -> erase_flag
+                    | ("NOERASE" | "NERAS") -> noerase_flag
+exceptionexit_param: ("EXCEPTIONEXIT" | "EEXT") "(" NAME ")"
 file_param:          "FILE" "(" NAME ")"
-freespace_param:     "FREESPACE" "(" INT ","? INT ")"
+freespace_param:     ("FREESPACE" | "FSPC") "(" INT INT ")"
 frlog_param:         "FRLOG" "(" FRLOG_VALUE ")"
-organization_param:  ORG_VALUE
+organization_param:  ("INDEXED" | "IXD") -> indexed_flag
+                    | ("NONINDEXED" | "NIXD" | "NUMBERED" | "NUMD" | "LINEAR" | "LIN" | "ZFS") -> other_organization
 keylabel_param:      "KEYLABEL" "(" NAME ")"
-keys_param:          "KEYS" "(" INT ","? INT ")"
+keys_param:          "KEYS" "(" INT INT ")"
 log_param:           "LOG" "(" LOG_VALUE ")"
-logreplicate_param:  "LOGREPLICATE" -> logreplicate_flag
-                    | "NOLOGREPLICATE" -> nologreplicate_flag
-logstreamid_param:   "LOGSTREAMID" "(" NAME ")"
-managementclass_param: "MANAGEMENTCLASS" "(" NAME ")"
+logreplicate_param:  ("LOGREPLICATE" | "LOGR") -> logreplicate_flag
+                    | ("NOLOGREPLICATE" | "NOLOGR") -> nologreplicate_flag
+logstreamid_param:   ("LOGSTREAMID" | "LSID") "(" NAME ")"
+managementclass_param: ("MANAGEMENTCLASS" | "MGMTCLAS") "(" NAME ")"
 model_param:         "MODEL" "(" NAME NAME? ")"
 owner_param:         "OWNER" "(" NAME ")"
-recatalog_param:     "RECATALOG" -> recatalog_flag
-                    | "NORECATALOG" -> norecatalog_flag
-recordsize_param:    "RECORDSIZE" "(" INT ","? INT ")"
-reuse_param:         "REUSE" -> reuse_flag
-                    | "NOREUSE" -> noreuse_flag
-rls_param:           "RLSQUIESCE" -> rlsquiesce_flag
-                    | "RLSENABLE" -> rlsenable_flag
-shareoptions_param:  "SHAREOPTIONS" "(" INT INT? ")"
-spanned_param:       "SPANNED" -> spanned_flag
-                    | "NONSPANNED" -> nonspanned_flag
+recatalog_param:     ("RECATALOG" | "RCTLG") -> recatalog_flag
+                    | ("NORECATALOG" | "NRCTLG") -> norecatalog_flag
+recordsize_param:    ("RECORDSIZE" | "RECSZ") "(" INT INT ")"
+reuse_param:         ("REUSE" | "RUS") -> reuse_flag
+                    | ("NOREUSE" | "NRUS") -> noreuse_flag
+rls_param:           ("RLSQUIESCE" | "RLSQ") -> rlsquiesce_flag
+                    | ("RLSENABLE" | "RLSE") -> rlsenable_flag
+shareoptions_param:  ("SHAREOPTIONS" | "SHR") "(" INT INT? ")"
+spanned_param:       ("SPANNED" | "SPND") -> spanned_flag
+                    | ("NONSPANNED" | "NSPND") -> nonspanned_flag
 speed_param:         "SPEED" -> speed_flag
-                    | "RECOVERY" -> recovery_flag
-storageclass_param:  "STORAGECLASS" "(" NAME ")"
+                    | ("RECOVERY" | "RCVY") -> recovery_flag
+storageclass_param:  ("STORAGECLASS" | "STORCLAS") "(" NAME ")"
 retention_param:     "TO" "(" INT ")" -> to_retention
                     | "FOR" "(" INT ")" -> for_retention
-writecheck_param:    "WRITECHECK" -> writecheck_flag
-                    | "NOWRITECHECK" -> nowritecheck_flag
+writecheck_param:    ("WRITECHECK" | "WCK") -> writecheck_flag
+                    | ("NOWRITECHECK" | "NWCK") -> nowritecheck_flag
 
-// Obsolete parameters that real (old) JCL may still contain: accepted so
-// parsing does not fail, but carry no semantic value on DefineCluster
-// (unlike DefineAlternateIndex, which has dedicated *_ignored fields).
 obsolete_ignored_param: "IMBED" -> obsolete_ignored
                        | "NOIMBED" -> obsolete_ignored
                        | "KEYRANGES" "(" INT+ ")" -> obsolete_ignored
@@ -237,54 +182,36 @@ obsolete_ignored_param: "IMBED" -> obsolete_ignored
                        | "REPLICATE" -> obsolete_ignored
                        | "NOREPLICATE" -> obsolete_ignored
 
-// ---------------------------------------------------------------------
-// DEFINE ALTERNATEINDEX (Task 3)
-//
-// DEFINE ALTERNATEINDEX ( aix_param* ) [DATA ( aixdata_param* )] [INDEX ( aixindex_param* )]
-//
-// Two independent mutually-exclusive choices can appear at the AIX
-// (command) level -- the space_choice (CYLINDERS|KILOBYTES|...,
-// shared with DEFINE CLUSTER) and ALTKEYS|ALTKEYSU (RLS VSAMDB
-// alternate-key-name lists, "already UTF-8" vs not). Same rationale as
-// cluster_seq_*/data_seq_*/index_seq_* above: aix_param* alone can't
-// enforce "at most one of these", so aix_seq_* is a small right-
-// recursive state machine tracking both dimensions (space_choice
-// consumed? x altkey_choice consumed?) -- four states, same shape as
-// cluster_seq_00/10/01/11. aixdata_seq_*/aixindex_seq_* only track the
-// space_choice dimension, mirroring data_seq_*/index_seq_*.
-define_alternateindex: "DEFINE" "ALTERNATEINDEX" "(" aix_seq_00 ")" aix_component_clause*
+// DEFINE ALTERNATEINDEX (AMS ch. 13)
+define_alternateindex: ("DEFINE" | "DEF") ("ALTERNATEINDEX" | "AIX") "(" aix_seq_00 ")" aix_component_clause*
 
 aix_component_clause: aixdata_clause | aixindex_clause
 aixdata_clause:  "DATA"  "(" aixdata_seq_0 ")"
-aixindex_clause: "INDEX" "(" aixindex_seq_0 ")"
+aixindex_clause: ("INDEX" | "IX") "(" aixindex_seq_0 ")"
 
 altkey_choice: altkeys_param | altkeysu_param
 
-// state: neither space_choice nor altkey_choice consumed yet
 aix_seq_00: aix_param aix_seq_00
-          | space_choice aix_seq_10
+          | _space_choice aix_seq_10
           | altkey_choice aix_seq_01
           |
-// state: space_choice consumed, altkey_choice not yet
 aix_seq_10: aix_param aix_seq_10
           | altkey_choice aix_seq_11
           |
-// state: altkey_choice consumed, space_choice not yet
 aix_seq_01: aix_param aix_seq_01
-          | space_choice aix_seq_11
+          | _space_choice aix_seq_11
           |
-// state: both consumed -- only the freely-repeatable params remain
 aix_seq_11: aix_param aix_seq_11
           |
 
 aixdata_seq_0: aixdata_param aixdata_seq_0
-             | space_choice aixdata_seq_1
+             | _space_choice aixdata_seq_1
              |
 aixdata_seq_1: aixdata_param aixdata_seq_1
              |
 
 aixindex_seq_0: aixindex_param aixindex_seq_0
-              | space_choice aixindex_seq_1
+              | _space_choice aixindex_seq_1
               |
 aixindex_seq_1: aixindex_param aixindex_seq_1
               |
@@ -317,9 +244,6 @@ aix_param: name_param
          | upgrade_param
          | writecheck_param
 
-// AixDataComponent: same shape as DataComponent minus SPANNED/NONSPANNED
-// (not valid for an AIX component at all per the manual), plus
-// ATTEMPTS/AUTHORIZATION/CODE/UNIQUEKEY (AIX-specific).
 aixdata_param: name_param
              | volumes_param
              | attempts_param
@@ -341,8 +265,6 @@ aixdata_param: name_param
              | uniquekey_param
              | writecheck_param
 
-// AixIndexComponent: strict subset of aixdata_param -- no BUFFERSPACE,
-// ERASE/NOERASE, FREESPACE, KEYS, RECORDSIZE, SPEED/RECOVERY, UNIQUEKEY.
 aixindex_param: name_param
               | volumes_param
               | attempts_param
@@ -357,7 +279,7 @@ aixindex_param: name_param
               | shareoptions_param
               | writecheck_param
 
-relate_param: "RELATE" "(" NAME ")"
+relate_param: ("RELATE" | "REL") "(" NAME ")"
 
 altkey_entry: NAME ALTKEY_ACTION
 altkeys_param:  "ALTKEYS"  "(" altkey_entry+ ")"
@@ -375,10 +297,10 @@ order_param:      "ORDERED" -> order_ignored_flag
                  | "UNORDERED" -> order_ignored_flag
 replicate_param:  "REPLICATE" -> replicate_ignored_flag
                  | "NOREPLICATE" -> replicate_ignored_flag
-uniquekey_param:  "UNIQUEKEY" -> uniquekey_flag
-                 | "NONUNIQUEKEY" -> nonuniquekey_flag
-upgrade_param:    "UPGRADE" -> upgrade_flag
-                 | "NOUPGRADE" -> noupgrade_flag
+uniquekey_param:  ("UNIQUEKEY" | "UNQK") -> uniquekey_flag
+                 | ("NONUNIQUEKEY" | "NUNQK") -> nonuniquekey_flag
+upgrade_param:    ("UPGRADE" | "UPG") -> upgrade_flag
+                 | ("NOUPGRADE" | "NUPG") -> noupgrade_flag
 
 ALTKEY_ACTION: "A" | "D"
 
@@ -387,20 +309,11 @@ DATABASE_FORMAT: "BSON" | "JSON"
 EATTR_VALUE:    "NO" | "OPT"
 FRLOG_VALUE:    "ALL" | "NONE" | "REDO" | "UNDO"
 LOG_VALUE:      "NONE" | "UNDO" | "ALL"
-ORG_VALUE:      "INDEXED" | "LINEAR" | "NONINDEXED" | "NUMBERED" | "ZFS"
 
-// ---------------------------------------------------------------------
-// DEFINE GENERATIONDATAGROUP (Task 4)
-//
-// DEFINE GENERATIONDATAGROUP ( gdg_param* )
-//
-// No DATA(...)/INDEX(...) trailers and no mutually-exclusive-choice
-// groups (no space allocation, no ALTKEYS-style pair) -- every parameter
-// is freely repeatable, so a plain gdg_param* suffices (unlike Tasks 2-3's
-// cluster_seq_*/aix_seq_* DFA state machines).
-define_gdg: "DEFINE" "GENERATIONDATAGROUP" "(" gdg_param* ")"
+// DEFINE GENERATIONDATAGROUP (AMS ch. 15)
+define_gdg: ("DEFINE" | "DEF") ("GENERATIONDATAGROUP" | "GDG") "(" _gdg_param* ")" catalog_param?
 
-gdg_param: name_param
+_gdg_param: name_param
          | limit_param
          | catalog_param
          | empty_param
@@ -410,29 +323,21 @@ gdg_param: name_param
          | purge_param
          | scratch_param
 
-limit_param:    "LIMIT" "(" INT ")"
-empty_param:    "EMPTY" -> empty_flag
-              | "NOEMPTY" -> noempty_flag
-extended_param: "EXTENDED" -> extended_flag
-              | "NOEXTENDED" -> noextended_flag
+limit_param:    ("LIMIT" | "LIM") "(" INT ")"
+empty_param:    ("EMPTY" | "EMP") -> empty_flag
+              | ("NOEMPTY" | "NEMP") -> noempty_flag
+extended_param: ("EXTENDED" | "EXT") -> extended_flag
+              | ("NOEXTENDED" | "NEXT") -> noextended_flag
 gdgorder_param: GDG_ORDER_VALUE
-purge_param:    "PURGE" -> purge_flag
-              | "NOPURGE" -> nopurge_flag
-scratch_param:  "SCRATCH" -> scratch_flag
-              | "NOSCRATCH" -> noscratch_flag
+purge_param:    ("PURGE" | "PRG") -> purge_flag
+              | ("NOPURGE" | "NPRG") -> nopurge_flag
+scratch_param:  ("SCRATCH" | "SCR") -> scratch_flag
+              | ("NOSCRATCH" | "NSCR") -> noscratch_flag
 
 GDG_ORDER_VALUE: "FIFO" | "LIFO"
 
-// ---------------------------------------------------------------------
-// DEFINE NONVSAM (Task 4)
-//
-// DEFINE NONVSAM ( nonvsam_param* )
-//
-// No DATA(...)/INDEX(...) trailers and no mutually-exclusive-choice
-// groups. VOLUMES and DEVICETYPES need dedicated rules/terminals (not
-// DEFINE CLUSTER's volumes_param) -- see module docstring in
-// ast_define_nonvsam.py for why.
-define_nonvsam: "DEFINE" "NONVSAM" "(" nonvsam_param* ")"
+// DEFINE NONVSAM (AMS ch. 16)
+define_nonvsam: ("DEFINE" | "DEF") ("NONVSAM" | "NVSAM") "(" nonvsam_param* ")"
 
 nonvsam_param: name_param
              | devicetypes_param
@@ -446,7 +351,7 @@ nonvsam_param: name_param
 
 devicetypes_param: "DEVICETYPES" "(" DEVICE_TYPE+ ")"
 
-nonvsam_volumes_param: "VOLUMES" "(" nonvsam_volume_item+ ")"
+nonvsam_volumes_param: ("VOLUMES" | "VOL") "(" nonvsam_volume_item+ ")"
 nonvsam_volume_item: NAME | INDIRECT_VOLUME_STAR | INDIRECT_VOLUME_SYMBOLIC
 
 collection_param: "COLLECTION" -> collection_flag
@@ -457,15 +362,8 @@ DEVICE_TYPE: /[A-Z0-9#@$]+/
 INDIRECT_VOLUME_STAR: "******"
 INDIRECT_VOLUME_SYMBOLIC: /&[A-Z0-9#@$]{1,5}/
 
-// ---------------------------------------------------------------------
-// DEFINE PATH (Task 4)
-//
-// DEFINE PATH ( path_param* )
-//
-// No DATA(...)/INDEX(...) trailers and no mutually-exclusive-choice
-// groups -- reuses catalog_param/model_param/owner_param/recatalog_param/
-// retention_param verbatim from Tasks 2-3.
-define_path: "DEFINE" "PATH" "(" path_param* ")"
+// DEFINE PATH (AMS ch. 18)
+define_path: ("DEFINE" | "DEF") "PATH" "(" path_param* ")"
 
 path_param: name_param
           | pathentry_param
@@ -476,46 +374,22 @@ path_param: name_param
           | retention_param
           | update_param
 
-pathentry_param: "PATHENTRY" "(" NAME ")"
+pathentry_param: ("PATHENTRY" | "PENT") "(" NAME ")"
 update_param:    "UPDATE" -> update_flag
                | "NOUPDATE" -> noupdate_flag
 
-// ---------------------------------------------------------------------
-// DELETE (Task 5)
-//
-// DELETE ( entryname [entryname...] ) delete_param*
-//
-// entryname list is the one required positional parameter (list/single
-// elision applies: a single entry drops its enclosing parens, so both
-// `DELETE (A)` and bare `DELETE A` -- the real corpus's common bare-dsname
-// form, no trailing type keyword required -- are valid). Max 100 entries
-// is a semantic check in the transformer, not a grammar-level limit.
-//
-// entry_type (ALIAS|ALTERNATEINDEX|CLUSTER|...|VVR) is the one genuine
-// "pick one kind" choice in this command -- a single entry can't be both
-// CLUSTER and PATH -- so it needs single-occurrence enforcement, same
-// rationale as cluster_seq_*/aix_seq_* above. Unlike those, it has no
-// second, independently-varying choice dimension to combine with here, so
-// a plain two-state sequence (entry_type consumed yet?) suffices -- no
-// four-state DFA needed. The six documented ON/OFF toggle pairs
-// (ERASE/NOERASE, FORCE/NOFORCE, MASK/NOMASK, PURGE/NOPURGE,
-// RECOVERY/NORECOVERY, SCRATCH/NOSCRATCH) are ordinary freely-repeatable
-// params -- last-wins-in-a-repeatable-list semantics is an accepted,
-// low-risk interpretation for simple booleans, per the plan's ratified
-// scoping decision.
-delete: "DELETE" delete_entries delete_seq_0
+// DELETE (AMS ch. 20)
+delete: ("DELETE" | "DEL") delete_entries _delete_seq_0
 
 delete_entries: "(" DELETE_ENTRY+ ")" | DELETE_ENTRY
 
-// state: entry_type not yet consumed
-delete_seq_0: delete_param delete_seq_0
-            | entry_type_param delete_seq_1
+_delete_seq_0: _delete_param _delete_seq_0
+            | entry_type_param _delete_seq_1
             |
-// state: entry_type consumed -- only freely-repeatable params remain
-delete_seq_1: delete_param delete_seq_1
+_delete_seq_1: _delete_param _delete_seq_1
             |
 
-delete_param: catalog_param
+_delete_param: catalog_param
             | erase_param
             | file_param
             | force_param
@@ -525,66 +399,26 @@ delete_param: catalog_param
             | delete_recovery_param
             | scratch_param
 
-entry_type_param: ENTRY_TYPE_VALUE
+entry_type_param: ("CLUSTER" | "CL" | "ALTERNATEINDEX" | "AIX" | "NONVSAM" | "NVSAM" | "PATH") -> deletable_entry_type
+                | ("ALIAS" | "GENERATIONDATAGROUP" | "GDG" | "LIBRARYENTRY" | "NVR" | "PAGESPACE"
+                  | "TRUENAME" | "USERCATALOG" | "VOLUMEENTRY" | "VVR") -> other_entry_type
 
-force_param: "FORCE" -> force_flag
-           | "NOFORCE" -> noforce_flag
+force_param: ("FORCE" | "FRC") -> force_flag
+           | ("NOFORCE" | "NFRC") -> noforce_flag
 mask_param:  "MASK" -> mask_flag
            | "NOMASK" -> nomask_flag
 nodisconnect_param: "NODISCONNECT" -> nodisconnect_flag
-delete_recovery_param: "RECOVERY" -> delete_recovery_flag
+delete_recovery_param: ("RECOVERY" | "RCVY") -> delete_recovery_flag
                       | "NORECOVERY" -> delete_norecovery_flag
 
-// Entry names accepted here are broader than the shared NAME/GENERIC_NAME
-// terminals: DELETE's MASK filter-key patterns use "**" (matches zero or
-// more qualifiers) and "%" (matches a single character within a
-// qualifier) in addition to plain names and the single-"*"-qualifier
-// generic form -- neither of which the strict Name.parse regex accepts.
-// The transformer tries Name.parse() first and falls back to a raw
-// Name(text=..., generic=True) for anything Name.parse rejects (i.e. real
-// MASK patterns), rather than loosening ast_values.py's shared, stricter
-// validation used by every other command.
-DELETE_ENTRY: /[A-Z0-9#@$%*]+(\.[A-Z0-9#@$%*]+)*/
+DELETE_ENTRY: /[A-Z0-9#@$%*](?:[A-Z0-9#@$%*]|\.(?=[A-Z0-9#@$%*+])|\+[ \t]*\r?\n[ \t]*)*/
 
-ENTRY_TYPE_VALUE: "ALIAS" | "ALTERNATEINDEX" | "CLUSTER" | "GENERATIONDATAGROUP"
-                 | "LIBRARYENTRY" | "NONVSAM" | "NVR" | "PAGESPACE" | "PATH"
-                 | "TRUENAME" | "USERCATALOG" | "VOLUMEENTRY" | "VVR"
-
-// ---------------------------------------------------------------------
-// ALTER (Task 6)
-//
-// ALTER entryname alter_param*
-//
-// entryname is the one required positional parameter -- a single Name,
-// no list/masking form (unlike DELETE's entries list).
-//
-// The manual documents exactly one genuine "pick one" choice in ALTER:
-// LOCK/UNLOCK vs SUSPEND/RESUME, both of which operate on the same
-// underlying "catalog access state" -- a single ALTER can't simultaneously
-// lock/unlock AND suspend/resume the same catalog. Modeled as a single
-// 4-way choice (catalog_state_choice), pulled out of the freely-repeatable
-// param list into a two-state sequence (alter_seq_0/alter_seq_1) exactly
-// like DELETE's entry_type_param/delete_seq_0/delete_seq_1 -- one
-// choice-of-4, single slot, not the two-independently-coupled-dimensions
-// DFA that DEFINE CLUSTER/ALTERNATEINDEX needed. Every other documented
-// ON/OFF pair in ALTER (ERASE/NOERASE, EMPTY/NOEMPTY, INHIBIT/UNINHIBIT,
-// PURGE/NOPURGE, RECLAIMCA/NORECLAIMCA, REUSE/NOREUSE,
-// RLSQUIESCE/RLSENABLE, SCRATCH/NOSCRATCH, UNIQUEKEY/NONUNIQUEKEY,
-// UPDATE/NOUPDATE, UPGRADE/NOUPGRADE, WRITECHECK/NOWRITECHECK, FIFO/LIFO,
-// ECSHARING/NOECSHARING) is an ordinary freely-repeatable param -- last-
-// wins-in-a-repeatable-list semantics is accepted for simple binary
-// toggles per the plan's ratified scoping decision.
-//
-// No STAGE parameter: the design spec explicitly defers it (definition
-// not recoverable from the manual excerpt read when the spec was
-// written); not added here either.
+// ALTER (AMS ch. 5)
 alter: "ALTER" NAME alter_seq_0
 
-// state: catalog_state_choice not yet consumed
 alter_seq_0: alter_param alter_seq_0
            | catalog_state_choice alter_seq_1
            |
-// state: catalog_state_choice consumed -- only freely-repeatable params remain
 alter_seq_1: alter_param alter_seq_1
            |
 
@@ -663,11 +497,6 @@ FILEDATA_VALUE:     "TEXT" | "BINARY"
 ALTER_FRLOG_VALUE:  "NONE" | "REDO"
 ALTER_LOG_VALUE:    "NONE" | "UNDO" | "ALL" | "REDO"
 
-// NULLIFY(...) sub-block: a nested parenthesized group, not a top-level
-// command-wide mutual-exclusivity concern. All 9 sub-options are
-// independently settable -- a single NULLIFY can plausibly nullify
-// several attributes at once, so (unlike catalog_state_choice above) this
-// is NOT a "pick one" choice.
 nullify_clause: "NULLIFY" "(" nullify_param* ")"
 
 nullify_param: nullify_authorization_param
@@ -683,46 +512,19 @@ nullify_param: nullify_authorization_param
 nullify_authorization_param:   "AUTHORIZATION" "(" NULLIFY_AUTH_VALUE ")"
 nullify_bwo_param:             "BWO"
 nullify_code_param:            "CODE"
-nullify_exceptionexit_param:   "EXCEPTIONEXIT"
+nullify_exceptionexit_param:   ("EXCEPTIONEXIT" | "EEXT")
 nullify_log_param:             "LOG"
-nullify_logstreamid_param:     "LOGSTREAMID"
-nullify_managementclass_param: "MANAGEMENTCLASS"
+nullify_logstreamid_param:     ("LOGSTREAMID" | "LSID")
+nullify_managementclass_param: ("MANAGEMENTCLASS" | "MGMTCLAS")
 nullify_owner_param:           "OWNER"
 nullify_retention_param:       "RETENTION"
 
 NULLIFY_AUTH_VALUE: "MODULE" | "STRING"
 
-// ---------------------------------------------------------------------
-// REPRO (Task 7), including ENCIPHER(...)/DECIPHER(...)
-//
-// REPRO { INFILE(ddname) | INDATASET(entryname) } { OUTFILE(ddname) |
-//   OUTDATASET(entryname) } repro_param*
-//
-// No enclosing parens around the whole parameter list (like ALTER, unlike
-// DEFINE CLUSTER/ALTERNATEINDEX) -- INFILE/INDATASET and OUTFILE/OUTDATASET
-// are the two REQUIRED "pick one" choices (a source and a target, each
-// exactly one of two forms), and the design spec documents six more
-// OPTIONAL "pick one" groups: ENTRIES/LEVEL, the 4-way RangeStart
-// (FROMKEY/FROMADDRESS/FROMNUMBER/SKIP), the 4-way RangeEnd
-// (TOKEY/TOADDRESS/TONUMBER/COUNT), ENCIPHER/DECIPHER, INSERTSHIFT/
-// INSERTALL, and SKIPDBCSCHECK/NODBCSCHECK.
-//
-// All ~15 ordinary params AND the individual members of the eight "pick
-// one" groups above are siblings in ONE flat, freely-repeatable
-// repro_param list -- Lark's "*" doesn't care about relative order, so
-// real-world reorderings (e.g. OUTFILE before INFILE) parse structurally.
-// "At most one member of a mutually-exclusive group" (and "at least one
-// of INFILE/INDATASET, and at least one of OUTFILE/OUTDATASET, is
-// required") is NOT a grammar-level constraint here -- it's enforced
-// post-parse by ComprehensiveIdcamsTransformer.repro(), which raises
-// ValueError on a violation. This mirrors DEFINE CLUSTER's
-// DATABASE(...)/KEYNAME(...) pattern (parser_comprehensive.py's
-// define_cluster): the grammar accepts broadly, the transformer validates
-// semantically. A combinatorial grammar-level DFA across all eight
-// uncoupled groups would need 2^8 states for no semantic benefit.
-repro: "REPRO" repro_param*
+// REPRO (AMS ch. 30)
+repro: "REPRO" _repro_param*
 
-repro_param: infile_param
+_repro_param: infile_param
            | indataset_param
            | outfile_param
            | outdataset_param
@@ -754,15 +556,15 @@ repro_param: infile_param
            | rlssource_param
            | rlstarget_param
 
-infile_param:     "INFILE" "(" NAME ")"
-indataset_param:  "INDATASET" "(" NAME ")"
-outfile_param:    "OUTFILE" "(" NAME ")"
-outdataset_param: "OUTDATASET" "(" NAME ")"
+infile_param:     ("INFILE" | "IFILE") "(" NAME ")"
+indataset_param:  ("INDATASET" | "IDS") "(" NAME ")"
+outfile_param:    ("OUTFILE" | "OFILE") "(" NAME ")"
+outdataset_param: ("OUTDATASET" | "ODS") "(" NAME ")"
 
-entries_param: "ENTRIES" "(" NAME+ ")"
+entries_param: ("ENTRIES" | "ENT") "(" NAME+ ")"
 level_param:   "LEVEL" "(" NAME ")"
 
-fromkey_param:     "FROMKEY" "(" value ")"
+fromkey_param:     ("FROMKEY" | "FKEY") "(" value ")"
 fromaddress_param: "FROMADDRESS" "(" value ")"
 fromnumber_param:  "FROMNUMBER" "(" value ")"
 skip_param:        "SKIP" "(" value ")"
@@ -796,14 +598,6 @@ rlstarget_param: "RLSTARGET" "(" RLS_STATE_VALUE ")"
 MESSAGELEVEL_VALUE: "ALL" | "SHORT"
 RLS_STATE_VALUE:    "NO" | "YES" | "QUIESCE"
 
-// ENCIPHER(...) -- CipherSpec. EXTERNALKEYNAME/INTERNALKEYNAME/PRIVATEKEY
-// is CipherSpec's own genuine "pick one key-management mode" choice
-// (required -- exactly one); like the top-level groups above, this is now
-// a flat freely-repeatable cipher_param list, with the "exactly one key
-// mode" constraint enforced by the transformer's encipher_clause() method,
-// not the grammar. CIPHERUNIT, DATAKEYFILE, DATAKEYVALUE, SHIPKEYNAMES,
-// STOREDATAKEY/NOSTOREDATAKEY, STOREKEYNAME, and USERDATA are ordinary
-// freely-repeatable cipher_param entries.
 encipher_clause: "ENCIPHER" "(" cipher_param* ")"
 
 cipher_param: cipherunit_param
@@ -830,11 +624,6 @@ storedatakey_param:        "STOREDATAKEY" -> storedatakey_flag
 storekeyname_param:       "STOREKEYNAME" "(" NAME ")"
 userdata_param:           "USERDATA" "(" (NAME | QUOTED_STRING) ")"
 
-// DECIPHER(...) -- DecipherSpec. DATAKEYFILE/DATAKEYVALUE/SYSTEMKEY is
-// DecipherSpec's own genuine "pick one key-management mode" choice
-// (required -- exactly one), same rationale/pattern as CipherSpec's key
-// choice above -- flat grammar, transformer-enforced. SYSTEMDATAKEY/
-// SYSTEMKEYNAME are ordinary freely-repeatable decipher_param entries.
 decipher_clause: "DECIPHER" "(" decipher_param* ")"
 
 decipher_param: systemdatakey_param
@@ -850,28 +639,7 @@ dk_systemkey_choice:    "SYSTEMKEY"
 systemdatakey_param: "SYSTEMDATAKEY" "(" (NAME | QUOTED_STRING) ")"
 systemkeyname_param: "SYSTEMKEYNAME" "(" NAME ")"
 
-// ---------------------------------------------------------------------
-// PRINT (Task 8)
-//
-// PRINT { INFILE(ddname) | INDATASET(entryname) } print_param*
-//
-// Same flat-grammar/transformer-validated pattern as REPRO above:
-// INFILE/INDATASET is PRINT's one required "pick one" choice; CHARACTER/
-// DUMP/HEX, RangeStart (FROMKEY/FROMADDRESS/FROMNUMBER/SKIP), RangeEnd
-// (TOKEY/TOADDRESS/TONUMBER/COUNT), INSERTSHIFT/INSERTALL, and
-// SKIPDBCSCHECK/NODBCSCHECK are optional "pick one" groups, all enforced
-// post-parse by ComprehensiveIdcamsTransformer.print_(), not the grammar.
-//
-// PRINT's RangeStart/RangeEnd, INSERTSHIFT/INSERTALL, SKIPDBCSCHECK/
-// NODBCSCHECK, CIMODE/NOCIMODE, DBCS, FILE, and RLSSOURCE are IDENTICAL in
-// shape to REPRO's -- fromkey_param/fromaddress_param/fromnumber_param/
-// skip_param/tokey_param/toaddress_param/tonumber_param/count_param/
-// insertshift_param/insertall_param/skipdbcscheck_param/nodbcscheck_param/
-// repro_cimode_param/repro_dbcs_param/file_param/rlssource_param are
-// ordinary top-level grammar rules (not nested inside REPRO's own rule),
-// so print_param references them directly instead of redefining them --
-// the resulting RangeStart/RangeEnd dataclasses (ast_repro.py) are shared
-// verbatim per the plan's interface contract for this task.
+// PRINT (AMS ch. 29)
 print: "PRINT" print_param*
 
 print_param: infile_param
@@ -898,37 +666,8 @@ print_format_param: "CHARACTER" -> print_character_flag
                    | "DUMP"      -> print_dump_flag
                    | "HEX"       -> print_hex_flag
 
-// ---------------------------------------------------------------------
-// LISTCAT (Task 8)
-//
-// LISTCAT listcat_param*
-//
-// Every LISTCAT parameter is optional (the "no operand" case lists
-// everything in the catalog). ENTRIES/LEVEL is LISTCAT's sole
-// mutual-exclusivity "pick one" group, reusing REPRO's entries_param/
-// level_param rules verbatim, enforced post-parse like PRINT/REPRO above.
-// The five detail-level keywords (NAME/HISTORY/VOLUME/ALLOCATION/ALL) are
-// likewise an optional "pick one" group (listcat_detail_param), also
-// transformer-enforced.
-//
-// entry_types (ALIAS/ALTERNATEINDEX/CLUSTER/DATA/GENERATIONDATAGROUP/
-// INDEX/NONVSAM/PAGESPACE/PATH/USERCATALOG) is explicitly NOT a choice
-// group -- the manual allows combining multiple entry-type filters in one
-// LISTCAT (e.g. "LISTCAT ALIAS CLUSTER"), so listcat_entrytype_param is an
-// ordinary freely-repeatable listcat_param alternative, and every
-// occurrence is collected into the entry_types tuple with no
-// single-occurrence enforcement.
-//
-// CATALOG, VOLUMEENTRIES, FILE, and OUTFILE reuse REPRO's existing
-// catalog_param/volumeentries_param/file_param/outfile_param rules, same
-// rationale as PRINT's reuse above.
-//
-// CDILVL/NOCDILVL: the manual documents CDILVL as meaningful only
-// alongside LEVEL, but that coupling is NOT grammar-enforced here -- it's
-// accepted standalone and deferred to a later semantic/execution layer,
-// consistent with this module's parsing-only scope (see the test file's
-// module docstring for the explicit decision).
-listcat: "LISTCAT" listcat_param*
+// LISTCAT (AMS ch. 27)
+listcat: ("LISTCAT" | "LISTC") listcat_param*
 
 listcat_param: listcat_entrytype_param
              | libraryentries_param
@@ -947,8 +686,8 @@ listcat_param: listcat_entrytype_param
 
 listcat_entrytype_param: LISTCAT_ENTRYTYPE_VALUE
 
-LISTCAT_ENTRYTYPE_VALUE: "ALIAS" | "ALTERNATEINDEX" | "CLUSTER" | "DATA"
-                        | "GENERATIONDATAGROUP" | "INDEX" | "NONVSAM"
+LISTCAT_ENTRYTYPE_VALUE: "ALIAS" | "ALTERNATEINDEX" | "AIX" | "CLUSTER" | "CL" | "DATA"
+                        | "GENERATIONDATAGROUP" | "GDG" | "INDEX" | "IX" | "NONVSAM"
                         | "PAGESPACE" | "PATH" | "USERCATALOG"
 
 libraryentries_param: "LIBRARYENTRIES" "(" NAME ")"
@@ -962,33 +701,12 @@ listcat_prefix_param: "PREFIX" -> prefix_flag
 
 listcat_detail_param: LISTCAT_DETAIL_VALUE
 
-// Explicit low priority (below the default 0): "VOLUME" and "ALL" are
-// prefixes of other LISTCAT keywords assembled from separate tokens
-// (VOLUMEENTRIES = "VOLUME"+"ENTRIES", ALLOCATION contains "ALL" as a
-// prefix too) -- without this, the earley dynamic lexer's ambiguity
-// resolution can pick the split ("VOLUME" detail + "ENTRIES(...)") over
-// the intended single VOLUMEENTRIES(...) keyword-with-argument parse.
-// Longest-alternative-first within the terminal itself (ALLOCATION before
-// ALL) additionally guards against ALLOCATION being misread as ALL.
 LISTCAT_DETAIL_VALUE.-1: "ALLOCATION" | "HISTORY" | "VOLUME" | "NAME" | "ALL"
 
 library_param: "LIBRARY" "(" NAME ")"
 
-// ---------------------------------------------------------------------
-// EXPORT (Task 9)
-//
-// EXPORT entryname export_param*
-//
-// entryname is the one required positional parameter (a single Name, same
-// shape as ALTER's). Three genuine "pick one" choice groups, all flat-
-// grammar/transformer-enforced per the plan's ratified pattern (see
-// ComprehensiveIdcamsTransformer.export()): OUTFILE/OUTDATASET (required,
-// exactly one), CIMODE/RECORDMODE (optional, at most one -- which
-// processing mode), and TEMPORARY/PERMANENT (optional, at most one --
-// which export kind). ERASE/NOERASE, INHIBITSOURCE/NOINHIBITSOURCE,
-// INHIBITTARGET/NOINHIBITTARGET, and PURGE/NOPURGE are ordinary simple
-// ON/OFF toggle pairs, per the plan's ratified scope for simple booleans.
-export: "EXPORT" NAME export_param*
+// EXPORT (AMS ch. 23)
+export: ("EXPORT" | "EXP") NAME export_param*
 
 export_param: outfile_param
             | outdataset_param
@@ -1012,31 +730,7 @@ inhibittarget_param: "INHIBITTARGET" -> inhibittarget_flag
 export_kind_param: "TEMPORARY" -> export_temporary_flag
                   | "PERMANENT" -> export_permanent_flag
 
-// ---------------------------------------------------------------------
-// IMPORT (Task 9)
-//
-// IMPORT import_param*
-//
-// Two genuine required "pick one" choice groups, both flat-grammar/
-// transformer-enforced (ComprehensiveIdcamsTransformer.import_cmd()):
-// INFILE/INDATASET and OUTFILE/OUTDATASET. ALIAS/NOALIAS, ERASE/NOERASE,
-// LOCK/UNLOCK, PURGE/NOPURGE, and SAVRAC/NOSAVRAC are ordinary simple
-// ON/OFF toggle pairs. LOCK/UNLOCK deliberately reuses ALTER's
-// catalog_state_choice aliases (lock_flag/unlock_flag) verbatim -- same
-// ("lock", bool) shape IMPORT's own `lock` field needs, so no new
-// transformer callback is required for it.
-//
-// OBJECTS(...) is a REPEATABLE list of nested groups (import_object),
-// not a mutual-exclusivity choice -- each group has a required positional
-// entryname followed by independently-optional FILE/MANAGEMENTCLASS/
-// NEWNAME/STORAGECLASS/VOLUMES sub-params, reusing file_param/
-// managementclass_param/newname_param/storageclass_param/volumes_param
-// verbatim from earlier tasks.
-//
-// Grammar rule (and its transformer callback) is named `import_cmd`, not
-// `import` -- a Transformer method literally named `import` would be a
-// Python syntax error (the dataclass `Import` itself is safe to name,
-// only the statement keyword is reserved).
+// IMPORT (AMS ch. 25)
 import_cmd: "IMPORT" import_param*
 
 import_param: infile_param
@@ -1069,44 +763,18 @@ import_object_param: file_param
                     | storageclass_param
                     | volumes_param
 
-// ---------------------------------------------------------------------
-// VERIFY (Task 10)
-//
-// VERIFY verify_param*
-//
-// The lightest command in the comprehensive-grammar plan. One genuine
-// required "pick one" choice group, flat-grammar/transformer-enforced
-// (ComprehensiveIdcamsTransformer.verify()): FILE/DATASET. RECOVER is an
-// ordinary bare flag.
-verify: "VERIFY" verify_param*
+// VERIFY (AMS ch. 34)
+verify: ("VERIFY" | "VFY") _verify_param*
 
-verify_param: file_param
+_verify_param: file_param
             | verify_dataset_param
             | verify_recover_param
 
-verify_dataset_param: "DATASET" "(" NAME ")"
+verify_dataset_param: ("DATASET" | "DS") "(" NAME ")"
 verify_recover_param: "RECOVER" -> verify_recover_flag
 
-// ---------------------------------------------------------------------
-// BLDINDEX (Task 10)
-//
-// BLDINDEX bldindex_param*
-//
-// Three genuine "pick one" choice groups, all flat-grammar/transformer-
-// enforced (ComprehensiveIdcamsTransformer.bldindex()): INFILE/INDATASET
-// (required, exactly one; reuses infile_param/indataset_param verbatim
-// from REPRO/IMPORT), OUTFILE/OUTDATASET (required, exactly one -- but
-// unlike every other OUTFILE/OUTDATASET in this grammar, BLDINDEX's own
-// versions each accept a LIST of 1+ ddnames/entrynames, e.g. OUTFILE(A B),
-// to build multiple alternate indexes for the same base cluster in one
-// invocation -- hence the dedicated bldindex_outfiles_param/
-// bldindex_outdatasets_param rules below rather than reusing outfile_param/
-// outdataset_param), EXTERNALSORT/INTERNALSORT (optional, at most one --
-// which sort strategy), and SORTCALL/NOSORTCALL (optional, at most one --
-// which sort mechanism). SORTDEVICETYPE, SORTFILENUMBER, SORTMESSAGEDD,
-// SORTMESSAGELEVEL, WORKFILES, and CATALOG are ordinary single-occurrence
-// (or, for WORKFILES, plain list) params -- no mutual-exclusivity machinery.
-bldindex: "BLDINDEX" bldindex_param*
+// BLDINDEX (AMS ch. 8)
+bldindex: ("BLDINDEX" | "BIX") bldindex_param*
 
 bldindex_param: infile_param
               | indataset_param
@@ -1121,8 +789,8 @@ bldindex_param: infile_param
               | workfiles_param
               | catalog_param
 
-bldindex_outfiles_param:    "OUTFILE" "(" NAME+ ")"
-bldindex_outdatasets_param: "OUTDATASET" "(" NAME+ ")"
+bldindex_outfiles_param:    ("OUTFILE" | "OFILE") "(" NAME+ ")"
+bldindex_outdatasets_param: ("OUTDATASET" | "ODS") "(" NAME+ ")"
 
 bldindex_sort_kind_param: "EXTERNALSORT" -> externalsort_flag
                         | "INTERNALSORT" -> internalsort_flag
@@ -1138,48 +806,23 @@ workfiles_param:      "WORKFILES" "(" NAME NAME ")"
 
 SORT_MESSAGE_LEVEL_VALUE: "ALL" | "CRITICAL" | "NONE"
 
-// ---------------------------------------------------------------------
-// MODAL COMMANDS (Task 11): IF/THEN/ELSE/DO/END, SET, CANCEL
-//
-// IF {LASTCC|MAXCC} op number THEN [command | DO command+ END]
-//   [ELSE [command | DO command+ END]]
-//
-// `clause` covers all three THEN/ELSE shapes: null (bare THEN/ELSE
-// followed by nothing -- the IBM manual's own worked examples use this),
-// a single functional/modal command, or a DO ... END block of 1+ commands.
-// `clause` reuses the shared `command` alternation (not a private copy) so
-// THEN/ELSE/DO can hold any of the 14 functional commands or another
-// modal command -- this is what makes a nested IF fall out for free,
-// exactly like the manual's own nested-IF examples.
-//
-// Two full if_command alternatives (if_with_else / if_without_else),
-// rather than one rule with an optional "ELSE clause" suffix, deliberately
-// distinguish "no ELSE clause was written at all" from "an ELSE clause was
-// written but it's null" -- see ast_modal.py's IfCommand docstring for why
-// these are two different things per the manual's own null-command
-// semantics; the transformer maps if_without_else's absence of an ELSE
-// child to else_=None and if_with_else's (possibly empty) clause to
-// else_=(), never conflating the two.
-//
-// IF nesting depth (max 10 per the manual) is NOT enforced here -- Earley
-// parses arbitrarily deep recursion without complaint. The cap is
-// enforced by the transformer while building IfCommand instances (a
-// semantic/business-rule check, not a syntax-level one).
-if_command: "IF" cc_name if_op INT "THEN" clause "ELSE" clause -> if_with_else
-          | "IF" cc_name if_op INT "THEN" clause                -> if_without_else
+// A THEN or ELSE with nothing after it in its record is the null command; each ELSE
+// takes the nearest unmatched THEN (AMS pp. 16-17).
+if_matched: _if_head then_closed else_closed
+if_open: _if_head then_any
+       | _if_head then_closed else_open
+_if_head: "IF" cc_name if_op INT "THEN"
+then_closed: _closed?
+then_any: _any?
+else_closed: _NL* "ELSE" _closed?
+else_open: _NL* "ELSE" if_open
+_closed: _simple | if_matched | do_block
+_any: _simple | if_matched | if_open | do_block
+do_block: "DO" _NL+ (command _NL+)* "END"
 
-// MAXCC/LASTCC choice, shared by IF's left-hand side and SET's target.
 cc_name: "MAXCC"  -> maxcc_field
        | "LASTCC" -> lastcc_field
 
-// Six operator spellings collapsing to four comparison directions plus
-// equal/not-equal. Alternatives are anonymous string literals inlined
-// directly in the rule (not one regex terminal) so Lark's automatic
-// longest-match terminal-priority resolves ">=" over ">" and "<=" over
-// "<" without a hand-written priority annotation. "¬=" is the IBM
-// manual's own "not equal" symbol (logical NOT); "NE" is the ASCII-safe
-// spelling most real JCL actually uses -- both accepted here, both
-// normalized to "NE" in the transformer (mirrors "=" normalizing to "EQ").
 if_op: "="  -> op_eq
      | "EQ" -> op_eq
      | "¬=" -> op_ne
@@ -1193,24 +836,17 @@ if_op: "="  -> op_eq
      | "<"  -> op_lt
      | "LT" -> op_lt
 
-clause: command                 -> clause_single
-      | "DO" command+ "END"     -> clause_do
-      |                         -> clause_null
-
-// ---------------------------------------------------------------------
-NAME:          /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*/
+// A "+" continues a value onto the next record (AMS p. xxvii).
+NAME:          /[A-Z#@$](?:[A-Z0-9#@$]|\.(?=[A-Z#@$+])|\+[ \t]*\r?\n[ \t]*)*/
 GENERIC_NAME:  /[A-Z#@$][A-Z0-9#@$]*(\.[A-Z#@$][A-Z0-9#@$]*)*\.\*(\.[A-Z#@$][A-Z0-9#@$]*)?/
 QUOTED_STRING: /'([^']|'')*'/
 HEX_LITERAL:   /X'[0-9A-Fa-f]+'/
 BIN_LITERAL:   /B'[01]+'/
 INT:           /[0-9]+/
 
-// Whitespace, "-" continuation (whitespace-equivalent), semicolon
-// terminator (rest of physical line becomes a comment), and /* */
-// comments are all ignorable. "+" continuation is handled by
-// preprocess.join_plus_continuations() *before* this grammar ever sees
-// the text, not here.
-%ignore /[ \t\r\n]+/
-%ignore /-[ \t]*(?=\r?\n)/
+// Blanks, commas and comments separate (AMS p. xxiv); "-" continues the record.
+_NL: /[ \t]*\r?\n/
+%ignore /[ \t,]+/
+%ignore /-[ \t]*\r?\n/
 %ignore /;[^\r\n]*/
 %ignore /\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\//

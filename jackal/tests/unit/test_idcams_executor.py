@@ -97,24 +97,38 @@ def test_repro_from_an_unlabelled_input_ends_with_12_and_idcams_goes_on(tmp_path
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_delete_existing_dsn_returns_0(tmp_path):
+def test_delete_ends_with_the_highest_code_of_its_entries(tmp_path):
+    """AMS p. 22: 8 when an entry to be deleted could not be found. A DELETE of
+    several entries deletes each it finds and ends with the highest code."""
     from jackal.idcams.executor import run_idcams
 
-    upload(tmp_path, "MY.DS", b"")
+    for name in ("ONE.DS", "TWO.DS", "THREE.DS"):
+        upload(tmp_path, name, b"")
     cat = job_catalog(tmp_path)
-    cmds = (Delete(dsn="MY.DS"),)
-    rc = run_idcams(cmds, DdEnvironment(()), cat)
-    assert rc == 0
+    rcs = tuple(
+        run_idcams((Delete(entries, purge=False),), DdEnvironment(()), cat)
+        for entries in (("ONE.DS",), ("GHOST.DS",), ("TWO.DS", "GHOST.DS", "THREE.DS"))
+    )
+    assert rcs == (0, 8, 8)
+    assert (
+        tuple(cat.resolve(n) for n in ("ONE.DS", "TWO.DS", "THREE.DS"))
+        == (NotCataloged(),) * 3
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_delete_missing_dsn_returns_8(tmp_path):
+def test_a_command_not_executed_ends_with_12_and_the_stream_goes_on(tmp_path):
+    """Record O6: a command jackal parsed but does not run ends with condition
+    code 12, which LASTCC sees, and the next command runs."""
+    from jackal.idcams.commands import Cc, CcOp, Condition, If, NotExecuted, SetCc, Verb
     from jackal.idcams.executor import run_idcams
 
     cat = job_catalog(tmp_path)
-    cmds = (Delete(dsn="GHOST.DS"),)
-    rc = run_idcams(cmds, DdEnvironment(()), cat)
-    assert rc == 8
+    cmds = (
+        NotExecuted(Verb.LISTCAT),
+        If(Condition(Cc.LASTCC, CcOp.EQ, 12), (SetCc(Cc.MAXCC, 3),), ()),
+    )
+    assert run_idcams(cmds, DdEnvironment(()), cat) == 3
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -135,7 +149,7 @@ def test_if_maxcc_sets_value_when_condition_met(tmp_path):
     cat = job_catalog(tmp_path)
     # Delete missing → maxcc=8; IF MAXCC LE 8 → SET MAXCC=0
     cmds = (
-        Delete(dsn="GHOST.DS"),
+        Delete(("GHOST.DS",), purge=False),
         If(Condition(Cc.MAXCC, CcOp.LE, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
@@ -149,7 +163,7 @@ def test_if_maxcc_does_not_set_when_condition_not_met(tmp_path):
     cat = job_catalog(tmp_path)
     # Delete missing → maxcc=8; IF MAXCC LT 8 → not met (8 < 8 is false)
     cmds = (
-        Delete(dsn="GHOST.DS"),
+        Delete(("GHOST.DS",), purge=False),
         If(Condition(Cc.MAXCC, CcOp.LT, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
@@ -164,7 +178,7 @@ def test_if_maxcc_all_operators(tmp_path):
 
     def after_rc_8(op: str, value: int) -> int:
         cmds = (
-            Delete(dsn="GHOST.DS"),
+            Delete(("GHOST.DS",), purge=False),
             If(Condition(Cc.MAXCC, CcOp(op), value), (SetCc(Cc.MAXCC, 0),), ()),
         )
         return run_idcams(cmds, DdEnvironment(()), cat)
@@ -188,7 +202,7 @@ def test_set_maxcc_overrides_accumulated_rc(tmp_path):
     # same idempotency idiom real CardDemo JCL uses so a missing dataset
     # doesn't fail a step that's about to (re)DEFINE it anyway.
     cmds = (
-        Delete(dsn="GHOST.DS"),
+        Delete(("GHOST.DS",), purge=False),
         SetCc(Cc.MAXCC, 0),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
@@ -201,7 +215,7 @@ def test_if_lastcc_tests_immediately_preceding_command_rc(tmp_path):
 
     cat = job_catalog(tmp_path)
     cmds = (
-        Delete(dsn="GHOST.DS"),  # missing -> rc 8, lastcc=8, maxcc=8
+        Delete(("GHOST.DS",), purge=False),  # missing -> rc 8, lastcc=8, maxcc=8
         If(Condition(Cc.LASTCC, CcOp.EQ, 8), (SetCc(Cc.MAXCC, 0),), ()),
     )
     rc = run_idcams(cmds, DdEnvironment(()), cat)
@@ -218,7 +232,7 @@ def test_if_lastcc_reflects_only_the_most_recent_command_not_running_maxcc(tmp_p
 
     cat = job_catalog(tmp_path)
     cmds = (
-        Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
+        Delete(("GHOST.DS",), purge=False),  # missing -> rc 8; lastcc=8, maxcc=8
         DefineCluster(
             name="MY.KSDS", key_length=5, key_offset=0, record_size=80
         ),  # succeeds -> rc 0; lastcc=0, maxcc stays 8 (max(8,0))
@@ -237,7 +251,7 @@ def test_set_maxcc_does_not_change_lastcc(tmp_path):
 
     cat = job_catalog(tmp_path)
     cmds = (
-        Delete(dsn="GHOST.DS"),  # missing -> rc 8; lastcc=8, maxcc=8
+        Delete(("GHOST.DS",), purge=False),  # missing -> rc 8; lastcc=8, maxcc=8
         SetCc(Cc.MAXCC, 0),  # maxcc forced to 0; lastcc still 8
         If(Condition(Cc.LASTCC, CcOp.EQ, 8), (SetCc(Cc.MAXCC, 5),), ()),
     )
@@ -254,7 +268,7 @@ def test_delete_purge_flag_deletes_existing_dsn_same_as_without_purge(tmp_path):
 
     upload(tmp_path, "MY.DS", b"")
     cat = job_catalog(tmp_path)
-    cmds = (Delete(dsn="MY.DS", purge=True),)
+    cmds = (Delete(("MY.DS",), purge=True),)
     rc = run_idcams(cmds, DdEnvironment(()), cat)
     assert rc == 0
 
