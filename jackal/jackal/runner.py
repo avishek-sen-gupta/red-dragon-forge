@@ -95,6 +95,24 @@ def _copied(
 def _dcb_copied(
     dcb: Dcb[StepReference], earlier: Mapping[DdName, DD[StepReference]]
 ) -> Dcb[StepReference]:
+    return _refdd_copied(_model_copied(dcb, earlier), earlier)
+
+
+def _refdd_copied(
+    dcb: Dcb[StepReference], earlier: Mapping[DdName, DD[StepReference]]
+) -> Dcb[StepReference]:
+    match dcb.refdd:
+        case BackwardRef(dd=ResolvedDd(dd=referenced)):
+            return dcb.referred_to(referenced.dcb)
+        case StepDd(ddname=name) if name in earlier:
+            return dcb.referred_to(earlier[name].dcb)
+        case _:
+            return dcb
+
+
+def _model_copied(
+    dcb: Dcb[StepReference], earlier: Mapping[DdName, DD[StepReference]]
+) -> Dcb[StepReference]:
     match dcb.model:
         case BackwardRef(dd=ResolvedDd(dd=referenced)):
             return dcb.completed_by(referenced.dcb)

@@ -477,7 +477,7 @@ ddParmPROTECT : PROTECT EQUAL keywordOrSymbolic? ;
 ddParmPRTSP : PRTSP EQUAL keywordOrSymbolic? ;
 ddParmRECFM : RECFM EQUAL keywordOrSymbolic? ;
 ddParmRECORG : RECORG EQUAL keywordOrSymbolic? ;
-ddParmREFDD : REFDD EQUAL keywordOrSymbolic? ;
+ddParmREFDD : REFDD EQUAL datasetName? ;
 ddParmRESERVE : RESERVE EQUAL parenList? ;
 ddParmRETPD : RETPD EQUAL keywordOrSymbolic? ;
 ddParmRKP : RKP EQUAL keywordOrSymbolic? ;

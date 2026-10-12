@@ -41,7 +41,8 @@ public class ContractTest {
     }
 
     private static final String UNCODED_ATTRIBUTES =
-            ",'dcb':{'coded':false,'source':{'kind':'none'},'recfm':[],'lrecl':[]},'gdg_order':[]";
+            ",'dcb':{'coded':false,'source':{'kind':'none'},'recfm':[],'lrecl':[],"
+            + "'like':{'kind':'none'},'refdd':{'kind':'none'}},'gdg_order':[]";
 
     private static String named(String ddname, String dsn, String disp) {
         return "{'ddname':'" + ddname + "','dsn':{'kind':'name','value':[" + literal(dsn)

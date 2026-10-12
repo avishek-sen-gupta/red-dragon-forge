@@ -57,11 +57,11 @@ public class ParseFixesTest {
                 "[{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"IN\",\"dsn\":{\"kind\":\"name\","
                         + "\"value\":[{\"kind\":\"literal\",\"text\":\"T.X\"}]},\"disp\":[],\"nullified\":[\"dcb\"],"
                         + "\"in_stream\":[],\"sysout\":false,\"concatenated\":[],"
-                        + "\"dcb\":{\"coded\":true,\"source\":{\"kind\":\"none\"},\"recfm\":[],\"lrecl\":[]},\"gdg_order\":[]}},"
+                        + "\"dcb\":{\"coded\":true,\"source\":{\"kind\":\"none\"},\"recfm\":[],\"lrecl\":[],\"like\":{\"kind\":\"none\"},\"refdd\":{\"kind\":\"none\"}},\"gdg_order\":[]}},"
                         + "{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"OUT\",\"dsn\":{\"kind\":\"none\"},"
                         + "\"disp\":[],\"nullified\":[\"disp\",\"dsn\"],\"in_stream\":[],\"sysout\":false,"
                         + "\"concatenated\":[],"
-                        + "\"dcb\":{\"coded\":false,\"source\":{\"kind\":\"none\"},\"recfm\":[],\"lrecl\":[]},\"gdg_order\":[]}}]",
+                        + "\"dcb\":{\"coded\":false,\"source\":{\"kind\":\"none\"},\"recfm\":[],\"lrecl\":[],\"like\":{\"kind\":\"none\"},\"refdd\":{\"kind\":\"none\"}},\"gdg_order\":[]}}]",
                 job.getAsJsonArray("statements").get(0).getAsJsonObject()
                         .getAsJsonArray("dd_overrides").toString());
     }

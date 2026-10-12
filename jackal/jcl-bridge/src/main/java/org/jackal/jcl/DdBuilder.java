@@ -12,31 +12,45 @@ import java.util.Optional;
 /** A DD statement, with the unnamed DDs after it as its concatenated members. */
 final class DdBuilder {
 
-    /** The DCB attributes jackal models: the model (positional), RECFM and LRECL, and whether DCB= was coded. */
+    /**
+     * The record attributes jackal models: DCB's model (positional), RECFM and LRECL, whether DCB= was
+     * coded, and the LIKE and REFDD sources.
+     */
     private record Dcb(
             Optional<JCLParser.DatasetNameContext> source,
             Optional<JCLParser.KeywordOrSymbolicContext> recfm,
             Optional<JCLParser.KeywordOrSymbolicContext> lrecl,
-            boolean coded) {
+            boolean coded,
+            Optional<JCLParser.DatasetNameContext> like,
+            Optional<JCLParser.DatasetNameContext> refdd) {
 
         static Dcb empty() {
-            return new Dcb(Optional.empty(), Optional.empty(), Optional.empty(), false);
+            return new Dcb(Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.empty(),
+                    Optional.empty());
         }
 
         Dcb withSource(JCLParser.DatasetNameContext name) {
-            return new Dcb(Optional.of(name), recfm, lrecl, coded);
+            return new Dcb(Optional.of(name), recfm, lrecl, coded, like, refdd);
         }
 
         Dcb withRecfm(JCLParser.KeywordOrSymbolicContext value) {
-            return new Dcb(source, Optional.ofNullable(value), lrecl, coded);
+            return new Dcb(source, Optional.ofNullable(value), lrecl, coded, like, refdd);
         }
 
         Dcb withLrecl(JCLParser.KeywordOrSymbolicContext value) {
-            return new Dcb(source, recfm, Optional.ofNullable(value), coded);
+            return new Dcb(source, recfm, Optional.ofNullable(value), coded, like, refdd);
         }
 
         Dcb asCoded() {
-            return new Dcb(source, recfm, lrecl, true);
+            return new Dcb(source, recfm, lrecl, true, like, refdd);
+        }
+
+        Dcb withLike(JCLParser.DatasetNameContext name) {
+            return new Dcb(source, recfm, lrecl, coded, Optional.ofNullable(name), refdd);
+        }
+
+        Dcb withRefdd(JCLParser.DatasetNameContext name) {
+            return new Dcb(source, recfm, lrecl, coded, like, Optional.ofNullable(name));
         }
     }
 
@@ -149,6 +163,10 @@ final class DdBuilder {
                             (f, p) -> dcbParameter(f, p.getChild(0), true), (a, b) -> b)
                     .withNullified(c.ddParmDCB_Parameter().isEmpty(), "dcb");
             case JCLParser.DdParmDCB_ParameterContext c -> dcbParameter(acc, c.getChild(0), false);
+            case JCLParser.DdParmLIKEContext c -> acc.withDcb(acc.dcb().withLike(c.datasetName()))
+                    .withNullified(c.datasetName() == null, "like");
+            case JCLParser.DdParmREFDDContext c -> acc.withDcb(acc.dcb().withRefdd(c.datasetName()))
+                    .withNullified(c.datasetName() == null, "refdd");
             case JCLParser.DdParmGDGORDERContext c -> acc.withGdgOrder(c.keywordOrSymbolic())
                     .withNullified(c.keywordOrSymbolic() == null, "gdgorder");
             default -> acc;
@@ -172,6 +190,8 @@ final class DdBuilder {
         out.add("source", dcb.source().map(DdBuilder::named).orElseGet(() -> kind("none")));
         out.add("recfm", dcb.recfm().map(ValueParts::of).orElseGet(JsonArray::new));
         out.add("lrecl", dcb.lrecl().map(ValueParts::of).orElseGet(JsonArray::new));
+        out.add("like", dcb.like().map(DdBuilder::named).orElseGet(() -> kind("none")));
+        out.add("refdd", dcb.refdd().map(DdBuilder::named).orElseGet(() -> kind("none")));
         return out;
     }
 

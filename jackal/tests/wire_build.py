@@ -5,7 +5,14 @@ from collections.abc import Sequence
 from jackal.jcl import wire
 
 NO_COND = wire.Cond(tests=(), mode="NORMAL")
-NO_DCB = wire.DcbWire(coded=False, source=wire.NoneDsn(), recfm=(), lrecl=())
+NO_DCB = wire.DcbWire(
+    coded=False,
+    source=wire.NoneDsn(),
+    recfm=(),
+    lrecl=(),
+    like=wire.NoneDsn(),
+    refdd=wire.NoneDsn(),
+)
 
 
 def lit(text: str) -> wire.LiteralPart:

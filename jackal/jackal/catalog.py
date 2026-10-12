@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import reduce
 from pathlib import Path
+from typing import TypeAlias
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset, Relabeller
-from jackal.dcb_label import coded_label
+from jackal.dcb_label import coded_label, liked_label
 from jackal.gdg import GdgBase, RequestedOrder, relative_generation
 from jackal.labels import DatasetLabel, Label, LabelPending
 from jackal.model import (
@@ -20,6 +22,7 @@ from jackal.model import (
     DispNormal,
     DispStatus,
     GenerationDSN,
+    NoDSN,
     NullifiedValue,
     ResolvedDisp,
     StepReference,
@@ -45,6 +48,11 @@ class Unallocated:
 
 def _temp_name(alias: str) -> str:
     return f"&&{alias}"
+
+
+_LabelRule: TypeAlias = Callable[
+    [Value | NullifiedValue, Value | NullifiedValue, DatasetLabel], DatasetLabel
+]
 
 
 def _requested_order(coded: Value | NullifiedValue) -> RequestedOrder:
@@ -232,11 +240,20 @@ class DatasetCatalog(Relabeller):
         return self._temps.put(temp.dsn, Dataset(temp.dsn, temp.path, label))
 
     def _label(self, dd: DD[StepReference]) -> DatasetLabel | AllocationError:
-        match self._model_label(dd.dcb.model):
+        match (dd.dcb.model, dd.dcb.like):
+            case (NoDSN(), DirectDSN() as like):
+                return self._labelled(dd, liked_label, like)
+            case (model, _):
+                return self._labelled(dd, coded_label, model)
+
+    def _labelled(
+        self, dd: DD[StepReference], rule: _LabelRule, model: DSN[StepReference]
+    ) -> DatasetLabel | AllocationError:
+        match self._model_label(model):
             case AllocationError() as error:
                 return error
-            case model:
-                return coded_label(dd.dcb.recfm, dd.dcb.lrecl, model)
+            case label:
+                return rule(dd.dcb.recfm, dd.dcb.lrecl, label)
 
     def _model_label(self, model: DSN[StepReference]) -> DatasetLabel | AllocationError:
         match model:

@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
-from jackal.labels import LabelPending, RecordFormat, SequentialLabel
+from jackal.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.model import (
@@ -22,7 +24,7 @@ from jackal.model import (
 )
 from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner
-from jackal.unresolved import RaiseErrorStrategy
+from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import dd, disp, job, program, ref
@@ -120,3 +122,85 @@ def test_a_model_that_is_not_cataloged_fails_the_allocation(tmp_path):
     assert result.steps[0].outcome == AllocationFailed(
         DdName("A"), AllocationError.DATASET_NOT_FOUND
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_like_copies_a_cataloged_model_and_refdd_copies_a_dds_coded_attributes(
+    tmp_path,
+):
+    """JCL Ref pp. 208-210: LIKE=dsname copies a cataloged model's RECORG or
+    RECFM and LRECL, a KSDS's included, and LRECL or RECFM coded on the DD
+    override them; a model not cataloged fails the allocation. pp. 238-240:
+    REFDD=*.ddname or *.step.ddname copies the RECFM and LRECL coded on that DD,
+    never its dataset's label. A REFDD or DCB referback naming no earlier DD is an
+    unresolved reference, rejected before any step runs."""
+    upload(tmp_path, "T.MODEL", b"", _FB80)
+    upload(tmp_path, "T.KSDS", b"", KsdsLabel(100, 0, 8))
+    model, ksds = DirectDSN(literal("T.MODEL")), DirectDSN(literal("T.KSDS"))
+    c_in_s1 = BackwardRef(ref("S1"), UnresolvedDd(DdName("C")))
+    l1_in_s1 = BackwardRef(ref("S1"), UnresolvedDd(DdName("L1")))
+    j = job(
+        "J",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (
+                    _new("C", _dcb(recfm="VB", lrecl="204")),
+                    _new("L1", replace(_dcb(), like=model)),
+                    _new("L2", replace(_dcb(lrecl="120"), like=model)),
+                    _new("L3", replace(_dcb(), like=ksds)),
+                    _new("L4", replace(_dcb(lrecl="200"), like=ksds)),
+                    _new("L5", replace(_dcb(recfm="VB", lrecl="84"), like=ksds)),
+                    _new("R1", replace(_dcb(), refdd=StepDd(DdName("C")))),
+                ),
+            ),
+            program(
+                "S2",
+                "IEFBR14",
+                (
+                    _new("R2", replace(_dcb(lrecl="300"), refdd=c_in_s1)),
+                    _new("R3", replace(_dcb(), refdd=l1_in_s1)),
+                ),
+            ),
+        ),
+    )
+    missing = job(
+        "M",
+        (
+            program(
+                "S1",
+                "IEFBR14",
+                (_new("X", replace(_dcb(), like=DirectDSN(literal("T.NOPE")))),),
+            ),
+        ),
+    )
+    result = _runner(tmp_path).run(j, scratch=scratch(tmp_path))
+    failed = _runner(tmp_path).run(missing, scratch=scratch(tmp_path))
+    after = job_catalog(tmp_path)
+    assert [s.outcome for s in result.steps] == [Completed(0), Completed(0)]
+    assert {
+        n: after.resolve(f"T.{n}").label
+        for n in ("L1", "L2", "L3", "L4", "L5", "R1", "R2", "R3")
+    } == {
+        "L1": _FB80,
+        "L2": SequentialLabel(RecordFormat.FB, 120),
+        "L3": KsdsLabel(100, 0, 8),
+        "L4": KsdsLabel(200, 0, 8),
+        "L5": SequentialLabel(RecordFormat.VB, 84),
+        "R1": SequentialLabel(RecordFormat.VB, 204),
+        "R2": SequentialLabel(RecordFormat.VB, 300),
+        "R3": LabelPending(),
+    }
+    assert failed.steps[0].outcome == AllocationFailed(
+        DdName("X"), AllocationError.DATASET_NOT_FOUND
+    )
+    for dangling in (
+        replace(_dcb(), refdd=StepDd(DdName("NOPE"))),
+        _dcb(BackwardRef(ref("S9"), UnresolvedDd(DdName("X")))),
+    ):
+        with pytest.raises(UnresolvedReference):
+            _runner(tmp_path).run(
+                job("D", (program("S1", "IEFBR14", (_new("Y", dangling),)),)),
+                scratch=scratch(tmp_path),
+            )

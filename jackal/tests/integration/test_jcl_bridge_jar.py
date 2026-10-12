@@ -226,6 +226,53 @@ def test_real_jar_overrides_dcb_subparameters_one_by_one(jcl_bridge_jar, tmp_pat
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_carries_like_and_refdd_through_symbols_and_overrides(
+    jcl_bridge_jar, tmp_path
+):
+    """JCL Ref p. 208: LIKE=dsname; p. 239: REFDD=*.ddname, *.stepname.ddname or
+    *.stepname.procstepname.ddname. An override changes each only where it codes
+    it, and LIKE= with no value nullifies it."""
+    from jackal.expansion import expand_or_fail
+    from jackal.model import BackwardRef, Dcb, NoDSN, StepDd
+
+    jcl = (
+        "//J JOB 1\n"
+        "//S0 EXEC PGM=A\n"
+        "//OUT DD DSN=T.OUT,DISP=(NEW,CATLG),RECFM=FB,LRECL=80\n"
+        "//S1 EXEC PGM=A\n"
+        "//A DD DSN=T.A,DISP=(NEW,CATLG),LIKE=T.MODEL\n"
+        "//B DD DSN=T.B,DISP=(NEW,CATLG),REFDD=*.S0.OUT\n"
+        "//C DD DSN=T.C,DISP=(NEW,CATLG),REFDD=*.A,LRECL=100\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    out_in_s0 = BackwardRef(
+        StepRef(OwnScope(), StepName("S0")), UnresolvedDd(DdName("OUT"))
+    )
+    assert [dd.dcb for dd in job.steps[-1].dds] == [
+        Dcb(like=DirectDSN(literal("T.MODEL"))),
+        Dcb(refdd=out_in_s0),
+        Dcb(NoDSN(), (), literal("100"), refdd=StepDd(DdName("A"))),
+    ]
+
+    (tmp_path / "P.prc").write_text(
+        "//P PROC M=T.SYM\n"
+        "//PS EXEC PGM=A\n"
+        "//D1 DD DSN=T.D1,DISP=(NEW,CATLG),LIKE=T.MOD\n"
+        "//D2 DD DSN=T.D2,DISP=(NEW,CATLG),REFDD=*.D1\n"
+        "//D3 DD DSN=T.D3,DISP=(NEW,CATLG),LIKE=&M\n"
+        "// PEND\n"
+    )
+    call = "//J JOB 1\n//S EXEC P\n//PS.D1 DD LIKE=T.OTHER\n//PS.D3 DD LIKE=\n"
+    called = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(call)
+    expanded = expand_or_fail(called, DirectoryProcLibrary((tmp_path,)))
+    assert [dd.dcb for dd in expanded.steps[0].step.dds] == [
+        Dcb(like=DirectDSN(literal("T.OTHER"))),
+        Dcb(refdd=StepDd(DdName("D1"))),
+        Dcb(),
+    ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_real_jar_carries_gdgorder_through_symbols_and_overrides(
     jcl_bridge_jar, tmp_path
 ):

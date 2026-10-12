@@ -7,6 +7,7 @@ from typing import Protocol
 from jackal.expansion import ExpandedJob
 from jackal.model import (
     DD,
+    DSN,
     AllPriorSteps,
     BackwardRef,
     BypassTest,
@@ -33,27 +34,26 @@ def _test_resolved(test: BypassTest[StepReference]) -> bool:
             return isinstance(test.target.target, ResolvedProgramStep)
 
 
-def _referback_resolved(dd: DD[StepReference]) -> bool:
-    match dd.dsn:
+def _resolved(dsn: DSN[StepReference], earlier: frozenset[DdName]) -> bool:
+    match dsn:
         case BackwardRef(dd=coordinate):
             return isinstance(coordinate, ResolvedDd)
-        case _:
-            return True
-
-
-def _same_step_resolved(dd: DD[StepReference], earlier: frozenset[DdName]) -> bool:
-    match dd.dsn:
         case StepDd(ddname=name):
             return name in earlier
         case _:
             return True
 
 
+def _referbacks(dd: DD[StepReference]) -> tuple[DSN[StepReference], ...]:
+    return (dd.dsn, dd.dcb.model, dd.dcb.refdd)
+
+
 def referbacks_resolved(step: ProgramStep[StepReference]) -> bool:
     names = tuple(dd.ddname for dd in step.dds)
     return all(
-        _referback_resolved(dd) and _same_step_resolved(dd, frozenset(names[:at]))
+        _resolved(dsn, frozenset(names[:at]))
         for at, dd in enumerate(step.dds)
+        for dsn in _referbacks(dd)
     )
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Generic, TypeAlias, TypeVar
 
@@ -508,34 +508,52 @@ def _model_over(own: DSN[R], override: DSN[R]) -> DSN[R]:
 
 @dataclass(frozen=True)
 class Dcb(Generic[R]):
-    """A DD's DCB attributes as coded: the model whose label they complete, RECFM and LRECL."""
+    """A DD's record attributes as coded: DCB's model, RECFM and LRECL, and the LIKE and REFDD sources."""
 
     model: DSN[R] = NoDSN()
     recfm: Value | NullifiedValue = ()
     lrecl: Value | NullifiedValue = ()
+    like: DSN[R] = NoDSN()
+    refdd: DSN[R] = NoDSN()
 
     def overridden_by(self, override: Dcb[R]) -> Dcb[R]:
         return Dcb(
             _model_over(self.model, override.model),
             _value_over(_kept(self.recfm), override.recfm),
             _value_over(_kept(self.lrecl), override.lrecl),
+            _model_over(self.like, override.like),
+            _model_over(self.refdd, override.refdd),
         )
 
     def completed_by(self, referenced: Dcb[R]) -> Dcb[R]:
-        return Dcb(
-            NoDSN(),
-            _value_over(_kept(referenced.recfm), self.recfm),
-            _value_over(_kept(referenced.lrecl), self.lrecl),
+        return replace(self._attributes_over(referenced), model=NoDSN())
+
+    def referred_to(self, referenced: Dcb[R]) -> Dcb[R]:
+        return replace(self._attributes_over(referenced), refdd=NoDSN())
+
+    def _attributes_over(self, referenced: Dcb[R]) -> Dcb[R]:
+        return replace(
+            self,
+            recfm=_value_over(_kept(referenced.recfm), self.recfm),
+            lrecl=_value_over(_kept(referenced.lrecl), self.lrecl),
         )
 
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> Dcb[S]:
-        return Dcb(self.model.mapped(backref), self.recfm, self.lrecl)
+        return Dcb(
+            self.model.mapped(backref),
+            self.recfm,
+            self.lrecl,
+            self.like.mapped(backref),
+            self.refdd.mapped(backref),
+        )
 
     def substituted(self, substitution: Substitution[R]) -> Dcb[R]:
         return Dcb(
             self.model.substituted(substitution),
             _substituted_value(self.recfm, substitution),
             _substituted_value(self.lrecl, substitution),
+            self.like.substituted(substitution),
+            self.refdd.substituted(substitution),
         )
 
 
