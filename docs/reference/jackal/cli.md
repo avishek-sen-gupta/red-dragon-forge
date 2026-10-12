@@ -17,7 +17,8 @@ A dataset is brought in once; later runs against the same `DIR` find it.
 ## `jackal run`
 
 ```
-jackal run JCL --system DIR [--source-dir DIR] [--copybook-dir DIR] [--link PGM ...]
+jackal run JCL --system DIR [--source-dir DIR] [--copybook-dir DIR] [--proclib DIR]...
+           [--link PGM ...]
 ```
 
 Parses `JCL`, runs every step against the system directory, and prints one line per step:
@@ -27,7 +28,9 @@ STEP05: RC=0
 ```
 
 The exit status is 0 if the job completed with every return code 0, and 1 otherwise (a nonzero
-return code, an abend or a failed allocation). Argument errors exit with 2.
+return code, an abend or a failed allocation). A job that refers to a PROC, step or DD that does
+not resolve is not run: the command prints `jackal: <reference>` and exits with 1. Argument errors
+exit with 2.
 
 | Argument | Default | Meaning |
 |---|---|---|
@@ -35,6 +38,7 @@ return code, an abend or a failed allocation). Argument errors exit with 2.
 | `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`; a program that is neither there nor a utility is stubbed with RC 0 and a warning. |
 | `--system DIR` | required | The system directory: `catalog.json` and the cataloged datasets' bytes. Created if absent. |
 | `--copybook-dir DIR` | `$CARDDEMO_HOME/app/cpy` | Copybook directory for COBOL steps. |
+| `--proclib DIR` | `$CARDDEMO_HOME/app/proc` | Directory of cataloged procedures: `EXEC P` expands `DIR/P.prc`. Repeat the flag to search several directories in order. With neither the flag nor `CARDDEMO_HOME`, only in-stream PROCs expand. |
 | `--link PGM ...` | none | Programs a CALL by data-name may reach. Each `PGM` is loaded from `--source-dir` and compiled into every COBOL step. A name with no source there is an argument error. |
 
 `--source-dir` and `--copybook-dir` come from their flag, else from `CARDDEMO_HOME`. If neither is given the command
@@ -49,8 +53,6 @@ it catalogs stay for later runs, and datasets it deletes are gone. A DSN not in 
 not found; the CLI then stands in an empty dataset, with a warning, and catalogs it like any
 dataset the job creates. Temporary datasets, in-stream cards and sinks live in a scratch
 directory that is removed when the command exits.
-
-The CLI does not expand cataloged procedures: it passes no proclib directories to `JobRunner`.
 
 Each COBOL program may run 500,000 interpreter steps. One that has not ended by then abends
 `S322`.

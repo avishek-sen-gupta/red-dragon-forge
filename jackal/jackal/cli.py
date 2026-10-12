@@ -14,12 +14,12 @@ from jackal.jcl.parser import parse_jcl
 from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
-from jackal.model import ProgramRef
+from jackal.model import Job, ProgramRef
 from jackal.program_sources import LinkedProgramNotFound
 from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.system_catalog import SystemCatalog
-from jackal.unresolved import RaiseErrorStrategy
+from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
 
 
 def _resolve_dir(
@@ -36,12 +36,22 @@ def _resolve_dir(
     parser.error(f"{flag_name} is required: supply the flag or set $CARDDEMO_HOME")
 
 
+def _proclibs(flag_values: Sequence[str]) -> tuple[Path, ...]:
+    if flag_values:
+        return tuple(map(Path, flag_values))
+    carddemo_home = os.environ.get("CARDDEMO_HOME", "")
+    if carddemo_home:
+        return (Path(carddemo_home) / "app/proc",)
+    return ()
+
+
 def _run_command(runp: argparse.ArgumentParser) -> None:
     runp.add_argument("jcl")
     runp.add_argument("--system", required=True)
     runp.add_argument("--source-dir", default="")
     runp.add_argument("--copybook-dir", default="")
     runp.add_argument("--link", nargs="+", default=[], metavar="PGM")
+    runp.add_argument("--proclib", action="append", default=[], metavar="DIR")
 
 
 def _catalog_add_command(add: argparse.ArgumentParser) -> None:
@@ -79,6 +89,7 @@ def _job_runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRun
         missing_program=StubMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         linked_programs=tuple(ProgramRef(name) for name in args.link),
+        proclib_dirs=_proclibs(args.proclib),
     )
 
 
@@ -93,7 +104,15 @@ def _run_job(args: argparse.Namespace, ap: argparse.ArgumentParser) -> int:
     runner = _runner(args, ap)
     job = parse_jcl(Path(args.jcl).read_text())
     with tempfile.TemporaryDirectory(prefix="jackal_") as scratch:
-        return _report(runner.run(job, scratch=Path(scratch)))
+        return _report(_ran(runner, job, Path(scratch)))
+
+
+def _ran(runner: JobRunner, job: Job, scratch: Path) -> JobResult:
+    try:
+        return runner.run(job, scratch=scratch)
+    except UnresolvedReference as unresolved:
+        sys.stderr.write(f"jackal: {unresolved}\n")
+        raise SystemExit(1) from unresolved
 
 
 def _catalog_add(args: argparse.Namespace) -> int:
