@@ -503,6 +503,13 @@ class Dcb(Generic[R]):
             _value_over(self._kept(self.lrecl), override.lrecl),
         )
 
+    def completed_by(self, referenced: Dcb[R]) -> Dcb[R]:
+        return Dcb(
+            NoDSN(),
+            _value_over(self._kept(referenced.recfm), self.recfm),
+            _value_over(self._kept(referenced.lrecl), self.lrecl),
+        )
+
     def _kept(self, value: Value | NullifiedValue) -> Value:
         match value:
             case NullifiedValue():

@@ -158,7 +158,7 @@ the JCL Reference's DISP defaults say. The decisions and their IBM sources are i
 |---|---|
 | `DISP=OLD` or `SHR` | Resolved from the system catalog. Missing is an allocation failure. |
 | `DISP=MOD` | As above; created empty and cataloged if absent. |
-| `DISP=NEW` | Created empty and cataloged, its label pending. A name already cataloged fails allocation. |
+| `DISP=NEW` | Created empty and cataloged. A name already cataloged fails allocation. It is labelled from its DD's `RECFM`/`LRECL` over its model's label (`DCB=dsname`, or the subparameters of `DCB=*.dd`/`*.step.dd`); `FBA` labels FB, `VBS` VB. With either still unknown, or `RECFM=U`, the label stays pending until the first `OPEN OUTPUT`. A model not in the catalog fails allocation (`DATASET_NOT_FOUND`). An existing dataset's label is never changed by its DD ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). |
 | `DSN=&&NAME` | Job-scoped temporary dataset, kept apart from named datasets (its file is `&&NAME`), deleted at job end. |
 | `DSN=*.STEP.DD` | Referback to an earlier step's DD. |
 | `DSN=GDG(+n)`, `(0)`, `(-n)` | A relative generation, resolved against the GDG's active generations as the job first found them (GDGBIAS=JOB) to an absolute `GDG.GnnnnV00`. `(+n)` counts on from the newest; `(0)` and `(-n)` must name an active generation (else `DATASET_NOT_FOUND`); an undefined GDG fails with `GDG_BASE_NOT_FOUND`. A generation whose disposition at step end is `CATLG` rolls into the GDG; past `LIMIT` the oldest (`NOEMPTY`) or every active generation (`EMPTY`) rolls off, deleted under `SCRATCH`, left cataloged under `NOSCRATCH`. `KEEP` leaves it cataloged outside the GDG ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |

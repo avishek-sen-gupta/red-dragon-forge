@@ -21,6 +21,7 @@ from jackal.model import (
     AbendMode,
     Always,
     BackwardRef,
+    Dcb,
     DdName,
     Job,
     ProgramStep,
@@ -83,11 +84,27 @@ def _copied(
             return dsn
 
 
+def _dcb_copied(
+    dcb: Dcb[StepReference], earlier: Mapping[DdName, DD[StepReference]]
+) -> Dcb[StepReference]:
+    match dcb.model:
+        case BackwardRef(dd=ResolvedDd(dd=referenced)):
+            return dcb.completed_by(referenced.dcb)
+        case StepDd(ddname=name) if name in earlier:
+            return dcb.completed_by(earlier[name].dcb)
+        case _:
+            return dcb
+
+
 def _resolved_after(
     done: tuple[DD[StepReference], ...], dd: DD[StepReference]
 ) -> tuple[DD[StepReference], ...]:
-    earlier = {d.ddname: d.dsn for d in done}
-    return (*done, replace(dd, dsn=_copied(dd.dsn, earlier)))
+    earlier = {d.ddname: d for d in done}
+    dsns = {name: d.dsn for name, d in earlier.items()}
+    return (
+        *done,
+        replace(dd, dsn=_copied(dd.dsn, dsns), dcb=_dcb_copied(dd.dcb, earlier)),
+    )
 
 
 def _resolved_dds(
