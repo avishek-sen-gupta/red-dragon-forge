@@ -12,6 +12,7 @@ both.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,13 @@ def _stub_spec(recorder: _Recorder) -> CoprocessorSpec:
     )
 
 
+_PROGRAM_ID = re.compile(r"PROGRAM-ID\.\s+([A-Z0-9-]+)", re.IGNORECASE)
+
+
+def _program_id(source: str) -> str:
+    return _PROGRAM_ID.search(source).group(1)
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_extra_specs_prepass_runs_for_every_compiled_program(
     tmp_path, bridge_jar, monkeypatch
@@ -73,15 +81,16 @@ def test_extra_specs_prepass_runs_for_every_compiled_program(
     test fails there. A build_region that accepted the parameter but never
     threaded it into compile_program would leave recorder.sources empty; only
     a build_region that actually composes it produces one recorded source
-    per compiled program, each containing that program's own name."""
+    per compiled program, each containing that program's own name. Compiled
+    programs include static callees: COTRN02C calls CSUTLDTC, found in the
+    CardDemo source directory, which calls the Language Environment stub
+    CEEDAYS, found in the LE stub directory."""
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
     config = load_config(_CONFIG)
     recorder = _Recorder()
 
     build_region(config, bridge_jar, tmp_path, extra_specs=[_stub_spec(recorder)])
 
-    assert len(recorder.sources) == len(config.programs)
-    for name in config.programs:
-        assert any(
-            name in text for text in recorder.sources
-        ), f"{name}'s source never reached extra_specs' source_prepass"
+    assert sorted(_program_id(text) for text in recorder.sources) == sorted(
+        (*config.programs, "CSUTLDTC", "CEEDAYS")
+    )
