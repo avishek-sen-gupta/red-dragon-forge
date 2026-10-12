@@ -14,6 +14,8 @@ from jackal.jcl.parser import parse_jcl
 from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
+from jackal.model import ProgramRef
+from jackal.program_sources import LinkedProgramNotFound
 from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.system_catalog import SystemCatalog
@@ -39,6 +41,7 @@ def _run_command(runp: argparse.ArgumentParser) -> None:
     runp.add_argument("--system", required=True)
     runp.add_argument("--source-dir", default="")
     runp.add_argument("--copybook-dir", default="")
+    runp.add_argument("--link", nargs="+", default=[], metavar="PGM")
 
 
 def _catalog_add_command(add: argparse.ArgumentParser) -> None:
@@ -59,6 +62,13 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
+    try:
+        return _job_runner(args, ap)
+    except LinkedProgramNotFound as missing:
+        ap.error(f"--link: {missing}")
+
+
+def _job_runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
     return JobRunner(
         source_dir=_resolve_dir(args.source_dir, "app/cbl", "--source-dir", ap),
         bridge_jar=os.environ.get("PROLEAP_BRIDGE_JAR", ""),
@@ -68,6 +78,7 @@ def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
         missing_data=LenientAllocation(),
         missing_program=StubMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        linked_programs=tuple(ProgramRef(name) for name in args.link),
     )
 
 

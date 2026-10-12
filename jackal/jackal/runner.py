@@ -24,6 +24,7 @@ from jackal.model import (
     Dcb,
     DdName,
     Job,
+    ProgramRef,
     ProgramStep,
     QualifiedStep,
     RcComparison,
@@ -34,7 +35,13 @@ from jackal.model import (
     UnexpandedCall,
 )
 from jackal.program_compiler import ProgramCompiler
-from jackal.program_sources import CobolSource, DirectoryProgramSources, SourceNotFound
+from jackal.program_sources import (
+    CobolSource,
+    DirectoryProgramSources,
+    LinkedProgramNotFound,
+    ProgramSources,
+    SourceNotFound,
+)
 from jackal.results import (
     AllocationFailed,
     Bypassed,
@@ -114,6 +121,14 @@ def _resolved_dds(
     return reduce(_resolved_after, dds, ())
 
 
+def _linked_source(sources: ProgramSources, pgm: ProgramRef) -> CobolSource:
+    match sources.find(pgm):
+        case CobolSource() as source:
+            return source
+        case SourceNotFound():
+            raise LinkedProgramNotFound(pgm)
+
+
 class JobRunner:
     def __init__(
         self,
@@ -127,10 +142,15 @@ class JobRunner:
         program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
         coprocessors: Sequence[CoprocessorSpec] = (),
+        linked_programs: Sequence[ProgramRef] = (),
     ):
         self._sources = DirectoryProgramSources(source_dir)
         self._compiler = ProgramCompiler(
-            bridge_jar, (copybook_dir,), (source_dir,), tuple(coprocessors)
+            bridge_jar,
+            (copybook_dir,),
+            (source_dir,),
+            tuple(coprocessors),
+            {pgm: _linked_source(self._sources, pgm) for pgm in linked_programs},
         )
         self._system = system
         self._unresolved = unresolved

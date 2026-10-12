@@ -17,7 +17,7 @@ A dataset is brought in once; later runs against the same `DIR` find it.
 ## `jackal run`
 
 ```
-jackal run JCL --system DIR [--source-dir DIR] [--copybook-dir DIR]
+jackal run JCL --system DIR [--source-dir DIR] [--copybook-dir DIR] [--link PGM ...]
 ```
 
 Parses `JCL`, runs every step against the system directory, and prints one line per step:
@@ -35,6 +35,7 @@ return code, an abend or a failed allocation). Argument errors exit with 2.
 | `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`; a program that is neither there nor a utility is stubbed with RC 0 and a warning. |
 | `--system DIR` | required | The system directory: `catalog.json` and the cataloged datasets' bytes. Created if absent. |
 | `--copybook-dir DIR` | `$CARDDEMO_HOME/app/cpy` | Copybook directory for COBOL steps. |
+| `--link PGM ...` | none | Programs a CALL by data-name may reach. Each `PGM` is loaded from `--source-dir` and compiled into every COBOL step. A name with no source there is an argument error. |
 
 `--source-dir` and `--copybook-dir` come from their flag, else from `CARDDEMO_HOME`. If neither is given the command
 fails before parsing:

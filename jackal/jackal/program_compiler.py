@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
@@ -13,6 +13,8 @@ from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_pro
 from interpreter.project.types import LinkedProgram
 from jackal.cobol_files import ProgramFile, program_files
 from jackal.le_abend import LE_STUBS
+from jackal.model import ProgramRef
+from jackal.program_sources import CobolSource
 
 _MAIN_MODULE = Path("__main__.cbl")
 
@@ -29,6 +31,7 @@ class ProgramCompiler:
     copybook_dirs: tuple[Path, ...]
     source_dirs: tuple[Path, ...]
     coprocessors: tuple[CoprocessorSpec, ...]
+    linked: Mapping[ProgramRef, CobolSource] = field(default_factory=dict)
 
     def compiled(self, source: str) -> CompiledProgram:
         if not self.bridge_jar:
@@ -45,6 +48,10 @@ class ProgramCompiler:
             parser,
             self.coprocessors,
             source_search_dirs=(*self.source_dirs, LE_STUBS),
+            linked_subprogram_sources={
+                pgm.name: linked.text.encode("utf-8")
+                for pgm, linked in self.linked.items()
+            },
         )
         sources = (source.encode("utf-8"), *_callee_sources(linked))
         with dialect_parsers_in_scope([s.dialect_parser for s in self.coprocessors]):

@@ -146,3 +146,36 @@ def test_cli_catalogs_a_dataset_then_runs_a_job_that_changes_the_system(
         Dataset("J.OUT", datasets / "J.OUT", LabelPending()),
         Dataset("NO.SUCH", datasets / "NO.SUCH", LabelPending()),
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cli_refuses_a_link_list_naming_a_program_with_no_source(tmp_path, capsys):
+    import pytest
+
+    (tmp_path / "SUBPGM.cbl").write_text("")
+    jcl = tmp_path / "j.jcl"
+    jcl.write_text("//J JOB 1\n//A EXEC PGM=IEFBR14\n")
+    with pytest.raises(SystemExit) as exited:
+        run(
+            [
+                "run",
+                str(jcl),
+                "--source-dir",
+                str(tmp_path),
+                "--system",
+                str(tmp_path / "system"),
+                "--copybook-dir",
+                str(tmp_path),
+                "--link",
+                "SUBPGM",
+                "NOSUCH",
+            ]
+        )
+    assert (exited.value.code, capsys.readouterr()) == (
+        2,
+        (
+            "",
+            "usage: jackal [-h] {run,catalog} ...\n"
+            "jackal: error: --link: no COBOL source for linked program NOSUCH\n",
+        ),
+    )
