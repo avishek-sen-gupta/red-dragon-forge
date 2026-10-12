@@ -12,6 +12,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
 from interpreter.project.types import LinkedProgram
 from jackal.cobol_files import ProgramFile, program_files
+from jackal.le_abend import LE_STUBS
 
 _MAIN_MODULE = Path("__main__.cbl")
 
@@ -43,7 +44,7 @@ class ProgramCompiler:
             source.encode("utf-8"),
             parser,
             self.coprocessors,
-            source_search_dirs=self.source_dirs,
+            source_search_dirs=(*self.source_dirs, LE_STUBS),
         )
         sources = (source.encode("utf-8"), *_callee_sources(linked))
         with dialect_parsers_in_scope([s.dialect_parser for s in self.coprocessors]):

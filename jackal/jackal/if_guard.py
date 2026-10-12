@@ -96,10 +96,10 @@ def _step_abend(step: Sequence[_Ran]) -> _Truth:
 
 
 def _same_code(outcome: Completed | Abended, code: SystemAbend | UserAbend) -> bool:
-    match (outcome, code):
-        case (Abended(), SystemAbend()):
-            return outcome.code.code == code.code
-        case _:
+    match outcome:
+        case Abended():
+            return outcome.code == code
+        case Completed():
             return False
 
 

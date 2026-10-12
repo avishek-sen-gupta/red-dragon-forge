@@ -24,10 +24,11 @@ from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
 from jackal.cobol_files import AllocatedFileIOProvider
 from jackal.dataset import Relabeller
-from jackal.model import ProgramStep, StepReference
+from jackal.le_abend import user_abend
+from jackal.model import ProgramStep, StepReference, SystemAbend
 from jackal.parm import build_parm_region
 from jackal.program_compiler import CompiledProgram
-from jackal.results import Abended, Completed, ProgramResult, SystemAbend
+from jackal.results import Abended, Completed, ProgramResult
 from jackal.value_parts import resolve
 
 DEFAULT_PROGRAM_STEP_BUDGET = 500_000
@@ -68,9 +69,16 @@ def program_result(outcome: RunOutcome) -> ProgramResult:
 def _ended(outcome: RunCompleted | BudgetExhausted) -> ProgramResult:
     match outcome:
         case RunCompleted(vm=vm):
-            return Completed(read_return_code(vm))
+            return _completed_or_abended(vm)
         case BudgetExhausted():
             return Abended(CPU_TIME_EXCEEDED)
+
+
+def _completed_or_abended(vm: VMState) -> ProgramResult:
+    abends = user_abend(vm)
+    if abends:
+        return Abended(abends[0])
+    return Completed(read_return_code(vm))
 
 
 def _initial_vm(

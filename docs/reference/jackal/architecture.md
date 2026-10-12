@@ -136,6 +136,11 @@ changes a record's length with file status 44
 of interpreter steps, `JobRunner`'s `program_step_budget` (the CLI gives 500,000). A program
 that ends gives `Completed` with the return code read back from the VM. One still running
 when its budget runs out abends `S322`, as z/OS ends a step that exceeds its CPU time.
+A program that calls LE's `CEE3ABD` abends with that user code (`Unnnn`; a bare call gives
+U0000). `CEE3ABD` is a COBOL stub jackal links from `jackal/le_stubs/`, last on the CALL search
+path. It records the code in its WORKING-STORAGE and `STOP RUN`s, and `jackal.le_abend` reads the
+code from the finished VM
+([decision record](../../records/design/2026-10-12-jackal-user-abend.md)).
 
 ## Datasets and the catalog
 
