@@ -265,3 +265,15 @@ def test_real_jar_applies_a_set_inside_a_proc_below_its_exec_and_proc_values(
         DirectDSN(literal("EXECA.JOBB.PDEF")),
         DirectDSN(literal("EXECA.SETB.PDEF")),
     ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_a_null_symbolic_override_on_exec(jcl_bridge_jar):
+    """JCL Ref, EXEC statement: symbol= with no value nullifies the symbol for the
+    procedure. It used to fail the whole job with 'no viable alternative'."""
+    jcl = "//J JOB 1\n//S1 EXEC PROC=P1,A=,C=789\n"
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    assert job.steps[0].symbol_overrides == (
+        (SymbolName("A"), ()),
+        (SymbolName("C"), literal("789")),
+    )
