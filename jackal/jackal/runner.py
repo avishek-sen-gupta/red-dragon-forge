@@ -47,6 +47,7 @@ from jackal.results import (
     StepResult,
 )
 from jackal.system_catalog import SystemCatalog
+from jackal.tso_step import dsn_runs, run_tso_step
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
 
@@ -221,6 +222,15 @@ class JobRunner:
     ) -> ProgramResult:
         if step.pgm in UTILITIES:
             return Completed(UTILITIES[step.pgm](step, env, catalog))
+        runs = dsn_runs(step)
+        if runs:
+            return run_tso_step(
+                step,
+                runs,
+                lambda pgm: self._found(
+                    qualified, replace(step, pgm=pgm), env, catalog
+                ),
+            )
         return self._found(qualified, step, env, catalog)
 
     def _found(

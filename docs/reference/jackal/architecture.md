@@ -177,6 +177,7 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 | Program | Behaviour |
 |---|---|
 | `IEFBR14` | Does nothing; the runner's allocation and disposition do its work. Return code 0. |
+| `IKJEFT01`, `IKJEFT1A`, `IKJEFT1B` | The TSO monitor. Each `RUN PROGRAM(p)` in SYSTSIN's DSN session runs `p` as the step's program, with the step's DDs; its EXEC SQL is served by the runner's injected coprocessors (`PLAN` is not used). The step's code is the highest program code. A program abend ends the session: 12 under IKJEFT01, S04C under IKJEFT1A/1B. A monitor step with no RUN keeps the missing-program path ([decision record](../../records/design/2026-10-12-jackal-tso-run-program.md)). |
 | `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label; an input whose label is still pending ends that `REPRO` with condition code 12 and the next command runs; a DUMMY input is an immediate end of file (the output is left empty) and a DUMMY output discards the records. Return code is the final MAXCC. |
 
 The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`,
@@ -212,6 +213,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
 | `jackal/jackal/record_format.py` | The record format a COBOL FD asks for, and its fit with a label. |
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
+| `jackal/jackal/tso_step.py` | A TSO monitor step's DSN session: one RUN PROGRAM after another. |
 | `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
 | `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |
 | `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label, opened by its label. |
