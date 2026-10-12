@@ -19,6 +19,12 @@ class SourceNotFound:
     pass
 
 
+class LinkedProgramNotFound(Exception):
+    def __init__(self, program: ProgramRef):
+        super().__init__(f"no COBOL source for linked program {program.name}")
+        self.program = program
+
+
 class ProgramSources(Protocol):
     def find(self, pgm: ProgramRef) -> CobolSource | SourceNotFound: ...
 

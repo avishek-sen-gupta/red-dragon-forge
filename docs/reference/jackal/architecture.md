@@ -118,8 +118,11 @@ cicada or squall; `.importlinter` enforces this.
 module: through red-dragon's `compile_program`, with the runner's source directory as the
 search path for every program it CALLs by literal name, and with the `CoprocessorSpec`s
 injected into `JobRunner` (`coprocessors=`). jackal imports no coprocessor: standalone it
-is given none, and the forge composes squall's EXEC SQL spec in. A CALL by data-name does not yet
-reach its target (red-dragon-forge-ua7). `jackal.cobol_step.run_cobol_step` maps every
+is given none, and the forge composes squall's EXEC SQL spec in. A CALL by data-name reaches the
+programs on `JobRunner`'s link list (`linked_programs`, CLI `--link`), which are compiled into every
+COBOL step; a link-list name with no source is refused before any job runs, and a CALL to a program
+outside the run unit still ends the run with red-dragon's `UnresolvedProgramError`
+(red-dragon-forge-xzw) ([decision record](../../records/design/2026-10-12-jackal-dynamic-call-link-list.md)). `jackal.cobol_step.run_cobol_step` maps every
 `FILE-CONTROL` entry of the program and its callees to the file of the step's DD allocation,
 and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
 (`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
