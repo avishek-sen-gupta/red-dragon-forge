@@ -9,6 +9,7 @@ from typing import Literal
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset
+from jackal.gdg import Empty, GdgBase, Scratch
 from jackal.labels import (
     DatasetLabel,
     KsdsLabel,
@@ -66,8 +67,32 @@ class _EntryWire(_Wire):
     label: _LabelWire = Field(discriminator="kind")
 
 
+class _GdgWire(_Wire):
+    name: str
+    limit: int
+    empty: Empty
+    scratch: Scratch
+    generations: tuple[int, ...]
+
+    def model(self) -> GdgBase:
+        return GdgBase(
+            self.name, self.limit, self.empty, self.scratch, self.generations
+        )
+
+
+def _gdg_wire(base: GdgBase) -> _GdgWire:
+    return _GdgWire(
+        name=base.name,
+        limit=base.limit,
+        empty=base.empty,
+        scratch=base.scratch,
+        generations=base.generations,
+    )
+
+
 class _CatalogWire(_Wire):
     entries: tuple[_EntryWire, ...]
+    gdgs: tuple[_GdgWire, ...] = ()
 
 
 def _label_wire(label: DatasetLabel) -> _LabelWire:
@@ -98,20 +123,32 @@ class SystemCatalog:
         self._datasets_dir = root / DATASETS_DIR
         self._datasets_dir.mkdir(parents=True, exist_ok=True)
         self._entries: Table[str, Dataset] = Table()
-        for entry in self._recorded():
+        self._gdgs: Table[str, GdgBase] = Table()
+        recorded = self._recorded()
+        for entry in recorded.entries:
             self._entries.put(entry.dsn, self._dataset(entry.dsn, entry.label.model()))
+        for gdg in recorded.gdgs:
+            self._gdgs.put(gdg.name, gdg.model())
 
-    def _recorded(self) -> tuple[_EntryWire, ...]:
+    def _recorded(self) -> _CatalogWire:
         path = self._root / CATALOG_FILE
         if not path.exists():
-            return ()
-        return _CatalogWire.model_validate_json(path.read_text()).entries
+            return _CatalogWire(entries=())
+        return _CatalogWire.model_validate_json(path.read_text())
 
     def _dataset(self, dsn: str, label: DatasetLabel) -> Dataset:
         return Dataset(dsn, self._datasets_dir / dsn, label)
 
     def lookup(self, dsn: str) -> Dataset | NotCataloged:
         return self._entries.get(dsn) if self._entries.has(dsn) else NotCataloged()
+
+    def gdg(self, name: str) -> GdgBase | NotCataloged:
+        return self._gdgs.get(name) if self._gdgs.has(name) else NotCataloged()
+
+    def define_gdg(self, base: GdgBase) -> GdgBase:
+        self._gdgs.put(base.name, base)
+        self._write()
+        return base
 
     def add(self, dsn: str, source: Path, label: Label) -> Dataset:
         dataset = self._dataset(dsn, label)
@@ -140,6 +177,7 @@ class SystemCatalog:
             _EntryWire(dsn=d.dsn, label=_label_wire(d.label))
             for d in self._entries.values()
         )
+        gdgs = tuple(_gdg_wire(base) for base in self._gdgs.values())
         (self._root / CATALOG_FILE).write_text(
-            _CatalogWire(entries=entries).model_dump_json(indent=2)
+            _CatalogWire(entries=entries, gdgs=gdgs).model_dump_json(indent=2)
         )

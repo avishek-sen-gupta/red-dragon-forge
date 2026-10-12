@@ -7,6 +7,7 @@ from pathlib import Path
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset, Relabeller
+from jackal.gdg import GdgBase
 from jackal.labels import Label, LabelPending
 from jackal.model import (
     DD,
@@ -143,12 +144,23 @@ class DatasetCatalog(Relabeller):
     def delete_created(self, dd: DD[StepReference]) -> None:
         self._delete(dd.dsn)
 
+    def gdg(self, name: str) -> GdgBase | NotCataloged:
+        return self._system.gdg(name)
+
     def define(self, dsn: str, label: Label) -> Dataset:
-        match self._system.lookup(dsn):
-            case Dataset():
-                raise ValueError(f"DSN already cataloged: {dsn}")
-            case NotCataloged():
-                return self._system.create(dsn, label)
+        self._uncataloged(dsn)
+        return self._system.create(dsn, label)
+
+    def define_gdg(self, base: GdgBase) -> GdgBase:
+        self._uncataloged(base.name)
+        return self._system.define_gdg(base)
+
+    def _uncataloged(self, name: str) -> None:
+        match (self._system.lookup(name), self._system.gdg(name)):
+            case (NotCataloged(), NotCataloged()):
+                return
+            case _:
+                raise ValueError(f"DSN already cataloged: {name}")
 
     def delete_dsn(self, dsn: str) -> bool:
         match self._system.lookup(dsn):

@@ -5,6 +5,7 @@ start: command+
 
 command: delete_cmd
        | define_cmd
+       | define_gdg
        | repro_cmd
        | if_cmd
        | set_cmd
@@ -19,7 +20,32 @@ delete_cmd: "DELETE" DSNAME "CLUSTER"? purge_trailer?
 purge_trailer: "PURGE"
 
 // DEFINE CLUSTER ( params ) trailers
-define_cmd: "DEFINE" "CLUSTER" "(" _param+ ")" _trailer*
+define_cmd: _DEFINE "CLUSTER" "(" _param+ ")" _trailer*
+
+// DEFINE GENERATIONDATAGROUP ( params ) [CATALOG(catname)]  (AMS ch. 15)
+// OWNER, FIFO|LIFO, PURGE|NOPURGE, NOEXTENDED and CATALOG are accepted, not modelled.
+define_gdg: _DEFINE ("GENERATIONDATAGROUP" | "GDG") "(" _gdg_param+ ")" _catalog?
+
+_DEFINE: "DEFINE" | "DEF"
+
+_gdg_param: name_param
+          | limit_param
+          | empty_param
+          | noempty_param
+          | noscratch_param
+          | scratch_param
+          | extended_param
+          | _gdg_ignored
+
+limit_param:     ("LIMIT" | "LIM") "(" INT ")"
+empty_param:     "EMPTY" | "EMP"
+noempty_param:   "NOEMPTY" | "NEMP"
+noscratch_param: "NOSCRATCH" | "NSCR"
+scratch_param:   "SCRATCH" | "SCR"
+extended_param:  "EXTENDED" | "EXT"
+_gdg_ignored:    "OWNER" "(" INNER_TEXT ")"
+             | "FIFO" | "LIFO" | "PURGE" | "NOPURGE" | "NOEXTENDED" | "NEXT"
+_catalog:        ("CATALOG" | "CAT") "(" INNER_TEXT ")"
 
 _param: name_param
       | keys_param

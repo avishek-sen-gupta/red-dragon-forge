@@ -16,6 +16,7 @@ from jackal.dataset import Dataset
 from jackal.idcams.commands import (
     Command,
     DefineCluster,
+    DefineGdg,
     Delete,
     IfMaxcc,
     Repro,
@@ -35,6 +36,7 @@ _OPS: Mapping[str, Callable[[int, int], bool]] = {
 
 
 _OPEN_FAILED = 12
+_LOGICAL_ERROR = 12
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,16 @@ def _handle_define_cluster(cmd: DefineCluster, catalog: DatasetCatalog) -> int:
         )
     except ValueError:
         return 12
+    return 0
+
+
+def _handle_define_gdg(cmd: DefineGdg, catalog: DatasetCatalog) -> int:
+    if not cmd.within_limit():
+        return _LOGICAL_ERROR
+    try:
+        catalog.define_gdg(cmd.base())
+    except ValueError:
+        return _LOGICAL_ERROR
     return 0
 
 
@@ -93,7 +105,9 @@ def _copied(in_ds: Dataset, out_ds: Dataset) -> int:
 
 
 def _functional_rc(
-    cmd: Delete | DefineCluster | Repro, dds: DdEnvironment, catalog: DatasetCatalog
+    cmd: Delete | DefineCluster | DefineGdg | Repro,
+    dds: DdEnvironment,
+    catalog: DatasetCatalog,
 ) -> int:
     match cmd:
         case Repro():
@@ -102,12 +116,22 @@ def _functional_rc(
             return _catalog_rc(cmd, catalog)
 
 
-def _catalog_rc(cmd: Delete | DefineCluster, catalog: DatasetCatalog) -> int:
+def _catalog_rc(
+    cmd: Delete | DefineCluster | DefineGdg, catalog: DatasetCatalog
+) -> int:
     match cmd:
         case Delete():
             return _handle_delete(cmd, catalog)
         case _:
+            return _define_rc(cmd, catalog)
+
+
+def _define_rc(cmd: DefineCluster | DefineGdg, catalog: DatasetCatalog) -> int:
+    match cmd:
+        case DefineCluster():
             return _handle_define_cluster(cmd, catalog)
+        case DefineGdg():
+            return _handle_define_gdg(cmd, catalog)
 
 
 def _if_maxcc(cmd: IfMaxcc, codes: _Codes) -> _Codes:
