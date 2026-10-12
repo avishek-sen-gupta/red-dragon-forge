@@ -181,6 +181,14 @@ class BackrefDsn(Wire):
         )
 
 
+class StepDdDsn(Wire):
+    kind: Literal["step_dd"] = "step_dd"
+    ddname: str
+
+    def model(self) -> DSN[StepRef]:
+        return model.StepDd(DdName(self.ddname))
+
+
 class InStreamDsn(Wire):
     kind: Literal["in_stream"] = "in_stream"
 
@@ -203,7 +211,14 @@ class NoneDsn(Wire):
 
 
 Dsn = Annotated[
-    NameDsn | GenerationDsn | TempDsn | BackrefDsn | InStreamDsn | DummyDsn | NoneDsn,
+    NameDsn
+    | GenerationDsn
+    | TempDsn
+    | BackrefDsn
+    | StepDdDsn
+    | InStreamDsn
+    | DummyDsn
+    | NoneDsn,
     Field(discriminator="kind"),
 ]
 
@@ -231,30 +246,9 @@ def _keyword(
     return value(parts)
 
 
-class StepDdSource(Wire):
-    kind: Literal["step_dd"] = "step_dd"
-    ddname: str
-
-    def model(self) -> model.StepDd:
-        return model.StepDd(DdName(self.ddname))
-
-
-DcbSource = Annotated[
-    NameDsn
-    | GenerationDsn
-    | TempDsn
-    | BackrefDsn
-    | InStreamDsn
-    | DummyDsn
-    | NoneDsn
-    | StepDdSource,
-    Field(discriminator="kind"),
-]
-
-
 class DcbWire(Wire):
     coded: bool
-    source: DcbSource
+    source: Dsn
     recfm: tuple[Part, ...]
     lrecl: tuple[Part, ...]
 
@@ -270,7 +264,7 @@ class DcbWire(Wire):
             _keyword(self.lrecl, Nullified.LRECL, nullified),
         )
 
-    def _source_over(self) -> DSN[StepRef] | model.StepDd:
+    def _source_over(self) -> DSN[StepRef]:
         match self.source:
             case NoneDsn() if self.coded:
                 return NullifiedDSN()

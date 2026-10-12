@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from functools import reduce
 from pathlib import Path
 
@@ -21,12 +21,14 @@ from jackal.model import (
     AbendMode,
     Always,
     BackwardRef,
+    DdName,
     Job,
     ProgramStep,
     QualifiedStep,
     RcComparison,
     ResolvedDd,
     StepCondition,
+    StepDd,
     StepReference,
     UnexpandedCall,
 )
@@ -69,23 +71,29 @@ class _History:
         return _History((*self.results, StepResult(entry, outcome)))
 
 
-def _copied(dsn: DSN[StepReference]) -> DSN[StepReference]:
+def _copied(
+    dsn: DSN[StepReference], earlier: Mapping[DdName, DSN[StepReference]]
+) -> DSN[StepReference]:
     match dsn:
         case BackwardRef(dd=ResolvedDd(dd=referenced)):
-            return _copied(referenced.dsn)
+            return _copied(referenced.dsn, {})
+        case StepDd(ddname=name) if name in earlier:
+            return earlier[name]
         case _:
             return dsn
 
 
-def _resolved_dd(dd: DD[StepReference]) -> DD[StepReference]:
-    return DD(
-        dd.ddname,
-        _copied(dd.dsn),
-        dd.disp,
-        dd.in_stream,
-        dd.sysout,
-        dd.concatenated,
-    )
+def _resolved_after(
+    done: tuple[DD[StepReference], ...], dd: DD[StepReference]
+) -> tuple[DD[StepReference], ...]:
+    earlier = {d.ddname: d.dsn for d in done}
+    return (*done, replace(dd, dsn=_copied(dd.dsn, earlier)))
+
+
+def _resolved_dds(
+    dds: tuple[DD[StepReference], ...],
+) -> tuple[DD[StepReference], ...]:
+    return reduce(_resolved_after, dds, ())
 
 
 class JobRunner:
@@ -171,7 +179,7 @@ class JobRunner:
         resolved = ProgramStep(
             step.label,
             step.pgm,
-            tuple(_resolved_dd(dd) for dd in step.dds),
+            _resolved_dds(step.dds),
             step.cond,
             step.parm,
             step.guard,
