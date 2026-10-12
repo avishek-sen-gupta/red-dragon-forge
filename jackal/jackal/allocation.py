@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import TypeAlias
@@ -139,7 +139,7 @@ class _Part:
 
 def _member_dds(dd: DD[StepReference]) -> tuple[DD[StepReference], ...]:
     members = tuple(DD(dd.ddname, m.dsn, m.disp, m.in_stream) for m in dd.concatenated)
-    return (DD(dd.ddname, dd.dsn, dd.disp, dd.in_stream, dd.sysout), *members)
+    return (replace(dd, concatenated=()), *members)
 
 
 def _parts(dd: DD[StepReference], allocation: Allocation) -> tuple[_Part, ...]:

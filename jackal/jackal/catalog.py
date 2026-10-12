@@ -7,8 +7,9 @@ from pathlib import Path
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset, Relabeller
+from jackal.dcb_label import coded_label
 from jackal.gdg import GdgBase, relative_generation
-from jackal.labels import Label, LabelPending
+from jackal.labels import DatasetLabel, Label, LabelPending
 from jackal.model import (
     DD,
     DSN,
@@ -152,7 +153,36 @@ class DatasetCatalog(Relabeller):
     def _new_temp(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         if self._temps.has(_temp_name(name)):
             return Unallocated(dd, AllocationError.DUPLICATE_NAME)
-        return Allocated(self.created_empty(dd), existed=False)
+        match self._label(dd):
+            case AllocationError() as error:
+                return Unallocated(dd, error)
+            case label:
+                return Allocated(self._created_temp(name, label), existed=False)
+
+    def _created_temp(self, alias: str, label: DatasetLabel) -> Dataset:
+        temp = _empty(self._temp_dataset(alias))
+        return self._temps.put(temp.dsn, Dataset(temp.dsn, temp.path, label))
+
+    def _label(self, dd: DD[StepReference]) -> DatasetLabel | AllocationError:
+        match self._model_label(dd.dcb.model):
+            case AllocationError() as error:
+                return error
+            case model:
+                return coded_label(dd.dcb.recfm, dd.dcb.lrecl, model)
+
+    def _model_label(self, model: DSN[StepReference]) -> DatasetLabel | AllocationError:
+        match model:
+            case DirectDSN():
+                return self._cataloged_label(model.dataset_name())
+            case _:
+                return LabelPending()
+
+    def _cataloged_label(self, name: str) -> DatasetLabel | AllocationError:
+        match self._system.lookup(name):
+            case Dataset() as found:
+                return found.label
+            case NotCataloged():
+                return AllocationError.DATASET_NOT_FOUND
 
     def _allocate_direct(
         self, dd: DD[StepReference], name: str
@@ -166,10 +196,14 @@ class DatasetCatalog(Relabeller):
             case Dataset():
                 return Unallocated(dd, AllocationError.DUPLICATE_NAME)
             case NotCataloged():
-                return Allocated(self._created(name), existed=False)
+                return self._created(dd, name)
 
-    def _created(self, name: str) -> Dataset:
-        return self._system.create(name, LabelPending())
+    def _created(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
+        match self._label(dd):
+            case AllocationError() as error:
+                return Unallocated(dd, error)
+            case label:
+                return Allocated(self._system.create(name, label), existed=False)
 
     def _existing(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         match self._system.lookup(name):
@@ -180,7 +214,7 @@ class DatasetCatalog(Relabeller):
 
     def _missing(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         if dd.disposition().status is DispStatus.MOD:
-            return Allocated(self._created(name), existed=False)
+            return self._created(dd, name)
         return Unallocated(dd, AllocationError.DATASET_NOT_FOUND)
 
     def delete_created(self, dd: DD[StepReference], dataset: Dataset) -> None:
