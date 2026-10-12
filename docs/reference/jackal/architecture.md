@@ -98,7 +98,8 @@ cicada or squall; `.importlinter` enforces this.
      (`jackal.concatenated_records`), each checked against the FD like the first (a later V
      member may be shorter); any other open mode fails with file status 37
      ([decision record](../../records/design/2026-10-12-jackal-concatenation.md)). IDCAMS
-     `REPRO` cannot read one yet (red-dragon-forge-2dz).
+     `REPRO` reads one member after member, each at its own label
+     ([decision record](../../records/design/2026-10-12-jackal-repro-concatenation.md)).
    - A step's in-stream and sink files are released even when its program raises.
    - The step is dispatched. A program in the utility table runs the emulated utility.
      Any other program found as `<source-dir>/<PGM>.cbl` is run as COBOL. A program found as
@@ -187,7 +188,7 @@ the catalog's one in-place table is `jackal.catalog_stores`.
 |---|---|
 | `IEFBR14` | Does nothing; the runner's allocation and disposition do its work. Return code 0. |
 | `IKJEFT01`, `IKJEFT1A`, `IKJEFT1B` | The TSO monitor. Each `RUN PROGRAM(p)` in SYSTSIN's DSN session runs `p` as the step's program, with the step's DDs; its EXEC SQL is served by the runner's injected coprocessors (`PLAN` is not used). The step's code is the highest program code. A program abend ends the session: 12 under IKJEFT01, S04C under IKJEFT1A/1B. A monitor step with no RUN keeps the missing-program path ([decision record](../../records/design/2026-10-12-jackal-tso-run-program.md)). |
-| `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label; an input whose label is still pending ends that `REPRO` with condition code 12 and the next command runs; a DUMMY input is an immediate end of file (the output is left empty) and a DUMMY output discards the records. Return code is the final MAXCC. |
+| `IDCAMS` | Parses the in-stream `SYSIN` and executes it; `REPRO` reads and writes the datasets its DDs were allocated, each at its own label, a concatenated input member after member; an input (or member) whose label is still pending, or an output that is also an input, ends that `REPRO` with condition code 12 and the next command runs; a DUMMY input is an immediate end of file (the output is left empty) and a DUMMY output discards the records. Return code is the final MAXCC. |
 
 The IDCAMS executor (`jackal.idcams.executor`) handles `DELETE`, `DEFINE CLUSTER`,
 `DEFINE GENERATIONDATAGROUP` (`DEF GDG`), `REPRO`, `VERIFY` (`VFY`), and the modal commands:

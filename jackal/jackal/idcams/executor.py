@@ -6,12 +6,18 @@ import operator
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
-from itertools import count, takewhile
+from itertools import chain, count, takewhile
 
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
-from jackal.allocation import DdEnvironment, DummyAllocation
+from jackal.allocation import (
+    ConcatenatedAllocation,
+    DatasetAllocation,
+    DdEnvironment,
+    DummyAllocation,
+    MemberAllocation,
+)
 from jackal.catalog import DatasetCatalog
 from jackal.dataset import Dataset
 from jackal.idcams.commands import (
@@ -146,28 +152,54 @@ def _side(dds: DdEnvironment, ddname: str) -> Dataset | _Dummy:
             return dds.dataset(DdName(ddname))
 
 
-def _handle_repro(cmd: Repro, dds: DdEnvironment) -> int:
-    source = _side(dds, cmd.infile_dd)
-    match source:
-        case Dataset(label=LabelPending()):
-            return _OPEN_FAILED
+def _member(allocation: MemberAllocation) -> Dataset | _Dummy:
+    match allocation:
+        case DummyAllocation():
+            return _Dummy()
+        case DatasetAllocation(dataset=dataset):
+            return dataset
         case _:
-            return _copied(source, _side(dds, cmd.outfile_dd))
+            raise TypeError(f"REPRO cannot read {type(allocation).__name__}")
 
 
-def _copied(source: Dataset | _Dummy, sink: Dataset | _Dummy) -> int:
+def _sources(dds: DdEnvironment, ddname: str) -> tuple[Dataset | _Dummy, ...]:
+    match dds.get(DdName(ddname)):
+        case ConcatenatedAllocation(members=members):
+            return tuple(map(_member, members))
+        case allocation:
+            return (_member(allocation),)
+
+
+def _unreadable(source: Dataset | _Dummy, sink: Dataset | _Dummy) -> bool:
+    match (source, sink):
+        case (Dataset(label=LabelPending()), _):
+            return True
+        case (Dataset(), Dataset()):
+            return source.dsn == sink.dsn
+        case _:
+            return False
+
+
+def _handle_repro(cmd: Repro, dds: DdEnvironment) -> int:
+    sources = _sources(dds, cmd.infile_dd)
+    sink = _side(dds, cmd.outfile_dd)
+    if any(_unreadable(source, sink) for source in sources):
+        return _OPEN_FAILED
+    return _written(chain.from_iterable(map(_member_records, sources)), sink)
+
+
+def _member_records(source: Dataset | _Dummy) -> Iterator[bytes]:
     match source:
         case _Dummy():
-            return _written((), sink)
+            return iter(())
         case Dataset():
-            return _read(source, sink)
+            return _read(source)
 
 
-def _read(source: Dataset, sink: Dataset | _Dummy) -> int:
+def _read(source: Dataset) -> Iterator[bytes]:
     driver = source.opened(OpenMode.INPUT)
-    rc = _written(_records(driver), sink)
+    yield from _records(driver)
     driver.close()
-    return rc
 
 
 def _written(records: Iterable[bytes], sink: Dataset | _Dummy) -> int:
