@@ -16,7 +16,7 @@ from jackal.model import (
     TempRef,
 )
 from jackal.results import AllocationError, Completed
-from jackal.system_catalog import SystemCatalog
+from jackal.system_catalog import NotCataloged, SystemCatalog
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 
@@ -45,8 +45,8 @@ def _given(cat: DatasetCatalog, dd: DD) -> Dataset:
     return found.dataset
 
 
-def _disposed(cat: DatasetCatalog, dd: DD, existed: bool = False) -> None:
-    cat.dispose(dd, dd.disposition().resolved(existed), existed, Completed(0))
+def _disposed(cat: DatasetCatalog, dd: DD, ds: Dataset, existed: bool = False) -> None:
+    cat.dispose(dd, ds, dd.disposition().resolved(existed), existed, Completed(0))
 
 
 def _dd(dsn: str, status: DispStatus, normal: DispNormal = DispNormal.KEEP) -> DD:
@@ -75,10 +75,10 @@ def test_a_dataset_in_the_system_catalog_is_allocated_by_name(tmp_path):
 def test_pass_retains_delete_removes(tmp_path):
     cat = _catalog(tmp_path)
     keep = _given(cat, _dd("J.A", DispStatus.NEW, DispNormal.PASS))
-    _disposed(cat, _dd("J.A", DispStatus.NEW, DispNormal.PASS))
+    _disposed(cat, _dd("J.A", DispStatus.NEW, DispNormal.PASS), keep)
     assert keep.path.exists()
     drop = _given(cat, _dd("J.B", DispStatus.NEW, DispNormal.DELETE))
-    _disposed(cat, _dd("J.B", DispStatus.NEW, DispNormal.DELETE))
+    _disposed(cat, _dd("J.B", DispStatus.NEW, DispNormal.DELETE), drop)
     assert not drop.path.exists()
 
 
@@ -93,8 +93,13 @@ def test_define_catalogs_a_labelled_ksds_once(tmp_path):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dispose_delete_of_missing_dsn_is_noop(tmp_path):
+    _upload(tmp_path, "J.GONE", b"")
     cat = _catalog(tmp_path)
-    _disposed(cat, _dd("J.NEVER", DispStatus.SHR, DispNormal.DELETE))
+    dd = _dd("J.GONE", DispStatus.SHR, DispNormal.DELETE)
+    ds = _given(cat, dd)
+    cat.delete_dsn("J.GONE")
+    _disposed(cat, dd, ds, existed=True)
+    assert cat.resolve("J.GONE") == NotCataloged()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -149,7 +154,7 @@ def test_temp_dispose_delete_removes_file(tmp_path):
     cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
     ds = _given(cat, dd)
-    _disposed(cat, dd)
+    _disposed(cat, dd, ds)
     assert not ds.path.exists()
 
 
@@ -158,7 +163,7 @@ def test_temp_dispose_pass_retains_file(tmp_path):
     cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.PASS)
     ds = _given(cat, dd)
-    _disposed(cat, dd)
+    _disposed(cat, dd, ds)
     assert ds.path.exists()
 
 
@@ -174,8 +179,7 @@ def test_end_job_deletes_a_surviving_temp(tmp_path):
 def test_end_job_is_a_noop_when_every_temp_was_deleted(tmp_path):
     cat = _catalog(tmp_path)
     dd = _temp_dd("TEMP", DispStatus.NEW, DispNormal.DELETE)
-    _given(cat, dd)
-    _disposed(cat, dd)
+    _disposed(cat, dd, _given(cat, dd))
     cat.end_job()
 
 

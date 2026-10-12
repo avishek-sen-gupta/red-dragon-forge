@@ -110,6 +110,7 @@ class AllocationError(Enum):
     DATASET_NOT_FOUND = "DATASET_NOT_FOUND"
     DUPLICATE_NAME = "DUPLICATE_NAME"
     TEMP_NOT_CREATED = "TEMP_NOT_CREATED"
+    GDG_BASE_NOT_FOUND = "GDG_BASE_NOT_FOUND"
 
 
 @dataclass(frozen=True)

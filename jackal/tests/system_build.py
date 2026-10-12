@@ -6,6 +6,7 @@ from pathlib import Path
 
 from jackal.catalog import DatasetCatalog
 from jackal.dataset import Dataset
+from jackal.gdg import GdgBase
 from jackal.labels import Label, RecordFormat, SequentialLabel
 from jackal.system_catalog import SystemCatalog
 
@@ -32,3 +33,9 @@ def upload(root: Path, dsn: str, data: bytes, label: Label = FB80) -> Dataset:
     added = system(root).add(dsn, source, label)
     source.unlink()
     return added
+
+
+def gdg(root: Path, base: GdgBase, label: Label = FB80) -> GdgBase:
+    for number in base.generations:
+        upload(root, f"{base.name}.G{number:04d}V00", b"", label)
+    return system(root).catalog_gdg(base)

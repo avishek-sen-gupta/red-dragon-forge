@@ -158,6 +158,7 @@ the JCL Reference's DISP defaults say. The decisions and their IBM sources are i
 | `DISP=NEW` | Created empty and cataloged, its label pending. A name already cataloged fails allocation. |
 | `DSN=&&NAME` | Job-scoped temporary dataset, kept apart from named datasets (its file is `&&NAME`), deleted at job end. |
 | `DSN=*.STEP.DD` | Referback to an earlier step's DD. |
+| `DSN=GDG(+n)`, `(0)`, `(-n)` | A relative generation, resolved against the GDG's active generations as the job first found them (GDGBIAS=JOB) to an absolute `GDG.GnnnnV00`. `(+n)` counts on from the newest; `(0)` and `(-n)` must name an active generation (else `DATASET_NOT_FOUND`); an undefined GDG fails with `GDG_BASE_NOT_FOUND`. A generation whose disposition at step end is `CATLG` rolls into the GDG; past `LIMIT` the oldest (`NOEMPTY`) or every active generation (`EMPTY`) rolls off, deleted under `SCRATCH`, left cataloged under `NOSCRATCH`. `KEEP` leaves it cataloged outside the GDG ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |
 | `DISP=(…,DELETE)` | The dataset and its file are removed when the step ends. |
 | `DISP=(…,PASS)` | Handed to later steps; a later DD naming it receives it, and its own disposition then applies. One the job created and never received is deleted at job end. |
 | IDCAMS `DEFINE CLUSTER` | Catalogs a KSDS with the label its `RECORDSIZE` and `KEYS` give. |
