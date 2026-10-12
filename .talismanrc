@@ -13,8 +13,6 @@ fileignoreconfig:
   checksum: fc5b0547a94e20bd5bbc054a70f4cc65b07d08b7a1f97c3266cd3538e7387e61
 - filename: tests/unit/test_carddemo_db2_region_wiring.py
   checksum: 12a3d64301102e96971767ae80e66f6ba5b5bd35f4335897537a135be3e978aa
-- filename: cicada/README.md
-  checksum: ede015dc4d9e7deffee31e826019669f62148fe67b8f2eb4481173d94e9c4e90
 - filename: carddemo-env.sh
   checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
 - filename: cicada/tests/integration/cics/test_tn3270_e2e.py
@@ -23,16 +21,10 @@ fileignoreconfig:
   checksum: 6d4066194b10e01a4f8db2382d40bfb6e96a41d53ca5f2d739b3f322f10ccbe6
 - filename: cicada/tests/unit/cics/test_terminal_screen.py
   checksum: 7f20eeb8f67f2244606f372d5c741c2e409205ab4fa1da33d1cffeae87b2eb12
-- filename: cicada/cics/tn3270/config.py
-  checksum: 2639df6abcebc046b745f286f22b99622ec8edcddd4767716787029bd0969fc1
 - filename: cicada/tests/unit/cics/test_tn3270_config.py
   checksum: 684ef81ccdd10db56d696dc2eec69f22c0214a67167e1d442ddde6ced6ce3bec
-- filename: cicada/cics/tn3270/region.py
-  checksum: 0631e524c32423fa8a3155ab0b323411c9e72549072e000ceb28f0f4513506fa
 - filename: cicada/tests/integration/cics/test_tn3270_region.py
   checksum: ebeb7d6067f8474356f3abca1b6b5be0ab203a75c3990738c4de3955450b35e8
-- filename: cicada/tests/integration/cics/test_carddemo_terminal_screen.py
-  checksum: 00b654ab4e4457e433ad01de77ec3234f22615d8bb4570a60b49200108787cb7
 - filename: cicada/tests/unit/cics/test_screen_builtins.py
   checksum: afe0a653a2c45f21edde528ea182a66dbc3ae1f63c87627cea59048220bba306
 - filename: cicada/tests/unit/bms_copybook_gen/test_parser_layout.py
@@ -49,100 +41,38 @@ fileignoreconfig:
   checksum: 261569048f4017914bd4cee19732a4ddad3bb05d565df599dbdc6ea72c670180
 - filename: docs/superpowers/plans/2026-07-07-cobol-knowledge-graph.md
   checksum: d2cd33c177e8444bac414fe7003ac104e73c238349328189d10d7971d13c25ee
-- filename: docs/superpowers/specs/2026-07-07-cobol-knowledge-graph-design.md
-  checksum: 6c4d59f40d43531d82afd4f18b52eb58d35eb3da05f509718500cb72dea0c74c
 - filename: squall/squall/backends/sqlite.py
   checksum: e6756d3ccfea412fe42f263aa54858a8148531a250c6de57d62fa95e46e44ae8
-- filename: fp.json
-  checksum: e3e2206a29551ce72fa153cbed327b53031df48c108951b67d31a1dec46e7576
 - filename: squall/squall/dclgen_meta.py
   checksum: 01141c2f800f9c7fdcf79e12bd4fc57e27d1a073ad437eb898802978dae9ff15
 - filename: squall/tests/unit/test_varchar.py
   checksum: 3558cdbd688db511f5a53990dcf7da7e1aaa7b6dd5a11802ec297a7f485926f2
-- filename: cicada/cics/strategy.py
-  checksum: 0b237376e980ac8bb77e0f4ce2591014728e43f1c1edc9c23792f0f68be4910f
 - filename: cicada/cics/builtins/vsam.py
   checksum: 2f021cbbae55f41d8c34b6aecf38e02822a66e3ccc2a829bbdbe7c7a23a7b780
-- filename: cicada/cics/vsam/engine.py
-  checksum: 081ac76912438c895fe6570de6262b1f6534d7861abf4cf0e0547495ee1986e4
 - filename: cicada/tests/unit/cics/test_vsam_engine.py
   checksum: 074dc2f8bf57a2f865b834d4a779315702306b3180b2a3e74f1c510fb332d861
-- filename: cicada/tests/unit/cics/test_vsam_builtins.py
-  checksum: 7b6599bd0f5464bd1922db61db2c9c12209fd1fbe80104fb0db95ede41d6420f
-- filename: docs/design/2026-07-04-cics-sql-composition-design.md
-  checksum: 65635c68516ce860ce0ddf8838ab582e03311cb9820d81627e7f1fe66d877da3
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
   checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
 - filename: vendor/red-dragon
-  ignore_detectors: [filecontent]
-- filename: vendor/squall
   ignore_detectors: [filecontent]
 - filename: cicada/third-party/che-che4z-lsp-for-hlasm-fork
   ignore_detectors: [filecontent]
 - filename: vendor/bank-of-z
   checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
-- filename: tests/integration/db2_env.sh
-  checksum: 3205b9d23b98c4d83f8099f4bc08a0e4e76a7a5e91cba3eb5c9671bb11e0b874
-- filename: .superpowers/sdd/progress.md
-  checksum: 12726c2e3db64b1a7267643bcd8da2f1b8eee34ae7bb3475133def1fd01a43c0
-- filename: .superpowers/sdd/progress.md
-  checksum: 7203e638ff1ba870dc5345166ddff5e52f3dbf50fa4ac243319c79cabec5e817
-- filename: docs/superpowers/specs/2026-07-05-monorepo-migration-design.md
-  checksum: eae5f17de46d9792e64cac6012e668b445524e596da53ead0803a5619d1d5b40
 - filename: docs/superpowers/plans/2026-07-05-monorepo-migration.md
   checksum: e4d3b88fe4d65ac05e971fdd094e6f500da43490a37fcf2b4c38fe479e7e14a2
 - filename: issues/issues.jsonl
   ignore_detectors: [filecontent]
-- filename: CLAUDE.md
-  checksum: a2f21ef67ecfc14b9850c7de2d11c6ac487d78e41859c1d9b66666312e45dc9a
 - filename: squall/db2/dsn-env.sh
   checksum: 75359a29913b33af44ff342008e35ed779e588cf3365adb02d8b3cd3cdf9700d
 - filename: uv.lock
   ignore_detectors: [filecontent]
-- filename: jackal/docs/superpowers/plans/2026-07-08-jcl-symbolic-value-type.md
-  checksum: 8b4766155fb1f041e8bd35ad41a776e5e6f02dcb56c4255b5d1e738b71f99625
-- filename: jackal/tests/unit/test_dsn.py
-  checksum: 03bfd8d7bfcfe92a71a506be7a13ad25083f3a7aface5abdac2e62683b12fd9a
-- filename: jackal/docs/superpowers/plans/2026-07-08-jcl-proc-expansion.md
-  checksum: 97075a791957f4905a35f10d65d49d1bc30360f2dc8b24da879a47481b819659
-- filename: jackal/jackal/jcl/bridge_parser.py
-  checksum: d0dd164ee8152bca2fff7a5aaa4746460d27f8cc505cc9c35842bcfd346c7a3c
 - filename: jackal/tests/unit/test_idcams_parser.py
   checksum: 647ee48976472dbb8e818f3cb1c9d12bf7b5c9ae55fa4b61a16a3925329082d2
-- filename: jackal/docs/superpowers/specs/2026-07-08-idcams-comprehensive-grammar-design.md
-  checksum: f7e42ba1922031ab4bca18355346e3a3ca89234523d3bc27e4edc0b7903ee276
-- filename: jackal/docs/superpowers/plans/2026-07-08-idcams-comprehensive-grammar.md
-  checksum: 45a01a150cb3de9aca89db81941c17759b8a0eaff1ca8c55b78a5012d082f177
-- filename: jackal/jackal/idcams/ast_define_cluster.py
-  checksum: aeb9c3dacba80bd7a75598e64c5cc738d07bad6fc6dbf54cba86e4baf68d8843
-- filename: jackal/jackal/idcams/ast_define_alternateindex.py
-  checksum: 217ec63f392190dd81cb24a806ac2f5b09a3e6f0c8e16c943136b7a714392382
-- filename: jackal/tests/unit/test_idcams_define_alternateindex.py
-  checksum: 44812647e307ac543349972e20580ad203d83f218e92d2feb8ac0a98608b27bd
-- filename: jackal/tests/unit/test_idcams_delete_comprehensive.py
-  checksum: 4cd73b8812e3b7ecd44f3be7232703833457e2c7aa63b068d79aa05c5765ee20
-- filename: jackal/jackal/idcams/ast_alter.py
-  checksum: 8938c687b7f2d7ee071b063ed15afcdc5c591eed5d7fcea833f4c1e5bfdb3a4a
-- filename: jackal/jackal/idcams/ast_repro.py
-  checksum: 1fed49c6742f2138146836e60be4b5f396b228f1776da99919204d26b9429184
-- filename: jackal/tests/unit/test_idcams_repro_comprehensive.py
-  checksum: 3620fa326691d20e58bd3d87ef7535afa0af14633e5f43686aaf02b04f3316a5
-- filename: jackal/tests/unit/test_idcams_print_listcat.py
-  checksum: c922dafd6243cffbd98e2e43cfcc1e4626fae24977244928e4da6833b0af80ed
-- filename: jackal/jackal/idcams/parser_comprehensive.py
-  checksum: 0b304da791fcfffadc1115127c4d8920c6b822adfcde31a213df978167d56491
-- filename: jackal/tests/unit/test_idcams_modal.py
-  checksum: 6697ff6181a1ae8ee037b4e21a3d2cabfc6338c2e602768e6cd1ad2649098404
 - filename: jackal/jackal/idcams/grammar/ams.lark
   checksum: 572deced932b0f54454f72fc03c7722635012488bed0a689f970cd2df5a87b67
-- filename: jackal/tests/integration/test_idcams_comprehensive_carddemo_e2e.py
-  checksum: 31dc998645f1a3ff4236e242697643868de7b14c23d3cb461b06bbc76f19ab20
-- filename: jackal/tests/unit/test_idcams_define_cluster.py
-  checksum: f136a378680c5bad83e81aca552401505119eab971e839190e9151ac14234ac7
 - filename: docs/records/design/2026-10-12-jackal-idcams-repro-labels.md
   checksum: ec1641e126ec15bb059c34b6f276cc4f74bf6292c3882de04c57c2ac4afb42d0
-- filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/DdBuilder.java
-  checksum: a75525f6c381634b7f8735522c4d3a7769b3cba8dc019a8e7e54e9060e11cd6c
 - filename: jackal/jackal/concatenated_records.py
   checksum: 319da9d2575e77c0e5c1be0be7a848c83eb1c8d0102aca5a4b3dc24a46fb3dc9
 - filename: jackal/jackal/variable_records.py
@@ -151,92 +81,32 @@ fileignoreconfig:
   checksum: baf64c868246fe17fd027b4d8e8af4767c62f9a16c66cd0cffc07cae3c3af8a8
 - filename: docs/records/design/2026-10-12-jackal-variable-records.md
   checksum: 6a62e90acffbfdfbd2c4742b8dfe96e59658309f59fe7647f2133a314d4cc5f4
-- filename: jackal/tests/unit/test_idcams_executor.py
-  checksum: ea98461dc40a890ed143bcf91c2a812c9b5ad9175e96a0814adbdff843c9c826
 - filename: jackal/jackal/idcams/parser.py
   checksum: 54bceafdba5ae748d0ea3314983692e58797cb5112f2f8e833d6a384296dffeb
-- filename: jackal/docs/analysis/2026-07-09-carddemo-job-executability.md
-  checksum: c2850ccc1efc6df63fd3181abd2f3e23130f4628152ec90a7894153c2c015e6a
 - filename: docs/superpowers/plans/2026-07-09-graph-analysis-core-decoupling.md
   checksum: 3ee954707626dec0b6da59718c216defc15e362d67022460bb2e161c0a411cc2
-- filename: cicada/cics/csd_parse.py
-  checksum: 72c715ad359f69a350cbe4c4a0157e2df7bda53b87c371a3898c5901c4911e52
 - filename: tools/mainframe_inventory.py
   checksum: 4112d616e47371f2a2dfe675f426d88e5edb2836eb5b918144e1e82a6b2a7084
 - filename: tests/integration/test_mainframe_inventory_carddemo.py
   checksum: d200d7552d4e98bbad54174fb06304554861352f193df0ff43f8baccf1341b45
-- filename: jackal/jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLParser.g4
-  checksum: 566ae24a6749948e9daa206747efdca4bf800cd0ac9337f88c50e8c21233851b
-- filename: jackal/jcl-bridge/src/main/antlr4/org/jackal/jcl/JCLLexer.g4
-  checksum: 45571209d7e9b9da8fb827bb6be8bf7423f3f377cf9dcc5399d7520722c7ef9c
-- filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/JclSerializer.java
-  checksum: 732d0607a8e5b04cc16e04a63c8e89edeacb0fdd9b3fb7fefdc0c1543adf4cac
-- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/JclSerializerTest.java
-  checksum: 9c86f7440e60664b4dacbca2cd5aafcd101dd7a9c0bfb3ace2a095acb8fdbe3f
-- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/DcbContinuationTest.java
-  checksum: 67ef82a7c319421e6365b47d1765e9c3f88d2149cd53ee959e04592b6c141ad5
 - filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/NullDcbSubparameterTest.java
   checksum: 22d10773cf93300bcd4e54175b016b550abfcd20eb600d4b78a4ae3c3e2ac049
-- filename: jackal/jcl-bridge/src/test/java/org/jackal/jcl/ProcSequenceNumberTest.java
-  checksum: 0e8c1ccc38a02a4b94940fe1db94b2a1b37cbdeccc161b79782ae2a567bae001
-- filename: docs/superpowers/plans/2026-09-01-index-items-and-search.md
-  checksum: 900ac83f01bef64a9c2a81352b57aa05365267981ea41c31933b8a0d068d9f4b
 - filename: docs/superpowers/specs/2026-08-29-cobble-consolidation-design.md
   checksum: ced0001719ce3efb3da7f7e3f527eb9f29bc59b3d542d5b77375aa1a1bfa44f1
-- filename: docs/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md
-  checksum: 54dcc96675ed1a91f1a092151decf9600879632e33c55cd6a48073a6d33187ad
 - filename: jackal/jackal/tso.py
   checksum: 6ca8635fdde4d7217c6db04e310b6f9d0bb9c63319ee563be7111f61b530e62d
-- filename: jackal/jackal/jcl/proc_expand.py
-  checksum: 1687ad878695c2f8416ac91028409af832ecca1799eb3b7d9d7d7548ee12af60
 - filename: jackal/tests/unit/fixtures/proc/WORKPROC.prc
   checksum: 8c67811f0adcae4b0bfaa2ab3e0147bdda964f020e8a6c4c5cf587741d547d71
 - filename: docs/superpowers/specs/2026-09-01-delete-stale-graph-stack-design.md
   checksum: 603553fc076120db3965cd66a0dcb60c3dc1f100b56a446b8c716ca63524a004
-- filename: docs/superpowers/specs/2026-09-02-cobble-divergence-reconciliation-design.md
-  checksum: 747a520d2f6dccb91eeeb7b159ae27d52a08b2d5654f85c5dba64717a2d26460
-- filename: cobble/.github/workflows/reproduce.yml
-  checksum: 6d669efcdca8d2719cc0ac29f1d971adc84317d18f7e4564236b114ed2e0358a
-- filename: cobble/.pre-commit-config.yaml
-  checksum: 5b07860e5a00deef732f4bb59a5f264de39db5107a1a1ee5bc8cf58f5a1678b9
 - filename: cobble/.python-fp-lint/rules/no-subscript-tuple-mutation.yml
   checksum: 349f5b174d36b9a7e45a02bf1359aae738ffb5bd4dd562983f7956d177c507ba
-- filename: cobble/README.md
-  checksum: 1d74e90bf73dd2e563d5887d6d124d8e928d57eccabb41e069b0b747619bc103
-- filename: cobble/cobble/build_graph.py
-  checksum: e0fbead980330a51abd38bfc11d1687c989f474139a31837ee42bdaddd351093
-- filename: cobble/cobble/cics/flow_map.py
-  checksum: 5dd018eb045e53fbf3e749be2ad08687a2a6cde6d631b65529b3a450dbfdc406
-- filename: cobble/cobble/cics/synth_csd.py
-  checksum: bb3791aad555b9395f84d223903dab127dfa28a63329e08a5ecd602197b7547d
-- filename: cobble/cobble/compare.py
-  checksum: 3bed4bd4a32a5d38ddd9d1ae62c6d1cc681a294997519e97f9796906f944d2d6
-- filename: cobble/cobble/corpus_index.py
-  checksum: 66a20f71af92d48edb57c6acf45ac6803219c56e92cde8f89600a4ee80c24003
-- filename: cobble/cobble/corpus_index_builder.py
-  checksum: 11bb10aad1eb4aeb8b9ca66c3deafbcf06bb14ad962b937e49691950ce06e94c
-- filename: cobble/cobble/diagnosis/copybooks.py
-  checksum: 97afa2bc67633c475fe22bb374ce3ab7e416caf2c844b1483b0068a9e4dff2e7
-- filename: cobble/cobble/jcl/cobol_file_graph.py
-  checksum: cb4fef584d4feb3bfc6e6f3f405890129ad36b73fef9767e30e53d8adc28ca35
-- filename: cobble/cobble/jcl/jcl_graph.py
-  checksum: 21d2c6b3d039d2059ec8b42778c3d69a483d904683814bc9c961175d49a934a7
-- filename: cobble/cobble/jcl/jcl_store.py
-  checksum: 490e91d8d163a8480937a1062309cfb434e60db1e6fc72eae08a3419af02140b
-- filename: cobble/cobble/knowledge_graph/export.py
-  checksum: 826011f8434861a5d90b2ca83bb5e9eaf0eb0a13f6c96433f2ea3d9885047641
-- filename: cobble/cobble/knowledge_graph/graph_writer.py
-  checksum: f2ad6071fd4d938b2eb2d1c369b0d0d30f427f91c955a74d1802e35fad637845
-- filename: cobble/cobble/knowledge_graph/layout.py
-  checksum: ed1c86f2507a992c95416e2e0b26b557bc497297b87a480059e3dcf48d6bb00a
 - filename: cobble/cobble/knowledge_graph/merge.py
   checksum: 0141de8cb164892ac3e680cc41b163614cab23e2151a259bbd94d52540247336
 - filename: cobble/cobble/knowledge_graph/node_key.py
   checksum: cbb02ecdca03251ccb77b040067d4bad604a07507c95e9076491f6918eb7f550
 - filename: cobble/cobble/knowledge_graph/render.py
   checksum: c506e3dfda9664593063dc74ba28fd404a300ef1da78296bae308169a237b588
-- filename: cobble/cobble/knowledge_graph/render_webgl.py
-  checksum: 74e4a8053b6dd99fb41ec7e9dc1232e59331d727c41762f48f10096f23e83320
 - filename: cobble/cobble/knowledge_graph/vendor/graphology.umd.min.js
   checksum: 55f9d309aa688f951b4f0bee78d18608da4a482c76d381baafe39d8b4c4fd0f1
 - filename: cobble/cobble/knowledge_graph/vendor/sigma.min.js
@@ -245,54 +115,12 @@ fileignoreconfig:
   checksum: 725b49cad8f203b9118a095c5cd0489cfb421e1c219f3d61fe7fb297d753494b
 - filename: cobble/cobble/matching_files.py
   checksum: ba487ea58770b0f282b8df70f46730538296843fce39c4b2824ccb6f46b05f73
-- filename: cobble/cobble/sink_state.py
-  checksum: accadd04f36d2317ee05850b0d180eff72bf54012361e335793dcba09f2f6974
-- filename: cobble/docs/corpus-onboarding-blockers.md
-  checksum: 16da0e60a6a3e22358ab33674b5d8d797f310c90bab466162ff326a1a363f754
-- filename: cobble/docs/outstanding-issues.md
-  checksum: 48b3a5d7f9c8b0b16c8bc812ee397ab19396110a0acfc309f34c5bcef4280ec5
-- filename: cobble/docs/superpowers/plans/2026-07-11-corpus-config.md
-  checksum: 4e2b999a6db46b5c62909da8cf4cb58eaf4060a92a8e837f4c638bdc6cf7e702
-- filename: cobble/docs/superpowers/specs/2026-07-11-corpus-config-design.md
-  checksum: f8134203939ab2a66414f5e2644f5eac8e72b3df1a61671ac6a961368683e928
-- filename: cobble/tests/cics/test_flow_map.py
-  checksum: d526f5817ca7317c48fcddccf8ba97f9ad25b03a4305c434a968be373dd97945
 - filename: cobble/tests/jackal/test_bridge_parser.py
   checksum: 4447c49a31da6aa0cbe993d9ee218c6212725ce95de52dcf35dd3233bcfdc8bd
-- filename: cobble/tests/jackal/test_dsn.py
-  checksum: ecb7303ffe4f99e549afd3662ef16255df2987d8ac3dd618a6b8ef8c9475af80
-- filename: cobble/tests/jackal/test_proc_expand.py
-  checksum: 0f7f15006244582930d217c82ca1578fcaf1d77d07cf7dc46e8fc766cf7b6ebe
-- filename: cobble/tests/jcl/test_jcl_graph.py
-  checksum: 210bc98a4de79ba8ee8ee606ce8daa7bf9c53a573f22901cb0881a63b23b7136
-- filename: cobble/tests/jcl/test_jcl_store.py
-  checksum: c615111b422ea068c9480261cb765e5ed3cfed310440ddfc3e0217e68f326384
-- filename: cobble/tests/knowledge_graph/test_graph_writer.py
-  checksum: 76c64b7ec0e1fc5b7a929b175879214b9fdb8627ee075e2337bfc9bc26e0342b
-- filename: cobble/tests/knowledge_graph/test_layout.py
-  checksum: c0ce39ec50b69b17723f6e07f635f28f42f4c9a7ee0d6261bb08fc054c880caf
-- filename: cobble/tests/knowledge_graph/test_merge.py
-  checksum: a4c9579e593c41f56b5e593749144e2bd62b5f4c7ec1ddb1f0669203c69ab813
-- filename: cobble/tests/knowledge_graph/test_render.py
-  checksum: 58ec7ac5b53dacc99a6d6cc8bfa02233a6bd6b5ce0671d3625a4a783f6305509
-- filename: cobble/tests/knowledge_graph/test_render_webgl.py
-  checksum: fabc6b964193f18d93f2b6ecba9410c7eed97d7aa49dd1d5e49f13f72d693fe2
-- filename: cobble/tests/test_build_graph.py
-  checksum: d23404218dd86ffb89967f633d36cf9824dc6ca25e92b6951eca0023d8e47d96
-- filename: cobble/tests/test_compare.py
-  checksum: 9a829a2c47ddec316d0bf9549ebe232639ddd74547233239e3645c0044697a46
-- filename: cobble/tests/test_corpus_config.py
-  checksum: 350de0b9b5118851437ec1bb62a3b99c3b8e5d9d07292fbdc4055b6fc4aeb46a
-- filename: cobble/tests/test_corpus_index.py
-  checksum: 9fff22215b3b0171dccd8f953da924a8eee94c2cb093febb33dbcea26e332aa8
-- filename: cobble/tests/test_generate_csd.py
-  checksum: b9be99df753705c311959beff5c4f31bb3fb3cf4d099dafa1af5d3942d25b479
 - filename: cobble/uv.lock
   checksum: eb4d16e76eefae068c5ee1d27d9619ee8afc159153b527493f2ac9a48a2b0649
 - filename: .python-fp-lint/rules/no-subscript-tuple-mutation.yml
   checksum: e15ef52716569a749ac3d9ea5c0710dfce9085a24a6c6a6b2e99a8bee34923b6
-- filename: docs/superpowers/specs/2026-09-02-cics-interval-control-design.md
-  checksum: 45f39708d8deaa8fec94135c7e116aca35df6a304d7555e1a28a6f430a15b639
 - filename: docs/superpowers/plans/2026-09-02-cics-interval-control.md
   checksum: c04978b4a27f19f27ddc7df98987f564a83c04cb6b8809b71a90f27031189723
 - filename: docs/superpowers/plans/2026-09-03-cics-condition-handling.md
@@ -313,78 +141,18 @@ fileignoreconfig:
   checksum: 7d95aa1876ba37d4bcea07992a3ca3fc18ac8ac2092398c50b63f667000be4f0
 - filename: docs/superpowers/plans/2026-09-06-field-level-byte-dataflow-intraprogram.md
   checksum: 3901407a31bfdfad401779a57f63203e70921a384cefffdb5f38e4b61725378b
-- filename: cobble/cobble/dataflow/fields/extent.py
-  checksum: f805c8fb7b7c81c9d0cb023a8895704891668cf67f40c45fb0e42e4e066a1a47
-- filename: cobble/cobble/dataflow/fields/state.py
-  checksum: 411eb695e9fd5a9f8b8cb4e2d0bafe35a934831d6282e03e763ed141fde8d3b6
-- filename: cobble/cobble/dataflow/fields/transfer.py
-  checksum: 41138077bea65219aa79f3c763514d8c17471728cd5b5999a4229b8d1699a2de
-- filename: cobble/tests/dataflow/fields/test_fixpoint.py
-  checksum: f40a187db5635624e2dd30d8340e6fd23e6a2913684ec5d23ab9ab6299ce97a5
-- filename: cobble/cobble/dataflow/fixpoint/fixpoint.py
-  checksum: eb9f2e00612e5b8cc4cc760aa55d1d65fea2dff4edf7f5c368649982266cb01d
 - filename: cobble/cobble/dataflow/fields/naming.py
   checksum: 7c8fb0b6f7fdee215d9f8e0501e6716fdec469183456e0ad4e1db9f30d59aa71
 - filename: cobble/tests/dataflow/fields/test_naming.py
   checksum: 26938d28bcc510eae09e3c6802eb6fed1e653ebf11b7cf0d42cbf0a7ced10cab
-- filename: cobble/cobble/dataflow/fixpoint/config.py
-  checksum: ea3595e3d5a42506d164b707efee5a26de982110fa00f0215a9b46ae9ff6eb51
-- filename: cobble/tests/dataflow/fields/test_fields_config.py
-  checksum: bf84ff4478fc4511da1fc3d23ec65487d144e22e76dbb51c43d77d8ffe31bc00
-- filename: cobble/tests/dataflow/fields/test_fields_build_corpus.py
-  checksum: 4ad76224ff937519efb34cd77011260f9af052b60647e613f311cc3b5c38bdb7
-- filename: cobble/cobble/dataflow/fixpoint/build_corpus.py
-  checksum: ab09f9f9845cbf24ff881ad2a5091d588955005428bb91da52ce80cd9d468039
-- filename: cobble/tests/dataflow/fields/test_fields_acceptance.py
-  checksum: d6c24b2a048ee62fa7e77c20cc2bca65082c78cbe31dc731d48977561d564d01
-- filename: cobble/cobble/dataflow/fields/side_tables.py
-  checksum: bbba8baf46404ae5467a01c832daaec6b3ca1c59761fa8f45a0285b808709eac
-- filename: cobble/cobble/dataflow/fixpoint/query.py
-  checksum: be3d9da41f96f7a03abe63d6b8cc7cc8994d622eb7a9fc840b2cbbf9f4c4cb7c
-- filename: cobble/tests/dataflow/fields/test_fields_synthetic.py
-  checksum: ac334a88abcd9c8ce8d105554216d508834231a26cdad5239e27859b0808ac6f
-- filename: cobble/cobble/dataflow/fixpoint/rows.py
-  checksum: adfffca388573fce310006bdaf3c21141c2b7faf97113eaedb20d01aa8c37f9c
-- filename: cobble/cobble/dataflow/srccfg/dataflow.py
-  checksum: 12461885a6326eea22e739c89ba3dd5fd890ef92708dec50e09ba88e9c63cb5a
-- filename: docs/superpowers/specs/2026-09-07-cross-program-commarea-dataflow-design.md
-  checksum: cd923026dfc3a3c1f962597a4f60b3977c7a0f31f3f2b77646b9f6fd3a3474b9
 - filename: docs/superpowers/plans/2026-09-07-cross-program-commarea-dataflow.md
   checksum: 88aa47b5309c263111a6e262b1ddb1772a2e7c6dbffb8fe78ffdf6f5aabe8352
-- filename: cobble/cobble/dataflow/fields/aliases.py
-  checksum: d1641b14cf008903c96a7f3f1a541f4295efeb8de15152666c0368e6fb452fbe
-- filename: cobble/tests/dataflow/fields/test_fields_aliases.py
-  checksum: 83c7ee29c017268a5a21bba5c43bd998e860da66be7057fbfac8ed9807e89891
-- filename: cobble/tests/dataflow/fields/test_fields_crossing.py
-  checksum: 85f4ed750e4cd31fb2d485ec9fbbad19b4b785b67b36255eed753bc446a70c89
-- filename: cobble/cobble/dataflow/fields/trace.py
-  checksum: 476fcb24f27c8788f2ae5e35272e917d78b232d99e99bfe3804afa6e762d4594
 - filename: docs/superpowers/specs/2026-09-07-path-sampling-trace-design.md
   checksum: 053c317e40ad4e70e7bccca1b175ed2e8f2414428fb57bdbad80a6935d3eecb3
 - filename: docs/superpowers/plans/2026-09-07-path-sampling-trace.md
   checksum: 7ae612136e2891267844041a618027c5e1089c0008f98b6a4a0cd37e0bfa46cd
-- filename: cobble/cobble/dataflow/fields/trace_query.py
-  checksum: 6108bd7683fd3967ba20868327b0a67c34b8deb56bbdd4a79608ec8bcf3442bf
-- filename: cobble/cobble/dataflow/fields/trace_report.py
-  checksum: 5bff435e279a61ee123e923938cd65f8b7e6351f1475abda4b7b9a335149162e
-- filename: .pre-commit-config.yaml
-  checksum: 68b437aa8d52f1ea8cb3ac5bd0f63b94abfb84a786cf6ee76f165d4a8534d349
-- filename: cobble/tests/dataflow/fields/test_fields_trace.py
-  checksum: 2242ee81af5ea1cbe73f83b44303bae8e0aa5c95fce237a35cc896d782bbef68
-- filename: cobble/tests/dataflow/fields/test_trace_query.py
-  checksum: c6c0c435333e6f849910438d828d1dadd61e4dc80d8e07838ef38233676335cb
-- filename: cobble/cobble/viz/callgraph_cmd.py
-  checksum: 02a19d3e2127e64a1ee0c6e2b7b386551cfdc75c74e92e20e1136d77a1c24780
-- filename: cobble/cobble/viz/dataflow_cmd.py
-  checksum: c83be5ff99f6a7523d02e36dc78e6da62e6bd86146040d8b322cca60b6b6918a
-- filename: cobble/cobble/viz/render_cmd.py
-  checksum: 3b8df378139cc07fd028b53610e1dcd2fcab41f81ea530c4760113d5d06e0df0
 - filename: docs/presentation/artifacts/jcl/readacct-sysout-excerpt.txt
   checksum: 642839a12926cb223ec29ed1950904657b28c8c4c1bd5ec26d113678c4a1717a
-- filename: docs/presentation/artifacts/cics/01-COSGN0A.json
-  checksum: 93192dd7d16507d19f75742f6c848b08d2eede81fc1195f5b0f8089f078eeeff
-- filename: docs/presentation/artifacts/cics/FACTS.md
-  checksum: 695083aa1c06a10e4c0122cb71d695bd37e1e8002c961282969594fad9e35e39
 - filename: docs/presentation/artifacts/cobble/screens/COSGN0A.html
   checksum: 65930ff6892053fbe25adbb08b799c71df01a3ac663c4982225686a2d2a67b26
 - filename: docs/presentation/artifacts/cobble/screens/COUSR2A.html
@@ -393,8 +161,6 @@ fileignoreconfig:
   checksum: dabb96626d2adf26cae9686af707142da3ec0e9e9dec18b0b8acdc6fb0777d75
 - filename: docs/presentation/artifacts/sql/cursor-sqb-run.txt
   checksum: ece6d7c2424da7f11c137a806c49d53ab3bd20639da504491d9cb74ac1cdb8d1
-- filename: docs/presentation/artifacts/jcl/FACTS.md
-  checksum: c84edee2f45a93c0acc30339ffe6e528c5181d9a4db5f7e0748686c80ba324c6
 - filename: docs/presentation/artifacts/cics/turns.jsonl
   checksum: 641d44c186e546c9aaf91293354db041279e02b1ceffe51e075df44002c5268c
 - filename: docs/presentation/artifacts/jcl/acctfile-readacct.log.txt
@@ -403,20 +169,14 @@ fileignoreconfig:
   checksum: 8a266c35b349bb0671f0aaca1b0a967b2680602147c2d965a536650c0f4bcf53
 - filename: docs/presentation/artifacts/cobble/screens/COUSR1A.html
   checksum: 357ebc11fc18ef665a86e2ffa57a2f3e77a671cd0ee98a8224e38401ba82df70
-- filename: docs/presentation/artifacts/srccfg/COSGN00C-READ-USER-SEC-FILE.dot
-  checksum: 40008c4eb4ebff5e88eab98f7a67cf5a812938b7fd6200f1d38e9ecb5b8aa163
 - filename: docs/presentation/artifacts/jcl/job-survey.json
   checksum: 9bf3c0f597a940afc909c0e5510e48cfed84a6633fe5790d3d5707daa3d4ae56
 - filename: docs/presentation/artifacts/srccfg/guards-COSGN00C-xctl.txt
   checksum: 5b2b189652f2e9637c0dfdee73a68ba8a315107a91a30484635e68aaf0139a50
-- filename: docs/presentation/index.html
-  checksum: c6eb8ba88f3d8049d16c699441c662c75e2865a6eed314d06c2d7c9ed7a9c743
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.dot
   checksum: 8ea2f45359e73ab3dc56502cbd6e3c3d7b225e8e58aebe55cd69875b7e7e4b4a
 - filename: docs/presentation/artifacts/srccfg/provenance-COSGN00C-CDEMO-USER-ID.txt
   checksum: 44b7772451ee93f9694911e4c35b1732e373d0db8fb8389bdcf668b5615c4723
-- filename: cobble/cobble/dataflow/srccfg/bundle.py
-  checksum: 220c3e94144d226bac20a71f1695800f01539dd495df6d6a51a6192f8ce0c1e6
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.jsonl
   checksum: 0a8245a4bbb9185146fde82d8e460c858a5e29f2a7aa141c7240345617eaea14
 - filename: docs/presentation/artifacts/srccfg/cfg-COACTVWC.jsonl
@@ -425,10 +185,6 @@ fileignoreconfig:
   checksum: e5cc3f24822c63276009ae4976fc9a87f3a535f5e7453930e16e8b47673b57b5
 - filename: docs/presentation/artifacts/cobble/viz/COSGN00C-sequences.json
   checksum: b59ec1ab1062b5d499356ad0f9ff5e1bc2c4134a3645e89bf97feca1a8496fdc
-- filename: cobble/cobble/dataflow/depgraph/config.py
-  checksum: ae5acb3e0514203600619a39592fb698915cac3cb22d0516c0e75390b6fbd847
-- filename: cobble/cobble/corpus_config.py
-  checksum: e3b2df9dad5c6571e11b7cadaf2f10b116eb73ed0004c890976d091e153ae0b9
 - filename: cicada/tests/unit/cics/test_tn3270_decoder.py
   checksum: 8d7ca9568d789e1f0876d7d4219f6eeb004c7ab79fa81125a7cb4d925eadca83
 - filename: docs/superpowers/specs/2026-09-18-carddemo-db2-tn3270-design.md
@@ -439,12 +195,6 @@ fileignoreconfig:
   checksum: 9d7a995511586a61d7598de56e9a9589841f259cf4ae6b3791e39217a51d216b
 - filename: squall/squall/preprocess.py
   checksum: bd301524ab302bd1005dc13d34f825b7a2de4a13103a383d5804ebfedaff30d8
-- filename: squall/squall/exec_sql_scan.py
-  checksum: c5450e80e3d187790db0777548cabc8d4c420f94b3e8c7940d3a4135bd83d851
-- filename: squall/tests/unit/test_exec_sql_scan.py
-  checksum: 284988d03d54c01792a48df17d54bb9171beef7bd80330151e75533cad2b475a
-- filename: docs/superpowers/plans/2026-09-19-carddemo-db2-tier.md
-  checksum: e9095ace48e6e93aa549e6497f23e4c5993ec5864971c76aded5aa18858832c8
 - filename: squall/squall/data_division_exec_sql.py
   checksum: 709c5f628d1da46d2adfc0915590608722124a68b67b96eaa525e8908448936f
 - filename: squall/tests/unit/test_data_division_exec_sql.py
@@ -455,12 +205,6 @@ fileignoreconfig:
   checksum: b937f1f2a6cbc4a7ac3ce1c83ef25e62dad3ba5aa0f034b8bca2c5bcabf3e680
 - filename: squall/squall/binding.py
   checksum: d19795b341ed47ff94ffd7796571f5b22e79199eb117b391cc5385b0fed68167
-- filename: tests/integration/test_carddemo_db2_headless.py
-  checksum: fcebaa0b2249bb87e5f419973d982a01e5c1fd54a20f685a68834b0239fb5a45
-- filename: cobble/cobble/dataflow/srccfg/webgl.py
-  checksum: 51ee12844b4cc5f6a3612c3000d6dafb033edc439b1c0df96f40996f721943a8
-- filename: cobble/cobble/dataflow/srccfg/joined.py
-  checksum: edb6943cba4ee88acc283e9ceb08f2edfea1b4a98c281b60bb85c8ff16cda0ea
 - filename: cicada/cics/cics_visitor.py
   checksum: 2bb2151e87c46e9065533e7ae4b6b0404987d5909121b1e942fa3d778e96d35f
 - filename: guidelines/data-security.md
@@ -471,8 +215,6 @@ fileignoreconfig:
   checksum: 36bf1c2c62c6879b42b7e32dbcd9e036c8af395f1b702f8adb692960039973dd
 - filename: guidelines/lang/python/testing.md
   checksum: b62087be3775094d4985e8bfc4f2b0ef0a836e013c9782f47d50eeae46cb3afa
-- filename: guidelines/project/workflow.md
-  checksum: e0256a53df9af2a5f5c1cddf58cb8df5d40adb3d15d9baa2253c8f4c7eb8b8d9
 - filename: guidelines/testing.md
   checksum: e4094fa4c5d3f3f6f5a61865b11bc8628cc44fe4b25515d61617b7def8afdf94
 - filename: guidelines/refactoring.md
@@ -483,14 +225,6 @@ fileignoreconfig:
   checksum: 063f59919983494fd7f687fb61dcff47f35af29de2f71016daccea5f0cf18feb
 - filename: docs/superpowers/plans/2026-09-28-pathwalk-animation.md
   checksum: 310b0f9b8534349c95e52e5a4dcc2b68a0b1192bbe66f799db862d1735bdb6c3
-- filename: cobble/cobble/viz/pathwalk_template.html
-  checksum: 1e6cab5f8e3467404c50ed9bca0b169a4de9ad2ae02c3980873a3bc1420769ac
-- filename: cobble/cobble/viz/pathwalk_viz.py
-  checksum: 5f347dfac777fe9a3065d5c8858533be6413a7f23bb4e47873ef5b001d861cad
-- filename: cobble/cobble/dataflow/fields/trace_report.py
-  checksum: 5bff435e279a61ee123e923938cd65f8b7e6351f1475abda4b7b9a335149162e
-- filename: cobble/cobble/viz/pathwalk_template.html
-  checksum: 1e6cab5f8e3467404c50ed9bca0b169a4de9ad2ae02c3980873a3bc1420769ac
 - filename: cobble/tests/viz/test_pathwalk_viz.py
   checksum: 5f4569c14aca97b037c0685ec58ddf13ee6477e844a23ef5e7c394e4a53b7aeb
 - filename: docs/superpowers/specs/2026-09-30-cobble-exec-sql-whenever-cfg-design.md
@@ -499,38 +233,18 @@ fileignoreconfig:
   checksum: 678ae42c15d4a85765fddc8c4b1ac58082ad8ef8734235cc86386894cd91849d
 - filename: docs/superpowers/plans/2026-10-01-cobble-single-graph-file.md
   checksum: ab86e94d30381f45e3b9d7423338135279ecc04fdc09a444773a348202a4e7cf
-- filename: cobble/reference/graph.jsonl
-  checksum: e57e54f70ee857af5bf705fa38f8d06e4ffd0427f8cdb379e39cc4c23a8fc7ef
 - filename: docs/superpowers/plans/2026-09-30-cobble-dynamic-call-resolution-unit-1.md
   checksum: 55fea677560d44e44ee55b90ae7e9e838788f3523eb06eea867794ef68e5fa30
 - filename: docs/superpowers/plans/2026-10-02-srccfg-jsonl.md
   checksum: 22b1c8a31adc79ddaeb672e3d5af96193b985c1ae3def8c1965ea36f712ade04
 - filename: docs/superpowers/plans/2026-10-02-srccfg-reach.md
   checksum: fd808074d85aca2abee080dac45078fc50d791c97b090ea11476c9df3f215a9d
-- filename: cobble/tests/dataflow/srccfg/test_reach.py
-  checksum: 3cb2877b50de21eae2d5cbb8cc21adebcea808e618252bbdb928b31c9887ecc9
-- filename: cobble/tests/dataflow/srccfg/test_reach_cli.py
-  checksum: b6dd09b80b4bc4a7291dc2c4e892d6915335e3cd428b5842db0cedf4af3aaedf
 - filename: cobble/cobble/dataflow/srccfg/arm_clauses.py
   checksum: b74101234c683e9df7f51c46ef055c7446ec7e67f34b0c369c367259ddcb7f59
-- filename: docs/design/2026-10-05-jcl-to-be-architecture.md
-  checksum: b7852f568b4863010293bb8fd18fbc5a2aa0f194bad3b4867652cbd586414644
-- filename: cicada/docs/cics-production-roadmap.md
-  checksum: cdc461a4020cd727af9b29ba33e93ce5c42d81a2c5bc9b8a8ab2dae2df96a3ca
-- filename: docs/explainers/eliminating-gotos.html
-  checksum: f7e8729fdbda4230eaa8c38831ce97d1f9e6f260c50fc168ef1cfa5a44bcc97c
 - filename: docs/explainers/tree-zippers.html
   checksum: 4bb3d3ec94a3ca576d8e46e1b4e58999e12f9befae0a0fa67945b16067d01534
-- filename: docs/explainers/reducibility-and-loops.html
-  checksum: eeedb806e620bb91a4e70b99ff397e0b8e1d93b61061ac3b9fac63b2699e024e
 - filename: docs/explainers/dominance-and-reachability.html
   checksum: 808c98b330e2ecf7a03221f4820a112f839535cf4d14d82db1b5b24b82cbdcf2
-- filename: docs/explainers/traversal-orders.html
-  checksum: 3d6f221ea9d953372a7b5f133b6c8b9d7e58c7ca00da9c46e7f1bb1edae0d880
-- filename: docs/explainers/fixpoints.html
-  checksum: e7aff9f5c434b8361195fd9447fa7974ccfab1ff76e1564469f3e3426d7eb6be
-- filename: docs/explainers/byte-extents.html
-  checksum: e395fd25bd24e5553ee2d4a737c6ef67e967ab3c47988645e2c01f9475813e85
 - filename: cobble/cobble/dataflow/srccfg/subgraph.py
   checksum: 9f47880f20d546bd63ae6c9975da21fa0caed89138178483f7da3fc99d00a829
 - filename: docs/explainers/dj-graphs-and-natural-loops.html
@@ -539,8 +253,6 @@ fileignoreconfig:
   checksum: ee38e80604dfce34cad5f5fccb5a3893dedc29b44a8d08f239201b4672c013cf
 - filename: docs/explainers/structured-program-theorem.html
   checksum: 9783ecb10e242f2010a331c8ffd67a3621ec9f6857d30d6a68523ceb4936a54c
-- filename: docs/superpowers/specs/2026-10-05-cross-program-dataflow-combine-design.md
-  checksum: a881632af83f40c117236ed10704f0860342eab363bec500300d63827f0d1234
 - filename: docs/superpowers/plans/2026-10-06-cross-program-dataflow-combine.md
   checksum: a8fb734914598b1b86a212f271a343858707089cc74da4747acd5e60e1c44847
 - filename: docs/presentation/artifacts/cics/headless-tests.txt
@@ -549,22 +261,14 @@ fileignoreconfig:
   checksum: 1cb7b44b9c26b5b596b29d0055820c976e231a42f930e450fbced2c7c5f5844d
 - filename: docs/presentation/capture/carddemo_3270_video.sh
   checksum: 32a1ebcfbb9686d0567719dac8288b43d8d80fc9c323ab556b005ad50fdedda2
-- filename: docs/analysis/2026-10-07-dataflow-fixpoint-oom-diagnosis.md
-  checksum: 7b59bd160243a9f6c2666eda6c2a069c9f8725e97eb9805816b73189b0e28f78
-- filename: docs/how-to/run-jcl-job.md
-  checksum: 057c240081ea454157f6a93c1fbbfe73fc21a8b92131df08d96ed9f4ccbc2d97
 - filename: docs/how-to/run-carddemo.md
   checksum: 88840f9cb4d9397cd4cca8bbb548bfc13370f6dba68936b361434d659a143777
-- filename: docs/roadmaps/cicada.md
-  checksum: dafddaccc13096ad9a609f42eecfef8b4fb11e8d6fec750c4285a0f00b463a0a
 - filename: docs/how-to/run-tests.md
   checksum: 8d3ae487f569ff814d7ca4b1ff30aedd9edd115e007c69307ce53ce496f7c0f1
 - filename: docs/how-to/setup.md
   checksum: ac85976bae534797b4171f4e3949466c67a0c3f18033dbfaad4817f9d2127471
 - filename: docs/how-to/analyse-a-corpus.md
   checksum: 8283d647dafad09623f096a7034408a24cdca75a24bc50ec7f8214e0f5254bbd
-- filename: docs/roadmaps/jackal.md
-  checksum: 38e67b1fa599f873b0e570d0fa98f7246470c53dbd8aa9a91af8b8e9008ebef9
 - filename: docs/reference/cobble/config.md
   checksum: d9c0bd9e47fbf8c7179eb1f16ac736bdc06d292918de10c4237998f4fe69292b
 - filename: docs/reference/cicada/architecture.md
@@ -573,64 +277,16 @@ fileignoreconfig:
   checksum: 617c99944b7edec89262544a4614edcd83da3bd390a7d889457e240884b0617b
 - filename: docs/superpowers/specs/2026-10-08-docs-consolidation-design.md
   checksum: 8f7db65aae8f90a9ac8352e2c23d4ebc83ec141edf3e4665709fb52383fe29aa
-- filename: docs/reference/cobble/field-dataflow.md
-  checksum: 5517172d14630198f6aa7ae74b6c03f57f305db67fca0cdba01bca79cb98d88f
-- filename: docs/superpowers/specs/2026-10-10-jackal-job-level-domain-model-design.md
-  checksum: 4a049414ef2aaed6d9b656f825f9e753b27e338d2a0d27a3e3eefdfc126c6851
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-unit1-acceptance.md
   checksum: 5e537151a14b741996f46f6c8014dd3a8103609e81c43461fec4139bf6a3850d
-- filename: jackal/tests/acceptance/build.py
-  checksum: 2cce5d7d662043abd624c51411989b9739b44f9e6df41f24befd3435937716db
-- filename: jackal/tests/acceptance/test_disp.py
-  checksum: 98c09e838cd0941a015db9a6fa85393b8a5dc05a0856d4029700c5d936c4329e
-- filename: jackal/tests/acceptance/test_dsn.py
-  checksum: 8ccff7faf8d8cf888532cd038910d2694681f2e819335b3829e7a0d5842329c8
-- filename: jackal/tests/acceptance/test_symbols.py
-  checksum: 5f5b6be07e18a808b3491bfe7e7fc94529a89ce2bc206e958bcc263d007b9d91
-- filename: jackal/tests/unit/test_jcl_bridge_deserialize.py
-  checksum: 0d4f57346b8f4afffa7e075a14f77e8c6afec800c4fcd50c30478f66dabc7c24
-- filename: jackal/tests/integration/test_temp_datasets.py
-  checksum: f8b6b279daa9f465639fac91a9b2b6b92cb77772b0fc725b6868b48c4034a8bb
-- filename: jackal/jackal/catalog.py
-  checksum: 6890937150abe82936e40642f72ffe68e8a0f6b83bda25509f2686a234425aa8
-- filename: jackal/jackal/cond.py
-  checksum: 39ca68c8b30147a6ee5bfa81295bf00e022e396960b1e013654f8e9700543e4f
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-units3-4-model-and-expansion.md
   checksum: 26e4523a848bab55f3dc987aec7a4b679b3f3a3d9b39460d61f0bfa7c92d5c8b
-- filename: jackal/tests/unit/test_cond.py
-  checksum: a7689ba5468894803f04da282e502747f5dfaad3aee928dc918c484f19597867
 - filename: jackal/jackal/jcl/wire.py
   checksum: 10c2767d8cc75799c54d3bdd3195622b151b0ef4f3bf999e92ea84b7bfa3e51f
-- filename: jackal/tests/acceptance/carddemo_facts.py
-  checksum: dc6aa3933b7b47ade57267eb172811ffb8b42490a9a5d6c6327b6620da498986
-- filename: jackal/jackal/runner.py
-  checksum: cfb709a4d9c1e516027f48580eb87d6b0e3f56c56d24e6266f01db5658f8c9e5
-- filename: jackal/jackal/model.py
-  checksum: 6276cc606efac3fd88b0d953149b878c7a51941bfca3e8bc5b2f597e99172acf
-- filename: jackal/tests/unit/test_results.py
-  checksum: 8e326a7a22b0a8bf9b2230448e5d6f968373ebbf19717944c4f9493e303305e3
-- filename: jackal/tests/unit/test_runner.py
-  checksum: 36182466f6b47d001e8225d60c452b88a975384ea02862da04cf0e7f988f516b
-- filename: jackal/tests/integration/test_jcl_execute_e2e.py
-  checksum: 268ece0d315e530fb9cffc49b8d297bf2dfd7cd0aee0c1c614fc843cc7574825
-- filename: jackal/tests/integration/test_cond_e2e.py
-  checksum: daffe285d83cdfbc49c2c606533f451b5653b18113d5a6c9c5834570b370309c
-- filename: docs/reference/jackal/architecture.md
-  checksum: 5f95c77643f5222e749bf16741c94ee948872c8e50772bd30268d61c7da6cd08
-- filename: jackal/tests/unit/test_catalog.py
-  checksum: a875c18f5e4fd5a710542d9cbfb3fb5e431800dad18e52f32cdd9ec94e20b615
-- filename: jackal/jackal/labels.py
-  checksum: 01de7c74860f36680ef3ed75083530155b9c876f38f1213e5c888cff6ee3bd8f
-- filename: jackal/jackal/idcams/executor.py
-  checksum: 8401818bbb504819c34d721932d8bf286e85405fac32983e1bf4f79eed5cec96
-- filename: jackal/jackal/system_catalog.py
-  checksum: 01acf2aac3d86481d4725749c1992aae8890989dbea2230a03a6b2337ea02127
 - filename: jackal/tests/unit/test_jcl_parser.py
   checksum: af18c929ccef7956db1a21dbdc7c6f997722f5d4572242cc8f98ad2207d38eb6
 - filename: docs/records/design/2026-10-11-jackal-dataset-decisions.md
   checksum: ece97e916b576037d45af880fb3774729d86500c565015c32282fb645f592156
-- filename: jackal/jackal/cobol_files.py
-  checksum: 479e8297517fc25a5c5f3661a7a61769cce4593b93f65c8baf8207a7285dcf90
 - filename: cobol_harness/state.py
   checksum: ea0e23afa4ffef8f96e244a4aef9af14350dcfbd23e71360bf2a61fb1ab9f531
 - filename: tests/integration/test_headless_harness.py
@@ -641,8 +297,6 @@ fileignoreconfig:
   checksum: 6d9fd77ddcd339c7ee311f7167f4e55ff332177b8849d28c3a4e2e1fa75254b6
 - filename: docs/records/design/2026-10-12-jackal-dcb-attributes.md
   checksum: 13278f885cf69dcccd9e132a36e457e36ee0042c16bd7532129918d6c8f891e8
-- filename: jackal/tests/integration/test_jcl_bridge_jar.py
-  checksum: 702b36b0c3f80d8d1bc707a4eac5b29aea180cb8d9ee21a7f1486e5b93831a24
 - filename: jackal/tests/integration/test_proc_referback.py
   checksum: 6ec4e494a47123880c83693fe506c9dbdec6a772abf9e192b4a1a1ceb4d1d711
 - filename: jackal/jackal/dcb_label.py
