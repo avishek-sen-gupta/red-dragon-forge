@@ -4,7 +4,17 @@ a run.  Agnostic to any one program.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
+
+from interpreter.address import Address
+from interpreter.cobol.run_unit import RUN_UNIT_VAR
+
+
+def program_regions(vm: Any) -> Iterator[bytearray]:
+    """Every region in allocation order except the run unit's, which every COBOL
+    run allocates first and which holds no program's fields."""
+    run_unit = Address(str(vm.call_stack[0].local_vars[RUN_UNIT_VAR].value))
+    return (vm.region_get(rk) for rk in filter(run_unit.__ne__, vm.region_keys()))
 
 
 def find_screen(screens: Sequence[dict], map_name: str, *, last: bool = True) -> dict | None:
@@ -40,8 +50,7 @@ def read_vm_field(vm: Any, field_name: str) -> bytes:
     if fld is None:
         raise KeyError(f"{field_name!r} not in data_layout: {sorted(layout)[:40]}")
     off, sz = fld["offset"], fld["length"]
-    for rk in vm.region_keys():
-        rgn = vm.region_get(rk)
+    for rgn in program_regions(vm):
         if rgn is not None and len(rgn) >= off + sz:
             return bytes(rgn[off : off + sz])
     raise RuntimeError(f"no region large enough for {field_name!r} (offset={off}, length={sz})")

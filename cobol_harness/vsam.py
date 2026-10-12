@@ -11,6 +11,8 @@ from cics.vsam.engine import VsamEngine
 from cics.vsam.fct import DatasetConfig, FctConfig
 from cics.vsam.seed import seed_records
 
+from .state import program_regions
+
 
 def to_ebcdic(s: str) -> bytes:
     """ASCII string -> EBCDIC bytes (cp037).
@@ -75,8 +77,7 @@ def build_record(
     if fld is None:
         raise KeyError(f"{record_name!r} not in layout: {sorted(vm.data_layout)[:40]}")
     off, sz = fld["offset"], fld["length"]
-    for rk in vm.region_keys():
-        rgn = vm.region_get(rk)
+    for rgn in program_regions(vm):
         if rgn is not None and len(rgn) >= off + sz:
             data = bytes(rgn[off : off + sz])
             if expected_length is not None and len(data) != expected_length:

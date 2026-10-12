@@ -49,11 +49,6 @@ def run_cobol(lines: list[str], max_steps: int = 1000):
     return run(source=source, language="cobol", max_steps=max_steps)
 
 
-def first_region(vm):
-    """Return the first memory region from the VM state."""
-    return vm.region_get(list(vm.region_keys())[0])
-
-
 def all_field_names(fields) -> set[str]:
     """Recursively collect all field names from a list of CobolFields."""
     names: set[str] = set()
