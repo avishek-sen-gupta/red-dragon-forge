@@ -12,16 +12,45 @@ import java.util.Optional;
 /** A DD statement, with the unnamed DDs after it as its concatenated members. */
 final class DdBuilder {
 
+    /** The DCB attributes jackal models: the model (positional), RECFM and LRECL, and whether DCB= was coded. */
+    private record Dcb(
+            Optional<JCLParser.DatasetNameContext> source,
+            Optional<JCLParser.KeywordOrSymbolicContext> recfm,
+            Optional<JCLParser.KeywordOrSymbolicContext> lrecl,
+            boolean coded) {
+
+        static Dcb empty() {
+            return new Dcb(Optional.empty(), Optional.empty(), Optional.empty(), false);
+        }
+
+        Dcb withSource(JCLParser.DatasetNameContext name) {
+            return new Dcb(Optional.of(name), recfm, lrecl, coded);
+        }
+
+        Dcb withRecfm(JCLParser.KeywordOrSymbolicContext value) {
+            return new Dcb(source, Optional.ofNullable(value), lrecl, coded);
+        }
+
+        Dcb withLrecl(JCLParser.KeywordOrSymbolicContext value) {
+            return new Dcb(source, recfm, Optional.ofNullable(value), coded);
+        }
+
+        Dcb asCoded() {
+            return new Dcb(source, recfm, lrecl, true);
+        }
+    }
+
     private record Fields(
             Optional<JCLParser.DatasetNameContext> dsn,
             JsonArray disp,
             boolean sysout,
             boolean dummy,
             boolean inStream,
-            List<String> nullified) {
+            List<String> nullified,
+            Dcb dcb) {
 
         static Fields empty() {
-            return new Fields(Optional.empty(), new JsonArray(), false, false, false, List.of());
+            return new Fields(Optional.empty(), new JsonArray(), false, false, false, List.of(), Dcb.empty());
         }
 
         Fields withNullified(boolean empty, String keyword) {
@@ -30,7 +59,11 @@ final class DdBuilder {
             }
             List<String> more = new ArrayList<>(nullified);
             more.add(keyword);
-            return new Fields(dsn, disp, sysout, dummy, inStream, List.copyOf(more));
+            return new Fields(dsn, disp, sysout, dummy, inStream, List.copyOf(more), dcb);
+        }
+
+        Fields withDcb(Dcb changed) {
+            return new Fields(dsn, disp, sysout, dummy, inStream, nullified, changed);
         }
     }
 
@@ -64,6 +97,7 @@ final class DdBuilder {
         JsonArray members = new JsonArray();
         ctx.ddStatementConcatenation().forEach(member -> members.add(member(member)));
         dd.add("concatenated", members);
+        dd.add("dcb", dcb(fields.dcb()));
         return dd;
     }
 
@@ -87,24 +121,59 @@ final class DdBuilder {
         return switch (inner) {
             case JCLParser.DdParmDSNAMEContext c -> new Fields(
                     Trees.first(c, JCLParser.DatasetNameContext.class), acc.disp(), acc.sysout(),
-                    acc.dummy(), acc.inStream(), acc.nullified())
+                    acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb())
                     .withNullified(c.datasetName() == null, "dsn");
             case JCLParser.DdParmDISPContext c -> new Fields(
                     acc.dsn(),
                     Trees.first(c, JCLParser.SingleOrMultipleValueContext.class)
                             .map(DdBuilder::dispWords).orElseGet(JsonArray::new),
-                    acc.sysout(), acc.dummy(), acc.inStream(), acc.nullified())
+                    acc.sysout(), acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb())
                     .withNullified(c.singleOrMultipleValue() == null, "disp");
             case JCLParser.DdParmSYSOUTContext c -> new Fields(
-                    acc.dsn(), acc.disp(), true, acc.dummy(), acc.inStream(), acc.nullified());
+                    acc.dsn(), acc.disp(), true, acc.dummy(), acc.inStream(), acc.nullified(), acc.dcb());
             case JCLParser.DdParmDUMMYContext c -> new Fields(
-                    acc.dsn(), acc.disp(), acc.sysout(), true, acc.inStream(), acc.nullified());
+                    acc.dsn(), acc.disp(), acc.sysout(), true, acc.inStream(), acc.nullified(), acc.dcb());
             case JCLParser.DdParmASTERISKContext c -> new Fields(
-                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified());
+                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified(), acc.dcb());
             case JCLParser.DdParmDATAContext c -> new Fields(
-                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified());
+                    acc.dsn(), acc.disp(), acc.sysout(), acc.dummy(), true, acc.nullified(), acc.dcb());
+            case JCLParser.DdParmDCBContext c -> c.ddParmDCB_Parameter().stream()
+                    .reduce(acc.withDcb(acc.dcb().asCoded()),
+                            (f, p) -> dcbParameter(f, p.getChild(0), true), (a, b) -> b)
+                    .withNullified(c.ddParmDCB_Parameter().isEmpty(), "dcb");
+            case JCLParser.DdParmDCB_ParameterContext c -> dcbParameter(acc, c.getChild(0), false);
             default -> acc;
         };
+    }
+
+    private static Fields dcbParameter(Fields acc, ParseTree inner, boolean inDcb) {
+        return switch (inner) {
+            case JCLParser.DdParmRECFMContext c -> acc.withDcb(acc.dcb().withRecfm(c.keywordOrSymbolic()))
+                    .withNullified(c.keywordOrSymbolic() == null, "recfm");
+            case JCLParser.DdParmLRECLContext c -> acc.withDcb(acc.dcb().withLrecl(c.keywordOrSymbolic()))
+                    .withNullified(c.keywordOrSymbolic() == null, "lrecl");
+            case JCLParser.DatasetNameContext c when inDcb -> acc.withDcb(acc.dcb().withSource(c));
+            default -> acc;
+        };
+    }
+
+    private static JsonObject dcbSource(JCLParser.DatasetNameContext name) {
+        String raw = name.getText();
+        if (raw.startsWith("*.") && raw.indexOf('.', 2) < 0) {
+            JsonObject sameStep = kind("step_dd");
+            sameStep.addProperty("ddname", raw.substring(2));
+            return sameStep;
+        }
+        return named(name);
+    }
+
+    private static JsonObject dcb(Dcb dcb) {
+        JsonObject out = new JsonObject();
+        out.addProperty("coded", dcb.coded());
+        out.add("source", dcb.source().map(DdBuilder::dcbSource).orElseGet(() -> kind("none")));
+        out.add("recfm", dcb.recfm().map(ValueParts::of).orElseGet(JsonArray::new));
+        out.add("lrecl", dcb.lrecl().map(ValueParts::of).orElseGet(JsonArray::new));
+        return out;
     }
 
     private static JsonObject dsn(Fields fields) {

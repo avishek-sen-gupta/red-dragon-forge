@@ -55,11 +55,13 @@ public class ParseFixesTest {
         assertEquals(2, steps(job));
         assertEquals(
                 "[{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"IN\",\"dsn\":{\"kind\":\"name\","
-                        + "\"value\":[{\"kind\":\"literal\",\"text\":\"T.X\"}]},\"disp\":[],\"nullified\":[],"
-                        + "\"in_stream\":[],\"sysout\":false,\"concatenated\":[]}},"
+                        + "\"value\":[{\"kind\":\"literal\",\"text\":\"T.X\"}]},\"disp\":[],\"nullified\":[\"dcb\"],"
+                        + "\"in_stream\":[],\"sysout\":false,\"concatenated\":[],"
+                        + "\"dcb\":{\"coded\":true,\"source\":{\"kind\":\"none\"},\"recfm\":[],\"lrecl\":[]}}},"
                         + "{\"procstep\":\"P1\",\"dd\":{\"ddname\":\"OUT\",\"dsn\":{\"kind\":\"none\"},"
                         + "\"disp\":[],\"nullified\":[\"disp\",\"dsn\"],\"in_stream\":[],\"sysout\":false,"
-                        + "\"concatenated\":[]}}]",
+                        + "\"concatenated\":[],"
+                        + "\"dcb\":{\"coded\":false,\"source\":{\"kind\":\"none\"},\"recfm\":[],\"lrecl\":[]}}}]",
                 job.getAsJsonArray("statements").get(0).getAsJsonObject()
                         .getAsJsonArray("dd_overrides").toString());
     }

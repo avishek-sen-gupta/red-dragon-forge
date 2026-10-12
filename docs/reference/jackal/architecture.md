@@ -16,8 +16,11 @@ cicada or squall; `.importlinter` enforces this.
 1. Parse. `jackal.jcl.parser.parse_jcl` sends the JCL text to the JCL bridge JAR in a JVM
    subprocess. The JAR parses it with the ANTLR mapa grammar and returns JSON that mirrors the
    parsed model: statements (program steps, PROC calls with their overrides split from their
-   qualifiers, IF blocks with their expression as a tree), and per DD its DSN kind, DISP and
-   concatenated members. `jackal.jcl.bridge_parser` validates it as the Pydantic models in
+   qualifiers, IF blocks with their expression as a tree), and per DD its DSN kind, DISP,
+   concatenated members and DCB attributes (RECFM and LRECL, coded in `DCB=` or as DD keywords,
+   and the model: a dataset name, `*.step.dd` or a same-step `*.dd`). An override changes
+   only the DCB subparameters it codes
+   ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). `jackal.jcl.bridge_parser` validates it as the Pydantic models in
    `jackal.jcl.wire`, which build an immutable `Job` (`jackal.model`).
 2. Expand. `jackal.expansion.expand_procs(job, library)` returns an `ExpandedJob` or a
    `JclError` value, before anything runs. It inlines each PROC call found in the `ProcLibrary`
