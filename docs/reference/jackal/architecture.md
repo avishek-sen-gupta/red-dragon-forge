@@ -18,8 +18,8 @@ cicada or squall; `.importlinter` enforces this.
    parsed model: statements (program steps, PROC calls with their overrides split from their
    qualifiers, IF blocks with their expression as a tree), and per DD its DSN kind, DISP,
    concatenated members and DCB attributes (RECFM and LRECL, coded in `DCB=` or as DD keywords,
-   and the model: a dataset name, `*.step.dd` or a same-step `*.dd`), and GDGORDER. An override changes
-   only the DCB subparameters and GDGORDER it codes
+   and the model: a dataset name, `*.step.dd` or a same-step `*.dd`), the `LIKE` and `REFDD` sources,
+   and GDGORDER. An override changes only the DCB subparameters, LIKE, REFDD and GDGORDER it codes
    ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). `jackal.jcl.bridge_parser` validates it as the Pydantic models in
    `jackal.jcl.wire`, which build an immutable `Job` (`jackal.model`).
 2. Expand. `jackal.expansion.expand_procs(job, library)` returns an `ExpandedJob` or a
@@ -42,7 +42,7 @@ cicada or squall; `.importlinter` enforces this.
    `UnresolvedReferenceStrategy` (`jackal.unresolved`, blueprint D7); both behaviours are
    jackal's own, since z/OS rejects a job with an unresolved reference at conversion:
    - `RaiseErrorStrategy` raises `UnresolvedReference` before any step runs, naming the first
-     `UnexpandedCall` or step whose `COND` or referback holds an unresolved reference.
+     `UnexpandedCall` or step whose `COND` or referback (in DSN, DCB or REFDD) holds an unresolved reference.
    - `IgnoreStrategy` runs the job. A `COND` test naming an unresolved step is false, as for a
      step that did not run. An `UnexpandedCall`, and a step with an unresolved referback, go
      through the gate like any step (an `UnexpandedCall` with no `COND`); where the gate would
@@ -166,7 +166,7 @@ the JCL Reference's DISP defaults say. The decisions and their IBM sources are i
 |---|---|
 | `DISP=OLD` or `SHR` | Resolved from the system catalog. Missing is an allocation failure. |
 | `DISP=MOD` | As above; created empty and cataloged if absent. |
-| `DISP=NEW` | Created empty and cataloged. A name already cataloged fails allocation. It is labelled from its DD's `RECFM`/`LRECL` over its model's label (`DCB=dsname`, or the subparameters of `DCB=*.dd`/`*.step.dd`); `FBA` labels FB, `VBS` VB. With either still unknown, or `RECFM=U`, the label stays pending until the first `OPEN OUTPUT`. A model not in the catalog fails allocation (`DATASET_NOT_FOUND`). An existing dataset's label is never changed by its DD ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). |
+| `DISP=NEW` | Created empty and cataloged. A name already cataloged fails allocation. It is labelled from its DD's `RECFM`/`LRECL` over its model's label (`DCB=dsname`, or the subparameters of `DCB=*.dd`/`*.step.dd`); `FBA` labels FB, `VBS` VB. With either still unknown, or `RECFM=U`, the label stays pending until the first `OPEN OUTPUT`. A model not in the catalog fails allocation (`DATASET_NOT_FOUND`). An existing dataset's label is never changed by its DD ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). `LIKE=dsname` labels it from a cataloged model as `DCB=dsname` does, except that a KSDS model gives a KSDS (with a coded LRECL, unless RECFM is coded); `REFDD=*.dd` copies the RECFM and LRECL coded on that DD, as `DCB=*.dd` does ([decision record](../../records/design/2026-10-12-jackal-like-refdd.md)). |
 | `DSN=&&NAME` | Job-scoped temporary dataset, kept apart from named datasets (its file is `&&NAME`), deleted at job end. |
 | `DSN=*.STEP.DD` | Referback to an earlier step's DD. |
 | `DSN=GDG(+n)`, `(0)`, `(-n)` | A relative generation, resolved against the GDG's active generations as the job first found them (GDGBIAS=JOB) to an absolute `GDG.GnnnnV00`. `(+n)` counts on from the newest; `(0)` and `(-n)` must name an active generation (else `DATASET_NOT_FOUND`); an undefined GDG fails with `GDG_BASE_NOT_FOUND`. A generation whose disposition at step end is `CATLG` rolls into the GDG; past `LIMIT` the oldest (`NOEMPTY`) or every active generation (`EMPTY`) rolls off, deleted under `SCRATCH`, left cataloged under `NOSCRATCH`. `KEEP` leaves it cataloged outside the GDG ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). A generation whose disposition deletes it leaves the GDG. |

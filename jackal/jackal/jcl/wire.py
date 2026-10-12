@@ -230,11 +230,16 @@ class Nullified(Enum):
     RECFM = "recfm"
     LRECL = "lrecl"
     GDGORDER = "gdgorder"
+    LIKE = "like"
+    REFDD = "refdd"
 
 
-_DCB_CLEARED: model.Dcb[StepRef] = model.Dcb(
-    NullifiedDSN(), model.NullifiedValue(), model.NullifiedValue()
-)
+def _source(
+    dsn: Dsn, keyword: Nullified, nullified: tuple[Nullified, ...]
+) -> DSN[StepRef]:
+    if keyword in nullified:
+        return NullifiedDSN()
+    return dsn.model()
 
 
 def _keyword(
@@ -252,17 +257,35 @@ class DcbWire(Wire):
     source: Dsn
     recfm: tuple[Part, ...]
     lrecl: tuple[Part, ...]
+    like: Dsn
+    refdd: Dsn
 
     def dcb(self) -> model.Dcb[StepRef]:
-        return model.Dcb(self.source.model(), value(self.recfm), value(self.lrecl))
+        return model.Dcb(
+            self.source.model(),
+            value(self.recfm),
+            value(self.lrecl),
+            self.like.model(),
+            self.refdd.model(),
+        )
 
     def override(self, nullified: tuple[Nullified, ...]) -> model.Dcb[StepRef]:
+        like = _source(self.like, Nullified.LIKE, nullified)
+        refdd = _source(self.refdd, Nullified.REFDD, nullified)
         if Nullified.DCB in nullified:
-            return _DCB_CLEARED
+            return model.Dcb(
+                NullifiedDSN(),
+                model.NullifiedValue(),
+                model.NullifiedValue(),
+                like,
+                refdd,
+            )
         return model.Dcb(
             self._source_over(),
             _keyword(self.recfm, Nullified.RECFM, nullified),
             _keyword(self.lrecl, Nullified.LRECL, nullified),
+            like,
+            refdd,
         )
 
     def _source_over(self) -> DSN[StepRef]:
@@ -286,9 +309,7 @@ def _override_disp(
 
 
 def _override_dsn(dsn: Dsn, nullified: tuple[Nullified, ...]) -> DSN[StepRef]:
-    if Nullified.DSN in nullified:
-        return NullifiedDSN()
-    return dsn.model()
+    return _source(dsn, Nullified.DSN, nullified)
 
 
 class Member(Wire):

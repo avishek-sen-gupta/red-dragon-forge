@@ -1,11 +1,17 @@
-"""A new dataset's label from its DD's DCB attributes over its model's label (JCL Ref, DCB parameter)."""
+"""A new dataset's label from its DD's coded attributes over its DCB or LIKE model's label (JCL Ref, DCB and LIKE parameters)."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TypeVar
 
-from jackal.labels import DatasetLabel, LabelPending, RecordFormat, SequentialLabel
+from jackal.labels import (
+    DatasetLabel,
+    KsdsLabel,
+    LabelPending,
+    RecordFormat,
+    SequentialLabel,
+)
 from jackal.model import NullifiedValue
 from jackal.value_parts import Value, resolve
 
@@ -63,3 +69,14 @@ def coded_label(
     if not (formats and lengths):
         return LabelPending()
     return SequentialLabel(formats[0], lengths[0])
+
+
+def liked_label(
+    recfm: Value | NullifiedValue, lrecl: Value | NullifiedValue, model: DatasetLabel
+) -> DatasetLabel:
+    match model:
+        case KsdsLabel() if not _coded(recfm):
+            lengths = _chosen(_coded(lrecl), _record_length, (model.lrecl,))
+            return KsdsLabel(lengths[0], model.key_offset, model.key_length)
+        case _:
+            return coded_label(recfm, lrecl, model)

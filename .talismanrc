@@ -600,7 +600,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_cond.py
   checksum: a7689ba5468894803f04da282e502747f5dfaad3aee928dc918c484f19597867
 - filename: jackal/jackal/jcl/wire.py
-  checksum: dcb1929168727e3f6d5aae2a3357acafea8d18780ec56f6a07818630f1466871
+  checksum: 10c2767d8cc75799c54d3bdd3195622b151b0ef4f3bf999e92ea84b7bfa3e51f
 - filename: jackal/tests/acceptance/carddemo_facts.py
   checksum: dc6aa3933b7b47ade57267eb172811ffb8b42490a9a5d6c6327b6620da498986
 - filename: jackal/jackal/runner.py
@@ -645,4 +645,6 @@ fileignoreconfig:
   checksum: 702b36b0c3f80d8d1bc707a4eac5b29aea180cb8d9ee21a7f1486e5b93831a24
 - filename: jackal/tests/integration/test_proc_referback.py
   checksum: 6ec4e494a47123880c83693fe506c9dbdec6a772abf9e192b4a1a1ceb4d1d711
+- filename: jackal/jackal/dcb_label.py
+  checksum: 8912ca684372bf0a70d73a72b50956113efaaf684f2dac6c3ddaddf5f81af780
 version: "1.0"
