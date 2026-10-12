@@ -238,3 +238,30 @@ def test_real_jar_parses_a_same_step_referback(jcl_bridge_jar):
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     assert job.steps[0].dds[1].dsn == StepDd(DdName("IN"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_applies_a_set_inside_a_proc_below_its_exec_and_proc_values(
+    jcl_bridge_jar, tmp_path
+):
+    """JCL Ref p. 48, Table 13: inside a procedure a symbol takes the calling EXEC's
+    value, then the PROC statement's default, then a SET's, then the value from
+    outside. A SET applies to the statements after it."""
+    from jackal.expansion import expand_or_fail
+
+    (tmp_path / "P.prc").write_text(
+        "//P PROC C=PDEF\n"
+        "//S1 EXEC PGM=A\n"
+        "//D DD DSN=&A..&B..&C,DISP=SHR\n"
+        "// SET A=SETA,B=SETB,C=SETC\n"
+        "//S2 EXEC PGM=A\n"
+        "//D DD DSN=&A..&B..&C,DISP=SHR\n"
+        "// PEND\n"
+    )
+    jcl = "//J JOB 1\n// SET B=JOBB\n//J1 EXEC P,A=EXECA\n"
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    expanded = expand_or_fail(job, DirectoryProcLibrary((tmp_path,)))
+    assert [s.step.dds[0].dsn for s in expanded.steps] == [
+        DirectDSN(literal("EXECA.JOBB.PDEF")),
+        DirectDSN(literal("EXECA.SETB.PDEF")),
+    ]
