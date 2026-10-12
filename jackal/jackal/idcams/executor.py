@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import reduce
 from itertools import count, takewhile
@@ -11,7 +11,7 @@ from itertools import count, takewhile
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
-from jackal.allocation import DdEnvironment
+from jackal.allocation import DdEnvironment, DummyAllocation
 from jackal.catalog import DatasetCatalog
 from jackal.dataset import Dataset
 from jackal.idcams.commands import (
@@ -133,22 +133,55 @@ def _records(driver: FileOrganizationDriver) -> Iterator[bytes]:
     )
 
 
+@dataclass(frozen=True)
+class _Dummy:
+    """A DUMMY DD: an immediate end of file to read, a discard to write."""
+
+
+def _side(dds: DdEnvironment, ddname: str) -> Dataset | _Dummy:
+    match dds.get(DdName(ddname)):
+        case DummyAllocation():
+            return _Dummy()
+        case _:
+            return dds.dataset(DdName(ddname))
+
+
 def _handle_repro(cmd: Repro, dds: DdEnvironment) -> int:
-    in_ds = dds.dataset(DdName(cmd.infile_dd))
-    match in_ds.label:
-        case LabelPending():
+    source = _side(dds, cmd.infile_dd)
+    match source:
+        case Dataset(label=LabelPending()):
             return _OPEN_FAILED
         case _:
-            return _copied(in_ds, dds.dataset(DdName(cmd.outfile_dd)))
+            return _copied(source, _side(dds, cmd.outfile_dd))
 
 
-def _copied(in_ds: Dataset, out_ds: Dataset) -> int:
-    in_drv = in_ds.opened(OpenMode.INPUT)
-    out_drv = out_ds.opened(OpenMode.OUTPUT)
-    for record in _records(in_drv):
-        out_drv.write(record)
-    in_drv.close()
-    out_drv.close()
+def _copied(source: Dataset | _Dummy, sink: Dataset | _Dummy) -> int:
+    match source:
+        case _Dummy():
+            return _written((), sink)
+        case Dataset():
+            return _read(source, sink)
+
+
+def _read(source: Dataset, sink: Dataset | _Dummy) -> int:
+    driver = source.opened(OpenMode.INPUT)
+    rc = _written(_records(driver), sink)
+    driver.close()
+    return rc
+
+
+def _written(records: Iterable[bytes], sink: Dataset | _Dummy) -> int:
+    match sink:
+        case _Dummy():
+            return 0
+        case Dataset():
+            return _filled(records, sink.opened(OpenMode.OUTPUT))
+
+
+def _filled(records: Iterable[bytes], driver: FileOrganizationDriver) -> int:
+    for record in records:
+        driver.write(record)
+    driver.close()
     return 0
 
 

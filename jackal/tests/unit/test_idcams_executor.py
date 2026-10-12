@@ -451,3 +451,32 @@ def test_modal_commands_follow_the_condition_codes(tmp_path):
         8,
     )
     assert cat.resolve("SEQ.PS").dsn == "SEQ.PS"
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_from_dummy_empties_its_output_and_into_dummy_keeps_its_input(tmp_path):
+    """vqa item 5: DUMMY reads as an immediate end of file, so REPRO from it
+    leaves a sequential output empty; REPRO into DUMMY discards every record."""
+    from jackal.idcams.executor import run_idcams
+    from jackal.model import DummyDSN, NotCoded
+
+    upload(tmp_path, "FULL.PS", b"AAAABBBB", SequentialLabel(RecordFormat.FB, 4))
+    upload(tmp_path, "KEEP.PS", b"CCCCDDDD", SequentialLabel(RecordFormat.FB, 4))
+    cat = job_catalog(tmp_path)
+    old = Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP)
+    dds = (
+        DD(DdName("NOTHING"), DummyDSN(), NotCoded()),
+        DD(DdName("FULL"), DirectDSN(literal("FULL.PS")), old),
+        DD(DdName("KEEP"), DirectDSN(literal("KEEP.PS")), old),
+        DD(DdName("DISCARD"), DummyDSN(), NotCoded()),
+    )
+    env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
+    rcs = (
+        run_idcams((Repro(infile_dd="NOTHING", outfile_dd="FULL"),), env, cat),
+        run_idcams((Repro(infile_dd="KEEP", outfile_dd="DISCARD"),), env, cat),
+    )
+    assert rcs == (0, 0)
+    assert (
+        cat.resolve("FULL.PS").path.read_bytes(),
+        cat.resolve("KEEP.PS").path.read_bytes(),
+    ) == (b"", b"CCCCDDDD")

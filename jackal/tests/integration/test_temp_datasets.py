@@ -14,7 +14,6 @@ from jackal.missing_program import AbendMissingProgram
 from jackal.model import (
     DD,
     DdName,
-    DummyDSN,
     InStreamDSN,
     NotCoded,
     StepRef,
@@ -108,30 +107,30 @@ def test_a_temp_never_created_fails_its_step_or_is_substituted_when_lenient(
     )
 
 
-def _repro_from_dummy() -> tuple[DD[StepRef], ...]:
+def _unsupported_idcams() -> tuple[DD[StepRef], ...]:
     sysin = DD(
         DdName("SYSIN"),
         InStreamDSN(),
         NotCoded(),
-        in_stream=(" REPRO INFILE(IN) OUTFILE(OUT)",),
+        in_stream=(" LISTCAT ENTRIES(A.B.C)",),
     )
-    dummies = tuple(DD(DdName(n), DummyDSN(), NotCoded()) for n in ("IN", "OUT"))
-    return (sysin, *dummies)
+    return (sysin,)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cleanup_runs_after_step_exception(tmp_path):
     """Temp allocated in step 1 is cleaned up even when step 2 raises."""
     import pytest
+    from lark.exceptions import UnexpectedInput
 
     j = job(
         "J",
         (
             program("S1", "IEFBR14", (_pass_dd("KEPT"),)),
-            program("S2", "IDCAMS", _repro_from_dummy()),
+            program("S2", "IDCAMS", _unsupported_idcams()),
         ),
     )
-    with pytest.raises(TypeError, match="DD IN is DummyAllocation"):
+    with pytest.raises(UnexpectedInput):
         _runner(tmp_path).run(j, scratch=scratch(tmp_path))
     left = (tmp_path / "scratch").rglob("*")
     assert sorted(p.name for p in left if p.is_file()) == []
