@@ -11,6 +11,7 @@ from jackal.expansion import ExpandedJob
 from jackal.model import (
     DD,
     IfBlock,
+    InStreamProc,
     Job,
     JobStatement,
     ProcCall,
@@ -82,10 +83,10 @@ def expanded_steps(job: ExpandedJob) -> tuple[StepView, ...]:
 
 
 def _written_leaf(
-    statement: ProgramStep[StepRef] | ProcCall | SetStatement,
+    statement: ProgramStep[StepRef] | ProcCall | SetStatement | InStreamProc,
 ) -> tuple[ProgramStep[StepRef] | ProcCall, ...]:
     match statement:
-        case SetStatement():
+        case SetStatement() | InStreamProc():
             return ()
         case _:
             return (statement,)

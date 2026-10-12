@@ -553,13 +553,22 @@ class SetStatement(Wire):
         return model.SetStatement(tuple(a.binding() for a in self.assignments))
 
 
+class ProcDefStatement(Wire):
+    kind: Literal["proc_def"] = "proc_def"
+    proc: "ProcDoc"
+
+    def statement(self) -> model.JobStatement:
+        return model.InStreamProc(self.proc.proc())
+
+
 Statement = Annotated[
-    Program | ProcCall | IfBlock | SetStatement, Field(discriminator="kind")
+    Program | ProcCall | IfBlock | SetStatement | ProcDefStatement,
+    Field(discriminator="kind"),
 ]
 
 
 def statements(
-    wired: Sequence[Program | ProcCall | IfBlock | SetStatement],
+    wired: Sequence[Program | ProcCall | IfBlock | SetStatement | ProcDefStatement],
 ) -> tuple[model.JobStatement, ...]:
     return tuple(s.statement() for s in wired)
 
@@ -596,6 +605,9 @@ class ProcDoc(Wire):
             tuple(d.binding() for d in self.defaults),
             statements(self.statements),
         )
+
+
+ProcDefStatement.model_rebuild()
 
 
 class Document(RootModel[Annotated[JobDoc | ProcDoc, Field(discriminator="kind")]]):

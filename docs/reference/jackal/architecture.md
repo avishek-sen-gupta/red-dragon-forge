@@ -29,7 +29,7 @@ cicada or squall; `.importlinter` enforces this.
    the JCL Reference's rules (an unqualified `COND` reaches nested PROCs' steps too); an override DD merges with the PROC's DD per parameter, keeping
    what it does not write (an unwritten DISP is `NotCoded`). A `SET` statement defines symbols for the statements after it,
    job-level steps included, whichever IF branch it sits in; a value on the calling `EXEC` or a
-   PROC default takes precedence over it. A call whose PROC is in no library stays an `UnexpandedCall`. Every
+   PROC default takes precedence over it, and a symbol a nested PROC does not assign keeps the value of the PROC that called it (JCL Ref Table 13). An in-stream PROC (`PROC` … `PEND` in the job) is found before the library, by calls after its definition only; its body is not part of the job's own steps ([decision record](../../records/design/2026-10-12-jackal-in-stream-procs.md)). A call whose PROC is in no library stays an `UnexpandedCall`. Every
    step reference (in `COND`, referbacks and IF terms) becomes a `StepReference`: a path of
    PROC-call coordinates and a target step, each coordinate resolved (holding what was found) or
    unresolved (holding the name). A name that matches nothing, or a step inside a PROC in no

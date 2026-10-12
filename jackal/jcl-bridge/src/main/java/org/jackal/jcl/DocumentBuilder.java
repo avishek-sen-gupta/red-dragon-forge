@@ -6,7 +6,9 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 import java.util.Optional;
 
 /** A job or PROC document: its statements in order, with IF blocks nesting the statements between them. */
@@ -70,12 +72,63 @@ final class DocumentBuilder {
                 .map(ParseTree::getText).orElse(""));
         job.add("end_job_tests", card.flatMap(c -> Trees.first(c, JCLParser.JobParmCONDContext.class))
                 .map(ConditionReader::endJobTests).orElseGet(JsonArray::new));
-        job.add("statements", statements(ctx));
+        job.add("statements", jobStatements(Trees.children(ctx)));
         return job;
     }
 
     private JsonObject proc(JCLParser.ProcJCLContext ctx) {
-        Optional<JCLParser.ProcStatementContext> statement = Trees.first(ctx, JCLParser.ProcStatementContext.class);
+        return proc(Trees.first(ctx, JCLParser.ProcStatementContext.class), Trees.children(ctx));
+    }
+
+    /** A job's statements, with each in-stream PROC ... PEND gathered into one procedure definition. */
+    private JsonArray jobStatements(List<ParseTree> children) {
+        List<Piece> outside = new ArrayList<>();
+        int at = 0;
+        while (at < children.size()) {
+            ParseTree child = children.get(at);
+            if (child instanceof JCLParser.PendStatementContext) {
+                throw new JclSerializer.SyntaxErrorException("PEND without an in-stream PROC");
+            }
+            if (child instanceof JCLParser.ProcStatementContext procStatement) {
+                int end = pendAfter(children, at);
+                outside.add(new InStreamProc(procStatement, children.subList(at + 1, end)));
+                at = end + 1;
+                continue;
+            }
+            outside.add(new Node(child));
+            at++;
+        }
+        return statements(outside);
+    }
+
+    private static int pendAfter(List<ParseTree> children, int procAt) {
+        for (int i = procAt + 1; i < children.size(); i++) {
+            ParseTree child = children.get(i);
+            if (child instanceof JCLParser.ProcStatementContext) {
+                throw new JclSerializer.SyntaxErrorException("an in-stream PROC inside another");
+            }
+            if (child instanceof JCLParser.PendStatementContext) {
+                return i;
+            }
+        }
+        throw new JclSerializer.SyntaxErrorException("in-stream PROC without PEND");
+    }
+
+    /** One entry of a statement list: a parse node, or an in-stream PROC gathered with its body. */
+    private sealed interface Piece permits Node, InStreamProc {
+    }
+
+    private record Node(ParseTree tree) implements Piece {
+    }
+
+    private record InStreamProc(JCLParser.ProcStatementContext statement, List<ParseTree> body) implements Piece {
+    }
+
+    private static List<Piece> nodes(List<ParseTree> children) {
+        return children.stream().<Piece>map(Node::new).toList();
+    }
+
+    private JsonObject proc(Optional<JCLParser.ProcStatementContext> statement, List<ParseTree> body) {
         JsonObject proc = new JsonObject();
         proc.addProperty("kind", "proc");
         proc.addProperty("name", statement.flatMap(s -> Trees.first(s, JCLParser.ProcNameContext.class))
@@ -86,7 +139,7 @@ final class DocumentBuilder {
                         Trees.token(d, JCLLexer.PROC_PARM_NAME).orElseThrow().getText(),
                         Optional.ofNullable(d.keywordOrSymbolic())))));
         proc.add("defaults", defaults);
-        proc.add("statements", statements(ctx));
+        proc.add("statements", statements(nodes(body)));
         return proc;
     }
 
@@ -97,10 +150,15 @@ final class DocumentBuilder {
         return symbol;
     }
 
-    private JsonArray statements(ParseTree container) {
+    private JsonArray statements(List<Piece> pieces) {
         JsonArray top = new JsonArray();
         Deque<OpenIf> open = new ArrayDeque<>();
-        for (ParseTree child : Trees.children(container)) {
+        for (Piece piece : pieces) {
+            if (piece instanceof InStreamProc defined) {
+                current(open, top).add(procDefinition(defined));
+                continue;
+            }
+            ParseTree child = ((Node) piece).tree();
             switch (child) {
                 case JCLParser.JclStepContext step -> current(open, top).add(step(step));
                 case JCLParser.SetStatementContext set -> current(open, top).add(set(set));
@@ -119,6 +177,13 @@ final class DocumentBuilder {
             throw new JclSerializer.SyntaxErrorException("IF without ENDIF");
         }
         return top;
+    }
+
+    private JsonObject procDefinition(InStreamProc defined) {
+        JsonObject statement = new JsonObject();
+        statement.addProperty("kind", "proc_def");
+        statement.add("proc", proc(Optional.of(defined.statement()), defined.body()));
+        return statement;
     }
 
     private static OpenIf innermost(Deque<OpenIf> open, String statement) {

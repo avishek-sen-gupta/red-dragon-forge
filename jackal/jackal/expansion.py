@@ -24,6 +24,7 @@ from jackal.model import (
     DirectDSN,
     Guard,
     IfBlock,
+    InStreamProc,
     Job,
     JobStatement,
     Negated,
@@ -134,6 +135,19 @@ class ProcNotFound:
 
 class ProcLibrary(Protocol):
     def find(self, proc: ProcRef) -> ProcDef | ProcNotFound: ...
+
+
+@dataclass(frozen=True)
+class InStreamProcLibrary(ProcLibrary):
+    """An in-stream procedure, found before the library the job had until its PROC statement."""
+
+    proc: ProcDef
+    rest: ProcLibrary
+
+    def find(self, proc: ProcRef) -> ProcDef | ProcNotFound:
+        if proc.name == self.proc.name:
+            return self.proc
+        return self.rest.find(proc)
 
 
 @dataclass(frozen=True)
@@ -378,10 +392,11 @@ def _flat_one(
 
 
 def _flat_leaf(
-    statement: ProgramStep[StepRef] | ProcCall | SetStatement, position: Run
+    statement: ProgramStep[StepRef] | ProcCall | SetStatement | InStreamProc,
+    position: Run,
 ) -> tuple[tuple[Run, ProgramStep[StepRef] | ProcCall], ...]:
     match statement:
-        case SetStatement():
+        case SetStatement() | InStreamProc():
             return ()
         case _:
             return ((position, statement),)
@@ -491,15 +506,23 @@ def _set(statement: SetStatement, scope: _Scope) -> _Scope:
 
 
 def _place_leaf(
-    statement: ProgramStep[StepRef] | ProcCall | SetStatement,
+    statement: ProgramStep[StepRef] | ProcCall | SetStatement | InStreamProc,
     scope: _Scope,
     position: Run,
 ) -> _Placement:
     match statement:
-        case SetStatement():
-            return _Placement((), _set(statement, scope))
+        case SetStatement() | InStreamProc():
+            return _Placement((), _defined(statement, scope))
         case _:
             return _Placement(_place_step(statement, scope, position), scope)
+
+
+def _defined(statement: SetStatement | InStreamProc, scope: _Scope) -> _Scope:
+    match statement:
+        case SetStatement():
+            return _set(statement, scope)
+        case InStreamProc(proc=proc):
+            return replace(scope, library=InStreamProcLibrary(proc, scope.library))
 
 
 def _place(statement: JobStatement, scope: _Scope, position: Run) -> _Placement:

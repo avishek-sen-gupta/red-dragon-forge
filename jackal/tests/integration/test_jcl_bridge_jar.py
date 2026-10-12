@@ -296,3 +296,66 @@ def test_real_jar_gives_a_nested_procedure_the_symbols_of_the_one_enclosing_it(
     )
     expanded = expand_or_fail(job, DirectoryProcLibrary((tmp_path,)))
     assert expanded.steps[0].step.dds[0].dsn == DirectDSN(literal("ABC.789"))
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_expands_ibms_nested_in_stream_procedure_example(jcl_bridge_jar):
+    """JCL Ref p. 48, Example 1: PROC1 and PROC2 are in-stream, PROC1 calls PROC2,
+    and their bodies run only where STEP1 calls PROC1. SYSUT1 resolves to
+    ABC.DEF and SYSUT2's LRECL to 789."""
+    from jackal.expansion import expand_or_fail
+    from jackal.model import ProgramRef
+
+    jcl = (
+        "//MYJOB JOB 1\n"
+        "//SET1 SET A=123,B=456\n"
+        "//PROC1 PROC A=234,C=GHI\n"
+        "//PSTEP1 EXEC PROC=PROC2,A=ABC,B=DEF\n"
+        "//PSTEP2 EXEC PGM=IEFBR14\n"
+        "// PEND\n"
+        "//PROC2 PROC\n"
+        "//P2STEP1 EXEC PGM=IEBGENER\n"
+        "//SYSPRINT DD SYSOUT=A\n"
+        "//SYSUT1 DD DSN=&A..&B,DISP=SHR\n"
+        "//SYSUT2 DD SYSOUT=A,DCB=LRECL=&C\n"
+        "// PEND\n"
+        "//STEP1 EXEC PROC=PROC1,A=,C=789\n"
+        "//BARNEY EXEC PGM=IEFBR14\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    steps = [s.step for s in expand_or_fail(job, _NO_LIBRARY).steps]
+    assert [s.pgm for s in steps] == [
+        ProgramRef("IEBGENER"),
+        ProgramRef("IEFBR14"),
+        ProgramRef("IEFBR14"),
+    ]
+    assert (steps[0].dds[1].dsn, steps[0].dds[2].dcb.lrecl) == (
+        DirectDSN(literal("ABC.DEF")),
+        literal("789"),
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_finds_an_in_stream_procedure_only_after_its_definition(
+    jcl_bridge_jar, tmp_path
+):
+    """JCL Ref p. 26: a call searches the input stream before the library, and an
+    in-stream procedure must come before the EXEC that calls it."""
+    from jackal.expansion import expand_or_fail
+    from jackal.model import ProgramRef
+
+    (tmp_path / "P.prc").write_text("//P PROC\n//LIB EXEC PGM=FROMLIB\n// PEND\n")
+    jcl = (
+        "//J JOB 1\n"
+        "//EARLY EXEC P\n"
+        "//P PROC\n"
+        "//INS EXEC PGM=INSTREAM\n"
+        "// PEND\n"
+        "//LATE EXEC P\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    expanded = expand_or_fail(job, DirectoryProcLibrary((tmp_path,)))
+    assert [s.step.pgm for s in expanded.steps] == [
+        ProgramRef("FROMLIB"),
+        ProgramRef("INSTREAM"),
+    ]

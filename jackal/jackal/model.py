@@ -794,7 +794,16 @@ class SetStatement:
     assignments: tuple[tuple[SymbolName, Value], ...]
 
 
-JobStatement: TypeAlias = ProgramStep[StepRef] | ProcCall | IfBlock | SetStatement
+@dataclass(frozen=True)
+class InStreamProc:
+    """PROC ... PEND inside a job: a procedure the calls after it can find before the library."""
+
+    proc: ProcDef
+
+
+JobStatement: TypeAlias = (
+    ProgramStep[StepRef] | ProcCall | IfBlock | SetStatement | InStreamProc
+)
 
 
 @dataclass(frozen=True)
