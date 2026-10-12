@@ -217,7 +217,7 @@ class JobRunner:
         resolved = ProgramStep(
             step.label,
             step.pgm,
-            _resolved_dds(step.dds),
+            tuple(map(catalog.generations_expanded, _resolved_dds(step.dds))),
             step.cond,
             step.parm,
             step.guard,

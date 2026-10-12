@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import reduce
 from pathlib import Path
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset, Relabeller
 from jackal.dcb_label import coded_label
-from jackal.gdg import GdgBase, relative_generation
+from jackal.gdg import GdgBase, RequestedOrder, relative_generation
 from jackal.labels import DatasetLabel, Label, LabelPending
 from jackal.model import (
     DD,
     DSN,
+    ConcatMember,
     DirectDSN,
     DispAbnormal,
     DispNormal,
     DispStatus,
     GenerationDSN,
+    NullifiedValue,
     ResolvedDisp,
     StepReference,
     TempRef,
@@ -25,6 +28,7 @@ from jackal.model import (
 from jackal.results import Abended, AllocationError, Completed, ProgramResult
 from jackal.system_catalog import NotCataloged, SystemCatalog
 from jackal.system_catalog_removal import remove_cataloged
+from jackal.value_parts import Value, resolve
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,18 @@ class Unallocated:
 
 def _temp_name(alias: str) -> str:
     return f"&&{alias}"
+
+
+def _requested_order(coded: Value | NullifiedValue) -> RequestedOrder:
+    match coded:
+        case NullifiedValue() | ():
+            return RequestedOrder.USECATLG
+        case _:
+            return RequestedOrder(resolve(coded))
+
+
+def _parts(dd: DD[StepReference]) -> tuple[ConcatMember[StepReference], ...]:
+    return (ConcatMember(dd.dsn, dd.disp, dd.in_stream), *dd.concatenated)
 
 
 def _empty(dataset: Dataset) -> Dataset:
@@ -118,9 +134,61 @@ class DatasetCatalog(Relabeller):
         return base.dataset_name(numbers[0])
 
     def _numbers(self, base: GdgBase, dsn: GenerationDSN) -> tuple[int, ...]:
+        return relative_generation(self._active(base), dsn.relative)
+
+    def _active(self, base: GdgBase) -> tuple[int, ...]:
         if not self._found.has(base.name):
             self._found.put(base.name, base.generations)
-        return relative_generation(self._found.get(base.name), dsn.relative)
+        return self._found.get(base.name)
+
+    def generations_expanded(self, dd: DD[StepReference]) -> DD[StepReference]:
+        requested = _requested_order(dd.gdg_order)
+        head, *rest = (
+            p for part in _parts(dd) for p in self._expanded(part, requested)
+        )
+        return replace(
+            dd,
+            dsn=head.dsn,
+            disp=head.disp,
+            in_stream=head.in_stream,
+            concatenated=tuple(rest),
+        )
+
+    def _expanded(
+        self, part: ConcatMember[StepReference], requested: RequestedOrder
+    ) -> tuple[ConcatMember[StepReference], ...]:
+        match part.dsn:
+            case DirectDSN() as dsn:
+                return self._all_generations(part, dsn, requested)
+            case _:
+                return (part,)
+
+    def _all_generations(
+        self,
+        part: ConcatMember[StepReference],
+        dsn: DirectDSN,
+        requested: RequestedOrder,
+    ) -> tuple[ConcatMember[StepReference], ...]:
+        match self._system.gdg(dsn.dataset_name()):
+            case GdgBase() as base:
+                return self._each_generation(part, dsn, base, requested)
+            case NotCataloged():
+                return (part,)
+
+    def _each_generation(
+        self,
+        part: ConcatMember[StepReference],
+        dsn: DirectDSN,
+        base: GdgBase,
+        requested: RequestedOrder,
+    ) -> tuple[ConcatMember[StepReference], ...]:
+        relatives = base.all_relatives(self._active(base), requested)
+        if not relatives:
+            return (part,)
+        return tuple(
+            replace(part, dsn=GenerationDSN(dsn.name, relative))
+            for relative in relatives
+        )
 
     def created_empty(self, dd: DD[StepReference]) -> Dataset:
         match dd.dsn:
@@ -321,8 +389,25 @@ class DatasetCatalog(Relabeller):
             case TempRef(name=alias):
                 self._delete_temp(alias)
             case _:
+                self._generation_deleted(dsn)
                 self.delete_dsn(name)
                 self._received(name)
+
+    def _generation_deleted(self, dsn: DSN[StepReference]) -> None:
+        match dsn:
+            case GenerationDSN():
+                self._dropped_from_gdg(dsn)
+            case _:
+                return
+
+    def _dropped_from_gdg(self, dsn: GenerationDSN) -> None:
+        match self._system.gdg(dsn.base_name()):
+            case GdgBase() as base:
+                self._system.catalog_gdg(
+                    reduce(GdgBase.without, self._numbers(base, dsn), base)
+                )
+            case NotCataloged():
+                return
 
     def _delete_temp(self, name: str) -> None:
         if self._temps.has(_temp_name(name)):

@@ -142,7 +142,7 @@ fileignoreconfig:
 - filename: docs/records/design/2026-10-12-jackal-idcams-repro-labels.md
   checksum: ec1641e126ec15bb059c34b6f276cc4f74bf6292c3882de04c57c2ac4afb42d0
 - filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/DdBuilder.java
-  checksum: 7ebcc0fe3499c0c9071089ba17794de86554585da5a30204065a3ee707ea9f3b
+  checksum: a75525f6c381634b7f8735522c4d3a7769b3cba8dc019a8e7e54e9060e11cd6c
 - filename: jackal/jackal/concatenated_records.py
   checksum: 319da9d2575e77c0e5c1be0be7a848c83eb1c8d0102aca5a4b3dc24a46fb3dc9
 - filename: jackal/jackal/variable_records.py
@@ -154,7 +154,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_idcams_executor.py
   checksum: ea98461dc40a890ed143bcf91c2a812c9b5ad9175e96a0814adbdff843c9c826
 - filename: jackal/jackal/idcams/parser.py
-  checksum: 8a7c3adae91ce4bb754a5c72bfa5760db8348ca8d2b42cd885f2695b87f30865
+  checksum: d53b8d9d56bb6f3187320105911bdeaf2c2fa116fafc2f2ad189c2061bd1ea6f
 - filename: jackal/docs/analysis/2026-07-09-carddemo-job-executability.md
   checksum: c2850ccc1efc6df63fd3181abd2f3e23130f4628152ec90a7894153c2c015e6a
 - filename: docs/superpowers/plans/2026-07-09-graph-analysis-core-decoupling.md
@@ -600,7 +600,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_cond.py
   checksum: a7689ba5468894803f04da282e502747f5dfaad3aee928dc918c484f19597867
 - filename: jackal/jackal/jcl/wire.py
-  checksum: f11194f8b20c7afa296ff1da60fb9a9c6dfb239abc433cfd228ce4f4014f9ea9
+  checksum: dcb1929168727e3f6d5aae2a3357acafea8d18780ec56f6a07818630f1466871
 - filename: jackal/tests/acceptance/carddemo_facts.py
   checksum: dc6aa3933b7b47ade57267eb172811ffb8b42490a9a5d6c6327b6620da498986
 - filename: jackal/jackal/runner.py

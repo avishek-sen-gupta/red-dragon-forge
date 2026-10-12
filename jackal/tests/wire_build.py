@@ -36,6 +36,7 @@ def dd(
         sysout=sysout,
         concatenated=(),
         dcb=NO_DCB,
+        gdg_order=(),
     )
 
 

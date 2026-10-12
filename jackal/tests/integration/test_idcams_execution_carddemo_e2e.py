@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from jackal.allocation import DdEnvironment
-from jackal.gdg import Empty, GdgBase, Scratch
+from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
 from jackal.idcams.executor import run_idcams
 from jackal.idcams.parser import parse_idcams
 from jackal.jcl.parser import parse_jcl
@@ -77,5 +77,10 @@ def test_defgdgb_defines_its_bases_and_reruns_cleanly(
     )
     assert rcs == (0, 0)
     assert job_catalog(tmp_path).gdg("AWS.M2.CARDDEMO.TRANSACT.COMBINED") == GdgBase(
-        "AWS.M2.CARDDEMO.TRANSACT.COMBINED", 5, Empty.NOEMPTY, Scratch.SCRATCH, ()
+        "AWS.M2.CARDDEMO.TRANSACT.COMBINED",
+        5,
+        Empty.NOEMPTY,
+        Scratch.SCRATCH,
+        GdgOrder.LIFO,
+        (),
     )

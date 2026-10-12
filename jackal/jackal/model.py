@@ -478,6 +478,24 @@ def _value_over(own: Value, override: Value | NullifiedValue) -> Value:
             return override
 
 
+def _kept(value: Value | NullifiedValue) -> Value:
+    match value:
+        case NullifiedValue():
+            return ()
+        case _:
+            return value
+
+
+def _substituted_value(
+    value: Value | NullifiedValue, substitution: Substitution[R]
+) -> Value | NullifiedValue:
+    match value:
+        case NullifiedValue():
+            return value
+        case _:
+            return substitution.value(value)
+
+
 def _model_over(own: DSN[R], override: DSN[R]) -> DSN[R]:
     match override:
         case NullifiedDSN():
@@ -499,23 +517,16 @@ class Dcb(Generic[R]):
     def overridden_by(self, override: Dcb[R]) -> Dcb[R]:
         return Dcb(
             _model_over(self.model, override.model),
-            _value_over(self._kept(self.recfm), override.recfm),
-            _value_over(self._kept(self.lrecl), override.lrecl),
+            _value_over(_kept(self.recfm), override.recfm),
+            _value_over(_kept(self.lrecl), override.lrecl),
         )
 
     def completed_by(self, referenced: Dcb[R]) -> Dcb[R]:
         return Dcb(
             NoDSN(),
-            _value_over(self._kept(referenced.recfm), self.recfm),
-            _value_over(self._kept(referenced.lrecl), self.lrecl),
+            _value_over(_kept(referenced.recfm), self.recfm),
+            _value_over(_kept(referenced.lrecl), self.lrecl),
         )
-
-    def _kept(self, value: Value | NullifiedValue) -> Value:
-        match value:
-            case NullifiedValue():
-                return ()
-            case _:
-                return value
 
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> Dcb[S]:
         return Dcb(self.model.mapped(backref), self.recfm, self.lrecl)
@@ -523,18 +534,9 @@ class Dcb(Generic[R]):
     def substituted(self, substitution: Substitution[R]) -> Dcb[R]:
         return Dcb(
             self.model.substituted(substitution),
-            self._substituted(self.recfm, substitution),
-            self._substituted(self.lrecl, substitution),
+            _substituted_value(self.recfm, substitution),
+            _substituted_value(self.lrecl, substitution),
         )
-
-    def _substituted(
-        self, value: Value | NullifiedValue, substitution: Substitution[R]
-    ) -> Value | NullifiedValue:
-        match value:
-            case NullifiedValue():
-                return value
-            case _:
-                return substitution.value(value)
 
 
 @dataclass(frozen=True)
@@ -572,6 +574,7 @@ class DD(Generic[R]):
     sysout: bool = False
     concatenated: tuple[ConcatMember[R], ...] = ()
     dcb: Dcb[R] = Dcb()
+    gdg_order: Value | NullifiedValue = ()
 
     def disposition(self) -> Disp:
         return self.disp.disposition()
@@ -585,6 +588,7 @@ class DD(Generic[R]):
                     NotCoded(),
                     concatenated=self._members(override),
                     dcb=self.dcb.overridden_by(override.dcb),
+                    gdg_order=_value_over(_kept(self.gdg_order), override.gdg_order),
                 )
             case _:
                 return self._merged(override)
@@ -616,6 +620,7 @@ class DD(Generic[R]):
             sysout,
             self._members(override),
             self.dcb.overridden_by(override.dcb),
+            _value_over(_kept(self.gdg_order), override.gdg_order),
         )
 
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DD[S]:
@@ -627,6 +632,7 @@ class DD(Generic[R]):
             self.sysout,
             tuple(m.mapped(backref) for m in self.concatenated),
             self.dcb.mapped(backref),
+            self.gdg_order,
         )
 
     def substituted(self, substitution: Substitution[R]) -> DD[R]:
@@ -638,6 +644,7 @@ class DD(Generic[R]):
             self.sysout,
             tuple(m.substituted(substitution) for m in self.concatenated),
             self.dcb.substituted(substitution),
+            _substituted_value(self.gdg_order, substitution),
         )
 
 

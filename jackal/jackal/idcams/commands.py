@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
-from jackal.gdg import Empty, GdgBase, Scratch
+from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
 
 _LIMIT = 255
 _EXTENDED_LIMIT = 999
@@ -32,13 +32,14 @@ class DefineGdg:
     limit: int
     empty: Empty
     scratch: Scratch
+    order: GdgOrder
     extended: bool
 
     def within_limit(self) -> bool:
         return 1 <= self.limit <= (_EXTENDED_LIMIT if self.extended else _LIMIT)
 
     def base(self) -> GdgBase:
-        return GdgBase(self.name, self.limit, self.empty, self.scratch, ())
+        return GdgBase(self.name, self.limit, self.empty, self.scratch, self.order, ())
 
 
 @dataclass(frozen=True)

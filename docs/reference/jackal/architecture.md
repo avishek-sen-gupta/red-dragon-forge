@@ -18,8 +18,8 @@ cicada or squall; `.importlinter` enforces this.
    parsed model: statements (program steps, PROC calls with their overrides split from their
    qualifiers, IF blocks with their expression as a tree), and per DD its DSN kind, DISP,
    concatenated members and DCB attributes (RECFM and LRECL, coded in `DCB=` or as DD keywords,
-   and the model: a dataset name, `*.step.dd` or a same-step `*.dd`). An override changes
-   only the DCB subparameters it codes
+   and the model: a dataset name, `*.step.dd` or a same-step `*.dd`), and GDGORDER. An override changes
+   only the DCB subparameters and GDGORDER it codes
    ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). `jackal.jcl.bridge_parser` validates it as the Pydantic models in
    `jackal.jcl.wire`, which build an immutable `Job` (`jackal.model`).
 2. Expand. `jackal.expansion.expand_procs(job, library)` returns an `ExpandedJob` or a
@@ -169,11 +169,12 @@ the JCL Reference's DISP defaults say. The decisions and their IBM sources are i
 | `DISP=NEW` | Created empty and cataloged. A name already cataloged fails allocation. It is labelled from its DD's `RECFM`/`LRECL` over its model's label (`DCB=dsname`, or the subparameters of `DCB=*.dd`/`*.step.dd`); `FBA` labels FB, `VBS` VB. With either still unknown, or `RECFM=U`, the label stays pending until the first `OPEN OUTPUT`. A model not in the catalog fails allocation (`DATASET_NOT_FOUND`). An existing dataset's label is never changed by its DD ([decision record](../../records/design/2026-10-12-jackal-dcb-attributes.md)). |
 | `DSN=&&NAME` | Job-scoped temporary dataset, kept apart from named datasets (its file is `&&NAME`), deleted at job end. |
 | `DSN=*.STEP.DD` | Referback to an earlier step's DD. |
-| `DSN=GDG(+n)`, `(0)`, `(-n)` | A relative generation, resolved against the GDG's active generations as the job first found them (GDGBIAS=JOB) to an absolute `GDG.GnnnnV00`. `(+n)` counts on from the newest; `(0)` and `(-n)` must name an active generation (else `DATASET_NOT_FOUND`); an undefined GDG fails with `GDG_BASE_NOT_FOUND`. A generation whose disposition at step end is `CATLG` rolls into the GDG; past `LIMIT` the oldest (`NOEMPTY`) or every active generation (`EMPTY`) rolls off, deleted under `SCRATCH`, left cataloged under `NOSCRATCH`. `KEEP` leaves it cataloged outside the GDG ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |
+| `DSN=GDG(+n)`, `(0)`, `(-n)` | A relative generation, resolved against the GDG's active generations as the job first found them (GDGBIAS=JOB) to an absolute `GDG.GnnnnV00`. `(+n)` counts on from the newest; `(0)` and `(-n)` must name an active generation (else `DATASET_NOT_FOUND`); an undefined GDG fails with `GDG_BASE_NOT_FOUND`. A generation whose disposition at step end is `CATLG` rolls into the GDG; past `LIMIT` the oldest (`NOEMPTY`) or every active generation (`EMPTY`) rolls off, deleted under `SCRATCH`, left cataloged under `NOSCRATCH`. `KEEP` leaves it cataloged outside the GDG ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). A generation whose disposition deletes it leaves the GDG. |
+| `DSN=GDG` (a GDG base name) | Every active generation, as the job first found them, read as a concatenation in the GDG's order (`LIFO`, newest first, unless `DEFINE GDG` coded `FIFO`) or the DD's `GDGORDER`. Each generation is allocated and disposed with the DD's DISP, so `DISP=(OLD,DELETE)` empties the GDG. A GDG with no generations fails with `DATASET_NOT_FOUND` ([decision record](../../records/design/2026-10-12-jackal-gdg-all.md)). |
 | `DISP=(…,DELETE)` | The dataset and its file are removed when the step ends. |
 | `DISP=(…,PASS)` | Handed to later steps; a later DD naming it receives it, and its own disposition then applies. One the job created and never received is deleted at job end. |
 | IDCAMS `DEFINE CLUSTER` | Catalogs a KSDS with the label its `RECORDSIZE` and `KEYS` give. |
-| IDCAMS `DEFINE GENERATIONDATAGROUP` | Catalogs a GDG base: its `LIMIT`, `EMPTY`/`NOEMPTY` (default `NOEMPTY`), `SCRATCH`/`NOSCRATCH` (default `NOSCRATCH`) and its active generations, none yet. A name already cataloged, as a dataset or a GDG, ends the command with condition code 12 ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |
+| IDCAMS `DEFINE GENERATIONDATAGROUP` | Catalogs a GDG base: its `LIMIT`, `EMPTY`/`NOEMPTY` (default `NOEMPTY`), `SCRATCH`/`NOSCRATCH` (default `NOSCRATCH`), `FIFO`/`LIFO` (default `LIFO`) and its active generations, none yet. A name already cataloged, as a dataset or a GDG, ends the command with condition code 12 ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |
 
 Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`;
 the catalog's one in-place table is `jackal.catalog_stores`.
