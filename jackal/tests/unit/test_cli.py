@@ -179,3 +179,38 @@ def test_cli_refuses_a_link_list_naming_a_program_with_no_source(tmp_path, capsy
             "jackal: error: --link: no COBOL source for linked program NOSUCH\n",
         ),
     )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_cli_expands_procs_from_its_proclib_and_reports_an_unresolved_one(
+    tmp_path, capsys
+):
+    import pytest
+
+    procs = tmp_path / "proc"
+    procs.mkdir()
+    (procs / "MKPROC.prc").write_text(
+        "//MKPROC PROC\n//PS EXEC PGM=IEFBR14\n//D DD DSN=J.X,DISP=(NEW,DELETE)\n"
+    )
+    jcl = tmp_path / "j.jcl"
+    jcl.write_text("//J JOB 1\n//S1 EXEC MKPROC\n")
+    common = [
+        "run",
+        str(jcl),
+        "--source-dir",
+        str(tmp_path),
+        "--system",
+        str(tmp_path / "system"),
+        "--copybook-dir",
+        str(tmp_path),
+    ]
+    assert (run([*common, "--proclib", str(procs)]), capsys.readouterr().out) == (
+        0,
+        "S1.PS: RC=0\n",
+    )
+    with pytest.raises(SystemExit) as exited:
+        run([*common, "--proclib", str(tmp_path)])
+    assert (exited.value.code, capsys.readouterr().err) == (
+        1,
+        "jackal: S1: PROC MKPROC is in no proclib (blueprint D7)\n",
+    )
