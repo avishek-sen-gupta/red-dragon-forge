@@ -10,10 +10,12 @@ from jackal.model import (
     AllPriorSteps,
     BackwardRef,
     BypassTest,
+    DdName,
     ProgramStep,
     QualifiedStep,
     ResolvedDd,
     ResolvedProgramStep,
+    StepDd,
     StepReference,
     UnexpandedCall,
 )
@@ -39,8 +41,20 @@ def _referback_resolved(dd: DD[StepReference]) -> bool:
             return True
 
 
+def _same_step_resolved(dd: DD[StepReference], earlier: frozenset[DdName]) -> bool:
+    match dd.dsn:
+        case StepDd(ddname=name):
+            return name in earlier
+        case _:
+            return True
+
+
 def referbacks_resolved(step: ProgramStep[StepReference]) -> bool:
-    return all(_referback_resolved(dd) for dd in step.dds)
+    names = tuple(dd.ddname for dd in step.dds)
+    return all(
+        _referback_resolved(dd) and _same_step_resolved(dd, frozenset(names[:at]))
+        for at, dd in enumerate(step.dds)
+    )
 
 
 def _step_unresolved(qualified: QualifiedStep) -> tuple[str, ...]:

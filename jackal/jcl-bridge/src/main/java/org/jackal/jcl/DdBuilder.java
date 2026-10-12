@@ -157,20 +157,10 @@ final class DdBuilder {
         };
     }
 
-    private static JsonObject dcbSource(JCLParser.DatasetNameContext name) {
-        String raw = name.getText();
-        if (raw.startsWith("*.") && raw.indexOf('.', 2) < 0) {
-            JsonObject sameStep = kind("step_dd");
-            sameStep.addProperty("ddname", raw.substring(2));
-            return sameStep;
-        }
-        return named(name);
-    }
-
     private static JsonObject dcb(Dcb dcb) {
         JsonObject out = new JsonObject();
         out.addProperty("coded", dcb.coded());
-        out.add("source", dcb.source().map(DdBuilder::dcbSource).orElseGet(() -> kind("none")));
+        out.add("source", dcb.source().map(DdBuilder::named).orElseGet(() -> kind("none")));
         out.add("recfm", dcb.recfm().map(ValueParts::of).orElseGet(JsonArray::new));
         out.add("lrecl", dcb.lrecl().map(ValueParts::of).orElseGet(JsonArray::new));
         return out;
@@ -194,6 +184,11 @@ final class DdBuilder {
 
     private static JsonObject named(JCLParser.DatasetNameContext datasetName) {
         String raw = datasetName.getText();
+        if (raw.startsWith("*.") && raw.indexOf('.', 2) < 0) {
+            JsonObject sameStep = kind("step_dd");
+            sameStep.addProperty("ddname", raw.substring(2));
+            return sameStep;
+        }
         if (raw.startsWith("*.")) {
             int last = raw.lastIndexOf('.');
             JsonObject backref = kind("backref");

@@ -223,3 +223,18 @@ def test_real_jar_overrides_dcb_subparameters_one_by_one(jcl_bridge_jar, tmp_pat
         Dcb(model, literal("FB"), literal("80")),
         Dcb(NoDSN(), (), ()),
     ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_a_same_step_referback(jcl_bridge_jar):
+    """JCL Ref, DD DSNAME: *.ddname refers to an earlier DD of the same step."""
+    from jackal.model import StepDd
+
+    jcl = (
+        "//J JOB 1\n"
+        "//S1 EXEC PGM=A\n"
+        "//IN DD DSN=T.IN,DISP=SHR\n"
+        "//AGAIN DD DSN=*.IN,DISP=SHR\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    assert job.steps[0].dds[1].dsn == StepDd(DdName("IN"))

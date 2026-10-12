@@ -223,6 +223,22 @@ class BackwardRef(Generic[R]):
 
 
 @dataclass(frozen=True)
+class StepDd:
+    """*.ddname: an earlier DD of the same step, resolved by the runner against that step's DDs."""
+
+    ddname: DdName
+
+    def dataset_name(self) -> str:
+        raise TypeError(f"referback to *.{self.ddname.text} is resolved by the runner")
+
+    def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> StepDd:
+        return self
+
+    def substituted(self, substitution: Substitution[R]) -> StepDd:
+        return self
+
+
+@dataclass(frozen=True)
 class InStreamDSN:
     def dataset_name(self) -> str:
         raise TypeError("in-stream data has no dataset")
@@ -275,6 +291,7 @@ DSN: TypeAlias = (
     | GenerationDSN
     | TempRef
     | BackwardRef[R]
+    | StepDd
     | InStreamDSN
     | DummyDSN
     | NoDSN
@@ -451,19 +468,6 @@ class NullifiedValue:
     pass
 
 
-@dataclass(frozen=True)
-class StepDd:
-    """DCB=*.ddname: an earlier DD of the same step, whose DCB subparameters are copied."""
-
-    ddname: DdName
-
-    def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> StepDd:
-        return self
-
-    def substituted(self, substitution: Substitution[R]) -> StepDd:
-        return self
-
-
 def _value_over(own: Value, override: Value | NullifiedValue) -> Value:
     match override:
         case NullifiedValue():
@@ -474,7 +478,7 @@ def _value_over(own: Value, override: Value | NullifiedValue) -> Value:
             return override
 
 
-def _model_over(own: DSN[R] | StepDd, override: DSN[R] | StepDd) -> DSN[R] | StepDd:
+def _model_over(own: DSN[R], override: DSN[R]) -> DSN[R]:
     match override:
         case NullifiedDSN():
             return NoDSN()
@@ -488,7 +492,7 @@ def _model_over(own: DSN[R] | StepDd, override: DSN[R] | StepDd) -> DSN[R] | Ste
 class Dcb(Generic[R]):
     """A DD's DCB attributes as coded: the model whose label they complete, RECFM and LRECL."""
 
-    model: DSN[R] | StepDd = NoDSN()
+    model: DSN[R] = NoDSN()
     recfm: Value | NullifiedValue = ()
     lrecl: Value | NullifiedValue = ()
 
