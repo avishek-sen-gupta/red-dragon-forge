@@ -482,3 +482,42 @@ def test_repro_from_dummy_empties_its_output_and_into_dummy_keeps_its_input(tmp_
         cat.resolve("FULL.PS").path.read_bytes(),
         cat.resolve("KEEP.PS").path.read_bytes(),
     ) == (b"", b"CCCCDDDD")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_repro_reads_a_concatenated_input_member_after_member(tmp_path):
+    """AMS p. 314: REPRO's input can be a sequential concatenation, each member
+    read at its own label; the output cannot be one of its members. A member whose
+    label is pending ends the command with 12, as a single input's does."""
+    from jackal.idcams.executor import run_idcams
+    from jackal.labels import LabelPending
+    from jackal.model import ConcatMember
+
+    fb4 = SequentialLabel(RecordFormat.FB, 4)
+    upload(tmp_path, "ONE.PS", b"AAAABBBB", fb4)
+    upload(tmp_path, "TWO.PS", b"CCCC", fb4)
+    upload(tmp_path, "PEND.PS", b"", LabelPending())
+    upload(tmp_path, "OUT.PS", b"", fb4)
+    cat = job_catalog(tmp_path)
+    old = Disp(DispStatus.OLD, DispNormal.KEEP, DispNormal.KEEP)
+
+    def named(ddname: str, dsn: str, *more: str) -> DD:
+        members = tuple(ConcatMember(DirectDSN(literal(m)), old) for m in more)
+        return DD(DdName(ddname), DirectDSN(literal(dsn)), old, concatenated=members)
+
+    dds = (
+        named("IN", "ONE.PS", "TWO.PS"),
+        named("HALF", "ONE.PS", "PEND.PS"),
+        named("OUT", "OUT.PS"),
+        named("AGAIN", "TWO.PS"),
+    )
+    env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
+    rcs = tuple(
+        run_idcams((Repro(infile_dd=i, outfile_dd=o),), env, cat)
+        for i, o in (("IN", "OUT"), ("HALF", "AGAIN"), ("IN", "AGAIN"))
+    )
+    assert rcs == (0, 12, 12)
+    assert (
+        cat.resolve("OUT.PS").path.read_bytes(),
+        cat.resolve("TWO.PS").path.read_bytes(),
+    ) == (b"AAAABBBBCCCC", b"CCCC")
