@@ -145,7 +145,7 @@ class SystemCatalog:
     def gdg(self, name: str) -> GdgBase | NotCataloged:
         return self._gdgs.get(name) if self._gdgs.has(name) else NotCataloged()
 
-    def define_gdg(self, base: GdgBase) -> GdgBase:
+    def catalog_gdg(self, base: GdgBase) -> GdgBase:
         self._gdgs.put(base.name, base)
         self._write()
         return base

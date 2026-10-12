@@ -592,7 +592,7 @@ fileignoreconfig:
 - filename: jackal/tests/integration/test_temp_datasets.py
   checksum: f8b6b279daa9f465639fac91a9b2b6b92cb77772b0fc725b6868b48c4034a8bb
 - filename: jackal/jackal/catalog.py
-  checksum: a2c1cf21447fb76262026f731c92090108c34cf28c3949b822ff60a5e6632d43
+  checksum: 6890937150abe82936e40642f72ffe68e8a0f6b83bda25509f2686a234425aa8
 - filename: jackal/jackal/cond.py
   checksum: 39ca68c8b30147a6ee5bfa81295bf00e022e396960b1e013654f8e9700543e4f
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-units3-4-model-and-expansion.md

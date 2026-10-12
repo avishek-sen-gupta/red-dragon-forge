@@ -286,17 +286,17 @@ def allocate(
     return allocator.remaining(dds, (), DdEnvironment(()))
 
 
-def _created(allocation: MemberAllocation) -> bool:
+def _created(allocation: MemberAllocation) -> tuple[Dataset, ...]:
     match allocation:
-        case DatasetAllocation(existed=existed):
-            return not existed
+        case DatasetAllocation(dataset=dataset, existed=False):
+            return (dataset,)
         case _:
-            return False
+            return ()
 
 
 def _undo_parts(parts: Sequence[_Part], catalog: DatasetCatalog) -> None:
-    for created in (p for p in parts if _created(p.allocation)):
-        catalog.delete_created(created.dd)
+    for dd, dataset in ((p.dd, d) for p in parts for d in _created(p.allocation)):
+        catalog.delete_created(dd, dataset)
     for part in parts:
         _released(part.allocation)
 
@@ -317,8 +317,10 @@ def _released(allocation: MemberAllocation) -> None:
 
 def _disposed(part: _Part, catalog: DatasetCatalog, result: ProgramResult) -> None:
     match part.allocation:
-        case DatasetAllocation(disposition=disposition, existed=existed):
-            catalog.dispose(part.dd, disposition, existed, result)
+        case DatasetAllocation(
+            dataset=dataset, disposition=disposition, existed=existed
+        ):
+            catalog.dispose(part.dd, dataset, disposition, existed, result)
         case _:
             return
 

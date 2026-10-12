@@ -7,7 +7,7 @@ from pathlib import Path
 
 from jackal.catalog_stores import Table
 from jackal.dataset import Dataset, Relabeller
-from jackal.gdg import GdgBase
+from jackal.gdg import GdgBase, relative_generation
 from jackal.labels import Label, LabelPending
 from jackal.model import (
     DD,
@@ -55,6 +55,14 @@ def _passes(disp: ResolvedDisp, result: ProgramResult) -> bool:
             return False
 
 
+def _catalogs(disp: ResolvedDisp, result: ProgramResult) -> bool:
+    match result:
+        case Completed():
+            return disp.normal is DispNormal.CATLG
+        case Abended():
+            return disp.abnormal is DispAbnormal.CATLG
+
+
 def _deletes(disp: ResolvedDisp, result: ProgramResult) -> bool:
     match result:
         case Completed():
@@ -71,6 +79,7 @@ class DatasetCatalog(Relabeller):
         self._system = system
         self._temps: Table[str, Dataset] = Table()
         self._passed: Table[str, str] = Table()
+        self._found: Table[str, tuple[int, ...]] = Table()
 
     def resolve(self, dsn: str) -> Dataset | NotCataloged:
         return self._system.lookup(dsn)
@@ -79,8 +88,38 @@ class DatasetCatalog(Relabeller):
         match dd.dsn:
             case TempRef(name=name):
                 return self._allocate_temp(dd, name)
+            case GenerationDSN():
+                return self._allocate_generation(dd, dd.dsn)
             case _:
                 return self._allocate_direct(dd, dd.dsn.dataset_name())
+
+    def _allocate_generation(
+        self, dd: DD[StepReference], dsn: GenerationDSN
+    ) -> Allocated | Unallocated:
+        match self._generation(dsn):
+            case AllocationError() as error:
+                return Unallocated(dd, error)
+            case str() as name:
+                return self._allocate_direct(dd, name)
+
+    def _generation(self, dsn: GenerationDSN) -> str | AllocationError:
+        match self._system.gdg(dsn.base_name()):
+            case NotCataloged():
+                return AllocationError.GDG_BASE_NOT_FOUND
+            case GdgBase() as base:
+                return self._numbered(base, self._numbers(base, dsn))
+
+    def _numbered(
+        self, base: GdgBase, numbers: tuple[int, ...]
+    ) -> str | AllocationError:
+        if not numbers:
+            return AllocationError.DATASET_NOT_FOUND
+        return base.dataset_name(numbers[0])
+
+    def _numbers(self, base: GdgBase, dsn: GenerationDSN) -> tuple[int, ...]:
+        if not self._found.has(base.name):
+            self._found.put(base.name, base.generations)
+        return relative_generation(self._found.get(base.name), dsn.relative)
 
     def created_empty(self, dd: DD[StepReference]) -> Dataset:
         match dd.dsn:
@@ -127,22 +166,25 @@ class DatasetCatalog(Relabeller):
             case Dataset():
                 return Unallocated(dd, AllocationError.DUPLICATE_NAME)
             case NotCataloged():
-                return Allocated(self.created_empty(dd), existed=False)
+                return Allocated(self._created(name), existed=False)
+
+    def _created(self, name: str) -> Dataset:
+        return self._system.create(name, LabelPending())
 
     def _existing(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         match self._system.lookup(name):
             case Dataset() as found:
                 return Allocated(found, existed=True)
             case NotCataloged():
-                return self._missing(dd)
+                return self._missing(dd, name)
 
-    def _missing(self, dd: DD[StepReference]) -> Allocated | Unallocated:
+    def _missing(self, dd: DD[StepReference], name: str) -> Allocated | Unallocated:
         if dd.disposition().status is DispStatus.MOD:
-            return Allocated(self.created_empty(dd), existed=False)
+            return Allocated(self._created(name), existed=False)
         return Unallocated(dd, AllocationError.DATASET_NOT_FOUND)
 
-    def delete_created(self, dd: DD[StepReference]) -> None:
-        self._delete(dd.dsn)
+    def delete_created(self, dd: DD[StepReference], dataset: Dataset) -> None:
+        self._delete(dd.dsn, dataset.dsn)
 
     def gdg(self, name: str) -> GdgBase | NotCataloged:
         return self._system.gdg(name)
@@ -153,7 +195,7 @@ class DatasetCatalog(Relabeller):
 
     def define_gdg(self, base: GdgBase) -> GdgBase:
         self._uncataloged(base.name)
-        return self._system.define_gdg(base)
+        return self._system.catalog_gdg(base)
 
     def _uncataloged(self, name: str) -> None:
         match (self._system.lookup(name), self._system.gdg(name)):
@@ -173,27 +215,53 @@ class DatasetCatalog(Relabeller):
     def dispose(
         self,
         dd: DD[StepReference],
+        dataset: Dataset,
         disposition: ResolvedDisp,
         existed: bool,
         result: ProgramResult,
     ) -> None:
         if _deletes(disposition, result):
-            self._delete(dd.dsn)
+            self._delete(dd.dsn, dataset.dsn)
             return
-        self._pass_or_receive(dd, disposition, existed, result)
+        self._pass_or_receive(dd, dataset.dsn, disposition, existed, result)
+        if _catalogs(disposition, result):
+            self._rolled_in(dd.dsn)
 
     def _pass_or_receive(
         self,
         dd: DD[StepReference],
+        name: str,
         disposition: ResolvedDisp,
         existed: bool,
         result: ProgramResult,
     ) -> None:
         match dd.dsn:
             case DirectDSN() | GenerationDSN():
-                self._passed_on(dd.dsn.dataset_name(), disposition, existed, result)
+                self._passed_on(name, disposition, existed, result)
             case _:
                 return
+
+    def _rolled_in(self, dsn: DSN[StepReference]) -> None:
+        match dsn:
+            case GenerationDSN():
+                self._generation_rolled_in(dsn)
+            case _:
+                return
+
+    def _generation_rolled_in(self, dsn: GenerationDSN) -> None:
+        match self._system.gdg(dsn.base_name()):
+            case GdgBase() as base:
+                self._roll(base, self._numbers(base, dsn))
+            case NotCataloged():
+                return
+
+    def _roll(self, base: GdgBase, numbers: tuple[int, ...]) -> None:
+        if not numbers:
+            return
+        rolled, off = base.rolled_in(numbers[0])
+        self._system.catalog_gdg(rolled)
+        for name in rolled.scratched(off):
+            self.delete_dsn(name)
 
     def _passed_on(
         self,
@@ -214,20 +282,13 @@ class DatasetCatalog(Relabeller):
         if self._passed.has(name):
             self._passed.take(name)
 
-    def _delete(self, dsn: DSN[StepReference]) -> None:
+    def _delete(self, dsn: DSN[StepReference], name: str) -> None:
         match dsn:
-            case TempRef(name=name):
-                self._delete_temp(name)
+            case TempRef(name=alias):
+                self._delete_temp(alias)
             case _:
-                self._delete_direct(dsn)
-
-    def _delete_direct(self, dsn: DSN[StepReference]) -> None:
-        match dsn:
-            case DirectDSN() | GenerationDSN():
-                self.delete_dsn(dsn.dataset_name())
-                self._received(dsn.dataset_name())
-            case _:
-                return
+                self.delete_dsn(name)
+                self._received(name)
 
     def _delete_temp(self, name: str) -> None:
         if self._temps.has(_temp_name(name)):
