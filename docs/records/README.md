@@ -17,6 +17,8 @@ Dated design records and analyses. Frozen: never edited after they are written.
 - 2026-10-12 — [jackal: IF/THEN/ELSE/ENDIF Execution — Decision Record](design/2026-10-12-jackal-if-then-else.md)
 - 2026-10-12 — [jackal: DD Concatenation — Decision Record](design/2026-10-12-jackal-concatenation.md)
 - 2026-10-12 — [jackal: Generation Data Groups — Decision Record](design/2026-10-12-jackal-gdg.md)
+- 2026-10-12 — [jackal: DD DCB Attributes and Model Datasets — Decision Record](design/2026-10-12-jackal-dcb-attributes.md)
+- 2026-10-12 — [jackal: IDCAMS Modal Commands and VERIFY — Decision Record](design/2026-10-12-jackal-idcams-modal.md)
 
 ## Analysis
 

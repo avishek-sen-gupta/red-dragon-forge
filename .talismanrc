@@ -152,7 +152,7 @@ fileignoreconfig:
 - filename: docs/records/design/2026-10-12-jackal-variable-records.md
   checksum: 6a62e90acffbfdfbd2c4742b8dfe96e59658309f59fe7647f2133a314d4cc5f4
 - filename: jackal/tests/unit/test_idcams_executor.py
-  checksum: 8d5a3189ce77255991eec142fbc6edb2d8f86ca2b52521832459e9b2b37f47f9
+  checksum: ea98461dc40a890ed143bcf91c2a812c9b5ad9175e96a0814adbdff843c9c826
 - filename: jackal/jackal/idcams/parser.py
   checksum: 8a7c3adae91ce4bb754a5c72bfa5760db8348ca8d2b42cd885f2695b87f30865
 - filename: jackal/docs/analysis/2026-07-09-carddemo-job-executability.md
