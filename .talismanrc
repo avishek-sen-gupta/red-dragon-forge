@@ -643,4 +643,6 @@ fileignoreconfig:
   checksum: 13278f885cf69dcccd9e132a36e457e36ee0042c16bd7532129918d6c8f891e8
 - filename: jackal/tests/integration/test_jcl_bridge_jar.py
   checksum: 702b36b0c3f80d8d1bc707a4eac5b29aea180cb8d9ee21a7f1486e5b93831a24
+- filename: jackal/tests/integration/test_proc_referback.py
+  checksum: 6ec4e494a47123880c83693fe506c9dbdec6a772abf9e192b4a1a1ceb4d1d711
 version: "1.0"
