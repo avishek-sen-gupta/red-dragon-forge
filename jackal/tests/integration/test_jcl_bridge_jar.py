@@ -144,3 +144,82 @@ def test_real_jar_parses_a_relative_generation_as_its_gdg_base_and_number(
         DirectDSN(literal("P.PDS(MEMBER1)")),
         DirectDSN(literal("P.HIST.G0001V00")),
     ]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_parses_dcb_attributes_and_model_however_coded(jcl_bridge_jar):
+    """Record A1 (JCL Ref pp. 127-128): RECFM and LRECL coded inside DCB= or as
+    DD keywords are one attribute; a dsname, *.step.dd or *.dd is the model."""
+    from jackal.expansion import expand_or_fail
+    from jackal.model import BackwardRef, Dcb, NoDSN, StepDd
+
+    jcl = (
+        "//J JOB 1\n"
+        "// SET LR=204\n"
+        "//S0 EXEC PGM=A\n"
+        "//OUT DD DSN=T.OUT,DISP=(NEW,CATLG),DCB=(RECFM=FB,LRECL=60)\n"
+        "//S1 EXEC PGM=A\n"
+        "//A DD DSN=T.A,DISP=(NEW,CATLG),\n"
+        "//         DCB=(T.MODEL,RECFM=FB,LRECL=80,BLKSIZE=800)\n"
+        "//B DD DSN=T.B,DISP=(NEW,CATLG),RECFM=VB,LRECL=&LR,BLKSIZE=0\n"
+        "//C DD DSN=T.C,DISP=(NEW,CATLG),DCB=*.S0.OUT\n"
+        "//D DD DSN=T.D,DISP=SHR\n"
+        "//E DD DSN=T.E,DISP=(NEW,CATLG),DCB=*.A\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    assert [dd.dcb for dd in job.steps[-1].dds] == [
+        Dcb(DirectDSN(literal("T.MODEL")), literal("FB"), literal("80")),
+        Dcb(NoDSN(), literal("VB"), (Symbol(SymbolName("LR")),)),
+        Dcb(
+            BackwardRef(
+                StepRef(OwnScope(), StepName("S0")), UnresolvedDd(DdName("OUT"))
+            ),
+            (),
+            (),
+        ),
+        Dcb(NoDSN(), (), ()),
+        Dcb(StepDd(DdName("A")), (), ()),
+    ]
+    expanded = expand_or_fail(job, _NO_LIBRARY)
+    assert expanded.steps[-1].step.dds[1].dcb == Dcb(
+        NoDSN(), literal("VB"), literal("204")
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_real_jar_overrides_dcb_subparameters_one_by_one(jcl_bridge_jar, tmp_path):
+    """Record A8 (JCL Ref p. 75): an override changes only the DCB keywords it
+    codes, keeps the model only if it codes DCB= without one dropping it, nullifies
+    a keyword coded empty, and DUMMY keeps the DCB. DCB= empty clears it all."""
+    from jackal.expansion import expand_or_fail
+    from jackal.model import Dcb, NoDSN
+
+    (tmp_path / "P.prc").write_text(
+        "//P PROC\n"
+        "//PS EXEC PGM=A\n"
+        "//D1 DD DSN=T.D1,DISP=(NEW,CATLG),DCB=(T.MOD,RECFM=FB,LRECL=80)\n"
+        "//D2 DD DSN=T.D2,DISP=(NEW,CATLG),DCB=(T.MOD,RECFM=FB,LRECL=80)\n"
+        "//D3 DD DSN=T.D3,DISP=(NEW,CATLG),DCB=(T.MOD,RECFM=FB,LRECL=80)\n"
+        "//D4 DD DSN=T.D4,DISP=(NEW,CATLG),DCB=(T.MOD,RECFM=FB,LRECL=80)\n"
+        "//D5 DD DSN=T.D5,DISP=(NEW,CATLG),DCB=(T.MOD,RECFM=FB,LRECL=80)\n"
+        "// PEND\n"
+    )
+    jcl = (
+        "//J JOB 1\n"
+        "//S EXEC P\n"
+        "//PS.D1 DD LRECL=100\n"
+        "//PS.D2 DD DCB=(RECFM=VB)\n"
+        "//PS.D3 DD RECFM=\n"
+        "//PS.D4 DD DUMMY\n"
+        "//PS.D5 DD DCB=\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    expanded = expand_or_fail(job, DirectoryProcLibrary((tmp_path,)))
+    model = DirectDSN(literal("T.MOD"))
+    assert [dd.dcb for dd in expanded.steps[0].step.dds] == [
+        Dcb(model, literal("FB"), literal("100")),
+        Dcb(NoDSN(), literal("VB"), literal("80")),
+        Dcb(model, (), literal("80")),
+        Dcb(model, literal("FB"), literal("80")),
+        Dcb(NoDSN(), (), ()),
+    ]

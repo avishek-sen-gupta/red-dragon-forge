@@ -142,7 +142,7 @@ fileignoreconfig:
 - filename: docs/records/design/2026-10-12-jackal-idcams-repro-labels.md
   checksum: ec1641e126ec15bb059c34b6f276cc4f74bf6292c3882de04c57c2ac4afb42d0
 - filename: jackal/jcl-bridge/src/main/java/org/jackal/jcl/DdBuilder.java
-  checksum: 31256827c3a7f6bc4967b2f1fa13274fd8e47eed7980f44605cfca157ccc9999
+  checksum: 7ebcc0fe3499c0c9071089ba17794de86554585da5a30204065a3ee707ea9f3b
 - filename: jackal/jackal/concatenated_records.py
   checksum: 319da9d2575e77c0e5c1be0be7a848c83eb1c8d0102aca5a4b3dc24a46fb3dc9
 - filename: jackal/jackal/variable_records.py
@@ -600,7 +600,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_cond.py
   checksum: a7689ba5468894803f04da282e502747f5dfaad3aee928dc918c484f19597867
 - filename: jackal/jackal/jcl/wire.py
-  checksum: 77587c2c06aba1dc4fad80818c97ace0f337cc523107e5831d47d0b66dbb680e
+  checksum: f11194f8b20c7afa296ff1da60fb9a9c6dfb239abc433cfd228ce4f4014f9ea9
 - filename: jackal/tests/acceptance/carddemo_facts.py
   checksum: dc6aa3933b7b47ade57267eb172811ffb8b42490a9a5d6c6327b6620da498986
 - filename: jackal/jackal/runner.py
@@ -639,4 +639,8 @@ fileignoreconfig:
   checksum: 7c3edb167b738c169e973305329ec209eb1a6e01b964c2d67f5fd080048fc065
 - filename: cobol_harness/region.py
   checksum: 6d9fd77ddcd339c7ee311f7167f4e55ff332177b8849d28c3a4e2e1fa75254b6
+- filename: docs/records/design/2026-10-12-jackal-dcb-attributes.md
+  checksum: 13278f885cf69dcccd9e132a36e457e36ee0042c16bd7532129918d6c8f891e8
+- filename: jackal/tests/integration/test_jcl_bridge_jar.py
+  checksum: 702b36b0c3f80d8d1bc707a4eac5b29aea180cb8d9ee21a7f1486e5b93831a24
 version: "1.0"

@@ -447,6 +447,86 @@ def _disp_over(own: Disp | NotCoded, override: Disp | NotCoded) -> Disp | NotCod
 
 
 @dataclass(frozen=True)
+class NullifiedValue:
+    pass
+
+
+@dataclass(frozen=True)
+class StepDd:
+    """DCB=*.ddname: an earlier DD of the same step, whose DCB subparameters are copied."""
+
+    ddname: DdName
+
+    def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> StepDd:
+        return self
+
+    def substituted(self, substitution: Substitution[R]) -> StepDd:
+        return self
+
+
+def _value_over(own: Value, override: Value | NullifiedValue) -> Value:
+    match override:
+        case NullifiedValue():
+            return ()
+        case ():
+            return own
+        case _:
+            return override
+
+
+def _model_over(own: DSN[R] | StepDd, override: DSN[R] | StepDd) -> DSN[R] | StepDd:
+    match override:
+        case NullifiedDSN():
+            return NoDSN()
+        case NoDSN():
+            return own
+        case _:
+            return override
+
+
+@dataclass(frozen=True)
+class Dcb(Generic[R]):
+    """A DD's DCB attributes as coded: the model whose label they complete, RECFM and LRECL."""
+
+    model: DSN[R] | StepDd = NoDSN()
+    recfm: Value | NullifiedValue = ()
+    lrecl: Value | NullifiedValue = ()
+
+    def overridden_by(self, override: Dcb[R]) -> Dcb[R]:
+        return Dcb(
+            _model_over(self.model, override.model),
+            _value_over(self._kept(self.recfm), override.recfm),
+            _value_over(self._kept(self.lrecl), override.lrecl),
+        )
+
+    def _kept(self, value: Value | NullifiedValue) -> Value:
+        match value:
+            case NullifiedValue():
+                return ()
+            case _:
+                return value
+
+    def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> Dcb[S]:
+        return Dcb(self.model.mapped(backref), self.recfm, self.lrecl)
+
+    def substituted(self, substitution: Substitution[R]) -> Dcb[R]:
+        return Dcb(
+            self.model.substituted(substitution),
+            self._substituted(self.recfm, substitution),
+            self._substituted(self.lrecl, substitution),
+        )
+
+    def _substituted(
+        self, value: Value | NullifiedValue, substitution: Substitution[R]
+    ) -> Value | NullifiedValue:
+        match value:
+            case NullifiedValue():
+                return value
+            case _:
+                return substitution.value(value)
+
+
+@dataclass(frozen=True)
 class ConcatMember(Generic[R]):
     dsn: DSN[R]
     disp: Disp | NotCoded
@@ -480,6 +560,7 @@ class DD(Generic[R]):
     in_stream: tuple[str, ...] = ()
     sysout: bool = False
     concatenated: tuple[ConcatMember[R], ...] = ()
+    dcb: Dcb[R] = Dcb()
 
     def disposition(self) -> Disp:
         return self.disp.disposition()
@@ -492,6 +573,7 @@ class DD(Generic[R]):
                     override.dsn,
                     NotCoded(),
                     concatenated=self._members(override),
+                    dcb=self.dcb.overridden_by(override.dcb),
                 )
             case _:
                 return self._merged(override)
@@ -522,6 +604,7 @@ class DD(Generic[R]):
             in_stream,
             sysout,
             self._members(override),
+            self.dcb.overridden_by(override.dcb),
         )
 
     def mapped(self, backref: Callable[[BackwardRef[R]], BackwardRef[S]]) -> DD[S]:
@@ -532,6 +615,7 @@ class DD(Generic[R]):
             self.in_stream,
             self.sysout,
             tuple(m.mapped(backref) for m in self.concatenated),
+            self.dcb.mapped(backref),
         )
 
     def substituted(self, substitution: Substitution[R]) -> DD[R]:
@@ -542,6 +626,7 @@ class DD(Generic[R]):
             self.in_stream,
             self.sysout,
             tuple(m.substituted(substitution) for m in self.concatenated),
+            self.dcb.substituted(substitution),
         )
 
 

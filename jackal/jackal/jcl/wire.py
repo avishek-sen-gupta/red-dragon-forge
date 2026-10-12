@@ -211,6 +211,71 @@ Dsn = Annotated[
 class Nullified(Enum):
     DSN = "dsn"
     DISP = "disp"
+    DCB = "dcb"
+    RECFM = "recfm"
+    LRECL = "lrecl"
+
+
+_DCB_CLEARED: model.Dcb[StepRef] = model.Dcb(
+    NullifiedDSN(), model.NullifiedValue(), model.NullifiedValue()
+)
+
+
+def _keyword(
+    parts: tuple[LiteralPart | SymbolPart, ...],
+    keyword: Nullified,
+    nullified: tuple[Nullified, ...],
+) -> value_parts.Value | model.NullifiedValue:
+    if keyword in nullified:
+        return model.NullifiedValue()
+    return value(parts)
+
+
+class StepDdSource(Wire):
+    kind: Literal["step_dd"] = "step_dd"
+    ddname: str
+
+    def model(self) -> model.StepDd:
+        return model.StepDd(DdName(self.ddname))
+
+
+DcbSource = Annotated[
+    NameDsn
+    | GenerationDsn
+    | TempDsn
+    | BackrefDsn
+    | InStreamDsn
+    | DummyDsn
+    | NoneDsn
+    | StepDdSource,
+    Field(discriminator="kind"),
+]
+
+
+class DcbWire(Wire):
+    coded: bool
+    source: DcbSource
+    recfm: tuple[Part, ...]
+    lrecl: tuple[Part, ...]
+
+    def dcb(self) -> model.Dcb[StepRef]:
+        return model.Dcb(self.source.model(), value(self.recfm), value(self.lrecl))
+
+    def override(self, nullified: tuple[Nullified, ...]) -> model.Dcb[StepRef]:
+        if Nullified.DCB in nullified:
+            return _DCB_CLEARED
+        return model.Dcb(
+            self._source_over(),
+            _keyword(self.recfm, Nullified.RECFM, nullified),
+            _keyword(self.lrecl, Nullified.LRECL, nullified),
+        )
+
+    def _source_over(self) -> DSN[StepRef] | model.StepDd:
+        match self.source:
+            case NoneDsn() if self.coded:
+                return NullifiedDSN()
+            case _:
+                return self.source.model()
 
 
 def _disp(words: tuple[str, ...]) -> Disp | NotCoded:
@@ -256,6 +321,7 @@ class Dd(Wire):
     in_stream: tuple[str, ...]
     sysout: bool
     concatenated: tuple[Member, ...]
+    dcb: DcbWire
 
     def model(self) -> DD[StepRef]:
         return DD(
@@ -265,6 +331,7 @@ class Dd(Wire):
             self.in_stream,
             self.sysout,
             tuple(m.model() for m in self.concatenated),
+            self.dcb.dcb(),
         )
 
     def override(self) -> DD[StepRef]:
@@ -275,6 +342,7 @@ class Dd(Wire):
             self.in_stream,
             self.sysout,
             tuple(m.override() for m in self.concatenated),
+            self.dcb.override(self.nullified),
         )
 
 

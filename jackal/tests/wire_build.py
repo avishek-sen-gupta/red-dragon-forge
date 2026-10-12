@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from jackal.jcl import wire
 
 NO_COND = wire.Cond(tests=(), mode="NORMAL")
+NO_DCB = wire.DcbWire(coded=False, source=wire.NoneDsn(), recfm=(), lrecl=())
 
 
 def lit(text: str) -> wire.LiteralPart:
@@ -34,6 +35,7 @@ def dd(
         in_stream=in_stream,
         sysout=sysout,
         concatenated=(),
+        dcb=NO_DCB,
     )
 
 
