@@ -15,7 +15,7 @@ gated in strategy.py.
 from __future__ import annotations
 
 import logging
-from collections.abc import Container, Mapping, MutableSequence
+from collections.abc import Mapping, MutableSequence
 from dataclasses import dataclass, field
 from typing import TypeVar
 
@@ -66,14 +66,6 @@ class SharedSqlStores:
     plans: list[ParsedSql] = field(default_factory=list)
     field_meta: dict[str, FieldMeta] = field(default_factory=dict)
     cursors: dict[str, ParsedSql] = field(default_factory=dict)
-    # Names ever written as an explicit sidecar declaration (constructor
-    # ``field_meta`` or ``absorb_field_meta``), as opposed to a bridge-JSON
-    # inference (``merge_field_meta``'s *derived*). Lets ``merge_field_meta``
-    # tell the two apart in a store now shared region-wide: an explicit
-    # declaration still outranks any inference, from any program, but two
-    # inferences never compete on "whoever ran first" -- see
-    # ``merge_field_meta``.
-    sidecar_field_names: set[str] = field(default_factory=set)
 
 
 # The overwrite warning is the strategy's own diagnostic; keep it on its logger.
@@ -111,73 +103,23 @@ def merge_cursors(
     place.
 
     *store* is ``SqlLoweringStrategy._cursors_store``, the exact dict object
-    ``make_exec_sql_builtin`` holds as ``ctx.cursors``. Unlike
-    ``merge_field_meta`` there is no sidecar-vs-inference precedence to
-    settle — a cursor name reaches here from exactly one source — but the
-    write must still land on this same object, never a rebuild, or a later
+    ``make_exec_sql_builtin`` holds as ``ctx.cursors``. The write must land
+    on this same object, never a rebuild, or a later
     OPEN would keep reading the old (pre-merge) dict forever.
     """
     store.update(derived)
 
 
-def absorb_field_meta(
-    store: dict[str, FieldMeta],
-    sidecar: Mapping[str, FieldMeta],
-    sidecar_field_names: set[str] | None = None,
-) -> None:
-    """Add one program's SIDECAR-declared field metadata to the spec's shared
-    store, in place.
-
-    Called once per program compiled from a single ``build_sql_spec``, from
-    that spec's source-text stage. *sidecar* wins over what is there, the
-    same precedence ``merge_field_meta`` applies in the other direction: an
-    explicit sidecar declaration beats metadata a previous program's bridge
-    JSON was only shape-recognised into. The write must land on this object,
-    never a rebuild -- it is the dict the ``__exec_sql`` builtin's
-    ``MappingProxyType`` view already wraps.
-
-    *sidecar_field_names*, when given, records *sidecar*'s keys as
-    sidecar-declared (see ``SharedSqlStores.sidecar_field_names``) so a later
-    ``merge_field_meta`` call for any program can still tell an explicit
-    declaration apart from an inference, even once *store* is shared
-    region-wide.
-    """
-    store.update(sidecar)
-    if sidecar_field_names is not None:
-        sidecar_field_names.update(sidecar.keys())
-
-
 def merge_field_meta(
     store: dict[str, FieldMeta],
     derived: Mapping[str, FieldMeta],
-    sidecar_field_names: Container[str] = frozenset(),
 ) -> None:
     """Merge *derived* -- the CURRENT program's own bridge-JSON inference --
-    into *store* in place.
-
-    An explicit sidecar declaration (name present in *sidecar_field_names*)
-    still outranks an inference, from any program: it is a positive
-    statement, and shape recognition is only a guess. But between two
-    inferences there is no such asymmetry, so *derived* wins over whatever is
-    already in *store* for a name *not* in *sidecar_field_names*. Getting
-    this backwards -- *store* winning outright, as a flat ``{**derived,
-    **store}`` -- was fine when every strategy held a private store (each
-    program's own metadata, nothing else, so "store wins" and "mine wins"
-    were the same thing); now that ``SharedSqlStores.field_meta`` is one dict
-    across the whole spec, unqualified "store wins" instead means "whichever
-    program compiled first wins", silently handing program B's own host
-    variable program A's leftover metadata whenever the bare COBOL names
-    collide (see ``SharedSqlStores`` and the docstring on
-    ``sidecar_field_names``).
+    into *store* in place; *derived* wins over what an earlier program left.
 
     *store* is the live dict the ``__exec_sql`` builtin's ``MappingProxyType``
-    view already wraps, so this replaces its *contents* (clear + update)
-    rather than rebinding the name — a rebind would leave that view, and the
-    builtin holding it, pointed at the old (pre-merge) mapping forever.
+    view already wraps, so this writes into it rather than rebinding the name
+    — a rebind would leave that view, and the builtin holding it, pointed at
+    the old (pre-merge) mapping forever.
     """
-    merged = dict(store)
-    for name, meta in derived.items():
-        if name not in sidecar_field_names:
-            merged[name] = meta
-    store.clear()
-    store.update(merged)
+    store.update(derived)

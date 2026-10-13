@@ -85,7 +85,7 @@ Paths are relative to `squall/squall/`.
 | `statements.py` | `ExecSqlStatement` and `SqlDialectParser`. |
 | `exec_sql_payload.py` | `ExecSqlPayload`: the Pydantic model for one statement's JSON, from the bridge or the ASG cache. |
 | `parser/` | Lark grammar (`grammar.lark`), `parse.py` (statement parse, host-variable extraction, query rewrite), `sql_model.py` (parsed-model value types). |
-| `preprocess.py` | Source prepass before ProLeap: rewrites `EXEC SQL INCLUDE x` to `COPY x` and loads DCLGEN field metadata. |
+| `preprocess.py` | Source rewrite before ProLeap: `EXEC SQL INCLUDE x` becomes `COPY x`. |
 | `exec_sql_scan.py` | Finds `EXEC SQL … END-EXEC` spans in fixed-format code areas. |
 | `fixed_format.py` | Positional model of a fixed-format line. Rewrites touch columns 8–72 only. |
 | `data_division_exec_sql.py` | Recovers `DECLARE CURSOR` plans written in WORKING-STORAGE from the bridge JSON. |
@@ -96,7 +96,7 @@ Paths are relative to `squall/squall/`.
 | `backend.py` | `SqlBackend` protocol and `SqlResult`. |
 | `backends/db2.py`, `backends/sqlite.py` | The two backends. |
 | `backends/_stores.py` | A backend's writes to its own cursor map. |
-| `dclgen.py` | Generates a host-variable copybook and a JSON metadata sidecar from a table schema. |
+| `dclgen.py` | Generates a host-variable copybook from a table schema. |
 | `dclgen_meta.py` | Derives VARCHAR field metadata from the bridge JSON's data fields. |
 | `dclgen_copybooks.py` | Strips `EXEC SQL DECLARE … TABLE` from DCLGEN copybooks into a staging directory. |
 | `db2_stubs.py`, `stubs/` | COBOL stand-ins for Db2-supplied programs (`DSNTIAC.cbl`), linked into every run unit. |

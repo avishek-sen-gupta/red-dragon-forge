@@ -76,9 +76,7 @@ def compile_cobol(
     *connections* is the connection registry (name -> backend) the program's
     EXEC SQL CONNECT selects from at run time; a run starts disconnected.
 
-    Builds one CoprocessorSpec (squall.coprocessor.build_sql_spec) around a
-    private holder that threads the prepass's dclgen field_meta into the SQL
-    strategy, and delegates to RedDragon's shared compile_program
+    Builds one CoprocessorSpec (squall.coprocessor.build_sql_spec) and delegates to RedDragon's shared compile_program
     (interpreter.project.coprocessor_compile) -- the same composition
     mechanism Cicada and red-dragon-forge use.
 
@@ -90,7 +88,7 @@ def compile_cobol(
 
     dirs = copybook_dirs or []
     parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
-    spec = build_sql_spec(connections, copybook_dirs=dirs)
+    spec = build_sql_spec(connections)
     return compile_program(source.encode("utf-8"), parser, [spec])
 
 
@@ -104,9 +102,8 @@ def run_cobol(
     """Compile and run a COBOL program against the *connections* registry; return
     the final VMState.
 
-    Builds the SQL strategy from *connections* (name → backend) + the prepass
-    field_meta (the single prepass — always run with copybook_dirs — owns the JSON
-    loading) and wraps it in the frontend's extension_strategies array. The run
+    Builds the SQL strategy from *connections* (name → backend) and wraps it in
+    the frontend's extension_strategies array. The run
     starts disconnected; the program's EXEC SQL CONNECT selects its database.
 
     Mirrors the two-phase execution model in interpreter.run.run() for COBOL:

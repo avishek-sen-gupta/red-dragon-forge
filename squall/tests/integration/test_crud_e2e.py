@@ -3,7 +3,7 @@ tests/integration/test_crud_e2e.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The capstone (squall-swd): the whole vertical on a GENERATED copybook.
 
-  dclgen(schema) -> ACCTREC.cpy + .json
+  dclgen(schema) -> ACCTREC.cpy
        -> EXEC SQL INCLUDE ACCTREC  (apply_sql_prepass rewrites to COPY)
        -> ProLeap inlines it -> lower -> compile -> link
        -> run on the real VMState performing INSERT / SELECT / UPDATE / SELECT /
@@ -93,11 +93,10 @@ def test_crud_round_trip_on_generated_copybook(bridge_jar, tmp_path):
         " ACCT_NAME CHAR(20))"
     )
 
-    # 2. Run dclgen on the live schema -> generated copybook + JSON in a temp dir.
+    # 2. Run dclgen on the live schema -> generated copybook in a temp dir.
     rec = generate(conn, "ACCOUNT", record_name="ACCTREC")
-    write(rec, tmp_path)
-    assert (tmp_path / "ACCTREC.cpy").is_file()
-    assert (tmp_path / "ACCTREC.json").is_file()
+    assert write(rec, tmp_path) == tmp_path / "ACCTREC.cpy"
+    assert not (tmp_path / "ACCTREC.json").exists()
 
     # 3. Drive the whole pipeline on the GENERATED copybook.
     backend = SqliteBackend(conn)
@@ -153,14 +152,14 @@ _VARCHAR_PROGRAM = """       IDENTIFICATION DIVISION.
 
 
 def test_varchar_round_trip_on_generated_copybook(bridge_jar, tmp_path):
-    # Live schema with a VARCHAR column -> generated 49-group copybook + JSON.
+    # Live schema with a VARCHAR column -> generated 49-group copybook.
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE EMP (EMP_ID INTEGER NOT NULL, EMP_NAME VARCHAR(9))")
     rec = generate(conn, "EMP", record_name="EMPREC")
     write(rec, tmp_path)
 
-    # run_cobol's prepass loads EMPREC.json during its INCLUDE scan; that
-    # field_meta flows to the strategy and on to the binding VARCHAR codec.
+    # The strategy infers EMP-NAME's VARCHAR shape from the copybook's 49-level
+    # LEN/TEXT group; that shape reaches the binding VARCHAR codec.
     backend = SqliteBackend(conn)
     vm = run_cobol(
         _VARCHAR_PROGRAM,

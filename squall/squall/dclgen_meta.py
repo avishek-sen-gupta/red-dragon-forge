@@ -3,19 +3,15 @@ squall.dclgen_meta
 ~~~~~~~~~~~~~~~~~~~
 Derives DCLGEN VARCHAR host-var metadata directly from the raw ProLeap bridge
 JSON — the same ``data_fields`` tree (``name`` / ``level`` / ``pic`` / ``usage``
-/ ``children``) the bridge emits for every program, whether or not the
-program's copybooks carry a squall-generated ``<NAME>.json`` sidecar.
+/ ``children``) the bridge emits for every program.
 
 Why this exists: ``squall.binding``'s level-49 VARCHAR codec is only reached
-when ``field_meta[name]["category"] == "VARCHAR"``, and until now
-``field_meta`` was populated *exclusively* from those sidecars. Hand-written
-IBM DCLGEN copybooks (CardDemo's ``.dcl`` files among them) have no sidecar,
-so their VARCHAR host vars silently fell through to the flat byte codec —
-corrupting both the binary length prefix and the text. Recognising the DCLGEN
-VARCHAR *shape* — a group whose two children are both level 49: a
-``PIC S9(4) USAGE COMP`` length prefix immediately followed by a
-``PIC X(n)`` text field — closes that gap with no dependence on a sidecar, a
-live DB connection, or any DCLGEN naming convention.
+when ``field_meta[name]["category"] == "VARCHAR"``, and this is the one source
+of that metadata. Recognising the DCLGEN VARCHAR *shape* — a group whose two
+children are both level 49: a ``PIC S9(4) USAGE COMP`` length prefix
+immediately followed by a ``PIC X(n)`` text field — works for squall-generated
+and hand-written IBM DCLGEN copybooks alike, with no dependence on a live DB
+connection or any DCLGEN naming convention.
 """
 
 from __future__ import annotations
@@ -99,7 +95,7 @@ def derive_field_meta(program: _Field) -> Mapping[str, FieldMeta]:
 
     *program* is the raw bridge JSON dict ``SqlLoweringStrategy.
     preprocess_program_dict`` receives — before ProLeap's dict is turned into
-    a ``CobolASG`` — so this depends on nothing but shape: no sidecar, no live
+    a ``CobolASG`` — so this depends on nothing but shape: no live
     DB connection, no DCLGEN naming convention. A program with no VARCHAR
     groups (or no ``data_fields`` at all) yields ``{}``.
     """

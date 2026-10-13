@@ -38,7 +38,6 @@ from squall.backend import SqlBackend
 from squall.binding import (
     read_params,
     resolve_dml_sqlcode,
-    validate_field_meta,
     write_outputs,
     write_sqlcode,
 )
@@ -476,12 +475,6 @@ def make_exec_sql_builtin(
 
     def __exec_sql(args: Sequence[TypedValue], vm) -> BuiltinResult:
         from interpreter.vm.vm_types import BuiltinResult
-
-        # Fail loud on any dclgen/copybook category drift before binding anything.
-        # Stateless: validate_field_meta is a pure check over the (fixed) layout
-        # and field_meta — cheap dict lookups, re-run per call rather than cached
-        # behind a mutable "already validated" flag.
-        validate_field_meta(vm.data_layout, field_meta, tolerant=tolerant)
 
         parsed = plans[int(args[0].value)]
         _HANDLERS.get(parsed.kind, _h_query)(ctx, parsed, vm)

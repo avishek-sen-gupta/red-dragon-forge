@@ -30,8 +30,8 @@ def build_db2_region(
     ``NamedDbConnector("CARDDEMO")`` models the CICS Db2 attachment
     facility: CARDDEMO is already the current connection when a task
     starts, so COTRTUPC/COTRTLIC's own EXEC SQL statements never need an
-    explicit CONNECT. ``tolerant=True`` matches Task 4's verified recipe --
-    CardDemo's hand-written DCLGEN copybooks have no JSON sidecars.
+    explicit CONNECT. ``tolerant=True`` matches Task 4's verified recipe:
+    host variables missing from the data layout are skipped, not raised.
 
     ``backend.rollback`` becomes the dispatcher's ``on_abend`` callable:
     an abending task (unhandled condition, unsupported verb, or a
@@ -50,7 +50,6 @@ def build_db2_region(
     backend = Db2Backend(conn)
     sql_spec = build_sql_spec(
         connections={"CARDDEMO": backend},
-        copybook_dirs=config.copybook_dirs,
         initial_connector=NamedDbConnector("CARDDEMO"),
         tolerant=True,
     )

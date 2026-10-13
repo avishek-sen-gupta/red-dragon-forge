@@ -227,7 +227,6 @@ def test_inqcust_found_and_not_found(bridge_jar):
         )
         inqcust_sql_spec = build_sql_spec(
             connections={"SAMPLE": backend},
-            copybook_dirs=[_BANK_OF_Z_COPY],
             initial_connector=NamedDbConnector("SAMPLE"),
         )
         inqcust_source = (_BANK_OF_Z_COBOL / "INQCUST.cbl").read_bytes()
