@@ -20,7 +20,6 @@ from pathlib import Path
 
 import pytest
 
-from interpreter.cobol.cobol_frontend import CobolFrontend
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.types import LinkedProgram
@@ -70,7 +69,7 @@ def compile_cobol(
     bridge_jar_path: str,
     connections,
     copybook_dirs: list[Path] | None = None,
-) -> tuple[CobolFrontend, LinkedProgram]:
+) -> LinkedProgram:
     """Compile a COBOL source string to a LinkedProgram.
 
     *connections* is the connection registry (name -> backend) the program's
@@ -80,8 +79,8 @@ def compile_cobol(
     (interpreter.project.coprocessor_compile) -- the same composition
     mechanism Cicada and red-dragon-forge use.
 
-    Returns (frontend, linked) so that callers can access frontend.data_layout
-    for assertions and pass the LinkedProgram to run_linked.
+    Returns the LinkedProgram; its data_layout serves assertions, and it goes to
+    run_linked.
     """
     from squall.coprocessor import build_sql_spec
     from interpreter.project.coprocessor_compile import compile_program
@@ -111,7 +110,7 @@ def run_cobol(
     program's procedure division function (func_<pid>_0).  This is required
     so that __ws_region is visible in the frame when the builtins execute.
     """
-    frontend, linked = compile_cobol(
+    linked = compile_cobol(
         source, bridge_jar_path, connections, copybook_dirs=copybook_dirs
     )
 

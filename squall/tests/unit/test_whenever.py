@@ -129,7 +129,7 @@ def test_whenever_goto_emits_conditional_branch(bridge_jar=None):
     """A SELECT under an active WHENEVER SQLERROR GO TO lowers a BranchIf
     (the synthetic IF SQLCODE < 0 GO TO ERR-PARA) into the IR."""
     jar = os.environ["PROLEAP_BRIDGE_JAR"]
-    _frontend, linked = compile_cobol(
+    linked = compile_cobol(
         _PROGRAM_GOTO, jar, {"SAMPLE": _NullBackend()}, copybook_dirs=[]
     )
     assert any(

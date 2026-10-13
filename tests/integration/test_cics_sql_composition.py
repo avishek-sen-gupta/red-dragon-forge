@@ -55,7 +55,7 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
     sql_spec = build_sql_spec(connections={"SAMPLE": backend})
     parser = make_parser(bridge_jar)
 
-    _frontend, linked = compile_program(
+    linked = compile_program(
         _COMBINED_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
 
@@ -120,7 +120,7 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
     sql_spec = build_sql_spec(connections={"SAMPLE": backend})
     parser = make_parser(bridge_jar)
 
-    _frontend, linked = compile_program(
+    linked = compile_program(
         _CURSOR_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
 

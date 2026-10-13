@@ -59,7 +59,7 @@ def _caller_src(date_text: str) -> str:
 def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
     """Compile DRIVER + the CEEDAYS stub, run, and return WS-SEV (the severity)."""
     stub = LE_STUBS_DIR / "CEEDAYS.cbl"
-    _, linked = compile_cobol(
+    linked = compile_cobol(
         _caller_src(date_text).encode(),
         parser=make_cobol_parser(),
         programs=(SourceFile(stub, stub.read_bytes()),),

@@ -74,7 +74,7 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
     )
 
-    _frontend, linked = compile_program(_CICS_ONLY_PROGRAM, parser, [spec])
+    linked = compile_program(_CICS_ONLY_PROGRAM, parser, [spec])
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
@@ -107,7 +107,7 @@ def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
     )
 
-    _frontend, linked = compile_program(_CICS_CEEDAYS_PROGRAM, parser, [spec])
+    linked = compile_program(_CICS_CEEDAYS_PROGRAM, parser, [spec])
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()

@@ -124,7 +124,7 @@ def test_cotrtupc_compiles_with_cics_and_sql_composed(bridge_jar):
     of the column-corruption bug (Task 2's fix target): a rewrite that slid
     the identification area into Area B, which made ProLeap's error
     recovery silently swallow a whole 01-level record declaration."""
-    _frontend, linked = _compile(bridge_jar, "COTRTUPC")
+    linked = _compile(bridge_jar, "COTRTUPC")
 
     required = frozenset(
         (
@@ -146,7 +146,7 @@ def test_cotrtlic_compiles_with_cics_and_sql_composed(bridge_jar):
     references CARDDEMO-COMMAREA -- assert those field names explicitly
     rather than only checking that a LinkedProgram came back, for the same
     reason as COTRTUPC above."""
-    _frontend, linked = _compile(bridge_jar, "COTRTLIC")
+    linked = _compile(bridge_jar, "COTRTLIC")
 
     required = frozenset(("CARDDEMO-COMMAREA", "SQLCA", "DCLTRANSACTION-TYPE"))
     present = frozenset(name for name in required if name in linked.data_layout)
@@ -169,7 +169,7 @@ def test_cotrtlic_working_storage_cursors_reach_their_opens(bridge_jar):
     data_division_exec_sql dict -- this is the one committed test that
     exercises the real bridge→squall seam end to end, so a bridge or ASG
     contract regression on either side cannot pass silently."""
-    _frontend, linked = _compile(bridge_jar, "COTRTLIC")
+    linked = _compile(bridge_jar, "COTRTLIC")
     texts = {
         i.value
         for i in linked.merged_ir

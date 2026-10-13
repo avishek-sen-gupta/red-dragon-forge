@@ -28,7 +28,7 @@ def test_a_program_lowered_here_runs_in_a_fresh_process(bridge_jar, tmp_path):
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE EMP (EMP_ID INTEGER NOT NULL, EMP_NAME VARCHAR(9))")
     write(generate(conn, "EMP", record_name="EMPREC"), tmp_path)
-    _frontend, linked = _helpers.compile_cobol(
+    linked = _helpers.compile_cobol(
         _VARCHAR_PROGRAM,
         bridge_jar,
         {"SAMPLE": SqliteBackend(conn)},

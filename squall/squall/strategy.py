@@ -68,6 +68,8 @@ _NO_CONNECTOR: DbConnector = NullDbConnector()
 class SqlLoweringStrategy:
     """Full SQL lowering strategy.  Inject at ``CobolFrontend`` construction."""
 
+    name = "sql"
+
     def __init__(
         self,
         connections: Mapping[str, SqlBackend],

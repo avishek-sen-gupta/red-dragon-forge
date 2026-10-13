@@ -230,7 +230,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
             initial_connector=NamedDbConnector("SAMPLE"),
         )
         inqcust_source = (_BANK_OF_Z_COBOL / "INQCUST.cbl").read_bytes()
-        _inqcust_frontend, inqcust_linked = compile_program(
+        inqcust_linked = compile_program(
             inqcust_source, parser, [inqcust_cics_spec, inqcust_sql_spec]
         )
         program_cache["INQCUST"] = inqcust_linked
@@ -244,7 +244,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
             program_cache=program_cache,
         )
         wrapper_parser = make_parser(bridge_jar, copybook_dirs=[_BANK_OF_Z_COPY])
-        wrapper_frontend, wrapper_linked = compile_program(
+        wrapper_linked = compile_program(
             _WRAPPER_PROGRAM.encode("utf-8"), wrapper_parser, [wrapper_spec]
         )
 
@@ -256,8 +256,8 @@ def test_inqcust_found_and_not_found(bridge_jar):
         # INQCUSTZ shape, so its data_layout is the one that actually carries
         # this field -- and it's the same buffer DispatchResult.commarea
         # returns. The offset is relative to WS-CA's own start.
-        success_field = wrapper_frontend.data_layout["INQCUST-INQ-SUCCESS"]
-        ws_ca_field = wrapper_frontend.data_layout["WS-CA"]
+        success_field = wrapper_linked.data_layout["INQCUST-INQ-SUCCESS"]
+        ws_ca_field = wrapper_linked.data_layout["WS-CA"]
         off = success_field["offset"] - ws_ca_field["offset"]
         length = success_field["length"]
         total_len = ws_ca_field["length"]
