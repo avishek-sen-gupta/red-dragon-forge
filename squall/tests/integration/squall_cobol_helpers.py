@@ -115,16 +115,19 @@ def run_cobol(
         source, bridge_jar_path, connections, copybook_dirs=copybook_dirs
     )
 
-    # For COBOL, use function-entry mode so run_linked runs the WS init block
-    # (phase 1) then dispatches into func_<pid>_0 (phase 2).
-    # Without this, only the init block runs and __ws_region is never in scope.
-    entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
+    return run_linked_program(linked, max_steps)
 
-    # Pre-populate data_layout on initial_vm so builtins that run DURING
-    # execution (e.g. __exec_sql writing to WS fields) can find the layout.
-    # Without this, vm.data_layout is empty until run_linked() sets it AFTER
-    # execution ends — too late for any builtin that reads/writes WS fields.
-    # We also push the main frame; execute_cfg only pushes it when vm is None.
+
+def run_linked_program(linked: LinkedProgram, max_steps: int = 1000) -> VMState:
+    """Run a compiled program from its entry label; return the final VMState.
+
+    Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
+    run_linked runs the WS init block (phase 1), then dispatches into the
+    program's procedure division (phase 2). data_layout is put on the initial
+    VM so builtins that run during execution (e.g. __exec_sql writing to WS
+    fields) can find the layout, and the main frame is pushed because
+    execute_cfg only pushes it when vm is None.
+    """
     from interpreter.func_name import FuncName
     from interpreter.vm.vm import StackFrame
     from interpreter import constants as _constants
@@ -134,14 +137,14 @@ def run_cobol(
     initial_vm.call_stack.append(
         StackFrame(function_name=FuncName(_constants.MAIN_FRAME_NAME))
     )
-
-    vm = run_linked(
+    return run_linked(
         linked,
-        entry_point=entry_point,
+        entry_point=EntryPoint.function(
+            lambda ref: ref.label == linked.entry_func_label
+        ),
         max_steps=max_steps,
         initial_vm=initial_vm,
     )
-    return vm
 
 
 def read_ws_field(vm, field_name: str):
