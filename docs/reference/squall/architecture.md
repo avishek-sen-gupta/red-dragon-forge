@@ -24,9 +24,11 @@ SQL runs against a `SqlBackend`. Two backends ship:
 
 EXEC SQL adds no execution semantics: every statement is a synchronous call. Squall has no
 driver, region, dispatcher or suspend/resume. The lowering strategy turns each EXEC SQL
-statement into a `CallFunction("__exec_sql", …)` IR call. The builtin binds host variables,
-runs the statement on the current connection and returns. The SQL text is parsed once, at
-lowering time, not on each execution.
+statement into a `CallFunction("__exec_sql", …)` IR call that carries everything the builtin
+needs: the statement's text, an OPEN's cursor declaration, and the VARCHAR shapes of the host
+variables it binds. A `DECLARE CURSOR` lowers to nothing; its text travels on the OPEN. The
+builtin parses the text once per process, binds host variables, runs the statement on the
+current connection and returns. A lowered program needs nothing from the lowering to run.
 
 A run starts disconnected. `CONNECT TO` and `SET CONNECTION` pick a backend from the
 connection registry; `CONNECT RESET` and `DISCONNECT` clear it. A data statement with no
@@ -80,15 +82,16 @@ Paths are relative to `squall/squall/`.
 | Path | Purpose |
 |---|---|
 | `coprocessor.py` | `build_sql_spec`: wraps the strategy, source prepass, dialect parser and Db2 stubs as a `CoprocessorSpec`. |
-| `strategy.py` | `SqlLoweringStrategy`: lowers `ExecSqlStatement` to `__exec_sql` calls, registers the builtins, derives field metadata and cursors from the bridge JSON. |
-| `strategy_stores.py` | The in-place writes the strategy makes to state it shares: `Builtins.TABLE`, the plan pool, cursors, field metadata (`SharedSqlStores`). |
+| `strategy.py` | `SqlLoweringStrategy`: lowers `ExecSqlStatement` to self-contained `__exec_sql` calls and registers the builtins. |
+| `program_scope.py` | `ProgramScope`: the program being lowered, its cursor declarations and VARCHAR groups. |
+| `strategy_stores.py` | Builtin registration into `Builtins.TABLE`. |
 | `statements.py` | `ExecSqlStatement` and `SqlDialectParser`. |
 | `exec_sql_payload.py` | `ExecSqlPayload`: the Pydantic model for one statement's JSON, from the bridge or the ASG cache. |
 | `parser/` | Lark grammar (`grammar.lark`), `parse.py` (statement parse, host-variable extraction, query rewrite), `sql_model.py` (parsed-model value types). |
 | `preprocess.py` | Source rewrite before ProLeap: `EXEC SQL INCLUDE x` becomes `COPY x`. |
 | `exec_sql_scan.py` | Finds `EXEC SQL … END-EXEC` spans in fixed-format code areas. |
 | `fixed_format.py` | Positional model of a fixed-format line. Rewrites touch columns 8–72 only. |
-| `data_division_exec_sql.py` | Recovers `DECLARE CURSOR` plans written in WORKING-STORAGE from the bridge JSON. |
+| `data_division_exec_sql.py` | Recovers WORKING-STORAGE `DECLARE CURSOR` texts from the bridge JSON. |
 | `binding.py` | Host-variable binding engine and byte codecs (zoned, alphanumeric, COMP-3, binary, VARCHAR). |
 | `binding_stores.py` | The binding engine's writes into the VM region. |
 | `builtins/exec_sql.py` | The `__exec_sql` builtin and the session, syncpoint and rollback handlers. |
@@ -97,6 +100,7 @@ Paths are relative to `squall/squall/`.
 | `backends/db2.py`, `backends/sqlite.py` | The two backends. |
 | `backends/_stores.py` | A backend's writes to its own cursor map. |
 | `dclgen.py` | Generates a host-variable copybook from a table schema. |
+| `dclgen_field.py` | `DclgenField`: one host-variable field of a generated record. |
 | `dclgen_meta.py` | Derives VARCHAR field metadata from the bridge JSON's data fields. |
 | `dclgen_copybooks.py` | Strips `EXEC SQL DECLARE … TABLE` from DCLGEN copybooks into a staging directory. |
 | `db2_stubs.py`, `stubs/` | COBOL stand-ins for Db2-supplied programs (`DSNTIAC.cbl`), linked into every run unit. |
