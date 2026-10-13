@@ -33,7 +33,11 @@ def test_build_region_forwards_on_abend_to_build_cics_spec(monkeypatch, tmp_path
         region_mod, "_compiled", lambda config, parser, spec, extra_specs: {}
     )
     monkeypatch.setattr(
-        region_mod, "_region", lambda config, wiring, programs: object()
+        region_mod,
+        "_region",
+        lambda config, wiring, programs, on_abend: captured.update(
+            region_on_abend=on_abend
+        ),
     )
     monkeypatch.setattr(region_mod, "_catalog", lambda config: object())
     monkeypatch.setattr(
@@ -52,6 +56,7 @@ def test_build_region_forwards_on_abend_to_build_cics_spec(monkeypatch, tmp_path
     region_mod.build_region(config, "bridge.jar", tmp_path, on_abend=sentinel)  # type: ignore[reportArgumentType]
 
     assert captured["on_abend"] is sentinel
+    assert captured["region_on_abend"] is sentinel
 
 
 def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path):
@@ -74,7 +79,7 @@ def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path)
         region_mod, "_compiled", lambda config, parser, spec, extra_specs: {}
     )
     monkeypatch.setattr(
-        region_mod, "_region", lambda config, wiring, programs: object()
+        region_mod, "_region", lambda config, wiring, programs, on_abend: object()
     )
     monkeypatch.setattr(region_mod, "_catalog", lambda config: object())
     monkeypatch.setattr(

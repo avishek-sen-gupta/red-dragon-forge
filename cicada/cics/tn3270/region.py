@@ -143,7 +143,10 @@ def _compiled(
 
 
 def _region(
-    config: RegionConfig, wiring: _Wiring, programs: Mapping[str, LinkedProgram]
+    config: RegionConfig,
+    wiring: _Wiring,
+    programs: Mapping[str, LinkedProgram],
+    on_abend: Callable[[], None],
 ) -> CicsRegion:
     return CicsRegion(
         programs,
@@ -155,6 +158,7 @@ def _region(
         start_queue=wiring.start_queue,
         max_steps=_MAX_STEPS,
         min_commarea_len=config.min_commarea_len,
+        on_abend=on_abend,
     )
 
 
@@ -186,7 +190,7 @@ def build_region(
     )
     parser = _parser(config, bridge_jar, work_dir / "sym")
     fill(program_cache, _compiled(config, parser, spec, extra_specs))
-    region = _region(config, wiring, program_cache)
+    region = _region(config, wiring, program_cache, on_abend)
     driver = PseudoConversationalDriver(
         region, wiring.screen_channel, frozenset(config.transactions)
     )
