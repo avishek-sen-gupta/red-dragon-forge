@@ -18,7 +18,8 @@ SQL runs against a `SqlBackend`. Two backends ship:
   the shape of a batch program.
 - Composed: `red_dragon_forge` passes squall's `CoprocessorSpec` and cicada's to
   `interpreter.project.coprocessor_compile.compile_program`, which builds one program for
-  CICS + Db2.
+  CICS + Db2 and returns its `LinkedProgram`. Because each `__exec_sql` call carries its own
+  statement, a compiled SQL program runs in any process.
 
 ## Passive design
 

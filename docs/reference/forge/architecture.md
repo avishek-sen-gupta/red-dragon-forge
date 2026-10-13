@@ -20,6 +20,12 @@ a multi-language interpreter vendored at `vendor/red-dragon`. The forge never mo
 RedDragon exposes one seam, `CoprocessorSpec`, in `interpreter.project.coprocessor_compile`. A
 spec bundles a dialect parser and a lowering strategy for one kind of `EXEC` block.
 `compile_program` takes a list of specs and compiles one COBOL program with all of them.
+It returns the `LinkedProgram` alone. Compilation runs in three stages chained through files —
+`.ast.json`, `.unit.json`, `.linked.json` — named by a digest of the source and the lowering
+settings, including each spec's strategy `name`; the program a caller gets is read back from
+the linked file ([decision record](../../records/design/2026-10-13-compiled-cobol-is-files.md)).
+A strategy's lowering leaves nothing a run needs outside the IR, so a compiled program runs in
+any process.
 
 Each runtime lowers its `EXEC` statements to `CallFunction` IR that calls builtins the runtime
 registers. RedDragon's VM has no CICS, SQL or JCL knowledge of its own.
