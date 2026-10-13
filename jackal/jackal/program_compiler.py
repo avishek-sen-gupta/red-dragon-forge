@@ -45,7 +45,7 @@ class ProgramCompiler:
             bridge_jar=self.bridge_jar,
             copybook_dirs=list(self.copybook_dirs),
         )
-        _, linked = compile_program(
+        linked = compile_program(
             source.encode("utf-8"),
             parser,
             self.coprocessors,

@@ -64,9 +64,7 @@ def test_sql_only_spec_selects_into(bridge_jar):
     spec = build_sql_spec(connections={"SAMPLE": backend})
     parser = make_parser(bridge_jar)
 
-    _frontend, linked = compile_program(
-        _SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec]
-    )
+    linked = compile_program(_SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec])
 
     entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
 

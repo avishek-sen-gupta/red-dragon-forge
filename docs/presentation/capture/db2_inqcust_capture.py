@@ -270,7 +270,7 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
         initial_connector=NamedDbConnector("SAMPLE"),
     )
     parser = make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY])
-    _f, inq_linked = compile_program(
+    inq_linked = compile_program(
         INQCUST_CBL.read_bytes(), parser, [inq_cics, inq_sql]
     )
     wrap_spec = build_cics_spec(
@@ -279,13 +279,13 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
         result_holder=result_holder,
         program_cache={"INQCUST": inq_linked},
     )
-    wrap_frontend, wrap_linked = compile_program(
+    wrap_linked = compile_program(
         inq._WRAPPER_PROGRAM.encode("utf-8"),
         make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY]),
         [wrap_spec],
     )
     return CompiledInqcust(
-        wrap_linked, wrap_frontend.data_layout, context_holder, result_holder
+        wrap_linked, wrap_linked.data_layout, context_holder, result_holder
     )
 
 
@@ -464,7 +464,7 @@ def _run_composed(source: str, backend: SqlBackend, transid: str):
         applid="FORGEAPP",
     )
     sql_spec = build_sql_spec(connections={"SAMPLE": backend})
-    _f, linked = compile_program(
+    linked = compile_program(
         source.encode("utf-8"),
         make_parser(os.environ["PROLEAP_BRIDGE_JAR"]),
         [cics_spec, sql_spec],

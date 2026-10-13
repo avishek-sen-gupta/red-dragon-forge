@@ -121,7 +121,7 @@ def _compile_one(
         parser,
         specs,
         source_search_dirs=config.source_dirs,
-    )[1]
+    )
 
 
 def _compiled(

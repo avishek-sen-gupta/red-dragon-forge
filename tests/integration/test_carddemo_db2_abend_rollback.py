@@ -115,7 +115,7 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
     )
     parser = make_parser(bridge_jar)
 
-    _frontend, linked = compile_program(
+    linked = compile_program(
         program_source.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
 

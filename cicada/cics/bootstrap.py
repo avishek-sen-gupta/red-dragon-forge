@@ -66,7 +66,7 @@ def compile_cics_program(
     """
     from interpreter.project.coprocessor_compile import compile_program
 
-    _frontend, linked = compile_program(
+    linked = compile_program(
         source,
         parser,
         [spec],

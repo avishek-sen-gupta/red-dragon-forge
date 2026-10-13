@@ -69,7 +69,7 @@ def build_record(
     from interpreter.project.entry_point import EntryPoint
     from interpreter.run import initial_vm_state, run_linked
 
-    _, linked = compile_cobol(src.encode(), parser=parser, copybook_dirs=list(copybook_dirs), tolerant=True)
+    linked = compile_cobol(src.encode(), parser=parser, copybook_dirs=list(copybook_dirs), tolerant=True)
     entry_point = EntryPoint.function(lambda f: "init_params" not in str(f.name))
     vm = run_linked(linked, entry_point, max_steps=500_000, initial_vm=initial_vm_state())
     vm.data_layout = linked.data_layout

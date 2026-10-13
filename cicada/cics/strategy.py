@@ -1166,6 +1166,8 @@ Lowerer: TypeAlias = (
 class CicsLoweringStrategy:
     """Full CICS lowering strategy. Inject at CobolFrontend construction for CICS mode."""
 
+    name = "cics"
+
     def __init__(
         self,
         context_holder: Holder[CicsContext],

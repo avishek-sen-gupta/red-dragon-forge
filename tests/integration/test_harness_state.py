@@ -20,7 +20,7 @@ _PROGRAM = b"""       IDENTIFICATION DIVISION.
 
 
 def test_read_vm_field_reads_working_storage_not_the_run_unit_region():
-    _, linked = compile_cobol(_PROGRAM, parser=make_cobol_parser())
+    linked = compile_cobol(_PROGRAM, parser=make_cobol_parser())
     vm = run_linked(
         linked,
         EntryPoint.function(lambda f: str(f.name) == "func_hstate_0"),

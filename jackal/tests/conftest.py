@@ -1,4 +1,6 @@
 import os
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -33,3 +35,12 @@ def carddemo_home() -> Path:
     if not home.is_dir():
         pytest.skip(f"no CardDemo checkout at {home}")
     return home
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _compiles_stay_in_the_session_temp_dir(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    tempfile.tempdir = str(tmp_path_factory.mktemp("compile"))
+    yield
+    tempfile.tempdir = None

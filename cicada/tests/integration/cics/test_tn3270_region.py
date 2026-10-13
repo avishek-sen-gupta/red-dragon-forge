@@ -37,6 +37,8 @@ class _NoOpStrategy:
     statement -- ``handles`` always returns False, so ``lower`` is never
     called and this strategy has no effect on any compiled program."""
 
+    name = "noop"
+
     def handles(self, stmt: Any) -> bool:
         return False
 
