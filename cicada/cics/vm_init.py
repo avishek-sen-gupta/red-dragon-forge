@@ -16,11 +16,12 @@ if TYPE_CHECKING:
 def make_cics_initial_vm(context: "CicsContext", ca_bytes: bytes) -> Any:
     """Build a fresh VMState with rgn_commarea and standard CICS locals.
 
-    The COMMAREA is argument 0 of __call_arguments, so it binds the program's
-    first LINKAGE 01 -- DFHCOMMAREA.
+    The COMMAREA is argument 0 of the entry parameter, so it binds the
+    program's first LINKAGE 01 -- DFHCOMMAREA.
     """
     from interpreter.address import Address  # noqa: PLC0415
     from interpreter.cobol.call_arguments import call_arguments  # noqa: PLC0415
+    from interpreter.cobol.program_object import ARGUMENTS_PARAM  # noqa: PLC0415
     from interpreter.vm.vm_types import StackFrame, VMState  # noqa: PLC0415
 
     vm = VMState()
@@ -33,7 +34,7 @@ def make_cics_initial_vm(context: "CicsContext", ca_bytes: bytes) -> Any:
                 VarName("__cics_transid"): typed(context.transid, UNKNOWN),
                 VarName("__cics_eibcalen"): typed(len(ca_bytes), UNKNOWN),
                 VarName("__cics_eibaid"): typed(context.eibaid, UNKNOWN),
-                VarName("__call_arguments"): call_arguments(vm, [commarea_addr]),
+                ARGUMENTS_PARAM: call_arguments(vm, [commarea_addr]),
             },
         )
     )
@@ -41,20 +42,7 @@ def make_cics_initial_vm(context: "CicsContext", ca_bytes: bytes) -> Any:
 
 
 def make_entry_point(program: Any) -> Any:
-    """Select the right EntryPoint predicate for a LinkedProgram.
-
-    Uses entry_func_label when present (multi-module link); otherwise falls
-    back to the bare func_* prefix predicate.
-    """
+    """Enter the program at the entry label its compile recorded."""
     from interpreter.run import EntryPoint  # noqa: PLC0415
 
-    entry_label = getattr(program, "entry_func_label", None)
-    if entry_label is not None:
-        entry_label_str = str(entry_label)
-        return EntryPoint.function(
-            lambda ref, _lbl=entry_label_str: str(ref.label) == _lbl
-        )
-    return EntryPoint.function(
-        lambda ref: str(ref.label).startswith("func_")
-        and not str(ref.label).startswith("func_init_params_")
-    )
+    return EntryPoint.function(lambda ref: ref.label == program.entry_func_label)

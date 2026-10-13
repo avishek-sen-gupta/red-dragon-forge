@@ -37,6 +37,7 @@ def _build_initial_vm(context: CicsContext):
     region and a main frame carrying the transid / EIBCALEN / EIBAID / params."""
     from interpreter.address import Address
     from interpreter.cobol.call_arguments import call_arguments
+    from interpreter.cobol.program_object import ARGUMENTS_PARAM
     from interpreter.func_name import FuncName
     from interpreter.types.type_expr import UNKNOWN
     from interpreter.types.typed_value import typed
@@ -53,7 +54,7 @@ def _build_initial_vm(context: CicsContext):
                 VarName("__cics_transid"): typed(context.transid, UNKNOWN),
                 VarName("__cics_eibcalen"): typed(len(context.commarea), UNKNOWN),
                 VarName("__cics_eibaid"): typed(context.eibaid, UNKNOWN),
-                VarName("__call_arguments"): call_arguments(vm, [commarea_addr]),
+                ARGUMENTS_PARAM: call_arguments(vm, [commarea_addr]),
             },
         )
     )
@@ -61,21 +62,10 @@ def _build_initial_vm(context: CicsContext):
 
 
 def _entry_point(program: Any):
-    """Mirror run_cics()'s entry resolution: the program's own func label if the
-    bootstrap recorded one, else the sole bare ``func_*`` (not ``func_init_params_``).
-    """
+    """Mirror run_cics()'s entry: the label the compile recorded."""
     from interpreter.run import EntryPoint
 
-    entry_label = getattr(program, "entry_func_label", None)
-    if entry_label is not None:
-        entry_label_str = str(entry_label)
-        return EntryPoint.function(
-            lambda ref, _lbl=entry_label_str: str(ref.label) == _lbl
-        )
-    return EntryPoint.function(
-        lambda ref: str(ref.label).startswith("func_")
-        and not str(ref.label).startswith("func_init_params_")
-    )
+    return EntryPoint.function(lambda ref: ref.label == program.entry_func_label)
 
 
 class ConversationalRegion:

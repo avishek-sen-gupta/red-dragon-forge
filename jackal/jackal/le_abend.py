@@ -5,15 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from interpreter.address import Address
-from interpreter.field_name import FieldName
-from interpreter.var_name import VarName
+from interpreter.cobol.program_object import WORKING_STORAGE_FIELD, program_var
 from interpreter.vm.vm_types import Pointer, VMState
 from jackal.model import UserAbend
 
 LE_STUBS = Path(__file__).parent / "le_stubs"
 
-_SINGLETON = VarName("__prog_CEE3ABD")
-_WORKING_STORAGE = FieldName("ws_handle")
+_SINGLETON = program_var("CEE3ABD")
+_WORKING_STORAGE = WORKING_STORAGE_FIELD
 _CODE_BYTES = 4
 _NOT_CALLED = -1
 

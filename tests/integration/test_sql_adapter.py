@@ -68,20 +68,7 @@ def test_sql_only_spec_selects_into(bridge_jar):
         _SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec]
     )
 
-    entry_point = EntryPoint.top_level()
-    if linked.func_symbol_table:
-        proc_label = next(
-            (
-                label
-                for label in linked.func_symbol_table
-                if not str(label).startswith("func_init_params_")
-            ),
-            None,
-        )
-        if proc_label is not None:
-            entry_point = EntryPoint.function(
-                lambda ref, _l=proc_label: ref.label == _l
-            )
+    entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
 
     initial_vm = VMState()
     initial_vm.data_layout = linked.data_layout

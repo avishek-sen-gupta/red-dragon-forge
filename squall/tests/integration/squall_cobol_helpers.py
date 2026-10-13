@@ -121,19 +121,7 @@ def run_cobol(
     # For COBOL, use function-entry mode so run_linked runs the WS init block
     # (phase 1) then dispatches into func_<pid>_0 (phase 2).
     # Without this, only the init block runs and __ws_region is never in scope.
-    entry_point = EntryPoint.top_level()
-    if linked.func_symbol_table:
-        proc_label = next(
-            (
-                label
-                for label in linked.func_symbol_table
-                if not str(label).startswith("func_init_params_")
-            ),
-            None,
-        )
-        if proc_label is not None:
-            _label = proc_label
-            entry_point = EntryPoint.function(lambda ref: ref.label == _label)
+    entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
 
     # Pre-populate data_layout on initial_vm so builtins that run DURING
     # execution (e.g. __exec_sql writing to WS fields) can find the layout.

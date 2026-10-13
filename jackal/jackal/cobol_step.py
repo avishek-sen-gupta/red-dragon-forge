@@ -7,6 +7,7 @@ from pathlib import Path
 
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
+from interpreter.cobol.program_object import ARGUMENTS_PARAM
 from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.func_name import FuncName
 from interpreter.project.entry_point import EntryPoint
@@ -19,7 +20,6 @@ from interpreter.run import (
     run_linked_resumable,
 )
 from interpreter.run import Completed as RunCompleted
-from interpreter.var_name import VarName
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
 from jackal.cobol_files import AllocatedFileIOProvider
@@ -106,23 +106,12 @@ def _parm_vm(
         call_stack=[
             StackFrame(
                 function_name=FuncName("__jcl_entry__"),
-                local_vars={VarName("__call_arguments"): arguments},
+                local_vars={ARGUMENTS_PARAM: arguments},
             )
         ],
     )
 
 
 def _entry_point(linked: LinkedProgram) -> EntryPoint:
-    """For COBOL, mirror run()'s entry-point switch: when func_symbol_table is
-    populated, use function-entry mode so run_linked runs the init block (phase
-    1, including RETURN-CODE region setup) then dispatches into the PROCEDURE
-    DIVISION function (phase 2)."""
-    procedures = [
-        label
-        for label in linked.func_symbol_table
-        if not str(label).startswith("func_init_params_")
-    ]
-    if not procedures:
-        return EntryPoint.top_level()
-    entry = procedures[0]
-    return EntryPoint.function(lambda ref: ref.label == entry)
+    """Enter the program at the entry label its compile recorded."""
+    return EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
