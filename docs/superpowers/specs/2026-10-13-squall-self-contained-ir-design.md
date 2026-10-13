@@ -6,9 +6,12 @@ Date: 2026-10-13. Status: approved in brainstorm. Precedes red-dragon-ajps
 ## The idea
 
 Everything `__exec_sql` needs to run a statement is written into that
-statement's own call site. Nothing is looked up in objects the lowering filled.
-A program lowered in one process then runs in another, which is what persisted
-lowered units require.
+statement's own call site. Nothing is looked up in objects the lowering or the
+source rewrite filled. A program lowered in one process then runs in another,
+which is what persisted lowered units require.
+
+Ruling (user, 2026-10-13): as much information as possible travels in the IR,
+unless that makes no logical sense.
 
 ## Why
 
@@ -20,19 +23,39 @@ plan list; the IR carries only the list index:
 %r = call_function __exec_sql %i
 ```
 
-The builtin closes over that list, over a cursor map that
-`preprocess_program_dict` fills from WORKING-STORAGE `DECLARE CURSOR`s, and over
-a field-metadata map extended with VARCHAR groups inferred from the program's
-DATA DIVISION. A fresh process has empty stores, so a stored unit's indices
-point at nothing.
+The builtin closes over that list and over two more stores filled at compile
+time:
 
+- a cursor map, filled by `preprocess_program_dict` from WORKING-STORAGE
+  `DECLARE CURSOR`s;
+- a field-metadata map, filled from two places: the DCLGEN JSON sidecars the
+  source rewrite reads beside each `EXEC SQL INCLUDE`d copybook, and VARCHAR
+  groups inferred from the program's DATA DIVISION.
+
+A fresh process has empty stores, so a stored unit's indices point at nothing.
 `SharedSqlStores` exists only because the last-built strategy's builtin is the
-one registered, so every program's pools have to be reachable from it
+one registered, so every program's stores have to be reachable from it
 (forge-2xy).
 
 ## Design
 
-### 1. Statements carry their text
+### 1. No DCLGEN sidecars
+
+squall's DCLGEN (`squall/squall/dclgen.py`) writes a copybook and a
+`<RECORD>.json` sidecar from the same table schema. The sidecar repeats what the
+copybook already says: each category (binary COMP, COMP-3, `PIC X`) is what
+`data_layout` derives from the PIC and USAGE, and binding encodes and decodes by
+`data_layout`. Its one other fact, a VARCHAR group's length and text children,
+is the 49-level pair in the copybook, which `derive_field_meta` already infers.
+Its only remaining use is `validate_field_meta`, a per-call check that the JSON
+and the copybook agree.
+
+The sidecar goes: DCLGEN writes the copybook only, the source rewrite returns only the
+rewritten source, and `validate_field_meta`, `FieldMetaMismatch` and the
+strategy's `field_meta` constructor argument are deleted. `tolerant` keeps its
+other job, skipping host variables missing from the layout.
+
+### 2. Statements carry their text
 
 Every executable EXEC SQL lowers to a call whose first argument is the
 statement's text:
@@ -42,10 +65,12 @@ statement's text:
 %r = call_function __exec_sql %s
 ```
 
-The builtin parses the text with `parse_exec_sql`, memoised per process by
-text, so a PERFORM loop parses a statement once.
+The lowering still parses the statement, to find its host variables (section 4)
+and its WHENEVER directives; it keeps nothing. The builtin parses the text with
+`parse_exec_sql`, memoised per process by text, so a PERFORM loop parses a
+statement once.
 
-### 2. OPEN carries its cursor's declaration
+### 3. OPEN carries its cursor's declaration
 
 `DECLARE CURSOR` is not an executable statement (Db2 SQL reference) and must
 precede references to the cursor. The lowering resolves each OPEN to its
@@ -63,52 +88,52 @@ lowering data. An OPEN whose cursor has no declaration in the program lowers to
 a call with its own text only, and the builtin reports the unknown-cursor
 SQLCODE it reports today.
 
-### 3. Inferred VARCHAR shapes travel with the statement
+### 4. VARCHAR shapes travel with the statement
 
-The inferred part of `field_meta` is the DCLGEN VARCHAR groups
-(`derive_field_meta`): per group, its length child and its text child. For each
-host variable a statement binds that is such a group, the call carries three
-`str` arguments: the group name, its length child, its text child. Category,
-offset and length come from `data_layout`, as they do now.
+For each host variable a statement binds that is an inferred VARCHAR group, the
+call carries three `str` arguments: the group name, its length child, its text
+child. For an OPEN, the bound host variables are the OPEN's own (USING) or else
+the declaration's.
 
-Sidecar `field_meta` stays run-time configuration on the strategy and keeps
-precedence over an inferred shape.
+### 5. The builtin
 
-### 4. The builtin
+`__exec_sql(text, [declaration], *varchar_shapes)`. An OPEN with one argument
+names an undeclared cursor; otherwise its second argument is the declaration.
+Every other kind's arguments after the text are VARCHAR shapes, three at a time.
+The builtin holds no plan list, no cursor declarations and no field metadata;
+the per-run cursor registry keeps only open-cursor state.
 
-`__exec_sql(text, [declaration], *varchar_shapes)` — the argument layout is
-fixed per statement kind (OPEN has a declaration; others do not), so the
-builtin never guesses. It holds no plan list and no cursor declarations; the
-per-run cursor registry keeps only open-cursor state.
+### 6. What is deleted
 
-### 5. What is deleted
-
-`SharedSqlStores`, the plan list, the cursor and inferred-metadata stores,
-`merge_cursors`, `merge_field_meta`, and the shared-store wiring in
-`build_sql_spec`. WHENEVER is unchanged: it is lowering-only state already
+`SharedSqlStores`, the plan list, the cursor and field-metadata stores,
+`merge_cursors`, `merge_field_meta`, `absorb_field_meta`, the sidecar reader and
+writer, `validate_field_meta`, `FieldMetaMismatch`, and the shared-store wiring
+in `build_sql_spec`. WHENEVER is unchanged: it is lowering-only state already
 turned into IR.
 
 ## Behaviour changes
 
-- Two programs that use one host-variable name with different VARCHAR shapes
-  no longer see each other's metadata.
+- Two programs that use one host-variable name with different VARCHAR shapes no
+  longer see each other's metadata.
 - A statement's IR shows its SQL text.
-- A malformed statement is reported when it runs, not when it is lowered, with
-  the same exception `parse_exec_sql` raises today.
+- No check that a DCLGEN JSON agrees with its copybook; there is no JSON.
+- A PROCEDURE DIVISION `DECLARE CURSOR` no longer has to execute before its
+  OPEN; it only has to precede it in the source.
 
 ## Tests
 
 - Unit: the IR of a SELECT is `const <text>` + `__exec_sql`; an OPEN of a
-  WORKING-STORAGE cursor carries the declaration text; a DECLARE CURSOR emits
-  no call; a VARCHAR host variable's shape appears as three arguments.
+  WORKING-STORAGE cursor carries the declaration text; a DECLARE CURSOR emits no
+  call; a VARCHAR host variable's shape appears as three arguments.
 - Unit: the builtin parses a repeated statement once.
 - Cross-process: lower a SQL program, write its IR and data layout with pickle
   to a temp file, load it in a fresh process (a subprocess) with a fresh
   strategy, run it against SQLite, and compare host variables with an
-  in-process run. Proves no lowering state is needed at run time.
+  in-process run. Proves no compile-time state is needed at run time.
 - Existing suites: squall, the root suite's SQL and CICS+SQL composition tests,
-  and the Db2-backed CardDemo tests, with assertions unchanged. Tests that read
-  `_cursors_store` or `SharedSqlStores` change to assert on IR or behaviour.
+  and the Db2-backed CardDemo tests, with assertions unchanged. Tests of the
+  deleted stores and sidecars are deleted; tests that read `_cursors_store`
+  change to assert on IR or behaviour.
 
 ## Out of scope
 
