@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.cobol_statements import dialect_parsers_in_scope
 from cobol_asg.subprocess_runner import RealSubprocessRunner
@@ -53,17 +55,12 @@ class ProgramCompiler:
                 for pgm, linked in self.linked.items()
             },
         )
-        sources = (source.encode("utf-8"), *_callee_sources(linked))
         with dialect_parsers_in_scope([s.dialect_parser for s in self.coprocessors]):
-            asgs = tuple(parser.parse(text) for text in sources)
+            asgs = tuple(_parsed(ast) for ast in linked.ast_paths.values())
         return CompiledProgram(
             linked, tuple(f for asg in asgs for f in program_files(asg))
         )
 
 
-def _callee_sources(linked: LinkedProgram) -> Sequence[bytes]:
-    return tuple(
-        path.read_bytes()
-        for path in linked.modules
-        if path != _MAIN_MODULE and path.is_file()
-    )
+def _parsed(ast: Path) -> CobolASG:
+    return CobolASG.from_dict(json.loads(ast.read_text(encoding="utf-8")))

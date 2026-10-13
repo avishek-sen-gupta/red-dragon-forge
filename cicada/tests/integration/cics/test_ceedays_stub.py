@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from interpreter.constants import Language
 from interpreter.cobol.features import CobolFeature
 from cics.le_stubs import LE_STUBS_DIR
-from interpreter.project.compiler import compile_directory
+from cobol_asg.cobol_parser import make_cobol_parser
+from interpreter.project.cobol_compile import compile_cobol
+from interpreter.project.source_file import SourceFile
 from interpreter.run import run_linked, EntryPoint, initial_vm_state
 from interpreter.var_name import VarName
 from interpreter.field_name import FieldName
@@ -58,10 +59,12 @@ def _caller_src(date_text: str) -> str:
 
 def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
     """Compile DRIVER + the CEEDAYS stub, run, and return WS-SEV (the severity)."""
-    (tmp_path / "DRIVER.cbl").write_text(_caller_src(date_text))
-    (tmp_path / "CEEDAYS.cbl").write_text((LE_STUBS_DIR / "CEEDAYS.cbl").read_text())
-
-    linked = compile_directory(tmp_path, Language.COBOL)
+    stub = LE_STUBS_DIR / "CEEDAYS.cbl"
+    _, linked = compile_cobol(
+        _caller_src(date_text).encode(),
+        parser=make_cobol_parser(),
+        programs=(SourceFile(stub, stub.read_bytes()),),
+    )
     vm = run_linked(
         linked,
         EntryPoint.function(
