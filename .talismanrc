@@ -301,4 +301,6 @@ fileignoreconfig:
   checksum: 6ec4e494a47123880c83693fe506c9dbdec6a772abf9e192b4a1a1ceb4d1d711
 - filename: jackal/jackal/dcb_label.py
   checksum: 8912ca684372bf0a70d73a72b50956113efaaf684f2dac6c3ddaddf5f81af780
+- filename: docs/superpowers/plans/2026-10-13-squall-self-contained-ir.md
+  checksum: 01cff98a18570ed989b9486a1096802fd02ef3d90531cb546aa8151b2e9e4aef
 version: "1.0"
