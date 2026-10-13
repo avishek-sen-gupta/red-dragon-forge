@@ -1163,10 +1163,12 @@ Lowerer: TypeAlias = (
 )
 
 
+_BLOCKING_NAME = "cics"
+_CONVERSATIONAL_NAME = "cics-conversational"
+
+
 class CicsLoweringStrategy:
     """Full CICS lowering strategy. Inject at CobolFrontend construction for CICS mode."""
-
-    name = "cics"
 
     def __init__(
         self,
@@ -1200,7 +1202,9 @@ class CicsLoweringStrategy:
         )
         # Conversational mode lowers EXEC CICS RECEIVE MAP to a SUSPEND (yielding
         # to a run_resumable/resume driver) instead of a blocking input-queue read.
-        self._conversational = conversational
+        self._conversational, self.name = conversational, (
+            _CONVERSATIONAL_NAME if conversational else _BLOCKING_NAME
+        )
         self._lowerers = self._verb_lowerers()
         wiring = _wiring(context_holder, result_holder, program_cache, td_queue)
         _register_core_builtins(wiring, (applid, sysid, userid), on_abend)

@@ -94,7 +94,8 @@ spec from `build_cics_spec` and returns the `LinkedProgram`. Callees reached by 
 compiled and linked transitively. Each compile writes its AST, unit and linked files into a
 new temporary directory; the region does not reuse them yet (red-dragon-forge-k6l).
 A conversational program is compiled with `CicsLoweringStrategy(conversational=True)`, which
-lowers `RECEIVE MAP` to a VM suspend.
+lowers `RECEIVE MAP` to a VM suspend. The strategy is named `cics-conversational` rather than
+`cics`, so the two modes' compiled files never share a name.
 
 ## Supported verbs
 
