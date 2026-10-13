@@ -187,14 +187,10 @@ class SqlLoweringStrategy:
         plan = parse_exec_sql(text)
         match plan.kind, plan.cursor:
             case Kind.DECLARE_CURSOR, NamedCursor(name=declared):
-                self._scope = self._scope.declaring(declared, text)
-            case Kind.OPEN, NamedCursor(name=opened) if (
-                opened in self._scope.declarations
-            ):
+                self._scope = self._scope.declaring(declared.upper(), text)
+            case Kind.OPEN, NamedCursor(name=opened):
                 self._emit_call(
-                    ctx,
-                    self._open_values(text, plan, self._scope.declarations[opened]),
-                    materialised,
+                    ctx, self._open_values(text, plan, opened), materialised
                 )
             case _:
                 self._emit_call(
@@ -203,15 +199,19 @@ class SqlLoweringStrategy:
                     materialised,
                 )
 
-    def _open_values(
-        self, text: str, plan: ParsedSql, declaration: str
-    ) -> tuple[str, ...]:
-        """An OPEN's call: its text, its declaration, and the shapes of the host
-        variables it binds — its own USING list, else the declaration's."""
+    def _open_values(self, text: str, plan: ParsedSql, cursor: str) -> tuple[str, ...]:
+        """An OPEN's call: its text, then -- when the program declares the cursor
+        (names compare upper-cased, as Db2 folds them) -- its declaration and the
+        shapes of the host variables it binds, its own USING list or else the
+        declaration's."""
         from squall.parser.parse import parse_exec_sql
 
-        bound = plan.in_vars or parse_exec_sql(declaration).in_vars
-        return (text, declaration, *self._shapes(bound))
+        match self._scope.declarations.get(cursor.upper()):
+            case None:
+                return (text,)
+            case declaration:
+                bound = plan.in_vars or parse_exec_sql(declaration).in_vars
+                return (text, declaration, *self._shapes(bound))
 
     def _emit_call(
         self,
