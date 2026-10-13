@@ -9,29 +9,31 @@ Design
 * ``make_exec_sql_builtin`` closes over a **connection registry** (name →
   ``SqlBackend``) and returns a callable with the RedDragon builtin signature
   ``(args, vm) -> BuiltinResult``.
-* The single argument is the ``ParsedSql`` plan produced ONCE at lowering time
-  (``squall.strategy.SqlLoweringStrategy.lower``). The builtin does **no
-  parsing** at run time — it only binds host vars and executes the plan, so a
-  statement in a PERFORM loop is parsed once, not on every pass.
+* The arguments are what the call site carries: the statement's text, an
+  OPEN's cursor declaration text, and the VARCHAR shapes of the host variables
+  it binds (``squall.strategy.SqlLoweringStrategy.lower``). The text is parsed
+  here, memoised per process, so a statement in a PERFORM loop is parsed once.
 * Connection lifecycle is **faithful**: a run starts *disconnected*. ``CONNECT
   TO <db>`` sets the current connection from the registry; ``SET CONNECTION``
   switches it; ``CONNECT RESET`` / ``DISCONNECT`` clears it. Data statements
   route through the current connection and report ``-1024`` when there is none.
   The current connection is the one piece of per-run mutable session state (a
-  ``_ConnState`` holder), alongside the cursor registry.
+  ``_ConnState`` holder), alongside the set of open cursors.
 * Dispatch:
     - ``connect`` / ``set_connection`` / ``disconnect``: manage the session.
     - ``select_into``: bind inputs, execute, write outputs, write SQLCODE.
     - DML kinds with a non-empty query (insert/update/delete/…): execute + write SQLCODE.
-    - Cursor kinds (declare_cursor/open_/fetch/close): driven through the
-      current connection's cursor surface via a per-run cursor registry.
+    - Cursor kinds (open_/fetch/close): driven through the current connection's
+      cursor surface; OPEN carries its declaration. DECLARE CURSOR is
+      declarative and runs nothing.
     - Declare-section bookends: no-op with SQLCODE 0.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import cache
 from typing import TYPE_CHECKING
 
 from squall.backend import SqlBackend
@@ -42,6 +44,7 @@ from squall.binding import (
     write_sqlcode,
 )
 from squall.connector import DbConnector, NamedDbConnector, NullDbConnector
+from squall.parser.parse import parse_exec_sql
 from squall.parser.sql_model import (
     ConnectReset,
     ConnectTo,
@@ -52,7 +55,6 @@ from squall.parser.sql_model import (
     NamedCursor,
     ParsedSql,
 )
-from squall.strategy_stores import ABSENT, Absent
 
 if TYPE_CHECKING:
     from interpreter.types.typed_value import TypedValue
@@ -67,7 +69,7 @@ SQLCODE_CURSOR_NOT_OPEN = -501  # FETCH/CLOSE on a cursor that is not open right
 # same -501 for all three; only a genuinely open cursor is exempt)
 
 # The host-var declare-section bookends are purely declarative — no DB effect.
-_NO_OP_KINDS = frozenset({Kind.BEGIN_DECLARE, Kind.END_DECLARE})
+_NO_OP_KINDS = frozenset({Kind.BEGIN_DECLARE, Kind.END_DECLARE, Kind.DECLARE_CURSOR})
 
 # A module-level singleton rather than a call in make_exec_sql_builtin's own
 # default (B008 — mirrors squall.strategy._NO_CONNECTOR exactly): a fresh
@@ -103,25 +105,40 @@ class _ConnState:
 
 
 @dataclass(frozen=True)
-class _Ctx:
-    """The per-run handler context: the connection registry (name → backend),
-    the mutable current-connection holder, the cursor registry (mutated in place
-    across DECLARE→OPEN→FETCH→CLOSE), the dclgen field metadata, and the set of
-    cursor names currently OPEN.
+class _Undeclared:
+    """An OPEN whose cursor has no declaration in its program."""
 
-    ``cursors`` and ``open_cursors`` answer different questions and must not be
-    conflated: ``cursors`` is "has this name ever been DECLAREd" (it survives
-    OPEN/CLOSE and even task end — see ``_close_all_cursors``), while
-    ``open_cursors`` is "can FETCH/CLOSE act on this name right now". A name can
-    be declared without being open (never OPENed yet, or already CLOSEd), which
-    is exactly the case Db2 reports SQLCODE -501 for.
+
+@cache
+def _parsed(text: str) -> ParsedSql:
+    return parse_exec_sql(text)
+
+
+def _shapes(values: Sequence[str]) -> Mapping[str, FieldMeta]:
+    """VARCHAR field metadata from the call's (group, length child, text child) triples."""
+    return {
+        values[i]: FieldMeta(
+            category="VARCHAR", len_var=values[i + 1], text_var=values[i + 2]
+        )
+        for i in range(0, len(values), 3)
+    }
+
+
+@dataclass(frozen=True)
+class _Ctx:
+    """The handler context: the connection registry (name → backend), the
+    mutable current-connection holder and the set of cursor names currently
+    OPEN — both per run — plus what one call carries: the VARCHAR field
+    metadata of the host variables it binds and, for an OPEN, its cursor's
+    declaration. ``__exec_sql`` derives the per-call context with
+    ``dataclasses.replace``, which shares the per-run state by reference.
     """
 
     connections: Mapping[str, SqlBackend]
     conn: _ConnState
-    cursors: dict[str, ParsedSql]
     open_cursors: set[str]
     field_meta: Mapping[str, FieldMeta]
+    declaration: ParsedSql | _Undeclared
     tolerant: bool = False
 
 
@@ -205,12 +222,6 @@ def _cursor_name(ref) -> str:
             raise AssertionError(f"cursor handler reached with {ref!r}")
 
 
-def _h_declare_cursor(ctx: _Ctx, parsed, vm) -> None:
-    # Declaration only — remember the SELECT + its host vars for OPEN.
-    ctx.cursors[_cursor_name(parsed.cursor)] = parsed
-    write_sqlcode(vm, 0)
-
-
 def _open_declared_cursor(
     backend: SqlBackend, ctx: _Ctx, parsed, decl, name: str, vm
 ) -> None:
@@ -234,8 +245,8 @@ def _open_on(backend: SqlBackend, ctx: _Ctx, parsed, vm) -> None:
     """The OPEN half that needs a live connection — split out of _h_open so
     neither function nests a second is-None guard inside the first."""
     name = _cursor_name(parsed.cursor)
-    match ctx.cursors.get(name):
-        case None:
+    match ctx.declaration:
+        case _Undeclared():
             write_sqlcode(vm, -1)  # cursor not declared
         case decl:
             _open_declared_cursor(backend, ctx, parsed, decl, name, vm)
@@ -300,16 +311,11 @@ def _h_rollback(ctx: _Ctx, _parsed, vm) -> None:
 
 
 def _close_all_cursors(ctx: _Ctx, backend: SqlBackend) -> None:
-    """``backend.close`` is a no-op for a name that was never actually
-    opened, so it's safe to close every DECLAREd cursor unconditionally
-    rather than checking ``open_cursors`` first for each one. The DECLARE
-    registry (``ctx.cursors``) itself is untouched here -- a WORKING-STORAGE
-    DECLARE must survive task end, since nothing will ever re-DECLARE it.
-    ``open_cursors`` is cleared, though: every one of them really is closed
-    now, and a stale entry would let a later FETCH wrongly believe a cursor
-    still open.
+    """Close every open cursor and forget them all: a stale entry would let a
+    later FETCH wrongly believe a cursor still open. A cursor's declaration is
+    not run-time state -- each OPEN carries it -- so nothing else is reset.
     """
-    for name in ctx.cursors:
+    for name in tuple(ctx.open_cursors):
         backend.close(name)
     ctx.open_cursors.clear()
 
@@ -387,7 +393,6 @@ _HANDLERS = {
     Kind.CONNECT: _h_connect,
     Kind.SET_CONNECTION: _h_set_connection,
     Kind.DISCONNECT: _h_disconnect,
-    Kind.DECLARE_CURSOR: _h_declare_cursor,
     Kind.OPEN: _h_open,
     Kind.FETCH: _h_fetch,
     Kind.CLOSE: _h_close,
@@ -412,28 +417,24 @@ def _make_uow_builtin(ctx: _Ctx, effect: Callable[[_Ctx], None]) -> Callable:
     return _uow_builtin
 
 
+def _call_context(ctx: _Ctx, parsed: ParsedSql, rest: Sequence[str]) -> _Ctx:
+    match parsed.kind, rest:
+        case Kind.OPEN, (declaration, *shapes):
+            return replace(
+                ctx, declaration=_parsed(declaration), field_meta=_shapes(shapes)
+            )
+        case _:
+            return replace(ctx, field_meta=_shapes(rest))
+
+
 def make_exec_sql_builtin(
     connections: Mapping[str, SqlBackend],
-    plans: Sequence[ParsedSql],
-    field_meta: Mapping[str, FieldMeta],
     initial_connector: DbConnector = _NO_CONNECTOR,
     *,
     tolerant: bool = False,
-    cursors: dict[str, ParsedSql] | Absent = ABSENT,
 ) -> tuple[Callable, Callable, Callable, Callable]:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
-    (name → backend), the plan pool, and the dclgen *field_meta* map (loaded once
-    by the prepass, shared by reference).
-
-    *cursors*, when given, becomes ``ctx.cursors`` by the SAME object
-    reference rather than a copy — it is ``SqlLoweringStrategy``'s own
-    ``self._cursors_store``, which ``preprocess_program_dict`` populates
-    with ``DECLARE CURSOR`` plans recovered from outside PROCEDURE DIVISION
-    (``squall.data_division_exec_sql``) *after* this function returns. Only
-    sharing the object, not a snapshot of it, lets a later OPEN see those
-    entries. When *cursors* is ``ABSENT`` (the default), a fresh, private
-    dict is built instead — unchanged behaviour for every existing caller
-    that never had WORKING-STORAGE cursors to recover.
+    (name → backend).
 
     The run starts *disconnected*: a data statement before a successful CONNECT
     reports SQLCODE -1024. ``CONNECT TO``/``SET CONNECTION`` select the current
@@ -448,10 +449,10 @@ def make_exec_sql_builtin(
     for programs that do their own ``CONNECT``; pass a ``NamedDbConnector(name)``
     to model the attachment facility instead.
 
-    *plans* is the lowering-time constant pool of ``ParsedSql`` objects
-    (``SqlLoweringStrategy._plans``). Each call site passes its plan's pool index
-    as the single argument; the builtin resolves it and dispatches by kind via
-    ``_HANDLERS`` — it never parses at run time.
+    Each call's first argument is the statement's text. An OPEN's second, when
+    present, is its cursor's declaration; every other argument is a VARCHAR
+    shape, three at a time. The builtin parses the text (memoised) and
+    dispatches by kind via ``_HANDLERS``.
 
     Returns four builtins, all sharing the standard RedDragon signature
     (``(args: list[TypedValue], vm: VMState) -> BuiltinResult``) and the same
@@ -461,23 +462,23 @@ def make_exec_sql_builtin(
     ``syncpoint`` (commit only, cursors stay open — see ``_syncpoint``), and
     ``rollback`` (roll back + close cursors).
     """
-    # Per-run session: the current connection (resolved once, up front, via
-    # initial_connector — disconnected unless it names a real entry) + the
-    # cursor registry (DECLARE records, OPEN reads).
     ctx = _Ctx(
         connections=connections,
         conn=_ConnState(current=initial_connector.connect(connections)),
-        cursors={} if isinstance(cursors, Absent) else cursors,
         open_cursors=set(),
-        field_meta=field_meta,
+        field_meta={},
+        declaration=_Undeclared(),
         tolerant=tolerant,
     )
 
     def __exec_sql(args: Sequence[TypedValue], vm) -> BuiltinResult:
         from interpreter.vm.vm_types import BuiltinResult
 
-        parsed = plans[int(args[0].value)]
-        _HANDLERS.get(parsed.kind, _h_query)(ctx, parsed, vm)
+        values = [str(a.value) for a in args]
+        parsed = _parsed(values[0])
+        _HANDLERS.get(parsed.kind, _h_query)(
+            _call_context(ctx, parsed, values[1:]), parsed, vm
+        )
         return BuiltinResult(value=None)
 
     return (

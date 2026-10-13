@@ -128,16 +128,14 @@ def _make_vm(ws_id: int = 0) -> tuple[_VM, bytearray]:
 
 
 def _session(connections, vm, initial_connector=NullDbConnector()):
-    """One builtin over *connections* + a shared plan pool, bound to *vm*.
-    Returns issue(sql); connection/cursor state persists across calls."""
-    plans: list = []
+    """One builtin over *connections*, bound to *vm*. Returns issue(sql, *rest);
+    connection/cursor state persists across calls."""
     builtin, *_ = make_exec_sql_builtin(
-        connections, plans, {}, initial_connector=initial_connector
+        connections, initial_connector=initial_connector
     )
 
-    def issue(sql: str):
-        plans.append(parse_exec_sql(sql))
-        return builtin([_TV(len(plans) - 1)], vm)
+    def issue(sql: str, *rest: str):
+        return builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     return issue
 

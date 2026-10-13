@@ -8,45 +8,41 @@ Implements ``RedDragonExtensionLoweringStrategy`` (match the protocol
 signatures exactly).  Registered as an element of the
 ``CobolFrontend.extension_strategies`` array.
 
-Slice-1 scope:
-* All ``ExecSqlStatement`` nodes are lowered to a single
-  ``CallFunction("__exec_sql", [<verbatim-text const>])`` call.
+* Every executable ``ExecSqlStatement`` lowers to one ``__exec_sql`` call that
+  carries everything the builtin needs: the statement's text, an OPEN's cursor
+  declaration, and the VARCHAR shapes of the host variables it binds. A
+  lowered program needs nothing from the lowering to run.
+* ``DECLARE CURSOR`` is declarative: it lowers to nothing, and its text travels
+  on the OPEN. WORKING-STORAGE declarations come from the raw bridge JSON
+  (``squall.data_division_exec_sql``); VARCHAR groups from the program's DATA
+  DIVISION (``squall.dclgen_meta``). Both are per program.
 * The ``__exec_sql`` builtin (registered in ``Builtins.TABLE`` at
   construction) handles per-kind dispatch.
-* ``on_procedure_entry`` is a no-op. ``preprocess_program_dict`` derives
-  DCLGEN VARCHAR ``field_meta`` from the raw bridge JSON (see
-  ``squall.dclgen_meta``) and merges it into the live ``field_meta`` view
-  already handed to the ``__exec_sql`` builtin at construction time.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from types import MappingProxyType
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, cast
 
 from squall.backend import SqlBackend
+from squall.binding import varchar_children
 from squall.builtins.exec_sql import make_exec_sql_builtin
 from squall.connector import DbConnector, NullDbConnector
 from squall.data_division_exec_sql import derive_cursors
 from squall.dclgen_meta import derive_field_meta
 from squall.parser.sql_model import (
-    FieldMeta,
     GoTo,
+    HostVar,
+    Kind,
+    NamedCursor,
     ParsedSql,
     WheneverAction,
     WheneverCondition,
 )
-from squall.strategy_stores import (
-    ABSENT,
-    Absent,
-    SharedSqlStores,
-    merge_cursors,
-    merge_field_meta,
-    register,
-)
-from squall.strategy_stores import append as _append_plan
+from squall.program_scope import ProgramScope
+from squall.strategy_stores import register
 
 if TYPE_CHECKING:
     from interpreter.cobol.emit_context import EmitContext
@@ -78,7 +74,6 @@ class SqlLoweringStrategy:
         initial_connector: DbConnector = _NO_CONNECTOR,
         *,
         tolerant: bool = False,
-        stores: SharedSqlStores | Absent = ABSENT,
     ) -> None:
         # The connection registry (name → backend). A run starts disconnected;
         # the program's EXEC SQL CONNECT selects from this registry at run time.
@@ -86,51 +81,16 @@ class SqlLoweringStrategy:
         # modelling a CICS Db2-attached program, which is handed a live thread
         # by the attachment facility and never issues EXEC SQL CONNECT itself.
         self._connections = connections
-        # The three stores below belong to *stores*, not to this instance: a
-        # spec serving several SQL programs passes the same SharedSqlStores to
-        # every strategy it builds, so the one surviving __exec_sql builtin can
-        # still reach every program's plans, cursors and field metadata (see
-        # SharedSqlStores for why only one builtin survives). Omitting it gives
-        # this strategy private stores -- the single-program behaviour every
-        # direct caller has always had.
-        self._stores: SharedSqlStores = (
-            SharedSqlStores() if isinstance(stores, Absent) else stores
-        )
-        # VARCHAR host-var metadata inferred from each program's DATA DIVISION
-        # by ``preprocess_program_dict``, held in a mutable store wrapped in an
-        # immutable, LIVE view: the builtin is registered before
-        # preprocess_program_dict is ever called (see CoprocessorSpec's ordering
-        # guarantee), so nothing but a live, shared view can work.
-        self._field_meta_store: dict[str, FieldMeta] = self._stores.field_meta
-        self._field_meta: Mapping[str, FieldMeta] = MappingProxyType(
-            self._field_meta_store
-        )
         # WHENEVER directive state: condition -> action. Updated in textual order
         # as `lower` sees each WHENEVER statement (precompiler scoping). A stored
         # Continue/NoOpAction disables a previously-active branch (the emit loop
         # no-ops on them).
         self._whenever: dict[WheneverCondition, WheneverAction] = {}
-        # Constant pool of plans parsed at lowering time. Each EXEC SQL site is
-        # lowered to a Const carrying its index here; the builtin closes over the
-        # same list and looks the plan up at run time. Plans never travel through
-        # the IR as objects (the VM's Const handling only round-trips primitives).
-        self._plans: list[ParsedSql] = self._stores.plans
-        # DECLARE CURSOR plans recovered from outside PROCEDURE DIVISION (see
-        # squall.data_division_exec_sql) -- a mutable store handed to the
-        # builtin below by the SAME object, not a copy, exactly like
-        # self._field_meta_store above: preprocess_program_dict populates it
-        # after construction, and only a live shared dict lets OPEN see that
-        # update (CoprocessorSpec's ordering guarantee: the builtin is built
-        # before preprocess_program_dict ever runs).
-        self._cursors_store: dict[str, ParsedSql] = self._stores.cursors
+        # The program being lowered; preprocess_program_dict starts a new one.
+        self._scope = ProgramScope()
         exec_sql_fn, reset_session_fn, syncpoint_fn, rollback_fn = (
             make_exec_sql_builtin(
-                connections,
-                self._plans,
-                self._field_meta,
-                initial_connector=initial_connector,
-                tolerant=tolerant,
-                cursors=self._cursors_store,
+                connections, initial_connector=initial_connector, tolerant=tolerant
             )
         )
         self._register_builtins(
@@ -166,16 +126,15 @@ class SqlLoweringStrategy:
         return isinstance(stmt, ExecSqlStatement)
 
     def preprocess_program_dict(self, data: dict) -> dict:  # type: ignore[type-arg]
-        """Derive DCLGEN VARCHAR ``field_meta`` and WORKING-STORAGE
-        ``DECLARE CURSOR`` plans from *data* (the raw bridge JSON) and merge
-        both into their live stores. *data* itself is returned
-        unchanged; this method's effect is entirely the two store side
-        effects (see ``squall.strategy_stores`` for why ``merge_field_meta``
-        must mutate in place rather than rebind, and the constructor's own
-        comment on ``self._cursors_store`` for cursors).
-        """
-        merge_field_meta(self._field_meta_store, derive_field_meta(data))
-        merge_cursors(self._cursors_store, derive_cursors(data))
+        """Start a program: its WORKING-STORAGE cursor declarations and its
+        inferred VARCHAR groups, both for this program only. *data* itself is
+        returned unchanged."""
+        self._scope = ProgramScope(
+            declarations=derive_cursors(data),
+            varchar={
+                name.upper(): meta for name, meta in derive_field_meta(data).items()
+            },
+        )
         return data
 
     def on_procedure_entry(
@@ -198,7 +157,6 @@ class SqlLoweringStrategy:
         followed by the synthetic ``IF SQLCODE <cmp> <val> GO TO <target>`` for
         each active (non-CONTINUE) condition.
         """
-        from squall.parser.parse import parse_exec_sql
         from squall.statements import ExecSqlStatement
 
         # The frontend only ever calls lower() for a stmt handles() accepted
@@ -217,41 +175,80 @@ class SqlLoweringStrategy:
             )
             return
 
-        # Parse the plan ONCE, here at lowering time. The statement is static, so
-        # the Lark parse must not run at execution time (it would re-parse on
-        # every pass through a PERFORM loop). The runtime builtin receives the
-        # already-parsed ParsedSql plan and only binds + executes.
-        plan = parse_exec_sql(exec_sql_stmt.text)
+        self._lower_statement(ctx, exec_sql_stmt.text, materialised)
 
-        # append() (squall.strategy_stores) is the __exec_sql builtin's own
-        # closed-over plan pool -- this is the one place lowering writes to it.
-        plan_index = _append_plan(self._plans, plan)
-        self._emit_exec_sql_call(ctx, plan_index)
+    def _lower_statement(
+        self, ctx: EmitContext, text: str, materialised: MaterialisedSectionedLayout
+    ) -> None:
+        """A DECLARE CURSOR is remembered for its OPENs and emits nothing; every
+        other statement becomes a self-contained ``__exec_sql`` call."""
+        from squall.parser.parse import parse_exec_sql
 
-        # Automatic SQLCODE branching for each active WHENEVER condition.
+        plan = parse_exec_sql(text)
+        match plan.kind, plan.cursor:
+            case Kind.DECLARE_CURSOR, NamedCursor(name=declared):
+                self._scope = self._scope.declaring(declared, text)
+            case Kind.OPEN, NamedCursor(name=opened) if (
+                opened in self._scope.declarations
+            ):
+                self._emit_call(
+                    ctx,
+                    self._open_values(text, plan, self._scope.declarations[opened]),
+                    materialised,
+                )
+            case _:
+                self._emit_call(
+                    ctx,
+                    (text, *self._shapes((*plan.in_vars, *plan.out_vars))),
+                    materialised,
+                )
+
+    def _open_values(
+        self, text: str, plan: ParsedSql, declaration: str
+    ) -> tuple[str, ...]:
+        """An OPEN's call: its text, its declaration, and the shapes of the host
+        variables it binds — its own USING list, else the declaration's."""
+        from squall.parser.parse import parse_exec_sql
+
+        bound = plan.in_vars or parse_exec_sql(declaration).in_vars
+        return (text, declaration, *self._shapes(bound))
+
+    def _emit_call(
+        self,
+        ctx: EmitContext,
+        values: tuple[str, ...],
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        """The ``__exec_sql`` call, then the SQLCODE branch of each active WHENEVER."""
+        self._emit_exec_sql_call(ctx, values)
         self._emit_whenever_checks(ctx, materialised)
 
-    def _emit_exec_sql_call(self, ctx: EmitContext, plan_index: int) -> None:
-        """Emit the ``Const(plan_index)`` + ``CallFunction(__exec_sql)`` pair
-        every non-WHENEVER EXEC SQL statement lowers to.
+    def _shapes(self, host_vars: Sequence[HostVar]) -> tuple[str, ...]:
+        """(group, length child, text child) for each bound VARCHAR group."""
+        return tuple(
+            part
+            for hv in host_vars
+            if hv.name.upper() in self._scope.varchar
+            for part in (
+                hv.name,
+                *varchar_children(self._scope.varchar[hv.name.upper()]),
+            )
+        )
 
-        Carries only the plan's pool index through the IR (a primitive the
-        VM's ``Const`` handling round-trips cleanly); the builtin resolves it
-        back to the parsed plan at run time.
-        """
+    def _emit_exec_sql_call(self, ctx: EmitContext, values: tuple[str, ...]) -> None:
+        """Emit one ``Const`` per call-site value, then ``__exec_sql`` over them."""
         from interpreter.func_name import FuncName
         from interpreter.instructions import CallFunction, Const
         from interpreter.types.type_expr import UNKNOWN
 
-        index_reg = ctx.fresh_reg()
-        ctx.emit_inst(Const(result_reg=index_reg, value=plan_index, type_expr=UNKNOWN))
-
-        result_reg = ctx.fresh_reg()
+        regs = tuple(ctx.fresh_reg() for _ in values)
+        for reg, value in zip(regs, values, strict=True):
+            ctx.emit_inst(Const(result_reg=reg, value=value, type_expr=UNKNOWN))
         ctx.emit_inst(
             CallFunction(
-                result_reg=result_reg,
+                result_reg=ctx.fresh_reg(),
                 func_name=FuncName(_BUILTIN_NAME),
-                args=(index_reg,),
+                args=regs,
             )
         )
 
