@@ -267,7 +267,6 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
     )
     inq_sql = build_sql_spec(
         connections={"SAMPLE": recorder},
-        copybook_dirs=[inq._BANK_OF_Z_COPY],
         initial_connector=NamedDbConnector("SAMPLE"),
     )
     parser = make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY])

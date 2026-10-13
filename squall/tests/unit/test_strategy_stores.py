@@ -8,20 +8,19 @@ Covers the review finding fixed here: a flat ``SharedSqlStores.field_meta``
 shared across an entire spec must not let an EARLIER program's bridge-derived
 (inferred) metadata outrank a LATER program's own bridge-derived metadata for
 the later program's own field, merely because the earlier program compiled
-first. An explicit sidecar declaration still outranks any inference.
+first.
 """
 
 from __future__ import annotations
 
-from squall.strategy_stores import SharedSqlStores, absorb_field_meta, merge_field_meta
+from squall.strategy_stores import SharedSqlStores, merge_field_meta
 
 
 def test_a_later_programs_own_derived_metadata_wins_over_an_earlier_programs():
     """Reproduces the review's finding 5 scenario directly: program A's
     bridge-derived WS-DESC (len=10) must not survive program B's own,
     unrelated WS-DESC (len=50) merely because A compiled first into the same
-    shared store. Neither field is sidecar-declared, so this is a pure
-    inference-vs-inference collision -- the exact case the old
+    shared store: an inference-vs-inference collision -- the exact case the old
     ``{**derived, **store}`` got backwards (it kept A's value, discarding
     B's).
 
@@ -41,33 +40,6 @@ def test_a_later_programs_own_derived_metadata_wins_over_an_earlier_programs():
     merge_field_meta(stores.field_meta, {"WS-DESC": {"length": 10}})
     assert stores.field_meta["WS-DESC"] == {"length": 10}
 
-    merge_field_meta(
-        stores.field_meta,
-        {"WS-DESC": {"length": 50}},
-        stores.sidecar_field_names,
-    )
+    merge_field_meta(stores.field_meta, {"WS-DESC": {"length": 50}})
 
     assert stores.field_meta["WS-DESC"] == {"length": 50}
-
-
-def test_a_sidecar_declaration_still_wins_over_any_programs_inference():
-    """The explicit/inferred asymmetry the old code was trying to preserve
-    must survive the fix: once a name is sidecar-declared (by any program),
-    no later inference -- from that program or another -- displaces it."""
-    stores = SharedSqlStores()
-    absorb_field_meta(
-        stores.field_meta,
-        {"DCL-TR-DESCRIPTION": {"category": "ALPHANUMERIC", "length": 999}},
-        stores.sidecar_field_names,
-    )
-
-    merge_field_meta(
-        stores.field_meta,
-        {"DCL-TR-DESCRIPTION": {"category": "VARCHAR", "length": 50}},
-        stores.sidecar_field_names,
-    )
-
-    assert stores.field_meta["DCL-TR-DESCRIPTION"] == {
-        "category": "ALPHANUMERIC",
-        "length": 999,
-    }

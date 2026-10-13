@@ -109,27 +109,9 @@ def test_generate_copybook_lines() -> None:
             assert line.index("05") == 11
 
 
-def test_generate_metadata() -> None:
-    rec = generate(_seed(), "ACCOUNT", record_name="ACCT-REC")
-    md = rec.metadata
-    assert md["record"] == "ACCT-REC" and md["table"] == "ACCOUNT"
-    by_col = {f["column"]: f for f in md["fields"]}
-    assert by_col["ACCT_ID"]["host_var"] == "ACCT-ID"
-    assert by_col["ACCT_ID"]["sql_type"] == "INTEGER"
-    assert by_col["ACCT_ID"]["category"] == "BINARY"
-    assert by_col["ACCT_ID"]["nullable"] is False
-    assert by_col["ACCT_BAL"]["nullable"] is True
-    assert by_col["ACCT_BAL"]["category"] == "COMP3"
-    assert by_col["ACCT_BAL"]["total_digits"] == 7
-    assert by_col["ACCT_BAL"]["decimal_digits"] == 2
-    assert by_col["ACCT_NAME"]["category"] == "ALPHANUMERIC"
-    assert by_col["ACCT_NAME"]["length"] == 20
-
-
 def test_prefix_applied_to_host_vars() -> None:
     rec = generate(_seed(), "ACCOUNT", record_name="ACCT-REC", prefix="WS-")
-    hv = {f["column"]: f["host_var"] for f in rec.metadata["fields"]}
-    assert hv["ACCT_ID"] == "WS-ACCT-ID"
+    assert "05  WS-ACCT-ID" in rec.copybook
 
 
 # ── VARCHAR 49-group ──────────────────────────────────────────────────────────
@@ -154,18 +136,3 @@ def test_generate_varchar_group_copybook() -> None:
         ln.index("49") for ln in cpy.splitlines() if "49  EMP-NAME-LEN" in ln
     )
     assert child_col > group_col
-
-
-def test_generate_varchar_metadata() -> None:
-    rec = generate(_seed_varchar(), "EMP", record_name="EMP-REC")
-    by_col = {f["column"]: f for f in rec.metadata["fields"]}
-    nm = by_col["EMP_NAME"]
-    assert nm["category"] == "VARCHAR"
-    assert nm["sql_type"] == "VARCHAR(9)"
-    assert nm["length"] == 9
-    assert nm["host_var"] == "EMP-NAME"
-    # The 49-group children, named so binding can resolve LEN/TEXT from the
-    # flat data_layout (which cannot express the group structure).
-    assert nm["len_var"] == "EMP-NAME-LEN"
-    assert nm["text_var"] == "EMP-NAME-TEXT"
-    assert nm["nullable"] is True

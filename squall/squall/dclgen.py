@@ -2,31 +2,32 @@
 squall.dclgen
 ~~~~~~~~~~~~~
 A squall-side DCLGEN: read a database table's schema and generate the COBOL
-host-variable record (the copybook an ``EXEC SQL INCLUDE`` pulls in) plus a JSON
-sidecar of per-field metadata.
+host-variable record (the copybook an ``EXEC SQL INCLUDE`` pulls in).
 
-The copybook is consumed by ProLeap (after ``INCLUDE → COPY``); the JSON carries
-the *SQL-side* type each host var was generated for, so binding never has to
-recover the column type from the COBOL PIC (which is lossy). This is the forward,
-single-source-of-truth mapping — DB type → COBOL PIC + metadata.
+The copybook is consumed by ProLeap (after ``INCLUDE → COPY``) and alone carries
+each host variable's type: binding reads it from the data layout ProLeap builds,
+and a VARCHAR column renders as the DCLGEN 49-level LEN/TEXT group the lowering
+recognises. This is the forward mapping — DB type → COBOL PIC.
 
 Design
 ------
 * Pure functions for the mapping/render; the only effect is reading the schema
   (``generate``) and writing files (``write``).
 * v1 supports exactly the categories the binding codec can bind today:
-  INTEGER/SMALLINT/BIGINT (binary COMP), DECIMAL/NUMERIC (COMP-3), CHAR (PIC X).
-  VARCHAR / floating point / lengthless TEXT / BLOB raise ``NotImplementedError``
-  rather than silently degrade (faithful VARCHAR is tracked separately).
+  INTEGER/SMALLINT/BIGINT (binary COMP), DECIMAL/NUMERIC (COMP-3), CHAR (PIC X),
+  and VARCHAR as a 49-level LEN/TEXT group. Floating point / lengthless TEXT /
+  BLOB raise ``NotImplementedError`` rather than silently degrade.
 * No regex: the declared-type string is split on fixed punctuation, not parsed
   with a pattern.
 """
 
 from __future__ import annotations
 
-import json
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+from squall.dclgen_field import DclgenField
 
 # ── Name mapping ──────────────────────────────────────────────────────────────
 
@@ -57,64 +58,14 @@ def _parse_sql_type(decl: str) -> dict:
     Raises ``NotImplementedError`` for types v1 does not support.
     """
     base, args = _split_decl(decl)
-
-    if base in ("INTEGER", "INT", "INT4"):
-        return _binary("INTEGER", 9)
-    if base in ("SMALLINT", "INT2"):
-        return _binary("SMALLINT", 4)
-    if base in ("BIGINT", "INT8"):
-        return _binary("BIGINT", 18)
-
-    if base in ("DECIMAL", "NUMERIC", "DEC"):
-        precision = args[0] if args else 9
-        scale = args[1] if len(args) > 1 else 0
-        integer_digits = precision - scale
-        pic = (
-            f"S9({integer_digits})V9({scale}) COMP-3"
-            if scale > 0
-            else f"S9({precision}) COMP-3"
-        )
-        return {
-            "sql_type": f"DECIMAL({precision},{scale})",
-            "category": "COMP3",
-            "total_digits": precision,
-            "decimal_digits": scale,
-            "length": 0,
-            "pic": pic,
-        }
-
-    if base in ("CHAR", "CHARACTER"):
-        char_len = args[0] if args else 1
-        return {
-            "sql_type": f"CHAR({char_len})",
-            "category": "ALPHANUMERIC",
-            # ProLeap reports total_digits = character count for PIC X(n); match it
-            # so the metadata agrees with the data_layout it will be validated against.
-            "total_digits": char_len,
-            "decimal_digits": 0,
-            "length": char_len,
-            "pic": f"X({char_len})",
-        }
-
-    if base in ("VARCHAR", "VARYING", "CHARACTER VARYING"):
-        varchar_len = args[0] if args else 1
-        # A VARCHAR is the IBM DCLGEN 49-group: a group item with two 49-level
-        # children — a binary length prefix and the text. It is NOT an elementary
-        # item, so it carries no single PIC (pic=None); _render_copybook emits the
-        # group and the children, and binding drives the LEN/TEXT codec.
-        return {
-            "sql_type": f"VARCHAR({varchar_len})",
-            "category": "VARCHAR",
-            "total_digits": 0,
-            "decimal_digits": 0,
-            "length": varchar_len,
-            "pic": None,
-        }
-
-    raise NotImplementedError(
-        f"dclgen v1 does not support SQL type {decl!r} "
-        f"(floating point / lengthless TEXT / BLOB are not yet mapped)"
-    )
+    match _TYPES.get(base):
+        case None:
+            raise NotImplementedError(
+                f"dclgen v1 does not support SQL type {decl!r} "
+                f"(floating point / lengthless TEXT / BLOB are not yet mapped)"
+            )
+        case build:
+            return build(args)
 
 
 def _binary(sql_type: str, total_digits: int) -> dict:
@@ -128,6 +79,62 @@ def _binary(sql_type: str, total_digits: int) -> dict:
     }
 
 
+def _decimal(args: Sequence[int]) -> dict:
+    precision = args[0] if args else 9
+    scale = args[1] if len(args) > 1 else 0
+    pic = (
+        f"S9({precision - scale})V9({scale}) COMP-3"
+        if scale > 0
+        else f"S9({precision}) COMP-3"
+    )
+    return {
+        "sql_type": f"DECIMAL({precision},{scale})",
+        "category": "COMP3",
+        "total_digits": precision,
+        "decimal_digits": scale,
+        "length": 0,
+        "pic": pic,
+    }
+
+
+def _char(args: Sequence[int]) -> dict:
+    char_len = args[0] if args else 1
+    return {
+        "sql_type": f"CHAR({char_len})",
+        "category": "ALPHANUMERIC",
+        "total_digits": char_len,
+        "decimal_digits": 0,
+        "length": char_len,
+        "pic": f"X({char_len})",
+    }
+
+
+def _varchar(args: Sequence[int]) -> dict:
+    varchar_len = args[0] if args else 1
+    return {
+        "sql_type": f"VARCHAR({varchar_len})",
+        "category": "VARCHAR",
+        "total_digits": 0,
+        "decimal_digits": 0,
+        "length": varchar_len,
+        "pic": None,
+    }
+
+
+_TYPE_FAMILIES: tuple[tuple[tuple[str, ...], Callable[[Sequence[int]], dict]], ...] = (
+    (("INTEGER", "INT", "INT4"), lambda _args: _binary("INTEGER", 9)),
+    (("SMALLINT", "INT2"), lambda _args: _binary("SMALLINT", 4)),
+    (("BIGINT", "INT8"), lambda _args: _binary("BIGINT", 18)),
+    (("DECIMAL", "NUMERIC", "DEC"), _decimal),
+    (("CHAR", "CHARACTER"), _char),
+    (("VARCHAR", "VARYING", "CHARACTER VARYING"), _varchar),
+)
+
+_TYPES: Mapping[str, Callable[[Sequence[int]], dict]] = {
+    name: build for names, build in _TYPE_FAMILIES for name in names
+}
+
+
 # ── Field + record assembly ───────────────────────────────────────────────────
 
 
@@ -135,52 +142,43 @@ def _binary(sql_type: str, total_digits: int) -> dict:
 class GeneratedRecord:
     record_name: str
     copybook: str
-    metadata: dict
 
 
-def _field_meta(column: str, decl: str, notnull: int, prefix: str) -> dict:
+def _field(column: str, decl: str, prefix: str) -> DclgenField:
     t = _parse_sql_type(decl)
-    host_var = prefix + _cobolify(column)
-    meta = {
-        "column": column,
-        "host_var": host_var,
-        "sql_type": t["sql_type"],
-        "nullable": not bool(notnull),
-        "category": t["category"],
-        "total_digits": t["total_digits"],
-        "decimal_digits": t["decimal_digits"],
-        "length": t["length"],
-        "pic": t["pic"],
-    }
-    if t["category"] == "VARCHAR":
-        # Record the 49-group children so binding can resolve LEN/TEXT from the
-        # flat data_layout (which records them as <host>-LEN / <host>-TEXT but
-        # cannot mark the group itself as VARCHAR).
-        meta["len_var"] = f"{host_var}-LEN"
-        meta["text_var"] = f"{host_var}-TEXT"
-    return meta
+    return DclgenField(
+        host_var=prefix + _cobolify(column),
+        category=t["category"],
+        length=t["length"],
+        pic=t["pic"] or "",
+    )
 
 
-def _render_copybook(record_name: str, fields: list[dict]) -> str:
-    # 01 in Area A (column 8), 05 elementary items in Area B (column 12),
-    # 49-level VARCHAR children nested one step deeper (column 16).
-    width = max((len(f["host_var"]) for f in fields), default=0)
-    lines = [f"       01  {record_name}."]
-    for f in fields:
-        if f["category"] == "VARCHAR":
-            n = f["length"]
-            lines.append(f"           05  {f['host_var']}.")
-            lines.append(f"               49  {f['len_var']:<{width}}  PIC S9(4) COMP.")
-            lines.append(f"               49  {f['text_var']:<{width}}  PIC X({n}).")
-        else:
-            lines.append(f"           05  {f['host_var']:<{width}}  PIC {f['pic']}.")
+def _record_lines(field: DclgenField, width: int) -> tuple[str, ...]:
+    match field.category:
+        case "VARCHAR":
+            return (
+                f"           05  {field.host_var}.",
+                f"               49  {field.host_var + '-LEN':<{width}}  PIC S9(4) COMP.",
+                f"               49  {field.host_var + '-TEXT':<{width}}  PIC X({field.length}).",
+            )
+        case _:
+            return (f"           05  {field.host_var:<{width}}  PIC {field.pic}.",)
+
+
+def _render_copybook(record_name: str, fields: Sequence[DclgenField]) -> str:
+    width = max((len(f.host_var) for f in fields), default=0)
+    lines = (
+        f"       01  {record_name}.",
+        *(line for field in fields for line in _record_lines(field, width)),
+    )
     return "\n".join(lines) + "\n"
 
 
 def generate(
-    conn, table: str, record_name: str | None = None, prefix: str = ""
+    conn, table: str, record_name: str = "", prefix: str = ""
 ) -> GeneratedRecord:
-    """Read *table*'s schema from *conn* and build its host-var record + metadata.
+    """Read *table*'s schema from *conn* and build its host-var record.
 
     *conn* is any DB-API connection exposing ``PRAGMA table_info`` (SQLite).
     """
@@ -191,24 +189,19 @@ def generate(
 
     # PRAGMA table_info row: (cid, name, type, notnull, dflt_value, pk)
     fields = [
-        _field_meta(name, decl, notnull, prefix)
-        for _cid, name, decl, notnull, _dflt, _pk in rows
+        _field(name, decl, prefix) for _cid, name, decl, _notnull, _dflt, _pk in rows
     ]
 
-    metadata = {"record": resolved_name, "table": table, "fields": fields}
     return GeneratedRecord(
         record_name=resolved_name,
         copybook=_render_copybook(resolved_name, fields),
-        metadata=metadata,
     )
 
 
-def write(record: GeneratedRecord, out_dir) -> tuple[Path, Path]:
-    """Write ``<RECORD>.cpy`` and ``<RECORD>.json`` into *out_dir*; return paths."""
+def write(record: GeneratedRecord, out_dir) -> Path:
+    """Write ``<RECORD>.cpy`` into *out_dir*; return its path."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     cpy = out / f"{record.record_name}.cpy"
-    meta = out / f"{record.record_name}.json"
     cpy.write_text(record.copybook, encoding="utf-8")
-    meta.write_text(json.dumps(record.metadata, indent=2), encoding="utf-8")
-    return cpy, meta
+    return cpy

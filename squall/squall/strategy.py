@@ -46,7 +46,6 @@ from squall.strategy_stores import (
     merge_field_meta,
     register,
 )
-from squall.strategy_stores import absorb_field_meta as _absorb_field_meta
 from squall.strategy_stores import append as _append_plan
 
 if TYPE_CHECKING:
@@ -76,7 +75,6 @@ class SqlLoweringStrategy:
     def __init__(
         self,
         connections: Mapping[str, SqlBackend],
-        field_meta: Mapping[str, FieldMeta],
         initial_connector: DbConnector = _NO_CONNECTOR,
         *,
         tolerant: bool = False,
@@ -98,24 +96,12 @@ class SqlLoweringStrategy:
         self._stores: SharedSqlStores = (
             SharedSqlStores() if isinstance(stores, Absent) else stores
         )
-        # dclgen host-var metadata: sidecar entries loaded by the prepass, held
-        # in a *mutable* private store wrapped in an immutable, LIVE view. The
-        # store starts as a copy of the sidecar-declared *field_meta* passed
-        # in -- via the same ``absorb_field_meta`` helper ``build_sql_spec``
-        # (coprocessor.py) uses for the shared-store case, so the two paths
-        # cannot drift on sidecar-vs-inference precedence. ``preprocess_program_dict``
-        # (below) later merges in metadata derived from the raw bridge JSON —
-        # a program's own DCLGEN copybooks carry no sidecar at all, so that's
-        # often the *only* metadata a VARCHAR host var gets. The builtin is
-        # constructed with ``self._field_meta`` (this same view, not a bare
-        # copy of *field_meta*) further down, so a later in-place store update
-        # reaches it — the builtin is registered before preprocess_program_dict
-        # is ever called (see CoprocessorSpec's ordering guarantee), so
-        # nothing but a live, shared view can work.
+        # VARCHAR host-var metadata inferred from each program's DATA DIVISION
+        # by ``preprocess_program_dict``, held in a mutable store wrapped in an
+        # immutable, LIVE view: the builtin is registered before
+        # preprocess_program_dict is ever called (see CoprocessorSpec's ordering
+        # guarantee), so nothing but a live, shared view can work.
         self._field_meta_store: dict[str, FieldMeta] = self._stores.field_meta
-        _absorb_field_meta(
-            self._field_meta_store, field_meta, self._stores.sidecar_field_names
-        )
         self._field_meta: Mapping[str, FieldMeta] = MappingProxyType(
             self._field_meta_store
         )
@@ -182,19 +168,13 @@ class SqlLoweringStrategy:
     def preprocess_program_dict(self, data: dict) -> dict:  # type: ignore[type-arg]
         """Derive DCLGEN VARCHAR ``field_meta`` and WORKING-STORAGE
         ``DECLARE CURSOR`` plans from *data* (the raw bridge JSON) and merge
-        both into their live stores. Sidecar field_meta entries win on
-        conflict, since a sidecar is an explicit statement and shape
-        recognition is only an inference. *data* itself is returned
+        both into their live stores. *data* itself is returned
         unchanged; this method's effect is entirely the two store side
         effects (see ``squall.strategy_stores`` for why ``merge_field_meta``
         must mutate in place rather than rebind, and the constructor's own
         comment on ``self._cursors_store`` for cursors).
         """
-        merge_field_meta(
-            self._field_meta_store,
-            derive_field_meta(data),
-            self._stores.sidecar_field_names,
-        )
+        merge_field_meta(self._field_meta_store, derive_field_meta(data))
         merge_cursors(self._cursors_store, derive_cursors(data))
         return data
 

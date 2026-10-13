@@ -10,7 +10,7 @@ rediscover it:
 
 - **Copybook dirs**, in this order: the Db2 tree's own `cpy`, `cpy-bms`,
   `dcl` (holds the hand-written `DCLTRTYP.dcl` / `DCLTRCAT.dcl` DCLGEN
-  copybooks with no JSON sidecars), then the top-level `carddemo_home`'s
+  copybooks), then the top-level `carddemo_home`'s
   `cpy`, `cpy-bms` (BMS-generated map copybooks + `COCOM01Y.cpy`, which
   declares `CARDDEMO-COMMAREA`), plus squall's and cicada's own bundled
   `copybooks` directories (`SQLCA.cpy`, `DFHEIBLK.cpy`).
@@ -19,9 +19,8 @@ rediscover it:
   *replaces* the bridge's default list rather than extending it, so every
   extension the corpus uses, including the DCLGEN `.dcl` one, must be
   restated).
-- **`tolerant=True`** on `build_sql_spec` — CardDemo's hand-written DCLGEN
-  copybooks have no JSON sidecars, so strict host-var metadata matching
-  would fail even though the record layouts themselves are fine.
+- **`tolerant=True`** on `build_sql_spec` — host variables missing from the
+  data layout are skipped rather than raised.
 - `stage_sanitised_copybooks` is deliberately NOT used: proving the raw
   `.dcl` files parse now that Task 1/2 stop corrupting fixed-format columns
   is the point of this test.
@@ -114,7 +113,6 @@ def _compile(bridge_jar: str, program_name: str):
     )
     sql_spec = build_sql_spec(
         connections={"CARDDEMO": backend},
-        copybook_dirs=_copybook_dirs(),
         tolerant=True,
     )
 

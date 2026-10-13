@@ -192,9 +192,9 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-09-18-carddemo-db2-tn3270.md
   checksum: 5be5343c12e706d485e5fd73798bff29d50358298e15b52e6ffa6962526a72ef
 - filename: squall/tests/unit/test_preprocess.py
-  checksum: 9d7a995511586a61d7598de56e9a9589841f259cf4ae6b3791e39217a51d216b
+  checksum: d10ca9647bb1d96812ea58683ca53684809822fa2fbe51a1678cc6b5c068769b
 - filename: squall/squall/preprocess.py
-  checksum: bd301524ab302bd1005dc13d34f825b7a2de4a13103a383d5804ebfedaff30d8
+  checksum: 1811674c7bf409028a8d7ddf2e96aab4525171b07b19e4610004acf1a616753f
 - filename: squall/squall/data_division_exec_sql.py
   checksum: 709c5f628d1da46d2adfc0915590608722124a68b67b96eaa525e8908448936f
 - filename: squall/tests/unit/test_data_division_exec_sql.py
@@ -303,4 +303,6 @@ fileignoreconfig:
   checksum: 8912ca684372bf0a70d73a72b50956113efaaf684f2dac6c3ddaddf5f81af780
 - filename: docs/superpowers/plans/2026-10-13-squall-self-contained-ir.md
   checksum: 01cff98a18570ed989b9486a1096802fd02ef3d90531cb546aa8151b2e9e4aef
+- filename: squall/squall/coprocessor.py
+  checksum: 15ecd741adb311b1b0b52d670140f592ee152c9dfa673b3398e50783fc331793
 version: "1.0"

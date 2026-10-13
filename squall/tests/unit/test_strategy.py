@@ -71,7 +71,7 @@ def backend():
 
 @pytest.fixture()
 def strategy(backend):
-    return SqlLoweringStrategy(backend, {})
+    return SqlLoweringStrategy(backend)
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ def test_strategy_registers_exec_sql_builtin(backend):
     # Remove any prior registration to test fresh insertion
     Builtins.TABLE.pop(key, None)
 
-    SqlLoweringStrategy(backend, {})
+    SqlLoweringStrategy(backend)
 
     assert (
         key in Builtins.TABLE
@@ -162,7 +162,7 @@ def test_strategy_registers_task_end_hook(backend):
     try:
         Builtins.TABLE.pop(key, None)
 
-        SqlLoweringStrategy(backend, {})
+        SqlLoweringStrategy(backend)
 
         assert key in Builtins.TABLE
         assert callable(Builtins.TABLE[key])
@@ -186,7 +186,7 @@ def test_strategy_registers_syncpoint_and_rollback_hooks(backend):
         for key in keys:
             Builtins.TABLE.pop(key, None)
 
-        SqlLoweringStrategy(backend, {})
+        SqlLoweringStrategy(backend)
 
         for key in keys:
             assert key in Builtins.TABLE
@@ -239,26 +239,12 @@ _BRIDGE_VARCHAR_GROUP = {
 
 
 def test_preprocess_program_dict_derives_varchar_field_meta(strategy):
-    """With no sidecar at all, preprocess_program_dict must still populate
-    field_meta for a DCLGEN VARCHAR group found in the raw bridge JSON."""
+    """preprocess_program_dict populates field_meta for a DCLGEN VARCHAR group
+    found in the raw bridge JSON."""
     strategy.preprocess_program_dict(_BRIDGE_VARCHAR_GROUP)
 
     assert strategy._field_meta["DCL-TR-DESCRIPTION"]["category"] == "VARCHAR"
     assert strategy._field_meta["DCL-TR-DESCRIPTION"]["length"] == 50
-
-
-def test_sidecar_field_meta_wins_over_derived_on_conflict(backend):
-    """A sidecar is an explicit statement; derivation is only an inference.
-    Where both describe the same host var, the sidecar's category must win."""
-    sidecar = {"DCL-TR-DESCRIPTION": {"category": "ALPHANUMERIC", "length": 999}}
-    strat = SqlLoweringStrategy(backend, sidecar)
-
-    strat.preprocess_program_dict(_BRIDGE_VARCHAR_GROUP)
-
-    assert strat._field_meta["DCL-TR-DESCRIPTION"] == {
-        "category": "ALPHANUMERIC",
-        "length": 999,
-    }
 
 
 def test_field_meta_is_immutable_to_external_consumers(strategy):
@@ -290,7 +276,7 @@ def test_derived_field_meta_reaches_the_already_registered_builtin(
 
     monkeypatch.setattr(strategy_module, "make_exec_sql_builtin", spy)
 
-    strat = SqlLoweringStrategy(backend, {})
+    strat = SqlLoweringStrategy(backend)
     assert "DCL-TR-DESCRIPTION" not in captured["field_meta"]
 
     strat.preprocess_program_dict(_BRIDGE_VARCHAR_GROUP)
@@ -346,7 +332,7 @@ def test_derived_cursors_reach_the_already_registered_builtin(backend, monkeypat
 
     monkeypatch.setattr(strategy_module, "make_exec_sql_builtin", spy)
 
-    strat = SqlLoweringStrategy(backend, {})
+    strat = SqlLoweringStrategy(backend)
     assert "C-TR-TYPE-FORWARD" not in captured["cursors"]
 
     strat.preprocess_program_dict(_BRIDGE_WORKING_STORAGE_DECLARE)
