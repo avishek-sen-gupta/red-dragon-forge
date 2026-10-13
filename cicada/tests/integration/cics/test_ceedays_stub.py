@@ -19,8 +19,7 @@ from cobol_asg.cobol_parser import make_cobol_parser
 from interpreter.project.cobol_compile import compile_cobol
 from interpreter.project.source_file import SourceFile
 from interpreter.run import run_linked, EntryPoint, initial_vm_state
-from interpreter.var_name import VarName
-from interpreter.field_name import FieldName
+from interpreter.cobol.program_object import WORKING_STORAGE_FIELD, program_var
 from interpreter.address import Address
 from tests.covers import covers
 
@@ -67,20 +66,17 @@ def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
     )
     vm = run_linked(
         linked,
-        EntryPoint.function(
-            lambda r: str(r.label).endswith("func_driver_0")
-            and "init_params" not in str(r.label)
-        ),
+        EntryPoint.function(lambda r: r.label == linked.entry_func_label),
         max_steps=200_000,
         initial_vm=initial_vm_state(),
     )
 
     # Read WS-SEV (offset 0, 4 zoned-decimal bytes) from DRIVER's WS region.
     for frame in reversed(vm.call_stack):
-        if VarName("__prog_DRIVER") in frame.local_vars:
-            ptr = frame.local_vars[VarName("__prog_DRIVER")].value
+        if program_var("DRIVER") in frame.local_vars:
+            ptr = frame.local_vars[program_var("DRIVER")].value
             base = getattr(ptr, "base", ptr)
-            ws_handle = vm.heap_get(base).fields[FieldName("ws_handle")].value
+            ws_handle = vm.heap_get(base).fields[WORKING_STORAGE_FIELD].value
             region = vm.region_get(Address(str(ws_handle)))
             assert region is not None, "DRIVER WS region missing"
             return int(region[0:4].decode("cp037"))

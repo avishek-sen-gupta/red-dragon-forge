@@ -64,11 +64,12 @@ COBOL_ASSIGN = """\
 """
 
 
-def _link_single_cobol(source: bytes, frontend: CobolFrontend):
+def _link_single_cobol(source: bytes, frontend: CobolFrontend, program_id: str):
     from interpreter.cfg import build_cfg
     from interpreter.registry import build_registry
     from interpreter.constants import Language
     from interpreter.project.types import LinkedProgram
+    from interpreter.ir import CodeLabel
 
     instructions = frontend.lower(source)
     cfg = build_cfg(instructions)
@@ -90,6 +91,7 @@ def _link_single_cobol(source: bytes, frontend: CobolFrontend):
         data_layout=frontend.data_layout,
         func_symbol_table=frontend.func_symbol_table,
         class_symbol_table=frontend.class_symbol_table,
+        entry_func_label=CodeLabel(f"func_{program_id.lower()}_0"),
     )
 
 
@@ -116,7 +118,7 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
         extension_strategies=[strategy],
         dialect_parsers=[CicsDialectParser()],
     )
-    program = _link_single_cobol(source, frontend)
+    program = _link_single_cobol(source, frontend, "TESTASGN")
 
     result = run_cics(
         program,
