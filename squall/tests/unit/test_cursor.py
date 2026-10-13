@@ -15,7 +15,6 @@ import sqlite3
 from squall.backends.sqlite import SqliteBackend
 from squall.binding import _zoned_decode, _alpha_decode
 from squall.builtins.exec_sql import make_exec_sql_builtin
-from squall.parser.parse import parse_exec_sql
 
 from interpreter.var_name import VarName
 from interpreter.address import Address
@@ -77,6 +76,9 @@ class _TV:
         self.value = v
 
 
+_DECLARE_C1 = "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
+
+
 def _backend():
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE STAFF (NAME VARCHAR(9), DEPT INTEGER, JOB VARCHAR(5))")
@@ -92,12 +94,10 @@ def test_cursor_declare_open_fetch_close():
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     def sqlcode():
         return _zoned_decode(bytes(region[13:22]))
@@ -113,13 +113,11 @@ def test_cursor_declare_open_fetch_close():
     assert sqlcode() == 0
 
     # DECLARE — register the cursor's SELECT; no DB work yet.
-    run(
-        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
-    )
+    run(_DECLARE_C1)
     assert sqlcode() == 0
 
     # OPEN — run the SELECT, position before the first row.
-    run("EXEC SQL OPEN c1 END-EXEC")
+    run("EXEC SQL OPEN c1 END-EXEC", _DECLARE_C1)
     assert sqlcode() == 0
 
     # FETCH ×2 — first two managers, in order, into PNAME/DEPT.
@@ -146,12 +144,10 @@ def test_fetch_on_undeclared_cursor_is_not_open():
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     run("EXEC SQL CONNECT TO SAMPLE END-EXEC")  # a run starts disconnected
     run("EXEC SQL FETCH nope INTO :PNAME, :DEPT END-EXEC")
@@ -167,11 +163,9 @@ def test_open_on_a_cursor_declared_via_data_division_exec_sql_returns_sqlcode_0(
     PROCEDURE DIVISION or lowers to a __exec_sql call. The bridge now
     recovers it into the raw JSON's "data_division_exec_sql" key (a real
     ProLeap bridge fix, not a squall-side re-parse of raw source);
-    squall.data_division_exec_sql.derive_cursors turns that into a
-    DECLARE_CURSOR plan, and it must reach ctx.cursors through the SAME
-    plumbing SqlLoweringStrategy.preprocess_program_dict uses for
-    field_meta -- OPEN must then succeed (SQLCODE 0), not fail with -1 as
-    it would if the cursor were never registered."""
+    squall.data_division_exec_sql.derive_cursors recovers its text, and the
+    OPEN carries it -- OPEN must then succeed (SQLCODE 0), not fail with -1
+    as it would with no declaration."""
     from squall.data_division_exec_sql import derive_cursors
 
     bridge_data = {
@@ -191,14 +185,10 @@ def test_open_on_a_cursor_declared_via_data_division_exec_sql_returns_sqlcode_0(
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin(
-        {"SAMPLE": backend}, plans, {}, cursors=recovered_cursors
-    )
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     def sqlcode():
         return _zoned_decode(bytes(region[13:22]))
@@ -211,7 +201,10 @@ def test_open_on_a_cursor_declared_via_data_division_exec_sql_returns_sqlcode_0(
 
     # No DECLARE statement runs here -- it never lowered at all -- yet OPEN
     # must still find the cursor's plan and succeed.
-    run("EXEC SQL OPEN C-TR-TYPE-FORWARD END-EXEC")
+    run(
+        "EXEC SQL OPEN C-TR-TYPE-FORWARD END-EXEC",
+        recovered_cursors["C-TR-TYPE-FORWARD"],
+    )
     assert sqlcode() == 0
 
     run("EXEC SQL FETCH C-TR-TYPE-FORWARD INTO :PNAME END-EXEC")
@@ -231,20 +224,16 @@ def test_fetch_on_a_declared_but_never_opened_cursor_is_not_open():
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     def sqlcode():
         return _zoned_decode(bytes(region[13:22]))
 
     run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
-    run(
-        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
-    )
+    run(_DECLARE_C1)
     # No OPEN c1 here.
     run("EXEC SQL FETCH c1 INTO :PNAME, :DEPT END-EXEC")
     assert sqlcode() == -501
@@ -257,21 +246,17 @@ def test_fetch_after_close_is_not_open():
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     def sqlcode():
         return _zoned_decode(bytes(region[13:22]))
 
     run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
-    run(
-        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
-    )
-    run("EXEC SQL OPEN c1 END-EXEC")
+    run(_DECLARE_C1)
+    run("EXEC SQL OPEN c1 END-EXEC", _DECLARE_C1)
     run("EXEC SQL CLOSE c1 END-EXEC")
     assert sqlcode() == 0
 
@@ -286,26 +271,22 @@ def test_close_on_a_cursor_that_is_not_open_is_not_open():
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     def sqlcode():
         return _zoned_decode(bytes(region[13:22]))
 
     run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
-    run(
-        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
-    )
+    run(_DECLARE_C1)
     # Never OPENed.
     run("EXEC SQL CLOSE c1 END-EXEC")
     assert sqlcode() == -501
 
     # OPEN, then CLOSE twice -- the second CLOSE finds it already not open.
-    run("EXEC SQL OPEN c1 END-EXEC")
+    run("EXEC SQL OPEN c1 END-EXEC", _DECLARE_C1)
     assert sqlcode() == 0
     run("EXEC SQL CLOSE c1 END-EXEC")
     assert sqlcode() == 0

@@ -36,10 +36,10 @@ import pytest
 from cics.coprocessor import build_cics_spec
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.instructions import Const
 from interpreter.project.coprocessor_compile import compile_program
 from squall.backends.sqlite import SqliteBackend
 from squall.coprocessor import build_sql_spec
-from squall.strategy import SqlLoweringStrategy
 
 from tests.integration.forge_cobol_helpers import (
     cics_copybooks_dir,
@@ -156,11 +156,11 @@ def test_cotrtlic_compiles_with_cics_and_sql_composed(bridge_jar):
     )
 
 
-def test_cotrtlic_working_storage_cursors_reach_the_sql_strategy(bridge_jar):
+def test_cotrtlic_working_storage_cursors_reach_their_opens(bridge_jar):
     """The regression gate for forge-qhi (task 7): COTRTLIC declares BOTH
     C-TR-TYPE-FORWARD and C-TR-TYPE-BACKWARD in WORKING-STORAGE, nested
     inside WS-MISC-STORAGE, not as PROCEDURE DIVISION statements. Neither
-    ever lowers, so the only way either reaches squall's cursor registry is
+    ever lowers, so the only way either reaches its OPEN call is
     through the real ProLeap bridge's "data_division_exec_sql" ASG key
     (proleap-bridge, red-dragon commit d9e5afd4) and
     squall.data_division_exec_sql.derive_cursors.
@@ -169,16 +169,15 @@ def test_cotrtlic_working_storage_cursors_reach_the_sql_strategy(bridge_jar):
     data_division_exec_sql dict -- this is the one committed test that
     exercises the real bridge→squall seam end to end, so a bridge or ASG
     contract regression on either side cannot pass silently."""
-    frontend, _linked = _compile(bridge_jar, "COTRTLIC")
-
-    sql_strategies = [
-        s for s in frontend._extension_strategies if isinstance(s, SqlLoweringStrategy)
-    ]
-    assert len(sql_strategies) == 1, "Expected exactly one SqlLoweringStrategy"
-    cursors = sql_strategies[0]._cursors_store
-
-    assert {"C-TR-TYPE-FORWARD", "C-TR-TYPE-BACKWARD"} <= cursors.keys(), (
-        f"WORKING-STORAGE cursors missing from the SQL strategy's cursor "
-        f"store: found only {sorted(cursors)} -- this is the exact failure "
-        "signature of forge-qhi (ctx.cursors empty, OPEN returns SQLCODE -1)"
-    )
+    _frontend, linked = _compile(bridge_jar, "COTRTLIC")
+    texts = {
+        i.value
+        for i in linked.merged_ir
+        if isinstance(i, Const) and isinstance(i.value, str)
+    }
+    declared = {
+        name
+        for name in ("C-TR-TYPE-FORWARD", "C-TR-TYPE-BACKWARD")
+        if any(f"DECLARE {name} CURSOR" in text for text in texts)
+    }
+    assert declared == {"C-TR-TYPE-FORWARD", "C-TR-TYPE-BACKWARD"}

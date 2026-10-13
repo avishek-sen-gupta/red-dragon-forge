@@ -262,3 +262,51 @@ def test_varchar_host_variable_round_trips_exactly_with_derived_field_meta():
     assert read_params(vm, ("DCL-TR-DESCRIPTION",), field_meta=field_meta) == [
         "CASH ADVANCE"
     ]
+
+
+class _Arg:
+    def __init__(self, value):
+        self.value = value
+
+
+def test_a_fetch_into_a_varchar_binds_through_the_shape_its_call_carries():
+    import sqlite3
+
+    from squall.backends.sqlite import SqliteBackend
+    from squall.builtins.exec_sql import make_exec_sql_builtin
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE EMP (EMP_NAME VARCHAR(9))")
+    conn.execute("INSERT INTO EMP VALUES ('SANDERS')")
+    region = bytearray(_REGION_SIZE + 9)
+    vm = _VM(region)
+    vm.data_layout = {
+        **_LAYOUT,
+        "SQLCODE": {
+            "offset": _REGION_SIZE,
+            "length": 9,
+            "category": "ZONED_DECIMAL",
+            "total_digits": 9,
+            "decimal_digits": 0,
+            "signed": True,
+        },
+    }
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": SqliteBackend(conn)})
+    declare = "EXEC SQL DECLARE C1 CURSOR FOR SELECT EMP_NAME FROM EMP END-EXEC"
+    calls = (
+        ("EXEC SQL CONNECT TO SAMPLE END-EXEC",),
+        ("EXEC SQL OPEN C1 END-EXEC", declare),
+        (
+            "EXEC SQL FETCH C1 INTO :EMP-NAME END-EXEC",
+            "EMP-NAME",
+            "EMP-NAME-LEN",
+            "EMP-NAME-TEXT",
+        ),
+    )
+    for call in calls:
+        builtin([_Arg(value) for value in call], vm)
+
+    assert (
+        int.from_bytes(bytes(region[2:4]), "big", signed=True),
+        _alpha_decode(bytes(region[4:11])),
+    ) == (7, "SANDERS")

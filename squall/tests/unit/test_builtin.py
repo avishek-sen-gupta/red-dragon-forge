@@ -111,19 +111,13 @@ def _make_vm(ws_id: int = 1) -> tuple[_FakeVM, bytearray]:
 
 
 def _session(backend, vm):
-    """A per-run session: one builtin over a ``{'SAMPLE': backend}`` registry and
-    a shared plan pool, bound to *vm*. Returns ``issue(sql)`` running one EXEC SQL
-    by constant-pool index — connection + cursor state persist across calls,
-    mirroring how lower() parses once and passes only the index.
-    """
-    from squall.parser.parse import parse_exec_sql
+    """A per-run session over ``{'SAMPLE': backend}`` bound to *vm*;
+    ``issue(sql, *rest)`` runs one EXEC SQL with its text and any further
+    call-site arguments. Connection + cursor state persist across calls."""
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    plans: list = []
-    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
-
-    def issue(sql_text: str):
-        plans.append(parse_exec_sql(sql_text))
-        return builtin([_TypedValue(len(plans) - 1)], vm)
+    def issue(sql_text: str, *rest: str):
+        return builtin([_TypedValue(sql_text), *(_TypedValue(r) for r in rest)], vm)
 
     return issue
 
@@ -288,3 +282,25 @@ def test_declare_section_is_noop_sqlcode_zero(backend, sql):
     vm, region = _make_vm(ws_id=1)
     _call_builtin(backend, vm, sql)
     assert _zoned_decode(bytes(region[13:22])) == 0
+
+
+def test_a_repeated_statement_is_parsed_once(backend):
+    from squall.builtins import exec_sql
+
+    exec_sql._parsed.cache_clear()
+    vm, _region = _make_vm()
+    issue = _session(backend, vm)
+    text = "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT WHERE ACCT_ID = :WS-ID END-EXEC"
+    issue("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    issue(text)
+    issue(text)
+    info = exec_sql._parsed.cache_info()
+    assert (info.misses, info.hits) == (2, 1)
+
+
+def test_an_open_without_a_declaration_reports_an_unknown_cursor(backend):
+    vm, region = _make_vm()
+    issue = _session(backend, vm)
+    issue("EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    issue("EXEC SQL OPEN NOSUCH END-EXEC")
+    assert _zoned_decode(bytes(region[13:22])) == -1

@@ -367,7 +367,7 @@ def _meta_for(field_meta: Mapping[str, FieldMeta], name: str) -> FieldMeta:
             return exact
 
 
-def _varchar_children(meta: FieldMeta) -> tuple[str, str]:
+def varchar_children(meta: FieldMeta) -> tuple[str, str]:
     """The (len_var, text_var) host-var names for a VARCHAR ``field_meta`` entry.
 
     ``FieldMeta`` is intentionally ``total=False`` -- ``len_var``/``text_var``
@@ -394,7 +394,7 @@ def _varchar_decode(data_layout: Mapping, region: bytearray, meta: FieldMeta) ->
     delimits the value exactly, so a value that legitimately ends in a space
     must keep it -- rstripping here would silently drop it.
     """
-    len_var, text_var = _varchar_children(meta)
+    len_var, text_var = varchar_children(meta)
     len_f = _require_field(data_layout, len_var)
     text_f = _require_field(data_layout, text_var)
     lo, ll = len_f["offset"], len_f["length"]
@@ -412,7 +412,7 @@ def _varchar_writes(
     region mutation stays at the single boundary in ``write_outputs`` — mirroring
     how ``_encode_field`` returns bytes rather than touching the region itself.
     """
-    len_var, text_var = _varchar_children(meta)
+    len_var, text_var = varchar_children(meta)
     len_f = _require_field(data_layout, len_var)
     text_f = _require_field(data_layout, text_var)
     len_bytes = _binary_encode(len(value), len_f["length"], len_f.get("signed", True))
@@ -649,7 +649,7 @@ class _Plan:
 
 def _plan_varchar_assignment(data_layout: Mapping, meta: FieldMeta, value) -> _Plan:
     """Pure: plan a VARCHAR host-var assignment through its 49-group children."""
-    _, text_var = _varchar_children(meta)
+    _, text_var = varchar_children(meta)
     text_f = _require_field(data_layout, text_var)
     varchar_code = _varchar_assignability(value, text_f)
     if varchar_code != 0:

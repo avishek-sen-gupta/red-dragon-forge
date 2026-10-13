@@ -14,7 +14,6 @@ import sqlite3
 from squall.backends.sqlite import SqliteBackend
 from squall.binding import _zoned_decode
 from squall.builtins.exec_sql import make_exec_sql_builtin
-from squall.parser.parse import parse_exec_sql
 
 from interpreter.var_name import VarName
 from interpreter.address import Address
@@ -77,6 +76,9 @@ class _TV:
         self.value = v
 
 
+_DECLARE_C1 = "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
+
+
 def _backend():
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE STAFF (NAME VARCHAR(9), DEPT INTEGER, JOB VARCHAR(5))")
@@ -98,7 +100,7 @@ class _RecordingBackend:
         self.committed = False
 
     def open_cursor(self, name, sql, params):
-        raise AssertionError("not used by this test")
+        return 0
 
     def fetch(self, name):
         raise AssertionError("not used by this test")
@@ -122,27 +124,22 @@ def test_reset_session_closes_an_open_cursor():
     Db2-faithful SQLCODE -501 (not open), the same code
     test_fetch_on_undeclared_cursor_is_not_open (tests/unit/test_cursor.py)
     reports for a name FETCH never reaches at all: reset_session clears
-    ctx.open_cursors (not ctx.cursors, which must survive task end for a
-    WORKING-STORAGE DECLARE), so a CLOSEd cursor and a never-OPENed one are
-    now indistinguishable to FETCH, exactly as real Db2 makes them."""
+    ctx.open_cursors, so a CLOSEd cursor and a never-OPENed one are
+    indistinguishable to FETCH, exactly as real Db2 makes them."""
     backend = _backend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
-    builtin, reset, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    builtin, reset, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
-    def run(sql):
-        plans.append(parse_exec_sql(sql))
-        builtin([_TV(len(plans) - 1)], vm)
+    def run(sql, *rest):
+        builtin([_TV(sql), *(_TV(r) for r in rest)], vm)
 
     def sqlcode():
         return _zoned_decode(bytes(region[13:22]))
 
     run("EXEC SQL CONNECT TO SAMPLE END-EXEC")
-    run(
-        "EXEC SQL DECLARE c1 CURSOR FOR SELECT NAME, DEPT FROM STAFF WHERE JOB = 'Mgr' END-EXEC"
-    )
-    run("EXEC SQL OPEN c1 END-EXEC")
+    run(_DECLARE_C1)
+    run("EXEC SQL OPEN c1 END-EXEC", _DECLARE_C1)
     run("EXEC SQL FETCH c1 INTO :PNAME, :DEPT END-EXEC")
     assert sqlcode() == 0  # first row fetched fine; a second row remains
 
@@ -151,10 +148,8 @@ def test_reset_session_closes_an_open_cursor():
     run("EXEC SQL FETCH c1 INTO :PNAME, :DEPT END-EXEC")
     assert sqlcode() == -501  # closed by reset — not "still open, next row"
 
-    # The DECLARE itself must survive task end -- nothing will ever re-DECLARE
-    # a WORKING-STORAGE cursor, so ctx.cursors (unlike ctx.open_cursors) is
-    # untouched by reset_session. A re-OPEN must still succeed.
-    run("EXEC SQL OPEN c1 END-EXEC")
+    # The OPEN carries its declaration, so a re-OPEN after task end succeeds.
+    run("EXEC SQL OPEN c1 END-EXEC", _DECLARE_C1)
     assert sqlcode() == 0
 
 
@@ -162,11 +157,8 @@ def test_reset_session_commits_the_current_connection():
     from squall.connector import NamedDbConnector
 
     backend = _RecordingBackend()
-    plans: list = []
     _builtin, reset, *_ = make_exec_sql_builtin(
         {"SAMPLE": backend},
-        plans,
-        {},
         initial_connector=NamedDbConnector("SAMPLE"),
     )
     assert backend.committed is False
@@ -178,8 +170,7 @@ def test_reset_session_is_a_noop_when_disconnected():
     """No connection ever established -> reset_session must not raise (there
     is nothing to commit or close)."""
     backend = _RecordingBackend()
-    plans: list = []
-    _builtin, reset, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    _builtin, reset, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
     reset([], vm=None)  # must not raise
 
@@ -197,7 +188,7 @@ class _UowRecordingBackend:
         self.closed: list[str] = []
 
     def open_cursor(self, name, sql, params):
-        raise AssertionError("not used by this test")
+        return 0
 
     def fetch(self, name):
         raise AssertionError("not used by this test")
@@ -215,15 +206,16 @@ class _UowRecordingBackend:
         self.rolled_back = True
 
 
-def _declare_cursor(builtin, plans, vm) -> None:
-    from squall.parser.parse import parse_exec_sql
-
-    plans.append(
-        parse_exec_sql(
-            "EXEC SQL DECLARE c1 CURSOR FOR SELECT 1 FROM SYSIBM.SYSDUMMY1 END-EXEC"
-        )
+def _open_cursor(builtin, vm) -> None:
+    builtin(
+        [
+            _TV("EXEC SQL OPEN c1 END-EXEC"),
+            _TV(
+                "EXEC SQL DECLARE c1 CURSOR FOR SELECT 1 FROM SYSIBM.SYSDUMMY1 END-EXEC"
+            ),
+        ],
+        vm,
     )
-    builtin([_TV(len(plans) - 1)], vm)
 
 
 def test_syncpoint_commits_without_closing_cursors():
@@ -236,14 +228,11 @@ def test_syncpoint_commits_without_closing_cursors():
     backend = _UowRecordingBackend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
     builtin, _reset, syncpoint, _rollback = make_exec_sql_builtin(
         {"SAMPLE": backend},
-        plans,
-        {},
         initial_connector=NamedDbConnector("SAMPLE"),
     )
-    _declare_cursor(builtin, plans, vm)
+    _open_cursor(builtin, vm)
 
     syncpoint([], vm=None)
 
@@ -260,14 +249,11 @@ def test_task_end_commits_and_closes_cursors():
     backend = _UowRecordingBackend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
     builtin, reset, _syncpoint, _rollback = make_exec_sql_builtin(
         {"SAMPLE": backend},
-        plans,
-        {},
         initial_connector=NamedDbConnector("SAMPLE"),
     )
-    _declare_cursor(builtin, plans, vm)
+    _open_cursor(builtin, vm)
 
     reset([], vm=None)
 
@@ -284,14 +270,11 @@ def test_rollback_hook_rolls_back_and_closes_cursors():
     backend = _UowRecordingBackend()
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
-    plans: list = []
     builtin, _reset, _syncpoint, rollback = make_exec_sql_builtin(
         {"SAMPLE": backend},
-        plans,
-        {},
         initial_connector=NamedDbConnector("SAMPLE"),
     )
-    _declare_cursor(builtin, plans, vm)
+    _open_cursor(builtin, vm)
 
     rollback([], vm=None)
 
@@ -307,8 +290,7 @@ def test_reset_session_returns_a_builtin_result():
     from interpreter.vm.vm_types import BuiltinResult
 
     backend = _RecordingBackend()
-    plans: list = []
-    _builtin, reset, *_ = make_exec_sql_builtin({"SAMPLE": backend}, plans, {})
+    _builtin, reset, *_ = make_exec_sql_builtin({"SAMPLE": backend})
 
     result = reset([], vm=None)
 

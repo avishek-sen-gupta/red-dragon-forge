@@ -27,8 +27,9 @@ def test_derives_a_declare_cursor_from_working_storage():
 
     cursors = derive_cursors(data)
 
-    assert "C-TR-TYPE-FORWARD" in cursors
-    assert "TRANSACTION_TYPE" in cursors["C-TR-TYPE-FORWARD"].query
+    assert cursors == {
+        "C-TR-TYPE-FORWARD": data["data_division_exec_sql"][0]["exec_sql_text"]
+    }
 
 
 def test_multiple_declares_are_all_recovered():

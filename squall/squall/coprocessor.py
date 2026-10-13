@@ -12,7 +12,6 @@ from squall.db2_stubs import read_db2_stub_sources
 from squall.preprocess import apply_sql_prepass
 from squall.statements import SqlDialectParser
 from squall.strategy import SqlLoweringStrategy
-from squall.strategy_stores import SharedSqlStores
 
 # A module-level singleton rather than a call in build_sql_spec's own default
 # (B008 -- mirrors squall.strategy._NO_CONNECTOR exactly): a fresh
@@ -45,13 +44,10 @@ def build_sql_spec(
     the ``DCL-`` prefix Squall derives from the SQL) still execute — host
     variables that can't be located stay at their initialized values.
 
-    One ``SharedSqlStores`` is built here and handed to EVERY strategy this
-    spec makes, so a region compiling several SQL programs from one spec
-    keeps each program's plans, cursors and VARCHAR metadata reachable from
-    the single ``__exec_sql`` builtin that survives in ``Builtins.TABLE``
-    (forge-2xy; see ``SharedSqlStores`` for what breaks without it). Mirrors
-    ``build_cics_spec``'s spec-level ``context_holder``/``result_holder``/
-    ``program_cache``.
+    Every program this spec compiles gets its own strategy; the last one's
+    ``__exec_sql`` is the one registered in ``Builtins.TABLE``, and it serves
+    every program, because each call site carries its own statement,
+    declaration and VARCHAR shapes.
 
     ``linked_subprogram_sources`` links squall's Db2 stubs (``DSNTIAC``) into
     every run unit this spec compiles. Linking them outright rather than
@@ -60,14 +56,12 @@ def build_sql_spec(
     reaches DSNTIAC by data-name, which no scan can discover (red-dragon-t3kl).
     See ``squall.db2_stubs`` for what each stub does and does not model.
     """
-    stores = SharedSqlStores()
 
     def _make_strategy() -> SqlLoweringStrategy:
         return SqlLoweringStrategy(
             connections,
             initial_connector=initial_connector,
             tolerant=tolerant,
-            stores=stores,
         )
 
     return CoprocessorSpec(
