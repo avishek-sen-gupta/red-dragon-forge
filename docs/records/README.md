@@ -28,6 +28,7 @@ Dated design records and analyses. Frozen: never edited after they are written.
 - 2026-10-12 — [jackal: LIKE and REFDD Label a New Dataset — Decision Record](design/2026-10-12-jackal-like-refdd.md)
 - 2026-10-12 — [jackal: IDCAMS REPRO Reads a Concatenated Input — Decision Record](design/2026-10-12-jackal-repro-concatenation.md)
 - 2026-10-12 — [jackal: IDCAMS Parses Through One Grammar, ams.lark — Decision Record](design/2026-10-12-jackal-idcams-one-grammar.md)
+- 2026-10-13 — [red-dragon-forge: Compiled COBOL Is Files — Decision Record](design/2026-10-13-compiled-cobol-is-files.md)
 
 ## Analysis
 
