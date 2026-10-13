@@ -33,7 +33,7 @@ _ExecSqlEntry = Mapping[str, Any]
 
 def derive_cursors(data: _ProgramDict) -> Mapping[str, str]:
     """Every ``DECLARE CURSOR`` in ``data["data_division_exec_sql"]``, as
-    ``{cursor_name: declaration text}``.
+    ``{upper-cased cursor name: declaration text}``.
 
     Other EXEC SQL kinds recovered from outside PROCEDURE DIVISION (e.g. a
     ``DECLARE TABLE``, which is documentation for the precompiler and has no
@@ -44,7 +44,7 @@ def derive_cursors(data: _ProgramDict) -> Mapping[str, str]:
     entries: tuple[_ExecSqlEntry, ...] = tuple(data.get("data_division_exec_sql", ()))
     texts = (str(entry["exec_sql_text"]) for entry in entries)
     return {
-        plan.cursor.name: text
+        plan.cursor.name.upper(): text
         for text, plan in ((text, parse_exec_sql(text)) for text in texts)
         if plan.kind is Kind.DECLARE_CURSOR and isinstance(plan.cursor, NamedCursor)
     }

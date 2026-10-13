@@ -196,7 +196,7 @@ fileignoreconfig:
 - filename: squall/squall/preprocess.py
   checksum: 1811674c7bf409028a8d7ddf2e96aab4525171b07b19e4610004acf1a616753f
 - filename: squall/squall/data_division_exec_sql.py
-  checksum: e2db976e2875f7bf76d5bb348320225e47bfedd92bcb247ccdea2e4a5d1c73ee
+  checksum: d387764a444b74d055de3053f53b5e932f7e700a2524a29eb2f1327d06f85f4d
 - filename: squall/tests/unit/test_data_division_exec_sql.py
   checksum: 619e5c032b4ed12ad5f0a112122f18843cb6d995dbd68348a64ddede5b3775b0
 - filename: squall/squall/builtins/exec_sql.py

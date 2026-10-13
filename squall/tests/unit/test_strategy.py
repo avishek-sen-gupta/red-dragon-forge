@@ -307,3 +307,37 @@ def test_programs_lowered_by_one_strategy_keep_their_own_shapes(strategy):
     second = _FakeEmitContext()
     strategy.lower(second, ExecSqlStatement(text=text), materialised=None)
     assert (len(_call_args(first)), _call_args(second)) == (4, [text])
+
+
+def test_an_undeclared_open_carries_only_its_own_text(strategy):
+    strategy.preprocess_program_dict(_BRIDGE_VARCHAR_GROUP)
+    open_text = "EXEC SQL OPEN NOSUCH USING :DCL-TR-DESCRIPTION END-EXEC"
+    ctx = _FakeEmitContext()
+    strategy.lower(ctx, ExecSqlStatement(text=open_text), materialised=None)
+    assert _call_args(ctx) == [open_text]
+
+
+def test_a_cursor_is_found_whatever_the_case_it_is_written_in(strategy):
+    declare = "EXEC SQL DECLARE c1 CURSOR FOR SELECT X FROM T END-EXEC"
+    open_text = "EXEC SQL OPEN C1 END-EXEC"
+    strategy.preprocess_program_dict(
+        {
+            "data_division_exec_sql": [
+                {
+                    "section": "WORKING-STORAGE",
+                    "exec_sql_text": "EXEC SQL DECLARE ws1 CURSOR FOR SELECT Y FROM T END-EXEC",
+                }
+            ]
+        }
+    )
+    strategy.lower(
+        _FakeEmitContext(), ExecSqlStatement(text=declare), materialised=None
+    )
+    procedure, working_storage = _FakeEmitContext(), _FakeEmitContext()
+    strategy.lower(procedure, ExecSqlStatement(text=open_text), materialised=None)
+    strategy.lower(
+        working_storage,
+        ExecSqlStatement(text="EXEC SQL OPEN WS1 END-EXEC"),
+        materialised=None,
+    )
+    assert (_call_args(procedure)[1], len(_call_args(working_storage))) == (declare, 2)
