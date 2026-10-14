@@ -309,4 +309,8 @@ fileignoreconfig:
   checksum: 0bf126ce5976f1e550db0b4f044546b2fe2f983008be1c47179792c5cba95848
 - filename: docs/superpowers/plans/2026-10-14-catnip-system-catalog.md
   checksum: 0f8c28b9a70ca9d0f3881a78ecce234fa24c029fc3709da30860b542b3dbd859
+- filename: catnip/catnip/alternate_index.py
+  checksum: d4950763f6dcc178365117f9549745154f3b68e56c22bf4951f1199eeb4b2fca
+- filename: catnip/catnip/system_catalog.py
+  checksum: 567bdf606a5cae467da53693663013e7b1935be9b81ccc14831f3e83ff4b50d7
 version: "1.0"

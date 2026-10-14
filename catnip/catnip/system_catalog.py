@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from catnip.alternate_index import AlternateIndex
+from catnip.catalog_error import CatalogError
+from catnip.catalog_path import CatalogPath
 from catnip.catalog_stores import Table
 from catnip.dataset import Dataset
 from catnip.gdg import Empty, GdgBase, GdgOrder, Scratch
@@ -15,6 +18,7 @@ from catnip.labels import (
     KsdsLabel,
     Label,
     LabelPending,
+    PathView,
     RecordFormat,
     SequentialLabel,
 )
@@ -97,15 +101,56 @@ def _gdg_wire(base: GdgBase) -> _GdgWire:
     )
 
 
+class _AixWire(_Wire):
+    dsn: str
+    base: str
+    key_offset: int
+    key_length: int
+    unique: bool
+
+    def model(self) -> AlternateIndex:
+        return AlternateIndex(
+            self.dsn, self.base, self.key_offset, self.key_length, self.unique
+        )
+
+
+def _aix_wire(aix: AlternateIndex) -> _AixWire:
+    return _AixWire(
+        dsn=aix.dsn,
+        base=aix.base,
+        key_offset=aix.key_offset,
+        key_length=aix.key_length,
+        unique=aix.unique,
+    )
+
+
+class _PathWire(_Wire):
+    dsn: str
+    aix: str
+
+    def model(self) -> CatalogPath:
+        return CatalogPath(self.dsn, self.aix)
+
+
 class _CatalogWire(_Wire):
     entries: tuple[_EntryWire, ...]
     gdgs: tuple[_GdgWire, ...] = ()
+    aixs: tuple[_AixWire, ...] = ()
+    paths: tuple[_PathWire, ...] = ()
 
 
 def _label_wire(label: DatasetLabel) -> _LabelWire:
     match label:
         case SequentialLabel():
             return _SequentialWire(recfm=label.recfm, lrecl=label.lrecl)
+        case _:
+            return _stored_wire(label)
+
+
+def _stored_wire(label: KsdsLabel | LabelPending | PathView) -> _LabelWire:
+    match label:
+        case PathView():
+            raise CatalogError("a path's view is never stored as a dataset label")
         case _:
             return _keyed_or_pending_wire(label)
 
@@ -122,6 +167,16 @@ def _keyed_or_pending_wire(label: KsdsLabel | LabelPending) -> _LabelWire:
             return _PendingWire()
 
 
+def _ksds(dataset: Dataset) -> KsdsLabel:
+    match dataset.label:
+        case KsdsLabel():
+            return dataset.label
+        case _:
+            raise CatalogError(
+                f"{dataset.dsn}: an alternate index's base is not a KSDS"
+            )
+
+
 class SystemCatalog:
     """Imperative shell: cataloged datasets survive the run, recorded in catalog.json beside their bytes."""
 
@@ -131,11 +186,23 @@ class SystemCatalog:
         self._datasets_dir.mkdir(parents=True, exist_ok=True)
         self._entries: Table[str, Dataset] = Table()
         self._gdgs: Table[str, GdgBase] = Table()
+        self._aixs: Table[str, AlternateIndex] = Table()
+        self._paths: Table[str, CatalogPath] = Table()
         recorded = self._recorded()
+        self._load_datasets(recorded)
+        self._load_indexes(recorded)
+
+    def _load_datasets(self, recorded: _CatalogWire) -> None:
         for entry in recorded.entries:
             self._entries.put(entry.dsn, self._dataset(entry.dsn, entry.label.model()))
         for gdg in recorded.gdgs:
             self._gdgs.put(gdg.name, gdg.model())
+
+    def _load_indexes(self, recorded: _CatalogWire) -> None:
+        for aix in recorded.aixs:
+            self._aixs.put(aix.dsn, aix.model())
+        for path in recorded.paths:
+            self._paths.put(path.dsn, path.model())
 
     def _recorded(self) -> _CatalogWire:
         path = self._root / CATALOG_FILE
@@ -147,7 +214,40 @@ class SystemCatalog:
         return Dataset(dsn, self._datasets_dir / dsn, label)
 
     def lookup(self, dsn: str) -> Dataset | NotCataloged:
-        return self._entries.get(dsn) if self._entries.has(dsn) else NotCataloged()
+        if self._entries.has(dsn):
+            return self._entries.get(dsn)
+        if self._paths.has(dsn):
+            return self._through(self._paths.get(dsn))
+        return NotCataloged()
+
+    def define_aix(self, aix: AlternateIndex) -> AlternateIndex:
+        match self.lookup(aix.base):
+            case Dataset(label=KsdsLabel()):
+                self._aixs.put(aix.dsn, aix)
+                self._write()
+                return aix
+            case _:
+                raise CatalogError(
+                    f"{aix.dsn}: base cluster {aix.base} is not a cataloged KSDS"
+                )
+
+    def define_path(self, path: CatalogPath) -> Dataset:
+        if not self._aixs.has(path.aix):
+            raise CatalogError(
+                f"{path.dsn}: alternate index {path.aix} is not cataloged"
+            )
+        self._paths.put(path.dsn, path)
+        self._write()
+        return self._through(path)
+
+    def _through(self, path: CatalogPath) -> Dataset:
+        aix = self._aixs.get(path.aix)
+        base = self._entries.get(aix.base)
+        return Dataset(
+            path.dsn,
+            base.path,
+            PathView(_ksds(base), aix.key_offset, aix.key_length, aix.unique),
+        )
 
     def gdg(self, name: str) -> GdgBase | NotCataloged:
         return self._gdgs.get(name) if self._gdgs.has(name) else NotCataloged()
@@ -168,8 +268,21 @@ class SystemCatalog:
         return self._cataloged(dataset)
 
     def remove(self, dsn: str) -> None:
-        self._entries.take(dsn).path.unlink(missing_ok=True)
+        if self._paths.has(dsn):
+            self._paths.take(dsn)
+        elif self._aixs.has(dsn):
+            self._drop_aix(dsn)
+        else:
+            self._drop_cluster(dsn)
         self._write()
+
+    def _drop_cluster(self, dsn: str) -> None:
+        self._entries.take(dsn).path.unlink(missing_ok=True)
+        tuple(self._drop_aix(a.dsn) for a in self._aixs.values() if a.base == dsn)
+
+    def _drop_aix(self, dsn: str) -> None:
+        self._aixs.take(dsn)
+        tuple(self._paths.take(p.dsn) for p in self._paths.values() if p.aix == dsn)
 
     def relabel(self, dsn: str, label: Label) -> Dataset:
         return self._cataloged(self._dataset(dsn, label))
@@ -185,6 +298,12 @@ class SystemCatalog:
             for d in self._entries.values()
         )
         gdgs = tuple(_gdg_wire(base) for base in self._gdgs.values())
+        aixs = tuple(_aix_wire(aix) for aix in self._aixs.values())
+        paths = tuple(
+            _PathWire(dsn=path.dsn, aix=path.aix) for path in self._paths.values()
+        )
         (self._root / CATALOG_FILE).write_text(
-            _CatalogWire(entries=entries, gdgs=gdgs).model_dump_json(indent=2)
+            _CatalogWire(
+                entries=entries, gdgs=gdgs, aixs=aixs, paths=paths
+            ).model_dump_json(indent=2)
         )
