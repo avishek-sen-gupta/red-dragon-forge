@@ -1,0 +1,159 @@
+data_dir = "${FORGE_ROOT}/vendor/carddemo/app/data/EBCDIC"
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.USRSEC.PS"
+from  = "AWS.M2.CARDDEMO.USRSEC.PS"
+recfm = "FB"
+lrecl = 80
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.ACCTDATA.PS"
+from  = "AWS.M2.CARDDEMO.ACCTDATA.PS"
+recfm = "FB"
+lrecl = 300
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.CARDDATA.PS"
+from  = "AWS.M2.CARDDEMO.CARDDATA.PS"
+recfm = "FB"
+lrecl = 150
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.CUSTDATA.PS"
+from  = "AWS.M2.CARDDEMO.CUSTDATA.PS"
+recfm = "FB"
+lrecl = 500
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.CARDXREF.PS"
+from  = "AWS.M2.CARDDEMO.CARDXREF.PS"
+recfm = "FB"
+lrecl = 50
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.DALYTRAN.PS.INIT"
+from  = "AWS.M2.CARDDEMO.DALYTRAN.PS.INIT"
+recfm = "FB"
+lrecl = 350
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.DALYTRAN.PS"
+from  = "AWS.M2.CARDDEMO.DALYTRAN.PS"
+recfm = "FB"
+lrecl = 350
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.DISCGRP.PS"
+from  = "AWS.M2.CARDDEMO.DISCGRP.PS"
+recfm = "FB"
+lrecl = 50
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.TRANCATG.PS"
+from  = "AWS.M2.CARDDEMO.TRANCATG.PS"
+recfm = "FB"
+lrecl = 60
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.TRANTYPE.PS"
+from  = "AWS.M2.CARDDEMO.TRANTYPE.PS"
+recfm = "FB"
+lrecl = 60
+
+[[sequential]]
+dsn   = "AWS.M2.CARDDEMO.TCATBALF.PS"
+from  = "AWS.M2.CARDDEMO.TCATBALF.PS"
+recfm = "FB"
+lrecl = 50
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.USRSEC.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.USRSEC.PS"
+lrecl      = 80
+key_offset = 0
+key_length = 8
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.ACCTDATA.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.ACCTDATA.PS"
+lrecl      = 300
+key_offset = 0
+key_length = 11
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.CARDDATA.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.CARDDATA.PS"
+lrecl      = 150
+key_offset = 0
+key_length = 16
+
+[[ksds.aix]]
+dsn        = "AWS.M2.CARDDEMO.CARDDATA.VSAM.AIX"
+path       = "AWS.M2.CARDDEMO.CARDDATA.VSAM.AIX.PATH"
+key_offset = 16
+key_length = 11
+unique     = false
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.CUSTDATA.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.CUSTDATA.PS"
+lrecl      = 500
+key_offset = 0
+key_length = 9
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.CARDXREF.PS"
+lrecl      = 50
+key_offset = 0
+key_length = 16
+
+[[ksds.aix]]
+dsn        = "AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX"
+path       = "AWS.M2.CARDDEMO.CARDXREF.VSAM.AIX.PATH"
+key_offset = 25
+key_length = 11
+unique     = false
+
+# CardDemo ships no TRANSACT seed; DALYTRAN.PS has the same layout (TRANFILE.jcl loads DALYTRAN.PS.INIT, a single record).
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.TRANSACT.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.DALYTRAN.PS"
+lrecl      = 350
+key_offset = 0
+key_length = 16
+
+[[ksds.aix]]
+dsn        = "AWS.M2.CARDDEMO.TRANSACT.VSAM.AIX"
+path       = "AWS.M2.CARDDEMO.TRANSACT.VSAM.AIX.PATH"
+key_offset = 304
+key_length = 26
+unique     = false
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.DISCGRP.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.DISCGRP.PS"
+lrecl      = 50
+key_offset = 0
+key_length = 16
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.TRANCATG.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.TRANCATG.PS"
+lrecl      = 60
+key_offset = 0
+key_length = 6
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.TRANTYPE.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.TRANTYPE.PS"
+lrecl      = 60
+key_offset = 0
+key_length = 2
+
+[[ksds]]
+dsn        = "AWS.M2.CARDDEMO.TCATBALF.VSAM.KSDS"
+from       = "AWS.M2.CARDDEMO.TCATBALF.PS"
+lrecl      = 50
+key_offset = 0
+key_length = 17

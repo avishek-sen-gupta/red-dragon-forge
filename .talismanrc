@@ -313,4 +313,12 @@ fileignoreconfig:
   checksum: d4950763f6dcc178365117f9549745154f3b68e56c22bf4951f1199eeb4b2fca
 - filename: catnip/catnip/system_catalog.py
   checksum: 567bdf606a5cae467da53693663013e7b1935be9b81ccc14831f3e83ff4b50d7
+- filename: catnip/catnip/declaration.py
+  checksum: 4c589f8cf8f7f15ef5038a3d33542ee2fe6ee32002a45fcebad6f32c51129482
+- filename: catnip/catnip/install.py
+  checksum: 3ea668ba24025adf9c7147b84ff0aa33c5d6be53530b50fb3ca012b14c4a0599
+- filename: catnip/tests/unit/test_install.py
+  checksum: 3275bf6a5c94074f1ff0a552b8234b5d398dc953fd42541d9b06549d39115a70
+- filename: tests/integration/test_carddemo_data_install.py
+  checksum: d6e023498d56fc9dcbbff2c33f61b5469af57efaef8b09c6ab66b7d8114e6a51
 version: "1.0"

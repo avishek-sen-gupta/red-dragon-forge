@@ -11,7 +11,7 @@ BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squ
   catnip/catnip catnip/tests jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
 DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
-.PHONY: help setup hlasm jar jar-force python test test-all fmt jackal-install db2-up db2-seed db2-status db2-restart db2-stop db2-clean
+.PHONY: help setup hlasm jar jar-force python test test-all fmt catnip-install-carddemo db2-up db2-seed db2-status db2-restart db2-stop db2-clean
 
 help:
 	@echo "make setup     - init submodules + build hlasm_export + rebuild bridge JARs + uv sync"
@@ -22,7 +22,7 @@ help:
 	@echo "make test      - root composition-layer suite (needs jar, Db2 DSN)"
 	@echo "make test-all  - jar once, then run every package's full suite (cicada, squall, jackal, cobble, forge)"
 	@echo "make fmt       - black-format the codebase"
-	@echo "make jackal-install SYSTEM=DIR - catalog CardDemo's datasets, labelled per its README, into a jackal system directory"
+	@echo "make catnip-install-carddemo SYSTEM=DIR - install config/carddemo/data.toml into a system directory"
 	@echo "make db2-up    - start squall's Db2 container and wait until healthy (idempotent)"
 	@echo "make db2-seed  - create and seed CardDemo's Db2 schema (the only DROP TABLE)"
 	@echo "make db2-status - does Db2 actually answer? (container up != instance alive)"
@@ -97,15 +97,15 @@ db2-up:
 	done; \
 	echo "DB2 did not become healthy in time:"; docker logs --tail 80 squall-db2; exit 1
 
+catnip-install-carddemo:
+	@test -n "$(SYSTEM)" || (echo "usage: make catnip-install-carddemo SYSTEM=DIR" >&2; exit 2)
+	@FORGE_ROOT=$(CURDIR) uv run --no-sync catnip install config/carddemo/data.toml --system "$(SYSTEM)"
+
 # Create and seed CardDemo's Db2 schema. Deliberately its OWN target, not a flag
 # on the server: this is the only thing that issues DROP TABLE, and a server does
 # not need that authority on every routine start. Calls the same apply_schema the
 # integration fixture calls, so the green screen cannot show data the tests never
 # exercised.
-jackal-install:
-	@test -n "$(SYSTEM)" || (echo "usage: make jackal-install SYSTEM=DIR" >&2; exit 2)
-	@uv run --no-sync python -m red_dragon_forge.carddemo_jackal_install "$(SYSTEM)"
-
 db2-seed:
 	@FORGE_ROOT=$(CURDIR) SQUALL_DIR=squall sh -c '. ./carddemo-env.sh >/dev/null 2>&1; . tests/integration/db2_env.sh >/dev/null 2>&1; uv run --no-sync python -m red_dragon_forge.carddemo_db2_seed'
 
