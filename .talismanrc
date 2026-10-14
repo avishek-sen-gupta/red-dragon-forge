@@ -369,4 +369,8 @@ fileignoreconfig:
   checksum: 4553838ea11b000e48f964db3e7cbe633aee19f43f856506258631cd0f078151
 - filename: docs/superpowers/plans/2026-10-15-file-definitions-as-ir-data.md
   checksum: 73db18b0b575c4b47d1cf1af21c4b28e5e759d9de7ef135d585358b3867aac04
+- filename: jackal/tests/unit/test_file_definitions.py
+  checksum: 8a34632037896d0ddcfba6681547c053fa1e153f76beb03747a99c6ca0e860ef
+- filename: jackal/jackal/file_definitions.py
+  checksum: e0169cc5929ee1f9f54b6fa8c36e079895d9597073617b14c6679a5b3935ad5b
 version: "1.0"
