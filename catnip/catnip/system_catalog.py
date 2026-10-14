@@ -246,7 +246,7 @@ class SystemCatalog:
         return Dataset(
             path.dsn,
             base.path,
-            PathView(_ksds(base), aix.key_offset, aix.key_length, aix.unique),
+            PathView(aix.base, _ksds(base), aix.key_offset, aix.key_length, aix.unique),
         )
 
     def gdg(self, name: str) -> GdgBase | NotCataloged:

@@ -312,7 +312,7 @@ fileignoreconfig:
 - filename: catnip/catnip/alternate_index.py
   checksum: d4950763f6dcc178365117f9549745154f3b68e56c22bf4951f1199eeb4b2fca
 - filename: catnip/catnip/system_catalog.py
-  checksum: 567bdf606a5cae467da53693663013e7b1935be9b81ccc14831f3e83ff4b50d7
+  checksum: 6b5de16f2f9b0abc5dc401867ccf5c748fa45856f48be6d2a2737161036fb743
 - filename: catnip/catnip/declaration.py
   checksum: 4c589f8cf8f7f15ef5038a3d33542ee2fe6ee32002a45fcebad6f32c51129482
 - filename: catnip/catnip/install.py
@@ -346,7 +346,7 @@ fileignoreconfig:
 - filename: docs/roadmaps/cicada.md
   checksum: 01e69cbe5efa625a0d7642e184c913646e4bd301b8d7fe8cabd9df05966a7b21
 - filename: docs/reference/jackal/architecture.md
-  checksum: 50fd9647ed728fe0a923fcabeeab9c81d208b6d7f2ef81ca3a466ed328c5f32d
+  checksum: 44d77ff1be18c6ff5a864dac100eccd2571b2dac083e322e575b8e06471364ff
 - filename: docs/reference/cicada/cicada-architecture.html
   checksum: dd480ed8a4686b3d2a69be8aa53f5bf288d6e1d4f105494db681488764920e33
 - filename: docs/reference/catnip/README.md

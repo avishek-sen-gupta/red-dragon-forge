@@ -108,6 +108,10 @@ def _through_path(label: DatasetLabel) -> bool:
             return False
 
 
+def _supported(label: DatasetLabel, mode: str) -> bool:
+    return not (_through_path(label) and mode == OpenMode.OUTPUT.value)
+
+
 def _dataset_driver(
     dataset: Dataset,
     path: Path,
@@ -150,6 +154,13 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         if mode == OpenMode.OUTPUT.value and filename in self._appended_files:
             return OpenMode.EXTEND.value
         return mode
+
+    def _supports(self, filename: str, mode: str) -> bool:
+        if filename in self._concatenations:
+            return mode == OpenMode.INPUT.value
+        if self._datasets.has(filename):
+            return _supported(self._datasets.get(filename).label, mode)
+        return True
 
     def _admits(self, filename: str, mode: str) -> bool:
         if filename in self._concatenations:
@@ -222,7 +233,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         key_length: int,
     ) -> IOResult:
         opened = self._opened_as(filename, mode)
-        if filename in self._concatenations and opened != OpenMode.INPUT.value:
+        if not self._supports(filename, opened):
             return to_ioresult(AccessResult(AccessCondition.OPEN_MODE_NOT_SUPPORTED))
         if not self._admits(filename, opened):
             return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))

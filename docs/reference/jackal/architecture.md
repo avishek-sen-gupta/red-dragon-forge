@@ -164,7 +164,8 @@ declaration, or `jackal catalog add`, which copies one sequential file in with i
 Forge runtime accepts an unlabelled dataset. Every open reads the label: it chooses the driver
 and gives the record length. A DD naming a path opens its base cluster through the path's
 alternate index: a COBOL program reads it in alternate-key order, gets file status `02` when
-more records with the same alternate key follow, and its writes change the base cluster. A
+more records with the same alternate key follow, and its writes change the base cluster.
+`OPEN OUTPUT` through a path fails with file status 37 and leaves the base cluster as it was. A
 `LIKE=` naming a path labels the new dataset from the base cluster. IDCAMS cannot define an
 AIX or path (red-dragon-forge-shdi); `DELETE` of a cluster removes its AIXs and paths.
 `jackal.catalog.DatasetCatalog` is one job's view of the system catalog, adding

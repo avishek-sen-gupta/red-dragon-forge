@@ -52,7 +52,7 @@ def test_a_path_survives_reopening_and_opens_the_base_in_alternate_key_order(
     assert path == Dataset(
         "T.PATH",
         tmp_path / "system" / "datasets" / "T.KSDS",
-        PathView(_KSDS, 3, 3, False),
+        PathView("T.KSDS", _KSDS, 3, 3, False),
     )
     assert seen == (
         AccessResult(AccessCondition.DUPLICATES_FOLLOW, b"002AAAyy"),
@@ -94,4 +94,26 @@ def test_an_alternate_index_needs_a_cataloged_cluster_and_a_path_needs_its_index
     )
     assert (
         str(without_index.value) == "T.PATH: alternate index T.MISSING is not cataloged"
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_path_refuses_output_and_leaves_its_base_cluster_loaded(
+    tmp_path: Path,
+) -> None:
+    system = _system(tmp_path)
+    path = system.lookup("T.PATH")
+
+    with pytest.raises(CatalogError) as refused:
+        match path:
+            case Dataset():
+                path.opened(OpenMode.OUTPUT)
+            case NotCataloged():
+                pass
+
+    assert str(refused.value) == (
+        "T.PATH: OPEN OUTPUT through a path would reload its base cluster T.KSDS"
+    )
+    assert (tmp_path / "system" / "datasets" / "T.KSDS").read_bytes() == (
+        b"001BBBxx002AAAyy003AAAzz"
     )

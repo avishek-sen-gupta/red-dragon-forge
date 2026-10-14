@@ -146,7 +146,9 @@ def test_an_installed_carddemo_system_holds_each_dataset_and_runs_acctfile(
         ],
         [(data / s.dsn).read_bytes() for s in sequential],
         b"".join(sorted(_records(xref_source, 50), key=lambda r: r[:16])),
-        PathView(KsdsLabel(50, 0, 16), 25, 11, False),
+        PathView(
+            "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS", KsdsLabel(50, 0, 16), 25, 11, False
+        ),
         [Completed(0), Completed(0), Completed(0)],
         Dataset(ksds, root / "datasets" / ksds, KsdsLabel(300, 0, 11)),
     )

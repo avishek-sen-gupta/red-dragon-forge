@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from catnip.catalog_error import CatalogError
 from catnip.labels import (
     VARIABLE,
     DatasetLabel,
@@ -32,7 +33,7 @@ class Dataset:
             case KsdsLabel():
                 return _indexed(self.path, mode, self.label)
             case PathView():
-                return _through_path(self.path, mode, self.label)
+                return _through_path(self.dsn, self.path, mode, self.label)
             case _:
                 return _sequential(self.path, mode, self.label)
 
@@ -49,8 +50,13 @@ def _indexed(path: Path, mode: OpenMode, label: KsdsLabel) -> FileOrganizationDr
 
 
 def _through_path(
-    path: Path, mode: OpenMode, label: PathView
+    dsn: str, path: Path, mode: OpenMode, label: PathView
 ) -> FileOrganizationDriver:
+    if mode is OpenMode.OUTPUT:
+        raise CatalogError(
+            f"{dsn}: OPEN OUTPUT through a path would reload its base cluster "
+            f"{label.base_dsn}"
+        )
     return open_alternate_index_driver(
         path,
         mode,
