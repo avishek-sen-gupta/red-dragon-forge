@@ -26,15 +26,17 @@ Runs a CardDemo batch job through jackal. Flags are in
 
    Expected: no output.
 
-3. Install CardDemo's datasets into a system directory. Each is cataloged with the record
-   format and length CardDemo's README declares for it (its "Upload Sample Data" step); do it
-   once per system directory.
+3. Install CardDemo's data into a system directory from its declaration,
+   `config/carddemo/data.toml`: the sequential files with the record format and length
+   CardDemo's README declares (its "Upload Sample Data" step), and the clusters, alternate
+   indexes and paths its IDCAMS JCL defines, each cluster sorted by its primary key. The whole
+   declaration is validated before anything is written; do it once per system directory.
 
    ```bash
-   make jackal-install SYSTEM=/tmp/jackal-system
+   make catnip-install-carddemo SYSTEM=/tmp/jackal-system
    ```
 
-   Expected: an `installing …` line per dataset, then `installed 11 datasets into /tmp/jackal-system`.
+   Expected: an `installed …` line per dataset, alternate index and path.
    A single dataset can be added by hand with `jackal catalog add`; see
    [the CLI reference](../reference/jackal/cli.md).
 

@@ -40,7 +40,6 @@ registers. RedDragon's VM has no CICS, SQL or JCL knowledge of its own.
 | `carddemo_db2_region.py` | The CardDemo region with CICS and SQL composed. |
 | `carddemo_db2_schema.py` | CardDemo's Db2 schema and seed data. |
 | `carddemo_db2_seed.py` | `carddemo-db2-seed`: drops, recreates and seeds the schema. Run it as `make db2-seed`. |
-| `carddemo_jackal_install.py` | Catalogs CardDemo's eleven datasets into a jackal system directory with the RECFM/LRECL its README declares (its "Upload Sample Data" step). Run it as `make jackal-install SYSTEM=DIR`. |
 | `carddemo_db2_cli.py` | `carddemo-db2-cli`: serves the composed region over TN3270. See [Run CardDemo](../../how-to/run-carddemo.md). |
 | `db2_status.py` | `make db2-status`: connects and queries Db2. Exit codes: 0 up, 1 down, 2 DSN unset. |
 
