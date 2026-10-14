@@ -43,6 +43,7 @@ from cics.types import DispatchKind
 from cics.interval import StartQueue
 from cics.dispatcher import InputEvent, CicsRegion
 from cics.bootstrap import compile_cics_program
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from cics.bms.generate import generate_symbolic_copybooks
@@ -776,8 +777,11 @@ def test_real_carddemo_account_update_rewrite(tmp_path, bridge_jar):
 
     # Verify the REWRITE persisted: read ACCTDAT back from the engine and check
     # the active-status byte (offset 11, X(1)) is now 'N'.
-    record, resp = engine.read("ACCTDAT", _ACCT_ID.encode("cp037"), 11)
-    assert record is not None, f"ACCTDAT record vanished after REWRITE (resp={resp})"
+    record_read = engine.read("ACCTDAT", _ACCT_ID.encode("cp037"), 11)
+    assert isinstance(
+        record_read, RecordRead
+    ), f"ACCTDAT record vanished after REWRITE (resp={record_read.resp})"
+    record = record_read.record
     status_byte = record[11:12].decode("cp037")
     assert status_byte == _NEW_ACCT_STATUS, (
         f"REWRITE did not persist status change: stored {status_byte!r}, "
@@ -1048,13 +1052,14 @@ def test_real_carddemo_transaction_add_write(tmp_path, bridge_jar):
     rB, viewB, engine = _drive_transaction_add(tmp_path, bridge_jar)
 
     # The created record must exist in TRANSACT under the generated key.
-    record, resp = engine.read(
+    record_read = engine.read(
         "TRANSACT", _EXPECTED_NEW_TRAN_ID.encode("cp037"), _TRAN_KEYLEN
     )
-    assert record is not None, (
-        f"new TRANSACT record not written (resp={resp}); "
+    assert isinstance(record_read, RecordRead), (
+        f"new TRANSACT record not written (resp={record_read.resp}); "
         f"screen err={viewB.get('ERRMSG')!r}"
     )
+    record = record_read.record
     # TRAN-ID X(16)@0 — the generated next id.
     assert (
         record[0:16].decode("cp037") == _EXPECTED_NEW_TRAN_ID

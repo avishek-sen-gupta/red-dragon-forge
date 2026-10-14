@@ -25,6 +25,7 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
@@ -199,8 +200,9 @@ _EDIT_FIELDS = {
 
 
 def _embossed_in_carddat(engine) -> str:
-    rec, _ = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
-    assert rec is not None, "card vanished"
+    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
+    assert isinstance(rec_read, RecordRead), "card vanished"
+    rec = rec_read.record
     return bytes(rec[30:80]).decode("cp037").strip()
 
 

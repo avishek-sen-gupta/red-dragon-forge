@@ -25,6 +25,8 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
+from cics.vsam.no_record import NoRecord
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
@@ -182,8 +184,9 @@ def test_real_carddemo_user_delete_removes_record(tmp_path, bridge_jar):
     region, screen_q, engine = _drive_to_user_delete(tmp_path, bridge_jar)
 
     # Pre-condition: the target exists.
-    rec, _ = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
-    assert rec is not None, "target user missing before delete"
+    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
+    assert isinstance(rec_read, RecordRead), "target user missing before delete"
+    rec = rec_read.record
 
     # Turn 4: first display (empty prompt)
     drain(screen_q)
@@ -213,10 +216,11 @@ def test_real_carddemo_user_delete_removes_record(tmp_path, bridge_jar):
     assert (r6.transid or "").strip() == "CU03"
 
     # Verify the DELETE: the key is gone; a neighbouring user is untouched.
-    rec, _ = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
-    assert rec is None, "target user still present after delete"
-    other, _ = engine.read("USRSEC", "USER0001".encode("cp037"), 8)
-    assert other is not None, "delete removed the wrong record"
+    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
+    assert isinstance(rec_read, NoRecord), "target user still present after delete"
+    other_read = engine.read("USRSEC", "USER0001".encode("cp037"), 8)
+    assert isinstance(other_read, RecordRead), "delete removed the wrong record"
+    other = other_read.record
 
     msgs = [
         (s.get("fields", {}).get("ERRMSG") or "")

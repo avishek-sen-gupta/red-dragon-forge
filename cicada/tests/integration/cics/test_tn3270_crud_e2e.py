@@ -45,6 +45,8 @@ fields surviving a turn untyped.
 
 from __future__ import annotations
 
+from cics.vsam.record_read import RecordRead
+from cics.vsam.no_record import NoRecord
 import os
 from contextlib import closing
 from dataclasses import replace
@@ -127,8 +129,9 @@ _NEW_FIRST_NAME = "JANE"
 
 
 def _custdat_first_name(engine) -> str:
-    rec, _ = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
-    assert rec is not None, "customer vanished"
+    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
+    assert isinstance(rec_read, RecordRead), "customer vanished"
+    rec = rec_read.record
     return bytes(rec[9:34]).decode("cp037").strip()
 
 
@@ -136,8 +139,9 @@ def _custdat_untouched(engine) -> tuple[str, str]:
     """CUST-SSN 9(9)@279 and CUST-FICO-CREDIT-SCORE 9(3)@329 (CVCUS01Y) --
     fields this flow's edit never touches, to prove the REWRITE didn't
     corrupt the rest of the 500-byte record."""
-    rec, _ = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
-    assert rec is not None, "customer vanished"
+    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
+    assert isinstance(rec_read, RecordRead), "customer vanished"
+    rec = rec_read.record
     b = bytes(rec)
     return b[279:288].decode("cp037"), b[329:332].decode("cp037")
 
@@ -230,8 +234,9 @@ _NEW_EMBOSSED_NAME = "JANE VON"
 
 
 def _carddat_embossed_name(engine) -> str:
-    rec, _ = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
-    assert rec is not None, "card vanished"
+    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
+    assert isinstance(rec_read, RecordRead), "card vanished"
+    rec = rec_read.record
     return bytes(rec[30:80]).decode("cp037").strip()
 
 
@@ -245,8 +250,9 @@ def _carddat_acct_id(engine) -> str:
     field on this screen), so every card update genuinely zeroes CARD-CVV-CD
     and blanks FILLER in VSAM -- confirmed live (747 -> 000); that is real
     COCRDUPC behaviour, not a cicada REWRITE-offset bug."""
-    rec, _ = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
-    assert rec is not None, "card vanished"
+    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
+    assert isinstance(rec_read, RecordRead), "card vanished"
+    rec = rec_read.record
     return bytes(rec[16:27]).decode("cp037")
 
 
@@ -359,8 +365,9 @@ def _transact_fields(engine, tran_id: str) -> dict[str, str]:
     """CVTRA05Y TRAN-RECORD field slices (matches the headless regression
     test's own offsets: id, type, category, source, description, merchant id,
     merchant name, card number)."""
-    rec, _ = engine.read("TRANSACT", tran_id.encode("cp037"), 16)
-    assert rec is not None, f"transaction {tran_id} was not written"
+    rec_read = engine.read("TRANSACT", tran_id.encode("cp037"), 16)
+    assert isinstance(rec_read, RecordRead), f"transaction {tran_id} was not written"
+    rec = rec_read.record
     b = bytes(rec)
     return {
         "id": b[0:16].decode("cp037").strip(),
@@ -387,11 +394,9 @@ def test_add_transaction_writes_transact(
 
     with served_session(config, bridge_jar, tmp_path) as served:
         # Pre-condition: the id STARTBR/READPREV will mint does not exist yet.
-        assert (
-            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16)[
-                0
-            ]
-            is None
+        assert isinstance(
+            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16),
+            NoRecord,
         )
 
         with closing(S3270()) as terminal:
@@ -435,11 +440,11 @@ def test_add_transaction_writes_transact(
 
             # The confirm prompt only validates and re-displays; the WRITE
             # must not have happened until CONFIRM='Y' actually commits.
-            assert (
+            assert isinstance(
                 served.region.vsam_engine.read(
                     "TRANSACT", new_tran_id.encode("cp037"), 16
-                )[0]
-                is None
+                ),
+                NoRecord,
             )
 
             # Turn 2: CONFIRM='Y' -- every other field above is BMS ATTRB=FSET
@@ -478,8 +483,9 @@ def test_add_transaction_writes_transact(
 
 
 def _acctdat_balance(engine, acct_id: str) -> float:
-    rec, _ = engine.read("ACCTDAT", acct_id.encode("cp037"), 11)
-    assert rec is not None, "account vanished"
+    rec_read = engine.read("ACCTDAT", acct_id.encode("cp037"), 11)
+    assert isinstance(rec_read, RecordRead), "account vanished"
+    rec = rec_read.record
     return decode_zoned(bytes(rec[12:24]), decimal_digits=2)
 
 
@@ -518,11 +524,9 @@ def test_bill_pay_rewrites_acctdat_and_writes_transact(
     assert original_edited != zero_edited  # the payment must be a real change
 
     with served_session(config, bridge_jar, tmp_path) as served:
-        assert (
-            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16)[
-                0
-            ]
-            is None
+        assert isinstance(
+            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16),
+            NoRecord,
         )
 
         with closing(S3270()) as terminal:
@@ -592,8 +596,9 @@ def _next_admin_id() -> str:
 
 
 def _usrsec_fields(engine, user_id: str) -> dict[str, str]:
-    rec, _ = engine.read("USRSEC", user_id.encode("cp037"), 8)
-    assert rec is not None, f"user {user_id} vanished"
+    rec_read = engine.read("USRSEC", user_id.encode("cp037"), 8)
+    assert isinstance(rec_read, RecordRead), f"user {user_id} vanished"
+    rec = rec_read.record
     b = bytes(rec)
     return {
         "fname": b[8:28].decode("cp037").strip(),
@@ -625,9 +630,9 @@ def test_admin_add_user_writes_usrsec(
     new_fname, new_lname, new_pwd, new_type = "TESTFNAME", "TESTLNAME", "PASSWD01", "A"
 
     with served_session(config, bridge_jar, tmp_path) as served:
-        assert (
-            served.region.vsam_engine.read("USRSEC", new_id.encode("cp037"), 8)[0]
-            is None
+        assert isinstance(
+            served.region.vsam_engine.read("USRSEC", new_id.encode("cp037"), 8),
+            NoRecord,
         )
 
         with closing(S3270()) as terminal:
@@ -794,11 +799,9 @@ def test_admin_delete_user_removes_usrsec(
 
             # The find turn only READs and displays; the record must still
             # exist in VSAM until PF5 actually DELETEs it.
-            assert (
-                served.region.vsam_engine.read("USRSEC", delete_id.encode("cp037"), 8)[
-                    0
-                ]
-                is not None
+            assert isinstance(
+                served.region.vsam_engine.read("USRSEC", delete_id.encode("cp037"), 8),
+                RecordRead,
             )
 
             # Turn 2: PF5 DELETEs (COUSR03C.cbl:307, message at :320).
@@ -806,10 +809,12 @@ def test_admin_delete_user_removes_usrsec(
             assert f"User {delete_id} has been deleted" in committed
 
             engine = served.region.vsam_engine
-            assert engine.read("USRSEC", delete_id.encode("cp037"), 8)[0] is None
+            assert isinstance(
+                engine.read("USRSEC", delete_id.encode("cp037"), 8), NoRecord
+            )
             for neighbour in neighbour_ids:
-                assert (
-                    engine.read("USRSEC", neighbour.encode("cp037"), 8)[0] is not None
+                assert isinstance(
+                    engine.read("USRSEC", neighbour.encode("cp037"), 8), RecordRead
                 )
 
             # Turn 3: INITIALIZE-ALL-FIELDS cleared USRIDIN on success, so

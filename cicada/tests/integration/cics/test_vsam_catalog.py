@@ -7,8 +7,9 @@ import logging
 import pytest
 
 from catnip.system_catalog import SystemCatalog
-from cics.vsam.engine import RESP_NORMAL, VsamEngine
-from cics.vsam.eibresp import RESP_DUPKEY
+from cics.vsam.engine import VsamEngine
+from cics.vsam.record_read import RecordRead
+from cics.vsam.eibresp import RESP_DUPKEY, RESP_NORMAL
 from cics.vsam.file_table import FileTableError, cics_files
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
@@ -34,8 +35,8 @@ def test_a_record_written_through_the_cluster_is_read_through_its_path(tmp_path)
     after_restart = restarted.read("CCXREF", b"000", 3)
 
     assert wrote == RESP_NORMAL
-    assert first == (b"000AAAzz", RESP_DUPKEY)
-    assert after_restart == (b"000AAAzz", RESP_NORMAL)
+    assert first == RecordRead(b"000AAAzz", RESP_DUPKEY)
+    assert after_restart == RecordRead(b"000AAAzz", RESP_NORMAL)
 
 
 @covers(CobolFeature.EXEC_CICS)
@@ -73,4 +74,4 @@ def test_duplicate_alternate_keys_come_back_in_the_order_they_were_written(tmp_p
     engine.write("CCXREF", b"000", 3, b"000AAAzz")
     first = engine.read("CXACAIX", b"AAA", 3)
 
-    assert first == (b"001AAAxx", RESP_DUPKEY)
+    assert first == RecordRead(b"001AAAxx", RESP_DUPKEY)

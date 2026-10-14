@@ -160,9 +160,11 @@ region TOML names CSD files, not datasets ([config](tn3270-config.md)).
   alternate-key order, duplicates in primary-key order; `READ`, `READNEXT`, `READPREV` and
   `DELETE` return `DUPKEY` (RESP 15) when more records with the same alternate key follow; a
   `WRITE` or `REWRITE` through a path changes the base cluster, and one that repeats a key in a
-  unique AIX returns `DUPREC`. A file not in the table returns `DISABLED`. Browses keep one open
-  driver per task, file and cursor. The adapter owns the held read-for-update key and the
-  browse cursors.
+  unique AIX returns `DUPREC`. A file not in the table returns `DISABLED`. `READ`, `READNEXT`
+  and `READPREV` return a `ReadOutcome`: `RecordRead(record, resp)` when a record came back,
+  `NoRecord(resp)` when none did; the builtins fill the `INTO` area only from a `RecordRead`.
+  Browses keep one open driver per task, file and cursor. The adapter owns the held
+  read-for-update key and the browse cursors.
 - A failure the declared shape causes is logged, not raised, since the program may handle the
   condition: a `NOTFND` whose program key length differs from the declared one (on `READ`,
   `DELETE`, or `STARTBR` with `EQUAL`) logs the file, its DSN, the declared key length and

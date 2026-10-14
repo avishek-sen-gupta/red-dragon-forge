@@ -48,9 +48,9 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_varchar.py
   checksum: 3558cdbd688db511f5a53990dcf7da7e1aaa7b6dd5a11802ec297a7f485926f2
 - filename: cicada/cics/builtins/vsam.py
-  checksum: 2f021cbbae55f41d8c34b6aecf38e02822a66e3ccc2a829bbdbe7c7a23a7b780
+  checksum: b238c19d6f876adb46018429eda2f70184796ea0286c86cd46d1eb0594bc065d
 - filename: cicada/tests/unit/cics/test_vsam_engine.py
-  checksum: be53e6da2f8975aa4abec4d3c90eb90585b2398f29204a402634799ff8bda5d4
+  checksum: d83ab64b29d26ddb7737596a2e22954789c8bce8a8ac0923b826856cb806064e
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
   checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
 - filename: vendor/red-dragon
@@ -326,7 +326,7 @@ fileignoreconfig:
 - filename: cicada/tests/integration/cics/test_carddemo_user_list.py
   checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
 - filename: cicada/cics/vsam/engine.py
-  checksum: a0de6d50b79d742349a5df7d41986e2764f9f46ecd9e333cbcbfa310f7d74031
+  checksum: 83e01d5888bcc1925ccebf8c2f4292cdf7ae460f38d289a740d414a51d1c3445
 - filename: cicada/tests/vsam_system.py
   checksum: a1338614fbd2226f6e566a6dd83f5c84cc5a0196ffdf25561bd2d9f172fe9aed
 - filename: cicada/tests/integration/cics/test_vsam_roundtrip.py
@@ -334,7 +334,7 @@ fileignoreconfig:
 - filename: cicada/tests/integration/cics/test_carddemo_user_update.py
   checksum: 86e9e51028f22b8c27940d241b2ff3588a54f16e5c96b7d5a898d42511b7ff95
 - filename: cicada/tests/integration/cics/test_vsam_catalog.py
-  checksum: 7f44238add03ad4424a0684be094dcd255d76502dd55ac5ea098394d939b2831
+  checksum: 616db18c8f72bf60c51e83bf90fafab56e09958f765e77009af44577a43ed5ad
 - filename: cicada/tests/unit/cics/test_vsam_builtins.py
   checksum: 7dda6fee6b36a43824b30db2dff5674a4f52468372d8dcdbae6cfd5286126f22
 - filename: docs/presentation/capture/cics_flow.py
