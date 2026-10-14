@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import TypeAlias, TypeVar
 
-from jackal.gdg import Empty, GdgOrder, Scratch
+from catnip.gdg import Empty, GdgOrder, Scratch
 from jackal.idcams.commands import (
     Cancel,
     Cc,

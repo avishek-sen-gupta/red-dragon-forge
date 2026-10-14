@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import pytest
-from jackal.catalog import Dataset
-from jackal.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
-from jackal.system_catalog import NotCataloged, SystemCatalog
+from catnip.dataset import Dataset
+from catnip.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
+from catnip.system_catalog import NotCataloged, SystemCatalog
+from catnip.system_catalog_removal import remove_cataloged
 from tests.covers import NotLanguageFeature, covers
 
 FB80 = SequentialLabel(RecordFormat.FB, 80)
@@ -41,7 +42,7 @@ def test_created_and_removed_datasets_are_recorded_for_later_catalogs(
     created = system.create("J.NEW", LabelPending())
     ksds = system.create("J.KSDS", KsdsLabel(300, 0, 11))
     gone = system.create("J.GONE", FB80)
-    system.remove("J.GONE")
+    remove_cataloged(system, "J.GONE")
     reloaded = SystemCatalog(root)
     assert (
         reloaded.lookup("J.NEW"),

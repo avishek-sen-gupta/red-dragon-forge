@@ -8,15 +8,15 @@ docs/records/design/2026-10-12-jackal-concatenation.md.
 from pathlib import Path
 
 import pytest
+from catnip.labels import RecordFormat, SequentialLabel
+from catnip.system_catalog import NotCataloged
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
-from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
-from jackal.system_catalog import NotCataloged
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.system_build import job_catalog, system, upload

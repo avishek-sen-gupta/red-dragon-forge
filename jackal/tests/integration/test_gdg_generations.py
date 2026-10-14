@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from catnip.gdg import Empty, GdgBase, GdgOrder, Scratch
+from catnip.system_catalog import NotCataloged
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
-from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
 from jackal.missing_data import (
     LenientAllocation,
     MissingDataStrategy,
@@ -16,7 +17,6 @@ from jackal.missing_program import AbendMissingProgram
 from jackal.model import DD, DdName, GenerationDSN, StepRef
 from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner
-from jackal.system_catalog import NotCataloged
 from jackal.unresolved import RaiseErrorStrategy
 from jackal.value_parts import Value, literal
 from tests.covers import NotLanguageFeature, covers

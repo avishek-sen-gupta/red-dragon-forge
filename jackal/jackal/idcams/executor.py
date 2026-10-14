@@ -9,6 +9,9 @@ from functools import reduce
 from itertools import chain, count, takewhile
 from typing import TypeAlias
 
+from catnip.dataset import Dataset
+from catnip.labels import DatasetLabel, KsdsLabel, LabelPending
+from catnip.system_catalog import NotCataloged
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
@@ -20,7 +23,6 @@ from jackal.allocation import (
     MemberAllocation,
 )
 from jackal.catalog import DatasetCatalog
-from jackal.dataset import Dataset
 from jackal.idcams.commands import (
     Cancel,
     Cc,
@@ -38,9 +40,7 @@ from jackal.idcams.commands import (
     VerifyDataset,
     VerifyFile,
 )
-from jackal.labels import DatasetLabel, KsdsLabel, LabelPending
 from jackal.model import DdName
-from jackal.system_catalog import NotCataloged
 
 _TESTS: Mapping[CcOp, Callable[[int, int], bool]] = {
     CcOp.LE: operator.le,

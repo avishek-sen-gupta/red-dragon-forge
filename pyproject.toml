@@ -23,7 +23,7 @@ carddemo-db2-seed = "red_dragon_forge.carddemo_db2_seed:main"
 red-dragon = { path = "vendor/red-dragon", editable = true }
 
 [tool.uv.workspace]
-members = ["cicada", "squall", "jackal", "cobble"]
+members = ["cicada", "squall", "jackal", "cobble", "catnip"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["red_dragon_forge"]

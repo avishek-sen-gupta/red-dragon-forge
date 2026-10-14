@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from jackal.catalog_stores import Table
-from jackal.dataset import Dataset
-from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
-from jackal.labels import (
+from catnip.catalog_stores import Table
+from catnip.dataset import Dataset
+from catnip.gdg import Empty, GdgBase, GdgOrder, Scratch
+from catnip.labels import (
     DatasetLabel,
     KsdsLabel,
     Label,

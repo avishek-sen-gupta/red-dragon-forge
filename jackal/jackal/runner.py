@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from functools import reduce
 from pathlib import Path
 
+from catnip.system_catalog import SystemCatalog
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
@@ -53,7 +54,6 @@ from jackal.results import (
     StepOutcome,
     StepResult,
 )
-from jackal.system_catalog import SystemCatalog
 from jackal.tso_step import dsn_runs, run_tso_step
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES

@@ -10,6 +10,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "catnip",
     "cicada",
     "cobble",
     "jackal",
@@ -210,6 +211,37 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/66/76/302e313964bcff7e28df329d39f84f5270095730d85ff0acc260610a0d82/black-26.5.1-cp314-cp314-win_amd64.whl", hash = "sha256:577f21094ea469ef92ec1adaf2c9441a226d2144d01a5be2fa823cecf6543e50", size = 1511860, upload-time = "2026-05-18T17:05:43.943Z" },
     { url = "https://files.pythonhosted.org/packages/27/4e/a3827e35e0e567f9f9ee59e2a0ab979267dca98718f25547ca8c6733afd4/black-26.5.1-cp314-cp314-win_arm64.whl", hash = "sha256:ed1a20af114c301a0269bf01163d51dbef72737fd65f850001e7cbe7f3c7abae", size = 1316632, upload-time = "2026-05-18T17:05:45.521Z" },
     { url = "https://files.pythonhosted.org/packages/94/51/f975cae76d44274cc2868dc9040ac5d58d464784610234455b4e7b19c6ef/black-26.5.1-py3-none-any.whl", hash = "sha256:4ed7f7da04046d2e488437170797d3b4a4ad83906683bcb7dfc68b673bbce5e2", size = 213693, upload-time = "2026-05-18T16:53:33.964Z" },
+]
+
+[[package]]
+name = "catnip"
+version = "0.1.0"
+source = { editable = "catnip" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "red-dragon" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "pre-commit" },
+    { name = "pyright" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "red-dragon", editable = "vendor/red-dragon" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=26.5.1" },
+    { name = "pre-commit", specifier = ">=4.6.0" },
+    { name = "pyright", specifier = ">=1.1.410" },
+    { name = "pytest", specifier = ">=9.1.1" },
 ]
 
 [[package]]
@@ -828,6 +860,7 @@ name = "jackal"
 version = "0.1.0"
 source = { editable = "jackal" }
 dependencies = [
+    { name = "catnip" },
     { name = "lark" },
     { name = "red-dragon" },
 ]
@@ -844,6 +877,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "catnip", editable = "catnip" },
     { name = "lark", specifier = ">=1.1" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
 ]

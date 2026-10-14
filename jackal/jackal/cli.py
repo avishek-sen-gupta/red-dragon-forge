@@ -9,16 +9,16 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+from catnip.labels import RecordFormat, SequentialLabel
+from catnip.system_catalog import SystemCatalog
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
-from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
 from jackal.model import Job, ProgramRef
 from jackal.program_sources import LinkedProgramNotFound
 from jackal.results import JobResult
 from jackal.runner import JobRunner
-from jackal.system_catalog import SystemCatalog
 from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
 
 

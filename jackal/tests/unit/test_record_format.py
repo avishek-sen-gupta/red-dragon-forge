@@ -6,6 +6,7 @@ docs/records/design/2026-10-11-jackal-dataset-decisions.md.
 """
 
 import pytest
+from catnip.labels import KsdsLabel, RecordFormat, SequentialLabel
 from cobol_asg.cobol_statements import (
     FileDescription,
     NoRecordClause,
@@ -14,7 +15,6 @@ from cobol_asg.cobol_statements import (
     RecordVarying,
 )
 from cobol_asg.file_enums import RecordingMode
-from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.record_format import (
     FdRecords,
     FixedFormat,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jackal.system_catalog import SystemCatalog
+from catnip.system_catalog import SystemCatalog
 
 
 def remove_cataloged(system: SystemCatalog, dsn: str) -> None:

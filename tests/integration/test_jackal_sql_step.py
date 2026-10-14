@@ -5,13 +5,13 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from catnip.system_catalog import SystemCatalog
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed, StepOutcome
 from jackal.runner import JobRunner
-from jackal.system_catalog import SystemCatalog
 from jackal.unresolved import RaiseErrorStrategy
 from squall.backends.sqlite import SqliteBackend
 from squall.coprocessor import build_sql_spec

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jackal.gdg import Empty, GdgOrder, Scratch
+from catnip.gdg import Empty, GdgOrder, Scratch
 from jackal.idcams.commands import (
     Cancel,
     Cc,

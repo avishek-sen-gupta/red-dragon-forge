@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from catnip.dataset import Dataset
+from catnip.labels import LabelPending, RecordFormat, SequentialLabel
+from catnip.system_catalog import SystemCatalog
 from jackal.cli import main, run
-from jackal.dataset import Dataset
-from jackal.labels import LabelPending, RecordFormat, SequentialLabel
-from jackal.system_catalog import SystemCatalog
 from tests.covers import NotLanguageFeature, covers
 
 

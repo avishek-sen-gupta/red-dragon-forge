@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 
 import pytest
+from catnip.labels import RecordFormat, SequentialLabel
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
-from jackal.labels import RecordFormat, SequentialLabel
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed

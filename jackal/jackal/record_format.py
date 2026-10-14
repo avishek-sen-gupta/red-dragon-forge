@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TypeAlias
 
+from catnip.labels import (
+    VARIABLE,
+    DatasetLabel,
+    LabelPending,
+    RecordFormat,
+    SequentialLabel,
+)
 from cobol_asg.cobol_statements import (
     FileDescription,
     NoRecordClause,
@@ -14,13 +21,6 @@ from cobol_asg.cobol_statements import (
     RecordVarying,
 )
 from cobol_asg.file_enums import RecordingMode
-from jackal.labels import (
-    VARIABLE,
-    DatasetLabel,
-    LabelPending,
-    RecordFormat,
-    SequentialLabel,
-)
 
 _RDW = 4
 

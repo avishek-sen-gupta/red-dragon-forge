@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from catnip.dataset import Relabeller
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
 from interpreter.cobol.program_object import ARGUMENTS_PARAM
@@ -23,7 +24,6 @@ from interpreter.run import Completed as RunCompleted
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
 from jackal.cobol_files import AllocatedFileIOProvider
-from jackal.dataset import Relabeller
 from jackal.le_abend import user_abend
 from jackal.model import ProgramStep, StepReference, SystemAbend
 from jackal.parm import build_parm_region

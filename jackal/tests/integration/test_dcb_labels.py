@@ -6,9 +6,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
+from catnip.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
-from jackal.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.model import (
