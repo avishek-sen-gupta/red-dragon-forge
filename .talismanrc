@@ -365,4 +365,6 @@ fileignoreconfig:
   checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
   checksum: 6122ec03beac3ba3222e3032bab94c695dccec1b29564b382698a714aa75b6e4
+- filename: docs/superpowers/specs/2026-10-15-file-definitions-as-ir-data-design.md
+  checksum: 107348c367c6f3287c44573338dcb14e8d24cee9d85ace2ccf802ab8c64d361d
 version: "1.0"
