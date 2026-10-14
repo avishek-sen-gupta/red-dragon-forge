@@ -26,7 +26,7 @@ fileignoreconfig:
 - filename: cicada/tests/integration/cics/test_tn3270_region.py
   checksum: 590ff73ee552a72c4f718e3876197a2bd71ed689004d286c9200c48f3f24e0e4
 - filename: cicada/tests/unit/cics/test_screen_builtins.py
-  checksum: afe0a653a2c45f21edde528ea182a66dbc3ae1f63c87627cea59048220bba306
+  checksum: ff195bb9357728f045d7fee49b5d0d0e4062243fec893a13471d8a92be3c36f2
 - filename: cicada/tests/unit/bms_copybook_gen/test_parser_layout.py
   checksum: a9cc8f08f4aa4632f4406e1d1d46538e2069d9d2c08362755d2245f6f4e86700
 - filename: cicada/bms_copybook_gen/parser.py
@@ -288,11 +288,11 @@ fileignoreconfig:
 - filename: docs/records/design/2026-10-11-jackal-dataset-decisions.md
   checksum: ece97e916b576037d45af880fb3774729d86500c565015c32282fb645f592156
 - filename: cobol_harness/state.py
-  checksum: ea0e23afa4ffef8f96e244a4aef9af14350dcfbd23e71360bf2a61fb1ab9f531
+  checksum: b7568cfbb54a9796a7206969f1d5ce3ba0b6ba78a319b2138b039253d3a8eec8
 - filename: tests/integration/test_headless_harness.py
   checksum: 5179cbf2fb2b5588aa8627219e7a30eabad583e8cb061e57ecfce7d24dd2da29
 - filename: cobol_harness/vsam.py
-  checksum: 911137ec1b388f0981f5e37475129443b15593ecf9144aa80eb05c2fce64c152
+  checksum: 9ed5061d0b35577bb37f513f47e73fd05297e647a12394c3b84366a9be072189
 - filename: cobol_harness/region.py
   checksum: 6d9fd77ddcd339c7ee311f7167f4e55ff332177b8849d28c3a4e2e1fa75254b6
 - filename: docs/records/design/2026-10-12-jackal-dcb-attributes.md
@@ -373,4 +373,6 @@ fileignoreconfig:
   checksum: 8a34632037896d0ddcfba6681547c053fa1e153f76beb03747a99c6ca0e860ef
 - filename: jackal/jackal/file_definitions.py
   checksum: e0169cc5929ee1f9f54b6fa8c36e079895d9597073617b14c6679a5b3935ad5b
+- filename: cicada/tests/integration/cics/test_sign_on_flow.py
+  checksum: de82c11f91f78729a1970450526c8e514eb8397f3d0919007689df8ae872be5e
 version: "1.0"

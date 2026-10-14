@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from interpreter.cobol.cobol_frontend import CobolFrontend
+from interpreter.project.cobol_compile import compile_cobol
 from cics.statements import CicsDialectParser
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
@@ -64,37 +64,6 @@ COBOL_ASSIGN = """\
 """
 
 
-def _link_single_cobol(source: bytes, frontend: CobolFrontend, program_id: str):
-    from interpreter.cfg import build_cfg
-    from interpreter.registry import build_registry
-    from interpreter.constants import Language
-    from interpreter.project.types import LinkedProgram
-    from interpreter.ir import CodeLabel
-
-    instructions = frontend.lower(source)
-    cfg = build_cfg(instructions)
-    registry = build_registry(
-        instructions,
-        cfg,
-        func_symbol_table=frontend.func_symbol_table,
-        class_symbol_table=frontend.class_symbol_table,
-    )
-    return LinkedProgram(
-        modules={},
-        merged_ir=list(instructions),
-        merged_cfg=cfg,
-        merged_registry=registry,
-        language=Language.COBOL,
-        import_graph={},
-        type_env_builder=frontend.type_env_builder,
-        symbol_table=frontend.symbol_table,
-        data_layout=frontend.data_layout,
-        func_symbol_table=frontend.func_symbol_table,
-        class_symbol_table=frontend.class_symbol_table,
-        entry_func_label=CodeLabel(f"func_{program_id.lower()}_0"),
-    )
-
-
 @covers(CobolFeature.EXEC_CICS)
 def test_assign_and_formattime_write_target_fields(cobol_parser):
     """ASSIGN APPLID and FORMATTIME YYYYMMDD populate their named fields."""
@@ -113,12 +82,12 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
         unsupported_verbs=set(),
     )
     source = apply_cics_prepass(COBOL_ASSIGN).encode()
-    frontend = CobolFrontend(
-        cobol_parser=cobol_parser,
+    program = compile_cobol(
+        source,
+        parser=cobol_parser,
         extension_strategies=[strategy],
         dialect_parsers=[CicsDialectParser()],
     )
-    program = _link_single_cobol(source, frontend, "TESTASGN")
 
     result = run_cics(
         program,

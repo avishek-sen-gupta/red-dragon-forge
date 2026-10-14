@@ -35,8 +35,11 @@ import ibm_db
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import run_cics
 from cics.types import CicsContext, DispatchKind
+from interpreter.cobol.field_position import FieldPosition
+from interpreter.cobol.layout_data import field_positions
 from interpreter.project.coprocessor_compile import compile_program
 from interpreter.project.types import LinkedProgram
+from interpreter.run import main_declarations
 from squall.backend import SqlBackend, SqlResult
 from squall.backends.db2 import Db2Backend
 from squall.backends.sqlite import SqliteBackend
@@ -65,7 +68,7 @@ STAFF_ROWS = (
     (40, "NGAN", 15, "Clerk"),
 )
 
-Field = Mapping[str, int]
+Field = FieldPosition
 Layout = Mapping[str, Field]
 
 
@@ -183,23 +186,23 @@ def _excerpt(path: Path) -> str:
 def _is_group(candidate: Field, fields: Sequence[tuple[str, Field]]) -> bool:
     return any(
         other is not candidate
-        and candidate["offset"]
-        <= other["offset"]
-        < candidate["offset"] + candidate["length"]
-        and other["length"] < candidate["length"]
+        and candidate.offset
+        <= other.offset
+        < candidate.offset + candidate.length
+        and other.length < candidate.length
         for _, other in fields
     )
 
 
 def _leaf_fields(layout: Layout, prefix: str, base: Field) -> list[tuple[str, Field]]:
-    lo, hi = base["offset"], base["offset"] + base["length"]
+    lo, hi = base.offset, base.offset + base.length
     fields = [
         (n, f)
         for n, f in layout.items()
-        if n.startswith(prefix) and lo <= f["offset"] < hi
+        if n.startswith(prefix) and lo <= f.offset < hi
     ]
     by_offset = sorted(
-        (f["offset"], position, n, f)
+        (f.offset, position, n, f)
         for position, (n, f) in enumerate(fields)
         if not _is_group(f, fields)
     )
@@ -207,15 +210,15 @@ def _leaf_fields(layout: Layout, prefix: str, base: Field) -> list[tuple[str, Fi
 
 
 def _field_bytes(buf: bytes, target: Field, base: Field) -> bytes:
-    off = target["offset"] - base["offset"]
-    return buf[off : off + target["length"]]
+    off = target.offset - base.offset
+    return buf[off : off + target.length]
 
 
 def _field_row(buf: bytes, name: str, target: Field, base: Field) -> str:
-    off = target["offset"] - base["offset"]
+    off = target.offset - base.offset
     raw = _field_bytes(buf, target, base)
     text = raw.decode("cp037") if any(raw) else f"<{len(raw)} x NUL bytes>"
-    return f"  {name:<26} +{off:<4} len {target['length']:<3} = {text.rstrip()!r}"
+    return f"  {name:<26} +{off:<4} len {target.length:<3} = {text.rstrip()!r}"
 
 
 def _decode_commarea(buf: bytes, layout: Layout, base: Field) -> list[str]:
@@ -285,14 +288,17 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
         [wrap_spec],
     )
     return CompiledInqcust(
-        wrap_linked, wrap_linked.data_layout, context_holder, result_holder
+        wrap_linked,
+        field_positions(main_declarations(wrap_linked)),
+        context_holder,
+        result_holder,
     )
 
 
 def _run_inqcust_case(
     program: CompiledInqcust, log: StatementLog, case: InqcustCase
 ) -> list[str]:
-    commarea = inq._seed_commarea(inq._SORT_CODE, case.custno, program.ws_ca["length"])
+    commarea = inq._seed_commarea(inq._SORT_CODE, case.custno, program.ws_ca.length)
     t1 = time.perf_counter()
     result = run_cics(
         program.linked,
@@ -314,7 +320,7 @@ def _run_inqcust_case(
     return [
         "",
         f"=== Case: {case.label} ===",
-        f"COMMAREA in  ({program.ws_ca['length']} bytes, cp037): "
+        f"COMMAREA in  ({program.ws_ca.length} bytes, cp037): "
         f"INQCUST-SCODE={inq._SORT_CODE!r} INQCUST-CUSTNO={case.custno!r}; rest NUL",
         f"Dispatch:    {result.kind.name}   elapsed {run_s:.2f}s",
         "SQL reaching Db2 (recorded at the SqlBackend boundary):",

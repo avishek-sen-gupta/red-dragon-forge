@@ -69,16 +69,17 @@ def build_record(
 """
     from interpreter.project.cobol_compile import compile_cobol
     from interpreter.project.entry_point import EntryPoint
+    from interpreter.cobol.layout_data import field_positions
     from interpreter.run import initial_vm_state, run_linked
 
     linked = compile_cobol(src.encode(), parser=parser, copybook_dirs=list(copybook_dirs), tolerant=True)
     entry_point = EntryPoint.function(lambda f: "init_params" not in str(f.name))
     vm = run_linked(linked, entry_point, max_steps=500_000, initial_vm=initial_vm_state())
-    vm.data_layout = linked.data_layout
-    fld = vm.data_layout.get(record_name)
+    layout = field_positions(vm.declarations)
+    fld = layout.get(record_name)
     if fld is None:
-        raise KeyError(f"{record_name!r} not in layout: {sorted(vm.data_layout)[:40]}")
-    off, sz = fld["offset"], fld["length"]
+        raise KeyError(f"{record_name!r} not in layout: {sorted(layout)[:40]}")
+    off, sz = fld.offset, fld.length
     for rgn in program_regions(vm):
         if rgn is not None and len(rgn) >= off + sz:
             data = bytes(rgn[off : off + sz])

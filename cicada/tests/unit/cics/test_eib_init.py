@@ -1,5 +1,7 @@
 """Unit tests for EIB initialization builtin."""
 
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 import struct
 from tests.covers import covers, NotLanguageFeature
 from cics.types import CicsContext
@@ -22,13 +24,50 @@ def _make_vm_with_ws_region(region_bytes: bytearray) -> tuple[VMState, Address]:
         local_vars={VarName("__ws_region"): typed(str(addr), UNKNOWN)},
     )
     vm.call_stack.append(frame)
-    vm.data_layout = {
-        "EIBTRNID": {"offset": 0, "length": 4, "category": "ALPHANUMERIC"},
-        "EIBCALEN": {"offset": 4, "length": 2, "category": "BINARY"},
-        "EIBAID": {"offset": 6, "length": 1, "category": "ALPHANUMERIC"},
-        "EIBRESP": {"offset": 7, "length": 4, "category": "BINARY"},
-        "EIBRESP2": {"offset": 11, "length": 4, "category": "BINARY"},
-    }
+    vm.declarations = declarations(
+        {
+            "EIBTRNID": FieldPosition(
+                offset=0,
+                length=4,
+                category="ALPHANUMERIC",
+                total_digits=4,
+                decimal_digits=0,
+                signed=False,
+            ),
+            "EIBCALEN": FieldPosition(
+                offset=4,
+                length=2,
+                category="BINARY",
+                total_digits=4,
+                decimal_digits=0,
+                signed=True,
+            ),
+            "EIBAID": FieldPosition(
+                offset=6,
+                length=1,
+                category="ALPHANUMERIC",
+                total_digits=1,
+                decimal_digits=0,
+                signed=False,
+            ),
+            "EIBRESP": FieldPosition(
+                offset=7,
+                length=4,
+                category="BINARY",
+                total_digits=8,
+                decimal_digits=0,
+                signed=True,
+            ),
+            "EIBRESP2": FieldPosition(
+                offset=11,
+                length=4,
+                category="BINARY",
+                total_digits=8,
+                decimal_digits=0,
+                signed=True,
+            ),
+        }
+    )
     return vm, addr
 
 

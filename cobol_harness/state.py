@@ -4,9 +4,10 @@ a run.  Agnostic to any one program.
 """
 from __future__ import annotations
 
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Iterator, Sequence
 
 from interpreter.address import Address
+from interpreter.cobol.layout_data import field_positions
 from interpreter.cobol.run_unit import RUN_UNIT_VAR
 
 
@@ -36,20 +37,18 @@ def screen_field(screens: Sequence[dict], map_name: str, field_name: str, defaul
 
 def read_vm_field(vm: Any, field_name: str) -> bytes:
     """Raw bytes for ``field_name`` from ``vm``'s own WORKING-STORAGE,
-    looked up via ``vm.data_layout`` (must already be set -- true for any
-    VMState returned by ``run_linked``/``run_cics``). For inspecting
-    program state directly rather than through a rendered screen.
+    looked up through ``vm.declarations`` (set on any VMState returned by
+    ``run_linked``/``run_cics``). For inspecting program state directly
+    rather than through a rendered screen.
 
     Raises KeyError if ``field_name`` isn't in the layout, RuntimeError if
     no region is large enough to contain it.
     """
-    layout: Mapping[str, dict] | None = getattr(vm, "data_layout", None)
-    if layout is None:
-        raise RuntimeError("vm.data_layout is not set -- was this VMState produced by run_linked/run_cics?")
+    layout = field_positions(vm.declarations)
     fld = layout.get(field_name)
     if fld is None:
-        raise KeyError(f"{field_name!r} not in data_layout: {sorted(layout)[:40]}")
-    off, sz = fld["offset"], fld["length"]
+        raise KeyError(f"{field_name!r} not in the field layout: {sorted(layout)[:40]}")
+    off, sz = fld.offset, fld.length
     for rgn in program_regions(vm):
         if rgn is not None and len(rgn) >= off + sz:
             return bytes(rgn[off : off + sz])

@@ -55,7 +55,7 @@ def _make_stub_linked_program(ca_out: bytes):
     from interpreter.vm.vm_types import VMState as _VMState
 
     class _StubLinked:
-        data_layout = {}
+        modules = {}
         entry_func_label = None
 
     def _fake_run_linked(linked, entry_point, *, max_steps, initial_vm):
@@ -201,7 +201,7 @@ def test_link_restores_task_end_hook_even_on_exception():
     try:
 
         class _BadLinked:
-            data_layout = {}
+            modules = {}
             entry_func_label = None
 
         def _exploding_run(linked, ep, *, max_steps, initial_vm):
@@ -235,7 +235,7 @@ def test_link_result_holder_restored_even_on_exception():
     """result_holder is restored even if run_linked raises."""
 
     class _BadLinked:
-        data_layout = {}
+        modules = {}
         entry_func_label = None
 
     def _exploding_run(linked, ep, *, max_steps, initial_vm):

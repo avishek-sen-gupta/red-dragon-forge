@@ -27,5 +27,4 @@ def test_read_vm_field_reads_working_storage_not_the_run_unit_region():
         max_steps=10_000,
         initial_vm=initial_vm_state(),
     )
-    vm.data_layout = linked.data_layout
     assert read_vm_field(vm, "WS-CODE") == "GO".encode("cp037")
