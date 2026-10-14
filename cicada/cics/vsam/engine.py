@@ -9,15 +9,14 @@ from dataclasses import dataclass
 from catnip.catalog_stores import Table
 from catnip.dataset import Dataset
 from catnip.labels import KsdsLabel, PathView
-from cobol_asg.file_enums import OpenMode
-from interpreter.cobol.access_result import AccessCondition, AccessResult
-from interpreter.cobol.file_drivers import FileOrganizationDriver
-
 from cics.vsam.browse import BrowseStart
 from cics.vsam.eibresp import RESP_DISABLED, RESP_NORMAL, RESP_NOTFND, to_eibresp
 from cics.vsam.no_record import NoRecord
 from cics.vsam.read_outcome import ReadOutcome
 from cics.vsam.record_read import RecordRead
+from cobol_asg.file_enums import OpenMode
+from interpreter.cobol.access_result import AccessCondition, AccessResult
+from interpreter.cobol.file_drivers import FileOrganizationDriver
 
 logger = logging.getLogger(__name__)
 

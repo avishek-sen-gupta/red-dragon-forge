@@ -40,3 +40,7 @@ def write_fields(
 
 def commit_region(vm: VMState, address: Address, region: bytearray) -> None:
     vm.region_set(address, region)
+
+
+def write_at(region: bytearray, offset: int, data: bytes) -> None:
+    region[offset : offset + len(data)] = data
