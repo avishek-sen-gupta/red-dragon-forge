@@ -18,16 +18,17 @@ from __future__ import annotations
 
 from interpreter.cobol.access_result import AccessCondition
 
-# CICS EIBRESP codes used by file control.
 RESP_NORMAL = 0
 RESP_NOTFND = 13
 RESP_DUPREC = 14
+RESP_DUPKEY = 15
 RESP_IOERR = 17
 RESP_ENDFILE = 20
 RESP_DISABLED = 84
 
 _EIBRESP: dict[AccessCondition, int] = {
     AccessCondition.OK: RESP_NORMAL,
+    AccessCondition.DUPLICATES_FOLLOW: RESP_DUPKEY,
     AccessCondition.END_OF_FILE: RESP_ENDFILE,
     AccessCondition.NOT_FOUND: RESP_NOTFND,
     AccessCondition.DUPLICATE_KEY: RESP_DUPREC,
