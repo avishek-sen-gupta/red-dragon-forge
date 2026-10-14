@@ -25,6 +25,7 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
@@ -249,8 +250,9 @@ def _last(screens, mapname):
 
 
 def _cust_first_name(engine) -> str:
-    rec, _ = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
-    assert rec is not None, "customer vanished"
+    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
+    assert isinstance(rec_read, RecordRead), "customer vanished"
+    rec = rec_read.record
     return bytes(rec[9:34]).decode("cp037").strip()
 
 

@@ -5,12 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.covers import covers, NotLanguageFeature
-from cics.vsam.engine import (
-    VsamEngine,
-    RESP_NORMAL,
-    RESP_NOTFND,
-    RESP_ENDFILE,
-)
+from cics.vsam.engine import VsamEngine
+from cics.vsam.eibresp import RESP_NORMAL, RESP_NOTFND, RESP_ENDFILE
 from cics.vsam.browse import BrowseStart
 from cics.vsam.file_table import cics_files
 from tests.vsam_system import SeedCluster, build_test_system

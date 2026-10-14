@@ -27,6 +27,7 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
@@ -227,8 +228,9 @@ def test_real_carddemo_user_update_rewrites_record(tmp_path, bridge_jar):
 
     # Verify the REWRITE: the stored record now carries the new first name, with
     # the key and other fields intact.
-    rec, _ = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
-    assert rec is not None, "target user vanished after update"
+    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
+    assert isinstance(rec_read, RecordRead), "target user vanished after update"
+    rec = rec_read.record
     assert rec[0:8].decode("cp037").strip() == _TGT_ID
     assert rec[8:28].decode("cp037").strip() == _NEW_FNAME
     assert rec[28:48].decode("cp037").strip() == _TGT_LNAME

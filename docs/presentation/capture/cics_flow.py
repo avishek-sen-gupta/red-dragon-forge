@@ -39,6 +39,7 @@ from cics.vsam.browse import BrowseStart
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from cics.vsam.format import read_flat_file
+from cics.vsam.read_outcome import ReadOutcome
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from interpreter.project.types import LinkedProgram
 
@@ -204,12 +205,12 @@ class RecordingVsamEngine(VsamEngine):
         super().__init__(files)
         self._journal = journal
 
-    def read(self, file_name: str, rid: bytes, rid_len: int):
-        record, resp = super().read(file_name, rid, rid_len)
+    def read(self, file_name: str, rid: bytes, rid_len: int) -> ReadOutcome:
+        outcome = super().read(file_name, rid, rid_len)
         self._journal.put(
-            rid_entry("READ", file_name, resp, rid[: rid_len or len(rid)])
+            rid_entry("READ", file_name, outcome.resp, rid[: rid_len or len(rid)])
         )
-        return record, resp
+        return outcome
 
     def write(self, file_name: str, rid: bytes, rid_len: int, record: bytes) -> int:
         resp = super().write(file_name, rid, rid_len, record)
@@ -230,15 +231,15 @@ class RecordingVsamEngine(VsamEngine):
         )
         return resp
 
-    def readnext(self, file_name: str, cursor: tuple[str, str, str]):
-        record, resp = super().readnext(file_name, cursor)
-        self._journal.put(browse_entry("READNEXT", file_name, resp))
-        return record, resp
+    def readnext(self, file_name: str, cursor: tuple[str, str, str]) -> ReadOutcome:
+        outcome = super().readnext(file_name, cursor)
+        self._journal.put(browse_entry("READNEXT", file_name, outcome.resp))
+        return outcome
 
-    def readprev(self, file_name: str, cursor: tuple[str, str, str]):
-        record, resp = super().readprev(file_name, cursor)
-        self._journal.put(browse_entry("READPREV", file_name, resp))
-        return record, resp
+    def readprev(self, file_name: str, cursor: tuple[str, str, str]) -> ReadOutcome:
+        outcome = super().readprev(file_name, cursor)
+        self._journal.put(browse_entry("READPREV", file_name, outcome.resp))
+        return outcome
 
     def endbr(self, file_name: str, cursor: tuple[str, str, str]) -> int:
         resp = super().endbr(file_name, cursor)

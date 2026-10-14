@@ -28,6 +28,7 @@ import pytest
 from catnip.dataset import Dataset
 from catnip.system_catalog import SystemCatalog
 from cics.vsam.format import read_flat_file
+from cics.vsam.record_read import RecordRead
 from tests.covers import covers, NotLanguageFeature
 from tests.integration.cics.test_carddemo_signon_real import (
     _ACCT_ID,
@@ -178,8 +179,11 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
     acct_key = _ACCT_ID.encode("cp037")
 
     engine_before = _usrsec_engine(tmp_path / "vsam")
-    record_before, _ = engine_before.read("ACCTDAT", acct_key, 11)
-    assert record_before is not None, "seeded ACCTDAT record not found before update"
+    record_before_read = engine_before.read("ACCTDAT", acct_key, 11)
+    assert isinstance(
+        record_before_read, RecordRead
+    ), "seeded ACCTDAT record not found before update"
+    record_before = record_before_read.record
 
     print("\n=== ACCTDAT before update ===")
     print(render_block(layout, [record_before]))
@@ -207,8 +211,11 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
         RISMON=_NEW_REISSUE_MON,
         RISDAY=_NEW_REISSUE_DAY,
     )
-    record_after, _ = engine_after.read("ACCTDAT", acct_key, 11)
-    assert record_after is not None, "ACCTDAT record missing from engine after update"
+    record_after_read = engine_after.read("ACCTDAT", acct_key, 11)
+    assert isinstance(
+        record_after_read, RecordRead
+    ), "ACCTDAT record missing from engine after update"
+    record_after = record_after_read.record
 
     print("\n=== ACCTDAT after update ===")
     print(render_block(layout, [record_after]))

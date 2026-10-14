@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 
 from cics.builtins.system import _get_ws_region_addr
 from cics.vsam.browse import BrowseStart
+from cics.vsam.read_outcome import ReadOutcome
+from cics.vsam.record_read import RecordRead
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
 if TYPE_CHECKING:
@@ -52,6 +54,13 @@ def _write_into_ws(vm: VMState, record: bytes, offset: int, length: int) -> None
     payload = record[:length].ljust(length, b"\x00")
     region[offset : offset + length] = payload
     vm.region_set(addr, region)
+
+
+def _filled(vm: VMState, outcome: ReadOutcome, offset: int, length: int) -> int:
+    match outcome:
+        case RecordRead(record=record):
+            _write_into_ws(vm, record, offset, length)
+    return outcome.resp
 
 
 def _file(args: list[TypedValue], i: int = 0) -> str:
@@ -89,10 +98,9 @@ def make_vsam_read_builtin(engine: VsamEngine) -> object:
         into_off = _int(args, 3)
         into_len = _int(args, 4)
 
-        record, resp = engine.read(file_name, key, key_len)
-        if record is not None:
-            _write_into_ws(vm, record, into_off, into_len)
-        return BuiltinResult(value=resp)
+        return BuiltinResult(
+            value=_filled(vm, engine.read(file_name, key, key_len), into_off, into_len)
+        )
 
     return __cics_read
 
@@ -163,10 +171,8 @@ def make_vsam_readnext_builtin(engine: VsamEngine) -> object:
     def __cics_readnext(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         fname = _file(args, 0)
         into_off, into_len = _int(args, 1), _int(args, 2)
-        record, resp = engine.readnext(fname, (_TASK_ID, fname, "0"))
-        if record is not None:
-            _write_into_ws(vm, record, into_off, into_len)
-        return BuiltinResult(value=resp)
+        outcome = engine.readnext(fname, (_TASK_ID, fname, "0"))
+        return BuiltinResult(value=_filled(vm, outcome, into_off, into_len))
 
     return __cics_readnext
 
@@ -180,10 +186,8 @@ def make_vsam_readprev_builtin(engine: VsamEngine) -> object:
     def __cics_readprev(args: list[TypedValue], vm: VMState) -> BuiltinResult:
         fname = _file(args, 0)
         into_off, into_len = _int(args, 1), _int(args, 2)
-        record, resp = engine.readprev(fname, (_TASK_ID, fname, "0"))
-        if record is not None:
-            _write_into_ws(vm, record, into_off, into_len)
-        return BuiltinResult(value=resp)
+        outcome = engine.readprev(fname, (_TASK_ID, fname, "0"))
+        return BuiltinResult(value=_filled(vm, outcome, into_off, into_len))
 
     return __cics_readprev
 

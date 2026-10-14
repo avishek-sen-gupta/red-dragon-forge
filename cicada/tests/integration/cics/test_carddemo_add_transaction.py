@@ -25,6 +25,8 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
+from cics.vsam.no_record import NoRecord
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
@@ -223,8 +225,11 @@ def _last(screens, mapname):
 
 def _added_transaction(engine):
     """Read back the freshly-WRITTEN TRANSACT record (CVTRA05Y, by tran id)."""
-    rec, _ = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
-    assert rec is not None, f"new transaction {_NEW_TRAN_ID} was not written"
+    rec_read = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
+    assert isinstance(
+        rec_read, RecordRead
+    ), f"new transaction {_NEW_TRAN_ID} was not written"
+    rec = rec_read.record
     b = bytes(rec)
     return {
         "TRAN_ID": b[0:16].decode("cp037").strip(),
@@ -249,7 +254,9 @@ def test_real_carddemo_add_transaction_writes(tmp_path, bridge_jar):
     record's key fields are cross-checked in the engine."""
     region, screen_q, engine = _drive_to_add_transaction(tmp_path, bridge_jar)
     # Pre-condition: the next id does not exist yet.
-    assert engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)[0] is None
+    assert isinstance(
+        engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16), NoRecord
+    )
 
     # Turn 4: first display (empty form).
     drain(screen_q)

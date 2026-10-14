@@ -28,6 +28,8 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
+from cics.vsam.no_record import NoRecord
+from cics.vsam.record_read import RecordRead
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
@@ -189,8 +191,10 @@ def test_real_carddemo_user_add_writes_record(tmp_path, bridge_jar):
     region, screen_q, engine = _drive_to_user_add(tmp_path, bridge_jar)
 
     # Pre-condition: the new key does not yet exist.
-    rec, _ = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)
-    assert rec is None, "new user unexpectedly present before the add"
+    rec_read = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)
+    assert isinstance(
+        rec_read, NoRecord
+    ), "new user unexpectedly present before the add"
 
     # Turn 4: COUSR01C first display (empty add form)
     drain(screen_q)
@@ -217,8 +221,10 @@ def test_real_carddemo_user_add_writes_record(tmp_path, bridge_jar):
 
     # Verify the WRITE against the engine: the new key is now present with the
     # fields we supplied.
-    rec, resp = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)
-    assert rec is not None, "new user was not written to USRSEC"
+    rec_read = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)
+    assert isinstance(rec_read, RecordRead), "new user was not written to USRSEC"
+    rec = rec_read.record
+    resp = rec_read.resp
     assert rec[0:8].decode("cp037").strip() == _NEW_ID
     assert rec[8:28].decode("cp037").strip() == _NEW_FNAME
     assert rec[28:48].decode("cp037").strip() == _NEW_LNAME
