@@ -43,6 +43,10 @@ base cluster's file through red-dragon's `AlternateIndexDriver`:
 - A write, rewrite or delete through a path changes the base cluster. One that would repeat a key
   in a unique AIX is rejected: file status `22`, CICS `DUPREC` (RESP 14).
 - The order is computed when the path is opened. Nothing is stored, so it is always current.
+- A path cannot be opened for `OUTPUT`. z/OS loads a cluster only once unless it is reusable, and
+  a cluster with an AIX cannot be reusable, so `OUTPUT` through a path would reload a loaded base
+  cluster. `Dataset.opened` raises `CatalogError`:
+  `PATH: OPEN OUTPUT through a path would reload its base cluster BASE`.
 
 Removing a cluster removes its AIXs and their paths. Removing an AIX removes its paths.
 

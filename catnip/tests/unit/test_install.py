@@ -77,7 +77,7 @@ def test_a_declaration_installs_sorted_clusters_indexes_and_paths(tmp_path):
     assert system.lookup("T.SEQ").label == SequentialLabel(RecordFormat.FB, 4)
     assert system.lookup("T.KSDS").path.read_bytes() == b"001BBBxx002AAAyy003AAAzz"
     assert system.lookup("T.EMPTY").path.read_bytes() == b""
-    assert path.label == PathView(KsdsLabel(8, 0, 3), 3, 3, False)
+    assert path.label == PathView("T.KSDS", KsdsLabel(8, 0, 3), 3, 3, False)
     assert through == [b"002AAAyy", b"003AAAzz", b"001BBBxx"]
 
 

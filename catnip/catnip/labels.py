@@ -51,6 +51,7 @@ class LabelPending:
 class PathView:
     """A path's label: its base cluster's label read through an alternate key."""
 
+    base_dsn: str
     base: KsdsLabel
     key_offset: int
     key_length: int
