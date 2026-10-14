@@ -172,7 +172,9 @@ region TOML names CSD files, not datasets ([config](tn3270-config.md)).
   declared record length logs the file, the DSN and both lengths.
 - `cics/vsam/eibresp.py` — maps the driver's `AccessCondition` to EIBRESP.
 - `cics/vsam/format.py` — reads a fixed-length-record file as its records.
-- `cics/vsam/dump.py` — decodes a cataloged dataset through a copybook. The record length is
+- `cics/vsam/dump.py` — decodes a cataloged dataset through a copybook into frozen
+  `DecodedRecord`s (`cics/vsam/decoded_record.py`): a read-only mapping from field name to a
+  string or number, a tuple of them for an `OCCURS` item, or a nested record. The record length is
   the copybook's; a path's DSN dumps its base cluster's file in primary-key order:
 
   ```bash
