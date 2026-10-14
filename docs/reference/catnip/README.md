@@ -165,6 +165,12 @@ Each message names the dataset and the declaration field to change.
 | A unique AIX over repeated alternate keys | `AIX: unique: alternate key b'…' repeats` |
 | A DSN declared twice, across datasets, AIXs, paths and GDG bases | `DSN: dsn: declared twice` |
 | An unset variable in `data_dir` | `data_dir: unset environment variable in '…'` |
+| A TOML syntax error | `FILE: <the TOML parser's message, with line and column>` |
+| A missing or unknown key, a wrong value type, `lrecl`, `key_length` or `limit` below 1, or a key offset below 0 | `[[SECTION]] NAME: FIELD: <pydantic's message>`, for example `[[ksds.aix]] A.AIX: key_offset: Input should be greater than or equal to 0` |
+
+`SECTION` is `sequential`, `ksds`, `ksds.aix` or `gdg`. `NAME` is the entry's `dsn` (`name` for a
+GDG base), or `entry N` (counting from 1) when that did not parse. These shape errors are found
+while the file is read, so nothing is written.
 
 ## What uses it
 
