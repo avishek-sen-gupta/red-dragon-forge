@@ -1,5 +1,6 @@
 """The runner allocates every DD before a program runs and disposes after it."""
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -155,7 +156,10 @@ VARYING = "VARYING".ljust(100).encode("cp037")
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_one(
-    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+    tmp_path: Path,
+    bridge_jar: str,
+    jcl_bridge_jar: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Enterprise COBOL 6.4 Programming Guide, ch. 9: the program's attributes are
     used for a new file; a mismatch in record format or length with an existing
@@ -184,7 +188,8 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
     )
-    result = runner.run_job(job, catalog)
+    with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
+        result = runner.run_job(job, catalog)
     reloaded = system(tmp_path)
     var, copy = reloaded.lookup("J.VAR"), reloaded.lookup("J.COPY")
     assert (
@@ -198,6 +203,9 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         (SequentialLabel(RecordFormat.V, 104), b"\x00\x68\x00\x00" + VARYING),
         (SequentialLabel(RecordFormat.F, 100), VARYING),
     )
+    assert [
+        r.getMessage() for r in caplog.records if r.name == "jackal.cobol_files"
+    ] == ["J.FIX: LRECL: declared 80, FD 50"]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

@@ -1,5 +1,6 @@
 """A batch program reads a cluster through a path, in alternate-key order."""
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -83,3 +84,30 @@ def test_open_output_through_a_path_gets_status_37_and_keeps_the_base_cluster(
 
     assert rc == Completed(37)
     assert system(tmp_path).lookup("J.KSDS").path.read_bytes() == _BASE
+
+
+@pytest.mark.parametrize(
+    ("dsn", "messages"),
+    [
+        (
+            "J.KSDS",
+            [
+                "J.KSDS: LRECL: declared 8, FD 9",
+                "J.KSDS: key offset: declared 0, FD 3",
+            ],
+        ),
+        ("J.PATH", ["J.PATH: LRECL: declared 8, FD 9"]),
+    ],
+)
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_an_fd_that_contradicts_a_keyed_label_gets_status_39_and_logs_each_field(
+    tmp_path, bridge_jar, caplog, dsn, messages
+):
+    cat = _path_catalog(tmp_path)
+    with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
+        rc = _ran(cat, bridge_jar, "KEYCHK", (dd("XREFDD", dsn, disp("SHR")),))
+
+    assert rc == Completed(39)
+    assert [
+        r.getMessage() for r in caplog.records if r.name == "jackal.cobol_files"
+    ] == messages

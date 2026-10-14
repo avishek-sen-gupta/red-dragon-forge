@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
@@ -13,7 +14,6 @@ from catnip.labels import (
     CARDS,
     VARIABLE,
     DatasetLabel,
-    KsdsLabel,
     Label,
     LabelPending,
     PathView,
@@ -36,17 +36,23 @@ from jackal.allocation import (
     MemberAllocation,
 )
 from jackal.concatenated_records import ConcatenatedDriver
+from jackal.label_conflict import LabelConflict
 from jackal.record_format import (
     FdRecords,
     FixedFormat,
     FormatFromDataset,
     ProgramFormat,
     VariableFormat,
+    conflicting,
     conflicts,
+    indexed_conflicts,
     joins,
     label_for,
     program_format,
 )
+from jackal.record_key import RecordKey
+
+logger = logging.getLogger(__name__)
 
 _LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
 
@@ -92,12 +98,9 @@ def _variable(label: DatasetLabel) -> bool:
             return False
 
 
-def _indexed_conflict(label: DatasetLabel) -> bool:
-    match label:
-        case KsdsLabel() | PathView():
-            return False
-        case _:
-            return True
+def _agrees(dataset: Dataset, found: Sequence[LabelConflict]) -> bool:
+    tuple(logger.warning("%s", conflict.described(dataset.dsn)) for conflict in found)
+    return not found
 
 
 def _through_path(label: DatasetLabel) -> bool:
@@ -162,19 +165,20 @@ class AllocatedFileIOProvider(RealFileIOProvider):
             return _supported(self._datasets.get(filename).label, mode)
         return True
 
-    def _admits(self, filename: str, mode: str) -> bool:
+    def _admits(self, filename: str, mode: str, key: RecordKey) -> bool:
         if filename in self._concatenations:
             return _concatenation_admitted(
                 self._files[filename].fmt, self._concatenations[filename]
             )
-        return self._admits_dataset(filename, mode)
+        return self._admits_dataset(filename, mode, key)
 
-    def _admits_dataset(self, filename: str, mode: str) -> bool:
+    def _admits_dataset(self, filename: str, mode: str, key: RecordKey) -> bool:
         if not self._datasets.has(filename):
             return True
         file = self._files[filename]
         if file.entry.organization is FileOrganization.INDEXED:
-            return not _indexed_conflict(self._datasets.get(filename).label)
+            dataset = self._datasets.get(filename)
+            return _agrees(dataset, indexed_conflicts(file.fmt, key, dataset.label))
         return self._admits_sequential(filename, file.fmt, mode)
 
     def _admits_sequential(self, filename: str, fmt: ProgramFormat, mode: str) -> bool:
@@ -186,7 +190,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
                 self._labelled(filename, dataset, label_for(fmt))
                 return True
             case _:
-                return not conflicts(fmt, dataset.label)
+                return _agrees(dataset, conflicting(fmt, dataset.label))
 
     def _labelled(self, filename: str, dataset: Dataset, label: Label) -> None:
         self._relabeller.relabel(dataset, label)
@@ -235,7 +239,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         opened = self._opened_as(filename, mode)
         if not self._supports(filename, opened):
             return to_ioresult(AccessResult(AccessCondition.OPEN_MODE_NOT_SUPPORTED))
-        if not self._admits(filename, opened):
+        if not self._admits(filename, opened, RecordKey(key_offset, key_length)):
             return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
         return super()._open_file(
             filename, opened, record_length, organization, key_offset, key_length

@@ -1,0 +1,23 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. KEYCHK.
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT XREF-FILE ASSIGN TO XREFDD
+                  ORGANIZATION IS INDEXED
+                  ACCESS MODE IS SEQUENTIAL
+                  RECORD KEY IS XREF-ALT
+                  FILE STATUS IS WS-STATUS.
+       DATA DIVISION.
+       FILE SECTION.
+       FD  XREF-FILE.
+       01  XREF-REC.
+           05  XREF-KEY  PIC X(3).
+           05  XREF-ALT  PIC X(3).
+           05  XREF-TAIL PIC X(3).
+       WORKING-STORAGE SECTION.
+       01  WS-STATUS  PIC 99.
+       PROCEDURE DIVISION.
+           OPEN INPUT XREF-FILE.
+           MOVE WS-STATUS TO RETURN-CODE.
+           GOBACK.
