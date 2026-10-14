@@ -125,9 +125,10 @@ programs on `JobRunner`'s link list (`linked_programs`, CLI `--link`), which are
 COBOL step; a link-list name with no source is refused before any job runs, and a CALL to a program
 outside the run unit still ends the run with red-dragon's `UnresolvedProgramError`
 (red-dragon-forge-xzw) ([decision record](../../records/design/2026-10-12-jackal-dynamic-call-link-list.md)).
-`compile_program` returns the `LinkedProgram` read back from its linked file; its `ast_paths`
-name each program's AST file, which `ProgramCompiler` re-reads for the program's
-`FILE-CONTROL`. Each step compiles afresh into a new temporary directory (red-dragon-forge-k6l;
+`compile_program` returns the `LinkedProgram` read back from its linked file. Its IR carries a
+file-definitions `Data` directive per program, and `jackal.file_definitions` reads the step's
+files from those alone: each `FILE-CONTROL` entry, and the record format its FD asks for, or the
+dataset's own where the `SELECT` has no FD. Each step compiles afresh into a new temporary directory (red-dragon-forge-k6l;
 [decision record](../../records/design/2026-10-13-compiled-cobol-is-files.md)). `jackal.cobol_step.run_cobol_step` maps every
 `FILE-CONTROL` entry of the program and its callees to the file of the step's DD allocation,
 and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
@@ -245,6 +246,7 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
 | `jackal/jackal/program_compiler.py` | Compiles a step's program with its callees and injected coprocessors. |
+| `jackal/jackal/file_definitions.py` | The files a linked program declares, read from its file-definitions `Data` directives. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
 | `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
 | `jackal/jackal/record_format.py` | The record format a COBOL FD asks for, and its fit with a label. |

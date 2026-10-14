@@ -21,11 +21,9 @@ from catnip.labels import (
     SequentialLabel,
 )
 from catnip.variable_records import VariableRecordDriver
-from cobol_asg.asg_types import CobolASG, CobolField
 from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
-from interpreter.cobol.data_layout import record_length
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 from interpreter.cobol.io_provider import IOResult
 from interpreter.cobol.real_file_provider import RealFileIOProvider, to_ioresult
@@ -41,16 +39,13 @@ from jackal.allocation import (
 from jackal.concatenated_records import ConcatenatedDriver
 from jackal.label_conflict import LabelConflict
 from jackal.record_format import (
-    FdRecords,
     FixedFormat,
-    FormatFromDataset,
     ProgramFormat,
     VariableFormat,
     conflicting,
     indexed_conflicts,
     joining,
     label_for,
-    program_format,
 )
 from jackal.record_key import RecordKey
 
@@ -63,33 +58,6 @@ _LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
 class ProgramFile:
     entry: FileControlEntry
     fmt: ProgramFormat
-
-
-def _depends(f: CobolField) -> bool:
-    return bool(f.occurs_depending_on) or any(_depends(c) for c in f.children)
-
-
-def _records(asg: CobolASG, fd_name: str) -> FdRecords:
-    roots = tuple(
-        f
-        for f in asg.file_fields
-        if f.level == 1 and asg.file_record_to_select.get(f.name.upper()) == fd_name
-    )
-    return FdRecords(
-        tuple(record_length(f) for f in roots), any(_depends(f) for f in roots)
-    )
-
-
-def _format(asg: CobolASG, entry: FileControlEntry) -> ProgramFormat:
-    fds = {d.fd_name.upper(): d for d in asg.file_descriptions}
-    name = entry.file_name.upper()
-    if name not in fds:
-        return FormatFromDataset()
-    return program_format(fds[name], _records(asg, name))
-
-
-def program_files(asg: CobolASG) -> tuple[ProgramFile, ...]:
-    return tuple(ProgramFile(e, _format(asg, e)) for e in asg.file_control)
 
 
 def _variable(label: DatasetLabel) -> bool:
