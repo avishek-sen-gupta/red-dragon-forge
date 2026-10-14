@@ -54,26 +54,6 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-07-04-cics-sql-composition.md
   checksum: 1682a3a936caf68bd54754a99e8a67923f01656cae6f7f478efd74aa2e6b644e
 - filename: vendor/red-dragon
-- filename: cicada/cics/vsam/dump.py
-  checksum: 55afce956fef16ec0b44bed6dc3d8d4e63c2bf95f1d7f224352c9dd6c4a7b7a0
-- filename: cicada/tests/integration/cics/test_carddemo_user_list.py
-  checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
-- filename: cicada/cics/vsam/engine.py
-  checksum: a0de6d50b79d742349a5df7d41986e2764f9f46ecd9e333cbcbfa310f7d74031
-- filename: cicada/tests/vsam_system.py
-  checksum: a1338614fbd2226f6e566a6dd83f5c84cc5a0196ffdf25561bd2d9f172fe9aed
-- filename: cicada/tests/integration/cics/test_vsam_roundtrip.py
-  checksum: ba4f040cff051d6951df11077015d4fbf8f19465c749d7fa76494aa78b3f4b5a
-- filename: cicada/tests/integration/cics/test_carddemo_user_update.py
-  checksum: 86e9e51028f22b8c27940d241b2ff3588a54f16e5c96b7d5a898d42511b7ff95
-- filename: cicada/tests/integration/cics/test_vsam_catalog.py
-  checksum: 7f44238add03ad4424a0684be094dcd255d76502dd55ac5ea098394d939b2831
-- filename: cicada/tests/unit/cics/test_vsam_builtins.py
-  checksum: 7dda6fee6b36a43824b30db2dff5674a4f52468372d8dcdbae6cfd5286126f22
-- filename: docs/presentation/capture/cics_flow.py
-  checksum: b735d94871ba4fe084899418312aed6ba12a5cc868e21163535dd5f2c3ebb612
-- filename: cicada/tests/integration/cics/test_carddemo_signon_real.py
-  checksum: 44202a862ca5fcacf66ec25a86c53a7de780eaea17bff8702b15b12305f94d1f
   ignore_detectors: [filecontent]
 - filename: cicada/third-party/che-che4z-lsp-for-hlasm-fork
   ignore_detectors: [filecontent]
@@ -341,4 +321,24 @@ fileignoreconfig:
   checksum: 3275bf6a5c94074f1ff0a552b8234b5d398dc953fd42541d9b06549d39115a70
 - filename: tests/integration/test_carddemo_data_install.py
   checksum: d6e023498d56fc9dcbbff2c33f61b5469af57efaef8b09c6ab66b7d8114e6a51
+- filename: cicada/cics/vsam/dump.py
+  checksum: 55afce956fef16ec0b44bed6dc3d8d4e63c2bf95f1d7f224352c9dd6c4a7b7a0
+- filename: cicada/tests/integration/cics/test_carddemo_user_list.py
+  checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
+- filename: cicada/cics/vsam/engine.py
+  checksum: a0de6d50b79d742349a5df7d41986e2764f9f46ecd9e333cbcbfa310f7d74031
+- filename: cicada/tests/vsam_system.py
+  checksum: a1338614fbd2226f6e566a6dd83f5c84cc5a0196ffdf25561bd2d9f172fe9aed
+- filename: cicada/tests/integration/cics/test_vsam_roundtrip.py
+  checksum: ba4f040cff051d6951df11077015d4fbf8f19465c749d7fa76494aa78b3f4b5a
+- filename: cicada/tests/integration/cics/test_carddemo_user_update.py
+  checksum: 86e9e51028f22b8c27940d241b2ff3588a54f16e5c96b7d5a898d42511b7ff95
+- filename: cicada/tests/integration/cics/test_vsam_catalog.py
+  checksum: 7f44238add03ad4424a0684be094dcd255d76502dd55ac5ea098394d939b2831
+- filename: cicada/tests/unit/cics/test_vsam_builtins.py
+  checksum: 7dda6fee6b36a43824b30db2dff5674a4f52468372d8dcdbae6cfd5286126f22
+- filename: docs/presentation/capture/cics_flow.py
+  checksum: b735d94871ba4fe084899418312aed6ba12a5cc868e21163535dd5f2c3ebb612
+- filename: cicada/tests/integration/cics/test_carddemo_signon_real.py
+  checksum: 44202a862ca5fcacf66ec25a86c53a7de780eaea17bff8702b15b12305f94d1f
 version: "1.0"
