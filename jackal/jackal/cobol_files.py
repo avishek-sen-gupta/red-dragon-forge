@@ -7,6 +7,18 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
+from catnip.catalog_stores import Table
+from catnip.dataset import Dataset, Relabeller
+from catnip.labels import (
+    CARDS,
+    VARIABLE,
+    DatasetLabel,
+    KsdsLabel,
+    Label,
+    LabelPending,
+    SequentialLabel,
+)
+from catnip.variable_records import VariableRecordDriver
 from cobol_asg.asg_types import CobolASG, CobolField
 from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization, OpenMode
@@ -22,18 +34,7 @@ from jackal.allocation import (
     InStreamAllocation,
     MemberAllocation,
 )
-from jackal.catalog_stores import Table
 from jackal.concatenated_records import ConcatenatedDriver
-from jackal.dataset import Dataset, Relabeller
-from jackal.labels import (
-    CARDS,
-    VARIABLE,
-    DatasetLabel,
-    KsdsLabel,
-    Label,
-    LabelPending,
-    SequentialLabel,
-)
 from jackal.record_format import (
     FdRecords,
     FixedFormat,
@@ -45,7 +46,6 @@ from jackal.record_format import (
     label_for,
     program_format,
 )
-from jackal.variable_records import VariableRecordDriver
 
 _LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
 

@@ -6,9 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from cobol_asg.file_enums import FileOrganization, OpenMode
-from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
-from jackal.labels import (
+from catnip.labels import (
     VARIABLE,
     DatasetLabel,
     KsdsLabel,
@@ -16,7 +14,9 @@ from jackal.labels import (
     LabelPending,
     SequentialLabel,
 )
-from jackal.variable_records import VariableRecordDriver
+from catnip.variable_records import VariableRecordDriver
+from cobol_asg.file_enums import FileOrganization, OpenMode
+from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 
 
 @dataclass(frozen=True)

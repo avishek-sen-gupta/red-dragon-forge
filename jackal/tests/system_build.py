@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from catnip.dataset import Dataset
+from catnip.gdg import GdgBase
+from catnip.labels import Label, RecordFormat, SequentialLabel
+from catnip.system_catalog import SystemCatalog
 from jackal.catalog import DatasetCatalog
-from jackal.dataset import Dataset
-from jackal.gdg import GdgBase
-from jackal.labels import Label, RecordFormat, SequentialLabel
-from jackal.system_catalog import SystemCatalog
 
 FB80 = SequentialLabel(RecordFormat.FB, 80)
 

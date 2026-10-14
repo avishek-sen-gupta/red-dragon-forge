@@ -2,9 +2,10 @@ import logging
 from pathlib import Path
 
 import pytest
+from catnip.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
+from catnip.system_catalog import CATALOG_FILE, NotCataloged, SystemCatalog
 from jackal.catalog import Dataset
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
-from jackal.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from jackal.missing_data import (
     LenientAllocation,
     MissingDataStrategy,
@@ -63,7 +64,6 @@ from jackal.results import (
     SystemAbend,
 )
 from jackal.runner import JobRunner
-from jackal.system_catalog import CATALOG_FILE, NotCataloged, SystemCatalog
 from jackal.unresolved import (
     IgnoreStrategy,
     RaiseErrorStrategy,

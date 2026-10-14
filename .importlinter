@@ -4,6 +4,7 @@ root_packages =
     squall
     jackal
     cobble
+    catnip
     red_dragon_forge
     interpreter
 
@@ -60,7 +61,6 @@ layers =
     jackal.runner
     jackal.cobol_step : jackal.utilities
     jackal.catalog
-    jackal.system_catalog
     jackal.model
 
 [importlinter:contract:jcl-idcams-independence]
@@ -144,6 +144,7 @@ forbidden_modules =
     squall.dclgen
     squall.preprocess
     squall.strategy
+    catnip
     red_dragon_forge
 
 [importlinter:contract:nothing-imports-cobble]
@@ -153,6 +154,7 @@ source_modules =
     cics
     squall
     jackal
+    catnip
     red_dragon_forge
 forbidden_modules =
     cobble
@@ -169,3 +171,15 @@ source_modules =
     cics.input_event
 forbidden_modules =
     cics.tn3270
+
+[importlinter:contract:catnip-imports-no-runtime]
+name = catnip is the system's catalog — it imports no runtime
+type = forbidden
+source_modules =
+    catnip
+forbidden_modules =
+    cics
+    squall
+    jackal
+    cobble
+    red_dragon_forge

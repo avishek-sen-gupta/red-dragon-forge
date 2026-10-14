@@ -1,11 +1,12 @@
 from pathlib import Path
 
 import pytest
+from catnip.dataset import Dataset
+from catnip.labels import KsdsLabel, RecordFormat, SequentialLabel
+from catnip.system_catalog import NotCataloged, SystemCatalog
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition
 from jackal.catalog import Allocated, DatasetCatalog, Unallocated
-from jackal.dataset import Dataset
-from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
     DD,
     DirectDSN,
@@ -16,7 +17,6 @@ from jackal.model import (
     TempRef,
 )
 from jackal.results import AllocationError, Completed
-from jackal.system_catalog import NotCataloged, SystemCatalog
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 

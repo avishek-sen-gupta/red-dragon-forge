@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from catnip.gdg import Empty, GdgBase, GdgOrder, Scratch
+from catnip.labels import KsdsLabel, RecordFormat, SequentialLabel
+from catnip.system_catalog import NotCataloged
 from jackal.allocation import DdEnvironment
-from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
 from jackal.idcams.commands import (
     Cc,
     CcOp,
@@ -15,7 +17,6 @@ from jackal.idcams.commands import (
     Repro,
     SetCc,
 )
-from jackal.labels import KsdsLabel, RecordFormat, SequentialLabel
 from jackal.model import (
     DD,
     DdName,
@@ -27,7 +28,6 @@ from jackal.model import (
     ProgramStep,
     StepName,
 )
-from jackal.system_catalog import NotCataloged
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated
@@ -503,8 +503,8 @@ def test_repro_reads_a_concatenated_input_member_after_member(tmp_path):
     """AMS p. 314: REPRO's input can be a sequential concatenation, each member
     read at its own label; the output cannot be one of its members. A member whose
     label is pending ends the command with 12, as a single input's does."""
+    from catnip.labels import LabelPending
     from jackal.idcams.executor import run_idcams
-    from jackal.labels import LabelPending
     from jackal.model import ConcatMember
 
     fb4 = SequentialLabel(RecordFormat.FB, 4)

@@ -6,9 +6,9 @@ Reference 6.4, Table 34 (file status 44). See
 docs/records/design/2026-10-12-jackal-variable-records.md.
 """
 
+from catnip.variable_records import VariableRecordDriver
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition
-from jackal.variable_records import VariableRecordDriver
 from tests.covers import NotLanguageFeature, covers
 
 
@@ -42,14 +42,17 @@ def test_records_are_framed_by_an_rdw_and_read_back_at_their_own_length(tmp_path
     )
 
 
+def _written(path, records):
+    out = VariableRecordDriver(path, OpenMode.OUTPUT, 0)
+    for record in records:
+        out.write(record)
+    out.close()
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_rewrite_replaces_the_record_just_read_only_at_the_same_length(tmp_path):
     path = tmp_path / "v.dat"
-    out = VariableRecordDriver(path, OpenMode.OUTPUT, 0)
-    out.write(b"ONE")
-    out.write(b"TWO")
-    out.write(b"END")
-    out.close()
+    _written(path, (b"ONE", b"TWO", b"END"))
     io = VariableRecordDriver(path, OpenMode.IO, 0)
     io.read_seq()
     io.read_seq()

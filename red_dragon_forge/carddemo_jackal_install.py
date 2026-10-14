@@ -9,9 +9,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from jackal.dataset import Dataset
-from jackal.labels import RecordFormat, SequentialLabel
-from jackal.system_catalog import SystemCatalog
+from catnip.dataset import Dataset
+from catnip.labels import RecordFormat, SequentialLabel
+from catnip.system_catalog import SystemCatalog
 
 logger = logging.getLogger(__name__)
 

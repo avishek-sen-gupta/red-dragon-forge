@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
-from jackal.gdg import Empty, GdgBase, GdgOrder, Scratch
+from catnip.gdg import Empty, GdgBase, GdgOrder, Scratch
 
 _LIMIT = 255
 _EXTENDED_LIMIT = 999

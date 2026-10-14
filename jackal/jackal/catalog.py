@@ -8,11 +8,13 @@ from functools import reduce
 from pathlib import Path
 from typing import TypeAlias
 
-from jackal.catalog_stores import Table
-from jackal.dataset import Dataset, Relabeller
+from catnip.catalog_stores import Table
+from catnip.dataset import Dataset, Relabeller
+from catnip.gdg import GdgBase, RequestedOrder, relative_generation
+from catnip.labels import DatasetLabel, Label, LabelPending
+from catnip.system_catalog import NotCataloged, SystemCatalog
+from catnip.system_catalog_removal import remove_cataloged
 from jackal.dcb_label import coded_label, liked_label
-from jackal.gdg import GdgBase, RequestedOrder, relative_generation
-from jackal.labels import DatasetLabel, Label, LabelPending
 from jackal.model import (
     DD,
     DSN,
@@ -29,8 +31,6 @@ from jackal.model import (
     TempRef,
 )
 from jackal.results import Abended, AllocationError, Completed, ProgramResult
-from jackal.system_catalog import NotCataloged, SystemCatalog
-from jackal.system_catalog_removal import remove_cataloged
 from jackal.value_parts import Value, resolve
 
 

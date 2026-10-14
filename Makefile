@@ -8,7 +8,7 @@ PYTEST = uv run --no-sync python -m pytest
 # Make's /bin/sh is dash on Linux, which bridge-env.sh cannot locate itself from.
 BRIDGE_ENV = FORGE_ROOT=$(CURDIR) . ./bridge-env.sh
 BLACK_PATHS = cicada/cics cicada/bms_copybook_gen cicada/tests squall/squall squall/tests \
-  jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
+  catnip/catnip catnip/tests jackal/jackal jackal/tests red_dragon_forge cobble/cobble cobble/tests tools tests
 DB2_COMPOSE = docker compose -f squall/docker-compose.yml
 
 .PHONY: help setup hlasm jar jar-force python test test-all fmt jackal-install db2-up db2-seed db2-status db2-restart db2-stop db2-clean
@@ -68,6 +68,7 @@ test: jar
 test-all: jar hlasm
 	$(BRIDGE_ENV) && cd cicada && $(PYTEST)
 	$(BRIDGE_ENV) && cd squall && . db2/dsn-env.sh && $(PYTEST)
+	cd catnip && $(PYTEST)
 	$(BRIDGE_ENV) && cd jackal && $(PYTEST)
 	cd cobble && $(PYTEST)
 	$(MAKE) test
