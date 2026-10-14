@@ -64,9 +64,11 @@ def _account_view() -> _AccountView:
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_signon_menu_account_view_and_back(tmp_path, bridge_jar, monkeypatch):
+def test_signon_menu_account_view_and_back(
+    tmp_path, bridge_jar, monkeypatch, carddemo_system
+):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = load_config(_CONFIG)
+    config = load_config(_CONFIG, carddemo_system)
     expected = _account_view()
 
     with served_session(config, bridge_jar, tmp_path) as served:

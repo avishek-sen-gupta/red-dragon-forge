@@ -1,16 +1,14 @@
-"""GATED demo: a real CardDemo REWRITE / WRITE persists to the VSAM flat file.
+"""GATED demo: a real CardDemo REWRITE / WRITE persists to the cataloged cluster.
 
-This is the final task of VSAM file persistence. The persistence machinery is
-built (``VsamEngine(config, vsam_dir)`` writes go straight to the backing
-every mutation to ``<backing_dir>/<NAME>.dat`` as a raw fixed-length flat image).
-These two tests prove it end to end by driving the SAME real CardDemo flows the
-durable harness already exercises (``test_carddemo_signon_real.py``) — only with
-a ``vsam_dir`` — then reading the backing flat file off disk with
-``read_flat_file`` and asserting the mutation landed there.
+Every VsamEngine mutation goes straight to the cluster's file in the system
+catalog, a raw fixed-length flat image. These tests drive the SAME real CardDemo
+flows the durable harness exercises (``test_carddemo_signon_real.py``) with a
+system ``root``, then read the cluster's file off disk with ``read_flat_file``
+and assert the mutation landed there.
 
 The driving is NOT re-derived here: the shared region/engine setup and the
 turn-by-turn drivers (``_drive_rewrite`` / ``_drive_transaction_add``) are reused
-from ``test_carddemo_signon_real.py`` (each now takes an optional ``vsam_dir``).
+from ``test_carddemo_signon_real.py`` (each takes an optional ``root``).
 
 Gated exactly like the durable test (skipped unless CARDDEMO_HOME + bms-tools +
 the ProLeap JAR are present). Run explicitly:
@@ -27,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from catnip.dataset import Dataset
+from catnip.system_catalog import SystemCatalog
 from cics.vsam.format import read_flat_file
 from tests.covers import covers, NotLanguageFeature
 from tests.integration.cics.test_carddemo_signon_real import (
@@ -72,23 +72,31 @@ _ACCT_ID_LEN = 11
 _ACCT_STATUS_OFFSET = 11
 
 
+def _cluster_file(root: Path, dsn: str) -> Path:
+    match SystemCatalog(root / "system").lookup(dsn):
+        case Dataset(path=path):
+            return path
+        case _:
+            raise AssertionError(f"{dsn} is not cataloged under {root}")
+
+
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_account_update_rewrite_persists_to_flat_file(tmp_path, bridge_jar):
     """Real CardDemo account-update REWRITE (status 'Y'->'N') write-throughs to
     the ACCTDAT backing flat file on disk.
 
     Drives the SAME flow as ``test_real_carddemo_account_update_rewrite`` but
-    builds the shared VsamEngine with ``vsam_dir=tmp_path/'store'``. After the
-    REWRITE, reads ``store/ACCTDAT.dat`` as fixed-length records, finds the record
+    builds the shared VsamEngine's system under ``tmp_path/'store'``. After the
+    REWRITE, reads the TEST.ACCTDAT cluster's file as fixed-length records, finds the record
     whose ACCT-ID (offset 0, 11 bytes) == '00000000011', and asserts its
     ACCT-ACTIVE-STATUS byte (offset 11) is now 'N' — proving the mutation is
     durable on disk, not just in the in-memory engine.
     """
     store = tmp_path / "store"
-    _drive_rewrite(tmp_path, bridge_jar, vsam_dir=store)
+    _drive_rewrite(tmp_path, bridge_jar, root=store)
 
-    records = read_flat_file(store / "ACCTDAT.dat", _ACCTDAT_RECLN)
-    assert records, "ACCTDAT.dat backing file is empty or missing after REWRITE"
+    records = read_flat_file(_cluster_file(store, "TEST.ACCTDAT"), _ACCTDAT_RECLN)
+    assert records, "TEST.ACCTDAT cluster file is empty or missing after REWRITE"
 
     want_key = _ACCT_ID.encode("cp037")
     match = next(
@@ -100,7 +108,7 @@ def test_account_update_rewrite_persists_to_flat_file(tmp_path, bridge_jar):
         None,
     )
     assert match is not None, (
-        f"account {_ACCT_ID!r} not found in ACCTDAT.dat backing file "
+        f"account {_ACCT_ID!r} not found in TEST.ACCTDAT cluster file "
         f"({len(records)} records on disk)"
     )
     status_byte = match[_ACCT_STATUS_OFFSET : _ACCT_STATUS_OFFSET + 1]
@@ -116,18 +124,18 @@ def test_transaction_add_write_persists_to_flat_file(tmp_path, bridge_jar):
     throughs to the TRANSACT backing flat file on disk.
 
     Drives the SAME flow as ``test_real_carddemo_transaction_add_write`` but
-    builds the shared VsamEngine with ``vsam_dir=tmp_path/'store'``. After the
-    EXEC CICS WRITE, reads ``store/TRANSACT.dat`` as fixed-length records, finds
+    builds the shared VsamEngine's system under ``tmp_path/'store'``. After the
+    EXEC CICS WRITE, reads the TEST.TRANSACT cluster's file as fixed-length records, finds
     the record whose TRAN-ID (offset 0, 16 bytes) == the generated next id, and
     asserts the seeded fields (type/cat/source/desc) the add flow set are present
     on disk — proving the created record is durable, not just in memory.
     """
     store = tmp_path / "store"
-    rB, viewB, _ = _drive_transaction_add(tmp_path, bridge_jar, vsam_dir=store)
+    rB, viewB, _ = _drive_transaction_add(tmp_path, bridge_jar, root=store)
 
-    records = read_flat_file(store / "TRANSACT.dat", _TRAN_RECLN)
+    records = read_flat_file(_cluster_file(store, "TEST.TRANSACT"), _TRAN_RECLN)
     assert records, (
-        f"TRANSACT.dat backing file empty/missing after WRITE; "
+        f"TEST.TRANSACT cluster file empty/missing after WRITE; "
         f"screen err={viewB.get('ERRMSG')!r}"
     )
 
@@ -135,7 +143,7 @@ def test_transaction_add_write_persists_to_flat_file(tmp_path, bridge_jar):
     match = next((r for r in records if r[0:16] == want_key), None)
     assert match is not None, (
         f"newly-written transaction {_EXPECTED_NEW_TRAN_ID!r} not found in "
-        f"TRANSACT.dat backing file ({len(records)} records on disk); "
+        f"TEST.TRANSACT cluster file ({len(records)} records on disk); "
         f"screen err={viewB.get('ERRMSG')!r}"
     )
     # The fields the add flow set, read back off disk (CVTRA05Y layout):
@@ -154,7 +162,7 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
 
     Reads the seeded ACCOUNT-RECORD, prints a human-readable block dump, drives
     the update flow (status 'Y'->'N'), then prints the block dump of the same
-    record read back from the backing flat file in vsam_dir.
+    record read back from the cluster file in the system catalog.
     """
     from cics.vsam.dump import load_record_layout, render_block
 

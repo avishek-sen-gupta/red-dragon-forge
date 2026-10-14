@@ -1,11 +1,11 @@
-"""Gated e2e: a real CardDemo REWRITE, then decode the backing .dat via the dump CLI.
+"""Gated e2e: a real CardDemo REWRITE, then decode the cataloged cluster via the dump module.
 
 Proves the whole copybook-driven dump pipeline end to end. Drives the SAME real
 CardDemo account-update REWRITE the durable harness exercises
-(``test_carddemo_signon_real._drive_rewrite``) but through a ``vsam_dir`` that
-write-throughs every mutation to ``<store>/ACCTDAT.dat`` as a fixed-length flat
-image. Then loads the real ACCOUNT copybook (``CVACT01Y.cpy``) into a DataLayout,
-reads the backing flat file, decodes each record via the dump module, finds the
+(``test_carddemo_signon_real._drive_rewrite``) over a system catalog under
+``<store>``, whose TEST.ACCTDAT cluster takes every mutation as a fixed-length
+flat image. Then loads the real ACCOUNT copybook (``CVACT01Y.cpy``) into a DataLayout,
+reads the cluster's file, decodes each record via the dump module, finds the
 rewritten account (ACCT-ID 00000000011) and asserts ACCT-ACTIVE-STATUS == "N".
 
 Gated exactly like ``test_vsam_persistence.py`` (skipped unless CARDDEMO_HOME +
@@ -31,6 +31,8 @@ from tests.integration.cics.test_carddemo_signon_real import (
 )
 from tests.integration.cobol_helpers import bridge_jar
 from cics.vsam.dump import decode_record, load_record_layout
+from catnip.dataset import Dataset
+from catnip.system_catalog import SystemCatalog
 from cics.vsam.format import read_flat_file
 from tests.covers import covers, NotLanguageFeature
 
@@ -49,7 +51,7 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path, bridge_jar):
     "N" — the value the REWRITE flow set (Y -> N).
     """
     backing = tmp_path / "store"
-    _drive_rewrite(tmp_path, bridge_jar, vsam_dir=backing)
+    _drive_rewrite(tmp_path, bridge_jar, root=backing)
 
     # Locate the real CardDemo ACCOUNT copybook (the one ACCTDAT records use).
     carddemo = Path(os.environ["CARDDEMO_HOME"])
@@ -59,8 +61,10 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path, bridge_jar):
     ), f"expected 1 CVACT01Y.cpy under CARDDEMO_HOME, found {len(matches)}: {matches}"
     copybook = matches[0]
     layout = load_record_layout(copybook, None, bridge_jar, [])
-    records = read_flat_file(backing / "ACCTDAT.dat", layout.total_bytes)
-    assert records, "ACCTDAT.dat backing file is empty or missing after REWRITE"
+    acctdat = SystemCatalog(backing / "system").lookup("TEST.ACCTDAT")
+    assert isinstance(acctdat, Dataset)
+    records = read_flat_file(acctdat.path, layout.total_bytes)
+    assert records, "TEST.ACCTDAT cluster file is empty or missing after REWRITE"
 
     decoded = [decode_record(layout, r) for r in records]
 

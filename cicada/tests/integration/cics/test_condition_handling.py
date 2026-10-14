@@ -18,12 +18,13 @@ from cics.dispatcher import InputEvent, run_cics
 from cics.preprocessor import CONDITION_TABLE_SLOTS, raisable_literal
 from cics.types import CicsContext, DispatchKind
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import DatasetConfig, FctConfig
+from cics.vsam.file_table import cics_files
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 
 from tests.covers import covers
+from tests.vsam_system import SeedCluster, build_test_system
 from tests.integration.cobol_helpers import bridge_jar  # noqa: F401
 
 _CICS_COPYBOOKS = Path(__file__).resolve().parents[3] / "cics" / "copybooks"
@@ -43,12 +44,8 @@ def cobol_parser(bridge_jar):  # noqa: F811
 
 @pytest.fixture
 def vsam_engine_with_acctfile(tmp_path):
-    config = FctConfig(
-        datasets={"ACCTFILE": DatasetConfig(record_length=80, key_length=11)}
-    )
-    engine = VsamEngine(config, tmp_path / "vsam")
-    engine.load_all()
-    return engine
+    clusters = (SeedCluster("ACCTFILE", 80, 11, ()),)
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _copybook_capture(pattern: str) -> str:

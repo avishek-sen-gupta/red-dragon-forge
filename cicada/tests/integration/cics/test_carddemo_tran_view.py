@@ -11,8 +11,7 @@ record and renders the COTRN1A detail screen.
       MOVE TRNIDIN TO TRAN-ID -> READ TRANSACT -> populate detail fields ->
       SEND MAP COTRN1A -> RETURN TRANSID CT01.
 
-VSAM engine seeded via FctConfig.from_yaml + seed_vsam (the same pipeline
-as test_carddemo_tran_list).
+Files are clusters in a test system catalog, as in test_carddemo_tran_list.
 """
 
 from __future__ import annotations
@@ -30,11 +29,10 @@ from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import FctConfig
-from cics.vsam.format import write_flat_file
-from cics.vsam.seed import seed_vsam
+from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
+from tests.vsam_system import SeedCluster, build_test_system
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
 from tests.integration.cobol_helpers import bridge_jar
@@ -109,37 +107,12 @@ def _usrsec_record() -> bytes:
     return rec.ljust(_USRSEC_RECLN, b"\x40")[:_USRSEC_RECLN]
 
 
-def _write_seed_files(data_dir: Path) -> None:
-    data_dir.mkdir(parents=True, exist_ok=True)
-    write_flat_file(data_dir / "USRSEC.dat", [_usrsec_record()], _USRSEC_RECLN)
-    write_flat_file(data_dir / "TRANSACT.dat", [_view_tran_record()], _TRAN_RECLN)
-
-
-_FCT_YAML = """\
-datasets:
-  USRSEC:
-    record_length: 80
-    file: USRSEC.dat
-    key_length: 8
-  TRANSACT:
-    record_length: 350
-    file: TRANSACT.dat
-    key_length: 16
-"""
-
-
 def _tran_view_engine(tmp_path: Path) -> VsamEngine:
-    data_dir = tmp_path / "data"
-    fct_path = tmp_path / "fct.yaml"
-    _write_seed_files(data_dir)
-    fct_path.write_text(_FCT_YAML)
-
-    fct = FctConfig.from_yaml(fct_path)
-    vsam_dir = tmp_path / "vsam"
-    seed_vsam(fct_path, data_dir, vsam_dir)
-    engine = VsamEngine(fct, vsam_dir)
-    engine.load_all()
-    return engine
+    clusters = (
+        SeedCluster("USRSEC", 80, 8, (_usrsec_record(),)),
+        SeedCluster("TRANSACT", 350, 16, (_view_tran_record(),)),
+    )
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _drive_to_tran_view(tmp_path: Path, bridge_jar):

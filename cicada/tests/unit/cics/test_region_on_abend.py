@@ -25,7 +25,7 @@ def test_build_region_forwards_on_abend_to_build_cics_spec(monkeypatch, tmp_path
         return object()
 
     monkeypatch.setattr(region_mod, "build_cics_spec", fake_build_cics_spec)
-    monkeypatch.setattr(region_mod, "_vsam_engine", lambda config, vsam_dir: object())
+    monkeypatch.setattr(region_mod, "_vsam_engine", lambda config: object())
     monkeypatch.setattr(
         region_mod, "_parser", lambda config, bridge_jar, sym_dir: object()
     )
@@ -71,7 +71,7 @@ def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path)
         return object()
 
     monkeypatch.setattr(region_mod, "build_cics_spec", fake_build_cics_spec)
-    monkeypatch.setattr(region_mod, "_vsam_engine", lambda config, vsam_dir: object())
+    monkeypatch.setattr(region_mod, "_vsam_engine", lambda config: object())
     monkeypatch.setattr(
         region_mod, "_parser", lambda config, bridge_jar, sym_dir: object()
     )

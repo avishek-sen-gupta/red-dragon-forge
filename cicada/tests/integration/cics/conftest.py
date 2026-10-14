@@ -21,10 +21,14 @@ from pathlib import Path
 
 import pytest
 
+from catnip.declaration import load_declaration
+from catnip.install import install
+from catnip.system_catalog import SystemCatalog
 from tests.integration.cics.bms_tools_helpers import BMS_TOOLS_AVAILABLE
 
 _MONOREPO_ROOT = Path(__file__).parents[4]
 _SUBMODULE_CARDDEMO = _MONOREPO_ROOT / "vendor" / "carddemo" / "app"
+_DATA_DECLARATION = _MONOREPO_ROOT / "config" / "carddemo" / "data.toml"
 
 
 def _resolve_carddemo_home() -> str | None:
@@ -56,3 +60,15 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         return
     if not _TOOLCHAIN_OK:
         pytest.fail(_SETUP_MSG, pytrace=False)
+
+
+@pytest.fixture
+def carddemo_system(tmp_path: Path) -> Path:
+    """CardDemo's data declaration installed into a fresh system directory."""
+    declaration = tmp_path / "data.toml"
+    declaration.write_text(
+        _DATA_DECLARATION.read_text().replace("${FORGE_ROOT}", str(_MONOREPO_ROOT))
+    )
+    system = tmp_path / "system"
+    install(load_declaration(declaration), SystemCatalog(system))
+    return system

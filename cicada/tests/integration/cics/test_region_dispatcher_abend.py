@@ -57,13 +57,13 @@ def test_an_unknown_return_transid_runs_the_regions_rollback(cobol_parser, tmp_p
         source_dirs=(),
         copybook_dirs=(),
         bms_dirs=(),
-        data_dir=tmp_path,
         hlasm_export=tmp_path,
         initial_transid="HP00",
         min_commarea_len=0,
         transactions={"HP00": "HOPPER"},
         programs=frozenset({"HOPPER"}),
-        datasets={},
+        system=tmp_path,
+        csd_files=(),
     )
     rollbacks: list[str] = []
 
