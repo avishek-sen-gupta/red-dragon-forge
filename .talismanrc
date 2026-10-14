@@ -322,7 +322,7 @@ fileignoreconfig:
 - filename: tests/integration/test_carddemo_data_install.py
   checksum: d6e023498d56fc9dcbbff2c33f61b5469af57efaef8b09c6ab66b7d8114e6a51
 - filename: cicada/cics/vsam/dump.py
-  checksum: aacb80bb4a0f977ee76b4f7618503dd7506896949c61888ab8339d94ed27bd17
+  checksum: 3a85f24f98f84777f64dae9a24b21f42b4fa85043c123ec8eb9e703d0ddeabfe
 - filename: cicada/tests/integration/cics/test_carddemo_user_list.py
   checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
 - filename: cicada/cics/vsam/engine.py
@@ -364,5 +364,5 @@ fileignoreconfig:
 - filename: jackal/jackal/record_format.py
   checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
-  checksum: dd8957ef257ed4decbcf893a9d6306f9108094f4ca5810e7ab85634086f1535f
+  checksum: 6122ec03beac3ba3222e3032bab94c695dccec1b29564b382698a714aa75b6e4
 version: "1.0"

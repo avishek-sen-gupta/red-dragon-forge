@@ -60,7 +60,7 @@ def test_dump_decodes_rewritten_acctdat_status_n(tmp_path, bridge_jar):
         len(matches) == 1
     ), f"expected 1 CVACT01Y.cpy under CARDDEMO_HOME, found {len(matches)}: {matches}"
     copybook = matches[0]
-    layout = load_record_layout(copybook, None, bridge_jar, [])
+    layout = load_record_layout(copybook, "", bridge_jar, [])
     acctdat = SystemCatalog(backing / "system").lookup("TEST.ACCTDAT")
     assert isinstance(acctdat, Dataset)
     records = read_flat_file(acctdat.path, layout.total_bytes)

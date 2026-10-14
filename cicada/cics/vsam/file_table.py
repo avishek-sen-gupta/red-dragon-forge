@@ -13,12 +13,20 @@ class FileTableError(ValueError):
     pass
 
 
+def _cluster_or_path(name: str, dataset: Dataset) -> Dataset:
+    match dataset.label:
+        case KsdsLabel() | PathView():
+            return dataset
+        case _:
+            raise FileTableError(
+                f"CICS file {name}: {dataset.dsn} is not a KSDS or path"
+            )
+
+
 def _resolved(system: SystemCatalog, name: str, dsn: str) -> Dataset:
     match system.lookup(dsn):
-        case Dataset(label=KsdsLabel() | PathView()) as dataset:
-            return dataset
-        case Dataset():
-            raise FileTableError(f"CICS file {name}: {dsn} is not a KSDS or path")
+        case Dataset() as dataset:
+            return _cluster_or_path(name, dataset)
         case NotCataloged():
             raise FileTableError(f"CICS file {name}: {dsn} is not cataloged")
 

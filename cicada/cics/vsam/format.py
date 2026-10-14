@@ -13,7 +13,10 @@ def read_flat_file(path: Path, record_length: int) -> list[bytes]:
     """
     if not path.exists():
         return []
-    data = path.read_bytes()
+    return _records(path, path.read_bytes(), record_length)
+
+
+def _records(path: Path, data: bytes, record_length: int) -> list[bytes]:
     if record_length <= 0:
         raise ValueError(f"record_length must be positive, got {record_length}")
     if len(data) % record_length != 0:

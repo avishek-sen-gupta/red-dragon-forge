@@ -22,20 +22,53 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable, Mapping, Sequence
+from itertools import chain
 from pathlib import Path
 
 from catnip.dataset import Dataset
 from catnip.system_catalog import NotCataloged, SystemCatalog
 from cics.vsam.decoded_record import Decoded, DecodedRecord, Leaf
 from cics.vsam.format import read_flat_file
-from interpreter.cobol.binary import decode_binary
-from interpreter.cobol.comp3 import decode_comp3
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.cobol_types import CobolDataCategory
+from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.cobol.binary import decode_binary
+from interpreter.cobol.comp3 import decode_comp3
 from interpreter.cobol.data_layout import DataLayout, FieldLayout, build_data_layout
 from interpreter.cobol.ebcdic_table import EbcdicTable
-from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.zoned_decimal import decode_zoned
+
+
+def _text(field: FieldLayout, data: bytes) -> Leaf:
+    return (
+        EbcdicTable.ebcdic_to_ascii(data).decode("ascii", errors="replace").rstrip(" ")
+    )
+
+
+def _zoned(field: FieldLayout, data: bytes) -> Leaf:
+    digits = field.type_descriptor.decimal_digits
+    return _as_number(decode_zoned(data, digits), digits)
+
+
+def _packed(field: FieldLayout, data: bytes) -> Leaf:
+    digits = field.type_descriptor.decimal_digits
+    return _as_number(decode_comp3(data, digits), digits)
+
+
+def _binary(field: FieldLayout, data: bytes) -> Leaf:
+    td = field.type_descriptor
+    return _as_number(
+        decode_binary(data, td.decimal_digits, td.signed), td.decimal_digits
+    )
+
+
+_DECODERS: Mapping[CobolDataCategory, Callable[[FieldLayout, bytes], Leaf]] = {
+    CobolDataCategory.ALPHANUMERIC: _text,
+    CobolDataCategory.ZONED_DECIMAL: _zoned,
+    CobolDataCategory.COMP3: _packed,
+    CobolDataCategory.BINARY: _binary,
+}
 
 
 def _decode_leaf(field: FieldLayout, data: bytes) -> Leaf:
@@ -46,29 +79,17 @@ def _decode_leaf(field: FieldLayout, data: bytes) -> Leaf:
     decimals decode to float. Alphanumeric fields decode EBCDIC -> ASCII text with
     trailing spaces trimmed.
     """
-    td = field.type_descriptor
-    cat = td.category
-    if cat == CobolDataCategory.ALPHANUMERIC:
-        return (
-            EbcdicTable.ebcdic_to_ascii(data)
-            .decode("ascii", errors="replace")
-            .rstrip(" ")
+    category = field.type_descriptor.category
+    if category not in _DECODERS:
+        raise NotImplementedError(
+            f"VSAM dump does not support category {category.value} "
+            f"(field {field.name!r})"
         )
-    if cat == CobolDataCategory.ZONED_DECIMAL:
-        return _as_number(decode_zoned(data, td.decimal_digits), td.decimal_digits)
-    if cat == CobolDataCategory.COMP3:
-        return _as_number(decode_comp3(data, td.decimal_digits), td.decimal_digits)
-    if cat == CobolDataCategory.BINARY:
-        return _as_number(
-            decode_binary(data, td.decimal_digits, td.signed), td.decimal_digits
-        )
-    raise NotImplementedError(
-        f"VSAM dump does not support category {cat.value} (field {field.name!r})"
-    )
+    return _DECODERS[category](field, data)
 
 
 def _as_number(value: float, decimal_digits: int) -> int | float:
-    return int(round(value)) if decimal_digits == 0 else value
+    return round(value) if decimal_digits == 0 else value
 
 
 def decode_record(layout: DataLayout, record: bytes) -> DecodedRecord:
@@ -146,28 +167,35 @@ def _decode_group(
     return _decoded(sub, record, base, root)
 
 
-def select_record_layout(root: DataLayout, record_name: str | None) -> DataLayout:
-    """Pick the 01-level record layout to decode.
-
-    - Root has group children: select by ``record_name``; if exactly one group and
-      no name given, use it; if multiple and no name, raise listing the names.
-    - Root has no group children (the 01 is elementary): decode the root itself.
-    """
-    groups = root.groups
-    if not groups:
-        return root
-    if record_name is not None:
-        for name, sub in groups.items():
-            if name.upper() == record_name.upper():
-                return sub
+def _named_record(groups: Mapping[str, DataLayout], record_name: str) -> DataLayout:
+    found = [sub for name, sub in groups.items() if name.upper() == record_name.upper()]
+    if not found:
         raise ValueError(
             f"record {record_name!r} not found; available: {sorted(groups)}"
         )
+    return found[0]
+
+
+def _only_record(groups: Mapping[str, DataLayout]) -> DataLayout:
     if len(groups) == 1:
         return next(iter(groups.values()))
     raise ValueError(
         f"copybook declares multiple records; pass --record (one of {sorted(groups)})"
     )
+
+
+def select_record_layout(root: DataLayout, record_name: str) -> DataLayout:
+    """Pick the 01-level record layout to decode.
+
+    - Root has group children: select by ``record_name``; if exactly one group and
+      no name given (``""``), use it; if multiple and no name, raise listing the names.
+    - Root has no group children (the 01 is elementary): decode the root itself.
+    """
+    if not root.groups:
+        return root
+    if record_name:
+        return _named_record(root.groups, record_name)
+    return _only_record(root.groups)
 
 
 _SKELETON_HEAD = (
@@ -180,19 +208,16 @@ _SKELETON_HEAD = (
 
 def load_record_layout(
     copybook: Path,
-    record_name: str | None,
+    record_name: str,
     jar: str,
-    extra_dirs: list[Path],
+    extra_dirs: Sequence[Path],
 ) -> DataLayout:
     """Parse a copybook (wrapped in a minimal program) into the selected layout."""
-    member = copybook.stem
-    source = (_SKELETON_HEAD + f"       COPY {member}.\n").encode("utf-8")
-    copybook_dirs = [copybook.parent, *extra_dirs]
+    source = (_SKELETON_HEAD + f"       COPY {copybook.stem}.\n").encode("utf-8")
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), jar, copybook_dirs=copybook_dirs
+        RealSubprocessRunner(), jar, copybook_dirs=[copybook.parent, *extra_dirs]
     )
-    asg = parser.parse(source)
-    root = build_data_layout(asg.data_fields)
+    root = build_data_layout(parser.parse(source).data_fields)
     return select_record_layout(root, record_name)
 
 
@@ -200,45 +225,62 @@ def _plain(record: DecodedRecord) -> dict[str, Decoded]:
     return record.plain()
 
 
-def render_jsonl(layout: DataLayout, records: list[bytes]) -> str:
+def render_jsonl(layout: DataLayout, records: Sequence[bytes]) -> str:
     """One compact JSON object per record, each newline-terminated; empty input yields an empty string."""
     lines = [json.dumps(decode_record(layout, rec), default=_plain) for rec in records]
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def render_block(layout: DataLayout, records: list[bytes]) -> str:
+def render_block(layout: DataLayout, records: Sequence[bytes]) -> str:
     """Human-readable per-field block: @offset NAME value 0xRAW, for each record.
 
     Note: OCCURS fields show the first element's raw bytes with a ``<occurs>``
     value placeholder; block format does not expand arrays. Use jsonl to see
     decoded arrays.
     """
-    chunks: list[str] = []
-    for idx, rec in enumerate(records, start=1):
-        chunks.append(f"=== record {idx} ===")
-        chunks.extend(_block_lines(layout, rec, layout.offset, prefix=""))
+    chunks = tuple(
+        chain.from_iterable(
+            (f"=== record {index} ===", *_block_lines(layout, rec, layout.offset, ""))
+            for index, rec in enumerate(records, start=1)
+        )
+    )
     return "\n".join(chunks) + ("\n" if chunks else "")
+
+
+def _field_line(
+    field_name: str, fl: FieldLayout, record: bytes, base: int, prefix: str
+) -> str:
+    start = fl.offset - base
+    raw = record[start : start + fl.byte_length]
+    value = _decode_leaf(fl, raw) if fl.occurs_count == 0 else "<occurs>"
+    return f"  @{fl.offset:<5} {prefix}{field_name:<28} {value!r:<24} 0x{raw.hex()}"
+
+
+def _group_lines(
+    group_name: str, sub: DataLayout, record: bytes, base: int, prefix: str
+) -> tuple[str, ...]:
+    return (
+        f"  @{sub.offset:<5} {prefix}{group_name}:",
+        *_block_lines(sub, record, base, prefix + "  "),
+    )
 
 
 def _block_lines(
     layout: DataLayout, record: bytes, base: int, prefix: str
-) -> list[str]:
-    lines: list[str] = []
-    for name, fl in layout.fields.items():
-        start = fl.offset - base
-        raw = record[start : start + fl.byte_length]
-        value = _decode_leaf(fl, raw) if fl.occurs_count == 0 else "<occurs>"
-        lines.append(
-            f"  @{fl.offset:<5} {prefix}{name:<28} {value!r:<24} 0x{raw.hex()}"
-        )
-    for name, sub in layout.groups.items():
-        lines.append(f"  @{sub.offset:<5} {prefix}{name}:")
-        lines.extend(_block_lines(sub, record, base, prefix + "  "))
-    return lines
+) -> tuple[str, ...]:
+    return (
+        *(
+            _field_line(field_name, fl, record, base, prefix)
+            for field_name, fl in layout.fields.items()
+        ),
+        *chain.from_iterable(
+            _group_lines(group_name, sub, record, base, prefix)
+            for group_name, sub in layout.groups.items()
+        ),
+    )
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: parse args, decode the cataloged dataset via the copybook, write to stdout. Returns an exit code."""
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m cics.vsam.dump",
         description="Decode a cataloged VSAM dataset via a COBOL copybook.",
@@ -247,29 +289,48 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dsn", required=True, help="cataloged dataset name")
     parser.add_argument("--copybook", required=True, type=Path, help="record copybook")
     parser.add_argument(
-        "--record", default=None, help="01-level record name (if multiple)"
+        "--record", default="", help="01-level record name (if multiple)"
     )
     parser.add_argument("--format", choices=["jsonl", "block"], default="jsonl")
     parser.add_argument("--copybook-dir", action="append", default=[], type=Path)
     parser.add_argument(
         "--jar",
-        default=os.environ.get("PROLEAP_BRIDGE_JAR"),
+        default=os.environ.get("PROLEAP_BRIDGE_JAR", ""),
         help="ProLeap bridge JAR (defaults to $PROLEAP_BRIDGE_JAR)",
     )
+    return parser
+
+
+def _records(
+    parser: argparse.ArgumentParser, system: Path, dsn: str, record_length: int
+) -> list[bytes]:
+    match SystemCatalog(system).lookup(dsn):
+        case Dataset(path=path):
+            return read_flat_file(path, record_length)
+        case NotCataloged():
+            parser.error(f"{dsn} is not cataloged in {system}")
+
+
+_RENDERERS: Mapping[str, Callable[[DataLayout, Sequence[bytes]], str]] = {
+    "jsonl": render_jsonl,
+    "block": render_block,
+}
+
+
+def run(argv: Sequence[str]) -> int:
+    """Decode the cataloged dataset ``argv`` names via its copybook and write it to stdout."""
+    parser = _parser()
     args = parser.parse_args(argv)
     if not args.jar:
         parser.error("no JAR: pass --jar or set PROLEAP_BRIDGE_JAR")
-
     layout = load_record_layout(args.copybook, args.record, args.jar, args.copybook_dir)
-    record_length = layout.total_bytes
-    match SystemCatalog(args.system).lookup(args.dsn):
-        case Dataset(path=path):
-            records = read_flat_file(path, record_length)
-        case NotCataloged():
-            parser.error(f"{args.dsn} is not cataloged in {args.system}")
-    renderer = render_jsonl if args.format == "jsonl" else render_block
-    sys.stdout.write(renderer(layout, records))
+    records = _records(parser, args.system, args.dsn, layout.total_bytes)
+    sys.stdout.write(_RENDERERS[args.format](layout, records))
     return 0
+
+
+def main() -> int:
+    return run(sys.argv[1:])
 
 
 if __name__ == "__main__":  # pragma: no cover

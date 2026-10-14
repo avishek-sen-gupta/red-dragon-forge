@@ -287,7 +287,7 @@ def test_select_record_layout_single_group_is_default():
         total_bytes=1,
     )
     root = DataLayout(groups={"REC-A": inner}, total_bytes=1)
-    assert select_record_layout(root, None) is inner
+    assert select_record_layout(root, "") is inner
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -296,7 +296,7 @@ def test_select_record_layout_multiple_groups_requires_name():
     b = DataLayout(offset=1, total_bytes=1)
     root = DataLayout(groups={"REC-A": a, "REC-B": b}, total_bytes=2)
     with pytest.raises(ValueError) as exc:
-        select_record_layout(root, None)
+        select_record_layout(root, "")
     assert "REC-A" in str(exc.value) and "REC-B" in str(exc.value)
     assert select_record_layout(root, "REC-B") is b
 
@@ -307,7 +307,7 @@ def test_select_record_layout_no_groups_uses_root():
     root = DataLayout(
         fields={"X": _fl(CobolDataCategory.ALPHANUMERIC, 0, 1, 1)}, total_bytes=1
     )
-    assert select_record_layout(root, None) is root
+    assert select_record_layout(root, "") is root
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
