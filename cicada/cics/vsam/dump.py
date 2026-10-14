@@ -318,7 +318,6 @@ _RENDERERS: Mapping[str, Callable[[DataLayout, Sequence[bytes]], str]] = {
 
 
 def run(argv: Sequence[str]) -> int:
-    """Decode the cataloged dataset ``argv`` names via its copybook and write it to stdout."""
     parser = _parser()
     args = parser.parse_args(argv)
     if not args.jar:

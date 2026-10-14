@@ -224,10 +224,14 @@ def _shorter_variable(fmt: VariableFormat, label: DatasetLabel) -> bool:
             return False
 
 
-def joins(fmt: ProgramFormat, label: DatasetLabel) -> bool:
+def joining(fmt: ProgramFormat, label: DatasetLabel) -> tuple[LabelConflict, ...]:
     """A later member of a like concatenation: as the first, or a shorter variable LRECL."""
     match fmt:
         case VariableFormat() if _shorter_variable(fmt, label):
-            return True
+            return ()
         case _:
-            return not conflicts(fmt, label)
+            return conflicting(fmt, label)
+
+
+def joins(fmt: ProgramFormat, label: DatasetLabel) -> bool:
+    return not joining(fmt, label)

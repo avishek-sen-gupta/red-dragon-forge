@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
+from itertools import chain
 from pathlib import Path
 
 from catnip.catalog_stores import Table
@@ -32,8 +33,10 @@ from jackal.allocation import (
     ConcatenatedAllocation,
     DatasetAllocation,
     DdEnvironment,
+    DummyAllocation,
     InStreamAllocation,
     MemberAllocation,
+    SysoutAllocation,
 )
 from jackal.concatenated_records import ConcatenatedDriver
 from jackal.label_conflict import LabelConflict
@@ -44,9 +47,8 @@ from jackal.record_format import (
     ProgramFormat,
     VariableFormat,
     conflicting,
-    conflicts,
     indexed_conflicts,
-    joins,
+    joining,
     label_for,
     program_format,
 )
@@ -98,9 +100,14 @@ def _variable(label: DatasetLabel) -> bool:
             return False
 
 
-def _agrees(dataset: Dataset, found: Sequence[LabelConflict]) -> bool:
-    tuple(logger.warning("%s", conflict.described(dataset.dsn)) for conflict in found)
+def _logged(found: Sequence[tuple[str, LabelConflict]]) -> bool:
+    for name, conflict in found:
+        logger.warning("%s", conflict.described(name))
     return not found
+
+
+def _agrees(dataset: Dataset, found: Sequence[LabelConflict]) -> bool:
+    return _logged(tuple((dataset.dsn, conflict) for conflict in found))
 
 
 def _through_path(label: DatasetLabel) -> bool:
@@ -281,11 +288,39 @@ def _member_label(member: MemberAllocation) -> DatasetLabel:
             return LabelPending()
 
 
+_UNNAMED_MEMBERS: Mapping[type[MemberAllocation], str] = {
+    InStreamAllocation: "DD *",
+    DummyAllocation: "DUMMY",
+    SysoutAllocation: "SYSOUT",
+}
+
+
+def _member_name(member: MemberAllocation) -> str:
+    match member:
+        case DatasetAllocation(dataset=dataset):
+            return dataset.dsn
+        case _:
+            return _UNNAMED_MEMBERS[type(member)]
+
+
+def _named(
+    member: MemberAllocation, found: Sequence[LabelConflict]
+) -> tuple[tuple[str, LabelConflict], ...]:
+    return tuple((_member_name(member), conflict) for conflict in found)
+
+
 def _concatenation_admitted(
     fmt: ProgramFormat, members: Sequence[MemberAllocation]
 ) -> bool:
-    first, *later = (_member_label(m) for m in members)
-    return not conflicts(fmt, first) and all(joins(fmt, label) for label in later)
+    first, *later = members
+    return _logged(
+        (
+            *_named(first, conflicting(fmt, _member_label(first))),
+            *chain.from_iterable(
+                _named(member, joining(fmt, _member_label(member))) for member in later
+            ),
+        )
+    )
 
 
 def _member_driver(
