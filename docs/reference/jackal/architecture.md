@@ -134,7 +134,13 @@ and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the rec
 (`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
 largest record plus 4) meets the dataset's label: a pending label is written from it on
 `OUTPUT` or `EXTEND`; a label that contradicts it in organization, fixed against variable, or
-length fails the `OPEN` with file status 39. `RECORDING MODE U` and `S` are refused. The
+length fails the `OPEN` with file status 39. An indexed FD is checked against a cluster's or a
+path's label the same way: its largest record against the cluster's LRECL, and its `RECORD KEY`
+offset and length against the cluster's key, or the alternate key for a path. Each attribute in
+conflict is logged as a warning, `DSN: FIELD: declared D, FD P` (for example
+`A.KSDS: key offset: declared 0, FD 3`), so the line to change can be found; the program still
+gets status 39 and may handle it. `ALTERNATE RECORD KEY` clauses are not compared, because a
+cluster's label does not list its AIXs. `RECORDING MODE U` and `S` are refused. The
 decisions and their IBM sources are in
 [the COBOL OPEN decision record](../../records/design/2026-10-11-jackal-cobol-open-record-format.md).
 A dataset labelled V or VB is read and written through `catnip.variable_records`, which keeps

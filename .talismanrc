@@ -346,11 +346,21 @@ fileignoreconfig:
 - filename: docs/roadmaps/cicada.md
   checksum: 01e69cbe5efa625a0d7642e184c913646e4bd301b8d7fe8cabd9df05966a7b21
 - filename: docs/reference/jackal/architecture.md
-  checksum: 44d77ff1be18c6ff5a864dac100eccd2571b2dac083e322e575b8e06471364ff
+  checksum: 5eff0922b8d3a9ad0f8eb7fac84b0a7840eb8b7f1868a251f46770f44549223c
 - filename: docs/reference/cicada/cicada-architecture.html
   checksum: dd480ed8a4686b3d2a69be8aa53f5bf288d6e1d4f105494db681488764920e33
 - filename: docs/reference/catnip/README.md
   checksum: 43e5a2992fa46cf93cdd1ebf2adb37a446b76df0f714fc6e14f37b8d8c282f72
 - filename: docs/records/design/2026-10-14-catnip-catalog-extraction.md
   checksum: 013b5c85f12a71df1e0aae34ca43f816db8ef167fde170f38a75a628e333d932
+- filename: jackal/jackal/record_key.py
+  checksum: 1385311efd556ef1d0575775507159d8175c3658666d6d40e3e0104c2a985e62
+- filename: jackal/tests/integration/test_cobol_path.py
+  checksum: d8bafcd63f06ad3d2b7b7d091c2ab7cba22f9c742cc5add48eadec8067c6b8db
+- filename: jackal/jackal/label_field.py
+  checksum: 80fe7ab65a0a29459c9e92da2d317278ca4398b5f1b16b72925ae6ee2410d68e
+- filename: jackal/jackal/cobol_files.py
+  checksum: 6be09e6098846b8d62c25bcb533a4df576d85b1a04fb93d6eca541bb7f09ec14
+- filename: jackal/jackal/record_format.py
+  checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 version: "1.0"
