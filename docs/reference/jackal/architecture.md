@@ -7,9 +7,10 @@ emulates utility programs in Python. The reference workload is the CardDemo batc
 in [../../how-to/run-jcl-job.md](../../how-to/run-jcl-job.md). Open work is in
 [../../roadmaps/jackal.md](../../roadmaps/jackal.md).
 
-jackal requires Python 3.13. Its dependencies are `lark` and `red-dragon` (an editable path
-source at `vendor/red-dragon`, which is never modified from this repo). jackal must not import
-cicada or squall; `.importlinter` enforces this.
+jackal requires Python 3.13. Its dependencies are `lark`, `red-dragon` (an editable path
+source at `vendor/red-dragon`, which is never modified from this repo) and
+[catnip](../catnip/README.md), the system catalog. jackal must not import cicada or squall;
+`.importlinter` enforces this.
 
 ## How a job runs
 
@@ -136,7 +137,7 @@ largest record plus 4) meets the dataset's label: a pending label is written fro
 length fails the `OPEN` with file status 39. `RECORDING MODE U` and `S` are refused. The
 decisions and their IBM sources are in
 [the COBOL OPEN decision record](../../records/design/2026-10-11-jackal-cobol-open-record-format.md).
-A dataset labelled V or VB is read and written through `jackal.variable_records`, which keeps
+A dataset labelled V or VB is read and written through `catnip.variable_records`, which keeps
 each record behind its 4-byte record descriptor word as z/OS does, and fails a `REWRITE` that
 changes a record's length with file status 44
 ([decision record](../../records/design/2026-10-12-jackal-variable-records.md)). `PARM=` is passed in as an OS halfword-prefixed parameter region
@@ -153,13 +154,20 @@ code from the finished VM
 ## Datasets and the catalog
 
 Datasets live in a **system directory** that persists across runs, standing in for a
-mainframe's disks and catalog. `jackal.system_catalog.SystemCatalog` holds it: `catalog.json`
-records every cataloged dataset with its label (`jackal.labels`: RECFM and LRECL for a
+mainframe's disks and catalog. The catalog is [catnip](../catnip/README.md)'s
+`SystemCatalog`, shared with cicada, so a CICS region pointed at the same directory sees what a
+job wrote. `catalog.json` records every cataloged dataset with its label (RECFM and LRECL for a
 sequential dataset, LRECL and key extent for a KSDS, or pending for a dataset a job created,
-whose label is built at its first `OPEN OUTPUT`), and `datasets/`
-holds the bytes. Data enters only through `jackal catalog add`, which copies the file in with
-its label; no Forge runtime accepts an unlabelled dataset. Every open reads the label: it
-chooses the driver and gives the record length. `jackal.catalog.DatasetCatalog` is one job's view of it, adding
+whose label is built at its first `OPEN OUTPUT`), alternate indexes, paths and GDG bases, and
+`datasets/` holds the bytes. Data enters through `catnip install`, which loads a whole data
+declaration, or `jackal catalog add`, which copies one sequential file in with its label; no
+Forge runtime accepts an unlabelled dataset. Every open reads the label: it chooses the driver
+and gives the record length. A DD naming a path opens its base cluster through the path's
+alternate index: a COBOL program reads it in alternate-key order, gets file status `02` when
+more records with the same alternate key follow, and its writes change the base cluster. A
+`LIKE=` naming a path labels the new dataset from the base cluster. IDCAMS cannot define an
+AIX or path (red-dragon-forge-shdi); `DELETE` of a cluster removes its AIXs and paths.
+`jackal.catalog.DatasetCatalog` is one job's view of the system catalog, adding
 the job's temps, passed datasets and a scratch directory. Dispositions follow SMS: `CATLG` and
 `KEEP` leave a dataset cataloged and `UNCATLG` does nothing. An omitted normal or abnormal
 disposition is kept as omitted by the parser and defaulted at allocation, once the catalog
@@ -181,8 +189,8 @@ the JCL Reference's DISP defaults say. The decisions and their IBM sources are i
 | IDCAMS `DEFINE CLUSTER` | Catalogs a KSDS with the label its `RECORDSIZE` and `KEYS` give. |
 | IDCAMS `DEFINE GENERATIONDATAGROUP` | Catalogs a GDG base: its `LIMIT`, `EMPTY`/`NOEMPTY` (default `NOEMPTY`), `SCRATCH`/`NOSCRATCH` (default `NOSCRATCH`), `FIFO`/`LIFO` (default `LIFO`) and its active generations, none yet. A name already cataloged, as a dataset or a GDG, ends the command with condition code 12 ([decision record](../../records/design/2026-10-12-jackal-gdg.md)). |
 
-Supported organisations are sequential (PS) and VSAM KSDS. DSN types are in `jackal.dsn`;
-the catalog's one in-place table is `jackal.catalog_stores`.
+Supported organisations are sequential (PS) and VSAM KSDS, read directly or through a path.
+DSN types are in `jackal.model`; the catalog's one in-place table is `catnip.catalog_stores`.
 
 ## Utilities
 
@@ -236,10 +244,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/utilities.py` | The utility table: IEFBR14, IDCAMS. |
 | `jackal/jackal/tso_step.py` | A TSO monitor step's DSN session: one RUN PROGRAM after another. |
 | `jackal/jackal/catalog.py` | One job's dataset catalog: the system's datasets, temps, `PASS`, DISP lifecycle. |
-| `jackal/jackal/system_catalog.py` | The persistent system catalog and the bytes it owns. |
-| `jackal/jackal/labels.py`, `dataset.py` | Dataset labels, and a dataset with its file and label, opened by its label. |
+| `jackal/jackal/dcb_label.py` | A new dataset's label from its DD's DCB, `LIKE` or `REFDD` and its model. |
 | `jackal/jackal/concatenated_records.py` | A concatenation read member after member as one file. |
-| `jackal/jackal/variable_records.py` | RECFM=V/VB records on disk, each behind its record descriptor word. |
 | `jackal/jackal/cond.py` | `COND=` evaluation, and the order of every gate. |
 | `jackal/jackal/if_guard.py` | `IF/THEN/ELSE` condition evaluation. |
 | `jackal/jackal/model.py`, `results.py` | Immutable job model, DSN types and step results. |

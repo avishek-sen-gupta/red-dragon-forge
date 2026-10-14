@@ -34,8 +34,9 @@ Two explainer pages sit beside this one:
   structural. The one regex strips `*>` comment lines inside an `EXEC CICS` block, in
   `CicsDialectParser.parse`.
 - `_advance_routing` in `cics/dispatcher.py` is the only definition of inter-program routing.
-- VSAM record I/O goes through RedDragon's shared access-method drivers. The `.dat` file is the
-  store.
+- CICS files are datasets in [catnip](../catnip/README.md)'s system catalog, the one jackal's
+  jobs use. Record I/O goes through RedDragon's shared access-method drivers over the
+  catalog's own bytes; cicada keeps no copy.
 
 ## Package layout
 
@@ -68,7 +69,7 @@ All paths are under `cicada/`.
 | `cics/copybooks/` | `DFHAID`, `DFHBMSCA`, `DFHEIBLK`, `DFHHANDLE` |
 | `cics/builtins/` | service builtins: `flow`, `screen`, `system`, `vsam`, `interval`, `cells` |
 | `cics/screen/` | `TerminalScreen` (24x80 field model), turn driver, cursor, screen payloads |
-| `cics/vsam/` | `fct`, `engine`, `browse`, `eibresp`, `seed`, `format`, `dump` |
+| `cics/vsam/` | `file_table`, `engine`, `browse`, `eibresp`, `format`, `dump` |
 | `cics/bms/` | `generate` (symbolic copybooks), `catalog` (parsed mapsets), `attributes`, `macros/` |
 | `cics/tn3270/` | the TN3270 server: `cli`, `config`, `region`, `session`, `negotiation`, `encoder`, `decoder`, `codes`, `wire` |
 | `bms_copybook_gen/` | BMS macro invocations → COBOL symbolic copybook |
@@ -145,26 +146,45 @@ Screens and input travel over `ScreenChannel` and `InputChannel` (`cics/terminal
 
 ## VSAM
 
-- `cics/vsam/fct.py` — `DatasetConfig(file, record_length, key_offset, key_length)` and
-  `FctConfig`, keyed by upper-cased file name.
-- `cics/vsam/engine.py` — `VsamEngine(config, vsam_dir)`, a CICS adapter over RedDragon's
-  access-method drivers. `<vsam_dir>/<NAME>.dat` is the store. `key_offset` 0 opens the indexed
-  driver; a non-zero offset opens the alternate-key driver, which is read-only. Browses keep one
-  open driver per task, file and cursor. The adapter owns FCT enable state, the held
-  read-for-update key and browse cursors.
+File control runs over the system catalog in the directory given with `--system`. The region
+TOML names CSD files, not datasets ([config](tn3270-config.md)).
+
+- `cics/vsam/file_table.py` — `cics_files(system, dsnames)` resolves each CICS file, through the
+  CSD's `DEFINE FILE(...) DSNAME(...)`, to its cataloged dataset, keyed by upper-cased file name.
+  A DSN that is not cataloged, or is neither a KSDS nor a path, raises `FileTableError` naming
+  the file and the DSN, and the region does not start.
+- `cics/vsam/engine.py` — `VsamEngine(files)`, a CICS adapter over RedDragon's access-method
+  drivers. The record length and key come from the dataset's catalog label. Each point
+  operation opens the dataset, acts and closes it, so a write is on disk at once. A KSDS opens
+  the indexed driver. A path opens `AlternateIndexDriver` over its base cluster: records come in
+  alternate-key order, duplicates in primary-key order; `READ`, `READNEXT`, `READPREV` and
+  `DELETE` return `DUPKEY` (RESP 15) when more records with the same alternate key follow; a
+  `WRITE` or `REWRITE` through a path changes the base cluster, and one that repeats a key in a
+  unique AIX returns `DUPREC`. A file not in the table returns `DISABLED`. Browses keep one open
+  driver per task, file and cursor. The adapter owns the held read-for-update key and the
+  browse cursors.
+- A failure the declared shape causes is logged, not raised, since the program may handle the
+  condition: a `NOTFND` whose program key length differs from the declared one (on `READ`,
+  `DELETE`, or `STARTBR` with `EQUAL`) logs the file, its DSN, the declared key length and
+  offset, and the program's key length; a `WRITE` or `REWRITE` whose record differs from the
+  declared record length logs the file, the DSN and both lengths.
 - `cics/vsam/eibresp.py` — maps the driver's `AccessCondition` to EIBRESP.
-- `cics/vsam/seed.py` — `seed_vsam` writes `.dat` files from EBCDIC flat files. Base clusters
-  are written key-sorted; alternate-key datasets keep source order.
-- `cics/vsam/format.py` — fixed-length record read and atomic write.
-- `cics/vsam/dump.py` — decodes a `.dat` file through a copybook:
+- `cics/vsam/format.py` — reads a fixed-length-record file as its records.
+- `cics/vsam/dump.py` — decodes a cataloged dataset through a copybook. The record length is
+  the copybook's; a path's DSN dumps its base cluster's file in primary-key order:
 
   ```bash
   . ./bridge-env.sh
-  uv run --no-sync python -m cics.vsam.dump --data FILE.dat --copybook RECORD.cpy --format block
+  uv run --no-sync python -m cics.vsam.dump --system DIR --dsn DSN --copybook RECORD.cpy --format block
   ```
 
-  Flags: `--data`, `--copybook`, `--record`, `--format jsonl|block`, `--copybook-dir`, `--jar`
-  (defaults to `$PROLEAP_BRIDGE_JAR`).
+  Flags: `--system`, `--dsn`, `--copybook`, `--record`, `--format jsonl|block`,
+  `--copybook-dir`, `--jar` (defaults to `$PROLEAP_BRIDGE_JAR`).
+
+z/OS returns duplicate alternate keys in the order they were written; cicada returns them in
+primary-key order (red-dragon-forge-zqxf). Nothing locks a system directory against a batch job
+running at the same time, and CICS file open and close state is not modelled
+(red-dragon-forge-y6gk).
 
 ## BMS
 

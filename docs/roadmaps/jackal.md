@@ -43,7 +43,8 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | GDG base name as every generation (`GDGORDER`, `FIFO`/`LIFO`) | `red-dragon-forge-zbb` | supported |
 | PDS and PDSE members (`DSN=LIB(MEMBER)`) | `jackal-1o2.16` | not started |
 | VSAM ESDS and RRDS | `jackal-1o2.21` | not started |
-| VSAM alternate indexes (`DEFINE AIX`, `BLDINDEX`, `PATH`) | `jackal-1o2.22` | not started |
+| VSAM alternate indexes: a program reads and writes a cluster through a path cataloged by `catnip install` | `jackal-1o2.22` | supported |
+| IDCAMS `DEFINE AIX`, `DEFINE PATH`, `BLDINDEX` | `red-dragon-forge-shdi` | not started |
 | IEFBR14 | — | supported |
 | IDCAMS `DELETE`, `DEFINE CLUSTER`, `DEFINE GDG`, `REPRO` (DUMMY, concatenations) | — | supported |
 | IDCAMS `VERIFY` and the modal commands (`IF`/`THEN`/`ELSE`, `DO…END`, `SET`, `CANCEL`) | `red-dragon-forge-vqa` | supported |

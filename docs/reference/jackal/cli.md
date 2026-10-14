@@ -10,9 +10,12 @@ no `__main__`.
 jackal catalog add DSN --system DIR --file PATH --recfm {F,FB,V,VB} --lrecl N
 ```
 
-Copies `PATH` into the system directory `DIR` as dataset `DSN`, cataloged with the given label
-(a sequential dataset). This is the mainframe's upload: jobs only ever read the system's copy.
-A dataset is brought in once; later runs against the same `DIR` find it.
+Copies `PATH` into the system directory `DIR` as dataset `DSN`, cataloged in catnip's system
+catalog with the given label (a sequential dataset). This is the mainframe's upload: jobs only
+ever read the system's copy. A dataset is brought in once; later runs against the same `DIR`
+find it. To load many datasets, clusters, alternate indexes and paths at once, use
+`catnip install` ([catnip](../catnip/README.md#catnip-install)); a CICS region pointed at `DIR`
+sees the clusters and paths it installs.
 
 ## `jackal run`
 
@@ -36,7 +39,7 @@ exit with 2.
 |---|---|---|
 | `JCL` | required | Path to the JCL file. |
 | `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`; a program that is neither there nor a utility is stubbed with RC 0 and a warning. |
-| `--system DIR` | required | The system directory: `catalog.json` and the cataloged datasets' bytes. Created if absent. |
+| `--system DIR` | required | The system directory: catnip's `catalog.json` and the cataloged datasets' bytes. Created if absent. |
 | `--copybook-dir DIR` | `$CARDDEMO_HOME/app/cpy` | Copybook directory for COBOL steps. |
 | `--proclib DIR` | `$CARDDEMO_HOME/app/proc` | Directory of cataloged procedures: `EXEC P` expands `DIR/P.prc`. Repeat the flag to search several directories in order. With neither the flag nor `CARDDEMO_HOME`, only in-stream PROCs expand. |
 | `--link PGM ...` | none | Programs a CALL by data-name may reach. Each `PGM` is loaded from `--source-dir` and compiled into every COBOL step. A name with no source there is an argument error. |

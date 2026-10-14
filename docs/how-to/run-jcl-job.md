@@ -38,7 +38,8 @@ Runs a CardDemo batch job through jackal. Flags are in
 
    Expected: an `installed …` line per dataset, alternate index and path.
    A single dataset can be added by hand with `jackal catalog add`; see
-   [the CLI reference](../reference/jackal/cli.md).
+   [the CLI reference](../reference/jackal/cli.md). The declaration format is in
+   [catnip](../reference/catnip/README.md).
 
 4. Run `ACCTFILE.jcl`. It deletes, defines and loads the account VSAM KSDS with IDCAMS.
 
@@ -153,7 +154,7 @@ from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.runner import JobRunner
-from jackal.system_catalog import SystemCatalog
+from catnip.system_catalog import SystemCatalog
 from jackal.unresolved import RaiseErrorStrategy
 from squall.backends.sqlite import SqliteBackend
 from squall.connector import NamedDbConnector
@@ -192,6 +193,8 @@ an abend in one gives 12 under IKJEFT01 and `S04C` under IKJEFT1A/1B.
 - A step ends `allocation failed (DD …: DATASET_NOT_FOUND)`, or a warning says an empty dataset
   stood in for one: the dataset is not in the system directory. Add it with
   `jackal catalog add`, or run step 3.
+- `DSN: from: … does not exist`, or another `DSN: field: …` line from step 3: the declaration
+  does not match the seed files. Change the named field; nothing was installed.
 - `KeyError: 'JCL_BRIDGE_JAR'`: step 1 was not run in this shell.
 - `No module named jackal.__main__`: use `uv run --no-sync jackal`, not `python -m jackal`.
 - `jackal: S1: PROC P is in no proclib`: `P.prc` is not in the PROC library. Pass

@@ -11,6 +11,17 @@ Db2 server adds admin options 5 and 6. Commands run from the repo root.
 - A 3270 emulator. `brew install x3270` installs `c3270` on macOS.
 - For the Db2 server only: Docker, and `squall/.env` copied from `squall/.env.example`.
 
+## Install the data
+
+Both servers read and write CardDemo's VSAM data in a system directory. Install it once:
+
+```bash
+make catnip-install-carddemo SYSTEM=/tmp/carddemo-system
+```
+
+Expected: an `installed …` line per dataset, alternate index and path. The directory keeps every
+change the region and any batch job make. To start clean, install into a new directory.
+
 ## Without Db2
 
 1. Export the paths and JARs.
@@ -24,10 +35,11 @@ Db2 server adds admin options 5 and 6. Commands run from the repo root.
 2. Start the server.
 
    ```bash
-   uv run --no-sync cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
+   uv run --no-sync cicada-tn3270 --config cicada/config/carddemo-tn3270.toml \
+       --system /tmp/carddemo-system --port 3270
    ```
 
-   Expected: VSAM, BMS and compile log lines, then
+   Expected: BMS and compile log lines, then
    `INFO cics.tn3270.cli: serving cicada/config/carddemo-tn3270.toml on 127.0.0.1:3270`.
 
 3. In a second terminal, connect.
@@ -43,8 +55,7 @@ Db2 server adds admin options 5 and 6. Commands run from the repo root.
 
    Expected: the menu for that user type.
 
-Stop the server with `Ctrl+C`. Each start reseeds VSAM into a temporary directory, so all
-changes are discarded.
+Stop the server with `Ctrl+C`. Changes stay in the system directory and a restart keeps them.
 
 ## With Db2
 
@@ -85,10 +96,11 @@ changes are discarded.
 5. Start the server.
 
    ```bash
-   uv run --no-sync carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
+   uv run --no-sync carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml \
+       --system /tmp/carddemo-system --port 3271
    ```
 
-   Expected: VSAM, BMS and compile log lines, then
+   Expected: BMS and compile log lines, then
    `INFO red_dragon_forge.carddemo_db2_cli: serving on 127.0.0.1:3271 -- ready for a 3270 to connect`.
 
 6. In a second terminal, connect.
@@ -123,6 +135,8 @@ fields. `Ctrl+R` clears a locked keyboard. In `c3270`, `F5` sends PF5.
 - The connection drops after choosing an option. The option's program is not in the region,
   for example `09`, or admin `5`/`6` on the plain server. An `XCTL` to an unknown program
   crashes the driver instead of painting an abend (`forge-6jj`).
+- The server stops at startup with `CICS file NAME: DSN is not cataloged`: the system
+  directory lacks a dataset the CSD's `DEFINE FILE` names. Install the data into it first.
 - Screens are green only. The emulator is a 3278 or lacks `-E`. Use `-model 3279-2-E`.
 - Every Db2 screen fails with `SQL30081N`. The Db2 instance died inside a running container.
   Run `make db2-restart`.

@@ -10,7 +10,7 @@ Prerequisite: [Set up a fresh clone](setup.md).
    make db2-up
    ```
 
-2. Run every suite: cicada, squall, jackal, cobble, then the root composition suite.
+2. Run every suite: cicada, squall, catnip, jackal, cobble, then the root composition suite.
 
    ```bash
    make test-all
@@ -24,6 +24,7 @@ Run from the repo root. Each line is self-contained.
 |---|---|---|
 | cicada | JARs | `. ./bridge-env.sh && (cd cicada && uv run --no-sync python -m pytest)` |
 | squall | JARs, Db2 | `. ./bridge-env.sh && (cd squall && . db2/dsn-env.sh && uv run --no-sync python -m pytest)` |
+| catnip | nothing | `(cd catnip && uv run --no-sync python -m pytest)` |
 | jackal | JARs | `. ./bridge-env.sh && (cd jackal && uv run --no-sync python -m pytest)` |
 | cobble | nothing | `(cd cobble && uv run --no-sync python -m pytest)` |
 | root (composition) | JARs, Db2 | `make test` |
