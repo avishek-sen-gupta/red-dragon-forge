@@ -12,10 +12,12 @@ from catnip.labels import (
     KsdsLabel,
     Label,
     LabelPending,
+    PathView,
     SequentialLabel,
 )
 from catnip.variable_records import VariableRecordDriver
 from cobol_asg.file_enums import FileOrganization, OpenMode
+from interpreter.cobol.alternate_index_driver import open_alternate_index_driver
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
 
 
@@ -29,6 +31,8 @@ class Dataset:
         match self.label:
             case KsdsLabel():
                 return _indexed(self.path, mode, self.label)
+            case PathView():
+                return _through_path(self.path, mode, self.label)
             case _:
                 return _sequential(self.path, mode, self.label)
 
@@ -41,6 +45,21 @@ def _indexed(path: Path, mode: OpenMode, label: KsdsLabel) -> FileOrganizationDr
         label.lrecl,
         label.key_offset,
         label.key_length,
+    )
+
+
+def _through_path(
+    path: Path, mode: OpenMode, label: PathView
+) -> FileOrganizationDriver:
+    return open_alternate_index_driver(
+        path,
+        mode,
+        label.base.lrecl,
+        label.base.key_offset,
+        label.base.key_length,
+        label.key_offset,
+        label.key_length,
+        label.unique,
     )
 
 

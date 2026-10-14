@@ -6,6 +6,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from catnip.alternate_index import AlternateIndex
+from catnip.catalog_path import CatalogPath
 from catnip.labels import KsdsLabel, LabelPending, RecordFormat, SequentialLabel
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.missing_data import StrictAllocation
@@ -129,13 +131,16 @@ def test_like_copies_a_cataloged_model_and_refdd_copies_a_dds_coded_attributes(
 ):
     """JCL Ref pp. 208-210: LIKE=dsname copies a cataloged model's RECORG or
     RECFM and LRECL, a KSDS's included, and LRECL or RECFM coded on the DD
-    override them; a model not cataloged fails the allocation. pp. 238-240:
+    override them; a path is copied as its base cluster; a model not cataloged fails the allocation. pp. 238-240:
     REFDD=*.ddname or *.step.ddname copies the RECFM and LRECL coded on that DD,
     never its dataset's label. A REFDD or DCB referback naming no earlier DD is an
     unresolved reference, rejected before any step runs."""
     upload(tmp_path, "T.MODEL", b"", _FB80)
     upload(tmp_path, "T.KSDS", b"", KsdsLabel(100, 0, 8))
+    system(tmp_path).define_aix(AlternateIndex("T.AIX", "T.KSDS", 8, 4, False))
+    system(tmp_path).define_path(CatalogPath("T.PATH", "T.AIX"))
     model, ksds = DirectDSN(literal("T.MODEL")), DirectDSN(literal("T.KSDS"))
+    through = DirectDSN(literal("T.PATH"))
     c_in_s1 = BackwardRef(ref("S1"), UnresolvedDd(DdName("C")))
     l1_in_s1 = BackwardRef(ref("S1"), UnresolvedDd(DdName("L1")))
     j = job(
@@ -151,6 +156,7 @@ def test_like_copies_a_cataloged_model_and_refdd_copies_a_dds_coded_attributes(
                     _new("L3", replace(_dcb(), like=ksds)),
                     _new("L4", replace(_dcb(lrecl="200"), like=ksds)),
                     _new("L5", replace(_dcb(recfm="VB", lrecl="84"), like=ksds)),
+                    _new("L6", replace(_dcb(), like=through)),
                     _new("R1", replace(_dcb(), refdd=StepDd(DdName("C")))),
                 ),
             ),
@@ -180,13 +186,14 @@ def test_like_copies_a_cataloged_model_and_refdd_copies_a_dds_coded_attributes(
     assert [s.outcome for s in result.steps] == [Completed(0), Completed(0)]
     assert {
         n: after.resolve(f"T.{n}").label
-        for n in ("L1", "L2", "L3", "L4", "L5", "R1", "R2", "R3")
+        for n in ("L1", "L2", "L3", "L4", "L5", "L6", "R1", "R2", "R3")
     } == {
         "L1": _FB80,
         "L2": SequentialLabel(RecordFormat.FB, 120),
         "L3": KsdsLabel(100, 0, 8),
         "L4": KsdsLabel(200, 0, 8),
         "L5": SequentialLabel(RecordFormat.VB, 84),
+        "L6": KsdsLabel(100, 0, 8),
         "R1": SequentialLabel(RecordFormat.VB, 204),
         "R2": SequentialLabel(RecordFormat.VB, 300),
         "R3": LabelPending(),

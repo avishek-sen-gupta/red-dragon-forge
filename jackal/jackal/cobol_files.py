@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -16,6 +16,7 @@ from catnip.labels import (
     KsdsLabel,
     Label,
     LabelPending,
+    PathView,
     SequentialLabel,
 )
 from catnip.variable_records import VariableRecordDriver
@@ -93,10 +94,32 @@ def _variable(label: DatasetLabel) -> bool:
 
 def _indexed_conflict(label: DatasetLabel) -> bool:
     match label:
-        case KsdsLabel():
+        case KsdsLabel() | PathView():
             return False
         case _:
             return True
+
+
+def _through_path(label: DatasetLabel) -> bool:
+    match label:
+        case PathView():
+            return True
+        case _:
+            return False
+
+
+def _dataset_driver(
+    dataset: Dataset,
+    path: Path,
+    mode: OpenMode,
+    record_length: int,
+    by_organization: Callable[[], FileOrganizationDriver],
+) -> FileOrganizationDriver:
+    if _through_path(dataset.label):
+        return dataset.opened(mode)
+    if _variable(dataset.label):
+        return VariableRecordDriver(path, mode, record_length)
+    return by_organization()
 
 
 class AllocatedFileIOProvider(RealFileIOProvider):
@@ -173,11 +196,8 @@ class AllocatedFileIOProvider(RealFileIOProvider):
             return ConcatenatedDriver(
                 tuple(partial(_member_driver, m, record_length) for m in members)
             )
-        if self._datasets.has(filename) and _variable(
-            self._datasets.get(filename).label
-        ):
-            return VariableRecordDriver(path, mode, record_length)
-        return super()._driver(
+        by_organization = partial(
+            super()._driver,
             filename,
             org,
             path,
@@ -185,6 +205,11 @@ class AllocatedFileIOProvider(RealFileIOProvider):
             record_length,
             key_offset,
             key_length,
+        )
+        if not self._datasets.has(filename):
+            return by_organization()
+        return _dataset_driver(
+            self._datasets.get(filename), path, mode, record_length, by_organization
         )
 
     def _open_file(

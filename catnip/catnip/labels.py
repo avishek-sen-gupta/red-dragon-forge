@@ -47,7 +47,17 @@ class LabelPending:
     """A dataset a job created, labelled at its first OPEN OUTPUT."""
 
 
+@dataclass(frozen=True)
+class PathView:
+    """A path's label: its base cluster's label read through an alternate key."""
+
+    base: KsdsLabel
+    key_offset: int
+    key_length: int
+    unique: bool
+
+
 Label: TypeAlias = SequentialLabel | KsdsLabel
-DatasetLabel: TypeAlias = Label | LabelPending
+DatasetLabel: TypeAlias = Label | LabelPending | PathView
 
 CARDS = SequentialLabel(RecordFormat.F, 80)

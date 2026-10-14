@@ -9,6 +9,7 @@ from catnip.labels import (
     DatasetLabel,
     KsdsLabel,
     LabelPending,
+    PathView,
     RecordFormat,
     SequentialLabel,
 )
@@ -71,7 +72,21 @@ def coded_label(
     return SequentialLabel(formats[0], lengths[0])
 
 
+def _cluster_label(model: DatasetLabel) -> DatasetLabel:
+    match model:
+        case PathView():
+            return model.base
+        case _:
+            return model
+
+
 def liked_label(
+    recfm: Value | NullifiedValue, lrecl: Value | NullifiedValue, model: DatasetLabel
+) -> DatasetLabel:
+    return _liked(recfm, lrecl, _cluster_label(model))
+
+
+def _liked(
     recfm: Value | NullifiedValue, lrecl: Value | NullifiedValue, model: DatasetLabel
 ) -> DatasetLabel:
     match model:
