@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from interpreter.cobol.cobol_frontend import CobolFrontend
+from interpreter.project.cobol_compile import compile_cobol
 from cics.statements import CicsDialectParser
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
@@ -88,37 +88,6 @@ def _engine(tmp_path: Path) -> VsamEngine:
     return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
-def _link_single_cobol(source: bytes, frontend: CobolFrontend, program_id: str):
-    from interpreter.cfg import build_cfg
-    from interpreter.registry import build_registry
-    from interpreter.constants import Language
-    from interpreter.project.types import LinkedProgram
-    from interpreter.ir import CodeLabel
-
-    instructions = frontend.lower(source)
-    cfg = build_cfg(instructions)
-    registry = build_registry(
-        instructions,
-        cfg,
-        func_symbol_table=frontend.func_symbol_table,
-        class_symbol_table=frontend.class_symbol_table,
-    )
-    return LinkedProgram(
-        modules={},
-        merged_ir=list(instructions),
-        merged_cfg=cfg,
-        merged_registry=registry,
-        language=Language.COBOL,
-        import_graph={},
-        type_env_builder=frontend.type_env_builder,
-        symbol_table=frontend.symbol_table,
-        data_layout=frontend.data_layout,
-        func_symbol_table=frontend.func_symbol_table,
-        class_symbol_table=frontend.class_symbol_table,
-        entry_func_label=CodeLabel(f"func_{program_id.lower()}_0"),
-    )
-
-
 @covers(CobolFeature.EXEC_CICS)
 def test_vsam_browse_forward_round_trips(cobol_parser, tmp_path):
     """STARTBR + two READNEXTs walk records in key order; 2nd record body reaches COMMAREA."""
@@ -136,12 +105,12 @@ def test_vsam_browse_forward_round_trips(cobol_parser, tmp_path):
         unsupported_verbs=set(),
     )
     source = apply_cics_prepass(COBOL_BROWSE).encode()
-    frontend = CobolFrontend(
-        cobol_parser=cobol_parser,
+    program = compile_cobol(
+        source,
+        parser=cobol_parser,
         extension_strategies=[strategy],
         dialect_parsers=[CicsDialectParser()],
     )
-    program = _link_single_cobol(source, frontend, "TESTBRWS")
 
     result = run_cics(
         program,

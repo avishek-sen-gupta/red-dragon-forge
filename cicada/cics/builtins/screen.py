@@ -7,7 +7,6 @@ import queue
 import struct
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from types import MappingProxyType
 
 from cics.builtins.cells import FieldWrite, commit_region, write_fields
 from cics.cell import Holder, held_or, hold
@@ -17,12 +16,13 @@ from cics.screen.payload import FieldAttributes, SendMapPayload, SendMode
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import NO_TERMINAL, CicsContext, DispatchKind, DispatchResult
 from interpreter.address import Address
+from interpreter.cobol.layout_data import field_positions
 from interpreter.types.typed_value import TypedValue
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
 logger = logging.getLogger(__name__)
 
-# data_layout category (CobolDataCategory.ZONED_DECIMAL.value) for a PIC 9
+# Field category (CobolDataCategory.ZONED_DECIMAL.value) for a PIC 9
 # DISPLAY field — what a BMS PICIN='9(n)' input field generates. Such fields are
 # de-edited on RECEIVE (right-justified, zero-filled), as z/OS BMS does.
 _NUMERIC_DISPLAY = "ZONED_DECIMAL"
@@ -40,7 +40,6 @@ _READ_TIMEOUT_ABCODE = "AZCT"
 # <f>F attribute-byte flag set when a field's data was cleared (received empty).
 _FLAG_CLEARED = 0x80
 
-_NO_LAYOUT: Mapping[str, int] = MappingProxyType({})
 _CP037_SPACE = " ".encode("cp037")  # 0x40
 _CP037_ZERO = "0".encode("cp037")  # 0xF0
 
@@ -70,12 +69,16 @@ def ws_region(vm: VMState) -> WsRegion:
 
 
 def read_ws_field(vm: VMState, region: bytearray, name: str) -> bytes:
-    layout = vm.data_layout.get(name, _NO_LAYOUT)
-    return (
-        bytes(region[layout["offset"] : layout["offset"] + layout["length"]])
-        if layout
-        else b""
-    )
+    positions = field_positions(vm.declarations)
+    if name not in positions:
+        return b""
+    position = positions[name]
+    return bytes(region[position.offset : position.offset + position.length])
+
+
+def _numeric_input(vm: VMState, name: str) -> bool:
+    positions = field_positions(vm.declarations)
+    return name in positions and positions[name].category == _NUMERIC_DISPLAY
 
 
 def _has_terminal(context_holder: Holder[CicsContext]) -> bool:
@@ -224,9 +227,7 @@ def _received_writes(vm: VMState, base: str, raw: bytes) -> tuple[FieldWrite, ..
     ZONED_DECIMAL — de-edited like z/OS BMS, right-justified and zero-filled;
     other fields left-justified and space-padded), its <f>L entered length,
     and its <f>F attribute byte, flagged cleared when the field arrived empty."""
-    numeric = (
-        vm.data_layout.get(base + "I", _NO_LAYOUT).get("category") == _NUMERIC_DISPLAY
-    )
+    numeric = _numeric_input(vm, base + "I")
     data = (
         FieldWrite(base + "I", raw, _CP037_ZERO, True)
         if numeric

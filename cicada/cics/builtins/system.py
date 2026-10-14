@@ -11,6 +11,7 @@ from interpreter.vm.vm_types import BuiltinResult, VMState
 from interpreter.types.typed_value import TypedValue
 from interpreter.var_name import VarName
 from interpreter.address import Address
+from interpreter.cobol.layout_data import field_positions
 from cics.conditions import UNHANDLED_ABCODE, UNSUPPORTED_VERB_ABCODE
 from cics.types import DispatchKind, DispatchResult
 
@@ -60,13 +61,13 @@ def make_init_eib_builtin(context_holder: list[CicsContext]) -> object:
             )
             return BuiltinResult(value=None)
 
-        layout = vm.data_layout
+        layout = field_positions(vm.declarations)
 
         def _write_field(name: str, data: list[int]) -> None:
             if name not in layout:
                 return
             f = layout[name]
-            off, length = f["offset"], f["length"]
+            off, length = f.offset, f.length
             region[off : off + length] = data[:length]
 
         _write_field("EIBTRNID", _ascii_to_ebcdic_bytes(ctx.transid, 4))

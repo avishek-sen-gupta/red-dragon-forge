@@ -84,8 +84,8 @@ def compile_main_program(
 ) -> Any:
     """Compile the program under test itself into ``program_cache[name]``.
 
-    Returns the ``LinkedProgram`` (useful for its ``.data_layout``, needed
-    by ``commarea.build_commarea`` and ``state.read_vm_field``).
+    Returns the ``LinkedProgram``, whose declarations carry the field layout
+    ``commarea.build_commarea`` and ``state.read_vm_field`` need.
     """
     linked = compile_cics_program(source, parser, spec, tolerant=tolerant)
     program_cache[name] = linked

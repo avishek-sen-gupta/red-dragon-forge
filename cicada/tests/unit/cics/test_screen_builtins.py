@@ -1,5 +1,7 @@
 """Unit tests for BMS screen builtins."""
 
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 import queue
 import struct
 
@@ -29,7 +31,7 @@ _NO_TERMINAL_TASK: list = [
 class _FakeVM:
     def __init__(self, region, layout, addr=1):
         self._region = region
-        self.data_layout = layout
+        self.declarations = declarations(layout)
         self._addr = addr
 
     def region_get(self, addr):
@@ -49,11 +51,46 @@ def _send(monkeypatch, layout, region, *args):
 
 
 _LAYOUT = {
-    "USERIDL": {"offset": 0, "length": 2},
-    "USERIDA": {"offset": 2, "length": 1},
-    "USERIDC": {"offset": 3, "length": 1},
-    "USERIDH": {"offset": 4, "length": 1},
-    "USERIDO": {"offset": 5, "length": 8},
+    "USERIDL": FieldPosition(
+        offset=0,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "USERIDA": FieldPosition(
+        offset=2,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "USERIDC": FieldPosition(
+        offset=3,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "USERIDH": FieldPosition(
+        offset=4,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "USERIDO": FieldPosition(
+        offset=5,
+        length=8,
+        category="ALPHANUMERIC",
+        total_digits=8,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 
 
@@ -121,8 +158,22 @@ def test_maponly_sends_no_symbolic_data(monkeypatch):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_map_reads_named_output_fields_from_ws(monkeypatch):
     layout = {
-        "USERIDO": {"offset": 0, "length": 8},
-        "ERRMSGO": {"offset": 8, "length": 78},
+        "USERIDO": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "ERRMSGO": FieldPosition(
+            offset=8,
+            length=78,
+            category="ALPHANUMERIC",
+            total_digits=78,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     region = bytearray(b"\x40" * 86)
     region[0:8] = "USER0001".encode("cp037")
@@ -140,8 +191,22 @@ def test_send_map_reads_named_output_fields_from_ws(monkeypatch):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_receive_map_writes_eibaid_from_input_event(monkeypatch):
     layout = {
-        "USERIDI": {"offset": 0, "length": 8},
-        "EIBAID": {"offset": 200, "length": 1},
+        "USERIDI": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "EIBAID": FieldPosition(
+            offset=200,
+            length=1,
+            category="ALPHANUMERIC",
+            total_digits=1,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
@@ -158,8 +223,22 @@ def test_receive_map_writes_eibaid_from_input_event(monkeypatch):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_receive_map_backcompat_dict_leaves_eibaid_default(monkeypatch):
     layout = {
-        "USERIDI": {"offset": 0, "length": 8},
-        "EIBAID": {"offset": 200, "length": 1},
+        "USERIDI": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "EIBAID": FieldPosition(
+            offset=200,
+            length=1,
+            category="ALPHANUMERIC",
+            total_digits=1,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     region = bytearray(b"\x40" * 210)
     # Pre-seed EIBAID with a sentinel so the default write is observable.
@@ -190,9 +269,30 @@ def test_receive_map_writes_named_input_fields_to_ws(monkeypatch):
     import struct
 
     layout = {
-        "USERIDI": {"offset": 0, "length": 8},
-        "USERIDL": {"offset": 100, "length": 2},
-        "EIBAID": {"offset": 200, "length": 1},
+        "USERIDI": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "USERIDL": FieldPosition(
+            offset=100,
+            length=2,
+            category="ALPHANUMERIC",
+            total_digits=2,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "EIBAID": FieldPosition(
+            offset=200,
+            length=1,
+            category="ALPHANUMERIC",
+            total_digits=1,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
@@ -214,10 +314,38 @@ def test_receive_map_numeric_field_is_de_edited(monkeypatch):
     import struct
 
     layout = {
-        "AMOUNTI": {"offset": 0, "length": 10, "category": "ZONED_DECIMAL"},
-        "AMOUNTL": {"offset": 20, "length": 2},
-        "NAMEI": {"offset": 30, "length": 10, "category": "ALPHANUMERIC"},
-        "EIBAID": {"offset": 200, "length": 1},
+        "AMOUNTI": FieldPosition(
+            offset=0,
+            length=10,
+            category="ZONED_DECIMAL",
+            total_digits=10,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "AMOUNTL": FieldPosition(
+            offset=20,
+            length=2,
+            category="ALPHANUMERIC",
+            total_digits=2,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "NAMEI": FieldPosition(
+            offset=30,
+            length=10,
+            category="ALPHANUMERIC",
+            total_digits=10,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "EIBAID": FieldPosition(
+            offset=200,
+            length=1,
+            category="ALPHANUMERIC",
+            total_digits=1,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
@@ -250,14 +378,70 @@ def _receive(monkeypatch, layout, event, bases):
 
 
 _RECEIVE_LAYOUT = {
-    "USERIDL": {"offset": 0, "length": 2},
-    "USERIDF": {"offset": 2, "length": 1},
-    "USERIDI": {"offset": 3, "length": 8},
-    "PASSWDL": {"offset": 11, "length": 2},
-    "PASSWDF": {"offset": 13, "length": 1},
-    "PASSWDI": {"offset": 14, "length": 8},
-    "EIBAID": {"offset": 40, "length": 1},
-    "EIBCPOSN": {"offset": 41, "length": 2},
+    "USERIDL": FieldPosition(
+        offset=0,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "USERIDF": FieldPosition(
+        offset=2,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "USERIDI": FieldPosition(
+        offset=3,
+        length=8,
+        category="ALPHANUMERIC",
+        total_digits=8,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "PASSWDL": FieldPosition(
+        offset=11,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "PASSWDF": FieldPosition(
+        offset=13,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "PASSWDI": FieldPosition(
+        offset=14,
+        length=8,
+        category="ALPHANUMERIC",
+        total_digits=8,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "EIBAID": FieldPosition(
+        offset=40,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "EIBCPOSN": FieldPosition(
+        offset=41,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 
 
@@ -283,11 +467,46 @@ def test_received_empty_field_sets_the_cleared_flag(monkeypatch):
 
 
 _NUMERIC_RECEIVE_LAYOUT = {
-    "AMOUNTL": {"offset": 0, "length": 2},
-    "AMOUNTF": {"offset": 2, "length": 1},
-    "AMOUNTI": {"offset": 3, "length": 10, "category": "ZONED_DECIMAL"},
-    "EIBAID": {"offset": 40, "length": 1},
-    "EIBCPOSN": {"offset": 41, "length": 2},
+    "AMOUNTL": FieldPosition(
+        offset=0,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "AMOUNTF": FieldPosition(
+        offset=2,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "AMOUNTI": FieldPosition(
+        offset=3,
+        length=10,
+        category="ZONED_DECIMAL",
+        total_digits=10,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "EIBAID": FieldPosition(
+        offset=40,
+        length=1,
+        category="ALPHANUMERIC",
+        total_digits=1,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "EIBCPOSN": FieldPosition(
+        offset=41,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 
 

@@ -172,3 +172,65 @@ def test_link_between_programs_of_a_bootstrapped_region_reaches_the_callee(
     assert [(s["map"], s["fields"].get("RESULT")) for s in drain(screen_q)] == [
         ("LNKMAP", "DONE")
     ]
+
+
+_SENDER_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. SENDER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-PAD PIC X(12) VALUE 'PADPADPADPAD'.
+       01 SNDMAP.
+          05 RESULTO PIC X(4).
+       LINKAGE SECTION.
+       01 DFHCOMMAREA PIC X(4).
+       PROCEDURE DIVISION.
+           MOVE 'CALL' TO RESULTO.
+           EXEC CICS SEND MAP('SNDMAP') FROM(SNDMAP) END-EXEC.
+           MOVE 'DONE' TO DFHCOMMAREA.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+
+_CALLER_SRC = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CALLER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 LNKMAP.
+          05 RESULTO PIC X(4).
+       01 WS-CA PIC X(4) VALUE 'INIT'.
+       PROCEDURE DIVISION.
+           EXEC CICS LINK PROGRAM('SENDER')
+               COMMAREA(WS-CA) LENGTH(LENGTH OF WS-CA)
+           END-EXEC.
+           MOVE WS-CA TO RESULTO.
+           EXEC CICS SEND MAP('LNKMAP') FROM(LNKMAP) END-EXEC.
+           EXEC CICS RETURN END-EXEC.
+           STOP RUN.
+"""
+
+
+@covers(CobolFeature.EXEC_CICS)
+def test_a_linked_program_reads_its_own_fields_at_its_own_offsets(cobol_parser):
+    """The LINKed program's RESULTO sits after a 12-byte pad, the caller's at
+    offset 0; the callee's SEND MAP shows what the callee wrote there."""
+    screen_q: queue.Queue = queue.Queue()
+
+    result = run_carddemo_region(
+        program_sources={
+            "CALLER": _CALLER_SRC.encode(),
+            "SENDER": _SENDER_SRC.encode(),
+        },
+        parser=cobol_parser,
+        entry_transid="CA00",
+        screen_queue=screen_q,
+        input_queue=queue.Queue(),
+        transid_to_program={"CA00": "CALLER", "SE00": "SENDER"},
+    )
+
+    assert result.kind == DispatchKind.RETURN
+    assert [(s["map"], s["fields"].get("RESULT")) for s in drain(screen_q)] == [
+        ("SNDMAP", "CALL"),
+        ("LNKMAP", "DONE"),
+    ]

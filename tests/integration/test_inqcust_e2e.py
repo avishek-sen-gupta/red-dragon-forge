@@ -25,17 +25,15 @@ direct investigation against the real compiled program, not assumed):
    result commarea via .decode("cp037"). Seeding and reading back COMMAREA
    bytes must go through cp037, not plain str.encode()/bytes literals.
 
-The ``INQCUST-INQ-SUCCESS`` field's offset is read from WRAPPER's OWN
-frontend.data_layout (not INQCUST's) because it is a LINKAGE SECTION field of
-INQCUST's DFHCOMMAREA, which never gets a data_layout entry for the compiled
-INQCUST program at all -- verified empirically: INQCUST-INQ-SUCCESS is absent
-from both inqcust_frontend.data_layout and inqcust_linked.data_layout. WRAPPER
-copies INQCUSTZ into its own WORKING-STORAGE WS-CA record, and WORKING-STORAGE
-fields DO get data_layout entries, so WRAPPER's own data_layout is the correct
-(and only working) place to resolve the field's offset -- exactly the buffer
-DispatchResult.commarea returns.  The offset is relative to WS-CA's own start
-(field offset minus WS-CA's own data_layout offset), since the returned
-COMMAREA buffer IS the WS-CA bytes, not the full WORKING-STORAGE region.
+The ``INQCUST-INQ-SUCCESS`` field's offset is read from WRAPPER's OWN field
+layout (not INQCUST's) because it is a LINKAGE SECTION field of INQCUST's
+DFHCOMMAREA, which never gets a layout entry for the compiled INQCUST program
+at all. WRAPPER copies INQCUSTZ into its own WORKING-STORAGE WS-CA record, and
+WORKING-STORAGE fields DO get layout entries, so WRAPPER's own layout is the
+correct (and only working) place to resolve the field's offset -- exactly the
+buffer DispatchResult.commarea returns.  The offset is relative to WS-CA's own
+start (field offset minus WS-CA's own offset), since the returned COMMAREA
+buffer IS the WS-CA bytes, not the full WORKING-STORAGE region.
 
 This test also required two real upstream fixes, made during this task's
 investigation (not workarounds in this file):
@@ -68,7 +66,9 @@ from squall.connector import NamedDbConnector
 
 from cics.coprocessor import build_cics_spec
 from squall.coprocessor import build_sql_spec
+from interpreter.cobol.layout_data import field_positions
 from interpreter.project.coprocessor_compile import compile_program
+from interpreter.run import main_declarations
 from tests.integration.forge_cobol_helpers import make_parser
 
 _BANK_OF_Z_COPY = (
@@ -249,18 +249,17 @@ def test_inqcust_found_and_not_found(bridge_jar):
         )
 
         # INQCUST-INQ-SUCCESS is a LINKAGE SECTION field of INQCUST's own
-        # DFHCOMMAREA and never gets a data_layout entry for the compiled
-        # INQCUST program (verified empirically against both
-        # inqcust_frontend.data_layout and inqcust_linked.data_layout -- absent
-        # from both). WRAPPER's own WORKING-STORAGE WS-CA copies the same
-        # INQCUSTZ shape, so its data_layout is the one that actually carries
+        # DFHCOMMAREA and never gets a layout entry for the compiled INQCUST
+        # program. WRAPPER's own WORKING-STORAGE WS-CA copies the same
+        # INQCUSTZ shape, so its layout is the one that actually carries
         # this field -- and it's the same buffer DispatchResult.commarea
         # returns. The offset is relative to WS-CA's own start.
-        success_field = wrapper_linked.data_layout["INQCUST-INQ-SUCCESS"]
-        ws_ca_field = wrapper_linked.data_layout["WS-CA"]
-        off = success_field["offset"] - ws_ca_field["offset"]
-        length = success_field["length"]
-        total_len = ws_ca_field["length"]
+        wrapper_fields = field_positions(main_declarations(wrapper_linked))
+        success_field = wrapper_fields["INQCUST-INQ-SUCCESS"]
+        ws_ca_field = wrapper_fields["WS-CA"]
+        off = success_field.offset - ws_ca_field.offset
+        length = success_field.length
+        total_len = ws_ca_field.length
 
         screen_q: queue.Queue = queue.Queue()
         input_q: queue.Queue = queue.Queue()

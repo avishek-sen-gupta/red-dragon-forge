@@ -8,6 +8,8 @@ websocket, multiprocessing) can plug in by implementing put/get without
 touching program/VM/strategy logic.
 """
 
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 import queue
 import struct
 
@@ -61,7 +63,7 @@ _ListInputChannel = _ListChannel
 class _FakeVM:
     def __init__(self, region, layout, addr=1):
         self._region = region
-        self.data_layout = layout
+        self.declarations = declarations(layout)
         self._addr = addr
 
     def region_get(self, addr):
@@ -89,7 +91,16 @@ def test_custom_input_channel_satisfies_protocol():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_send_map_drives_a_custom_non_queue_channel(monkeypatch):
     """SEND MAP puts a rendered screen dict on a non-queue ScreenChannel."""
-    layout = {"USERIDO": {"offset": 0, "length": 8}}
+    layout = {
+        "USERIDO": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        )
+    }
     region = bytearray(b"\x40" * 8)
     region[0:8] = "USER0001".encode("cp037")
     vm = _FakeVM(region, layout)
@@ -139,9 +150,30 @@ def test_receive_map_consumes_from_a_custom_non_queue_channel(monkeypatch):
     """RECEIVE MAP gets an InputEvent through a non-queue InputChannel and
     writes its fields + eibaid into the WS region."""
     layout = {
-        "USERIDI": {"offset": 0, "length": 8},
-        "USERIDL": {"offset": 100, "length": 2},
-        "EIBAID": {"offset": 200, "length": 1},
+        "USERIDI": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "USERIDL": FieldPosition(
+            offset=100,
+            length=2,
+            category="ALPHANUMERIC",
+            total_digits=2,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "EIBAID": FieldPosition(
+            offset=200,
+            length=1,
+            category="ALPHANUMERIC",
+            total_digits=1,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)

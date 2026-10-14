@@ -3,7 +3,7 @@ Integration test: CICS pseudo-conversational sign-on -> main menu flow.
 
 Exercises the REAL dispatcher loop (_run_dispatcher_with_runner) and the REAL
 screen builtins (SEND MAP / RECEIVE MAP), which read/write the symbolic map
-group's leaf fields from the program's WORKING-STORAGE layout (vm.data_layout).
+group's leaf fields from the program's WORKING-STORAGE layout (vm.declarations).
 Only the COBOL program execution is stubbed via a stateful run_fn, so no ProLeap
 JAR is required; each turn supplies a small fake VM carrying the map region and
 layout the real lowering would have produced.
@@ -14,6 +14,8 @@ Flow:
   Turn 2: CC00 / COMEN01C -- SEND MAP COMEN0A, RETURN (terminate).
 """
 
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 import queue
 
 from tests.covers import covers, NotLanguageFeature
@@ -36,13 +38,13 @@ _AT_TERMINAL: list = [
 class _FakeVM:
     """Minimal VM standing in for the symbolic map group in WORKING-STORAGE.
 
-    Holds the map region bytes and a name->{offset,length} layout, mirroring
+    Holds the map region bytes and its field positions as a layout Data, mirroring
     what compile_cics_program would have built for the program's WS records.
     """
 
     def __init__(self, region: bytearray, layout: dict, addr: int = 1):
         self._region = region
-        self.data_layout = layout
+        self.declarations = declarations(layout)
         self._addr = addr
 
     def region_get(self, addr):
@@ -72,11 +74,46 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
     # Sign-on map COSGN0A: symbolic output leaves USERIDO / PASSWDO and the
     # matching input leaves USERIDI / PASSWDI (REDEFINES, same offsets).
     sgn_layout = {
-        "USERIDO": {"offset": 0, "length": 8},
-        "PASSWDO": {"offset": 8, "length": 8},
-        "USERIDI": {"offset": 0, "length": 8},
-        "PASSWDI": {"offset": 8, "length": 8},
-        "EIBAID": {"offset": 16, "length": 1},
+        "USERIDO": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "PASSWDO": FieldPosition(
+            offset=8,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "USERIDI": FieldPosition(
+            offset=0,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "PASSWDI": FieldPosition(
+            offset=8,
+            length=8,
+            category="ALPHANUMERIC",
+            total_digits=8,
+            decimal_digits=0,
+            signed=False,
+        ),
+        "EIBAID": FieldPosition(
+            offset=16,
+            length=1,
+            category="ALPHANUMERIC",
+            total_digits=1,
+            decimal_digits=0,
+            signed=False,
+        ),
     }
     sgn_region = bytearray(b"\x40" * 17)
     # The program MOVEd a userid prompt into the output field before SEND.
@@ -84,7 +121,16 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
     sgn_vm = _FakeVM(sgn_region, sgn_layout)
 
     # Menu map COMEN0A: one output leaf OPTIONO.
-    men_layout = {"OPTIONO": {"offset": 0, "length": 2}}
+    men_layout = {
+        "OPTIONO": FieldPosition(
+            offset=0,
+            length=2,
+            category="ALPHANUMERIC",
+            total_digits=2,
+            decimal_digits=0,
+            signed=False,
+        )
+    }
     men_region = bytearray(b"\x40" * 2)
     men_vm = _FakeVM(men_region, men_layout)
 

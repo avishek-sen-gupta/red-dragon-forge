@@ -13,7 +13,7 @@ Four groups, matching the four concerns any such harness has:
   - **vsam** + **commarea**: set up test data -- byte-exact VSAM seed
     records (``vsam.build_record``, piggybacking on COBOL's own INITIALIZE
     semantics) and COMMAREA buffers (``commarea.build_commarea``), both
-    resolved by field name through the program's own ``data_layout``, not
+    resolved by field name through the program's own field layout, not
     hand-computed offsets.
   - **state**: assert on the final result -- read a field off a rendered
     screen (``state.screen_field``) or straight out of WORKING-STORAGE

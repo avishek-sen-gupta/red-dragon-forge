@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from interpreter.address import Address
+from interpreter.cobol.layout_data import field_positions
 from interpreter.vm.vm_types import VMState
 
 
@@ -27,13 +28,14 @@ def _placed(write: FieldWrite, length: int) -> bytes:
 def write_fields(
     vm: VMState, region: bytearray, writes: Sequence[FieldWrite]
 ) -> frozenset[str]:
+    positions = field_positions(vm.declarations)
     missing = set()
     for write in writes:
-        layout = vm.data_layout.get(write.name)
-        if layout is None:
+        if write.name not in positions:
             missing.add(write.name)
             continue
-        offset, length = layout["offset"], layout["length"]
+        position = positions[write.name]
+        offset, length = position.offset, position.length
         region[offset : offset + length] = _placed(write, length)
     return frozenset(missing)
 

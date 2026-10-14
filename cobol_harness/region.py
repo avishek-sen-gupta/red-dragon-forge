@@ -10,11 +10,14 @@ import queue
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.interval import StartQueue
+from interpreter.cobol.field_position import FieldPosition
+from interpreter.cobol.layout_data import field_positions
+from interpreter.run import main_declarations
 
 from .compile import compile_link_targets, compile_main_program, make_parser
 from .vsam import VsamFixture
@@ -101,8 +104,7 @@ class CicsSession:
     # ---- compile-time ----------------------------------------------------
 
     def compile_main(self, source: bytes, name: str) -> Any:
-        """Compile the program under test. Returns its LinkedProgram (for
-        ``.data_layout``)."""
+        """Compile the program under test. Returns its LinkedProgram."""
         linked = compile_main_program(self.parser, self.spec, self.program_cache, source, name, tolerant=self.tolerant)
         self.main_name = name
         return linked
@@ -111,12 +113,12 @@ class CicsSession:
         compile_link_targets(self.parser, self.spec, self.program_cache, names, stub_dir=stub_dir, tolerant=self.tolerant)
 
     @property
-    def data_layout(self) -> dict:
-        """The main program's field-name -> {offset, length, category, ...}
-        table, needed by ``commarea.build_commarea`` / ``state.read_vm_field``."""
+    def positions(self) -> Mapping[str, FieldPosition]:
+        """The main program's field-name -> FieldPosition table, needed by
+        ``commarea.build_commarea``."""
         if self.main_name is None:
             raise RuntimeError("compile_main() hasn't been called yet")
-        return self.program_cache[self.main_name].data_layout
+        return field_positions(main_declarations(self.program_cache[self.main_name]))
 
     def build_record(self, copy_member: str, record_name: str, overrides: dict[str, str], expected_length: int | None = None) -> bytes:
         """See ``vsam.build_record`` -- re-exposed here so callers that
