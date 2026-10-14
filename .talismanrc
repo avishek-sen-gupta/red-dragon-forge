@@ -356,7 +356,7 @@ fileignoreconfig:
 - filename: jackal/jackal/record_key.py
   checksum: 1385311efd556ef1d0575775507159d8175c3658666d6d40e3e0104c2a985e62
 - filename: jackal/tests/integration/test_cobol_path.py
-  checksum: d8bafcd63f06ad3d2b7b7d091c2ab7cba22f9c742cc5add48eadec8067c6b8db
+  checksum: 70dbfafbb83596fd940ac3c6f095cefa900cb8dbf22bec3080a2b8688f7cb6f4
 - filename: jackal/jackal/label_field.py
   checksum: 80fe7ab65a0a29459c9e92da2d317278ca4398b5f1b16b72925ae6ee2410d68e
 - filename: jackal/jackal/cobol_files.py

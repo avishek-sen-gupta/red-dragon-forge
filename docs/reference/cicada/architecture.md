@@ -67,7 +67,7 @@ All paths are under `cicada/`.
 | `cics/cell.py` | a mutable slot holding an immutable value |
 | `cics/le_stubs.py`, `cics/stubs/` | IBM Language Environment stubs (`CEEDAYS`) |
 | `cics/copybooks/` | `DFHAID`, `DFHBMSCA`, `DFHEIBLK`, `DFHHANDLE` |
-| `cics/builtins/` | service builtins: `flow`, `screen`, `system`, `vsam`, `interval`, `cells` |
+| `cics/builtins/` | service builtins: `flow`, `screen`, `system`, `vsam`, `interval`, `cells`. They find working-storage fields through the program's layout `Data` (`field_positions(vm.declarations)`); `LINK` gives the inner VM the callee's declarations. |
 | `cics/screen/` | `TerminalScreen` (24x80 field model), turn driver, cursor, screen payloads |
 | `cics/vsam/` | `file_table`, `engine`, `browse`, `eibresp`, `format`, `dump` |
 | `cics/bms/` | `generate` (symbolic copybooks), `catalog` (parsed mapsets), `attributes`, `macros/` |

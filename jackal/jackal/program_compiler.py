@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_parser import ProLeapCobolParser
-from cobol_asg.cobol_statements import dialect_parsers_in_scope
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.coprocessor_compile import CoprocessorSpec, compile_program
 from interpreter.project.types import LinkedProgram
-from jackal.cobol_files import ProgramFile, program_files
+from jackal.cobol_files import ProgramFile
+from jackal.file_definitions import program_files_of
 from jackal.le_abend import LE_STUBS
 from jackal.model import ProgramRef
 from jackal.program_sources import CobolSource
-
-_MAIN_MODULE = Path("__main__.cbl")
 
 
 @dataclass(frozen=True)
@@ -55,12 +51,4 @@ class ProgramCompiler:
                 for pgm, linked in self.linked.items()
             },
         )
-        with dialect_parsers_in_scope([s.dialect_parser for s in self.coprocessors]):
-            asgs = tuple(_parsed(ast) for ast in linked.ast_paths.values())
-        return CompiledProgram(
-            linked, tuple(f for asg in asgs for f in program_files(asg))
-        )
-
-
-def _parsed(ast: Path) -> CobolASG:
-    return CobolASG.from_dict(json.loads(ast.read_text(encoding="utf-8")))
+        return CompiledProgram(linked, program_files_of(linked))
