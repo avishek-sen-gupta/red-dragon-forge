@@ -27,6 +27,7 @@ bms_dirs = [
 ]
 hlasm_export = "${FORGE_ROOT}/cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
 csd_files = ["${CARDDEMO_HOME}/csd/CARDDEMO.CSD"]
+system = "/tmp/carddemo-system"
 # Restates the ProLeap bridge's own default copybook_exts plus "dcl" -- see
 # tests/integration/test_carddemo_db2_compile.py's module docstring (task 4's
 # verified recipe): "-copybook-ext" REPLACES the bridge's defaults rather than

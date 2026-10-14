@@ -38,7 +38,7 @@ class RegionConfig:
     copybook_exts: tuple[str, ...] = ()
 
 
-def load_config(path: Path, system: Path) -> RegionConfig:
+def load_config(path: Path) -> RegionConfig:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     paths, region = raw["paths"], raw["region"]
     transactions = MappingProxyType(dict(raw["transactions"]))
@@ -51,7 +51,7 @@ def load_config(path: Path, system: Path) -> RegionConfig:
         min_commarea_len=int(region.get("min_commarea_len", 0)),
         transactions=transactions,
         programs=frozenset((*transactions.values(), *region.get("programs", ()))),
-        system=system,
+        system=_path(paths["system"]),
         csd_files=tuple(_path(p) for p in paths["csd_files"]),
         copybook_exts=tuple(paths.get("copybook_exts", ())),
     )

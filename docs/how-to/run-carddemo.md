@@ -19,6 +19,9 @@ Both servers read and write CardDemo's VSAM data in a system directory. Install 
 make catnip-install-carddemo SYSTEM=/tmp/carddemo-system
 ```
 
+Both shipped region configs name this directory as their `system`. To use another, install
+into it and change `system` in the config.
+
 Expected: an `installed …` line per dataset, alternate index and path. The directory keeps every
 change the region and any batch job make. To start clean, install into a new directory.
 
@@ -35,8 +38,7 @@ change the region and any batch job make. To start clean, install into a new dir
 2. Start the server.
 
    ```bash
-   uv run --no-sync cicada-tn3270 --config cicada/config/carddemo-tn3270.toml \
-       --system /tmp/carddemo-system --port 3270
+   uv run --no-sync cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
    ```
 
    Expected: BMS and compile log lines, then
@@ -96,8 +98,7 @@ Stop the server with `Ctrl+C`. Changes stay in the system directory and a restar
 5. Start the server.
 
    ```bash
-   uv run --no-sync carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml \
-       --system /tmp/carddemo-system --port 3271
+   uv run --no-sync carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
    ```
 
    Expected: BMS and compile log lines, then

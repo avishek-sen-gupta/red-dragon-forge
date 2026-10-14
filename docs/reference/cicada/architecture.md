@@ -146,8 +146,8 @@ Screens and input travel over `ScreenChannel` and `InputChannel` (`cics/terminal
 
 ## VSAM
 
-File control runs over the system catalog in the directory given with `--system`. The region
-TOML names CSD files, not datasets ([config](tn3270-config.md)).
+File control runs over the system catalog in the directory the region TOML's `system` names. The
+region TOML names CSD files, not datasets ([config](tn3270-config.md)).
 
 - `cics/vsam/file_table.py` — `cics_files(system, dsnames)` resolves each CICS file, through the
   CSD's `DEFINE FILE(...) DSNAME(...)`, to its cataloged dataset, keyed by upper-cased file name.

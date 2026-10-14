@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from tests.integration.cics.tn3270_helpers import region_toml
 from cics.tn3270.config import load_config
 from cics.tn3270.region import build_region
 from interpreter.project.coprocessor_compile import CoprocessorSpec
@@ -88,7 +89,7 @@ def test_extra_specs_prepass_runs_for_every_compiled_program(
     CardDemo source directory, which calls the Language Environment stub
     CEEDAYS, found in the LE stub directory."""
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = load_config(_CONFIG, carddemo_system)
+    config = load_config(region_toml(_CONFIG, carddemo_system))
     recorder = _Recorder()
 
     build_region(config, bridge_jar, tmp_path, extra_specs=[_stub_spec(recorder)])

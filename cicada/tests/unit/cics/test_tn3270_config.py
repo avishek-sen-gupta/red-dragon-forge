@@ -21,6 +21,7 @@ copybook_dirs = ["${APP}/cpy"]
 bms_dirs = ["${APP}/bms"]
 hlasm_export = "/bin/hlasm_export"
 csd_files = ["${APP}/csd/CARDDEMO.CSD"]
+system = "${APP}/system"
 [transactions]
 CC00 = "COSGN00C"
 """
@@ -31,11 +32,11 @@ def test_loads_paths_programs_csd_files_and_system(tmp_path, monkeypatch):
     monkeypatch.setenv("APP", "/carddemo")
     path = tmp_path / "c.toml"
     path.write_text(_TOML)
-    config = load_config(path, tmp_path / "system")
+    config = load_config(path)
     assert tuple(str(d) for d in config.source_dirs) == ("/carddemo/cbl",)
     assert config.programs == frozenset({"COSGN00C", "COACTVWC"})
     assert config.csd_files == (Path("/carddemo/csd/CARDDEMO.CSD"),)
-    assert config.system == tmp_path / "system"
+    assert config.system == Path("/carddemo/system")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -44,7 +45,7 @@ def test_unset_variable_is_loud(tmp_path, monkeypatch):
     path = tmp_path / "c.toml"
     path.write_text(_TOML)
     with pytest.raises(ConfigError, match="APP"):
-        load_config(path, tmp_path / "system")
+        load_config(path)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -54,7 +55,7 @@ def test_default_copybook_exts_is_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("APP", "/carddemo")
     path = tmp_path / "c.toml"
     path.write_text(_TOML)
-    assert load_config(path, tmp_path / "system").copybook_exts == ()
+    assert load_config(path).copybook_exts == ()
 
 
 def _config(*source_dirs: str) -> RegionConfig:

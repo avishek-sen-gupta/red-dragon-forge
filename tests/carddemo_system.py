@@ -20,3 +20,14 @@ def installed_carddemo(root: Path) -> Path:
     system = root / "system"
     install(load_declaration(declaration), SystemCatalog(system))
     return system
+
+
+def region_toml(config: Path, system: Path) -> Path:
+    """The region TOML at ``config``, rewritten beside ``system`` to name it as the region's system."""
+    region = system.parent / config.name
+    region.write_text(
+        config.read_text().replace(
+            'system = "/tmp/carddemo-system"', f'system = "{system}"'
+        )
+    )
+    return region
