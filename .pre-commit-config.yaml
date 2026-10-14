@@ -64,7 +64,7 @@ repos:
         entry: bash -c '. ./bridge-env.sh && cd cicada && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(cicada/|vendor/red-dragon(/|$))
+        files: ^(cicada/|catnip/|config/|vendor/red-dragon(/|$))
 
       - id: tests-squall
         name: Squall unit test suite
@@ -85,14 +85,14 @@ repos:
         entry: bash -c '. ./bridge-env.sh && uv run --no-sync pytest jackal/tests -x -q'
         language: system
         pass_filenames: false
-        files: ^(jackal/|catnip/|vendor/red-dragon(/|$))
+        files: ^(jackal/|catnip/|config/|vendor/red-dragon(/|$))
 
       - id: tests-forge
         name: red-dragon-forge test suite (root and cobble)
         entry: bash -c 'make db2-restart && make test PYTEST_ARGS="-x -q" && cd cobble && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(red_dragon_forge/|cicada/|squall/|cobble/|catnip/|vendor/)
+        files: ^(red_dragon_forge/|cicada/|squall/|cobble/|catnip/|jackal/|tests/|config/|vendor/)
 
   # Talisman was installed as a bare git hook, which pre-commit demoted to
   # .git/hooks/pre-commit.legacy on taking over pre-commit. Talisman derives its
