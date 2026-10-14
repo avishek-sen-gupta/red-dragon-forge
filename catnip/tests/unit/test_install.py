@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+from catnip.cli import run
 from catnip.dataset import Dataset
 from catnip.declaration import load_declaration
-from catnip.declaration_error import DeclarationError
 from catnip.install import install
 from catnip.labels import KsdsLabel, PathView, RecordFormat, SequentialLabel
 from catnip.system_catalog import NotCataloged, SystemCatalog
@@ -113,17 +114,69 @@ def test_a_declaration_installs_sorted_clusters_indexes_and_paths(tmp_path):
             _FILES,
             "T.SEQ: from: nope.ps does not exist",
         ),
+        (
+            ('from = "seq.ps"\n', ""),
+            _FILES,
+            "[[sequential]] T.SEQ: from: Field required",
+        ),
+        (
+            ('dsn = "T.SEQ"\n', ""),
+            _FILES,
+            "[[sequential]] entry 1: dsn: Field required",
+        ),
+        (
+            (
+                "key_offset = 0\nkey_length = 3\n\n[[ksds.aix]]",
+                "key_offset = 0\nkey_lenth = 3\n\n[[ksds.aix]]",
+            ),
+            _FILES,
+            "[[ksds]] T.KSDS: key_length: Field required",
+        ),
+        (
+            ('recfm = "FB"', 'recfm "FB"'),
+            _FILES,
+            "{declaration}: Expected '=' after a key in a key/value pair (at line 6, column 7)",
+        ),
+        (
+            ('dsn = "T.EMPTY"\nlrecl = 8', 'dsn = "T.EMPTY"\nlrecl = 0'),
+            _FILES,
+            "[[ksds]] T.EMPTY: lrecl: Input should be greater than 0",
+        ),
+        (
+            ("key_offset = 3\nkey_length = 3", "key_offset = -1\nkey_length = 3"),
+            _FILES,
+            "[[ksds.aix]] T.AIX: key_offset: Input should be greater than or equal to 0",
+        ),
+        (
+            (
+                '[[ksds]]\ndsn = "T.EMPTY"',
+                '[[gdg]]\nname = "T.GDG"\nlimit = 0\nempty = "NOEMPTY"\n'
+                'scratch = "NOSCRATCH"\norder = "LIFO"\n\n[[ksds]]\ndsn = "T.EMPTY"',
+            ),
+            _FILES,
+            "[[gdg]] T.GDG: limit: Input should be greater than 0",
+        ),
+        (
+            (
+                '[[sequential]]\ndsn = "T.SEQ"\nfrom = "seq.ps"\n',
+                'gdg = [1]\n\n[[sequential]]\ndsn = "T.SEQ"\n',
+            ),
+            _FILES,
+            "[[sequential]] entry 1: from: Field required",
+        ),
     ],
 )
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_an_invalid_declaration_installs_nothing_and_names_the_field(
-    tmp_path, change, files, message
+    tmp_path, caplog, change, files, message
 ):
-    text = _GOOD.replace(*change)
-    system = SystemCatalog(tmp_path / "system")
+    declaration = _declared(tmp_path, _GOOD.replace(*change), files)
+    root = tmp_path / "system"
 
-    with pytest.raises(DeclarationError) as error:
-        install(load_declaration(_declared(tmp_path, text, files)), system)
+    with caplog.at_level(logging.ERROR, logger="catnip.cli"):
+        code = run(["install", str(declaration), "--system", str(root)])
 
-    assert str(error.value) == message
-    assert SystemCatalog(tmp_path / "system").lookup("T.SEQ") == NotCataloged()
+    assert code == 1
+    assert caplog.messages == [message.format(declaration=declaration)]
+    assert [p for p in root.rglob("*") if p.is_file()] == []
+    assert SystemCatalog(root).lookup("T.SEQ") == NotCataloged()
