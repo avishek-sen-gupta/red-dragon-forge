@@ -52,6 +52,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.integration.cics.tn3270_helpers import region_toml
 from cics.tn3270.config import RegionConfig, load_config
 from interpreter.cobol.features import CobolFeature
 from interpreter.cobol.zoned_decimal import decode_zoned
@@ -146,7 +147,9 @@ def test_account_update_rewrites_custdat(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(load_config(_CONFIG, carddemo_system), ("CC00", "CM00", "CAUP"))
+    config = _trimmed(
+        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CAUP")
+    )
     original_record = [
         r
         for r in _ebcdic_records("AWS.M2.CARDDEMO.CUSTDATA.PS", 500)
@@ -252,7 +255,9 @@ def test_card_update_rewrites_carddat(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(load_config(_CONFIG, carddemo_system), ("CC00", "CM00", "CCUP"))
+    config = _trimmed(
+        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CCUP")
+    )
     original_record = [
         r
         for r in _ebcdic_records("AWS.M2.CARDDEMO.CARDDATA.PS", 150)
@@ -374,7 +379,9 @@ def test_add_transaction_writes_transact(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(load_config(_CONFIG, carddemo_system), ("CC00", "CM00", "CT02"))
+    config = _trimmed(
+        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CT02")
+    )
     card_num, acct_id = _cxacaix_pairs()[0]
     new_tran_id = _next_transaction_id()
 
@@ -498,7 +505,9 @@ def test_bill_pay_rewrites_acctdat_and_writes_transact(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(load_config(_CONFIG, carddemo_system), ("CC00", "CM00", "CB00"))
+    config = _trimmed(
+        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CB00")
+    )
     card_num, acct_id = _cxacaix_pairs()[1]
     new_tran_id = _next_transaction_id()
 
@@ -608,7 +617,8 @@ def test_admin_add_user_writes_usrsec(
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
     config = _trimmed(
-        load_config(_CONFIG, carddemo_system), ("CC00", "CA00", "CU01", "CU02")
+        load_config(region_toml(_CONFIG, carddemo_system)),
+        ("CC00", "CA00", "CU01", "CU02"),
     )
     new_id = _next_admin_id()
     assert new_id not in _usrsec_ids()  # verified absent, not assumed
@@ -668,7 +678,9 @@ def test_admin_update_user_rewrites_usrsec(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(load_config(_CONFIG, carddemo_system), ("CC00", "CA00", "CU02"))
+    config = _trimmed(
+        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CA00", "CU02")
+    )
     update_id = "USER0002"
     assert update_id in _usrsec_ids()
     seeded = [r for r in _usrsec_records() if r[0:8].decode("cp037") == update_id][0]
@@ -753,7 +765,9 @@ def test_admin_delete_user_removes_usrsec(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(load_config(_CONFIG, carddemo_system), ("CC00", "CA00", "CU03"))
+    config = _trimmed(
+        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CA00", "CU03")
+    )
     delete_id = "USER0004"
     neighbour_ids = ("USER0003", "USER0005")
     ids = _usrsec_ids()

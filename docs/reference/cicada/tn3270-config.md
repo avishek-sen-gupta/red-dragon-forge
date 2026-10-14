@@ -7,14 +7,13 @@ below. Steps to run them are in [run-carddemo.md](../../how-to/run-carddemo.md).
 ## CLI
 
 ```bash
-uv run --no-sync cicada-tn3270 --config CONFIG --system DIR [--host HOST] [--port PORT]
-uv run --no-sync carddemo-db2-cli --config CONFIG --system DIR [--host HOST] [--port PORT]
+uv run --no-sync cicada-tn3270 --config CONFIG [--host HOST] [--port PORT]
+uv run --no-sync carddemo-db2-cli --config CONFIG [--host HOST] [--port PORT]
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--config` | required | path to the TOML config |
-| `--system` | required | the system directory: [catnip](../catnip/README.md)'s catalog and the datasets' bytes. Fill it with `catnip install` first |
 | `--host` | `127.0.0.1` | address to listen on |
 | `--port` | `3270` | port to listen on |
 
@@ -53,6 +52,7 @@ Shipped configs:
 | `copybook_dirs` | list of paths | copybook search path |
 | `bms_dirs` | list of paths | `.bms` mapset sources; an earlier directory's mapset wins |
 | `hlasm_export` | path | the `hlasm_export` binary built by `make hlasm` |
+| `system` | path | the system directory: [catnip](../catnip/README.md)'s catalog and the datasets' bytes. Fill it with `catnip install` first. The shipped configs name `/tmp/carddemo-system`, where [run-carddemo.md](../../how-to/run-carddemo.md) installs CardDemo |
 | `csd_files` | list of paths | CSD files; each `DEFINE FILE(NAME) ... DSNAME(DSN)` makes `NAME` a CICS file over the cataloged dataset `DSN`. A later file's definition of the same name wins |
 | `copybook_exts` | list of strings, optional | copybook extensions passed to the bridge as `-copybook-ext`; empty uses the bridge's defaults |
 

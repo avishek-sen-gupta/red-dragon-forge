@@ -32,7 +32,7 @@ def _stub_common(monkeypatch, *, schema_conn, region_conn, served=None):
     monkeypatch.setattr(
         cli_mod,
         "load_config",
-        lambda path, system: SimpleNamespace(initial_transid="CC00"),
+        lambda path: SimpleNamespace(initial_transid="CC00"),
     )
     monkeypatch.setattr(
         cli_mod,
@@ -63,8 +63,6 @@ def test_the_server_cannot_mutate_the_schema(monkeypatch, tmp_path):
             "carddemo-db2-cli",
             "--config",
             str(tmp_path / "c.toml"),
-            "--system",
-            str(tmp_path / "system"),
         ],
     )
 
@@ -91,8 +89,6 @@ def test_connection_is_closed_even_when_serving_raises(monkeypatch, tmp_path):
             "carddemo-db2-cli",
             "--config",
             str(tmp_path / "c.toml"),
-            "--system",
-            str(tmp_path / "system"),
         ],
     )
 

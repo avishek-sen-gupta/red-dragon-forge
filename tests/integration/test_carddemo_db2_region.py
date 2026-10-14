@@ -21,6 +21,7 @@ from pathlib import Path
 import ibm_db
 import pytest
 
+from tests.carddemo_system import region_toml
 from cics.tn3270.config import load_config
 from red_dragon_forge.carddemo_db2_region import build_db2_region
 
@@ -38,7 +39,7 @@ def test_all_nineteen_bms_maps_reach_one_catalog(
     dropped the second bms_dirs entry would instead produce 17."""
     monkeypatch.setenv("FORGE_ROOT", str(_REPO_ROOT))
     monkeypatch.setenv("CARDDEMO_HOME", str(carddemo_home))
-    config = load_config(_CONFIG, carddemo_system)
+    config = load_config(region_toml(_CONFIG, carddemo_system))
 
     # Safe to close: the _reset_builtins_table autouse fixture (conftest.py)
     # restores RedDragon's process-wide Builtins.TABLE after this test, so a

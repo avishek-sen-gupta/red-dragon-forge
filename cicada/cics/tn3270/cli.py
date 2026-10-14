@@ -2,8 +2,7 @@
 
 . ./bridge-env.sh
 uv run catnip install config/carddemo/data.toml --system /tmp/carddemo-system
-uv run cicada-tn3270 --config cicada/config/carddemo-tn3270.toml \
-    --system /tmp/carddemo-system --port 3270
+uv run cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port 3270
 c3270 -model 3279-2-E localhost:3270   # 3279 + -E, or you get monochrome
 """
 
@@ -31,7 +30,6 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--system", required=True, type=Path)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=3270)
     return parser.parse_args(argv)
@@ -42,7 +40,7 @@ def main() -> int:
         level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
     )
     args = _arguments(sys.argv[1:])
-    config = load_config(args.config, args.system)
+    config = load_config(args.config)
     with tempfile.TemporaryDirectory(prefix="cicada-tn3270-") as work_dir:
         served = build_region(config, os.environ["PROLEAP_BRIDGE_JAR"], Path(work_dir))
         server = bind(args.host, args.port)
