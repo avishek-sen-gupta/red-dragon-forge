@@ -5,6 +5,7 @@ DFSMS Using Data Sets, "Concatenating Data Sets Sequentially", pp. 369-370. See
 docs/records/design/2026-10-12-jackal-concatenation.md.
 """
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -35,11 +36,16 @@ def _ebcdic(text: bytes) -> bytes:
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_program_reads_a_concatenation_member_by_member_and_cannot_write_one(
-    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+def test_a_concatenation_reads_member_by_member_cannot_be_written_and_logs_a_conflicting_member(
+    tmp_path: Path,
+    bridge_jar: str,
+    jcl_bridge_jar: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     upload(tmp_path, "J.IN1", _ebcdic(b"applekiwis"), FB5)
     upload(tmp_path, "J.IN2", _ebcdic(b"mango"), FB5)
+    upload(tmp_path, "J.BAD6", _ebcdic(b"banana"), SequentialLabel(RecordFormat.FB, 6))
+    upload(tmp_path, "J.BAD4", _ebcdic(b"pear"), SequentialLabel(RecordFormat.FB, 4))
     jcl = (
         "//J JOB 1\n"
         "//S1 EXEC PGM=COPYUP\n"
@@ -49,6 +55,12 @@ def test_a_program_reads_a_concatenation_member_by_member_and_cannot_write_one(
         "//S2 EXEC PGM=CATWRITE\n"
         "//OUTDD DD DSN=J.IN1,DISP=SHR\n"
         "//      DD DSN=J.OUT,DISP=SHR\n"
+        "//S3 EXEC PGM=CONCHK\n"
+        "//INDD DD DSN=J.IN1,DISP=SHR\n"
+        "//     DD DSN=J.BAD6,DISP=SHR\n"
+        "//S4 EXEC PGM=CONCHK\n"
+        "//INDD DD DSN=J.BAD4,DISP=SHR\n"
+        "//     DD DSN=J.IN1,DISP=SHR\n"
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     runner = JobRunner(
@@ -61,7 +73,8 @@ def test_a_program_reads_a_concatenation_member_by_member_and_cannot_write_one(
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
     )
-    result = runner.run_job(job, job_catalog(tmp_path))
+    with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
+        result = runner.run_job(job, job_catalog(tmp_path))
     reloaded = system(tmp_path)
     assert (
         [s.outcome for s in result.steps],
@@ -69,8 +82,11 @@ def test_a_program_reads_a_concatenation_member_by_member_and_cannot_write_one(
         reloaded.lookup("J.IN2"),
         reloaded.lookup("J.IN1").path.read_bytes(),
     ) == (
-        [Completed(0), Completed(37)],
+        [Completed(0), Completed(37), Completed(39), Completed(39)],
         _ebcdic(b"APPLEKIWISMANGO"),
         NotCataloged(),
         _ebcdic(b"applekiwis"),
     )
+    assert [
+        r.getMessage() for r in caplog.records if r.name == "jackal.cobol_files"
+    ] == ["J.BAD6: LRECL: declared 6, FD 5", "J.BAD4: LRECL: declared 4, FD 5"]

@@ -41,7 +41,7 @@ def _write_into_ws(vm: VMState, record: bytes, offset: int, length: int) -> None
     """Write ``record`` into the WORKING-STORAGE region at the INTO field's offset.
 
     Pads/truncates the record to ``length`` bytes. No-op (with a warning) if the
-    region is missing. Shared by READ, READNEXT, READPREV and XCTL's COMMAREA.
+    region is missing.
     """
     match _get_ws_region_addr(vm):
         case Address() as address:
