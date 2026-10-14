@@ -9,9 +9,10 @@ a multi-language interpreter vendored at `vendor/red-dragon`. The forge never mo
 
 | Package | Python module | What it is | Reference |
 |---|---|---|---|
-| `cicada/` | `cics` | CICS runtime: pseudo-conversational transaction dispatch, VSAM KSDS file control, BMS screens, a TN3270 server. | [cicada](../cicada/architecture.md) |
+| `cicada/` | `cics` | CICS runtime: pseudo-conversational transaction dispatch, VSAM KSDS file control over the system catalog, BMS screens, a TN3270 server. | [cicada](../cicada/architecture.md) |
 | `squall/` | `squall` | EXEC SQL coprocessor runtime for Db2-attached programs. | [squall](../squall/architecture.md) |
-| `jackal/` | `jackal` | JCL/batch engine: job and step orchestration, IDCAMS, datasets. | [jackal](../jackal/architecture.md) |
+| `jackal/` | `jackal` | JCL/batch engine: job and step orchestration, IDCAMS, a job's view of the datasets. | [jackal](../jackal/architecture.md) |
+| `catnip/` | `catnip` | System catalog: datasets, clusters, alternate indexes, paths and GDG bases, shared by jackal and cicada; `catnip install` loads a data declaration. | [catnip](../catnip/README.md) |
 | `red_dragon_forge/` | `red_dragon_forge` | Composition layer: assembles several runtimes into one program. | this page |
 | `cobble/` | `cobble` | Static analyser: corpus onboarding, knowledge graph, source CFG, field dataflow. Never runs a program. | [cobble](../cobble/config.md) |
 
@@ -50,12 +51,15 @@ Design record: [CICS + SQL composition](../../records/design/2026-07-04-cics-sql
 `.importlinter` at the repo root is the enforced contract. Run it with `uv run lint-imports`.
 
 - `cics`, `squall` and `jackal` must not import each other.
+- `catnip` imports none of `cics`, `squall`, `jackal`, `cobble` or `red_dragon_forge`. `cics` and
+  `jackal` import it.
 - `red_dragon_forge` may import any runtime.
 - `cobble` may import only the static surface of the other packages (parsers, models,
-  `cobol_asg`). It must not import the interpreter or any runtime module, and nothing imports
-  `cobble`.
+  `cobol_asg`). It must not import the interpreter, any runtime module or `catnip`, and nothing
+  imports `cobble`.
 
-Rationale: [package boundaries](../../records/design/2026-09-09-package-boundaries.md).
+Rationale: [package boundaries](../../records/design/2026-09-09-package-boundaries.md); catnip's
+placement: [the catnip decision record](../../records/design/2026-10-14-catnip-catalog-extraction.md).
 
 ## Native and Java build products
 

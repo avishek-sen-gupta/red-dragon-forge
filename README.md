@@ -13,6 +13,7 @@ them, and a static analyser for the same code.
 | [`cicada/`](cicada/) | CICS runtime and TN3270 server |
 | [`squall/`](squall/) | EXEC SQL runtime for Db2 programs |
 | [`jackal/`](jackal/) | JCL/batch engine |
+| [`catnip/`](catnip/) | System catalog: the datasets jobs and CICS regions share |
 | [`red_dragon_forge/`](red_dragon_forge/) | Composition layer |
 | [`cobble/`](cobble/) | Static analyser: knowledge graph, control flow, field dataflow |
 

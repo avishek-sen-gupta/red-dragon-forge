@@ -272,7 +272,7 @@ fileignoreconfig:
 - filename: docs/reference/cobble/config.md
   checksum: d9c0bd9e47fbf8c7179eb1f16ac736bdc06d292918de10c4237998f4fe69292b
 - filename: docs/reference/cicada/architecture.md
-  checksum: b0a21d4fb313a811d933a09d9f97280b9826acbe2b80a32fbebf1c3173694bcb
+  checksum: cef3337e56892f2564d0daf9341a94803945e78097c74c2806e3c4b14e9c8b70
 - filename: docs/reference/squall/architecture.md
   checksum: 617c99944b7edec89262544a4614edcd83da3bd390a7d889457e240884b0617b
 - filename: docs/superpowers/specs/2026-10-08-docs-consolidation-design.md
@@ -341,4 +341,16 @@ fileignoreconfig:
   checksum: b735d94871ba4fe084899418312aed6ba12a5cc868e21163535dd5f2c3ebb612
 - filename: cicada/tests/integration/cics/test_carddemo_signon_real.py
   checksum: 44202a862ca5fcacf66ec25a86c53a7de780eaea17bff8702b15b12305f94d1f
+- filename: docs/reference/cicada/tn3270-config.md
+  checksum: 675f578d6fb5249341ee226761dcd659dc136e2fe453da16cab99027b4282175
+- filename: docs/roadmaps/cicada.md
+  checksum: 01e69cbe5efa625a0d7642e184c913646e4bd301b8d7fe8cabd9df05966a7b21
+- filename: docs/reference/jackal/architecture.md
+  checksum: 50fd9647ed728fe0a923fcabeeab9c81d208b6d7f2ef81ca3a466ed328c5f32d
+- filename: docs/reference/cicada/cicada-architecture.html
+  checksum: dd480ed8a4686b3d2a69be8aa53f5bf288d6e1d4f105494db681488764920e33
+- filename: docs/reference/catnip/README.md
+  checksum: 0ea7256c45947f178eef2f86af1dae7be2bc05a0cc7627de9a470504d0bbeb9f
+- filename: docs/records/design/2026-10-14-catnip-catalog-extraction.md
+  checksum: 013b5c85f12a71df1e0aae34ca43f816db8ef167fde170f38a75a628e333d932
 version: "1.0"

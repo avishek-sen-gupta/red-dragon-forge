@@ -442,40 +442,40 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════
-     SLIDE 8 — VSAM: FCT + VsamEngine
+     SLIDE 8 — VSAM: file table + VsamEngine
      ═══════════════════════════════════════════════════════════════ -->
 <section>
-  <h2>VSAM — FCT &amp; VsamEngine</h2>
-  <h3>File Control Table + CICS adapter over the shared access-method drivers</h3>
+  <h2>VSAM — file table &amp; VsamEngine</h2>
+  <h3>CICS files resolved through the CSD to catnip's system catalog</h3>
 
   <div class="row" style="gap:1.2rem;margin-top:.6rem">
     <div class="col">
-      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">FCT (File Control Table)</div>
-      <p style="font-size:.8rem">A YAML file declaring every dataset Cicada knows about. Cicada's equivalent of the real CICS FCT — maps a name to the metadata the engine needs.</p>
+      <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">File table</div>
+      <p style="font-size:.8rem">Each CSD <code>DEFINE FILE(name) DSNAME(dsn)</code> maps a CICS file to a DSN. The DSN is looked up in catnip's system catalog, in the directory given with <code>--system</code> — the same catalog jackal's batch jobs use.</p>
       <table class="deck-table" style="margin-top:.4rem">
-        <tr><th>Field</th><th>Meaning</th></tr>
-        <tr><td><code>record_length</code></td><td>Fixed record size in bytes</td></tr>
-        <tr><td><code>key_offset</code></td><td>Byte offset of the key within a record</td></tr>
-        <tr><td><code>key_length</code></td><td>Key width (0 = use operation's length)</td></tr>
-        <tr><td><code>file</code></td><td>Seed filename in the data directory</td></tr>
+        <tr><th>Catalog entry</th><th>The CICS file reads</th></tr>
+        <tr><td>KSDS</td><td>the cluster, by its primary key</td></tr>
+        <tr><td>Path</td><td>its base cluster, by the alternate index's key</td></tr>
+        <tr><td>anything else, or not cataloged</td><td>nothing: the region stops at startup, naming the file and the DSN</td></tr>
       </table>
       <div style="font-size:.75rem;color:#888;margin-top:.5rem">
-        Implementation: <code>cics/vsam/fct.py · FctConfig</code>
+        Record length and key come from the catalog label, not the region config.
+        Implementation: <code>cics/vsam/file_table.py · cics_files</code>
       </div>
     </div>
     <div class="col">
       <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">VsamEngine (thin CICS adapter)</div>
-      <p style="font-size:.8rem">Owns no storage. Each dataset's backing <code>.dat</code> file <strong>is</strong> the store, served by RedDragon's shared file-resident access-method drivers — the same ones COBOL batch &amp; IDCAMS use. The adapter just gates FCT state, picks the driver, and maps the result to EIBRESP.</p>
+      <p style="font-size:.8rem">Owns no storage. The catalog's own dataset file <strong>is</strong> the store, served by RedDragon's shared file-resident access-method drivers — the same ones COBOL batch &amp; IDCAMS use. The adapter opens the dataset per operation, picks the driver by its label, and maps the result to EIBRESP.</p>
       <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.78rem;border:1px solid #2a2a2a;margin-top:.3rem">
-        <div style="color:var(--c-vsam);margin-bottom:.4rem">Driver routing (<code>_open</code>, by <code>key_offset</code>)</div>
+        <div style="color:var(--c-vsam);margin-bottom:.4rem">Driver routing (by the dataset's label)</div>
         <div style="color:#ccc">
-          <code>0</code> → <code>open_driver(INDEXED)</code> — binary search over a key-sorted file<br>
-          <code>&gt;0</code> → <code>open_alternate_key_driver</code> — linear scan, read-only<br><br>
-          Alternate-index paths (e.g. CARD-XREF with ACCT-ID at offset 25) set a non-zero <code>key_offset</code> in the FCT entry.
+          KSDS → <code>open_driver(INDEXED)</code> — binary search over a key-sorted file<br>
+          Path → <code>AlternateIndexDriver</code> over the base cluster — alternate-key order, duplicates in primary-key order; <code>DUPKEY</code> (15) when more follow; writes change the base cluster<br><br>
+          CardDemo's CXACAIX is the path over CCXREF's cluster: a write through one is read through the other.
         </div>
       </div>
       <div class="callout teal" style="margin-top:.6rem">
-        <strong>CardDemo datasets:</strong> ACCTDAT (300 B), TRANSACT (350 B), USRSEC (80 B), CARDDAT, CARDXREF — all declared in <code>fct.yaml</code>.
+        <strong>CardDemo data:</strong> installed once with <code>make catnip-install-carddemo SYSTEM=DIR</code> from <code>config/carddemo/data.toml</code>.
       </div>
     </div>
   </div>
@@ -509,14 +509,14 @@
       <div style="font-size:.78rem;color:var(--c-vsam);font-weight:700;margin-bottom:.4rem">The store: a backing flat file</div>
       <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.8rem;border:1px solid #2a2a2a;margin-bottom:.5rem">
         <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">No in-memory copy, no backends</div>
-        Each dataset's <code>&lt;vsam_dir&gt;/&lt;NAME&gt;.dat</code> file <strong>is</strong> the store. RedDragon's file-resident drivers read/write it directly — so cicada, COBOL batch, and IDCAMS share one storage implementation.
+        Each dataset's <code>&lt;system&gt;/datasets/&lt;DSN&gt;</code> file <strong>is</strong> the store. RedDragon's file-resident drivers read/write it directly — so cicada, COBOL batch, and IDCAMS share one storage implementation and one set of bytes. A region's writes survive a restart.
       </div>
       <div style="background:#111;border-radius:8px;padding:.7em 1em;font-size:.8rem;border:1px solid #2a2a2a">
-        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">Seeding — <code>seed_vsam()</code></div>
-        Writes the <code>.dat</code> files from the EBCDIC fixtures (same format as IDCAMS REPRO output). Base-KSDS records are written <strong>key-sorted</strong> (the binary-search driver requires it); alt-key datasets in source order.
+        <div style="color:#ddd;font-weight:700;margin-bottom:.3rem">Loading — <code>catnip install</code></div>
+        Validates a data declaration whole, then copies the seeds in. Each KSDS is written <strong>key-sorted</strong> (the binary-search driver requires it); alternate indexes and paths are catalog entries with no bytes of their own.
       </div>
       <div class="callout teal" style="margin-top:.6rem">
-        EIBRESP comes from mapping the drivers' neutral <code>AccessCondition</code> (<code>cics/vsam/eibresp.py</code>) — file state stays an FCT concern.
+        EIBRESP comes from mapping the drivers' neutral <code>AccessCondition</code> (<code>cics/vsam/eibresp.py</code>). A file not in the table returns <code>DISABLED</code>.
       </div>
     </div>
   </div>
@@ -824,7 +824,7 @@
       <div class="inv-num">4</div>
       <div class="inv-text">
         <strong>VsamEngine is a thin adapter over the shared storage engine.</strong><br>
-        <span style="color:#999">Record I/O delegates to RedDragon's file-resident access-method drivers (the same ones COBOL batch &amp; IDCAMS use); the backing <code>.dat</code> file is the store. The adapter holds only CICS state — FCT enable/disable, held key, task cursors — and the neutral-condition→EIBRESP mapping.</span>
+        <span style="color:#999">Record I/O delegates to RedDragon's file-resident access-method drivers (the same ones COBOL batch &amp; IDCAMS use); the system catalog's dataset file is the store. The adapter holds only CICS state — the file table, held key, task cursors — and the neutral-condition→EIBRESP mapping.</span>
       </div>
     </div>
   </div>
