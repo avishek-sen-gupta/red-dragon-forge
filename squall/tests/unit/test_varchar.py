@@ -5,12 +5,15 @@ The VARCHAR 49-group codec at the binding layer.
 
 A VARCHAR host var is an IBM DCLGEN group: ``<HV>`` (the group) over two 49-level
 children — ``<HV>-LEN`` (binary length prefix) and ``<HV>-TEXT`` (the chars). The
-flat data_layout records all three but cannot mark the group as VARCHAR; the
+flat field layout records all three but cannot mark the group as VARCHAR; the
 dclgen ``field_meta`` map supplies that, naming the LEN/TEXT children. read/write
 then drive the length-prefixed codec over those children.
 """
 
 from __future__ import annotations
+
+from interpreter.cobol.field_position import FieldPosition
+from unit.layout_build import declarations
 
 from squall.binding import read_params, write_outputs, _alpha_decode
 from squall.dclgen_meta import derive_field_meta
@@ -23,30 +26,30 @@ from interpreter.address import Address
 #   EMP-NAME-LEN         BINARY       @2 len 2  (signed S9(4) COMP)
 #   EMP-NAME-TEXT        ALPHANUMERIC @4 len 9
 _LAYOUT = {
-    "EMP-NAME": {
-        "offset": 2,
-        "length": 11,
-        "category": "ALPHANUMERIC",
-        "total_digits": 11,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "EMP-NAME-LEN": {
-        "offset": 2,
-        "length": 2,
-        "category": "BINARY",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": True,
-    },
-    "EMP-NAME-TEXT": {
-        "offset": 4,
-        "length": 9,
-        "category": "ALPHANUMERIC",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": False,
-    },
+    "EMP-NAME": FieldPosition(
+        offset=2,
+        length=11,
+        category="ALPHANUMERIC",
+        total_digits=11,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "EMP-NAME-LEN": FieldPosition(
+        offset=2,
+        length=2,
+        category="BINARY",
+        total_digits=4,
+        decimal_digits=0,
+        signed=True,
+    ),
+    "EMP-NAME-TEXT": FieldPosition(
+        offset=4,
+        length=9,
+        category="ALPHANUMERIC",
+        total_digits=9,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 _REGION_SIZE = 13
 
@@ -75,7 +78,7 @@ class _Frame:
 class _VM:
     def __init__(self, region, addr="1"):
         self._region = region
-        self.data_layout = _LAYOUT
+        self.declarations = declarations(_LAYOUT)
         self._addr = Address(addr)
         self.call_stack = [_Frame(addr)]
 
@@ -186,43 +189,43 @@ _DCLTRTYP_BRIDGE_GROUP = {
 # The group entry matters here: pre-fix, field_meta has no "DCL-TR-DESCRIPTION"
 # entry at all, so _plan_assignment/_read_one fall through to the FLAT-field
 # path and look up "DCL-TR-DESCRIPTION" itself (not its LEN/TEXT children) in
-# data_layout. Omitting it would make a pre-fix revert raise KeyError instead
+# the field layout. Omitting it would make a pre-fix revert raise KeyError instead
 # of reproducing the measured corruption (LEN = -15423, TEXT = 'SH ADVANCE') —
 # a characterisation test that fails on the wrong exception instead of the
 # behaviour it documents.
 _DCLTRTYP_LAYOUT = {
-    "DCL-TR-TYPE": {
-        "offset": 0,
-        "length": 2,
-        "category": "ALPHANUMERIC",
-        "total_digits": 2,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "DCL-TR-DESCRIPTION": {
-        "offset": 2,
-        "length": 52,
-        "category": "ALPHANUMERIC",
-        "total_digits": 52,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "DCL-TR-DESCRIPTION-LEN": {
-        "offset": 2,
-        "length": 2,
-        "category": "BINARY",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": True,
-    },
-    "DCL-TR-DESCRIPTION-TEXT": {
-        "offset": 4,
-        "length": 50,
-        "category": "ALPHANUMERIC",
-        "total_digits": 50,
-        "decimal_digits": 0,
-        "signed": False,
-    },
+    "DCL-TR-TYPE": FieldPosition(
+        offset=0,
+        length=2,
+        category="ALPHANUMERIC",
+        total_digits=2,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "DCL-TR-DESCRIPTION": FieldPosition(
+        offset=2,
+        length=52,
+        category="ALPHANUMERIC",
+        total_digits=52,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "DCL-TR-DESCRIPTION-LEN": FieldPosition(
+        offset=2,
+        length=2,
+        category="BINARY",
+        total_digits=4,
+        decimal_digits=0,
+        signed=True,
+    ),
+    "DCL-TR-DESCRIPTION-TEXT": FieldPosition(
+        offset=4,
+        length=50,
+        category="ALPHANUMERIC",
+        total_digits=50,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 _DCLTRTYP_REGION_SIZE = 54
 
@@ -236,7 +239,7 @@ def test_varchar_host_variable_round_trips_exactly_with_derived_field_meta():
     ``_DCLTRTYP_LAYOUT`` before writing this test. This is why
     ``_DCLTRTYP_LAYOUT`` below carries the "DCL-TR-DESCRIPTION" *group* entry
     in addition to its LEN/TEXT children: without it, a pre-fix revert would
-    raise KeyError (the flat path's ``_require_field(data_layout, name)``
+    raise KeyError (the flat path's ``_require_field(layout, name)``
     lookup on the group name) instead of reproducing this corruption -- a
     characterisation test that fails on the wrong exception instead of the
     behaviour it documents.
@@ -247,7 +250,7 @@ def test_varchar_host_variable_round_trips_exactly_with_derived_field_meta():
     field_meta = derive_field_meta({"data_fields": [_DCLTRTYP_BRIDGE_GROUP]})
     region = bytearray(_DCLTRTYP_REGION_SIZE)
     vm = _VM(region)
-    vm.data_layout = _DCLTRTYP_LAYOUT
+    vm.declarations = declarations(_DCLTRTYP_LAYOUT)
 
     status = write_outputs(
         vm, ("DCL-TR-DESCRIPTION",), ("CASH ADVANCE",), field_meta=field_meta
@@ -280,17 +283,19 @@ def test_a_fetch_into_a_varchar_binds_through_the_shape_its_call_carries():
     conn.execute("INSERT INTO EMP VALUES ('SANDERS')")
     region = bytearray(_REGION_SIZE + 9)
     vm = _VM(region)
-    vm.data_layout = {
-        **_LAYOUT,
-        "SQLCODE": {
-            "offset": _REGION_SIZE,
-            "length": 9,
-            "category": "ZONED_DECIMAL",
-            "total_digits": 9,
-            "decimal_digits": 0,
-            "signed": True,
-        },
-    }
+    vm.declarations = declarations(
+        {
+            **_LAYOUT,
+            "SQLCODE": FieldPosition(
+                offset=_REGION_SIZE,
+                length=9,
+                category="ZONED_DECIMAL",
+                total_digits=9,
+                decimal_digits=0,
+                signed=True,
+            ),
+        }
+    )
     builtin, *_ = make_exec_sql_builtin({"SAMPLE": SqliteBackend(conn)})
     declare = "EXEC SQL DECLARE C1 CURSOR FOR SELECT EMP_NAME FROM EMP END-EXEC"
     calls = (

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from interpreter.cobol.field_position import FieldPosition
+
 from squall.binding import (
     _assignability,
     SQLCODE_INCOMPATIBLE_TYPE,
@@ -18,23 +20,28 @@ from squall.binding import (
 )
 
 
-def _numeric(category: str, total_digits: int, decimal_digits: int = 0) -> dict:
-    return {
-        "category": category,
-        "total_digits": total_digits,
-        "decimal_digits": decimal_digits,
-        "length": (total_digits // 2) + 1,
-        "signed": True,
-    }
+def _numeric(
+    category: str, total_digits: int, decimal_digits: int = 0
+) -> FieldPosition:
+    return FieldPosition(
+        offset=0,
+        length=(total_digits // 2) + 1,
+        category=category,
+        total_digits=total_digits,
+        decimal_digits=decimal_digits,
+        signed=True,
+    )
 
 
-def _alpha(length: int) -> dict:
-    return {
-        "category": "ALPHANUMERIC",
-        "length": length,
-        "total_digits": length,
-        "decimal_digits": 0,
-    }
+def _alpha(length: int) -> FieldPosition:
+    return FieldPosition(
+        offset=0,
+        length=length,
+        category="ALPHANUMERIC",
+        total_digits=length,
+        decimal_digits=0,
+        signed=False,
+    )
 
 
 # ── Compatible assignments → 0 ────────────────────────────────────────────────

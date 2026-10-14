@@ -10,6 +10,9 @@ FETCH binds the row into the host vars; end-of-cursor sets SQLCODE 100.
 
 from __future__ import annotations
 
+from interpreter.cobol.field_position import FieldPosition
+from unit.layout_build import declarations
+
 import sqlite3
 
 from squall.backends.sqlite import SqliteBackend
@@ -21,30 +24,30 @@ from interpreter.address import Address
 
 # PNAME X(9) @0, DEPT 9(4) ZONED @9, SQLCODE S9(9) ZONED @13
 _LAYOUT = {
-    "PNAME": {
-        "offset": 0,
-        "length": 9,
-        "category": "ALPHANUMERIC",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "DEPT": {
-        "offset": 9,
-        "length": 4,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "SQLCODE": {
-        "offset": 13,
-        "length": 9,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
+    "PNAME": FieldPosition(
+        offset=0,
+        length=9,
+        category="ALPHANUMERIC",
+        total_digits=9,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "DEPT": FieldPosition(
+        offset=9,
+        length=4,
+        category="ZONED_DECIMAL",
+        total_digits=4,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "SQLCODE": FieldPosition(
+        offset=13,
+        length=9,
+        category="ZONED_DECIMAL",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
 }
 _REGION_SIZE = 22
 
@@ -62,7 +65,7 @@ class _Frame:
 class _VM:
     def __init__(self, region, addr="1"):
         self._region = region
-        self.data_layout = _LAYOUT
+        self.declarations = declarations(_LAYOUT)
         self._addr = Address(addr)
         self.call_stack = [_Frame(addr)]
 

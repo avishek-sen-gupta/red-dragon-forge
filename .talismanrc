@@ -46,7 +46,7 @@ fileignoreconfig:
 - filename: squall/squall/dclgen_meta.py
   checksum: 01141c2f800f9c7fdcf79e12bd4fc57e27d1a073ad437eb898802978dae9ff15
 - filename: squall/tests/unit/test_varchar.py
-  checksum: 3558cdbd688db511f5a53990dcf7da7e1aaa7b6dd5a11802ec297a7f485926f2
+  checksum: a1f391fcd89d92d1bcffb74b3423cfdf30b458d80238234adac35ffbdea04728
 - filename: cicada/cics/builtins/vsam.py
   checksum: b238c19d6f876adb46018429eda2f70184796ea0286c86cd46d1eb0594bc065d
 - filename: cicada/tests/unit/cics/test_vsam_engine.py
@@ -204,7 +204,7 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_strategy.py
   checksum: b937f1f2a6cbc4a7ac3ce1c83ef25e62dad3ba5aa0f034b8bca2c5bcabf3e680
 - filename: squall/squall/binding.py
-  checksum: d19795b341ed47ff94ffd7796571f5b22e79199eb117b391cc5385b0fed68167
+  checksum: 85d86f87b9d3daa902e702d663a1da4c02fecdf14903498df8c888bbc09978f3
 - filename: cicada/cics/cics_visitor.py
   checksum: 2bb2151e87c46e9065533e7ae4b6b0404987d5909121b1e942fa3d778e96d35f
 - filename: guidelines/data-security.md

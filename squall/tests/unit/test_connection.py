@@ -6,6 +6,9 @@ Faithful CONNECT: registry routing + per-run connection lifecycle (squall-yml).
 
 from __future__ import annotations
 
+from interpreter.cobol.field_position import FieldPosition
+from unit.layout_build import declarations
+
 import sqlite3
 
 from interpreter.address import Address
@@ -67,22 +70,22 @@ def test_parse_disconnect():
 
 # WS-ID (zoned 4 @0), SQLCODE (zoned signed 9 @4); region size 13.
 _LAYOUT = {
-    "WS-ID": {
-        "offset": 0,
-        "length": 4,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "SQLCODE": {
-        "offset": 4,
-        "length": 9,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
+    "WS-ID": FieldPosition(
+        offset=0,
+        length=4,
+        category="ZONED_DECIMAL",
+        total_digits=4,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "SQLCODE": FieldPosition(
+        offset=4,
+        length=9,
+        category="ZONED_DECIMAL",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
 }
 _REGION_SIZE = 13
 
@@ -100,7 +103,7 @@ class _Frame:
 class _VM:
     def __init__(self, region: bytearray, addr: str = "1"):
         self._region = region
-        self.data_layout = _LAYOUT
+        self.declarations = declarations(_LAYOUT)
         self._addr = Address(addr)
         self.call_stack = [_Frame(addr)]
 

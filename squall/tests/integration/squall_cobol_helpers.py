@@ -79,8 +79,7 @@ def compile_cobol(
     (interpreter.project.coprocessor_compile) -- the same composition
     mechanism Cicada and red-dragon-forge use.
 
-    Returns the LinkedProgram; its data_layout serves assertions, and it goes to
-    run_linked.
+    Returns the LinkedProgram; it goes to run_linked.
     """
     from squall.coprocessor import build_sql_spec
     from interpreter.project.coprocessor_compile import compile_program
@@ -122,9 +121,9 @@ def run_linked_program(linked: LinkedProgram, max_steps: int = 1000) -> VMState:
 
     Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
     run_linked runs the WS init block (phase 1), then dispatches into the
-    program's procedure division (phase 2). data_layout is put on the initial
-    VM so builtins that run during execution (e.g. __exec_sql writing to WS
-    fields) can find the layout, and the main frame is pushed because
+    program's procedure division (phase 2), with the program's declarations on
+    the initial VM so builtins that run during execution (e.g. __exec_sql
+    writing to WS fields) can find the layout. The main frame is pushed because
     execute_cfg only pushes it when vm is None.
     """
     from interpreter.func_name import FuncName
@@ -132,7 +131,6 @@ def run_linked_program(linked: LinkedProgram, max_steps: int = 1000) -> VMState:
     from interpreter import constants as _constants
 
     initial_vm = VMState()
-    initial_vm.data_layout = linked.data_layout
     initial_vm.call_stack.append(
         StackFrame(function_name=FuncName(_constants.MAIN_FRAME_NAME))
     )
@@ -150,7 +148,7 @@ def read_ws_field(vm, field_name: str):
     """Decode a named WS field from the post-run VMState.
 
     Locates the __ws_region address in the top-most call frame, then reads
-    and decodes the field using vm.data_layout (populated by run_linked).
+    and decodes the field at its position in vm.declarations (set by run_linked).
 
     Decoding delegates to squall.binding._decode_field, which handles:
       ZONED_DECIMAL  → int
@@ -161,6 +159,7 @@ def read_ws_field(vm, field_name: str):
     Returns None if the field or WS region is not found.
     """
     from interpreter.var_name import VarName
+    from interpreter.cobol.layout_data import field_positions
     from squall.binding import _decode_field
 
     ws_var = VarName("__ws_region")
@@ -176,11 +175,10 @@ def read_ws_field(vm, field_name: str):
     if region is None:
         return None
 
-    layout = vm.data_layout
-    f = layout.get(field_name)
+    f = field_positions(vm.declarations).get(field_name)
     if f is None:
         return None
 
-    off, length = f["offset"], f["length"]
+    off, length = f.offset, f.length
     raw = bytes(region[off : off + length])
     return _decode_field(raw, f)

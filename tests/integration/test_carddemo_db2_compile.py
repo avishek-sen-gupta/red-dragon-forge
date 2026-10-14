@@ -36,8 +36,10 @@ import pytest
 from cics.coprocessor import build_cics_spec
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.cobol.layout_data import field_positions
 from interpreter.instructions import Const
 from interpreter.project.coprocessor_compile import compile_program
+from interpreter.run import main_declarations
 from squall.backends.sqlite import SqliteBackend
 from squall.coprocessor import build_sql_spec
 
@@ -134,10 +136,12 @@ def test_cotrtupc_compiles_with_cics_and_sql_composed(bridge_jar):
             "DCLTRANSACTION-TYPE-CATEGORY",
         )
     )
-    present = frozenset(name for name in required if name in linked.data_layout)
+    present = frozenset(
+        name for name in required if name in field_positions(main_declarations(linked))
+    )
     assert present == required, (
         f"{sorted(required - present)} missing from COTRTUPC's compiled "
-        "data_layout -- this is the signature of the column-corruption bug returning"
+        "field layout -- this is the signature of the column-corruption bug returning"
     )
 
 
@@ -149,10 +153,12 @@ def test_cotrtlic_compiles_with_cics_and_sql_composed(bridge_jar):
     linked = _compile(bridge_jar, "COTRTLIC")
 
     required = frozenset(("CARDDEMO-COMMAREA", "SQLCA", "DCLTRANSACTION-TYPE"))
-    present = frozenset(name for name in required if name in linked.data_layout)
+    present = frozenset(
+        name for name in required if name in field_positions(main_declarations(linked))
+    )
     assert present == required, (
         f"{sorted(required - present)} missing from COTRTLIC's compiled "
-        "data_layout -- this is the signature of the column-corruption bug returning"
+        "field layout -- this is the signature of the column-corruption bug returning"
     )
 
 
