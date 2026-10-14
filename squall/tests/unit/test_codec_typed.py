@@ -2,10 +2,6 @@
 tests/unit/test_codec_typed.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Unit tests for COMP-3 (packed decimal) and BINARY codec helpers in squall.binding.
-
-All fake-VM layouts use the REAL data_layout entry shape:
-  {"offset": int, "length": int, "category": str,
-   "total_digits": int, "decimal_digits": int, "signed": bool}
 """
 
 from __future__ import annotations

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from interpreter.cobol.layout_data import field_positions
 from interpreter.project.entry_point import EntryPoint
 from interpreter.run import run_linked
 from interpreter.address import Address
@@ -47,9 +48,8 @@ def _read_ws_field(vm: VMState, field_name: str):
             region = vm.region_get(addr)
             break
     assert region is not None, "__ws_region not found in call stack"
-    layout = vm.data_layout
-    f = layout[field_name]
-    off, length = f["offset"], f["length"]
+    f = field_positions(vm.declarations)[field_name]
+    off, length = f.offset, f.length
     raw = bytes(region[off : off + length])
     return _decode_field(raw, f)
 
@@ -69,7 +69,6 @@ def test_sql_only_spec_selects_into(bridge_jar):
     entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
 
     initial_vm = VMState()
-    initial_vm.data_layout = linked.data_layout
     initial_vm.call_stack.append(
         StackFrame(function_name=FuncName(rd_constants.MAIN_FRAME_NAME))
     )

@@ -8,6 +8,9 @@ Uses a duck-typed _FakeVM (no imports from cicada or red-dragon VM internals).
 
 from __future__ import annotations
 
+from interpreter.cobol.field_position import FieldPosition
+from unit.layout_build import declarations
+
 import pytest
 
 from decimal import Decimal
@@ -33,41 +36,41 @@ from squall.binding import (
 #  SQLCODE  S9(9) ZONED @offset=13 len=9   category=ZONED_DECIMAL
 #  WS-NAME  X(10) ALPHA @offset=22 len=10  category=ALPHANUMERIC
 
-# Full data_layout contract: real entries always carry total_digits/decimal_digits
+# Full field-layout contract: real entries always carry total_digits/decimal_digits
 # (the coercion layer needs them); the fakes must match or the gate sees capacity 0.
 _LAYOUT = {
-    "WS-ID": {
-        "offset": 0,
-        "length": 4,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "WS-BAL": {
-        "offset": 4,
-        "length": 9,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "SQLCODE": {
-        "offset": 13,
-        "length": 9,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
-    "WS-NAME": {
-        "offset": 22,
-        "length": 10,
-        "category": "ALPHANUMERIC",
-        "total_digits": 10,
-        "decimal_digits": 0,
-        "signed": False,
-    },
+    "WS-ID": FieldPosition(
+        offset=0,
+        length=4,
+        category="ZONED_DECIMAL",
+        total_digits=4,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "WS-BAL": FieldPosition(
+        offset=4,
+        length=9,
+        category="ZONED_DECIMAL",
+        total_digits=9,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "SQLCODE": FieldPosition(
+        offset=13,
+        length=9,
+        category="ZONED_DECIMAL",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
+    "WS-NAME": FieldPosition(
+        offset=22,
+        length=10,
+        category="ALPHANUMERIC",
+        total_digits=10,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 
 _REGION_SIZE = 32
@@ -101,7 +104,7 @@ class _FakeVM:
 
     def __init__(self, region: bytearray, layout: dict, addr: str = "1"):
         self._region = region
-        self.data_layout = layout
+        self.declarations = declarations(layout)
         self._addr = Address(addr)
         self.call_stack = [_FakeFrame(addr)]
 
@@ -230,7 +233,7 @@ def test_read_params_multiple_fields():
 
 
 def test_read_params_missing_field_fails_loudly():
-    """A host var absent from data_layout is an invariant violation, not a
+    """A host var absent from the field layout is an invariant violation, not a
     silently-tolerated None — read_params raises rather than fabricating a value."""
     vm, _ = _make_vm()
     with pytest.raises(KeyError):
@@ -239,20 +242,17 @@ def test_read_params_missing_field_fails_loudly():
 
 # ── Test 9: COMP-3 (packed decimal) field decodes to Decimal ─────────────────
 #
-# Layout uses the REAL data_layout entry shape (as confirmed empirically):
-#   ACCT-BAL PIC S9(7)V9(2) COMP-3:
-#   {"offset": 0, "length": 5, "category": "COMP3",
-#    "total_digits": 9, "decimal_digits": 2, "signed": True}
+# ACCT-BAL PIC S9(7)V9(2) COMP-3.
 
 _COMP3_LAYOUT = {
-    "ACCT-BAL": {
-        "offset": 0,
-        "length": 5,
-        "category": "COMP3",
-        "total_digits": 9,
-        "decimal_digits": 2,
-        "signed": True,
-    },
+    "ACCT-BAL": FieldPosition(
+        offset=0,
+        length=5,
+        category="COMP3",
+        total_digits=9,
+        decimal_digits=2,
+        signed=True,
+    ),
 }
 
 _COMP3_REGION_SIZE = 8
@@ -293,30 +293,25 @@ def test_read_write_comp3_roundtrip():
 
 # ── Test 10: BINARY field and write_sqlcode with BINARY SQLCODE ──────────────
 #
-# SQLCODE PIC S9(9) COMP (real SQLCA shape):
-#   {"offset": 0, "length": 4, "category": "BINARY",
-#    "total_digits": 9, "decimal_digits": 0, "signed": True}
-# ACCT-ID PIC S9(9) COMP:
-#   {"offset": 4, "length": 4, "category": "BINARY",
-#    "total_digits": 9, "decimal_digits": 0, "signed": True}
+# SQLCODE PIC S9(9) COMP (real SQLCA shape) and ACCT-ID PIC S9(9) COMP.
 
 _BINARY_LAYOUT = {
-    "SQLCODE": {
-        "offset": 0,
-        "length": 4,
-        "category": "BINARY",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
-    "ACCT-ID": {
-        "offset": 4,
-        "length": 4,
-        "category": "BINARY",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
+    "SQLCODE": FieldPosition(
+        offset=0,
+        length=4,
+        category="BINARY",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
+    "ACCT-ID": FieldPosition(
+        offset=4,
+        length=4,
+        category="BINARY",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
 }
 
 _BINARY_REGION_SIZE = 8
@@ -386,30 +381,30 @@ def test_write_sqlcode_still_works_for_zoned():
 #       49  SQLERRMC   PIC X(70).        (message text)
 
 _SQLCA_LAYOUT = {
-    "SQLCODE": {
-        "offset": 0,
-        "length": 4,
-        "category": "BINARY",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
-    "SQLERRML": {
-        "offset": 4,
-        "length": 2,
-        "category": "BINARY",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": True,
-    },
-    "SQLERRMC": {
-        "offset": 6,
-        "length": 70,
-        "category": "ALPHANUMERIC",
-        "total_digits": 70,
-        "decimal_digits": 0,
-        "signed": False,
-    },
+    "SQLCODE": FieldPosition(
+        offset=0,
+        length=4,
+        category="BINARY",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
+    "SQLERRML": FieldPosition(
+        offset=4,
+        length=2,
+        category="BINARY",
+        total_digits=4,
+        decimal_digits=0,
+        signed=True,
+    ),
+    "SQLERRMC": FieldPosition(
+        offset=6,
+        length=70,
+        category="ALPHANUMERIC",
+        total_digits=70,
+        decimal_digits=0,
+        signed=False,
+    ),
 }
 _SQLCA_REGION_SIZE = 76
 

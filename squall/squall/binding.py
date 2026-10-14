@@ -4,7 +4,7 @@ squall.binding
 Dialect-agnostic bridge between COBOL host-variable fields and SQL params/results.
 
 All functions are pure (no global mutable state). The VM interface is duck-typed:
-any object with ``call_stack``, ``data_layout``, and ``region_get`` satisfies it.
+any object with ``call_stack``, ``declarations``, and ``region_get`` satisfies it.
 
 Supported codec categories (slice 1 + 2):
   - ZONED_DECIMAL  (PIC 9 / S9 DISPLAY)  → int
@@ -32,6 +32,8 @@ bootstrap_vendor_path(_VENDOR)
 
 from interpreter.address import Address  # noqa: E402
 from interpreter.cobol.cobol_constants import ByteConstants  # noqa: E402
+from interpreter.cobol.field_position import FieldPosition  # noqa: E402
+from interpreter.cobol.layout_data import field_positions  # noqa: E402
 from interpreter.var_name import VarName  # noqa: E402
 
 # ── Low-level codec helpers ───────────────────────────────────────────────────
@@ -292,12 +294,12 @@ def _get_ws_region(vm) -> tuple[Address, bytearray]:
 # (ALPHANUMERIC, and anything unrecognized, is the table's implicit default).
 _FIELD_DECODERS: Mapping[str, Callable[..., int | str | Decimal]] = {
     "ZONED_DECIMAL": lambda data, f: _zoned_decode(data),
-    "COMP3": lambda data, f: _comp3_decode(data, f.get("decimal_digits", 0)),
-    "BINARY": lambda data, f: _binary_decode(data, f.get("signed", True)),
+    "COMP3": lambda data, f: _comp3_decode(data, f.decimal_digits),
+    "BINARY": lambda data, f: _binary_decode(data, f.signed),
 }
 
 
-def _decode_field(data: bytes, f: Mapping):
+def _decode_field(data: bytes, f: FieldPosition):
     """Decode field bytes to a Python value based on the field's category.
 
     Supported categories:
@@ -306,7 +308,7 @@ def _decode_field(data: bytes, f: Mapping):
       COMP3         → Decimal
       BINARY        → int
     """
-    category = f.get("category", "ALPHANUMERIC")
+    category = f.category
     decoder = _FIELD_DECODERS.get(category, lambda data, f: _alpha_decode(data))
     return decoder(data, f)
 
@@ -316,15 +318,13 @@ def _decode_field(data: bytes, f: Mapping):
 _FIELD_ENCODERS: Mapping[str, Callable[..., bytes]] = {
     "ZONED_DECIMAL": lambda value, f, length: _zoned_encode(int(value), length),
     "COMP3": lambda value, f, length: _comp3_encode(
-        value, f["total_digits"], f["decimal_digits"], f.get("signed", True)
+        value, f.total_digits, f.decimal_digits, f.signed
     ),
-    "BINARY": lambda value, f, length: _binary_encode(
-        int(value), length, f.get("signed", True)
-    ),
+    "BINARY": lambda value, f, length: _binary_encode(int(value), length, f.signed),
 }
 
 
-def _encode_field(value, f: Mapping, length: int) -> bytes:
+def _encode_field(value, f: FieldPosition, length: int) -> bytes:
     """Encode a Python value to bytes based on the field's category.
 
     Supported categories:
@@ -333,7 +333,7 @@ def _encode_field(value, f: Mapping, length: int) -> bytes:
       COMP3         → _comp3_encode
       BINARY        → _binary_encode
     """
-    category = f.get("category", "ALPHANUMERIC")
+    category = f.category
     encoder = _FIELD_ENCODERS.get(
         category, lambda value, f, length: _alpha_encode(str(value), length)
     )
@@ -343,7 +343,7 @@ def _encode_field(value, f: Mapping, length: int) -> bytes:
 # ── VARCHAR (49-group) codec ──────────────────────────────────────────────────
 #
 # A VARCHAR host var is an IBM DCLGEN group spanning two 49-level children: a
-# binary length prefix (<HV>-LEN) and the text (<HV>-TEXT). The flat data_layout
+# binary length prefix (<HV>-LEN) and the text (<HV>-TEXT). The flat field layout
 # records all three entries but cannot mark the group as VARCHAR — the dclgen
 # ``field_meta`` map supplies that and names the children. The codec reads/writes
 # the LEN child as binary and the first LEN characters of the TEXT child.
@@ -383,7 +383,9 @@ def varchar_children(meta: FieldMeta) -> tuple[str, str]:
             raise KeyError("VARCHAR field_meta entry missing len_var/text_var")
 
 
-def _varchar_decode(data_layout: Mapping, region: bytearray, meta: FieldMeta) -> str:
+def _varchar_decode(
+    layout: Mapping[str, FieldPosition], region: bytearray, meta: FieldMeta
+) -> str:
     """Pure: decode a VARCHAR host var to its first-LEN characters.
 
     Reads the binary LEN child and returns exactly that many decoded characters
@@ -395,16 +397,16 @@ def _varchar_decode(data_layout: Mapping, region: bytearray, meta: FieldMeta) ->
     must keep it -- rstripping here would silently drop it.
     """
     len_var, text_var = varchar_children(meta)
-    len_f = _require_field(data_layout, len_var)
-    text_f = _require_field(data_layout, text_var)
-    lo, ll = len_f["offset"], len_f["length"]
-    n = _binary_decode(bytes(region[lo : lo + ll]), len_f.get("signed", True))
-    to = text_f["offset"]
+    len_f = _require_field(layout, len_var)
+    text_f = _require_field(layout, text_var)
+    lo, ll = len_f.offset, len_f.length
+    n = _binary_decode(bytes(region[lo : lo + ll]), len_f.signed)
+    to = text_f.offset
     return bytes(region[to : to + n]).decode("cp037")
 
 
 def _varchar_writes(
-    value: str, data_layout: Mapping, meta: FieldMeta
+    value: str, layout: Mapping[str, FieldPosition], meta: FieldMeta
 ) -> tuple[tuple[int, bytes], ...]:
     """Pure: the ``(offset, bytes)`` writes that store *value* into a VARCHAR group.
 
@@ -413,11 +415,11 @@ def _varchar_writes(
     how ``_encode_field`` returns bytes rather than touching the region itself.
     """
     len_var, text_var = varchar_children(meta)
-    len_f = _require_field(data_layout, len_var)
-    text_f = _require_field(data_layout, text_var)
-    len_bytes = _binary_encode(len(value), len_f["length"], len_f.get("signed", True))
-    text_bytes = _alpha_encode(value, text_f["length"])
-    return (len_f["offset"], len_bytes), (text_f["offset"], text_bytes)
+    len_f = _require_field(layout, len_var)
+    text_f = _require_field(layout, text_var)
+    len_bytes = _binary_encode(len(value), len_f.length, len_f.signed)
+    text_bytes = _alpha_encode(value, text_f.length)
+    return (len_f.offset, len_bytes), (text_f.offset, text_bytes)
 
 
 # ── Coercion layer (strict) ───────────────────────────────────────────────────
@@ -464,23 +466,23 @@ def _numeric_type_ok(value) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float, Decimal))
 
 
-def _numeric_range_ok(dec: Decimal, f: Mapping) -> bool:
+def _numeric_range_ok(dec: Decimal, f: FieldPosition) -> bool:
     """Whether *dec* fits field *f* without truncating a fractional digit or
     overflowing the integer part."""
     int_digits, frac_digits = _decimal_digit_counts(dec)
-    decimal_digits = f.get("decimal_digits", 0)
-    total_digits = f.get("total_digits", 0)
+    decimal_digits = f.decimal_digits
+    total_digits = f.total_digits
     return frac_digits <= decimal_digits and int_digits <= total_digits - decimal_digits
 
 
-def _numeric_out_of_range(dec: Decimal, f: Mapping) -> bool:
+def _numeric_out_of_range(dec: Decimal, f: FieldPosition) -> bool:
     """NaN/Infinity can't be represented; otherwise defer to the range check."""
     if not dec.is_finite():
         return True
     return not _numeric_range_ok(dec, f)
 
 
-def _numeric_assignability(value, f: Mapping) -> int:
+def _numeric_assignability(value, f: FieldPosition) -> int:
     """Strict assignability for a ZONED_DECIMAL/COMP3/BINARY field."""
     if not _numeric_type_ok(value):
         return SQLCODE_INCOMPATIBLE_TYPE
@@ -490,7 +492,7 @@ def _numeric_assignability(value, f: Mapping) -> int:
     return 0
 
 
-def _alphanumeric_assignability(value, f: Mapping) -> int:
+def _alphanumeric_assignability(value, f: FieldPosition) -> int:
     """Strict assignability for an ALPHANUMERIC (character) field.
 
     A numeric (or other) value into a character host var is not an allowed
@@ -498,12 +500,12 @@ def _alphanumeric_assignability(value, f: Mapping) -> int:
     """
     if not isinstance(value, str):
         return SQLCODE_INCOMPATIBLE_TYPE
-    if len(value) > f.get("length", len(value)):
+    if len(value) > f.length:
         return SQLCODE_VALUE_OUT_OF_RANGE  # would truncate the string
     return 0
 
 
-def _assignability(value, f: Mapping) -> int:
+def _assignability(value, f: FieldPosition) -> int:
     """Return 0 if *value* can be assigned into field *f* with no coercion or
     loss, else a genuine-failure SQLCODE.
 
@@ -515,21 +517,21 @@ def _assignability(value, f: Mapping) -> int:
     match value:
         case None:
             return SQLCODE_NULL_NO_INDICATOR
-        case _ if f.get("category", "ALPHANUMERIC") in _NUMERIC_CATEGORIES:
+        case _ if f.category in _NUMERIC_CATEGORIES:
             return _numeric_assignability(value, f)
         case _:
             return _alphanumeric_assignability(value, f)
 
 
-def _varchar_string_assignability(value: str, text_f: Mapping) -> int:
+def _varchar_string_assignability(value: str, text_f: FieldPosition) -> int:
     """A string value's assignability (the ``case str()`` arm): truncation
     only, since it's already known to be character data."""
-    if len(value) > text_f["length"]:
+    if len(value) > text_f.length:
         return SQLCODE_VALUE_OUT_OF_RANGE
     return 0
 
 
-def _varchar_assignability(value, text_f: Mapping) -> int:
+def _varchar_assignability(value, text_f: FieldPosition) -> int:
     """Strict assignability for a VARCHAR host var (its TEXT child capacity).
 
     A character value is required; a value longer than the declared capacity
@@ -545,35 +547,35 @@ def _varchar_assignability(value, text_f: Mapping) -> int:
             return SQLCODE_INCOMPATIBLE_TYPE
 
 
-def _lookup_field(data_layout, name: str):
+def _lookup_field(layout: Mapping[str, FieldPosition], name: str):
     """Look up a field by host-var name, CASE-INSENSITIVELY.
 
     COBOL identifiers are case-insensitive, but ProLeap preserves the source
-    (declaration) case in ``data_layout`` — so a program that declares ``pname``
+    (declaration) case in the field layout — so a program that declares ``pname``
     yet writes ``FETCH … INTO :PNAME`` must still resolve. Try the exact name
     first (fast path), then fall back to an upper-cased scan.
     """
-    match data_layout.get(name):
+    match layout.get(name):
         case None:
             upper = name.upper()
             return next(
-                (entry for key, entry in data_layout.items() if key.upper() == upper),
+                (entry for key, entry in layout.items() if key.upper() == upper),
                 None,
             )
         case f:
             return f
 
 
-def _require_field(data_layout, name: str) -> dict:
+def _require_field(layout: Mapping[str, FieldPosition], name: str) -> FieldPosition:
     """Resolve a field that must exist; raise loudly if it does not.
 
     Used where the field's presence is an invariant — e.g. the LEN/TEXT children
     of a dclgen-generated VARCHAR group. A miss is a generation/layout bug, not a
     runtime condition to absorb, so it fails rather than returning a sentinel.
     """
-    match _lookup_field(data_layout, name):
+    match _lookup_field(layout, name):
         case None:
-            raise KeyError(f"host-var field {name!r} not found in data_layout")
+            raise KeyError(f"host-var field {name!r} not found in the field layout")
         case f:
             return f
 
@@ -595,18 +597,24 @@ def read_params(
     decoded through its 49-group LEN/TEXT children instead of as a flat group.
 
     ``tolerant=True``: return ``None`` for any host var whose field is not found in
-    data_layout rather than raising. The backend receives ``None`` for that
+    the field layout rather than raising. The backend receives ``None`` for that
     parameter position; mock backends that ignore params are unaffected.
     """
     _, region = _get_ws_region(vm)
     return [
-        _read_one(vm.data_layout, region, field_meta, name, tolerant=tolerant)
+        _read_one(
+            field_positions(vm.declarations),
+            region,
+            field_meta,
+            name,
+            tolerant=tolerant,
+        )
         for name in in_names
     ]
 
 
 def _read_one(
-    data_layout: Mapping,
+    layout: Mapping[str, FieldPosition],
     region: bytearray,
     field_meta: Mapping[str, FieldMeta],
     name: str,
@@ -616,22 +624,18 @@ def _read_one(
     """Pure: decode one host var — VARCHAR via its 49-group, else its flat field."""
     meta = _meta_for(field_meta, name)
     if meta.get("category") == "VARCHAR":
-        return _varchar_decode(data_layout, region, meta)
-    f = (
-        _lookup_field(data_layout, name)
-        if tolerant
-        else _require_field(data_layout, name)
-    )
+        return _varchar_decode(layout, region, meta)
+    f = _lookup_field(layout, name) if tolerant else _require_field(layout, name)
     match f:
         case None:
             import logging as _logging
 
             _logging.getLogger(__name__).warning(
-                "read_params: field %r not in data_layout — returning None", name
+                "read_params: field %r not in the field layout — returning None", name
             )
             return None
         case _:
-            off, length = f["offset"], f["length"]
+            off, length = f.offset, f.length
             return _decode_field(bytes(region[off : off + length]), f)
 
 
@@ -647,29 +651,34 @@ class _Plan:
     writes: tuple[tuple[int, bytes], ...]
 
 
-def _plan_varchar_assignment(data_layout: Mapping, meta: FieldMeta, value) -> _Plan:
+def _plan_varchar_assignment(
+    layout: Mapping[str, FieldPosition], meta: FieldMeta, value
+) -> _Plan:
     """Pure: plan a VARCHAR host-var assignment through its 49-group children."""
     _, text_var = varchar_children(meta)
-    text_f = _require_field(data_layout, text_var)
+    text_f = _require_field(layout, text_var)
     varchar_code = _varchar_assignability(value, text_f)
     if varchar_code != 0:
         return _Plan(varchar_code, ())
-    return _Plan(0, _varchar_writes(value, data_layout, meta))
+    return _Plan(0, _varchar_writes(value, layout, meta))
 
 
-def _plan_scalar_assignment(data_layout: Mapping, name: str, value) -> _Plan:
+def _plan_scalar_assignment(
+    layout: Mapping[str, FieldPosition], name: str, value
+) -> _Plan:
     """Pure: plan a non-VARCHAR host-var assignment through its flat field."""
-    f = _require_field(data_layout, name)
+    f = _require_field(layout, name)
     scalar_code = _assignability(value, f)
     if scalar_code != 0:
         return _Plan(scalar_code, ())
-    return _Plan(
-        0, ((f["offset"], _encode_field(value, f, f["length"])[: f["length"]]),)
-    )
+    return _Plan(0, ((f.offset, _encode_field(value, f, f.length)[: f.length]),))
 
 
 def _plan_assignment(
-    data_layout: Mapping, field_meta: Mapping[str, FieldMeta], name: str, value
+    layout: Mapping[str, FieldPosition],
+    field_meta: Mapping[str, FieldMeta],
+    name: str,
+    value,
 ) -> _Plan:
     """Pure: plan one host-var assignment. VARCHAR host vars (carrying dclgen
     metadata) plan through their 49-group LEN/TEXT children; all others through
@@ -678,9 +687,9 @@ def _plan_assignment(
     meta = _meta_for(field_meta, name)
     match meta.get("category"):
         case "VARCHAR":
-            return _plan_varchar_assignment(data_layout, meta, value)
+            return _plan_varchar_assignment(layout, meta, value)
         case _:
-            return _plan_scalar_assignment(data_layout, name, value)
+            return _plan_scalar_assignment(layout, name, value)
 
 
 def write_outputs(
@@ -701,7 +710,7 @@ def write_outputs(
     """
     region = _get_ws_region(vm)[1]
     plans = [
-        _plan_assignment(vm.data_layout, field_meta, name, value)
+        _plan_assignment(field_positions(vm.declarations), field_meta, name, value)
         for name, value in zip(out_names, row, strict=True)
     ]
     failure = next((p.code for p in plans if p.code != 0), 0)
@@ -716,7 +725,7 @@ def write_sqlcode(vm, code: int, message: str = "") -> None:
     """Write ``code`` into SQLCODE, and *message* into SQLERRM, in the WS region.
 
     Encoding is determined by the SQLCODE field's own ``category`` in
-    data_layout.  In real SQLCA the field is BINARY (PIC S9(9) COMP);
+    the field layout.  In real SQLCA the field is BINARY (PIC S9(9) COMP);
     in test fixtures it may be ZONED_DECIMAL.  Both are handled via
     ``_encode_field`` so this function stays category-agnostic.
 
@@ -725,11 +734,12 @@ def write_sqlcode(vm, code: int, message: str = "") -> None:
     test fixtures only lay out SQLCODE, and must keep working unchanged.
     """
     _, region = _get_ws_region(vm)
-    f = _require_field(vm.data_layout, "SQLCODE")
-    length = f["length"]
-    off = f["offset"]
+    layout = field_positions(vm.declarations)
+    f = _require_field(layout, "SQLCODE")
+    length = f.length
+    off = f.offset
     sqlcode_write = ((off, _encode_field(code, f, length)[:length]),)
-    apply_writes(region, sqlcode_write + _sqlerrm_writes(vm.data_layout, message))
+    apply_writes(region, sqlcode_write + _sqlerrm_writes(layout, message))
 
 
 # Real DB2 fills SQLERRM with positional substitution tokens (table/object
@@ -738,24 +748,22 @@ def write_sqlcode(vm, code: int, message: str = "") -> None:
 # runtime deliberately writes the driver's own prose error text instead --
 # strictly more useful to a human than a token list would be here.
 def _sqlerrm_field_writes(
-    len_f: Mapping, text_f: Mapping, message: str
+    len_f: FieldPosition, text_f: FieldPosition, message: str
 ) -> tuple[tuple[int, bytes], ...]:
     """Pure: the LEN/TEXT writes for *message*, once both SQLCA fields are
     known to be present."""
-    truncated = message[: text_f["length"]]
-    len_bytes = _binary_encode(
-        len(truncated), len_f["length"], len_f.get("signed", True)
-    )
-    text_bytes = _alpha_encode(truncated, text_f["length"])
-    return (len_f["offset"], len_bytes), (text_f["offset"], text_bytes)
+    truncated = message[: text_f.length]
+    len_bytes = _binary_encode(len(truncated), len_f.length, len_f.signed)
+    text_bytes = _alpha_encode(truncated, text_f.length)
+    return (len_f.offset, len_bytes), (text_f.offset, text_bytes)
 
 
-def _sqlca_errm_fields(data_layout: Mapping):
+def _sqlca_errm_fields(layout: Mapping[str, FieldPosition]):
     """Both SQLCA SQLERRM fields as ``(len_f, text_f)``, or ``()`` if either is
-    absent from *data_layout* (most unit-test fixtures lay out only SQLCODE)."""
+    absent from *layout* (most unit-test fixtures lay out only SQLCODE)."""
     match (
-        _lookup_field(data_layout, "SQLERRML"),
-        _lookup_field(data_layout, "SQLERRMC"),
+        _lookup_field(layout, "SQLERRML"),
+        _lookup_field(layout, "SQLERRMC"),
     ):
         case (None, _) | (_, None):
             return ()
@@ -764,7 +772,7 @@ def _sqlca_errm_fields(data_layout: Mapping):
 
 
 def _sqlerrm_writes(
-    data_layout: Mapping, message: str
+    layout: Mapping[str, FieldPosition], message: str
 ) -> tuple[tuple[int, bytes], ...]:
     """Pure: the writes that store *message* into the SQLCA SQLERRM VARCHAR
     group (SQLERRML/SQLERRMC).
@@ -777,7 +785,7 @@ def _sqlerrm_writes(
     Returns ``()`` only when the WS region has no SQLCA at all (most
     unit-test fixtures lay out only SQLCODE).
     """
-    match _sqlca_errm_fields(data_layout):
+    match _sqlca_errm_fields(layout):
         case ():
             return ()
         case (len_f, text_f):

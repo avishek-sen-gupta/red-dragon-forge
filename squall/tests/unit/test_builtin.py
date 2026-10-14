@@ -10,6 +10,9 @@ Layout: WS-ID (zoned, 4), WS-BAL (zoned, 9), SQLCODE (zoned, 9).
 
 from __future__ import annotations
 
+from interpreter.cobol.field_position import FieldPosition
+from unit.layout_build import declarations
+
 import sqlite3
 
 import pytest
@@ -21,30 +24,30 @@ from squall.builtins.exec_sql import make_exec_sql_builtin
 # ── Layout ────────────────────────────────────────────────────────────────────
 
 _LAYOUT = {
-    "WS-ID": {
-        "offset": 0,
-        "length": 4,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 4,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "WS-BAL": {
-        "offset": 4,
-        "length": 9,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": False,
-    },
-    "SQLCODE": {
-        "offset": 13,
-        "length": 9,
-        "category": "ZONED_DECIMAL",
-        "total_digits": 9,
-        "decimal_digits": 0,
-        "signed": True,
-    },
+    "WS-ID": FieldPosition(
+        offset=0,
+        length=4,
+        category="ZONED_DECIMAL",
+        total_digits=4,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "WS-BAL": FieldPosition(
+        offset=4,
+        length=9,
+        category="ZONED_DECIMAL",
+        total_digits=9,
+        decimal_digits=0,
+        signed=False,
+    ),
+    "SQLCODE": FieldPosition(
+        offset=13,
+        length=9,
+        category="ZONED_DECIMAL",
+        total_digits=9,
+        decimal_digits=0,
+        signed=True,
+    ),
 }
 _REGION_SIZE = 22
 
@@ -69,7 +72,7 @@ class _FakeFrame:
 class _FakeVM:
     def __init__(self, region: bytearray, layout: dict, addr: str = "1"):
         self._region = region
-        self.data_layout = layout
+        self.declarations = declarations(layout)
         self._addr = Address(addr)
         self.call_stack = [_FakeFrame(addr)]
 
