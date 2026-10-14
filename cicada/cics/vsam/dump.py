@@ -26,6 +26,7 @@ from pathlib import Path
 
 from catnip.dataset import Dataset
 from catnip.system_catalog import NotCataloged, SystemCatalog
+from cics.vsam.decoded_record import Decoded, DecodedRecord, Leaf
 from cics.vsam.format import read_flat_file
 from interpreter.cobol.binary import decode_binary
 from interpreter.cobol.comp3 import decode_comp3
@@ -37,7 +38,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.zoned_decimal import decode_zoned
 
 
-def _decode_leaf(field: FieldLayout, data: bytes) -> int | float | str:
+def _decode_leaf(field: FieldLayout, data: bytes) -> Leaf:
     """Decode the bytes of one elementary field to a Python value.
 
     ``data`` must be exactly the field's bytes. Numeric fields with no implied
@@ -70,84 +71,79 @@ def _as_number(value: float, decimal_digits: int) -> int | float:
     return int(round(value)) if decimal_digits == 0 else value
 
 
-def decode_record(
-    layout: DataLayout,
-    record: bytes,
-    base_offset: int | None = None,
-    root: DataLayout | None = None,
-) -> dict[str, object]:
-    """Decode one record's bytes into a nested dict, per the DataLayout.
+def decode_record(layout: DataLayout, record: bytes) -> DecodedRecord:
+    """Decode one record's bytes field by field, per the DataLayout.
 
-    Leaf fields decode via _decode_leaf; group children recurse. Fields/groups with
-    occurs_count > 0 become lists (stride element_size). OCCURS DEPENDING ON honors
-    the counter field (resolved from ``root``) clamped to [occurs_min or 1,
-    occurs_count]. ``base_offset`` rebases absolute offsets to the record start; it
-    defaults to the layout's own offset so a sub-01 group selected from a multi-01
-    copybook (sitting at a non-zero absolute offset) slices correctly.
+    Groups nest; OCCURS items become tuples, OCCURS DEPENDING ON honouring its
+    counter clamped to [occurs_min or 1, occurs_count]. Offsets are rebased to
+    the layout's own offset, so a sub-01 selected from a multi-01 copybook
+    slices from the record's start.
     """
-    base = layout.offset if base_offset is None else base_offset
-    top = layout if root is None else root
-    out: dict[str, object] = {}
-    for name, fl in layout.fields.items():
-        out[name] = _decode_field(fl, record, base, top)
-    for name, sub in layout.groups.items():
-        out[name] = _decode_group(sub, record, base, top)
-    return out
+    return _decoded(layout, record, layout.offset, layout)
 
 
-def _live_count(
-    node: FieldLayout | DataLayout, record: bytes, base: int, root: DataLayout
-) -> int:
-    """Resolve the occurrence count for an OCCURS node, honoring ODO.
+def _decoded(
+    layout: DataLayout, record: bytes, base: int, root: DataLayout
+) -> DecodedRecord:
+    return DecodedRecord(
+        (
+            *(
+                (name, _decode_field(fl, record, base, root))
+                for name, fl in layout.fields.items()
+            ),
+            *(
+                (name, _decode_group(sub, record, base, root))
+                for name, sub in layout.groups.items()
+            ),
+        )
+    )
 
-    Group nodes (DataLayout) carry no occurs_depending_on attribute, so a
-    fixed-OCCURS group simply uses its declared occurs_count.
-    """
-    odo = getattr(node, "occurs_depending_on", "")
-    if not odo:
-        return node.occurs_count
-    counter = root.lookup(odo)
-    if counter is None:
-        return node.occurs_count  # unresolved counter: fall back to declared max
-    start = counter.offset - base
-    raw = _decode_leaf(counter, record[start : start + counter.byte_length])
-    n = int(raw)
-    low = getattr(node, "occurs_min", 0) or 1
-    return max(low, min(n, node.occurs_count))
+
+def _occurs_floor(field: FieldLayout) -> int:
+    return max(field.occurs_min, 1)
+
+
+def _counted(field: FieldLayout, record: bytes, base: int, root: DataLayout) -> int:
+    match root.lookup(field.occurs_depending_on):
+        case FieldLayout() as counter:
+            start = counter.offset - base
+            live = int(
+                _decode_leaf(counter, record[start : start + counter.byte_length])
+            )
+            return max(_occurs_floor(field), min(live, field.occurs_count))
+        case _:
+            return field.occurs_count
+
+
+def _live_count(field: FieldLayout, record: bytes, base: int, root: DataLayout) -> int:
+    if not field.occurs_depending_on:
+        return field.occurs_count
+    return _counted(field, record, base, root)
+
+
+def _element(fl: FieldLayout, record: bytes, base: int, index: int) -> Leaf:
+    start = fl.offset - base + index * fl.element_size
+    return _decode_leaf(fl, record[start : start + fl.byte_length])
 
 
 def _decode_field(
     fl: FieldLayout, record: bytes, base: int, root: DataLayout
-) -> list[int | float | str] | int | float | str:
+) -> Leaf | tuple[Leaf, ...]:
     if fl.occurs_count > 0:
-        n = _live_count(fl, record, base, root)
-        result = []
-        for i in range(n):
-            start = fl.offset - base + i * fl.element_size
-            result.append(_decode_leaf(fl, record[start : start + fl.byte_length]))
-        return result
-    start = fl.offset - base
-    return _decode_leaf(fl, record[start : start + fl.byte_length])
+        count = _live_count(fl, record, base, root)
+        return tuple(_element(fl, record, base, i) for i in range(count))
+    return _element(fl, record, base, 0)
 
 
 def _decode_group(
     sub: DataLayout, record: bytes, base: int, root: DataLayout
-) -> list[dict[str, object]] | dict[str, object]:
+) -> DecodedRecord | tuple[DecodedRecord, ...]:
     if sub.occurs_count > 0:
-        n = _live_count(sub, record, base, root)
-        return [_decode_group_element(sub, record, base, root, i) for i in range(n)]
-    return decode_record(sub, record, base, root)
-
-
-def _decode_group_element(
-    sub: DataLayout, record: bytes, base: int, root: DataLayout, index: int
-) -> dict[str, object]:
-    """Decode the index-th element of an OCCURS group (shift base by stride)."""
-    # Subtracting from base is equivalent to adding index*element_size to every
-    # child's (offset - base) in the recursive call; children store the
-    # first-element absolute offset, so this maps them to element #index.
-    shifted_base = base - index * sub.element_size
-    return decode_record(sub, record, shifted_base, root)
+        return tuple(
+            _decoded(sub, record, base - i * sub.element_size, root)
+            for i in range(sub.occurs_count)
+        )
+    return _decoded(sub, record, base, root)
 
 
 def select_record_layout(root: DataLayout, record_name: str | None) -> DataLayout:
@@ -200,9 +196,13 @@ def load_record_layout(
     return select_record_layout(root, record_name)
 
 
+def _plain(record: DecodedRecord) -> dict[str, Decoded]:
+    return record.plain()
+
+
 def render_jsonl(layout: DataLayout, records: list[bytes]) -> str:
     """One compact JSON object per record, each newline-terminated; empty input yields an empty string."""
-    lines = [json.dumps(decode_record(layout, rec)) for rec in records]
+    lines = [json.dumps(decode_record(layout, rec), default=_plain) for rec in records]
     return "\n".join(lines) + ("\n" if lines else "")
 
 

@@ -157,7 +157,7 @@ def test_decode_record_fixed_occurs_leaf_array():
     )
     layout = DataLayout(fields={"CODE": item}, total_bytes=6)
     record = EbcdicTable.ascii_to_ebcdic(b"AABBCC")
-    assert decode_record(layout, record) == {"CODE": ["AA", "BB", "CC"]}
+    assert decode_record(layout, record) == {"CODE": ("AA", "BB", "CC")}
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -181,7 +181,7 @@ def test_decode_record_odo_honors_counter_not_max():
     record = b"\xf2" + EbcdicTable.ascii_to_ebcdic(b"AABBZZ")
     out = decode_record(layout, record)
     assert out["N"] == 2
-    assert out["ITEM"] == ["AA", "BB"]
+    assert out["ITEM"] == ("AA", "BB")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -203,7 +203,7 @@ def test_decode_record_odo_counter_clamped_to_max():
     # N=9 (corrupt, > max 3) -> clamp to 3 items.
     record = b"\xf9" + EbcdicTable.ascii_to_ebcdic(b"AABBCC")
     out = decode_record(layout, record)
-    assert out["ITEM"] == ["AA", "BB", "CC"]
+    assert out["ITEM"] == ("AA", "BB", "CC")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -225,10 +225,10 @@ def test_decode_record_group_occurs_array():
     # element #0 -> A="P1", B="Q1"; element #1 -> A="P2", B="Q2"
     record = EbcdicTable.ascii_to_ebcdic(b"P1Q1P2Q2")
     assert decode_record(layout, record) == {
-        "PAIR": [
+        "PAIR": (
             {"A": "P1", "B": "Q1"},
             {"A": "P2", "B": "Q2"},
-        ]
+        )
     }
 
 
@@ -252,7 +252,7 @@ def test_decode_record_odo_counter_clamped_to_min():
     record = b"\xf0" + EbcdicTable.ascii_to_ebcdic(b"AABBCC")
     out = decode_record(layout, record)
     assert out["N"] == 0
-    assert out["ITEM"] == ["AA"]
+    assert out["ITEM"] == ("AA",)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
