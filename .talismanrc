@@ -305,4 +305,6 @@ fileignoreconfig:
   checksum: 01cff98a18570ed989b9486a1096802fd02ef3d90531cb546aa8151b2e9e4aef
 - filename: squall/squall/coprocessor.py
   checksum: 15ecd741adb311b1b0b52d670140f592ee152c9dfa673b3398e50783fc331793
+- filename: docs/superpowers/specs/2026-10-14-catnip-system-catalog-design.md
+  checksum: 0bf126ce5976f1e550db0b4f044546b2fe2f983008be1c47179792c5cba95848
 version: "1.0"
