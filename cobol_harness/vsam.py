@@ -1,4 +1,4 @@
-"""Test-data setup: byte-exact VSAM records, dataset registration/seeding,
+"""Test-data setup: byte-exact VSAM records, cluster registration/seeding in a system catalog,
 and ASCII/EBCDIC conversion.  Agnostic to any one program or copybook.
 """
 from __future__ import annotations
@@ -7,9 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
+from catnip.dataset import Dataset
+from catnip.labels import KsdsLabel
+from catnip.system_catalog import SystemCatalog
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import DatasetConfig, FctConfig
-from cics.vsam.seed import seed_records
+from cics.vsam.file_table import cics_files
 
 from .state import program_regions
 
@@ -88,36 +90,38 @@ def build_record(
 
 @dataclass
 class VsamFixture:
-    """One region's VSAM file control: dataset definitions + seeded rows.
+    """One region's VSAM file control: KSDS clusters in a system catalog, one per CICS file.
 
     ``register`` must be called for a dataset even if you want it left
     EMPTY (e.g. because the real program's own EIBRESP handling treats
     NOTFND as the clean/expected branch) -- an *unregistered* dataset
-    behaves differently from a *registered-but-empty* one (NOTOPEN vs.
+    behaves differently from a *registered-but-empty* one (DISABLED vs.
     NOTFND), and COBOL programs commonly branch on which one they get.
     """
 
-    vsam_dir: Path
-    datasets: dict[str, DatasetConfig] = field(default_factory=dict)
-    engine: VsamEngine | None = field(default=None, init=False)
-    _fct: FctConfig | None = field(default=None, init=False, repr=False)
+    system: SystemCatalog
+    files: dict[str, Dataset] = field(default_factory=dict)
+    engine: VsamEngine = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.engine = VsamEngine(self.files)
 
     @classmethod
     def create(cls, vsam_dir: Path) -> "VsamFixture":
-        vsam_dir = Path(vsam_dir)
-        vsam_dir.mkdir(parents=True, exist_ok=True)
-        fixture = cls(vsam_dir=vsam_dir)
-        fixture._fct = FctConfig(datasets=fixture.datasets)
-        fixture.engine = VsamEngine(fixture._fct, fixture.vsam_dir)
-        return fixture
+        return cls(SystemCatalog(Path(vsam_dir)))
 
     def register(self, dataset: str, *, record_length: int, key_offset: int = 0, key_length: int = 8) -> None:
-        self.datasets[dataset] = DatasetConfig(record_length=record_length, key_offset=key_offset, key_length=key_length)
+        dsn = f"TEST.{dataset}"
+        self.system.create(dsn, KsdsLabel(record_length, key_offset, key_length))
+        self.files.update(cics_files(self.system, {dataset: dsn}))
 
     def seed(self, dataset: str, records: list[bytes]) -> None:
-        """Write ``records`` to disk for ``dataset`` and reload the engine.
+        """Write ``records``, key-sorted, as ``dataset``'s cluster.
         ``dataset`` must already be ``register``ed."""
-        if dataset not in self.datasets:
+        if dataset not in self.files:
             raise KeyError(f"{dataset!r} not registered -- call register() first")
-        seed_records(self.vsam_dir, self._fct, {dataset: records})
-        self.engine.load_all()
+        cluster = self.files[dataset]
+        label = cluster.label
+        assert isinstance(label, KsdsLabel)
+        start, end = label.key_offset, label.key_offset + label.key_length
+        cluster.path.write_bytes(b"".join(sorted(records, key=lambda r: r[start:end])))

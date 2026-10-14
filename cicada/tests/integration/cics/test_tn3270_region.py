@@ -76,7 +76,7 @@ def _program_id(source: str) -> str:
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_extra_specs_prepass_runs_for_every_compiled_program(
-    tmp_path, bridge_jar, monkeypatch
+    tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
     """Against pre-task-9 code, build_region has no extra_specs parameter at
     all, so this call raises TypeError before ever reaching a spec -- this
@@ -88,7 +88,7 @@ def test_extra_specs_prepass_runs_for_every_compiled_program(
     CardDemo source directory, which calls the Language Environment stub
     CEEDAYS, found in the LE stub directory."""
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = load_config(_CONFIG)
+    config = load_config(_CONFIG, carddemo_system)
     recorder = _Recorder()
 
     build_region(config, bridge_jar, tmp_path, extra_specs=[_stub_spec(recorder)])

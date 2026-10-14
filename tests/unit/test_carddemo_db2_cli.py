@@ -30,7 +30,9 @@ def _stub_common(monkeypatch, *, schema_conn, region_conn, served=None):
     monkeypatch.setattr(cli_mod.ibm_db, "autocommit", lambda *a, **k: None)
 
     monkeypatch.setattr(
-        cli_mod, "load_config", lambda path: SimpleNamespace(initial_transid="CC00")
+        cli_mod,
+        "load_config",
+        lambda path, system: SimpleNamespace(initial_transid="CC00"),
     )
     monkeypatch.setattr(
         cli_mod,
@@ -56,7 +58,14 @@ def test_the_server_cannot_mutate_the_schema(monkeypatch, tmp_path):
     monkeypatch.setattr(cli_mod, "serve_forever", lambda server, session: None)
     monkeypatch.setattr(cli_mod.ibm_db, "close", lambda conn: None)
     monkeypatch.setattr(
-        "sys.argv", ["carddemo-db2-cli", "--config", str(tmp_path / "c.toml")]
+        "sys.argv",
+        [
+            "carddemo-db2-cli",
+            "--config",
+            str(tmp_path / "c.toml"),
+            "--system",
+            str(tmp_path / "system"),
+        ],
     )
 
     assert cli_mod.main() == 0
@@ -78,7 +87,13 @@ def test_connection_is_closed_even_when_serving_raises(monkeypatch, tmp_path):
 
     monkeypatch.setattr(
         "sys.argv",
-        ["carddemo-db2-cli", "--config", str(tmp_path / "c.toml")],
+        [
+            "carddemo-db2-cli",
+            "--config",
+            str(tmp_path / "c.toml"),
+            "--system",
+            str(tmp_path / "system"),
+        ],
     )
 
     with pytest.raises(RuntimeError, match="boom"):

@@ -48,6 +48,7 @@ import pytest
 from cics.dispatcher import InputEvent
 from cics.screen.terminal_screen import TerminalScreen
 from cics.tn3270.config import load_config
+from tests.carddemo_system import installed_carddemo
 from squall.backends.db2 import Db2Backend
 
 from red_dragon_forge.carddemo_db2_region import build_db2_region
@@ -261,7 +262,9 @@ def region(tmp_path_factory):
     patch = pytest.MonkeyPatch()
     patch.setenv("FORGE_ROOT", str(_REPO_ROOT))
     patch.setenv("CARDDEMO_HOME", carddemo_home)
-    config = load_config(_CONFIG)
+    config = load_config(
+        _CONFIG, installed_carddemo(tmp_path_factory.mktemp("carddemo_system"))
+    )
     before_the_region = dict(Builtins.TABLE)
     served, conn = build_db2_region(
         config,

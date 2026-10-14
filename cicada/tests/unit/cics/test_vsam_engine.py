@@ -1,8 +1,8 @@
-"""Unit tests for the VsamEngine CICS adapter over the file-resident drivers.
+"""Unit tests for the VsamEngine CICS adapter over cataloged clusters and paths.
 
-Seeding writes backing ``<NAME>.dat`` files (key-sorted for base KSDS) via
-``seed_records``; the engine opens them. Assertions are on the CICS surface
-(records returned, EIBRESP, browse order) — there is no in-memory store.
+Each CICS file is a cluster or path in a test system catalog; the engine opens
+its file per operation. Assertions are on the CICS surface (records returned,
+EIBRESP, browse order) — there is no in-memory store.
 """
 
 from pathlib import Path
@@ -16,28 +16,9 @@ from cics.vsam.engine import (
     RESP_ENDFILE,
 )
 from cics.vsam.browse import BrowseStart
-from cics.vsam.fct import FctConfig, DatasetConfig
-from cics.vsam.seed import seed_records
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_fct_config_from_yaml():
-    import yaml
-
-    data = yaml.safe_load(
-        "datasets:\n"
-        "  ACCTDAT:\n"
-        "    file: acctdata.dat\n"
-        "    record_length: 300\n"
-        "  CARDDAT:\n"
-        "    file: carddata.dat\n"
-        "    record_length: 150\n"
-    )
-    config = FctConfig.from_dict(data)
-    assert "ACCTDAT" in config.datasets
-    assert config.datasets["ACCTDAT"].record_length == 300
-    assert config.datasets["CARDDAT"].file == "carddata.dat"
-
+from cics.vsam.file_table import cics_files
+from catnip.dataset import Dataset
+from tests.vsam_system import SeedAix, SeedCluster, build_test_system
 
 REC_LEN = 10
 KEY_LEN = 4
@@ -51,32 +32,14 @@ def _rec(key: str, rest: str = "") -> bytes:
 def _engine_with_records(
     tmp_path: Path, records: list[bytes], rec_len: int = REC_LEN
 ) -> VsamEngine:
-    config = FctConfig(
-        datasets={"TESTDS": DatasetConfig(record_length=rec_len, key_length=KEY_LEN)}
-    )
-    vsam_dir = tmp_path / "vsam"
-    seed_records(vsam_dir, config, {"TESTDS": records})
-    engine = VsamEngine(config, vsam_dir)
-    engine.load_all()
-    return engine
+    clusters = (SeedCluster("TESTDS", rec_len, KEY_LEN, tuple(records)),)
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_vsam_engine_loads_dataset(tmp_path: Path) -> None:
-    config = FctConfig(datasets={"TESTDS": DatasetConfig(record_length=30)})
-    vsam_dir = tmp_path / "vsam"
-    seed_records(vsam_dir, config, {"TESTDS": [b"A" * 20 + b"B" * 10]})
-    engine = VsamEngine(config, vsam_dir)
-    engine.load_all()
-    assert engine.dataset_count() == 1
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_vsam_engine_empty_seed_is_ok(tmp_path: Path) -> None:
-    config = FctConfig(datasets={"EMPTY": DatasetConfig(record_length=10)})
-    engine = VsamEngine(config, tmp_path / "vsam")
-    engine.load_all()
-    assert engine.dataset_count() == 1
+def test_a_read_on_an_empty_cluster_is_notfnd(tmp_path: Path) -> None:
+    engine = _engine_with_records(tmp_path, [])
+    assert engine.read("TESTDS", b"AA01", KEY_LEN) == (None, RESP_NOTFND)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -226,24 +189,19 @@ def test_startbr_then_readprev_walks_backwards_to_first(tmp_path: Path):
     assert p4 == RESP_ENDFILE
 
 
-# ── Key-offset / alternate-key linear scan (red-dragon-7kgb) ─────────
-
-
 def _engine_offset(
     tmp_path: Path, records: list[bytes], rec_len: int, key_offset: int, key_length: int
 ) -> VsamEngine:
-    config = FctConfig(
-        datasets={
-            "OFFDS": DatasetConfig(
-                record_length=rec_len, key_offset=key_offset, key_length=key_length
-            )
-        }
+    clusters = (
+        SeedCluster(
+            "OFFBASE",
+            rec_len,
+            16,
+            tuple(records),
+            aix=(SeedAix("OFFDS", key_offset, key_length, False),),
+        ),
     )
-    vsam_dir = tmp_path / "vsam"
-    seed_records(vsam_dir, config, {"OFFDS": records})
-    engine = VsamEngine(config, vsam_dir)
-    engine.load_all()
-    return engine
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -273,26 +231,23 @@ def test_read_default_offset_zero_unchanged(tmp_path: Path):
     assert record is not None and record[:KEY_LEN] == b"AA01"
 
 
-# ── Backing-file is the store (write lands on disk) ──────────────────
-
-
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_write_lands_on_backing_file_and_survives_new_engine(tmp_path: Path) -> None:
-    """A WRITE goes straight to the backing .dat (the file IS the store); a fresh
-    engine over the same vsam_dir reads it back."""
-    config = FctConfig(datasets={"DS": DatasetConfig(record_length=4, key_length=4)})
-    vsam_dir = tmp_path / "vsam"
-    seed_records(vsam_dir, config, {"DS": [b"AAAA"]})
-    eng = VsamEngine(config, vsam_dir)
-    eng.load_all()
+    """A WRITE goes straight to the cluster's file (the file IS the store); a
+    fresh engine over the same system catalog reads it back."""
+    system, dsnames = build_test_system(
+        tmp_path, (SeedCluster("DS", 4, 4, (b"AAAA",)),)
+    )
+    eng = VsamEngine(cics_files(system, dsnames))
     assert eng.write("DS", b"ZZZZ", 4, b"ZZZZ") == RESP_NORMAL
 
     from cics.vsam.format import read_flat_file
 
-    assert read_flat_file(vsam_dir / "DS.dat", 4) == [b"AAAA", b"ZZZZ"]
+    cluster = system.lookup("TEST.DS")
+    assert isinstance(cluster, Dataset)
+    assert read_flat_file(cluster.path, 4) == [b"AAAA", b"ZZZZ"]
 
-    eng2 = VsamEngine(config, vsam_dir)
-    eng2.load_all()
+    eng2 = VsamEngine(cics_files(system, dsnames))
     rec, resp = eng2.read("DS", b"ZZZZ", 4)
     assert resp == RESP_NORMAL and rec == b"ZZZZ"
 

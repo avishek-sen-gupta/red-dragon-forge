@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 from tests.covers import covers, NotLanguageFeature
-from cics.vsam.seed import seed_records
 from cics.vsam.engine import (
     VsamEngine,
     RESP_NORMAL,
@@ -14,7 +12,8 @@ from cics.vsam.engine import (
     RESP_ENDFILE,
 )
 from cics.vsam.browse import BrowseStart
-from cics.vsam.fct import FctConfig, DatasetConfig
+from cics.vsam.file_table import cics_files
+from tests.vsam_system import SeedCluster, build_test_system
 from cics.builtins.vsam import (
     make_vsam_read_builtin,
     make_vsam_write_builtin,
@@ -42,15 +41,9 @@ def _rec(key: str, rest: str = "") -> bytes:
     return (key.ljust(KEY_LEN)[:KEY_LEN] + body).encode()
 
 
-def _engine_with_records(records: list[bytes]) -> VsamEngine:
-    config = FctConfig(
-        datasets={"TESTDS": DatasetConfig(record_length=REC_LEN, key_length=KEY_LEN)}
-    )
-    vsam_dir = Path(tempfile.mkdtemp()) / "vsam"
-    seed_records(vsam_dir, config, {"TESTDS": records})
-    engine = VsamEngine(config, vsam_dir)
-    engine.load_all()
-    return engine
+def _engine_with_records(tmp_path: Path, records: list[bytes]) -> VsamEngine:
+    clusters = (SeedCluster("TESTDS", REC_LEN, KEY_LEN, tuple(records)),)
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _make_vm_with_ws_region(region_bytes: bytearray) -> tuple[VMState, Address]:
@@ -70,9 +63,9 @@ def _args(*vals):
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_write_then_read_round_trip_fills_buffer():
+def test_write_then_read_round_trip_fills_buffer(tmp_path: Path):
     """WRITE stores a record; READ writes it into the INTO buffer at the offset."""
-    engine = _engine_with_records([])
+    engine = _engine_with_records(tmp_path, [])
     write = make_vsam_write_builtin(engine)
     read = make_vsam_read_builtin(engine)
     record = _rec("AA01", "HELLO")
@@ -93,8 +86,8 @@ def test_write_then_read_round_trip_fills_buffer():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_read_not_found_returns_notfnd_and_does_not_write_buffer():
-    engine = _engine_with_records([_rec("AA01", "DATA")])
+def test_read_not_found_returns_notfnd_and_does_not_write_buffer(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
     read = make_vsam_read_builtin(engine)
     vm, addr = _make_vm_with_ws_region(bytearray(32))
     rresult = read(_args("TESTDS", b"ZZ99", KEY_LEN, 4, REC_LEN), vm)
@@ -106,8 +99,8 @@ def test_read_not_found_returns_notfnd_and_does_not_write_buffer():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_delete_removes_record():
-    engine = _engine_with_records([_rec("AA01", "DATA")])
+def test_delete_removes_record(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
     delete = make_vsam_delete_builtin(engine)
     read = make_vsam_read_builtin(engine)
     dresult = delete(_args("TESTDS", b"AA01", KEY_LEN), VMState())
@@ -118,8 +111,8 @@ def test_delete_removes_record():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_rewrite_updates_record():
-    engine = _engine_with_records([_rec("AA01", "OLD")])
+def test_rewrite_updates_record(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01", "OLD")])
     rewrite = make_vsam_rewrite_builtin(engine)
     read = make_vsam_read_builtin(engine)
     rwresult = rewrite(
@@ -134,9 +127,9 @@ def test_rewrite_updates_record():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_read_no_ws_region_still_returns_resp():
+def test_read_no_ws_region_still_returns_resp(tmp_path: Path):
     """No __ws_region in VM: buffer write is skipped but resp still returned."""
-    engine = _engine_with_records([_rec("AA01", "DATA")])
+    engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
     read = make_vsam_read_builtin(engine)
     rresult = read(_args("TESTDS", b"AA01", KEY_LEN, 4, REC_LEN), VMState())
     assert rresult.value == RESP_NORMAL
@@ -146,11 +139,11 @@ def test_read_no_ws_region_still_returns_resp():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_browse_forward_fills_buffer_in_key_order():
+def test_browse_forward_fills_buffer_in_key_order(tmp_path: Path):
     """STARTBR then READNEXT twice fills the INTO buffer with successive records."""
     rec_a = _rec("AA01", "ALPHA")
     rec_b = _rec("BB02", "BRAVO")
-    engine = _engine_with_records([rec_b, rec_a])  # written out of order
+    engine = _engine_with_records(tmp_path, [rec_b, rec_a])  # written out of order
     startbr = make_vsam_startbr_builtin(engine)
     readnext = make_vsam_readnext_builtin(engine)
 
@@ -174,8 +167,8 @@ def test_browse_forward_fills_buffer_in_key_order():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_readnext_past_end_returns_endfile():
-    engine = _engine_with_records([_rec("AA01", "ONE")])
+def test_readnext_past_end_returns_endfile(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01", "ONE")])
     startbr = make_vsam_startbr_builtin(engine)
     readnext = make_vsam_readnext_builtin(engine)
     startbr(_args("TESTDS", b"\x00" * KEY_LEN, KEY_LEN), VMState())
@@ -187,12 +180,12 @@ def test_readnext_past_end_returns_endfile():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_readprev_after_stepping_forward_returns_prior_record():
+def test_readprev_after_stepping_forward_returns_prior_record(tmp_path: Path):
     """READNEXT A, READNEXT B, then READPREV: the direction switch re-reads B
     (CICS semantics); a further READPREV returns the prior record A."""
     rec_a = _rec("AA01", "ALPHA")
     rec_b = _rec("BB02", "BRAVO")
-    engine = _engine_with_records([rec_a, rec_b])
+    engine = _engine_with_records(tmp_path, [rec_a, rec_b])
     startbr = make_vsam_startbr_builtin(engine)
     readnext = make_vsam_readnext_builtin(engine)
     readprev = make_vsam_readprev_builtin(engine)
@@ -213,8 +206,8 @@ def test_readprev_after_stepping_forward_returns_prior_record():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_endbr_returns_normal():
-    engine = _engine_with_records([_rec("AA01", "ONE")])
+def test_endbr_returns_normal(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01", "ONE")])
     startbr = make_vsam_startbr_builtin(engine)
     endbr = make_vsam_endbr_builtin(engine)
     startbr(_args("TESTDS", b"\x00" * KEY_LEN, KEY_LEN), VMState())
@@ -299,7 +292,7 @@ def _make_strategy():
     from cics.strategy import CicsLoweringStrategy
     from cics.types import CicsContext
 
-    engine = _engine_with_records([])
+    engine = VsamEngine({})
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     return CicsLoweringStrategy(
         transid_to_program={},
@@ -476,8 +469,8 @@ def test_lower_endbr_emits_call_with_one_arg():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_startbr_equal_on_absent_key_returns_notfnd():
-    engine = _engine_with_records([_rec("AA01"), _rec("CC03")])
+def test_startbr_equal_on_absent_key_returns_notfnd(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
     startbr = make_vsam_startbr_builtin(engine)
 
     result = startbr(
@@ -488,8 +481,8 @@ def test_startbr_equal_on_absent_key_returns_notfnd():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_startbr_without_a_mode_argument_browses_gteq():
-    engine = _engine_with_records([_rec("AA01"), _rec("CC03")])
+def test_startbr_without_a_mode_argument_browses_gteq(tmp_path: Path):
+    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
     startbr = make_vsam_startbr_builtin(engine)
 
     result = startbr(_args("TESTDS", b"BB02", KEY_LEN), VMState())

@@ -1,7 +1,7 @@
-"""Copybook-driven decoder/dumper for VSAM flat-file dataset images.
+"""Copybook-driven decoder/dumper for cataloged VSAM datasets.
 
-Reads a fixed-length-record flat file (see interpreter/cics/vsam/format.py) and
-decodes each record field-by-field using a COBOL record layout parsed from a
+Reads a cataloged dataset's fixed-length-record file (see cics/vsam/format.py)
+and decodes each record field-by-field using a COBOL record layout parsed from a
 copybook, emitting JSON-lines (default) or a human-readable block format.
 
 Pure orchestration over existing primitives: build_data_layout (copybook ->
@@ -10,7 +10,7 @@ DataLayout) and the COBOL pure decoders. No new decode logic, no new format.
 CLI entrypoint::
 
     python -m cics.vsam.dump \\
-        --data <flat-file> --copybook <copybook> \\
+        --system <system-dir> --dsn <dsn> --copybook <copybook> \\
         [--record NAME] [--format jsonl|block] [--jar PATH]
 
 ``--jar`` defaults to ``$PROLEAP_BRIDGE_JAR`` when the env var is set.
@@ -24,6 +24,8 @@ import os
 import sys
 from pathlib import Path
 
+from catnip.dataset import Dataset
+from catnip.system_catalog import NotCataloged, SystemCatalog
 from cics.vsam.format import read_flat_file
 from interpreter.cobol.binary import decode_binary
 from interpreter.cobol.comp3 import decode_comp3
@@ -236,12 +238,13 @@ def _block_lines(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: parse args, decode the flat file via the copybook, write to stdout. Returns an exit code."""
+    """CLI entry point: parse args, decode the cataloged dataset via the copybook, write to stdout. Returns an exit code."""
     parser = argparse.ArgumentParser(
         prog="python -m cics.vsam.dump",
-        description="Decode a VSAM flat-file dataset via a COBOL copybook.",
+        description="Decode a cataloged VSAM dataset via a COBOL copybook.",
     )
-    parser.add_argument("--data", required=True, type=Path, help="flat-file .dat path")
+    parser.add_argument("--system", required=True, type=Path, help="system directory")
+    parser.add_argument("--dsn", required=True, help="cataloged dataset name")
     parser.add_argument("--copybook", required=True, type=Path, help="record copybook")
     parser.add_argument(
         "--record", default=None, help="01-level record name (if multiple)"
@@ -259,7 +262,11 @@ def main(argv: list[str] | None = None) -> int:
 
     layout = load_record_layout(args.copybook, args.record, args.jar, args.copybook_dir)
     record_length = layout.total_bytes
-    records = read_flat_file(args.data, record_length)
+    match SystemCatalog(args.system).lookup(args.dsn):
+        case Dataset(path=path):
+            records = read_flat_file(path, record_length)
+        case NotCataloged():
+            parser.error(f"{args.dsn} is not cataloged in {args.system}")
     renderer = render_jsonl if args.format == "jsonl" else render_block
     sys.stdout.write(renderer(layout, records))
     return 0

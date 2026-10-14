@@ -24,11 +24,10 @@ from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import FctConfig
-from cics.vsam.format import write_flat_file
-from cics.vsam.seed import seed_vsam
+from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
+from tests.vsam_system import SeedAix, SeedCluster, build_test_system
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
 from tests.integration.cobol_helpers import bridge_jar
@@ -144,52 +143,25 @@ def _cust_record() -> bytes:
     return rec.ljust(_CUST_RECLN, b"\x40")[:_CUST_RECLN]
 
 
-def _write_seed_files(data_dir: Path) -> None:
-    data_dir.mkdir(parents=True, exist_ok=True)
-    write_flat_file(
-        data_dir / "USRSEC.dat",
-        [_usrsec_record(_USER_ID, "First1", "Last1", _USER_PWD, "U")],
-        _USRSEC_RECLN,
-    )
-    write_flat_file(data_dir / "ACCTDAT.dat", [_acct_record()], _ACCT_RECLN)
-    write_flat_file(data_dir / "CXACAIX.dat", [_xref_record()], _XREF_RECLN)
-    write_flat_file(data_dir / "CUSTDAT.dat", [_cust_record()], _CUST_RECLN)
-
-
-_FCT_YAML = """\
-datasets:
-  USRSEC:
-    record_length: 80
-    file: USRSEC.dat
-    key_length: 8
-  ACCTDAT:
-    record_length: 300
-    file: ACCTDAT.dat
-    key_length: 11
-  CXACAIX:
-    record_length: 50
-    file: CXACAIX.dat
-    key_length: 11
-    key_offset: 25
-  CUSTDAT:
-    record_length: 500
-    file: CUSTDAT.dat
-    key_length: 9
-"""
-
-
 def _make_engine(tmp_path: Path) -> VsamEngine:
-    data_dir = tmp_path / "data"
-    fct_path = tmp_path / "fct.yaml"
-    _write_seed_files(data_dir)
-    fct_path.write_text(_FCT_YAML)
-
-    fct = FctConfig.from_yaml(fct_path)
-    vsam_dir = tmp_path / "vsam"
-    seed_vsam(fct_path, data_dir, vsam_dir)
-    engine = VsamEngine(fct, vsam_dir)
-    engine.load_all()
-    return engine
+    clusters = (
+        SeedCluster(
+            "USRSEC",
+            80,
+            8,
+            (_usrsec_record(_USER_ID, "First1", "Last1", _USER_PWD, "U"),),
+        ),
+        SeedCluster("ACCTDAT", 300, 11, (_acct_record(),)),
+        SeedCluster(
+            "CCXREF",
+            50,
+            16,
+            (_xref_record(),),
+            aix=(SeedAix("CXACAIX", 25, 11, False),),
+        ),
+        SeedCluster("CUSTDAT", 500, 9, (_cust_record(),)),
+    )
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _drive_to_account_view(tmp_path: Path, bridge_jar):

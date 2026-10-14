@@ -23,8 +23,9 @@ from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import FctConfig, DatasetConfig
+from cics.vsam.file_table import cics_files
 from tests.covers import covers
+from tests.vsam_system import SeedCluster, build_test_system
 from tests.integration.cobol_helpers import bridge_jar
 
 _CICS_COPYBOOKS = Path(__file__).parents[3] / "cics" / "copybooks"
@@ -82,13 +83,9 @@ COBOL_BROWSE = """\
 """
 
 
-def _engine() -> VsamEngine:
-    import tempfile
-
-    config = FctConfig(datasets={"TESTDS": DatasetConfig(record_length=10)})
-    engine = VsamEngine(config, Path(tempfile.mkdtemp()) / "vsam")
-    engine.load_all()
-    return engine
+def _engine(tmp_path: Path) -> VsamEngine:
+    clusters = (SeedCluster("TESTDS", 10, 4, ()),)
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _link_single_cobol(source: bytes, frontend: CobolFrontend, program_id: str):
@@ -123,7 +120,7 @@ def _link_single_cobol(source: bytes, frontend: CobolFrontend, program_id: str):
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_vsam_browse_forward_round_trips(cobol_parser):
+def test_vsam_browse_forward_round_trips(cobol_parser, tmp_path):
     """STARTBR + two READNEXTs walk records in key order; 2nd record body reaches COMMAREA."""
     import queue
 
@@ -134,7 +131,7 @@ def test_vsam_browse_forward_round_trips(cobol_parser):
         program_cache={},
         context_holder=context_holder,
         result_holder=result_holder,
-        vsam_engine=_engine(),
+        vsam_engine=_engine(tmp_path),
         handler_source=[],
         unsupported_verbs=set(),
     )

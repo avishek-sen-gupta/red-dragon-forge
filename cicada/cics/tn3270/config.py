@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
-from cics.vsam.fct import DatasetConfig
-
 TomlValue = str | int | list[str] | Mapping[str, str | int]
 
 
@@ -25,31 +23,22 @@ def _path(raw: str) -> Path:
     return Path(expanded).expanduser()
 
 
-def _dataset(raw: Mapping[str, str | int]) -> DatasetConfig:
-    return DatasetConfig(
-        record_length=int(raw["record_length"]),
-        file=str(raw["file"]),
-        key_offset=int(raw.get("key_offset", 0)),
-        key_length=int(raw.get("key_length", 0)),
-    )
-
-
 @dataclass(frozen=True)
 class RegionConfig:
     source_dirs: tuple[Path, ...]
     copybook_dirs: tuple[Path, ...]
     bms_dirs: tuple[Path, ...]
-    data_dir: Path
     hlasm_export: Path
     initial_transid: str
     min_commarea_len: int
     transactions: Mapping[str, str]
     programs: frozenset[str]
-    datasets: Mapping[str, DatasetConfig]
+    system: Path
+    csd_files: tuple[Path, ...]
     copybook_exts: tuple[str, ...] = ()
 
 
-def load_config(path: Path) -> RegionConfig:
+def load_config(path: Path, system: Path) -> RegionConfig:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     paths, region = raw["paths"], raw["region"]
     transactions = MappingProxyType(dict(raw["transactions"]))
@@ -57,15 +46,13 @@ def load_config(path: Path) -> RegionConfig:
         source_dirs=tuple(_path(p) for p in paths["source_dirs"]),
         copybook_dirs=tuple(_path(p) for p in paths["copybook_dirs"]),
         bms_dirs=tuple(_path(p) for p in paths["bms_dirs"]),
-        data_dir=_path(paths["data_dir"]),
         hlasm_export=_path(paths["hlasm_export"]),
         initial_transid=region.get("initial_transid", ""),
         min_commarea_len=int(region.get("min_commarea_len", 0)),
         transactions=transactions,
         programs=frozenset((*transactions.values(), *region.get("programs", ()))),
-        datasets=MappingProxyType(
-            {name.upper(): _dataset(d) for name, d in raw["datasets"].items()}
-        ),
+        system=system,
+        csd_files=tuple(_path(p) for p in paths["csd_files"]),
         copybook_exts=tuple(paths.get("copybook_exts", ())),
     )
 

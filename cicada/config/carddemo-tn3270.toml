@@ -7,8 +7,8 @@ programs = ["COACTVWC"]
 source_dirs = ["${CARDDEMO_HOME}/cbl"]
 copybook_dirs = ["${CARDDEMO_HOME}/cpy", "${CARDDEMO_HOME}/cpy-bms"]
 bms_dirs = ["${CARDDEMO_HOME}/bms"]
-data_dir = "${CARDDEMO_HOME}/data/EBCDIC"
 hlasm_export = "${FORGE_ROOT}/cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"
+csd_files = ["${CARDDEMO_HOME}/csd/CARDDEMO.CSD"]
 
 [transactions]
 CC00 = "COSGN00C"
@@ -27,52 +27,3 @@ CCDL = "COCRDSLC"
 CT00 = "COTRN00C"
 CT01 = "COTRN01C"
 CU00 = "COUSR00C"
-
-[datasets.USRSEC]
-file = "AWS.M2.CARDDEMO.USRSEC.PS"
-record_length = 80
-key_length = 8
-
-[datasets.ACCTDAT]
-file = "AWS.M2.CARDDEMO.ACCTDATA.PS"
-record_length = 300
-key_length = 11
-
-[datasets.CUSTDAT]
-file = "AWS.M2.CARDDEMO.CUSTDATA.PS"
-record_length = 500
-key_length = 9
-
-[datasets.CXACAIX]
-file = "AWS.M2.CARDDEMO.CARDXREF.PS"
-record_length = 50
-key_offset = 25
-key_length = 11
-
-[datasets.CARDDAT]
-file = "AWS.M2.CARDDEMO.CARDDATA.PS"
-record_length = 150
-key_offset = 0
-key_length = 16
-
-[datasets.CCXREF]
-file = "AWS.M2.CARDDEMO.CARDXREF.PS"
-record_length = 50
-key_offset = 0
-key_length = 16
-
-[datasets.CARDAIX]
-file = "AWS.M2.CARDDEMO.CARDDATA.PS"
-record_length = 150
-key_offset = 16
-key_length = 11
-
-# COTRN02C (add transaction) needs a keyed TRANSACT dataset but CardDemo ships
-# no TRANSACT.PS; AWS.M2.CARDDEMO.DALYTRAN.PS is layout-compatible (350-byte
-# records, 16-byte id at offset 0) and gives read/lookup flows real records to
-# find, while writes land in each test's tmp vsam dir untouched by re-seeding.
-[datasets.TRANSACT]
-file = "AWS.M2.CARDDEMO.DALYTRAN.PS"
-record_length = 350
-key_offset = 0
-key_length = 16

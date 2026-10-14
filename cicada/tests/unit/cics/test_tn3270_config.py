@@ -19,26 +19,23 @@ programs = ["COACTVWC"]
 source_dirs = ["${APP}/cbl"]
 copybook_dirs = ["${APP}/cpy"]
 bms_dirs = ["${APP}/bms"]
-data_dir = "${APP}/data/EBCDIC"
 hlasm_export = "/bin/hlasm_export"
+csd_files = ["${APP}/csd/CARDDEMO.CSD"]
 [transactions]
 CC00 = "COSGN00C"
-[datasets.usrsec]
-file = "AWS.M2.CARDDEMO.USRSEC.PS"
-record_length = 80
-key_length = 8
 """
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_loads_paths_programs_and_datasets(tmp_path, monkeypatch):
+def test_loads_paths_programs_csd_files_and_system(tmp_path, monkeypatch):
     monkeypatch.setenv("APP", "/carddemo")
     path = tmp_path / "c.toml"
     path.write_text(_TOML)
-    config = load_config(path)
+    config = load_config(path, tmp_path / "system")
     assert tuple(str(d) for d in config.source_dirs) == ("/carddemo/cbl",)
     assert config.programs == frozenset({"COSGN00C", "COACTVWC"})
-    assert config.datasets["USRSEC"].key_length == 8
+    assert config.csd_files == (Path("/carddemo/csd/CARDDEMO.CSD"),)
+    assert config.system == tmp_path / "system"
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -47,7 +44,7 @@ def test_unset_variable_is_loud(tmp_path, monkeypatch):
     path = tmp_path / "c.toml"
     path.write_text(_TOML)
     with pytest.raises(ConfigError, match="APP"):
-        load_config(path)
+        load_config(path, tmp_path / "system")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -57,7 +54,7 @@ def test_default_copybook_exts_is_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("APP", "/carddemo")
     path = tmp_path / "c.toml"
     path.write_text(_TOML)
-    assert load_config(path).copybook_exts == ()
+    assert load_config(path, tmp_path / "system").copybook_exts == ()
 
 
 def _config(*source_dirs: str) -> RegionConfig:
@@ -65,13 +62,13 @@ def _config(*source_dirs: str) -> RegionConfig:
         source_dirs=tuple(Path(d) for d in source_dirs),
         copybook_dirs=(),
         bms_dirs=(),
-        data_dir=None,  # type: ignore[arg-type]
         hlasm_export=None,  # type: ignore[arg-type]
         initial_transid="",
         min_commarea_len=0,
         transactions={},
         programs=frozenset(),
-        datasets={},
+        system=Path("/system"),
+        csd_files=(),
     )
 
 

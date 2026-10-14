@@ -28,10 +28,9 @@ from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import FctConfig
-from cics.vsam.format import write_flat_file
-from cics.vsam.seed import seed_vsam
+from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
+from tests.vsam_system import SeedCluster, build_test_system
 from tests.covers import covers
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
@@ -60,31 +59,13 @@ def _zbnk_record(acct: str, pin: str, balance: str) -> bytes:
     return rec[:_ZBNK_RECLN]
 
 
-_FCT_YAML = """\
-datasets:
-  VSAMZBNK:
-    record_length: 30
-    file: VSAMZBNK.dat
-    key_length: 10
-"""
-
-
 def _make_engine(tmp_path: Path) -> VsamEngine:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    write_flat_file(
-        data_dir / "VSAMZBNK.dat",
-        [_zbnk_record(_ACCT, _PIN, _BALANCE)],
-        _ZBNK_RECLN,
+    clusters = (
+        SeedCluster(
+            "VSAMZBNK", _ZBNK_RECLN, 10, (_zbnk_record(_ACCT, _PIN, _BALANCE),)
+        ),
     )
-    fct_path = tmp_path / "fct.yaml"
-    fct_path.write_text(_FCT_YAML)
-    fct = FctConfig.from_yaml(fct_path)
-    vsam_dir = tmp_path / "vsam"
-    seed_vsam(fct_path, data_dir, vsam_dir)
-    engine = VsamEngine(fct, vsam_dir)
-    engine.load_all()
-    return engine
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):

@@ -10,18 +10,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from catnip.system_catalog import SystemCatalog
 from cics.bms.catalog import MapCatalog, load_catalog
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.cell import fill
 from cics.coprocessor import build_cics_spec
+from cics.csd_parse import parse_csd_files
 from cics.dispatcher import CicsRegion
 from cics.interval import StartQueue
 from cics.screen.driver import PseudoConversationalDriver
 from cics.tn3270.config import RegionConfig, resolve_program_source
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import FctConfig
-from cics.vsam.format import read_flat_file
-from cics.vsam.seed import seed_records
+from cics.vsam.file_table import cics_files
 
 if TYPE_CHECKING:
     from cobol_asg.cobol_parser import ProLeapCobolParser
@@ -39,16 +39,16 @@ class ServedRegion:
     vsam_engine: VsamEngine
 
 
-def _vsam_engine(config: RegionConfig, vsam_dir: Path) -> VsamEngine:
-    fct = FctConfig(datasets=dict(config.datasets))
-    records = {
-        name: read_flat_file(config.data_dir / ds.file, ds.record_length)
-        for name, ds in fct.datasets.items()
+def _dsnames(csd_files: Sequence[Path]) -> dict[str, str]:
+    return {
+        name: dsn for csd in csd_files for name, dsn in parse_csd_files(csd).items()
     }
-    seed_records(vsam_dir, fct, records)
-    engine = VsamEngine(fct, vsam_dir)
-    engine.load_all()
-    return engine
+
+
+def _vsam_engine(config: RegionConfig) -> VsamEngine:
+    return VsamEngine(
+        cics_files(SystemCatalog(config.system), _dsnames(config.csd_files))
+    )
 
 
 @dataclass(frozen=True)
@@ -175,7 +175,7 @@ def build_region(
     on_abend: Callable[[], None] = _region_noop,
 ) -> ServedRegion:
     wiring = _wiring()
-    vsam_engine = _vsam_engine(config, work_dir / "vsam")
+    vsam_engine = _vsam_engine(config)
     program_cache: dict[str, LinkedProgram] = {}
     spec = build_cics_spec(
         start_queue=wiring.start_queue,

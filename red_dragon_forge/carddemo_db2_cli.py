@@ -3,7 +3,9 @@
 . ./carddemo-env.sh
 . tests/integration/db2_env.sh
 uv run carddemo-db2-seed          # once, to create and seed the schema
-uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
+uv run catnip install config/carddemo/data.toml --system /tmp/carddemo-system
+uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml \
+    --system /tmp/carddemo-system --port 3271
 c3270 -model 3279-2-E localhost:3271   # 3279 + -E, or you get monochrome
 """
 
@@ -38,6 +40,7 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--system", required=True, type=Path)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=3270)
     return parser.parse_args(argv)
@@ -127,7 +130,7 @@ def main() -> int:
     )
     args = _arguments(sys.argv[1:])
     dsn = _dsn()
-    config = load_config(args.config)
+    config = load_config(args.config, args.system)
     _require_schema(dsn)
     with tempfile.TemporaryDirectory(prefix="carddemo-db2-tn3270-") as work_dir:
         _serve(

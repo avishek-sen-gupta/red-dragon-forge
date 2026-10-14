@@ -2,8 +2,8 @@
 
     uv run --no-sync python docs/presentation/capture/cics_flow.py
 
-Compiles the unmodified CardDemo programs, seeds VSAM from CardDemo's shipped
-EBCDIC data files, drives the region one turn at a time with scripted terminal
+Compiles the unmodified CardDemo programs, catalogs clusters loaded from
+CardDemo's shipped EBCDIC data files, drives the region one turn at a time with scripted terminal
 input, and writes every SEND MAP payload unchanged to
 docs/presentation/artifacts/cics/NN-<map>.json plus a per-turn turns.jsonl.
 Exits non-zero if the flow stops before the script is exhausted.
@@ -24,6 +24,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from catnip.alternate_index import AlternateIndex
+from catnip.catalog_path import CatalogPath
+from catnip.dataset import Dataset
+from catnip.labels import KsdsLabel
+from catnip.system_catalog import SystemCatalog
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
@@ -32,9 +37,8 @@ from cics.interval import StartQueue
 from cics.types import DispatchKind, DispatchResult
 from cics.vsam.browse import BrowseStart
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import DatasetConfig, FctConfig
+from cics.vsam.file_table import cics_files
 from cics.vsam.format import read_flat_file
-from cics.vsam.seed import seed_records
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from interpreter.project.types import LinkedProgram
 
@@ -74,28 +78,34 @@ ENTRY_TRANSID = "CC00"
 
 
 @dataclass(frozen=True)
-class Dataset:
-    """A CICS FILE's CardDemo EBCDIC source and its record geometry.
-
-    CICS names the record identifier a RIDFLD; ``rid_offset``/``rid_length`` locate
-    it inside each record.
-    """
+class Cluster:
+    """A CICS FILE's CardDemo EBCDIC source and its record geometry, keyed at offset 0."""
 
     source: str
     record_length: int
-    rid_offset: int
-    rid_length: int
+    key_length: int
+
+
+@dataclass(frozen=True)
+class AlternateKey:
+    """A CICS FILE read through a path over another file's cluster, by the key at this position."""
+
+    base: str
+    key_offset: int
+    key_length: int
 
 
 # Geometry follows the copybooks CSUSR01Y, CVACT01Y, CVCUS01Y, CVACT03Y, CVACT02Y.
-DATASETS = {
-    "USRSEC": Dataset("AWS.M2.CARDDEMO.USRSEC.PS", 80, 0, 8),
-    "ACCTDAT": Dataset("AWS.M2.CARDDEMO.ACCTDATA.PS", 300, 0, 11),
-    "CUSTDAT": Dataset("AWS.M2.CARDDEMO.CUSTDATA.PS", 500, 0, 9),
-    "CCXREF": Dataset("AWS.M2.CARDDEMO.CARDXREF.PS", 50, 0, 16),
-    "CXACAIX": Dataset("AWS.M2.CARDDEMO.CARDXREF.PS", 50, 25, 11),
-    "CARDDAT": Dataset("AWS.M2.CARDDEMO.CARDDATA.PS", 150, 0, 16),
-    "CARDAIX": Dataset("AWS.M2.CARDDEMO.CARDDATA.PS", 150, 16, 11),
+CLUSTERS = {
+    "USRSEC": Cluster("AWS.M2.CARDDEMO.USRSEC.PS", 80, 8),
+    "ACCTDAT": Cluster("AWS.M2.CARDDEMO.ACCTDATA.PS", 300, 11),
+    "CUSTDAT": Cluster("AWS.M2.CARDDEMO.CUSTDATA.PS", 500, 9),
+    "CCXREF": Cluster("AWS.M2.CARDDEMO.CARDXREF.PS", 50, 16),
+    "CARDDAT": Cluster("AWS.M2.CARDDEMO.CARDDATA.PS", 150, 16),
+}
+PATHS = {
+    "CXACAIX": AlternateKey("CCXREF", 25, 11),
+    "CARDAIX": AlternateKey("CARDDAT", 16, 11),
 }
 
 PROGRAMS = {
@@ -136,7 +146,7 @@ def signon_fields() -> tuple[str, ...]:
 
 def signon_value(user: str) -> str:
     """The user's sign-on field as shipped in CardDemo's USRSEC data."""
-    usrsec = DATASETS["USRSEC"]
+    usrsec = CLUSTERS["USRSEC"]
     rows = (
         record.decode("cp037")
         for record in read_flat_file(EBCDIC / usrsec.source, usrsec.record_length)
@@ -190,8 +200,8 @@ def browse_entry(op: str, file_name: str, resp: int) -> dict[str, str | int]:
 class RecordingVsamEngine(VsamEngine):
     """Journals every file-control call the CICS builtins make onto a queue."""
 
-    def __init__(self, config: FctConfig, vsam_dir: Path, journal: queue.Queue) -> None:
-        super().__init__(config, vsam_dir)
+    def __init__(self, files: Mapping[str, Dataset], journal: queue.Queue) -> None:
+        super().__init__(files)
         self._journal = journal
 
     def read(self, file_name: str, rid: bytes, rid_len: int):
@@ -236,26 +246,32 @@ class RecordingVsamEngine(VsamEngine):
         return resp
 
 
-def seeded_engine(vsam_dir: Path, journal: queue.Queue) -> RecordingVsamEngine:
-    fct = FctConfig(
-        datasets={
-            name: DatasetConfig(
-                ds.record_length, ds.source, ds.rid_offset, ds.rid_length
-            )
-            for name, ds in DATASETS.items()
-        }
+def cluster_dsn(system: SystemCatalog, name: str, cluster: Cluster) -> str:
+    dsn = f"CAPTURE.{name}"
+    records = read_flat_file(EBCDIC / cluster.source, cluster.record_length)
+    ordered = sorted(records, key=lambda record: record[: cluster.key_length])
+    label = KsdsLabel(cluster.record_length, 0, cluster.key_length)
+    system.create(dsn, label).path.write_bytes(b"".join(ordered))
+    return dsn
+
+
+def path_dsn(system: SystemCatalog, base: str, key: AlternateKey) -> str:
+    system.define_aix(
+        AlternateIndex(f"{base}.AIX", base, key.key_offset, key.key_length, False)
     )
-    seed_records(
-        vsam_dir,
-        fct,
-        {
-            name: read_flat_file(EBCDIC / ds.source, ds.record_length)
-            for name, ds in DATASETS.items()
-        },
-    )
-    engine = RecordingVsamEngine(fct, vsam_dir, journal)
-    engine.load_all()
-    return engine
+    system.define_path(CatalogPath(f"{base}.PATH", f"{base}.AIX"))
+    return f"{base}.PATH"
+
+
+def seeded_engine(root: Path, journal: queue.Queue) -> RecordingVsamEngine:
+    system = SystemCatalog(root)
+    clusters = {
+        name: cluster_dsn(system, name, cluster) for name, cluster in CLUSTERS.items()
+    }
+    paths = {
+        name: path_dsn(system, clusters[key.base], key) for name, key in PATHS.items()
+    }
+    return RecordingVsamEngine(cics_files(system, {**clusters, **paths}), journal)
 
 
 def drain(channel: queue.Queue) -> list:
@@ -350,7 +366,7 @@ def main() -> int:
         )
         journal: queue.Queue = queue.Queue()
         return run_region(
-            cobol_parser(tmp / "sym"), seeded_engine(tmp / "vsam", journal), journal
+            cobol_parser(tmp / "sym"), seeded_engine(tmp / "system", journal), journal
         )
 
 

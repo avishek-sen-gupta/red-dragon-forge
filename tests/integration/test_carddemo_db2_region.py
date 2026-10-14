@@ -30,7 +30,7 @@ _CONFIG = _REPO_ROOT / "cicada" / "config" / "carddemo-db2-tn3270.toml"
 
 @pytest.mark.usefixtures("carddemo_db2_schema")
 def test_all_nineteen_bms_maps_reach_one_catalog(
-    tmp_path, bridge_jar, db2_dsn, carddemo_home, monkeypatch
+    tmp_path, bridge_jar, db2_dsn, carddemo_home, monkeypatch, carddemo_system
 ):
     """Verified by execution. The main tree's 17 .bms files and the Db2
     tree's 2 are disjoint mapsets, so a correct first-hit-wins merge across
@@ -38,7 +38,7 @@ def test_all_nineteen_bms_maps_reach_one_catalog(
     dropped the second bms_dirs entry would instead produce 17."""
     monkeypatch.setenv("FORGE_ROOT", str(_REPO_ROOT))
     monkeypatch.setenv("CARDDEMO_HOME", str(carddemo_home))
-    config = load_config(_CONFIG)
+    config = load_config(_CONFIG, carddemo_system)
 
     # Safe to close: the _reset_builtins_table autouse fixture (conftest.py)
     # restores RedDragon's process-wide Builtins.TABLE after this test, so a

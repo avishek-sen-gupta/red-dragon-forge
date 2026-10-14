@@ -10,7 +10,7 @@ admin menu COADM01C (not the regular COMEN01C), then lists users from USRSEC.
   Turn 4 (COUSR00C, first display): STARTBR USRSEC from LOW-VALUES ->
       READNEXT x N -> SEND MAP COUSR0A -> RETURN TRANSID CU00.
 
-VSAM engine seeded via FctConfig.from_yaml + seed_vsam (USRSEC only).
+Files are clusters in a test system catalog (USRSEC only).
 """
 
 from __future__ import annotations
@@ -28,11 +28,10 @@ from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
 from cics.vsam.engine import VsamEngine
-from cics.vsam.fct import FctConfig
-from cics.vsam.format import write_flat_file
-from cics.vsam.seed import seed_vsam
+from cics.vsam.file_table import cics_files
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
+from tests.vsam_system import SeedCluster, build_test_system
 from tests.integration.cics.bms_tools_helpers import HLASM_EXPORT_BIN
 from tests.integration.cics.channel_drain import drain
 from tests.integration.cobol_helpers import bridge_jar
@@ -80,38 +79,25 @@ def _usrsec_record(uid: str, fname: str, lname: str, pwd: str, utype: str) -> by
     return rec.ljust(_USRSEC_RECLN, b"\x40")[:_USRSEC_RECLN]
 
 
-def _write_seed_files(data_dir: Path) -> None:
-    data_dir.mkdir(parents=True, exist_ok=True)
-    records = [
-        _usrsec_record(
-            uid, fname, lname, _ADMIN_PWD if uid == _ADMIN_ID else "PASS0001", utype
-        )
-        for (uid, fname, lname, utype) in _USERS
-    ]
-    write_flat_file(data_dir / "USRSEC.dat", records, _USRSEC_RECLN)
-
-
-_FCT_YAML = """\
-datasets:
-  USRSEC:
-    record_length: 80
-    file: USRSEC.dat
-    key_length: 8
-"""
-
-
 def _user_list_engine(tmp_path: Path) -> VsamEngine:
-    data_dir = tmp_path / "data"
-    fct_path = tmp_path / "fct.yaml"
-    _write_seed_files(data_dir)
-    fct_path.write_text(_FCT_YAML)
-
-    fct = FctConfig.from_yaml(fct_path)
-    vsam_dir = tmp_path / "vsam"
-    seed_vsam(fct_path, data_dir, vsam_dir)
-    engine = VsamEngine(fct, vsam_dir)
-    engine.load_all()
-    return engine
+    clusters = (
+        SeedCluster(
+            "USRSEC",
+            80,
+            8,
+            tuple(
+                _usrsec_record(
+                    uid,
+                    fname,
+                    lname,
+                    _ADMIN_PWD if uid == _ADMIN_ID else "PASS0001",
+                    utype,
+                )
+                for (uid, fname, lname, utype) in _USERS
+            ),
+        ),
+    )
+    return VsamEngine(cics_files(*build_test_system(tmp_path, clusters)))
 
 
 def _drive_to_user_list(tmp_path: Path, bridge_jar):
