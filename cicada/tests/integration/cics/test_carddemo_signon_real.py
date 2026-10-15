@@ -39,6 +39,7 @@ from pathlib import Path
 import pytest
 
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.types import DispatchKind
 from cics.interval import StartQueue
 from cics.dispatcher import InputEvent, CicsRegion
@@ -238,16 +239,17 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_usrsec_engine(tmp_path / "vsam"),
         screen_queue=screen_q,
         input_queue=input_q,
     )
+    spec = build_cics_spec()
 
     signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
@@ -489,16 +491,17 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
     result_holder: list = [None]
     engine = _usrsec_engine(root or (tmp_path / "vsam"))
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
         screen_queue=screen_q,
         input_queue=input_q,
     )
+    spec = build_cics_spec()
 
     signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
@@ -898,16 +901,17 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
     result_holder: list = [None]
     engine = _add_engine(root or (tmp_path / "vsam"))
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
         screen_queue=screen_q,
         input_queue=input_q,
     )
+    spec = build_cics_spec()
 
     signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)

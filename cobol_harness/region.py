@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.interval import StartQueue
 from interpreter.cobol.field_position import FieldPosition
@@ -68,7 +69,7 @@ class CicsSession:
     """Shared, mutable cell: ``region()`` ``.update()``s this in place rather
     than replacing it, because the ``EXEC CICS START`` builtin inside every
     already-compiled program captured a REFERENCE to this exact dict object
-    at compile time."""
+    when the CICS runtime was installed."""
     screen_q: "queue.Queue" = field(init=False)
     input_q: "queue.Queue" = field(init=False)
     context_holder: list = field(init=False)
@@ -90,9 +91,9 @@ class CicsSession:
         self.context_holder = [None]
         self.result_holder = [None]
         self.start_queue = StartQueue()
-        self.spec = build_cics_spec(
+        install_cics_runtime(
+            self.context_holder,
             start_queue=self.start_queue,
-            context_holder=self.context_holder,
             result_holder=self.result_holder,
             program_cache=self.program_cache,
             vsam_engine=self.vsam.engine,
@@ -100,6 +101,7 @@ class CicsSession:
             input_queue=self.input_q,
             transid_to_program=self.transid_to_program,
         )
+        self.spec = build_cics_spec()
 
     # ---- compile-time ----------------------------------------------------
 

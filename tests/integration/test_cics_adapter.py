@@ -9,6 +9,7 @@ from cics.dispatcher import run_cics
 from cics.types import CicsContext, DispatchKind
 
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from interpreter.project.coprocessor_compile import compile_program
 
 # The prepass injects `COPY DFHEIBLK.` into WORKING-STORAGE; ProLeap resolves
@@ -64,12 +65,13 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
     )
+    spec = build_cics_spec()
     parser = ProLeapCobolParser(
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
     )
@@ -97,12 +99,13 @@ def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
     )
+    spec = build_cics_spec()
     parser = ProLeapCobolParser(
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
     )

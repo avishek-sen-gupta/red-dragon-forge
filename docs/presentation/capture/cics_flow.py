@@ -34,6 +34,7 @@ from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.interval import StartQueue
+from cics.runtime import install_cics_runtime
 from cics.types import DispatchKind, DispatchResult
 from cics.vsam.browse import BrowseStart
 from cics.vsam.engine import VsamEngine
@@ -379,16 +380,17 @@ def run_region(
     context_holder: list = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
         screen_queue=screen_q,
         input_queue=input_q,
     )
+    spec = build_cics_spec()
     compiled = {prog: compile_program(prog, parser, spec) for prog in PROGRAMS.values()}
     region = CicsRegion(
         {prog: c.program for prog, c in compiled.items()},

@@ -52,8 +52,8 @@ def _abend(on_abend: Callable[[], None], abcode: str) -> DispatchResult:
 
     These abends are raised in Python at the routing layer, not IR, so they
     cannot emit a __cics_rollback_hook the way EXEC CICS SYNCPOINT ROLLBACK
-    does -- this is the same on_abend callable cics.strategy's _Wiring
-    already threads into the IR-raised abend builtins (build_cics_spec's
+    does -- this is the same on_abend callable cics.runtime's _Wiring
+    already threads into the IR-raised abend builtins (install_cics_runtime's
     on_abend), so a forge composition supplies one rollback callable that
     reaches every abend path, dispatcher included.
 

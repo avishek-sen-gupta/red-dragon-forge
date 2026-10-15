@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.layout_data import field_positions
@@ -102,12 +103,13 @@ def _compile(bridge_jar: str, program_name: str):
     source = (_db2_tree() / "cbl" / f"{program_name}.cbl").read_bytes()
     parser = _make_parser(bridge_jar)
 
-    cics_spec = build_cics_spec(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
     )
+    cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
 
     return compile_program(source, parser, [cics_spec, sql_spec], tolerant=True)

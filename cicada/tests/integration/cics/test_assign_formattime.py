@@ -22,6 +22,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
+from cics.runtime import install_cics_runtime
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
 from tests.covers import covers
@@ -71,15 +72,16 @@ def test_assign_and_formattime_write_target_fields(cobol_parser):
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         applid="CARDDEMO",
         sysid="SYS1",
-        handler_source=[],
-        unsupported_verbs=set(),
+    )
+    strategy = CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
     )
     source = apply_cics_prepass(COBOL_ASSIGN).encode()
     program = compile_cobol(

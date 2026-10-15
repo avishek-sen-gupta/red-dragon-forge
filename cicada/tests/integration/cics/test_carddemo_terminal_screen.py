@@ -11,6 +11,7 @@ from cics.bms.catalog import load_catalog
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.interval import StartQueue
 from cics.screen.cursor import Cursor
@@ -51,16 +52,17 @@ def _driver(
     screens: queue.Queue = queue.Queue()
     inputs: queue.Queue = queue.Queue()
     context_holder, result_holder, start_queue = [None], [None], StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_usrsec_engine(tmp_path / "vsam"),
         screen_queue=screens,
         input_queue=inputs,
     )
+    spec = build_cics_spec()
     programs = {
         p: compile_cics_program((app / "cbl" / f"{p}.cbl").read_bytes(), parser, spec)
         for p in transactions.values()

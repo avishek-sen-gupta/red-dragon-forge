@@ -126,10 +126,10 @@ def _reset_builtins_table():
     around every test in this suite.
 
     ``Builtins.TABLE`` is a single class-level dict shared by the whole
-    process (see ``interpreter/vm/builtins.py``) -- every ``CicsLoweringStrategy``
-    / ``SqlLoweringStrategy`` construction overwrites entries like
-    ``__cics_task_end_hook`` in place (cicada's own strategy logs "Multiple
-    CicsLoweringStrategy instances in one process is unsupported" for exactly
+    process (see ``interpreter/vm/builtins.py``) -- every ``install_cics_runtime``
+    / ``install_sql_runtime`` call overwrites entries like
+    ``__cics_task_end_hook`` in place (cicada's runtime logs "Installing the
+    CICS runtime more than once in one process is unsupported" for exactly
     this reason). Without a reset, a test that composes cics+squall over a
     Db2 connection leaves that connection's session-reset hook registered
     globally; a later, unrelated test that reaches EXEC CICS RETURN then

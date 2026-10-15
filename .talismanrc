@@ -6,7 +6,7 @@ fileignoreconfig:
 - filename: cicada/tests/unit/cics/test_bms_generate_shared_out_dir.py
   checksum: baefd886cf7448b4aa563a33247e3ea10441fcab1a87d88b31e0042c3006e06b
 - filename: cicada/tests/unit/cics/test_region_on_abend.py
-  checksum: a18bba378a9b8737ef63996d22f0bd64b5b27a09189c09add4a33e5937e66b6e
+  checksum: 77eefab7f2b0360659808720427440df5be7d17542391c657a0086b06cd66a29
 - filename: tests/integration/test_carddemo_db2_region.py
   checksum: eff0edf8ac219c483d7b92ef52e553a33e6eba09e9392fb36c70a17581985cdd
 - filename: tests/integration/test_carddemo_db2_schema.py

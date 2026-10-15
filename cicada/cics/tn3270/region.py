@@ -18,6 +18,7 @@ from cics.coprocessor import build_cics_spec
 from cics.csd_parse import parse_csd_files
 from cics.dispatcher import CicsRegion
 from cics.interval import StartQueue
+from cics.runtime import install_cics_runtime
 from cics.screen.driver import PseudoConversationalDriver
 from cics.tn3270.config import RegionConfig, resolve_program_source
 from cics.vsam.engine import VsamEngine
@@ -164,7 +165,7 @@ def _region(
 
 def _region_noop() -> None:
     """Default on_abend: a CICS-only region has no composed SQL runtime to
-    roll back when a task abends -- mirrors build_cics_spec's own default."""
+    roll back when a task abends -- mirrors install_cics_runtime's own default."""
 
 
 def build_region(
@@ -177,9 +178,9 @@ def build_region(
     wiring = _wiring()
     vsam_engine = _vsam_engine(config)
     program_cache: dict[str, LinkedProgram] = {}
-    spec = build_cics_spec(
+    install_cics_runtime(
+        wiring.context_holder,
         start_queue=wiring.start_queue,
-        context_holder=wiring.context_holder,
         result_holder=wiring.result_holder,
         program_cache=program_cache,
         transid_to_program=dict(config.transactions),
@@ -188,6 +189,7 @@ def build_region(
         input_queue=wiring.input_channel,
         on_abend=on_abend,
     )
+    spec = build_cics_spec()
     parser = _parser(config, bridge_jar, work_dir / "sym")
     fill(program_cache, _compiled(config, parser, spec, extra_specs))
     region = _region(config, wiring, program_cache, on_abend)

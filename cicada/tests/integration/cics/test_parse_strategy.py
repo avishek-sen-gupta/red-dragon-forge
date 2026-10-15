@@ -85,19 +85,21 @@ def test_return_lowers_to_call_and_return(cobol_parser):
     from interpreter.cobol.cobol_frontend import CobolFrontend
     from cics.statements import CicsDialectParser
     from cics.strategy import CicsLoweringStrategy
+    from cics.runtime import install_cics_runtime
     from cics.types import CicsContext
     from interpreter.ir import Opcode
     from interpreter.func_name import FuncName
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
-        handler_source=[],
-        unsupported_verbs=set(),
+    )
+    strategy = CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
     )
 
     source = apply_cics_prepass(COBOL_RETURN.decode()).encode()

@@ -49,6 +49,7 @@ import queue
 import ibm_db
 import pytest
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.types import CicsContext, DispatchKind
 from interpreter.project.coprocessor_compile import compile_program
 from red_dragon_forge.run import run_program
@@ -102,13 +103,14 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
 
     context_holder = [None]
     result_holder = [None]
-    cics_spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         on_abend=backend.rollback,
     )
+    cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 

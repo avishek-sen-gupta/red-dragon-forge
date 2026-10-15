@@ -3,9 +3,10 @@
 Assembles a running CICS region from a transid→program mapping (``parse_csd``
 reads one from a CSD) and a set of COBOL program sources:
 
-  1. construct ONE shared CICS :class:`~interpreter.project.coprocessor_compile.CoprocessorSpec`
-     (via :func:`cics.coprocessor.build_cics_spec`) over the region's runtime
-     state (VSAM engine, BMS loader, screen/input queues, context/result holders),
+  1. install the CICS runtime (:func:`cics.runtime.install_cics_runtime`) over
+     the region's state (VSAM engine, screen/input queues, context/result
+     holders) and build ONE shared compile spec
+     (:func:`cics.coprocessor.build_cics_spec`),
   2. eagerly compile every distinct program named in the CSD into a
      ``program_cache`` keyed by program name (fail-fast on a missing source),
   3. run the dispatcher loop at the entry transid.
@@ -29,6 +30,7 @@ from cics.cell import Holder, fill
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import _run_dispatcher_with_runner, run_cics
 from cics.interval import StartQueue
+from cics.runtime import install_cics_runtime
 from cics.strategy import NOT_SUPPLIED, Absent
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchResult
 from cics.vsam.engine import VsamEngine
@@ -147,7 +149,7 @@ def run_carddemo_region(
     ``on_abend`` (default a no-op) is the one rollback callable a composition
     supplies for EVERY abend path -- both the IR-raised ones (EXEC CICS
     ABEND, an unhandled condition, an unsupported verb; threaded via
-    ``build_cics_spec``) and the dispatcher-level ones raised in Python at
+    ``install_cics_runtime``) and the dispatcher-level ones raised in Python at
     the routing layer (PGMI, TRNI, AZCT, the runaway guard's ASTL; threaded
     via ``_run_dispatcher_with_runner``) -- so a caller never has to inspect
     the terminal :class:`DispatchResult` itself to know whether to roll back.
@@ -158,8 +160,8 @@ def run_carddemo_region(
     result_holder: Holder[DispatchResult] = [None]
     start_queue = StartQueue()
     program_cache: dict[str, LinkedProgram] = {}
-    spec = build_cics_spec(
-        context_holder=context_holder,
+    install_cics_runtime(
+        context_holder,
         result_holder=result_holder,
         program_cache=program_cache,
         vsam_engine=vsam_engine,
@@ -174,7 +176,9 @@ def run_carddemo_region(
     )
     fill(
         program_cache,
-        _compiled(programs, program_sources, parser, spec, source_search_dirs),
+        _compiled(
+            programs, program_sources, parser, build_cics_spec(), source_search_dirs
+        ),
     )
 
     def run_fn(

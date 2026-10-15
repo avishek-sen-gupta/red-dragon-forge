@@ -24,6 +24,7 @@ from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.conversational import ConversationalRegion
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
@@ -94,17 +95,18 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
         screen_queue=screen_q,
         input_queue=input_q,
         receive_timeout=receive_timeout,
     )
+    spec = build_cics_spec()
 
     prog = compile_cics_program(prog_path.read_bytes(), parser, spec)
     region = CicsRegion(
@@ -142,16 +144,16 @@ def _build_conversational(tmp_path: Path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=engine,
         screen_queue=screen_q,
         input_queue=input_q,
-        conversational=True,
     )
+    spec = build_cics_spec(conversational=True)
     prog = compile_cics_program(
         (_FIXTURES / "ZBANK.cbl").read_bytes(),
         parser,

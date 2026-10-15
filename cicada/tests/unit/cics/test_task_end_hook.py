@@ -9,6 +9,7 @@ import pytest
 from tests.covers import covers, NotLanguageFeature
 from cics.statements import ExecCicsStatement, CicsOperand
 from cics.strategy import CicsLoweringStrategy
+from cics.runtime import install_cics_runtime
 
 from interpreter.func_name import FuncName
 from interpreter.instructions import CallFunction
@@ -58,6 +59,22 @@ class _Ctx:
         return False
 
 
+def _install() -> None:
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
+        result_holder=[None],
+    )
+
+
+def _strategy() -> CicsLoweringStrategy:
+    _install()
+    return CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
+    )
+
+
 def _task_end_hook_calls(ctx: _Ctx) -> list[CallFunction]:
     return _hook_calls(ctx, _HOOK_NAME)
 
@@ -70,14 +87,7 @@ def _hook_calls(ctx: _Ctx, name: FuncName) -> list[CallFunction]:
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_plain_return_emits_task_end_hook_call():
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     stmt = ExecCicsStatement(verb="RETURN", options={})
     ctx = _Ctx()
 
@@ -88,14 +98,7 @@ def test_plain_return_emits_task_end_hook_call():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_return_transid_emits_task_end_hook_call():
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     stmt = ExecCicsStatement(
         verb="RETURN",
         options={"TRANSID": CicsOperand("CA00", True)},
@@ -111,14 +114,7 @@ def test_return_transid_emits_task_end_hook_call():
 def test_xctl_does_not_emit_task_end_hook_call():
     """XCTL continues the same task (no new terminal input, same unit of
     work) — it must not fire the task-end hook."""
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     stmt = ExecCicsStatement(
         verb="XCTL",
         options={"PROGRAM": CicsOperand("COSGN00C", True)},
@@ -134,14 +130,7 @@ def test_xctl_does_not_emit_task_end_hook_call():
 def test_default_hook_is_registered_and_is_a_noop():
     Builtins.TABLE.pop(_HOOK_NAME, None)
 
-    CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    _install()
 
     assert _HOOK_NAME in Builtins.TABLE
     result = Builtins.TABLE[_HOOK_NAME]([], vm=None)
@@ -151,22 +140,15 @@ def test_default_hook_is_registered_and_is_a_noop():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_default_hook_does_not_overwrite_an_existing_registration():
     """Order-independence: if another coprocessor (e.g. squall) already
-    registered its real implementation before CicsLoweringStrategy
-    constructs, the default must not clobber it."""
+    registered its real implementation before the CICS runtime
+    installs, the default must not clobber it."""
 
     def _real_reset(args, vm):
         return BuiltinResult(value="already-registered")
 
     Builtins.TABLE[_HOOK_NAME] = _real_reset
 
-    CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    _install()
 
     assert Builtins.TABLE[_HOOK_NAME] is _real_reset
 
@@ -178,14 +160,7 @@ def test_default_hook_does_not_overwrite_an_existing_registration():
 def test_syncpoint_emits_the_syncpoint_hook():
     """EXEC CICS SYNCPOINT used to be a pure no-op that never touched SQL —
     it must now reach a composed SQL runtime's commit (task-6 brief)."""
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     stmt = ExecCicsStatement(verb="SYNCPOINT", options={})
     ctx = _Ctx()
 
@@ -201,14 +176,7 @@ def test_syncpoint_rollback_emits_the_rollback_hook():
     """SYNCPOINT ROLLBACK was unregistered and fell through to
     _lower_unsupported's loud abend (forge-1zu.15) -- it must lower to the
     rollback hook instead, distinct from plain SYNCPOINT's commit hook."""
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     stmt = ExecCicsStatement(verb="SYNCPOINT ROLLBACK", options={})
     ctx = _Ctx()
 
@@ -222,14 +190,7 @@ def test_syncpoint_rollback_emits_the_rollback_hook():
 def test_default_syncpoint_hook_is_registered_and_is_a_noop():
     Builtins.TABLE.pop(_SYNCPOINT_HOOK_NAME, None)
 
-    CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    _install()
 
     assert _SYNCPOINT_HOOK_NAME in Builtins.TABLE
     result = Builtins.TABLE[_SYNCPOINT_HOOK_NAME]([], vm=None)
@@ -240,14 +201,7 @@ def test_default_syncpoint_hook_is_registered_and_is_a_noop():
 def test_default_rollback_hook_is_registered_and_is_a_noop():
     Builtins.TABLE.pop(_ROLLBACK_HOOK_NAME, None)
 
-    CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    _install()
 
     assert _ROLLBACK_HOOK_NAME in Builtins.TABLE
     result = Builtins.TABLE[_ROLLBACK_HOOK_NAME]([], vm=None)
@@ -261,13 +215,6 @@ def test_default_syncpoint_hook_does_not_overwrite_an_existing_registration():
 
     Builtins.TABLE[_SYNCPOINT_HOOK_NAME] = _real_syncpoint
 
-    CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    _install()
 
     assert Builtins.TABLE[_SYNCPOINT_HOOK_NAME] is _real_syncpoint

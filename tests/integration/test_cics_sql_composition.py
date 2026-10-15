@@ -6,6 +6,7 @@ import sqlite3
 from cics.types import CicsContext, DispatchKind
 
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 from interpreter.project.coprocessor_compile import compile_program
@@ -46,13 +47,14 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    cics_spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         applid="FORGEAPP",
     )
+    cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 
@@ -112,13 +114,14 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    cics_spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         applid="FORGEAPP",
     )
+    cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 

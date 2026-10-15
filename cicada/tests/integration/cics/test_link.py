@@ -19,6 +19,7 @@ import pytest
 
 from cics.bootstrap import compile_cics_program, run_carddemo_region
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import CicsContext, DispatchKind
@@ -88,15 +89,16 @@ def test_link_commarea_written_back(cobol_parser):
     program_cache: dict = {}
 
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         screen_queue=screen_q,
         input_queue=input_q,
         program_cache=program_cache,
     )
+    spec = build_cics_spec()
 
     mutator = compile_cics_program(_MUTATOR_SRC.encode(), cobol_parser, spec)
     wrapper = compile_cics_program(_WRAPPER_SRC.encode(), cobol_parser, spec)

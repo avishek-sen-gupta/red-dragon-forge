@@ -44,9 +44,10 @@ All paths are under `cicada/`.
 
 | Path | Contents |
 |---|---|
-| `cics/strategy.py` | `CicsLoweringStrategy`: registers the service builtins and lowers each verb |
+| `cics/strategy.py` | `CicsLoweringStrategy`: lowers each verb. Registers nothing |
+| `cics/runtime.py` | `install_cics_runtime`: the runtime surface. Registers the `__cics_*` service builtins over the region's live state |
 | `cics/strategy_stores.py` | the strategy's writes into state it does not own |
-| `cics/coprocessor.py` | `build_cics_spec`: the strategy, parser and pre-pass as one `CoprocessorSpec` |
+| `cics/coprocessor.py` | `build_cics_spec`: the compile surface. The strategy, parser and pre-pass as one `CoprocessorSpec` |
 | `cics/statements.py` | `ExecCicsStatement`, `CicsDialectParser` |
 | `cics/cics_grammar/` | ANTLR4 grammar (`CICSzLexer.g4`, `CICSzParser.g4`) and generated parser |
 | `cics/cics_visitor.py` | `parse_exec_cics_text(text) -> (verb, {OPTION: CicsOperand})` |
@@ -94,9 +95,26 @@ The CICS transaction-flow graph code (`flow_map`, `flow_graph_core`, `flow_obser
 spec from `build_cics_spec` and returns the `LinkedProgram`. Callees reached by `CALL` are
 compiled and linked transitively. Each compile writes its AST, unit and linked files into a
 new temporary directory; the region does not reuse them yet (red-dragon-forge-k6l).
-A conversational program is compiled with `CicsLoweringStrategy(conversational=True)`, which
+A conversational program is compiled with `build_cics_spec(conversational=True)`, which
 lowers `RECEIVE MAP` to a VM suspend. The strategy is named `cics-conversational` rather than
 `cics`, so the two modes' compiled files never share a name.
+
+## Compile surface and runtime surface
+
+The coprocessor has two entry points. `cics.coprocessor.build_cics_spec(*, conversational)` is
+the compile surface: its `CicsLoweringStrategy` keeps only lowering state (the `HANDLE
+CONDITION` statements the dialect parser collects, and the set of verbs it could not lower,
+which a caller may pass in as `unsupported_verbs` to read back) and registers nothing, so
+compiling leaves `Builtins.TABLE` unchanged. `cics.runtime.install_cics_runtime(context_holder,
+*, program_cache, transid_to_program, ...)` is the runtime surface: it registers the `__cics_*`
+builtins over the region's live state — the context and result holders, the program cache
+`LINK` and `INQUIRE` resolve against, the transaction map `START` validates against, the TD
+queue, the screen and input channels, the VSAM engine, the start queue and the `on_abend`
+rollback callable — and returns the start queue it used. The three hooks
+(`__cics_task_end_hook`, `__cics_syncpoint_hook`, `__cics_rollback_hook`) are registered only
+if nothing is registered under them yet, so a composed SQL runtime's hooks survive in either
+install order. A process that compiles and runs calls both; a process that runs a program
+compiled elsewhere calls only `install_cics_runtime`, before it runs anything.
 
 ## Supported verbs
 

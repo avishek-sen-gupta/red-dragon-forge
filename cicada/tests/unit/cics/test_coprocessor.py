@@ -11,15 +11,13 @@ squall's rollback here (Task 10) without cicada ever naming squall.
 
 from __future__ import annotations
 
-import pytest
-
 from interpreter.func_name import FuncName
 from interpreter.instructions import CallFunction
 from interpreter.register import Register
 from interpreter.vm.builtins import Builtins
 
 from cics.coprocessor import build_cics_spec
-from cics.strategy import CicsLoweringStrategy
+from cics.runtime import install_cics_runtime
 from cics.statements import ExecCicsStatement
 from tests.covers import NotLanguageFeature, covers
 
@@ -58,12 +56,13 @@ def _fire_registered_abend_builtin() -> None:
 def test_build_cics_spec_default_on_abend_is_a_noop():
     """A CICS-only region (no on_abend supplied) keeps its current
     behaviour exactly -- EXEC CICS ABEND must not raise."""
-    spec = build_cics_spec(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
     )
+    spec = build_cics_spec()
     strategy = spec.make_strategy()
 
     _lower_abend(strategy)
@@ -75,46 +74,17 @@ def test_build_cics_spec_threads_on_abend_to_the_abend_builtin():
     """build_cics_spec's on_abend must reach EXEC CICS ABEND's own builtin,
     so a composed SQL runtime's rollback callable runs when the task abends."""
     calls: list[int] = []
-    spec = build_cics_spec(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
         on_abend=lambda: calls.append(1),
     )
+    spec = build_cics_spec()
     strategy = spec.make_strategy()
 
     _lower_abend(strategy)
     _fire_registered_abend_builtin()
 
     assert calls == [1]
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_spec_or_strategy_without_the_regions_programs_and_transactions_is_refused() -> (
-    None
-):
-    """Every EXEC CICS LINK resolves against the program cache and every START
-    against the transaction map. Empty ones the runtime made for itself would
-    make every LINK fail and every START be rejected, silently; a caller that
-    forgets either is told so instead."""
-    with pytest.raises(TypeError) as spec_refused:
-        build_cics_spec(context_holder=[None])
-    with pytest.raises(TypeError) as strategy_refused:
-        CicsLoweringStrategy(
-            context_holder=[None],
-            handler_source=[],
-            unsupported_verbs=set(),
-        )
-
-    refusals = (str(spec_refused.value), str(strategy_refused.value))
-    assert [
-        (message.partition(" missing ")[0], message.rpartition(": ")[2])
-        for message in refusals
-    ] == [
-        ("build_cics_spec()", "'program_cache' and 'transid_to_program'"),
-        (
-            "CicsLoweringStrategy.__init__()",
-            "'program_cache' and 'transid_to_program'",
-        ),
-    ]

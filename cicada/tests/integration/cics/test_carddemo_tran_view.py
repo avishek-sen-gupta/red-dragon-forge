@@ -25,6 +25,7 @@ import pytest
 from cics.bootstrap import compile_cics_program
 from cics.bms.generate import generate_symbolic_copybooks
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.interval import StartQueue
 from cics.dispatcher import CicsRegion, InputEvent
 from cics.types import DispatchKind
@@ -147,16 +148,17 @@ def _drive_to_tran_view(tmp_path: Path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
         start_queue=start_queue,
-        context_holder=context_holder,
         result_holder=result_holder,
         vsam_engine=_tran_view_engine(tmp_path),
         screen_queue=screen_q,
         input_queue=input_q,
     )
+    spec = build_cics_spec()
 
     signon = compile_cics_program(signon_path.read_bytes(), parser, spec)
     menu = compile_cics_program(menu_path.read_bytes(), parser, spec)
