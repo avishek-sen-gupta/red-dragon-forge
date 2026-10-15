@@ -13,9 +13,11 @@ from litter.entries import MANIFEST_ENTRY, mapset_entry, program_entry
 from litter.manifest import Manifest
 from litter.package import Package
 from litter.package_error import PackageError
+from litter.validation_message import validation_message
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
+_EXTRACTED = "program.linked.json"
 
 
 def open_package(path: Path) -> Package:
@@ -46,16 +48,20 @@ def _manifest(path: Path, archive: zipfile.ZipFile) -> Manifest:
     try:
         return Manifest.model_validate_json(_entry(path, archive, MANIFEST_ENTRY))
     except ValidationError as exc:
-        raise PackageError(f"{path}: {MANIFEST_ENTRY}: {exc}") from exc
+        raise PackageError(
+            f"{path}: {MANIFEST_ENTRY}: {validation_message(exc)}"
+        ) from exc
 
 
 def _program(
     path: Path, archive: zipfile.ZipFile, extracted: Path, program: str
 ) -> LinkedProgram:
     entry = program_entry(program)
-    linked = extracted / f"{program}.linked.json"
+    linked = extracted / _EXTRACTED
     linked.write_bytes(_entry(path, archive, entry))
     try:
         return LinkedCodec(IrCodec()).read(linked)
     except UnitFormatError as exc:
-        raise PackageError(f"{path}: {entry}: {exc}") from exc
+        raise PackageError(
+            f"{path}: {entry}: {str(exc).removeprefix(f'{linked}: ')}"
+        ) from exc

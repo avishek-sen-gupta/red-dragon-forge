@@ -1,15 +1,16 @@
 """A package's manifest: its programs, coprocessors, CSD tables and mapsets; the only thing serialised to manifest.json."""
 
 from litter.cics_file import CicsFile
+from litter.member_name import MemberName
 from litter.transaction import Transaction
 from pydantic import BaseModel, ConfigDict
 
 
 class Manifest(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    programs: tuple[str, ...]
+    programs: tuple[MemberName, ...]
     coprocessors: tuple[str, ...]
     transactions: tuple[Transaction, ...]
     files: tuple[CicsFile, ...]
-    mapsets: tuple[str, ...]
+    mapsets: tuple[MemberName, ...]

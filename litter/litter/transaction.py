@@ -2,8 +2,10 @@
 
 from dataclasses import dataclass
 
+from litter.member_name import MemberName
+
 
 @dataclass(frozen=True)
 class Transaction:
     transid: str
-    program: str
+    program: MemberName
