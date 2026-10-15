@@ -55,7 +55,7 @@ def build_db2_region(
         initial_connector=NamedDbConnector("CARDDEMO"),
         tolerant=True,
     )
-    sql_spec = build_sql_spec(tolerant=True)
+    sql_spec = build_sql_spec()
     region = build_region(
         config,
         bridge_jar,

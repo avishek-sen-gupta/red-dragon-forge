@@ -41,7 +41,7 @@ def test_build_db2_region_forwards_backend_rollback_as_on_abend(monkeypatch, tmp
 
     monkeypatch.setattr(region_mod, "install_sql_runtime", fake_install_sql_runtime)
 
-    def fake_build_sql_spec(**kwargs):
+    def fake_build_sql_spec():
         return "the-sql-spec"
 
     monkeypatch.setattr(region_mod, "build_sql_spec", fake_build_sql_spec)

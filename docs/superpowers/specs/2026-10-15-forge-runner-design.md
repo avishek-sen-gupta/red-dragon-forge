@@ -36,7 +36,7 @@ copybook_exts = ["cpy", "CPY"]
 name = "carddemo"
 programs = ["COSGN00C", "CBACT01C"]
 coprocessors = ["cics", "sql"]      # any of: sql, cics, cics-conversational; [] for none
-tolerant = false
+tolerant = false                    # compile-time tolerance, passed to compile_program
 out_dir = "out"
 
 [cics]                              # required when coprocessors include cics
@@ -90,12 +90,12 @@ hand-written table.
 
 ```toml
 package = "out/carddemo.zip"
+tolerant = false                    # run-time tolerance, passed to every runtime that has one
 
 [paths]
 system = "region/system"            # catnip's system directory
 
 [sql]                               # required when the package was built with sql
-tolerant = false                    # skip host variables missing from the layout
                                     # DSN from SQUALL_DB2_DSN
 
 # exactly one of [plain], [jcl], [cics]

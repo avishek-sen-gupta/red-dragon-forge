@@ -10,7 +10,7 @@ from squall.statements import SqlDialectParser
 from squall.strategy import SqlLoweringStrategy
 
 
-def build_sql_spec(*, tolerant: bool = False) -> CoprocessorSpec:
+def build_sql_spec() -> CoprocessorSpec:
     """Build the EXEC SQL CoprocessorSpec.
 
     ``source_prepass`` rewrites EXEC SQL INCLUDE -> COPY.
