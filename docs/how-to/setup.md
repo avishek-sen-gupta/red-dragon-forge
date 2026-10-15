@@ -25,14 +25,15 @@
 
    If a native tool is missing, the build stops with `error: hlasm_export needs <tool>`.
 
-3. Export the JAR paths into your shell. Do this in every new shell before running a runtime
+3. Export the JAR paths and `hlasm_export`'s path into your shell. Do this in every new shell before running a runtime
    or its tests by hand.
 
    ```bash
    . ./bridge-env.sh
    ```
 
-   It prints nothing when both JARs exist, and `warning: … not built` otherwise.
+   It prints nothing when both JARs and `hlasm_export` exist, and `warning: … not built`
+   otherwise.
 
 4. Check the install by running the static analyser's suite, which needs no JVM or Db2.
 

@@ -381,4 +381,6 @@ fileignoreconfig:
   checksum: 31a07348cf2a75eb522ee5926782ec18e39eaf3736989ce6b113f9ef81d5935b
 - filename: squall/tests/unit/test_runtime.py
   checksum: 91bb5edcd1c6957c0bd864d4fc4b390ed8776604f30112934fa6dc08251e9fdb
+- filename: bridge-env.sh
+  checksum: a07b346f805f593fa6031704f2cef920488d25296a9d7d105b0e99731a9f5a7f
 version: "1.0"
