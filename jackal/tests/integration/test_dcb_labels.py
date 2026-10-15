@@ -28,6 +28,7 @@ from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
 from jackal.value_parts import literal
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import EMPTY
 from tests.model_build import dd, disp, job, program, ref
 from tests.system_build import job_catalog, scratch, system, upload
 
@@ -40,10 +41,8 @@ def _runner(tmp_path: Path) -> JobRunner:
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=tmp_path,
-        bridge_jar="unused",
+        package=EMPTY,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
 
 

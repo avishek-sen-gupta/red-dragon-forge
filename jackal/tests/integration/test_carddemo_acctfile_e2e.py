@@ -16,6 +16,7 @@ from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import package
 from tests.system_build import job_catalog, system, upload
 
 
@@ -47,10 +48,8 @@ def test_acctfile_then_readacct_e2e(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=cbl_dir,
-        bridge_jar=bridge_jar,
+        package=package(tmp_path / "package", ("CBACT01C",), cbl_dir, (cpy_dir,)),
         system=system(tmp_path),
-        copybook_dir=cpy_dir,
     )
 
     catalog = job_catalog(tmp_path)

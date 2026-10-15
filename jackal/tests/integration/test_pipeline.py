@@ -11,6 +11,7 @@ from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import package
 from tests.system_build import scratch, system, upload
 
 FIX = Path(__file__).parent / "fixtures"
@@ -36,10 +37,8 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=FIX / "cbl",
-        bridge_jar=bridge_jar,
+        package=package(tmp_path / "package", ("UPCASE", "STARRER")),
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
     result = runner.run(job, scratch=scratch(tmp_path))
     datasets = tmp_path / "system" / "datasets"

@@ -41,14 +41,14 @@ from jackal.results import JobResult, StepResult
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from jackal.utilities import UTILITIES
+from litter.open import open_package
 
 HOME = Path(os.environ["CARDDEMO_HOME"])
 JCL_DIR = HOME / "jcl"
 CBL_DIR = HOME / "cbl"
-CPY_DIR = HOME / "cpy"
 SOURCE_DATA_DIR = HOME / "data" / "EBCDIC"
 PROC_DIR = HOME / "proc"
-BRIDGE = os.environ["PROLEAP_BRIDGE_JAR"]
+PACKAGE = Path(os.environ["CARDDEMO_PACKAGE"])
 
 LOADER_JOBS = (
     "ACCTFILE",
@@ -99,10 +99,8 @@ def _session(work: Path, workdir: Path, proclib: bool) -> Session:
     data_dir = _staged_data(work)
     runner = JobRunner(
         unresolved=RaiseErrorStrategy(),
-        source_dir=CBL_DIR,
-        bridge_jar=BRIDGE,
+        package=open_package(PACKAGE),
         data_dir=data_dir,
-        copybook_dir=CPY_DIR,
         proclib_dirs=[PROC_DIR] if proclib else (),
     )
     catalog = DatasetCatalog(workdir=workdir, data_dir=data_dir)

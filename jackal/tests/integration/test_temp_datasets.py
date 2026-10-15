@@ -23,6 +23,7 @@ from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import EMPTY
 from tests.model_build import dd, disp, job, program
 from tests.system_build import scratch, system
 
@@ -49,10 +50,8 @@ def _runner(tmp_path, missing_data: MissingDataStrategy = StrictAllocation()):
         missing_data=missing_data,
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=tmp_path,
-        bridge_jar="unused",
+        package=EMPTY,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
 
 

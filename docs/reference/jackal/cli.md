@@ -20,11 +20,11 @@ sees the clusters and paths it installs.
 ## `jackal run`
 
 ```
-jackal run JCL --system DIR [--source-dir DIR] [--copybook-dir DIR] [--proclib DIR]...
-           [--link PGM ...]
+jackal run JCL --system DIR --package ZIP [--proclib DIR]...
 ```
 
-Parses `JCL`, runs every step against the system directory, and prints one line per step:
+Parses `JCL`, runs every step against the system directory with the programs of the package,
+and prints one line per step:
 
 ```
 STEP05: RC=0
@@ -38,18 +38,12 @@ exit with 2.
 | Argument | Default | Meaning |
 |---|---|---|
 | `JCL` | required | Path to the JCL file. |
-| `--source-dir DIR` | `$CARDDEMO_HOME/app/cbl` | Directory of COBOL sources. `PGM=X` loads `DIR/X.cbl`; a program that is neither there nor a utility is stubbed with RC 0 and a warning. |
 | `--system DIR` | required | The system directory: catnip's `catalog.json` and the cataloged datasets' bytes. Created if absent. |
-| `--copybook-dir DIR` | `$CARDDEMO_HOME/app/cpy` | Copybook directory for COBOL steps. |
+| `--package ZIP` | required | A [litter](../litter/README.md) package of linked programs. `PGM=X`, and `DSN RUN PROGRAM(X)` under a TSO monitor, run the package's program `X`; a program that is neither in the package nor a utility is stubbed with RC 0 and a warning. jackal compiles nothing. |
 | `--proclib DIR` | `$CARDDEMO_HOME/app/proc` | Directory of cataloged procedures: `EXEC P` expands `DIR/P.prc`. Repeat the flag to search several directories in order. With neither the flag nor `CARDDEMO_HOME`, only in-stream PROCs expand. |
-| `--link PGM ...` | none | Programs a CALL by data-name may reach. Each `PGM` is loaded from `--source-dir` and compiled into every COBOL step. A name with no source there is an argument error. |
 
-`--source-dir` and `--copybook-dir` come from their flag, else from `CARDDEMO_HOME`. If neither is given the command
-fails before parsing:
-
-```
-jackal: error: --source-dir is required: supply the flag or set $CARDDEMO_HOME
-```
+A program reaches the programs it CALLs by literal name, which the package build linked into it.
+A program reached only by a CALL through a data-name is not linked (`red-dragon-forge-8urg`).
 
 A run changes the system directory in place, as a job changes a mainframe's catalog: datasets
 it catalogs stay for later runs, and datasets it deletes are gone. A DSN not in the catalog is
@@ -65,7 +59,6 @@ Each COBOL program may run 500,000 interpreter steps. One that has not ended by 
 | Variable | Required | Use |
 |---|---|---|
 | `JCL_BRIDGE_JAR` | yes | Path to the JCL bridge JAR. Parsing fails if unset. |
-| `PROLEAP_BRIDGE_JAR` | for COBOL steps | Path to the ProLeap COBOL bridge JAR. |
-| `CARDDEMO_HOME` | unless all three directory flags are given | Root of a CardDemo checkout, such as `vendor/carddemo`. The defaults above are relative to it. |
+| `CARDDEMO_HOME` | no | Root of a CardDemo checkout, such as `vendor/carddemo`. The `--proclib` default is relative to it. |
 
-`. ./bridge-env.sh` from the repo root exports both JAR paths.
+`. ./bridge-env.sh` from the repo root exports the JAR path.

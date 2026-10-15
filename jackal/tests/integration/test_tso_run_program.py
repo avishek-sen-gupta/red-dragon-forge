@@ -12,6 +12,7 @@ from jackal.results import Abended, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import package
 from tests.system_build import scratch, system
 
 _RC4 = """\
@@ -59,10 +60,8 @@ def test_a_tso_step_runs_its_programs_and_ends_with_the_highest_code(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=src,
-        bridge_jar=bridge_jar,
+        package=package(tmp_path / "package", ("RC4", "RC0"), src),
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
 
     def outcome(step: str):

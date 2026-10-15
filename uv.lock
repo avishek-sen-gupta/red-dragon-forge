@@ -865,6 +865,7 @@ source = { editable = "jackal" }
 dependencies = [
     { name = "catnip" },
     { name = "lark" },
+    { name = "litter" },
     { name = "red-dragon" },
 ]
 
@@ -882,6 +883,7 @@ dev = [
 requires-dist = [
     { name = "catnip", editable = "catnip" },
     { name = "lark", specifier = ">=1.1" },
+    { name = "litter", editable = "litter" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
 ]
 

@@ -71,6 +71,7 @@ from jackal.unresolved import (
     UnresolvedReferenceStrategy,
 )
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import EMPTY
 from tests.model_build import cond, dd, disp, job, program, ref
 
 OK = Completed(0)
@@ -87,10 +88,8 @@ def _run(
     missing_program: MissingProgramStrategy = AbendMissingProgram(),
 ) -> JobResult:
     runner = JobRunner(
-        source_dir=tmp_path,
-        bridge_jar="unused",
+        package=EMPTY,
         system=SystemCatalog(tmp_path / "system"),
-        copybook_dir=tmp_path,
         unresolved=unresolved,
         missing_data=missing_data,
         missing_program=missing_program,

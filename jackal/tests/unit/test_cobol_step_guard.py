@@ -1,4 +1,4 @@
-"""Unit guards: compiling needs PROLEAP_BRIDGE_JAR; a batch program cannot suspend."""
+"""Unit guard: a batch program cannot suspend."""
 
 from __future__ import annotations
 
@@ -7,14 +7,7 @@ from interpreter.ir import CodeLabel
 from interpreter.register import Register
 from interpreter.run import ExecutionState, Suspended, initial_vm_state
 from jackal.cobol_step import BatchProgramSuspended, program_result
-from jackal.program_compiler import ProgramCompiler
 from tests.covers import NotLanguageFeature, covers
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_compiling_a_cobol_program_with_an_empty_bridge_jar_fails_loud():
-    with pytest.raises(ValueError, match="PROLEAP_BRIDGE_JAR"):
-        ProgramCompiler("", (), (), ()).compiled("irrelevant")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

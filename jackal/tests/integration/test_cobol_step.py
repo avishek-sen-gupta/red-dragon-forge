@@ -4,13 +4,11 @@ import pytest
 from catnip.labels import RecordFormat, SequentialLabel
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
-from jackal.program_compiler import ProgramCompiler
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated, dd, disp, program
+from tests.package_build import compiled, package
 from tests.system_build import job_catalog, upload
-
-CBL = Path(__file__).parent / "fixtures" / "cbl"
 
 
 def _ebcdic(text: bytes) -> bytes:
@@ -36,9 +34,7 @@ def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
     )
     rc = run_cobol_step(
         step,
-        ProgramCompiler(bridge_jar, (), (CBL,), ()).compiled(
-            (CBL / "COPYUP.cbl").read_text()
-        ),
+        compiled(package(tmp_path / "package", ("COPYUP",)), "COPYUP"),
         allocated(step, cat),
         cat.workdir,
         budget=DEFAULT_PROGRAM_STEP_BUDGET,

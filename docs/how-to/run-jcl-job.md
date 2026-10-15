@@ -41,10 +41,52 @@ Runs a CardDemo batch job through jackal. Flags are in
    [the CLI reference](../reference/jackal/cli.md). The declaration format is in
    [catnip](../reference/catnip/README.md).
 
-4. Run `ACCTFILE.jcl`. It deletes, defines and loads the account VSAM KSDS with IDCAMS.
+4. Build a [litter](../reference/litter/README.md) package of the COBOL programs the jobs run.
+   jackal compiles nothing: a step's `PGM=X` runs the package's program `X`. Save as
+   `build_batch.py`:
+
+   ```python
+   import os
+   from pathlib import Path
+
+   from cobol_asg.cobol_parser import ProLeapCobolParser
+   from cobol_asg.subprocess_runner import RealSubprocessRunner
+   from jackal.le_abend import LE_STUBS
+   from litter.build import build
+
+   app = Path(os.environ["CARDDEMO_HOME"]) / "app"
+   programs = ("CBACT01C",)
+   build(
+       name="carddemo-batch",
+       programs=programs,
+       sources={p: app / "cbl" / f"{p}.cbl" for p in programs},
+       parser=ProLeapCobolParser(
+           runner=RealSubprocessRunner(),
+           bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
+           copybook_dirs=[app / "cpy"],
+       ),
+       specs=(),
+       search_dirs=(app / "cbl", LE_STUBS),
+       work_dir=Path("/tmp/carddemo-batch-work"),
+       out_dir=Path("/tmp"),
+       transactions=(),
+       files=(),
+       mapsets={},
+       tolerant=False,
+   )
+   ```
 
    ```bash
-   uv run --no-sync jackal run vendor/carddemo/app/jcl/ACCTFILE.jcl --system /tmp/jackal-system
+   uv run --no-sync python build_batch.py
+   ```
+
+   Expected: `/tmp/carddemo-batch.zip`. Build once; rebuild only when a program changes.
+
+5. Run `ACCTFILE.jcl`. It deletes, defines and loads the account VSAM KSDS with IDCAMS.
+
+   ```bash
+   uv run --no-sync jackal run vendor/carddemo/app/jcl/ACCTFILE.jcl --system /tmp/jackal-system \
+     --package /tmp/carddemo-batch.zip
    ```
 
    Expected, with exit status 0:
@@ -63,7 +105,8 @@ Runs a CardDemo batch job through jackal. Flags are in
 elsewhere with `--proclib DIR`, repeated to search several directories in order:
 
 ```bash
-uv run --no-sync jackal run my.jcl --system /tmp/jackal-system --proclib ./proc --proclib ./more-procs
+uv run --no-sync jackal run my.jcl --system /tmp/jackal-system --package /tmp/carddemo-batch.zip \
+  --proclib ./proc --proclib ./more-procs
 ```
 
 In-stream procedures (`PROC` … `PEND` in the job) need no flag.
@@ -115,9 +158,9 @@ first unless `GDGORDER=FIFO` is coded, and deletes them:
 ```
 
 ```bash
-uv run --no-sync jackal run gdgload.jcl --system /tmp/demo --source-dir . --copybook-dir .
+uv run --no-sync jackal run gdgload.jcl --system /tmp/demo --package /tmp/carddemo-batch.zip
 ls /tmp/demo/datasets
-uv run --no-sync jackal run gdgread.jcl --system /tmp/demo --source-dir . --copybook-dir .
+uv run --no-sync jackal run gdgread.jcl --system /tmp/demo --package /tmp/carddemo-batch.zip
 ls /tmp/demo/datasets
 ```
 
@@ -127,21 +170,15 @@ generations) and `DEMO.SEED`.
 
 ### A program that CALLs through a variable
 
-A `CALL WS-PGM` reaches only programs linked into the step. A program CALLed by a quoted name is
-linked automatically; one named only by a variable must be listed with `--link`, from the same
-`--source-dir`:
-
-```bash
-uv run --no-sync jackal run dyn.jcl --system /tmp/demo --link CALLSUB
-```
-
-Without it the run stops with `UnresolvedProgramError: CALL resolved to program name 'CALLSUB'
-at run time, but no program named CALLSUB is linked into this run unit`.
+A program CALLed by a quoted name is found in the build's `search_dirs` and linked into its
+caller. A `CALL WS-PGM` reaches only programs linked into the caller, and a package build links
+none by variable name (red-dragon-forge-8urg): the run stops with `UnresolvedProgramError: CALL
+resolved at run time to __entry_CALLSUB, but nothing in this run unit is registered under it`.
 
 ### A Db2 step (IKJEFT01 with DSN RUN PROGRAM)
 
 The `jackal` command composes no SQL support, so a program with `EXEC SQL` runs through the Python
-API, with squall's runtime installed and its coprocessor given to the runner. A Db2 batch program
+API: built into a package with squall's coprocessor, and run with squall's runtime installed. A Db2 batch program
 does not `CONNECT`; DSN attaches it to its subsystem, which `initial_connector` stands in for. This runs a SYSTSIN of
 `DSN SYSTEM(DB2P)` / `RUN PROGRAM(RPTPGM) PLAN(RPTPLAN)` against an SQLite database:
 
@@ -149,8 +186,11 @@ does not `CONNECT`; DSN attaches it to its subsystem, which `initial_connector` 
 import os, sqlite3, tempfile
 from pathlib import Path
 
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
+from jackal.le_abend import LE_STUBS
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.runner import JobRunner
@@ -160,19 +200,36 @@ from squall.backends.sqlite import SqliteBackend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
+from litter.build import build
+from litter.open import open_package
 
+package = build(
+    name="db2job",
+    programs=("RPTPGM",),
+    sources={"RPTPGM": Path("cbl/RPTPGM.cbl")},
+    parser=ProLeapCobolParser(
+        runner=RealSubprocessRunner(),
+        bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
+        copybook_dirs=[Path("cpy")],
+    ),
+    specs=(build_sql_spec(),),
+    search_dirs=(Path("cbl"), LE_STUBS),
+    work_dir=Path("/tmp/db2job-work"),
+    out_dir=Path("/tmp"),
+    transactions=(),
+    files=(),
+    mapsets={},
+    tolerant=False,
+)
 conn = sqlite3.connect("bank.db")
 install_sql_runtime({"DB2P": SqliteBackend(conn)}, NamedDbConnector("DB2P"))
 runner = JobRunner(
-    source_dir=Path("cbl"),
-    bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
+    package=open_package(package),
     system=SystemCatalog(Path("/tmp/demo")),
-    copybook_dir=Path("cpy"),
     unresolved=RaiseErrorStrategy(),
     missing_data=StrictAllocation(),
     missing_program=AbendMissingProgram(),
     program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-    coprocessors=(build_sql_spec(),),
 )
 with tempfile.TemporaryDirectory() as scratch:
     result = runner.run(parse_jcl(Path("db2job.jcl").read_text()), Path(scratch))
@@ -186,8 +243,9 @@ an abend in one gives 12 under IKJEFT01 and `S04C` under IKJEFT1A/1B.
 
 ## Troubleshooting
 
-- `--source-dir is required`: `CARDDEMO_HOME` is unset. Repeat step 2, or pass
-  `--source-dir` and `--copybook-dir`.
+- `the following arguments are required: --package`: pass the package step 4 built.
+- A step ends `RC=0` with a warning `no program X; stubbed with RC 0`: the package does not
+  hold `X`. Add it to `programs` in step 4 and rebuild.
 - A step ends `allocation failed (DD …: DATASET_NOT_FOUND)`, or a warning says an empty dataset
   stood in for one: the dataset is not in the system directory. Add it with
   `jackal catalog add`, or run step 3.
@@ -197,6 +255,6 @@ an abend in one gives 12 under IKJEFT01 and `S04C` under IKJEFT1A/1B.
 - `No module named jackal.__main__`: use `uv run --no-sync jackal`, not `python -m jackal`.
 - `jackal: S1: PROC P is in no proclib`: `P.prc` is not in the PROC library. Pass
   `--proclib`, or set `CARDDEMO_HOME`.
-- `UnresolvedProgramError: CALL resolved to program name …`: the program is CALLed through a
-  variable; add it with `--link`.
+- `UnresolvedProgramError: CALL resolved at run time to …`: the program is CALLed through a
+  variable, which a package does not link (red-dragon-forge-8urg).
 - A step ends `abended Unnnn`: the program called LE's `CEE3ABD` with that user code.

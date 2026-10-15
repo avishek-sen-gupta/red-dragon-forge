@@ -10,6 +10,7 @@ from catnip.labels import LabelPending, RecordFormat, SequentialLabel
 from catnip.system_catalog import SystemCatalog
 from jackal.cli import main, run
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import built
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -22,12 +23,10 @@ def test_cli_runs_utility_job(tmp_path, capsys):
         [
             "run",
             str(jcl),
-            "--source-dir",
-            str(tmp_path),
+            "--package",
+            str(built(tmp_path, ())),
             "--system",
             str(tmp_path / "system"),
-            "--copybook-dir",
-            str(tmp_path),
         ]
     )
     assert (rc, capsys.readouterr().out) == (0, "A: RC=0\n")
@@ -46,12 +45,10 @@ def test_cli_console_script_entry(tmp_path, capsys, monkeypatch):
             "jackal",
             "run",
             str(jcl),
-            "--source-dir",
-            str(tmp_path),
+            "--package",
+            str(built(tmp_path, ())),
             "--system",
             str(tmp_path / "system"),
-            "--copybook-dir",
-            str(tmp_path),
         ],
     )
     rc = main()
@@ -77,12 +74,10 @@ def test_cli_cleans_up_workdir(tmp_path, monkeypatch):
         [
             "run",
             str(jcl),
-            "--source-dir",
-            str(tmp_path),
+            "--package",
+            str(built(tmp_path, ())),
             "--system",
             str(tmp_path / "system"),
-            "--copybook-dir",
-            str(tmp_path),
         ]
     )
     assert rc == 0
@@ -123,10 +118,8 @@ def test_cli_catalogs_a_dataset_then_runs_a_job_that_changes_the_system(
             str(jcl),
             "--system",
             str(system),
-            "--source-dir",
-            str(tmp_path),
-            "--copybook-dir",
-            str(tmp_path),
+            "--package",
+            str(built(tmp_path, ())),
         ]
     )
     catalog = SystemCatalog(system)
@@ -149,39 +142,6 @@ def test_cli_catalogs_a_dataset_then_runs_a_job_that_changes_the_system(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_cli_refuses_a_link_list_naming_a_program_with_no_source(tmp_path, capsys):
-    import pytest
-
-    (tmp_path / "SUBPGM.cbl").write_text("")
-    jcl = tmp_path / "j.jcl"
-    jcl.write_text("//J JOB 1\n//A EXEC PGM=IEFBR14\n")
-    with pytest.raises(SystemExit) as exited:
-        run(
-            [
-                "run",
-                str(jcl),
-                "--source-dir",
-                str(tmp_path),
-                "--system",
-                str(tmp_path / "system"),
-                "--copybook-dir",
-                str(tmp_path),
-                "--link",
-                "SUBPGM",
-                "NOSUCH",
-            ]
-        )
-    assert (exited.value.code, capsys.readouterr()) == (
-        2,
-        (
-            "",
-            "usage: jackal [-h] {run,catalog} ...\n"
-            "jackal: error: --link: no COBOL source for linked program NOSUCH\n",
-        ),
-    )
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cli_expands_procs_from_its_proclib_and_reports_an_unresolved_one(
     tmp_path, capsys
 ):
@@ -197,12 +157,10 @@ def test_cli_expands_procs_from_its_proclib_and_reports_an_unresolved_one(
     common = [
         "run",
         str(jcl),
-        "--source-dir",
-        str(tmp_path),
+        "--package",
+        str(built(tmp_path, ())),
         "--system",
         str(tmp_path / "system"),
-        "--copybook-dir",
-        str(tmp_path),
     ]
     assert (run([*common, "--proclib", str(procs)]), capsys.readouterr().out) == (
         0,

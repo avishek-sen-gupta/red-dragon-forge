@@ -19,11 +19,11 @@ from jackal.results import AllocationError, AllocationFailed, Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from jackal.value_parts import Value, literal
+from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import EMPTY, package
 from tests.model_build import dd, disp, job, program
 from tests.system_build import gdg, job_catalog, scratch, system, upload
-
-CBL = Path(__file__).parent / "fixtures" / "cbl"
 
 
 def _gen(ddname: str, base: str, relative: int, *words: str) -> DD[StepRef]:
@@ -33,17 +33,15 @@ def _gen(ddname: str, base: str, relative: int, *words: str) -> DD[StepRef]:
 def _runner(
     tmp_path: Path,
     missing_data: MissingDataStrategy = StrictAllocation(),
-    bridge_jar: str = "unused",
+    packaged: Package = EMPTY,
 ):
     return JobRunner(
         unresolved=RaiseErrorStrategy(),
         missing_data=missing_data,
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
 
 
@@ -192,7 +190,9 @@ def test_a_gdg_base_name_reads_every_generation_in_the_gdgs_order(tmp_path, brid
             _read_all("S3", "A.NEWEST", "J.OVER", "SHR", order=literal("FIFO")),
         ),
     )
-    result = _runner(tmp_path, bridge_jar=bridge_jar).run(j, scratch=scratch(tmp_path))
+    result = _runner(
+        tmp_path, packaged=package(tmp_path / "package", ("CARDCOPY",))
+    ).run(j, scratch=scratch(tmp_path))
     after = job_catalog(tmp_path)
 
     def records(dsn: str) -> list[str]:

@@ -3,10 +3,10 @@ from pathlib import Path
 import pytest
 from jackal.allocation import DdEnvironment
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
-from jackal.program_compiler import ProgramCompiler
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
+from tests.package_build import compiled, package
 from tests.system_build import job_catalog
 
 _PGM = """\
@@ -26,9 +26,12 @@ def _require_bridge(bridge_jar):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_cobol_step_returns_real_return_code(tmp_path: Path, bridge_jar):
     cat = job_catalog(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "SETRC.cbl").write_text(_PGM)
     assert run_cobol_step(
         program("S", "SETRC"),
-        ProgramCompiler(bridge_jar, (), (), ()).compiled(_PGM),
+        compiled(package(tmp_path / "package", ("SETRC",), src), "SETRC"),
         DdEnvironment(()),
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,
