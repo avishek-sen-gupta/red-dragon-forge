@@ -10,6 +10,7 @@ from cics.coprocessor import build_cics_spec
 from cics.interval import StartQueue
 from cics.runtime import install_cics_runtime
 from cics.statements import CicsOperand, ExecCicsStatement
+from cics.types import DispatchKind, DispatchResult
 from cics.vsam.engine import VsamEngine
 from interpreter.func_name import FuncName
 from interpreter.instructions import Suspend
@@ -157,6 +158,12 @@ def test_an_install_without_the_regions_programs_and_transactions_is_refused():
     )
 
 
+_SCREEN_BUILTINS = frozenset(
+    FuncName(name)
+    for name in ("__cics_send_map", "__cics_receive_map", "__cics_send_text")
+)
+
+
 def _fire_abend() -> BuiltinResult:
     return Builtins.TABLE[FuncName("__cics_abend")]([], VMState())
 
@@ -165,14 +172,17 @@ def _fire_abend() -> BuiltinResult:
 def test_install_default_on_abend_is_a_noop():
     """A CICS-only region (no on_abend supplied) keeps its current
     behaviour exactly -- EXEC CICS ABEND must not raise."""
+    holder: list[DispatchResult] = [None]
     install_cics_runtime(
         [None],
         transid_to_program={},
         program_cache={},
-        result_holder=[None],
+        result_holder=holder,
     )
 
     _fire_abend()
+
+    assert holder == [DispatchResult(kind=DispatchKind.ABEND, abcode="UNKN")]
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -195,6 +205,8 @@ def test_install_threads_on_abend_to_the_abend_builtin():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_install_registers_screen_builtins_given_both_channels():
+    Builtins.TABLE.clear()
+
     install_cics_runtime(
         [None],
         transid_to_program={},
@@ -204,19 +216,21 @@ def test_install_registers_screen_builtins_given_both_channels():
         input_queue=queue.Queue(),
     )
 
-    assert FuncName("__cics_send_map") in Builtins.TABLE
-    assert FuncName("__cics_receive_map") in Builtins.TABLE
-    assert FuncName("__cics_send_text") in Builtins.TABLE
+    assert {n for n in Builtins.TABLE if n in _SCREEN_BUILTINS} == _SCREEN_BUILTINS
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_install_without_channels_does_not_raise():
+def test_install_without_channels_registers_no_screen_builtins():
+    Builtins.TABLE.clear()
+
     install_cics_runtime(
         [None],
         transid_to_program={},
         program_cache={},
         result_holder=[None],
     )
+
+    assert {n for n in Builtins.TABLE if n in _SCREEN_BUILTINS} == set()
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
