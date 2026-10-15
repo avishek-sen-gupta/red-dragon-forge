@@ -128,7 +128,9 @@ outside the run unit still ends the run with red-dragon's `UnresolvedProgramErro
 `compile_program` returns the `LinkedProgram` read back from its linked file. Its IR carries a
 file-definitions `Data` directive per program, and `jackal.file_definitions` reads the step's
 files from those alone: each `FILE-CONTROL` entry, and the record format its FD asks for, or the
-dataset's own where the `SELECT` has no FD. Each step compiles afresh into a new temporary directory (red-dragon-forge-k6l;
+dataset's own where the `SELECT` has no FD. The main program's files come first, then each
+callee's in link order; where two programs share a `SELECT` name, the later entry (a callee's)
+wins, so both programs' `OPEN`s go to its DD and meet its FD. Each step compiles afresh into a new temporary directory (red-dragon-forge-k6l;
 [decision record](../../records/design/2026-10-13-compiled-cobol-is-files.md)). `jackal.cobol_step.run_cobol_step` maps every
 `FILE-CONTROL` entry of the program and its callees to the file of the step's DD allocation,
 and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
