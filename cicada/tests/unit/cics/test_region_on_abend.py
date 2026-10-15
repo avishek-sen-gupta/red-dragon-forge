@@ -14,6 +14,7 @@ and CardDemo checkout -- see test_region_e2e.py for that)."""
 
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 
 import pytest
@@ -77,7 +78,9 @@ def test_build_region_forwards_on_abend_to_install_cics_runtime(monkeypatch, tmp
     assert captured["region_on_abend"] is sentinel
 
 
-def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path):
+def test_build_region_default_on_abend_is_the_module_noop(
+    monkeypatch, tmp_path, caplog
+):
     """No caller-supplied on_abend keeps a CICS-only region's current
     behaviour exactly -- the default forwarded to install_cics_runtime is a
     genuine no-op, not None (install_cics_runtime's own default would otherwise
@@ -111,6 +114,11 @@ def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path)
 
     result = _fire_installed_abend()
 
+    assert (
+        inspect.signature(region_mod.build_region).parameters["on_abend"].default
+        is region_mod._region_noop
+    )
     assert captured["region_on_abend"] is region_mod._region_noop
     assert region_mod._region_noop() is None
-    assert isinstance(result, BuiltinResult)
+    assert caplog.records == []
+    assert result == BuiltinResult(value=None)
