@@ -34,6 +34,7 @@ from types import ModuleType
 import ibm_db
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import run_cics
+from cics.runtime import install_cics_runtime
 from cics.types import CicsContext, DispatchKind
 from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
@@ -263,24 +264,26 @@ class CompiledInqcust:
 
 def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInqcust:
     context_holder, result_holder = [None], [None]
-    inq_cics = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
-        context_holder=context_holder,
         result_holder=result_holder,
         program_cache={},
     )
+    inq_cics = build_cics_spec()
     inq_sql = build_sql_spec()
     parser = make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY])
     inq_linked = compile_program(
         INQCUST_CBL.read_bytes(), parser, [inq_cics, inq_sql]
     )
     install_sql_runtime({"SAMPLE": recorder}, NamedDbConnector("SAMPLE"))
-    wrap_spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
-        context_holder=context_holder,
         result_holder=result_holder,
         program_cache={"INQCUST": inq_linked},
     )
+    wrap_spec = build_cics_spec()
     wrap_linked = compile_program(
         inq._WRAPPER_PROGRAM.encode("utf-8"),
         make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY]),
@@ -461,13 +464,14 @@ def _db2_backend(dsn: str, case: CompositionCase) -> Iterator[Db2Backend]:
 
 def _run_composed(source: str, backend: SqlBackend, transid: str):
     context_holder, result_holder = [None], [None]
-    cics_spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         applid="FORGEAPP",
     )
+    cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
     linked = compile_program(
         source.encode("utf-8"),

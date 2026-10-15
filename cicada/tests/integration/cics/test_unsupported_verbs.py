@@ -17,6 +17,7 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.dispatcher import run_cics
 from cics.types import CicsContext, DispatchKind
 from cobol_asg.cobol_parser import ProLeapCobolParser
@@ -68,13 +69,13 @@ COBOL_NEVER_REACHES_UNSUPPORTED = """\
 def _run(source: bytes, cobol_parser, unsupported: set):
     context_holder = [CicsContext(transid="UNS1", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
-        unsupported_verbs=unsupported,
     )
+    spec = build_cics_spec(unsupported_verbs=unsupported)
     program = compile_cics_program(source, cobol_parser, spec)
     return run_cics(
         program,

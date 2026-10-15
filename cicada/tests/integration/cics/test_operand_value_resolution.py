@@ -20,6 +20,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
 from tests.covers import covers
@@ -79,12 +80,13 @@ def _run(source: str, parser) -> "object":
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
     )
+    spec = build_cics_spec()
     program = compile_cics_program(source.encode(), parser, spec)
     return run_cics(
         program,

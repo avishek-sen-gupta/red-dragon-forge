@@ -65,6 +65,7 @@ from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 from interpreter.cobol.layout_data import field_positions
@@ -220,12 +221,13 @@ def test_inqcust_found_and_not_found(bridge_jar):
         # program_cache so WRAPPER's EXEC CICS LINK can find it by name at run
         # time. NamedDbConnector("SAMPLE") models the CICS Db2 attachment
         # facility: INQCUST never issues EXEC SQL CONNECT itself.
-        inqcust_cics_spec = build_cics_spec(
+        install_cics_runtime(
+            context_holder,
             transid_to_program={},
-            context_holder=context_holder,
             result_holder=result_holder,
             program_cache=program_cache,
         )
+        inqcust_cics_spec = build_cics_spec()
         inqcust_sql_spec = build_sql_spec()
         inqcust_source = (_BANK_OF_Z_COBOL / "INQCUST.cbl").read_bytes()
         inqcust_linked = compile_program(
@@ -236,12 +238,13 @@ def test_inqcust_found_and_not_found(bridge_jar):
 
         # Compile WRAPPER (CICS only -- it never touches SQL) sharing the SAME
         # context_holder/result_holder/program_cache.
-        wrapper_spec = build_cics_spec(
+        install_cics_runtime(
+            context_holder,
             transid_to_program={},
-            context_holder=context_holder,
             result_holder=result_holder,
             program_cache=program_cache,
         )
+        wrapper_spec = build_cics_spec()
         wrapper_parser = make_parser(bridge_jar, copybook_dirs=[_BANK_OF_Z_COPY])
         wrapper_linked = compile_program(
             _WRAPPER_PROGRAM.encode("utf-8"), wrapper_parser, [wrapper_spec]

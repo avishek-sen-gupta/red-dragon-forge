@@ -4,6 +4,7 @@ import queue
 
 from tests.covers import covers, NotLanguageFeature
 from cics.strategy import CicsLoweringStrategy
+from cics.runtime import install_cics_runtime
 from cics.types import DispatchKind
 from interpreter.func_name import FuncName
 from interpreter.register import Register
@@ -36,13 +37,14 @@ class _Ctx:
 
 
 def _strategy():
-    return CicsLoweringStrategy(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
+    )
+    return CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
     )
 
 
@@ -52,15 +54,13 @@ def test_strategy_registers_screen_builtins():
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
-    CicsLoweringStrategy(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
         screen_queue=screen_q,
         input_queue=input_q,
-        handler_source=[],
-        unsupported_verbs=set(),
     )
     assert FuncName("__cics_send_map") in Builtins.TABLE
     assert FuncName("__cics_receive_map") in Builtins.TABLE
@@ -70,13 +70,11 @@ def test_strategy_registers_screen_builtins():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_strategy_without_bms_still_constructs():
     # No screen_queue/input_queue -> screen builtins simply not registered, no error.
-    CicsLoweringStrategy(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
     )
 
 
@@ -198,14 +196,7 @@ def test_send_map_lowering_passes_base_field_names():
             "FROM": CicsOperand("COSGN0AO", False),
         },
     )
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     strategy.lower(ctx, stmt, materialised=materialised)
 
     send_calls = [
@@ -288,14 +279,7 @@ def test_receive_map_without_into_derives_group_from_literal_map_name():
             "MAPSET": CicsOperand("COSGN00", True),
         },  # no INTO -> derive COSGN0AI from the literal map name
     )
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     strategy.lower(ctx, stmt, materialised=materialised)
 
     recv = [
@@ -337,13 +321,14 @@ def test_syncpoint_rollback_lowers_to_the_rollback_hook():
     from cics.statements import ExecCicsStatement
 
     unsupported: set = set()
-    strategy = CicsLoweringStrategy(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=unsupported,
+    )
+    strategy = CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=unsupported
     )
     ctx = _Ctx()
     stmt = ExecCicsStatement(verb="SYNCPOINT ROLLBACK", options={})
@@ -502,14 +487,7 @@ def test_writeq_td_lowers_with_real_args():
             "FROM": CicsOperand("SOME-DATA", True),
         },
     )
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     strategy.lower(ctx, stmt, materialised=None)
 
     calls = [
@@ -610,14 +588,7 @@ def test_writeq_td_lowers_with_resp_writeback():
             "RESP": CicsOperand("WS-RC", False),
         },
     )
-    strategy = CicsLoweringStrategy(
-        transid_to_program={},
-        program_cache={},
-        context_holder=[None],
-        result_holder=[None],
-        handler_source=[],
-        unsupported_verbs=set(),
-    )
+    strategy = _strategy()
     strategy.lower(ctx, stmt, materialised=None)
 
     calls = [
@@ -652,13 +623,11 @@ class _MinimalHolder:
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_non_list_result_holder_still_receives_dispatch_results():
     holder = _MinimalHolder([None])
-    CicsLoweringStrategy(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=holder,
-        handler_source=[],
-        unsupported_verbs=set(),
     )
 
     abend = Builtins.TABLE[FuncName("__cics_abend")]
@@ -674,13 +643,11 @@ def test_none_result_holder_falls_back_without_crashing():
     (see ``Absent``'s docstring in strategy.py) — the same as omitting it.
     A caller passing it must still get a working internal holder, not a
     bare ``None`` the builtins try to subscript."""
-    CicsLoweringStrategy(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=None,
-        handler_source=[],
-        unsupported_verbs=set(),
     )
 
     abend = Builtins.TABLE[FuncName("__cics_abend")]
@@ -692,9 +659,12 @@ def test_none_result_holder_falls_back_without_crashing():
 def test_build_cics_spec_default_result_holder_does_not_crash():
     from cics.coprocessor import build_cics_spec
 
-    spec = build_cics_spec(
-        transid_to_program={}, program_cache={}, context_holder=[None]
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
     )
+    spec = build_cics_spec()
     spec.make_strategy()
 
     abend = Builtins.TABLE[FuncName("__cics_abend")]

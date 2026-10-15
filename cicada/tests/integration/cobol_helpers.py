@@ -11,6 +11,11 @@ import os
 
 import pytest
 
+from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
+from cics.strategy import NOT_SUPPLIED, Absent
+from cics.vsam.engine import VsamEngine
+from interpreter.project.coprocessor_compile import CoprocessorSpec
 from interpreter.run import run
 
 _AREA_A = "       "  # 7 spaces: cols 1-6 (seq) + col 7 (indicator = space)
@@ -67,3 +72,18 @@ def bridge_jar() -> str:
     returned path; run()/compile_directory read the same env var themselves.
     """
     return os.environ["PROLEAP_BRIDGE_JAR"]
+
+
+def installed_cics_spec(
+    context_holder: list,
+    result_holder: list,
+    vsam_engine: VsamEngine | Absent = NOT_SUPPLIED,
+) -> CoprocessorSpec:
+    install_cics_runtime(
+        context_holder,
+        transid_to_program={},
+        program_cache={},
+        result_holder=result_holder,
+        vsam_engine=vsam_engine,
+    )
+    return build_cics_spec()

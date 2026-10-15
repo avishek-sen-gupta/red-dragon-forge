@@ -8,6 +8,7 @@ import pytest
 
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.dispatcher import InputEvent
 from cics.tn3270.config import RegionConfig
 from cics.tn3270.region import _region, _wiring
@@ -41,15 +42,16 @@ def cobol_parser(bridge_jar):
 def test_an_unknown_return_transid_runs_the_regions_rollback(cobol_parser, tmp_path):
     wiring = _wiring()
     program_cache: dict = {}
-    spec = build_cics_spec(
+    install_cics_runtime(
+        wiring.context_holder,
         start_queue=wiring.start_queue,
-        context_holder=wiring.context_holder,
         result_holder=wiring.result_holder,
         program_cache=program_cache,
         transid_to_program={"HP00": "HOPPER"},
         screen_queue=wiring.screen_channel,
         input_queue=wiring.input_channel,
     )
+    spec = build_cics_spec()
     program_cache["HOPPER"] = compile_cics_program(
         _UNKNOWN_NEXT_SRC.encode(), cobol_parser, spec
     )

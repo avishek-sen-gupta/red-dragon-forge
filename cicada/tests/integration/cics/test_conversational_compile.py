@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from interpreter.cobol.features import CobolFeature
 from interpreter.instructions import Suspend
 from interpreter.project.cobol_compile import compile_cobol
@@ -43,15 +44,15 @@ def cobol_parser(bridge_jar):
 
 
 def _compiled(cobol_parser, conversational: bool, work_dir: Path) -> LinkedProgram:
-    spec = build_cics_spec(
+    install_cics_runtime(
+        [None],
         transid_to_program={},
         program_cache={},
-        context_holder=[None],
         result_holder=[None],
         screen_queue=queue.Queue(),
         input_queue=queue.Queue(),
-        conversational=conversational,
     )
+    spec = build_cics_spec(conversational=conversational)
     return compile_cobol(
         spec.source_prepass(_RECEIVER_SRC).encode(),
         parser=cobol_parser,

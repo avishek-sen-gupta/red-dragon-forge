@@ -129,9 +129,9 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
     path is validated, queued, and never run."""
     captured: dict[str, object] = {}
 
-    def _fake_build_spec(**kwargs):
+    def _fake_install_runtime(context_holder, **kwargs):
         captured["spec_start_queue"] = kwargs["start_queue"]
-        return object()
+        return kwargs["start_queue"]
 
     def _fake_loop(
         run_fn, program_cache, transid_to_program, initial_context, sq, iq, **kwargs
@@ -140,7 +140,7 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
         captured["loop_region_termid"] = kwargs["region_termid"]
         return DispatchResult(kind=DispatchKind.RETURN)
 
-    monkeypatch.setattr(bootstrap, "build_cics_spec", _fake_build_spec)
+    monkeypatch.setattr(bootstrap, "install_cics_runtime", _fake_install_runtime)
     monkeypatch.setattr(
         bootstrap,
         "compile_cics_program",

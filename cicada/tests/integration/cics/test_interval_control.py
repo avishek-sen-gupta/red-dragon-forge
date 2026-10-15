@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.dispatcher import CicsRegion, InputEvent, run_cics
 from cics.interval import RejectReason, StartQueue, StartRequest
 from cics.preprocessor import apply_cics_prepass
@@ -69,12 +70,13 @@ def test_eibterm_is_readable_by_the_program(cobol_parser):
         CicsContext(transid="TRM0", commarea=b"", eibaid="\x7d", termid="T001")
     ]
     result_holder: list = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
     )
+    spec = build_cics_spec()
     program = compile_cics_program(COBOL_EIBTRMID.encode(), cobol_parser, spec)
 
     result = run_cics(
@@ -113,14 +115,15 @@ COBOL_START_A = """\
 
 
 def _spec_with_queue(context_holder, result_holder, start_queue, transid_map):
-    return build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         start_queue=start_queue,
         transid_to_program=transid_map,
         region_termid="T001",
     )
+    return build_cics_spec()
 
 
 @covers(CobolFeature.EXEC_CICS)
@@ -164,15 +167,16 @@ def test_start_lowering_emits_no_return(cobol_parser):
     context_holder = [
         CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001")
     ]
-    strategy = CicsLoweringStrategy(
+    install_cics_runtime(
+        context_holder,
         program_cache={},
-        context_holder=context_holder,
         result_holder=[None],
         start_queue=StartQueue(),
         transid_to_program={"SRTB": "STARTB"},
         region_termid="T001",
-        handler_source=[],
-        unsupported_verbs=set(),
+    )
+    strategy = CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
     )
     frontend = CobolFrontend(
         cobol_parser=cobol_parser,
@@ -647,9 +651,9 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
     transid_map = {"SRTA": "STARTNT", "SRTD": "STARTD"}
     screen_queue: queue.Queue = queue.Queue()
     input_queue: queue.Queue = queue.Queue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         start_queue=start_queue,
         transid_to_program=transid_map,
@@ -657,6 +661,7 @@ def test_non_terminal_started_task_runs_and_send_map_is_invreq(cobol_parser):
         screen_queue=screen_queue,
         input_queue=input_queue,
     )
+    spec = build_cics_spec()
     program_cache = {
         "STARTNT": compile_cics_program(
             COBOL_START_NOTERM.encode(), cobol_parser, spec
@@ -711,9 +716,9 @@ def test_a_non_terminal_send_map_without_resp_abends(cobol_parser):
     transid_map = {"SRTA": "STARTNT", "SRTD": "STARTD"}
     screen_queue: queue.Queue = queue.Queue()
     input_queue: queue.Queue = queue.Queue()
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
         start_queue=start_queue,
         transid_to_program=transid_map,
@@ -721,6 +726,7 @@ def test_a_non_terminal_send_map_without_resp_abends(cobol_parser):
         screen_queue=screen_queue,
         input_queue=input_queue,
     )
+    spec = build_cics_spec()
     program_cache = {
         "STARTNT": compile_cics_program(
             COBOL_START_NOTERM.encode(), cobol_parser, spec

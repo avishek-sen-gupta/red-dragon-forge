@@ -24,6 +24,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
+from cics.runtime import install_cics_runtime
 from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
@@ -81,12 +82,13 @@ def test_commarea_carries_bytes(cobol_parser):
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = build_cics_spec(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
     )
+    spec = build_cics_spec()
     program = compile_cics_program(COBOL_COMMAREA.encode(), cobol_parser, spec)
 
     result = run_cics(
@@ -116,13 +118,14 @@ def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
     """RETURN COMMAREA(WS-CA) emits a LoadRegion feeding set_return_context."""
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
-        handler_source=[],
-        unsupported_verbs=set(),
+    )
+    strategy = CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
     )
     source = apply_cics_prepass(COBOL_COMMAREA).encode()
     frontend = CobolFrontend(
@@ -157,13 +160,14 @@ def test_return_commarea_literal_falls_back_to_const(cobol_parser):
     """RETURN TRANSID without a data-name COMMAREA keeps the Const fallback."""
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    strategy = CicsLoweringStrategy(
+    install_cics_runtime(
+        context_holder,
         transid_to_program={},
         program_cache={},
-        context_holder=context_holder,
         result_holder=result_holder,
-        handler_source=[],
-        unsupported_verbs=set(),
+    )
+    strategy = CicsLoweringStrategy(
+        conversational=False, handler_source=[], unsupported_verbs=set()
     )
     source = apply_cics_prepass(COBOL_RETURN_LIT).encode()
     frontend = CobolFrontend(
