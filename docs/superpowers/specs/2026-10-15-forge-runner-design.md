@@ -69,7 +69,7 @@ forge root and jackal and cicada import it. It provides:
 
 | entry | content |
 |---|---|
-| `manifest.json` | program name → linked file; coprocessor names; the transaction table from the CSD |
+| `manifest.json` | program name → linked file; coprocessor names; the transaction and file tables from the CSD |
 | `maps/<MAPSET>.json` | `hlasm_export`'s output for one BMS mapset, unchanged |
 | `programs/<PROGRAM>.linked.json` | the linked program, written by red-dragon's `LinkedCodec` |
 
@@ -139,7 +139,8 @@ build their fixtures with `litter.build`; `ProgramCompiler`, `ProgramSources` an
 **D9. `[cics]` serves a region assembled from the package over TN3270.** cicada's
 `build_region` splits into compile (now `litter.build`'s job) and assemble (programs, maps,
 transaction table and files into a region), and the run command assembles from the package.
-CICS datasets come from the CSD's `DEFINE FILE` → `DSNAME`, resolved through catnip.
+CICS datasets come from the CSD's `DEFINE FILE` → `DSNAME`, read at build into the manifest's
+file table and resolved through catnip at run.
 `min_commarea_len` leaves configuration: it defaults to 32763, CICS's maximum COMMAREA length
 (IBM, "Maximum length for the COMMAREA"; a longer COMMAREA raises LENGERR), and a bead records
 replacing the padding with the caller's real storage.
