@@ -13,7 +13,8 @@ datasets come from.
 
 ## Goal
 
-One build command turns a `build.toml` into `<name>.zip`, a package of linked programs. One run
+One build command turns a `build.toml` into `<name>.zip`, a package holding one linked image of
+the application's programs. One run
 command runs a package as `env.toml` describes: a program on its own, a JCL job, or a CICS region
 served over TN3270. Runs never parse, lower or link. Scope is parity with what each runtime does
 today.
@@ -34,7 +35,8 @@ copybook_exts = ["cpy", "CPY"]
 
 [build]
 name = "carddemo"
-programs = ["COSGN00C", "CBACT01C"]
+programs = ["COSGN00C", "CBACT01C", "CBSTM03A", "CBSTM03B"]   # lowered, once each
+link = ["COSGN00C", "CBACT01C", "CBSTM03A", "CBSTM03B"]       # linked into one image
 coprocessors = ["cics", "sql"]      # any of: sql, cics, cics-conversational; [] for none
 tolerant = false                    # compile-time tolerance, passed to compile_program
 out_dir = "out"
@@ -44,41 +46,43 @@ bms_dirs = ["app/bms"]
 csd_files = ["app/csd/CARDDEMO.CSD"]
 ```
 
-Each listed program is the main program of its own run unit, and every other listed program is
-linked into that run unit as a CALL target, as every member of a z/OS load library is
-available to a dynamic CALL: a program reached only by `CALL identifier` is simply listed.
-Static CALL targets are also found in `source_dirs`. LINK and XCTL targets are run units of
-their own and must be listed. A program name is its member name (the CICS load-module name). The build uses only the
-coprocessors' compile surface (D10). jackal's LE stubs are always on the search path, so every
-program can run under any mode.
+Lowering and linking are separate. Every program in `programs` is lowered once, on its own;
+lowering has no dependency on any other program. `link` names exactly the programs linked
+together into the package's one image, and may be a subset of `programs`. Nothing is
+discovered: a program reached by `CALL 'LITERAL'` or `CALL identifier` is linked only if it is
+in `link`. A tool that discovers CALL targets sits one level up and writes `build.toml`. There
+is no main program; a run chooses the program it enters (D11). A program name is its member
+name (the CICS load-module name). The build uses only the coprocessors' compile surface (D10).
+The build command always lowers jackal's LE stubs (`CEE3ABD`) and adds them to the image,
+as z/OS always has Language Environment available.
 
 **D3. `litter` is a new workspace member holding the package.** It imports no runtime; the
 forge root and jackal and cicada import it. It provides:
 
-- `build(programs, specs, search_dirs, work_dir, transactions, maps) -> Path` — compiles each
-  program with red-dragon's `compile_program` and the given `CoprocessorSpec`s, and writes the
-  zip. red-dragon's intermediate files go in `work_dir` (`out_dir/work/`), and a rebuild reuses
-  them; red-dragon's one change is `compile_program` gaining `work_dir`. Each linked program is
-  written with red-dragon's `LinkedCodec.write`. `transactions` is a tuple of frozen
+- `build(programs, link, specs, ..., work_dir, transactions, files, mapsets) -> Path` — lowers
+  each program in `programs` once with red-dragon's lowering stage (D11) and the given
+  `CoprocessorSpec`s, links the units of the programs in `link` into one image with red-dragon's
+  link stage, and writes the zip. Unit files go in `work_dir` (`out_dir/work/`), and a rebuild
+  reuses them. The image is written with red-dragon's `LinkedCodec.write`. `transactions` is a tuple of frozen
   `Transaction(transid, program)`, defined in `litter`; `maps` maps each mapset name to the
   JSON file `hlasm_export` wrote for it (empty for a package without cics), copied in
   unchanged.
-- `open(path) -> Package` — the typed manifest (programs, coprocessor names, transactions),
-  each program's `LinkedProgram` read with `LinkedCodec.read`, and each mapset's
+- `open(path) -> Package` — the typed manifest (the linked programs, coprocessor names,
+  transactions, files), the image read with `LinkedCodec.read`, and each mapset's
   `hlasm_export` JSON for cicada to parse with its existing mapset parser.
 
 **D4. The package is `<name>.zip`**, like a JAR:
 
 | entry | content |
 |---|---|
-| `manifest.json` | program name → linked file; coprocessor names; the transaction and file tables from the CSD |
+| `manifest.json` | the programs in the image; coprocessor names; the transaction and file tables from the CSD |
 | `maps/<MAPSET>.json` | `hlasm_export`'s output for one BMS mapset, unchanged |
-| `programs/<PROGRAM>.linked.json` | the linked program, written by red-dragon's `LinkedCodec` |
+| `image.linked.json` | the one linked image, written by red-dragon's `LinkedCodec` |
 
 The forge never serialises a `LinkedProgram` itself, and adds no map format of its own: a run
 parses the mapsets from `hlasm_export`'s JSON as cicada does today, without running
-`hlasm_export`. A package whose manifest names a missing
-linked file, or whose linked file fails `LinkedCodec.read`, stops the run naming the entry.
+`hlasm_export`. A package with no image, or whose image fails `LinkedCodec.read`, stops the run
+naming the entry.
 
 **D5. The build command** (forge root) reads `build.toml`; builds squall's and cicada's
 compile specs from `coprocessors` (`cics-conversational` is the cics spec with
@@ -124,7 +128,8 @@ The section present picks the mode; there is no mode key. A file with none or mo
 manifest names sql, a missing `[cics]` program or transid, or a program the manifest does not
 hold stops the run naming it.
 
-**D7. `[plain]` runs one program directly.** Its files are named by catalog name:
+**D7. `[plain]` runs one program directly**, entering the image at `program`. Its files are
+named by catalog name:
 `[plain.files]` maps each ASSIGN name to a dataset in catnip's catalog, which supplies the
 record format, length and record layout, as a DD with `DSN=...,DISP=SHR` does. No file is described in
 `env.toml`. The program runs as jackal runs a one-step program — the same allocation,
@@ -132,16 +137,23 @@ file-status and return-code behaviour — with the step's DDs built from `[plain
 
 **D8. `[jcl]` runs a job with jackal against the package.** jackal runs packages only: a
 `JobRunner` takes a `litter.Package` in place of a source directory and a compiler, and a step's
-`EXEC PGM=X` (or `DSN RUN PROGRAM(X)`) takes `X` from the package. A program the package does
-not hold is a missing program, handled by jackal's existing missing-program strategy. Datasets
+`EXEC PGM=X` (or `DSN RUN PROGRAM(X)`) runs the image entered at `X`. A program the image does
+not hold is a missing program, handled by jackal's existing missing-program strategy. jackal
+indexes file declarations by (program, SELECT name), read from every program's
+`__cobol_file_definitions` `Data` in the image; every file call names its program (D11), so two
+programs declaring the same SELECT name never meet. A program with no declaration for a SELECT
+falls back to the dataset's own label (`FormatFromDataset`). Status 39 and labelling a pending
+dataset stay in jackal, using the opening program's own declaration. Datasets
 come from the job's DDs and catnip's catalog. The step budget and the unresolved-reference,
 missing-data and missing-program strategies are jackal CLI's current defaults. jackal's tests
 build their fixtures with `litter.build`; `ProgramCompiler`, `ProgramSources` and the `--source-dir`,
 `--copybook-dir` and `--link` options go.
 
 **D9. `[cics]` serves a region assembled from the package over TN3270.** cicada's
-`build_region` splits into compile (now `litter.build`'s job) and assemble (programs, maps,
-transaction table and files into a region), and the run command assembles from the package.
+`build_region` splits into compile (now `litter.build`'s job) and assemble (the image, maps,
+transaction table and files into a region), and the run command assembles from the package. A
+new task enters the image at its transaction's program; EXEC CICS LINK and XCTL enter it at the
+named program.
 CICS datasets come from the CSD's `DEFINE FILE` → `DSNAME`, read at build into the manifest's
 file table and resolved through catnip at run.
 `min_commarea_len` leaves configuration: it defaults to 32763, CICS's maximum COMMAREA length
@@ -172,6 +184,27 @@ coprocessor the manifest names before it runs anything (`[jcl]` installs squall'
 handing the job to jackal, which still imports no other runtime); a path that compiles and
 runs in one process calls both. red-dragon's `CoprocessorSpec` is unchanged.
 
+**D11. red-dragon: separate lowering and linking, enter by program, file calls name their
+program.** All three are in red-dragon's project and COBOL packages; the VM core is unchanged.
+
+- *Lowering and linking.* Lowering one program to a unit file and linking a set of unit files
+  into one `LinkedProgram` are public, separate operations. Linking has no main: no unit is
+  positionally first, and the image's start-up is the COBOL run-unit allocation, which is the
+  same for every program. The image carries `programs: Mapping[str, CodeLabel]`, each program
+  name to its entry label, taken from each unit's program name (a `ModuleUnit` field the COBOL
+  lowering sets from PROGRAM-ID), never parsed from a label.
+- *Entering by program.* Every `run_linked*` entry point accepts the program to enter; a name
+  the image does not hold raises an error naming it. `VMState.declarations` are the entered
+  program's `Data`, not a fixed main's. CALLs resolve as today, by `__entry_<PROGRAM-ID>` at run
+  time, against every program in the image.
+- *File calls name their program.* Every COBOL file I/O call the lowering emits
+  (`__cobol_open_file`, `__cobol_read_record`, `__cobol_write_record`, `__cobol_rewrite_record`,
+  `__cobol_start_file`, `__cobol_delete_record`, `__cobol_close_file`, `__cobol_io_status`,
+  `__cobol_io_data`, `__cobol_file_open_mode`) carries the caller's PROGRAM-ID, a constant the
+  lowering knows, as its last argument. Each `CobolIOProvider` method gains it as its last
+  parameter; red-dragon's own providers accept and ignore it. `__cobol_file_definitions` records
+  gain a `program` field, so a provider indexes declarations by program as data.
+
 ## Out of scope
 
 - Migrating CardDemo onto `build.toml` and `env.toml`, and retiring `cicada-tn3270`,
@@ -183,10 +216,17 @@ runs in one process calls both. red-dragon's `CoprocessorSpec` is unchanged.
 - **squall and cicada (D10):** compiling with a compile spec leaves red-dragon's builtin table
   unchanged; `install_*_runtime` registers the same builtin names the constructors register
   today; a program compiled in one process runs in another after `install_*_runtime`.
-- **litter:** a built package opens to the same `LinkedProgram`s the compile produced (codec
-  round trip), with the manifest and maps as given; a rebuild with an unchanged work directory
-  reuses red-dragon's intermediate files; a missing or unreadable linked file stops `open`
-  naming the entry.
+- **red-dragon (D11):** a program lowered on its own and then linked equals today's compile of
+  it; an image linked from three programs runs each when entered by name, with that program's
+  declarations; entering a name the image lacks raises naming it; a `CALL identifier` to a
+  linked program resolves; every file call carries the caller's PROGRAM-ID last.
+- **litter:** a built package opens to the image the link produced (codec round trip), with the
+  manifest and maps as given; a program in `programs` but not `link` is lowered but absent from
+  the image; a rebuild with an unchanged work directory reuses the unit files; a missing or
+  unreadable image stops `open` naming it.
+- **jackal:** two programs in one image declaring the same SELECT name with different ASSIGN
+  names and formats each open their own dataset with their own format; CardDemo's CBSTM03A
+  step, whose callee CBSTM03B opens the files, runs.
 - **build command:** a `build.toml` with a CICS program, a batch program and a CSD yields a
   package whose manifest lists both programs, the coprocessors and the CSD's transactions; an
   unset `PROLEAP_BRIDGE_JAR` or `HLASM_EXPORT` stops the build naming it.
@@ -199,9 +239,15 @@ runs in one process calls both. red-dragon's `CoprocessorSpec` is unchanged.
 
 ## Units
 
-1. **red-dragon:** `compile_program` gains `work_dir`. Push; bump the forge.
-2. **squall and cicada:** the compile and runtime surfaces (D10); every caller migrates.
-3. **litter:** the member, `build` and `open`, `bridge-env.sh` exporting `HLASM_EXPORT`.
-4. **jackal:** runs packages only (D8); its tests build fixtures with `litter`.
+1. **red-dragon:** `compile_program` gains `work_dir`. Push; bump the forge. (done)
+2. **squall and cicada:** the compile and runtime surfaces (D10); every caller migrates. (done)
+2a. **red-dragon:** separate lowering and linking, the image's program index, entering by
+   program (D11).
+2b. **red-dragon:** file calls carry the caller's PROGRAM-ID; providers and the file-definitions
+   `Data` gain it (D11).
+3. **litter:** the member, `build` and `open`, `bridge-env.sh` exporting `HLASM_EXPORT`. (done
+   for one linked program per program; reworked to lower once and link one image)
+4. **jackal:** runs packages only (D8); its tests build fixtures with `litter`. (done; reworked
+   to enter the image by program and key declarations by program)
 5. **cicada:** `build_region` splits into compile and assemble; assemble from a package (D9).
 6. **forge root:** the build command (D2, D5) and the run command (D6–D9).
