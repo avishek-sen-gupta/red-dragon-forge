@@ -5,6 +5,7 @@ root_packages =
     jackal
     cobble
     catnip
+    litter
     red_dragon_forge
     interpreter
 
@@ -145,6 +146,7 @@ forbidden_modules =
     squall.preprocess
     squall.strategy
     catnip
+    litter
     red_dragon_forge
 
 [importlinter:contract:nothing-imports-cobble]
@@ -155,6 +157,7 @@ source_modules =
     squall
     jackal
     catnip
+    litter
     red_dragon_forge
 forbidden_modules =
     cobble
@@ -182,4 +185,17 @@ forbidden_modules =
     squall
     jackal
     cobble
+    red_dragon_forge
+
+[importlinter:contract:litter-imports-no-runtime]
+name = litter is the package of linked programs — it imports no runtime
+type = forbidden
+source_modules =
+    litter
+forbidden_modules =
+    cics
+    squall
+    jackal
+    cobble
+    catnip
     red_dragon_forge

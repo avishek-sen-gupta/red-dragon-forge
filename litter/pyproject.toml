@@ -1,0 +1,30 @@
+[project]
+name = "litter"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["pydantic>=2.0", "red-dragon"]
+
+[tool.uv.sources]
+red-dragon = { path = "../vendor/red-dragon", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "pre-commit>=4.6.0",
+    "pyright>=1.1.410",
+    "pytest>=9.1.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["litter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+target-version = ["py313"]
+extend-exclude = "/vendor/"
