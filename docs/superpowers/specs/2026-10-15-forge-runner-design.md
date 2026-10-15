@@ -44,9 +44,11 @@ bms_dirs = ["app/bms"]
 csd_files = ["app/csd/CARDDEMO.CSD"]
 ```
 
-Each listed program is the main program of its own run unit: the programs it CALLs are found
-in `source_dirs` and linked in; LINK and XCTL targets are run units of their own and must be
-listed. A program name is its member name (the CICS load-module name). The build uses only the
+Each listed program is the main program of its own run unit, and every other listed program is
+linked into that run unit as a CALL target, as every member of a z/OS load library is
+available to a dynamic CALL: a program reached only by `CALL identifier` is simply listed.
+Static CALL targets are also found in `source_dirs`. LINK and XCTL targets are run units of
+their own and must be listed. A program name is its member name (the CICS load-module name). The build uses only the
 coprocessors' compile surface (D10). jackal's LE stubs are always on the search path, so every
 program can run under any mode.
 
