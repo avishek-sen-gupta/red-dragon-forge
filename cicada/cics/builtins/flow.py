@@ -120,8 +120,6 @@ def make_link_builtin(
         from cics.vm_init import make_cics_initial_vm, make_entry_point  # noqa: PLC0415
         from cics.builtins.vsam import _write_into_ws  # noqa: PLC0415
 
-        from interpreter.run import main_declarations  # noqa: PLC0415
-
         if _run_fn is None:
             from interpreter.run import run_linked  # noqa: PLC0415
 
@@ -148,7 +146,6 @@ def make_link_builtin(
         saved_hook = swap(_TASK_END_HOOK, make_noop_hook_builtin())
         try:
             inner_vm = make_cics_initial_vm(context_holder[0], ca_bytes)
-            inner_vm.declarations = main_declarations(linked)
             final_vm = _run(
                 linked,
                 make_entry_point(linked),

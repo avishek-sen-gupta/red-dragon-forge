@@ -16,6 +16,7 @@ from cics.screen.payload import FieldAttributes, SendMapPayload, SendMode
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import NO_TERMINAL, CicsContext, DispatchKind, DispatchResult
 from interpreter.address import Address
+from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
 from interpreter.types.typed_value import TypedValue
 from interpreter.vm.vm_types import BuiltinResult, VMState
@@ -68,16 +69,16 @@ def ws_region(vm: VMState) -> WsRegion:
     return WsRegion(address, region) if region else NO_WS_REGION
 
 
-def read_ws_field(vm: VMState, region: bytearray, name: str) -> bytes:
-    positions = field_positions(vm.declarations)
+def read_ws_field(
+    positions: Mapping[str, FieldPosition], region: bytearray, name: str
+) -> bytes:
     if name not in positions:
         return b""
     position = positions[name]
     return bytes(region[position.offset : position.offset + position.length])
 
 
-def _numeric_input(vm: VMState, name: str) -> bool:
-    positions = field_positions(vm.declarations)
+def _numeric_input(positions: Mapping[str, FieldPosition], name: str) -> bool:
     return name in positions and positions[name].category == _NUMERIC_DISPLAY
 
 
@@ -113,34 +114,36 @@ def _send_mode(flags: frozenset[str]) -> SendMode:
     )
 
 
-def _halfword(vm: VMState, region: bytearray, name: str) -> int:
-    raw = read_ws_field(vm, region, name)
+def _halfword(
+    positions: Mapping[str, FieldPosition], region: bytearray, name: str
+) -> int:
+    raw = read_ws_field(positions, region, name)
     return struct.unpack(">h", raw)[0] if len(raw) == 2 else 0
 
 
-def _byte(vm: VMState, region: bytearray, name: str) -> int:
-    raw = read_ws_field(vm, region, name)
+def _byte(positions: Mapping[str, FieldPosition], region: bytearray, name: str) -> int:
+    raw = read_ws_field(positions, region, name)
     return raw[0] if raw else 0
 
 
 def _send_cursor(
-    vm: VMState,
+    positions: Mapping[str, FieldPosition],
     region: bytearray,
     bases: Sequence[str],
     flags: frozenset[str],
     offset: int,
 ) -> CursorPosition:
     """CURSOR(n) is an offset; a bare CURSOR takes the first field whose <f>L is -1."""
-    marked = tuple(b for b in bases if _halfword(vm, region, b + "L") == -1)
+    marked = tuple(b for b in bases if _halfword(positions, region, b + "L") == -1)
     symbolic = SymbolicCursor(marked[0]) if marked else NO_CURSOR
     explicit = Cursor(offset) if offset >= 0 else symbolic
     return explicit if "CURSOR" in flags else NO_CURSOR
 
 
 def _symbolic_values(
-    vm: VMState, region: bytearray, bases: Sequence[str]
+    positions: Mapping[str, FieldPosition], region: bytearray, bases: Sequence[str]
 ) -> Mapping[str, str]:
-    raw = {b: read_ws_field(vm, region, b + "O") for b in bases}
+    raw = {b: read_ws_field(positions, region, b + "O") for b in bases}
     return {
         b: data.decode("cp037", errors="replace").rstrip()
         for b, data in raw.items()
@@ -149,13 +152,13 @@ def _symbolic_values(
 
 
 def _overrides(
-    vm: VMState, region: bytearray, bases: Sequence[str]
+    positions: Mapping[str, FieldPosition], region: bytearray, bases: Sequence[str]
 ) -> Mapping[str, FieldAttributes]:
     attrs = {
         b: FieldAttributes(
-            _byte(vm, region, b + "A"),
-            _byte(vm, region, b + "C"),
-            _byte(vm, region, b + "H"),
+            _byte(positions, region, b + "A"),
+            _byte(positions, region, b + "C"),
+            _byte(positions, region, b + "H"),
         )
         for b in bases
     }
@@ -166,6 +169,7 @@ def _send_map_payload(args: Sequence[TypedValue], vm: VMState) -> SendMapPayload
     bases = tuple(str(v) for v in _named_args(args, 1))
     flags = frozenset(str(v) for v in _named_args(args, 3))
     region = ws_region(vm).data
+    positions = field_positions(vm.declarations)
     mode = _send_mode(flags)
     symbolic = mode is not SendMode.MAPONLY
     return SendMapPayload(
@@ -176,9 +180,9 @@ def _send_map_payload(args: Sequence[TypedValue], vm: VMState) -> SendMapPayload
         alarm="ALARM" in flags,
         frset="FRSET" in flags,
         freekb="FREEKB" in flags,
-        cursor=_send_cursor(vm, region, bases, flags, _cursor_arg(args, 4)),
-        fields=_symbolic_values(vm, region, bases) if symbolic else {},
-        attrs=_overrides(vm, region, bases) if symbolic else {},
+        cursor=_send_cursor(positions, region, bases, flags, _cursor_arg(args, 4)),
+        fields=_symbolic_values(positions, region, bases) if symbolic else {},
+        attrs=_overrides(positions, region, bases) if symbolic else {},
     )
 
 
@@ -221,13 +225,15 @@ def _encoded(value: str | bytes) -> bytes:
     )
 
 
-def _received_writes(vm: VMState, base: str, raw: bytes) -> tuple[FieldWrite, ...]:
+def _received_writes(
+    positions: Mapping[str, FieldPosition], base: str, raw: bytes
+) -> tuple[FieldWrite, ...]:
     """The write set for a field the terminal actually sent: its <f>I data
     (numeric input fields — BMS PICIN '9(n)' -> PIC 9 DISPLAY, category
     ZONED_DECIMAL — de-edited like z/OS BMS, right-justified and zero-filled;
     other fields left-justified and space-padded), its <f>L entered length,
     and its <f>F attribute byte, flagged cleared when the field arrived empty."""
-    numeric = _numeric_input(vm, base + "I")
+    numeric = _numeric_input(positions, base + "I")
     data = (
         FieldWrite(base + "I", raw, _CP037_ZERO, True)
         if numeric
@@ -252,15 +258,17 @@ def _unreceived_writes(base: str) -> tuple[FieldWrite, ...]:
 
 
 def _field_writes(
-    vm: VMState, base: str, values: Mapping[str, str]
+    positions: Mapping[str, FieldPosition], base: str, values: Mapping[str, str]
 ) -> tuple[FieldWrite, ...]:
     if base not in values:
         return _unreceived_writes(base)
-    return _received_writes(vm, base, _encoded(values[base]))
+    return _received_writes(positions, base, _encoded(values[base]))
 
 
 def _apply_input_writes(
-    vm: VMState, item: InputEvent | Mapping[str, str], base_names: frozenset[str]
+    positions: Mapping[str, FieldPosition],
+    item: InputEvent | Mapping[str, str],
+    base_names: frozenset[str],
 ) -> tuple[FieldWrite, ...]:
     """Write a terminal input event (real or legacy-duck-typed, or a plain
     dict) into the WS region: EIBAID, EIBCPOSN, then every base in the map —
@@ -278,7 +286,11 @@ def _apply_input_writes(
     return (
         eibaid_write,
         cposn_write,
-        *(w for base in sorted(base_names) for w in _field_writes(vm, base, values)),
+        *(
+            w
+            for base in sorted(base_names)
+            for w in _field_writes(positions, base, values)
+        ),
     )
 
 
@@ -289,7 +301,10 @@ def _apply_input(
     if not region.data:
         logger.warning("RECEIVE MAP: no WS region — EIBAID not updated")
         return
-    missing = write_fields(vm, region.data, _apply_input_writes(vm, item, base_names))
+    positions = field_positions(vm.declarations)
+    missing = write_fields(
+        positions, region.data, _apply_input_writes(positions, item, base_names)
+    )
     commit_region(vm, region.address, region.data)
     if "EIBAID" in missing:
         logger.warning("RECEIVE MAP: EIBAID not in data layout — EIBAID not updated")

@@ -36,6 +36,8 @@ from dataclasses import dataclass, replace
 from functools import cache
 from typing import TYPE_CHECKING
 
+from interpreter.cobol.field_position import FieldPosition
+from interpreter.cobol.layout_data import field_positions
 from squall.backend import SqlBackend
 from squall.binding import (
     read_params,
@@ -83,7 +85,13 @@ def _host_names(host_vars) -> tuple[str, ...]:
     return tuple(hv.name for hv in host_vars)
 
 
-def _bind_row(vm, out_vars, result, field_meta: Mapping[str, FieldMeta]) -> int:
+def _bind_row(
+    vm,
+    layout: Mapping[str, FieldPosition],
+    out_vars,
+    result,
+    field_meta: Mapping[str, FieldMeta],
+) -> int:
     """Bind *result*'s first row into *out_vars*; return the resulting SQLCODE.
 
     A no-row result leaves the host vars untouched and reports ``result.sqlcode``
@@ -92,7 +100,9 @@ def _bind_row(vm, out_vars, result, field_meta: Mapping[str, FieldMeta]) -> int:
     """
     if not result.rows:
         return result.sqlcode
-    status = write_outputs(vm, _host_names(out_vars), result.rows[0], field_meta)
+    status = write_outputs(
+        vm, layout, _host_names(out_vars), result.rows[0], field_meta
+    )
     return status if status != 0 else result.sqlcode
 
 
@@ -139,6 +149,7 @@ class _Ctx:
     open_cursors: set[str]
     field_meta: Mapping[str, FieldMeta]
     declaration: ParsedSql | _Undeclared
+    layout: Mapping[str, FieldPosition]
     tolerant: bool = False
 
 
@@ -150,7 +161,7 @@ def _current(ctx: _Ctx, vm) -> SqlBackend | None:
     """
     match ctx.conn.current:
         case None:
-            write_sqlcode(vm, SQLCODE_NO_CONNECTION)
+            write_sqlcode(vm, ctx.layout, SQLCODE_NO_CONNECTION)
             return None
         case backend:
             return backend
@@ -163,15 +174,15 @@ def _resolve_db(spec, ctx: _Ctx, vm) -> str:
         case ConnectTo(LiteralDb(name)):
             return name
         case ConnectTo(HostVarDb(var)):
-            value = read_params(vm, (var.name,), ctx.field_meta)[0]
+            value = read_params(vm, ctx.layout, (var.name,), ctx.field_meta)[0]
             return str(value).strip().upper()
         case _:
             raise AssertionError(f"_resolve_db reached with {spec!r}")
 
 
-def _h_noop(_ctx: _Ctx, _parsed, vm) -> None:
+def _h_noop(ctx: _Ctx, _parsed, vm) -> None:
     # Declare-section bookends have no DB effect.
-    write_sqlcode(vm, 0)
+    write_sqlcode(vm, ctx.layout, 0)
 
 
 def _h_connect(ctx: _Ctx, parsed, vm) -> None:
@@ -183,16 +194,16 @@ def _h_connect(ctx: _Ctx, parsed, vm) -> None:
     # idiom (re-connect to the same db) succeeds idempotently.
     if isinstance(parsed.connect, ConnectReset):
         ctx.conn.current = None
-        write_sqlcode(vm, 0)
+        write_sqlcode(vm, ctx.layout, 0)
         return
     match NamedDbConnector(_resolve_db(parsed.connect, ctx, vm)).connect(
         ctx.connections
     ):
         case None:
-            write_sqlcode(vm, SQLCODE_DB_NOT_FOUND)
+            write_sqlcode(vm, ctx.layout, SQLCODE_DB_NOT_FOUND)
         case backend:
             ctx.conn.current = backend
-            write_sqlcode(vm, 0)
+            write_sqlcode(vm, ctx.layout, 0)
 
 
 def _h_set_connection(ctx: _Ctx, parsed, vm) -> None:
@@ -202,15 +213,15 @@ def _h_set_connection(ctx: _Ctx, parsed, vm) -> None:
         ctx.connections
     ):
         case None:
-            write_sqlcode(vm, SQLCODE_NOT_ESTABLISHED)
+            write_sqlcode(vm, ctx.layout, SQLCODE_NOT_ESTABLISHED)
         case backend:
             ctx.conn.current = backend
-            write_sqlcode(vm, 0)
+            write_sqlcode(vm, ctx.layout, 0)
 
 
 def _h_disconnect(ctx: _Ctx, _parsed, vm) -> None:
     ctx.conn.current = None
-    write_sqlcode(vm, 0)
+    write_sqlcode(vm, ctx.layout, 0)
 
 
 def _cursor_name(ref) -> str:
@@ -231,6 +242,7 @@ def _open_declared_cursor(
     # cursor SELECT's own host vars.
     params = read_params(
         vm,
+        ctx.layout,
         _host_names(parsed.in_vars or decl.in_vars),
         ctx.field_meta,
         tolerant=ctx.tolerant,
@@ -238,7 +250,7 @@ def _open_declared_cursor(
     sqlcode = backend.open_cursor(name, decl.query, params)
     if sqlcode == 0:
         ctx.open_cursors.add(name)
-    write_sqlcode(vm, sqlcode)
+    write_sqlcode(vm, ctx.layout, sqlcode)
 
 
 def _open_on(backend: SqlBackend, ctx: _Ctx, parsed, vm) -> None:
@@ -247,7 +259,7 @@ def _open_on(backend: SqlBackend, ctx: _Ctx, parsed, vm) -> None:
     name = _cursor_name(parsed.cursor)
     match ctx.declaration:
         case _Undeclared():
-            write_sqlcode(vm, -1)  # cursor not declared
+            write_sqlcode(vm, ctx.layout, -1)  # cursor not declared
         case decl:
             _open_declared_cursor(backend, ctx, parsed, decl, name, vm)
 
@@ -272,10 +284,14 @@ def _h_fetch(ctx: _Ctx, parsed, vm) -> None:
                 # CLOSEd -- all three are "not open right now", distinct from
                 # a genuinely open cursor with no more rows, which the
                 # backend itself reports as end-of-cursor (+100).
-                write_sqlcode(vm, SQLCODE_CURSOR_NOT_OPEN)
+                write_sqlcode(vm, ctx.layout, SQLCODE_CURSOR_NOT_OPEN)
                 return
             result = backend.fetch(name)
-            write_sqlcode(vm, _bind_row(vm, parsed.out_vars, result, ctx.field_meta))
+            write_sqlcode(
+                vm,
+                ctx.layout,
+                _bind_row(vm, ctx.layout, parsed.out_vars, result, ctx.field_meta),
+            )
 
 
 def _h_close(ctx: _Ctx, parsed, vm) -> None:
@@ -285,11 +301,11 @@ def _h_close(ctx: _Ctx, parsed, vm) -> None:
         case backend:
             name = _cursor_name(parsed.cursor)
             if name not in ctx.open_cursors:
-                write_sqlcode(vm, SQLCODE_CURSOR_NOT_OPEN)
+                write_sqlcode(vm, ctx.layout, SQLCODE_CURSOR_NOT_OPEN)
                 return
             backend.close(name)
             ctx.open_cursors.discard(name)
-            write_sqlcode(vm, 0)
+            write_sqlcode(vm, ctx.layout, 0)
 
 
 def _h_commit(ctx: _Ctx, _parsed, vm) -> None:
@@ -298,7 +314,7 @@ def _h_commit(ctx: _Ctx, _parsed, vm) -> None:
             return
         case backend:
             backend.commit()
-            write_sqlcode(vm, 0)
+            write_sqlcode(vm, ctx.layout, 0)
 
 
 def _h_rollback(ctx: _Ctx, _parsed, vm) -> None:
@@ -307,7 +323,7 @@ def _h_rollback(ctx: _Ctx, _parsed, vm) -> None:
             return
         case backend:
             backend.rollback()
-            write_sqlcode(vm, 0)
+            write_sqlcode(vm, ctx.layout, 0)
 
 
 def _close_all_cursors(ctx: _Ctx, backend: SqlBackend) -> None:
@@ -376,15 +392,19 @@ def _h_query(ctx: _Ctx, parsed, vm) -> None:
             return
         case backend:
             params = read_params(
-                vm, _host_names(parsed.in_vars), ctx.field_meta, tolerant=ctx.tolerant
+                vm,
+                ctx.layout,
+                _host_names(parsed.in_vars),
+                ctx.field_meta,
+                tolerant=ctx.tolerant,
             )
             result = backend.execute(parsed.query, params)
             code = (
-                _bind_row(vm, parsed.out_vars, result, ctx.field_meta)
+                _bind_row(vm, ctx.layout, parsed.out_vars, result, ctx.field_meta)
                 if parsed.kind is Kind.SELECT_INTO
                 else resolve_dml_sqlcode(parsed.kind, result)
             )
-            write_sqlcode(vm, code, result.sqlerrm)
+            write_sqlcode(vm, ctx.layout, code, result.sqlerrm)
 
 
 # Dispatch table: EXEC SQL kind -> handler. Kinds with a non-empty query
@@ -468,6 +488,7 @@ def make_exec_sql_builtin(
         open_cursors=set(),
         field_meta={},
         declaration=_Undeclared(),
+        layout={},
         tolerant=tolerant,
     )
 
@@ -476,9 +497,11 @@ def make_exec_sql_builtin(
 
         values = [str(a.value) for a in args]
         parsed = _parsed(values[0])
-        _HANDLERS.get(parsed.kind, _h_query)(
-            _call_context(ctx, parsed, values[1:]), parsed, vm
+        call = replace(
+            _call_context(ctx, parsed, values[1:]),
+            layout=field_positions(vm.declarations),
         )
+        _HANDLERS.get(parsed.kind, _h_query)(call, parsed, vm)
         return BuiltinResult(value=None)
 
     return (

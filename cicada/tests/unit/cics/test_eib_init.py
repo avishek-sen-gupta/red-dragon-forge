@@ -1,9 +1,9 @@
 """Unit tests for EIB initialization builtin."""
 
-from interpreter.cobol.field_position import FieldPosition
-from tests.layout_build import declarations
 import struct
 from tests.covers import covers, NotLanguageFeature
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 from cics.types import CicsContext
 from cics.builtins.system import make_init_eib_builtin
 from interpreter.cobol.ebcdic_table import EbcdicTable
