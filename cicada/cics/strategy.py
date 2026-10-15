@@ -82,7 +82,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-K = TypeVar("K")
 V = TypeVar("V")
 
 _BUILTIN_INIT_EIB = FuncName("__cics_init_eib")
@@ -917,12 +916,6 @@ def _as_builtin_list(holder: Holder[T]) -> list[T]:
     return cast("list[T]", holder)
 
 
-def _as_builtin_dict(mapping: Mapping[K, V]) -> dict[K, V]:
-    """interval.py still annotates the mappings it only reads as ``dict``; it
-    reads the caller's object, so later additions show."""
-    return cast("dict[K, V]", mapping)
-
-
 @dataclass(frozen=True)
 class _Wiring:
     """The caller's shared objects, kept by identity: LINK and INQUIRE see
@@ -1063,8 +1056,10 @@ def _register_interval_builtins(
 ) -> None:
     from cics.builtins.interval import make_retrieve_builtin, make_start_builtin
 
-    transids = _as_builtin_dict(transid_to_program)
-    register("__cics_start", make_start_builtin(start_queue, transids, region_termid))
+    register(
+        "__cics_start",
+        make_start_builtin(start_queue, transid_to_program, region_termid),
+    )
     register("__cics_retrieve", make_retrieve_builtin(start_queue))
 
 

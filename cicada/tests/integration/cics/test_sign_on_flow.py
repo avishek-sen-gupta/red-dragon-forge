@@ -19,6 +19,7 @@ import queue
 from tests.covers import covers, NotLanguageFeature
 from interpreter.cobol.field_position import FieldPosition
 from tests.layout_build import declarations
+from interpreter.address import Address
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from cics.builtins.screen import (
     make_send_map_builtin,
@@ -35,6 +36,9 @@ _AT_TERMINAL: list = [
 ]
 
 
+_WS_ADDRESS = Address("1")
+
+
 class _FakeVM:
     """Minimal VM standing in for the symbolic map group in WORKING-STORAGE.
 
@@ -42,7 +46,7 @@ class _FakeVM:
     what compile_cics_program would have built for the program's WS records.
     """
 
-    def __init__(self, region: bytearray, layout: dict, addr: int = 1):
+    def __init__(self, region: bytearray, layout: dict, addr: Address = _WS_ADDRESS):
         self._region = region
         self.declarations = declarations(layout)
         self._addr = addr
@@ -65,7 +69,9 @@ def test_sign_on_to_main_menu_flow(monkeypatch):
     input_q: queue.Queue = queue.Queue()
 
     # The screen builtins locate the WS region via _get_ws_region_addr; pin it.
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
 
     send_map = make_send_map_builtin(screen_q, _AT_TERMINAL)
     # short timeout so a missing input fails fast rather than hanging the suite

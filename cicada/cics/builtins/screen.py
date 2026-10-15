@@ -15,7 +15,7 @@ from cics.screen.cursor import NO_CURSOR, Cursor, CursorPosition, SymbolicCursor
 from cics.screen.payload import FieldAttributes, SendMapPayload, SendMode
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import NO_TERMINAL, CicsContext, DispatchKind, DispatchResult
-from interpreter.address import Address
+from interpreter.address import NO_ADDRESS, Address
 from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
 from interpreter.types.typed_value import TypedValue
@@ -55,7 +55,7 @@ class WsRegion:
     data: bytearray
 
 
-NO_WS_REGION = WsRegion(address=Address(""), data=bytearray())
+NO_WS_REGION = WsRegion(address=NO_ADDRESS, data=bytearray())
 
 
 def ws_region(vm: VMState) -> WsRegion:
@@ -63,7 +63,7 @@ def ws_region(vm: VMState) -> WsRegion:
     from cics.builtins.system import _get_ws_region_addr
 
     address = _get_ws_region_addr(vm)
-    if not address:
+    if not address.is_present():
         return NO_WS_REGION
     region = vm.region_get(address)
     return WsRegion(address, region) if region else NO_WS_REGION

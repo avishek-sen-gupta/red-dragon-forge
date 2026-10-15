@@ -12,7 +12,7 @@ from cics.builtins.screen import CicsBuiltin, ws_region
 from cics.cell import Holder, hold
 from cics.conditions import UNHANDLED_ABCODE, UNSUPPORTED_VERB_ABCODE
 from cics.types import CicsContext, DispatchKind, DispatchResult
-from interpreter.address import Address
+from interpreter.address import NO_ADDRESS, Address
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from interpreter.cobol.layout_data import field_positions
 from interpreter.project.types import LinkedProgram
@@ -37,14 +37,13 @@ def _ascii_to_ebcdic_bytes(s: str, length: int) -> bytes:
 
 
 def _get_ws_region_addr(vm: VMState) -> Address:
-    """The working-storage region's address, or the empty Address when no frame holds one."""
     return next(
         (
             Address(str(frame.local_vars[_WS_REGION].value))
             for frame in reversed(vm.call_stack)
             if _WS_REGION in frame.local_vars
         ),
-        Address(""),
+        NO_ADDRESS,
     )
 
 

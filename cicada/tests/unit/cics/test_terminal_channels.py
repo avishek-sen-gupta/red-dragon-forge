@@ -10,6 +10,7 @@ touching program/VM/strategy logic.
 
 from interpreter.cobol.field_position import FieldPosition
 from tests.layout_build import declarations
+from interpreter.address import Address
 import queue
 import struct
 
@@ -60,8 +61,11 @@ _ListScreenChannel = _ListChannel
 _ListInputChannel = _ListChannel
 
 
+_WS_ADDRESS = Address("1")
+
+
 class _FakeVM:
-    def __init__(self, region, layout, addr=1):
+    def __init__(self, region, layout, addr=_WS_ADDRESS):
         self._region = region
         self.declarations = declarations(layout)
         self._addr = addr
@@ -104,7 +108,9 @@ def test_send_map_drives_a_custom_non_queue_channel(monkeypatch):
     region = bytearray(b"\x40" * 8)
     region[0:8] = "USER0001".encode("cp037")
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     ch = _ListScreenChannel()
     builtin = make_send_map_builtin(ch, _AT_TERMINAL)
     builtin([_tv("COSGN0A"), _tv(["USERID"])], vm)
@@ -177,7 +183,9 @@ def test_receive_map_consumes_from_a_custom_non_queue_channel(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     ch = _ListInputChannel()
     ch.put(InputEvent(eibaid="\x33", fields={"USERID": "USER0001"}))

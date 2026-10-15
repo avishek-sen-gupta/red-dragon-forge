@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
 
-from cics.builtins.system import _get_ws_region_addr
+from cics.builtins.cells import commit_region, write_at
+from cics.builtins.screen import CicsBuiltin, ws_region
 from cics.interval import RejectReason, StartQueue, StartRequest
 from cics.types import NO_TERMINAL
+from interpreter.types.typed_value import TypedValue
 from interpreter.vm.vm_types import BuiltinResult, VMState
-
-if TYPE_CHECKING:
-    from interpreter.types.typed_value import TypedValue
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +20,11 @@ _RESP_TRANSIDERR = 28
 _RESP_ENDDATA = 29
 
 
-def _text(args: list[TypedValue], i: int) -> str:
+def _text(args: Sequence[TypedValue], i: int) -> str:
     return str(args[i].value).strip("'\" ") if len(args) > i else ""
 
 
-def _payload(args: list[TypedValue], i: int) -> bytes:
+def _payload(args: Sequence[TypedValue], i: int) -> bytes:
     v = args[i].value if len(args) > i else b""
     return (
         bytes(v)
@@ -34,11 +33,27 @@ def _payload(args: list[TypedValue], i: int) -> bytes:
     )
 
 
+def _start(
+    start_queue: StartQueue,
+    transid_to_program: Mapping[str, str],
+    region_termid: str,
+    req: StartRequest,
+) -> int:
+    if req.transid not in transid_to_program:
+        start_queue.reject(req, RejectReason.UNKNOWN_TRANSID)
+        return _RESP_TRANSIDERR
+    if req.termid not in (NO_TERMINAL, region_termid):
+        start_queue.reject(req, RejectReason.NO_SUCH_TERMINAL)
+        return _RESP_TERMIDERR
+    start_queue.queue(req)
+    return _RESP_NORMAL
+
+
 def make_start_builtin(
     start_queue: StartQueue,
-    transid_to_program: dict[str, str],
+    transid_to_program: Mapping[str, str],
     region_termid: str,
-) -> object:
+) -> CicsBuiltin:
     """START: queues a start-request and returns a resp code.
 
     args: (transid_str, data_bytes, termid_str, reqid_str, timing_str)
@@ -47,7 +62,7 @@ def make_start_builtin(
     issuing program falls through to its next statement as in real CICS.
     """
 
-    def __cics_start(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+    def __cics_start(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
         req = StartRequest(
             transid=_text(args, 0),
             data=_payload(args, 1),
@@ -55,14 +70,9 @@ def make_start_builtin(
             reqid=_text(args, 3),
             timing_text=_text(args, 4),
         )
-        if req.transid not in transid_to_program:
-            start_queue.reject(req, RejectReason.UNKNOWN_TRANSID)
-            return BuiltinResult(value=_RESP_TRANSIDERR)
-        if req.termid not in (NO_TERMINAL, region_termid):
-            start_queue.reject(req, RejectReason.NO_SUCH_TERMINAL)
-            return BuiltinResult(value=_RESP_TERMIDERR)
-        start_queue.queue(req)
-        return BuiltinResult(value=_RESP_NORMAL)
+        return BuiltinResult(
+            value=_start(start_queue, transid_to_program, region_termid, req)
+        )
 
     return __cics_start
 
@@ -72,20 +82,15 @@ def _write_into_ws(vm: VMState, data: bytes, offset: int, length: int) -> None:
 
     Same Option-A buffer fill as the VSAM read builtins; see cics/builtins/vsam.py.
     """
-    addr = _get_ws_region_addr(vm)
-    if not addr:
-        logger.warning("RETRIEVE: no __ws_region in VM — INTO not filled")
+    region = ws_region(vm)
+    if not region.data:
+        logger.warning("RETRIEVE: no WS region in VM — INTO not filled")
         return
-    region = vm.region_get(addr)
-    if not region:
-        logger.warning("RETRIEVE: WS region not allocated — INTO not filled")
-        return
-    payload = data[:length].ljust(length, b"\x00")
-    region[offset : offset + length] = payload
-    vm.region_set(addr, region)
+    write_at(region.data, offset, data[:length].ljust(length, b"\x00"))
+    commit_region(vm, region.address, region.data)
 
 
-def make_retrieve_builtin(start_queue: StartQueue) -> object:
+def make_retrieve_builtin(start_queue: StartQueue) -> CicsBuiltin:
     """RETRIEVE: consumes this task's start data into INTO; returns a resp code.
 
     args: (into_offset_int, into_length_int)
@@ -94,7 +99,7 @@ def make_retrieve_builtin(start_queue: StartQueue) -> object:
     the terminal rather than by START. The INTO area is then left untouched.
     """
 
-    def __cics_retrieve(args: list[TypedValue], vm: VMState) -> BuiltinResult:
+    def __cics_retrieve(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
         into_off = int(args[0].value) if args else 0
         into_len = int(args[1].value) if len(args) > 1 else 0
         data = start_queue.take_start_data()
