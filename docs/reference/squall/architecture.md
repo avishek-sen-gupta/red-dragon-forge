@@ -19,7 +19,19 @@ SQL runs against a `SqlBackend`. Two backends ship:
 - Composed: `red_dragon_forge` passes squall's `CoprocessorSpec` and cicada's to
   `interpreter.project.coprocessor_compile.compile_program`, which builds one program for
   CICS + Db2 and returns its `LinkedProgram`. Because each `__exec_sql` call carries its own
-  statement, a compiled SQL program runs in any process.
+  statement, a compiled SQL program runs in any process that has installed the SQL runtime.
+
+## Compile surface and runtime surface
+
+The coprocessor has two entry points. `squall.coprocessor.build_sql_spec(*, tolerant)` is the
+compile surface: its `SqlLoweringStrategy` keeps only lowering state (the WHENEVER table and
+the program's cursor scope) and registers nothing, so compiling leaves `Builtins.TABLE`
+unchanged. `squall.runtime.install_sql_runtime(connections, initial_connector, *, tolerant)`
+is the runtime surface: it registers `__exec_sql` and the three CICS hooks (see Hooks) over
+the live connection registry. A process that compiles and runs calls both; a process that runs
+a program compiled elsewhere calls only `install_sql_runtime`, before it runs anything.
+`tolerant=True` on the runtime skips host variables missing from the data layout rather than
+raising.
 
 ## Passive design
 
@@ -33,7 +45,7 @@ current connection and returns. A lowered program needs nothing from the lowerin
 
 A run starts disconnected. `CONNECT TO` and `SET CONNECTION` pick a backend from the
 connection registry; `CONNECT RESET` and `DISCONNECT` clear it. A data statement with no
-current connection sets `SQLCODE` to `-1024`. `build_sql_spec(initial_connector=NamedDbConnector(name))`
+current connection sets `SQLCODE` to `-1024`. `install_sql_runtime(connections, NamedDbConnector(name))`
 starts the run already connected, which models the CICS Db2 attachment facility.
 
 ## Invariants
@@ -65,7 +77,7 @@ Changes to these RedDragon pieces go upstream; `vendor/red-dragon` is not edited
 
 ## Hooks
 
-`SqlLoweringStrategy` registers four builtins in `Builtins.TABLE`:
+`install_sql_runtime` registers four builtins in `Builtins.TABLE`:
 
 | Builtin | Called by | Effect |
 |---|---|---|
@@ -82,8 +94,9 @@ Paths are relative to `squall/squall/`.
 
 | Path | Purpose |
 |---|---|
-| `coprocessor.py` | `build_sql_spec`: wraps the strategy, source prepass, dialect parser and Db2 stubs as a `CoprocessorSpec`. |
-| `strategy.py` | `SqlLoweringStrategy`: lowers `ExecSqlStatement` to self-contained `__exec_sql` calls and registers the builtins. |
+| `coprocessor.py` | `build_sql_spec`: the compile surface. Wraps the strategy, source prepass, dialect parser and Db2 stubs as a `CoprocessorSpec`. |
+| `runtime.py` | `install_sql_runtime`: the runtime surface. Registers `__exec_sql` and the three CICS hooks over the connection registry. |
+| `strategy.py` | `SqlLoweringStrategy`: lowers `ExecSqlStatement` to self-contained `__exec_sql` calls. Registers nothing. |
 | `program_scope.py` | `ProgramScope`: the program being lowered, its cursor declarations and VARCHAR groups. |
 | `strategy_stores.py` | Builtin registration into `Builtins.TABLE`. |
 | `statements.py` | `ExecSqlStatement` and `SqlDialectParser`. |

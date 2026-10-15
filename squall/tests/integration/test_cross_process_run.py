@@ -7,7 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from squall.backends.sqlite import SqliteBackend
 from squall.dclgen import generate, write
 
 
@@ -31,7 +30,6 @@ def test_a_program_lowered_here_runs_in_a_fresh_process(bridge_jar, tmp_path):
     linked = _helpers.compile_cobol(
         _VARCHAR_PROGRAM,
         bridge_jar,
-        {"SAMPLE": SqliteBackend(conn)},
         copybook_dirs=[tmp_path],
     )
     unit = tmp_path / "unit.pickle"

@@ -83,32 +83,6 @@ _spec.loader.exec_module(_helpers)
 compile_cobol = _helpers.compile_cobol
 
 
-class _NullBackend:
-    """A backend whose execute always fails (SQLCODE -1) — enough to compile."""
-
-    def execute(self, sql, params):
-        from squall.backend import SqlResult
-
-        return SqlResult(rows=(), rowcount=0, sqlcode=-1)
-
-    def open_cursor(self, name, sql, params):  # pragma: no cover - unused here
-        pass
-
-    def fetch(self, name):  # pragma: no cover - unused here
-        from squall.backend import SqlResult
-
-        return SqlResult(rows=(), rowcount=0, sqlcode=100)
-
-    def close(self, name):  # pragma: no cover - unused here
-        pass
-
-    def commit(self):  # pragma: no cover - unused here
-        pass
-
-    def rollback(self):  # pragma: no cover - unused here
-        pass
-
-
 _PROGRAM_GOTO = """       IDENTIFICATION DIVISION.
        PROGRAM-ID. WHENT.
        DATA DIVISION.
@@ -129,9 +103,7 @@ def test_whenever_goto_emits_conditional_branch(bridge_jar=None):
     """A SELECT under an active WHENEVER SQLERROR GO TO lowers a BranchIf
     (the synthetic IF SQLCODE < 0 GO TO ERR-PARA) into the IR."""
     jar = os.environ["PROLEAP_BRIDGE_JAR"]
-    linked = compile_cobol(
-        _PROGRAM_GOTO, jar, {"SAMPLE": _NullBackend()}, copybook_dirs=[]
-    )
+    linked = compile_cobol(_PROGRAM_GOTO, jar, copybook_dirs=[])
     assert any(
         isinstance(i, BranchIf) for i in linked.merged_ir
     ), "expected a conditional branch from the synthetic WHENEVER IF/GO TO"

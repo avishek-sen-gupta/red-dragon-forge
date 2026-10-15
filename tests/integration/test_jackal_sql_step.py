@@ -15,6 +15,7 @@ from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from squall.backends.sqlite import SqliteBackend
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 
 CBL = Path(__file__).parent / "fixtures" / "cbl"
 
@@ -26,6 +27,7 @@ def _report(
     conn.execute("CREATE TABLE ACCOUNT (ACCT_ID INTEGER, ACCT_BAL INTEGER)")
     conn.execute("INSERT INTO ACCOUNT VALUES (11, 500)")
     conn.commit()
+    install_sql_runtime({"SAMPLE": SqliteBackend(conn)})
     system = SystemCatalog(tmp_path / "system")
     runner = JobRunner(
         source_dir=CBL,
@@ -36,7 +38,7 @@ def _report(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        coprocessors=(build_sql_spec({"SAMPLE": SqliteBackend(conn)}),),
+        coprocessors=(build_sql_spec(),),
     )
     scratch = tmp_path / "scratch"
     scratch.mkdir()

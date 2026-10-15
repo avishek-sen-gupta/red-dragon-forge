@@ -67,13 +67,9 @@ def make_cobol_parser(
 def compile_cobol(
     source: str,
     bridge_jar_path: str,
-    connections,
     copybook_dirs: list[Path] | None = None,
 ) -> LinkedProgram:
     """Compile a COBOL source string to a LinkedProgram.
-
-    *connections* is the connection registry (name -> backend) the program's
-    EXEC SQL CONNECT selects from at run time; a run starts disconnected.
 
     Builds one CoprocessorSpec (squall.coprocessor.build_sql_spec) and delegates to RedDragon's shared compile_program
     (interpreter.project.coprocessor_compile) -- the same composition
@@ -86,7 +82,7 @@ def compile_cobol(
 
     dirs = copybook_dirs or []
     parser = make_cobol_parser(bridge_jar_path, copybook_dirs=dirs)
-    spec = build_sql_spec(connections)
+    spec = build_sql_spec()
     return compile_program(source.encode("utf-8"), parser, [spec])
 
 
@@ -100,18 +96,19 @@ def run_cobol(
     """Compile and run a COBOL program against the *connections* registry; return
     the final VMState.
 
-    Builds the SQL strategy from *connections* (name → backend) and wraps it in
-    the frontend's extension_strategies array. The run
-    starts disconnected; the program's EXEC SQL CONNECT selects its database.
+    Compiles with the SQL compile spec, then installs the SQL runtime over
+    *connections* (name → backend). The run starts disconnected; the
+    program's EXEC SQL CONNECT selects its database.
 
     Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
     Phase 1 runs the init block (top-level), phase 2 dispatches into the
     program's procedure division function (func_<pid>_0).  This is required
     so that __ws_region is visible in the frame when the builtins execute.
     """
-    linked = compile_cobol(
-        source, bridge_jar_path, connections, copybook_dirs=copybook_dirs
-    )
+    from squall.runtime import install_sql_runtime
+
+    linked = compile_cobol(source, bridge_jar_path, copybook_dirs=copybook_dirs)
+    install_sql_runtime(connections)
 
     return run_linked_program(linked, max_steps)
 

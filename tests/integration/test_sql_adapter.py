@@ -15,6 +15,7 @@ from squall.backends.sqlite import SqliteBackend
 from squall.binding import _decode_field
 
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 from interpreter.project.coprocessor_compile import compile_program
 from tests.integration.forge_cobol_helpers import make_parser
 
@@ -61,10 +62,11 @@ def test_sql_only_spec_selects_into(bridge_jar):
     conn.commit()
     backend = SqliteBackend(conn)
 
-    spec = build_sql_spec(connections={"SAMPLE": backend})
+    spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 
     linked = compile_program(_SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec])
+    install_sql_runtime({"SAMPLE": backend})
 
     entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
 

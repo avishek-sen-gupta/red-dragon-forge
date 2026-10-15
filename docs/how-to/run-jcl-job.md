@@ -141,8 +141,8 @@ at run time, but no program named CALLSUB is linked into this run unit`.
 ### A Db2 step (IKJEFT01 with DSN RUN PROGRAM)
 
 The `jackal` command composes no SQL support, so a program with `EXEC SQL` runs through the Python
-API, with squall's coprocessor given to the runner. A Db2 batch program does not `CONNECT`; DSN
-attaches it to its subsystem, which `initial_connector` stands in for. This runs a SYSTSIN of
+API, with squall's runtime installed and its coprocessor given to the runner. A Db2 batch program
+does not `CONNECT`; DSN attaches it to its subsystem, which `initial_connector` stands in for. This runs a SYSTSIN of
 `DSN SYSTEM(DB2P)` / `RUN PROGRAM(RPTPGM) PLAN(RPTPLAN)` against an SQLite database:
 
 ```python
@@ -159,8 +159,10 @@ from jackal.unresolved import RaiseErrorStrategy
 from squall.backends.sqlite import SqliteBackend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 
 conn = sqlite3.connect("bank.db")
+install_sql_runtime({"DB2P": SqliteBackend(conn)}, NamedDbConnector("DB2P"))
 runner = JobRunner(
     source_dir=Path("cbl"),
     bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
@@ -170,11 +172,7 @@ runner = JobRunner(
     missing_data=StrictAllocation(),
     missing_program=AbendMissingProgram(),
     program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-    coprocessors=(
-        build_sql_spec(
-            {"DB2P": SqliteBackend(conn)}, initial_connector=NamedDbConnector("DB2P")
-        ),
-    ),
+    coprocessors=(build_sql_spec(),),
 )
 with tempfile.TemporaryDirectory() as scratch:
     result = runner.run(parse_jcl(Path("db2job.jcl").read_text()), Path(scratch))

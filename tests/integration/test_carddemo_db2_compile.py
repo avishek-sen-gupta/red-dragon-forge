@@ -2,8 +2,8 @@
 2026-09-19-carddemo-db2-tier plan).
 
 Proves both `COTRTUPC` and `COTRTLIC` compile with the CICS and SQL
-coprocessor specs composed, against an in-memory `SqliteBackend`
-(compilation never touches a database, so this gate does not require Db2).
+coprocessor specs composed (compilation never touches a database, so this
+gate does not require Db2).
 
 Verified recipe — later tasks (9-11) should copy this rather than
 rediscover it:
@@ -29,7 +29,6 @@ rediscover it:
 from __future__ import annotations
 
 import os
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -40,7 +39,6 @@ from interpreter.cobol.layout_data import field_positions
 from interpreter.instructions import Const
 from interpreter.project.coprocessor_compile import compile_program
 from interpreter.run import main_declarations
-from squall.backends.sqlite import SqliteBackend
 from squall.coprocessor import build_sql_spec
 
 from tests.integration.forge_cobol_helpers import (
@@ -104,19 +102,13 @@ def _compile(bridge_jar: str, program_name: str):
     source = (_db2_tree() / "cbl" / f"{program_name}.cbl").read_bytes()
     parser = _make_parser(bridge_jar)
 
-    conn = sqlite3.connect(":memory:")
-    backend = SqliteBackend(conn)
-
     cics_spec = build_cics_spec(
         transid_to_program={},
         program_cache={},
         context_holder=[None],
         result_holder=[None],
     )
-    sql_spec = build_sql_spec(
-        connections={"CARDDEMO": backend},
-        tolerant=True,
-    )
+    sql_spec = build_sql_spec(tolerant=True)
 
     return compile_program(source, parser, [cics_spec, sql_spec], tolerant=True)
 

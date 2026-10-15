@@ -7,6 +7,7 @@ from cics.types import CicsContext, DispatchKind
 
 from cics.coprocessor import build_cics_spec
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 from interpreter.project.coprocessor_compile import compile_program
 from red_dragon_forge.run import run_program
 from squall.backends.sqlite import SqliteBackend
@@ -52,12 +53,13 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
         result_holder=result_holder,
         applid="FORGEAPP",
     )
-    sql_spec = build_sql_spec(connections={"SAMPLE": backend})
+    sql_spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 
     linked = compile_program(
         _COMBINED_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
+    install_sql_runtime({"SAMPLE": backend})
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
@@ -117,12 +119,13 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
         result_holder=result_holder,
         applid="FORGEAPP",
     )
-    sql_spec = build_sql_spec(connections={"SAMPLE": backend})
+    sql_spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 
     linked = compile_program(
         _CURSOR_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
+    install_sql_runtime({"SAMPLE": backend})
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
