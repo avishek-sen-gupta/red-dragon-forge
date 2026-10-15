@@ -109,7 +109,7 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
         result_holder=result_holder,
         on_abend=backend.rollback,
     )
-    sql_spec = build_sql_spec(tolerant=True)
+    sql_spec = build_sql_spec()
     parser = make_parser(bridge_jar)
 
     linked = compile_program(

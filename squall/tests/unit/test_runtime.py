@@ -61,7 +61,7 @@ def _stand_in(_args: object, vm: object) -> None:
 def test_compile_spec_registers_nothing():
     before = dict(Builtins.TABLE)
 
-    build_sql_spec(tolerant=False).make_strategy()
+    build_sql_spec().make_strategy()
 
     assert dict(Builtins.TABLE) == before
 

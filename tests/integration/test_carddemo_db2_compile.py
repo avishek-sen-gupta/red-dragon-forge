@@ -19,8 +19,8 @@ rediscover it:
   *replaces* the bridge's default list rather than extending it, so every
   extension the corpus uses, including the DCLGEN `.dcl` one, must be
   restated).
-- **`tolerant=True`** on `build_sql_spec` — host variables missing from the
-  data layout are skipped rather than raised.
+- **`tolerant=True`** on `install_sql_runtime` when the program runs — host
+  variables missing from the data layout are skipped rather than raised.
 - `stage_sanitised_copybooks` is deliberately NOT used: proving the raw
   `.dcl` files parse now that Task 1/2 stop corrupting fixed-format columns
   is the point of this test.
@@ -108,7 +108,7 @@ def _compile(bridge_jar: str, program_name: str):
         context_holder=[None],
         result_holder=[None],
     )
-    sql_spec = build_sql_spec(tolerant=True)
+    sql_spec = build_sql_spec()
 
     return compile_program(source, parser, [cics_spec, sql_spec], tolerant=True)
 

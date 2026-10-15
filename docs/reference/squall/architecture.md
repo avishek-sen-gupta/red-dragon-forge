@@ -23,15 +23,15 @@ SQL runs against a `SqlBackend`. Two backends ship:
 
 ## Compile surface and runtime surface
 
-The coprocessor has two entry points. `squall.coprocessor.build_sql_spec(*, tolerant)` is the
+The coprocessor has two entry points. `squall.coprocessor.build_sql_spec()` is the
 compile surface: its `SqlLoweringStrategy` keeps only lowering state (the WHENEVER table and
 the program's cursor scope) and registers nothing, so compiling leaves `Builtins.TABLE`
 unchanged. `squall.runtime.install_sql_runtime(connections, initial_connector, *, tolerant)`
 is the runtime surface: it registers `__exec_sql` and the three CICS hooks (see Hooks) over
 the live connection registry. A process that compiles and runs calls both; a process that runs
 a program compiled elsewhere calls only `install_sql_runtime`, before it runs anything.
-`tolerant=True` on the runtime skips host variables missing from the data layout rather than
-raising.
+Tolerance belongs to the runtime only: `tolerant=True` on `install_sql_runtime` skips host
+variables missing from the data layout rather than raising.
 
 ## Passive design
 
