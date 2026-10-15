@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from catnip.dataset import Relabeller
@@ -23,16 +23,21 @@ from interpreter.run import (
 from interpreter.run import Completed as RunCompleted
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
-from jackal.cobol_files import AllocatedFileIOProvider
+from jackal.cobol_files import AllocatedFileIOProvider, ProgramFile
 from jackal.le_abend import user_abend
 from jackal.model import ProgramStep, StepReference, SystemAbend
 from jackal.parm import build_parm_region
-from jackal.program_compiler import CompiledProgram
 from jackal.results import Abended, Completed, ProgramResult
 from jackal.value_parts import resolve
 
 DEFAULT_PROGRAM_STEP_BUDGET = 500_000
 CPU_TIME_EXCEEDED = SystemAbend(0x322)
+
+
+@dataclass(frozen=True)
+class CompiledProgram:
+    linked: LinkedProgram
+    files: tuple[ProgramFile, ...]
 
 
 class BatchProgramSuspended(Exception):

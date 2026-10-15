@@ -21,10 +21,18 @@ from jackal.results import (
 )
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
+from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import package
 from tests.system_build import job_catalog, system
 
-CBL = Path(__file__).parent / "fixtures" / "cbl"
+
+@pytest.fixture(scope="module")
+def packaged(tmp_path_factory: pytest.TempPathFactory) -> Package:
+    return package(
+        tmp_path_factory.mktemp("package"),
+        ("CARDCOPY", "RUNAWAY", "FIXWRITE", "VARWRITE", "SHORTRD", "VARREAD"),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +46,7 @@ def _ebcdic(text: str) -> bytes:
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_input(
-    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+    tmp_path: Path, packaged: Package, jcl_bridge_jar: str
 ) -> None:
     jcl = (
         "//J JOB 1\n"
@@ -56,10 +64,8 @@ def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_inp
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     catalog = job_catalog(tmp_path)
     runner = JobRunner(
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
@@ -79,7 +85,7 @@ def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_inp
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
-    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+    tmp_path: Path, packaged: Package, jcl_bridge_jar: str
 ) -> None:
     jcl = (
         "//J JOB 1\n"
@@ -97,10 +103,8 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     catalog = job_catalog(tmp_path)
     runner = JobRunner(
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
@@ -118,7 +122,7 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
-    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+    tmp_path: Path, packaged: Package, jcl_bridge_jar: str
 ) -> None:
     jcl = (
         "//J JOB 1\n"
@@ -129,10 +133,8 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     catalog = job_catalog(tmp_path)
     runner = JobRunner(
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
@@ -157,7 +159,7 @@ VARYING = "VARYING".ljust(100).encode("cp037")
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_one(
     tmp_path: Path,
-    bridge_jar: str,
+    packaged: Package,
     jcl_bridge_jar: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -179,10 +181,8 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     catalog = job_catalog(tmp_path)
     runner = JobRunner(
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
@@ -210,7 +210,7 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_cobol_step_writing_to_dummy_or_nullfile_keeps_nothing(
-    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+    tmp_path: Path, packaged: Package, jcl_bridge_jar: str
 ) -> None:
     jcl = (
         "//J JOB 1\n"
@@ -221,10 +221,8 @@ def test_a_cobol_step_writing_to_dummy_or_nullfile_keeps_nothing(
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     runner = JobRunner(
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),

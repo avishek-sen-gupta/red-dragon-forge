@@ -19,6 +19,8 @@ from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
+from litter.manifest import Manifest
+from litter.package import Package
 
 _FORGE_ROOT = Path(__file__).parents[2]
 _DECLARATION = _FORGE_ROOT / "config" / "carddemo" / "data.toml"
@@ -114,10 +116,14 @@ def test_an_installed_carddemo_system_holds_each_dataset_and_runs_acctfile(
     xref = "AWS.M2.CARDDEMO.CARDXREF.VSAM.KSDS"
     xref_bytes = (root / "datasets" / xref).read_bytes()
     runner = JobRunner(
-        source_dir=carddemo_home / "cbl",
-        bridge_jar=bridge_jar,
+        package=Package(
+            Manifest(
+                programs=(), coprocessors=(), transactions=(), files=(), mapsets=()
+            ),
+            {},
+            {},
+        ),
         system=system,
-        copybook_dir=carddemo_home / "cpy",
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),

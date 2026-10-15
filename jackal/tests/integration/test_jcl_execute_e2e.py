@@ -26,7 +26,9 @@ from jackal.results import (
 )
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
+from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import EMPTY, package
 from tests.system_build import scratch, system
 
 # Minimal COBOL that reads PARM-DATA and sets RETURN-CODE=42 when it equals 'HELLO     '.
@@ -57,16 +59,14 @@ def _parse(jcl: str, jcl_bridge_jar: str):
     return JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
 
 
-def _runner(src: Path, bridge_jar: str, tmp_path: Path) -> JobRunner:
+def _runner(packaged: Package, tmp_path: Path) -> JobRunner:
     return JobRunner(
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=src,
-        bridge_jar=bridge_jar,
+        package=packaged,
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
 
 
@@ -84,7 +84,9 @@ def test_parm_passed_through_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_jar):
 
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=TESTPARM,PARM='HELLO     '\n"
     job = _parse(jcl, jcl_bridge_jar)
-    result = _runner(src, bridge_jar, tmp_path).run(job, scratch=scratch(tmp_path))
+    result = _runner(package(tmp_path / "package", ("TESTPARM",), src), tmp_path).run(
+        job, scratch=scratch(tmp_path)
+    )
 
     assert len(result.steps) == 1
     assert result.steps[0].outcome == Completed(42)
@@ -106,7 +108,7 @@ def test_temp_dataset_lifecycle_via_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_
         "//WRK    DD DSN=&&TEMP,DISP=(OLD,DELETE,DELETE)\n"
     )
     job = _parse(jcl, jcl_bridge_jar)
-    result = _runner(tmp_path, bridge_jar, tmp_path).run(job, scratch=scratch(tmp_path))
+    result = _runner(EMPTY, tmp_path).run(job, scratch=scratch(tmp_path))
 
     assert all(s.outcome == Completed(0) for s in result.steps)
     assert not (tmp_path / "TEMP").exists()
@@ -128,7 +130,7 @@ def test_backward_ref_resolves_via_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_j
         "//INPUT  DD DSN=*.STEP1.WRK,DISP=(OLD,DELETE,DELETE)\n"
     )
     job = _parse(jcl, jcl_bridge_jar)
-    result = _runner(tmp_path, bridge_jar, tmp_path).run(job, scratch=scratch(tmp_path))
+    result = _runner(EMPTY, tmp_path).run(job, scratch=scratch(tmp_path))
 
     step1, step2 = result.steps
     assert (step1.outcome, step2.outcome) == (Completed(0), Completed(0))
@@ -149,7 +151,7 @@ def test_backward_ref_to_a_bypassed_step_fails_allocation_via_jcl_bridge(
         "//STEP3 EXEC PGM=IEFBR14,COND=EVEN\n"
     )
     job = _parse(jcl, jcl_bridge_jar)
-    result = _runner(tmp_path, bridge_jar, tmp_path).run(job, scratch=scratch(tmp_path))
+    result = _runner(EMPTY, tmp_path).run(job, scratch=scratch(tmp_path))
 
     step0, step1, step2, step3 = result.steps
     assert (step0.outcome, step1.outcome, step2.outcome, step3.outcome) == (

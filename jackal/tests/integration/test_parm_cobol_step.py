@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from jackal.allocation import DdEnvironment
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
-from jackal.program_compiler import ProgramCompiler
 from jackal.results import Completed
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
+from tests.package_build import compiled, package
 from tests.system_build import job_catalog
 
 # Minimal COBOL program that reads PARM-DATA and signals receipt via RETURN-CODE.
@@ -43,11 +43,14 @@ _NO_PARM_PROGRAM = """\
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
     cat = job_catalog(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "TESTPARM.cbl").write_text(_PARM_PROGRAM)
     # Pad to 10 chars so the region exactly fills PARM-DATA PIC X(10)
     step = program("S", "TESTPARM", parm="HELLO     ")
     assert run_cobol_step(
         step,
-        ProgramCompiler(bridge_jar, (), (), ()).compiled(_PARM_PROGRAM),
+        compiled(package(tmp_path / "package", ("TESTPARM",), src), "TESTPARM"),
         DdEnvironment(()),
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,
@@ -58,9 +61,12 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
     cat = job_catalog(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "NOPARM.cbl").write_text(_NO_PARM_PROGRAM)
     assert run_cobol_step(
         program("S", "NOPARM"),
-        ProgramCompiler(bridge_jar, (), (), ()).compiled(_NO_PARM_PROGRAM),
+        compiled(package(tmp_path / "package", ("NOPARM",), src), "NOPARM"),
         DdEnvironment(()),
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,

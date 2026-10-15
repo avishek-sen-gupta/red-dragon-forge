@@ -12,6 +12,7 @@ from jackal.results import Abended, AfterAbend, Completed, Flushed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import package
 from tests.system_build import scratch, system
 
 _ABEND = """\
@@ -60,10 +61,8 @@ def test_cee3abd_abends_the_step_with_its_user_code(tmp_path: Path, bridge_jar):
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        source_dir=src,
-        bridge_jar=bridge_jar,
+        package=package(tmp_path / "package", ("ABEND999", "BAREABD", "OK"), src),
         system=system(tmp_path),
-        copybook_dir=tmp_path,
     )
     jcl = (
         "//J JOB 1\n"

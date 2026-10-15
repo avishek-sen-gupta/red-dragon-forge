@@ -8,12 +8,12 @@ from functools import reduce
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
-from interpreter.project.coprocessor_compile import CoprocessorSpec
 from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
-from jackal.cobol_step import run_cobol_step
+from jackal.cobol_step import CompiledProgram, run_cobol_step
 from jackal.cond import Run, gate
 from jackal.expansion import DirectoryProcLibrary, expand_or_fail
+from jackal.file_definitions import program_files_of
 from jackal.missing_data import MissingDataStrategy
 from jackal.missing_program import MissingProgramStrategy
 from jackal.model import (
@@ -25,7 +25,6 @@ from jackal.model import (
     Dcb,
     DdName,
     Job,
-    ProgramRef,
     ProgramStep,
     QualifiedStep,
     RcComparison,
@@ -34,14 +33,6 @@ from jackal.model import (
     StepDd,
     StepReference,
     UnexpandedCall,
-)
-from jackal.program_compiler import ProgramCompiler
-from jackal.program_sources import (
-    CobolSource,
-    DirectoryProgramSources,
-    LinkedProgramNotFound,
-    ProgramSources,
-    SourceNotFound,
 )
 from jackal.results import (
     AllocationFailed,
@@ -57,6 +48,7 @@ from jackal.results import (
 from jackal.tso_step import dsn_runs, run_tso_step
 from jackal.unresolved import UnresolvedReferenceStrategy, referbacks_resolved
 from jackal.utilities import UTILITIES
+from litter.package import Package
 
 Entry = QualifiedStep | UnexpandedCall
 
@@ -139,37 +131,18 @@ def _resolved_dds(
     return reduce(_resolved_after, dds, ())
 
 
-def _linked_source(sources: ProgramSources, pgm: ProgramRef) -> CobolSource:
-    match sources.find(pgm):
-        case CobolSource() as source:
-            return source
-        case SourceNotFound():
-            raise LinkedProgramNotFound(pgm)
-
-
 class JobRunner:
     def __init__(
         self,
-        source_dir: Path,
-        bridge_jar: str,
+        package: Package,
         system: SystemCatalog,
-        copybook_dir: Path,
         unresolved: UnresolvedReferenceStrategy,
         missing_data: MissingDataStrategy,
         missing_program: MissingProgramStrategy,
         program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
-        coprocessors: Sequence[CoprocessorSpec] = (),
-        linked_programs: Sequence[ProgramRef] = (),
     ):
-        self._sources = DirectoryProgramSources(source_dir)
-        self._compiler = ProgramCompiler(
-            bridge_jar,
-            (copybook_dir,),
-            (source_dir,),
-            tuple(coprocessors),
-            {pgm: _linked_source(self._sources, pgm) for pgm in linked_programs},
-        )
+        self._package = package
         self._system = system
         self._unresolved = unresolved
         self._missing_data = missing_data
@@ -278,15 +251,14 @@ class JobRunner:
         env: DdEnvironment,
         catalog: DatasetCatalog,
     ) -> ProgramResult:
-        match self._sources.find(step.pgm):
-            case SourceNotFound():
-                return self._missing_program.settle(qualified, step.pgm)
-            case CobolSource(text=source):
-                return run_cobol_step(
-                    step,
-                    self._compiler.compiled(source),
-                    env,
-                    catalog.workdir,
-                    self._program_step_budget,
-                    catalog,
-                )
+        if step.pgm.name not in self._package.programs:
+            return self._missing_program.settle(qualified, step.pgm)
+        linked = self._package.programs[step.pgm.name]
+        return run_cobol_step(
+            step,
+            CompiledProgram(linked, program_files_of(linked)),
+            env,
+            catalog.workdir,
+            self._program_step_budget,
+            catalog,
+        )

@@ -39,7 +39,7 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
    program step; an override naming no step; a PROC that calls itself. A name used by more than
    one run of a PROC resolves to the same run, with a warning. `expand_or_fail` raises the error
    as `ExpansionFailed` for callers that want an exception.
-3. Run steps in order (`jackal.runner.JobRunner`). The runner is given an
+3. Run steps in order (`jackal.runner.JobRunner`), against a litter package. The runner is given an
    `UnresolvedReferenceStrategy` (`jackal.unresolved`, blueprint D7); both behaviours are
    jackal's own, since z/OS rejects a job with an unresolved reference at conversion:
    - `RaiseErrorStrategy` raises `UnresolvedReference` before any step runs, naming the first
@@ -58,7 +58,7 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
      name), logs a warning, and runs the step. The CLI uses it.
 
    And a `MissingProgramStrategy` (`jackal.missing_program`) for a program that is neither a
-   utility nor found as COBOL source (`jackal.program_sources`):
+   utility nor held by the package:
    - `AbendMissingProgram` abends the step `S806`, as z/OS does when it cannot find the load
      module.
    - `StubMissingProgram` completes the step with RC 0 in the program's place and logs a
@@ -90,8 +90,8 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
      the referenced step never made is `DATASET_NOT_FOUND` or `TEMP_NOT_CREATED`.
    - The runner allocates every DD before the program starts (`jackal.allocation`), in order: a
      dataset through the catalog, `DD *` cards written out as 80-byte EBCDIC records, `DUMMY` and
-     `SYSOUT` as empty sinks. STEPLIB and JOBLIB are skipped: jackal finds programs as source,
-     not in load libraries. The program receives the allocations as a `DdEnvironment`. If a
+     `SYSOUT` as empty sinks. STEPLIB and JOBLIB are skipped: jackal finds programs in its
+     package, not in load libraries. The program receives the allocations as a `DdEnvironment`. If a
      DD fails under `StrictAllocation`, the step's in-stream and sink files are released and the
      `NEW` datasets it had already created are deleted.
    - A concatenated DD (unnamed DDs after it) allocates and disposes each member with its own
@@ -103,8 +103,8 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
      ([decision record](../../records/design/2026-10-12-jackal-repro-concatenation.md)).
    - A step's in-stream and sink files are released even when its program raises.
    - The step is dispatched. A program in the utility table runs the emulated utility.
-     Any other program found as `<source-dir>/<PGM>.cbl` is run as COBOL. A program found as
-     neither is settled by the `MissingProgramStrategy`.
+     Any other program the package holds is run as COBOL. A program found as neither is
+     settled by the `MissingProgramStrategy`.
    - A dataset allocated `DISP=MOD` is positioned at its end: a COBOL `OPEN OUTPUT` on it
      appends, through jackal's own file handler over red-dragon's file drivers.
    - After the program, the runner applies each DD's normal DISP, or its abnormal DISP if the
@@ -116,22 +116,19 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
 
 ## COBOL steps
 
-`jackal.program_compiler.ProgramCompiler` compiles a step's program as z/OS links a load
-module: through red-dragon's `compile_program`, with the runner's source directory as the
-search path for every program it CALLs by literal name, and with the `CoprocessorSpec`s
-injected into `JobRunner` (`coprocessors=`). jackal imports no coprocessor: standalone it
-is given none, and the forge composes squall's EXEC SQL spec in. A CALL by data-name reaches the
-programs on `JobRunner`'s link list (`linked_programs`, CLI `--link`), which are compiled into every
-COBOL step; a link-list name with no source is refused before any job runs, and a CALL to a program
-outside the run unit still ends the run with red-dragon's `UnresolvedProgramError`
-(red-dragon-forge-xzw) ([decision record](../../records/design/2026-10-12-jackal-dynamic-call-link-list.md)).
-`compile_program` returns the `LinkedProgram` read back from its linked file. Its IR carries a
+jackal compiles nothing. `JobRunner` is given a [litter](../litter/README.md) package, built
+once, and a step's `EXEC PGM=X` (or `DSN RUN PROGRAM(X)` under a TSO monitor) runs the
+package's `LinkedProgram` `X`, as z/OS fetches a load module. The package build linked each
+program with every program it CALLs by literal name, and with the coprocessors it was built
+with: jackal imports no coprocessor, and the forge composes squall's EXEC SQL spec into the
+build and installs its runtime before the run. A program reached only by a CALL through a
+data-name is not linked into the package's programs, so the CALL ends the run with red-dragon's
+`UnresolvedProgramError` (red-dragon-forge-8urg). Each `LinkedProgram`'s IR carries a
 file-definitions `Data` directive per program, and `jackal.file_definitions` reads the step's
 files from those alone: each `FILE-CONTROL` entry, and the record format its FD asks for, or the
 dataset's own where the `SELECT` has no FD. The main program's files come first, then each
 callee's in link order; where two programs share a `SELECT` name, the later entry (a callee's)
-wins, so both programs' `OPEN`s go to its DD and meet its FD. Each step compiles afresh into a new temporary directory (red-dragon-forge-k6l;
-[decision record](../../records/design/2026-10-13-compiled-cobol-is-files.md)). `jackal.cobol_step.run_cobol_step` maps every
+wins, so both programs' `OPEN`s go to its DD and meet its FD. `jackal.cobol_step.run_cobol_step` maps every
 `FILE-CONTROL` entry of the program and its callees to the file of the step's DD allocation,
 and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
 (`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
@@ -247,7 +244,6 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/cli.py` | The `jackal` command. |
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
-| `jackal/jackal/program_compiler.py` | Compiles a step's program with its callees and injected coprocessors. |
 | `jackal/jackal/file_definitions.py` | The files a linked program declares, read from its file-definitions `Data` directives. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
 | `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
@@ -264,7 +260,6 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/unresolved.py` | What the runner does with unresolved references (D7). |
 | `jackal/jackal/missing_data.py` | What the runner does with a DD it cannot allocate. |
 | `jackal/jackal/missing_program.py` | What the runner does with a program it cannot find. |
-| `jackal/jackal/program_sources.py` | Where the runner finds a program's COBOL source. |
 | `jackal/jackal/parm.py` | `PARM=` region for COBOL `LINKAGE`. |
 | `jackal/jackal/tso.py` | Reads the programs a TSO batch step runs from its `SYSTSIN`. Used by cobble. |
 | `jackal/jackal/jcl/` | JCL parsing through the bridge JAR; procedure expansion. |

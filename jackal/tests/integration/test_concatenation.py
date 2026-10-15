@@ -20,9 +20,9 @@ from jackal.results import Completed
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
+from tests.package_build import package
 from tests.system_build import job_catalog, system, upload
 
-CBL = Path(__file__).parent / "fixtures" / "cbl"
 FB5 = SequentialLabel(RecordFormat.FB, 5)
 
 
@@ -64,10 +64,8 @@ def test_a_concatenation_reads_member_by_member_cannot_be_written_and_logs_a_con
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     runner = JobRunner(
-        source_dir=CBL,
-        bridge_jar=bridge_jar,
+        package=package(tmp_path / "package", ("COPYUP", "CATWRITE", "CONCHK")),
         system=system(tmp_path),
-        copybook_dir=tmp_path,
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),

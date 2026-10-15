@@ -15,25 +15,11 @@ from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import LenientAllocation
 from jackal.missing_program import StubMissingProgram
-from jackal.model import Job, ProgramRef
-from jackal.program_sources import LinkedProgramNotFound
+from jackal.model import Job
 from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
-
-
-def _resolve_dir(
-    flag_value: str,
-    env_subpath: str,
-    flag_name: str,
-    parser: argparse.ArgumentParser,
-) -> Path:
-    if flag_value:
-        return Path(flag_value)
-    carddemo_home = os.environ.get("CARDDEMO_HOME", "")
-    if carddemo_home:
-        return Path(carddemo_home) / env_subpath
-    parser.error(f"{flag_name} is required: supply the flag or set $CARDDEMO_HOME")
+from litter.open import open_package
 
 
 def _proclibs(flag_values: Sequence[str]) -> tuple[Path, ...]:
@@ -48,9 +34,7 @@ def _proclibs(flag_values: Sequence[str]) -> tuple[Path, ...]:
 def _run_command(runp: argparse.ArgumentParser) -> None:
     runp.add_argument("jcl")
     runp.add_argument("--system", required=True)
-    runp.add_argument("--source-dir", default="")
-    runp.add_argument("--copybook-dir", default="")
-    runp.add_argument("--link", nargs="+", default=[], metavar="PGM")
+    runp.add_argument("--package", required=True, metavar="ZIP")
     runp.add_argument("--proclib", action="append", default=[], metavar="DIR")
 
 
@@ -71,24 +55,14 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
-    try:
-        return _job_runner(args, ap)
-    except LinkedProgramNotFound as missing:
-        ap.error(f"--link: {missing}")
-
-
-def _job_runner(args: argparse.Namespace, ap: argparse.ArgumentParser) -> JobRunner:
+def _runner(args: argparse.Namespace) -> JobRunner:
     return JobRunner(
-        source_dir=_resolve_dir(args.source_dir, "app/cbl", "--source-dir", ap),
-        bridge_jar=os.environ.get("PROLEAP_BRIDGE_JAR", ""),
+        package=open_package(Path(args.package)),
         system=SystemCatalog(Path(args.system)),
-        copybook_dir=_resolve_dir(args.copybook_dir, "app/cpy", "--copybook-dir", ap),
         unresolved=RaiseErrorStrategy(),
         missing_data=LenientAllocation(),
         missing_program=StubMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        linked_programs=tuple(ProgramRef(name) for name in args.link),
         proclib_dirs=_proclibs(args.proclib),
     )
 
@@ -100,8 +74,8 @@ def _report(result: JobResult) -> int:
     return 0 if result.outcome.succeeded() else 1
 
 
-def _run_job(args: argparse.Namespace, ap: argparse.ArgumentParser) -> int:
-    runner = _runner(args, ap)
+def _run_job(args: argparse.Namespace) -> int:
+    runner = _runner(args)
     job = parse_jcl(Path(args.jcl).read_text())
     with tempfile.TemporaryDirectory(prefix="jackal_") as scratch:
         return _report(_ran(runner, job, Path(scratch)))
@@ -129,7 +103,7 @@ def run(argv: Sequence[str]) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "catalog":
         return _catalog_add(args)
-    return _run_job(args, ap)
+    return _run_job(args)
 
 
 def main() -> int:

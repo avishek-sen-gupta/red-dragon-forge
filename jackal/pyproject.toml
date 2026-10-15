@@ -2,11 +2,12 @@
 name = "jackal"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = ["lark>=1.1", "red-dragon", "catnip"]
+dependencies = ["lark>=1.1", "red-dragon", "catnip", "litter"]
 
 [tool.uv.sources]
 red-dragon = { path = "../vendor/red-dragon", editable = true }
 catnip = { workspace = true }
+litter = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

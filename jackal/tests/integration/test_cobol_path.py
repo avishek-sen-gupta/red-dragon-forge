@@ -11,17 +11,20 @@ from interpreter.project.linked_codec import LinkedCodec
 from catnip.alternate_index import AlternateIndex
 from catnip.catalog_path import CatalogPath
 from catnip.labels import KsdsLabel
-from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET, run_cobol_step
+from jackal.cobol_step import (
+    DEFAULT_PROGRAM_STEP_BUDGET,
+    CompiledProgram,
+    run_cobol_step,
+)
 from jackal.file_definitions import program_files_of
-from jackal.program_compiler import CompiledProgram, ProgramCompiler
 from jackal.catalog import DatasetCatalog
 from jackal.model import DD, StepRef
 from jackal.results import Completed, ProgramResult
+from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.model_build import allocated, dd, disp, program
+from tests.package_build import compiled, package
 from tests.system_build import job_catalog, system, upload
-
-CBL = Path(__file__).parent / "fixtures" / "cbl"
 
 
 def _ebcdic(text: bytes) -> bytes:
@@ -31,6 +34,11 @@ def _ebcdic(text: bytes) -> bytes:
 @pytest.fixture(autouse=True)
 def _require_bridge(bridge_jar):
     """Enforce PROLEAP_BRIDGE_JAR."""
+
+
+@pytest.fixture(scope="module")
+def packaged(tmp_path_factory: pytest.TempPathFactory) -> Package:
+    return package(tmp_path_factory.mktemp("package"), ("ALTREAD", "ALTLOAD", "KEYCHK"))
 
 
 _BASE = _ebcdic(b"001BBBxx002AAAyy003AAAzz")
@@ -43,10 +51,8 @@ def _path_catalog(tmp_path: Path) -> DatasetCatalog:
     return job_catalog(tmp_path)
 
 
-def _compiled(bridge_jar: str, name: str) -> CompiledProgram:
-    return ProgramCompiler(bridge_jar, (), (CBL,), ()).compiled(
-        (CBL / f"{name}.cbl").read_text()
-    )
+def _compiled(packaged: Package, name: str) -> CompiledProgram:
+    return compiled(packaged, name)
 
 
 def _read_back(compiled: CompiledProgram, path: Path) -> CompiledProgram:
@@ -57,9 +63,9 @@ def _read_back(compiled: CompiledProgram, path: Path) -> CompiledProgram:
 
 
 def _ran(
-    cat: DatasetCatalog, bridge_jar: str, name: str, dds: tuple[DD[StepRef], ...]
+    cat: DatasetCatalog, packaged: Package, name: str, dds: tuple[DD[StepRef], ...]
 ) -> ProgramResult:
-    return _ran_compiled(cat, _compiled(bridge_jar, name), name, dds)
+    return _ran_compiled(cat, _compiled(packaged, name), name, dds)
 
 
 def _ran_compiled(
@@ -80,11 +86,11 @@ def _ran_compiled(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_program_reads_a_cluster_through_its_path(tmp_path, bridge_jar):
+def test_a_program_reads_a_cluster_through_its_path(tmp_path, packaged):
     cat = _path_catalog(tmp_path)
     rc = _ran(
         cat,
-        bridge_jar,
+        packaged,
         "ALTREAD",
         (
             dd("XREFDD", "J.PATH", disp("SHR")),
@@ -100,10 +106,10 @@ def test_a_program_reads_a_cluster_through_its_path(tmp_path, bridge_jar):
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_open_output_through_a_path_gets_status_37_and_keeps_the_base_cluster(
-    tmp_path, bridge_jar
+    tmp_path, packaged
 ):
     cat = _path_catalog(tmp_path)
-    rc = _ran(cat, bridge_jar, "ALTLOAD", (dd("XREFDD", "J.PATH", disp("SHR")),))
+    rc = _ran(cat, packaged, "ALTLOAD", (dd("XREFDD", "J.PATH", disp("SHR")),))
 
     assert rc == Completed(37)
     assert system(tmp_path).lookup("J.KSDS").path.read_bytes() == _BASE
@@ -124,10 +130,10 @@ def test_open_output_through_a_path_gets_status_37_and_keeps_the_base_cluster(
 )
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_an_fd_that_contradicts_a_keyed_label_gets_status_39_and_logs_each_field(
-    tmp_path, bridge_jar, caplog, dsn, messages
+    tmp_path, packaged, caplog, dsn, messages
 ):
     cat = _path_catalog(tmp_path)
-    compiled = _compiled(bridge_jar, "KEYCHK")
+    compiled = _compiled(packaged, "KEYCHK")
     read_back = _read_back(compiled, tmp_path / "KEYCHK.linked.json")
     with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
         rc = _ran_compiled(cat, read_back, "KEYCHK", (dd("XREFDD", dsn, disp("SHR")),))

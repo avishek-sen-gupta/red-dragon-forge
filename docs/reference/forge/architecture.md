@@ -55,6 +55,7 @@ Design record: [CICS + SQL composition](../../records/design/2026-07-04-cics-sql
 - `catnip` imports none of `cics`, `squall`, `jackal`, `cobble` or `red_dragon_forge`. `cics` and
   `jackal` import it.
 - `litter` imports none of `cics`, `squall`, `jackal`, `cobble`, `catnip` or `red_dragon_forge`.
+  `jackal` imports it: a job runs against a litter package.
 - `red_dragon_forge` may import any runtime.
 - `cobble` may import only the static surface of the other packages (parsers, models,
   `cobol_asg`). It must not import the interpreter, any runtime module, `catnip` or `litter`,
