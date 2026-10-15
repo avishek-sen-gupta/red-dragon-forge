@@ -6,25 +6,39 @@ reached squall's rollback -- Task 6 threaded on_abend through the CICS
 runtime and the dispatcher, but build_region itself never forwarded a
 caller-supplied callable into that internal call (now install_cics_runtime).
 
-Every other module-level collaborator is monkeypatched to a stub so this
-stays a pure unit test of the wiring, not a full compile+run (which needs a
-real bridge_jar and CardDemo checkout -- see test_region_e2e.py for that)."""
+The CICS runtime is installed for real and its abend builtin fired. Every
+other module-level collaborator is still monkeypatched to a stub until it
+gets a production seam (red-dragon-forge-ysfi), so this stays a pure unit
+test of the wiring, not a full compile+run (which needs a real bridge_jar
+and CardDemo checkout -- see test_region_e2e.py for that)."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 import cics.tn3270.region as region_mod
+from interpreter.func_name import FuncName
+from interpreter.vm.builtins import Builtins
+from interpreter.vm.vm_types import BuiltinResult, VMState
+
+
+@pytest.fixture(autouse=True)
+def _restore_builtins_table():
+    before = dict(Builtins.TABLE)
+    yield
+    Builtins.TABLE.clear()
+    Builtins.TABLE.update(before)
+
+
+def _fire_installed_abend() -> BuiltinResult:
+    return Builtins.TABLE[FuncName("__cics_abend")]([], VMState())
 
 
 def test_build_region_forwards_on_abend_to_install_cics_runtime(monkeypatch, tmp_path):
     captured: dict = {}
 
-    def fake_install_cics_runtime(context_holder, **kwargs):
-        captured.update(kwargs)
-        return object()
-
-    monkeypatch.setattr(region_mod, "install_cics_runtime", fake_install_cics_runtime)
     monkeypatch.setattr(region_mod, "_vsam_engine", lambda config: object())
     monkeypatch.setattr(
         region_mod, "_parser", lambda config, bridge_jar, sym_dir: object()
@@ -44,8 +58,10 @@ def test_build_region_forwards_on_abend_to_install_cics_runtime(monkeypatch, tmp
         region_mod, "PseudoConversationalDriver", lambda *a, **k: object()
     )
 
+    calls: list[int] = []
+
     def sentinel() -> None:
-        return None
+        calls.append(1)
 
     # type: ignore below is test scaffolding, not an ibm_db-style stub gap:
     # SimpleNamespace stands in for a real RegionConfig (every collaborator
@@ -55,7 +71,9 @@ def test_build_region_forwards_on_abend_to_install_cics_runtime(monkeypatch, tmp
     config = SimpleNamespace(transactions={})
     region_mod.build_region(config, "bridge.jar", tmp_path, on_abend=sentinel)  # type: ignore[reportArgumentType]
 
-    assert captured["on_abend"] is sentinel
+    _fire_installed_abend()
+
+    assert calls == [1]
     assert captured["region_on_abend"] is sentinel
 
 
@@ -66,11 +84,6 @@ def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path)
     have to special-case None)."""
     captured: dict = {}
 
-    def fake_install_cics_runtime(context_holder, **kwargs):
-        captured.update(kwargs)
-        return object()
-
-    monkeypatch.setattr(region_mod, "install_cics_runtime", fake_install_cics_runtime)
     monkeypatch.setattr(region_mod, "_vsam_engine", lambda config: object())
     monkeypatch.setattr(
         region_mod, "_parser", lambda config, bridge_jar, sym_dir: object()
@@ -79,7 +92,11 @@ def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path)
         region_mod, "_compiled", lambda config, parser, spec, extra_specs: {}
     )
     monkeypatch.setattr(
-        region_mod, "_region", lambda config, wiring, programs, on_abend: object()
+        region_mod,
+        "_region",
+        lambda config, wiring, programs, on_abend: captured.update(
+            region_on_abend=on_abend
+        ),
     )
     monkeypatch.setattr(region_mod, "_catalog", lambda config: object())
     monkeypatch.setattr(
@@ -92,5 +109,8 @@ def test_build_region_default_on_abend_is_the_module_noop(monkeypatch, tmp_path)
     config = SimpleNamespace(transactions={})
     region_mod.build_region(config, "bridge.jar", tmp_path)  # type: ignore[reportArgumentType]
 
-    assert captured["on_abend"] is region_mod._region_noop
-    assert captured["on_abend"]() is None
+    result = _fire_installed_abend()
+
+    assert captured["region_on_abend"] is region_mod._region_noop
+    assert region_mod._region_noop() is None
+    assert isinstance(result, BuiltinResult)

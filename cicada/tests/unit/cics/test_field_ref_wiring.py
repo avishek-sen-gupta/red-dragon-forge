@@ -253,17 +253,9 @@ class FakeStmt:
 
 def _make_strategy():
     from cics.strategy import CicsLoweringStrategy
-    from cics.runtime import install_cics_runtime
     from cics.types import CicsContext
 
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
-    install_cics_runtime(
-        holder,
-        transid_to_program={},
-        program_cache={},
-        applid="CARDDEMO",
-        sysid="SYS1",
-    )
     return CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
     )
