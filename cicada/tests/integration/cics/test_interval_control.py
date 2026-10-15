@@ -164,17 +164,6 @@ def test_start_queues_the_request_and_the_program_keeps_running(cobol_parser):
 def test_start_lowering_emits_no_return(cobol_parser):
     """The invariant no passing scenario can observe: if START ever emits a
     Return_ again, the program silently stops there."""
-    context_holder = [
-        CicsContext(transid="SRTA", commarea=b"", eibaid="\x7d", termid="T001")
-    ]
-    install_cics_runtime(
-        context_holder,
-        program_cache={},
-        result_holder=[None],
-        start_queue=StartQueue(),
-        transid_to_program={"SRTB": "STARTB"},
-        region_termid="T001",
-    )
     strategy = CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
     )

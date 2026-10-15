@@ -286,17 +286,10 @@ MATERIALISED = object()
 
 def _make_strategy():
     from cics.strategy import CicsLoweringStrategy
-    from cics.runtime import install_cics_runtime
     from cics.types import CicsContext
 
     engine = VsamEngine({})
     holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
-    install_cics_runtime(
-        holder,
-        transid_to_program={},
-        program_cache={},
-        vsam_engine=engine,
-    )
     return CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
     )

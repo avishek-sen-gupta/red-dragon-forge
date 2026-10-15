@@ -116,14 +116,6 @@ def test_commarea_carries_bytes(cobol_parser):
 @covers(CobolFeature.EXEC_CICS)
 def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
     """RETURN COMMAREA(WS-CA) emits a LoadRegion feeding set_return_context."""
-    context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
-    result_holder: list = [None]
-    install_cics_runtime(
-        context_holder,
-        transid_to_program={},
-        program_cache={},
-        result_holder=result_holder,
-    )
     strategy = CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
     )
@@ -158,14 +150,6 @@ def test_return_commarea_field_lowers_to_loadregion(cobol_parser):
 @covers(CobolFeature.EXEC_CICS)
 def test_return_commarea_literal_falls_back_to_const(cobol_parser):
     """RETURN TRANSID without a data-name COMMAREA keeps the Const fallback."""
-    context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
-    result_holder: list = [None]
-    install_cics_runtime(
-        context_holder,
-        transid_to_program={},
-        program_cache={},
-        result_holder=result_holder,
-    )
     strategy = CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
     )

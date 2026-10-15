@@ -1,6 +1,4 @@
-"""Verify screen builtins are registered when the screen/input queues are provided."""
-
-import queue
+"""CicsLoweringStrategy lowers the screen and system verbs; the runtime's abend builtin keeps any result holder it is given."""
 
 from tests.covers import covers, NotLanguageFeature
 from cics.strategy import CicsLoweringStrategy
@@ -37,44 +35,8 @@ class _Ctx:
 
 
 def _strategy():
-    install_cics_runtime(
-        [None],
-        transid_to_program={},
-        program_cache={},
-        result_holder=[None],
-    )
     return CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
-    )
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_strategy_registers_screen_builtins():
-    from interpreter.vm.builtins import Builtins
-
-    screen_q: queue.Queue = queue.Queue()
-    input_q: queue.Queue = queue.Queue()
-    install_cics_runtime(
-        [None],
-        transid_to_program={},
-        program_cache={},
-        result_holder=[None],
-        screen_queue=screen_q,
-        input_queue=input_q,
-    )
-    assert FuncName("__cics_send_map") in Builtins.TABLE
-    assert FuncName("__cics_receive_map") in Builtins.TABLE
-    assert FuncName("__cics_send_text") in Builtins.TABLE
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_strategy_without_bms_still_constructs():
-    # No screen_queue/input_queue -> screen builtins simply not registered, no error.
-    install_cics_runtime(
-        [None],
-        transid_to_program={},
-        program_cache={},
-        result_holder=[None],
     )
 
 
@@ -321,12 +283,6 @@ def test_syncpoint_rollback_lowers_to_the_rollback_hook():
     from cics.statements import ExecCicsStatement
 
     unsupported: set = set()
-    install_cics_runtime(
-        [None],
-        transid_to_program={},
-        program_cache={},
-        result_holder=[None],
-    )
     strategy = CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=unsupported
     )
@@ -649,23 +605,6 @@ def test_none_result_holder_falls_back_without_crashing():
         program_cache={},
         result_holder=None,
     )
-
-    abend = Builtins.TABLE[FuncName("__cics_abend")]
-    result = abend([], VMState())
-    assert isinstance(result, BuiltinResult)
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_build_cics_spec_default_result_holder_does_not_crash():
-    from cics.coprocessor import build_cics_spec
-
-    install_cics_runtime(
-        [None],
-        transid_to_program={},
-        program_cache={},
-    )
-    spec = build_cics_spec()
-    spec.make_strategy()
 
     abend = Builtins.TABLE[FuncName("__cics_abend")]
     result = abend([], VMState())

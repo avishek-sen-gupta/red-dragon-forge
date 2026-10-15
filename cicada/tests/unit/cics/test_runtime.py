@@ -15,6 +15,7 @@ from interpreter.func_name import FuncName
 from interpreter.instructions import Suspend
 from interpreter.register import Register
 from interpreter.vm.builtins import Builtins
+from interpreter.vm.vm_types import BuiltinResult, VMState
 from tests.covers import NotLanguageFeature, covers
 
 _CONSTRUCTOR_BUILTINS = frozenset(
@@ -115,7 +116,7 @@ def test_compile_spec_registers_nothing():
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_install_registers_today_s_builtins():
-    [Builtins.TABLE.pop(name, None) for name in _CONSTRUCTOR_BUILTINS]
+    Builtins.TABLE.clear()
 
     start_queue = StartQueue()
 
@@ -154,3 +155,77 @@ def test_an_install_without_the_regions_programs_and_transactions_is_refused():
         "install_cics_runtime()",
         "'program_cache' and 'transid_to_program'",
     )
+
+
+def _fire_abend() -> BuiltinResult:
+    return Builtins.TABLE[FuncName("__cics_abend")]([], VMState())
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_install_default_on_abend_is_a_noop():
+    """A CICS-only region (no on_abend supplied) keeps its current
+    behaviour exactly -- EXEC CICS ABEND must not raise."""
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
+        result_holder=[None],
+    )
+
+    _fire_abend()
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_install_threads_on_abend_to_the_abend_builtin():
+    """install_cics_runtime's on_abend must reach EXEC CICS ABEND's own builtin,
+    so a composed SQL runtime's rollback callable runs when the task abends."""
+    calls: list[int] = []
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
+        result_holder=[None],
+        on_abend=lambda: calls.append(1),
+    )
+
+    _fire_abend()
+
+    assert calls == [1]
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_install_registers_screen_builtins_given_both_channels():
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
+        result_holder=[None],
+        screen_queue=queue.Queue(),
+        input_queue=queue.Queue(),
+    )
+
+    assert FuncName("__cics_send_map") in Builtins.TABLE
+    assert FuncName("__cics_receive_map") in Builtins.TABLE
+    assert FuncName("__cics_send_text") in Builtins.TABLE
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_install_without_channels_does_not_raise():
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
+        result_holder=[None],
+    )
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_install_default_result_holder_does_not_crash():
+    install_cics_runtime(
+        [None],
+        transid_to_program={},
+        program_cache={},
+    )
+
+    result = _fire_abend()
+    assert isinstance(result, BuiltinResult)

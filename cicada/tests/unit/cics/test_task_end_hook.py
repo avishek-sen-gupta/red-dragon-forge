@@ -69,7 +69,6 @@ def _install() -> None:
 
 
 def _strategy() -> CicsLoweringStrategy:
-    _install()
     return CicsLoweringStrategy(
         conversational=False, handler_source=[], unsupported_verbs=set()
     )

@@ -15,7 +15,20 @@ import pytest
 from cics import bootstrap
 from cics.dispatcher import parse_csd
 from cics.types import CicsContext, DispatchKind, DispatchResult
+from interpreter.func_name import FuncName
+from interpreter.types.type_expr import UNKNOWN
+from interpreter.types.typed_value import typed
+from interpreter.vm.builtins import Builtins
+from interpreter.vm.vm_types import VMState
 from tests.covers import covers, NotLanguageFeature
+
+
+@pytest.fixture(autouse=True)
+def _restore_builtins_table():
+    before = dict(Builtins.TABLE)
+    yield
+    Builtins.TABLE.clear()
+    Builtins.TABLE.update(before)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -129,10 +142,6 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
     path is validated, queued, and never run."""
     captured: dict[str, object] = {}
 
-    def _fake_install_runtime(context_holder, **kwargs):
-        captured["spec_start_queue"] = kwargs["start_queue"]
-        return kwargs["start_queue"]
-
     def _fake_loop(
         run_fn, program_cache, transid_to_program, initial_context, sq, iq, **kwargs
     ):
@@ -140,7 +149,6 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
         captured["loop_region_termid"] = kwargs["region_termid"]
         return DispatchResult(kind=DispatchKind.RETURN)
 
-    monkeypatch.setattr(bootstrap, "install_cics_runtime", _fake_install_runtime)
     monkeypatch.setattr(
         bootstrap,
         "compile_cics_program",
@@ -158,5 +166,9 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
         region_termid="T009",
     )
 
-    assert captured["loop_start_queue"] is captured["spec_start_queue"]
+    start_args = [typed(text, UNKNOWN) for text in ("CC00", "", "T009", "", "")]
+    resp = Builtins.TABLE[FuncName("__cics_start")](start_args, VMState()).value
+    queued = captured["loop_start_queue"].pop_runnable("T009")
+
+    assert (resp, tuple(req.transid for req in queued)) == (0, ("CC00",))
     assert captured["loop_region_termid"] == "T009"
