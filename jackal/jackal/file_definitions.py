@@ -171,4 +171,6 @@ def program_files_in(ir: Sequence[InstructionBase]) -> tuple[ProgramFile, ...]:
 
 
 def program_files_of(linked: LinkedProgram) -> tuple[ProgramFile, ...]:
-    return program_files_in(linked.merged_ir)
+    return tuple(
+        file for unit in linked.modules.values() for file in program_files_in(unit.ir)
+    )

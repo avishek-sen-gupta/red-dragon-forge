@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from catnip.labels import LabelPending, RecordFormat, SequentialLabel
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
@@ -85,3 +86,32 @@ def test_a_link_list_naming_a_program_with_no_source_is_refused(
     with pytest.raises(LinkedProgramNotFound) as refused:
         _runner(tmp_path, bridge_jar, (ProgramRef("CALLSUB"), ProgramRef("NOSUCH")))
     assert refused.value.program == ProgramRef("NOSUCH")
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_select_name_the_main_and_its_callee_share_takes_the_callees_dd_and_fd(
+    tmp_path: Path, bridge_jar: str, jcl_bridge_jar: str
+) -> None:
+    jcl = (
+        "//J JOB 1\n"
+        "//S1 EXEC PGM=SHRMAIN\n"
+        "//MAINDD DD DSN=J.MAIN,DISP=(NEW,CATLG)\n"
+        "//SUBDD DD DSN=J.SUB,DISP=(NEW,CATLG)\n"
+    )
+    job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
+    result = _runner(tmp_path, bridge_jar, ()).run_job(job, job_catalog(tmp_path))
+    reloaded = system(tmp_path)
+    main, sub = reloaded.lookup("J.MAIN"), reloaded.lookup("J.SUB")
+
+    assert (
+        [s.outcome for s in result.steps],
+        (main.label, main.path.read_bytes()),
+        (sub.label, sub.path.read_bytes()),
+    ) == (
+        [Completed(0)],
+        (LabelPending(), b""),
+        (
+            SequentialLabel(RecordFormat.F, 120),
+            "WRITTEN BY THE MAIN PROGRAM".ljust(80).encode("cp037"),
+        ),
+    )
