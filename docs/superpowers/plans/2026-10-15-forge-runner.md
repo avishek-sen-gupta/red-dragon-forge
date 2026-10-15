@@ -421,3 +421,126 @@ Each line has a pinning test in the task that owns the code (Tasks 2, 3, 4, 5, 8
 - [ ] **Step 4: File the follow-up bead**: "Migrate CardDemo onto build.toml + env.toml; retire
   cicada-tn3270, carddemo-db2-cli and the aggregate region TOMLs" (depends on jr5). Close jr5.
   `bd export -o issues/issues.jsonl`; commit `chore(beads): jr5 done; CardDemo migration filed`; push.
+
+---
+
+## Revision 2026-10-16 — one linked image (spec D2, D3, D4, D8, D9, D11)
+
+Tasks 1–5 are done as first written. The design now lowers each program once and links an
+explicit flat list into one image, entered by program name at run time; COBOL file calls carry
+the caller's PROGRAM-ID. Execution order from here: 2a, 2b, 4b, 5b, 6, 7, 8. Tasks 6–8 below are
+amended in place by the notes at the end of this section.
+
+### Task 2a: red-dragon — separate lowering and linking; enter by program
+
+**Files (in `~/code/red-dragon`):**
+- Modify: `interpreter/project/cobol_compile.py` (make lowering one program and linking a set of
+  units public; `_link` loses its positional main), `interpreter/project/types.py`
+  (`ModuleUnit.program: str` set from PROGRAM-ID; `LinkedProgram.programs: Mapping[str, CodeLabel]`),
+  `interpreter/project/unit_codec.py` and `linked_codec.py` (new fields; unit and linked format 3),
+  `interpreter/run.py` (`run_linked*` take the program to enter; `declarations_of(linked, program)`
+  replaces `main_declarations`), `interpreter/project/coprocessor_compile.py` (`compile_program`
+  keeps working on the new stages)
+- Test: `tests/unit/project/test_lower_and_link.py` (create), `tests/unit/project/test_cobol_compile.py`
+
+**Interfaces:**
+- Produces:
+  - `lower_program(source: bytes, *, parser, specs: Sequence[CoprocessorSpec], copybook_dirs, work_dir: Path, tolerant: bool) -> Path` — the unit file (prepass and dialect parsers from the specs applied; no discovery).
+  - `link_units(units: Sequence[Path], work_dir: Path) -> LinkedProgram` — one image, no main; `programs` maps each unit's program name to its namespaced entry label.
+  - `ProgramEntry(name: str)` accepted by `run_linked`, `run_linked_resumable`, `run_linked_traced`; an absent name raises `ProgramNotInImage("<name>")`.
+  - `declarations_of(linked: LinkedProgram, program: str) -> tuple[Data, ...]`.
+
+- [ ] **Step 1: Failing tests** in `test_lower_and_link.py`:
+  1. `test_lowered_then_linked_equals_compile`: lower `MAIN` (which CALLs `SUB`) and `SUB`
+     separately, link both; running entered at `MAIN` gives the same final WORKING-STORAGE bytes
+     (`declarations_of` + `field_positions` read-back) as today's `compile_cobol` of the pair.
+  2. `test_image_runs_each_program_entered_by_name`: link `A`, `B`, `C` (no CALLs between them,
+     each DISPLAYs its own name); entering each yields exactly its own output, and
+     `vm.declarations == declarations_of(image, name)`.
+  3. `test_entering_an_absent_program_names_it`: `ProgramNotInImage("Z")`, message
+     `program Z is not in the image`.
+  4. `test_dynamic_call_resolves_in_image`: `MAIN` does `CALL WS-PGM` with `WS-PGM = 'SUB'`;
+     linked with `SUB`, the call runs `SUB`; linked without it, `UnresolvedProgramError`.
+  5. `test_program_index_comes_from_program_id`: `image.programs` equals
+     `{"A": <label>, "B": <label>, "C": <label>}` where each label is that unit's `entry_label`
+     namespaced — asserted against the unit's `program` field, not a parsed label.
+- [ ] **Step 2: Implement.** Keep `compile_cobol` and `compile_program` as compositions of the two
+  stages (their tests must stay green unchanged). Format numbers go to 3; a format-2 file fails
+  with `UnitFormatError` naming the path.
+- [ ] **Step 3: Mutation-check** (enter the first unit regardless of name → test 2 fails; keep
+  main's declarations → test 2 fails). Restore.
+- [ ] **Step 4: Commit, push, bump.** `uv run pytest -q` green in red-dragon; docs
+  (`docs/linker-design.md`, the ADR index) updated; commit `feat(project): lowering and linking are
+  separate; an image is entered by program`. Forge: bump; `make test-all`; commit `chore(vendor):
+  bump red-dragon — lower and link separately, enter by program`.
+
+### Task 2b: red-dragon — COBOL file calls carry the caller's PROGRAM-ID
+
+**Files (in `~/code/red-dragon`):** `interpreter/cobol/lower_io.py` (every file call gains a last
+argument: the PROGRAM-ID constant), `interpreter/cobol/io_provider.py` (`CobolIOProvider` methods
+gain `program: str` last), `interpreter/cobol/real_file_provider.py` and the null/stub providers
+(accept and ignore), `interpreter/cobol/file_definitions_data.py` (each file record gains
+`program`), the provider tests (`tests/unit/test_cobol_io_provider.py`,
+`tests/unit/test_cobol_io_integration.py`, the integration tests and `tests/nist/conftest.py`).
+
+- [ ] **Step 1: Failing test:** lowering a program `PGMX` with `OPEN INPUT F1`, `READ F1`,
+  `CLOSE F1` emits each `__cobol_*` call with `Const("PGMX")` as its last argument (assert the
+  exact arg tuples); a recording provider sees `program="PGMX"` on every method; the
+  file-definitions record for `F1` has `program == "PGMX"`.
+- [ ] **Step 2: Implement**; every existing assertion unchanged except the call arity in tests
+  that construct calls by hand (list them).
+- [ ] **Step 3: Mutation-check** (drop the argument on CLOSE → test fails). Restore.
+- [ ] **Step 4: Commit, push, bump** as in 2a: `feat(cobol): file calls name the calling program`;
+  jackal's `AllocatedFileIOProvider` gains the parameter in the same forge bump commit (accepted,
+  not yet used), so the forge stays green.
+
+### Task 4b: litter — lower once, link one image
+
+**Files:** `litter/litter/build.py`, `open.py`, `manifest.py`, `package.py`, `entries.py`, the
+litter tests and README.
+
+**Interfaces:**
+- Produces: `build(*, name, programs: Sequence[str], link: Sequence[str], sources, parser, specs,
+  copybook_dirs, work_dir, out_dir, transactions, files, mapsets, tolerant) -> Path`;
+  `Package(manifest, image: LinkedProgram, mapsets)`; `Manifest.programs` = the linked names;
+  zip entries `manifest.json`, `image.linked.json`, `maps/<M>.json`.
+
+- [ ] **Step 1: Failing tests:** a package built with `programs=("A","B","C")`,
+  `link=("A","B")` opens to an image whose `programs` names are exactly `{"A","B"}` and whose
+  manifest lists `("A","B")`; `link` naming a program not in `programs` → `PackageError`
+  naming it; the rebuild-reuses-units test and the path-traversal tests carry over with the new
+  entry names; a missing `image.linked.json` → `PackageError` naming it.
+- [ ] **Step 2: Implement** with Task 2a's `lower_program` and `link_units`.
+- [ ] **Step 3: Mutation-check, commit, push** (`feat(litter): a package holds one image linked
+  from an explicit list`).
+
+### Task 5b: jackal — enter the image by program; declarations by program
+
+**Files:** `jackal/jackal/runner.py`, `cobol_step.py`, `cobol_files.py`, `file_definitions.py`,
+`cli.py`, `jackal/tests/package_build.py`, the two `xfail` tests, the Task 5 review's LOW items.
+
+- [ ] **Step 1: Failing tests:**
+  1. Two programs in one image declare `SELECT ACCTFILE` with different ASSIGN names and FD
+     formats; two steps run each against their own DD; each opens its own dataset and a pending
+     dataset is labelled from its own FD (assert both catalog labels exactly).
+  2. CardDemo's `CBSTM03A` with `CBSTM03B` in the image: the statement step's outputs equal
+     today's (copy the existing expected values).
+  3. The two `xfail(strict)` dynamic-CALL tests lose their marker and pass unchanged.
+  4. A program with no declaration for a SELECT falls back to the dataset's label.
+- [ ] **Step 2: Implement:** a step enters the image at `PGM=`; declarations keyed by
+  `(program, SELECT)` from every module's `Data`; the provider uses the call's `program`. Fix the
+  Task 5 review LOWs: a bad `--package` is an argument error (`ap.error`) with a test; the test
+  helper takes the bridge JAR from its fixture; the literal-CALL variant of the callee-files test.
+- [ ] **Step 3: Mutation-check, `make test-all`, commit, push** (`feat(jackal): a step enters the
+  image by program; file declarations are per program`). Close bead red-dragon-forge-8urg.
+
+### Amendments to Tasks 6–8
+
+- **Task 6 (cicada):** `assemble_region` takes the `Package`'s image; the region's program cache
+  maps every manifest program to the image, and a task, LINK or XCTL enters it with
+  `ProgramEntry(name)`.
+- **Task 7 (forge-build):** `BuildConfig` gains `link: tuple[str, ...]`; `forge-build` passes
+  `programs` and `link` to `litter.build`, always lowering and linking jackal's LE stubs
+  (`CEE3ABD`); no CALL discovery anywhere.
+- **Task 8 (forge-run):** `[plain]` enters the image at `program`; a `program` not in the
+  manifest stops the run naming it (unchanged message).
