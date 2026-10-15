@@ -10,7 +10,7 @@ from interpreter.project.linked_codec import LinkedCodec
 from squall.backends.sqlite import SqliteBackend
 from squall.runtime import install_sql_runtime
 
-_HELPERS = Path(__file__).parent.parent / "integration" / "squall_cobol_helpers.py"
+_HELPERS = Path(__file__).with_name("squall_cobol_helpers.py")
 _spec = importlib.util.spec_from_file_location("squall_cobol_helpers", _HELPERS)
 _helpers = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_helpers)
