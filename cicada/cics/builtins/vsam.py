@@ -44,7 +44,7 @@ def _write_into_ws(vm: VMState, record: bytes, offset: int, length: int) -> None
     region is missing.
     """
     match _get_ws_region_addr(vm):
-        case Address() as address:
+        case Address() as address if address:
             _write_into_region(
                 vm, address, record[:length].ljust(length, b"\x00"), offset
             )
