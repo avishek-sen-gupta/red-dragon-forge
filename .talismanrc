@@ -200,7 +200,7 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_data_division_exec_sql.py
   checksum: 619e5c032b4ed12ad5f0a112122f18843cb6d995dbd68348a64ddede5b3775b0
 - filename: squall/squall/builtins/exec_sql.py
-  checksum: 30bc745843c47f90f4166a4d91371dbc4168d9d1ceb5224c3d99bbb64f35db95
+  checksum: e6f0ba81c79035d05ff0e2194c08bc4fc493c01a1880cff9dc3520462f30d0dc
 - filename: squall/tests/unit/test_strategy.py
   checksum: b937f1f2a6cbc4a7ac3ce1c83ef25e62dad3ba5aa0f034b8bca2c5bcabf3e680
 - filename: squall/squall/binding.py
@@ -375,4 +375,6 @@ fileignoreconfig:
   checksum: e0169cc5929ee1f9f54b6fa8c36e079895d9597073617b14c6679a5b3935ad5b
 - filename: cicada/tests/integration/cics/test_sign_on_flow.py
   checksum: de82c11f91f78729a1970450526c8e514eb8397f3d0919007689df8ae872be5e
+- filename: fp.json
+  checksum: 6faba405e22203668879cc4114a28a2793f5845bd0148bc808470e87435917c4
 version: "1.0"
