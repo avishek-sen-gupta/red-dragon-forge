@@ -13,6 +13,7 @@ then drive the length-prefixed codec over those children.
 from __future__ import annotations
 
 from interpreter.cobol.field_position import FieldPosition
+from interpreter.cobol.layout_data import field_positions
 from unit.layout_build import declarations
 
 from squall.binding import read_params, write_outputs, _alpha_decode
@@ -91,7 +92,13 @@ def test_varchar_write_then_read_round_trips():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
 
-    status = write_outputs(vm, ("EMP-NAME",), ("SANDERS",), field_meta=_FIELD_META)
+    status = write_outputs(
+        vm,
+        field_positions(vm.declarations),
+        ("EMP-NAME",),
+        ("SANDERS",),
+        field_meta=_FIELD_META,
+    )
     assert status == 0
 
     # LEN child holds 7 as a 2-byte big-endian binary (squall's COMP convention).
@@ -100,7 +107,9 @@ def test_varchar_write_then_read_round_trips():
     assert _alpha_decode(bytes(region[4:11])) == "SANDERS"
 
     # Reading back yields exactly the LEN-many characters (no padding).
-    vals = read_params(vm, ("EMP-NAME",), field_meta=_FIELD_META)
+    vals = read_params(
+        vm, field_positions(vm.declarations), ("EMP-NAME",), field_meta=_FIELD_META
+    )
     assert vals == ["SANDERS"]
 
 
@@ -110,7 +119,13 @@ def test_varchar_overflow_fails_atomically():
     vm = _VM(region)
     before = bytes(region)
 
-    status = write_outputs(vm, ("EMP-NAME",), ("TOOLONGNAME",), field_meta=_FIELD_META)
+    status = write_outputs(
+        vm,
+        field_positions(vm.declarations),
+        ("EMP-NAME",),
+        ("TOOLONGNAME",),
+        field_meta=_FIELD_META,
+    )
     assert status == -304
     assert bytes(region) == before  # atomic: nothing written on overflow
 
@@ -119,9 +134,20 @@ def test_varchar_empty_string():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
 
-    assert write_outputs(vm, ("EMP-NAME",), ("",), field_meta=_FIELD_META) == 0
+    assert (
+        write_outputs(
+            vm,
+            field_positions(vm.declarations),
+            ("EMP-NAME",),
+            ("",),
+            field_meta=_FIELD_META,
+        )
+        == 0
+    )
     assert int.from_bytes(bytes(region[2:4]), "big", signed=True) == 0
-    assert read_params(vm, ("EMP-NAME",), field_meta=_FIELD_META) == [""]
+    assert read_params(
+        vm, field_positions(vm.declarations), ("EMP-NAME",), field_meta=_FIELD_META
+    ) == [""]
 
 
 def test_varchar_trailing_space_is_preserved():
@@ -134,13 +160,21 @@ def test_varchar_trailing_space_is_preserved():
     region = bytearray(_REGION_SIZE)
     vm = _VM(region)
 
-    status = write_outputs(vm, ("EMP-NAME",), ("SANDERS ",), field_meta=_FIELD_META)
+    status = write_outputs(
+        vm,
+        field_positions(vm.declarations),
+        ("EMP-NAME",),
+        ("SANDERS ",),
+        field_meta=_FIELD_META,
+    )
     assert status == 0
 
     # LEN child holds 8 (the space counts), not 7.
     assert int.from_bytes(bytes(region[2:4]), "big", signed=True) == 8
 
-    vals = read_params(vm, ("EMP-NAME",), field_meta=_FIELD_META)
+    vals = read_params(
+        vm, field_positions(vm.declarations), ("EMP-NAME",), field_meta=_FIELD_META
+    )
     assert vals == ["SANDERS "]
 
 
@@ -253,7 +287,11 @@ def test_varchar_host_variable_round_trips_exactly_with_derived_field_meta():
     vm.declarations = declarations(_DCLTRTYP_LAYOUT)
 
     status = write_outputs(
-        vm, ("DCL-TR-DESCRIPTION",), ("CASH ADVANCE",), field_meta=field_meta
+        vm,
+        field_positions(vm.declarations),
+        ("DCL-TR-DESCRIPTION",),
+        ("CASH ADVANCE",),
+        field_meta=field_meta,
     )
     assert status == 0
 
@@ -262,9 +300,12 @@ def test_varchar_host_variable_round_trips_exactly_with_derived_field_meta():
     # TEXT child starts with 'CASH ADVANCE' (EBCDIC), padded to its full length.
     assert _alpha_decode(bytes(region[4:16])) == "CASH ADVANCE"
 
-    assert read_params(vm, ("DCL-TR-DESCRIPTION",), field_meta=field_meta) == [
-        "CASH ADVANCE"
-    ]
+    assert read_params(
+        vm,
+        field_positions(vm.declarations),
+        ("DCL-TR-DESCRIPTION",),
+        field_meta=field_meta,
+    ) == ["CASH ADVANCE"]
 
 
 class _Arg:

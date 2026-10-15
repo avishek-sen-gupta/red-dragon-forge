@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from interpreter.address import Address
-from interpreter.cobol.layout_data import field_positions
+from interpreter.cobol.field_position import FieldPosition
 from interpreter.vm.vm_types import VMState
 
 
@@ -26,9 +26,10 @@ def _placed(write: FieldWrite, length: int) -> bytes:
 
 
 def write_fields(
-    vm: VMState, region: bytearray, writes: Sequence[FieldWrite]
+    positions: Mapping[str, FieldPosition],
+    region: bytearray,
+    writes: Sequence[FieldWrite],
 ) -> frozenset[str]:
-    positions = field_positions(vm.declarations)
     missing = set()
     for write in writes:
         if write.name not in positions:

@@ -14,11 +14,11 @@ Flow:
   Turn 2: CC00 / COMEN01C -- SEND MAP COMEN0A, RETURN (terminate).
 """
 
-from interpreter.cobol.field_position import FieldPosition
-from tests.layout_build import declarations
 import queue
 
 from tests.covers import covers, NotLanguageFeature
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from cics.builtins.screen import (
     make_send_map_builtin,

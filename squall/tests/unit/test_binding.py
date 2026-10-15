@@ -9,6 +9,7 @@ Uses a duck-typed _FakeVM (no imports from cicada or red-dragon VM internals).
 from __future__ import annotations
 
 from interpreter.cobol.field_position import FieldPosition
+from interpreter.cobol.layout_data import field_positions
 from unit.layout_build import declarations
 
 import pytest
@@ -133,7 +134,7 @@ def _make_vm() -> tuple[_FakeVM, bytearray]:
 
 def test_read_params_zoned_field():
     vm, _ = _make_vm()
-    result = read_params(vm, ("WS-ID",), {})
+    result = read_params(vm, field_positions(vm.declarations), ("WS-ID",), {})
     assert result == [11]
 
 
@@ -142,7 +143,7 @@ def test_read_params_zoned_field():
 
 def test_write_outputs_zoned_field():
     vm, region = _make_vm()
-    write_outputs(vm, ("WS-BAL",), (500,), {})
+    write_outputs(vm, field_positions(vm.declarations), ("WS-BAL",), (500,), {})
     # Verify by decoding the bytes directly
     raw = bytes(region[4:13])
     assert _zoned_decode(raw) == 500
@@ -153,7 +154,7 @@ def test_write_outputs_zoned_field():
 
 def test_write_sqlcode_positive():
     vm, region = _make_vm()
-    write_sqlcode(vm, 100)
+    write_sqlcode(vm, field_positions(vm.declarations), 100)
     raw = bytes(region[13:22])
     assert _zoned_decode(raw) == 100
 
@@ -163,7 +164,7 @@ def test_write_sqlcode_positive():
 
 def test_write_sqlcode_negative():
     vm, region = _make_vm()
-    write_sqlcode(vm, -1)
+    write_sqlcode(vm, field_positions(vm.declarations), -1)
     raw = bytes(region[13:22])
     assert _zoned_decode(raw) == -1
 
@@ -174,9 +175,9 @@ def test_write_sqlcode_negative():
 def test_write_read_alpha_field():
     vm, region = _make_vm()
     # Write a string into WS-NAME via write_outputs
-    write_outputs(vm, ("WS-NAME",), ("ALICE",), {})
+    write_outputs(vm, field_positions(vm.declarations), ("WS-NAME",), ("ALICE",), {})
     # Read it back via read_params
-    result = read_params(vm, ("WS-NAME",), {})
+    result = read_params(vm, field_positions(vm.declarations), ("WS-NAME",), {})
     assert result == ["ALICE"]
 
 
@@ -224,8 +225,8 @@ def test_alpha_encode_decode_roundtrip(s, length):
 
 def test_read_params_multiple_fields():
     vm, region = _make_vm()
-    write_outputs(vm, ("WS-BAL",), (42,), {})
-    result = read_params(vm, ("WS-ID", "WS-BAL"), {})
+    write_outputs(vm, field_positions(vm.declarations), ("WS-BAL",), (42,), {})
+    result = read_params(vm, field_positions(vm.declarations), ("WS-ID", "WS-BAL"), {})
     assert result == [11, 42]
 
 
@@ -237,7 +238,7 @@ def test_read_params_missing_field_fails_loudly():
     silently-tolerated None — read_params raises rather than fabricating a value."""
     vm, _ = _make_vm()
     with pytest.raises(KeyError):
-        read_params(vm, ("NO-SUCH-FIELD",), {})
+        read_params(vm, field_positions(vm.declarations), ("NO-SUCH-FIELD",), {})
 
 
 # ── Test 9: COMP-3 (packed decimal) field decodes to Decimal ─────────────────
@@ -269,7 +270,7 @@ def _make_comp3_vm(value: Decimal) -> tuple[_FakeVM, bytearray]:
 def test_read_params_comp3_field():
     """read_params returns Decimal for a COMP3 field."""
     vm, _ = _make_comp3_vm(Decimal("1234.56"))
-    result = read_params(vm, ("ACCT-BAL",), {})
+    result = read_params(vm, field_positions(vm.declarations), ("ACCT-BAL",), {})
     assert result == [Decimal("1234.56")]
 
 
@@ -277,7 +278,9 @@ def test_write_outputs_comp3_field():
     """write_outputs stores a Decimal correctly in a COMP3 field."""
     region = bytearray(_COMP3_REGION_SIZE)
     vm = _FakeVM(region, _COMP3_LAYOUT)
-    write_outputs(vm, ("ACCT-BAL",), (Decimal("9876.54"),), {})
+    write_outputs(
+        vm, field_positions(vm.declarations), ("ACCT-BAL",), (Decimal("9876.54"),), {}
+    )
     raw = bytes(region[0:5])
     assert _comp3_decode(raw, decimal_digits=2) == Decimal("9876.54")
 
@@ -286,8 +289,10 @@ def test_read_write_comp3_roundtrip():
     """Round-trip: write Decimal to COMP3 field, read it back via read_params."""
     region = bytearray(_COMP3_REGION_SIZE)
     vm = _FakeVM(region, _COMP3_LAYOUT)
-    write_outputs(vm, ("ACCT-BAL",), (Decimal("-0.01"),), {})
-    result = read_params(vm, ("ACCT-BAL",), {})
+    write_outputs(
+        vm, field_positions(vm.declarations), ("ACCT-BAL",), (Decimal("-0.01"),), {}
+    )
+    result = read_params(vm, field_positions(vm.declarations), ("ACCT-BAL",), {})
     assert result == [Decimal("-0.01")]
 
 
@@ -328,14 +333,14 @@ def test_read_params_binary_field():
     # Encode ACCT-ID = 42 at offset 4
     region[4:8] = _binary_encode(42, 4, signed=True)
     vm = _FakeVM(region, _BINARY_LAYOUT)
-    result = read_params(vm, ("ACCT-ID",), {})
+    result = read_params(vm, field_positions(vm.declarations), ("ACCT-ID",), {})
     assert result == [42]
 
 
 def test_write_outputs_binary_field():
     """write_outputs stores an int correctly in a BINARY field."""
     vm, region = _make_binary_vm()
-    write_outputs(vm, ("ACCT-ID",), (1234567,), {})
+    write_outputs(vm, field_positions(vm.declarations), ("ACCT-ID",), (1234567,), {})
     raw = bytes(region[4:8])
     assert _binary_decode(raw, signed=True) == 1234567
 
@@ -343,7 +348,7 @@ def test_write_outputs_binary_field():
 def test_write_sqlcode_binary_zero():
     """write_sqlcode(0) with a BINARY SQLCODE field encodes as zero."""
     vm, region = _make_binary_vm()
-    write_sqlcode(vm, 0)
+    write_sqlcode(vm, field_positions(vm.declarations), 0)
     raw = bytes(region[0:4])
     assert _binary_decode(raw, signed=True) == 0
 
@@ -351,7 +356,7 @@ def test_write_sqlcode_binary_zero():
 def test_write_sqlcode_binary_negative():
     """write_sqlcode(-1) with a BINARY SQLCODE field encodes as -1."""
     vm, region = _make_binary_vm()
-    write_sqlcode(vm, -1)
+    write_sqlcode(vm, field_positions(vm.declarations), -1)
     raw = bytes(region[0:4])
     assert _binary_decode(raw, signed=True) == -1
 
@@ -359,7 +364,7 @@ def test_write_sqlcode_binary_negative():
 def test_write_sqlcode_binary_positive():
     """write_sqlcode(100) with a BINARY SQLCODE field encodes as 100."""
     vm, region = _make_binary_vm()
-    write_sqlcode(vm, 100)
+    write_sqlcode(vm, field_positions(vm.declarations), 100)
     raw = bytes(region[0:4])
     assert _binary_decode(raw, signed=True) == 100
 
@@ -368,7 +373,7 @@ def test_write_sqlcode_still_works_for_zoned():
     """write_sqlcode with ZONED_DECIMAL SQLCODE (old shape) still works."""
     # The original SQLCODE in test_binding.py uses ZONED_DECIMAL
     vm, region = _make_vm()
-    write_sqlcode(vm, -1)
+    write_sqlcode(vm, field_positions(vm.declarations), -1)
     raw = bytes(region[13:22])
     assert _zoned_decode(raw) == -1
 
@@ -420,7 +425,7 @@ def test_write_sqlcode_populates_sqlerrm():
     token-substitution format (see resolve_dml_sqlcode/write_sqlcode
     docstrings for the ruling)."""
     vm, region = _make_sqlca_vm()
-    write_sqlcode(vm, -204, "TABLE not found")
+    write_sqlcode(vm, field_positions(vm.declarations), -204, "TABLE not found")
 
     assert _binary_decode(bytes(region[4:6]), signed=True) == len("TABLE not found")
     assert _alpha_decode(bytes(region[6:76])) == "TABLE not found"
@@ -431,7 +436,7 @@ def test_write_sqlcode_truncates_long_message_to_70_bytes():
     """A message longer than SQLERRMC's PIC X(70) is truncated, never raises."""
     vm, region = _make_sqlca_vm()
     long_message = "x" * 100
-    write_sqlcode(vm, -204, long_message)
+    write_sqlcode(vm, field_positions(vm.declarations), -204, long_message)
 
     assert _binary_decode(bytes(region[4:6]), signed=True) == 70
     assert _alpha_decode(bytes(region[6:76])) == "x" * 70
@@ -445,10 +450,10 @@ def test_write_sqlcode_empty_message_clears_stale_sqlerrm():
     leave the previous statement's prose in place for COTRTUPC to STRING
     into the operator's screen."""
     vm, region = _make_sqlca_vm()
-    write_sqlcode(vm, -911, "deadlock detected")
+    write_sqlcode(vm, field_positions(vm.declarations), -911, "deadlock detected")
     assert _binary_decode(bytes(region[4:6]), signed=True) == len("deadlock detected")
 
-    write_sqlcode(vm, 0, "")
+    write_sqlcode(vm, field_positions(vm.declarations), 0, "")
 
     assert _binary_decode(bytes(region[4:6]), signed=True) == 0
     assert bytes(region[6:76]) == bytes([ByteConstants.EBCDIC_SPACE]) * 70
@@ -458,9 +463,10 @@ def test_write_sqlcode_message_is_a_noop_without_sqlca_fields():
     """Most binding-test fixtures (and every earlier write_sqlcode caller)
     lay out only SQLCODE, with no SQLERRML/SQLERRMC at all. Passing a
     message must stay a silent no-op there, not raise KeyError -- backward
-    compatibility for every pre-task-8 write_sqlcode(vm, code) call site."""
+    compatibility for every pre-task-8 write_sqlcode(vm, field_positions(vm.declarations), code) call site.
+    """
     vm, region = _make_vm()
-    write_sqlcode(vm, -1, "some driver error text")
+    write_sqlcode(vm, field_positions(vm.declarations), -1, "some driver error text")
     raw = bytes(region[13:22])
     assert _zoned_decode(raw) == -1  # SQLCODE still written correctly
 

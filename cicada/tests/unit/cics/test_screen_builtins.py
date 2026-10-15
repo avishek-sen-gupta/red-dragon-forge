@@ -1,11 +1,11 @@
 """Unit tests for BMS screen builtins."""
 
-from interpreter.cobol.field_position import FieldPosition
-from tests.layout_build import declarations
 import queue
 import struct
 
 from tests.covers import covers, NotLanguageFeature
+from interpreter.cobol.field_position import FieldPosition
+from tests.layout_build import declarations
 from cics.builtins.screen import (
     make_send_map_builtin,
     make_receive_map_builtin,

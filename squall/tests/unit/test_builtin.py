@@ -11,6 +11,7 @@ Layout: WS-ID (zoned, 4), WS-BAL (zoned, 9), SQLCODE (zoned, 9).
 from __future__ import annotations
 
 from interpreter.cobol.field_position import FieldPosition
+from interpreter.cobol.layout_data import field_positions
 from unit.layout_build import declarations
 
 import sqlite3
@@ -201,7 +202,7 @@ def test_update_zero_rows_reports_sqlcode_100(backend):
     resolve_dml_sqlcode over a manufactured SqlResult -- see test_binding.py
     and test_backend.py for that unit-level coverage of the pure function in
     isolation. Reverting exec_sql.py's two call sites back to
-    ``result.sqlcode``/``write_sqlcode(vm, code)`` (pre-task-8) makes this
+    ``result.sqlcode``/``write_sqlcode(vm, field_positions(vm.declarations), code)`` (pre-task-8) makes this
     test fail with SQLCODE 0, not 100 -- verified by execution, see the
     task-8 report.
     """

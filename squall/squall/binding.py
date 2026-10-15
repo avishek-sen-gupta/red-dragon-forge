@@ -33,7 +33,6 @@ bootstrap_vendor_path(_VENDOR)
 from interpreter.address import Address  # noqa: E402
 from interpreter.cobol.cobol_constants import ByteConstants  # noqa: E402
 from interpreter.cobol.field_position import FieldPosition  # noqa: E402
-from interpreter.cobol.layout_data import field_positions  # noqa: E402
 from interpreter.var_name import VarName  # noqa: E402
 
 # ── Low-level codec helpers ───────────────────────────────────────────────────
@@ -585,6 +584,7 @@ def _require_field(layout: Mapping[str, FieldPosition], name: str) -> FieldPosit
 
 def read_params(
     vm,
+    layout: Mapping[str, FieldPosition],
     in_names: tuple[str, ...],
     field_meta: Mapping[str, FieldMeta],
     *,
@@ -603,7 +603,7 @@ def read_params(
     _, region = _get_ws_region(vm)
     return [
         _read_one(
-            field_positions(vm.declarations),
+            layout,
             region,
             field_meta,
             name,
@@ -694,6 +694,7 @@ def _plan_assignment(
 
 def write_outputs(
     vm,
+    layout: Mapping[str, FieldPosition],
     out_names: tuple[str, ...],
     row: tuple,
     field_meta: Mapping[str, FieldMeta],
@@ -710,7 +711,7 @@ def write_outputs(
     """
     region = _get_ws_region(vm)[1]
     plans = [
-        _plan_assignment(field_positions(vm.declarations), field_meta, name, value)
+        _plan_assignment(layout, field_meta, name, value)
         for name, value in zip(out_names, row, strict=True)
     ]
     failure = next((p.code for p in plans if p.code != 0), 0)
@@ -721,7 +722,9 @@ def write_outputs(
     return 0
 
 
-def write_sqlcode(vm, code: int, message: str = "") -> None:
+def write_sqlcode(
+    vm, layout: Mapping[str, FieldPosition], code: int, message: str = ""
+) -> None:
     """Write ``code`` into SQLCODE, and *message* into SQLERRM, in the WS region.
 
     Encoding is determined by the SQLCODE field's own ``category`` in
@@ -734,7 +737,6 @@ def write_sqlcode(vm, code: int, message: str = "") -> None:
     test fixtures only lay out SQLCODE, and must keep working unchanged.
     """
     _, region = _get_ws_region(vm)
-    layout = field_positions(vm.declarations)
     f = _require_field(layout, "SQLCODE")
     length = f.length
     off = f.offset
