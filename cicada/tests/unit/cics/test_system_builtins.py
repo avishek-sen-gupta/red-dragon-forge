@@ -99,7 +99,7 @@ def test_formattime_builtin_returns_time_for_time_key():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_writeq_td_appends_to_queue():
     queue: list[str] = []
-    builtin = make_writeq_td_builtin(queue)
+    builtin = make_writeq_td_builtin(queue.append)
     args = [typed("SOME DATA", UNKNOWN), typed("CSMT", UNKNOWN)]
     builtin(args, _vm())
     assert len(queue) == 1

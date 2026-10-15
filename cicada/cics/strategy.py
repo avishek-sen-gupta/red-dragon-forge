@@ -917,14 +917,9 @@ def _as_builtin_list(holder: Holder[T]) -> list[T]:
     return cast("list[T]", holder)
 
 
-def _as_builtin_queue(queue: MutableSequence[T]) -> list[T]:
-    """system.py still annotates the TD queue it appends to as ``list``."""
-    return cast("list[T]", queue)
-
-
 def _as_builtin_dict(mapping: Mapping[K, V]) -> dict[K, V]:
-    """flow.py, system.py and interval.py still annotate the mappings they only
-    read as ``dict``; they read the caller's object, so later additions show."""
+    """interval.py still annotates the mappings it only reads as ``dict``; it
+    reads the caller's object, so later additions show."""
     return cast("dict[K, V]", mapping)
 
 
@@ -946,12 +941,8 @@ def _register_system_builtins(wiring: _Wiring, identity: tuple[str, str, str]) -
     register("__cics_asktime", make_asktime_builtin())
     register("__cics_bif_deedit", make_bif_deedit_builtin())
     register("__cics_formattime", make_formattime_builtin())
-    register(
-        "__cics_inquire", make_inquire_builtin(_as_builtin_dict(wiring.program_cache))
-    )
-    register(
-        "__cics_writeq_td", make_writeq_td_builtin(_as_builtin_queue(wiring.td_queue))
-    )
+    register("__cics_inquire", make_inquire_builtin(wiring.program_cache))
+    register("__cics_writeq_td", make_writeq_td_builtin(wiring.td_queue.append))
     register("__cics_handle_abend", make_handle_abend_builtin())
 
 
@@ -983,7 +974,7 @@ def _register_flow_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> No
     register(
         "__cics_link",
         make_link_builtin(
-            _as_builtin_dict(wiring.program_cache),
+            wiring.program_cache,
             wiring.result_holder,
             wiring.context_holder,
             2_000_000,
