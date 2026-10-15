@@ -379,4 +379,6 @@ fileignoreconfig:
   checksum: 6faba405e22203668879cc4114a28a2793f5845bd0148bc808470e87435917c4
 - filename: docs/superpowers/plans/2026-10-15-forge-runner.md
   checksum: 31a07348cf2a75eb522ee5926782ec18e39eaf3736989ce6b113f9ef81d5935b
+- filename: squall/tests/unit/test_runtime.py
+  checksum: 91bb5edcd1c6957c0bd864d4fc4b390ed8776604f30112934fa6dc08251e9fdb
 version: "1.0"

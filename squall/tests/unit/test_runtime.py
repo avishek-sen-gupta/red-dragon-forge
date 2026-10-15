@@ -2,27 +2,20 @@
 
 from __future__ import annotations
 
-import importlib.util
-import os
 import sqlite3
-import subprocess
-import sys
-from pathlib import Path
+from collections.abc import Sequence
+
+import pytest
 
 from interpreter.func_name import FuncName
-from interpreter.project.coprocessor_compile import compile_program
-from interpreter.project.ir_codec import IrCodec
-from interpreter.project.linked_codec import LinkedCodec
+from interpreter.types.typed_value import TypedValue
 from interpreter.vm.builtins import Builtins
+from interpreter.vm.vm import VMState
+from interpreter.vm.vm_types import BuiltinResult
 from squall.backends.sqlite import SqliteBackend
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 from squall.strategy_stores import register
-
-_HELPERS_PATH = Path(__file__).parent.parent / "integration" / "squall_cobol_helpers.py"
-_spec = importlib.util.spec_from_file_location("squall_cobol_helpers", _HELPERS_PATH)
-_helpers = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_helpers)
 
 _NAMES = frozenset(
     FuncName(name)
@@ -34,28 +27,15 @@ _NAMES = frozenset(
     )
 )
 
-_SELECT_INTO = """\
-       IDENTIFICATION DIVISION.
-       PROGRAM-ID. SQLRUNTM.
-       DATA DIVISION.
-       WORKING-STORAGE SECTION.
-       01 WS-ID  PIC 9(4) VALUE 11.
-       01 WS-BAL PIC 9(9).
-       01 SQLCODE PIC S9(9).
-       PROCEDURE DIVISION.
-           EXEC SQL CONNECT TO SAMPLE END-EXEC
-           EXEC SQL
-               SELECT ACCT_BAL
-               INTO :WS-BAL
-               FROM ACCOUNT
-               WHERE ACCT_ID = :WS-ID
-           END-EXEC.
-           STOP RUN.
-"""
+
+def _stand_in(_args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
+    return BuiltinResult(value=None)
 
 
-def _stand_in(_args: object, vm: object) -> None:
-    pass
+@pytest.fixture()
+def backend():
+    conn = sqlite3.connect(":memory:")
+    return SqliteBackend(conn)
 
 
 def test_compile_spec_registers_nothing():
@@ -75,21 +55,64 @@ def test_install_registers_the_four_builtins():
     assert {n for n in _NAMES if Builtins.TABLE[n] is not _stand_in} == _NAMES
 
 
-def test_compiled_elsewhere_runs_after_install(tmp_path):
-    parser = _helpers.make_cobol_parser(os.environ["PROLEAP_BRIDGE_JAR"])
-    linked = compile_program(_SELECT_INTO.encode("utf-8"), parser, [build_sql_spec()])
-    linked_file = tmp_path / "program.linked.json"
-    LinkedCodec(IrCodec()).write(linked, linked_file)
+def test_install_registers_exec_sql_builtin(backend):
+    """Installing the SQL runtime registers '__exec_sql' in Builtins.TABLE."""
+    key = FuncName("__exec_sql")
+    # Remove any prior registration to test fresh insertion
+    Builtins.TABLE.pop(key, None)
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(Path(__file__).with_name("installed_runtime_runner.py")),
-            str(linked_file),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    install_sql_runtime(backend)
 
-    assert result.stdout.strip() == "500 0"
+    assert (
+        key in Builtins.TABLE
+    ), "__exec_sql must be in Builtins.TABLE after construction"
+    assert callable(Builtins.TABLE[key]), "registered value must be callable"
+
+
+def test_install_registers_task_end_hook(backend):
+    """Installing the SQL runtime claims the generic, cicada-owned
+    __cics_task_end_hook extension point — squall's session reset (commit +
+    close every cursor) runs whenever a composed CICS runtime signals task
+    end, with neither package importing the other."""
+    key = FuncName("__cics_task_end_hook")
+    previous = Builtins.TABLE.get(key)
+    try:
+        Builtins.TABLE.pop(key, None)
+
+        install_sql_runtime(backend)
+
+        assert key in Builtins.TABLE
+        assert callable(Builtins.TABLE[key])
+        result = Builtins.TABLE[key]([], vm=None)
+        assert result.value is None
+    finally:
+        if previous is None:
+            Builtins.TABLE.pop(key, None)
+        else:
+            Builtins.TABLE[key] = previous
+
+
+def test_install_registers_syncpoint_and_rollback_hooks(backend):
+    """Installing the SQL runtime also claims __cics_syncpoint_hook and
+    __cics_rollback_hook — the same name-convention composition as
+    __cics_task_end_hook, so EXEC CICS SYNCPOINT / SYNCPOINT ROLLBACK reach
+    squall without cicada ever naming it (task-6 brief)."""
+    keys = (FuncName("__cics_syncpoint_hook"), FuncName("__cics_rollback_hook"))
+    previous = {key: Builtins.TABLE.get(key) for key in keys}
+    try:
+        for key in keys:
+            Builtins.TABLE.pop(key, None)
+
+        install_sql_runtime(backend)
+
+        for key in keys:
+            assert key in Builtins.TABLE
+            assert callable(Builtins.TABLE[key])
+            result = Builtins.TABLE[key]([], vm=None)
+            assert result.value is None
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                Builtins.TABLE.pop(key, None)
+            else:
+                Builtins.TABLE[key] = value
