@@ -18,7 +18,10 @@ A package is `<name>.zip`:
 | `programs/<PROGRAM>.linked.json` | One linked program, written by red-dragon's `LinkedCodec` |
 | `maps/<MAPSET>.json` | `hlasm_export`'s JSON for one BMS mapset, copied in unchanged |
 
-The manifest is the only thing litter serialises itself. A transaction is a
+The manifest is the only thing litter serialises itself. It refuses keys it does not define.
+Program, mapset and transaction-program names are z/OS member names: 1 to 8 characters, the
+first `A`-`Z`, `#`, `@` or `$`, the rest those or `0`-`9`. No name read from a package reaches a
+filesystem path. A transaction is a
 `Transaction(transid, program)`; a file is a `CicsFile(name, dsname)`, one CSD `DEFINE FILE`. A
 coprocessor's name is its compile spec's strategy name, so a conversational CICS build records
 `cics-conversational`.
@@ -34,6 +37,11 @@ transactions=, files=, mapsets=, tolerant=)` compiles each program with red-drag
 - red-dragon's intermediate files for program `P` go in `work_dir/P`. A rebuild with the same
   work directory reuses them.
 - `mapsets` maps each mapset name to the JSON file `hlasm_export` wrote for it.
+- A name that is not a member name raises `PackageError`
+  (`<out_dir>/<name>.zip: manifest.json: programs.0: String should match pattern …`) before
+  anything is compiled or written.
+- The zip is written as `<name>.zip.part` and renamed when complete. A build that fails leaves
+  neither file behind.
 
 ## open_package
 
@@ -44,12 +52,13 @@ transactions=, files=, mapsets=, tolerant=)` compiles each program with red-drag
 | Fault | Message |
 |---|---|
 | An entry the manifest names is absent | `<path>: <entry>: missing` |
-| `manifest.json` fails validation | `<path>: manifest.json: <validation errors>` |
-| A linked file fails `LinkedCodec.read` | `<path>: programs/<PROGRAM>.linked.json: <codec error>` |
+| `manifest.json` fails validation | `<path>: manifest.json: <location>: <message>`, one per error, joined by `; ` |
+| A linked file fails `LinkedCodec.read` | `<path>: programs/<PROGRAM>.linked.json: <codec message>` |
 
 ## Tests
 
 `cd litter && . ../bridge-env.sh && uv run --no-sync python -m pytest`. The integration tests
 compile COBOL, so they need `PROLEAP_BRIDGE_JAR` and fail when it is unset. They cover the codec
-round trip of a built package, reuse of the work directory, mapsets shipped unchanged, and each
-`PackageError`.
+round trip of a built package, reuse of the work directory, mapsets shipped unchanged, names that
+are paths refused by `build` and `open_package`, no partial package after a failed build, and
+each `PackageError`.

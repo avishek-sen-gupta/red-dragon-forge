@@ -14,7 +14,10 @@ from interpreter.project.types import LinkedProgram
 from litter.cics_file import CicsFile
 from litter.entries import MANIFEST_ENTRY, mapset_entry, program_entry
 from litter.manifest import Manifest
+from litter.package_error import PackageError
 from litter.transaction import Transaction
+from litter.validation_message import validation_message
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,9 @@ def build(
     mapsets: Mapping[str, Path],
     tolerant: bool,
 ) -> Path:
-    manifest = Manifest(
+    package = out_dir / f"{name}.zip"
+    manifest = _manifest(
+        package,
         programs=tuple(programs),
         coprocessors=tuple(spec.make_strategy().name for spec in specs),
         transactions=tuple(transactions),
@@ -53,9 +58,45 @@ def build(
         for program in programs
     }
     out_dir.mkdir(parents=True, exist_ok=True)
-    package = out_dir / f"{name}.zip"
-    _write(package, manifest, linked, mapsets)
+    _publish(package, manifest, linked, mapsets)
     return package
+
+
+def _publish(
+    package: Path,
+    manifest: Manifest,
+    linked: Mapping[str, LinkedProgram],
+    mapsets: Mapping[str, Path],
+) -> None:
+    part = package.with_name(f"{package.name}.part")
+    try:
+        _write(part, manifest, linked, mapsets)
+        part.replace(package)
+    finally:
+        part.unlink(missing_ok=True)
+
+
+def _manifest(
+    package: Path,
+    *,
+    programs: tuple[str, ...],
+    coprocessors: tuple[str, ...],
+    transactions: tuple[Transaction, ...],
+    files: tuple[CicsFile, ...],
+    mapsets: tuple[str, ...],
+) -> Manifest:
+    try:
+        return Manifest(
+            programs=programs,
+            coprocessors=coprocessors,
+            transactions=transactions,
+            files=files,
+            mapsets=mapsets,
+        )
+    except ValidationError as exc:
+        raise PackageError(
+            f"{package}: {MANIFEST_ENTRY}: {validation_message(exc)}"
+        ) from exc
 
 
 def _compiled(

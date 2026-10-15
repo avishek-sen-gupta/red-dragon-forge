@@ -1,5 +1,6 @@
 """A built package opens to the programs the compile produced, and names any entry it cannot read."""
 
+import json
 import zipfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,6 +15,7 @@ from litter.package_error import PackageError
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "cbl"
 LINKED_ENTRY = "programs/MAINPGM.linked.json"
+MEMBER_NAME_MISMATCH = "String should match pattern '^[A-Z#@$][A-Z0-9#@$]{0,7}$'"
 
 
 def _build(
@@ -112,14 +114,13 @@ def test_open_names_an_unreadable_linked_file(
 ) -> None:
     path = _build(parser, tmp_path, {})
     _rewrite(path, {**_entries(path), LINKED_ENTRY: b'{"format": 1, "linked": {}}'})
-    prefix = f"{path}: {LINKED_ENTRY}: "
-    suffix = ": not a linked-program file of format 2"
 
     with pytest.raises(PackageError) as refused:
         open_package(path)
 
-    message = str(refused.value)
-    assert (message[: len(prefix)], message[-len(suffix) :]) == (prefix, suffix)
+    assert str(refused.value) == (
+        f"{path}: {LINKED_ENTRY}: not a linked-program file of format 2"
+    )
 
 
 def test_mapsets_ship_unchanged(parser: ProLeapCobolParser, tmp_path: Path) -> None:
@@ -144,6 +145,95 @@ def test_open_names_an_invalid_manifest(
     with pytest.raises(PackageError) as refused:
         open_package(path)
 
-    assert str(refused.value).splitlines()[0] == (
-        f"{path}: manifest.json: 4 validation errors for Manifest"
+    assert str(refused.value) == (
+        f"{path}: manifest.json: coprocessors: Field required; "
+        "transactions: Field required; files: Field required; mapsets: Field required"
     )
+
+
+def test_open_refuses_an_unknown_manifest_key(
+    parser: ProLeapCobolParser, tmp_path: Path
+) -> None:
+    path = _build(parser, tmp_path, {})
+    manifest = Manifest.model_validate_json(_entries(path)["manifest.json"])
+    unknown = {**manifest.model_dump(), "owner": "SOMEONE"}
+    _rewrite(
+        path,
+        {**_entries(path), "manifest.json": json.dumps(unknown).encode("utf-8")},
+    )
+
+    with pytest.raises(PackageError) as refused:
+        open_package(path)
+
+    assert str(refused.value) == (
+        f"{path}: manifest.json: owner: Extra inputs are not permitted"
+    )
+
+
+def test_open_refuses_a_program_name_that_is_a_path(
+    parser: ProLeapCobolParser, tmp_path: Path
+) -> None:
+    linked = _entries(_build(parser, tmp_path, {}))[LINKED_ENTRY]
+    names = (f"{tmp_path}/escape", "../../escape")
+    manifest = {
+        "programs": names,
+        "coprocessors": [],
+        "transactions": [],
+        "files": [],
+        "mapsets": [],
+    }
+    path = tmp_path / "crafted.zip"
+    _rewrite(
+        path,
+        {
+            "manifest.json": json.dumps(manifest).encode("utf-8"),
+            **{f"programs/{name}.linked.json": linked for name in names},
+        },
+    )
+
+    with pytest.raises(PackageError) as refused:
+        open_package(path)
+
+    assert (
+        str(refused.value),
+        list(tmp_path.parent.rglob("escape.linked.json")),
+    ) == (
+        f"{path}: manifest.json: programs.0: {MEMBER_NAME_MISMATCH}; "
+        f"programs.1: {MEMBER_NAME_MISMATCH}",
+        [],
+    )
+
+
+def test_build_refuses_a_program_name_that_is_a_path(
+    parser: ProLeapCobolParser, tmp_path: Path
+) -> None:
+    with pytest.raises(PackageError) as refused:
+        build(
+            name="app",
+            programs=("../X",),
+            sources={},
+            parser=parser,
+            specs=(),
+            search_dirs=(FIXTURES,),
+            work_dir=tmp_path / "work",
+            out_dir=tmp_path / "out",
+            transactions=(),
+            files=(),
+            mapsets={},
+            tolerant=False,
+        )
+
+    assert (str(refused.value), list(tmp_path.iterdir())) == (
+        f"{tmp_path / 'out' / 'app.zip'}: manifest.json: programs.0: "
+        f"{MEMBER_NAME_MISMATCH}",
+        [],
+    )
+
+
+def test_a_failed_build_leaves_no_package(
+    parser: ProLeapCobolParser, tmp_path: Path
+) -> None:
+    with pytest.raises(FileNotFoundError):
+        _build(parser, tmp_path, {"ABSENT": tmp_path / "ABSENT.json"})
+
+    assert list((tmp_path / "out").iterdir()) == []
