@@ -95,6 +95,7 @@ package = "out/carddemo.zip"
 system = "region/system"            # catnip's system directory
 
 [sql]                               # required when the package was built with sql
+tolerant = false                    # skip host variables missing from the layout
                                     # DSN from SQUALL_DB2_DSN
 
 # exactly one of [plain], [jcl], [cics]
@@ -151,7 +152,7 @@ live state (connections, program cache, queues, VSAM engine, transid table) in t
 constructors, so a program runs only in the process that compiled it. The two are split:
 
 ```python
-build_sql_spec(*, tolerant: bool) -> CoprocessorSpec
+build_sql_spec() -> CoprocessorSpec
 build_cics_spec(*, conversational: bool) -> CoprocessorSpec
 
 install_sql_runtime(connections, initial_connector, *, tolerant) -> None

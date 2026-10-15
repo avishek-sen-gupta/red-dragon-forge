@@ -361,7 +361,7 @@ Each line has a pinning test in the task that owns the code (Tasks 2, 3, 4, 5, 8
     `PROLEAP_BRIDGE_JAR`.
   Run → FAIL.
 - [ ] **Step 2: Implement.** Read the TOML (`tomllib`) into `BuildConfig` immediately. Build
-  compile specs: `sql` → `build_sql_spec(tolerant=...)`; `cics` / `cics-conversational` →
+  compile specs: `sql` → `build_sql_spec()`; `cics` / `cics-conversational` →
   `build_cics_spec(conversational=...)`. For cics: `mapset_json` per `*.bms` under `bms_dirs`,
   `generate_symbolic_copybooks` into `out_dir/work/sym` (on the copybook path), transactions
   from `parse_csd` and files from `parse_csd_files` over `csd_files`, mapped to `Transaction`
@@ -409,7 +409,7 @@ Each line has a pinning test in the task that owns the code (Tasks 2, 3, 4, 5, 8
 - [ ] **Step 2: Implement.** Parse `env.toml` into `EnvConfig` on arrival; open the package;
   check the manifest against the config (the errors above) before anything runs. Install
   runtimes for the manifest's coprocessors (`sql` → `install_sql_runtime` over a `Db2Backend`
-  from `SQUALL_DB2_DSN`; `cics` → done inside `assemble_region`). `[plain]`: a one-step
+  from `SQUALL_DB2_DSN`, with `[sql] tolerant`; `cics` → done inside `assemble_region`). `[plain]`: a one-step
   `Job` built in code — `ProgramStep(StepName("PLAIN"), ProgramRef(program), dds)` with one
   `DD(DdName(assign), DirectDSN(literal(dsn)), disp_from_words(("SHR",)))` per
   `[plain.files]` entry — run by `JobRunner` with jackal CLI's defaults and
