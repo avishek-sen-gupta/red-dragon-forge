@@ -43,13 +43,11 @@ def _write_into_ws(vm: VMState, record: bytes, offset: int, length: int) -> None
     Pads/truncates the record to ``length`` bytes. No-op (with a warning) if the
     region is missing.
     """
-    match _get_ws_region_addr(vm):
-        case Address() as address if address:
-            _write_into_region(
-                vm, address, record[:length].ljust(length, b"\x00"), offset
-            )
-        case _:
-            logger.warning("VSAM read: no __ws_region in VM — INTO not filled")
+    address = _get_ws_region_addr(vm)
+    if not address.is_present():
+        logger.warning("VSAM read: no __ws_region in VM — INTO not filled")
+        return
+    _write_into_region(vm, address, record[:length].ljust(length, b"\x00"), offset)
 
 
 def _write_into_region(

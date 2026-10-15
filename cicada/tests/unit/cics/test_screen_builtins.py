@@ -6,6 +6,7 @@ import struct
 from tests.covers import covers, NotLanguageFeature
 from interpreter.cobol.field_position import FieldPosition
 from tests.layout_build import declarations
+from interpreter.address import Address
 from cics.builtins.screen import (
     make_send_map_builtin,
     make_receive_map_builtin,
@@ -28,8 +29,11 @@ _NO_TERMINAL_TASK: list = [
 ]
 
 
+_WS_ADDRESS = Address("1")
+
+
 class _FakeVM:
-    def __init__(self, region, layout, addr=1):
+    def __init__(self, region, layout, addr=_WS_ADDRESS):
         self._region = region
         self.declarations = declarations(layout)
         self._addr = addr
@@ -44,7 +48,9 @@ def _tv(v):
 
 def _send(monkeypatch, layout, region, *args):
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     sq: queue.Queue = queue.Queue()
     make_send_map_builtin(sq, _AT_TERMINAL)([_tv(a) for a in args], vm)
     return screen_payload(sq.get(block=False))
@@ -178,7 +184,9 @@ def test_send_map_reads_named_output_fields_from_ws(monkeypatch):
     region = bytearray(b"\x40" * 86)
     region[0:8] = "USER0001".encode("cp037")
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     sq: queue.Queue = queue.Queue()
     builtin = make_send_map_builtin(sq, _AT_TERMINAL)
     builtin([_tv("COSGN0A"), _tv(["USERID", "ERRMSG"])], vm)
@@ -210,7 +218,9 @@ def test_receive_map_writes_eibaid_from_input_event(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(InputEvent(eibaid="\x33", fields={"USERID": "ALICE"}))
@@ -244,7 +254,9 @@ def test_receive_map_backcompat_dict_leaves_eibaid_default(monkeypatch):
     # Pre-seed EIBAID with a sentinel so the default write is observable.
     region[200] = 0x00
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     # Plain dict on the queue (legacy producers) — duck-typed as field values
@@ -296,7 +308,9 @@ def test_receive_map_writes_named_input_fields_to_ws(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"USERID": "USER0001"}))
@@ -349,7 +363,9 @@ def test_receive_map_numeric_field_is_de_edited(monkeypatch):
     }
     region = bytearray(b"\x40" * 210)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(_InputEvent({"AMOUNT": "100", "NAME": "BOB"}))
@@ -367,7 +383,9 @@ def test_receive_map_numeric_field_is_de_edited(monkeypatch):
 def _receive(monkeypatch, layout, event, bases):
     region = bytearray(b"\x40" * 64)
     vm = _FakeVM(region, layout)
-    monkeypatch.setattr("cics.builtins.system._get_ws_region_addr", lambda _vm: 1)
+    monkeypatch.setattr(
+        "cics.builtins.system._get_ws_region_addr", lambda _vm: _WS_ADDRESS
+    )
     vm.region_set = lambda addr, data: region.__setitem__(slice(0, len(data)), data)
     iq: queue.Queue = queue.Queue()
     iq.put(event)

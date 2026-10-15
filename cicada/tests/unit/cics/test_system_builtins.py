@@ -12,7 +12,9 @@ from cics.builtins.system import (
     make_abend_unhandled_builtin,
     make_abend_unsupported_builtin,
     make_inquire_builtin,
+    _get_ws_region_addr,
 )
+from interpreter.address import NO_ADDRESS
 from cics.types import DispatchKind, DispatchResult
 from interpreter.vm.vm_types import VMState, BuiltinResult
 from interpreter.types.typed_value import typed
@@ -314,3 +316,11 @@ def test_assign_builtin_warns_on_an_unimplemented_suboption(caplog):
     make_assign_builtin()([typed("NETNAME", UNKNOWN)], _vm())
 
     assert "NETNAME" in caplog.text
+
+
+@covers(NotLanguageFeature.INFRASTRUCTURE)
+def test_a_vm_with_no_working_storage_frame_has_no_region_address():
+    address = _get_ws_region_addr(_vm())
+
+    assert address is NO_ADDRESS
+    assert address.is_present() is False
