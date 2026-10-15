@@ -93,7 +93,7 @@ Paths are relative to `squall/squall/`.
 | `exec_sql_scan.py` | Finds `EXEC SQL … END-EXEC` spans in fixed-format code areas. |
 | `fixed_format.py` | Positional model of a fixed-format line. Rewrites touch columns 8–72 only. |
 | `data_division_exec_sql.py` | Recovers WORKING-STORAGE `DECLARE CURSOR` texts from the bridge JSON. |
-| `binding.py` | Host-variable binding engine and byte codecs (zoned, alphanumeric, COMP-3, binary, VARCHAR). Host variables are found through the program's layout `Data`: `field_positions(vm.declarations)`. |
+| `binding.py` | Host-variable binding engine and byte codecs (zoned, alphanumeric, COMP-3, binary, VARCHAR). Host variables are found through the program's layout `Data`: `field_positions(vm.declarations)`, parsed once per program in a run by `builtins/exec_sql.py`; a LINKed program's own declarations get their own layout. |
 | `binding_stores.py` | The binding engine's writes into the VM region. |
 | `builtins/exec_sql.py` | The `__exec_sql` builtin and the session, syncpoint and rollback handlers. |
 | `connector.py` | `DbConnector`: `NullDbConnector` (start disconnected) and `NamedDbConnector` (start connected). |

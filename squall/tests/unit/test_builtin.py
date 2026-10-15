@@ -15,6 +15,7 @@ from interpreter.cobol.layout_data import field_positions
 from unit.layout_build import declarations
 
 import sqlite3
+from dataclasses import replace
 
 import pytest
 
@@ -308,3 +309,43 @@ def test_an_open_without_a_declaration_reports_an_unknown_cursor(backend):
     issue("EXEC SQL CONNECT TO SAMPLE END-EXEC")
     issue("EXEC SQL OPEN NOSUCH END-EXEC")
     assert _zoned_decode(bytes(region[13:22])) == -1
+
+
+_CALLEE_LAYOUT = {
+    "WS-BAL": replace(_LAYOUT["WS-BAL"], offset=0),
+    "WS-ID": replace(_LAYOUT["WS-ID"], offset=9),
+    "SQLCODE": _LAYOUT["SQLCODE"],
+}
+
+
+def test_a_program_layout_is_parsed_once_and_a_callee_reads_its_own(backend):
+    parses = []
+
+    def counted(program_declarations):
+        parses.append(program_declarations)
+        return field_positions(program_declarations)
+
+    builtin, *_ = make_exec_sql_builtin({"SAMPLE": backend}, layout_of=counted)
+    caller, caller_region = _make_vm(ws_id=1)
+    callee_region = bytearray(_REGION_SIZE)
+    callee_region[9:13] = _zoned_encode(1, 4)
+    callee = _FakeVM(callee_region, _CALLEE_LAYOUT)
+    select = (
+        "EXEC SQL SELECT ACCT_BAL INTO :WS-BAL FROM ACCOUNT "
+        "WHERE ACCT_ID = :WS-ID END-EXEC"
+    )
+
+    def issue(vm, sql_text: str):
+        return builtin([_TypedValue(sql_text)], vm)
+
+    issue(caller, "EXEC SQL CONNECT TO SAMPLE END-EXEC")
+    [issue(caller, select) for _ in range(3)]
+    [issue(callee, select) for _ in range(3)]
+    issue(caller, select)
+
+    assert (
+        parses,
+        _zoned_decode(bytes(caller_region[4:13])),
+        _zoned_decode(bytes(callee_region[0:9])),
+        _zoned_decode(bytes(callee_region[13:22])),
+    ) == ([caller.declarations, callee.declarations], 500, 500, 0)

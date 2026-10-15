@@ -17,8 +17,9 @@ Design
   TO <db>`` sets the current connection from the registry; ``SET CONNECTION``
   switches it; ``CONNECT RESET`` / ``DISCONNECT`` clears it. Data statements
   route through the current connection and report ``-1024`` when there is none.
-  The current connection is the one piece of per-run mutable session state (a
-  ``_ConnState`` holder), alongside the set of open cursors.
+  The current connection is per-run mutable session state (a ``_ConnState``
+  holder), alongside the set of open cursors and each program's field layout,
+  parsed from its declarations at its first EXEC SQL (``_Layouts``).
 * Dispatch:
     - ``connect`` / ``set_connection`` / ``disconnect``: manage the session.
     - ``select_into``: bind inputs, execute, write outputs, write SQLCODE.
@@ -38,6 +39,7 @@ from typing import TYPE_CHECKING
 
 from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
+from interpreter.instructions import Data
 from squall.backend import SqlBackend
 from squall.binding import (
     read_params,
@@ -115,6 +117,22 @@ class _ConnState:
 
 
 @dataclass(frozen=True)
+class _Layouts:
+    """Each program's field layout, parsed at its first EXEC SQL in the run; keyed by the identity of the program's Data, which each entry keeps alive."""
+
+    parse: Callable[[Sequence[Data]], Mapping[str, FieldPosition]]
+    by_program: dict[
+        tuple[int, ...], tuple[Sequence[Data], Mapping[str, FieldPosition]]
+    ]
+
+    def of(self, declarations: Sequence[Data]) -> Mapping[str, FieldPosition]:
+        key = tuple(id(d) for d in declarations)
+        if key not in self.by_program:
+            self.by_program[key] = (declarations, self.parse(declarations))
+        return self.by_program[key][1]
+
+
+@dataclass(frozen=True)
 class _Undeclared:
     """An OPEN whose cursor has no declaration in its program."""
 
@@ -150,6 +168,7 @@ class _Ctx:
     field_meta: Mapping[str, FieldMeta]
     declaration: ParsedSql | _Undeclared
     layout: Mapping[str, FieldPosition]
+    layouts: _Layouts
     tolerant: bool = False
 
 
@@ -452,6 +471,9 @@ def make_exec_sql_builtin(
     initial_connector: DbConnector = _NO_CONNECTOR,
     *,
     tolerant: bool = False,
+    layout_of: Callable[
+        [Sequence[Data]], Mapping[str, FieldPosition]
+    ] = field_positions,
 ) -> tuple[Callable, Callable, Callable, Callable]:
     """Return a ``__exec_sql`` builtin over the connection registry *connections*
     (name → backend).
@@ -489,6 +511,7 @@ def make_exec_sql_builtin(
         field_meta={},
         declaration=_Undeclared(),
         layout={},
+        layouts=_Layouts(layout_of, {}),
         tolerant=tolerant,
     )
 
@@ -499,7 +522,7 @@ def make_exec_sql_builtin(
         parsed = _parsed(values[0])
         call = replace(
             _call_context(ctx, parsed, values[1:]),
-            layout=field_positions(vm.declarations),
+            layout=ctx.layouts.of(vm.declarations),
         )
         _HANDLERS.get(parsed.kind, _h_query)(call, parsed, vm)
         return BuiltinResult(value=None)
