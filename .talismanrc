@@ -377,4 +377,6 @@ fileignoreconfig:
   checksum: de82c11f91f78729a1970450526c8e514eb8397f3d0919007689df8ae872be5e
 - filename: fp.json
   checksum: 6faba405e22203668879cc4114a28a2793f5845bd0148bc808470e87435917c4
+- filename: docs/superpowers/plans/2026-10-15-forge-runner.md
+  checksum: 31a07348cf2a75eb522ee5926782ec18e39eaf3736989ce6b113f9ef81d5935b
 version: "1.0"
