@@ -36,8 +36,12 @@ def test_build_db2_region_forwards_backend_rollback_as_on_abend(monkeypatch, tmp
     monkeypatch.setattr(region_mod.ibm_db, "connect", lambda *a, **k: fake_conn)
     monkeypatch.setattr(region_mod, "Db2Backend", _FakeBackend)
 
+    def fake_install_sql_runtime(**kwargs):
+        captured["sql_runtime_kwargs"] = kwargs
+
+    monkeypatch.setattr(region_mod, "install_sql_runtime", fake_install_sql_runtime)
+
     def fake_build_sql_spec(**kwargs):
-        captured["sql_spec_kwargs"] = kwargs
         return "the-sql-spec"
 
     monkeypatch.setattr(region_mod, "build_sql_spec", fake_build_sql_spec)
@@ -59,7 +63,7 @@ def test_build_db2_region_forwards_backend_rollback_as_on_abend(monkeypatch, tmp
     assert conn is fake_conn
     assert captured["extra_specs"] == ("the-sql-spec",)
 
-    backend = captured["sql_spec_kwargs"]["connections"]["CARDDEMO"]
+    backend = captured["sql_runtime_kwargs"]["connections"]["CARDDEMO"]
     assert isinstance(backend, _FakeBackend)
     assert backend.conn is fake_conn
 

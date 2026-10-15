@@ -7,7 +7,7 @@ Verifies:
 - ``handles(ExecSqlStatement)`` is True; ``handles(<other>)`` is False.
 - ``lower(...)`` emits a single ``CallFunction`` targeting ``__exec_sql``
   whose single operand carries the verbatim text.
-- Constructing the strategy registers ``__exec_sql`` in ``Builtins.TABLE``.
+- Installing the SQL runtime registers ``__exec_sql`` in ``Builtins.TABLE``.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import pytest
 
 from squall.backends.sqlite import SqliteBackend
 from squall.parser.sql_model import Kind
+from squall.runtime import install_sql_runtime
 from squall.strategy import SqlLoweringStrategy
 
 # ── Imports from vendored red-dragon ─────────────────────────────────────────
@@ -70,8 +71,8 @@ def backend():
 
 
 @pytest.fixture()
-def strategy(backend):
-    return SqlLoweringStrategy(backend)
+def strategy():
+    return SqlLoweringStrategy()
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -113,12 +114,12 @@ def test_lower_emits_call_function(strategy):
 
 
 def test_strategy_registers_exec_sql_builtin(backend):
-    """Constructing SqlLoweringStrategy registers '__exec_sql' in Builtins.TABLE."""
+    """Installing the SQL runtime registers '__exec_sql' in Builtins.TABLE."""
     key = FuncName("__exec_sql")
     # Remove any prior registration to test fresh insertion
     Builtins.TABLE.pop(key, None)
 
-    SqlLoweringStrategy(backend)
+    install_sql_runtime(backend)
 
     assert (
         key in Builtins.TABLE
@@ -127,7 +128,7 @@ def test_strategy_registers_exec_sql_builtin(backend):
 
 
 def test_strategy_registers_task_end_hook(backend):
-    """Constructing SqlLoweringStrategy claims the generic, cicada-owned
+    """Installing the SQL runtime claims the generic, cicada-owned
     __cics_task_end_hook extension point — squall's session reset (commit +
     close every cursor) runs whenever a composed CICS runtime signals task
     end, with neither package importing the other."""
@@ -136,7 +137,7 @@ def test_strategy_registers_task_end_hook(backend):
     try:
         Builtins.TABLE.pop(key, None)
 
-        SqlLoweringStrategy(backend)
+        install_sql_runtime(backend)
 
         assert key in Builtins.TABLE
         assert callable(Builtins.TABLE[key])
@@ -150,7 +151,7 @@ def test_strategy_registers_task_end_hook(backend):
 
 
 def test_strategy_registers_syncpoint_and_rollback_hooks(backend):
-    """Constructing SqlLoweringStrategy also claims __cics_syncpoint_hook and
+    """Installing the SQL runtime also claims __cics_syncpoint_hook and
     __cics_rollback_hook — the same name-convention composition as
     __cics_task_end_hook, so EXEC CICS SYNCPOINT / SYNCPOINT ROLLBACK reach
     squall without cicada ever naming it (task-6 brief)."""
@@ -160,7 +161,7 @@ def test_strategy_registers_syncpoint_and_rollback_hooks(backend):
         for key in keys:
             Builtins.TABLE.pop(key, None)
 
-        SqlLoweringStrategy(backend)
+        install_sql_runtime(backend)
 
         for key in keys:
             assert key in Builtins.TABLE

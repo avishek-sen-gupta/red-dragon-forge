@@ -16,20 +16,17 @@ signatures exactly).  Registered as an element of the
   on the OPEN. WORKING-STORAGE declarations come from the raw bridge JSON
   (``squall.data_division_exec_sql``); VARCHAR groups from the program's DATA
   DIVISION (``squall.dclgen_meta``). Both are per program.
-* The ``__exec_sql`` builtin (registered in ``Builtins.TABLE`` at
-  construction) handles per-kind dispatch.
+* The strategy registers nothing. ``squall.runtime.install_sql_runtime``
+  registers the ``__exec_sql`` builtin that handles per-kind dispatch.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
-from squall.backend import SqlBackend
 from squall.binding import varchar_children
-from squall.builtins.exec_sql import make_exec_sql_builtin
-from squall.connector import DbConnector, NullDbConnector
 from squall.data_division_exec_sql import derive_cursors
 from squall.dclgen_meta import derive_field_meta
 from squall.parser.sql_model import (
@@ -42,7 +39,6 @@ from squall.parser.sql_model import (
     WheneverCondition,
 )
 from squall.program_scope import ProgramScope
-from squall.strategy_stores import register
 
 if TYPE_CHECKING:
     from interpreter.cobol.emit_context import EmitContext
@@ -59,30 +55,13 @@ _WHENEVER_RELATION: dict[WheneverCondition, tuple[str, str]] = {
     WheneverCondition.NOT_FOUND: ("=", "100"),
 }
 
-# A module-level singleton rather than a call in the constructor's own default
-# — B008: a fresh NullDbConnector() is stateless, so every SqlLoweringStrategy
-# that doesn't pass its own can safely share this one instance.
-_NO_CONNECTOR: DbConnector = NullDbConnector()
-
 
 class SqlLoweringStrategy:
     """Full SQL lowering strategy.  Inject at ``CobolFrontend`` construction."""
 
     name = "sql"
 
-    def __init__(
-        self,
-        connections: Mapping[str, SqlBackend],
-        initial_connector: DbConnector = _NO_CONNECTOR,
-        *,
-        tolerant: bool = False,
-    ) -> None:
-        # The connection registry (name → backend). A run starts disconnected;
-        # the program's EXEC SQL CONNECT selects from this registry at run time.
-        # Unless initial_connector resolves an entry that is already current —
-        # modelling a CICS Db2-attached program, which is handed a live thread
-        # by the attachment facility and never issues EXEC SQL CONNECT itself.
-        self._connections = connections
+    def __init__(self) -> None:
         # WHENEVER directive state: condition -> action. Updated in textual order
         # as `lower` sees each WHENEVER statement (precompiler scoping). A stored
         # Continue/NoOpAction disables a previously-active branch (the emit loop
@@ -90,35 +69,6 @@ class SqlLoweringStrategy:
         self._whenever: dict[WheneverCondition, WheneverAction] = {}
         # The program being lowered; preprocess_program_dict starts a new one.
         self._scope = ProgramScope()
-        exec_sql_fn, reset_session_fn, syncpoint_fn, rollback_fn = (
-            make_exec_sql_builtin(
-                connections, initial_connector=initial_connector, tolerant=tolerant
-            )
-        )
-        self._register_builtins(
-            exec_sql_fn, reset_session_fn, syncpoint_fn, rollback_fn
-        )
-
-    def _register_builtins(
-        self, exec_sql_fn, reset_session_fn, syncpoint_fn, rollback_fn
-    ) -> None:
-        """Register ``__exec_sql`` plus the three generic, CICS-owned
-        extension points (see cicada's CicsLoweringStrategy): cicada calls
-        these with no idea what, if anything, is registered under them — the
-        same name-convention-only composition __exec_sql itself uses, so
-        neither package imports the other. __cics_task_end_hook fires at
-        every task end (EXEC CICS RETURN, with or without TRANSID) and resets
-        the session (commit + close every cursor). __cics_syncpoint_hook
-        fires at EXEC CICS SYNCPOINT and commits WITHOUT closing cursors (see
-        ``_syncpoint``'s docstring for the ruling). __cics_rollback_hook
-        fires at EXEC CICS SYNCPOINT ROLLBACK, and — via a composed on_abend
-        callable cicada never names — when a task abends: it rolls back and
-        closes every cursor.
-        """
-        register(_BUILTIN_NAME, exec_sql_fn)
-        register("__cics_task_end_hook", reset_session_fn)
-        register("__cics_syncpoint_hook", syncpoint_fn)
-        register("__cics_rollback_hook", rollback_fn)
 
     # ── Protocol methods ──────────────────────────────────────────────────────
 

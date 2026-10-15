@@ -66,6 +66,7 @@ from squall.connector import NamedDbConnector
 
 from cics.coprocessor import build_cics_spec
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 from interpreter.cobol.layout_data import field_positions
 from interpreter.project.coprocessor_compile import compile_program
 from interpreter.run import main_declarations
@@ -225,15 +226,13 @@ def test_inqcust_found_and_not_found(bridge_jar):
             result_holder=result_holder,
             program_cache=program_cache,
         )
-        inqcust_sql_spec = build_sql_spec(
-            connections={"SAMPLE": backend},
-            initial_connector=NamedDbConnector("SAMPLE"),
-        )
+        inqcust_sql_spec = build_sql_spec()
         inqcust_source = (_BANK_OF_Z_COBOL / "INQCUST.cbl").read_bytes()
         inqcust_linked = compile_program(
             inqcust_source, parser, [inqcust_cics_spec, inqcust_sql_spec]
         )
         program_cache["INQCUST"] = inqcust_linked
+        install_sql_runtime({"SAMPLE": backend}, NamedDbConnector("SAMPLE"))
 
         # Compile WRAPPER (CICS only -- it never touches SQL) sharing the SAME
         # context_holder/result_holder/program_cache.

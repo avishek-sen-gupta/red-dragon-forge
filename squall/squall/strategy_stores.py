@@ -1,4 +1,4 @@
-"""The SQL lowering strategy's one write into state it does not own: builtin registration.
+"""The SQL runtime's one write into state it does not own: builtin registration.
 
 The VM looks builtins up in the process-global ``Builtins.TABLE``, so the
 registration has to change that object in place; a rebuilt copy would go unseen

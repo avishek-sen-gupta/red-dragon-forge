@@ -31,11 +31,11 @@ The mirror ``test_task_return_commits_the_db2_insert`` below is the positive
 control: without it, "row absent" in the abend test is also consistent with
 the INSERT never having reached the backend at all (this program declares
 ``01 SQLCODE PIC S9(9)`` directly rather than COPYing SQLCA, and the SQL
-spec runs ``tolerant=True``, so a misrouted statement would silently no-op
+runtime runs ``tolerant=True``, so a misrouted statement would silently no-op
 rather than fail compilation).
 
-Composes build_cics_spec/build_sql_spec directly (the same two calls
-build_db2_region makes) against an inline synthetic program, rather than
+Composes build_cics_spec/build_sql_spec/install_sql_runtime directly (the
+same calls build_db2_region makes) against an inline synthetic program, rather than
 going through build_db2_region + a RegionConfig, so this stays a focused
 test of the rollback mechanism itself; red_dragon_forge/carddemo_db2_region.py's
 OWN wiring of on_abend is covered separately by
@@ -55,6 +55,7 @@ from red_dragon_forge.run import run_program
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 
 from tests.integration.forge_cobol_helpers import make_parser
 
@@ -108,15 +109,16 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
         result_holder=result_holder,
         on_abend=backend.rollback,
     )
-    sql_spec = build_sql_spec(
-        connections={"CARDDEMO": backend},
-        initial_connector=NamedDbConnector("CARDDEMO"),
-        tolerant=True,
-    )
+    sql_spec = build_sql_spec(tolerant=True)
     parser = make_parser(bridge_jar)
 
     linked = compile_program(
         program_source.encode("utf-8"), parser, [cics_spec, sql_spec]
+    )
+    install_sql_runtime(
+        {"CARDDEMO": backend},
+        NamedDbConnector("CARDDEMO"),
+        tolerant=True,
     )
 
     screen_q: queue.Queue = queue.Queue()

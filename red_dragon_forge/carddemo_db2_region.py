@@ -4,9 +4,10 @@
 ``red_dragon_forge`` is the only package the import-linter contracts allow
 to import both ``cics`` and ``squall`` (``cics`` must never import
 ``squall``), so this module is the one place the two runtimes actually meet:
-it opens the Db2 connection, builds squall's SQL coprocessor spec over it,
-supplies squall's own rollback as cicada's dispatcher-level ``on_abend``
-callable (Task 6's seam), and composes both specs via
+it opens the Db2 connection, installs squall's SQL runtime over it, builds
+squall's SQL coprocessor spec, supplies squall's own rollback as cicada's
+dispatcher-level ``on_abend`` callable (Task 6's seam), and composes both
+specs via
 ``cics.tn3270.region.build_region``'s ``extra_specs``.
 """
 
@@ -20,12 +21,13 @@ from cics.tn3270.region import ServedRegion, build_region
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 
 
 def build_db2_region(
     config: RegionConfig, bridge_jar: str, work_dir: Path, dsn: str
 ) -> tuple[ServedRegion, ibm_db.IBM_DBConnection]:
-    """Open *dsn*, build the SQL spec over it, and compose the region.
+    """Open *dsn*, install the SQL runtime over it, and compose the region.
 
     ``NamedDbConnector("CARDDEMO")`` models the CICS Db2 attachment
     facility: CARDDEMO is already the current connection when a task
@@ -48,11 +50,12 @@ def build_db2_region(
     # squall.backends.db2's own docstring on this exact stub boundary).
     conn = ibm_db.connect(dsn, "", "")  # type: ignore[reportArgumentType]
     backend = Db2Backend(conn)
-    sql_spec = build_sql_spec(
+    install_sql_runtime(
         connections={"CARDDEMO": backend},
         initial_connector=NamedDbConnector("CARDDEMO"),
         tolerant=True,
     )
+    sql_spec = build_sql_spec(tolerant=True)
     region = build_region(
         config,
         bridge_jar,

@@ -45,6 +45,7 @@ from squall.backends.db2 import Db2Backend
 from squall.backends.sqlite import SqliteBackend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
+from squall.runtime import install_sql_runtime
 
 from red_dragon_forge.run import run_program
 
@@ -268,14 +269,12 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
         result_holder=result_holder,
         program_cache={},
     )
-    inq_sql = build_sql_spec(
-        connections={"SAMPLE": recorder},
-        initial_connector=NamedDbConnector("SAMPLE"),
-    )
+    inq_sql = build_sql_spec()
     parser = make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY])
     inq_linked = compile_program(
         INQCUST_CBL.read_bytes(), parser, [inq_cics, inq_sql]
     )
+    install_sql_runtime({"SAMPLE": recorder}, NamedDbConnector("SAMPLE"))
     wrap_spec = build_cics_spec(
         transid_to_program={},
         context_holder=context_holder,
@@ -469,12 +468,13 @@ def _run_composed(source: str, backend: SqlBackend, transid: str):
         result_holder=result_holder,
         applid="FORGEAPP",
     )
-    sql_spec = build_sql_spec(connections={"SAMPLE": backend})
+    sql_spec = build_sql_spec()
     linked = compile_program(
         source.encode("utf-8"),
         make_parser(os.environ["PROLEAP_BRIDGE_JAR"]),
         [cics_spec, sql_spec],
     )
+    install_sql_runtime({"SAMPLE": backend})
     t0 = time.perf_counter()
     result = run_program(
         linked,

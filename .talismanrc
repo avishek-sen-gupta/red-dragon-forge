@@ -12,7 +12,7 @@ fileignoreconfig:
 - filename: tests/integration/test_carddemo_db2_schema.py
   checksum: fc5b0547a94e20bd5bbc054a70f4cc65b07d08b7a1f97c3266cd3538e7387e61
 - filename: tests/unit/test_carddemo_db2_region_wiring.py
-  checksum: 12a3d64301102e96971767ae80e66f6ba5b5bd35f4335897537a135be3e978aa
+  checksum: e589612cb380f52c5aa145965c37abdd55d33a9218fa5186a3cd24fbba58ebfa
 - filename: carddemo-env.sh
   checksum: a614deff7d63e09ced0decae3df98198d6187a3ffa3b8a8859970586f4872933
 - filename: cicada/tests/integration/cics/test_tn3270_e2e.py
@@ -274,7 +274,7 @@ fileignoreconfig:
 - filename: docs/reference/cicada/architecture.md
   checksum: cef3337e56892f2564d0daf9341a94803945e78097c74c2806e3c4b14e9c8b70
 - filename: docs/reference/squall/architecture.md
-  checksum: 617c99944b7edec89262544a4614edcd83da3bd390a7d889457e240884b0617b
+  checksum: 6762bfe25e78985f1c2a968ee1c98263adb685da553753b0b3ebde865bcde319
 - filename: docs/superpowers/specs/2026-10-08-docs-consolidation-design.md
   checksum: 8f7db65aae8f90a9ac8352e2c23d4ebc83ec141edf3e4665709fb52383fe29aa
 - filename: docs/superpowers/plans/2026-10-10-jcl-object-model-unit1-acceptance.md
