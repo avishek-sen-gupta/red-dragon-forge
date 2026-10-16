@@ -115,7 +115,7 @@ _DDL = "CREATE TABLE ACCOUNT(ACCT_ID INTEGER, ACCT_BAL INTEGER)"
 _SEED = ["INSERT INTO ACCOUNT VALUES (11, 500)", "INSERT INTO ACCOUNT VALUES (22, 750)"]
 
 
-@pytest.fixture(params=["sqlite", "db2"])
+@pytest.fixture(params=["sqlite", pytest.param("db2", marks=pytest.mark.db2)])
 def backend(request):
     if request.param == "sqlite":
         from squall.backends.sqlite import SqliteBackend

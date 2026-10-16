@@ -41,3 +41,6 @@ allow-direct-references = true
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "db2: needs a live Db2 via SQUALL_DB2_DSN; CI deselects it with -m 'not db2'",
+]

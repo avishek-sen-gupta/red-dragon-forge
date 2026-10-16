@@ -21,6 +21,8 @@ import importlib.util
 import os
 from pathlib import Path
 
+import pytest
+
 _HERE = Path(__file__).parent
 _HELPERS = _HERE / "squall_cobol_helpers.py"
 _spec = importlib.util.spec_from_file_location("squall_cobol_helpers", _HELPERS)
@@ -31,6 +33,8 @@ read_ws_field = _helpers.read_ws_field
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.db2 import Db2Backend
+
+pytestmark = pytest.mark.db2
 
 _DB2_INCLUDES = _HERE / "db2_includes"
 

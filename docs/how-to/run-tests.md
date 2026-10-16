@@ -35,6 +35,16 @@ Pass extra pytest arguments to the root suite with `make test PYTEST_ARGS="-k na
 Tests that need Db2 fail, not skip, when it is not running. Sourcing `bridge-env.sh` before
 cobble's suite turns on its acceptance tests, which start a JVM and run much longer.
 
+## Without Db2
+
+CI runs this way; Db2-backed tests run only locally.
+
+- squall: its Db2 tests are marked `db2`. Deselect them with
+  `. ./bridge-env.sh && (cd squall && uv run --no-sync python -m pytest -m "not db2")`.
+- root: with `SQUALL_DB2_DSN` unset, the `db2_dsn` fixture skips every Db2 test. Run
+  `. ./bridge-env.sh && uv run --no-sync python -m pytest tests/`, not `make test`, which exports
+  the DSN.
+
 ## Before committing
 
 The pre-commit hook runs these. Run them by hand to see failures early.
