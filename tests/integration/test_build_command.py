@@ -180,6 +180,31 @@ def test_a_source_is_found_only_by_a_listed_extension(
     assert (built, stopped) == (rc, err)
 
 
+def test_two_members_with_one_program_id_stop_the_build(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "FIRST.cbl").write_text(_UPPER)
+    (tmp_path / "src" / "SECOND.cbl").write_text(_UPPER)
+    path = _build_toml(
+        tmp_path,
+        'name = "app"\nprograms = ["FIRST", "SECOND"]\nlink = ["FIRST", "SECOND"]\n',
+        "",
+    )
+
+    rc = run([str(path)], os.environ)
+
+    assert (
+        rc,
+        [
+            line.split(" twice:")[0]
+            for line in capsys.readouterr().err.splitlines()
+            if line.startswith("forge-build:")
+        ],
+        (tmp_path / "out" / "app.zip").exists(),
+    ) == (1, ["forge-build: program UPPER is in the image"], False)
+
+
 def test_a_build_with_sql_that_does_not_link_dsntiac_stops_before_linking(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -78,6 +78,7 @@ back. `EXEC SQL CONNECT TO` another location is red-dragon-forge-b114.
 | a package built with sql, no `[sql]` | `env.toml: [sql] is required: out/app.zip was built with sql` |
 | a `[plain]` program the image lacks | `env.toml: program X is not in out/app.zip` |
 | an `initial_transid` the package lacks | `env.toml: transaction X is not in out/app.zip` |
+| an `initial_transid` whose program is not linked | `env.toml: transaction X runs P, which is not in out/app.zip` |
 | env.toml missing or not TOML | `<path>: No such file or directory`, or `env.toml: <TOML error>` |
 | a key or value env.toml does not define | `env.toml: <location>: <message>` (a top-level `tolerant` is one) |
 | the package missing or not a zip | `env.toml: package <path>: <reason>` |

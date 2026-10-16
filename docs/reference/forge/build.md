@@ -62,7 +62,10 @@ csd_files = ["app/csd/CARDDEMO.CSD"]
   with cicada's own copybooks, and its `hlasm_export` JSON, copied into the package. The transaction table and the file table come from the CSD files'
   `DEFINE TRANSACTION` and `DEFINE FILE`.
 - Intermediate files go in `<out_dir>/work/`; a rebuild reuses red-dragon's units, keyed by
-  source and settings (a changed copybook's contents is red-dragon-o819).
+  source and settings. Reuse ignores a copybook's contents, including a regenerated BMS
+  symbolic map (red-dragon-o819): after editing a copybook or a `.bms`, delete
+  `<out_dir>/work/` before rebuilding.
+- `link` naming a program twice, or two members declaring one PROGRAM-ID, stops the build.
 - The manifest lists the programs the image holds, by PROGRAM-ID.
 
 | Fault | Message (on stderr, after `forge-build: `) |

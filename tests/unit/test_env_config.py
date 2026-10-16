@@ -20,7 +20,10 @@ _CICS = '[cics]\ninitial_transid = "CC00"\n'
 _MANIFEST = Manifest(
     programs=("CBACT01C", "COSGN00C"),
     coprocessors=("cics", "sql"),
-    transactions=(Transaction("CC00", "COSGN00C"),),
+    transactions=(
+        Transaction("CC00", "COSGN00C"),
+        Transaction("CT02", "COTRN02C"),
+    ),
     files=(),
     mapsets=(),
 )
@@ -118,6 +121,10 @@ def test_an_env_toml_that_does_not_parse_names_its_fault(
         (
             '[sql]\n[cics]\ninitial_transid = "ZZ99"\n',
             "env.toml: transaction ZZ99 is not in out/app.zip",
+        ),
+        (
+            '[sql]\n[cics]\ninitial_transid = "CT02"\n',
+            "env.toml: transaction CT02 runs COTRN02C, which is not in out/app.zip",
         ),
     ],
 )
