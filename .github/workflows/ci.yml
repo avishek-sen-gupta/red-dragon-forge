@@ -184,6 +184,15 @@ jobs:
           java-version: "21"
       - name: Build the shared ProLeap + JCL bridge JARs
         run: make jar
+      # CICS package builds generate symbolic maps with hlasm_export, and the
+      # forge-run TN3270 tests drive a real s3270 and fail without it.
+      - name: Install the hlasm_export build dependencies and s3270
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang libc++-dev libc++abi-dev s3270
+      - name: Build hlasm_export
+        env:
+          CC: clang
+          CXX: clang++
+        run: make hlasm
       - name: Install Python dependencies
         run: make python
       - name: Start DB2 (squall's compose stack)
