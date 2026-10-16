@@ -246,9 +246,9 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-09-30-cobble-dynamic-call-resolution-unit-1.md
   checksum: 55fea677560d44e44ee55b90ae7e9e838788f3523eb06eea867794ef68e5fa30
 - filename: docs/superpowers/plans/2026-10-02-srccfg-jsonl.md
-  checksum: 22b1c8a31adc79ddaeb672e3d5af96193b985c1ae3def8c1965ea36f712ade04
+  checksum: f30d2781cef16636805075d1f4b717613089d8a380277c659c19066e3f25b77f
 - filename: docs/superpowers/plans/2026-10-02-srccfg-reach.md
-  checksum: fd808074d85aca2abee080dac45078fc50d791c97b090ea11476c9df3f215a9d
+  checksum: 9af228071f97ebb57a7a9708fb9a9abad6ac1bf98642f78b1ab55352046e34d2
 - filename: cobble/cobble/dataflow/srccfg/arm_clauses.py
   checksum: b74101234c683e9df7f51c46ef055c7446ec7e67f34b0c369c367259ddcb7f59
 - filename: docs/explainers/tree-zippers.html
