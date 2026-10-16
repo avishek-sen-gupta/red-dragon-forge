@@ -103,7 +103,7 @@ def _compile(bridge_jar: str, program_name: str):
     source = (_db2_tree() / "cbl" / f"{program_name}.cbl").read_bytes()
     parser = _make_parser(bridge_jar)
 
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         [None],
         transid_to_program={},
         program_cache={},

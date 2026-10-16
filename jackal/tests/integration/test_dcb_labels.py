@@ -31,6 +31,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY
 from tests.model_build import dd, disp, job, program, ref
 from tests.system_build import job_catalog, scratch, system, upload
+from interpreter.vm.builtins import core_builtins
 
 _FB80 = SequentialLabel(RecordFormat.FB, 80)
 
@@ -43,6 +44,7 @@ def _runner(tmp_path: Path) -> JobRunner:
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=EMPTY,
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
 
 

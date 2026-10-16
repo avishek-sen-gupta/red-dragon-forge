@@ -73,7 +73,7 @@ def test_inquire_resp_writeback_round_trips(cobol_parser):
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -98,6 +98,7 @@ def test_inquire_resp_writeback_round_trips(cobol_parser):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN_TRANSID

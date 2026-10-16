@@ -33,7 +33,7 @@ Runs a CardDemo batch job through jackal. Flags are in
    declaration is validated before anything is written; do it once per system directory.
 
    ```bash
-   make catnip-install-carddemo SYSTEM=/tmp/jackal-system
+   uv run catnip install config/carddemo/data.toml --system /tmp/jackal-system
    ```
 
    Expected: an `installed …` line per dataset, alternate index and path.
@@ -183,7 +183,7 @@ default).
 
 The `jackal` command composes no SQL support. A program with `EXEC SQL` runs under
 [`forge-run`](../reference/forge/run.md) with `[jcl]` and `[sql]`, or through the Python
-API: built into a package with squall's coprocessor, and run with squall's runtime installed. A Db2 batch program
+API: built into a package with squall's coprocessor, and run with squall's `__exec_sql` composed into the runner's builtins table. A Db2 batch program
 does not `CONNECT`; DSN attaches it to its subsystem, which `initial_connector` stands in for. This runs a SYSTSIN of
 `DSN SYSTEM(DB2P)` / `RUN PROGRAM(RPTPGM) PLAN(RPTPLAN)` against an SQLite database:
 
@@ -204,6 +204,7 @@ from squall.backends.sqlite import SqliteBackend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
+from interpreter.vm.builtins import compose_builtins, core_builtins
 from litter.build import build
 from litter.open import open_package
 
@@ -227,7 +228,7 @@ package = build(
     tolerant=False,
 )
 conn = sqlite3.connect("bank.db")
-install_sql_runtime({"DB2P": SqliteBackend(conn)}, NamedDbConnector("DB2P"))
+sql = install_sql_runtime({"DB2P": SqliteBackend(conn)}, NamedDbConnector("DB2P"))
 runner = JobRunner(
     package=open_package(package),
     system=SystemCatalog(Path("/tmp/demo")),
@@ -235,6 +236,7 @@ runner = JobRunner(
     missing_data=StrictAllocation(),
     missing_program=AbendMissingProgram(),
     program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+    builtins=compose_builtins(core_builtins(), sql.entries),
 )
 with tempfile.TemporaryDirectory() as scratch:
     result = runner.run(parse_jcl(Path("db2job.jcl").read_text()), Path(scratch))

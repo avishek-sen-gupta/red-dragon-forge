@@ -8,7 +8,9 @@ from functools import reduce
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
+from interpreter.func_name import FuncName
 from interpreter.project.program_entry import ProgramEntry
+from interpreter.vm.builtin import Builtin
 from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import CompiledProgram, run_cobol_step
@@ -143,6 +145,7 @@ class JobRunner:
         program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
         *,
+        builtins: Mapping[FuncName, Builtin],
         permit_unresolved_call_targets: bool = True,
     ):
         self._package = package
@@ -153,6 +156,7 @@ class JobRunner:
         self._missing_program = missing_program
         self._program_step_budget = program_step_budget
         self._permit_unresolved_call_targets = permit_unresolved_call_targets
+        self._builtins = builtins
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
     def run(self, job: Job, scratch: Path) -> JobResult:
@@ -267,5 +271,6 @@ class JobRunner:
             catalog.workdir,
             self._program_step_budget,
             catalog,
+            builtins=self._builtins,
             permit_unresolved_call_targets=self._permit_unresolved_call_targets,
         )

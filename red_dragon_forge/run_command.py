@@ -6,17 +6,20 @@ import logging
 import os
 import sys
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from functools import partial
 from pathlib import Path
+from types import MappingProxyType
 from zipfile import BadZipFile
 
 from catnip.system_catalog import SystemCatalog
 from cics.tn3270.region import ServedRegion, assemble_region
 from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
+from cics.transaction_hooks import TransactionHooks
 from cics.vsam.file_table import FileTableError
 from interpreter.handlers.calls import UnresolvedProgramError
+from interpreter.vm.builtins import compose_builtins, core_builtins
 from jackal.cli import report
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
@@ -34,6 +37,7 @@ from litter.package_error import PackageError
 
 from red_dragon_forge.cics_run import CicsRun
 from red_dragon_forge.config_error import ConfigError
+from red_dragon_forge.coprocessing import Coprocessing
 from red_dragon_forge.db2_connection import connected
 from red_dragon_forge.env_config import (
     EnvConfig,
@@ -54,12 +58,18 @@ def _noop() -> None:
     return None
 
 
+_NO_COPROCESSING = Coprocessing(
+    on_abend=_noop, hooks=TransactionHooks(), builtins=MappingProxyType({})
+)
+
+
 def _runner(
     package: Package,
     config: EnvConfig,
     system: Path,
     budget: int,
     proclib_dirs: Sequence[Path],
+    coprocessing: Coprocessing,
 ) -> JobRunner:
     return JobRunner(
         package=package,
@@ -69,6 +79,7 @@ def _runner(
         missing_program=StubMissingProgram(),
         program_step_budget=budget,
         proclib_dirs=proclib_dirs,
+        builtins=compose_builtins(core_builtins(), coprocessing.builtins),
         permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
     )
 
@@ -98,20 +109,35 @@ def _ran(runner: JobRunner, job: Job) -> JobResult:
         return runner.run(job, Path(scratch))
 
 
-def _plain(base: Path, config: EnvConfig, plain: PlainRun, package: Package) -> int:
-    runner = _runner(package, config, base / config.paths.system, plain.max_steps, ())
+def _plain(
+    base: Path,
+    config: EnvConfig,
+    plain: PlainRun,
+    package: Package,
+    coprocessing: Coprocessing,
+) -> int:
+    runner = _runner(
+        package, config, base / config.paths.system, plain.max_steps, (), coprocessing
+    )
     result = _ran(runner, plain_job(plain))
     sys.stdout.write("".join(f"{s.outcome.rendered()}\n" for s in result.steps))
     return 1 if any(isinstance(s.outcome, Abended) for s in result.steps) else 0
 
 
-def _jcl(base: Path, config: EnvConfig, jcl: JclRun, package: Package) -> int:
+def _jcl(
+    base: Path,
+    config: EnvConfig,
+    jcl: JclRun,
+    package: Package,
+    coprocessing: Coprocessing,
+) -> int:
     runner = _runner(
         package,
         config,
         base / config.paths.system,
         DEFAULT_PROGRAM_STEP_BUDGET,
         tuple(base / d for d in jcl.proclib_dirs),
+        coprocessing,
     )
     return report(_ran(runner, parse_jcl(_job_text(base / jcl.job))))
 
@@ -128,9 +154,9 @@ def _cics(
     config: EnvConfig,
     cics: CicsRun,
     package: Package,
-    on_abend: Callable[[], None],
+    coprocessing: Coprocessing,
 ) -> int:
-    served = _region(base, config, package, on_abend)
+    served = _region(base, config, package, coprocessing)
     server = bind(cics.host, cics.port)
     logger.info("serving on %s:%d", cics.host, cics.port)
     serve_forever(
@@ -145,11 +171,11 @@ def _cics(
     return 0
 
 
-def _rollback(
+def _coprocessing(
     config: EnvConfig, package: Package, environ: Mapping[str, str]
-) -> Callable[[], None]:
+) -> Coprocessing:
     if "sql" not in package.manifest.coprocessors:
-        return _noop
+        return _NO_COPROCESSING
     if not environ.get(_DSN, ""):
         raise ConfigError(f"{_DSN} is not set")
     return connected(environ[_DSN]).install(
@@ -165,48 +191,54 @@ def _package(path: Path, config: EnvConfig) -> Package:
 
 
 def _region(
-    base: Path, config: EnvConfig, package: Package, on_abend: Callable[[], None]
+    base: Path, config: EnvConfig, package: Package, coprocessing: Coprocessing
 ) -> ServedRegion:
     return assemble_region(
         package,
         SystemCatalog(base / config.paths.system),
-        on_abend=on_abend,
+        on_abend=coprocessing.on_abend,
         permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
+        hooks=coprocessing.hooks,
+        other_builtins=coprocessing.builtins,
     )
 
 
 def _prepared(
     path: Path, environ: Mapping[str, str]
-) -> tuple[EnvConfig, RunMode, Package, Callable[[], None]]:
+) -> tuple[EnvConfig, RunMode, Package, Coprocessing]:
     config, mode = load_env_config(path)
     package = _package(path, config)
     check_against(path, config, mode, package.manifest)
-    return config, mode, package, _rollback(config, package, environ)
+    return config, mode, package, _coprocessing(config, package, environ)
 
 
 def cics_region(path: Path, environ: Mapping[str, str]) -> ServedRegion:
-    config, _, package, on_abend = _prepared(path, environ)
-    return _region(path.parent, config, package, on_abend)
+    config, _, package, coprocessing = _prepared(path, environ)
+    return _region(path.parent, config, package, coprocessing)
 
 
 def _run(path: Path, environ: Mapping[str, str]) -> int:
-    config, mode, package, on_abend = _prepared(path, environ)
+    config, mode, package, coprocessing = _prepared(path, environ)
     base = path.parent
     match mode:
         case CicsRun():
-            return _cics(base, config, mode, package, on_abend)
+            return _cics(base, config, mode, package, coprocessing)
         case _:
-            return _batch(base, config, mode, package)
+            return _batch(base, config, mode, package, coprocessing)
 
 
 def _batch(
-    base: Path, config: EnvConfig, mode: PlainRun | JclRun, package: Package
+    base: Path,
+    config: EnvConfig,
+    mode: PlainRun | JclRun,
+    package: Package,
+    coprocessing: Coprocessing,
 ) -> int:
     match mode:
         case PlainRun():
-            return _plain(base, config, mode, package)
+            return _plain(base, config, mode, package, coprocessing)
         case JclRun():
-            return _jcl(base, config, mode, package)
+            return _jcl(base, config, mode, package, coprocessing)
 
 
 def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:

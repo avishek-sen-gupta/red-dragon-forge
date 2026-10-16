@@ -17,7 +17,7 @@ signatures exactly).  Registered as an element of the
   (``squall.data_division_exec_sql``); VARCHAR groups from the program's DATA
   DIVISION (``squall.dclgen_meta``). Both are per program.
 * The strategy registers nothing. ``squall.runtime.install_sql_runtime``
-  registers the ``__exec_sql`` builtin that handles per-kind dispatch.
+  returns the ``__exec_sql`` builtin that handles per-kind dispatch.
 """
 
 from __future__ import annotations

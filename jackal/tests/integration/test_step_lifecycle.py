@@ -7,6 +7,7 @@ import pytest
 from catnip.labels import RecordFormat, SequentialLabel
 from catnip.system_catalog import NotCataloged
 from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
@@ -71,6 +72,7 @@ def test_a_cobol_step_with_or_without_parm_reads_in_stream_cards_and_a_dummy_inp
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     result = runner.run_job(job, catalog)
     assert (
@@ -110,6 +112,7 @@ def test_a_cobol_step_writing_a_mod_dataset_appends_to_it(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     result = runner.run_job(job, catalog)
     assert (
@@ -140,6 +143,7 @@ def test_a_cobol_program_that_never_ends_abends_s322_when_its_budget_runs_out(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=2_000,
+        builtins=core_builtins(),
     )
     result = runner.run_job(job, catalog)
     s1, s322 = result.steps[0].step, SystemAbend(0x322)
@@ -188,6 +192,7 @@ def test_a_cobol_open_labels_a_new_dataset_and_fails_status_39_on_a_conflicting_
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
         result = runner.run_job(job, catalog)
@@ -228,6 +233,7 @@ def test_a_cobol_step_writing_to_dummy_or_nullfile_keeps_nothing(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     result = runner.run_job(job, job_catalog(tmp_path))
     kept = sorted(p.name for p in tmp_path.rglob("*") if p.is_file())

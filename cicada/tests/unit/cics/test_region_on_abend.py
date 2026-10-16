@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -12,22 +12,13 @@ import cics.tn3270.region as region_mod
 from catnip.system_catalog import SystemCatalog
 from interpreter.func_name import FuncName
 from interpreter.project.cobol_compile import link_units
-from interpreter.vm.builtins import Builtins
 from interpreter.vm.vm_types import BuiltinResult, VMState
 from litter.manifest import Manifest
 from litter.package import Package
 
 
-@pytest.fixture(autouse=True)
-def _restore_builtins_table() -> Iterator[None]:
-    before = dict(Builtins.TABLE)
-    yield
-    Builtins.TABLE.clear()
-    Builtins.TABLE.update(before)
-
-
-def _fire_installed_abend() -> BuiltinResult:
-    return Builtins.TABLE[FuncName("__cics_abend")]([], VMState())
+def _fire_installed_abend(served: region_mod.ServedRegion) -> BuiltinResult:
+    return served.builtins[FuncName("__cics_abend")]([], VMState())
 
 
 def _empty(tmp_path: Path) -> Package:
@@ -38,8 +29,8 @@ def _empty(tmp_path: Path) -> Package:
     )
 
 
-def _assembled(tmp_path: Path, on_abend: Callable[[], None]) -> None:
-    region_mod.assemble_region(
+def _assembled(tmp_path: Path, on_abend: Callable[[], None]) -> region_mod.ServedRegion:
+    return region_mod.assemble_region(
         _empty(tmp_path), SystemCatalog(tmp_path / "system"), on_abend=on_abend
     )
 
@@ -49,8 +40,8 @@ def test_assemble_region_forwards_on_abend_to_install_cics_runtime(
 ) -> None:
     calls: list[int] = []
 
-    _assembled(tmp_path, on_abend=lambda: calls.append(1))
-    _fire_installed_abend()
+    served = _assembled(tmp_path, on_abend=lambda: calls.append(1))
+    _fire_installed_abend(served)
 
     assert calls == [1]
 
@@ -58,9 +49,11 @@ def test_assemble_region_forwards_on_abend_to_install_cics_runtime(
 def test_assemble_region_default_on_abend_is_the_module_noop(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    region_mod.assemble_region(_empty(tmp_path), SystemCatalog(tmp_path / "system"))
+    served = region_mod.assemble_region(
+        _empty(tmp_path), SystemCatalog(tmp_path / "system")
+    )
 
-    result = _fire_installed_abend()
+    result = _fire_installed_abend(served)
 
     assert (
         inspect.signature(region_mod.assemble_region).parameters["on_abend"].default

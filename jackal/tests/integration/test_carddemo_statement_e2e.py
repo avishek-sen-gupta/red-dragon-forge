@@ -21,6 +21,7 @@ from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import job_catalog, system
+from interpreter.vm.builtins import core_builtins
 
 _DATA = "data/EBCDIC/AWS.M2.CARDDEMO"
 _TRAN_LRECL = 350
@@ -138,6 +139,7 @@ def test_the_statement_step_writes_the_statements(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=_BUDGET,
+        builtins=core_builtins(),
     )
 
     result = runner.run_job(parse_jcl(_JCL), job_catalog(tmp_path))

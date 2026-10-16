@@ -4,6 +4,7 @@ import sqlite3
 
 from interpreter.cobol.layout_data import field_positions
 from interpreter.project.entry_point import EntryPoint
+from interpreter.vm.builtins import compose_builtins, core_builtins
 from interpreter.run import run_linked
 from interpreter.address import Address
 from interpreter.var_name import VarName
@@ -66,7 +67,7 @@ def test_sql_only_spec_selects_into(bridge_jar):
     parser = make_parser(bridge_jar)
 
     linked = compile_program(_SQL_ONLY_PROGRAM.encode("utf-8"), parser, [spec])
-    install_sql_runtime({"SAMPLE": backend})
+    sql = install_sql_runtime({"SAMPLE": backend})
 
     entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
 
@@ -76,7 +77,11 @@ def test_sql_only_spec_selects_into(bridge_jar):
     )
 
     vm = run_linked(
-        linked, entry_point=entry_point, max_steps=2000, initial_vm=initial_vm
+        linked,
+        entry_point=entry_point,
+        max_steps=2000,
+        builtins=compose_builtins(core_builtins(), sql.entries),
+        initial_vm=initial_vm,
     )
 
     assert _read_ws_field(vm, "WS-BAL") == 500

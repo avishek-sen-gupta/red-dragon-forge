@@ -20,6 +20,8 @@ from cics.interval import StartQueue, StartRequest
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
 from cics.vm_init import make_cics_initial_vm
+from interpreter.func_name import FuncName
+from interpreter.vm.builtin import Builtin
 
 if TYPE_CHECKING:
     from interpreter.project.program_entry import ProgramEntry
@@ -117,13 +119,14 @@ def run_cics(
     input_queue: InputChannel,
     *,
     entry: ProgramEntry,
+    builtins: Mapping[FuncName, Builtin],
     context_holder: Holder[CicsContext],
     result_holder: Holder[DispatchResult],
     max_steps: int = 50_000,
     permit_unresolved_call_targets: bool = True,
     on_abend: Callable[[], None] = _no_rollback,
 ) -> DispatchResult:
-    """Execute one CICS program, entering its image at ``entry``, with the given context."""
+    """Execute one CICS program, entering its image at ``entry``, with the given context and the region's builtins table."""
     logger.info(
         "run_cics: program=%s transid=%s commarea=%d B",
         entry.name,
@@ -137,10 +140,18 @@ def run_cics(
         entry,
         context,
         result_holder,
-        max_steps,
-        permit_unresolved_call_targets,
+        _TaskRun(max_steps, permit_unresolved_call_targets, builtins),
         on_abend,
     )
+
+
+@dataclass(frozen=True)
+class _TaskRun:
+    """How one task's program runs: its step budget, whether a CALL may reach nothing, and the region's table."""
+
+    max_steps: int
+    permit_unresolved_call_targets: bool
+    builtins: Mapping[FuncName, Builtin]
 
 
 def _task_result(
@@ -148,8 +159,7 @@ def _task_result(
     entry: ProgramEntry,
     context: CicsContext,
     result_holder: Holder[DispatchResult],
-    max_steps: int,
-    permit_unresolved_call_targets: bool,
+    task: _TaskRun,
     on_abend: Callable[[], None],
 ) -> DispatchResult:
     from interpreter.handlers.calls import UnresolvedProgramError
@@ -159,9 +169,10 @@ def _task_result(
         run_linked(
             program,
             entry,
-            max_steps=max_steps,
+            max_steps=task.max_steps,
+            builtins=task.builtins,
             initial_vm=make_cics_initial_vm(context, context.commarea),
-            permit_unresolved_call_targets=permit_unresolved_call_targets,
+            permit_unresolved_call_targets=task.permit_unresolved_call_targets,
         )
     except UnresolvedProgramError as unresolved:
         logger.error(
@@ -501,6 +512,7 @@ class _TaskIo:
     context_holder: Holder[CicsContext]
     result_holder: Holder[DispatchResult]
     permit_unresolved_call_targets: bool
+    builtins: Mapping[FuncName, Builtin]
 
 
 def _describe_input(input_event: InputEvent | NoInput) -> tuple[str, int]:
@@ -544,6 +556,7 @@ class CicsRegion:
         screen_queue: ScreenChannel,
         input_queue: InputChannel,
         *,
+        builtins: Mapping[FuncName, Builtin],
         context_holder: Holder[CicsContext],
         result_holder: Holder[DispatchResult],
         max_steps: int = 50_000,
@@ -562,6 +575,7 @@ class CicsRegion:
             context_holder,
             result_holder,
             permit_unresolved_call_targets,
+            builtins,
         )
         self._max_steps = max_steps
         self._min_commarea_len = min_commarea_len
@@ -662,6 +676,7 @@ class CicsRegion:
             self._io.screen_queue,
             self._io.input_queue,
             entry=program.entry(),
+            builtins=self._io.builtins,
             context_holder=self._io.context_holder,
             result_holder=self._io.result_holder,
             max_steps=(

@@ -239,7 +239,7 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -278,6 +278,7 @@ def _drive_through_turn4(tmp_path, bridge_jar):
         result_holder=result_holder,
         max_steps=1_000_000,
         min_commarea_len=400,
+        builtins=runtime.builtins,
     )
 
     # --- Turn 1: sign-on ENTER turn -> XCTL COMEN01C ---
@@ -491,7 +492,7 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
     result_holder: list = [None]
     engine = _usrsec_engine(root or (tmp_path / "vsam"))
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -516,6 +517,7 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
         result_holder,
         engine,
         start_queue,
+        runtime.builtins,
     )
 
 
@@ -536,6 +538,7 @@ def _drive_to_coactupc(tmp_path, bridge_jar, root=None):
         result_holder,
         engine,
         start_queue,
+        builtins,
     ) = _compile_update_programs(tmp_path, bridge_jar, root=root)
 
     # Region config: this run routes the menu's option '02' to COACTUPC.
@@ -550,6 +553,7 @@ def _drive_to_coactupc(tmp_path, bridge_jar, root=None):
         transid_to_program,
         screen_q,
         input_q,
+        builtins=builtins,
         context_holder=context_holder,
         start_queue=start_queue,
         result_holder=result_holder,
@@ -901,7 +905,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
     result_holder: list = [None]
     engine = _add_engine(root or (tmp_path / "vsam"))
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -943,6 +947,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
         result_holder=result_holder,
         max_steps=2_000_000,
         min_commarea_len=400,
+        builtins=runtime.builtins,
     )
 
     # Turn 1: sign-on -> XCTL COMEN01C (transid carries; no input after XCTL)

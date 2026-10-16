@@ -129,32 +129,3 @@ def carddemo_db2_schema(db2_admin_conn, carddemo_home: Path):
     db2_tree = carddemo_home / "app-transaction-type-db2"
     apply_schema(db2_admin_conn, db2_tree)
     yield
-
-
-@pytest.fixture(autouse=True)
-def _reset_builtins_table():
-    """Snapshot and restore RedDragon's process-wide ``Builtins.TABLE``
-    around every test in this suite.
-
-    ``Builtins.TABLE`` is a single class-level dict shared by the whole
-    process (see ``interpreter/vm/builtins.py``) -- every ``install_cics_runtime``
-    / ``install_sql_runtime`` call overwrites entries like
-    ``__cics_task_end_hook`` in place (cicada's runtime logs "Installing the
-    CICS runtime more than once in one process is unsupported" for exactly
-    this reason). Without a reset, a test that composes cics+squall over a
-    Db2 connection leaves that connection's session-reset hook registered
-    globally; a later, unrelated test that reaches EXEC CICS RETURN then
-    fires it against a connection it never opened -- silently committing
-    through foreign state if that connection is still open, or crashing with
-    "Connection is not active" if it was closed. Snapshotting the whole dict
-    (not just the CICS/SQL keys) and restoring it verbatim after every test
-    is the same save/restore shape ``cics.strategy_stores.swap``/``restore``
-    already apply to a single entry around a LINK, generalised to "the whole
-    table, every test" so callers no longer have to leak connections open to
-    dodge this."""
-    from interpreter.vm.builtins import Builtins
-
-    snapshot = dict(Builtins.TABLE)
-    yield
-    Builtins.TABLE.clear()
-    Builtins.TABLE.update(snapshot)

@@ -12,6 +12,7 @@ import pytest
 from catnip.labels import RecordFormat, SequentialLabel
 from catnip.system_catalog import NotCataloged
 from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.bridge_parser import JclBridgeParser, JclSubprocessRunner
 from jackal.missing_data import StrictAllocation
@@ -72,6 +73,7 @@ def test_a_concatenation_reads_member_by_member_cannot_be_written_and_logs_a_con
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     with caplog.at_level(logging.WARNING, logger="jackal.cobol_files"):
         result = runner.run_job(job, job_catalog(tmp_path))

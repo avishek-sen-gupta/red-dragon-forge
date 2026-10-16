@@ -34,7 +34,7 @@ squall skips a host variable missing from the data layout.
 Both packages read and write CardDemo's VSAM data in a system directory. Install it once:
 
 ```bash
-make catnip-install-carddemo SYSTEM=/tmp/carddemo-system
+uv run catnip install config/carddemo/data.toml --system /tmp/carddemo-system
 ```
 
 Both `env.toml` files name this directory as their `system`. To use another, install into it and

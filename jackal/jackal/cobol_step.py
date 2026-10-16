@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from interpreter.run import (
     run_linked_resumable,
 )
 from interpreter.run import Completed as RunCompleted
+from interpreter.vm.builtin import Builtin
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
 from jackal.cobol_files import ProgramFile
@@ -55,6 +57,7 @@ def run_cobol_step(
     budget: int,
     relabeller: Relabeller,
     *,
+    builtins: Mapping[FuncName, Builtin],
     permit_unresolved_call_targets: bool = True,
 ) -> ProgramResult:
     provider = ProgramFilesIOProvider(
@@ -65,6 +68,7 @@ def run_cobol_step(
         program.entry,
         max_steps=budget,
         io_provider=provider,
+        builtins=builtins,
         initial_vm=_initial_vm(step, provider),
         permit_unresolved_call_targets=permit_unresolved_call_targets,
     )

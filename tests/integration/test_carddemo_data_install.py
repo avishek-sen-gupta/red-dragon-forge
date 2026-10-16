@@ -13,6 +13,7 @@ from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.data_layout import record_length
 from interpreter.project.cobol_compile import link_units
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
@@ -51,10 +52,8 @@ UNDECLARED: dict[str, str] = {
 }
 
 
-def _declaration(tmp_path: Path) -> Declaration:
-    copy = tmp_path / "data.toml"
-    copy.write_text(_DECLARATION.read_text().replace("${FORGE_ROOT}", str(_FORGE_ROOT)))
-    return load_declaration(copy)
+def _declaration() -> Declaration:
+    return load_declaration(_DECLARATION)
 
 
 def _copybook_length(parser: ProLeapCobolParser, copybook: str) -> int:
@@ -77,7 +76,7 @@ def test_every_declared_carddemo_dataset_agrees_with_its_copybook_and_its_file(
     parser = ProLeapCobolParser(
         RealSubprocessRunner(), bridge_jar, copybook_dirs=[carddemo_home / "cpy"]
     )
-    declaration = _declaration(tmp_path)
+    declaration = _declaration()
     data = carddemo_home / "data" / "EBCDIC"
     seeded = [(s.dsn, s.seed, s.lrecl) for s in declaration.sequential] + [
         (k.dsn, k.seed, k.lrecl) for k in declaration.ksds if isinstance(k.seed, Path)
@@ -110,7 +109,7 @@ def test_every_declared_carddemo_dataset_agrees_with_its_copybook_and_its_file(
 def test_an_installed_carddemo_system_holds_each_dataset_and_runs_acctfile(
     tmp_path: Path, carddemo_home: Path, bridge_jar: str
 ) -> None:
-    declaration = _declaration(tmp_path)
+    declaration = _declaration()
     root = tmp_path / "system"
     install(declaration, SystemCatalog(root))
     system = SystemCatalog(root)
@@ -129,6 +128,7 @@ def test_an_installed_carddemo_system_holds_each_dataset_and_runs_acctfile(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     scratch = tmp_path / "scratch"
     scratch.mkdir()

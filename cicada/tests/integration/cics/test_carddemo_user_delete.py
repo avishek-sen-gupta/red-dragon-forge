@@ -120,7 +120,7 @@ def _drive_to_user_delete(tmp_path: Path, bridge_jar):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -152,6 +152,7 @@ def _drive_to_user_delete(tmp_path: Path, bridge_jar):
         result_holder=result_holder,
         max_steps=2_000_000,
         min_commarea_len=400,
+        builtins=runtime.builtins,
     )
 
     # Turn 1: admin sign-on -> XCTL COADM01C

@@ -20,6 +20,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.model_build import job, program
 from tests.package_build import built, package
 from tests.system_build import scratch, system
+from interpreter.vm.builtins import core_builtins
 
 _PGMA = """\
        IDENTIFICATION DIVISION.
@@ -60,6 +61,7 @@ def _outcomes(
         missing_data=StrictAllocation(),
         missing_program=missing_program,
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
     two_steps = job("J", (program("S1", "PGMA"), program("S2", "PGMB")))
     return [s.outcome for s in runner.run(two_steps, scratch(root)).steps]

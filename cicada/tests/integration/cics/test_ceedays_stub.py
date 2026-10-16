@@ -21,6 +21,7 @@ from interpreter.project.source_file import SourceFile
 from interpreter.run import run_linked, EntryPoint, initial_vm_state
 from interpreter.cobol.program_object import WORKING_STORAGE_FIELD, program_var
 from interpreter.address import Address
+from interpreter.vm.builtins import core_builtins
 from tests.covers import covers
 
 
@@ -69,6 +70,7 @@ def _run_and_read_sev(tmp_path: Path, date_text: str) -> int:
         EntryPoint.function(lambda r: r.label == linked.entry_func_label),
         max_steps=200_000,
         initial_vm=initial_vm_state(),
+        builtins=core_builtins(),
     )
 
     # Read WS-SEV (offset 0, 4 zoned-decimal bytes) from DRIVER's WS region.

@@ -23,10 +23,13 @@ multi-shot ``ExecutionState`` rather than a parked stack.
 from __future__ import annotations
 
 import queue
+from collections.abc import Mapping
 from typing import Any
 
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
+from interpreter.func_name import FuncName
 from interpreter.run import Suspended, resume_linked, run_linked_resumable
+from interpreter.vm.builtin import Builtin
 
 _DFHENTER = "\x7d"
 
@@ -85,6 +88,7 @@ class ConversationalRegion:
         program: Any,
         transid: str,
         *,
+        builtins: Mapping[FuncName, Builtin],
         screen_queue: "queue.Queue[Any]",
         context_holder: list,
         result_holder: list,
@@ -92,6 +96,7 @@ class ConversationalRegion:
         termid: str = DEFAULT_TERMID,
     ) -> None:
         self._program = program
+        self._builtins = builtins
         self._transid = transid
         self._termid = termid
         self._screen_queue = screen_queue
@@ -116,6 +121,7 @@ class ConversationalRegion:
             self._program,
             _entry_point(self._program),
             max_steps=self._max_steps,
+            builtins=self._builtins,
             initial_vm=vm,
         )
         return self._absorb(outcome)
@@ -124,7 +130,11 @@ class ConversationalRegion:
         if self._state is None:
             raise RuntimeError("send() before start(), or conversation already ended")
         outcome = resume_linked(
-            self._program, self._state, input_event, max_steps=self._max_steps
+            self._program,
+            self._state,
+            input_event,
+            max_steps=self._max_steps,
+            builtins=self._builtins,
         )
         return self._absorb(outcome)
 

@@ -5,6 +5,7 @@ import sqlite3
 
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
+from cics.transaction_hooks import TransactionHooks
 from cics.types import CicsContext, DispatchKind
 from interpreter.project.coprocessor_compile import compile_program
 from squall.backends.sqlite import SqliteBackend
@@ -48,12 +49,15 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    install_cics_runtime(
+    sql = install_sql_runtime({"SAMPLE": backend})
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
         result_holder=result_holder,
         applid="FORGEAPP",
+        hooks=TransactionHooks(sql.reset_session, sql.syncpoint, sql.rollback),
+        other_builtins=sql.entries,
     )
     cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
@@ -62,7 +66,6 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
     linked = compile_program(
         _COMBINED_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
-    install_sql_runtime({"SAMPLE": backend})
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
@@ -76,6 +79,7 @@ def test_cics_and_sql_compose_in_one_program(bridge_jar):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN
@@ -102,9 +106,9 @@ _CURSOR_PROGRAM = """\
 
 
 def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
-    """The task-end hook cicada's RETURN lowering calls and squall's strategy
-    registers under (__cics_task_end_hook) are never referenced directly by
-    either package — this is the only test that actually runs a compiled
+    """The task-end hook cicada's RETURN lowering calls (__cics_task_end_hook)
+    and squall's session reset, passed to it in TransactionHooks, are never
+    referenced directly by either package — this is the only test that actually runs a compiled
     program through both strategies and checks the wire-up did its job: a
     cursor left open by an EXEC CICS RETURN is closed, not leaked into the
     next task."""
@@ -116,12 +120,15 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    install_cics_runtime(
+    sql = install_sql_runtime({"SAMPLE": backend})
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
         result_holder=result_holder,
         applid="FORGEAPP",
+        hooks=TransactionHooks(sql.reset_session, sql.syncpoint, sql.rollback),
+        other_builtins=sql.entries,
     )
     cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
@@ -130,7 +137,6 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
     linked = compile_program(
         _CURSOR_PROGRAM.encode("utf-8"), parser, [cics_spec, sql_spec]
     )
-    install_sql_runtime({"SAMPLE": backend})
 
     screen_q: queue.Queue = queue.Queue()
     input_q: queue.Queue = queue.Queue()
@@ -144,9 +150,10 @@ def test_cics_return_resets_the_sql_session_end_to_end(bridge_jar):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN
     # The FETCH above proves the cursor really was open; if RETURN's task-end
-    # hook never reached squall, it would still be registered here.
+    # hook never reached squall, it would still be open here.
     assert backend._cursors == {}

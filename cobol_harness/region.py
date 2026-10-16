@@ -4,6 +4,7 @@ helpers.  Agnostic to any one program -- the main program and every LINK
 target are compiled through the same session so they share one VsamEngine
 and one program_cache, exactly as a real CICS region would.
 """
+
 from __future__ import annotations
 
 import queue
@@ -75,6 +76,8 @@ class CicsSession:
     context_holder: list = field(init=False)
     result_holder: list = field(init=False)
     start_queue: Any = field(init=False)
+    builtins: Any = field(init=False)
+    """The region's builtins table, which every task this session runs is given."""
     spec: Any = field(init=False)
     main_name: str | None = field(init=False, default=None)
     _region: CicsRegion | None = field(init=False, default=None)
@@ -91,7 +94,7 @@ class CicsSession:
         self.context_holder = [None]
         self.result_holder = [None]
         self.start_queue = StartQueue()
-        install_cics_runtime(
+        self.builtins = install_cics_runtime(
             self.context_holder,
             start_queue=self.start_queue,
             result_holder=self.result_holder,
@@ -100,19 +103,35 @@ class CicsSession:
             screen_queue=self.screen_q,
             input_queue=self.input_q,
             transid_to_program=self.transid_to_program,
-        )
+        ).builtins
         self.spec = build_cics_spec()
 
     # ---- compile-time ----------------------------------------------------
 
     def compile_main(self, source: bytes, name: str) -> Any:
         """Compile the program under test. Returns its LinkedProgram."""
-        linked = compile_main_program(self.parser, self.spec, self.program_cache, source, name, tolerant=self.tolerant)
+        linked = compile_main_program(
+            self.parser,
+            self.spec,
+            self.program_cache,
+            source,
+            name,
+            tolerant=self.tolerant,
+        )
         self.main_name = name
         return linked
 
-    def compile_link_targets(self, names: Sequence[str], *, stub_dir: Path | None = None) -> None:
-        compile_link_targets(self.parser, self.spec, self.program_cache, names, stub_dir=stub_dir, tolerant=self.tolerant)
+    def compile_link_targets(
+        self, names: Sequence[str], *, stub_dir: Path | None = None
+    ) -> None:
+        compile_link_targets(
+            self.parser,
+            self.spec,
+            self.program_cache,
+            names,
+            stub_dir=stub_dir,
+            tolerant=self.tolerant,
+        )
 
     @property
     def positions(self) -> Mapping[str, FieldPosition]:
@@ -120,18 +139,39 @@ class CicsSession:
         ``commarea.build_commarea``."""
         if self.main_name is None:
             raise RuntimeError("compile_main() hasn't been called yet")
-        return field_positions(declarations_of(self.program_cache[self.main_name], self.main_name))
+        return field_positions(
+            declarations_of(self.program_cache[self.main_name], self.main_name)
+        )
 
-    def build_record(self, copy_member: str, record_name: str, overrides: dict[str, str], expected_length: int | None = None) -> bytes:
+    def build_record(
+        self,
+        copy_member: str,
+        record_name: str,
+        overrides: dict[str, str],
+        expected_length: int | None = None,
+    ) -> bytes:
         """See ``vsam.build_record`` -- re-exposed here so callers that
         already have a ``CicsSession`` don't need a second import."""
         from .vsam import build_record
 
-        return build_record(self.parser, self.copybook_dirs, copy_member, record_name, overrides, expected_length)
+        return build_record(
+            self.parser,
+            self.copybook_dirs,
+            copy_member,
+            record_name,
+            overrides,
+            expected_length,
+        )
 
     # ---- run-time ----------------------------------------------------------
 
-    def region(self, transid_to_program: dict[str, str], *, max_steps: int = 2_000_000, min_commarea_len: int = 0) -> CicsRegion:
+    def region(
+        self,
+        transid_to_program: dict[str, str],
+        *,
+        max_steps: int = 2_000_000,
+        min_commarea_len: int = 0,
+    ) -> CicsRegion:
         """Build (or rebuild, for a fresh task) the CicsRegion. Must be
         called again before ``start_turn`` for each independent test case
         that needs a clean task/transaction state -- CicsRegion itself is
@@ -146,6 +186,7 @@ class CicsSession:
             self.transid_to_program,
             self.screen_q,
             self.input_q,
+            builtins=self.builtins,
             context_holder=self.context_holder,
             result_holder=self.result_holder,
             start_queue=self.start_queue,
@@ -167,18 +208,34 @@ class CicsSession:
         original = _disp.run_cics
         session = self
 
-        def _wrapped(program, context, screen_queue, input_queue, *, entry, context_holder, result_holder, max_steps=50_000, permit_unresolved_call_targets=True, on_abend=lambda: None):
+        def _wrapped(
+            program,
+            context,
+            screen_queue,
+            input_queue,
+            *,
+            entry,
+            builtins,
+            context_holder,
+            result_holder,
+            max_steps=50_000,
+            permit_unresolved_call_targets=True,
+            on_abend=lambda: None,
+        ):
             _disp.hold(context_holder, context)
             _disp.hold(result_holder, None)
             vm = run_linked(
                 program,
                 entry,
                 max_steps=max_steps,
+                builtins=builtins,
                 permit_unresolved_call_targets=permit_unresolved_call_targets,
                 initial_vm=make_cics_initial_vm(context, context.commarea),
             )
             session.last_vm = vm
-            return _disp.held_or(result_holder, DispatchResult(kind=DispatchKind.RETURN))
+            return _disp.held_or(
+                result_holder, DispatchResult(kind=DispatchKind.RETURN)
+            )
 
         _disp.run_cics = _wrapped
         try:
@@ -195,7 +252,9 @@ class CicsSession:
                 break
         return out
 
-    def start_turn(self, transid: str, *, commarea: bytes, eibaid: str, fields: dict[str, str]) -> Turn:
+    def start_turn(
+        self, transid: str, *, commarea: bytes, eibaid: str, fields: dict[str, str]
+    ) -> Turn:
         """Begin a fresh task (EIBCALEN = len(commarea), so a non-empty
         commarea takes a program's ``IF EIBCALEN > 0`` continuation branch
         immediately).
@@ -205,10 +264,16 @@ class CicsSession:
         if self._region is None:
             raise RuntimeError("call region(...) before start_turn")
         with self._capturing_vm():
-            result = self._region.start(transid, commarea=commarea, input_event=InputEvent(eibaid=eibaid, fields=fields))
+            result = self._region.start(
+                transid,
+                commarea=commarea,
+                input_event=InputEvent(eibaid=eibaid, fields=fields),
+            )
         return Turn(result=result, screens=self._drain_screens())
 
-    def step_turn(self, *, eibaid: str | None = None, fields: dict[str, str] | None = None) -> Turn:
+    def step_turn(
+        self, *, eibaid: str | None = None, fields: dict[str, str] | None = None
+    ) -> Turn:
         """Continue the current pseudo-conversational task with the next
         terminal input (or no input, for an XCTL'd-in redisplay turn).
         Updates ``self.last_vm``."""

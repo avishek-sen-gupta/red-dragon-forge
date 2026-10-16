@@ -13,10 +13,6 @@ _DECLARATION = _FORGE_ROOT / "config" / "carddemo" / "data.toml"
 
 
 def installed_carddemo(root: Path) -> Path:
-    declaration = root / "data.toml"
-    declaration.write_text(
-        _DECLARATION.read_text().replace("${FORGE_ROOT}", str(_FORGE_ROOT))
-    )
     system = root / "system"
-    install(load_declaration(declaration), SystemCatalog(system))
+    install(load_declaration(_DECLARATION), SystemCatalog(system))
     return system

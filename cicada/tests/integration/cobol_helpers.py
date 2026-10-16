@@ -8,6 +8,7 @@ they are defined exactly once.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 
 import pytest
 
@@ -15,7 +16,9 @@ from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.strategy import NOT_SUPPLIED, Absent
 from cics.vsam.engine import VsamEngine
+from interpreter.func_name import FuncName
 from interpreter.project.coprocessor_compile import CoprocessorSpec
+from interpreter.vm.builtin import Builtin
 from interpreter.run import run
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.project.types import LinkedProgram
@@ -80,15 +83,15 @@ def installed_cics_spec(
     context_holder: list,
     result_holder: list,
     vsam_engine: VsamEngine | Absent = NOT_SUPPLIED,
-) -> CoprocessorSpec:
-    install_cics_runtime(
+) -> tuple[CoprocessorSpec, Mapping[FuncName, Builtin]]:
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
         result_holder=result_holder,
         vsam_engine=vsam_engine,
     )
-    return build_cics_spec()
+    return build_cics_spec(), runtime.builtins
 
 
 def main_entry(linked: LinkedProgram) -> ProgramEntry:

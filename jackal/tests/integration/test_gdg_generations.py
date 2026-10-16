@@ -24,6 +24,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY, package
 from tests.model_build import dd, disp, job, program
 from tests.system_build import gdg, job_catalog, scratch, system, upload
+from interpreter.vm.builtins import core_builtins
 
 
 def _gen(ddname: str, base: str, relative: int, *words: str) -> DD[StepRef]:
@@ -42,6 +43,7 @@ def _runner(
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=packaged,
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
 
 

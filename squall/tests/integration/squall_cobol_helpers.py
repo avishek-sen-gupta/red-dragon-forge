@@ -108,12 +108,21 @@ def run_cobol(
     from squall.runtime import install_sql_runtime
 
     linked = compile_cobol(source, bridge_jar_path, copybook_dirs=copybook_dirs)
-    install_sql_runtime(connections)
+    return run_linked_program(
+        linked, sql_builtins(install_sql_runtime(connections)), max_steps
+    )
 
-    return run_linked_program(linked, max_steps)
+
+def sql_builtins(runtime):
+    """The table a batch SQL run uses: the core builtins and squall's entries."""
+    from interpreter.vm.builtins import compose_builtins, core_builtins
+
+    return compose_builtins(core_builtins(), runtime.entries)
 
 
-def run_linked_program(linked: LinkedProgram, max_steps: int = 1000) -> VMState:
+def run_linked_program(
+    linked: LinkedProgram, builtins, max_steps: int = 1000
+) -> VMState:
     """Run a compiled program from its entry label; return the final VMState.
 
     Mirrors the two-phase execution model in interpreter.run.run() for COBOL:
@@ -137,6 +146,7 @@ def run_linked_program(linked: LinkedProgram, max_steps: int = 1000) -> VMState:
             lambda ref: ref.label == linked.entry_func_label
         ),
         max_steps=max_steps,
+        builtins=builtins,
         initial_vm=initial_vm,
     )
 

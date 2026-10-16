@@ -67,6 +67,7 @@ from squall.connector import NamedDbConnector
 
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
+from cics.transaction_hooks import TransactionHooks
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 from interpreter.cobol.layout_data import field_positions
@@ -222,12 +223,6 @@ def test_inqcust_found_and_not_found(bridge_jar):
         # program_cache so WRAPPER's EXEC CICS LINK can find it by name at run
         # time. NamedDbConnector("SAMPLE") models the CICS Db2 attachment
         # facility: INQCUST never issues EXEC SQL CONNECT itself.
-        install_cics_runtime(
-            context_holder,
-            transid_to_program={},
-            result_holder=result_holder,
-            program_cache=program_cache,
-        )
         inqcust_cics_spec = build_cics_spec()
         inqcust_sql_spec = build_sql_spec()
         inqcust_source = (_BANK_OF_Z_COBOL / "INQCUST.cbl").read_bytes()
@@ -235,15 +230,18 @@ def test_inqcust_found_and_not_found(bridge_jar):
             inqcust_source, parser, [inqcust_cics_spec, inqcust_sql_spec]
         )
         program_cache["INQCUST"] = inqcust_linked
-        install_sql_runtime({"SAMPLE": backend}, NamedDbConnector("SAMPLE"))
+        sql = install_sql_runtime({"SAMPLE": backend}, NamedDbConnector("SAMPLE"))
 
         # Compile WRAPPER (CICS only -- it never touches SQL) sharing the SAME
-        # context_holder/result_holder/program_cache.
-        install_cics_runtime(
+        # context_holder/result_holder/program_cache. The region's table
+        # composes squall's entries and hooks in.
+        runtime = install_cics_runtime(
             context_holder,
             transid_to_program={},
             result_holder=result_holder,
             program_cache=program_cache,
+            hooks=TransactionHooks(sql.reset_session, sql.syncpoint, sql.rollback),
+            other_builtins=sql.entries,
         )
         wrapper_spec = build_cics_spec()
         wrapper_parser = make_parser(bridge_jar, copybook_dirs=[_BANK_OF_Z_COPY])
@@ -278,6 +276,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
             context_holder=context_holder,
             result_holder=result_holder,
             max_steps=50_000,
+            builtins=runtime.builtins,
         )
         assert found_result.kind == DispatchKind.RETURN_TRANSID
         assert found_result.commarea is not None
@@ -300,6 +299,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
             context_holder=context_holder,
             result_holder=result_holder,
             max_steps=50_000,
+            builtins=runtime.builtins,
         )
         assert not_found_result.kind == DispatchKind.RETURN_TRANSID
         assert not_found_result.commarea is not None

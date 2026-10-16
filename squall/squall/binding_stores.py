@@ -2,8 +2,7 @@
 squall.binding_stores
 ~~~~~~~~~~~~~~~~~~~~~
 The genuinely-mutating writes ``squall.binding`` needs, isolated in their own
-leaf module -- mirroring ``squall.strategy_stores`` and
-``squall.backends._stores`` -- so the mutation stays out of ``binding``'s
+leaf module -- mirroring ``squall.backends._stores`` -- so the mutation stays out of ``binding``'s
 otherwise FP-linted, pure surface. ``binding`` computes values purely (the
 ``(offset, bytes)`` writes, the vendor path to add); this module is the one
 place that applies them.

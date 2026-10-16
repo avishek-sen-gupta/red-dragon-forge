@@ -13,6 +13,7 @@ from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY
 from tests.system_build import job_catalog, scratch, system
+from interpreter.vm.builtins import core_builtins
 
 
 @pytest.fixture(autouse=True)
@@ -39,6 +40,7 @@ def test_a_step_receives_a_dataset_passed_by_a_procs_step(tmp_path: Path):
         package=EMPTY,
         system=system(tmp_path),
         proclib_dirs=(procs,),
+        builtins=core_builtins(),
     )
     jcl = (
         "//J JOB 1\n"

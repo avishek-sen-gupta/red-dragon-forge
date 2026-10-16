@@ -1,10 +1,11 @@
-"""The CICS coprocessor's runtime surface: installs the ``__cics_*`` builtins over a region's live state."""
+"""The CICS coprocessor's runtime surface: the ``__cics_*`` builtins over a region's live state, composed into the region's table."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping, MutableSequence
 from dataclasses import dataclass
 from functools import partial
+from types import MappingProxyType
 from typing import TypeVar, cast
 
 from cics.builtins.system import (
@@ -24,17 +25,25 @@ from cics.builtins.system import (
     make_writeq_td_builtin,
 )
 from cics.cell import Holder
+from cics.cics_runtime import CicsRuntime
 from cics.interval import StartQueue
 from cics.strategy import NOT_SUPPLIED, Absent
-from cics.strategy_stores import register, register_default
 from cics.terminal import InputChannel, ScreenChannel
+from cics.transaction_hooks import TransactionHooks
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchResult
 from cics.vsam.engine import VsamEngine
+from interpreter.func_name import FuncName
 from interpreter.project.types import LinkedProgram
+from interpreter.vm.builtin import Builtin
+from interpreter.vm.builtins import compose_builtins, core_builtins
 
 T = TypeVar("T")
 
 OWN_START_QUEUE = StartQueue()
+NO_HOOKS = TransactionHooks()
+_NO_BUILTINS: Mapping[FuncName, Builtin] = MappingProxyType({})
+
+RegionBuiltins = Callable[[], Mapping[FuncName, Builtin]]
 
 
 def _noop() -> None:
@@ -43,6 +52,10 @@ def _noop() -> None:
 
 def _as_builtin_list(holder: Holder[T]) -> list[T]:
     return cast("list[T]", holder)
+
+
+def _named(entries: Mapping[str, Builtin]) -> Mapping[FuncName, Builtin]:
+    return {FuncName(name): builtin for name, builtin in entries.items()}
 
 
 @dataclass(frozen=True)
@@ -56,70 +69,84 @@ class _Wiring:
     permit_unresolved_call_targets: bool
 
 
-def _register_system_builtins(wiring: _Wiring, identity: tuple[str, str, str]) -> None:
+def _system_builtins(
+    wiring: _Wiring, identity: tuple[str, str, str]
+) -> Mapping[FuncName, Builtin]:
     applid, sysid, userid = identity
-    register("__cics_assign", make_assign_builtin(applid, sysid, userid))
-    register("__cics_asktime", make_asktime_builtin())
-    register("__cics_bif_deedit", make_bif_deedit_builtin())
-    register("__cics_formattime", make_formattime_builtin())
-    register("__cics_inquire", make_inquire_builtin(wiring.program_cache))
-    register("__cics_writeq_td", make_writeq_td_builtin(wiring.td_queue.append))
-    register("__cics_handle_abend", make_handle_abend_builtin())
+    return _named(
+        {
+            "__cics_assign": make_assign_builtin(applid, sysid, userid),
+            "__cics_asktime": make_asktime_builtin(),
+            "__cics_bif_deedit": make_bif_deedit_builtin(),
+            "__cics_formattime": make_formattime_builtin(),
+            "__cics_inquire": make_inquire_builtin(wiring.program_cache),
+            "__cics_writeq_td": make_writeq_td_builtin(wiring.td_queue.append),
+            "__cics_handle_abend": make_handle_abend_builtin(),
+        }
+    )
 
 
-def _register_flow_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> None:
+def _hook_builtins(hooks: TransactionHooks) -> Mapping[FuncName, Builtin]:
+    return _named(
+        {
+            "__cics_task_end_hook": hooks.task_end,
+            "__cics_syncpoint_hook": hooks.syncpoint,
+            "__cics_rollback_hook": hooks.rollback,
+        }
+    )
+
+
+def _flow_builtins(
+    wiring: _Wiring, region_builtins: RegionBuiltins
+) -> Mapping[FuncName, Builtin]:
     from cics.builtins.flow import (
         make_link_builtin,
-        make_noop_hook_builtin,
-        make_noop_task_end_hook_builtin,
         make_set_return_context_builtin,
         make_set_xctl_context_builtin,
     )
     from interpreter.run import run_linked
 
-    register_default("__cics_task_end_hook", make_noop_task_end_hook_builtin())
-    register_default("__cics_syncpoint_hook", make_noop_hook_builtin())
-    register_default("__cics_rollback_hook", make_noop_hook_builtin())
-    _register_abend_builtins(wiring, on_abend)
-    register(
-        "__cics_set_return_context",
-        make_set_return_context_builtin(wiring.result_holder),
-    )
-    register(
-        "__cics_set_xctl_context", make_set_xctl_context_builtin(wiring.result_holder)
-    )
-    register(
-        "__cics_link",
-        make_link_builtin(
-            wiring.program_cache,
-            wiring.result_holder,
-            wiring.context_holder,
-            2_000_000,
-            _run_fn=partial(
-                run_linked,
-                permit_unresolved_call_targets=wiring.permit_unresolved_call_targets,
+    return _named(
+        {
+            "__cics_set_return_context": make_set_return_context_builtin(
+                wiring.result_holder
             ),
-        ),
+            "__cics_set_xctl_context": make_set_xctl_context_builtin(
+                wiring.result_holder
+            ),
+            "__cics_link": make_link_builtin(
+                wiring.program_cache,
+                wiring.result_holder,
+                wiring.context_holder,
+                2_000_000,
+                region_builtins=region_builtins,
+                _run_fn=partial(
+                    run_linked,
+                    permit_unresolved_call_targets=wiring.permit_unresolved_call_targets,
+                ),
+            ),
+        }
     )
 
 
-def _register_abend_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> None:
-    register("__cics_handle_aid", make_handle_noop_builtin("HANDLE AID"))
-    register(
-        "__cics_unlock",
-        make_runtime_noop_builtin(
-            "EXEC CICS UNLOCK",
-            "single-task emulation holds no lock another task could see",
-        ),
-    )
-    register("__cics_abend", make_abend_builtin(wiring.result_holder, on_abend))
-    register(
-        "__cics_abend_unhandled",
-        make_abend_unhandled_builtin(wiring.result_holder, on_abend),
-    )
-    register(
-        "__cics_abend_unsupported",
-        make_abend_unsupported_builtin(wiring.result_holder, on_abend),
+def _abend_builtins(
+    wiring: _Wiring, on_abend: Callable[[], None]
+) -> Mapping[FuncName, Builtin]:
+    return _named(
+        {
+            "__cics_handle_aid": make_handle_noop_builtin("HANDLE AID"),
+            "__cics_unlock": make_runtime_noop_builtin(
+                "EXEC CICS UNLOCK",
+                "single-task emulation holds no lock another task could see",
+            ),
+            "__cics_abend": make_abend_builtin(wiring.result_holder, on_abend),
+            "__cics_abend_unhandled": make_abend_unhandled_builtin(
+                wiring.result_holder, on_abend
+            ),
+            "__cics_abend_unsupported": make_abend_unsupported_builtin(
+                wiring.result_holder, on_abend
+            ),
+        }
     )
 
 
@@ -130,7 +157,9 @@ class _Terminal:
     receive_timeout: float
 
 
-def _register_screen_builtins(wiring: _Wiring, terminal: _Terminal) -> None:
+def _screen_builtins(
+    wiring: _Wiring, terminal: _Terminal
+) -> Mapping[FuncName, Builtin]:
     from cics.builtins.screen import (
         make_apply_input_builtin,
         make_receive_map_builtin,
@@ -138,24 +167,24 @@ def _register_screen_builtins(wiring: _Wiring, terminal: _Terminal) -> None:
         make_send_text_builtin,
     )
 
-    register(
-        "__cics_send_map",
-        make_send_map_builtin(terminal.screen_queue, wiring.context_holder),
+    return _named(
+        {
+            "__cics_send_map": make_send_map_builtin(
+                terminal.screen_queue, wiring.context_holder
+            ),
+            "__cics_receive_map": make_receive_map_builtin(
+                terminal.input_queue,
+                wiring.context_holder,
+                wiring.result_holder,
+                timeout=terminal.receive_timeout,
+            ),
+            "__cics_apply_input": make_apply_input_builtin(),
+            "__cics_send_text": make_send_text_builtin(terminal.screen_queue),
+        }
     )
-    register(
-        "__cics_receive_map",
-        make_receive_map_builtin(
-            terminal.input_queue,
-            wiring.context_holder,
-            wiring.result_holder,
-            timeout=terminal.receive_timeout,
-        ),
-    )
-    register("__cics_apply_input", make_apply_input_builtin())
-    register("__cics_send_text", make_send_text_builtin(terminal.screen_queue))
 
 
-def _register_vsam_builtins(engine: VsamEngine) -> None:
+def _vsam_builtins(engine: VsamEngine) -> Mapping[FuncName, Builtin]:
     from cics.builtins.vsam import (
         make_vsam_delete_builtin,
         make_vsam_endbr_builtin,
@@ -167,70 +196,74 @@ def _register_vsam_builtins(engine: VsamEngine) -> None:
         make_vsam_write_builtin,
     )
 
-    register("__cics_read", make_vsam_read_builtin(engine))
-    register("__cics_write", make_vsam_write_builtin(engine))
-    register("__cics_rewrite", make_vsam_rewrite_builtin(engine))
-    register("__cics_delete", make_vsam_delete_builtin(engine))
-    register("__cics_startbr", make_vsam_startbr_builtin(engine))
-    register("__cics_readnext", make_vsam_readnext_builtin(engine))
-    register("__cics_readprev", make_vsam_readprev_builtin(engine))
-    register("__cics_endbr", make_vsam_endbr_builtin(engine))
+    return _named(
+        {
+            "__cics_read": make_vsam_read_builtin(engine),
+            "__cics_write": make_vsam_write_builtin(engine),
+            "__cics_rewrite": make_vsam_rewrite_builtin(engine),
+            "__cics_delete": make_vsam_delete_builtin(engine),
+            "__cics_startbr": make_vsam_startbr_builtin(engine),
+            "__cics_readnext": make_vsam_readnext_builtin(engine),
+            "__cics_readprev": make_vsam_readprev_builtin(engine),
+            "__cics_endbr": make_vsam_endbr_builtin(engine),
+        }
+    )
 
 
-def _register_interval_builtins(
+def _interval_builtins(
     start_queue: StartQueue, transid_to_program: Mapping[str, str], region_termid: str
-) -> None:
+) -> Mapping[FuncName, Builtin]:
     from cics.builtins.interval import make_retrieve_builtin, make_start_builtin
 
-    register(
-        "__cics_start",
-        make_start_builtin(start_queue, transid_to_program, region_termid),
+    return _named(
+        {
+            "__cics_start": make_start_builtin(
+                start_queue, transid_to_program, region_termid
+            ),
+            "__cics_retrieve": make_retrieve_builtin(start_queue),
+        }
     )
-    register("__cics_retrieve", make_retrieve_builtin(start_queue))
 
 
-def _register_terminal_builtins(
+def _terminal_builtins(
     wiring: _Wiring,
     channels: tuple[ScreenChannel | Absent, InputChannel | Absent],
     receive_timeout: float,
-) -> None:
+) -> Mapping[FuncName, Builtin]:
     screen_queue, input_queue = channels
     if isinstance(screen_queue, ScreenChannel) and isinstance(
         input_queue, InputChannel
     ):
-        _register_screen_builtins(
+        return _screen_builtins(
             wiring, _Terminal(screen_queue, input_queue, receive_timeout)
         )
+    return _NO_BUILTINS
 
 
-def _register_io_builtins(
+def _io_builtins(
     wiring: _Wiring,
     channels: tuple[ScreenChannel | Absent, InputChannel | Absent],
     receive_timeout: float,
     vsam_engine: VsamEngine | Absent,
-) -> None:
-    _register_terminal_builtins(wiring, channels, receive_timeout)
+) -> Mapping[FuncName, Builtin]:
+    terminal = _terminal_builtins(wiring, channels, receive_timeout)
     if isinstance(vsam_engine, VsamEngine):
-        _register_vsam_builtins(vsam_engine)
+        return {**terminal, **_vsam_builtins(vsam_engine)}
+    return terminal
 
 
-_MULTIPLE_STRATEGIES = (
-    " Installing the CICS runtime more than once in one process is unsupported."
-)
-
-
-def _register_core_builtins(
+def _core_entries(
     wiring: _Wiring,
     identity: tuple[str, str, str],
     on_abend: Callable[[], None],
-) -> None:
-    register(
-        "__cics_init_eib",
-        make_init_eib_builtin(wiring.context_holder),
-        _MULTIPLE_STRATEGIES,
-    )
-    _register_system_builtins(wiring, identity)
-    _register_flow_builtins(wiring, on_abend)
+    region_builtins: RegionBuiltins,
+) -> Mapping[FuncName, Builtin]:
+    return {
+        FuncName("__cics_init_eib"): make_init_eib_builtin(wiring.context_holder),
+        **_system_builtins(wiring, identity),
+        **_abend_builtins(wiring, on_abend),
+        **_flow_builtins(wiring, region_builtins),
+    }
 
 
 def _wiring(
@@ -254,6 +287,55 @@ def _wiring(
     )
 
 
+@dataclass(frozen=True)
+class _Region:
+    """Where the region's tasks run: their terminal, files, START queue and identity."""
+
+    channels: tuple[ScreenChannel | Absent, InputChannel | Absent]
+    receive_timeout: float
+    vsam_engine: VsamEngine | Absent
+    start_queue: StartQueue
+    transid_to_program: Mapping[str, str]
+    region_termid: str
+    identity: tuple[str, str, str]
+
+
+def _entries(
+    wiring: _Wiring,
+    region: _Region,
+    hooks: TransactionHooks,
+    on_abend: Callable[[], None],
+    region_builtins: RegionBuiltins,
+) -> Mapping[FuncName, Builtin]:
+    return MappingProxyType(
+        {
+            **_core_entries(wiring, region.identity, on_abend, region_builtins),
+            **_hook_builtins(hooks),
+            **_io_builtins(
+                wiring, region.channels, region.receive_timeout, region.vsam_engine
+            ),
+            **_interval_builtins(
+                region.start_queue, region.transid_to_program, region.region_termid
+            ),
+        }
+    )
+
+
+def _runtime(
+    wiring: _Wiring,
+    region: _Region,
+    hooks: TransactionHooks,
+    on_abend: Callable[[], None],
+    other_builtins: Mapping[FuncName, Builtin],
+) -> CicsRuntime:
+    def region_builtins() -> Mapping[FuncName, Builtin]:
+        return table
+
+    entries = _entries(wiring, region, hooks, on_abend, region_builtins)
+    table = compose_builtins(core_builtins(), entries, other_builtins)
+    return CicsRuntime(entries=entries, builtins=table, start_queue=region.start_queue)
+
+
 def install_cics_runtime(
     context_holder: Holder[CicsContext],
     *,
@@ -272,8 +354,9 @@ def install_cics_runtime(
     region_termid: str = DEFAULT_TERMID,
     on_abend: Callable[[], None] = _noop,
     permit_unresolved_call_targets: bool = True,
-) -> StartQueue:
-    used_start_queue = StartQueue() if start_queue is OWN_START_QUEUE else start_queue
+    hooks: TransactionHooks = NO_HOOKS,
+    other_builtins: Mapping[FuncName, Builtin] = _NO_BUILTINS,
+) -> CicsRuntime:
     wiring = _wiring(
         context_holder,
         result_holder,
@@ -281,9 +364,13 @@ def install_cics_runtime(
         td_queue,
         permit_unresolved_call_targets,
     )
-    _register_core_builtins(wiring, (applid, sysid, userid), on_abend)
-    _register_io_builtins(
-        wiring, (screen_queue, input_queue), receive_timeout, vsam_engine
+    region = _Region(
+        channels=(screen_queue, input_queue),
+        receive_timeout=receive_timeout,
+        vsam_engine=vsam_engine,
+        start_queue=StartQueue() if start_queue is OWN_START_QUEUE else start_queue,
+        transid_to_program=transid_to_program,
+        region_termid=region_termid,
+        identity=(applid, sysid, userid),
     )
-    _register_interval_builtins(used_start_queue, transid_to_program, region_termid)
-    return used_start_queue
+    return _runtime(wiring, region, hooks, on_abend, other_builtins)

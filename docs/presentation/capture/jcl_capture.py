@@ -32,6 +32,7 @@ from pathlib import Path
 from types import CodeType, FrameType
 
 from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.vm.builtins import core_builtins
 from jackal.catalog import DatasetCatalog
 from jackal.dsn import dsn_key
 from jackal.jcl.parser import parse_jcl
@@ -102,6 +103,7 @@ def _session(work: Path, workdir: Path, proclib: bool) -> Session:
         package=open_package(PACKAGE),
         data_dir=data_dir,
         proclib_dirs=[PROC_DIR] if proclib else (),
+        builtins=core_builtins(),
     )
     catalog = DatasetCatalog(workdir=workdir, data_dir=data_dir)
     return Session(runner, catalog, io.StringIO())

@@ -89,7 +89,7 @@ def test_link_commarea_written_back(cobol_parser):
     program_cache: dict = {}
 
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         start_queue=start_queue,
@@ -114,6 +114,7 @@ def test_link_commarea_written_back(cobol_parser):
         context_holder=context_holder,
         start_queue=start_queue,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
     result = region.start(

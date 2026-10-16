@@ -95,7 +95,7 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     context_holder = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -118,6 +118,7 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
         start_queue=start_queue,
         result_holder=result_holder,
         max_steps=2_000_000,
+        builtins=runtime.builtins,
     )
     return region, screen_q, engine
 
@@ -144,7 +145,7 @@ def _build_conversational(tmp_path: Path, bridge_jar):
     input_q: queue.Queue = queue.Queue()
     context_holder = [None]
     result_holder: list = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -166,6 +167,7 @@ def _build_conversational(tmp_path: Path, bridge_jar):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=2_000_000,
+        builtins=runtime.builtins,
     )
     return region, engine
 

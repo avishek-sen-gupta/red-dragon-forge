@@ -8,6 +8,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
 from tests.package_build import compiled, package
 from tests.system_build import job_catalog
+from interpreter.vm.builtins import core_builtins
 
 _PGM = """\
        IDENTIFICATION DIVISION.
@@ -36,4 +37,5 @@ def test_cobol_step_returns_real_return_code(tmp_path: Path, bridge_jar):
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,
         cat,
+        builtins=core_builtins(),
     ) == Completed(8)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -125,21 +124,14 @@ class _GdgWire(_Wire):
         return GdgEntry(self.name, self.limit, self.empty, self.scratch, self.order)
 
 
-def _expanded(raw: str) -> Path:
-    expanded = os.path.expandvars(raw)
-    if "$" in expanded:
-        raise DeclarationError(f"data_dir: unset environment variable in {raw!r}")
-    return Path(expanded)
-
-
 class _DeclarationWire(_Wire):
     data_dir: str
     sequential: tuple[_SequentialWire, ...] = ()
     ksds: tuple[_KsdsWire, ...] = ()
     gdg: tuple[_GdgWire, ...] = ()
 
-    def model(self) -> Declaration:
-        data_dir = _expanded(self.data_dir)
+    def model(self, base: Path) -> Declaration:
+        data_dir = base / self.data_dir
         return Declaration(
             data_dir,
             tuple(entry.model(data_dir) for entry in self.sequential),
@@ -241,4 +233,4 @@ def _wire(path: Path, text: str) -> _DeclarationWire:
 
 
 def load_declaration(path: Path) -> Declaration:
-    return _wire(path, path.read_text("utf-8")).model()
+    return _wire(path, path.read_text("utf-8")).model(path.parent)

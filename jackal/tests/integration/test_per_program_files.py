@@ -14,6 +14,7 @@ from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import job_catalog, system
+from interpreter.vm.builtins import core_builtins
 
 
 def _writer(program: str, ddname: str, length: int) -> str:
@@ -63,6 +64,7 @@ def test_each_program_opens_its_own_dd_and_labels_it_from_its_own_fd(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
 
     result = runner.run_job(parse_jcl(_JCL), job_catalog(tmp_path))

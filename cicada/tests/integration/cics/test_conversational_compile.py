@@ -44,7 +44,7 @@ def cobol_parser(bridge_jar):
 
 
 def _compiled(cobol_parser, conversational: bool, work_dir: Path) -> LinkedProgram:
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         [None],
         transid_to_program={},
         program_cache={},

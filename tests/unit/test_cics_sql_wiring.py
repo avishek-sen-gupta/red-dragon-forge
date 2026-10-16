@@ -1,16 +1,14 @@
-"""A [cics] run with [sql]: the Db2 connection is the current one, its backend commits at SYNCPOINT, and its rollback is the region's on_abend."""
+"""A [cics] run with [sql]: the Db2 connection is the current one, its backend commits at SYNCPOINT, its rollback is the region's on_abend, and __exec_sql is in the region's table."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
-import pytest
 from catnip.system_catalog import SystemCatalog
 from cics.tn3270.region import assemble_region
 from interpreter.func_name import FuncName
 from interpreter.project.cobol_compile import link_units
-from interpreter.vm.builtins import Builtins
 from interpreter.vm.vm_types import VMState
 from litter.manifest import Manifest
 from litter.package import Package
@@ -42,14 +40,6 @@ class _RecordingBackend(SqlBackend):
         self.calls = (*self.calls, "rollback")
 
 
-@pytest.fixture(autouse=True)
-def _restore_builtins_table() -> Iterator[None]:
-    before = dict(Builtins.TABLE)
-    yield
-    Builtins.TABLE.clear()
-    Builtins.TABLE.update(before)
-
-
 def _empty(tmp_path: Path) -> Package:
     return Package(
         Manifest(programs=(), coprocessors=(), transactions=(), files=(), mapsets=()),
@@ -62,13 +52,18 @@ def test_the_backend_commits_at_syncpoint_and_rolls_back_on_abend(
     tmp_path: Path,
 ) -> None:
     backend = _RecordingBackend()
-    assemble_region(
+    coprocessing = Db2Connection("CARDDEMO", backend).install(tolerant=False)
+    served = assemble_region(
         _empty(tmp_path),
         SystemCatalog(tmp_path / "system"),
-        on_abend=Db2Connection("CARDDEMO", backend).install(tolerant=False),
+        on_abend=coprocessing.on_abend,
+        hooks=coprocessing.hooks,
+        other_builtins=coprocessing.builtins,
     )
 
-    Builtins.TABLE[FuncName("__cics_syncpoint_hook")]([], VMState())
-    Builtins.TABLE[FuncName("__cics_abend")]([], VMState())
+    served.builtins[FuncName("__cics_syncpoint_hook")]([], VMState())
+    served.builtins[FuncName("__cics_abend")]([], VMState())
 
     assert backend.calls == ("commit", "rollback")
+    exec_sql = FuncName("__exec_sql")
+    assert served.builtins[exec_sql] is coprocessing.builtins[exec_sql]

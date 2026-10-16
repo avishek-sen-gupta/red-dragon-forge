@@ -498,9 +498,9 @@ def make_exec_sql_builtin(
 
     Returns four builtins, all sharing the standard RedDragon signature
     (``(args: list[TypedValue], vm: VMState) -> BuiltinResult``) and the same
-    per-run session state: ``__exec_sql`` itself, then the three CICS
-    commit-boundary hooks a composed cicada registers this strategy under by
-    name convention — ``reset_session`` (task end: commit + close cursors),
+    per-run session state: ``__exec_sql`` itself, then the three
+    unit-of-work hooks a composer hands to a CICS runtime —
+    ``reset_session`` (task end: commit + close cursors),
     ``syncpoint`` (commit only, cursors stay open — see ``_syncpoint``), and
     ``rollback`` (roll back + close cursors).
     """

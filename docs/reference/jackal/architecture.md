@@ -125,7 +125,9 @@ step's run: false makes a `CALL` to a program the image does not hold raise
 `UnresolvedProgramError`; `forge-run` sets it from `env.toml`'s `[tolerant]`. Every program the
 image holds is a CALL target, by literal or through a data-name; one the build did not link is
 not there. The image was lowered with the coprocessors it was built with: jackal imports no
-coprocessor, and the forge installs squall's runtime before the run.
+coprocessor. `JobRunner`'s required `builtins` is the table every step's run is given:
+`jackal run` passes red-dragon's `core_builtins()`; `forge-run` composes squall's `__exec_sql`
+into it for a package built with `sql`.
 
 Each lowered program carries a file-definitions `Data` directive, and every COBOL file call
 names the program that made it. `jackal.file_definitions` reads every program's records from

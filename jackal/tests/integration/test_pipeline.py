@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from catnip.labels import RecordFormat, SequentialLabel
 from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
@@ -39,6 +40,7 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=package(tmp_path / "package", bridge_jar, ("UPCASE", "STARRER")),
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
     result = runner.run(job, scratch=scratch(tmp_path))
     datasets = tmp_path / "system" / "datasets"
