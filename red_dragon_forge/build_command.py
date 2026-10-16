@@ -13,6 +13,7 @@ from cics.csd_parse import parse_csd, parse_csd_files
 from cics.tn3270.region import CICS_COPYBOOKS
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.project.duplicate_program_in_image import DuplicateProgramInImage
 from litter.build import build
 from litter.cics_file import CicsFile
 from litter.package_error import PackageError
@@ -134,6 +135,7 @@ def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:
     except (
         _Unbuildable,
         ConfigError,
+        DuplicateProgramInImage,
         MissingRequiredProgram,
         PackageError,
     ) as unbuildable:

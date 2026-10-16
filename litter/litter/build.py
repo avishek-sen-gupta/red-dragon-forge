@@ -53,6 +53,7 @@ def build(
         mapsets=tuple(mapsets),
     )
     _refuse_unlowered(package, programs, link)
+    _refuse_repeated(package, link)
     image = _image(
         programs, link, sources, parser, specs, copybook_dirs, work_dir, tolerant
     )
@@ -114,6 +115,14 @@ def _refuse_unlowered(
     if unlowered:
         raise PackageError(
             f"{package}: link names {', '.join(unlowered)}, which programs does not list"
+        )
+
+
+def _refuse_repeated(package: Path, link: Sequence[str]) -> None:
+    repeated = tuple(dict.fromkeys(p for p in link if link.count(p) > 1))
+    if repeated:
+        raise PackageError(
+            f"{package}: link lists {', '.join(repeated)} more than once"
         )
 
 

@@ -107,14 +107,21 @@ def test_built_package_opens_to_the_image_its_link_list_produced(
     )
 
 
-def test_build_refuses_a_link_list_naming_an_unlowered_program(
-    parser: ProLeapCobolParser, tmp_path: Path
+@pytest.mark.parametrize(
+    ("link", "fault"),
+    [
+        (("MAINPGM", "ABSENT"), "link names ABSENT, which programs does not list"),
+        (("MAINPGM", "SUBPGM", "MAINPGM"), "link lists MAINPGM more than once"),
+    ],
+)
+def test_build_refuses_a_link_list_it_cannot_link(
+    parser: ProLeapCobolParser, tmp_path: Path, link: tuple[str, ...], fault: str
 ) -> None:
     with pytest.raises(PackageError) as refused:
-        _build(parser, tmp_path, {}, link=("MAINPGM", "ABSENT"))
+        _build(parser, tmp_path, {}, link=link)
 
     assert (str(refused.value), list(tmp_path.iterdir())) == (
-        f"{tmp_path / 'out' / 'app.zip'}: link names ABSENT, which programs does not list",
+        f"{tmp_path / 'out' / 'app.zip'}: {fault}",
         [],
     )
 

@@ -93,14 +93,25 @@ def _require_entry(
             raise ConfigError(
                 f"{path.name}: program {program} is not in {config.package}"
             )
-        case CicsRun(initial_transid=transid) if transid not in {
-            t.transid for t in manifest.transactions
-        }:
-            raise ConfigError(
-                f"{path.name}: transaction {transid} is not in {config.package}"
-            )
+        case CicsRun(initial_transid=transid):
+            _require_transaction(path, config, transid, manifest)
         case _:
             return
+
+
+def _require_transaction(
+    path: Path, config: EnvConfig, transid: str, manifest: Manifest
+) -> None:
+    programs = {t.transid: t.program for t in manifest.transactions}
+    if transid not in programs:
+        raise ConfigError(
+            f"{path.name}: transaction {transid} is not in {config.package}"
+        )
+    if programs[transid] not in manifest.programs:
+        raise ConfigError(
+            f"{path.name}: transaction {transid} runs {programs[transid]},"
+            f" which is not in {config.package}"
+        )
 
 
 def check_against(
