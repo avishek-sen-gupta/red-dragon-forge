@@ -15,6 +15,10 @@ and links programs into a package; `forge-run` runs it as a single program, a JC
 region over TN3270. CICS, EXEC SQL (Db2) and JCL are each a separate package, as is the dataset
 catalog. `cobble` analyses the same sources statically.
 
+> [!NOTE]
+> Work in progress. Forge emulates execution so you can understand and trace COBOL code; it is
+> not for production use.
+
 CardDemo's online tier served by cicada to a stock `c3270`: a user updates an account, an admin
 adds, updates and deletes a user.
 
