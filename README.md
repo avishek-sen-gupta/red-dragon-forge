@@ -15,6 +15,13 @@ and links programs into a package; `forge-run` runs it as a single program, a JC
 region over TN3270. CICS, EXEC SQL (Db2) and JCL are each a separate package, as is the dataset
 catalog. `cobble` analyses the same sources statically.
 
+CardDemo's online tier served by cicada to a stock `c3270`: a user updates an account, an admin
+adds, updates and deletes a user.
+
+<p align="center">
+  <img src="docs/presentation/artifacts/cics/carddemo-3270.gif" alt="CardDemo screens in c3270" width="800">
+</p>
+
 ## Quick start
 
 ```bash
@@ -43,13 +50,6 @@ Then:
 | [`litter/`](litter/) | Package: COBOL programs lowered once and linked into one image in a zip; `forge-build` writes one, `forge-run` runs it |
 | [`red_dragon_forge/`](red_dragon_forge/) | `forge-build` and `forge-run`: build a package from `build.toml`, run it from `env.toml`, composing the runtimes it needs |
 | [`cobble/`](cobble/) | Static analyser: knowledge graph, control flow, field dataflow |
-
-CardDemo's online tier served by cicada to a stock `c3270`: a user updates an account, an admin
-adds, updates and deletes a user.
-
-<p align="center">
-  <img src="docs/presentation/artifacts/cics/carddemo-3270.gif" alt="CardDemo screens in c3270" width="800">
-</p>
 
 CardDemo's knowledge graph from cobble, zoomed in on the online programs: programs (blue)
 linked to the copybooks (green), maps, transactions and files they use.
