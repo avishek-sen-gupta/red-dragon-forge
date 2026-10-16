@@ -44,6 +44,7 @@ Then:
 
 - [Run CardDemo in a 3270 terminal](docs/how-to/run-carddemo.md)
 - [Run your own COBOL application](docs/how-to/run-your-application.md)
+- [Drive forge from Python](docs/how-to/drive-forge-from-python.md)
 - [Run a JCL job](docs/how-to/run-jcl-job.md)
 - [Analyse a COBOL corpus](docs/how-to/analyse-a-corpus.md)
 - [Run the tests](docs/how-to/run-tests.md)
