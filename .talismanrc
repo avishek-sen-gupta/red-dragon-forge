@@ -423,4 +423,6 @@ fileignoreconfig:
   checksum: 3b211af033063c0c9673ab71135f639466001ccd5adc1357aabf1de88ba28d08
 - filename: docs/how-to/run-your-application.md
   checksum: 6d5d5f0273a0a960819cae601d400e61fe6ed8da9372b6f99e25bba55b619bfa
+- filename: .github/workflows/ci.yml
+  checksum: c13a891403b820defd117dfcaadc1330aab037b840860c1e3d67c9ee5b36955d
 version: "1.0"
