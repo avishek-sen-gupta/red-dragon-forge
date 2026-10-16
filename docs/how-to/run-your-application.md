@@ -10,7 +10,8 @@ job, or a CICS region served over TN3270. You write three files and run three co
 | `env.toml` | how to run the package, and which tolerances to allow | `forge-run` |
 
 CardDemo's checked-in set, in `config/carddemo/`, is a worked example of all three
-([Run CardDemo over TN3270](run-carddemo.md)). Paths inside each file are relative to that
+([Run CardDemo over TN3270](run-carddemo.md)). To do the same from Python, see
+[Drive forge from Python](drive-forge-from-python.md). Paths inside each file are relative to that
 file's directory. Commands run from the repo root.
 
 ## Prerequisites
