@@ -4,9 +4,11 @@
 
 # red-dragon-forge
 
-Runtimes that execute mainframe COBOL programs on the
-[RedDragon](https://github.com/avishek-sen-gupta/red-dragon) interpreter, a layer that composes
-them, and a static analyser for the same code.
+Build, run and analyse a mainframe COBOL application off the mainframe. Declare its datasets,
+build its programs into one package, and run that package as a batch program, a JCL job or a CICS
+region served to a 3270 terminal, with Db2 behind any of them. The programs execute on the
+[RedDragon](https://github.com/avishek-sen-gupta/red-dragon) interpreter. A static analyser reads
+the same code without running it.
 
 | Package | What it is |
 |---|---|
@@ -15,7 +17,7 @@ them, and a static analyser for the same code.
 | [`jackal/`](jackal/) | JCL/batch engine |
 | [`catnip/`](catnip/) | System catalog: the datasets jobs and CICS regions share |
 | [`litter/`](litter/) | Package: COBOL programs lowered once and linked into one image in a zip; `forge-build` writes one, `forge-run` runs it |
-| [`red_dragon_forge/`](red_dragon_forge/) | Composition layer |
+| [`red_dragon_forge/`](red_dragon_forge/) | `forge-build` and `forge-run`: build a package from `build.toml`, run it from `env.toml`, composing the runtimes it needs |
 | [`cobble/`](cobble/) | Static analyser: knowledge graph, control flow, field dataflow |
 
 CardDemo's online tier served by cicada to a stock `c3270`: a user updates an account, an admin
