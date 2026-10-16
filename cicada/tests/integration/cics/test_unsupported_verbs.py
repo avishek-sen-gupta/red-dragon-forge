@@ -19,6 +19,7 @@ from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.dispatcher import run_cics
+from tests.integration.cobol_helpers import main_entry
 from cics.types import CicsContext, DispatchKind
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
@@ -82,6 +83,7 @@ def _run(source: bytes, cobol_parser, unsupported: set):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )

@@ -13,7 +13,7 @@ a multi-language interpreter vendored at `vendor/red-dragon`. The forge never mo
 | `squall/` | `squall` | EXEC SQL coprocessor runtime for Db2-attached programs. | [squall](../squall/architecture.md) |
 | `jackal/` | `jackal` | JCL/batch engine: job and step orchestration, IDCAMS, a job's view of the datasets. | [jackal](../jackal/architecture.md) |
 | `catnip/` | `catnip` | System catalog: datasets, clusters, alternate indexes, paths and GDG bases, shared by jackal and cicada; `catnip install` loads a data declaration. | [catnip](../catnip/README.md) |
-| `litter/` | `litter` | Package: COBOL programs compiled once into a zip of linked programs, manifest and mapsets; `build` writes it, `open_package` reads it. | [litter](../litter/README.md) |
+| `litter/` | `litter` | Package: COBOL programs lowered once and linked into one image, zipped with a manifest and mapsets; `build` writes it, `open_package` reads it. | [litter](../litter/README.md) |
 | `red_dragon_forge/` | `red_dragon_forge` | Composition layer: assembles several runtimes into one program. | this page |
 | `cobble/` | `cobble` | Static analyser: corpus onboarding, knowledge graph, source CFG, field dataflow. Never runs a program. | [cobble](../cobble/config.md) |
 
@@ -38,6 +38,9 @@ registers. RedDragon's VM has no CICS, SQL or JCL knowledge of its own.
 
 | Module | Purpose |
 |---|---|
+| `build_command.py` | `forge-build`: a `build.toml` into a litter package. See [Build](build.md). |
+| `run_command.py` | `forge-run`: a package run as `env.toml` says, `[plain]`, `[jcl]` or `[cics]`. See [Run](run.md). |
+| `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
 | `run.py` | `run_program(linked, specs, …)` runs a compiled program through the one spec that owns execution. CICS owns execution; SQL is synchronous and owns none. |
 | `carddemo_db2_region.py` | The CardDemo region with CICS and SQL composed. |
 | `carddemo_db2_schema.py` | CardDemo's Db2 schema and seed data. |
@@ -55,7 +58,8 @@ Design record: [CICS + SQL composition](../../records/design/2026-07-04-cics-sql
 - `catnip` imports none of `cics`, `squall`, `jackal`, `cobble` or `red_dragon_forge`. `cics` and
   `jackal` import it.
 - `litter` imports none of `cics`, `squall`, `jackal`, `cobble`, `catnip` or `red_dragon_forge`.
-  `jackal` imports it: a job runs against a litter package.
+  `jackal` and `cics` import it: a job runs against a litter package, and a TN3270 region is
+  assembled from one.
 - `red_dragon_forge` may import any runtime.
 - `cobble` may import only the static surface of the other packages (parsers, models,
   `cobol_asg`). It must not import the interpreter, any runtime module, `catnip` or `litter`,

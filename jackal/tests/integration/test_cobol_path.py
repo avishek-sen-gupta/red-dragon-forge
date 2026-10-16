@@ -37,8 +37,10 @@ def _require_bridge(bridge_jar):
 
 
 @pytest.fixture(scope="module")
-def packaged(tmp_path_factory: pytest.TempPathFactory) -> Package:
-    return package(tmp_path_factory.mktemp("package"), ("ALTREAD", "ALTLOAD", "KEYCHK"))
+def packaged(tmp_path_factory: pytest.TempPathFactory, bridge_jar: str) -> Package:
+    return package(
+        tmp_path_factory.mktemp("package"), bridge_jar, ("ALTREAD", "ALTLOAD", "KEYCHK")
+    )
 
 
 _BASE = _ebcdic(b"001BBBxx002AAAyy003AAAzz")
@@ -59,7 +61,7 @@ def _read_back(compiled: CompiledProgram, path: Path) -> CompiledProgram:
     codec = LinkedCodec(IrCodec())
     codec.write(compiled.linked, path)
     linked = codec.read(path)
-    return CompiledProgram(linked, program_files_of(linked))
+    return CompiledProgram(linked, compiled.entry, program_files_of(linked))
 
 
 def _ran(

@@ -40,7 +40,7 @@ from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
 from interpreter.project.coprocessor_compile import compile_program
 from interpreter.project.types import LinkedProgram
-from interpreter.run import main_declarations
+from interpreter.run import declarations_of
 from squall.backend import SqlBackend, SqlResult
 from squall.backends.db2 import Db2Backend
 from squall.backends.sqlite import SqliteBackend
@@ -48,6 +48,7 @@ from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 
+from cobol_harness.compile import main_entry
 from red_dragon_forge.run import run_program
 
 REPO = Path(__file__).resolve().parents[3]
@@ -291,7 +292,7 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
     )
     return CompiledInqcust(
         wrap_linked,
-        field_positions(main_declarations(wrap_linked)),
+        field_positions(declarations_of(wrap_linked, "WRAPPER")),
         context_holder,
         result_holder,
     )
@@ -307,6 +308,7 @@ def _run_inqcust_case(
         CicsContext(transid="WRAP", commarea=commarea, eibaid="\x7d"),
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program.linked),
         context_holder=program.context_holder,
         result_holder=program.result_holder,
         max_steps=50_000,
@@ -486,6 +488,7 @@ def _run_composed(source: str, backend: SqlBackend, transid: str):
         CicsContext(transid=transid, commarea=b"", eibaid="\x7d"),
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(linked),
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,

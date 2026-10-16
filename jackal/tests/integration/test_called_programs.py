@@ -1,4 +1,4 @@
-"""A COBOL step runs its program with every program it CALLs, as a z/OS load module does."""
+"""A COBOL step enters the image at its program, which CALLs others linked beside it, each with its own files."""
 
 from pathlib import Path
 
@@ -25,9 +25,11 @@ def _require(bridge_jar, jcl_bridge_jar):
 
 
 @pytest.fixture(scope="module")
-def packaged(tmp_path_factory: pytest.TempPathFactory) -> Package:
+def packaged(tmp_path_factory: pytest.TempPathFactory, bridge_jar: str) -> Package:
     return package(
-        tmp_path_factory.mktemp("package"), ("CALLMAIN", "DYNMAIN", "SHRMAIN")
+        tmp_path_factory.mktemp("package"),
+        bridge_jar,
+        ("CALLMAIN", "DYNMAIN", "SHRMAIN", "CALLSUB", "SHRSUB"),
     )
 
 
@@ -70,11 +72,6 @@ def test_a_statically_called_program_writes_to_its_own_dd(
     )
 
 
-@pytest.mark.xfail(
-    reason="a package cannot link a callee named only by CALL identifier"
-    " (red-dragon-forge-8urg)",
-    strict=True,
-)
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_dynamically_called_program_on_the_link_list_writes_to_its_own_dd(
     tmp_path: Path, packaged: Package, jcl_bridge_jar: str
@@ -86,7 +83,7 @@ def test_a_dynamically_called_program_on_the_link_list_writes_to_its_own_dd(
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_select_name_the_main_and_its_callee_share_takes_the_callees_dd_and_fd(
+def test_a_select_name_the_main_and_its_callee_share_is_each_programs_own(
     tmp_path: Path, packaged: Package, jcl_bridge_jar: str
 ) -> None:
     jcl = (
@@ -106,9 +103,9 @@ def test_a_select_name_the_main_and_its_callee_share_takes_the_callees_dd_and_fd
         (sub.label, sub.path.read_bytes()),
     ) == (
         [Completed(0)],
-        (LabelPending(), b""),
         (
-            SequentialLabel(RecordFormat.F, 120),
+            SequentialLabel(RecordFormat.F, 80),
             "WRITTEN BY THE MAIN PROGRAM".ljust(80).encode("cp037"),
         ),
+        (LabelPending(), b""),
     )

@@ -60,7 +60,7 @@ def test_a_tso_step_runs_its_programs_and_ends_with_the_highest_code(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        package=package(tmp_path / "package", ("RC4", "RC0"), src),
+        package=package(tmp_path / "package", bridge_jar, ("RC4", "RC0"), src),
         system=system(tmp_path),
     )
 

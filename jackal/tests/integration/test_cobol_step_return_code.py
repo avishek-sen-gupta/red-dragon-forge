@@ -31,7 +31,7 @@ def test_cobol_step_returns_real_return_code(tmp_path: Path, bridge_jar):
     (src / "SETRC.cbl").write_text(_PGM)
     assert run_cobol_step(
         program("S", "SETRC"),
-        compiled(package(tmp_path / "package", ("SETRC",), src), "SETRC"),
+        compiled(package(tmp_path / "package", bridge_jar, ("SETRC",), src), "SETRC"),
         DdEnvironment(()),
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,

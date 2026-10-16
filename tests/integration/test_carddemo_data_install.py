@@ -12,6 +12,7 @@ from catnip.system_catalog import SystemCatalog
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.data_layout import record_length
+from interpreter.project.cobol_compile import link_units
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
@@ -120,7 +121,7 @@ def test_an_installed_carddemo_system_holds_each_dataset_and_runs_acctfile(
             Manifest(
                 programs=(), coprocessors=(), transactions=(), files=(), mapsets=()
             ),
-            {},
+            link_units((), tmp_path),
             {},
         ),
         system=system,

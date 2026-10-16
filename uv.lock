@@ -328,6 +328,7 @@ dependencies = [
     { name = "antlr4-python3-runtime" },
     { name = "catnip" },
     { name = "lark" },
+    { name = "litter" },
     { name = "pyyaml" },
     { name = "red-dragon" },
     { name = "sortedcontainers" },
@@ -349,6 +350,7 @@ requires-dist = [
     { name = "antlr4-python3-runtime", specifier = ">=4.13,<4.14" },
     { name = "catnip", editable = "catnip" },
     { name = "lark", specifier = ">=1.3.1" },
+    { name = "litter", editable = "litter" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
     { name = "sortedcontainers", specifier = ">=2.4.0" },
@@ -1657,7 +1659,9 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "antlr4-python3-runtime" },
+    { name = "catnip" },
     { name = "lark" },
+    { name = "litter" },
     { name = "pyyaml" },
     { name = "red-dragon" },
     { name = "sortedcontainers" },
@@ -1680,8 +1684,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "antlr4-python3-runtime", specifier = ">=4.13,<4.14" },
+    { name = "catnip", editable = "catnip" },
     { name = "ibm-db", marker = "extra == 'db2'", specifier = ">=3.2.0" },
     { name = "lark", specifier = ">=1.3.1" },
+    { name = "litter", editable = "litter" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "red-dragon", editable = "vendor/red-dragon" },
     { name = "sortedcontainers", specifier = ">=2.4.0" },

@@ -1,4 +1,4 @@
-"""A packaged program declares the files of every program it links."""
+"""A step declares the files of every program linked into its image, whichever way the caller names its callee."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import pytest
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import FIXTURE_CBL, compiled, package
 
-_CALLER = """\
+_BY_IDENTIFIER = """\
        IDENTIFICATION DIVISION.
        PROGRAM-ID. LINKER.
        DATA DIVISION.
@@ -16,25 +16,30 @@ _CALLER = """\
            CALL WS-CALLEE.
            GOBACK.
 """
+_BY_LITERAL = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. LINKER.
+       PROCEDURE DIVISION.
+           CALL 'COPYUP'.
+           GOBACK.
+"""
 
 
-@pytest.fixture(autouse=True)
-def _require_bridge(bridge_jar):
-    """Enforce PROLEAP_BRIDGE_JAR."""
-
-
-@pytest.mark.xfail(
-    reason="a package cannot link a callee named only by CALL identifier"
-    " (red-dragon-forge-8urg)",
-    strict=True,
-)
+@pytest.mark.parametrize("caller", [_BY_IDENTIFIER, _BY_LITERAL])
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_a_linked_subprograms_files_are_declared_by_the_step(tmp_path: Path) -> None:
+def test_a_linked_subprograms_files_are_declared_by_the_step(
+    tmp_path: Path, bridge_jar: str, caller: str
+) -> None:
     src = tmp_path / "src"
     src.mkdir()
-    (src / "LINKER.cbl").write_text(_CALLER)
+    (src / "LINKER.cbl").write_text(caller)
     (src / "COPYUP.cbl").write_text((FIXTURE_CBL / "COPYUP.cbl").read_text())
 
-    linker = compiled(package(tmp_path / "package", ("LINKER",), src), "LINKER")
+    linker = compiled(
+        package(tmp_path / "package", bridge_jar, ("LINKER", "COPYUP"), src), "LINKER"
+    )
 
-    assert sorted(f.entry.assign_to for f in linker.files) == ["INDD", "OUTDD"]
+    assert sorted((f.program, f.entry.assign_to) for f in linker.files) == [
+        ("COPYUP", "INDD"),
+        ("COPYUP", "OUTDD"),
+    ]

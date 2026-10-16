@@ -18,7 +18,7 @@ from cics.dispatcher import CicsRegion, InputEvent
 from cics.interval import StartQueue
 from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
-from interpreter.run import main_declarations
+from interpreter.run import declarations_of
 
 from .compile import compile_link_targets, compile_main_program, make_parser
 from .vsam import VsamFixture
@@ -120,7 +120,7 @@ class CicsSession:
         ``commarea.build_commarea``."""
         if self.main_name is None:
             raise RuntimeError("compile_main() hasn't been called yet")
-        return field_positions(main_declarations(self.program_cache[self.main_name]))
+        return field_positions(declarations_of(self.program_cache[self.main_name], self.main_name))
 
     def build_record(self, copy_member: str, record_name: str, overrides: dict[str, str], expected_length: int | None = None) -> bytes:
         """See ``vsam.build_record`` -- re-exposed here so callers that
@@ -161,19 +161,20 @@ class CicsSession:
         """
         import cics.dispatcher as _disp
         from cics.types import DispatchKind, DispatchResult
-        from cics.vm_init import make_cics_initial_vm, make_entry_point
+        from cics.vm_init import make_cics_initial_vm
         from interpreter.run import run_linked
 
         original = _disp.run_cics
         session = self
 
-        def _wrapped(program, context, screen_queue, input_queue, *, context_holder, result_holder, max_steps=50_000):
+        def _wrapped(program, context, screen_queue, input_queue, *, entry, context_holder, result_holder, max_steps=50_000, permit_unresolved_call_targets=True, on_abend=lambda: None):
             _disp.hold(context_holder, context)
             _disp.hold(result_holder, None)
             vm = run_linked(
                 program,
-                make_entry_point(program),
+                entry,
                 max_steps=max_steps,
+                permit_unresolved_call_targets=permit_unresolved_call_targets,
                 initial_vm=make_cics_initial_vm(context, context.commarea),
             )
             session.last_vm = vm

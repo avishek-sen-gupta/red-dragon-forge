@@ -42,10 +42,12 @@ def _require(bridge_jar: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def pgma_only(tmp_path_factory: pytest.TempPathFactory) -> Package:
+def pgma_only(tmp_path_factory: pytest.TempPathFactory, bridge_jar: str) -> Package:
     src = tmp_path_factory.mktemp("src")
     (src / "PGMA.cbl").write_text(_PGMA)
-    return package(tmp_path_factory.mktemp("package"), ("PGMA",), cbl_dir=src)
+    return package(
+        tmp_path_factory.mktemp("package"), bridge_jar, ("PGMA",), cbl_dir=src
+    )
 
 
 def _outcomes(
@@ -81,7 +83,7 @@ def test_a_program_the_package_lacks_is_a_missing_program(
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_the_cli_runs_a_job_against_the_package_it_is_given(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], bridge_jar: str
 ) -> None:
     src = tmp_path / "src"
     src.mkdir()
@@ -93,7 +95,7 @@ def test_the_cli_runs_a_job_against_the_package_it_is_given(
             "run",
             str(jcl),
             "--package",
-            str(built(tmp_path / "package", ("SETRC",), cbl_dir=src)),
+            str(built(tmp_path / "package", bridge_jar, ("SETRC",), cbl_dir=src)),
             "--system",
             str(tmp_path / "system"),
         ]

@@ -17,6 +17,8 @@ from cics.strategy import NOT_SUPPLIED, Absent
 from cics.vsam.engine import VsamEngine
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from interpreter.run import run
+from interpreter.project.program_entry import ProgramEntry
+from interpreter.project.types import LinkedProgram
 
 _AREA_A = "       "  # 7 spaces: cols 1-6 (seq) + col 7 (indicator = space)
 _COMMENT = "      *"  # col 7 = * for comment line
@@ -87,3 +89,13 @@ def installed_cics_spec(
         vsam_engine=vsam_engine,
     )
     return build_cics_spec()
+
+
+def main_entry(linked: LinkedProgram) -> ProgramEntry:
+    return ProgramEntry(
+        next(
+            name
+            for name, label in linked.programs.items()
+            if label == linked.entry_func_label
+        )
+    )

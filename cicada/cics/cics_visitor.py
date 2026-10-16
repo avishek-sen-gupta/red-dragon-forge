@@ -7,12 +7,10 @@ see cics_grammar/CICSzParser.g4 for the grammar source and regeneration notes.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from antlr4 import CommonTokenStream, InputStream, TerminalNode
 from antlr4.error.ErrorListener import ErrorListener
-
-from dataclasses import dataclass
-
 from cics.cics_grammar.CICSzLexer import CICSzLexer
 from cics.cics_grammar.CICSzParser import CICSzParser
 from cobol_asg.cobol_expression import ExprNode, FieldRefNode, LiteralNode

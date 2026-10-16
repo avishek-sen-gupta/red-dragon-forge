@@ -23,6 +23,7 @@ from cics.strategy import CicsLoweringStrategy
 from cics.runtime import install_cics_runtime
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
+from tests.integration.cobol_helpers import main_entry
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from tests.covers import covers
@@ -119,6 +120,7 @@ def test_vsam_browse_forward_round_trips(cobol_parser, tmp_path):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cics
 from cics.dispatcher import run_cics
+from cobol_harness.compile import main_entry
 from cics.types import CicsContext, DispatchKind
 
 from cics.coprocessor import build_cics_spec
@@ -85,6 +86,7 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
         CicsContext(transid="CICO", commarea=b"", eibaid="\x7d"),
         screen_q,
         input_q,
+        entry=main_entry(linked),
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
@@ -119,6 +121,7 @@ def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
         CicsContext(transid="CICD", commarea=b"", eibaid="\x7d"),
         screen_q,
         input_q,
+        entry=main_entry(linked),
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,

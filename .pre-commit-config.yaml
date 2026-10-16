@@ -4,8 +4,14 @@
 # rest as "(no files to check)" noise. Only terminology-commit-msg belongs to
 # the commit-msg stage, and it opts in explicitly.
 default_stages: [pre-commit]
+fail_fast: true
 
 repos:
+  - repo: https://github.com/thoughtworks/talisman
+    rev: v1.37.0
+    hooks:
+      - id: talisman-commit
+        entry: cmd --githook pre-commit
   - repo: https://github.com/avishek-sen-gupta/python-fp-lint
     rev: 1206504f7ea2be9e23609161eefd75446ed9117e
     hooks:
@@ -119,8 +125,3 @@ repos:
         entry: precommit-scripts/check-commit-msg
         language: script
         stages: [commit-msg]
-  - repo: https://github.com/thoughtworks/talisman
-    rev: v1.37.0
-    hooks:
-      - id: talisman-commit
-        entry: cmd --githook pre-commit

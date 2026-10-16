@@ -30,7 +30,6 @@ class RegionConfig:
     bms_dirs: tuple[Path, ...]
     hlasm_export: Path
     initial_transid: str
-    min_commarea_len: int
     transactions: Mapping[str, str]
     programs: frozenset[str]
     system: Path
@@ -48,7 +47,6 @@ def load_config(path: Path) -> RegionConfig:
         bms_dirs=tuple(_path(p) for p in paths["bms_dirs"]),
         hlasm_export=_path(paths["hlasm_export"]),
         initial_transid=region.get("initial_transid", ""),
-        min_commarea_len=int(region.get("min_commarea_len", 0)),
         transactions=transactions,
         programs=frozenset((*transactions.values(), *region.get("programs", ()))),
         system=_path(paths["system"]),

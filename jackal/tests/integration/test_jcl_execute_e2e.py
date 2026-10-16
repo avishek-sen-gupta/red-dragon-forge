@@ -84,9 +84,9 @@ def test_parm_passed_through_jcl_bridge(tmp_path, bridge_jar, jcl_bridge_jar):
 
     jcl = "//J JOB 1\n//STEP1 EXEC PGM=TESTPARM,PARM='HELLO     '\n"
     job = _parse(jcl, jcl_bridge_jar)
-    result = _runner(package(tmp_path / "package", ("TESTPARM",), src), tmp_path).run(
-        job, scratch=scratch(tmp_path)
-    )
+    result = _runner(
+        package(tmp_path / "package", bridge_jar, ("TESTPARM",), src), tmp_path
+    ).run(job, scratch=scratch(tmp_path))
 
     assert len(result.steps) == 1
     assert result.steps[0].outcome == Completed(42)

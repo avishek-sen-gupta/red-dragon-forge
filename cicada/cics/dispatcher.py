@@ -12,14 +12,17 @@ from typing import TYPE_CHECKING, Generic, NamedTuple, TypeAlias, TypeVar
 from cics.cell import Cell, Holder, held_or, hold
 from cics.csd_parse import parse_csd as parse_csd
 from cics.csd_parse import parse_csd_files as parse_csd_files
+from cics.entered_program import EnteredProgram
+from cics.entered_programs import EnteredPrograms
 from cics.input_event import DFHENTER
 from cics.input_event import InputEvent as InputEvent
 from cics.interval import StartQueue, StartRequest
 from cics.terminal import InputChannel, ScreenChannel
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
-from cics.vm_init import make_cics_initial_vm, make_entry_point
+from cics.vm_init import make_cics_initial_vm
 
 if TYPE_CHECKING:
+    from interpreter.project.program_entry import ProgramEntry
     from interpreter.project.types import LinkedProgram
 
 logger = logging.getLogger(__name__)
@@ -34,7 +37,9 @@ P = TypeVar("P")
 # doing nothing but started tasks stops on its (cap + 1)-th such dispatch.
 _MAX_CONSECUTIVE_STARTS = 256
 _RUNAWAY_ABCODE = "ASTL"
+_MODULE_NOT_FOUND = "4038"
 _USE_REGION_MAX_STEPS = -1
+MAX_COMMAREA = 32763
 
 _NO_OVERRIDE: tuple[DispatchResult, ...] = ()
 
@@ -102,7 +107,7 @@ class NoPendingTask:
 
 NO_PENDING_TASK = NoPendingTask()
 
-PendingTask: TypeAlias = "NextTask[LinkedProgram] | NoPendingTask"
+PendingTask: TypeAlias = "NextTask[EnteredProgram] | NoPendingTask"
 
 
 def run_cics(
@@ -111,36 +116,64 @@ def run_cics(
     screen_queue: ScreenChannel,
     input_queue: InputChannel,
     *,
+    entry: ProgramEntry,
     context_holder: Holder[CicsContext],
     result_holder: Holder[DispatchResult],
     max_steps: int = 50_000,
+    permit_unresolved_call_targets: bool = True,
+    on_abend: Callable[[], None] = _no_rollback,
 ) -> DispatchResult:
-    """Execute one CICS program with the given context. Returns DispatchResult."""
-    from interpreter.run import run_linked
-
+    """Execute one CICS program, entering its image at ``entry``, with the given context."""
     logger.info(
         "run_cics: program=%s transid=%s commarea=%d B",
-        getattr(program, "entry_func_label", None) or "?",
+        entry.name,
         context.transid,
         len(context.commarea),
     )
     hold(context_holder, context)
     hold(result_holder, None)
-    run_linked(
+    return _task_result(
         program,
-        make_entry_point(program),
-        max_steps=max_steps,
-        initial_vm=make_cics_initial_vm(context, context.commarea),
+        entry,
+        context,
+        result_holder,
+        max_steps,
+        permit_unresolved_call_targets,
+        on_abend,
     )
+
+
+def _task_result(
+    program: LinkedProgram,
+    entry: ProgramEntry,
+    context: CicsContext,
+    result_holder: Holder[DispatchResult],
+    max_steps: int,
+    permit_unresolved_call_targets: bool,
+    on_abend: Callable[[], None],
+) -> DispatchResult:
+    from interpreter.handlers.calls import UnresolvedProgramError
+    from interpreter.run import run_linked
+
+    try:
+        run_linked(
+            program,
+            entry,
+            max_steps=max_steps,
+            initial_vm=make_cics_initial_vm(context, context.commarea),
+            permit_unresolved_call_targets=permit_unresolved_call_targets,
+        )
+    except UnresolvedProgramError as unresolved:
+        logger.error(
+            "%s: %s — abending %s", context.transid, unresolved, _MODULE_NOT_FOUND
+        )
+        return _abend(on_abend, _MODULE_NOT_FOUND)
     result = held_or(result_holder, DispatchResult(kind=DispatchKind.RETURN))
     logger.info("run_cics done: %s", result.kind.name)
     return result
 
 
-RunCicsFn = Callable[
-    ["LinkedProgram", CicsContext, ScreenChannel, InputChannel],
-    DispatchResult,
-]
+RunCicsFn = Callable[[P, CicsContext, ScreenChannel, InputChannel], DispatchResult]
 
 
 def _route_return_transid(
@@ -266,20 +299,20 @@ def _runaway_abend(
 
 
 @dataclass(frozen=True)
-class _LoopTurn:
-    program: LinkedProgram
+class _LoopTurn(Generic[P]):
+    program: P
     context: CicsContext
-    pending_next: PendingTask
+    pending_next: NextTask[P] | NoPendingTask
     consecutive_starts: int
 
 
-_LoopState = _LoopTurn | DispatchResult
+_LoopState: TypeAlias = _LoopTurn[P] | DispatchResult
 
 
 @dataclass(frozen=True)
-class _DispatchLoop:
-    run_fn: RunCicsFn
-    program_cache: Mapping[str, LinkedProgram]
+class _DispatchLoop(Generic[P]):
+    run_fn: RunCicsFn[P]
+    program_cache: Mapping[str, P]
     transid_to_program: Mapping[str, str]
     screen_queue: ScreenChannel
     input_queue: InputChannel
@@ -289,10 +322,10 @@ class _DispatchLoop:
     terminal_termid: str
     on_abend: Callable[[], None] = _no_rollback
 
-    def advance(self, state: _LoopState, _tick: None) -> _LoopState:
+    def advance(self, state: _LoopState[P], _tick: None) -> _LoopState[P]:
         return self.turn(state) if isinstance(state, _LoopTurn) else state
 
-    def turn(self, state: _LoopTurn) -> _LoopState:
+    def turn(self, state: _LoopTurn[P]) -> _LoopState[P]:
         result = self.run_fn(
             state.program, state.context, self.screen_queue, self.input_queue
         )
@@ -309,7 +342,9 @@ class _DispatchLoop:
             return self._xctl(state, routing)
         return self._after_task(state, routing)
 
-    def _after_terminal(self, state: _LoopTurn, routing: DispatchResult) -> _LoopState:
+    def _after_terminal(
+        self, state: _LoopTurn[P], routing: DispatchResult
+    ) -> _LoopState[P]:
         if routing.kind == DispatchKind.ABEND:
             self.start_queue.discard_for_abend()
             return routing
@@ -318,7 +353,7 @@ class _DispatchLoop:
             state, pending if isinstance(pending, NextTask) else routing
         )
 
-    def _xctl(self, state: _LoopTurn, routing: NextTask[LinkedProgram]) -> _LoopState:
+    def _xctl(self, state: _LoopTurn[P], routing: NextTask[P]) -> _LoopState[P]:
         """XCTL transfers control WITHIN the same task: the task has not ended,
         so no started task may run yet, and the task keeps its own terminal."""
         return replace(
@@ -333,8 +368,8 @@ class _DispatchLoop:
         )
 
     def _after_task(
-        self, state: _LoopTurn, waiting: NextTask[LinkedProgram] | DispatchResult
-    ) -> _LoopState:
+        self, state: _LoopTurn[P], waiting: NextTask[P] | DispatchResult
+    ) -> _LoopState[P]:
         started = self.start_queue.pop_runnable(self.region_termid)
         if started:
             return self._start(state, waiting, started[0])
@@ -344,10 +379,10 @@ class _DispatchLoop:
 
     def _start(
         self,
-        state: _LoopTurn,
-        waiting: NextTask[LinkedProgram] | DispatchResult,
+        state: _LoopTurn[P],
+        waiting: NextTask[P] | DispatchResult,
         req: StartRequest,
-    ) -> _LoopState:
+    ) -> _LoopState[P]:
         """A started task carries start data, no COMMAREA (so EIBCALEN is 0), and
         the terminal the START named — NO_TERMINAL for a non-terminal task."""
         if state.consecutive_starts >= self.max_consecutive_starts:
@@ -366,7 +401,7 @@ class _DispatchLoop:
             consecutive_starts=state.consecutive_starts + 1,
         )
 
-    def _resume(self, state: _LoopTurn, pending: NextTask[LinkedProgram]) -> _LoopState:
+    def _resume(self, state: _LoopTurn[P], pending: NextTask[P]) -> _LoopState[P]:
         """On a pseudo-conversational RETURN TRANSID, the next turn's terminal
         input arrives here (blocks, up to a timeout). Its attention key seeds the
         next EIBAID; the event itself is left on the queue for the resumed turn's
@@ -394,8 +429,8 @@ class _DispatchLoop:
 
 
 def _run_dispatcher_with_runner(
-    run_fn: RunCicsFn,
-    program_cache: Mapping[str, LinkedProgram],
+    run_fn: RunCicsFn[P],
+    program_cache: Mapping[str, P],
     transid_to_program: Mapping[str, str],
     initial_context: CicsContext,
     screen_queue: ScreenChannel,
@@ -430,7 +465,7 @@ def _run_dispatcher_with_runner(
         terminal_termid=initial_context.termid,
         on_abend=on_abend,
     )
-    first: _LoopState = _LoopTurn(
+    first: _LoopState[P] = _LoopTurn(
         program=program_cache[transid_to_program[initial_context.transid]],
         context=initial_context,
         pending_next=NO_PENDING_TASK,
@@ -447,7 +482,7 @@ class RegionPosition:
     before it; the terminal holds one such slot."""
 
     transid: str
-    program: LinkedProgram | NoProgram
+    program: EnteredProgram | NoProgram
     commarea: bytes
     task_termid: str
     last_eibaid: str
@@ -458,13 +493,14 @@ class RegionPosition:
 
 @dataclass(frozen=True)
 class _TaskIo:
-    """What every task the region runs is wired to: the terminal channels and
-    the holder cells the builtins close over."""
+    """What every task the region runs is wired to: the terminal channels, the
+    holder cells the builtins close over, and whether a CALL may reach nothing."""
 
     screen_queue: ScreenChannel
     input_queue: InputChannel
     context_holder: Holder[CicsContext]
     result_holder: Holder[DispatchResult]
+    permit_unresolved_call_targets: bool
 
 
 def _describe_input(input_event: InputEvent | NoInput) -> tuple[str, int]:
@@ -516,10 +552,17 @@ class CicsRegion:
         region_termid: str = DEFAULT_TERMID,
         max_consecutive_starts: int = _MAX_CONSECUTIVE_STARTS,
         on_abend: Callable[[], None] = _no_rollback,
+        permit_unresolved_call_targets: bool = True,
     ) -> None:
-        self._program_cache = program_cache
+        self._programs = EnteredPrograms(program_cache)
         self._transid_to_program = transid_to_program
-        self._io = _TaskIo(screen_queue, input_queue, context_holder, result_holder)
+        self._io = _TaskIo(
+            screen_queue,
+            input_queue,
+            context_holder,
+            result_holder,
+            permit_unresolved_call_targets,
+        )
         self._max_steps = max_steps
         self._min_commarea_len = min_commarea_len
         self._start_queue = start_queue
@@ -561,7 +604,7 @@ class CicsRegion:
         logger.info(
             "region.start: transid=%s commarea=%d B", entry_transid, len(commarea)
         )
-        program = self._program_cache[self._transid_to_program[entry_transid]]
+        program = self._programs[self._transid_to_program[entry_transid]]
         self._position.set(
             replace(
                 self._position.get(),
@@ -607,8 +650,9 @@ class CicsRegion:
         if isinstance(input_event, InputEvent):
             self._io.input_queue.put(input_event)
         self._position.set(replace(position, last_eibaid=eibaid))
+        program = _started_program(position.program)
         result = run_cics(
-            _started_program(position.program),
+            program.image,
             CicsContext(
                 transid=position.transid,
                 commarea=position.commarea,
@@ -617,16 +661,19 @@ class CicsRegion:
             ),
             self._io.screen_queue,
             self._io.input_queue,
+            entry=program.entry(),
             context_holder=self._io.context_holder,
             result_holder=self._io.result_holder,
             max_steps=(
                 self._max_steps if max_steps == _USE_REGION_MAX_STEPS else max_steps
             ),
+            permit_unresolved_call_targets=self._io.permit_unresolved_call_targets,
+            on_abend=self._on_abend,
         )
         routing = _advance_routing(
             result,
             position.transid,
-            self._program_cache,
+            self._programs,
             self._transid_to_program,
             self._on_abend,
         )
@@ -637,7 +684,7 @@ class CicsRegion:
         self._position.set(replace(self._position.get(), **changes))
 
     def _advance(
-        self, result: DispatchResult, routing: NextTask[LinkedProgram] | DispatchResult
+        self, result: DispatchResult, routing: NextTask[EnteredProgram] | DispatchResult
     ) -> tuple[DispatchResult, ...]:
         """Settle the finished task and adopt whatever runs next. Returns the
         result ``_dispatch`` must report INSTEAD of the finished task's own, or
@@ -654,14 +701,14 @@ class CicsRegion:
         return self._settle(routing)
 
     def _settle(
-        self, routing: NextTask[LinkedProgram] | DispatchResult
+        self, routing: NextTask[EnteredProgram] | DispatchResult
     ) -> tuple[DispatchResult, ...]:
         if isinstance(routing, DispatchResult):
             return self._settle_terminal(routing)
         return self._settle_next_transid(routing)
 
     def _settle_next_transid(
-        self, routing: NextTask[LinkedProgram]
+        self, routing: NextTask[EnteredProgram]
     ) -> tuple[DispatchResult, ...]:
         started = self._start_queue.pop_runnable(self._region_termid)
         if started:
@@ -698,7 +745,7 @@ class CicsRegion:
         logger.info("dispatch → terminal %s", routing.kind.name)
         return _NO_OVERRIDE
 
-    def _adopt(self, routing: NextTask[LinkedProgram], task_termid: str) -> None:
+    def _adopt(self, routing: NextTask[EnteredProgram], task_termid: str) -> None:
         """``task_termid`` is the region's terminal for a fresh next-transid task,
         and the CURRENT task's terminal for an XCTL, which does not start a task."""
         position = replace(
@@ -715,7 +762,7 @@ class CicsRegion:
             len(position.commarea),
         )
 
-    def _adopt_next_transid(self, routing: NextTask[LinkedProgram]) -> None:
+    def _adopt_next_transid(self, routing: NextTask[EnteredProgram]) -> None:
         """A next-transid task is a NEW task the caller must supply input for, so
         it owns an empty start-data slot and it breaks a chain of started tasks —
         the region cannot block on the terminal, so adopting the turn is where
@@ -742,7 +789,7 @@ class CicsRegion:
                 position,
                 consecutive_starts=position.consecutive_starts + 1,
                 transid=req.transid,
-                program=self._program_cache[self._transid_to_program[req.transid]],
+                program=self._programs[self._transid_to_program[req.transid]],
                 commarea=b"",
                 task_termid=req.termid,
             )
@@ -752,7 +799,7 @@ class CicsRegion:
         return _NO_OVERRIDE
 
 
-def _started_program(program: LinkedProgram | NoProgram) -> LinkedProgram:
+def _started_program(program: EnteredProgram | NoProgram) -> EnteredProgram:
     if isinstance(program, NoProgram):
         raise RuntimeError("step() called on a region that has not started")
     return program

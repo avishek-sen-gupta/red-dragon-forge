@@ -1,10 +1,9 @@
 [region]
 initial_transid = "CC00"
-min_commarea_len = 2000
-programs = ["COACTVWC"]
+programs = ["COACTVWC", "CSUTLDTC", "CEEDAYS"]
 
 [paths]
-source_dirs = ["${CARDDEMO_HOME}/cbl"]
+source_dirs = ["${CARDDEMO_HOME}/cbl", "${FORGE_ROOT}/cicada/cics/stubs"]
 copybook_dirs = ["${CARDDEMO_HOME}/cpy", "${CARDDEMO_HOME}/cpy-bms"]
 bms_dirs = ["${CARDDEMO_HOME}/bms"]
 hlasm_export = "${FORGE_ROOT}/cicada/third-party/che-che4z-lsp-for-hlasm-fork/build/bin/hlasm_export"

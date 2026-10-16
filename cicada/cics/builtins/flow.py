@@ -12,6 +12,7 @@ from cics.strategy_stores import restore, swap
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from interpreter.address import Address
 from interpreter.project.entry_point import EntryPoint
+from interpreter.project.program_entry import ProgramEntry
 from interpreter.project.types import LinkedProgram
 from interpreter.run import run_linked
 from interpreter.types.typed_value import TypedValue
@@ -29,7 +30,7 @@ class RunLinked(Protocol):
     def __call__(
         self,
         linked: LinkedProgram,
-        entry_point: EntryPoint,
+        entry_point: EntryPoint | ProgramEntry,
         *,
         max_steps: int,
         initial_vm: VMState,
@@ -126,15 +127,16 @@ def make_set_xctl_context_builtin(
 def _linked_commarea(
     run: RunLinked,
     linked: LinkedProgram,
+    name: str,
     context: CicsContext,
     commarea: bytes,
     max_steps: int,
 ) -> bytes:
-    from cics.vm_init import make_cics_initial_vm, make_entry_point
+    from cics.vm_init import make_cics_initial_vm
 
     final_vm = run(
         linked,
-        make_entry_point(linked),
+        ProgramEntry(name),
         max_steps=max_steps,
         initial_vm=make_cics_initial_vm(context, commarea),
     )
@@ -144,6 +146,7 @@ def _linked_commarea(
 def _isolated_commarea(
     run: RunLinked,
     linked: LinkedProgram,
+    name: str,
     context: CicsContext,
     commarea: bytes,
     max_steps: int,
@@ -153,7 +156,7 @@ def _isolated_commarea(
     hold(result_holder, None)
     saved_hook = swap(_TASK_END_HOOK, make_noop_hook_builtin())
     try:
-        return _linked_commarea(run, linked, context, commarea, max_steps)
+        return _linked_commarea(run, linked, name, context, commarea, max_steps)
     finally:
         hold(result_holder, saved)
         restore(_TASK_END_HOOK, saved_hook)
@@ -203,6 +206,7 @@ def make_link_builtin(
         modified = _isolated_commarea(
             _run_fn,
             program_cache[name],
+            name,
             context_holder[0],
             _bytes(args, 1),
             max_steps,

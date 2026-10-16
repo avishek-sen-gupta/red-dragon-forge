@@ -59,7 +59,7 @@ How jackal works is in [../reference/jackal/architecture.md](../reference/jackal
 | SYSOUT and SYSPRINT capture | `jackal-1o2.7` | not started |
 | STEPLIB and JOBLIB load-library resolution | `jackal-1o2.17` | not started |
 | `IKJEFT01` DB2 steps through squall, composed in `red_dragon_forge` | `red-dragon-forge-46d` | supported through the Python API; the CLI composes no SQL |
-| `CALL` by data-name reaches programs on the link list (CLI `--link`) | `red-dragon-forge-ua7` | removed with `--link`: jackal runs litter packages, which link no program by data-name |
+| `CALL` by data-name reaches programs on the link list (CLI `--link`) | `red-dragon-forge-ua7` | done: a package links the programs its build lists into one image, and a CALL by data-name reaches any of them (`red-dragon-forge-8urg`) |
 | A package links a program reached only by `CALL` data-name | `red-dragon-forge-8urg` | not started |
 | Link list derived from cobble's dynamic call targets | `red-dragon-forge-btr` | not started |
 | A dynamic `CALL` to a program outside the run unit ends the step as z/OS does | `red-dragon-forge-xzw` | not started; the run ends with `UnresolvedProgramError` |

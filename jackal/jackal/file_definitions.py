@@ -1,4 +1,4 @@
-"""The files a program declares, read from the file-definitions Data in its linked IR."""
+"""The files each program declares, read from the file-definitions Data in a linked image."""
 
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def _format(record: DataRecord) -> ProgramFormat:
 
 def _files(data: Data) -> tuple[ProgramFile, ...]:
     return tuple(
-        ProgramFile(_entry(f), _format(f))
+        ProgramFile(_text(f, "program"), _entry(f), _format(f))
         for f in _records(_record(data.value, "files"), "files")
     )
 

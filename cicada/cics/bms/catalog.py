@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,14 +44,26 @@ def catalog_from_mapsets(mapsets: Sequence[BmsMapSet]) -> MapCatalog:
     return MapCatalog(maps={(s.label, m.label): m for s in mapsets for m in s.maps})
 
 
-def _invocations(
-    bms_file: Path, hlasm_export_bin: str, syslib_dirs: Sequence[Path]
-) -> Sequence[RawInvocation]:
+def mapset_json(
+    bms_file: Path,
+    hlasm_export_bin: str,
+    syslib_dirs: Sequence[Path] = (DEFAULT_MACRO_DIR,),
+) -> str:
     syslib = tuple(arg for d in syslib_dirs for arg in ("--syslib", str(d)))
     export = subprocess.run(
         [hlasm_export_bin, str(bms_file), *syslib], capture_output=True, check=True
     )
-    return json.loads(export.stdout).get("macro_invocations", [])
+    return export.stdout.decode("utf-8")
+
+
+def _invocations(text: str) -> Sequence[RawInvocation]:
+    return json.loads(text).get("macro_invocations", [])
+
+
+def catalog_from_json(texts: Iterable[str]) -> MapCatalog:
+    return catalog_from_mapsets(
+        tuple(mapset for text in texts for mapset in parse_mapsets(_invocations(text)))
+    )
 
 
 def load_catalog(
@@ -59,12 +71,7 @@ def load_catalog(
     hlasm_export_bin: str,
     syslib_dirs: Sequence[Path] = (DEFAULT_MACRO_DIR,),
 ) -> MapCatalog:
-    return catalog_from_mapsets(
-        tuple(
-            mapset
-            for bms_file in sorted(bms_dir.glob("*.bms"))
-            for mapset in parse_mapsets(
-                _invocations(bms_file, hlasm_export_bin, syslib_dirs)
-            )
-        )
+    return catalog_from_json(
+        mapset_json(bms_file, hlasm_export_bin, syslib_dirs)
+        for bms_file in sorted(bms_dir.glob("*.bms"))
     )

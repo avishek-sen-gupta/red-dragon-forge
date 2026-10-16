@@ -12,6 +12,8 @@ from tests.covers import NotLanguageFeature, covers
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_batch_program_that_suspends_is_refused():
-    state = ExecutionState(initial_vm_state(), CodeLabel("entry"), 0, Register("%0"))
+    state = ExecutionState(
+        initial_vm_state(), CodeLabel("entry"), 0, Register("%0"), CodeLabel("entry")
+    )
     with pytest.raises(BatchProgramSuspended):
         program_result(Suspended(state, None))

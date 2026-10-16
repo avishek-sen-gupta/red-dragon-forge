@@ -37,7 +37,7 @@ def test_two_step_pipeline_transforms_through_intermediate(tmp_path, bridge_jar)
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        package=package(tmp_path / "package", ("UPCASE", "STARRER")),
+        package=package(tmp_path / "package", bridge_jar, ("UPCASE", "STARRER")),
         system=system(tmp_path),
     )
     result = runner.run(job, scratch=scratch(tmp_path))

@@ -16,6 +16,7 @@ from cics.conversational import ConversationalRegion
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.dispatcher import InputEvent, run_cics
+from tests.integration.cobol_helpers import main_entry
 from cics.preprocessor import CONDITION_TABLE_SLOTS, raisable_literal
 from cics.types import CicsContext, DispatchKind
 from cics.vsam.engine import VsamEngine
@@ -134,6 +135,7 @@ def test_the_injected_table_is_visible_to_the_program(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -186,6 +188,7 @@ def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -238,6 +241,7 @@ def test_one_statement_naming_several_conditions_writes_each_slot(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -296,6 +300,7 @@ def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -354,6 +359,7 @@ def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -434,6 +440,7 @@ def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -471,6 +478,7 @@ def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -516,6 +524,7 @@ def test_a_registered_handler_takes_control(cobol_parser, vsam_engine_with_acctf
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -580,6 +589,7 @@ def _run_source(source, transid, cobol_parser, vsam_engine):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )

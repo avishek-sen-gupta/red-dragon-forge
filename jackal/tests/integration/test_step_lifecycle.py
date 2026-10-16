@@ -28,9 +28,10 @@ from tests.system_build import job_catalog, system
 
 
 @pytest.fixture(scope="module")
-def packaged(tmp_path_factory: pytest.TempPathFactory) -> Package:
+def packaged(tmp_path_factory: pytest.TempPathFactory, bridge_jar: str) -> Package:
     return package(
         tmp_path_factory.mktemp("package"),
+        bridge_jar,
         ("CARDCOPY", "RUNAWAY", "FIXWRITE", "VARWRITE", "SHORTRD", "VARREAD"),
     )
 

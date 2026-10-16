@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING
 from cics.cell import Holder, fill
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import _run_dispatcher_with_runner, run_cics
+from cics.entered_program import EnteredProgram
+from cics.entered_programs import EnteredPrograms
 from cics.interval import StartQueue
 from cics.runtime import install_cics_runtime
 from cics.strategy import NOT_SUPPLIED, Absent
@@ -182,16 +184,18 @@ def run_carddemo_region(
     )
 
     def run_fn(
-        program: LinkedProgram,
+        program: EnteredProgram,
         context: CicsContext,
         sq: ScreenChannel,
         iq: InputChannel,
     ) -> DispatchResult:
         return run_cics(
-            program,
+            program.image,
             context,
             sq,
             iq,
+            entry=program.entry(),
+            on_abend=on_abend,
             context_holder=context_holder,
             result_holder=result_holder,
             max_steps=max_steps,
@@ -199,7 +203,7 @@ def run_carddemo_region(
 
     return _run_dispatcher_with_runner(
         run_fn,
-        program_cache,
+        EnteredPrograms(program_cache),
         transid_to_program,
         CicsContext(
             transid=entry_transid, commarea=b"", eibaid="\x7d", termid=region_termid

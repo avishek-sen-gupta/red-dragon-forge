@@ -59,6 +59,7 @@ import ibm_db
 import pytest
 
 from cics.dispatcher import run_cics
+from cobol_harness.compile import main_entry
 from cics.types import CicsContext, DispatchKind
 
 from squall.backends.db2 import Db2Backend
@@ -70,7 +71,7 @@ from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 from interpreter.cobol.layout_data import field_positions
 from interpreter.project.coprocessor_compile import compile_program
-from interpreter.run import main_declarations
+from interpreter.run import declarations_of
 from tests.integration.forge_cobol_helpers import make_parser
 
 _BANK_OF_Z_COPY = (
@@ -256,7 +257,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
         # INQCUSTZ shape, so its layout is the one that actually carries
         # this field -- and it's the same buffer DispatchResult.commarea
         # returns. The offset is relative to WS-CA's own start.
-        wrapper_fields = field_positions(main_declarations(wrapper_linked))
+        wrapper_fields = field_positions(declarations_of(wrapper_linked, "WRAPPER"))
         success_field = wrapper_fields["INQCUST-INQ-SUCCESS"]
         ws_ca_field = wrapper_fields["WS-CA"]
         off = success_field.offset - ws_ca_field.offset
@@ -273,6 +274,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
             CicsContext(transid="WRAP", commarea=found_commarea, eibaid="\x7d"),
             screen_q,
             input_q,
+            entry=main_entry(wrapper_linked),
             context_holder=context_holder,
             result_holder=result_holder,
             max_steps=50_000,
@@ -294,6 +296,7 @@ def test_inqcust_found_and_not_found(bridge_jar):
             CicsContext(transid="WRAP", commarea=not_found_commarea, eibaid="\x7d"),
             screen_q,
             input_q,
+            entry=main_entry(wrapper_linked),
             context_holder=context_holder,
             result_holder=result_holder,
             max_steps=50_000,

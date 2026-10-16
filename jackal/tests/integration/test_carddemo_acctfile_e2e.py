@@ -48,7 +48,9 @@ def test_acctfile_then_readacct_e2e(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        package=package(tmp_path / "package", ("CBACT01C",), cbl_dir, (cpy_dir,)),
+        package=package(
+            tmp_path / "package", bridge_jar, ("CBACT01C",), cbl_dir, (cpy_dir,)
+        ),
         system=system(tmp_path),
     )
 

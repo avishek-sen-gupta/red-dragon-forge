@@ -39,11 +39,11 @@ exit with 2.
 |---|---|---|
 | `JCL` | required | Path to the JCL file. |
 | `--system DIR` | required | The system directory: catnip's `catalog.json` and the cataloged datasets' bytes. Created if absent. |
-| `--package ZIP` | required | A [litter](../litter/README.md) package of linked programs. `PGM=X`, and `DSN RUN PROGRAM(X)` under a TSO monitor, run the package's program `X`; a program that is neither in the package nor a utility is stubbed with RC 0 and a warning. jackal compiles nothing. |
+| `--package ZIP` | required | A [litter](../litter/README.md) package: one linked image. `PGM=X`, and `DSN RUN PROGRAM(X)` under a TSO monitor, enter the image at program `X`; a program that is neither in the image nor a utility is stubbed with RC 0 and a warning. jackal compiles nothing. A path that is missing or is not a package is an argument error: `jackal run: error: --package ZIP: <reason>`, exit 2. |
 | `--proclib DIR` | `$CARDDEMO_HOME/app/proc` | Directory of cataloged procedures: `EXEC P` expands `DIR/P.prc`. Repeat the flag to search several directories in order. With neither the flag nor `CARDDEMO_HOME`, only in-stream PROCs expand. |
 
-A program reaches the programs it CALLs by literal name, which the package build linked into it.
-A program reached only by a CALL through a data-name is not linked (`red-dragon-forge-8urg`).
+A program reaches every program the image holds, whether it CALLs it by literal name or through a
+data-name. The build links only the programs it lists; nothing is discovered.
 
 A run changes the system directory in place, as a job changes a mainframe's catalog: datasets
 it catalogs stay for later runs, and datasets it deletes are gone. A DSN not in the catalog is

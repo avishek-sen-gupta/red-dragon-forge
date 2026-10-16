@@ -8,10 +8,11 @@ from pathlib import Path
 from catnip.dataset import Relabeller
 from interpreter.address import Address
 from interpreter.cobol.call_arguments import call_arguments
+from interpreter.cobol.io_provider import CobolIOProvider
 from interpreter.cobol.program_object import ARGUMENTS_PARAM
 from interpreter.cobol.return_code_readback import read_return_code
 from interpreter.func_name import FuncName
-from interpreter.project.entry_point import EntryPoint
+from interpreter.project.program_entry import ProgramEntry
 from interpreter.project.types import LinkedProgram
 from interpreter.run import (
     BudgetExhausted,
@@ -23,10 +24,11 @@ from interpreter.run import (
 from interpreter.run import Completed as RunCompleted
 from interpreter.vm.vm_types import StackFrame, VMState
 from jackal.allocation import DdEnvironment
-from jackal.cobol_files import AllocatedFileIOProvider, ProgramFile
+from jackal.cobol_files import ProgramFile
 from jackal.le_abend import user_abend
 from jackal.model import ProgramStep, StepReference, SystemAbend
 from jackal.parm import build_parm_region
+from jackal.program_files_provider import ProgramFilesIOProvider
 from jackal.results import Abended, Completed, ProgramResult
 from jackal.value_parts import resolve
 
@@ -37,6 +39,7 @@ CPU_TIME_EXCEEDED = SystemAbend(0x322)
 @dataclass(frozen=True)
 class CompiledProgram:
     linked: LinkedProgram
+    entry: ProgramEntry
     files: tuple[ProgramFile, ...]
 
 
@@ -51,14 +54,19 @@ def run_cobol_step(
     workdir: Path,
     budget: int,
     relabeller: Relabeller,
+    *,
+    permit_unresolved_call_targets: bool = True,
 ) -> ProgramResult:
-    provider = AllocatedFileIOProvider(workdir, program.files, env, relabeller)
+    provider = ProgramFilesIOProvider(
+        workdir, tuple(program.linked.programs), program.files, env, relabeller
+    )
     outcome = run_linked_resumable(
         program.linked,
-        _entry_point(program.linked),
+        program.entry,
         max_steps=budget,
         io_provider=provider,
         initial_vm=_initial_vm(step, provider),
+        permit_unresolved_call_targets=permit_unresolved_call_targets,
     )
     return program_result(outcome)
 
@@ -86,9 +94,7 @@ def _completed_or_abended(vm: VMState) -> ProgramResult:
     return Completed(read_return_code(vm))
 
 
-def _initial_vm(
-    step: ProgramStep[StepReference], provider: AllocatedFileIOProvider
-) -> VMState:
+def _initial_vm(step: ProgramStep[StepReference], provider: CobolIOProvider) -> VMState:
     return (
         _parm_vm(step, provider)
         if step.parm
@@ -96,9 +102,7 @@ def _initial_vm(
     )
 
 
-def _parm_vm(
-    step: ProgramStep[StepReference], provider: AllocatedFileIOProvider
-) -> VMState:
+def _parm_vm(step: ProgramStep[StepReference], provider: CobolIOProvider) -> VMState:
     """A VM whose entry frame hands the program the PARM area as its first
     argument, which binds the first LINKAGE 01."""
     parm_addr = Address("rgn_parm")
@@ -115,8 +119,3 @@ def _parm_vm(
             )
         ],
     )
-
-
-def _entry_point(linked: LinkedProgram) -> EntryPoint:
-    """Enter the program at the entry label its compile recorded."""
-    return EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)

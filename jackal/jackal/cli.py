@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 import tempfile
+import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from jackal.results import JobResult
 from jackal.runner import JobRunner
 from jackal.unresolved import RaiseErrorStrategy, UnresolvedReference
 from litter.open import open_package
+from litter.package import Package
+from litter.package_error import PackageError
 
 
 def _proclibs(flag_values: Sequence[str]) -> tuple[Path, ...]:
@@ -55,9 +58,16 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _runner(args: argparse.Namespace) -> JobRunner:
+def _package(ap: argparse.ArgumentParser, path: Path) -> Package:
+    try:
+        return open_package(path)
+    except (OSError, zipfile.BadZipFile, PackageError) as unopened:
+        ap.error(f"--package {path}: {unopened}")
+
+
+def _runner(ap: argparse.ArgumentParser, args: argparse.Namespace) -> JobRunner:
     return JobRunner(
-        package=open_package(Path(args.package)),
+        package=_package(ap, Path(args.package)),
         system=SystemCatalog(Path(args.system)),
         unresolved=RaiseErrorStrategy(),
         missing_data=LenientAllocation(),
@@ -67,18 +77,18 @@ def _runner(args: argparse.Namespace) -> JobRunner:
     )
 
 
-def _report(result: JobResult) -> int:
+def report(result: JobResult) -> int:
     sys.stdout.write(
         "".join(f"{s.name}: {s.outcome.rendered()}\n" for s in result.steps)
     )
     return 0 if result.outcome.succeeded() else 1
 
 
-def _run_job(args: argparse.Namespace) -> int:
-    runner = _runner(args)
+def _run_job(ap: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    runner = _runner(ap, args)
     job = parse_jcl(Path(args.jcl).read_text())
     with tempfile.TemporaryDirectory(prefix="jackal_") as scratch:
-        return _report(_ran(runner, job, Path(scratch)))
+        return report(_ran(runner, job, Path(scratch)))
 
 
 def _ran(runner: JobRunner, job: Job, scratch: Path) -> JobResult:
@@ -103,7 +113,7 @@ def run(argv: Sequence[str]) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "catalog":
         return _catalog_add(args)
-    return _run_job(args)
+    return _run_job(ap, args)
 
 
 def main() -> int:

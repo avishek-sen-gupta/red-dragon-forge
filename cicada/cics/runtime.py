@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping, MutableSequence
 from dataclasses import dataclass
+from functools import partial
 from typing import TypeVar, cast
 
 from cics.builtins.system import (
@@ -52,6 +53,7 @@ class _Wiring:
     result_holder: list[DispatchResult]
     program_cache: MutableMapping[str, LinkedProgram]
     td_queue: MutableSequence[str]
+    permit_unresolved_call_targets: bool
 
 
 def _register_system_builtins(wiring: _Wiring, identity: tuple[str, str, str]) -> None:
@@ -73,6 +75,7 @@ def _register_flow_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> No
         make_set_return_context_builtin,
         make_set_xctl_context_builtin,
     )
+    from interpreter.run import run_linked
 
     register_default("__cics_task_end_hook", make_noop_task_end_hook_builtin())
     register_default("__cics_syncpoint_hook", make_noop_hook_builtin())
@@ -92,6 +95,10 @@ def _register_flow_builtins(wiring: _Wiring, on_abend: Callable[[], None]) -> No
             wiring.result_holder,
             wiring.context_holder,
             2_000_000,
+            _run_fn=partial(
+                run_linked,
+                permit_unresolved_call_targets=wiring.permit_unresolved_call_targets,
+            ),
         ),
     )
 
@@ -231,6 +238,7 @@ def _wiring(
     result_holder: Holder[DispatchResult] | Absent,
     program_cache: MutableMapping[str, LinkedProgram],
     td_queue: MutableSequence[str] | Absent,
+    permit_unresolved_call_targets: bool,
 ) -> _Wiring:
     results: Holder[DispatchResult] = (
         cast("Holder[DispatchResult]", [None])
@@ -242,6 +250,7 @@ def _wiring(
         result_holder=_as_builtin_list(results),
         program_cache=program_cache,
         td_queue=td_queue if isinstance(td_queue, MutableSequence) else [],
+        permit_unresolved_call_targets=permit_unresolved_call_targets,
     )
 
 
@@ -262,9 +271,16 @@ def install_cics_runtime(
     start_queue: StartQueue = OWN_START_QUEUE,
     region_termid: str = DEFAULT_TERMID,
     on_abend: Callable[[], None] = _noop,
+    permit_unresolved_call_targets: bool = True,
 ) -> StartQueue:
     used_start_queue = StartQueue() if start_queue is OWN_START_QUEUE else start_queue
-    wiring = _wiring(context_holder, result_holder, program_cache, td_queue)
+    wiring = _wiring(
+        context_holder,
+        result_holder,
+        program_cache,
+        td_queue,
+        permit_unresolved_call_targets,
+    )
     _register_core_builtins(wiring, (applid, sysid, userid), on_abend)
     _register_io_builtins(
         wiring, (screen_queue, input_queue), receive_timeout, vsam_engine

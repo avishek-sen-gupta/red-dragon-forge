@@ -10,7 +10,6 @@ from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.dispatcher import InputEvent
-from cics.tn3270.config import RegionConfig
 from cics.tn3270.region import _region, _wiring
 from cics.types import DispatchKind
 from interpreter.cobol.features import CobolFeature
@@ -55,22 +54,14 @@ def test_an_unknown_return_transid_runs_the_regions_rollback(cobol_parser, tmp_p
     program_cache["HOPPER"] = compile_cics_program(
         _UNKNOWN_NEXT_SRC.encode(), cobol_parser, spec
     )
-    config = RegionConfig(
-        source_dirs=(),
-        copybook_dirs=(),
-        bms_dirs=(),
-        hlasm_export=tmp_path,
-        initial_transid="HP00",
-        min_commarea_len=0,
-        transactions={"HP00": "HOPPER"},
-        programs=frozenset({"HOPPER"}),
-        system=tmp_path,
-        csd_files=(),
-    )
     rollbacks: list[str] = []
 
     region = _region(
-        config, wiring, program_cache, lambda: rollbacks.append("rolled back")
+        program_cache,
+        {"HP00": "HOPPER"},
+        wiring,
+        0,
+        lambda: rollbacks.append("rolled back"),
     )
     result = region.start("HP00", input_event=InputEvent(eibaid="\x7d"))
 

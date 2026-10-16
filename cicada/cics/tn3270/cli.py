@@ -17,10 +17,12 @@ from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 
-from cics.tn3270.config import load_config
-from cics.tn3270.region import build_region
+from catnip.system_catalog import SystemCatalog
+from cics.tn3270.config import RegionConfig, load_config
+from cics.tn3270.region import ServedRegion, assemble_region, compile_region_package
 from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
+from litter.open import open_package
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,11 @@ def _arguments(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _served(config: RegionConfig, bridge_jar: str, work_dir: Path) -> ServedRegion:
+    package = compile_region_package(config, bridge_jar, work_dir, work_dir / "out")
+    return assemble_region(open_package(package), SystemCatalog(config.system))
+
+
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
@@ -42,7 +49,7 @@ def main() -> int:
     args = _arguments(sys.argv[1:])
     config = load_config(args.config)
     with tempfile.TemporaryDirectory(prefix="cicada-tn3270-") as work_dir:
-        served = build_region(config, os.environ["PROLEAP_BRIDGE_JAR"], Path(work_dir))
+        served = _served(config, os.environ["PROLEAP_BRIDGE_JAR"], Path(work_dir))
         server = bind(args.host, args.port)
         logger.info("serving %s on %s:%d", args.config, args.host, args.port)
         session = partial(

@@ -25,8 +25,11 @@ Environment:
 | `CARDDEMO_HOME`, `FORGE_ROOT` | the shipped configs | expanded in `${VAR}` paths; exported by `carddemo-env.sh` |
 | `SQUALL_DB2_DSN` | `carddemo-db2-cli` | Db2 connection; exported by `tests/integration/db2_env.sh` |
 
-At startup the server resolves every CICS file the CSDs define to a cataloged dataset, compiles
-every program in the config, then logs a line starting `serving` that names the host and port.
+At startup the server compiles the region into a [litter](../litter/README.md) package
+(`compile_region_package`: every program in the config lowered once and linked into one image,
+each mapset's `hlasm_export` JSON, the transaction table, the CSDs' files), assembles the region
+from the package (`assemble_region`), resolving every CICS file the CSDs define to a cataloged
+dataset, then logs a line starting `serving` that names the host and port.
 A CICS file whose DSN is not cataloged, or is neither a KSDS nor a path, stops it with
 `CICS file NAME: DSN is not cataloged` or `CICS file NAME: DSN is not a KSDS or path`. The
 region reads and writes the cataloged datasets in place: its writes survive a restart, and a
@@ -48,7 +51,7 @@ Shipped configs:
 
 | Key | Type | Meaning |
 |---|---|---|
-| `source_dirs` | list of paths | directories searched for `<PROGRAM>.cbl`; the first hit wins |
+| `source_dirs` | list of paths | directories searched for `<PROGRAM>.cbl`; the first hit wins. A stub a program CALLs is found here too: the shipped configs add `cicada/cics/stubs` (`CEEDAYS`) and, for Db2, `squall/squall/stubs` (`DSNTIAC`) |
 | `copybook_dirs` | list of paths | copybook search path |
 | `bms_dirs` | list of paths | `.bms` mapset sources; an earlier directory's mapset wins |
 | `hlasm_export` | path | the `hlasm_export` binary built by `make hlasm` |
@@ -61,13 +64,17 @@ Shipped configs:
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `initial_transid` | string | `""` | transaction started when a terminal connects |
-| `min_commarea_len` | int | `0` | each follow-on task's COMMAREA is padded with nulls to this length |
-| `programs` | list of strings | `[]` | programs to compile in addition to those named in `[transactions]` |
+| `programs` | list of strings | `[]` | programs to link in addition to those named in `[transactions]`. Nothing is discovered: every program a transaction program CALLs, LINKs or XCTLs to, and every stub it reaches, is listed here or in `[transactions]` (the shipped configs list `CSUTLDTC` and `CEEDAYS`, and `DSNTIAC` for Db2). Under `cicada-tn3270` a CALL by quoted name to an unlisted program does not fail: red-dragon's unresolved-call resolver returns a symbolic result (`assemble_region(..., permit_unresolved_call_targets=True)`, the default). `forge-run` refuses it unless `[tolerant]` permits it |
 
 ### `[transactions]`
 
 One entry per transaction: `TRANSID = "PROGRAM"`. This is the region's transaction table, the
-equivalent of the CSD's `DEFINE TRANSACTION`. Every program named here is compiled.
+equivalent of the CSD's `DEFINE TRANSACTION`. Every program named here is linked.
+
+Each follow-on task's COMMAREA is padded with nulls to 32763 bytes (`MAX_COMMAREA`, CICS's
+maximum COMMAREA length), so a successor that indexes a larger COMMAREA than its predecessor
+passed reads nulls. There is no setting for it; red-dragon-forge-eqlr replaces the padding with
+the caller's real storage.
 
 ### CICS files
 

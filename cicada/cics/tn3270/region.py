@@ -1,36 +1,39 @@
-"""Building the CICS region a TN3270 server drives, from its RegionConfig."""
+"""A CICS region a TN3270 server drives: compiled into a litter package from its RegionConfig, then assembled from the package."""
 
 from __future__ import annotations
 
 import logging
 import queue
-from collections import ChainMap
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from catnip.system_catalog import SystemCatalog
-from cics.bms.catalog import MapCatalog, load_catalog
-from cics.bms.generate import generate_symbolic_copybooks
-from cics.cell import fill
+from cics.bms.catalog import MapCatalog, catalog_from_json
+from cics.bms.export import exported_mapsets, fresh_symbolic_copybooks
 from cics.coprocessor import build_cics_spec
 from cics.csd_parse import parse_csd_files
-from cics.dispatcher import CicsRegion
+from cics.dispatcher import MAX_COMMAREA, CicsRegion
 from cics.interval import StartQueue
 from cics.runtime import install_cics_runtime
 from cics.screen.driver import PseudoConversationalDriver
 from cics.tn3270.config import RegionConfig, resolve_program_source
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
-
-if TYPE_CHECKING:
-    from cobol_asg.cobol_parser import ProLeapCobolParser
-    from interpreter.project.coprocessor_compile import CoprocessorSpec
-    from interpreter.project.types import LinkedProgram
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.project.coprocessor_compile import CoprocessorSpec
+from interpreter.project.types import LinkedProgram
+from litter.build import build
+from litter.cics_file import CicsFile
+from litter.package import Package
+from litter.transaction import Transaction
 
 CICS_COPYBOOKS = Path(__file__).parents[1] / "copybooks"
 _MAX_STEPS = 1_000_000
+_PACKAGE_NAME = "region"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,18 +41,6 @@ class ServedRegion:
     driver: PseudoConversationalDriver
     catalog: MapCatalog
     vsam_engine: VsamEngine
-
-
-def _dsnames(csd_files: Sequence[Path]) -> dict[str, str]:
-    return {
-        name: dsn for csd in csd_files for name, dsn in parse_csd_files(csd).items()
-    }
-
-
-def _vsam_engine(config: RegionConfig) -> VsamEngine:
-    return VsamEngine(
-        cics_files(SystemCatalog(config.system), _dsnames(config.csd_files))
-    )
 
 
 @dataclass(frozen=True)
@@ -67,133 +58,132 @@ def _wiring() -> _Wiring:
     return _Wiring(queue.Queue(), queue.Queue(), [None], [None], StartQueue())
 
 
-def _generate_symbolic_copybooks(config: RegionConfig, sym_dir: Path) -> None:
-    # Each of config.bms_dirs is generated into the same sym_dir in order; a
-    # region with only one bms_dirs entry (every config today) behaves exactly
-    # as before.
-    for bms_dir in config.bms_dirs:
-        generate_symbolic_copybooks(
-            bms_dir=bms_dir,
-            out_dir=sym_dir,
-            hlasm_export_bin=str(config.hlasm_export),
-        )
+def _dsnames(csd_files: Sequence[Path]) -> dict[str, str]:
+    return {
+        name: dsn for csd in csd_files for name, dsn in parse_csd_files(csd).items()
+    }
 
 
-def _catalog(config: RegionConfig) -> MapCatalog:
-    # ChainMap looks up each key in its mappings in order, so an earlier
-    # bms_dirs entry's mapset always wins over a later one's -- first-hit-wins,
-    # matching the resolution used for source_dirs.
-    catalogs = (load_catalog(d, str(config.hlasm_export)) for d in config.bms_dirs)
-    return MapCatalog(maps=dict(ChainMap(*(dict(c.maps) for c in catalogs))))
+def _copybook_dirs(config: RegionConfig, sym_dir: Path) -> tuple[Path, ...]:
+    return (sym_dir, *config.copybook_dirs, CICS_COPYBOOKS)
 
 
-def _parser(config: RegionConfig, bridge_jar: str, sym_dir: Path) -> ProLeapCobolParser:
-    from cobol_asg.cobol_parser import ProLeapCobolParser
-    from cobol_asg.subprocess_runner import RealSubprocessRunner
-
-    _generate_symbolic_copybooks(config, sym_dir)
+def _parser(
+    config: RegionConfig, bridge_jar: str, copybook_dirs: Sequence[Path]
+) -> ProLeapCobolParser:
     return ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=[sym_dir, *config.copybook_dirs, CICS_COPYBOOKS],
+        copybook_dirs=list(copybook_dirs),
         copybook_exts=list(config.copybook_exts),
     )
 
 
-logger = logging.getLogger(__name__)
-
-
-def _compile_one(
-    name: str,
-    ordinal: int,
-    total: int,
+def compile_region_package(
     config: RegionConfig,
-    parser: ProLeapCobolParser,
-    specs: Sequence[CoprocessorSpec],
-) -> LinkedProgram:
-    """Compile one program, announcing which. Building a region is a minute of
-    silence otherwise -- the bridge's own progress bar names no program, so a
-    slow or wedged compile is indistinguishable from a finished one."""
-    from interpreter.project.coprocessor_compile import compile_program
-
-    logger.info("compiling %d/%d: %s", ordinal, total, name)
-    return compile_program(
-        resolve_program_source(config, name).read_bytes(),
-        parser,
-        specs,
-        source_search_dirs=config.source_dirs,
+    bridge_jar: str,
+    work_dir: Path,
+    out_dir: Path,
+    extra_specs: Sequence[CoprocessorSpec] = (),
+) -> Path:
+    sym_dir = work_dir / "sym"
+    fresh_symbolic_copybooks(config.bms_dirs, str(config.hlasm_export), sym_dir)
+    copybook_dirs = _copybook_dirs(config, sym_dir)
+    programs = tuple(sorted(config.programs))
+    return build(
+        name=_PACKAGE_NAME,
+        programs=programs,
+        link=programs,
+        sources={name: resolve_program_source(config, name) for name in programs},
+        parser=_parser(config, bridge_jar, copybook_dirs),
+        specs=(build_cics_spec(), *extra_specs),
+        copybook_dirs=copybook_dirs,
+        work_dir=work_dir / "units",
+        out_dir=out_dir,
+        transactions=tuple(
+            Transaction(transid, program)
+            for transid, program in sorted(config.transactions.items())
+        ),
+        files=tuple(
+            CicsFile(name, dsn) for name, dsn in _dsnames(config.csd_files).items()
+        ),
+        mapsets=exported_mapsets(
+            config.bms_dirs, str(config.hlasm_export), work_dir / "maps"
+        ),
+        tolerant=False,
     )
 
 
-def _compiled(
-    config: RegionConfig,
-    parser: ProLeapCobolParser,
-    cics_spec: CoprocessorSpec,
-    extra_specs: Sequence[CoprocessorSpec],
-) -> dict[str, LinkedProgram]:
-    # source_search_dirs resolves plain COBOL subprograms a transaction
-    # program CALLs (e.g. COTRN02C -> CSUTLDTC) from the same cbl directory;
-    # without it such a CALL is unresolved and the caller's own RESP handling
-    # takes the non-NORMAL branch, not a crash.
-    names = sorted(config.programs)
-    specs = [cics_spec, *extra_specs]
-    return {
-        name: _compile_one(name, ordinal, len(names), config, parser, specs)
-        for ordinal, name in enumerate(names, 1)
-    }
+def _region_noop() -> None:
+    return None
 
 
 def _region(
-    config: RegionConfig,
+    program_cache: Mapping[str, LinkedProgram],
+    transid_to_program: Mapping[str, str],
     wiring: _Wiring,
-    programs: Mapping[str, LinkedProgram],
+    min_commarea_len: int,
     on_abend: Callable[[], None],
+    permit_unresolved_call_targets: bool = True,
 ) -> CicsRegion:
     return CicsRegion(
-        programs,
-        dict(config.transactions),
+        program_cache,
+        transid_to_program,
         wiring.screen_channel,
         wiring.input_channel,
         context_holder=wiring.context_holder,
         result_holder=wiring.result_holder,
         start_queue=wiring.start_queue,
         max_steps=_MAX_STEPS,
-        min_commarea_len=config.min_commarea_len,
+        min_commarea_len=min_commarea_len,
         on_abend=on_abend,
+        permit_unresolved_call_targets=permit_unresolved_call_targets,
     )
 
 
-def _region_noop() -> None:
-    """Default on_abend: a CICS-only region has no composed SQL runtime to
-    roll back when a task abends -- mirrors install_cics_runtime's own default."""
-
-
-def build_region(
-    config: RegionConfig,
-    bridge_jar: str,
-    work_dir: Path,
-    extra_specs: Sequence[CoprocessorSpec] = (),
+def assemble_region(
+    package: Package,
+    system: SystemCatalog,
+    *,
+    min_commarea_len: int = MAX_COMMAREA,
     on_abend: Callable[[], None] = _region_noop,
+    permit_unresolved_call_targets: bool = True,
 ) -> ServedRegion:
     wiring = _wiring()
-    vsam_engine = _vsam_engine(config)
-    program_cache: dict[str, LinkedProgram] = {}
+    manifest = package.manifest
+    vsam_engine = VsamEngine(
+        cics_files(system, {f.name: f.dsname for f in manifest.files})
+    )
+    program_cache = {name: package.image for name in manifest.programs}
+    transid_to_program = {t.transid: t.program for t in manifest.transactions}
     install_cics_runtime(
         wiring.context_holder,
         start_queue=wiring.start_queue,
         result_holder=wiring.result_holder,
         program_cache=program_cache,
-        transid_to_program=dict(config.transactions),
+        transid_to_program=transid_to_program,
         vsam_engine=vsam_engine,
         screen_queue=wiring.screen_channel,
         input_queue=wiring.input_channel,
         on_abend=on_abend,
+        permit_unresolved_call_targets=permit_unresolved_call_targets,
     )
-    spec = build_cics_spec()
-    parser = _parser(config, bridge_jar, work_dir / "sym")
-    fill(program_cache, _compiled(config, parser, spec, extra_specs))
-    region = _region(config, wiring, program_cache, on_abend)
+    region = _region(
+        program_cache,
+        transid_to_program,
+        wiring,
+        min_commarea_len,
+        on_abend,
+        permit_unresolved_call_targets,
+    )
     driver = PseudoConversationalDriver(
-        region, wiring.screen_channel, frozenset(config.transactions)
+        region, wiring.screen_channel, frozenset(transid_to_program)
     )
-    return ServedRegion(driver, _catalog(config), vsam_engine)
+    logger.info(
+        "assembled a region of %d programs and %d transactions",
+        len(program_cache),
+        len(transid_to_program),
+    )
+    return ServedRegion(
+        driver, catalog_from_json(tuple(package.mapsets.values())), vsam_engine
+    )

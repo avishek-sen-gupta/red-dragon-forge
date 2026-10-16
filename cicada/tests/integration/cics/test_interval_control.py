@@ -22,6 +22,7 @@ from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.dispatcher import CicsRegion, InputEvent, run_cics
+from tests.integration.cobol_helpers import main_entry
 from cics.interval import RejectReason, StartQueue, StartRequest
 from cics.preprocessor import apply_cics_prepass
 from cics.statements import CicsDialectParser
@@ -84,6 +85,7 @@ def test_eibterm_is_readable_by_the_program(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -145,6 +147,7 @@ def test_start_queues_the_request_and_the_program_keeps_running(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -242,6 +245,7 @@ def test_retrieve_with_no_start_data_yields_enddata(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )
@@ -562,6 +566,7 @@ def _run_one(cobol_parser, source, transid_map, start_queue):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )

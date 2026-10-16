@@ -1,4 +1,4 @@
-"""Opens a package: the typed manifest, each linked program read by LinkedCodec, and each mapset's JSON text."""
+"""Opens a package: the typed manifest, the image read by LinkedCodec, and each mapset's JSON text."""
 
 import logging
 import tempfile
@@ -9,7 +9,7 @@ from interpreter.project.ir_codec import IrCodec
 from interpreter.project.linked_codec import LinkedCodec
 from interpreter.project.types import LinkedProgram
 from interpreter.project.unit_format_error import UnitFormatError
-from litter.entries import MANIFEST_ENTRY, mapset_entry, program_entry
+from litter.entries import IMAGE_ENTRY, MANIFEST_ENTRY, mapset_entry
 from litter.manifest import Manifest
 from litter.package import Package
 from litter.package_error import PackageError
@@ -17,7 +17,7 @@ from litter.validation_message import validation_message
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
-_EXTRACTED = "program.linked.json"
+_EXTRACTED = "image.linked.json"
 
 
 def open_package(path: Path) -> Package:
@@ -26,15 +26,12 @@ def open_package(path: Path) -> Package:
         tempfile.TemporaryDirectory() as extracted,
     ):
         manifest = _manifest(path, archive)
-        programs = {
-            program: _program(path, archive, Path(extracted), program)
-            for program in manifest.programs
-        }
+        image = _image(path, archive, Path(extracted))
         mapsets = {
             mapset: _entry(path, archive, mapset_entry(mapset)).decode("utf-8")
             for mapset in manifest.mapsets
         }
-    return Package(manifest, programs, mapsets)
+    return Package(manifest, image, mapsets)
 
 
 def _entry(path: Path, archive: zipfile.ZipFile, entry: str) -> bytes:
@@ -53,15 +50,12 @@ def _manifest(path: Path, archive: zipfile.ZipFile) -> Manifest:
         ) from exc
 
 
-def _program(
-    path: Path, archive: zipfile.ZipFile, extracted: Path, program: str
-) -> LinkedProgram:
-    entry = program_entry(program)
+def _image(path: Path, archive: zipfile.ZipFile, extracted: Path) -> LinkedProgram:
     linked = extracted / _EXTRACTED
-    linked.write_bytes(_entry(path, archive, entry))
+    linked.write_bytes(_entry(path, archive, IMAGE_ENTRY))
     try:
         return LinkedCodec(IrCodec()).read(linked)
     except UnitFormatError as exc:
         raise PackageError(
-            f"{path}: {entry}: {str(exc).removeprefix(f'{linked}: ')}"
+            f"{path}: {IMAGE_ENTRY}: {str(exc).removeprefix(f'{linked}: ')}"
         ) from exc

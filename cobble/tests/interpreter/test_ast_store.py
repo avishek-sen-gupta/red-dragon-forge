@@ -29,9 +29,10 @@ class CountingParser:
         self._responses = responses
         self.calls: tuple[bytes, ...] = ()
 
-    def parse_to_file(self, source: bytes, out: Path) -> None:
+    def parse_to_file(self, source: bytes, out_path: Path) -> Path:
         self.calls = (*self.calls, source)
-        out.write_text(self._responses[source], encoding="utf-8")
+        out_path.write_text(self._responses[source], encoding="utf-8")
+        return out_path
 
 
 def _program(directory: Path, name: str, source: bytes) -> Path:
@@ -118,10 +119,11 @@ class RejectingParser:
     def __init__(self, rejected: Mapping[bytes, Exception]):
         self._rejected = rejected
 
-    def parse_to_file(self, source: bytes, out: Path) -> None:
+    def parse_to_file(self, source: bytes, out_path: Path) -> Path:
         if source in self._rejected:
             raise self._rejected[source]
-        out.write_text('{"program_id": "OK"}', encoding="utf-8")
+        out_path.write_text('{"program_id": "OK"}', encoding="utf-8")
+        return out_path
 
 
 def test_a_rejected_program_is_named_in_the_error(tmp_path: Path) -> None:
