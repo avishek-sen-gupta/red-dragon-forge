@@ -1,0 +1,27 @@
+[paths]
+source_dirs = ["../../vendor/carddemo/app/cbl", "../../cicada/cics/stubs"]
+source_exts = [".cbl", ".CBL"]
+copybook_dirs = ["../../vendor/carddemo/app/cpy", "../../vendor/carddemo/app/cpy-bms"]
+
+[build]
+name = "carddemo"
+programs = [
+    "COSGN00C", "COMEN01C", "COADM01C",
+    "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
+    "COTRN00C", "COTRN01C", "COTRN02C", "COBIL00C", "CORPT00C",
+    "COUSR00C", "COUSR01C", "COUSR02C", "COUSR03C",
+    "CSUTLDTC", "CEEDAYS",
+]
+link = [
+    "COSGN00C", "COMEN01C", "COADM01C",
+    "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
+    "COTRN00C", "COTRN01C", "COTRN02C", "COBIL00C", "CORPT00C",
+    "COUSR00C", "COUSR01C", "COUSR02C", "COUSR03C",
+    "CSUTLDTC", "CEEDAYS",
+]
+coprocessors = ["cics"]
+out_dir = "/tmp/carddemo-build"
+
+[cics]
+bms_dirs = ["../../vendor/carddemo/app/bms"]
+csd_files = ["../../vendor/carddemo/app/csd/CARDDEMO.CSD"]

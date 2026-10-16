@@ -405,4 +405,10 @@ fileignoreconfig:
   checksum: 781a5a77e8af231e91bdb20de8e9e1ed9314163188682963c7e64cae0ee1ee12
 - filename: docs/reference/forge/build.md
   checksum: ddaa367336fb533fcf8c185db29a661c08cf09bea8ac49c86b64a8d0b980ad68
+- filename: config/carddemo/env-db2.toml
+  checksum: acbf85dfd3c87c3295d5c0103b4c95e943ec59836a6341f6977711970a54f7e9
+- filename: config/carddemo/env.toml
+  checksum: d13387ea64865fa9290a6d04c8448e51f12405877eb992689c001dfa38b7a282
+- filename: tests/integration/test_carddemo_forge.py
+  checksum: 3b211af033063c0c9673ab71135f639466001ccd5adc1357aabf1de88ba28d08
 version: "1.0"

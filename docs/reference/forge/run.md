@@ -97,3 +97,7 @@ unresolved CALL stops it when the CALL runs.
 `tests/integration/test_run_command.py` covers `[plain]` against the equivalent one-step
 `[jcl]` job, a multi-step `[jcl]` job against `jackal run`, the CardDemo sign-on screen served
 by `[cics]` over TN3270, and a `[plain]` Db2 program (needs `SQUALL_DB2_DSN`).
+`tests/integration/test_carddemo_forge.py` builds CardDemo's checked-in `config/carddemo/build.toml`
+and `build-db2.toml` (exact programs and CSD transactions), serves each with its `env.toml`, and
+drives it with `s3270`: a user signs on and views an account; an admin reaches the Db2
+transaction-type list (needs `SQUALL_DB2_DSN`).
