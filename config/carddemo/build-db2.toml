@@ -1,0 +1,48 @@
+[paths]
+source_dirs = [
+    "../../vendor/carddemo/app/cbl",
+    "../../vendor/carddemo/app/app-transaction-type-db2/cbl",
+    "../../cicada/cics/stubs",
+    "../../squall/squall/stubs",
+]
+source_exts = [".cbl", ".CBL"]
+copybook_dirs = [
+    "../../vendor/carddemo/app/cpy",
+    "../../vendor/carddemo/app/cpy-bms",
+    "../../vendor/carddemo/app/app-transaction-type-db2/cpy",
+    "../../vendor/carddemo/app/app-transaction-type-db2/cpy-bms",
+    "../../vendor/carddemo/app/app-transaction-type-db2/dcl",
+    "../../squall/squall/copybooks",
+]
+copybook_exts = ["", "cpy", "CPY", "cob", "cbl", "copy", "COPY", "dcl"]
+
+[build]
+name = "carddemo-db2"
+programs = [
+    "COSGN00C", "COMEN01C", "COADM01C",
+    "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
+    "COTRN00C", "COTRN01C", "COTRN02C", "COBIL00C", "CORPT00C",
+    "COUSR00C", "COUSR01C", "COUSR02C", "COUSR03C",
+    "COTRTLIC", "COTRTUPC",
+    "CSUTLDTC", "CEEDAYS", "DSNTIAC",
+]
+link = [
+    "COSGN00C", "COMEN01C", "COADM01C",
+    "COACTVWC", "COACTUPC", "COCRDLIC", "COCRDSLC", "COCRDUPC",
+    "COTRN00C", "COTRN01C", "COTRN02C", "COBIL00C", "CORPT00C",
+    "COUSR00C", "COUSR01C", "COUSR02C", "COUSR03C",
+    "COTRTLIC", "COTRTUPC",
+    "CSUTLDTC", "CEEDAYS", "DSNTIAC",
+]
+coprocessors = ["cics", "sql"]
+out_dir = "/tmp/carddemo-db2-build"
+
+[cics]
+bms_dirs = [
+    "../../vendor/carddemo/app/bms",
+    "../../vendor/carddemo/app/app-transaction-type-db2/bms",
+]
+csd_files = [
+    "../../vendor/carddemo/app/csd/CARDDEMO.CSD",
+    "../../vendor/carddemo/app/app-transaction-type-db2/csd/CRDDEMOD.csd",
+]

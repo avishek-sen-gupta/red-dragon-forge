@@ -19,11 +19,64 @@ Both servers read and write CardDemo's VSAM data in a system directory. Install 
 make catnip-install-carddemo SYSTEM=/tmp/carddemo-system
 ```
 
-Both shipped region configs name this directory as their `system`. To use another, install
-into it and change `system` in the config.
+Every shipped config (`config/carddemo/env.toml`, `config/carddemo/env-db2.toml` and both region
+configs) names this directory as its `system`. To use another, install into it and change
+`system` in the config.
 
 Expected: an `installed …` line per dataset, alternate index and path. The directory keeps every
 change the region and any batch job make. To start clean, install into a new directory.
+
+## Build once, run from env.toml
+
+`forge-build` lowers and links CardDemo's online programs into a package once; `forge-run` serves
+that package over TN3270 without compiling anything. Two pairs of configs ship in
+`config/carddemo/`:
+
+| Build | Package | Run | Port |
+|---|---|---|---|
+| `build.toml` | `/tmp/carddemo-build/carddemo.zip` | `env.toml` | 3270 |
+| `build-db2.toml` | `/tmp/carddemo-db2-build/carddemo-db2.zip` | `env-db2.toml` | 3271 |
+
+Each build lists every program CardDemo's CSD runs a transaction for, plus each callee: `CSUTLDTC`
+(called by `COTRN02C` and `CORPT00C`) and the LE stub `CEEDAYS` (called by `CSUTLDTC`). The Db2
+build adds `COTRTLIC` and `COTRTUPC`, the Db2 tier's CSD, and squall's `DSNTIAC` stub. Paths in
+the configs are relative to `config/carddemo/`.
+
+1. Export the JARs and `HLASM_EXPORT`, and install the data (above).
+
+   ```bash
+   . ./bridge-env.sh
+   ```
+
+2. Build the package. The first build takes a few minutes; a rebuild reuses the lowered units.
+
+   ```bash
+   uv run --no-sync forge-build config/carddemo/build.toml
+   ```
+
+   Expected: the package's path, `/tmp/carddemo-build/carddemo.zip`, as the last line.
+
+3. Serve it.
+
+   ```bash
+   uv run --no-sync forge-run config/carddemo/env.toml
+   ```
+
+4. In a second terminal, connect.
+
+   ```bash
+   c3270 -model 3279-2-E localhost:3270
+   ```
+
+   Expected: the sign-on screen. Sign on as `USER0001` / `PASSWORD` for the main menu, or
+   `ADMIN001` / `PASSWORD` for the admin menu.
+
+For Db2, do steps 1-4 of [With Db2](#with-db2) first, then build `config/carddemo/build-db2.toml`,
+run `config/carddemo/env-db2.toml` and connect to port 3271. `forge-run` connects to
+`SQUALL_DB2_DSN`.
+
+A `CALL` to a program the package does not hold abends the task with code 4038; the terminal and
+the region carry on.
 
 ## Without Db2
 

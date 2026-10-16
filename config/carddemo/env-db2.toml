@@ -1,0 +1,10 @@
+package = "/tmp/carddemo-db2-build/carddemo-db2.zip"
+
+[paths]
+system = "/tmp/carddemo-system"
+
+[sql]
+
+[cics]
+initial_transid = "CC00"
+port = 3271
