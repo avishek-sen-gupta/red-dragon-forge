@@ -138,7 +138,7 @@ unique     = false
 
 | Table | Keys |
 |---|---|
-| top level | `data_dir`: the directory `from` paths are relative to. `${VAR}` is expanded. |
+| top level | `data_dir`: the directory `from` paths are relative to; relative to the declaration's own directory |
 | `[[sequential]]` | `dsn`, `from`, `recfm` (`F`, `FB`, `V`, `VB`), `lrecl`; all required |
 | `[[ksds]]` | `dsn`, `lrecl`, `key_offset`, `key_length`; `from` optional (without it the cluster is cataloged empty) |
 | `[[ksds.aix]]` | `dsn`, `path` (the path's DSN), `key_offset`, `key_length`, `unique`; all required. Belongs to the `[[ksds]]` above it |
@@ -164,7 +164,6 @@ Each message names the dataset and the declaration field to change.
 | A KSDS seed with a repeated primary key | `DSN: from: primary key b'…' repeats` |
 | A unique AIX over repeated alternate keys | `AIX: unique: alternate key b'…' repeats` |
 | A DSN declared twice, across datasets, AIXs, paths and GDG bases | `DSN: dsn: declared twice` |
-| An unset variable in `data_dir` | `data_dir: unset environment variable in '…'` |
 | A TOML syntax error | `FILE: <the TOML parser's message, with line and column>` |
 | A missing or unknown key, a wrong value type, `lrecl`, `key_length` or `limit` below 1, or a key offset below 0 | `[[SECTION]] NAME: FIELD: <pydantic's message>`, for example `[[ksds.aix]] A.AIX: key_offset: Input should be greater than or equal to 0` |
 

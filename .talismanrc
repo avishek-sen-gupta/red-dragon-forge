@@ -421,4 +421,6 @@ fileignoreconfig:
   checksum: d13387ea64865fa9290a6d04c8448e51f12405877eb992689c001dfa38b7a282
 - filename: tests/integration/test_carddemo_forge.py
   checksum: 3b211af033063c0c9673ab71135f639466001ccd5adc1357aabf1de88ba28d08
+- filename: docs/how-to/run-your-application.md
+  checksum: 6d5d5f0273a0a960819cae601d400e61fe6ed8da9372b6f99e25bba55b619bfa
 version: "1.0"
