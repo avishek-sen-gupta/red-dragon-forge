@@ -17,9 +17,6 @@ dependencies = [
     "antlr4-python3-runtime>=4.13,<4.14",
 ]
 
-[project.scripts]
-cicada-tn3270 = "cics.tn3270.cli:main"
-
 [tool.uv.sources]
 red-dragon = { path = "../vendor/red-dragon", editable = true }
 catnip = { workspace = true }

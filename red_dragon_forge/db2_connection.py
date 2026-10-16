@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import ibm_db
+from squall.backend import SqlBackend
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 from squall.runtime import install_sql_runtime
@@ -18,7 +19,7 @@ _DATABASE = "DATABASE"
 @dataclass(frozen=True)
 class Db2Connection:
     database: str
-    backend: Db2Backend
+    backend: SqlBackend
 
     def install(self, tolerant: bool) -> Callable[[], None]:
         install_sql_runtime(

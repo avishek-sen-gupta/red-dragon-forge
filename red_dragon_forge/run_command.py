@@ -12,7 +12,7 @@ from pathlib import Path
 from zipfile import BadZipFile
 
 from catnip.system_catalog import SystemCatalog
-from cics.tn3270.region import assemble_region
+from cics.tn3270.region import ServedRegion, assemble_region
 from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
 from cics.vsam.file_table import FileTableError
@@ -35,7 +35,12 @@ from litter.package_error import PackageError
 from red_dragon_forge.cics_run import CicsRun
 from red_dragon_forge.config_error import ConfigError
 from red_dragon_forge.db2_connection import connected
-from red_dragon_forge.env_config import EnvConfig, check_against, load_env_config
+from red_dragon_forge.env_config import (
+    EnvConfig,
+    RunMode,
+    check_against,
+    load_env_config,
+)
 from red_dragon_forge.jcl_run import JclRun
 from red_dragon_forge.plain_run import PlainRun
 
@@ -125,12 +130,7 @@ def _cics(
     package: Package,
     on_abend: Callable[[], None],
 ) -> int:
-    served = assemble_region(
-        package,
-        SystemCatalog(base / config.paths.system),
-        on_abend=on_abend,
-        permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
-    )
+    served = _region(base, config, package, on_abend)
     server = bind(cics.host, cics.port)
     logger.info("serving on %s:%d", cics.host, cics.port)
     serve_forever(
@@ -164,12 +164,34 @@ def _package(path: Path, config: EnvConfig) -> Package:
         raise ConfigError(f"{path.name}: package {config.package}: {exc}") from exc
 
 
-def _run(path: Path, environ: Mapping[str, str]) -> int:
+def _region(
+    base: Path, config: EnvConfig, package: Package, on_abend: Callable[[], None]
+) -> ServedRegion:
+    return assemble_region(
+        package,
+        SystemCatalog(base / config.paths.system),
+        on_abend=on_abend,
+        permit_unresolved_call_targets=config.tolerant.permit_unresolved_call_targets,
+    )
+
+
+def _prepared(
+    path: Path, environ: Mapping[str, str]
+) -> tuple[EnvConfig, RunMode, Package, Callable[[], None]]:
     config, mode = load_env_config(path)
-    base = path.parent
     package = _package(path, config)
     check_against(path, config, mode, package.manifest)
-    on_abend = _rollback(config, package, environ)
+    return config, mode, package, _rollback(config, package, environ)
+
+
+def cics_region(path: Path, environ: Mapping[str, str]) -> ServedRegion:
+    config, _, package, on_abend = _prepared(path, environ)
+    return _region(path.parent, config, package, on_abend)
+
+
+def _run(path: Path, environ: Mapping[str, str]) -> int:
+    config, mode, package, on_abend = _prepared(path, environ)
+    base = path.parent
     match mode:
         case CicsRun():
             return _cics(base, config, mode, package, on_abend)

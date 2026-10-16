@@ -41,18 +41,16 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Mapping
-from pathlib import Path
 
 import ibm_db
 import pytest
 from cics.dispatcher import InputEvent
 from cics.screen.terminal_screen import TerminalScreen
-from tests.carddemo_system import region_toml
-from cics.tn3270.config import load_config
+from tests.carddemo_packages import DB2, local_env
 from tests.carddemo_system import installed_carddemo
 from squall.backends.db2 import Db2Backend
 
-from red_dragon_forge.carddemo_db2_region import build_db2_region
+from red_dragon_forge.run_command import cics_region
 
 # Task 12: CardDemo's own defects (Part E of
 # .superpowers/sdd/db2-epic/carddemo-db2-behaviour.md), pinned as
@@ -107,8 +105,6 @@ from red_dragon_forge.carddemo_db2_region import build_db2_region
 #      (COTRTLIC.cbl:279-301, never used in any SQL), SEND-PLAIN-TEXT, and the
 #      F6=Add map label.
 
-_REPO_ROOT = Path(__file__).parents[2]
-_CONFIG = _REPO_ROOT / "cicada" / "config" / "carddemo-db2-tn3270.toml"
 
 # DFHAID.cpy's attention identifiers, as the terminal sends them.
 _ENTER = "\x7d"
@@ -230,14 +226,16 @@ def _shows_info_prompt(terminal: _Terminal, message: str) -> bool:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def region(tmp_path_factory):
-    """The composed CardDemo Db2 region, built ONCE for this module.
+def region(tmp_path_factory, request):
+    """The composed CardDemo Db2 region, assembled ONCE for this module from
+    the package config/carddemo/build-db2.toml builds, by forge-run's own
+    ``cics_region`` over config/carddemo/env-db2.toml.
 
-    Autouse and module-scoped on purpose. Building it compiles all 19 of the
-    config's programs through the ProLeap bridge (about a minute), which is far
-    too slow per test -- and pytest instantiates module-scoped autouse fixtures
-    before function-scoped ones, so conftest's ``_reset_builtins_table`` takes
-    its snapshot with this region's builtins already registered and restores
+    Autouse and module-scoped on purpose. Building the package lowers all of
+    its programs through the ProLeap bridge, which is far too slow per test --
+    and pytest instantiates module-scoped autouse fixtures before
+    function-scoped ones, so conftest's ``_reset_builtins_table`` takes its
+    snapshot with this region's builtins already registered and restores
     them faithfully after every test. A lazily-built module fixture would
     instead be registered *after* the first test's snapshot and wiped by its
     teardown, leaving the second test running against an empty
@@ -247,40 +245,21 @@ def region(tmp_path_factory):
     itself. conftest's per-test restore replays the snapshot it took at the
     START of each test, which for every test here already contains this
     region's builtins -- so it faithfully puts them back and the last test
-    leaves them registered. This fixture then closes the region's Db2
-    connection, and the next module's first ``EXEC CICS RETURN`` would fire
-    this region's ``__cics_task_end_hook`` against it: "Connection is not
-    active". Snapshotting around the whole module closes that window.
+    leaves them registered, and the next module's first ``EXEC CICS RETURN``
+    would fire this region's ``__cics_task_end_hook`` against its Db2
+    connection. Snapshotting around the whole module closes that window.
     """
     from interpreter.vm.builtins import Builtins
 
-    dsn = os.environ.get("SQUALL_DB2_DSN")
-    if not dsn:
+    if not os.environ.get("SQUALL_DB2_DSN"):
         pytest.skip("SQUALL_DB2_DSN not set; source tests/integration/db2_env.sh")
-    carddemo_home = os.environ.get(
-        "CARDDEMO_HOME", str(_REPO_ROOT / "vendor" / "carddemo" / "app")
-    )
-    patch = pytest.MonkeyPatch()
-    patch.setenv("FORGE_ROOT", str(_REPO_ROOT))
-    patch.setenv("CARDDEMO_HOME", carddemo_home)
-    config = load_config(
-        region_toml(
-            _CONFIG,
-            installed_carddemo(tmp_path_factory.mktemp("carddemo_system")),
-        )
-    )
+    package = request.getfixturevalue("carddemo_db2_package")
+    root = tmp_path_factory.mktemp("db2_region")
+    env = local_env(DB2, root, package, installed_carddemo(root), DB2.port)
     before_the_region = dict(Builtins.TABLE)
-    served, conn = build_db2_region(
-        config,
-        os.environ["PROLEAP_BRIDGE_JAR"],
-        tmp_path_factory.mktemp("db2_region"),
-        dsn,
-    )
-    yield served
-    ibm_db.close(conn)  # type: ignore[reportArgumentType]
+    yield cics_region(env, os.environ)
     Builtins.TABLE.clear()
     Builtins.TABLE.update(before_the_region)
-    patch.undo()
 
 
 @pytest.fixture

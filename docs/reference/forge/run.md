@@ -100,4 +100,7 @@ by `[cics]` over TN3270, and a `[plain]` Db2 program (needs `SQUALL_DB2_DSN`).
 `tests/integration/test_carddemo_forge.py` builds CardDemo's checked-in `config/carddemo/build.toml`
 and `build-db2.toml` (exact programs and CSD transactions), serves each with its `env.toml`, and
 drives it with `s3270`: a user signs on and views an account; an admin reaches the Db2
-transaction-type list (needs `SQUALL_DB2_DSN`).
+transaction-type list (needs `SQUALL_DB2_DSN`); the Db2 package's region holds both trees'
+mapsets. `tests/integration/test_carddemo_db2_headless.py` drives the Db2 screens in process
+through `cics_region`, the region `[cics]` serves. `tests/unit/test_cics_sql_wiring.py` covers
+`[sql]`'s commit at SYNCPOINT and rollback on abend.

@@ -18,7 +18,6 @@ dependencies = [
 db2 = ["ibm-db>=3.2.0"]
 
 [project.scripts]
-carddemo-db2-cli = "red_dragon_forge.carddemo_db2_cli:main"
 carddemo-db2-seed = "red_dragon_forge.carddemo_db2_seed:main"
 forge-build = "red_dragon_forge.build_command:main"
 forge-run = "red_dragon_forge.run_command:main"

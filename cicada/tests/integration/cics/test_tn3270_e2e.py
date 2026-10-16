@@ -7,12 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration.cics.tn3270_helpers import region_toml
-from cics.tn3270.config import load_config
 from tests.covers import NotLanguageFeature, covers
 from tests.integration.cics.tn3270_helpers import (
-    REPO_ROOT,
     S3270,
+    carddemo_package,
     records,
     served_session,
 )
@@ -20,7 +18,7 @@ from tests.integration.cobol_helpers import bridge_jar  # noqa: F401
 
 pytestmark = [pytest.mark.carddemo_e2e, pytest.mark.tn3270_e2e]
 
-_CONFIG = Path(__file__).parents[3] / "config" / "carddemo-tn3270.toml"
+_PROGRAMS = ("COSGN00C", "COMEN01C", "COACTVWC")
 
 
 def _records(name: str, length: int) -> list[bytes]:
@@ -65,14 +63,11 @@ def _account_view() -> _AccountView:
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_signon_menu_account_view_and_back(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = load_config(region_toml(_CONFIG, carddemo_system))
+def test_signon_menu_account_view_and_back(tmp_path, bridge_jar, carddemo_system):
+    package = carddemo_package(tmp_path, bridge_jar, _PROGRAMS)
     expected = _account_view()
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         # closing() terminates the emulator however the test ends — a failed
         # assertion inside S3270.run must not leave an s3270 behind.
         with closing(S3270()) as terminal:

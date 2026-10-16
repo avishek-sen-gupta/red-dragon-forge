@@ -262,7 +262,7 @@ fileignoreconfig:
 - filename: docs/presentation/capture/carddemo_3270_video.sh
   checksum: 32a1ebcfbb9686d0567719dac8288b43d8d80fc9c323ab556b005ad50fdedda2
 - filename: docs/how-to/run-carddemo.md
-  checksum: 88840f9cb4d9397cd4cca8bbb548bfc13370f6dba68936b361434d659a143777
+  checksum: 1ac0ce4ed6d558cf1aba0b96ffea4621304ff16bca9879fb1777d40ed7ce4208
 - filename: docs/how-to/run-tests.md
   checksum: 8d3ae487f569ff814d7ca4b1ff30aedd9edd115e007c69307ce53ce496f7c0f1
 - filename: docs/how-to/setup.md
@@ -342,7 +342,7 @@ fileignoreconfig:
 - filename: cicada/tests/integration/cics/test_carddemo_signon_real.py
   checksum: 44202a862ca5fcacf66ec25a86c53a7de780eaea17bff8702b15b12305f94d1f
 - filename: docs/reference/cicada/tn3270-config.md
-  checksum: 675f578d6fb5249341ee226761dcd659dc136e2fe453da16cab99027b4282175
+  checksum: c4cb4f4af73da185cf37cfdb5cb142a51d4fc6828ec1f3cf49a74504b518a481
 - filename: docs/roadmaps/cicada.md
   checksum: 01e69cbe5efa625a0d7642e184c913646e4bd301b8d7fe8cabd9df05966a7b21
 - filename: docs/reference/jackal/architecture.md
@@ -406,7 +406,7 @@ fileignoreconfig:
 - filename: docs/reference/forge/build.md
   checksum: ddaa367336fb533fcf8c185db29a661c08cf09bea8ac49c86b64a8d0b980ad68
 - filename: config/carddemo/env-db2.toml
-  checksum: acbf85dfd3c87c3295d5c0103b4c95e943ec59836a6341f6977711970a54f7e9
+  checksum: f47ada5a960dc7b2ab2491b806e7501647d78802726289266544596c350419b1
 - filename: config/carddemo/env.toml
   checksum: d13387ea64865fa9290a6d04c8448e51f12405877eb992689c001dfa38b7a282
 - filename: tests/integration/test_carddemo_forge.py

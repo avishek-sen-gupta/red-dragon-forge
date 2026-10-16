@@ -49,19 +49,16 @@ from cics.vsam.record_read import RecordRead
 from cics.vsam.no_record import NoRecord
 import os
 from contextlib import closing
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from tests.integration.cics.tn3270_helpers import region_toml
-from cics.tn3270.config import RegionConfig, load_config
 from interpreter.cobol.features import CobolFeature
 from interpreter.cobol.zoned_decimal import decode_zoned
 from tests.covers import covers
 from tests.integration.cics.tn3270_helpers import (
-    REPO_ROOT,
     S3270,
+    carddemo_package,
     records,
     served_session,
 )
@@ -69,20 +66,31 @@ from tests.integration.cobol_helpers import bridge_jar  # noqa: F401
 
 pytestmark = [pytest.mark.carddemo_e2e, pytest.mark.tn3270_e2e]
 
-_CONFIG = Path(__file__).parents[3] / "config" / "carddemo-tn3270.toml"
+_PROGRAMS = {
+    "CC00": "COSGN00C",
+    "CM00": "COMEN01C",
+    "CA00": "COADM01C",
+    "CAUP": "COACTUPC",
+    "CCUP": "COCRDUPC",
+    "CT02": "COTRN02C",
+    "CB00": "COBIL00C",
+    "CU01": "COUSR01C",
+    "CU02": "COUSR02C",
+    "CU03": "COUSR03C",
+}
 
 
-def _trimmed(
-    config: RegionConfig, transids: tuple[str, ...], callees: tuple[str, ...] = ()
-) -> RegionConfig:
-    """Only the transactions (and their programs) this flow needs, plus the
-    programs they CALL -- compiling the full CardDemo transaction table for
-    every test is what the brief calls out as avoidable slowness."""
-    transactions = {t: config.transactions[t] for t in transids}
-    return replace(
-        config,
-        transactions=transactions,
-        programs=frozenset((*transactions.values(), *callees)),
+def _package(
+    tmp_path: Path,
+    bridge_jar: str,
+    transids: tuple[str, ...],
+    callees: tuple[str, ...] = (),
+) -> Path:
+    """A package linking only the programs this flow's transactions run, plus
+    the programs they CALL -- compiling all of CardDemo for every test is
+    avoidable slowness."""
+    return carddemo_package(
+        tmp_path, bridge_jar, (*(_PROGRAMS[t] for t in transids), *callees)
     )
 
 
@@ -151,13 +159,8 @@ def _custdat_untouched(engine) -> tuple[str, str]:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_account_update_rewrites_custdat(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CAUP")
-    )
+def test_account_update_rewrites_custdat(tmp_path, bridge_jar, carddemo_system):
+    package = _package(tmp_path, bridge_jar, ("CC00", "CM00", "CAUP"))
     original_record = [
         r
         for r in _ebcdic_records("AWS.M2.CARDDEMO.CUSTDATA.PS", 500)
@@ -168,7 +171,7 @@ def test_account_update_rewrites_custdat(
     original_fico = original_record[329:332].decode("cp037")
     assert original_first_name != _NEW_FIRST_NAME  # the edit must be a real change
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         with closing(S3270()) as terminal:
             _signon(terminal, served.port)
             _select(terminal, "02", "Update Account")
@@ -261,13 +264,8 @@ def _carddat_acct_id(engine) -> str:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_card_update_rewrites_carddat(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CCUP")
-    )
+def test_card_update_rewrites_carddat(tmp_path, bridge_jar, carddemo_system):
+    package = _package(tmp_path, bridge_jar, ("CC00", "CM00", "CCUP"))
     original_record = [
         r
         for r in _ebcdic_records("AWS.M2.CARDDEMO.CARDDATA.PS", 150)
@@ -277,7 +275,7 @@ def test_card_update_rewrites_carddat(
     original_acct_id_field = original_record[16:27].decode("cp037")
     assert original_embossed_name.upper() != _NEW_EMBOSSED_NAME  # a real change
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         with closing(S3270()) as terminal:
             _signon(terminal, served.port)
             _select(terminal, "05", "Please enter Account and Card Number")
@@ -386,19 +384,17 @@ def _transact_fields(engine, tran_id: str) -> dict[str, str]:
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_add_transaction_writes_transact(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)),
+def test_add_transaction_writes_transact(tmp_path, bridge_jar, carddemo_system):
+    package = _package(
+        tmp_path,
+        bridge_jar,
         ("CC00", "CM00", "CT02"),
         ("CSUTLDTC", "CEEDAYS"),
     )
     card_num, acct_id = _cxacaix_pairs()[0]
     new_tran_id = _next_transaction_id()
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         # Pre-condition: the id STARTBR/READPREV will mint does not exist yet.
         assert isinstance(
             served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16),
@@ -514,12 +510,9 @@ def _edited_balance(balance: float) -> str:
 
 @covers(CobolFeature.EXEC_CICS)
 def test_bill_pay_rewrites_acctdat_and_writes_transact(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
+    tmp_path, bridge_jar, carddemo_system
 ):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CB00")
-    )
+    package = _package(tmp_path, bridge_jar, ("CC00", "CM00", "CB00"))
     card_num, acct_id = _cxacaix_pairs()[1]
     new_tran_id = _next_transaction_id()
 
@@ -529,7 +522,7 @@ def test_bill_pay_rewrites_acctdat_and_writes_transact(
     zero_edited = _edited_balance(0.0)
     assert original_edited != zero_edited  # the payment must be a real change
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         assert isinstance(
             served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16),
             NoRecord,
@@ -623,19 +616,17 @@ def _admin_signon(terminal: S3270, port: int, admin_id: str = "ADMIN001") -> Non
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_admin_add_user_writes_usrsec(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)),
+def test_admin_add_user_writes_usrsec(tmp_path, bridge_jar, carddemo_system):
+    package = _package(
+        tmp_path,
+        bridge_jar,
         ("CC00", "CA00", "CU01", "CU02"),
     )
     new_id = _next_admin_id()
     assert new_id not in _usrsec_ids()  # verified absent, not assumed
     new_fname, new_lname, new_pwd, new_type = "TESTFNAME", "TESTLNAME", "PASSWD01", "A"
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         assert isinstance(
             served.region.vsam_engine.read("USRSEC", new_id.encode("cp037"), 8),
             NoRecord,
@@ -685,13 +676,8 @@ def test_admin_add_user_writes_usrsec(
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_admin_update_user_rewrites_usrsec(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CA00", "CU02")
-    )
+def test_admin_update_user_rewrites_usrsec(tmp_path, bridge_jar, carddemo_system):
+    package = _package(tmp_path, bridge_jar, ("CC00", "CA00", "CU02"))
     update_id = "USER0002"
     assert update_id in _usrsec_ids()
     seeded = [r for r in _usrsec_records() if r[0:8].decode("cp037") == update_id][0]
@@ -702,7 +688,7 @@ def test_admin_update_user_rewrites_usrsec(
     new_fname = "AJITHKUMAR"
     assert new_fname != original_fname  # the edit must be a real change
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         with closing(S3270()) as terminal:
             _admin_signon(terminal, served.port)
             _select(terminal, "03", "Update User")
@@ -772,13 +758,8 @@ def test_admin_update_user_rewrites_usrsec(
 
 
 @covers(CobolFeature.EXEC_CICS)
-def test_admin_delete_user_removes_usrsec(
-    tmp_path, bridge_jar, monkeypatch, carddemo_system
-):
-    monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
-    config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CA00", "CU03")
-    )
+def test_admin_delete_user_removes_usrsec(tmp_path, bridge_jar, carddemo_system):
+    package = _package(tmp_path, bridge_jar, ("CC00", "CA00", "CU03"))
     delete_id = "USER0004"
     neighbour_ids = ("USER0003", "USER0005")
     ids = _usrsec_ids()
@@ -788,7 +769,7 @@ def test_admin_delete_user_removes_usrsec(
     original_fname = seeded[8:28].decode("cp037").strip()
     original_lname = seeded[28:48].decode("cp037").strip()
 
-    with served_session(config, bridge_jar, tmp_path) as served:
+    with served_session(package, carddemo_system) as served:
         with closing(S3270()) as terminal:
             _admin_signon(terminal, served.port)
             _select(terminal, "04", "Delete User")

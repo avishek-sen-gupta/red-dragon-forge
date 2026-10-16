@@ -1,4 +1,4 @@
-"""The composed CardDemo Db2 region's own wiring: its backend is the current connection, its rollback is the region's on_abend, and a region that does not link DSNTIAC stops before connecting."""
+"""A [cics] run with [sql]: the Db2 connection is the current one, its backend commits at SYNCPOINT, and its rollback is the region's on_abend."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from catnip.system_catalog import SystemCatalog
-from cics.tn3270.config import RegionConfig
+from cics.tn3270.region import assemble_region
 from interpreter.func_name import FuncName
 from interpreter.project.cobol_compile import link_units
 from interpreter.vm.builtins import Builtins
@@ -16,8 +16,7 @@ from litter.manifest import Manifest
 from litter.package import Package
 from squall.backend import SqlBackend, SqlResult
 
-import red_dragon_forge.carddemo_db2_region as region_mod
-from red_dragon_forge.missing_required_program import MissingRequiredProgram
+from red_dragon_forge.db2_connection import Db2Connection
 
 
 class _RecordingBackend(SqlBackend):
@@ -63,34 +62,13 @@ def test_the_backend_commits_at_syncpoint_and_rolls_back_on_abend(
     tmp_path: Path,
 ) -> None:
     backend = _RecordingBackend()
-    region_mod.assembled_db2_region(
-        _empty(tmp_path), SystemCatalog(tmp_path / "system"), backend
+    assemble_region(
+        _empty(tmp_path),
+        SystemCatalog(tmp_path / "system"),
+        on_abend=Db2Connection("CARDDEMO", backend).install(tolerant=False),
     )
 
     Builtins.TABLE[FuncName("__cics_syncpoint_hook")]([], VMState())
     Builtins.TABLE[FuncName("__cics_abend")]([], VMState())
 
     assert backend.calls == ("commit", "rollback")
-
-
-def test_a_region_that_does_not_link_dsntiac_stops_before_connecting(
-    tmp_path: Path,
-) -> None:
-    config = RegionConfig(
-        source_dirs=(),
-        copybook_dirs=(),
-        bms_dirs=(),
-        hlasm_export=tmp_path,
-        initial_transid="",
-        transactions={},
-        programs=frozenset({"COSGN00C"}),
-        system=tmp_path,
-        csd_files=(),
-    )
-
-    with pytest.raises(MissingRequiredProgram) as refused:
-        region_mod.build_db2_region(config, "jar.jar", tmp_path, "no-such-dsn")
-
-    assert str(refused.value) == (
-        "coprocessor sql requires DSNTIAC in [region] programs"
-    )

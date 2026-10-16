@@ -2,26 +2,24 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import socket
 import subprocess
 import sys
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
-from functools import reduce
 from pathlib import Path
 
 import pytest
 from litter.open import open_package
 from litter.transaction import Transaction
 
-from red_dragon_forge.build_command import run as forge_build
+from catnip.system_catalog import SystemCatalog
+from cics.tn3270.region import assemble_region
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_CONFIG = _REPO_ROOT / "config" / "carddemo"
+from tests.carddemo_packages import DB2, ONLINE, local_env
+
 _SCREEN_ROWS = 24
 _BEFORE_THE_TIME = 70
 
@@ -71,62 +69,6 @@ _DB2_TRANSACTIONS = (
     Transaction("CTLI", "COTRTLIC"),
     Transaction("CTTU", "COTRTUPC"),
 )
-
-
-@dataclass(frozen=True)
-class _Region:
-    build: str
-    env: str
-    out_dir: str
-    port: int
-
-
-_ONLINE = _Region("build.toml", "env.toml", "/tmp/carddemo-build", 3270)
-_DB2 = _Region("build-db2.toml", "env-db2.toml", "/tmp/carddemo-db2-build", 3271)
-
-
-def _local(name: str, root: Path, rewrites: Mapping[str, str]) -> Path:
-    local = root / name
-    local.write_text(
-        reduce(
-            lambda text, rewrite: text.replace(*rewrite),
-            rewrites.items(),
-            (_CONFIG / name).read_text(),
-        )
-    )
-    return local
-
-
-def _built(root: Path, region: _Region) -> Path:
-    build = _local(
-        region.build,
-        root,
-        {'"../../': f'"{_REPO_ROOT}/', f'"{region.out_dir}"': f'"{root / "out"}"'},
-    )
-    assert forge_build([str(build)], os.environ) == 0
-    return next((root / "out").glob("*.zip"))
-
-
-@pytest.fixture(scope="module")
-def online_package(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    return _built(tmp_path_factory.mktemp("online"), _ONLINE)
-
-
-@pytest.fixture(scope="module")
-def db2_package(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    return _built(tmp_path_factory.mktemp("db2"), _DB2)
-
-
-def _env(region: _Region, root: Path, package: Path, system: Path, port: int) -> Path:
-    return _local(
-        region.env,
-        root,
-        {
-            f'"{region.out_dir}/': f'"{package.parent}/',
-            '"/tmp/carddemo-system"': f'"{system}"',
-            f"port = {region.port}": f"port = {port}",
-        },
-    )
 
 
 def _free_port() -> int:
@@ -181,9 +123,11 @@ def _rows(screen: Sequence[str]) -> list[str]:
 
 
 def test_each_build_toml_packages_its_programs_and_csd_transactions(
-    online_package: Path, db2_package: Path
+    carddemo_online_package: Path, carddemo_db2_package: Path
 ) -> None:
-    online, db2 = open_package(online_package), open_package(db2_package)
+    online, db2 = open_package(carddemo_online_package), open_package(
+        carddemo_db2_package
+    )
 
     assert (
         (online.manifest.programs, online.manifest.coprocessors),
@@ -209,11 +153,11 @@ def test_each_build_toml_packages_its_programs_and_csd_transactions(
 
 
 def test_a_user_signs_on_and_views_an_account(
-    tmp_path: Path, online_package: Path, carddemo_system: Path
+    tmp_path: Path, carddemo_online_package: Path, carddemo_system: Path
 ) -> None:
     assert shutil.which("s3270"), "s3270 is not installed (brew install x3270)"
     port = _free_port()
-    env = _env(_ONLINE, tmp_path, online_package, carddemo_system, port)
+    env = local_env(ONLINE, tmp_path, carddemo_online_package, carddemo_system, port)
 
     with _serving(env, port):
         screens = _screens(
@@ -272,11 +216,11 @@ def test_a_user_signs_on_and_views_an_account(
 
 @pytest.mark.usefixtures("db2_dsn", "carddemo_db2_schema")
 def test_an_admin_reaches_the_db2_transaction_type_list(
-    tmp_path: Path, db2_package: Path, carddemo_system: Path
+    tmp_path: Path, carddemo_db2_package: Path, carddemo_system: Path
 ) -> None:
     assert shutil.which("s3270"), "s3270 is not installed (brew install x3270)"
     port = _free_port()
-    env = _env(_DB2, tmp_path, db2_package, carddemo_system, port)
+    env = local_env(DB2, tmp_path, carddemo_db2_package, carddemo_system, port)
 
     with _serving(env, port):
         screens = _screens(
@@ -310,3 +254,33 @@ def test_an_admin_reaches_the_db2_transaction_type_list(
             " F2=Add   F3=Exit  F7=Page Up   F8=Page Dn  F10=Save",
         ],
     )
+
+
+def test_the_db2_package_serves_both_trees_mapsets(
+    carddemo_db2_package: Path, carddemo_system: Path
+) -> None:
+    region = assemble_region(
+        open_package(carddemo_db2_package), SystemCatalog(carddemo_system)
+    )
+
+    assert sorted(region.catalog.maps) == [
+        ("COACTUP", "CACTUPA"),
+        ("COACTVW", "CACTVWA"),
+        ("COADM01", "COADM1A"),
+        ("COBIL00", "COBIL0A"),
+        ("COCRDLI", "CCRDLIA"),
+        ("COCRDSL", "CCRDSLA"),
+        ("COCRDUP", "CCRDUPA"),
+        ("COMEN01", "COMEN1A"),
+        ("CORPT00", "CORPT0A"),
+        ("COSGN00", "COSGN0A"),
+        ("COTRN00", "COTRN0A"),
+        ("COTRN01", "COTRN1A"),
+        ("COTRN02", "COTRN2A"),
+        ("COTRTLI", "CTRTLIA"),
+        ("COTRTUP", "CTRTUPA"),
+        ("COUSR00", "COUSR0A"),
+        ("COUSR01", "COUSR1A"),
+        ("COUSR02", "COUSR2A"),
+        ("COUSR03", "COUSR3A"),
+    ]
