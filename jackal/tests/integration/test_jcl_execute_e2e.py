@@ -30,6 +30,7 @@ from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY, package
 from tests.system_build import scratch, system
+from interpreter.vm.builtins import core_builtins
 
 # Minimal COBOL that reads PARM-DATA and sets RETURN-CODE=42 when it equals 'HELLO     '.
 _PARM_PROGRAM = """\
@@ -67,6 +68,7 @@ def _runner(packaged: Package, tmp_path: Path) -> JobRunner:
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=packaged,
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
 
 

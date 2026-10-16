@@ -25,11 +25,13 @@ SQL runs against a `SqlBackend`. Two backends ship:
 
 The coprocessor has two entry points. `squall.coprocessor.build_sql_spec()` is the
 compile surface: its `SqlLoweringStrategy` keeps only lowering state (the WHENEVER table and
-the program's cursor scope) and registers nothing, so compiling leaves `Builtins.TABLE`
-unchanged. `squall.runtime.install_sql_runtime(connections, initial_connector, *, tolerant)`
-is the runtime surface: it registers `__exec_sql` and the three CICS hooks (see Hooks) over
-the live connection registry. A process that compiles and runs calls both; a process that runs
-a program compiled elsewhere calls only `install_sql_runtime`, before it runs anything.
+the program's cursor scope) and builds no builtins. `squall.runtime.install_sql_runtime(connections,
+initial_connector, *, tolerant)` is the runtime surface: over the live connection registry it
+returns a `SqlRuntime` holding `entries` (`__exec_sql`) and three unit-of-work hooks (see
+Hooks). It writes no shared table: whoever runs the program composes `entries` into the run's
+builtins table (`compose_builtins(core_builtins(), sql.entries)` for a batch run). A process that
+compiles and runs calls both; a process that runs a program compiled elsewhere calls only
+`install_sql_runtime`.
 Tolerance belongs to the runtime only: `tolerant=True` on `install_sql_runtime` skips host
 variables missing from the data layout rather than raising.
 
@@ -83,16 +85,18 @@ Changes to these RedDragon pieces go upstream; `vendor/red-dragon` is not edited
 
 ## Hooks
 
-`install_sql_runtime` registers four builtins in `Builtins.TABLE`:
+`install_sql_runtime` returns one builtin and three hooks. squall names no `__cics_*` builtin:
+a composer (forge, for a package with `sql`) packs the hooks into cicada's `TransactionHooks`,
+which puts each under its `__cics_*_hook` name.
 
-| Builtin | Called by | Effect |
+| `SqlRuntime` field | Called by | Effect |
 |---|---|---|
-| `__exec_sql` | every lowered EXEC SQL statement | Dispatch on statement kind, bind, execute, write `SQLCODE`. |
-| `__cics_task_end_hook` | cicada at task end (`EXEC CICS RETURN`) | Commit and close every cursor. |
-| `__cics_syncpoint_hook` | cicada at `EXEC CICS SYNCPOINT` | Commit; cursors stay open. |
-| `__cics_rollback_hook` | cicada at `EXEC CICS SYNCPOINT ROLLBACK` and on abend | Roll back and close every cursor. |
+| `entries` (`__exec_sql`) | every lowered EXEC SQL statement | Dispatch on statement kind, bind, execute, write `SQLCODE`. |
+| `reset_session` | cicada at task end (`EXEC CICS RETURN`), as `__cics_task_end_hook` | Commit and close every cursor. |
+| `syncpoint` | cicada at `EXEC CICS SYNCPOINT`, as `__cics_syncpoint_hook` | Commit; cursors stay open. |
+| `rollback` | cicada at `EXEC CICS SYNCPOINT ROLLBACK` and on abend, as `__cics_rollback_hook` | Roll back and close every cursor. |
 
-Cicada registers no-op defaults under the three `__cics_*` names, so it runs without squall.
+Cicada's hooks default to no-ops, so it runs without squall.
 
 ## Package layout
 
@@ -101,10 +105,9 @@ Paths are relative to `squall/squall/`.
 | Path | Purpose |
 |---|---|
 | `coprocessor.py` | `build_sql_spec`: the compile surface. Wraps the strategy, source prepass, dialect parser and Db2 stubs as a `CoprocessorSpec`. |
-| `runtime.py` | `install_sql_runtime`: the runtime surface. Registers `__exec_sql` and the three CICS hooks over the connection registry. |
-| `strategy.py` | `SqlLoweringStrategy`: lowers `ExecSqlStatement` to self-contained `__exec_sql` calls. Registers nothing. |
+| `runtime.py` | `install_sql_runtime`: the runtime surface. Returns `__exec_sql` and the three unit-of-work hooks over the connection registry as a `SqlRuntime` (`sql_runtime.py`). |
+| `strategy.py` | `SqlLoweringStrategy`: lowers `ExecSqlStatement` to self-contained `__exec_sql` calls. Builds no builtins. |
 | `program_scope.py` | `ProgramScope`: the program being lowered, its cursor declarations and VARCHAR groups. |
-| `strategy_stores.py` | Builtin registration into `Builtins.TABLE`. |
 | `statements.py` | `ExecSqlStatement` and `SqlDialectParser`. |
 | `exec_sql_payload.py` | `ExecSqlPayload`: the Pydantic model for one statement's JSON, from the bridge or the ASG cache. |
 | `parser/` | Lark grammar (`grammar.lark`), `parse.py` (statement parse, host-variable extraction, query rewrite), `sql_model.py` (parsed-model value types). |

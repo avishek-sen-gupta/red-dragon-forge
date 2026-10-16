@@ -84,7 +84,7 @@ def test_vsam_write_then_read_round_trips(cobol_parser, tmp_path):
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -110,6 +110,7 @@ def test_vsam_write_then_read_round_trips(cobol_parser, tmp_path):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN_TRANSID
@@ -156,7 +157,7 @@ def test_vsam_dataset_keyword_and_dataname_resolution(cobol_parser, tmp_path):
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -182,6 +183,7 @@ def test_vsam_dataset_keyword_and_dataname_resolution(cobol_parser, tmp_path):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN_TRANSID

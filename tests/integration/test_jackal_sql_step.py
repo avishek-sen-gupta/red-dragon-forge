@@ -8,6 +8,7 @@ from pathlib import Path
 from catnip.system_catalog import SystemCatalog
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.vm.builtins import compose_builtins, core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
@@ -55,7 +56,7 @@ def _report(
     conn.execute("INSERT INTO ACCOUNT VALUES (11, 500)")
     conn.commit()
     packaged = _package(tmp_path / "package", bridge_jar)
-    install_sql_runtime({"SAMPLE": SqliteBackend(conn)})
+    sql = install_sql_runtime({"SAMPLE": SqliteBackend(conn)})
     system = SystemCatalog(tmp_path / "system")
     runner = JobRunner(
         package=packaged,
@@ -64,6 +65,7 @@ def _report(
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=compose_builtins(core_builtins(), sql.entries),
     )
     scratch = tmp_path / "scratch"
     scratch.mkdir()

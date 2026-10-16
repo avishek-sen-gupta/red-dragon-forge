@@ -1,4 +1,14 @@
 fileignoreconfig:
+- filename: tests/integration/test_cics_sql_composition.py
+  checksum: 1f3b61c8ab8118fedd5d8d0c0d500f8a054223741ea0a7cd55cd3b067a77b059
+- filename: squall/squall/sql_runtime.py
+  checksum: 3c901da030d1c4ec79392095b2e7dc54a486bd5f672a092a52a755c5dd8edbc4
+- filename: docs/superpowers/specs/2026-10-16-per-region-builtins-design.md
+  checksum: 8945c43f415a10e855276eb8c210c0fcbf5ccad861b3174c15df8eec08675cb1
+- filename: cicada/tests/unit/cics/test_task_end_hook.py
+  checksum: f550e928ca4759a22256ce61ffb5a5b49b5d2912e857c01570b26cbd193cc3da
+- filename: cicada/tests/unit/cics/test_runtime.py
+  checksum: c623988ae09592c08279d47797d3268c78fddae9d2604e92d470c9cacc2712c9
 - filename: tests/unit/test_carddemo_db2_cli.py
   checksum: 8e0f54225809d783221987fd46d831d35d4e7ab9527449fa8538e784c96e11a7
 - filename: tests/unit/test_carddemo_db2_seed.py
@@ -200,7 +210,7 @@ fileignoreconfig:
 - filename: squall/tests/unit/test_data_division_exec_sql.py
   checksum: 619e5c032b4ed12ad5f0a112122f18843cb6d995dbd68348a64ddede5b3775b0
 - filename: squall/squall/builtins/exec_sql.py
-  checksum: e6f0ba81c79035d05ff0e2194c08bc4fc493c01a1880cff9dc3520462f30d0dc
+  checksum: 2424f86786de9637e1c7c99383bdf3fe5d80208e0d97c69e7a05a1a7f6afca19
 - filename: squall/tests/unit/test_strategy.py
   checksum: b937f1f2a6cbc4a7ac3ce1c83ef25e62dad3ba5aa0f034b8bca2c5bcabf3e680
 - filename: squall/squall/binding.py
@@ -292,7 +302,7 @@ fileignoreconfig:
 - filename: tests/integration/test_headless_harness.py
   checksum: 5179cbf2fb2b5588aa8627219e7a30eabad583e8cb061e57ecfce7d24dd2da29
 - filename: cobol_harness/vsam.py
-  checksum: 9ed5061d0b35577bb37f513f47e73fd05297e647a12394c3b84366a9be072189
+  checksum: 7efdb4c1c95410f0f795a13cf023f85d5ec2d6faf209cf7169d3afc6f90ca726
 - filename: cobol_harness/region.py
   checksum: 6d9fd77ddcd339c7ee311f7167f4e55ff332177b8849d28c3a4e2e1fa75254b6
 - filename: docs/records/design/2026-10-12-jackal-dcb-attributes.md

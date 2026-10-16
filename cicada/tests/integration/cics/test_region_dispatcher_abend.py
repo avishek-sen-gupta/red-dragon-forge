@@ -10,7 +10,7 @@ from cics.bootstrap import compile_cics_program
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.dispatcher import InputEvent
-from cics.tn3270.region import _region, _wiring
+from cics.tn3270.region import _region, _Tuning, _wiring
 from cics.types import DispatchKind
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
@@ -41,7 +41,7 @@ def cobol_parser(bridge_jar):
 def test_an_unknown_return_transid_runs_the_regions_rollback(cobol_parser, tmp_path):
     wiring = _wiring()
     program_cache: dict = {}
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         wiring.context_holder,
         start_queue=wiring.start_queue,
         result_holder=wiring.result_holder,
@@ -60,8 +60,8 @@ def test_an_unknown_return_transid_runs_the_regions_rollback(cobol_parser, tmp_p
         program_cache,
         {"HP00": "HOPPER"},
         wiring,
-        0,
-        lambda: rollbacks.append("rolled back"),
+        runtime.builtins,
+        _Tuning(0, lambda: rollbacks.append("rolled back"), True),
     )
     result = region.start("HP00", input_event=InputEvent(eibaid="\x7d"))
 

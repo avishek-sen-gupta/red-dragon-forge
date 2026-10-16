@@ -8,6 +8,7 @@ import pytest
 
 from tests.covers import covers, NotLanguageFeature
 from interpreter.run import run_linked
+from interpreter.vm.builtins import core_builtins
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from cics.csd_parse import CsdParseError
 from cics.dispatcher import (
@@ -395,6 +396,7 @@ def _region(program_cache, transid_to_program):
         context_holder=[None],
         result_holder=[None],
         start_queue=StartQueue(),
+        builtins=core_builtins(),
     )
 
 
@@ -520,6 +522,7 @@ def test_region_discards_unreceived_input_on_return_transid(monkeypatch):
         context_holder=[None],
         result_holder=[None],
         start_queue=StartQueue(),
+        builtins=core_builtins(),
     )
     region.start("CC00", input_event=InputEvent(eibaid="\xf3"))
     with pytest.raises(queue.Empty):
@@ -545,6 +548,7 @@ def test_region_keeps_unreceived_input_on_xctl(monkeypatch):
         context_holder=[None],
         result_holder=[None],
         start_queue=StartQueue(),
+        builtins=core_builtins(),
     )
     ev = InputEvent(eibaid="\xf3")
     region.start("CC00", input_event=ev)
@@ -998,6 +1002,7 @@ def test_a_driver_refuses_to_invent_its_own_start_queue():
             queue.Queue(),
             context_holder=[None],
             result_holder=[None],
+            builtins=core_builtins(),
         )
 
 
@@ -1166,6 +1171,7 @@ def test_region_discards_start_data_the_started_task_never_retrieved(monkeypatch
         result_holder=[None],
         start_queue=start_queue,
         region_termid="T001",
+        builtins=core_builtins(),
     )
 
     region.start("SRTA", input_event=InputEvent())
@@ -1205,6 +1211,7 @@ def test_region_xctl_keeps_the_started_tasks_data_for_the_new_program(monkeypatc
         result_holder=[None],
         start_queue=start_queue,
         region_termid="T001",
+        builtins=core_builtins(),
     )
 
     region.start("SRTA", input_event=InputEvent())

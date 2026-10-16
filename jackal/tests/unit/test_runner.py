@@ -73,6 +73,7 @@ from jackal.unresolved import (
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import EMPTY
 from tests.model_build import cond, dd, disp, job, program, ref
+from interpreter.vm.builtins import core_builtins
 
 OK = Completed(0)
 FB80 = SequentialLabel(RecordFormat.FB, 80)
@@ -95,6 +96,7 @@ def _run(
         missing_program=missing_program,
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         proclib_dirs=proclib,
+        builtins=core_builtins(),
     )
     scratch = tmp_path / "scratch"
     scratch.mkdir(exist_ok=True)

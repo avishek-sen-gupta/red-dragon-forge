@@ -70,7 +70,7 @@ COBOL_NEVER_REACHES_UNSUPPORTED = """\
 def _run(source: bytes, cobol_parser, unsupported: set):
     context_holder = [CicsContext(transid="UNS1", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -86,6 +86,7 @@ def _run(source: bytes, cobol_parser, unsupported: set):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
 

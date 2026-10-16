@@ -15,6 +15,7 @@ from litter.package import Package
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import job_catalog, system
+from interpreter.vm.builtins import core_builtins
 
 MESSAGE = "WRITTEN BY THE CALLED PROGRAM".ljust(80).encode("cp037")
 
@@ -41,6 +42,7 @@ def _runner(tmp_path: Path, packaged: Package) -> JobRunner:
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
+        builtins=core_builtins(),
     )
 
 

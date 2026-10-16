@@ -1,4 +1,4 @@
-data_dir = "${FORGE_ROOT}/vendor/carddemo/app/data/EBCDIC"
+data_dir = "../../vendor/carddemo/app/data/EBCDIC"
 
 [[sequential]]
 dsn   = "AWS.M2.CARDDEMO.USRSEC.PS"

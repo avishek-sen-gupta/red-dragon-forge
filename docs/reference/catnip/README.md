@@ -103,17 +103,17 @@ It logs `installed <DSN>` for each dataset, AIX, path and GDG base.
 For CardDemo:
 
 ```bash
-make catnip-install-carddemo SYSTEM=DIR
+uv run catnip install config/carddemo/data.toml --system DIR
 ```
 
-This installs `config/carddemo/data.toml` with `FORGE_ROOT` set to the repo root.
+`data_dir` is resolved against the declaration's own directory.
 
 ### The declaration
 
 A TOML file, read into typed models. An unknown key is an error.
 
 ```toml
-data_dir = "${FORGE_ROOT}/vendor/carddemo/app/data/EBCDIC"
+data_dir = "../../vendor/carddemo/app/data/EBCDIC"
 
 [[sequential]]
 dsn   = "AWS.M2.CARDDEMO.DALYTRAN.PS"

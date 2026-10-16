@@ -288,8 +288,8 @@ def test_rollback_hook_rolls_back_and_closes_cursors():
 
 def test_reset_session_returns_a_builtin_result():
     """reset_session has the standard RedDragon builtin signature (it is
-    registered directly into Builtins.TABLE and dispatched via
-    CallFunction, same as __exec_sql itself)."""
+    put in a region's builtins table and dispatched via CallFunction, same
+    as __exec_sql itself)."""
     from interpreter.vm.vm_types import BuiltinResult
 
     backend = _RecordingBackend()

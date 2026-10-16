@@ -35,12 +35,15 @@ import ibm_db
 from cics.coprocessor import build_cics_spec
 from cics.dispatcher import run_cics
 from cics.runtime import install_cics_runtime
+from cics.transaction_hooks import TransactionHooks
 from cics.types import CicsContext, DispatchKind
 from interpreter.cobol.field_position import FieldPosition
 from interpreter.cobol.layout_data import field_positions
+from interpreter.func_name import FuncName
 from interpreter.project.coprocessor_compile import compile_program
 from interpreter.project.types import LinkedProgram
 from interpreter.run import declarations_of
+from interpreter.vm.builtin import Builtin
 from squall.backend import SqlBackend, SqlResult
 from squall.backends.db2 import Db2Backend
 from squall.backends.sqlite import SqliteBackend
@@ -189,9 +192,7 @@ def _excerpt(path: Path) -> str:
 def _is_group(candidate: Field, fields: Sequence[tuple[str, Field]]) -> bool:
     return any(
         other is not candidate
-        and candidate.offset
-        <= other.offset
-        < candidate.offset + candidate.length
+        and candidate.offset <= other.offset < candidate.offset + candidate.length
         and other.length < candidate.length
         for _, other in fields
     )
@@ -257,6 +258,7 @@ class CompiledInqcust:
     layout: Layout
     context_holder: list
     result_holder: list
+    builtins: Mapping[FuncName, Builtin]
 
     @property
     def ws_ca(self) -> Field:
@@ -265,24 +267,18 @@ class CompiledInqcust:
 
 def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInqcust:
     context_holder, result_holder = [None], [None]
-    install_cics_runtime(
-        context_holder,
-        transid_to_program={},
-        result_holder=result_holder,
-        program_cache={},
-    )
     inq_cics = build_cics_spec()
     inq_sql = build_sql_spec()
     parser = make_parser(bridge_jar, copybook_dirs=[inq._BANK_OF_Z_COPY])
-    inq_linked = compile_program(
-        INQCUST_CBL.read_bytes(), parser, [inq_cics, inq_sql]
-    )
-    install_sql_runtime({"SAMPLE": recorder}, NamedDbConnector("SAMPLE"))
-    install_cics_runtime(
+    inq_linked = compile_program(INQCUST_CBL.read_bytes(), parser, [inq_cics, inq_sql])
+    sql = install_sql_runtime({"SAMPLE": recorder}, NamedDbConnector("SAMPLE"))
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         result_holder=result_holder,
         program_cache={"INQCUST": inq_linked},
+        hooks=TransactionHooks(sql.reset_session, sql.syncpoint, sql.rollback),
+        other_builtins=sql.entries,
     )
     wrap_spec = build_cics_spec()
     wrap_linked = compile_program(
@@ -295,6 +291,7 @@ def _compile_inqcust(bridge_jar: str, recorder: RecordingBackend) -> CompiledInq
         field_positions(declarations_of(wrap_linked, "WRAPPER")),
         context_holder,
         result_holder,
+        runtime.builtins,
     )
 
 
@@ -309,6 +306,7 @@ def _run_inqcust_case(
         queue.Queue(),
         queue.Queue(),
         entry=main_entry(program.linked),
+        builtins=program.builtins,
         context_holder=program.context_holder,
         result_holder=program.result_holder,
         max_steps=50_000,
@@ -466,12 +464,15 @@ def _db2_backend(dsn: str, case: CompositionCase) -> Iterator[Db2Backend]:
 
 def _run_composed(source: str, backend: SqlBackend, transid: str):
     context_holder, result_holder = [None], [None]
-    install_cics_runtime(
+    sql = install_sql_runtime({"SAMPLE": backend})
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
         result_holder=result_holder,
         applid="FORGEAPP",
+        hooks=TransactionHooks(sql.reset_session, sql.syncpoint, sql.rollback),
+        other_builtins=sql.entries,
     )
     cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
@@ -480,7 +481,6 @@ def _run_composed(source: str, backend: SqlBackend, transid: str):
         make_parser(os.environ["PROLEAP_BRIDGE_JAR"]),
         [cics_spec, sql_spec],
     )
-    install_sql_runtime({"SAMPLE": backend})
     t0 = time.perf_counter()
     result = run_program(
         linked,
@@ -492,6 +492,7 @@ def _run_composed(source: str, backend: SqlBackend, transid: str):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
+        builtins=runtime.builtins,
     )
     return result, time.perf_counter() - t0
 

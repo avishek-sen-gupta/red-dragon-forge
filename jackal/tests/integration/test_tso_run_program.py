@@ -14,6 +14,7 @@ from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import scratch, system
+from interpreter.vm.builtins import core_builtins
 
 _RC4 = """\
        IDENTIFICATION DIVISION.
@@ -62,6 +63,7 @@ def test_a_tso_step_runs_its_programs_and_ends_with_the_highest_code(
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=package(tmp_path / "package", bridge_jar, ("RC4", "RC0"), src),
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
 
     def outcome(step: str):

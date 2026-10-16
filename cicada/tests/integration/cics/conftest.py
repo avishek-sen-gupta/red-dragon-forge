@@ -65,10 +65,6 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
 @pytest.fixture
 def carddemo_system(tmp_path: Path) -> Path:
     """CardDemo's data declaration installed into a fresh system directory."""
-    declaration = tmp_path / "data.toml"
-    declaration.write_text(
-        _DATA_DECLARATION.read_text().replace("${FORGE_ROOT}", str(_MONOREPO_ROOT))
-    )
     system = tmp_path / "system"
-    install(load_declaration(declaration), SystemCatalog(system))
+    install(load_declaration(_DATA_DECLARATION), SystemCatalog(system))
     return system

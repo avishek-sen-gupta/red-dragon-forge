@@ -11,6 +11,7 @@ from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import scratch, system
+from interpreter.vm.builtins import core_builtins
 
 _FAIL_PGM = """\
        IDENTIFICATION DIVISION.
@@ -47,6 +48,7 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         package=package(tmp_path / "package", bridge_jar, ("FAILS", "OK"), src),
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
     res = runner.run(job, scratch=scratch(tmp_path))
     a, b = res.steps

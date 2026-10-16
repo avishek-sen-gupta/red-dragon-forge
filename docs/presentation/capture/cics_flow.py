@@ -380,7 +380,7 @@ def run_region(
     context_holder: list = [None]
     result_holder: list = [None]
     start_queue = StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -402,6 +402,7 @@ def run_region(
         start_queue=start_queue,
         max_steps=2_000_000,
         min_commarea_len=400,
+        builtins=runtime.builtins,
     )
     return drive(
         Capture(region, journal, screen_q, input_q),

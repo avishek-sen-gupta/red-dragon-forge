@@ -81,7 +81,7 @@ def _run(source: str, parser) -> "object":
 
     context_holder = [CicsContext(transid="CC00", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -97,6 +97,7 @@ def _run(source: str, parser) -> "object":
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
 

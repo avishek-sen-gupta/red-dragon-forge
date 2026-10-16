@@ -49,6 +49,7 @@ import ibm_db
 import pytest
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
+from cics.transaction_hooks import TransactionHooks
 from cics.types import CicsContext, DispatchKind
 from interpreter.project.coprocessor_compile import compile_program
 from squall.backends.db2 import Db2Backend
@@ -103,12 +104,19 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
 
     context_holder = [None]
     result_holder = [None]
-    install_cics_runtime(
+    sql = install_sql_runtime(
+        {"CARDDEMO": backend},
+        NamedDbConnector("CARDDEMO"),
+        tolerant=True,
+    )
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
         result_holder=result_holder,
         on_abend=backend.rollback,
+        hooks=TransactionHooks(sql.reset_session, sql.syncpoint, sql.rollback),
+        other_builtins=sql.entries,
     )
     cics_spec = build_cics_spec()
     sql_spec = build_sql_spec()
@@ -116,11 +124,6 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
 
     linked = compile_program(
         program_source.encode("utf-8"), parser, [cics_spec, sql_spec]
-    )
-    install_sql_runtime(
-        {"CARDDEMO": backend},
-        NamedDbConnector("CARDDEMO"),
-        tolerant=True,
     )
 
     screen_q: queue.Queue = queue.Queue()
@@ -135,6 +138,7 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
+        builtins=runtime.builtins,
     )
     return result, conn
 

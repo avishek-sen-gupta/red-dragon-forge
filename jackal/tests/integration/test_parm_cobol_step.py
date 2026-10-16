@@ -9,6 +9,7 @@ from tests.covers import NotLanguageFeature, covers
 from tests.model_build import program
 from tests.package_build import compiled, package
 from tests.system_build import job_catalog
+from interpreter.vm.builtins import core_builtins
 
 # Minimal COBOL program that reads PARM-DATA and signals receipt via RETURN-CODE.
 # PARM-LENGTH (S9(04) COMP) is a 2-byte big-endian halfword — matches build_parm_region.
@@ -57,6 +58,7 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,
         cat,
+        builtins=core_builtins(),
     ) == Completed(42)
 
 
@@ -73,4 +75,5 @@ def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,
         cat,
+        builtins=core_builtins(),
     ) == Completed(7)

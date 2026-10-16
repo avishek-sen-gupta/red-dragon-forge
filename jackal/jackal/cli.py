@@ -12,6 +12,7 @@ from pathlib import Path
 
 from catnip.labels import RecordFormat, SequentialLabel
 from catnip.system_catalog import SystemCatalog
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import LenientAllocation
@@ -74,6 +75,7 @@ def _runner(ap: argparse.ArgumentParser, args: argparse.Namespace) -> JobRunner:
         missing_program=StubMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
         proclib_dirs=_proclibs(args.proclib),
+        builtins=core_builtins(),
     )
 
 

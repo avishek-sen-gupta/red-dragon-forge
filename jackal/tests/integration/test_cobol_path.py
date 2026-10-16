@@ -7,6 +7,7 @@ import pytest
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from interpreter.project.ir_codec import IrCodec
 from interpreter.project.linked_codec import LinkedCodec
+from interpreter.vm.builtins import core_builtins
 
 from catnip.alternate_index import AlternateIndex
 from catnip.catalog_path import CatalogPath
@@ -84,6 +85,7 @@ def _ran_compiled(
         cat.workdir,
         budget=DEFAULT_PROGRAM_STEP_BUDGET,
         relabeller=cat,
+        builtins=core_builtins(),
     )
 
 

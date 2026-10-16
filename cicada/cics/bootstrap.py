@@ -3,8 +3,8 @@
 Assembles a running CICS region from a transid→program mapping (``parse_csd``
 reads one from a CSD) and a set of COBOL program sources:
 
-  1. install the CICS runtime (:func:`cics.runtime.install_cics_runtime`) over
-     the region's state (VSAM engine, screen/input queues, context/result
+  1. build the region's builtins table (:func:`cics.runtime.install_cics_runtime`)
+     over the region's state (VSAM engine, screen/input queues, context/result
      holders) and build ONE shared compile spec
      (:func:`cics.coprocessor.build_cics_spec`),
   2. eagerly compile every distinct program named in the CSD into a
@@ -162,7 +162,7 @@ def run_carddemo_region(
     result_holder: Holder[DispatchResult] = [None]
     start_queue = StartQueue()
     program_cache: dict[str, LinkedProgram] = {}
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         result_holder=result_holder,
         program_cache=program_cache,
@@ -195,6 +195,7 @@ def run_carddemo_region(
             sq,
             iq,
             entry=program.entry(),
+            builtins=runtime.builtins,
             on_abend=on_abend,
             context_holder=context_holder,
             result_holder=result_holder,

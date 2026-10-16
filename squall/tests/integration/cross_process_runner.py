@@ -16,9 +16,9 @@ _spec.loader.exec_module(_helpers)
 
 conn = sqlite3.connect(":memory:")
 conn.execute("CREATE TABLE EMP (EMP_ID INTEGER NOT NULL, EMP_NAME VARCHAR(9))")
-install_sql_runtime({"SAMPLE": SqliteBackend(conn)})
+runtime = install_sql_runtime({"SAMPLE": SqliteBackend(conn)})
 linked = pickle.loads(Path(sys.argv[1]).read_bytes())
-vm = _helpers.run_linked_program(linked, max_steps=4000)
+vm = _helpers.run_linked_program(linked, _helpers.sql_builtins(runtime), max_steps=4000)
 print(
     _helpers.read_ws_field(vm, "EMP-NAME-LEN"),
     _helpers.read_ws_field(vm, "EMP-NAME-TEXT").rstrip(),

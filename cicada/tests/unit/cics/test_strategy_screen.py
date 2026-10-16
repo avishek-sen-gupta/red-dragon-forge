@@ -6,7 +6,6 @@ from cics.runtime import install_cics_runtime
 from cics.types import DispatchKind
 from interpreter.func_name import FuncName
 from interpreter.register import Register
-from interpreter.vm.builtins import Builtins
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
 
@@ -579,14 +578,14 @@ class _MinimalHolder:
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_non_list_result_holder_still_receives_dispatch_results():
     holder = _MinimalHolder([None])
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         [None],
         transid_to_program={},
         program_cache={},
         result_holder=holder,
     )
 
-    abend = Builtins.TABLE[FuncName("__cics_abend")]
+    abend = runtime.builtins[FuncName("__cics_abend")]
     abend([], VMState())
 
     assert holder[0] is not None
@@ -599,13 +598,13 @@ def test_none_result_holder_falls_back_without_crashing():
     (see ``Absent``'s docstring in strategy.py) — the same as omitting it.
     A caller passing it must still get a working internal holder, not a
     bare ``None`` the builtins try to subscript."""
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         [None],
         transid_to_program={},
         program_cache={},
         result_holder=None,
     )
 
-    abend = Builtins.TABLE[FuncName("__cics_abend")]
+    abend = runtime.builtins[FuncName("__cics_abend")]
     result = abend([], VMState())
     assert isinstance(result, BuiltinResult)

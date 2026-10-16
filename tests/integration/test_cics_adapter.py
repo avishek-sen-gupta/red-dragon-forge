@@ -66,7 +66,7 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -90,6 +90,7 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN
@@ -101,7 +102,7 @@ def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
 
     context_holder = [None]
     result_holder = [None]
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -125,6 +126,7 @@ def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,
+        builtins=runtime.builtins,
     )
 
     assert result.kind == DispatchKind.RETURN

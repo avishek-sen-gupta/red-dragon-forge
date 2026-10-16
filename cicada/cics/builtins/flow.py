@@ -3,24 +3,28 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Protocol
 
 from cics.builtins.screen import CicsBuiltin
 from cics.cell import Holder, hold
-from cics.strategy_stores import restore, swap
+from cics.transaction_hooks import no_hook
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from interpreter.address import Address
+from interpreter.func_name import FuncName
 from interpreter.project.entry_point import EntryPoint
 from interpreter.project.program_entry import ProgramEntry
 from interpreter.project.types import LinkedProgram
 from interpreter.run import run_linked
 from interpreter.types.typed_value import TypedValue
+from interpreter.vm.builtin import Builtin
 from interpreter.vm.vm_types import BuiltinResult, VMState
 
 logger = logging.getLogger(__name__)
 
-_TASK_END_HOOK = "__cics_task_end_hook"
+_TASK_END_HOOK = FuncName("__cics_task_end_hook")
 _COMMAREA = Address("rgn_commarea")
 
 
@@ -33,30 +37,9 @@ class RunLinked(Protocol):
         entry_point: EntryPoint | ProgramEntry,
         *,
         max_steps: int,
+        builtins: Mapping[FuncName, Builtin],
         initial_vm: VMState,
     ) -> VMState: ...
-
-
-def make_noop_hook_builtin() -> CicsBuiltin:
-    """Return a no-op default builtin for a generic composed-coprocessor
-    extension point (task end / syncpoint / rollback). Cicada always calls
-    these hooks by name (see CicsLoweringStrategy's RETURN, SYNCPOINT and
-    SYNCPOINT ROLLBACK lowerings) with no idea what, if anything, another
-    composed coprocessor (e.g. squall) has registered under them; a real
-    registration replaces this default (register_default is
-    order-independent — see cics.strategy_stores).
-    """
-
-    def _noop_hook(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
-        return BuiltinResult(value=None)
-
-    return _noop_hook
-
-
-def make_noop_task_end_hook_builtin() -> CicsBuiltin:
-    """Return the default __cics_task_end_hook builtin: does nothing. See
-    make_noop_hook_builtin, which this mirrors."""
-    return make_noop_hook_builtin()
 
 
 def _text(args: Sequence[TypedValue], index: int) -> str:
@@ -124,42 +107,54 @@ def make_set_xctl_context_builtin(
     return __cics_set_xctl_context
 
 
+def _without_task_end(
+    builtins: Mapping[FuncName, Builtin],
+) -> Mapping[FuncName, Builtin]:
+    return MappingProxyType({**builtins, _TASK_END_HOOK: no_hook})
+
+
+@dataclass(frozen=True)
+class _Link:
+    """How LINK runs its target: the runner, its step budget and the table the target runs with."""
+
+    run: RunLinked
+    max_steps: int
+    builtins: Mapping[FuncName, Builtin]
+
+
 def _linked_commarea(
-    run: RunLinked,
+    link: _Link,
     linked: LinkedProgram,
     name: str,
     context: CicsContext,
     commarea: bytes,
-    max_steps: int,
 ) -> bytes:
     from cics.vm_init import make_cics_initial_vm
 
-    final_vm = run(
+    final_vm = link.run(
         linked,
         ProgramEntry(name),
-        max_steps=max_steps,
+        max_steps=link.max_steps,
+        builtins=link.builtins,
         initial_vm=make_cics_initial_vm(context, commarea),
     )
     return bytes(final_vm.region_get(_COMMAREA) or b"")
 
 
 def _isolated_commarea(
-    run: RunLinked,
+    link: _Link,
     linked: LinkedProgram,
     name: str,
     context: CicsContext,
     commarea: bytes,
-    max_steps: int,
     result_holder: Holder[DispatchResult],
 ) -> bytes:
     saved = result_holder[0]
     hold(result_holder, None)
-    saved_hook = swap(_TASK_END_HOOK, make_noop_hook_builtin())
     try:
-        return _linked_commarea(run, linked, name, context, commarea, max_steps)
+        return _linked_commarea(link, linked, name, context, commarea)
     finally:
         hold(result_holder, saved)
-        restore(_TASK_END_HOOK, saved_hook)
 
 
 def _write_back(vm: VMState, modified: bytes, offset: int, length: int) -> None:
@@ -175,6 +170,7 @@ def make_link_builtin(
     context_holder: Sequence[CicsContext],
     max_steps: int,
     *,
+    region_builtins: Callable[[], Mapping[FuncName, Builtin]],
     _run_fn: RunLinked = run_linked,
 ) -> CicsBuiltin:
     """Return __cics_link builtin.
@@ -184,9 +180,9 @@ def make_link_builtin(
     Runs the named program synchronously with a copy of the caller's COMMAREA,
     then writes the modified COMMAREA back into the caller's WS at the given
     offset/length. Uses save/restore on result_holder so the inner program's
-    EXEC CICS RETURN never affects outer transaction routing, and the same
-    save/restore on the __cics_task_end_hook registration so that RETURN
-    does not fire a composed coprocessor's real task-end hook (e.g. squall's
+    EXEC CICS RETURN never affects outer transaction routing, and runs the
+    inner program with the region's table (``region_builtins()``) with
+    __cics_task_end_hook replaced by a no-op, so that RETURN does not fire a composed coprocessor's real task-end hook (e.g. squall's
     commit + cursor-close) mid-task — the LINKed program's RETURN ends the
     LINK, not the caller's still-open unit of work.
 
@@ -204,12 +200,11 @@ def make_link_builtin(
             logger.warning("EXEC CICS LINK to unknown program %r — no-op", name)
             return BuiltinResult(value=0)
         modified = _isolated_commarea(
-            _run_fn,
+            _Link(_run_fn, max_steps, _without_task_end(region_builtins())),
             program_cache[name],
             name,
             context_holder[0],
             _bytes(args, 1),
-            max_steps,
             result_holder,
         )
         _write_back(vm, modified, _int(args, 2), _int(args, 3))

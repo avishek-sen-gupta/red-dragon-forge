@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import ibm_db
+from cics.transaction_hooks import TransactionHooks
 from squall.backend import SqlBackend
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 from squall.runtime import install_sql_runtime
 
 from red_dragon_forge.config_error import ConfigError
+from red_dragon_forge.coprocessing import Coprocessing
 
 _DATABASE = "DATABASE"
 
@@ -21,13 +22,21 @@ class Db2Connection:
     database: str
     backend: SqlBackend
 
-    def install(self, tolerant: bool) -> Callable[[], None]:
-        install_sql_runtime(
+    def install(self, tolerant: bool) -> Coprocessing:
+        runtime = install_sql_runtime(
             {self.database: self.backend},
             NamedDbConnector(self.database),
             tolerant=tolerant,
         )
-        return self.backend.rollback
+        return Coprocessing(
+            on_abend=self.backend.rollback,
+            hooks=TransactionHooks(
+                task_end=runtime.reset_session,
+                syncpoint=runtime.syncpoint,
+                rollback=runtime.rollback,
+            ),
+            builtins=runtime.entries,
+        )
 
 
 def _database(dsn: str) -> str:

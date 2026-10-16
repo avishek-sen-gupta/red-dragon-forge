@@ -52,7 +52,7 @@ def _driver(
     screens: queue.Queue = queue.Queue()
     inputs: queue.Queue = queue.Queue()
     context_holder, result_holder, start_queue = [None], [None], StartQueue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -77,6 +77,7 @@ def _driver(
         start_queue=start_queue,
         max_steps=1_000_000,
         min_commarea_len=min_commarea_len,
+        builtins=runtime.builtins,
     )
     return PseudoConversationalDriver(
         region, screens, frozenset(transactions)

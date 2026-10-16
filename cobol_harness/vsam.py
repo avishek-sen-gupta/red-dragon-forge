@@ -1,6 +1,7 @@
 """Test-data setup: byte-exact VSAM records, cluster registration/seeding in a system catalog,
 and ASCII/EBCDIC conversion.  Agnostic to any one program or copybook.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 
 from .state import program_regions
+from interpreter.vm.builtins import core_builtins
 
 
 def to_ebcdic(s: str) -> bytes:
@@ -72,9 +74,17 @@ def build_record(
     from interpreter.cobol.layout_data import field_positions
     from interpreter.run import initial_vm_state, run_linked
 
-    linked = compile_cobol(src.encode(), parser=parser, copybook_dirs=list(copybook_dirs), tolerant=True)
+    linked = compile_cobol(
+        src.encode(), parser=parser, copybook_dirs=list(copybook_dirs), tolerant=True
+    )
     entry_point = EntryPoint.function(lambda f: "init_params" not in str(f.name))
-    vm = run_linked(linked, entry_point, max_steps=500_000, initial_vm=initial_vm_state())
+    vm = run_linked(
+        linked,
+        entry_point,
+        max_steps=500_000,
+        initial_vm=initial_vm_state(),
+        builtins=core_builtins(),
+    )
     layout = field_positions(vm.declarations)
     fld = layout.get(record_name)
     if fld is None:
@@ -84,7 +94,9 @@ def build_record(
         if rgn is not None and len(rgn) >= off + sz:
             data = bytes(rgn[off : off + sz])
             if expected_length is not None and len(data) != expected_length:
-                raise AssertionError(f"{record_name} length {len(data)} != expected {expected_length}")
+                raise AssertionError(
+                    f"{record_name} length {len(data)} != expected {expected_length}"
+                )
             return data
     raise RuntimeError(f"region not found for {record_name!r}")
 
@@ -111,7 +123,14 @@ class VsamFixture:
     def create(cls, vsam_dir: Path) -> "VsamFixture":
         return cls(SystemCatalog(Path(vsam_dir)))
 
-    def register(self, dataset: str, *, record_length: int, key_offset: int = 0, key_length: int = 8) -> None:
+    def register(
+        self,
+        dataset: str,
+        *,
+        record_length: int,
+        key_offset: int = 0,
+        key_length: int = 8,
+    ) -> None:
         dsn = f"TEST.{dataset}"
         self.system.create(dsn, KsdsLabel(record_length, key_offset, key_length))
         self.files.update(cics_files(self.system, {dataset: dsn}))

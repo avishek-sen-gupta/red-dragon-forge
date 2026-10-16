@@ -20,17 +20,8 @@ from cics.types import CicsContext, DispatchKind, DispatchResult
 from interpreter.func_name import FuncName
 from interpreter.types.type_expr import UNKNOWN
 from interpreter.types.typed_value import typed
-from interpreter.vm.builtins import Builtins
 from interpreter.vm.vm_types import VMState
 from tests.covers import covers, NotLanguageFeature
-
-
-@pytest.fixture(autouse=True)
-def _restore_builtins_table():
-    before = dict(Builtins.TABLE)
-    yield
-    Builtins.TABLE.clear()
-    Builtins.TABLE.update(before)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -158,6 +149,12 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
         lambda source, parser, strategy, **kwargs: object(),
     )
     monkeypatch.setattr(bootstrap, "_run_dispatcher_with_runner", _fake_loop)
+    installed = bootstrap.install_cics_runtime
+    monkeypatch.setattr(
+        bootstrap,
+        "install_cics_runtime",
+        lambda *a, **k: captured.setdefault("runtime", installed(*a, **k)),
+    )
 
     bootstrap.run_carddemo_region(
         transid_to_program={"CC00": "SGNPGM"},
@@ -170,7 +167,8 @@ def test_run_region_threads_the_start_queue_and_termid_into_the_loop(monkeypatch
     )
 
     start_args = [typed(text, UNKNOWN) for text in ("CC00", "", "T009", "", "")]
-    resp = Builtins.TABLE[FuncName("__cics_start")](start_args, VMState()).value
+    start = captured["runtime"].builtins[FuncName("__cics_start")]
+    resp = start(start_args, VMState()).value
     queued = captured["loop_start_queue"].pop_runnable("T009")
 
     assert (resp, tuple(req.transid for req in queued)) == (0, ("CC00",))

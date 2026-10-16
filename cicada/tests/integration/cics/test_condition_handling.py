@@ -125,7 +125,7 @@ def test_the_injected_table_is_visible_to_the_program(cobol_parser):
     count would run past."""
     context_holder = [CicsContext(transid="HND0", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
     program = compile_cics_program(
         COBOL_READS_ITS_OWN_TABLE.encode(), cobol_parser, spec
     )
@@ -138,6 +138,7 @@ def test_the_injected_table_is_visible_to_the_program(cobol_parser):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea[0:1] == "Y".encode("cp037")
@@ -178,7 +179,7 @@ def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
     three different pairings, so a write shifted by one slot reads back 0."""
     context_holder = [CicsContext(transid="HND1", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
     program = compile_cics_program(
         COBOL_HANDLE_WRITES_THE_SLOT.encode(), cobol_parser, spec
     )
@@ -191,6 +192,7 @@ def test_handle_condition_writes_the_label_index_into_its_slot(cobol_parser):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea[0:2] == struct.pack(">h", 1)
@@ -231,7 +233,7 @@ def test_one_statement_naming_several_conditions_writes_each_slot(cobol_parser):
     its neighbouring slot must stay 0."""
     context_holder = [CicsContext(transid="HND4", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
     program = compile_cics_program(
         COBOL_MULTI_CONDITION_HANDLE.encode(), cobol_parser, spec
     )
@@ -244,6 +246,7 @@ def test_one_statement_naming_several_conditions_writes_each_slot(cobol_parser):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea[0:2] == struct.pack(">h", 1)
@@ -290,7 +293,7 @@ def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
     raised at all; then PARA-A registered again (index 1, raisable restored)."""
     context_holder = [CicsContext(transid="HND2", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
     program = compile_cics_program(
         COBOL_OVERRIDE_AND_IGNORE.encode(), cobol_parser, spec
     )
@@ -303,6 +306,7 @@ def test_a_later_handle_overrides_and_ignore_cancels(cobol_parser):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea[0:2] == struct.pack(">h", 2)
@@ -351,7 +355,7 @@ def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
     to show the subscripted writes land on one slot and do not smear."""
     context_holder = [CicsContext(transid="HND3", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
     program = compile_cics_program(COBOL_RAISABLE_FLAG.encode(), cobol_parser, spec)
 
     result = run_cics(
@@ -362,6 +366,7 @@ def test_ignore_clears_the_raisable_flag_and_handle_restores_it(cobol_parser):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea[0:1] == "Y".encode("cp037")
@@ -427,7 +432,7 @@ def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
 
     context_holder = [CicsContext(transid="HND5", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
     program = compile_cics_program(
         HNDLINKA_SRC.encode(),
         cobol_parser,
@@ -443,6 +448,7 @@ def test_a_called_subprogram_numbers_its_own_handlers(cobol_parser, tmp_path):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea[0:2] == struct.pack(">h", 1)
@@ -468,7 +474,7 @@ def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
     rather than falling through to RETURN on an untouched record area."""
     context_holder = [CicsContext(transid="HND6", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(
+    spec, builtins = installed_cics_spec(
         context_holder, result_holder, vsam_engine=vsam_engine_with_acctfile
     )
     program = compile_cics_program(COBOL_UNHANDLED.encode(), cobol_parser, spec)
@@ -481,6 +487,7 @@ def test_an_unhandled_condition_abends(cobol_parser, vsam_engine_with_acctfile):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.kind == DispatchKind.ABEND
@@ -514,7 +521,7 @@ def test_a_registered_handler_takes_control(cobol_parser, vsam_engine_with_acctf
     path is the discriminator — the commarea says which path ran."""
     context_holder = [CicsContext(transid="HND7", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(
+    spec, builtins = installed_cics_spec(
         context_holder, result_holder, vsam_engine=vsam_engine_with_acctfile
     )
     program = compile_cics_program(COBOL_HANDLED.encode(), cobol_parser, spec)
@@ -527,6 +534,7 @@ def test_a_registered_handler_takes_control(cobol_parser, vsam_engine_with_acctf
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
     assert result.commarea == "HANDLED0".encode("cp037")
@@ -582,7 +590,9 @@ COBOL_NOHANDLE_SUPPRESSES = """\
 def _run_source(source, transid, cobol_parser, vsam_engine):
     context_holder = [CicsContext(transid=transid, commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder, vsam_engine=vsam_engine)
+    spec, builtins = installed_cics_spec(
+        context_holder, result_holder, vsam_engine=vsam_engine
+    )
     program = compile_cics_program(source.encode(), cobol_parser, spec)
     return run_cics(
         program,
@@ -592,6 +602,7 @@ def _run_source(source, transid, cobol_parser, vsam_engine):
         entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=builtins,
     )
 
 
@@ -743,7 +754,7 @@ def test_a_handler_naming_no_paragraph_is_rejected_at_compile_time(cobol_parser)
     handle nor abend, it would simply end. The compile must refuse instead."""
     context_holder = [CicsContext(transid="HNDD", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
 
     with pytest.raises(NotImplementedError) as excinfo:
         compile_cics_program(COBOL_HANDLER_TARGET_MISSING.encode(), cobol_parser, spec)
@@ -811,7 +822,7 @@ def test_a_handler_for_an_unraised_condition_is_reported(cobol_parser, caplog):
     READNEXT loop written against it would loop past the end of the file."""
     context_holder = [CicsContext(transid="HNDF", commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
-    spec = installed_cics_spec(context_holder, result_holder)
+    spec, builtins = installed_cics_spec(context_holder, result_holder)
 
     with caplog.at_level(logging.WARNING, logger="cics.strategy"):
         compile_cics_program(
@@ -851,7 +862,7 @@ def _conversational_region(cobol_parser, transid):
     context_holder = [CicsContext(transid=transid, commarea=b"", eibaid="\x7d")]
     result_holder: list = [None]
     screen_queue: queue.Queue = queue.Queue()
-    install_cics_runtime(
+    runtime = install_cics_runtime(
         context_holder,
         transid_to_program={},
         program_cache={},
@@ -869,6 +880,7 @@ def _conversational_region(cobol_parser, transid):
         screen_queue=screen_queue,
         context_holder=context_holder,
         result_holder=result_holder,
+        builtins=runtime.builtins,
     )
 
 

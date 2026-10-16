@@ -14,6 +14,7 @@ from jackal.unresolved import RaiseErrorStrategy
 from tests.covers import NotLanguageFeature, covers
 from tests.package_build import package
 from tests.system_build import scratch, system
+from interpreter.vm.builtins import core_builtins
 
 _ABEND = """\
        IDENTIFICATION DIVISION.
@@ -68,6 +69,7 @@ def test_cee3abd_abends_the_step_with_its_user_code(tmp_path: Path, bridge_jar):
             src,
         ),
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
     jcl = (
         "//J JOB 1\n"

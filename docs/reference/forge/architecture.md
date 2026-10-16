@@ -30,7 +30,10 @@ A strategy's lowering leaves nothing a run needs outside the IR, so a compiled p
 any process.
 
 Each runtime lowers its `EXEC` statements to `CallFunction` IR that calls builtins the runtime
-registers. RedDragon's VM has no CICS, SQL or JCL knowledge of its own.
+returns. Every run is given its builtins table (`run_linked(…, builtins=)`); no table is
+process-global. A region's table is red-dragon's `core_builtins()` with each runtime's entries
+composed in by `compose_builtins`, which refuses a name two of them define. RedDragon's VM has no
+CICS, SQL or JCL knowledge of its own.
 
 ## The composition layer
 
@@ -41,12 +44,15 @@ registers. RedDragon's VM has no CICS, SQL or JCL knowledge of its own.
 | `build_command.py` | `forge-build`: a `build.toml` into a litter package. See [Build](build.md). |
 | `run_command.py` | `forge-run`: a package run as `env.toml` says, `[plain]`, `[jcl]` or `[cics]`; `cics_region` assembles the `[cics]` region in process. See [Run](run.md). |
 | `coprocessors.py` | The coprocessors a build may name, each with its compile spec and the programs it requires linked. |
+| `coprocessing.py` | `Coprocessing`: what a package's `sql` adds to a run — squall's builtins, the three CICS unit-of-work hooks and the abend rollback. `db2_connection.py` builds it; with no `sql` a run gets none. `[plain]`/`[jcl]` compose its builtins into the job runner's table; `[cics]` passes them and the hooks to the region. |
+| `db2_connection.py` | The `[sql]` Db2 connection: installs squall's runtime over it and returns the `Coprocessing`. |
 | `run.py` | `run_program(linked, specs, …)` runs a compiled program through the one spec that owns execution. CICS owns execution; SQL is synchronous and owns none. |
 | `carddemo_db2_schema.py` | CardDemo's Db2 schema and seed data. |
 | `carddemo_db2_seed.py` | `carddemo-db2-seed`: drops, recreates and seeds the schema. Run it as `make db2-seed`. |
 | `db2_status.py` | `make db2-status`: connects and queries Db2. Exit codes: 0 up, 1 down, 2 DSN unset. |
 
-Design record: [CICS + SQL composition](../../records/design/2026-07-04-cics-sql-composition-design.md).
+Design records: [CICS + SQL composition](../../records/design/2026-07-04-cics-sql-composition-design.md),
+[per-region builtins](../../superpowers/specs/2026-10-16-per-region-builtins-design.md).
 
 ## Package boundaries
 

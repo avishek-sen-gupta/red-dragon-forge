@@ -57,7 +57,7 @@ def _make_stub_linked_program(ca_out: bytes):
     class _StubLinked:
         entry_func_label = None
 
-    def _fake_run_linked(linked, entry_point, *, max_steps, initial_vm):
+    def _fake_run_linked(linked, entry_point, *, max_steps, builtins, initial_vm):
         addr = _Addr("rgn_commarea")
         buf = bytearray(initial_vm.region_get(addr) or b"")
         n = min(len(ca_out), len(buf))
@@ -68,6 +68,10 @@ def _make_stub_linked_program(ca_out: bytes):
     return _StubLinked(), _fake_run_linked
 
 
+def _region_table():
+    return {}
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
@@ -76,7 +80,13 @@ def test_link_unknown_program_is_noop():
     """LINK to a program not in program_cache logs a warning and returns 0."""
     result_holder = [None]
     context_holder = [_make_context()]
-    builtin = make_link_builtin({}, result_holder, context_holder, max_steps=10_000)
+    builtin = make_link_builtin(
+        {},
+        result_holder,
+        context_holder,
+        max_steps=10_000,
+        region_builtins=_region_table,
+    )
 
     ws = bytearray(b"INIT")
     vm, ws_addr = _make_vm_with_ws(ws)
@@ -95,7 +105,12 @@ def test_link_writes_modified_commarea_back_to_ws():
     result_holder = [None]
     context_holder = [_make_context()]
     builtin = make_link_builtin(
-        program_cache, result_holder, context_holder, max_steps=10_000, _run_fn=fake_run
+        program_cache,
+        result_holder,
+        context_holder,
+        max_steps=10_000,
+        region_builtins=_region_table,
+        _run_fn=fake_run,
     )
 
     ws = bytearray(b"INIT")
@@ -119,6 +134,7 @@ def test_link_restores_result_holder():
         result_holder,
         context_holder,
         max_steps=10_000,
+        region_builtins=_region_table,
         _run_fn=fake_run,
     )
 
@@ -134,98 +150,82 @@ def test_link_restores_result_holder():
 def test_link_suppresses_task_end_hook_during_inner_program():
     """A LINKed program's own RETURN must not fire the caller's task-end
     hook (e.g. squall's commit + cursor-close) -- that would end the
-    caller's still-open unit of work mid-task, not the LINK's."""
-    from interpreter.vm.builtins import Builtins
-
+    caller's still-open unit of work mid-task, not the LINK's. The inner
+    program runs with the region's table, the hook replaced by a no-op; the
+    region's own table is left as it was."""
     hook_name = FuncName("__cics_task_end_hook")
+    other_name = FuncName("__exec_sql")
     calls: list[str] = []
 
     def _outer_hook(args, vm):
         calls.append("outer")
         return BuiltinResult(value=None)
 
-    previous = Builtins.TABLE.get(hook_name)
-    Builtins.TABLE[hook_name] = _outer_hook
-    try:
-        stub, _ = _make_stub_linked_program(ca_out=b"DONE")
+    def _other(args, vm):
+        return BuiltinResult(value=None)
 
-        def _fake_run_linked(linked, entry_point, *, max_steps, initial_vm):
-            # Simulate the inner program's own RETURN firing whatever is
-            # currently registered under the hook name.
-            Builtins.TABLE[hook_name]([], initial_vm)
-            addr = Address("rgn_commarea")
-            buf = bytearray(initial_vm.region_get(addr) or b"")
-            n = min(len(b"DONE"), len(buf))
-            buf[:n] = b"DONE"[:n]
-            initial_vm.region_set(addr, buf)
-            return initial_vm
+    region_table = {hook_name: _outer_hook, other_name: _other}
+    seen: list = []
+    stub, _ = _make_stub_linked_program(ca_out=b"DONE")
 
-        program_cache = {"MUTATOR": stub}
-        result_holder = [None]
-        context_holder = [_make_context()]
-        builtin = make_link_builtin(
-            program_cache,
-            result_holder,
-            context_holder,
-            max_steps=10_000,
-            _run_fn=_fake_run_linked,
-        )
-        ws = bytearray(b"INIT")
-        vm, _ws_addr = _make_vm_with_ws(ws)
+    def _fake_run_linked(linked, entry_point, *, max_steps, builtins, initial_vm):
+        builtins[hook_name]([], initial_vm)
+        seen.append(builtins[other_name])
+        addr = Address("rgn_commarea")
+        buf = bytearray(initial_vm.region_get(addr) or b"")
+        n = min(len(b"DONE"), len(buf))
+        buf[:n] = b"DONE"[:n]
+        initial_vm.region_set(addr, buf)
+        return initial_vm
 
-        builtin(_args("MUTATOR", b"INIT", 0, 4), vm)
+    builtin = make_link_builtin(
+        {"MUTATOR": stub},
+        [None],
+        [_make_context()],
+        max_steps=10_000,
+        region_builtins=lambda: region_table,
+        _run_fn=_fake_run_linked,
+    )
+    vm, _ws_addr = _make_vm_with_ws(bytearray(b"INIT"))
 
-        assert calls == []  # suppressed during the LINK
-        assert Builtins.TABLE[hook_name] is _outer_hook  # restored after
-    finally:
-        if previous is None:
-            Builtins.TABLE.pop(hook_name, None)
-        else:
-            Builtins.TABLE[hook_name] = previous
+    builtin(_args("MUTATOR", b"INIT", 0, 4), vm)
+
+    assert calls == []  # suppressed during the LINK
+    assert seen == [_other]  # the rest of the region's table reaches the LINK
+    assert region_table[hook_name] is _outer_hook  # the region's table is untouched
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_link_restores_task_end_hook_even_on_exception():
-    """The task-end-hook suppression must unwind even when run_linked raises,
-    mirroring result_holder's own exception-safe restore."""
-    from interpreter.vm.builtins import Builtins
-
+def test_link_leaves_the_region_table_untouched_even_on_exception():
+    """The task-end-hook suppression is a new table for the LINK, so the
+    region's own table is unchanged even when run_linked raises."""
     hook_name = FuncName("__cics_task_end_hook")
 
     def _outer_hook(args, vm):
         return BuiltinResult(value=None)
 
-    previous = Builtins.TABLE.get(hook_name)
-    Builtins.TABLE[hook_name] = _outer_hook
-    try:
+    region_table = {hook_name: _outer_hook}
 
-        class _BadLinked:
-            entry_func_label = None
+    class _BadLinked:
+        entry_func_label = None
 
-        def _exploding_run(linked, ep, *, max_steps, initial_vm):
-            raise RuntimeError("boom")
+    def _exploding_run(linked, ep, *, max_steps, builtins, initial_vm):
+        raise RuntimeError("boom")
 
-        result_holder = [None]
-        context_holder = [_make_context()]
-        builtin = make_link_builtin(
-            {"BAD": _BadLinked()},
-            result_holder,
-            context_holder,
-            max_steps=10_000,
-            _run_fn=_exploding_run,
-        )
-        ws = bytearray(b"INIT")
-        vm, _ = _make_vm_with_ws(ws)
+    builtin = make_link_builtin(
+        {"BAD": _BadLinked()},
+        [None],
+        [_make_context()],
+        max_steps=10_000,
+        region_builtins=lambda: region_table,
+        _run_fn=_exploding_run,
+    )
+    vm, _ = _make_vm_with_ws(bytearray(b"INIT"))
 
-        with pytest.raises(RuntimeError, match="boom"):
-            builtin(_args("BAD", b"INIT", 0, 4), vm)
+    with pytest.raises(RuntimeError, match="boom"):
+        builtin(_args("BAD", b"INIT", 0, 4), vm)
 
-        assert Builtins.TABLE[hook_name] is _outer_hook
-    finally:
-        if previous is None:
-            Builtins.TABLE.pop(hook_name, None)
-        else:
-            Builtins.TABLE[hook_name] = previous
+    assert region_table == {hook_name: _outer_hook}
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -235,7 +235,7 @@ def test_link_result_holder_restored_even_on_exception():
     class _BadLinked:
         entry_func_label = None
 
-    def _exploding_run(linked, ep, *, max_steps, initial_vm):
+    def _exploding_run(linked, ep, *, max_steps, builtins, initial_vm):
         raise RuntimeError("boom")
 
     outer_result = DispatchResult(kind=DispatchKind.RETURN)
@@ -246,6 +246,7 @@ def test_link_result_holder_restored_even_on_exception():
         result_holder,
         context_holder,
         max_steps=10_000,
+        region_builtins=_region_table,
         _run_fn=_exploding_run,
     )
 

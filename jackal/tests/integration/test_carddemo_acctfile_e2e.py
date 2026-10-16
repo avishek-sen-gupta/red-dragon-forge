@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from catnip.labels import RecordFormat, SequentialLabel
 from interpreter.cobol.ebcdic_table import EbcdicTable
+from interpreter.vm.builtins import core_builtins
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
 from jackal.missing_data import StrictAllocation
@@ -52,6 +53,7 @@ def test_acctfile_then_readacct_e2e(
             tmp_path / "package", bridge_jar, ("CBACT01C",), cbl_dir, (cpy_dir,)
         ),
         system=system(tmp_path),
+        builtins=core_builtins(),
     )
 
     catalog = job_catalog(tmp_path)

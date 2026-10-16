@@ -231,35 +231,17 @@ def region(tmp_path_factory, request):
     the package config/carddemo/build-db2.toml builds, by forge-run's own
     ``cics_region`` over config/carddemo/env-db2.toml.
 
-    Autouse and module-scoped on purpose. Building the package lowers all of
-    its programs through the ProLeap bridge, which is far too slow per test --
-    and pytest instantiates module-scoped autouse fixtures before
-    function-scoped ones, so conftest's ``_reset_builtins_table`` takes its
-    snapshot with this region's builtins already registered and restores
-    them faithfully after every test. A lazily-built module fixture would
-    instead be registered *after* the first test's snapshot and wiped by its
-    teardown, leaving the second test running against an empty
-    ``Builtins.TABLE``.
-
-    That same ordering means this fixture has to restore ``Builtins.TABLE``
-    itself. conftest's per-test restore replays the snapshot it took at the
-    START of each test, which for every test here already contains this
-    region's builtins -- so it faithfully puts them back and the last test
-    leaves them registered, and the next module's first ``EXEC CICS RETURN``
-    would fire this region's ``__cics_task_end_hook`` against its Db2
-    connection. Snapshotting around the whole module closes that window.
+    Autouse and module-scoped on purpose: building the package lowers all of
+    its programs through the ProLeap bridge, which is far too slow per test.
+    The region carries its own builtins table, so nothing it composes reaches
+    another module's runs.
     """
-    from interpreter.vm.builtins import Builtins
-
     if not os.environ.get("SQUALL_DB2_DSN"):
         pytest.skip("SQUALL_DB2_DSN not set; source tests/integration/db2_env.sh")
     package = request.getfixturevalue("carddemo_db2_package")
     root = tmp_path_factory.mktemp("db2_region")
     env = local_env(DB2, root, package, installed_carddemo(root), DB2.port)
-    before_the_region = dict(Builtins.TABLE)
     yield cics_region(env, os.environ)
-    Builtins.TABLE.clear()
-    Builtins.TABLE.update(before_the_region)
 
 
 @pytest.fixture
