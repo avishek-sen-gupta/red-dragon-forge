@@ -134,13 +134,35 @@ jobs:
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
       # The knowledge-graph layout is precomputed by graphviz's sfdp, and its
       # tests skip without the binary — so without this the layout code was not
       # exercised in CI at all.
-      - name: Install graphviz
-        run: sudo apt-get update && sudo apt-get install -y graphviz
+      - name: Install graphviz and the hlasm_export build dependencies
+        run: sudo apt-get update && sudo apt-get install -y graphviz cmake ninja-build clang libc++-dev libc++abi-dev
+      - name: Build the bridge JARs (ProLeap + JCL)
+        working-directory: ${{ github.workspace }}
+        run: make jar
+      - name: Build hlasm_export
+        working-directory: ${{ github.workspace }}
+        env:
+          CC: clang
+          CXX: clang++
+        run: make hlasm
       - name: Install Python dependencies
         run: make -C .. python
+      # The fields and fixpoint acceptance tests read CardDemo's parsed ASGs from
+      # out-parsed/, which is gitignored. Only these two stages start the JVM, so
+      # bridge-env.sh is sourced here and not for the test run below.
+      - name: Parse CardDemo into the ASG cache
+        run: |
+          . ../bridge-env.sh
+          uv run --no-sync cobble-sym --config config/carddemo.toml
+          uv run --no-sync cobble-parse-corpus --config config/carddemo.toml
       - name: Run the full test suite
         run: uv run --no-sync python -m pytest
 
