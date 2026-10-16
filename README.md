@@ -2,6 +2,10 @@
   <img src="docs/assets/banner.png" alt="red-dragon-forge — CICS · SQL · JCL" width="100%">
 </p>
 
+<p align="center">
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
+
 # red-dragon-forge
 
 Tools for running mainframe COBOL programs on the
