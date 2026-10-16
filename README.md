@@ -15,6 +15,25 @@ and links programs into a package; `forge-run` runs it as a single program, a JC
 region over TN3270. CICS, EXEC SQL (Db2) and JCL are each a separate package, as is the dataset
 catalog. `cobble` analyses the same sources statically.
 
+## Quick start
+
+```bash
+git clone --recurse-submodules https://github.com/avishek-sen-gupta/red-dragon-forge.git
+cd red-dragon-forge
+make setup
+```
+
+Then:
+
+- [Run CardDemo in a 3270 terminal](docs/how-to/run-carddemo.md)
+- [Run your own COBOL application](docs/how-to/run-your-application.md)
+- [Drive forge from Python](docs/how-to/drive-forge-from-python.md)
+- [Run a JCL job](docs/how-to/run-jcl-job.md)
+- [Analyse a COBOL corpus](docs/how-to/analyse-a-corpus.md)
+- [Run the tests](docs/how-to/run-tests.md)
+
+## Packages
+
 | Package | What it is |
 |---|---|
 | [`cicada/`](cicada/) | CICS runtime and TN3270 server |
@@ -38,23 +57,6 @@ linked to the copybooks (green), maps, transactions and files they use.
 <p align="center">
   <img src="docs/assets/carddemo-graph.png" alt="CardDemo knowledge graph, zoomed in" width="100%">
 </p>
-
-## Quick start
-
-```bash
-git clone --recurse-submodules https://github.com/avishek-sen-gupta/red-dragon-forge.git
-cd red-dragon-forge
-make setup
-```
-
-Then:
-
-- [Run CardDemo in a 3270 terminal](docs/how-to/run-carddemo.md)
-- [Run your own COBOL application](docs/how-to/run-your-application.md)
-- [Drive forge from Python](docs/how-to/drive-forge-from-python.md)
-- [Run a JCL job](docs/how-to/run-jcl-job.md)
-- [Analyse a COBOL corpus](docs/how-to/analyse-a-corpus.md)
-- [Run the tests](docs/how-to/run-tests.md)
 
 ## Documentation
 
