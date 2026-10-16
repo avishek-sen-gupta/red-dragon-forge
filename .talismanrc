@@ -50,7 +50,7 @@ fileignoreconfig:
 - filename: docs/superpowers/specs/2026-07-07-knowledge-graph-config-driven-driver-design.md
   checksum: 261569048f4017914bd4cee19732a4ddad3bb05d565df599dbdc6ea72c670180
 - filename: docs/superpowers/plans/2026-07-07-cobol-knowledge-graph.md
-  checksum: d2cd33c177e8444bac414fe7003ac104e73c238349328189d10d7971d13c25ee
+  checksum: 451ade4b19c24e486f2377f9843f7f089e88e4f86cea3a01833b2eb440f841ad
 - filename: squall/squall/backends/sqlite.py
   checksum: e6756d3ccfea412fe42f263aa54858a8148531a250c6de57d62fa95e46e44ae8
 - filename: squall/squall/dclgen_meta.py
@@ -70,7 +70,7 @@ fileignoreconfig:
 - filename: vendor/bank-of-z
   checksum: 5851a6da905fa54005291c767fd450082efd860e1f3ae1c1b158f576a25b7c13
 - filename: docs/superpowers/plans/2026-07-05-monorepo-migration.md
-  checksum: e4d3b88fe4d65ac05e971fdd094e6f500da43490a37fcf2b4c38fe479e7e14a2
+  checksum: f8e38023e439d68d9ca428c70f4408f3f46fc7fdba5d8192680a827a909600e5
 - filename: issues/issues.jsonl
   ignore_detectors: [filecontent]
 - filename: squall/db2/dsn-env.sh
@@ -132,7 +132,7 @@ fileignoreconfig:
 - filename: .python-fp-lint/rules/no-subscript-tuple-mutation.yml
   checksum: e15ef52716569a749ac3d9ea5c0710dfce9085a24a6c6a6b2e99a8bee34923b6
 - filename: docs/superpowers/plans/2026-09-02-cics-interval-control.md
-  checksum: c04978b4a27f19f27ddc7df98987f564a83c04cb6b8809b71a90f27031189723
+  checksum: 8d2b868a69047f29de0dac12081f79352ec93002257d1c2660194aa50d23c03b
 - filename: docs/superpowers/plans/2026-09-03-cics-condition-handling.md
   ignore_detectors: [filecontent]
 - filename: docs/superpowers/specs/2026-09-03-cics-condition-handling-design.md
@@ -180,7 +180,7 @@ fileignoreconfig:
 - filename: docs/presentation/artifacts/cobble/screens/COUSR1A.html
   checksum: 357ebc11fc18ef665a86e2ffa57a2f3e77a671cd0ee98a8224e38401ba82df70
 - filename: docs/presentation/artifacts/jcl/job-survey.json
-  checksum: 9bf3c0f597a940afc909c0e5510e48cfed84a6633fe5790d3d5707daa3d4ae56
+  checksum: 25ea77c79cd7fbc6cb2f84036e40456e3165dff4828c9bfc9765426d625fecf8
 - filename: docs/presentation/artifacts/srccfg/guards-COSGN00C-xctl.txt
   checksum: 5b2b189652f2e9637c0dfdee73a68ba8a315107a91a30484635e68aaf0139a50
 - filename: docs/presentation/artifacts/srccfg/cfg-COSGN00C.dot
@@ -200,7 +200,7 @@ fileignoreconfig:
 - filename: docs/superpowers/specs/2026-09-18-carddemo-db2-tn3270-design.md
   checksum: 0d548cd1ace87a5ab01c724f239bc92fdf71e9b6139a26829cb553fdaefc3f60
 - filename: docs/superpowers/plans/2026-09-18-carddemo-db2-tn3270.md
-  checksum: 5be5343c12e706d485e5fd73798bff29d50358298e15b52e6ffa6962526a72ef
+  checksum: a43bd83e812fad3d5aef3c09697a9c43ffe199b7e6723772ac522c089d1b1e23
 - filename: squall/tests/unit/test_preprocess.py
   checksum: d10ca9647bb1d96812ea58683ca53684809822fa2fbe51a1678cc6b5c068769b
 - filename: squall/squall/preprocess.py
