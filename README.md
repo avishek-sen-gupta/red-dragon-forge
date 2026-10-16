@@ -4,11 +4,11 @@
 
 # red-dragon-forge
 
-Build, run and analyse a mainframe COBOL application off the mainframe. Declare its datasets,
-build its programs into one package, and run that package as a batch program, a JCL job or a CICS
-region served to a 3270 terminal, with Db2 behind any of them. The programs execute on the
-[RedDragon](https://github.com/avishek-sen-gupta/red-dragon) interpreter. A static analyser reads
-the same code without running it.
+Tools for running mainframe COBOL programs on the
+[RedDragon](https://github.com/avishek-sen-gupta/red-dragon) interpreter. `forge-build` lowers
+and links programs into a package; `forge-run` runs it as a single program, a JCL job, or a CICS
+region over TN3270. CICS, EXEC SQL (Db2) and JCL are each a separate package, as is the dataset
+catalog. `cobble` analyses the same sources statically.
 
 | Package | What it is |
 |---|---|
