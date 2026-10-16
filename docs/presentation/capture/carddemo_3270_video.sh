@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Record CardDemo driven through c3270 against cicada-tn3270, as an MP4 and a GIF.
+# Record CardDemo driven through c3270 against forge-run's [cics] mode, as an MP4 and a GIF.
 # Outputs: docs/presentation/artifacts/cics/carddemo-3270.{mp4,gif}. Needs the bridge JARs, hlasm_export, c3270, vhs.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT"
-. ./carddemo-env.sh
+. ./bridge-env.sh
 
 OUT="$ROOT/docs/presentation/artifacts/cics"
 MP4="$OUT/carddemo-3270.mp4"
@@ -31,8 +31,14 @@ trap stop_server EXIT
 BEFORE="$(vendor_state)"
 PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 
-echo "== starting cicada-tn3270 on port $PORT (log: $LOG)"
-uv run --no-sync cicada-tn3270 --config cicada/config/carddemo-tn3270.toml --port "$PORT" >"$LOG" 2>&1 &
+echo "== building config/carddemo/build.toml"
+uv run --no-sync forge-build config/carddemo/build.toml
+
+ENV="$WORK/env.toml"
+sed "s/^port = 3270$/port = $PORT/" config/carddemo/env.toml >"$ENV"
+
+echo "== starting forge-run on port $PORT (log: $LOG)"
+uv run --no-sync forge-run "$ENV" >"$LOG" 2>&1 &
 SERVER=$!
 
 until nc -z 127.0.0.1 "$PORT" 2>/dev/null; do

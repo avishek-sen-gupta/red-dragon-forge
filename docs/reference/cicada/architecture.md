@@ -4,7 +4,7 @@ cicada is the CICS runtime for the RedDragon interpreter. It runs unmodified COB
 programs: pseudo-conversational transaction dispatch, VSAM file control and BMS screens. The
 reference workload is the CardDemo online tier in `vendor/carddemo`.
 
-To run CardDemo, see [run-carddemo.md](../../how-to/run-carddemo.md). The server config is
+To run CardDemo, see [run-carddemo.md](../../how-to/run-carddemo.md). The TN3270 server is
 described in [tn3270-config.md](tn3270-config.md). Open gaps are in
 [the cicada roadmap](../../roadmaps/cicada.md).
 
@@ -60,7 +60,7 @@ All paths are under `cicada/`.
 | `cics/dispatcher.py` | `run_cics`, `_advance_routing`, `_run_dispatcher_with_runner`, `CicsRegion` |
 | `cics/vm_init.py` | `make_cics_initial_vm` |
 | `cics/entered_program.py`, `cics/entered_programs.py` | `EnteredProgram(name, image)`: a program with the name it is entered by; `EnteredPrograms`, a live view of a program cache handing out each one |
-| `cics/tn3270/region.py` | `compile_region_package` (a region TOML into a litter package) and `assemble_region` (a region from a package) |
+| `cics/tn3270/region.py` | `assemble_region`: a region from a litter package |
 | `cics/csd_parse.py` | `parse_csd` (transid → program), `parse_csd_files` (file → DSNAME) |
 | `cics/bootstrap.py` | `compile_cics_program`, `run_carddemo_region` |
 | `cics/conversational.py` | conversational driver over the VM's suspend/resume primitive |
@@ -74,9 +74,8 @@ All paths are under `cicada/`.
 | `cics/screen/` | `TerminalScreen` (24x80 field model), turn driver, cursor, screen payloads |
 | `cics/vsam/` | `file_table`, `engine`, `browse`, `eibresp`, `format`, `dump` |
 | `cics/bms/` | `generate` (symbolic copybooks), `catalog` (parsed mapsets), `attributes`, `macros/` |
-| `cics/tn3270/` | the TN3270 server: `cli`, `config`, `region`, `session`, `negotiation`, `encoder`, `decoder`, `codes`, `wire` |
+| `cics/tn3270/` | the TN3270 server: `region`, `session`, `negotiation`, `encoder`, `decoder`, `codes`, `wire` |
 | `bms_copybook_gen/` | BMS macro invocations → COBOL symbolic copybook |
-| `config/` | `carddemo-tn3270.toml`, `carddemo-db2-tn3270.toml` |
 | `third-party/che-che4z-lsp-for-hlasm-fork/` | source of the `hlasm_export` binary |
 | `tests/unit/`, `tests/integration/` | unit and integration suites |
 
@@ -97,8 +96,8 @@ The CICS transaction-flow graph code (`flow_map`, `flow_graph_core`, `flow_obser
 spec from `build_cics_spec` and returns the `LinkedProgram`. Callees reached by `CALL` are
 compiled and linked transitively. Each compile writes its AST, unit and linked files into a
 new temporary directory; the region does not reuse them yet (red-dragon-forge-k6l).
-A region served over TN3270 is built differently: `compile_region_package` lowers each program
-its TOML lists once and links them into one [litter](../litter/README.md) image, with no CALL
+A region served over TN3270 is built differently: `forge-build` lowers each program its
+`build.toml` lists once and links them into one [litter](../litter/README.md) image, with no CALL
 discovery, and `assemble_region` installs the runtime over that image, its mapsets (parsed from
 the package's `hlasm_export` JSON by `cics.bms.catalog.catalog_from_json`), its transaction table
 and its CSD files ([config](tn3270-config.md)).
@@ -177,8 +176,8 @@ Screens and input travel over `ScreenChannel` and `InputChannel` (`cics/terminal
 
 ## VSAM
 
-File control runs over the system catalog in the directory the region TOML's `system` names. The
-region TOML names CSD files, not datasets ([config](tn3270-config.md)).
+File control runs over the system catalog in the directory `env.toml`'s `[paths] system` names.
+The package's file table comes from CSD files, not datasets ([server](tn3270-config.md)).
 
 - `cics/vsam/file_table.py` — `cics_files(system, dsnames)` resolves each CICS file, through the
   CSD's `DEFINE FILE(...) DSNAME(...)`, to its cataloged dataset, keyed by upper-cased file name.
@@ -231,7 +230,7 @@ from.
 
 ## TN3270
 
-`cicada-tn3270` serves a `CicsRegion` to stock 3270 emulators, one terminal and one task at a
+`forge-run`'s `[cics]` mode serves a `CicsRegion` to stock 3270 emulators, one terminal and one task at a
 time. It serves pseudo-conversational programs; conversational programs are not served.
 It drives the same `cics/screen/driver.py` the headless tests use. `cics/tn3270/wire.py` holds
-the socket code. The config format is in [tn3270-config.md](tn3270-config.md).
+the socket code. Its configuration is in [tn3270-config.md](tn3270-config.md).

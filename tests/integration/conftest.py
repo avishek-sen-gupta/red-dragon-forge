@@ -9,6 +9,17 @@ import ibm_db
 import pytest
 
 from red_dragon_forge.carddemo_db2_schema import apply_schema
+from tests.carddemo_packages import DB2, ONLINE, built_package
+
+
+@pytest.fixture(scope="session")
+def carddemo_online_package(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return built_package(tmp_path_factory.mktemp("carddemo_online"), ONLINE)
+
+
+@pytest.fixture(scope="session")
+def carddemo_db2_package(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return built_package(tmp_path_factory.mktemp("carddemo_db2"), DB2)
 
 
 @pytest.fixture
@@ -140,7 +151,7 @@ def _reset_builtins_table():
     is the same save/restore shape ``cics.strategy_stores.swap``/``restore``
     already apply to a single entry around a LINK, generalised to "the whole
     table, every test" so callers no longer have to leak connections open to
-    dodge this (see red_dragon_forge.carddemo_db2_region tests)."""
+    dodge this."""
     from interpreter.vm.builtins import Builtins
 
     snapshot = dict(Builtins.TABLE)

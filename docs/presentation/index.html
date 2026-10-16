@@ -752,11 +752,11 @@ menu = retry.apply_payload(menu_turn.screens[-1], catalog)
       </div>
     </div>
   </div>
-<pre class="log">uv run cicada-tn3270   --config cicada/config/carddemo-tn3270.toml     --port 3270
-uv run carddemo-db2-cli --config cicada/config/carddemo-db2-tn3270.toml --port 3271
+<pre class="log">uv run forge-build config/carddemo/build-db2.toml
+uv run forge-run   config/carddemo/env-db2.toml       <span class="ok">← serves on 3271</span>
 
 c3270 -model <span class="hl">3279-2-E</span> localhost:3271     <span class="ok">← 3279 + -E, or the screens come back monochrome</span></pre>
-  <div class="source">cicada/cics/tn3270/ · red_dragon_forge/carddemo_db2_cli.py · README.md</div>
+  <div class="source">cicada/cics/tn3270/ · red_dragon_forge/run_command.py · config/carddemo/</div>
   <aside class="notes">Headless remains the primary path: the wire path builds the same region and drives the same driver, so a screen-fidelity feature is asserted headlessly first and the emulator is a second opinion, never the only one. Colour rides the extended data stream — the encoder emits colour attributes only when the negotiated terminal name ends in -E, so a 3278 gives correct but entirely green screens. Sign on ADMIN001/PASSWORD for the admin menu, which is where options 5 and 6 live.</aside>
 </section>
 
@@ -790,8 +790,8 @@ c3270 -model <span class="hl">3279-2-E</span> localhost:3271     <span class="ok
       <p class="small" style="margin-top:0.8em">Updates and deletes write to a temporary copy of the VSAM data, seeded from CardDemo's own files at start-up.</p>
     </div>
   </div>
-  <div class="source">artifacts/cics/carddemo-3270.mp4 · capture/carddemo-3270.tape · capture/carddemo_3270_video.sh · cicada/config/carddemo-tn3270.toml</div>
-  <aside class="notes">Recorded with vhs driving c3270 against cicada-tn3270; make video regenerates it. The account update shows a real validation error first: account 1's seed data fails CardDemo's own FICO check, so the script fixes FICO and zip before saving. That is CardDemo's data, not the runtime. Sign-off is PF3 to the thank-you screen, then Clear and CC00 to sign on again.</aside>
+  <div class="source">artifacts/cics/carddemo-3270.mp4 · capture/carddemo-3270.tape · capture/carddemo_3270_video.sh · config/carddemo/build.toml</div>
+  <aside class="notes">Recorded with vhs driving c3270 against forge-run; make video regenerates it. The account update shows a real validation error first: account 1's seed data fails CardDemo's own FICO check, so the script fixes FICO and zip before saving. That is CardDemo's data, not the runtime. Sign-off is PF3 to the thank-you screen, then Clear and CC00 to sign on again.</aside>
 </section>
 
 <section>
@@ -993,7 +993,7 @@ SQL reaching Db2 — case NOT FOUND
       </div>
     </div>
   </div>
-  <div class="source">tests/integration/test_carddemo_db2_headless.py · red_dragon_forge/carddemo_db2_region.py</div>
+  <div class="source">tests/integration/test_carddemo_db2_headless.py · config/carddemo/env-db2.toml</div>
   <aside class="notes">The main point here is the 6: each was a silent wrong answer, found only by running an IBM program, and all are fixed. Assertions go through a third connection on purpose — reading back through the program's own connection cannot tell "committed" from "still pending on this session", which would make every unit-of-work proof vacuous.</aside>
 </section>
 

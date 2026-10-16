@@ -1,5 +1,8 @@
 package = "/tmp/carddemo-db2-build/carddemo-db2.zip"
 
+[tolerant]
+permit_missing_host_variables = true
+
 [paths]
 system = "/tmp/carddemo-system"
 

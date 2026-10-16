@@ -1,6 +1,6 @@
 """The load-bearing proof for task 10 (2026-09-19-carddemo-db2-tier): an
 abending task actually rolls back its Db2 unit of work through the exact
-wiring red_dragon_forge.carddemo_db2_region.build_db2_region uses --
+wiring forge-run's [cics] mode uses with [sql] --
 ``on_abend=backend.rollback`` supplied to ``build_cics_spec`` (Task 6's
 seam).
 
@@ -35,11 +35,10 @@ runtime runs ``tolerant=True``, so a misrouted statement would silently no-op
 rather than fail compilation).
 
 Composes build_cics_spec/build_sql_spec/install_sql_runtime directly (the
-same calls build_db2_region makes) against an inline synthetic program, rather than
-going through build_db2_region + a RegionConfig, so this stays a focused
-test of the rollback mechanism itself; red_dragon_forge/carddemo_db2_region.py's
-OWN wiring of on_abend is covered separately by
-tests/unit/test_carddemo_db2_region_wiring.py.
+same calls a forge-build and forge-run make) against an inline synthetic
+program, rather than going through a package, so this stays a focused test of
+the rollback mechanism itself; forge-run's OWN wiring of on_abend is covered
+separately by tests/unit/test_cics_sql_wiring.py.
 """
 
 from __future__ import annotations
@@ -95,7 +94,7 @@ _RETURN_PROGRAM = """\
 
 
 def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
-    """Compose cics+squall exactly as build_db2_region does (backend.rollback
+    """Compose cics+squall exactly as forge-run does (backend.rollback
     as on_abend) and run *program_source* to completion. Returns the
     DispatchResult and the program's own (still open) connection -- the
     caller decides what to do with it."""

@@ -7,6 +7,7 @@ uses this, not here.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import threading
@@ -19,15 +20,22 @@ from pathlib import Path
 import pytest
 
 from catnip.system_catalog import SystemCatalog
-from cics.tn3270.config import RegionConfig
-from cics.tn3270.region import ServedRegion, assemble_region, compile_region_package
-from litter.open import open_package
+from cics.bms.export import exported_mapsets, fresh_symbolic_copybooks
+from cics.coprocessor import build_cics_spec
+from cics.csd_parse import parse_csd, parse_csd_files
+from cics.tn3270.region import CICS_COPYBOOKS, ServedRegion, assemble_region
 from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
+from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.subprocess_runner import RealSubprocessRunner
+from litter.build import build
+from litter.cics_file import CicsFile
+from litter.open import open_package
+from litter.transaction import Transaction
 
-# Repo root. A caller sets this as the FORGE_ROOT env var before load_config,
-# so a config's hlasm_export path can expand its ${FORGE_ROOT}/... prefix.
 REPO_ROOT = Path(__file__).parents[4]
+_STUBS = REPO_ROOT / "cicada" / "cics" / "stubs"
+_INITIAL_TRANSID = "CC00"
 
 
 @dataclass(frozen=True)
@@ -48,23 +56,65 @@ def _serve_until_closed(server, session) -> None:
         pass
 
 
+def _source(app: Path, program: str) -> Path:
+    found = [
+        source
+        for source in (app / "cbl" / f"{program}.cbl", _STUBS / f"{program}.cbl")
+        if source.is_file()
+    ]
+    return found[0]
+
+
+def carddemo_package(
+    work_dir: Path, bridge_jar: str, programs: tuple[str, ...]
+) -> Path:
+    """A litter package linking ``programs`` from CardDemo's online tree, with
+    every transaction, file and mapset its CSD and BMS directory define --
+    as forge-build builds config/carddemo/build.toml, restricted to the
+    programs a flow reaches."""
+    app = Path(os.environ["CARDDEMO_HOME"])
+    csd = app / "csd" / "CARDDEMO.CSD"
+    sym = work_dir / "sym"
+    fresh_symbolic_copybooks((app / "bms",), os.environ["HLASM_EXPORT"], sym)
+    copybook_dirs = (sym, app / "cpy", app / "cpy-bms", CICS_COPYBOOKS)
+    return build(
+        name="carddemo",
+        programs=programs,
+        link=programs,
+        sources={name: _source(app, name) for name in programs},
+        parser=ProLeapCobolParser(
+            RealSubprocessRunner(), bridge_jar, copybook_dirs=list(copybook_dirs)
+        ),
+        specs=(build_cics_spec(),),
+        copybook_dirs=copybook_dirs,
+        work_dir=work_dir / "units",
+        out_dir=work_dir / "out",
+        transactions=tuple(
+            Transaction(transid, program)
+            for transid, program in sorted(parse_csd(csd).items())
+        ),
+        files=tuple(CicsFile(name, dsn) for name, dsn in parse_csd_files(csd).items()),
+        mapsets=exported_mapsets(
+            (app / "bms",), os.environ["HLASM_EXPORT"], work_dir / "maps"
+        ),
+        tolerant=False,
+    )
+
+
 @contextmanager
-def served_session(
-    config: RegionConfig, bridge_jar: str, work_dir: Path
-) -> Iterator[ServedSession]:
-    """Build a region from ``config`` and serve it over TN3270 on an
+def served_session(package: Path, system: Path) -> Iterator[ServedSession]:
+    """Serve the region assembled from ``package`` over TN3270 on an
     ephemeral loopback port for the duration of the context.
 
     The listening socket and its daemon thread are torn down on exit; the
     thread is daemonic so a hung connection cannot block interpreter exit."""
-    package = compile_region_package(config, bridge_jar, work_dir, work_dir / "out")
-    region = assemble_region(open_package(package), SystemCatalog(config.system))
+    region = assemble_region(open_package(package), SystemCatalog(system))
     server = bind("127.0.0.1", 0)
     session = partial(
         run_session,
         driver=region.driver,
         catalog=region.catalog,
-        initial_transid=config.initial_transid,
+        initial_transid=_INITIAL_TRANSID,
     )
     thread = threading.Thread(
         target=_serve_until_closed, args=(server, session), daemon=True
@@ -127,13 +177,3 @@ class S3270:
     def close(self) -> None:
         self.proc.kill()
         self.proc.wait()
-
-
-def region_toml(config: Path, system: Path) -> Path:
-    region = system.parent / config.name
-    region.write_text(
-        config.read_text().replace(
-            'system = "/tmp/carddemo-system"', f'system = "{system}"'
-        )
-    )
-    return region

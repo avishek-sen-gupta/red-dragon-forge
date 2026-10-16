@@ -2,7 +2,7 @@
 
 Preparing a database and running a server are different jobs with different
 blast radii, so they are different commands: this one is the only thing that
-ever issues ``DROP TABLE``, and ``carddemo-db2-cli`` only ever reads. Folding
+ever issues ``DROP TABLE``, and ``forge-run`` only ever reads. Folding
 the reset into the server's startup would mean every routine start carried the
 power to destroy the tables, which is exactly the authority a server does not
 need.
@@ -48,7 +48,7 @@ def _connect(dsn: str):
     """Open *dsn* with autocommit ON, or exit 1 naming the remedy.
 
     Autocommit ON and separate from the region's own connection, which
-    build_db2_region always flips to SQL_AUTOCOMMIT_OFF -- the same split
+    its Db2Backend always flips to SQL_AUTOCOMMIT_OFF -- the same split
     tests/integration/conftest.py makes between db2_admin_conn and the
     program-under-test's connection.
     """
@@ -75,7 +75,7 @@ def main() -> int:
     apply_schema(conn, _db2_tree())
     ibm_db.close(conn)  # type: ignore[reportArgumentType]
     logger.info(
-        "seeded -- start the server with `uv run carddemo-db2-cli --config ...`"
+        "seeded -- serve it with `uv run forge-run config/carddemo/env-db2.toml`"
     )
     return 0
 
