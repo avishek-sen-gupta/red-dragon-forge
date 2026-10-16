@@ -1,4 +1,4 @@
-"""A package's manifest: its programs, coprocessors, CSD tables and mapsets; the only thing serialised to manifest.json."""
+"""A package's manifest: the programs linked into its image, coprocessors, CSD tables and mapsets; the only thing serialised to manifest.json."""
 
 from litter.cics_file import CicsFile
 from litter.member_name import MemberName

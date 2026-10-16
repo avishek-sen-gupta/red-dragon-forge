@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "red-dragon",
+    "litter",
+    "catnip",
     "pyyaml>=6.0",
     "sortedcontainers>=2.4.0",
     "lark>=1.3.1",
@@ -18,9 +20,13 @@ db2 = ["ibm-db>=3.2.0"]
 [project.scripts]
 carddemo-db2-cli = "red_dragon_forge.carddemo_db2_cli:main"
 carddemo-db2-seed = "red_dragon_forge.carddemo_db2_seed:main"
+forge-build = "red_dragon_forge.build_command:main"
+forge-run = "red_dragon_forge.run_command:main"
 
 [tool.uv.sources]
 red-dragon = { path = "vendor/red-dragon", editable = true }
+litter = { workspace = true }
+catnip = { workspace = true }
 
 [tool.uv.workspace]
 members = ["cicada", "squall", "jackal", "cobble", "catnip", "litter"]

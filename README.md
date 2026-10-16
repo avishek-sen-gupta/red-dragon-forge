@@ -14,7 +14,7 @@ them, and a static analyser for the same code.
 | [`squall/`](squall/) | EXEC SQL runtime for Db2 programs |
 | [`jackal/`](jackal/) | JCL/batch engine |
 | [`catnip/`](catnip/) | System catalog: the datasets jobs and CICS regions share |
-| [`litter/`](litter/) | Package: COBOL programs compiled once into a zip, opened later to run |
+| [`litter/`](litter/) | Package: COBOL programs lowered once and linked into one image in a zip; `forge-build` writes one, `forge-run` runs it |
 | [`red_dragon_forge/`](red_dragon_forge/) | Composition layer |
 | [`cobble/`](cobble/) | Static analyser: knowledge graph, control flow, field dataflow |
 

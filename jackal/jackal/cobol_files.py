@@ -56,6 +56,7 @@ _LABELLING = frozenset({OpenMode.OUTPUT.value, OpenMode.EXTEND.value})
 
 @dataclass(frozen=True)
 class ProgramFile:
+    program: str
     entry: FileControlEntry
     fmt: ProgramFormat
 
@@ -210,6 +211,7 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         organization: str,
         key_offset: int,
         key_length: int,
+        program: str,
     ) -> IOResult:
         opened = self._opened_as(filename, mode)
         if not self._supports(filename, opened):
@@ -217,7 +219,13 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         if not self._admits(filename, opened, RecordKey(key_offset, key_length)):
             return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
         return super()._open_file(
-            filename, opened, record_length, organization, key_offset, key_length
+            filename,
+            opened,
+            record_length,
+            organization,
+            key_offset,
+            key_length,
+            program,
         )
 
 

@@ -71,6 +71,7 @@ from __future__ import annotations
 from pathlib import Path
 
 DB2_STUBS_DIR = Path(__file__).parent / "stubs"
+DB2_STUB_PROGRAMS: tuple[str, ...] = ("DSNTIAC",)
 
 
 def read_db2_stub_sources() -> dict[str, bytes]:

@@ -292,11 +292,12 @@ class RejectingParser:
         self._rejected = rejected
         self.wrote: tuple[Path, ...] = ()
 
-    def parse_to_file(self, source: bytes, out: Path) -> None:
-        self.wrote = (*self.wrote, out)
+    def parse_to_file(self, source: bytes, out_path: Path) -> Path:
+        self.wrote = (*self.wrote, out_path)
         if source == self._rejected:
             raise CobolParseError(REAL_STDERR)
-        out.write_text('{"program_id": "OK"}', encoding="utf-8")
+        out_path.write_text('{"program_id": "OK"}', encoding="utf-8")
+        return out_path
 
 
 def _program(tmp_path: Path, name: str, source: bytes) -> Path:

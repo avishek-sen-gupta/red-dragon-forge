@@ -18,8 +18,10 @@ from pathlib import Path
 
 import pytest
 
+from catnip.system_catalog import SystemCatalog
 from cics.tn3270.config import RegionConfig
-from cics.tn3270.region import ServedRegion, build_region
+from cics.tn3270.region import ServedRegion, assemble_region, compile_region_package
+from litter.open import open_package
 from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
 
@@ -55,7 +57,8 @@ def served_session(
 
     The listening socket and its daemon thread are torn down on exit; the
     thread is daemonic so a hung connection cannot block interpreter exit."""
-    region = build_region(config, bridge_jar, work_dir)
+    package = compile_region_package(config, bridge_jar, work_dir, work_dir / "out")
+    region = assemble_region(open_package(package), SystemCatalog(config.system))
     server = bind("127.0.0.1", 0)
     session = partial(
         run_session,

@@ -25,9 +25,8 @@ from __future__ import annotations
 import queue
 from typing import Any
 
-from interpreter.run import Suspended, resume_linked, run_linked_resumable
-
 from cics.types import DEFAULT_TERMID, CicsContext, DispatchKind, DispatchResult
+from interpreter.run import Suspended, resume_linked, run_linked_resumable
 
 _DFHENTER = "\x7d"
 

@@ -36,6 +36,7 @@ def _file(
 ) -> DataRecord:
     return DataRecord(
         (
+            named("program", text("FILEDEFS")),
             named("file_name", text(name)),
             named("assign_to", text(f"{name[:3]}DD")),
             named("organization", text(organization)),
@@ -122,6 +123,7 @@ def test_each_file_record_becomes_its_entry_and_its_fds_format():
 
     assert program_files_in(ir) == (
         ProgramFile(
+            "FILEDEFS",
             FileControlEntry(
                 "SEQ-FILE",
                 "SEQDD",
@@ -134,6 +136,7 @@ def test_each_file_record_becomes_its_entry_and_its_fds_format():
             VariableFormat(54),
         ),
         ProgramFile(
+            "FILEDEFS",
             FileControlEntry(
                 "IDX-FILE",
                 "IDXDD",
@@ -146,6 +149,7 @@ def test_each_file_record_becomes_its_entry_and_its_fds_format():
             FixedFormat(80),
         ),
         ProgramFile(
+            "FILEDEFS",
             FileControlEntry(
                 "REL-FILE",
                 "RELDD",
@@ -158,6 +162,7 @@ def test_each_file_record_becomes_its_entry_and_its_fds_format():
             VariableFormat(64),
         ),
         ProgramFile(
+            "FILEDEFS",
             FileControlEntry(
                 "ODO-FILE",
                 "ODODD",
@@ -170,6 +175,7 @@ def test_each_file_record_becomes_its_entry_and_its_fds_format():
             VariableFormat(44),
         ),
         ProgramFile(
+            "FILEDEFS",
             FileControlEntry(
                 "NOFD-FILE",
                 "NOFDD",

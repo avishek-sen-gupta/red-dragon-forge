@@ -8,6 +8,7 @@ from functools import reduce
 from pathlib import Path
 
 from catnip.system_catalog import SystemCatalog
+from interpreter.project.program_entry import ProgramEntry
 from jackal.allocation import DdEnvironment, allocate, dispose, release
 from jackal.catalog import DatasetCatalog
 from jackal.cobol_step import CompiledProgram, run_cobol_step
@@ -141,13 +142,17 @@ class JobRunner:
         missing_program: MissingProgramStrategy,
         program_step_budget: int,
         proclib_dirs: Sequence[Path] = (),
+        *,
+        permit_unresolved_call_targets: bool = True,
     ):
         self._package = package
+        self._files = program_files_of(package.image)
         self._system = system
         self._unresolved = unresolved
         self._missing_data = missing_data
         self._missing_program = missing_program
         self._program_step_budget = program_step_budget
+        self._permit_unresolved_call_targets = permit_unresolved_call_targets
         self._library = DirectoryProcLibrary(tuple(proclib_dirs))
 
     def run(self, job: Job, scratch: Path) -> JobResult:
@@ -251,14 +256,16 @@ class JobRunner:
         env: DdEnvironment,
         catalog: DatasetCatalog,
     ) -> ProgramResult:
-        if step.pgm.name not in self._package.programs:
+        if step.pgm.name not in self._package.image.programs:
             return self._missing_program.settle(qualified, step.pgm)
-        linked = self._package.programs[step.pgm.name]
         return run_cobol_step(
             step,
-            CompiledProgram(linked, program_files_of(linked)),
+            CompiledProgram(
+                self._package.image, ProgramEntry(step.pgm.name), self._files
+            ),
             env,
             catalog.workdir,
             self._program_step_budget,
             catalog,
+            permit_unresolved_call_targets=self._permit_unresolved_call_targets,
         )

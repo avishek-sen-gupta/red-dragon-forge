@@ -64,7 +64,9 @@ def test_a_concatenation_reads_member_by_member_cannot_be_written_and_logs_a_con
     )
     job = JclBridgeParser(JclSubprocessRunner(), jcl_bridge_jar).parse(jcl)
     runner = JobRunner(
-        package=package(tmp_path / "package", ("COPYUP", "CATWRITE", "CONCHK")),
+        package=package(
+            tmp_path / "package", bridge_jar, ("COPYUP", "CATWRITE", "CONCHK")
+        ),
         system=system(tmp_path),
         unresolved=RaiseErrorStrategy(),
         missing_data=StrictAllocation(),

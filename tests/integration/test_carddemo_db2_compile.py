@@ -39,7 +39,7 @@ from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.layout_data import field_positions
 from interpreter.instructions import Const
 from interpreter.project.coprocessor_compile import compile_program
-from interpreter.run import main_declarations
+from interpreter.run import declarations_of
 from squall.coprocessor import build_sql_spec
 
 from tests.integration.forge_cobol_helpers import (
@@ -131,7 +131,9 @@ def test_cotrtupc_compiles_with_cics_and_sql_composed(bridge_jar):
         )
     )
     present = frozenset(
-        name for name in required if name in field_positions(main_declarations(linked))
+        name
+        for name in required
+        if name in field_positions(declarations_of(linked, "COTRTUPC"))
     )
     assert present == required, (
         f"{sorted(required - present)} missing from COTRTUPC's compiled "
@@ -148,7 +150,9 @@ def test_cotrtlic_compiles_with_cics_and_sql_composed(bridge_jar):
 
     required = frozenset(("CARDDEMO-COMMAREA", "SQLCA", "DCLTRANSACTION-TYPE"))
     present = frozenset(
-        name for name in required if name in field_positions(main_declarations(linked))
+        name
+        for name in required
+        if name in field_positions(declarations_of(linked, "COTRTLIC"))
     )
     assert present == required, (
         f"{sorted(required - present)} missing from COTRTLIC's compiled "

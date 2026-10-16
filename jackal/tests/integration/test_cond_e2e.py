@@ -45,7 +45,7 @@ def test_cond_bypasses_real_cobol_step(tmp_path: Path, bridge_jar, jcl_bridge_ja
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        package=package(tmp_path / "package", ("FAILS", "OK"), src),
+        package=package(tmp_path / "package", bridge_jar, ("FAILS", "OK"), src),
         system=system(tmp_path),
     )
     res = runner.run(job, scratch=scratch(tmp_path))

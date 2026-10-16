@@ -58,7 +58,9 @@ All paths are under `cicada/`.
 | `cics/handler_labels.py` | numbers the paragraphs `HANDLE CONDITION` can jump to |
 | `cics/interval.py` | `StartQueue`, `StartRequest`: pending `START` requests |
 | `cics/dispatcher.py` | `run_cics`, `_advance_routing`, `_run_dispatcher_with_runner`, `CicsRegion` |
-| `cics/vm_init.py` | `make_cics_initial_vm`, `make_entry_point` |
+| `cics/vm_init.py` | `make_cics_initial_vm` |
+| `cics/entered_program.py`, `cics/entered_programs.py` | `EnteredProgram(name, image)`: a program with the name it is entered by; `EnteredPrograms`, a live view of a program cache handing out each one |
+| `cics/tn3270/region.py` | `compile_region_package` (a region TOML into a litter package) and `assemble_region` (a region from a package) |
 | `cics/csd_parse.py` | `parse_csd` (transid → program), `parse_csd_files` (file → DSNAME) |
 | `cics/bootstrap.py` | `compile_cics_program`, `run_carddemo_region` |
 | `cics/conversational.py` | conversational driver over the VM's suspend/resume primitive |
@@ -95,6 +97,11 @@ The CICS transaction-flow graph code (`flow_map`, `flow_graph_core`, `flow_obser
 spec from `build_cics_spec` and returns the `LinkedProgram`. Callees reached by `CALL` are
 compiled and linked transitively. Each compile writes its AST, unit and linked files into a
 new temporary directory; the region does not reuse them yet (red-dragon-forge-k6l).
+A region served over TN3270 is built differently: `compile_region_package` lowers each program
+its TOML lists once and links them into one [litter](../litter/README.md) image, with no CALL
+discovery, and `assemble_region` installs the runtime over that image, its mapsets (parsed from
+the package's `hlasm_export` JSON by `cics.bms.catalog.catalog_from_json`), its transaction table
+and its CSD files ([config](tn3270-config.md)).
 A conversational program is compiled with `build_cics_spec(conversational=True)`, which
 lowers `RECEIVE MAP` to a VM suspend. The strategy is named `cics-conversational` rather than
 `cics`, so the two modes' compiled files never share a name.
@@ -135,7 +142,13 @@ A verb the grammar parses but the strategy does not lower compiles to an abend w
 
 ## Dispatch
 
-`run_cics` runs one program for one task. It builds a fresh VM with `make_cics_initial_vm`:
+`run_cics` runs one program for one task, entering its image at the program named by `entry`
+(red-dragon's `ProgramEntry`). A region's program cache maps each program name to the image
+that holds it: in a region assembled from a package every name maps to the one image, and a
+task, an `XCTL` and a `LINK` each enter it by the program's name. With
+`permit_unresolved_call_targets` false, a `CALL` to a program the image lacks abends the task
+with code 4038 (LE's module-not-found `U4038`): `run_cics` logs `TRANSID: <error> — abending
+4038` and runs the region's `on_abend`; HANDLE ABEND is not driven. It builds a fresh VM with `make_cics_initial_vm`:
 the COMMAREA is argument 0 and binds the first LINKAGE 01 item. It returns a `DispatchResult`
 of kind `RETURN`, `RETURN_TRANSID`, `XCTL` or `ABEND`.
 

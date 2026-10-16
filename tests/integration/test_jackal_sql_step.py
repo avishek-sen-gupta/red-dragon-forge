@@ -10,7 +10,6 @@ from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
-from jackal.le_abend import LE_STUBS
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.results import Completed, StepOutcome
@@ -31,12 +30,13 @@ def _package(tmp_path: Path, bridge_jar: str) -> Package:
         build(
             name="sql",
             programs=("SQLRPT",),
+            link=("SQLRPT",),
             sources={"SQLRPT": CBL / "SQLRPT.cbl"},
             parser=ProLeapCobolParser(
                 runner=RealSubprocessRunner(), bridge_jar=bridge_jar, copybook_dirs=[]
             ),
             specs=(build_sql_spec(),),
-            search_dirs=(CBL, LE_STUBS),
+            copybook_dirs=(),
             work_dir=tmp_path / "work",
             out_dir=tmp_path / "out",
             transactions=(),

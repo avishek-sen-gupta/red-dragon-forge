@@ -13,7 +13,6 @@ from tests.covers import NotLanguageFeature, covers
 _TOML = """
 [region]
 initial_transid = "CC00"
-min_commarea_len = 400
 programs = ["COACTVWC"]
 [paths]
 source_dirs = ["${APP}/cbl"]
@@ -65,7 +64,6 @@ def _config(*source_dirs: str) -> RegionConfig:
         bms_dirs=(),
         hlasm_export=None,  # type: ignore[arg-type]
         initial_transid="",
-        min_commarea_len=0,
         transactions={},
         programs=frozenset(),
         system=Path("/system"),

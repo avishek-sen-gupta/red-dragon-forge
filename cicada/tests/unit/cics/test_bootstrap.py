@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import queue
 
+from cics.entered_program import EnteredProgram
+
 import pytest
 
 from cics import bootstrap
@@ -87,9 +89,10 @@ def test_run_region_builds_program_cache_keyed_by_program_name(monkeypatch):
     assert result.kind == DispatchKind.RETURN
     cache = captured["program_cache"]
     assert set(cache.keys()) == {"SGNPGM", "MENUPGM"}
-    # Cache values are the sentinels the (stubbed) compile produced.
-    assert cache["SGNPGM"] is compiled[b"src-sgn"]
-    assert cache["MENUPGM"] is compiled[b"src-menu"]
+    # Cache values are the sentinels the (stubbed) compile produced, each
+    # entered by its own program name.
+    assert cache["SGNPGM"] == EnteredProgram("SGNPGM", compiled[b"src-sgn"])
+    assert cache["MENUPGM"] == EnteredProgram("MENUPGM", compiled[b"src-menu"])
     # The loop is driven at the entry transid.
     ctx = captured["initial_context"]
     assert isinstance(ctx, CicsContext)

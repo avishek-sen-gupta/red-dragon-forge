@@ -42,8 +42,9 @@ Runs a CardDemo batch job through jackal. Flags are in
    [catnip](../reference/catnip/README.md).
 
 4. Build a [litter](../reference/litter/README.md) package of the COBOL programs the jobs run.
-   jackal compiles nothing: a step's `PGM=X` runs the package's program `X`. Save as
-   `build_batch.py`:
+   jackal compiles nothing: a step's `PGM=X` enters the package's image at program `X`. List
+   every program the image needs, callees and Language Environment stubs included; nothing is
+   discovered. Save as `build_batch.py`:
 
    ```python
    import os
@@ -51,7 +52,6 @@ Runs a CardDemo batch job through jackal. Flags are in
 
    from cobol_asg.cobol_parser import ProLeapCobolParser
    from cobol_asg.subprocess_runner import RealSubprocessRunner
-   from jackal.le_abend import LE_STUBS
    from litter.build import build
 
    app = Path(os.environ["CARDDEMO_HOME"]) / "app"
@@ -59,6 +59,7 @@ Runs a CardDemo batch job through jackal. Flags are in
    build(
        name="carddemo-batch",
        programs=programs,
+       link=programs,
        sources={p: app / "cbl" / f"{p}.cbl" for p in programs},
        parser=ProLeapCobolParser(
            runner=RealSubprocessRunner(),
@@ -66,7 +67,7 @@ Runs a CardDemo batch job through jackal. Flags are in
            copybook_dirs=[app / "cpy"],
        ),
        specs=(),
-       search_dirs=(app / "cbl", LE_STUBS),
+       copybook_dirs=(app / "cpy",),
        work_dir=Path("/tmp/carddemo-batch-work"),
        out_dir=Path("/tmp"),
        transactions=(),
@@ -170,14 +171,18 @@ generations) and `DEMO.SEED`.
 
 ### A program that CALLs through a variable
 
-A program CALLed by a quoted name is found in the build's `search_dirs` and linked into its
-caller. A `CALL WS-PGM` reaches only programs linked into the caller, and a package build links
-none by variable name (red-dragon-forge-8urg): the run stops with `UnresolvedProgramError: CALL
-resolved at run time to __entry_CALLSUB, but nothing in this run unit is registered under it`.
+A `CALL WS-PGM` reaches any program the image holds, so list the callee in both `programs`
+and `link`. A callee left out of `link` is not in the image: a CALL through a data-name stops the
+run with `UnresolvedProgramError: CALL resolved at run time to __entry_CALLSUB, but nothing in
+this run unit is registered under it`. A CALL by a quoted name does the same under `forge-run`;
+under `jackal run` it goes to red-dragon's unresolved-call resolver, which returns a symbolic
+result instead of running anything (`JobRunner(..., permit_unresolved_call_targets=True)`, the
+default).
 
 ### A Db2 step (IKJEFT01 with DSN RUN PROGRAM)
 
-The `jackal` command composes no SQL support, so a program with `EXEC SQL` runs through the Python
+The `jackal` command composes no SQL support. A program with `EXEC SQL` runs under
+[`forge-run`](../reference/forge/run.md) with `[jcl]` and `[sql]`, or through the Python
 API: built into a package with squall's coprocessor, and run with squall's runtime installed. A Db2 batch program
 does not `CONNECT`; DSN attaches it to its subsystem, which `initial_connector` stands in for. This runs a SYSTSIN of
 `DSN SYSTEM(DB2P)` / `RUN PROGRAM(RPTPGM) PLAN(RPTPLAN)` against an SQLite database:
@@ -190,7 +195,6 @@ from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
-from jackal.le_abend import LE_STUBS
 from jackal.missing_data import StrictAllocation
 from jackal.missing_program import AbendMissingProgram
 from jackal.runner import JobRunner
@@ -206,6 +210,7 @@ from litter.open import open_package
 package = build(
     name="db2job",
     programs=("RPTPGM",),
+    link=("RPTPGM",),
     sources={"RPTPGM": Path("cbl/RPTPGM.cbl")},
     parser=ProLeapCobolParser(
         runner=RealSubprocessRunner(),
@@ -213,7 +218,7 @@ package = build(
         copybook_dirs=[Path("cpy")],
     ),
     specs=(build_sql_spec(),),
-    search_dirs=(Path("cbl"), LE_STUBS),
+    copybook_dirs=(Path("cpy"),),
     work_dir=Path("/tmp/db2job-work"),
     out_dir=Path("/tmp"),
     transactions=(),

@@ -1,7 +1,6 @@
-"""Proves build_region's ``extra_specs`` seam (task 9 of the
-2026-09-19-carddemo-db2-tier plan) actually composes a caller-supplied
-:class:`CoprocessorSpec` into ``compile_program``, not merely that
-``build_region`` accepts the parameter without dropping it.
+"""Proves compile_region_package's ``extra_specs`` seam actually composes a
+caller-supplied :class:`CoprocessorSpec` into the lowering of every program
+the region lists, not merely that it accepts the parameter without dropping it.
 
 Cicada cannot import squall (the import-linter contract
 ``cicada-squall-jackal-independence`` forbids ``cics`` -> ``squall``), so this
@@ -21,7 +20,7 @@ import pytest
 
 from tests.integration.cics.tn3270_helpers import region_toml
 from cics.tn3270.config import load_config
-from cics.tn3270.region import build_region
+from cics.tn3270.region import compile_region_package
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from tests.covers import NotLanguageFeature, covers
 from tests.integration.cics.tn3270_helpers import REPO_ROOT
@@ -79,21 +78,38 @@ def _program_id(source: str) -> str:
 def test_extra_specs_prepass_runs_for_every_compiled_program(
     tmp_path, bridge_jar, monkeypatch, carddemo_system
 ):
-    """Against pre-task-9 code, build_region has no extra_specs parameter at
-    all, so this call raises TypeError before ever reaching a spec -- this
-    test fails there. A build_region that accepted the parameter but never
-    threaded it into compile_program would leave recorder.sources empty; only
-    a build_region that actually composes it produces one recorded source
-    per compiled program, each containing that program's own name. Compiled
-    programs include static callees: COTRN02C calls CSUTLDTC, found in the
-    CardDemo source directory, which calls the Language Environment stub
-    CEEDAYS, found in the LE stub directory."""
+    """One recorded source per lowered program, each containing that
+    program's own name. The region lists its callees: COTRN02C calls CSUTLDTC,
+    which calls the Language Environment stub CEEDAYS."""
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
     config = load_config(region_toml(_CONFIG, carddemo_system))
     recorder = _Recorder()
 
-    build_region(config, bridge_jar, tmp_path, extra_specs=[_stub_spec(recorder)])
-
-    assert sorted(_program_id(text) for text in recorder.sources) == sorted(
-        (*config.programs, "CSUTLDTC", "CEEDAYS")
+    compile_region_package(
+        config,
+        bridge_jar,
+        tmp_path,
+        tmp_path / "out",
+        extra_specs=[_stub_spec(recorder)],
     )
+
+    assert sorted(_program_id(text) for text in recorder.sources) == [
+        "CEEDAYS",
+        "COACTUPC",
+        "COACTVWC",
+        "COADM01C",
+        "COBIL00C",
+        "COCRDLIC",
+        "COCRDSLC",
+        "COCRDUPC",
+        "COMEN01C",
+        "COSGN00C",
+        "COTRN00C",
+        "COTRN01C",
+        "COTRN02C",
+        "COUSR00C",
+        "COUSR01C",
+        "COUSR02C",
+        "COUSR03C",
+        "CSUTLDTC",
+    ]

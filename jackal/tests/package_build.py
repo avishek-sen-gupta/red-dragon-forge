@@ -1,13 +1,15 @@
-"""Test helpers: litter packages of fixture programs, built or opened; the empty package, and a packaged program as a step runs it."""
+"""Test helpers: litter packages of fixture programs, built or opened; the empty package, and a packaged program as a step enters it."""
 
 from __future__ import annotations
 
-import os
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import RealSubprocessRunner
+from interpreter.project.cobol_compile import link_units
+from interpreter.project.program_entry import ProgramEntry
 from jackal.cobol_step import CompiledProgram
 from jackal.file_definitions import program_files_of
 from jackal.le_abend import LE_STUBS
@@ -18,15 +20,25 @@ from litter.package import Package
 
 FIXTURE_CBL = Path(__file__).parent / "integration" / "fixtures" / "cbl"
 
+
 EMPTY = Package(
     Manifest(programs=(), coprocessors=(), transactions=(), files=(), mapsets=()),
-    {},
+    link_units((), Path(tempfile.mkdtemp(prefix="jackal-empty-image-"))),
     {},
 )
 
 
+def _source(name: str, cbl_dir: Path) -> Path:
+    return next(
+        found
+        for found in (cbl_dir / f"{name}.cbl", LE_STUBS / f"{name}.cbl")
+        if found.is_file()
+    )
+
+
 def built(
     directory: Path,
+    bridge_jar: str,
     programs: Sequence[str],
     cbl_dir: Path = FIXTURE_CBL,
     copybook_dirs: Sequence[Path] = (),
@@ -34,14 +46,15 @@ def built(
     return build(
         name="fixture",
         programs=programs,
-        sources={name: cbl_dir / f"{name}.cbl" for name in programs},
+        link=programs,
+        sources={name: _source(name, cbl_dir) for name in programs},
         parser=ProLeapCobolParser(
             runner=RealSubprocessRunner(),
-            bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
+            bridge_jar=bridge_jar,
             copybook_dirs=list(copybook_dirs),
         ),
         specs=(),
-        search_dirs=(cbl_dir, LE_STUBS),
+        copybook_dirs=copybook_dirs,
         work_dir=directory / "work",
         out_dir=directory / "out",
         transactions=(),
@@ -53,13 +66,15 @@ def built(
 
 def package(
     directory: Path,
+    bridge_jar: str,
     programs: Sequence[str],
     cbl_dir: Path = FIXTURE_CBL,
     copybook_dirs: Sequence[Path] = (),
 ) -> Package:
-    return open_package(built(directory, programs, cbl_dir, copybook_dirs))
+    return open_package(built(directory, bridge_jar, programs, cbl_dir, copybook_dirs))
 
 
 def compiled(packaged: Package, name: str) -> CompiledProgram:
-    linked = packaged.programs[name]
-    return CompiledProgram(linked, program_files_of(linked))
+    return CompiledProgram(
+        packaged.image, ProgramEntry(name), program_files_of(packaged.image)
+    )

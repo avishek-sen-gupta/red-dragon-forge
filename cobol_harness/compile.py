@@ -15,6 +15,8 @@ from typing import Any, Sequence
 
 from cics.bootstrap import compile_cics_program
 from interpreter.frontend import make_cobol_parser
+from interpreter.project.program_entry import ProgramEntry
+from interpreter.project.types import LinkedProgram
 
 
 def make_parser(copybook_dirs: Sequence[Path], copybook_exts: Sequence[str] = ("cpy", "txt")) -> Any:
@@ -90,3 +92,13 @@ def compile_main_program(
     linked = compile_cics_program(source, parser, spec, tolerant=tolerant)
     program_cache[name] = linked
     return linked
+
+
+def main_entry(linked: LinkedProgram) -> ProgramEntry:
+    return ProgramEntry(
+        next(
+            name
+            for name, label in linked.programs.items()
+            if label == linked.entry_func_label
+        )
+    )

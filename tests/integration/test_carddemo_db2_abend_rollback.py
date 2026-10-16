@@ -52,12 +52,13 @@ from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cics.types import CicsContext, DispatchKind
 from interpreter.project.coprocessor_compile import compile_program
-from red_dragon_forge.run import run_program
 from squall.backends.db2 import Db2Backend
 from squall.connector import NamedDbConnector
 from squall.coprocessor import build_sql_spec
 from squall.runtime import install_sql_runtime
 
+from cobol_harness.compile import main_entry
+from red_dragon_forge.run import run_program
 from tests.integration.forge_cobol_helpers import make_parser
 
 _ABEND_PROGRAM = """\
@@ -131,6 +132,7 @@ def _run(program_source: str, transid: str, bridge_jar: str, dsn: str):
         CicsContext(transid=transid, commarea=b"", eibaid="\x7d"),
         screen_q,
         input_q,
+        entry=main_entry(linked),
         context_holder=context_holder,
         result_holder=result_holder,
         max_steps=10_000,

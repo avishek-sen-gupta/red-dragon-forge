@@ -21,7 +21,9 @@
 | squall | [Architecture](reference/squall/architecture.md) |
 | jackal | [Architecture](reference/jackal/architecture.md), [CLI](reference/jackal/cli.md), [IDCAMS reference (PDF)](reference/jackal/idcams-ref.pdf) |
 | catnip | [The system catalog](reference/catnip/README.md): catalog objects, `catalog.json`, the data declaration, `catnip install` |
-| litter | [The package](reference/litter/README.md): what a package zip holds, `build`, `open_package` |
+| litter | [The package](reference/litter/README.md): what a package zip holds (one linked image), `build`, `open_package` |
+| forge-build | [Build](reference/forge/build.md): `build.toml` into a package |
+| forge-run | [Run](reference/forge/run.md): a package run as `env.toml` says: plain, JCL or CICS |
 | cobble | [Entry points and configuration](reference/cobble/config.md), [knowledge graph](reference/cobble/knowledge-graph.md), [source control-flow graphs](reference/cobble/srccfg.md), [field dataflow](reference/cobble/field-dataflow.md), [path traces](reference/cobble/trace.md), [pre-flight diagnoses](reference/cobble/diagnostics.md), [views and screens](reference/cobble/viz.md) |
 
 ## Roadmaps

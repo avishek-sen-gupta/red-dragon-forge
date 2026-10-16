@@ -116,21 +116,26 @@ source at `vendor/red-dragon`, which is never modified from this repo) and
 
 ## COBOL steps
 
-jackal compiles nothing. `JobRunner` is given a [litter](../litter/README.md) package, built
-once, and a step's `EXEC PGM=X` (or `DSN RUN PROGRAM(X)` under a TSO monitor) runs the
-package's `LinkedProgram` `X`, as z/OS fetches a load module. The package build linked each
-program with every program it CALLs by literal name, and with the coprocessors it was built
-with: jackal imports no coprocessor, and the forge composes squall's EXEC SQL spec into the
-build and installs its runtime before the run. A program reached only by a CALL through a
-data-name is not linked into the package's programs, so the CALL ends the run with red-dragon's
-`UnresolvedProgramError` (red-dragon-forge-8urg). Each `LinkedProgram`'s IR carries a
-file-definitions `Data` directive per program, and `jackal.file_definitions` reads the step's
-files from those alone: each `FILE-CONTROL` entry, and the record format its FD asks for, or the
-dataset's own where the `SELECT` has no FD. The main program's files come first, then each
-callee's in link order; where two programs share a `SELECT` name, the later entry (a callee's)
-wins, so both programs' `OPEN`s go to its DD and meet its FD. `jackal.cobol_step.run_cobol_step` maps every
-`FILE-CONTROL` entry of the program and its callees to the file of the step's DD allocation,
-and runs it on the red-dragon VM. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
+jackal compiles nothing. `JobRunner` is given a [litter](../litter/README.md) package holding one
+linked image, built once, and a step's `EXEC PGM=X` (or `DSN RUN PROGRAM(X)` under a TSO monitor)
+enters the image at program `X` with red-dragon's `ProgramEntry("X")`, as z/OS fetches a load
+module. A name the image does not hold goes to the missing-program strategy. `JobRunner`'s
+`permit_unresolved_call_targets` (default true, as `jackal run` uses it) is passed to every
+step's run: false makes a `CALL` to a program the image does not hold raise
+`UnresolvedProgramError`; `forge-run` sets it from `env.toml`'s `[tolerant]`. Every program the
+image holds is a CALL target, by literal or through a data-name; one the build did not link is
+not there. The image was lowered with the coprocessors it was built with: jackal imports no
+coprocessor, and the forge installs squall's runtime before the run.
+
+Each lowered program carries a file-definitions `Data` directive, and every COBOL file call
+names the program that made it. `jackal.file_definitions` reads every program's records from
+the image, each with its `program`: the `FILE-CONTROL` entry, and the record format its FD asks
+for, or the dataset's own where the `SELECT` has no FD. `jackal.cobol_step.run_cobol_step` runs
+the image on the red-dragon VM with a `ProgramFilesIOProvider`, which hands each file call to
+the `AllocatedFileIOProvider` of the program that made it, built from that program's own
+declarations. Two programs that declare the same `SELECT` name each open their own DD with
+their own FD, and their open files never meet; a program with no declaration for a `SELECT`
+takes the dataset its DD names as labelled. At each `OPEN` (`jackal.cobol_files`), the record format the FD asks for
 (`jackal.record_format`: Enterprise COBOL's default rule, a variable format's LRECL being its
 largest record plus 4) meets the dataset's label: a pending label is written from it on
 `OUTPUT` or `EXTEND`; a label that contradicts it in organization, fixed against variable, or
@@ -244,7 +249,8 @@ needed. The grammar's source and licence are recorded in
 | `jackal/jackal/cli.py` | The `jackal` command. |
 | `jackal/jackal/runner.py` | `JobRunner`: step sequencing, `COND=`, referbacks, dispatch. |
 | `jackal/jackal/allocation.py` | A step's DD allocations, made before and disposed after its program. |
-| `jackal/jackal/file_definitions.py` | The files a linked program declares, read from its file-definitions `Data` directives. |
+| `jackal/jackal/file_definitions.py` | The files each program in an image declares, read from its file-definitions `Data` directives, each with its `program`. |
+| `jackal/jackal/program_files_provider.py` | `ProgramFilesIOProvider`: hands each COBOL file call to the provider of the program that made it. |
 | `jackal/jackal/cobol_step.py` | Runs a COBOL step on the red-dragon VM. |
 | `jackal/jackal/cobol_files.py` | jackal's COBOL file handler: red-dragon's, with a `DISP=MOD` file opened to append and each `OPEN` checked against the dataset's label. |
 | `jackal/jackal/record_format.py` | The record format a COBOL FD asks for, and its fit with a label. |

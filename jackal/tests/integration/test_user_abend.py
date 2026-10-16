@@ -61,7 +61,12 @@ def test_cee3abd_abends_the_step_with_its_user_code(tmp_path: Path, bridge_jar):
         missing_data=StrictAllocation(),
         missing_program=AbendMissingProgram(),
         program_step_budget=DEFAULT_PROGRAM_STEP_BUDGET,
-        package=package(tmp_path / "package", ("ABEND999", "BAREABD", "OK"), src),
+        package=package(
+            tmp_path / "package",
+            bridge_jar,
+            ("ABEND999", "BAREABD", "OK", "CEE3ABD"),
+            src,
+        ),
         system=system(tmp_path),
     )
     jcl = (

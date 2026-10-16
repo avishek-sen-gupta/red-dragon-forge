@@ -33,6 +33,12 @@ a program compiled elsewhere calls only `install_sql_runtime`, before it runs an
 Tolerance belongs to the runtime only: `tolerant=True` on `install_sql_runtime` skips host
 variables missing from the data layout rather than raising.
 
+squall's Db2 stubs (`DSNTIAC`, under `squall/squall/stubs/`) are named by
+`squall.db2_stubs.DB2_STUB_PROGRAMS`. `compile_program` links them into every run unit through the
+spec's `linked_subprogram_sources`. A [litter](../litter/README.md) package links only what its
+build lists, so a package built with sql lists them as ordinary programs, and `forge-build`
+refuses one that does not ([build](../forge/build.md)).
+
 ## Passive design
 
 EXEC SQL adds no execution semantics: every statement is a synchronous call. Squall has no

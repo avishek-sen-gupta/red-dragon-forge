@@ -191,7 +191,7 @@ def test_a_gdg_base_name_reads_every_generation_in_the_gdgs_order(tmp_path, brid
         ),
     )
     result = _runner(
-        tmp_path, packaged=package(tmp_path / "package", ("CARDCOPY",))
+        tmp_path, packaged=package(tmp_path / "package", bridge_jar, ("CARDCOPY",))
     ).run(j, scratch=scratch(tmp_path))
     after = job_catalog(tmp_path)
 

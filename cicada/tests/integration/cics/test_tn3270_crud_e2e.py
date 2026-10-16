@@ -72,13 +72,17 @@ pytestmark = [pytest.mark.carddemo_e2e, pytest.mark.tn3270_e2e]
 _CONFIG = Path(__file__).parents[3] / "config" / "carddemo-tn3270.toml"
 
 
-def _trimmed(config: RegionConfig, transids: tuple[str, ...]) -> RegionConfig:
-    """Only the transactions (and their programs) this flow needs -- compiling
-    the full CardDemo transaction table for every test is what the brief calls
-    out as avoidable slowness."""
+def _trimmed(
+    config: RegionConfig, transids: tuple[str, ...], callees: tuple[str, ...] = ()
+) -> RegionConfig:
+    """Only the transactions (and their programs) this flow needs, plus the
+    programs they CALL -- compiling the full CardDemo transaction table for
+    every test is what the brief calls out as avoidable slowness."""
     transactions = {t: config.transactions[t] for t in transids}
     return replace(
-        config, transactions=transactions, programs=frozenset(transactions.values())
+        config,
+        transactions=transactions,
+        programs=frozenset((*transactions.values(), *callees)),
     )
 
 
@@ -387,7 +391,9 @@ def test_add_transaction_writes_transact(
 ):
     monkeypatch.setenv("FORGE_ROOT", str(REPO_ROOT))
     config = _trimmed(
-        load_config(region_toml(_CONFIG, carddemo_system)), ("CC00", "CM00", "CT02")
+        load_config(region_toml(_CONFIG, carddemo_system)),
+        ("CC00", "CM00", "CT02"),
+        ("CSUTLDTC", "CEEDAYS"),
     )
     card_num, acct_id = _cxacaix_pairs()[0]
     new_tran_id = _next_transaction_id()

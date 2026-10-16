@@ -1,12 +1,13 @@
 [region]
 initial_transid = "CC00"
-min_commarea_len = 2000
-programs = ["COACTVWC"]
+programs = ["COACTVWC", "CSUTLDTC", "CEEDAYS", "DSNTIAC"]
 
 [paths]
 source_dirs = [
     "${CARDDEMO_HOME}/cbl",
     "${CARDDEMO_HOME}/app-transaction-type-db2/cbl",
+    "${FORGE_ROOT}/cicada/cics/stubs",
+    "${FORGE_ROOT}/squall/squall/stubs",
 ]
 copybook_dirs = [
     "${CARDDEMO_HOME}/cpy",

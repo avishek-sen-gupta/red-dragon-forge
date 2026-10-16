@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def bridge_jar() -> str:
     """The ProLeap bridge JAR path; fail loudly if unset (COBOL steps need it)."""
     jar = os.environ["PROLEAP_BRIDGE_JAR"]

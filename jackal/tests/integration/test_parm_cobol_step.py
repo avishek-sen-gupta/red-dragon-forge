@@ -50,7 +50,9 @@ def test_parm_received_in_cobol_linkage(tmp_path, bridge_jar):
     step = program("S", "TESTPARM", parm="HELLO     ")
     assert run_cobol_step(
         step,
-        compiled(package(tmp_path / "package", ("TESTPARM",), src), "TESTPARM"),
+        compiled(
+            package(tmp_path / "package", bridge_jar, ("TESTPARM",), src), "TESTPARM"
+        ),
         DdEnvironment(()),
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,
@@ -66,7 +68,7 @@ def test_no_parm_step_runs_unchanged(tmp_path, bridge_jar):
     (src / "NOPARM.cbl").write_text(_NO_PARM_PROGRAM)
     assert run_cobol_step(
         program("S", "NOPARM"),
-        compiled(package(tmp_path / "package", ("NOPARM",), src), "NOPARM"),
+        compiled(package(tmp_path / "package", bridge_jar, ("NOPARM",), src), "NOPARM"),
         DdEnvironment(()),
         cat.workdir,
         DEFAULT_PROGRAM_STEP_BUDGET,

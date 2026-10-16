@@ -29,6 +29,7 @@ from cics.preprocessor import apply_cics_prepass
 from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from cics.dispatcher import run_cics
+from tests.integration.cobol_helpers import main_entry
 from interpreter.instructions import Const, LoadRegion
 from interpreter.ir import Opcode
 from interpreter.func_name import FuncName
@@ -96,6 +97,7 @@ def test_commarea_carries_bytes(cobol_parser):
         context_holder[0],
         queue.Queue(),
         queue.Queue(),
+        entry=main_entry(program),
         context_holder=context_holder,
         result_holder=result_holder,
     )

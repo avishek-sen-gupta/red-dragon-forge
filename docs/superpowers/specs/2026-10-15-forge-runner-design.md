@@ -30,6 +30,7 @@ unset.
 ```toml
 [paths]
 source_dirs = ["app/cbl"]
+source_exts = [".cbl", ".CBL"]      # tried in order; exact names; default [".cbl"]
 copybook_dirs = ["app/cpy"]
 copybook_exts = ["cpy", "CPY"]
 
@@ -53,8 +54,14 @@ discovered: a program reached by `CALL 'LITERAL'` or `CALL identifier` is linked
 in `link`. A tool that discovers CALL targets sits one level up and writes `build.toml`. There
 is no main program; a run chooses the program it enters (D11). A program name is its member
 name (the CICS load-module name). The build uses only the coprocessors' compile surface (D10).
-The build command always lowers jackal's LE stubs (`CEE3ABD`) and adds them to the image,
-as z/OS always has Language Environment available.
+Runtime stubs are programs like any other and are linked only if listed. A coprocessor's own
+stubs (sql: `DSNTIAC`, at `squall/squall/stubs/`) are required: a build with that coprocessor
+fails before linking when one is missing from `link`
+(`coprocessor sql requires DSNTIAC in [build] link`). Language Environment stubs (`CEE3ABD`
+at `jackal/jackal/le_stubs/`, `CEEDAYS` at `cicada/cics/stubs/`) are not checked; a CALL to
+an unlinked one fails at run time with `UnresolvedProgramError`. The CardDemo region TOMLs list
+their callees (`CSUTLDTC`, `CEEDAYS`, `DSNTIAC`) the same way; no build path discovers CALL
+targets.
 
 **D3. `litter` is a new workspace member holding the package.** It imports no runtime; the
 forge root and jackal and cicada import it. It provides:
@@ -96,7 +103,10 @@ hand-written table.
 
 ```toml
 package = "out/carddemo.zip"
-tolerant = false                    # run-time tolerance, passed to every runtime that has one
+
+[tolerant]                          # run-time tolerances, each false unless set
+permit_unresolved_call_targets = false   # a CALL to a program the image lacks runs symbolically
+permit_missing_host_variables = false    # squall skips a host variable missing from the layout
 
 [paths]
 system = "region/system"            # catnip's system directory
@@ -128,6 +138,16 @@ The section present picks the mode; there is no mode key. A file with none or mo
 manifest names sql, a missing `[cics]` program or transid, or a program the manifest does not
 hold stops the run naming it.
 
+`[tolerant]` holds the run-time tolerances; `build.toml`'s `[build] tolerant` stays the
+compile-time one. `permit_unresolved_call_targets` is passed to every red-dragon run the command
+makes, in all three modes: false, the default, makes a `CALL` to a program the image does not
+hold raise `UnresolvedProgramError`, which stops the run naming it. `permit_missing_host_variables`
+is squall's `install_sql_runtime(tolerant=...)`.
+
+With `[sql]`, the run connects to `SQUALL_DB2_DSN`, registers the connection under the DSN's
+`DATABASE=` value, and makes it current from the start, as a `DSN RUN` or CICS attachment thread
+is. `EXEC SQL CONNECT TO` another location is red-dragon-forge-b114.
+
 **D7. `[plain]` runs one program directly**, entering the image at `program`. Its files are
 named by catalog name:
 `[plain.files]` maps each ASSIGN name to a dataset in catnip's catalog, which supplies the
@@ -154,6 +174,10 @@ build their fixtures with `litter.build`; `ProgramCompiler`, `ProgramSources` an
 transaction table and files into a region), and the run command assembles from the package. A
 new task enters the image at its transaction's program; EXEC CICS LINK and XCTL enter it at the
 named program.
+A CALL to a program the image lacks, when `permit_unresolved_call_targets` is false, abends
+the task with code 4038 (LE `CEE3501S` module not found, `U4038`): the normal abend path runs
+(backout, the abend message on the terminal, the region's `on_abend`), HANDLE ABEND is not
+driven, and the terminal and the region carry on.
 CICS datasets come from the CSD's `DEFINE FILE` → `DSNAME`, read at build into the manifest's
 file table and resolved through catnip at run.
 `min_commarea_len` leaves configuration: it defaults to 32763, CICS's maximum COMMAREA length

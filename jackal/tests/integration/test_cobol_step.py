@@ -34,7 +34,7 @@ def test_cobol_step_reads_transforms_writes(tmp_path, bridge_jar):
     )
     rc = run_cobol_step(
         step,
-        compiled(package(tmp_path / "package", ("COPYUP",)), "COPYUP"),
+        compiled(package(tmp_path / "package", bridge_jar, ("COPYUP",)), "COPYUP"),
         allocated(step, cat),
         cat.workdir,
         budget=DEFAULT_PROGRAM_STEP_BUDGET,
