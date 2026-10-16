@@ -13,7 +13,7 @@
 1. Clone with submodules.
 
    ```bash
-   git clone --recurse-submodules git@github.com:avishek-sen-gupta/red-dragon-forge.git
+   git clone --recurse-submodules https://github.com/avishek-sen-gupta/red-dragon-forge.git
    cd red-dragon-forge
    ```
 

@@ -1,17 +1,17 @@
 [submodule "vendor/red-dragon"]
 	path = vendor/red-dragon
-	url = git@github.com:avishek-sen-gupta/red-dragon.git
+	url = https://github.com/avishek-sen-gupta/red-dragon.git
 [submodule "vendor/bank-of-z"]
 	path = vendor/bank-of-z
 	url = https://github.com/IBM/Bank-of-Z.git
 [submodule "cicada/third-party/che-che4z-lsp-for-hlasm-fork"]
 	path = cicada/third-party/che-che4z-lsp-for-hlasm-fork
-	url = git@github.com:avishek-sen-gupta/che-che4z-lsp-for-hlasm.git
+	url = https://github.com/avishek-sen-gupta/che-che4z-lsp-for-hlasm.git
 	branch = krakatoa-1.22.1
 [submodule "squall/testbed/db2-samples"]
 	path = squall/testbed/db2-samples
 	url = https://github.com/IBM/db2-samples.git
 [submodule "vendor/carddemo"]
 	path = vendor/carddemo
-	url = git@github.com:avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
+	url = https://github.com/avishek-sen-gupta/aws-mainframe-modernization-carddemo.git
 	branch = main
