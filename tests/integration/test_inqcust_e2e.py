@@ -51,7 +51,6 @@ investigation (not workarounds in this file):
 
 from __future__ import annotations
 
-import os
 import queue
 from pathlib import Path
 
@@ -206,9 +205,8 @@ def _drop_customer(conn) -> None:
         pass
 
 
-def test_inqcust_found_and_not_found(bridge_jar):
-    dsn = os.environ["SQUALL_DB2_DSN"]
-    conn = ibm_db.connect(dsn, "", "")
+def test_inqcust_found_and_not_found(bridge_jar, db2_dsn):
+    conn = ibm_db.connect(db2_dsn, "", "")
     try:
         _seed_customer(conn)
 

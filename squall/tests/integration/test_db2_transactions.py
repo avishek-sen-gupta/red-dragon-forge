@@ -16,6 +16,8 @@ import importlib.util
 import os
 from pathlib import Path
 
+import pytest
+
 _HERE = Path(__file__).parent
 _HELPERS = _HERE / "squall_cobol_helpers.py"
 _spec = importlib.util.spec_from_file_location("squall_cobol_helpers", _HELPERS)
@@ -25,6 +27,8 @@ run_cobol = _helpers.run_cobol
 bridge_jar = _helpers.bridge_jar  # noqa: F401  (re-exported pytest fixture)
 
 from squall.backends.db2 import Db2Backend
+
+pytestmark = pytest.mark.db2
 
 _UPDAT = _HERE.parent.parent / "testbed" / "db2-samples" / "cobol_mf" / "updat.sqb"
 _DB2_INCLUDES = _HERE / "db2_includes"
