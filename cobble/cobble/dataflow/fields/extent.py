@@ -350,16 +350,16 @@ def _bound(expression: RefModExpr, index: CellIndex) -> _Folded:
     """A reference-modification bound, folded: ``_const``'s literals and arithmetic,
     and ``LENGTH OF`` a field, which the compiler knows from its declaration."""
     match expression:
-        case RefModLengthOf(name=name):
-            return _length_of(name, index)
+        case RefModLengthOf(name=name, qualifiers=qualifiers):
+            return _length_of(name, qualifiers, index)
         case RefModBinOp(op=op, left=left, right=right):
             return _combine(op, _bound(left, index), _bound(right, index))
         case _:
             return _const(expression)
 
 
-def _length_of(name: str, index: CellIndex) -> _Folded:
-    cells = index.cells_named(name, (), 0)
+def _length_of(name: str, qualifiers: tuple[str, ...], index: CellIndex) -> _Folded:
+    cells = index.cells_named(name, qualifiers, 0)
     return _Folded(cells[0].length, True) if cells else _UNFOLDED
 
 
@@ -403,7 +403,7 @@ def _unresolved_reason(name: str) -> str:
 
 
 def _field_extents(operand: RefModOperand, index: CellIndex) -> OperandExtents:
-    if operand.length_of:
+    if operand.length_of.name:
         return OperandExtents(reason="length-of")
     candidates = index.cells_named(
         operand.name, operand.qualifiers, len(operand.subscripts)

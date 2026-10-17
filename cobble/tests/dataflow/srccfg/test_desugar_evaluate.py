@@ -32,8 +32,40 @@ def _cfg(program_of, statements: list[dict]) -> Cfg:
     return Cfg(program="PROGA", nodes=fragment.nodes, edges=fragment.edges)
 
 
-def _evaluate(*branches: dict, subject: str = "WS-TYPE-B") -> dict:
-    return {"type": "EVALUATE", "subject": subject, "children": list(branches)}
+def _ref(name: str) -> dict:
+    return {"kind": "ref", "name": name}
+
+
+def _lit(value: str) -> dict:
+    return {"kind": "lit", "value": value}
+
+
+def _subject(name: str) -> dict:
+    return {"kind": "expr", "expr": _ref(name)}
+
+
+TRUE_SUBJECT = {"kind": "boolean", "value": True}
+ANY = {"kind": "any"}
+
+
+def _value(value: dict, negated: bool = False) -> dict:
+    return {"kind": "value", "value": value, "not": negated}
+
+
+def _is(literal: str) -> dict:
+    return _value(_lit(literal))
+
+
+def _when(*objects: dict, children: list[dict], **extra) -> dict:
+    return {"type": "WHEN", "objects": list(objects), "children": children, **extra}
+
+
+def _evaluate(*branches: dict, subjects: tuple[dict, ...] = ()) -> dict:
+    return {
+        "type": "EVALUATE",
+        "subjects": list(subjects or (_subject("WS-TYPE-B"),)),
+        "children": list(branches),
+    }
 
 
 def _parts(cfg: Cfg) -> list[tuple[str, str, str]]:
@@ -45,20 +77,15 @@ def _parts(cfg: Cfg) -> list[tuple[str, str, str]]:
 
 
 def test_a_when_value_becomes_an_equality_on_the_subject(program_of) -> None:
-    """The parse cache holds EVALUATE <subject> WHEN <value> as the bare value
-    under the statement's subject -- the subject is joined to it only when
-    RedDragon lowers for execution. Without the subject the branch depends on
-    nothing, and a value like 0 reads as a condition name."""
+    """EVALUATE <subject> WHEN <value> holds the value as a WHEN object, and the
+    subject on the statement. Without the subject the branch depends on nothing,
+    and a value like 0 reads as a condition name."""
     cfg = _cfg(
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "0",
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                subject="WS-RESP-CD",
+                _when(_is("0"), children=[_move("'F'", "WS-RESULT")]),
+                subjects=(_subject("WS-RESP-CD"),),
             )
         ],
     )
@@ -73,12 +100,8 @@ def test_a_when_constant_name_is_compared_with_the_subject(program_of) -> None:
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "DFHENTER",
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                subject="EIBAID",
+                _when(_value(_ref("DFHENTER")), children=[_move("'F'", "WS-RESULT")]),
+                subjects=(_subject("EIBAID"),),
             )
         ],
     )
@@ -91,12 +114,11 @@ def test_a_when_dfhresp_value_is_compared_with_the_subject(program_of) -> None:
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": {"kind": "dfhresp", "condition": "NORMAL"},
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                subject="WS-RESP-CD",
+                _when(
+                    _value({"kind": "dfhresp", "condition": "NORMAL"}),
+                    children=[_move("'F'", "WS-RESULT")],
+                ),
+                subjects=(_subject("WS-RESP-CD"),),
             )
         ],
     )
@@ -104,17 +126,15 @@ def test_a_when_dfhresp_value_is_compared_with_the_subject(program_of) -> None:
     assert _parts(cfg) == [("WS-RESP-CD", "==", "DFHRESP(NORMAL)")]
 
 
-def test_a_bare_when_value_with_thru_is_a_range_on_the_subject(program_of) -> None:
+def test_a_when_thru_is_one_range_atom_on_the_subject(program_of) -> None:
     cfg = _cfg(
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "'A'",
-                    "condition_thru": "'M'",
-                    "children": [_move("'F'", "WS-RESULT")],
-                }
+                _when(
+                    {"kind": "range", "from": _lit("'A'"), "thru": _lit("'M'")},
+                    children=[_move("'F'", "WS-RESULT")],
+                )
             )
         ],
     )
@@ -122,23 +142,42 @@ def test_a_bare_when_value_with_thru_is_a_range_on_the_subject(program_of) -> No
     assert _parts(cfg) == [("WS-TYPE-B", "RANGE", "'A' THRU 'M'")]
 
 
+def test_a_not_value_enters_its_body_when_the_comparison_fails(program_of) -> None:
+    """WHEN NOT 'G' is the comparison with its edges swapped: the body is the
+    FALSE side of the equality test, and the next branch its TRUE side."""
+    cfg = _cfg(
+        program_of,
+        [
+            _evaluate(
+                _when(
+                    _value(_lit("'G'"), negated=True),
+                    children=[_move("'F'", "WS-RESULT")],
+                ),
+                {"type": "WHEN_OTHER", "children": [_move("'Z'", "WS-OTHER")]},
+            )
+        ],
+    )
+
+    assert (
+        _parts(cfg),
+        {(e.target, e.kind) for e in cfg.successors("MAIN/0.when.0#test")},
+    ) == (
+        [("WS-TYPE-B", "==", "'G'")],
+        {
+            ("MAIN/0.when.0.0", EdgeKind.FALSE),
+            ("MAIN/0.when.1.0", EdgeKind.TRUE),
+        },
+    )
+
+
 def test_each_also_value_is_compared_with_its_own_subject(program_of) -> None:
     cfg = _cfg(
         program_of,
         [
-            {
-                "type": "EVALUATE",
-                "subject": "WS-TYPE-B",
-                "also_subjects": ["WS-FLAG-A"],
-                "children": [
-                    {
-                        "type": "WHEN",
-                        "condition": "'G'",
-                        "also_conditions": ["'Y'"],
-                        "children": [_move("'F'", "WS-RESULT")],
-                    }
-                ],
-            }
+            _evaluate(
+                _when(_is("'G'"), _is("'Y'"), children=[_move("'F'", "WS-RESULT")]),
+                subjects=(_subject("WS-TYPE-B"), _subject("WS-FLAG-A")),
+            )
         ],
     )
 
@@ -146,38 +185,30 @@ def test_each_also_value_is_compared_with_its_own_subject(program_of) -> None:
 
 
 def test_under_evaluate_true_a_when_name_stays_a_condition_name(program_of) -> None:
+    """The bridge sends a resolved level-88 name as a condition object. One whose
+    declaration the parse did not have arrives as a plain value, and under TRUE
+    it is read as the same condition name."""
     cfg = _cfg(
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "INPUT-ERROR",
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                subject="TRUE",
+                _when(
+                    {
+                        "kind": "condition",
+                        "condition": {"not": False, "condition_name": "INPUT-ERROR"},
+                    },
+                    children=[_move("'F'", "WS-RESULT")],
+                ),
+                _when(
+                    _value(_ref("UNSTAGED-FLAG")),
+                    children=[_move("'G'", "WS-RESULT")],
+                ),
+                subjects=(TRUE_SUBJECT,),
             )
         ],
     )
 
-    assert _parts(cfg) == [("INPUT-ERROR", "88", "")]
-
-
-def test_a_when_already_joined_to_its_subject_is_not_joined_twice(program_of) -> None:
-    cfg = _cfg(
-        program_of,
-        [
-            _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'G'",
-                    "children": [_move("'F'", "WS-RESULT")],
-                }
-            )
-        ],
-    )
-
-    assert _parts(cfg) == [("WS-TYPE-B", "==", "'G'")]
+    assert _parts(cfg) == [("INPUT-ERROR", "88", ""), ("UNSTAGED-FLAG", "88", "")]
 
 
 def test_a_second_when_is_reached_only_by_the_first_ones_false_edge(program_of) -> None:
@@ -185,16 +216,8 @@ def test_a_second_when_is_reached_only_by_the_first_ones_false_edge(program_of) 
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'G'",
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'H'",
-                    "children": [_move("'J'", "WS-RESULT")],
-                },
+                _when(_is("'G'"), children=[_move("'F'", "WS-RESULT")]),
+                _when(_is("'H'"), children=[_move("'J'", "WS-RESULT")]),
             )
         ],
     )
@@ -212,11 +235,7 @@ def test_when_other_is_the_last_false_arm(program_of) -> None:
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'G'",
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
+                _when(_is("'G'"), children=[_move("'F'", "WS-RESULT")]),
                 {"type": "WHEN_OTHER", "children": [_move("'Z'", "WS-RESULT")]},
             )
         ],
@@ -237,16 +256,8 @@ def test_every_branch_body_continues_into_the_statement_after_the_evaluate(
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'G'",
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'H'",
-                    "children": [_move("'J'", "WS-RESULT")],
-                },
+                _when(_is("'G'"), children=[_move("'F'", "WS-RESULT")]),
+                _when(_is("'H'"), children=[_move("'J'", "WS-RESULT")]),
             ),
             _move("WS-RESULT", "WS-COPY"),
         ],
@@ -269,54 +280,37 @@ def test_a_structured_condition_under_evaluate_true_lowers_like_an_if(
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": {
-                        "op": "AND",
-                        "left": {
-                            "not": False,
-                            "relation": {
-                                "left": {"kind": "ref", "name": "WS-FLAG-A"},
-                                "op": "==",
-                                "right": {"kind": "lit", "value": "'Y'"},
+                _when(
+                    {
+                        "kind": "condition",
+                        "condition": {
+                            "op": "AND",
+                            "left": {
+                                "not": False,
+                                "relation": {
+                                    "left": _ref("WS-FLAG-A"),
+                                    "op": "==",
+                                    "right": _lit("'Y'"),
+                                },
                             },
-                        },
-                        "right": {
-                            "not": False,
-                            "relation": {
-                                "left": {"kind": "ref", "name": "WS-TYPE-B"},
-                                "op": "==",
-                                "right": {"kind": "lit", "value": "'G'"},
+                            "right": {
+                                "not": False,
+                                "relation": {
+                                    "left": _ref("WS-TYPE-B"),
+                                    "op": "==",
+                                    "right": _lit("'G'"),
+                                },
                             },
                         },
                     },
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
-                subject="TRUE",
+                    children=[_move("'F'", "WS-RESULT")],
+                ),
+                subjects=(TRUE_SUBJECT,),
             )
         ],
     )
 
-    assert len([n for n in cfg.nodes if n.kind == NodeKind.TEST]) == 2
-
-
-def test_a_when_thru_becomes_one_range_atom(program_of) -> None:
-    cfg = _cfg(
-        program_of,
-        [
-            _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'A'",
-                    "condition_thru": "'M'",
-                    "children": [_move("'F'", "WS-RESULT")],
-                }
-            )
-        ],
-    )
-
-    atom = next(n for n in cfg.nodes if n.kind == NodeKind.TEST).atom
-    assert (atom.left, atom.op, atom.right) == ("WS-TYPE-B", "RANGE", "'A' THRU 'M'")
+    assert _parts(cfg) == [("WS-FLAG-A", "==", "'Y'"), ("WS-TYPE-B", "==", "'G'")]
 
 
 def test_also_conditions_are_a_conjunction_within_the_branch(program_of) -> None:
@@ -326,13 +320,9 @@ def test_also_conditions_are_a_conjunction_within_the_branch(program_of) -> None
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "WS-TYPE-B = 'G'",
-                    "also_conditions": ["WS-FLAG-A = 'Y'"],
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
+                _when(_is("'G'"), _is("'Y'"), children=[_move("'F'", "WS-RESULT")]),
                 {"type": "WHEN_OTHER", "children": [_move("'Z'", "WS-RESULT")]},
+                subjects=(_subject("WS-TYPE-B"), _subject("WS-FLAG-A")),
             )
         ],
     )
@@ -351,15 +341,7 @@ def test_when_any_is_an_always_true_test_that_still_occupies_a_node(
     branch fired."""
     cfg = _cfg(
         program_of,
-        [
-            _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "ANY",
-                    "children": [_move("'F'", "WS-RESULT")],
-                }
-            )
-        ],
+        [_evaluate(_when(ANY, children=[_move("'F'", "WS-RESULT")]))],
     )
 
     atom = next(n for n in cfg.nodes if n.kind == NodeKind.TEST).atom
@@ -380,26 +362,12 @@ def test_an_any_among_also_values_is_no_test_at_all(program_of) -> None:
     cfg = _cfg(
         program_of,
         [
-            {
-                "type": "EVALUATE",
-                "subject": "WS-TYPE-B",
-                "also_subjects": ["WS-FLAG-A"],
-                "children": [
-                    {
-                        "type": "WHEN",
-                        "condition": "'G'",
-                        "also_conditions": ["ANY"],
-                        "children": [_move("'F'", "WS-RESULT")],
-                    },
-                    {
-                        "type": "WHEN",
-                        "condition": "ANY",
-                        "also_conditions": ["'Y'"],
-                        "children": [_move("'E'", "WS-RESULT")],
-                    },
-                    {"type": "WHEN_OTHER", "children": [_move("'O'", "WS-RESULT")]},
-                ],
-            }
+            _evaluate(
+                _when(_is("'G'"), ANY, children=[_move("'F'", "WS-RESULT")]),
+                _when(ANY, _is("'Y'"), children=[_move("'E'", "WS-RESULT")]),
+                {"type": "WHEN_OTHER", "children": [_move("'O'", "WS-RESULT")]},
+                subjects=(_subject("WS-TYPE-B"), _subject("WS-FLAG-A")),
+            )
         ],
     )
 
@@ -426,12 +394,11 @@ def test_a_stacked_when_reaches_its_one_body_from_either_condition(
         program_of,
         [
             _evaluate(
-                {
-                    "type": "WHEN",
-                    "condition": "1",
-                    "alternatives": [{"type": "WHEN", "condition": "2"}],
-                    "children": [_move("'F'", "WS-RESULT")],
-                },
+                _when(
+                    _is("1"),
+                    children=[_move("'F'", "WS-RESULT")],
+                    alternatives=[{"type": "WHEN", "objects": [_is("2")]}],
+                ),
                 {"type": "WHEN_OTHER", "children": [_move("'O'", "WS-OTHER")]},
             )
         ],

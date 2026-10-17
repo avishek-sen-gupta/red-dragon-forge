@@ -1,4 +1,5 @@
 from cobol_asg.cobol_expression import LiteralNode
+from cobol_asg.cobol_statements import ArithmeticStatement
 from cobol_asg.ref_mod import (
     RefModBinOp,
     RefModLengthOf,
@@ -51,7 +52,8 @@ def test_ref_mod_operand_from_dict_bare_field() -> None:
 
 
 def test_ref_mod_operand_from_dict_legacy_string_format() -> None:
-    assert RefModOperand.from_dict("WS-FIELD") == RefModOperand(name="WS-FIELD")
+    added = ArithmeticStatement.from_dict({"type": "ADD", "operands": ["WS-FIELD"]})
+    assert added.operands == [RefModOperand(name="WS-FIELD")]
 
 
 def test_ref_mod_operand_from_dict_with_start_and_length() -> None:
@@ -69,7 +71,7 @@ def test_ref_mod_operand_from_dict_with_start_and_length() -> None:
 def test_ref_mod_operand_from_dict_length_of_source_leaves_name_empty() -> None:
     operand = RefModOperand.from_dict({"kind": "length_of", "name": "WS-A"})
     assert operand.name == ""
-    assert operand.length_of == "WS-A"
+    assert operand.length_of == RefModLengthOf(name="WS-A")
 
 
 def test_ref_mod_operand_from_dict_with_subscripts() -> None:
@@ -92,5 +94,5 @@ def test_ref_mod_operand_to_dict_round_trips_start_and_length() -> None:
 
 
 def test_ref_mod_operand_to_dict_length_of_source() -> None:
-    operand = RefModOperand(name="", length_of="WS-A")
+    operand = RefModOperand(name="", length_of=RefModLengthOf(name="WS-A"))
     assert operand.to_dict() == {"kind": "length_of", "name": "WS-A"}

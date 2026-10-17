@@ -3,8 +3,8 @@
 Originally red-dragon-lu25 space-normalized a flat WHEN-condition string. That
 bandaid was superseded by red-dragon-z31u: the bridge now routes EVALUATE WHEN
 conditions through the SAME structured serializer the IF path uses, so a WHEN
-condition is a structured condition dict (op/left/right + relation/figurative),
-not a string. Assert the structured shape — including the abbreviated OR and the
+condition under EVALUATE TRUE is a condition selection object holding a
+structured condition dict (op/left/right + relation/figurative), not a string. Assert the structured shape — including the abbreviated OR and the
 figurative operands that the flat-string path could not represent.
 """
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.cobol_statements import EvaluateStatement, WhenStatement
+from cobol_asg.selection_condition import SelectionCondition
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from tests.covers import covers
@@ -51,8 +52,10 @@ def _find_when_condition(asg):
     for stmt in _all_statements(asg):
         if isinstance(stmt, EvaluateStatement):
             for child in stmt.children:
-                if isinstance(child, WhenStatement) and child.condition:
-                    return child.condition
+                if isinstance(child, WhenStatement):
+                    (selection,) = child.objects
+                    assert isinstance(selection, SelectionCondition), selection
+                    return selection.condition
     raise AssertionError("No EVALUATE WHEN condition found in parsed ASG")
 
 

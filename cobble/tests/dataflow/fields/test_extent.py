@@ -235,7 +235,9 @@ def test_a_table_name_without_subscripts_matches_no_cell(program_of, index_of, f
 
 def test_length_of_yields_no_extent_and_says_why(program_of, index_of, field):
     asg = _one(program_of, [field(1, "REC-A", children=[field(5, "WS-A", "X(10)")])])
-    result = operand_extents(RefModOperand(name="", length_of="WS-A"), index_of(asg))
+    result = operand_extents(
+        RefModOperand(name="", length_of=RefModLengthOf(name="WS-A")), index_of(asg)
+    )
     assert result.extents == ()
     assert result.reason == "length-of"
 

@@ -144,7 +144,7 @@ def test_accept_writes_its_target_even_though_the_source_is_outside(program_of) 
     reads from console or clock, not a field, so flows has no rule for it -- but it
     genuinely writes its target, and losing that would make a field that only ACCEPT
     writes look uninitialized to every downstream pass."""
-    fragment = _only(program_of, {"type": "ACCEPT", "target": "WS-FLAG-A"})
+    fragment = _only(program_of, {"type": "ACCEPT", "target": {"name": "WS-FLAG-A"}})
 
     node = fragment.nodes[0]
     assert (node.kind, node.writes, node.reads, node.transfer) == (
@@ -159,14 +159,14 @@ def test_a_gap_fill_kind_with_no_names_is_assign_not_nop(program_of) -> None:
     """A statement kind this module knows touches data is always ASSIGN, whether or
     not extraction produced names. An ASSIGN with empty writes and reads is a parse
     gap made visible -- greppable and countable -- not a no-op."""
-    fragment = _only(program_of, {"type": "ACCEPT"})
+    fragment = _only(program_of, {"type": "INITIALIZE"})
 
     node = fragment.nodes[0]
     assert (node.kind, node.writes, node.reads, node.transfer) == (
         NodeKind.ASSIGN,
         (),
         (),
-        "ACCEPT",
+        "INITIALIZE",
     )
 
 

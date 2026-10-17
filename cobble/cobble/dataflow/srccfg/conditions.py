@@ -18,7 +18,15 @@ from functools import reduce
 from itertools import accumulate, repeat, takewhile
 
 from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
+from cobble.dataflow.srccfg.expression_text import expression_text
 from cobble.dataflow.srccfg.synthetic import dfhresp_operand
+from cobol_asg.any_object import AnyObject
+from cobol_asg.evaluate_selection import SelectionObject, SelectionSubject
+from cobol_asg.expression_subject import ExpressionSubject
+from cobol_asg.range_object import RangeObject
+from cobol_asg.selection_condition import SelectionCondition
+from cobol_asg.truth_value import TruthValue
+from cobol_asg.value_object import ValueObject
 
 EIGHTY_EIGHT = "88"
 CLASS = "CLASS"
@@ -47,8 +55,9 @@ Cond = Atom | And | Or | Not
 
 
 ConditionData = Mapping | str | None
-"""What the ASG hands over for a condition or an operand: ``WhenStatement`` and
-``IfStatement`` type it ``dict | str``, and a missing key reads as None."""
+"""What the ASG hands over for a condition or an operand: ``IfStatement`` and
+``SelectionCondition`` type it ``dict``, a relation operand may be a name, and a
+missing key reads as None."""
 
 
 def read_condition(raw: ConditionData) -> Cond:
@@ -342,56 +351,89 @@ def _render_ranges(ranges: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
 
 
 ALWAYS = Atom(text="ANY", left="", op="", right="")
-_WHEN_ANY = ("ANY", "OTHER", "")
 
 
-_CONDITION_SUBJECTS = frozenset({"", "TRUE"})
-_NEGATED_CONDITION_SUBJECT = "FALSE"
+def read_when_object(selection: SelectionObject, subject: SelectionSubject) -> Cond:
+    """One WHEN object, compared with the EVALUATE subject it answers.
 
-
-def read_when_condition(raw: ConditionData, subject: str, thru: str = "") -> Cond:
-    """A WHEN branch's condition, compared with the EVALUATE subject it answers.
-
-    Under EVALUATE TRUE the WHEN is itself a condition: a structured dict, or a
-    level-88 name. EVALUATE FALSE selects the WHEN whose condition fails, so its
-    guard is the negation. Under a real subject the parse cache holds only the
-    value -- "0", "DFHENTER", a DFHRESP -- because RedDragon joins subject and
-    value when it lowers for execution, not when it parses. Reading that value as
-    a condition name drops the subject, so nothing in the branch depends on it.
+    Under EVALUATE TRUE the object is itself a condition, and under EVALUATE FALSE
+    its negation. Under an identifier or expression subject the object is a value
+    or a THRU range the subject is compared with; NOT negates that comparison.
+    ANY matches whatever its subject holds.
     """
-    normalised = subject.strip().upper()
-    if normalised in _CONDITION_SUBJECTS:
-        return _condition_when(raw)
-    if normalised == _NEGATED_CONDITION_SUBJECT:
-        return _negated(_condition_when(raw))
-    return _subject_when(raw, subject.strip(), thru)
+    match selection:
+        case AnyObject():
+            return ALWAYS
+        case ValueObject() | RangeObject():
+            return _negated_if(selection.negated, _valued(selection, subject))
+        case _:
+            return _truth_object(selection, subject)
+
+
+def _negated_if(negated: bool, cond: Cond) -> Cond:
+    return Not(inner=cond) if negated else cond
 
 
 def _negated(cond: Cond) -> Cond:
     return cond if cond == ALWAYS else Not(inner=cond)
 
 
-def _condition_when(raw: ConditionData) -> Cond:
-    if not isinstance(raw, str):
-        return read_condition(raw)
-    text = raw.strip()
-    return ALWAYS if text.upper() in _WHEN_ANY else _named(text)
-
-
-def _subject_when(raw: ConditionData, subject: str, thru: str) -> Cond:
-    match raw:
-        case str():
-            return _subject_value(raw.strip(), subject, thru)
-        case {"kind": "dfhresp"}:
-            return _compared(subject, _operand(raw), thru)
+def _valued(selection: ValueObject | RangeObject, subject: SelectionSubject) -> Cond:
+    """A value under a TRUE or FALSE subject is a condition name the bridge could
+    not resolve -- one declared in a copybook the parse did not have."""
+    match subject:
+        case ExpressionSubject(expr=expr):
+            return _compared(expression_text(expr), *_bounds(selection))
+        case TruthValue(value=truth):
+            return _against_truth(truth, _unresolved_name(selection))
         case _:
-            return read_condition(raw)
+            return UNRESOLVED
 
 
-def _subject_value(text: str, subject: str, thru: str) -> Cond:
-    if text.upper() in _WHEN_ANY:
-        return ALWAYS
-    return _compared(subject, text.removeprefix(f"{subject} = "), thru)
+def _bounds(selection: ValueObject | RangeObject) -> tuple[str, str]:
+    match selection:
+        case RangeObject(low=low, high=high):
+            return (expression_text(low), expression_text(high))
+        case ValueObject(value=value):
+            return (expression_text(value), "")
+
+
+def _unresolved_name(selection: ValueObject | RangeObject) -> Cond:
+    match selection:
+        case ValueObject(value=value):
+            return _named(expression_text(value))
+        case RangeObject():
+            return UNRESOLVED
+
+
+def _against_truth(truth: bool, cond: Cond) -> Cond:
+    return cond if truth else _negated(cond)
+
+
+def _truth_object(
+    selection: TruthValue | SelectionCondition, subject: SelectionSubject
+) -> Cond:
+    match selection:
+        case SelectionCondition(condition=condition):
+            return _condition_object(read_condition(condition), subject)
+        case TruthValue(value=truth):
+            return _truth_answering(truth, subject)
+
+
+def _condition_object(cond: Cond, subject: SelectionSubject) -> Cond:
+    match subject:
+        case TruthValue(value=truth):
+            return _against_truth(truth, cond)
+        case _:
+            return cond
+
+
+def _truth_answering(truth: bool, subject: SelectionSubject) -> Cond:
+    match subject:
+        case SelectionCondition(condition=condition):
+            return _against_truth(truth, read_condition(condition))
+        case _:
+            return UNRESOLVED
 
 
 def _compared(subject: str, value: str, thru: str) -> Atom:

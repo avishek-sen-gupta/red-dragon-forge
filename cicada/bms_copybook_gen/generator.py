@@ -28,35 +28,44 @@ def _data_pic(pic: str, f: BmsField) -> str:
     return pic if pic else f"X({f.length})"
 
 
-def _field_lines_output(f: BmsField, indent: int, extatt: bool) -> tuple[str, ...]:
-    extended = (
-        tuple(_line(indent, f"02  {f.label}{s}", "X") for s in _EXTATT_SUFFIXES)
+def _extended_lines(indent: int, label: str, extatt: bool) -> tuple[str, ...]:
+    return (
+        tuple(_line(indent, f"02  {label}{s}", "X") for s in _EXTATT_SUFFIXES)
         if extatt
         else ()
     )
+
+
+def _field_lines_output_only(f: BmsField, indent: int, extatt: bool) -> tuple[str, ...]:
     return (
         _line(indent, f"02  {f.label}L", "S9(4) COMP"),
         _line(indent, f"02  {f.label}A", "X"),
         " " * indent + f"02  FILLER REDEFINES {f.label}A.",
         _line(indent + 4, f"03  {f.label}F", "X"),
-        *extended,
+        *_extended_lines(indent, f.label, extatt),
         _line(indent, f"02  {f.label}O", _data_pic(f.picout, f)),
     )
 
 
 def _field_lines_input(f: BmsField, indent: int, extatt: bool) -> tuple[str, ...]:
-    # Mirror the output field's byte layout (length halfword + attribute byte +
-    # [extended-attribute bytes when EXTATT] + data) with anonymous FILLER. The
-    # output map's "FILLER REDEFINES <f>A / 03 <f>F" adds no bytes, so a single
-    # FILLER X for the attribute byte keeps the input redefinition byte-aligned.
     extended = (
         (_line(indent, "02  FILLER", f"X({len(_EXTATT_SUFFIXES)})"),) if extatt else ()
     )
     return (
-        _line(indent, "02  FILLER", "S9(4) COMP"),
-        _line(indent, "02  FILLER", "X"),
+        _line(indent, f"02  {f.label}L", "S9(4) COMP"),
+        _line(indent, f"02  {f.label}F", "X"),
+        " " * indent + f"02  FILLER REDEFINES {f.label}F.",
+        _line(indent + 4, f"03  {f.label}A", "X"),
         *extended,
         _line(indent, f"02  {f.label}I", _data_pic(f.picin, f)),
+    )
+
+
+def _field_lines_output(f: BmsField, indent: int, extatt: bool) -> tuple[str, ...]:
+    return (
+        _line(indent, "02  FILLER", "X(3)"),
+        *_extended_lines(indent, f.label, extatt),
+        _line(indent, f"02  {f.label}O", _data_pic(f.picout, f)),
     )
 
 
@@ -87,20 +96,27 @@ def _map_lines(
     return (header, *prefix, *body)
 
 
-def _output_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
+def _output_only_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
     header = f"       01  {bmsmap.label}O."
-    return _map_lines(bmsmap, header, mapset.tioapfx, _field_lines_output)
+    return _map_lines(bmsmap, header, mapset.tioapfx, _field_lines_output_only)
 
 
 def _input_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
-    header = f"       01  {bmsmap.label}I REDEFINES {bmsmap.label}O."
+    header = f"       01  {bmsmap.label}I."
     return _map_lines(bmsmap, header, mapset.tioapfx, _field_lines_input)
 
 
+def _output_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
+    header = f"       01  {bmsmap.label}O REDEFINES {bmsmap.label}I."
+    return _map_lines(bmsmap, header, mapset.tioapfx, _field_lines_output)
+
+
 def _copybook_lines(mapset: BmsMapSet, bmsmap: BmsMap) -> tuple[str, ...]:
-    output = _output_lines(mapset, bmsmap) if mapset.mode in ("OUT", "INOUT") else ()
-    inputs = _input_lines(mapset, bmsmap) if mapset.mode in ("IN", "INOUT") else ()
-    return (*output, *inputs)
+    if mapset.mode == "OUT":
+        return _output_only_lines(mapset, bmsmap)
+    inputs = _input_lines(mapset, bmsmap)
+    output = _output_lines(mapset, bmsmap) if mapset.mode == "INOUT" else ()
+    return (*inputs, *output)
 
 
 def generate_copybook(mapset: BmsMapSet) -> tuple[str, ...]:

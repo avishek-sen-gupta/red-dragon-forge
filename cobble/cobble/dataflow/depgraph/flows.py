@@ -244,15 +244,17 @@ def _move_corresponding(s, ctx: ProgramContext) -> tuple[Block, ...]:
 def _arithmetic(s, ctx: ProgramContext) -> tuple[Block, ...]:
     """ADD/SUBTRACT/MULTIPLY/DIVIDE, all four through op.
 
-    ``target`` is in BOTH columns because that is what the verb does without
-    GIVING: ADD A TO B reads A and B and writes B. The B -> B self edge pass1
-    drops; A -> B is the edge that matters. With GIVING, ADD A TO B GIVING C is
-    A -> C and B -> C, and B is no longer written.
+    Every operand is read. An in-place ``targets`` receiver is in BOTH columns
+    because that is what the verb does without GIVING: ADD A TO B reads A and B
+    and writes B. The B -> B self edge pass1 drops; A -> B is the edge that
+    matters. Each further receiver, as in ADD A TO B C, is one more in-place
+    target. With GIVING, ADD A TO B GIVING C is A -> C and B -> C, both A and B
+    arriving as operands, and nothing else is written.
     """
-    sources = (operand_name(s.source), operand_name(s.target))
-    given = operand_names(s.giving)
+    in_place = operand_names(s.targets)
+    sources = operand_names(s.operands) + in_place
     remainder = (operand_name(s.remainder),) if s.remainder is not None else ()
-    targets = (given or (operand_name(s.target),)) + remainder
+    targets = in_place + operand_names(s.giving) + remainder
     return _block(sources, targets)
 
 
@@ -281,8 +283,13 @@ def _string(s, ctx: ProgramContext) -> tuple[Block, ...]:
 
 
 def _unstring(s, ctx: ProgramContext) -> tuple[Block, ...]:
-    """One source split across many receivers; the tally and pointer derive from it."""
-    targets = operand_names(s.into) + (
+    """One source split across many receivers; each receiver's DELIMITER IN and
+    COUNT IN, the tally and the pointer derive from it too."""
+    targets = operand_names(
+        operand
+        for receiver in s.into
+        for operand in (receiver.target, receiver.delimiter_in, receiver.count_in)
+    ) + (
         operand_name(s.tallying_target),
         operand_name(s.pointer),
     )
@@ -347,7 +354,7 @@ def _call(s, ctx: ProgramContext) -> tuple[Block, ...]:
         if getattr(p, "param_type", "") == "REFERENCE"
         and not getattr(p, "is_literal", False)
     )
-    giving = (operand_name(s.giving),) if s.giving else ()
+    giving = operand_names((s.giving,))
     return _block(params, (program,) + giving) + _block((program,), by_reference)
 
 

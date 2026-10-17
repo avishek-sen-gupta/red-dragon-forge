@@ -23,7 +23,11 @@ def _moved_into(statement: CobolStatementType) -> str:
 
 
 def _when(*children: dict) -> dict:
-    return {"type": "WHEN", "condition": "1", "children": list(children)}
+    return {
+        "type": "WHEN",
+        "objects": [{"kind": "value", "value": {"kind": "lit", "value": "1"}}],
+        "children": list(children),
+    }
 
 
 def test_a_top_level_statement_is_indexed_at_its_position(program_of):
@@ -75,7 +79,7 @@ def test_an_evaluate_when_body_is_indexed_under_its_branch_position(program_of):
         [
             {
                 "type": "EVALUATE",
-                "subject": "WS-K",
+                "subjects": [{"kind": "expr", "expr": {"kind": "ref", "name": "WS-K"}}],
                 "children": [
                     _when(_move("WS-A", "WS-B")),
                     {"type": "WHEN_OTHER", "children": [_move("WS-C", "WS-D")]},
@@ -197,7 +201,12 @@ def test_every_statement_bearing_cfg_node_has_an_entry(asg_of):
                             "children": [
                                 {
                                     "type": "EVALUATE",
-                                    "subject": "WS-K",
+                                    "subjects": [
+                                        {
+                                            "kind": "expr",
+                                            "expr": {"kind": "ref", "name": "WS-K"},
+                                        }
+                                    ],
                                     "children": [
                                         _when(
                                             {

@@ -1,5 +1,6 @@
-"""A stacked WHEN, from COBOL source through cobble-srccfg-build: the body the
-two conditions share is one node, entered on TRUE from either."""
+"""A stacked WHEN, from COBOL source through cobble-srccfg-build: each condition
+compares the subject with its value, and the body the two share is one node,
+entered on TRUE from either."""
 
 from __future__ import annotations
 
@@ -60,15 +61,15 @@ def test_the_shared_body_is_one_node_entered_from_either_condition(
     assert build_main(["--config", str(config), "STACKP", "--output", str(built)]) == 0
     (cfg,) = load_bundle(built).cfgs
 
-    tests = [node.id for node in cfg.nodes if node.kind == NodeKind.TEST]
+    tests = [node for node in cfg.nodes if node.kind == NodeKind.TEST]
     writers = [node.id for node in cfg.nodes if "WS-B" in node.writes]
 
     assert (
-        len(tests),
+        [(test.atom.left, test.atom.op, test.atom.right) for test in tests],
         len(writers),
         {(edge.source, edge.kind) for edge in cfg.predecessors(writers[0])},
     ) == (
-        2,
+        [("WS-A", "==", "1"), ("WS-A", "==", "2")],
         1,
-        {(tests[0], EdgeKind.TRUE), (tests[1], EdgeKind.TRUE)},
+        {(tests[0].id, EdgeKind.TRUE), (tests[1].id, EdgeKind.TRUE)},
     )

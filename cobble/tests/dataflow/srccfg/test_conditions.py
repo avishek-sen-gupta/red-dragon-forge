@@ -16,8 +16,11 @@ from cobble.dataflow.srccfg.conditions import (
     Or,
     negate_atom,
     read_condition,
-    read_when_condition,
+    read_when_object,
 )
+from cobol_asg.any_object import AnyObject
+from cobol_asg.selection_condition import SelectionCondition
+from cobol_asg.truth_value import TruthValue
 
 
 def _rel(left: str, op: str, right: str, negated: bool = False) -> dict:
@@ -230,9 +233,17 @@ def test_two_figurative_constants_in_one_condition_stay_distinct() -> None:
         }
     )
 
-    assert isinstance(both, Or)
-    assert both.left != both.right
-    assert (both.left.right, both.right.right) == ("SPACES", "LOW-VALUES")
+    assert both == Or(
+        left=Atom(
+            text="IRRA-ERR-CDE == SPACES", left="IRRA-ERR-CDE", op="==", right="SPACES"
+        ),
+        right=Atom(
+            text="IRRA-ERR-CDE == LOW-VALUES",
+            left="IRRA-ERR-CDE",
+            op="==",
+            right="LOW-VALUES",
+        ),
+    )
 
 
 def test_a_figurative_constant_is_not_reported_as_a_field_dependency() -> None:
@@ -242,16 +253,23 @@ def test_a_figurative_constant_is_not_reported_as_a_field_dependency() -> None:
 
     atom = read_condition(_fig("IRRA-ERR-CDE", "==", "SPACES"))
 
+    assert isinstance(atom, Atom)
     assert is_literal(atom.right)
 
 
 def test_under_evaluate_false_a_when_is_reached_when_its_condition_fails() -> None:
     """EVALUATE FALSE selects the first WHEN whose condition is false, so the
     branch guard is the negation of what EVALUATE TRUE would test."""
-    assert read_when_condition("INPUT-ERROR", "FALSE") == Not(
-        inner=read_when_condition("INPUT-ERROR", "TRUE")
+    named = SelectionCondition(
+        condition={"not": False, "condition_name": "INPUT-ERROR"}
     )
+    tested = Atom(text="INPUT-ERROR", left="INPUT-ERROR", op=EIGHTY_EIGHT)
+
+    assert (
+        read_when_object(named, TruthValue(value=True)),
+        read_when_object(named, TruthValue(value=False)),
+    ) == (tested, Not(inner=tested))
 
 
-def test_under_evaluate_false_when_other_still_always_matches() -> None:
-    assert read_when_condition("OTHER", "FALSE") == ALWAYS
+def test_under_evaluate_false_when_any_still_always_matches() -> None:
+    assert read_when_object(AnyObject(), TruthValue(value=False)) == ALWAYS

@@ -256,7 +256,13 @@ def test_add_gives_the_target_the_union_of_its_operands(
     program_of, field, after, names_reaching
 ):
     asg = program_of(
-        [{"type": "ADD", "operands": [{"name": "WS-A"}, {"name": "WS-B"}]}],
+        [
+            {
+                "type": "ADD",
+                "operands": [{"name": "WS-A"}],
+                "targets": [{"name": "WS-B"}],
+            }
+        ],
         data_fields=[
             field(
                 1,

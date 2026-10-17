@@ -314,7 +314,7 @@ def _copy_start(
 
 
 def _initialize_targets(statement: InitializeStatement) -> tuple[RefModOperand, ...]:
-    return tuple(RefModOperand(name=name) for name in statement.operands)
+    return tuple(statement.operands)
 
 
 def _initialize_writes(
@@ -396,16 +396,15 @@ def _remainder(statement: ArithmeticStatement) -> tuple[RefModOperand, ...]:
 
 
 def _arithmetic_targets(statement: ArithmeticStatement) -> tuple[RefModOperand, ...]:
-    """Without GIVING the second operand is both read and written."""
-    given = tuple(statement.giving) or (statement.target,)
-    return (*given, *_remainder(statement))
+    """In-place receivers without GIVING, the GIVING receivers with it."""
+    return (*statement.targets, *statement.giving, *_remainder(statement))
 
 
 def _arithmetic_writes(
     statement: ArithmeticStatement, node: str, index: CellIndex, state: State
 ) -> Iterator[Write]:
     return _union_writes(
-        (statement.source, statement.target),
+        (*statement.operands, *statement.targets),
         _arithmetic_targets(statement),
         node,
         index,
@@ -487,7 +486,7 @@ def _origin_writes(
 
 
 def _read_targets(statement: ReadStatement) -> tuple[RefModOperand, ...]:
-    return (RefModOperand(name=statement.into),) if statement.into else ()
+    return (statement.into,) if statement.into.name else ()
 
 
 def _read_writes(
@@ -505,14 +504,16 @@ def _read_writes(
 def _call_targets(statement: CallStatement) -> tuple[RefModOperand, ...]:
     """BY REFERENCE is the only linkage the callee can write back through."""
     passed = tuple(
-        param.name
+        RefModOperand(
+            name=param.name, qualifiers=param.qualifiers, subscripts=param.subscripts
+        )
         for param in statement.using
         if param.param_type.upper() == "REFERENCE"
         and not param.omitted
         and not param.is_literal
     )
-    given = (statement.giving,) if statement.giving else ()
-    return tuple(RefModOperand(name=name) for name in (*passed, *given))
+    given = (statement.giving,) if statement.giving.name else ()
+    return (*passed, *given)
 
 
 def _call_origin(statement: CallStatement) -> str:

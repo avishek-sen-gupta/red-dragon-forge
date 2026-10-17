@@ -275,15 +275,14 @@ def test_a_search_reads_the_table_and_its_index(program_of) -> None:
 
 
 def test_an_add_with_size_error_names_the_arithmetic_target(program_of) -> None:
-    """ArithmeticStatement has giving, not targets, so the fallback chain must
-    handle both."""
+    """A GIVING form writes only its giving receivers, so the size error is about
+    the first of them rather than about an operand."""
     cfg = _cfg(
         program_of,
         [
             {
                 "type": "ADD",
-                "source": {"name": "WS-A"},
-                "target": {"name": "WS-B"},
+                "operands": [{"name": "WS-A"}, {"name": "WS-B"}],
                 "giving": [{"name": "WS-TOTAL"}],
                 "on_size_error": [_move("'E'", "WS-STATUS")],
             }
