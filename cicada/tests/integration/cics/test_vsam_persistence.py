@@ -251,15 +251,17 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
     # COACTUPC's own ACCT-UPDATE-RECORD (the structure it REWRITEs FROM) omits
     # ACCT-ADDR-ZIP and pads with FILLER X(188), while CVACT01Y has ACCT-ADDR-ZIP
     # @102, ACCT-GROUP-ID @112 and FILLER X(178). Its fields before the gap sum to
-    # 102, so ACCT-UPDATE-GROUP-ID writes over the ZIP and leaves @112 blank. That
-    # is CardDemo's own defect, reproduced here rather than papered over.
+    # 102, so ACCT-UPDATE-GROUP-ID writes over the ZIP and leaves @112 to the
+    # FILLER, which INITIALIZE does not touch, so it keeps the storage's initial
+    # LOW-VALUES. That is CardDemo's own defect, reproduced here rather than
+    # papered over.
     addr_zip_after = record_after[102:112].decode("cp037").rstrip()
     assert addr_zip_after == _NEW_GROUP_ID, (
         "ACCT-ADDR-ZIP should hold the group id COACTUPC misaligns into it, "
         f"got {addr_zip_after!r}"
     )
 
-    group_id_after = record_after[112:122].decode("cp037").rstrip()
+    group_id_after = record_after[112:122]
     assert (
-        group_id_after == ""
-    ), f"ACCT-GROUP-ID should be left blank by the same misalignment, got {group_id_after!r}"
+        group_id_after == b"\x00" * 10
+    ), f"ACCT-GROUP-ID should keep the FILLER's LOW-VALUES, got {group_id_after!r}"

@@ -14,6 +14,7 @@ from cobol_asg.cobol_statements import (
     RecordVarying,
 )
 from cobol_asg.file_enums import AccessMode, FileOrganization, RecordingMode
+from cobol_asg.ref_mod import RefModOperand
 from interpreter.cobol.file_definitions_data import FILE_DEFINITIONS
 from interpreter.data_value import DataList, DataRecord, DataScalar, DataValue
 from interpreter.field_name import FieldName
@@ -43,6 +44,10 @@ def _text(record: DataRecord, name: str) -> str:
             return value
         case other:
             raise ValueError(f"file definition field {name} is not text: {other!r}")
+
+
+def _operand(record: DataRecord, name: str) -> RefModOperand:
+    return RefModOperand(name=_text(record, name))
 
 
 def _int(value: DataValue, name: str) -> int:
@@ -97,9 +102,9 @@ def _entry(record: DataRecord) -> FileControlEntry:
         assign_to=_text(record, "assign_to"),
         organization=FileOrganization(_text(record, "organization")),
         access_mode=AccessMode(_text(record, "access_mode")),
-        record_key=_text(record, "record_key"),
-        relative_key=_text(record, "relative_key"),
-        file_status_var=_text(record, "file_status"),
+        record_key=_operand(record, "record_key"),
+        relative_key=_operand(record, "relative_key"),
+        file_status_var=_operand(record, "file_status"),
     )
 
 

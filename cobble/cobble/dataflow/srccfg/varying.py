@@ -1,13 +1,10 @@
-"""The text of a PERFORM VARYING spec's FROM or BY: the name or literal it holds."""
+"""The text of a PERFORM spec's operand: the name or literal it holds, upper-cased."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from cobble.dataflow.srccfg.expression_text import expression_text
+from cobol_asg.cobol_expression import ExprNode
 
 
-def spec_text(value: Mapping[str, str] | str) -> str:
-    """FROM is a structured expression dict in newer parses and text in older ones;
-    either way what is wanted is the name or the literal."""
-    if isinstance(value, Mapping):
-        return str(value.get("name", value.get("value", ""))).upper()
-    return str(value or "").upper()
+def spec_text(value: ExprNode) -> str:
+    return expression_text(value).upper()

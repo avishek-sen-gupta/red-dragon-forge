@@ -12,6 +12,7 @@ from cics.vsam.dump import (
     select_record_layout,
 )
 from cobol_asg.cobol_types import CobolDataCategory, CobolTypeDescriptor
+from cobol_asg.ref_mod import RefModOperand
 from interpreter.cobol.data_layout import DataLayout, FieldLayout
 from interpreter.cobol.ebcdic_table import EbcdicTable
 from interpreter.cobol.comp3 import encode_comp3
@@ -173,7 +174,7 @@ def test_decode_record_odo_honors_counter_not_max():
         byte_length=2,
         occurs_count=3,
         element_size=2,
-        occurs_depending_on="N",
+        occurs_depending_on=RefModOperand(name="N"),
         occurs_min=1,
     )
     layout = DataLayout(fields={"N": counter, "ITEM": item}, total_bytes=7)
@@ -196,7 +197,7 @@ def test_decode_record_odo_counter_clamped_to_max():
         byte_length=2,
         occurs_count=3,
         element_size=2,
-        occurs_depending_on="N",
+        occurs_depending_on=RefModOperand(name="N"),
         occurs_min=1,
     )
     layout = DataLayout(fields={"N": counter, "ITEM": item}, total_bytes=7)
@@ -244,7 +245,7 @@ def test_decode_record_odo_counter_clamped_to_min():
         byte_length=2,
         occurs_count=3,
         element_size=2,
-        occurs_depending_on="N",
+        occurs_depending_on=RefModOperand(name="N"),
         occurs_min=1,
     )
     layout = DataLayout(fields={"N": counter, "ITEM": item}, total_bytes=7)

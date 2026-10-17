@@ -82,7 +82,7 @@ def test_cli_input_map_present_for_inout(tmp_path):
     src = tmp_path / "map.json"
     src.write_text(json.dumps(SAMPLE_JSON))
     result = _run(["--input", str(src)])
-    assert "ORDERMAPI REDEFINES ORDERMAPO" in result.stdout
+    assert "ORDERMAPO REDEFINES ORDERMAPI" in result.stdout
     assert "ORDNOI" in result.stdout
 
 

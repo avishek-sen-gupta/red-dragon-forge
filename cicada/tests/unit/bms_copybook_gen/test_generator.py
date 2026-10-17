@@ -29,7 +29,7 @@ def _field(label, length, picout="", picin="", attrb=None, grpname="", occurs=0)
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_output_map_01_level():
     lines = generate_copybook(_mapset([_map("ORDERMAP", [])]))
-    assert "       01  ORDERMAPO." in lines
+    assert "       01  ORDERMAPO REDEFINES ORDERMAPI." in lines
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -53,14 +53,14 @@ def test_field_length_subfield():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_field_attribute_byte():
     lines = generate_copybook(_mapset([_map("M", [_field("ORDNO", 8)])]))
-    assert "           02  ORDNOA                          PIC X." in lines
+    assert "               03  ORDNOA                      PIC X." in lines
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_field_flag_redefines():
     lines = generate_copybook(_mapset([_map("M", [_field("ORDNO", 8)])]))
-    assert "           02  FILLER REDEFINES ORDNOA." in lines
-    assert "               03  ORDNOF                      PIC X." in lines
+    assert "           02  ORDNOF                          PIC X." in lines
+    assert "           02  FILLER REDEFINES ORDNOF." in lines
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -90,20 +90,25 @@ def test_two_fields_in_sequence():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_input_map_redefines_output():
+def test_input_map_is_the_one_the_output_map_redefines():
     lines = generate_copybook(_mapset([_map("ORDERMAP", [])]))
-    assert "       01  ORDERMAPI REDEFINES ORDERMAPO." in lines
+    assert (lines[0], "       01  ORDERMAPO REDEFINES ORDERMAPI." in lines) == (
+        "       01  ORDERMAPI.",
+        True,
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_input_map_field_uses_filler_for_length_and_attr():
+def test_output_map_field_spans_length_and_flag_with_one_filler():
     fields = [_field("ORDNO", 8)]
     lines = generate_copybook(_mapset([_map("M", fields)]))
-    # In input map, length and attr are FILLER
-    input_start = next(i for i, l in enumerate(lines) if "MI REDEFINES" in l)
-    input_section = lines[input_start:]
-    fillers = [l for l in input_section if "FILLER" in l and "PIC S9(4) COMP" in l]
-    assert len(fillers) >= 1
+    output_start = next(i for i, l in enumerate(lines) if "MO REDEFINES" in l)
+    assert lines[output_start:] == (
+        "       01  MO REDEFINES MI.",
+        "           02  FILLER                          PIC X(12).",
+        "           02  FILLER                          PIC X(3).",
+        "           02  ORDNOO                          PIC X(8).",
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -123,7 +128,10 @@ def test_input_field_picin_overrides():
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_mode_out_omits_input_map():
     lines = generate_copybook(_mapset([_map("ORDERMAP", [])], mode="OUT"))
-    assert not any("REDEFINES ORDERMAPO" in l for l in lines)
+    assert lines == (
+        "       01  ORDERMAPO.",
+        "           02  FILLER                          PIC X(12).",
+    )
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -201,8 +209,8 @@ def test_extatt_input_adds_four_filler_bytes_for_attributes():
     lines = generate_copybook(
         _mapset_extatt([_map_extatt("MYMAP", [_field("FLD", 8)])])
     )
-    input_start = next(i for i, l in enumerate(lines) if "REDEFINES MYMAPO" in l)
-    input_section = lines[input_start:]
+    output_start = next(i for i, l in enumerate(lines) if "REDEFINES MYMAPI" in l)
+    input_section = lines[:output_start]
     # the 4 extended-attribute bytes appear as a single FILLER X(4) in the input map
     assert any("02  FILLER" in l and "PIC X(4)." in l for l in input_section)
 

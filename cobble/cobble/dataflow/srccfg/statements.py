@@ -120,7 +120,7 @@ def _loop_assignments(statement: CobolStatementType, node: str) -> tuple[Entry, 
 
 
 def _assignments(spec: PerformVaryingSpec, node: str) -> tuple[Entry, ...]:
-    counter = RefModOperand(name=spec.varying_var.upper())
+    counter = RefModOperand(name=spec_text(spec.varying_var))
     return (
         (
             f"{node}#init",
@@ -133,8 +133,8 @@ def _assignments(spec: PerformVaryingSpec, node: str) -> tuple[Entry, ...]:
             f"{node}#step",
             ArithmeticStatement(
                 op="ADD",
-                source=RefModOperand(name=spec_text(spec.varying_by)),
-                target=counter,
+                operands=[RefModOperand(name=spec_text(spec.varying_by))],
+                targets=[counter],
             ),
         ),
     )

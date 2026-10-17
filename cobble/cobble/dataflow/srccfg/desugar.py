@@ -56,7 +56,7 @@ from cobble.dataflow.srccfg.conditions import (
     Not,
     Or,
     read_condition,
-    read_when_condition,
+    read_when_object,
     resolve_atom,
 )
 from cobble.dataflow.srccfg.paragraphs import end_id
@@ -72,7 +72,15 @@ from cobble.dataflow.srccfg.using_argument import UsingArgument
 from cobble.dataflow.srccfg.varying import spec_text
 from cobble.dataflow.srccfg.whenever import SQLCA_CONDITIONS, Governing
 from cobol_asg.cobol_expression import expr_to_dict
-from cobol_asg.cobol_statements import CallUsingParam
+from cobol_asg.cobol_statements import (
+    AcceptStatement,
+    CallUsingParam,
+    EvaluateStatement,
+    PerformTimesSpec,
+    PerformVaryingSpec,
+    WhenStatement,
+)
+from cobol_asg.evaluate_selection import SelectionSubject
 from cobol_asg.exit_kind import ExitKind
 from cobol_asg.ref_mod import RefModOperand
 from squall.statements import Kind
@@ -218,9 +226,8 @@ def _local_roles(statement, kind: str) -> tuple[tuple[str, ...], ...]:
     return ((), names)
 
 
-def _written_target(statement) -> tuple[str, ...]:
-    target = getattr(statement, "target", "")
-    return (target,) if target else ()
+def _written_target(statement: AcceptStatement) -> tuple[str, ...]:
+    return operand_names((statement.target,))
 
 
 def _flow_roles(statement, ctx: Ctx) -> tuple[tuple[str, ...], ...]:
@@ -546,18 +553,14 @@ def _raw_condition(statement) -> Mapping:
     return raw
 
 
-def _evaluate(statement, ctx: Ctx, path: str) -> Fragment:
+def _evaluate(statement: EvaluateStatement, ctx: Ctx, path: str) -> Fragment:
     """A guard chain. Each branch is tried only when every earlier one failed, so
     branch N is reached along branch N-1's FALSE edges -- the same chaining OR
     uses, which is why the negation of the branches above is already on the path.
     """
-    subjects = (
-        str(getattr(statement, "subject", "") or ""),
-        *getattr(statement, "also_subjects", ()),
-    )
     branches = tuple(
-        _branch(child, subjects, ctx, f"{path}.when.{position}")
-        for position, child in enumerate(getattr(statement, "children", ()))
+        _branch(child, statement.subjects, ctx, f"{path}.when.{position}")
+        for position, child in enumerate(statement.children)
     )
     return _chain_branches(tuple(b for b in branches if b.nodes))
 
@@ -573,7 +576,9 @@ class _Branch:
     false_exits: tuple[Exit, ...]
 
 
-def _branch(child, subjects: tuple[str, ...], ctx: Ctx, path: str) -> _Branch:
+def _branch(
+    child, subjects: tuple[SelectionSubject, ...], ctx: Ctx, path: str
+) -> _Branch:
     body = lower_statements(getattr(child, "children", ()), ctx, path)
     if type(child).__name__ == "WhenOtherStatement":
         return _Branch(
@@ -587,7 +592,11 @@ def _branch(child, subjects: tuple[str, ...], ctx: Ctx, path: str) -> _Branch:
 
 
 def _guarded_branch(
-    child, subjects: tuple[str, ...], ctx: Ctx, path: str, body: Fragment
+    child: WhenStatement,
+    subjects: tuple[SelectionSubject, ...],
+    ctx: Ctx,
+    path: str,
+    body: Fragment,
 ) -> _Branch:
     cond = _stacked_condition(child, subjects, ctx, path)
     into_body = _attach(cond.true_exits, body)
@@ -601,7 +610,7 @@ def _guarded_branch(
 
 
 def _stacked_condition(
-    child, subjects: tuple[str, ...], ctx: Ctx, path: str
+    child: WhenStatement, subjects: tuple[SelectionSubject, ...], ctx: Ctx, path: str
 ) -> CondFragment:
     """WHEN c1 WHEN c2 <body>: each alternative is tried when the conditions before
     it failed, and any one's TRUE exits enter the body -- an OR chain."""
@@ -609,7 +618,7 @@ def _stacked_condition(
         _either,
         (
             _when_condition(alternative, subjects, ctx, f"{path}.alt.{position}")
-            for position, alternative in enumerate(getattr(child, "alternatives", ()))
+            for position, alternative in enumerate(child.alternatives)
         ),
         _when_condition(child, subjects, ctx, path),
     )
@@ -633,22 +642,13 @@ def _either(left: CondFragment, right: CondFragment) -> CondFragment:
 
 
 def _when_condition(
-    child, subjects: tuple[str, ...], ctx: Ctx, path: str
+    child: WhenStatement, subjects: tuple[SelectionSubject, ...], ctx: Ctx, path: str
 ) -> CondFragment:
     """WHEN a ALSO b is a conjunction, so the ALSO conditions chain on TRUE. Each
-    value answers the subject in the same ALSO position; a value with no subject
-    to answer is read as a condition of its own."""
-    thru = str(getattr(child, "condition_thru", "") or "")
-    also_values = tuple(getattr(child, "also_conditions", ()))
-    also_subjects = (*subjects[1:], *("",) * len(also_values))
-    parts = (
-        read_when_condition(getattr(child, "condition", ""), subjects[0], thru),
-        *(
-            read_when_condition(value, subject)
-            for value, subject in zip(
-                also_values, also_subjects[: len(also_values)], strict=True
-            )
-        ),
+    object answers the subject in the same ALSO position."""
+    parts = tuple(
+        read_when_object(selection, subject)
+        for selection, subject in zip(child.objects, subjects, strict=True)
     )
     slotted = tuple(zip(_ALSO_SLOTS[: len(parts)], parts, strict=True))
     return _and_chain(_tested(slotted), ctx, path, 0)
@@ -959,10 +959,10 @@ def _before(spec) -> bool:
     return bool(getattr(spec, "test_before", True))
 
 
-def _times_test(spec, ctx: Ctx, path: str) -> CondFragment:
+def _times_test(spec: PerformTimesSpec, ctx: Ctx, path: str) -> CondFragment:
     """The count is a field as often as a literal; when it is a field the loop
     depends on it, so it is a read on the test."""
-    times = str(getattr(spec, "times", "") or "").upper()
+    times = spec_text(spec.times)
     node = Node(
         id=node_id(ctx, path, "#loop"),
         kind=NodeKind.TEST,
@@ -1010,23 +1010,23 @@ def _tested_loop(test: CondFragment, body: Fragment, before: bool) -> Fragment:
     )
 
 
-def _varying_loop(spec, body: Fragment, ctx: Ctx, path: str) -> Fragment:
+def _varying_loop(
+    spec: PerformVaryingSpec, body: Fragment, ctx: Ctx, path: str
+) -> Fragment:
     """FROM and BY are assignments to the loop variable, and both are definitions a
     query for its writers has to find.
 
     AFTER specs are nested loops whose innermost varies fastest, built inside-out.
     """
-    inner_body = _nest_after_specs(getattr(spec, "after_specs", ()), body, ctx, path)
-    variable = str(getattr(spec, "varying_var", "") or "").upper()
-    init = _step_node(
-        ctx, path, "#init", variable, (spec_text(getattr(spec, "varying_from", "")),)
-    )
+    inner_body = _nest_after_specs(spec.after_specs, body, ctx, path)
+    variable = spec_text(spec.varying_var)
+    init = _step_node(ctx, path, "#init", variable, (spec_text(spec.varying_from),))
     step = _step_node(
         ctx,
         path,
         "#step",
         variable,
-        (variable, spec_text(getattr(spec, "varying_by", ""))),
+        (variable, spec_text(spec.varying_by)),
     )
     loop = _tested_loop(
         _until_test(spec, ctx, path),
@@ -1061,20 +1061,20 @@ def _one_after_loop(
     inner = _one_after_loop(specs, position + 1, body, ctx, path)
     spec = specs[position]
     suffix = f".after.{position}"
-    variable = str(getattr(spec, "varying_var", "") or "").upper()
+    variable = spec_text(spec.varying_var)
     init = _step_node(
         ctx,
         path,
         f"{suffix}#init",
         variable,
-        (spec_text(getattr(spec, "varying_from", "")),),
+        (spec_text(spec.varying_from),),
     )
     step = _step_node(
         ctx,
         path,
         f"{suffix}#step",
         variable,
-        (variable, spec_text(getattr(spec, "varying_by", ""))),
+        (variable, spec_text(spec.varying_by)),
     )
     loop = _tested_loop(
         lower_condition(

@@ -332,7 +332,7 @@ fileignoreconfig:
 - filename: tests/integration/test_carddemo_data_install.py
   checksum: d6e023498d56fc9dcbbff2c33f61b5469af57efaef8b09c6ab66b7d8114e6a51
 - filename: cicada/cics/vsam/dump.py
-  checksum: 3a85f24f98f84777f64dae9a24b21f42b4fa85043c123ec8eb9e703d0ddeabfe
+  checksum: 2a8f9f346ed19a1da2d229e125a1efb349ccd7ce29922a8ea0b94e442f3441b1
 - filename: cicada/tests/integration/cics/test_carddemo_user_list.py
   checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
 - filename: cicada/cics/vsam/engine.py
@@ -374,7 +374,7 @@ fileignoreconfig:
 - filename: jackal/jackal/record_format.py
   checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
-  checksum: 6122ec03beac3ba3222e3032bab94c695dccec1b29564b382698a714aa75b6e4
+  checksum: 3a0c62ae4f55e4c8ff9bfb5e73d4e4827f1ea73b160022601b1948f3948ac452
 - filename: docs/superpowers/specs/2026-10-15-file-definitions-as-ir-data-design.md
   checksum: 4553838ea11b000e48f964db3e7cbe633aee19f43f856506258631cd0f078151
 - filename: docs/superpowers/plans/2026-10-15-file-definitions-as-ir-data.md
@@ -382,7 +382,7 @@ fileignoreconfig:
 - filename: jackal/tests/unit/test_file_definitions.py
   checksum: 8a34632037896d0ddcfba6681547c053fa1e153f76beb03747a99c6ca0e860ef
 - filename: jackal/jackal/file_definitions.py
-  checksum: e0169cc5929ee1f9f54b6fa8c36e079895d9597073617b14c6679a5b3935ad5b
+  checksum: d92e01d090c0e1e3fc3d8394d8c36e2b0b923b88d09ae6dc06e2d1fbff278edf
 - filename: cicada/tests/integration/cics/test_sign_on_flow.py
   checksum: de82c11f91f78729a1970450526c8e514eb8397f3d0919007689df8ae872be5e
 - filename: fp.json
@@ -425,4 +425,8 @@ fileignoreconfig:
   checksum: 6d5d5f0273a0a960819cae601d400e61fe6ed8da9372b6f99e25bba55b619bfa
 - filename: .github/workflows/ci.yml
   checksum: c13a891403b820defd117dfcaadc1330aab037b840860c1e3d67c9ee5b36955d
+- filename: cobble/cobble/dataflow/depgraph/flows.py
+  checksum: c4281f7c9c55f0f323effc01be8ed5761fda2799a1da47535d144fcc462b4d1a
+- filename: cobble/cobble/dataflow/fields/transfer.py
+  checksum: 9d0c73b6ba95623484b32cfc04c92a51f84d2500c13a521c62269b5bf91a4a6a
 version: "1.0"

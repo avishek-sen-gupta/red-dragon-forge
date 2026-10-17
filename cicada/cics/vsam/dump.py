@@ -125,8 +125,11 @@ def _occurs_floor(field: FieldLayout) -> int:
 
 
 def _counted(field: FieldLayout, record: bytes, base: int, root: DataLayout) -> int:
-    match root.lookup(field.occurs_depending_on):
-        case FieldLayout() as counter:
+    odo = field.occurs_depending_on
+    match tuple(
+        match.item for match in root.qualified_matches(odo.name, odo.qualifiers)
+    ):
+        case (FieldLayout() as counter,):
             start = counter.offset - base
             live = int(
                 _decode_leaf(counter, record[start : start + counter.byte_length])
@@ -137,7 +140,7 @@ def _counted(field: FieldLayout, record: bytes, base: int, root: DataLayout) -> 
 
 
 def _live_count(field: FieldLayout, record: bytes, base: int, root: DataLayout) -> int:
-    if not field.occurs_depending_on:
+    if not field.occurs_depending_on.name:
         return field.occurs_count
     return _counted(field, record, base, root)
 

@@ -279,7 +279,7 @@ def test_perform_times_is_a_loop_whose_test_names_the_count(program_of) -> None:
             {
                 "type": "PERFORM",
                 "perform_type": "TIMES",
-                "times": "WS-COUNT",
+                "times": {"kind": "ref", "name": "WS-COUNT"},
                 "children": [_move("'F'", "WS-RESULT")],
             }
         ],
@@ -299,9 +299,9 @@ def test_perform_varying_initialises_steps_and_tests(program_of) -> None:
             {
                 "type": "PERFORM",
                 "perform_type": "VARYING",
-                "varying_var": "WS-IDX",
-                "varying_from": "1",
-                "varying_by": "1",
+                "varying_var": {"kind": "ref", "name": "WS-IDX"},
+                "varying_from": {"kind": "lit", "value": "1"},
+                "varying_by": {"kind": "lit", "value": "1"},
                 "until": _cond("WS-IDX", "10"),
                 "children": [_move("'F'", "WS-RESULT")],
             }
@@ -323,9 +323,9 @@ def test_the_step_of_a_varying_loop_goes_back_to_the_test(program_of) -> None:
             {
                 "type": "PERFORM",
                 "perform_type": "VARYING",
-                "varying_var": "WS-IDX",
-                "varying_from": "1",
-                "varying_by": "1",
+                "varying_var": {"kind": "ref", "name": "WS-IDX"},
+                "varying_from": {"kind": "lit", "value": "1"},
+                "varying_by": {"kind": "lit", "value": "1"},
                 "until": _cond("WS-IDX", "10"),
                 "children": [_move("'F'", "WS-RESULT")],
             }
@@ -368,9 +368,9 @@ def test_perform_varying_with_test_after_runs_the_body_first(program_of) -> None
             {
                 "type": "PERFORM",
                 "perform_type": "VARYING",
-                "varying_var": "WS-IDX",
-                "varying_from": "1",
-                "varying_by": "1",
+                "varying_var": {"kind": "ref", "name": "WS-IDX"},
+                "varying_from": {"kind": "lit", "value": "1"},
+                "varying_by": {"kind": "lit", "value": "1"},
                 "until": _cond("WS-IDX", "10"),
                 "test_before": False,
                 "children": [_move("'F'", "WS-RESULT")],
@@ -392,16 +392,16 @@ def test_perform_varying_after_creates_nested_loops(program_of) -> None:
             {
                 "type": "PERFORM",
                 "perform_type": "VARYING",
-                "varying_var": "WS-I",
-                "varying_from": "1",
-                "varying_by": "1",
+                "varying_var": {"kind": "ref", "name": "WS-I"},
+                "varying_from": {"kind": "lit", "value": "1"},
+                "varying_by": {"kind": "lit", "value": "1"},
                 "until": _cond("WS-I", "3"),
                 "children": [_move("'F'", "WS-RESULT")],
                 "after_specs": [
                     {
-                        "varying_var": "WS-J",
-                        "varying_from": "1",
-                        "varying_by": "1",
+                        "varying_var": {"kind": "ref", "name": "WS-J"},
+                        "varying_from": {"kind": "lit", "value": "1"},
+                        "varying_by": {"kind": "lit", "value": "1"},
                         "until": _cond("WS-J", "5"),
                         "test_before": True,
                     }
@@ -428,16 +428,16 @@ def test_after_spec_nesting_direction_inner_step_to_inner_test(program_of) -> No
             {
                 "type": "PERFORM",
                 "perform_type": "VARYING",
-                "varying_var": "WS-I",
-                "varying_from": "1",
-                "varying_by": "1",
+                "varying_var": {"kind": "ref", "name": "WS-I"},
+                "varying_from": {"kind": "lit", "value": "1"},
+                "varying_by": {"kind": "lit", "value": "1"},
                 "until": _cond("WS-I", "3"),
                 "children": [_move("'F'", "WS-RESULT")],
                 "after_specs": [
                     {
-                        "varying_var": "WS-J",
-                        "varying_from": "1",
-                        "varying_by": "1",
+                        "varying_var": {"kind": "ref", "name": "WS-J"},
+                        "varying_from": {"kind": "lit", "value": "1"},
+                        "varying_by": {"kind": "lit", "value": "1"},
                         "until": _cond("WS-J", "5"),
                         "test_before": True,
                     }
