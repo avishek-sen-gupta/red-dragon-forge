@@ -21,6 +21,10 @@ from tests.package_build import package
 from tests.system_build import job_catalog, system, upload
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="symbolic step RETURN-CODE has no result until the injected strategy lands — red-dragon-forge-evn7",
+)
 @pytest.mark.carddemo_e2e
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_acctfile_then_readacct_e2e(

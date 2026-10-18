@@ -21,6 +21,7 @@ import re
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
+from cobol_asg.usage_synonyms import canonical_usage
 from squall.parser.sql_model import FieldMeta
 
 # A level-49 VARCHAR length prefix is always signed 4-digit binary: PIC S9(4)
@@ -38,7 +39,8 @@ _Field = Mapping[str, Any]
 
 def _is_varchar_len_child(field: _Field) -> bool:
     """True for a level-49 ``PIC S9(4) USAGE COMP`` binary length prefix."""
-    match field.get("level"), field.get("usage"), field.get("pic"):
+    usage = canonical_usage(str(field.get("usage", "")))
+    match field.get("level"), usage, field.get("pic"):
         case 49, "COMP", str(pic) if _LEN_PIC.match(pic):
             return True
         case _:
