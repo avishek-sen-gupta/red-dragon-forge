@@ -6,6 +6,9 @@ optional ~/.config/git/blocklist-exclude.txt (git pathspec globs), and prints a
 betterleaks TOML config to stdout:
 
   - one [[rules]] entry matching any blocklist term, case-insensitively
+  - one global [[allowlists]] entry for the blocklist's '!' lines: a finding is
+    dropped when its line matches any of them (write '\\!' for a term that
+    starts with a literal '!')
   - a global prefilter that skips paths matching the exclude globs
 
 Usage:
@@ -54,6 +57,23 @@ def glob_to_regex(glob: str) -> str:
     return "^" + "".join(out).rstrip("/") + "(?:/.*)?$"
 
 
+# betterleaks uses Go's RE2, which has no lookarounds; Python's re accepts them.
+LOOKAROUND = re.compile(r"(?<!\\)\(\?<?[=!]")
+
+
+def check_pattern(pattern: str) -> None:
+    if "'''" in pattern:
+        fail(
+            f"pattern contains ''' and cannot be written as a TOML literal: {pattern!r}"
+        )
+    if LOOKAROUND.search(pattern):
+        fail(f"lookarounds are not supported by betterleaks (RE2): {pattern}")
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        fail(f"invalid regex {pattern!r}: {e}")
+
+
 def fail(message: str) -> None:
     print(f"blocklist-to-toml: {message}", file=sys.stderr)
     sys.exit(1)
@@ -62,16 +82,13 @@ def fail(message: str) -> None:
 def main() -> None:
     if not os.path.isfile(BLOCKLIST):
         fail(f"no blocklist found at {BLOCKLIST}")
-    terms = read_entries(BLOCKLIST)
+    entries = read_entries(BLOCKLIST)
+    allows = [e[1:].lstrip() for e in entries if e.startswith("!")]
+    terms = [e for e in entries if not e.startswith("!")]
     if not terms:
         fail(f"blocklist at {BLOCKLIST} has no terms")
-    for term in terms:
-        if "'''" in term:
-            fail(f"term contains ''' and cannot be written as a TOML literal: {term!r}")
-        try:
-            re.compile(term)
-        except re.error as e:
-            fail(f"invalid regex {term!r}: {e}")
+    for pattern in terms + allows:
+        check_pattern(pattern)
 
     excludes = read_entries(EXCLUDELIST) if os.path.isfile(EXCLUDELIST) else []
     exclude_regexes = [glob_to_regex(g) for g in excludes]
@@ -88,6 +105,18 @@ def main() -> None:
             "'''",
             "",
         ]
+    if allows:
+        out += [
+            "[[allowlists]]",
+            'description = "Allowed terminology (! lines) from blocklist.txt"',
+            'regexTarget = "line"',
+            "regexes = [",
+            *(f"  '''(?i){a}'''," for a in allows),
+            "]",
+            "",
+        ]
+    # One alternation, not a rule per term: betterleaks runs each rule's regex
+    # over every file, so 200 rules scan ~8x slower.
     out += [
         "[[rules]]",
         'id = "forbidden-term"',
