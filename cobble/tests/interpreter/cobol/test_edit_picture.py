@@ -1,9 +1,6 @@
-import pytest
-
-from cobol_asg.edit_picture import (
-    format_edited,
-    parse_edit_picture,
-)
+from cobol_asg.edit_cell import EditCell
+from cobol_asg.edit_cell_kind import EditCellKind
+from cobol_asg.edit_picture import edit_plan, parse_edit_picture
 
 
 def test_parse_edit_picture_expands_repeat_counts() -> None:
@@ -35,26 +32,50 @@ def test_parse_edit_picture_detects_trailing_sign() -> None:
     assert not ep.sign_leading
 
 
-def test_format_edited_suppresses_leading_zeros_and_inserts_commas() -> None:
-    assert format_edited("1234.5", "ZZZ,ZZZ.99") == "  1,234.50"
+def _suppressed(before: int) -> EditCell:
+    return EditCell(EditCellKind.SUPPRESSED, "", before)
 
 
-def test_format_edited_all_suppressible_zero_is_blank() -> None:
-    assert format_edited("0", "Z(9)") == " " * 9
+def _digit(before: int) -> EditCell:
+    return EditCell(EditCellKind.DIGIT, "", before)
 
 
-def test_format_edited_fixed_sign_plus_shows_minus_for_negative() -> None:
-    assert format_edited("-42", "+9999") == "-0042"
+def test_edit_plan_suppresses_leading_digits_and_inserts_commas_once_significant() -> (
+    None
+):
+    plan = edit_plan("ZZZ,ZZZ.99")
+    assert plan.cells == (
+        _suppressed(0),
+        _suppressed(1),
+        _suppressed(2),
+        EditCell(EditCellKind.INSERTION, ",", 3),
+        _suppressed(3),
+        _suppressed(4),
+        _suppressed(5),
+        EditCell(EditCellKind.FIXED, ".", 6),
+        _digit(6),
+        _digit(7),
+    )
+    assert (
+        plan.digit_count,
+        plan.integer_digits,
+        plan.fraction_digits,
+        plan.signed,
+        plan.all_suppressible,
+        plan.zero_image,
+    ) == (8, 6, 2, False, False, " " * 10)
 
 
-def test_format_edited_fixed_sign_plus_shows_plus_for_positive() -> None:
-    assert format_edited("42", "+9999") == "+0042"
+def test_edit_plan_blanks_a_zero_when_every_digit_position_is_suppressible() -> None:
+    plan = edit_plan("Z(9)")
+    assert plan.cells == tuple(_suppressed(n) for n in range(9))
+    assert (plan.all_suppressible, plan.zero_image, plan.fill) == (True, " " * 9, " ")
 
 
-def test_format_edited_truncates_extra_fraction_digits() -> None:
-    assert format_edited("1.999", "9.99") == "1.99"
-
-
-@pytest.mark.parametrize("bad_value", ["", "not-a-number"])
-def test_format_edited_defaults_bad_input_to_zero(bad_value: str) -> None:
-    assert format_edited(bad_value, "9999") == "0000"
+def test_edit_plan_fixed_leading_plus_is_a_sign_cell_showing_plus() -> None:
+    plan = edit_plan("+9999")
+    assert plan.cells == (
+        EditCell(EditCellKind.SIGN, "+", 0),
+        *(_digit(n) for n in range(4)),
+    )
+    assert (plan.signed, plan.digit_count, plan.trailing_sign) == (True, 4, "")

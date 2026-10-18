@@ -2,8 +2,8 @@
 """CICS DFHRESP expression node pre-pass.
 
 Recursively replaces ``{"kind":"dfhresp","condition":"X"}`` nodes in the raw
-bridge JSON with ``{"kind":"lit","value":"N"}`` before the generic COBOL
-expression tree ever sees them.  Called by :class:`CicsLoweringStrategy` as
+bridge JSON with ``{"kind":"lit","value":"N","numeric":true}`` -- a numeric literal,
+as the bridge writes one -- before the generic COBOL expression tree ever sees them.  Called by :class:`CicsLoweringStrategy` as
 part of :meth:`preprocess_program_dict` (red-dragon-kieo).
 """
 
@@ -29,7 +29,7 @@ def resolve_dfhresp_nodes(data: object) -> object:
                     _DFHRESP_UNKNOWN,
                 )
                 code = _DFHRESP_UNKNOWN
-            return {"kind": "lit", "value": str(code)}
+            return {"kind": "lit", "value": str(code), "numeric": True}
         return {k: resolve_dfhresp_nodes(v) for k, v in data.items()}
     if isinstance(data, list):
         return [resolve_dfhresp_nodes(item) for item in data]

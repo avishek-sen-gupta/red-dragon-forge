@@ -9,19 +9,19 @@ from cics.dfhresp_prepass import resolve_dfhresp_nodes
 def test_dfhresp_node_in_simple_dict_resolves_to_lit() -> None:
     """A top-level dfhresp node is replaced with a lit node."""
     result = resolve_dfhresp_nodes({"kind": "dfhresp", "condition": "NOTFND"})
-    assert result == {"kind": "lit", "value": "13"}
+    assert result == {"kind": "lit", "value": "13", "numeric": True}
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dfhresp_node_pgmiderr_resolves() -> None:
     result = resolve_dfhresp_nodes({"kind": "dfhresp", "condition": "PGMIDERR"})
-    assert result == {"kind": "lit", "value": "27"}
+    assert result == {"kind": "lit", "value": "27", "numeric": True}
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_dfhresp_node_unknown_resolves_to_sentinel() -> None:
     result = resolve_dfhresp_nodes({"kind": "dfhresp", "condition": "BOGUS"})
-    assert result == {"kind": "lit", "value": "9999"}
+    assert result == {"kind": "lit", "value": "9999", "numeric": True}
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -36,7 +36,11 @@ def test_dfhresp_nested_inside_condition_dict_resolves() -> None:
         },
     }
     result = resolve_dfhresp_nodes(data)
-    assert result["relation"]["right"] == {"kind": "lit", "value": "13"}
+    assert result["relation"]["right"] == {
+        "kind": "lit",
+        "value": "13",
+        "numeric": True,
+    }
     assert result["relation"]["left"] == {"kind": "ref", "name": "EIBRESP"}
 
 
@@ -45,7 +49,7 @@ def test_dfhresp_inside_list_resolves() -> None:
     """dfhresp nodes inside lists (e.g. operands) are resolved."""
     data = [{"kind": "dfhresp", "condition": "NORMAL"}, {"kind": "ref", "name": "X"}]
     result = resolve_dfhresp_nodes(data)
-    assert result[0] == {"kind": "lit", "value": "0"}
+    assert result[0] == {"kind": "lit", "value": "0", "numeric": True}
     assert result[1] == {"kind": "ref", "name": "X"}
 
 

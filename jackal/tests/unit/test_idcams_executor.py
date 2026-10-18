@@ -63,9 +63,10 @@ def test_repro_reads_its_input_at_the_input_label_and_writes_at_the_output_label
     assert (defined, copied) == (0, 0)
     from cobol_asg.file_enums import OpenMode
     from interpreter.cobol.file_drivers import IndexedDriver
+    from interpreter.cobol.prime_key import PrimeKey
 
     drv = IndexedDriver()
-    drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)
+    drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, PrimeKey(0, 3))
     loaded = (drv.read_key(b"AAA").data, drv.read_key(b"BBB").data)
     drv.close()
     assert (loaded[0][:4], loaded[1][:4]) == (b"AAA1", b"BBB2")
@@ -324,6 +325,7 @@ def test_repro_reads_a_variable_input_record_by_record_at_each_record_length(
 ):
     from cobol_asg.file_enums import OpenMode
     from interpreter.cobol.file_drivers import IndexedDriver
+    from interpreter.cobol.prime_key import PrimeKey
     from jackal.idcams.executor import run_idcams
 
     upload(
@@ -353,7 +355,7 @@ def test_repro_reads_a_variable_input_record_by_record_at_each_record_length(
     env = allocated(ProgramStep(StepName("S1"), ProgramRef("IDCAMS"), dds), cat)
     copied = run_idcams((Repro(infile_dd="INF", outfile_dd="OUT"),), env, cat)
     drv = IndexedDriver()
-    drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, 0, 3)
+    drv.open(cat.resolve("OUT.KSDS").path, OpenMode.INPUT, 9, PrimeKey(0, 3))
     loaded = (drv.read_key(b"AAA").data, drv.read_key(b"BBB").data)
     drv.close()
     assert (copied, loaded[0][:4], loaded[1][:7]) == (0, b"AAA1", b"BBB2xyz")

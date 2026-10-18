@@ -4,6 +4,7 @@ sentinel, and a numeric literal the bridge tagged as a ref."""
 from __future__ import annotations
 
 from interpreter.cobol.condition_lowering import _lower_expr_dict
+from interpreter.cobol.lowering_scope import LoweringScope
 from interpreter.instructions import Const
 from interpreter.register import Register
 from tests.covers import covers, NotLanguageFeature
@@ -61,7 +62,9 @@ def test_unresolvable_ref_emits_sentinel_not_field_name_literal():
     sentinel constant ('UNRESOLVABLE__X'), not silently coerce the name to a
     literal via parse_literal."""
     ctx = _FakeCtx(fields=set())
-    _lower_expr_dict(ctx, {"kind": "ref", "name": "MISSING_FIELD"}, _MAT)
+    _lower_expr_dict(
+        LoweringScope(ctx, _MAT, None), {"kind": "ref", "name": "MISSING_FIELD"}
+    )
     consts = [i.value for i in ctx.emitted if isinstance(i, Const)]
     assert consts == [
         "UNRESOLVABLE__MISSING_FIELD"
@@ -73,6 +76,6 @@ def test_numeric_literal_tagged_as_ref_is_parsed_not_sentinelled():
     """The bridge sometimes tags a numeric literal as a ref (e.g. an abbreviated
     condition operand '1'). It must be parsed as the literal, NOT sentinelled."""
     ctx = _FakeCtx(fields=set())
-    _lower_expr_dict(ctx, {"kind": "ref", "name": "1"}, _MAT)
+    _lower_expr_dict(LoweringScope(ctx, _MAT, None), {"kind": "ref", "name": "1"})
     consts = [i.value for i in ctx.emitted if isinstance(i, Const)]
     assert consts == [1], f"expected literal int 1, got {consts}"

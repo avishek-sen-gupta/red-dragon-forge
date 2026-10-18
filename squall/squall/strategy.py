@@ -244,7 +244,7 @@ def _sqlcode_if_stmt(condition: WheneverCondition, target: str):
                 "relation": {
                     "left": {"kind": "ref", "name": "SQLCODE"},
                     "op": op,
-                    "right": {"kind": "lit", "value": value},
+                    "right": {"kind": "lit", "value": value, "numeric": True},
                 },
             },
             "children": [

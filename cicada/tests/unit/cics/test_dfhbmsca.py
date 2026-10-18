@@ -50,6 +50,7 @@ _EXPECTED = {
     "DFHBMPRF": PROTECTED | MDT,  # "PRotected Force" (real IBM X'61')
     "DFHBMASB": _ASKIP | BRT,  # autoskip, bright
     "DFHBMASK": _ASKIP,  # autoskip, not forced -- unused by CardDemo
+    "DFHBMASF": _ASKIP | MDT,  # autoskip, MDT forced
     "DFHBMFSE": MDT,  # "Force SEt": unprotected, MDT forced
     "DFHBMDAR": _DRK,
     "DFHBMBRY": BRT,

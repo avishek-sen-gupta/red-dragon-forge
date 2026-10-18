@@ -145,3 +145,27 @@ def test_a_condition_db2_does_not_define_does_not_raise() -> None:
     plan = parse_exec_sql("EXEC SQL WHENEVER MYCOND GO TO H END-EXEC")
 
     assert plan.whenever_condition == WheneverCondition.NONE
+
+
+@pytest.mark.parametrize(
+    ("condition", "op", "value"),
+    [(WheneverCondition.SQLERROR, "<", "0"), (WheneverCondition.NOT_FOUND, "=", "100")],
+    ids=["sqlerror", "not-found"],
+)
+def test_the_synthetic_sqlcode_test_compares_against_a_numeric_literal(
+    condition: WheneverCondition, op: str, value: str
+) -> None:
+    """The lowering compares a relation numerically only when its literal is marked
+    numeric, as the bridge marks one; unmarked, SQLCODE = 100 compared characters."""
+    from squall.strategy import _sqlcode_if_stmt
+
+    statement = _sqlcode_if_stmt(condition, "ERR-PARA")
+
+    assert statement.condition == {
+        "not": False,
+        "relation": {
+            "left": {"kind": "ref", "name": "SQLCODE"},
+            "op": op,
+            "right": {"kind": "lit", "value": value, "numeric": True},
+        },
+    }

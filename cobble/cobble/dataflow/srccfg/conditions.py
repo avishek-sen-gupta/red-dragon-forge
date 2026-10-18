@@ -21,6 +21,7 @@ from cobble.dataflow.srccfg.cfg import UNRESOLVED, Atom
 from cobble.dataflow.srccfg.expression_text import expression_text
 from cobble.dataflow.srccfg.synthetic import dfhresp_operand
 from cobol_asg.any_object import AnyObject
+from cobol_asg.condition_name import ConditionValue
 from cobol_asg.evaluate_selection import SelectionObject, SelectionSubject
 from cobol_asg.expression_subject import ExpressionSubject
 from cobol_asg.range_object import RangeObject
@@ -31,6 +32,7 @@ from cobol_asg.value_object import ValueObject
 EIGHTY_EIGHT = "88"
 CLASS = "CLASS"
 
+_QUOTE = "'"
 _OPPOSITE = {"==": "!=", "!=": "==", ">": "<=", "<=": ">", "<": ">=", ">=": "<"}
 
 
@@ -280,14 +282,24 @@ def _walk_fields(fields) -> tuple[EightyEight, ...]:
     )
 
 
+def _shown(value: ConditionValue, characters: str) -> str:
+    if value.numeric or value.figurative:
+        return characters
+    return _QUOTE + characters.replace(_QUOTE, _QUOTE * 2) + _QUOTE
+
+
 def _entries(cobol_field) -> tuple[EightyEight, ...]:
     return tuple(
         EightyEight(
             name=condition.name.upper(),
             parent=cobol_field.name.upper(),
-            values=tuple(v.from_val for v in condition.values if not v.is_range),
+            values=tuple(
+                _shown(v, v.from_val) for v in condition.values if not v.is_range
+            ),
             ranges=tuple(
-                (v.from_val, v.to_val) for v in condition.values if v.is_range
+                (_shown(v, v.from_val), _shown(v, v.to_val))
+                for v in condition.values
+                if v.is_range
             ),
         )
         for condition in cobol_field.conditions

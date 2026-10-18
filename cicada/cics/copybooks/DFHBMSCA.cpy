@@ -11,6 +11,7 @@
            02 DFHBMPRF   PIC X VALUE X'61'.
            02 DFHBMASB   PIC X VALUE X'F8'.
            02 DFHBMASK   PIC X VALUE X'F0'.
+           02 DFHBMASF   PIC X VALUE X'F1'.
            02 DFHBMFSE   PIC X VALUE X'C1'.
            02 DFHBMDAR   PIC X VALUE X'0C'.
            02 DFHBMBRY   PIC X VALUE X'08'.

@@ -9,6 +9,7 @@ from pathlib import Path
 from cobol_asg.file_enums import OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver
+from interpreter.cobol.prime_key import PrimeKey
 
 MemberOpener = Callable[[], FileOrganizationDriver]
 
@@ -43,8 +44,7 @@ class ConcatenatedDriver(FileOrganizationDriver):
         path: Path,
         mode: OpenMode,
         record_length: int,
-        key_offset: int,
-        key_length: int,
+        key: PrimeKey,
     ) -> None:
         raise TypeError("a ConcatenatedDriver is opened when it is constructed")
 

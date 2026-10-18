@@ -44,8 +44,6 @@ def test_parse_passes_each_copybook_extension_as_a_repeated_flag() -> None:
         "cpy",
         "-copybook-ext",
         "txt",
-        "-pointer-size",
-        "4",
     ]
 
 
@@ -82,6 +80,4 @@ def test_parse_emits_copybook_dirs_before_extensions() -> None:
         "sym",
         "-copybook-ext",
         "cpy",
-        "-pointer-size",
-        "4",
     ]
