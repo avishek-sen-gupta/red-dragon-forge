@@ -51,7 +51,7 @@ from cobble.dataflow.depgraph.flows import (
 )
 from cobble.dataflow.depgraph.graph import Passthrough, declarations, pass1, pass2
 from cobble.path_utils import ensure_dir
-from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import programs_at
 
 logger = logging.getLogger(__name__)
 
@@ -134,43 +134,44 @@ def main() -> int:
         for n, path in enumerate(paths, 1):
             program = path.stem
             with cached_asg_dialect_parsers_registered():
-                asg = CobolASG.from_dict(json.loads(path.read_text()))
+                programs = programs_at(path)
 
-            for name, where in declarations(asg).items():
-                node_decl.setdefault(name, where)
+            for asg in programs:
+                for name, where in declarations(asg).items():
+                    node_decl.setdefault(name, where)
 
-            e1, t1 = pass1(asg)
-            e2, t2 = pass2(e1, passthrough, window)
-            grand["programs"] += 1
-            grand["pass1_edges"] += len(e1)
-            grand["pass2_edges"] += len(e2)
-            # Every key, including stmt_/empty_/skip_: together they are the verb
-            # table's coverage report, and picking four by hand is how the last
-            # round failed to notice that all 49893 EXEC CICS statements were
-            # arriving empty.
-            for k, v in t1.items():
-                grand[k] += v
-            for k, v in t2.items():
-                grand[f"collapse_{k}"] += v
+                e1, t1 = pass1(asg)
+                e2, t2 = pass2(e1, passthrough, window)
+                grand["programs"] += 1
+                grand["pass1_edges"] += len(e1)
+                grand["pass2_edges"] += len(e2)
+                # Every key, including stmt_/empty_/skip_: together they are the verb
+                # table's coverage report, and picking four by hand is how the last
+                # round failed to notice that all 49893 EXEC CICS statements were
+                # arriving empty.
+                for k, v in t1.items():
+                    grand[k] += v
+                for k, v in t2.items():
+                    grand[f"collapse_{k}"] += v
 
-            before.append(conduit_stats(e1, window))
-            after.append(conduit_stats(e2, window))
-            for a, b, i, verb in e2:
-                pair_verbs[(a, b, verb)] += 1
-                node_programs[a].add(program)
-                node_programs[b].add(program)
-                edge_fh.write(
-                    json.dumps(
-                        {
-                            "src": a,
-                            "dst": b,
-                            "program": program,
-                            "seq": i,
-                            "verb": verb,
-                        }
+                before.append(conduit_stats(e1, window))
+                after.append(conduit_stats(e2, window))
+                for a, b, i, verb in e2:
+                    pair_verbs[(a, b, verb)] += 1
+                    node_programs[a].add(program)
+                    node_programs[b].add(program)
+                    edge_fh.write(
+                        json.dumps(
+                            {
+                                "src": a,
+                                "dst": b,
+                                "program": program,
+                                "seq": i,
+                                "verb": verb,
+                            }
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
 
             # Every 10 for the first 100, then every 100. Loading an ASG and
             # building its layout is about a second, so waiting for 100 of them
@@ -178,13 +179,12 @@ def main() -> int:
             if (n <= 100 and n % 10 == 0) or n % 100 == 0 or n == len(paths):
                 elapsed = time.perf_counter() - t0
                 logger.info(
-                    "[%5d/%d] %-10s pass1=%-6d pass2=%-6d edges=%-8d "
+                    "[%5d/%d] %-10s programs=%-3d edges=%-8d "
                     "elapsed=%.1fm eta=%.1fm",
                     n,
                     len(paths),
                     program,
-                    len(e1),
-                    len(e2),
+                    len(programs),
                     grand["pass2_edges"],
                     elapsed / 60,
                     (len(paths) - n) / (n / elapsed) / 60 if elapsed else 0,

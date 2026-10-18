@@ -26,6 +26,7 @@ from cobble.dataflow.fields.side_tables import defs_row, extent_row
 from cobble.dataflow.fixpoint.fixpoint import analysed
 from cobble.dataflow.fixpoint.query import FieldStore, Side, store_of
 from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 COVERAGE_FLOOR = 0.85
 
@@ -54,9 +55,7 @@ def _edge_row(edge) -> dict:
 
 def _asg(cache: Path, member: str) -> CobolASG:
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(
-            json.loads((cache / f"{member}.json").read_text(encoding="utf-8"))
-        )
+        return first_program_at(cache / f"{member}.json")
 
 
 def _analysed(cache: Path, member: str):

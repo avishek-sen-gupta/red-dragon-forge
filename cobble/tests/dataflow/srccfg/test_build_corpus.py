@@ -43,7 +43,9 @@ def _cache(tmp_path: Path, *programs: str) -> Path:
     asg_dir = tmp_path / "parsed"
     asg_dir.mkdir(parents=True, exist_ok=True)
     for program in programs:
-        (asg_dir / f"{program}.json").write_text(json.dumps(_asg(program)))
+        (asg_dir / f"{program}.json").write_text(
+            json.dumps({"programs": [_asg(program)]})
+        )
     return asg_dir
 
 
@@ -66,11 +68,48 @@ def test_one_member_builds_to_one_json_named_for_the_program(tmp_path: Path) -> 
     asg_dir = _cache(tmp_path, "PROGA")
     out_dir = tmp_path / "srccfg"
 
-    result = build_one(asg_dir / "PROGA.json", out_dir)
+    (result,) = build_one(asg_dir / "PROGA.json", out_dir)
 
     assert result.message == ""
     assert result.cfg_path == out_dir / "PROGA.jsonl"
     assert _only_cfg(result.cfg_path).program == "PROGA"
+
+
+def test_every_program_of_a_member_builds_to_a_json_named_for_it(
+    tmp_path: Path,
+) -> None:
+    """A member holding a nested program and a batch sibling is three programs, and
+    each one is a graph a later pass asks for by its PROGRAM-ID. Pre-order: a
+    program before those it contains, and both before the next sibling."""
+    asg_dir = tmp_path / "parsed"
+    asg_dir.mkdir()
+    (asg_dir / "MEMBERA.json").write_text(
+        json.dumps(
+            {
+                "programs": [
+                    {**_asg("PROGA"), "programs": [_asg("INNER")]},
+                    _asg("NEXT"),
+                ]
+            }
+        )
+    )
+    out_dir = tmp_path / "srccfg"
+
+    results = build_one(asg_dir / "MEMBERA.json", out_dir)
+
+    assert tuple(
+        (
+            result.member,
+            result.cfg_path,
+            result.message,
+            _only_cfg(result.cfg_path).program,
+        )
+        for result in results
+    ) == (
+        ("MEMBERA", out_dir / "PROGA.jsonl", "", "PROGA"),
+        ("MEMBERA", out_dir / "INNER.jsonl", "", "INNER"),
+        ("MEMBERA", out_dir / "NEXT.jsonl", "", "NEXT"),
+    )
 
 
 def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) -> None:
@@ -82,9 +121,9 @@ def test_source_file_names_the_member_file_not_the_program_id(tmp_path: Path) ->
     asg["paragraphs"][0]["statements"][0].update(
         line_start=10, col_start=12, line_end=10, col_end=50
     )
-    (asg_dir / "MEMBERA.json").write_text(json.dumps(asg))
+    (asg_dir / "MEMBERA.json").write_text(json.dumps({"programs": [asg]}))
 
-    result = build_one(
+    (result,) = build_one(
         asg_dir / "MEMBERA.json", tmp_path / "srccfg", source_dir=tmp_path / "src"
     )
 
@@ -98,7 +137,8 @@ def test_the_written_json_carries_every_node_and_edge(tmp_path: Path) -> None:
     the node ids and the edge kinds -- those ARE the reaching condition."""
     asg_dir = _cache(tmp_path, "PROGA")
 
-    written = _only_cfg(build_one(asg_dir / "PROGA.json", tmp_path / "out").cfg_path)
+    (result,) = build_one(asg_dir / "PROGA.json", tmp_path / "out")
+    written = _only_cfg(result.cfg_path)
 
     assert [node.id for node in written.nodes] == [
         "MAIN#label",
@@ -174,7 +214,7 @@ def test_a_written_cfg_reads_back_identical(tmp_path: Path) -> None:
     would silently drop call sites -- and a missing call site reads as a member with
     no callees rather than as an error."""
     asg_dir = _cache(tmp_path, "PROGA")
-    built = build_one(asg_dir / "PROGA.json", tmp_path / "out")
+    (built,) = build_one(asg_dir / "PROGA.json", tmp_path / "out")
 
     assert load_bundle(built.cfg_path).cfgs == (_rebuilt(asg_dir),)
 
@@ -186,7 +226,7 @@ def test_a_corpus_member_is_written_in_the_one_shape(tmp_path: Path) -> None:
     rather than by being a different shape -- so a reader never has to ask which
     kind of file it was handed."""
     asg_dir = _cache(tmp_path, "PROGA")
-    built = build_one(asg_dir / "PROGA.json", tmp_path / "out")
+    (built,) = build_one(asg_dir / "PROGA.json", tmp_path / "out")
 
     read = load_bundle(built.cfg_path)
 
@@ -202,7 +242,9 @@ def _two_members_one_program(tmp_path: Path) -> Path:
     asg_dir = tmp_path / "parsed"
     asg_dir.mkdir(parents=True, exist_ok=True)
     for member in ("MEMA", "MEMB"):
-        (asg_dir / f"{member}.json").write_text(json.dumps(_asg("PROGA")))
+        (asg_dir / f"{member}.json").write_text(
+            json.dumps({"programs": [_asg("PROGA")]})
+        )
     return asg_dir
 
 

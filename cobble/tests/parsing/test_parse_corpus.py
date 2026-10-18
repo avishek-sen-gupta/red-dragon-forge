@@ -101,6 +101,13 @@ def test_an_unbuilt_bridge_jar_names_the_target_that_builds_it(tmp_path: Path) -
         bridge_jar({"PROLEAP_BRIDGE_JAR": str(tmp_path / "absent.jar")})
 
 
+_ONE_PROGRAM = '{"programs": [{}]}'
+_NESTED_PAIR = (
+    '{"programs": [{"program_id": "A", "attribute": "",'
+    ' "programs": [{"program_id": "B", "attribute": "", "programs": []}]}]}'
+)
+
+
 def _job(config: CorpusConfig, name: str) -> Job:
     source = config.cobol_dir / name
     return Job(source, config.asg_dir / f"{source.stem}.json")
@@ -138,10 +145,12 @@ def test_a_parsed_member_is_written_where_the_cache_expects_it(
     config = _config(tmp_path)
     _members(config, "A.cbl")
 
-    result = parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
+    result = parse_with(_parser(CannedBridge(_NESTED_PAIR)), _job(config, "A.cbl"))
 
     assert result.ok is True
-    assert (config.asg_dir / "A.json").read_text() == "{}"
+    assert (config.asg_dir / "A.json").read_text() == (
+        '{"programs": [{"program_id": "A", "programs": [{"program_id": "B"}]}]}'
+    )
 
 
 def test_a_failure_to_WRITE_is_not_blamed_on_the_member(tmp_path: Path) -> None:
@@ -156,7 +165,7 @@ def test_a_failure_to_WRITE_is_not_blamed_on_the_member(tmp_path: Path) -> None:
     (config.asg_dir / "A.json").mkdir()
 
     with pytest.raises(OSError):
-        parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
+        parse_with(_parser(CannedBridge(_ONE_PROGRAM)), _job(config, "A.cbl"))
 
     assert not (config.asg_dir / "A.fail").exists()
 
@@ -169,7 +178,7 @@ def test_a_reparse_replaces_the_other_outcome(tmp_path: Path) -> None:
     (config.asg_dir / "A.fail").write_text("boom")
     (config.asg_dir / "B.json").write_text("{}")
 
-    parse_with(_parser(CannedBridge("{}")), _job(config, "A.cbl"))
+    parse_with(_parser(CannedBridge(_ONE_PROGRAM)), _job(config, "A.cbl"))
     parse_with(
         _parser(RejectingBridge("could not find copy book")), _job(config, "B.cbl")
     )

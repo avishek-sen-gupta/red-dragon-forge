@@ -23,7 +23,6 @@ change to ``cobol_memory``, which is vendored.
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -48,6 +47,7 @@ from cobble.dataflow.srccfg.cfg import Cfg, Edge, EdgeKind, NodeKind
 from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, LINK_TRANSFER, XCTL_TRANSFER
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
+from cobble.parsing.asg_cache import first_program_at
 from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -1504,7 +1504,7 @@ def _asg_at(path: Path) -> CobolASG:
     to it, and this design's one hard constraint is that nothing existing changes.
     """
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        return first_program_at(path)
 
 
 def _entry_node(asg: CobolASG) -> str:

@@ -58,7 +58,9 @@ def _callee_linkage(directory: Path, program: str, linkage_fields: list) -> None
         "paragraphs": [],
         "linkage_fields": linkage_fields,
     }
-    (directory / f"{program}.json").write_text(json.dumps(asg_dict), encoding="utf-8")
+    (directory / f"{program}.json").write_text(
+        json.dumps({"programs": [asg_dict]}), encoding="utf-8"
+    )
 
 
 def _rows(asg, asg_dir: Path, index_of):
@@ -219,7 +221,9 @@ def test_a_callee_without_a_commarea_is_a_named_dead_end(
         "paragraphs": [],
         "linkage_fields": [],
     }
-    (tmp_path / "XPROGB.json").write_text(json.dumps(empty), encoding="utf-8")
+    (tmp_path / "XPROGB.json").write_text(
+        json.dumps({"programs": [empty]}), encoding="utf-8"
+    )
     asg = _caller(
         (field(5, "WS-KEY", pic="X(12)", offset=0),),
         _link("XPROGB", "WS-AREA"),
@@ -259,9 +263,13 @@ def test_an_argument_past_the_callees_parameters_is_a_named_dead_end(
     (tmp_path / "XPROGB.json").write_text(
         json.dumps(
             {
-                "program_id": "XPROGB",
-                "linkage_fields": [field(1, "LK-A", pic="X(12)")],
-                "procedure_using": [{"name": "LK-A", "type": "REFERENCE"}],
+                "programs": [
+                    {
+                        "program_id": "XPROGB",
+                        "linkage_fields": [field(1, "LK-A", pic="X(12)")],
+                        "procedure_using": [{"name": "LK-A", "type": "REFERENCE"}],
+                    }
+                ]
             }
         ),
         encoding="utf-8",

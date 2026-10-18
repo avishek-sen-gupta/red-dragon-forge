@@ -1,4 +1,4 @@
-"""Build one CFG per cached ASG.
+"""Build one CFG per program of every cached member.
 
 No JVM: the ASG cache is the whole input. A member that raises is reported and the
 run continues, because the answer wanted from a corpus pass is "which members are
@@ -7,7 +7,6 @@ missing from this output", and a run that aborts answers that for one member onl
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from functools import reduce
 from pathlib import Path
@@ -17,8 +16,8 @@ from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl
 from cobble.dataflow.srccfg.cfg import Cfg
 from cobble.dataflow.srccfg.config import SrcCfgCorpusConfig
 from cobble.dataflow.srccfg.program import program_cfg
+from cobble.parsing.asg_cache import first_program_at, programs_at
 from cobble.path_utils import ensure_dir
-from cobol_asg.asg_types import CobolASG
 
 COLLISION_SEPARATOR = "__"
 
@@ -28,6 +27,9 @@ class MemberResult:
     member: str
     cfg_path: Path = Path()  # The path where the CFG JSON was written (not input path)
     message: str = ""
+
+
+_NO_RESULTS: tuple[MemberResult, ...] = ()
 
 
 def built(result: MemberResult) -> bool:
@@ -59,8 +61,9 @@ def build_one(
     out_dir: Path,
     taken: frozenset[Path] = frozenset(),
     source_dir: Path = Path(),
-) -> MemberResult:
-    """One member's CFG, written to a file named for its PROGRAM-ID.
+) -> tuple[MemberResult, ...]:
+    """A CFG for every program in one member, in pre-order, each written to a file
+    named for its PROGRAM-ID.
 
     ``taken`` is the set of paths this run has already written. Two members declaring
     the same PROGRAM-ID is normal on a real corpus -- a copy taken for a release, a
@@ -70,11 +73,35 @@ def build_one(
     """
     member = path.stem
     try:
-        cfg = cfg_of(path, source_file=source_file_of(source_dir, member))
+        cfgs = cfgs_of(path, source_file=source_file_of(source_dir, member))
     except Exception as error:  # noqa: BLE001 - one member must not end the run
-        return MemberResult(member=member, message=f"{member}: {error!r}")
+        return (MemberResult(member=member, message=f"{member}: {error!r}"),)
     ensure_dir(out_dir)
-    return _write(cfg, member, out_dir / f"{cfg.program or member}.jsonl", taken)
+    return reduce(
+        lambda done, cfg: _written_after(done, cfg, member, out_dir, taken),
+        cfgs,
+        _NO_RESULTS,
+    )
+
+
+def _written_after(
+    done: tuple[MemberResult, ...],
+    cfg: Cfg,
+    member: str,
+    out_dir: Path,
+    taken: frozenset[Path],
+) -> tuple[MemberResult, ...]:
+    """The member's results so far and this CFG's, written clear of every path the
+    run and this member have already used."""
+    return (
+        *done,
+        _write(
+            cfg,
+            member,
+            out_dir / f"{cfg.program or member}.jsonl",
+            taken | {result.cfg_path for result in done},
+        ),
+    )
 
 
 def _write(
@@ -110,10 +137,18 @@ def _collision(member: str, program: str, written: Path) -> str:
 
 
 def cfg_of(path: Path, source_file: str = "") -> Cfg:
-    """One member's CFG, with its CICS handler transfers resolved."""
+    """The CFG of a member's first program, the one its name means, with its CICS
+    handler transfers resolved."""
     with cached_asg_dialect_parsers_registered():
-        asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        asg = first_program_at(path)
     return program_cfg(asg, source_file=source_file)
+
+
+def cfgs_of(path: Path, source_file: str = "") -> tuple[Cfg, ...]:
+    """The CFG of every program in a member, in pre-order."""
+    with cached_asg_dialect_parsers_registered():
+        asgs = programs_at(path)
+    return tuple(program_cfg(asg, source_file=source_file) for asg in asgs)
 
 
 @dataclass(frozen=True)
@@ -135,8 +170,8 @@ def build_corpus(config: SrcCfgCorpusConfig) -> tuple[MemberResult, ...]:
     ).results
 
 
-def _extended(progress: _Progress, result: MemberResult) -> _Progress:
+def _extended(progress: _Progress, results: tuple[MemberResult, ...]) -> _Progress:
     return _Progress(
-        results=(*progress.results, result),
-        taken=progress.taken | {result.cfg_path},
+        results=(*progress.results, *results),
+        taken=progress.taken | {result.cfg_path for result in results},
     )

@@ -8,6 +8,7 @@ applied on load rather than at parse time, and same-named programs in different
 directories stay distinct.
 """
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -35,6 +36,11 @@ class CountingParser:
         return out_path
 
 
+def _unit(program_id: str) -> str:
+    """What the bridge writes for a source holding the one program ``program_id``."""
+    return json.dumps({"programs": [{"program_id": program_id}]})
+
+
 def _program(directory: Path, name: str, source: bytes) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
@@ -47,9 +53,9 @@ def test_get_returns_the_asg_the_parser_wrote(tmp_path: Path) -> None:
     store = AstStore(tmp_path / "cache")
     store.parse_all(
         {path: b"PROGRAM A"},
-        CountingParser({b"PROGRAM A": '{"program_id": "PAYROLL"}'}),
+        CountingParser({b"PROGRAM A": _unit("PAYROLL")}),
     )
-    assert store.get(path).program_id == "PAYROLL"
+    assert store.get(path).first_program.program_id == "PAYROLL"
 
 
 def test_the_parser_runs_once_per_program_however_often_get_is_called(
@@ -57,7 +63,7 @@ def test_the_parser_runs_once_per_program_however_often_get_is_called(
 ) -> None:
     """The point of the store: get() deserializes, it does not re-parse."""
     path = _program(tmp_path, "A.cbl", b"PROGRAM A")
-    parser = CountingParser({b"PROGRAM A": '{"program_id": "PAYROLL"}'})
+    parser = CountingParser({b"PROGRAM A": _unit("PAYROLL")})
     store = AstStore(tmp_path / "cache")
     store.parse_all({path: b"PROGRAM A"}, parser)
     store.get(path)
@@ -71,23 +77,23 @@ def test_the_preprocessor_is_applied_on_load_not_at_parse_time(tmp_path: Path) -
     So a store built with a preprocessor returns a transformed ASG from bytes the
     parser never saw transformed."""
     path = _program(tmp_path, "A.cbl", b"PROGRAM A")
-    parser = CountingParser({b"PROGRAM A": '{"program_id": "raw"}'})
+    parser = CountingParser({b"PROGRAM A": _unit("raw")})
     store = AstStore(tmp_path / "cache")
     store.parse_all(
         {path: b"PROGRAM A"},
         parser,
         preprocessor=lambda d: {**d, "program_id": "SHAPED"},
     )
-    assert store.get(path).program_id == "SHAPED"
+    assert store.get(path).first_program.program_id == "SHAPED"
 
 
 def test_without_a_preprocessor_the_json_is_used_as_written(tmp_path: Path) -> None:
     path = _program(tmp_path, "A.cbl", b"PROGRAM A")
     store = AstStore(tmp_path / "cache")
     store.parse_all(
-        {path: b"PROGRAM A"}, CountingParser({b"PROGRAM A": '{"program_id": "AS_IS"}'})
+        {path: b"PROGRAM A"}, CountingParser({b"PROGRAM A": _unit("AS_IS")})
     )
-    assert store.get(path).program_id == "AS_IS"
+    assert store.get(path).first_program.program_id == "AS_IS"
 
 
 def test_two_programs_with_the_same_stem_do_not_collide(tmp_path: Path) -> None:
@@ -96,12 +102,13 @@ def test_two_programs_with_the_same_stem_do_not_collide(tmp_path: Path) -> None:
     the stem, which would otherwise be the collision."""
     one = _program(tmp_path / "libA", "SAME.cbl", b"ONE")
     two = _program(tmp_path / "libB", "SAME.cbl", b"TWO")
-    parser = CountingParser(
-        {b"ONE": '{"program_id": "ONE"}', b"TWO": '{"program_id": "TWO"}'}
-    )
+    parser = CountingParser({b"ONE": _unit("ONE"), b"TWO": _unit("TWO")})
     store = AstStore(tmp_path / "cache")
     store.parse_all({one: b"ONE", two: b"TWO"}, parser)
-    assert (store.get(one).program_id, store.get(two).program_id) == ("ONE", "TWO")
+    assert (
+        store.get(one).first_program.program_id,
+        store.get(two).first_program.program_id,
+    ) == ("ONE", "TWO")
 
 
 def test_an_empty_program_set_is_not_an_error(tmp_path: Path) -> None:
@@ -122,7 +129,7 @@ class RejectingParser:
     def parse_to_file(self, source: bytes, out_path: Path) -> Path:
         if source in self._rejected:
             raise self._rejected[source]
-        out_path.write_text('{"program_id": "OK"}', encoding="utf-8")
+        out_path.write_text(_unit("OK"), encoding="utf-8")
         return out_path
 
 

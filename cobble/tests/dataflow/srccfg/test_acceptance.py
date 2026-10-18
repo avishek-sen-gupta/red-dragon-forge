@@ -13,14 +13,13 @@ anywhere its output is published.
 
 from __future__ import annotations
 
-import json
 import tomllib
 from pathlib import Path
 
 import pytest
-from cobol_asg.asg_types import CobolASG
 
 from cobble.dataflow.depgraph.cics_cache import cached_asg_dialect_parsers_registered
+from cobble.parsing.asg_cache import programs_at
 from cobble.dataflow.srccfg.build import build_program
 from cobble.dataflow.srccfg.bundle import Bundle, bundle_jsonl, bundle_of_rows
 from cobble.dataflow.srccfg.closure import build_closure
@@ -43,9 +42,8 @@ _GAP_FILL_TRANSFERS = ("INITIALIZE", "DISPLAY", "ACCEPT")
 def _cfgs(paths):
     with cached_asg_dialect_parsers_registered():
         for path in paths:
-            yield path, build_program(
-                CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-            )
+            for asg in programs_at(path):
+                yield path, build_program(asg)
 
 
 def test_every_member_builds_a_cfg(corpus_asg_paths) -> None:
@@ -55,10 +53,8 @@ def test_every_member_builds_a_cfg(corpus_asg_paths) -> None:
     for path in corpus_asg_paths:
         try:
             with cached_asg_dialect_parsers_registered():
-                cfg = build_program(
-                    CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
-                )
-            if not cfg.nodes:
+                cfgs = tuple(build_program(asg) for asg in programs_at(path))
+            if not cfgs or not all(cfg.nodes for cfg in cfgs):
                 failures.append((path.stem, "empty CFG"))
         except Exception as e:  # noqa: BLE001
             failures.append((path.stem, repr(e)))

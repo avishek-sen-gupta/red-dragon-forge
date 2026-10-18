@@ -15,7 +15,7 @@ from cobble.dataflow.srccfg.build import paragraph_order
 from cobble.dataflow.srccfg.conditions import condition_index
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
-from cobble.parsing.asg_cache import cached_asg
+from cobble.parsing.asg_cache import cached_first_program
 
 logger = logging.getLogger("cycle_sizes")
 
@@ -46,7 +46,7 @@ class CycleRow:
 
 
 def _reached(path: Path) -> tuple[int, nx.DiGraph]:
-    asg = cached_asg(path.parent, path)
+    asg = cached_first_program(path.parent, path)
     unpruned = program_cfg(asg)
     statements = with_unmodelled(statement_index(asg), unpruned, condition_index(asg))
     cfg = fallthroughs_pruned(unpruned, paragraph_order(asg), statements)

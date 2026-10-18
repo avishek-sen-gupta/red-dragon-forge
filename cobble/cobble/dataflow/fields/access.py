@@ -13,7 +13,6 @@ assignment at all.
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -24,7 +23,7 @@ from cobble.dataflow.fields.extent import CellIndex, cell_index, operand_extents
 from cobble.dataflow.layout import UnsizeableFieldError, program_records
 from cobble.dataflow.srccfg.bundle import load_bundle
 from cobble.dataflow.srccfg.cfg import Cfg, Node, NodeKind
-from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 from cobol_asg.ref_mod import RefModOperand
 from cobol_memory.field_extent import FieldExtent
 
@@ -72,7 +71,7 @@ def _try_index(program: str, asg_dir: Path) -> tuple[CellIndex, ...]:
         logger.warning("access: no ASG for %s, skipping", program)
         return ()
     with cached_asg_dialect_parsers_registered():
-        asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        asg = first_program_at(path)
     try:
         return (cell_index(program_records(asg)),)
     except UnsizeableFieldError as exc:

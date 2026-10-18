@@ -93,7 +93,7 @@ def _image(
         )
         for program in programs
     }
-    image = link_units([units[program] for program in link], work_dir)
+    image = link_units([unit for program in link for unit in units[program]], work_dir)
     logger.info("linked %s into one image", ", ".join(link))
     return image
 
@@ -171,8 +171,8 @@ def _lowered(
     copybook_dirs: Sequence[Path],
     work_dir: Path,
     tolerant: bool,
-) -> Path:
-    unit = lower_program(
+) -> tuple[Path, ...]:
+    units = lower_program(
         source,
         parser=parser,
         specs=specs,
@@ -180,8 +180,8 @@ def _lowered(
         work_dir=work_dir,
         tolerant=tolerant,
     )
-    logger.info("lowered %s to %s", program, unit.name)
-    return unit
+    logger.info("lowered %s to %s", program, ", ".join(unit.name for unit in units))
+    return units
 
 
 def _write(

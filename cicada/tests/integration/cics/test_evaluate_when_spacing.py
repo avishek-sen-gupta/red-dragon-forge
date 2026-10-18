@@ -63,7 +63,7 @@ def _find_when_condition(asg):
 def test_evaluate_when_condition_is_structured(bridge_jar):
     """EVALUATE WHEN condition is a structured dict matching the IF path."""
     parser = ProLeapCobolParser(RealSubprocessRunner(), bridge_jar)
-    asg = parser.parse(EVALUATE_SOURCE.encode("utf-8"))
+    asg = parser.parse(EVALUATE_SOURCE.encode("utf-8")).first_program
 
     condition = _find_when_condition(asg)
 

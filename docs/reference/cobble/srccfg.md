@@ -20,6 +20,9 @@ cobble-srccfg-build PROGRAM --config CONFIG [--output OUTPUT] [--dynamic-call-ta
 | `--output` | write the closure here; default stdout |
 | `--dynamic-call-targets` | a `targets.jsonl` from the fixpoint or the combine. Each dynamic site's candidates are built like any callee, transitively. Without it, dynamic sites pull in nothing. A named file that does not exist stops the build |
 
+Each program is looked up as `<program>.json` and built from that member's first program; a
+batch or contained program after it is not reachable this way (red-dragon-forge-1yoa).
+
 A callee missing from the ASG cache is logged as `called but not in the ASG cache; not built`
 and becomes an external program (see below). Parse everything you want reachable first.
 

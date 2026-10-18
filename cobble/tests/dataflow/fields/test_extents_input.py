@@ -20,6 +20,7 @@ from cobble.dataflow.fields.side_tables import extent_row
 from cobble.dataflow.fixpoint.query import Side, store_of
 from cobble.dataflow.layout import Cell
 from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 CACHE = Path(__file__).resolve().parents[3] / "out-parsed"
 
@@ -81,7 +82,7 @@ def _asg(member: str) -> CobolASG:
     if not path.is_file():
         pytest.skip(f"no parsed cache for {member}; run cobble-parse-corpus")
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        return first_program_at(path)
 
 
 def _cell_at(layout: ProgramLayout, name: str) -> Cell:

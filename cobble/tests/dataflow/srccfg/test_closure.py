@@ -46,7 +46,9 @@ def _cache(tmp_path: Path, members: dict[str, list[dict]]) -> Path:
     asg_dir = tmp_path / "parsed"
     asg_dir.mkdir(parents=True, exist_ok=True)
     for program, statements in members.items():
-        (asg_dir / f"{program}.json").write_text(json.dumps(_asg(program, statements)))
+        (asg_dir / f"{program}.json").write_text(
+            json.dumps({"programs": [_asg(program, statements)]})
+        )
     return asg_dir
 
 

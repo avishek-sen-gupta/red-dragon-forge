@@ -1,4 +1,4 @@
-"""parse_corpus.py — parse every program in a corpus to a cached ASG JSON.
+"""parse_corpus.py — parse every member of a corpus to a cached ASG JSON.
 
 Every stage after this one is built over ASGs, so the ASGs have to exist first,
 and a parse is 4-7 seconds of JVM. Caching them turns a four-hour corpus walk into
@@ -39,7 +39,6 @@ mark every member failed at once (red-dragon-forge-jbh).
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import time
@@ -52,11 +51,11 @@ from pathlib import Path
 from cobble.cli_logging import configure_cli_logging
 from cobble.corpus_config import CorpusConfig, load_corpus_config
 from cobble.matching_files import matching_files
-from cobble.parsing.asg_cache import cache_path, failure_path
+from cobble.parsing.asg_cache import cache_path, failure_path, unit_json
 from cobble.parsing.copybook_dir import unscannable
 from cobble.path_utils import ensure_dir
-from cobol_asg.asg_types import CobolASG
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.compilation_unit import CobolCompilationUnit
 from cobol_asg.subprocess_runner import CobolParseError, RealSubprocessRunner
 
 logger = logging.getLogger(__name__)
@@ -106,18 +105,18 @@ def record_failure(job: Job, exc: Exception, seconds: float) -> Result:
     return Result(job.stem, False, seconds, detail[:120])
 
 
-def _asg_for(parser: ProLeapCobolParser, job: Job) -> CobolASG:
+def _unit_for(parser: ProLeapCobolParser, job: Job) -> CobolCompilationUnit:
     from cobble.cics.asg_dialect_scope import asg_dialect_parsers_registered
 
     with asg_dialect_parsers_registered():
         return parser.parse(job.source.read_bytes())
 
 
-def _write_asg(dest: Path, asg: CobolASG) -> None:
+def _write_unit(dest: Path, unit: CobolCompilationUnit) -> None:
     """Written beside the target and renamed, so an interrupted run never leaves
     a half-written ASG that the next run would skip as done."""
     tmp = dest.with_name(dest.name + ".partial")
-    tmp.write_text(json.dumps(asg.to_dict()))
+    tmp.write_text(unit_json(unit))
     os.replace(tmp, dest)
 
 
@@ -131,10 +130,10 @@ def parse_with(parser: ProLeapCobolParser, job: Job) -> Result:
     """
     t0 = time.perf_counter()
     try:
-        asg = _asg_for(parser, job)
+        unit = _unit_for(parser, job)
     except (CobolParseError, ValueError, KeyError) as exc:
         return record_failure(job, exc, time.perf_counter() - t0)
-    _write_asg(job.dest, asg)
+    _write_unit(job.dest, unit)
     failure_path(job.dest.parent, job.source).unlink(missing_ok=True)
     return Result(job.stem, True, time.perf_counter() - t0, "")
 

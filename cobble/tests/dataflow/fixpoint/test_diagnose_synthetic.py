@@ -8,7 +8,7 @@ import pytest
 from cobble.dataflow.fixpoint.diagnose import cli, report
 from cobble.dataflow.fixpoint.fixpoint import stepwise
 from cobble.dataflow.fixpoint.options import AnalysisOptions
-from cobble.parsing.asg_cache import cached_asg
+from cobble.parsing.asg_cache import cached_first_program
 from cobble.dataflow.fixpoint.scope import Scope
 
 LOOPING = """\
@@ -71,7 +71,7 @@ def test_every_step_names_the_node_whose_successors_it_changed(
     out = fixpoint_out("SYNPERFA", source)
     parsed = out.parent / "parsed"
     cfg, walk = stepwise(
-        cached_asg(parsed, parsed / "SYNPERFA.json"), AnalysisOptions(), 50000
+        cached_first_program(parsed, parsed / "SYNPERFA.json"), AnalysisOptions(), 50000
     )
 
     strays = [

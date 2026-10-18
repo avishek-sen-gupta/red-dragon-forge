@@ -61,7 +61,7 @@ def _ast_mtimes(work_dir: Path) -> dict[Path, int]:
     return {ast: ast.stat().st_mtime_ns for ast in work_dir.glob("**/*.ast.json")}
 
 
-def _lowered(parser: ProLeapCobolParser, work_dir: Path, name: str) -> Path:
+def _lowered(parser: ProLeapCobolParser, work_dir: Path, name: str) -> tuple[Path, ...]:
     return lower_program(
         (FIXTURES / f"{name}.cbl").read_bytes(),
         parser=parser,
@@ -79,7 +79,8 @@ def test_built_package_opens_to_the_image_its_link_list_produced(
     package = open_package(path)
     reference = tmp_path / "reference"
     linked = link_units(
-        [_lowered(parser, reference, name) for name in LINKED], reference
+        [unit for name in LINKED for unit in _lowered(parser, reference, name)],
+        reference,
     )
 
     assert (
@@ -301,6 +302,35 @@ def test_the_manifest_names_the_programs_the_image_holds(
     assert (package.manifest.programs, tuple(package.image.programs)) == (
         ("OTHERPGM",),
         ("OTHERPGM",),
+    )
+
+
+def test_a_linked_source_brings_every_program_it_holds(
+    parser: ProLeapCobolParser, tmp_path: Path
+) -> None:
+    """A source is a compilation unit: linking it links the programs it contains,
+    so a CALL to one of them resolves inside the image."""
+    path = build(
+        name="app",
+        programs=("NESTPGM",),
+        link=("NESTPGM",),
+        sources={"NESTPGM": FIXTURES / "NESTPGM.cbl"},
+        parser=parser,
+        specs=(),
+        copybook_dirs=(),
+        work_dir=tmp_path / "work",
+        out_dir=tmp_path / "out",
+        transactions=(),
+        files=(),
+        mapsets={},
+        tolerant=False,
+    )
+
+    package = open_package(path)
+
+    assert (package.manifest.programs, tuple(package.image.programs)) == (
+        ("NESTPGM", "INNERPGM"),
+        ("NESTPGM", "INNERPGM"),
     )
 
 

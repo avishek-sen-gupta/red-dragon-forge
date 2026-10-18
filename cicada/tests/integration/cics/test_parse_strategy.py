@@ -136,7 +136,7 @@ def test_dfhaid_copy_resolves_and_exposes_aid_key_constants(bridge_jar):
         bridge_jar,
         copybook_dirs=[_CICS_COPYBOOKS],
     )
-    asg = parser.parse(source.encode("utf-8"))
+    asg = parser.parse(source.encode("utf-8")).first_program
 
     field_names = _all_field_names(asg.data_fields)
     assert "DFHENTER" in field_names, f"DFHENTER missing from {field_names}"

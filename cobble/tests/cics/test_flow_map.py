@@ -15,7 +15,7 @@ from pathlib import Path
 from cobble.cics.flow_map import extract_transaction_flow_graph
 from cobble.corpus_index import CorpusIndex
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
-from cobble.parsing.asg_cache import cache_path, cached_asg
+from cobble.parsing.asg_cache import cache_path, cached_first_program
 from cobol_asg.asg_types import CobolASG
 
 _CSD = """
@@ -142,6 +142,10 @@ def test_each_program_is_named_before_it_is_read(caplog) -> None:
     ] == ["CICS flow: reading PROGTWO"]
 
 
+def _cached_unit(program: dict) -> str:
+    return json.dumps({"programs": [program]})
+
+
 def test_a_program_read_from_the_parse_cache_yields_its_cics_verb_edges(
     tmp_path: Path,
 ) -> None:
@@ -152,7 +156,7 @@ def test_a_program_read_from_the_parse_cache_yields_its_cics_verb_edges(
     cached = cache_path(tmp_path, source)
     cached.parent.mkdir(parents=True, exist_ok=True)
     cached.write_text(
-        json.dumps(
+        _cached_unit(
             {
                 "program_id": "PROGONE",
                 "paragraphs": [
@@ -178,7 +182,7 @@ def test_a_program_read_from_the_parse_cache_yields_its_cics_verb_edges(
         "DEFINE TRANSACTION(AAAA) GROUP(GRP) PROGRAM(PROGONE)\n",
         {},
         {"PROGONE": source},
-        read_asg=partial(cached_asg, tmp_path),
+        read_asg=partial(cached_first_program, tmp_path),
         sink=sink,
         corpus_index=CorpusIndex(),
         max_workers=1,
@@ -201,7 +205,7 @@ def _cached_xctl(asg_dir: Path, program: str, target: str) -> Path:
         "options": {"PROGRAM": {"text": target, "is_literal": True}},
     }
     cached.write_text(
-        json.dumps(
+        _cached_unit(
             {
                 "program_id": program,
                 "paragraphs": [{"name": "MAIN", "statements": [statement]}],
@@ -236,7 +240,7 @@ def test_programs_read_across_worker_processes_stream_as_one_process_reads_them(
             csd,
             {},
             members,
-            read_asg=partial(cached_asg, tmp_path),
+            read_asg=partial(cached_first_program, tmp_path),
             sink=sink,
             corpus_index=CorpusIndex(),
             max_workers=workers,
