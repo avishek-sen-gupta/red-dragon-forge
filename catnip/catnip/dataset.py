@@ -19,7 +19,10 @@ from catnip.labels import (
 from catnip.variable_records import VariableRecordDriver
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.alternate_index_driver import open_alternate_index_driver
+from interpreter.cobol.alternate_key import AlternateKey
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
+from interpreter.cobol.prime_key import PrimeKey
+from interpreter.cobol.record_shape import RecordShape
 
 
 @dataclass(frozen=True)
@@ -40,12 +43,13 @@ class Dataset:
 
 def _indexed(path: Path, mode: OpenMode, label: KsdsLabel) -> FileOrganizationDriver:
     return open_driver(
-        FileOrganization.INDEXED,
         path,
         mode,
-        label.lrecl,
-        label.key_offset,
-        label.key_length,
+        RecordShape(
+            FileOrganization.INDEXED,
+            label.lrecl,
+            PrimeKey(label.key_offset, label.key_length),
+        ),
     )
 
 
@@ -60,12 +64,12 @@ def _through_path(
     return open_alternate_index_driver(
         path,
         mode,
-        label.base.lrecl,
-        label.base.key_offset,
-        label.base.key_length,
-        label.key_offset,
-        label.key_length,
-        label.unique,
+        RecordShape(
+            FileOrganization.INDEXED,
+            label.base.lrecl,
+            PrimeKey(label.base.key_offset, label.base.key_length),
+        ),
+        AlternateKey(PrimeKey(label.key_offset, label.key_length), label.unique),
     )
 
 
@@ -76,7 +80,7 @@ def _sequential(
         case SequentialLabel():
             return _labelled_sequential(path, mode, label)
         case LabelPending():
-            return open_driver(FileOrganization.SEQUENTIAL, path, mode, 0, 0, 0)
+            return open_driver(path, mode, _sequential_shape(0))
 
 
 def _labelled_sequential(
@@ -84,7 +88,11 @@ def _labelled_sequential(
 ) -> FileOrganizationDriver:
     if label.recfm in VARIABLE:
         return VariableRecordDriver(path, mode, 0)
-    return open_driver(FileOrganization.SEQUENTIAL, path, mode, label.lrecl, 0, 0)
+    return open_driver(path, mode, _sequential_shape(label.lrecl))
+
+
+def _sequential_shape(record_length: int) -> RecordShape:
+    return RecordShape(FileOrganization.SEQUENTIAL, record_length, PrimeKey())
 
 
 class Relabeller(Protocol):

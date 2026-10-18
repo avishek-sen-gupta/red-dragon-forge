@@ -63,7 +63,9 @@ def test_expr_from_dict_binop() -> None:
 def test_expr_from_dict_neg_folds_into_binop_multiply_by_negative_one() -> None:
     node = expr_from_dict({"kind": "neg", "expr": {"kind": "ref", "name": "WS-A"}})
     assert node == BinOpNode(
-        op="*", left=LiteralNode(value="-1"), right=FieldRefNode(name="WS-A")
+        op="*",
+        left=LiteralNode(value="-1", numeric=True),
+        right=FieldRefNode(name="WS-A"),
     )
 
 

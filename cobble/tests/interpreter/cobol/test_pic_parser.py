@@ -2,6 +2,7 @@ import pytest
 
 from cobol_asg.cobol_types import CobolDataCategory
 from cobol_asg.edit_picture import UnsupportedEditPictureError
+from cobol_asg.item_clauses import ItemClauses
 from cobol_asg.pic_parser import parse_pic
 
 
@@ -160,7 +161,7 @@ def test_parse_pic_zero_suppression_counts_every_symbol_as_a_digit() -> None:
 def test_parse_pic_sign_separate_adds_a_character_position() -> None:
     # "S ... Not counted in the size of the elementary item unless an associated
     # SIGN clause specifies the SEPARATE CHARACTER phrase" -- Table 12, p. 210.
-    desc = parse_pic("S9(5)", sign_separate=True)
+    desc = parse_pic("S9(5)", clauses=ItemClauses(sign_separate=True))
     assert desc.total_digits == 5
     assert desc.char_positions == 6
     assert desc.byte_length == 6
@@ -171,7 +172,7 @@ def test_parse_pic_blank_when_zero_is_a_flag_not_a_category() -> None:
     # (p. 218), but the descriptor's categories are storage categories and
     # BLANK WHEN ZERO changes no storage: the picture stays ZONED_DECIMAL and
     # the clause travels as its own flag.
-    desc = parse_pic("9(5)", blank_when_zero=True)
+    desc = parse_pic("9(5)", clauses=ItemClauses(blank_when_zero=True))
     assert desc.category == CobolDataCategory.ZONED_DECIMAL
     assert desc.char_positions == 5
     assert desc.blank_when_zero

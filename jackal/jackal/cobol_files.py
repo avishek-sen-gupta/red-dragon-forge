@@ -25,8 +25,12 @@ from cobol_asg.cobol_statements import FileControlEntry
 from cobol_asg.file_enums import FileOrganization, OpenMode
 from interpreter.cobol.access_result import AccessCondition, AccessResult
 from interpreter.cobol.file_drivers import FileOrganizationDriver, open_driver
+from interpreter.cobol.file_frame import FileFrame
 from interpreter.cobol.io_provider import IOResult
+from interpreter.cobol.prime_key import PrimeKey
 from interpreter.cobol.real_file_provider import RealFileIOProvider, to_ioresult
+from interpreter.cobol.record_shape import RecordShape
+from interpreter.cobol.run_inputs import RunInputs
 from jackal.allocation import (
     ConcatenatedAllocation,
     DatasetAllocation,
@@ -115,12 +119,20 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         env: DdEnvironment,
         relabeller: Relabeller,
     ) -> None:
-        super().__init__(base_dir, [f.entry for f in files], dict(env.paths()))
+        super().__init__(
+            base_dir,
+            inputs=RunInputs(
+                file_control=tuple(f.entry for f in files),
+                path_overrides=env.paths(),
+            ),
+        )
         appended = {name.text for name in env.appended()}
         self._appended_files = frozenset(
             f.entry.file_name for f in files if f.entry.assign_to in appended
         )
-        self._files: Mapping[str, ProgramFile] = {f.entry.file_name: f for f in files}
+        self._program_files: Mapping[str, ProgramFile] = {
+            f.entry.file_name: f for f in files
+        }
         self._relabeller = relabeller
         self._datasets: Table[str, Dataset] = Table()
         for name, dataset in _datasets(files, env):
@@ -144,14 +156,14 @@ class AllocatedFileIOProvider(RealFileIOProvider):
     def _admits(self, filename: str, mode: str, key: RecordKey) -> bool:
         if filename in self._concatenations:
             return _concatenation_admitted(
-                self._files[filename].fmt, self._concatenations[filename]
+                self._program_files[filename].fmt, self._concatenations[filename]
             )
         return self._admits_dataset(filename, mode, key)
 
     def _admits_dataset(self, filename: str, mode: str, key: RecordKey) -> bool:
         if not self._datasets.has(filename):
             return True
-        file = self._files[filename]
+        file = self._program_files[filename]
         if file.entry.organization is FileOrganization.INDEXED:
             dataset = self._datasets.get(filename)
             return _agrees(dataset, indexed_conflicts(file.fmt, key, dataset.label))
@@ -172,61 +184,34 @@ class AllocatedFileIOProvider(RealFileIOProvider):
         self._relabeller.relabel(dataset, label)
         self._datasets.put(filename, Dataset(dataset.dsn, dataset.path, label))
 
-    def _driver(
-        self,
-        filename: str,
-        org: FileOrganization,
-        path: Path,
-        mode: OpenMode,
-        record_length: int,
-        key_offset: int,
-        key_length: int,
+    def _driver_for(
+        self, frame: FileFrame, path: Path, mode: OpenMode
     ) -> FileOrganizationDriver:
+        filename = frame.file_name
         if filename in self._concatenations:
             members = self._concatenations[filename]
             return ConcatenatedDriver(
-                tuple(partial(_member_driver, m, record_length) for m in members)
+                tuple(partial(_member_driver, m, frame.record_length) for m in members)
             )
-        by_organization = partial(
-            super()._driver,
-            filename,
-            org,
-            path,
-            mode,
-            record_length,
-            key_offset,
-            key_length,
-        )
+        by_organization = partial(super()._driver_for, frame, path, mode)
         if not self._datasets.has(filename):
             return by_organization()
         return _dataset_driver(
-            self._datasets.get(filename), path, mode, record_length, by_organization
+            self._datasets.get(filename),
+            path,
+            mode,
+            frame.record_length,
+            by_organization,
         )
 
-    def _open_file(
-        self,
-        filename: str,
-        mode: str,
-        record_length: int,
-        organization: str,
-        key_offset: int,
-        key_length: int,
-        program: str,
-    ) -> IOResult:
+    def _open_file(self, filename: str, mode: str, program: str) -> IOResult:
         opened = self._opened_as(filename, mode)
         if not self._supports(filename, opened):
             return to_ioresult(AccessResult(AccessCondition.OPEN_MODE_NOT_SUPPORTED))
-        if not self._admits(filename, opened, RecordKey(key_offset, key_length)):
+        key = self._frames[filename].prime_key
+        if not self._admits(filename, opened, RecordKey(key.offset, key.length)):
             return to_ioresult(AccessResult(AccessCondition.ATTRIBUTE_CONFLICT))
-        return super()._open_file(
-            filename,
-            opened,
-            record_length,
-            organization,
-            key_offset,
-            key_length,
-            program,
-        )
+        return super()._open_file(filename, opened, program)
 
 
 def _datasets(
@@ -305,10 +290,7 @@ def _member_driver(
     if _variable(_member_label(member)):
         return VariableRecordDriver(member.path(), OpenMode.INPUT, record_length)
     return open_driver(
-        FileOrganization.SEQUENTIAL,
         member.path(),
         OpenMode.INPUT,
-        record_length,
-        0,
-        0,
+        RecordShape(FileOrganization.SEQUENTIAL, record_length, PrimeKey()),
     )

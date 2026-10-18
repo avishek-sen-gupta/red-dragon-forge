@@ -28,3 +28,4 @@
            02 EIBTRMID   PIC X(4).
            02 EIBLINK    PIC X(4).
            02 EIBCPOSN   PIC S9(4) COMP.
+           02 EIBTASKN   PIC S9(7) COMP-3.

@@ -84,7 +84,7 @@ fileignoreconfig:
 - filename: docs/records/design/2026-10-12-jackal-idcams-repro-labels.md
   checksum: ec1641e126ec15bb059c34b6f276cc4f74bf6292c3882de04c57c2ac4afb42d0
 - filename: jackal/jackal/concatenated_records.py
-  checksum: 319da9d2575e77c0e5c1be0be7a848c83eb1c8d0102aca5a4b3dc24a46fb3dc9
+  checksum: 02f23cc65fb53ad234d5fa1f7c5ee944763fc0e9245a7de868fb1082b28cd87a
 - filename: jackal/jackal/variable_records.py
   checksum: f9116c5c676e6840f7e14c62c397e19edd4613892c627f7534efe0f86642f124
 - filename: docs/records/design/2026-10-12-jackal-if-then-else.md
@@ -370,7 +370,7 @@ fileignoreconfig:
 - filename: jackal/jackal/label_field.py
   checksum: 80fe7ab65a0a29459c9e92da2d317278ca4398b5f1b16b72925ae6ee2410d68e
 - filename: jackal/jackal/cobol_files.py
-  checksum: 6be09e6098846b8d62c25bcb533a4df576d85b1a04fb93d6eca541bb7f09ec14
+  checksum: 91b8d20c19c08fdb5ac96b5fa537caf73921560fab6327f20c897d2f2a055f80
 - filename: jackal/jackal/record_format.py
   checksum: ce636f136b3f1922f062128ef0aa2a1bf94e0683310500aff41f703c5998ea9a
 - filename: cicada/tests/unit/cics/test_vsam_dump.py
@@ -410,7 +410,7 @@ fileignoreconfig:
 - filename: docs/reference/forge/run.md
   checksum: 01ed2eadaf16585f4ada62a6cfc4df6cb9c4d6cdd63b03e8087e528362b18492
 - filename: jackal/jackal/program_files_provider.py
-  checksum: 9e06fe88a436a74fa29213c041ef72695f9b4f1b6ba75a91d2e13980798020e1
+  checksum: e0047117501662b3dacf9efe38cfcc66d27dc761ba66ac0a418c7888a2293803
 - filename: tests/integration/test_run_command.py
   checksum: 781a5a77e8af231e91bdb20de8e9e1ed9314163188682963c7e64cae0ee1ee12
 - filename: docs/reference/forge/build.md
@@ -429,4 +429,10 @@ fileignoreconfig:
   checksum: c4281f7c9c55f0f323effc01be8ed5761fda2799a1da47535d144fcc462b4d1a
 - filename: cobble/cobble/dataflow/fields/transfer.py
   checksum: 9d0c73b6ba95623484b32cfc04c92a51f84d2500c13a521c62269b5bf91a4a6a
+- filename: catnip/catnip/dataset.py
+  checksum: 1edf837a2e54909956e83ce12a921118460803be66bc64900ede23fb7ac21538
+- filename: catnip/catnip/variable_records.py
+  checksum: 6c6debc16cdcca0e90cf04dbceb5d3204a1469da5c00dc6a1dfc9bc2977f1699
+- filename: jackal/tests/unit/test_program_files_provider.py
+  checksum: ecbed5f1854a6c9cab3b8d75b0b967bc9af171110c560b5e4c7e4946f6c6a850
 version: "1.0"
