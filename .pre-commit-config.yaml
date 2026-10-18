@@ -70,42 +70,48 @@ repos:
         entry: bash -c '. ./bridge-env.sh && cd cicada && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(cicada/|catnip/|litter/|config/|vendor/red-dragon(/|$))
+        files: ^(cicada/|catnip/|litter/|config/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
+        types: []
 
       - id: tests-squall
         name: Squall unit test suite
         entry: precommit-scripts/run-tests-squall
         language: script
         pass_filenames: false
-        files: ^(squall/|vendor/red-dragon(/|$))
+        files: ^(squall/|vendor/red-dragon(/|$)|\.gitmodules$)
+        types: []
 
       - id: tests-catnip
         name: catnip test suite
         entry: bash -c 'cd catnip && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(catnip/|vendor/red-dragon(/|$))
+        files: ^(catnip/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
+        types: []
 
       - id: tests-litter
         name: litter test suite
         entry: bash -c '. ./bridge-env.sh && cd litter && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(litter/|vendor/red-dragon(/|$))
+        files: ^(litter/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
+        types: []
 
       - id: tests-jackal
         name: Jackal full test suite (jackal + COBOL e2e via red-dragon)
         entry: bash -c '. ./bridge-env.sh && uv run --no-sync pytest jackal/tests -x -q'
         language: system
         pass_filenames: false
-        files: ^(jackal/|catnip/|litter/|config/|vendor/red-dragon(/|$))
+        files: ^(jackal/|catnip/|litter/|config/|vendor/(red-dragon|carddemo|bank-of-z)(/|$)|squall/testbed/db2-samples(/|$)|\.gitmodules$)
+        types: []
 
       - id: tests-forge
         name: red-dragon-forge test suite (root and cobble)
         entry: bash -c 'make db2-restart && make test PYTEST_ARGS="-x -q" && cd cobble && uv run --no-sync python -m pytest -x -q'
         language: system
         pass_filenames: false
-        files: ^(red_dragon_forge/|cicada/|squall/|cobble/|catnip/|litter/|jackal/|tests/|config/|vendor/)
+        files: ^(red_dragon_forge/|cicada/|squall/|cobble/|catnip/|litter/|jackal/|tests/|config/|vendor/|\.gitmodules$)
+        types: []
 
   # Talisman was installed as a bare git hook, which pre-commit demoted to
   # .git/hooks/pre-commit.legacy on taking over pre-commit. Talisman derives its
