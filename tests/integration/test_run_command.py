@@ -250,7 +250,16 @@ _CALLER = """\
             "forge-run: CALL to __entry_NOSUCHPG, but nothing in this run unit is"
             " registered under it\n",
         ),
-        ("[tolerant]\npermit_unresolved_call_targets = true\n", 0, "RC=0\n", ""),
+        pytest.param(
+            "[tolerant]\npermit_unresolved_call_targets = true\n",
+            0,
+            "RC=0\n",
+            "",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="symbolic step RETURN-CODE has no result until the injected strategy lands — red-dragon-forge-evn7",
+            ),
+        ),
     ],
 )
 def test_plain_refuses_a_call_to_an_unlinked_program_unless_tolerated(

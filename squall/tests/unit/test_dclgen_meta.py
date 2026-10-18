@@ -14,6 +14,8 @@ brief (which said ``picture``).
 
 from __future__ import annotations
 
+import pytest
+
 from squall.dclgen_meta import derive_field_meta
 
 # Real bridge shape for `10 DCL-TR-DESCRIPTION.` in vendor/carddemo's
@@ -51,8 +53,12 @@ _PLAIN_GROUP = {
 }
 
 
-def test_a_level_49_group_is_recognised_as_varchar():
-    meta = derive_field_meta({"data_fields": [_DCLGEN_VARCHAR]})
+@pytest.mark.parametrize("usage", ["COMP", "BINARY", "COMP_4"])
+def test_a_level_49_group_is_recognised_as_varchar(usage: str):
+    """The bridge writes a USAGE as ProLeap names it; BINARY and COMP-4 are COMP."""
+    length, text = _DCLGEN_VARCHAR["children"]
+    group = {**_DCLGEN_VARCHAR, "children": [{**length, "usage": usage}, text]}
+    meta = derive_field_meta({"data_fields": [group]})
 
     assert meta["DCL-TR-DESCRIPTION"] == {
         "category": "VARCHAR",

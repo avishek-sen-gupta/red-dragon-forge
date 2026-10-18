@@ -435,4 +435,6 @@ fileignoreconfig:
   checksum: 6c6debc16cdcca0e90cf04dbceb5d3204a1469da5c00dc6a1dfc9bc2977f1699
 - filename: jackal/tests/unit/test_program_files_provider.py
   checksum: ecbed5f1854a6c9cab3b8d75b0b967bc9af171110c560b5e4c7e4946f6c6a850
+- filename: squall/testbed/db2-samples
+  checksum: bb42ec8c655ac46b32f0e07aed4307ff02f2fd37f7235b4add20fa9f6e48a545
 version: "1.0"
