@@ -12,7 +12,7 @@ from pathlib import Path
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.subprocess_runner import SubprocessRunner
 
-_MINIMAL_ASG = '{"data_fields": [], "sections": [], "paragraphs": []}'
+_MINIMAL_ASG = '{"programs": [{"data_fields": [], "sections": [], "paragraphs": []}]}'
 
 
 class RecordingRunner(SubprocessRunner):

@@ -13,7 +13,6 @@ is still the member a caller asked for.
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 import time
@@ -33,6 +32,7 @@ from cobble.dataflow.fields.side_tables import (
     jsonl_writer,
 )
 from cobble.dataflow.layout import UnsizeableFieldError
+from cobble.parsing.asg_cache import first_program_at
 from cobble.path_utils import ensure_parent
 from cobol_asg.asg_types import CobolASG
 
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 def _asg_at(path: Path) -> CobolASG:
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        return first_program_at(path)
 
 
 def _members(asg_dir: Path) -> tuple[str, ...]:

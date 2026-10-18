@@ -23,7 +23,6 @@ share is read once. A single-member run still emits that member's outbound
 aliases, because the cache directory is the callee lookup whatever was selected.
 """
 
-import json
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
@@ -38,6 +37,7 @@ from cobble.dataflow.srccfg.desugar import CALL_TRANSFER, LINK_TRANSFER
 from cobble.dataflow.srccfg.link import COMMAREA_RECORD, CallSite, call_sites
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.using_argument import UsingArgument
+from cobble.parsing.asg_cache import first_program_at
 from cobol_asg.asg_types import CobolASG
 from cobol_memory.field_extent import FieldExtent, Precision
 from cobol_memory.region_id import RegionId
@@ -326,7 +326,7 @@ def _asg_at(path: Path) -> CobolASG:
     alias under ``UNREADABLE`` even when the LINKAGE this pass wants is intact.
     """
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        return first_program_at(path)
 
 
 def _linkage_of(asg: CobolASG) -> _Linkage:

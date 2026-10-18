@@ -23,7 +23,9 @@ def _cache(tmp_path: Path) -> Path:
         ("MEMBERB", "PROGB"),
         ("MEMBERD", "PROGD"),
     ):
-        (asg / f"{member}.json").write_text(json.dumps(_program(program)))
+        (asg / f"{member}.json").write_text(
+            json.dumps({"programs": [_program(program)]})
+        )
     (asg / "MEMBERC.json").write_text("{not json")
     return asg
 

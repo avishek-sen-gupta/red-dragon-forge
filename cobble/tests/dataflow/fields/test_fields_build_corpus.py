@@ -138,6 +138,10 @@ def _edge_text(out_dir: Path) -> str:
     )
 
 
+def _member_json(program: dict) -> str:
+    return json.dumps({"programs": [program]})
+
+
 @pytest.fixture
 def corpus(tmp_path: Path):
     """An ASG directory, an output directory, a config naming both, and the extents.
@@ -175,7 +179,7 @@ def corpus(tmp_path: Path):
 
 
 def test_a_run_writes_nodes_and_edges_and_exits_zero(corpus):
-    argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, out_dir = corpus({"MEMBERA": _member_json(_program("PROGA"))})
 
     assert cli(argv) == 0
 
@@ -192,7 +196,7 @@ def test_one_flow_written_on_four_paths_is_one_edge_and_one_defs_row(corpus):
     one varying between runs. As a relation of its own the flow is stated once and
     every definer survives, keyed by the node that moved the value and the range
     it read."""
-    argv, out_dir = corpus({"MEMBERA": json.dumps(_branched("PROGA"))})
+    argv, out_dir = corpus({"MEMBERA": _member_json(_branched("PROGA"))})
 
     assert cli(argv) == 0
 
@@ -232,9 +236,9 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
     records makes that more than one row."""
     argv, out_dir = corpus(
         {
-            "MEMBERA": json.dumps(_branched("PROGA")),
-            "XPROGA": json.dumps(_twice_declared_area("XPROGB", "XPROGZ")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "MEMBERA": _member_json(_branched("PROGA")),
+            "XPROGA": _member_json(_twice_declared_area("XPROGB", "XPROGZ")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         }
     )
     script = "import sys; from cobble.dataflow.fixpoint.build_corpus import cli; sys.exit(cli(sys.argv[1:]))"
@@ -260,7 +264,7 @@ def test_two_runs_of_one_member_write_byte_identical_artefacts(corpus):
 def test_every_endpoint_node_states_why_it_has_no_file(corpus):
     """cobble keeps no field-level index, so NOT_INDEXED -- and a resolver row has
     to exist at all, since GraphWriter resolves both endpoints of every edge."""
-    argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, out_dir = corpus({"MEMBERA": _member_json(_program("PROGA"))})
 
     assert cli(argv) == 0
 
@@ -271,7 +275,7 @@ def test_every_endpoint_node_states_why_it_has_no_file(corpus):
 
 def test_a_malformed_member_is_reported_and_the_run_continues(corpus):
     argv, out_dir = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA")), "MEMBERB": "{not json"}
+        {"MEMBERA": _member_json(_program("PROGA")), "MEMBERB": "{not json"}
     )
 
     assert cli(argv) == 3
@@ -291,8 +295,8 @@ def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
     """
     argv, out_dir = corpus(
         {
-            "MEMBERA": json.dumps(_program("PROGA")),
-            "MEMBERB": json.dumps(_program("PROGB")),
+            "MEMBERA": _member_json(_program("PROGA")),
+            "MEMBERB": _member_json(_program("PROGB")),
         },
         declared=("MEMBERA",),
     )
@@ -316,7 +320,7 @@ def test_a_member_the_extents_table_does_not_hold_is_a_reason_not_a_crash(
 
 def test_a_missing_extents_table_exits_two(corpus):
     """Exit 2, the input-not-found code, rather than 29 identical skips."""
-    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, _ = corpus({"MEMBERA": _member_json(_program("PROGA"))})
     absent = [
         "nowhere.jsonl" if argument.endswith("extents.jsonl") else argument
         for argument in argv
@@ -365,8 +369,8 @@ def test_two_members_declaring_one_program_id_are_both_reported(corpus):
     """
     argv, _ = corpus(
         {
-            "MEMBERA": json.dumps(_program("PROGA")),
-            "MEMBERB": json.dumps(_program("PROGA")),
+            "MEMBERA": _member_json(_program("PROGA")),
+            "MEMBERB": _member_json(_program("PROGA")),
         }
     )
 
@@ -375,14 +379,14 @@ def test_two_members_declaring_one_program_id_are_both_reported(corpus):
 
 def test_coverage_below_the_floor_exits_one(corpus):
     """A target that resolves to no storage is a write the analysis did not reach."""
-    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA", target="WS-GONE"))})
+    argv, _ = corpus({"MEMBERA": _member_json(_program("PROGA", target="WS-GONE"))})
 
     assert cli(argv) == 1
 
 
 def test_a_lowered_floor_accepts_the_same_run(corpus):
     argv, _ = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA", target="WS-GONE"))},
+        {"MEMBERA": _member_json(_program("PROGA", target="WS-GONE"))},
         extra=("--min-coverage", "0.0"),
     )
 
@@ -392,7 +396,7 @@ def test_a_lowered_floor_accepts_the_same_run(corpus):
 def test_the_run_writes_five_tables_and_no_layout_into_the_graph(corpus):
     """The layout is cobble-extents' table, which this stage reads and does not
     republish; a field node carries its id and nothing a layout would add."""
-    argv, out_dir = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, out_dir = corpus({"MEMBERA": _member_json(_program("PROGA"))})
 
     assert cli(argv) == 0
 
@@ -414,8 +418,8 @@ def test_a_named_member_is_the_only_one_analysed(corpus):
     """The intended use: one program, on demand, not the whole cache."""
     argv, out_dir = corpus(
         {
-            "MEMBERA": json.dumps(_program("PROGA")),
-            "MEMBERB": json.dumps(_program("PROGB")),
+            "MEMBERA": _member_json(_program("PROGA")),
+            "MEMBERB": _member_json(_program("PROGB")),
         },
         extra=("--member", "MEMBERA"),
     )
@@ -432,9 +436,9 @@ def test_several_named_members_are_analysed_together(corpus):
     a program: this stage is intra-program, and a CALL is a synthetic source."""
     argv, _ = corpus(
         {
-            "MEMBERA": json.dumps(_program("PROGA")),
-            "MEMBERB": json.dumps(_program("PROGB")),
-            "MEMBERC": json.dumps(_program("PROGC")),
+            "MEMBERA": _member_json(_program("PROGA")),
+            "MEMBERB": _member_json(_program("PROGB")),
+            "MEMBERC": _member_json(_program("PROGC")),
         },
         extra=("--member", "MEMBERA", "MEMBERC"),
     )
@@ -446,7 +450,7 @@ def test_a_named_member_the_cache_does_not_hold_exits_two(corpus):
     """Before any analysis: coverage over the members that do exist answers a
     question nobody asked."""
     argv, out_dir = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))},
+        {"MEMBERA": _member_json(_program("PROGA"))},
         extra=("--member", "MEMBERA", "MEMBERGONE"),
     )
 
@@ -460,7 +464,7 @@ def test_the_iteration_factor_reaches_the_fixpoint(corpus, capsys):
     re-runnable with more room, so the cap has to be settable from the command
     line."""
     argv, _ = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--iteration-factor", "0")
+        {"MEMBERA": _member_json(_program("PROGA"))}, extra=("--iteration-factor", "0")
     )
 
     assert cli(argv) == 0
@@ -471,7 +475,7 @@ def test_the_iteration_factor_reaches_the_fixpoint(corpus, capsys):
 
 def test_a_sweep_budget_analyses_the_member_and_reports_that_it_settled(corpus, capsys):
     argv, out_dir = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--sweeps", "2")
+        {"MEMBERA": _member_json(_program("PROGA"))}, extra=("--sweeps", "2")
     )
 
     assert cli(argv) == 0
@@ -484,7 +488,7 @@ def test_a_sweep_budget_analyses_the_member_and_reports_that_it_settled(corpus, 
 def test_a_sweep_budget_below_one_is_a_usage_error(corpus):
     """Zero sweeps would select the worklist walk by the value that disables it."""
     argv, _ = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--sweeps", "0")
+        {"MEMBERA": _member_json(_program("PROGA"))}, extra=("--sweeps", "0")
     )
 
     with pytest.raises(SystemExit) as failure:
@@ -496,7 +500,7 @@ def test_a_sweep_budget_below_one_is_a_usage_error(corpus):
 def test_a_sweep_budget_and_an_iteration_factor_at_once_are_a_usage_error(corpus):
     """The two budgets belong to different walks; taking both would drop one."""
     argv, _ = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))},
+        {"MEMBERA": _member_json(_program("PROGA"))},
         extra=("--sweeps", "2", "--iteration-factor", "100"),
     )
 
@@ -508,7 +512,7 @@ def test_a_sweep_budget_and_an_iteration_factor_at_once_are_a_usage_error(corpus
 
 def test_no_selection_is_a_usage_error(corpus):
     """A whole-corpus pass is asked for, never defaulted into."""
-    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, _ = corpus({"MEMBERA": _member_json(_program("PROGA"))})
     without_selector = [argument for argument in argv if argument != "--all"]
 
     with pytest.raises(SystemExit) as failure:
@@ -519,7 +523,7 @@ def test_no_selection_is_a_usage_error(corpus):
 
 def test_both_selections_at_once_are_a_usage_error(corpus):
     argv, _ = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))},
+        {"MEMBERA": _member_json(_program("PROGA"))},
         extra=("--all", "--member", "MEMBERA"),
     )
 
@@ -530,7 +534,7 @@ def test_both_selections_at_once_are_a_usage_error(corpus):
 
 
 def test_the_run_summary_reaches_stdout_for_a_pipeline(corpus, capsys):
-    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, _ = corpus({"MEMBERA": _member_json(_program("PROGA"))})
 
     assert cli(argv) == 0
 
@@ -603,8 +607,8 @@ def test_the_run_emits_the_alias_table_and_counts_its_dead_ends(corpus, capsys):
     """
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGA": _member_json(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         }
     )
 
@@ -622,8 +626,8 @@ def test_the_shared_window_is_the_shorter_of_the_two_declared_areas(corpus):
     """A row a cross-program consumer can cross: both sides, rebased, same length."""
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 8)),
+            "XPROGA": _member_json(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 8)),
         }
     )
 
@@ -645,7 +649,7 @@ def test_unreadable_callees_tally_under_one_dead_end_reason(corpus, capsys):
     """
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(_linking("XPROGY", "XPROGZ")),
+            "XPROGA": _member_json(_linking("XPROGY", "XPROGZ")),
             "XPROGY": "{not json",
             "XPROGZ": '{"program_id": "XPROG',
         }
@@ -668,8 +672,8 @@ def test_a_budget_skipped_member_still_emits_its_alias_rows(corpus, capsys):
     """
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGA": _member_json(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         },
         extra=("--iteration-factor", "0"),
     )
@@ -697,7 +701,7 @@ def test_a_callee_the_parse_cannot_read_costs_one_row_and_not_the_four_tables(
     nothing flowed in XPROGA is a worse answer than one dead-end row.
     """
     argv, out_dir = corpus(
-        {"XPROGA": json.dumps(_linking("XPROGB")), "XPROGB": "null"},
+        {"XPROGA": _member_json(_linking("XPROGB")), "XPROGB": "null"},
         extra=("--member", "XPROGA"),
     )
 
@@ -754,8 +758,8 @@ def test_one_site_resolving_to_two_caller_cells_counts_once(corpus, capsys):
     """``aliased`` is a site count, so two rows at one node are one aliased site."""
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(_twice_declared_area("XPROGB")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGA": _member_json(_twice_declared_area("XPROGB")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         }
     )
 
@@ -779,8 +783,8 @@ def test_the_report_names_every_dead_end_reason_without_a_dict_repr(corpus, capl
     """
     argv, _ = corpus(
         {
-            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGA": _member_json(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         }
     )
 
@@ -797,7 +801,7 @@ def test_the_report_names_every_dead_end_reason_without_a_dict_repr(corpus, capl
 def test_a_run_with_no_call_sites_says_nothing_about_aliases(corpus, caplog):
     """Zeroes read as a failure to alias; a corpus of leaf programs has no
     coverage to state."""
-    argv, _ = corpus({"MEMBERA": json.dumps(_program("PROGA"))})
+    argv, _ = corpus({"MEMBERA": _member_json(_program("PROGA"))})
 
     with caplog.at_level(logging.INFO):
         assert cli(argv) == 0
@@ -810,8 +814,8 @@ def test_a_single_member_run_emits_that_members_outbound_aliases(corpus):
     one program still says which bytes it hands to the programs it calls."""
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(_linking("XPROGB", "XPROGZ")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGA": _member_json(_linking("XPROGB", "XPROGZ")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         },
         extra=("--member", "XPROGA"),
     )
@@ -844,7 +848,7 @@ def test_a_blank_callee_means_the_target_could_not_be_resolved(corpus):
     """
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(
+            "XPROGA": _member_json(
                 _caller_of(_dynamic_link("WS-AREA"), _link("XPROGZ", "WS-AREA"))
             )
         },
@@ -866,10 +870,10 @@ def test_a_commarea_operand_naming_nothing_is_a_named_dead_end(corpus, capsys):
     """
     argv, out_dir = corpus(
         {
-            "XPROGA": json.dumps(
+            "XPROGA": _member_json(
                 _caller_of(_link("XPROGB", "OF"), _link("XPROGB", "WS-AREA"))
             ),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         }
     )
 
@@ -905,7 +909,7 @@ def test_the_pass_failing_before_it_enumerates_a_member_is_its_own_reason(
     in-process, since a worker process would import the module unpatched.
     """
     argv, _ = corpus(
-        {"XPROGA": json.dumps(_linking("XPROGB"))}, extra=("--member", "XPROGA")
+        {"XPROGA": _member_json(_linking("XPROGB"))}, extra=("--member", "XPROGA")
     )
     monkeypatch.setattr(
         build_corpus,
@@ -1021,7 +1025,7 @@ def _two_dynamic_sites() -> dict:
 def test_a_dynamic_call_site_is_published_whether_or_not_it_resolves(corpus):
     """The corpus fact a whole-corpus graph build needs: which programs each
     dynamic CALL/XCTL/LINK site can reach, beside the four graph tables."""
-    argv, out_dir = corpus({"XPROGA": json.dumps(_two_dynamic_sites())})
+    argv, out_dir = corpus({"XPROGA": _member_json(_two_dynamic_sites())})
 
     assert cli(argv) == 0
 
@@ -1037,7 +1041,7 @@ def test_a_dynamic_call_site_is_published_whether_or_not_it_resolves(corpus):
 
 
 def test_the_report_states_how_dynamic_sites_resolved(corpus, caplog):
-    argv, _ = corpus({"XPROGA": json.dumps(_two_dynamic_sites())})
+    argv, _ = corpus({"XPROGA": _member_json(_two_dynamic_sites())})
 
     with caplog.at_level(logging.INFO):
         assert cli(argv) == 0
@@ -1057,8 +1061,8 @@ def test_the_two_alias_counts_can_both_hold_one_site(corpus, caplog):
     """
     argv, _ = corpus(
         {
-            "XPROGA": json.dumps(_ambiguous_area("XPROGB")),
-            "XPROGB": json.dumps(_commarea_member("XPROGB", 12)),
+            "XPROGA": _member_json(_ambiguous_area("XPROGB")),
+            "XPROGB": _member_json(_commarea_member("XPROGB", 12)),
         }
     )
 
@@ -1075,7 +1079,7 @@ def test_the_build_reads_the_graph_and_targets_the_fixpoint_wrote(tmp_path, corp
     through the build's reader, and the build's dynamic-target stage turns the
     targets.jsonl it published into the build's own graph file -- an unresolved
     site into a DYNAMIC_TARGET, a resolved one into an ordinary LINK."""
-    argv, out_dir = corpus({"XPROGA": json.dumps(_two_dynamic_sites())})
+    argv, out_dir = corpus({"XPROGA": _member_json(_two_dynamic_sites())})
     assert cli(argv) == 0
 
     _fields, flows = read_graph(out_dir / GRAPH_FILE)
@@ -1134,9 +1138,9 @@ def test_the_build_reads_the_graph_and_targets_the_fixpoint_wrote(tmp_path, corp
 
 def _three_members() -> dict:
     return {
-        "MEMBERA": json.dumps(_program("PROGA")),
-        "MEMBERB": json.dumps(_branched("PROGB")),
-        "MEMBERC": json.dumps(_program("PROGC", target="WS-GONE")),
+        "MEMBERA": _member_json(_program("PROGA")),
+        "MEMBERB": _member_json(_branched("PROGB")),
+        "MEMBERC": _member_json(_program("PROGC", target="WS-GONE")),
     }
 
 
@@ -1174,7 +1178,7 @@ def test_every_member_is_reported_once_as_it_finishes(corpus, caplog):
 
 def test_a_worker_count_below_one_is_a_usage_error(corpus):
     argv, _ = corpus(
-        {"MEMBERA": json.dumps(_program("PROGA"))}, extra=("--max-workers", "0")
+        {"MEMBERA": _member_json(_program("PROGA"))}, extra=("--max-workers", "0")
     )
 
     with pytest.raises(SystemExit) as failure:
@@ -1190,8 +1194,8 @@ def test_two_programs_reading_the_same_named_bytes_keep_a_defs_row_each(corpus):
     first program's row, or not at all."""
     argv, out_dir = corpus(
         {
-            "MEMBERA": json.dumps(_written_then_read("PROGA")),
-            "MEMBERB": json.dumps(_written_then_read("PROGB")),
+            "MEMBERA": _member_json(_written_then_read("PROGA")),
+            "MEMBERB": _member_json(_written_then_read("PROGB")),
         }
     )
     extents = Path(argv[argv.index("--extents") + 1])

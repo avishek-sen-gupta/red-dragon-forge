@@ -296,7 +296,7 @@ class RejectingParser:
         self.wrote = (*self.wrote, out_path)
         if source == self._rejected:
             raise CobolParseError(REAL_STDERR)
-        out_path.write_text('{"program_id": "OK"}', encoding="utf-8")
+        out_path.write_text('{"programs": [{"program_id": "OK"}]}', encoding="utf-8")
         return out_path
 
 

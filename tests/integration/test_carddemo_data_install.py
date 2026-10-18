@@ -62,7 +62,7 @@ def _copybook_length(parser: ProLeapCobolParser, copybook: str) -> int:
         "       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n"
         f"       COPY {copybook}.\n       PROCEDURE DIVISION.\n           GOBACK.\n"
     )
-    records = parser.parse(source.encode()).data_fields
+    records = parser.parse(source.encode()).first_program.data_fields
     return record_length(records[0])
 
 

@@ -19,7 +19,7 @@ from cobble.dataflow.fixpoint.scope import Scope
 from cobble.dataflow.fixpoint.step_fact import StepFact
 from cobble.dataflow.fixpoint.stepped import Stepped
 from cobble.dataflow.srccfg.cfg import Cfg
-from cobble.parsing.asg_cache import cached_asg
+from cobble.parsing.asg_cache import cached_first_program
 
 USAGE = """\
 Walks the member exactly as cobble-dataflow-fixpoint does, stopping after
@@ -188,7 +188,7 @@ def report(
     anonymise: bool,
 ) -> str:
     """The diagnostic report for one member's walk, ``max_steps`` dequeues at most."""
-    asg = cached_asg(asg_path.parent, asg_path)
+    asg = cached_first_program(asg_path.parent, asg_path)
     cfg, walk = stepwise(asg, options, max_steps)
     facts = tuple(_fact(cfg, step, every, max_steps) for step in walk)
     if not facts:

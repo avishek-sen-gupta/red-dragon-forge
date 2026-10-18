@@ -60,7 +60,7 @@ def test_redefines_with_filler_sibling_parses_and_resolves(bridge_jar):
     runner = RealSubprocessRunner()
     parser = ProLeapCobolParser(runner, bridge_jar)
 
-    asg = parser.parse(REDEF_FILLER.encode("utf-8"))
+    asg = parser.parse(REDEF_FILLER.encode("utf-8")).first_program
 
     grp_in = _find(asg.data_fields, "GRP-IN")
     grp_out = _find(asg.data_fields, "GRP-OUT")

@@ -220,7 +220,7 @@ def load_record_layout(
     parser = ProLeapCobolParser(
         RealSubprocessRunner(), jar, copybook_dirs=[copybook.parent, *extra_dirs]
     )
-    root = build_data_layout(parser.parse(source).data_fields)
+    root = build_data_layout(parser.parse(source).first_program.data_fields)
     return select_record_layout(root, record_name)
 
 

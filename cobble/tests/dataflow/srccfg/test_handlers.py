@@ -289,8 +289,8 @@ def test_the_built_artefact_has_its_handler_transfers_resolved(tmp_path) -> None
     from cobble.dataflow.srccfg.bundle import load_bundle
     from cobble.dataflow.srccfg.query import provenance_report
 
-    (tmp_path / "MEMA.json").write_text(json.dumps(_handler_program()))
-    result = build_one(tmp_path / "MEMA.json", tmp_path / "out")
+    (tmp_path / "MEMA.json").write_text(json.dumps({"programs": [_handler_program()]}))
+    (result,) = build_one(tmp_path / "MEMA.json", tmp_path / "out")
 
     assert result.message == ""
     assert provenance_report(load_bundle(result.cfg_path).cfgs[0], "WS-ERR") == (

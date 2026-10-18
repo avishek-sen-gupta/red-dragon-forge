@@ -8,7 +8,7 @@ import pytest
 from cobble.dataflow.fixpoint.fixpoint import analysed
 from cobble.dataflow.fixpoint.options import AnalysisOptions
 from cobble.dataflow.fixpoint.scope import Scope
-from cobble.parsing.asg_cache import cached_asg
+from cobble.parsing.asg_cache import cached_first_program
 from tests.dataflow.fixpoint.fixpoint_baseline import FixpointBaseline
 from tests.dataflow.fixpoint.fixpoint_cost import FixpointCost
 from tests.dataflow.fixpoint.fixpoint_scope_baseline import FixpointScopeBaseline
@@ -289,7 +289,9 @@ def parsed(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_the_fixpoint_settles_at_the_recorded_round_robin_cost(
     parsed: Path, baseline: FixpointBaseline
 ) -> None:
-    flow, _ = analysed(cached_asg(parsed, PROGRAMS / f"{baseline.program}.cbl"))
+    flow, _ = analysed(
+        cached_first_program(parsed, PROGRAMS / f"{baseline.program}.cbl")
+    )
 
     assert (flow.nodes, flow.dequeues, flow.settled) == (
         baseline.round_robin.nodes,
@@ -302,7 +304,7 @@ def test_the_fixpoint_settles_at_the_recorded_round_robin_cost(
 def test_each_scope_settles_at_its_recorded_cost(
     parsed: Path, baseline: FixpointScopeBaseline
 ) -> None:
-    asg = cached_asg(parsed, PROGRAMS / f"{baseline.program}.cbl")
+    asg = cached_first_program(parsed, PROGRAMS / f"{baseline.program}.cbl")
     whole, _ = analysed(asg, AnalysisOptions(scope=Scope.WHOLE))
     restricted, _ = analysed(asg, AnalysisOptions(scope=Scope.CALL_TARGETS))
 

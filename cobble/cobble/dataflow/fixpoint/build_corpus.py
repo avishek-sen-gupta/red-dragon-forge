@@ -144,6 +144,7 @@ from cobble.dataflow.jumps.rows import jump_identity, jump_row
 from cobble.knowledge_graph.graph_file import read_graph_rows
 from cobble.knowledge_graph.graph_types import GraphEdge, GraphNode
 from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
+from cobble.parsing.asg_cache import first_program_at
 from cobble.path_utils import ensure_dir
 from cobol_asg.asg_types import CobolASG
 from pydantic import ValidationError
@@ -365,7 +366,7 @@ def _analysed_member(
     DIVISION: this stage computes no extent of its own, so the records the walk is
     seeded from are the same ones ``cobble-extents`` published.
     """
-    asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    asg = first_program_at(path)
     flow, index = analysed(
         asg,
         replace(options, areas=options.areas.seen_from(published.member)),

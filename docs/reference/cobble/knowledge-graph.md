@@ -68,7 +68,10 @@ Requires `PROLEAP_BRIDGE_JAR`. Refuses to start when the variable is unset, when
 a file, or when any `copybook_dirs` entry is not an existing directory.
 
 Writes one `<member>.json` per member to `asg_dir`, named for the member's file name, not its
-`PROGRAM-ID`. A member the bridge rejects gets `<member>.fail` with the bridge's message. A
+`PROGRAM-ID`. It holds the member's compilation unit, `{"programs": [...]}`: every program in
+the source, batch or nested, each carrying the programs it contains. A cache written before
+this shape fails to read back, member by member; rebuild it with `--force`. A
+member the bridge rejects gets `<member>.fail` with the bridge's message. A
 member with a `.json` is skipped; a member with a `.fail` is retried on every run. A re-parse
 whose outcome changes removes the other record, so a member never has both. A failure that is
 not about the member (an unwritable `asg_dir`, a full disk) ends the run.
@@ -100,7 +103,9 @@ cobble-build --config CONFIG --output OUTPUT [--dynamic-call-targets FILE]
 | `--dynamic-call-targets` | a `targets.jsonl` from `cobble-dataflow-fixpoint` or `cobble-dataflow-combine`. Without it, no dynamic-target edges. A named file that does not exist stops the build before it starts |
 
 Requires `JCL_BRIDGE_JAR`. Runs four extractors: JCL, `CALL`/`COPY`, CICS flow, and batch
-`FILE-CONTROL`. The CICS flow and `FILE-CONTROL` extractors read ASGs from `asg_dir`. The
+`FILE-CONTROL`. The CICS flow and `FILE-CONTROL` extractors read ASGs from `asg_dir`:
+`FILE-CONTROL` reads every program of a member, the CICS flow only the first (the program the
+member is named for, red-dragon-forge-1yoa). The
 build refuses to start when a `csd_files` entry is not a readable file.
 
 Skips are collected per extractor and reported at the end on stderr as a block headed

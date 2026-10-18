@@ -32,7 +32,9 @@ coprocessor's name is its compile spec's strategy name, so a conversational CICS
 transactions=, files=, mapsets=, tolerant=)` returns `out_dir/<name>.zip`.
 
 - Each program in `programs` is lowered once, on its own, with red-dragon's `lower_program` and
-  the given `CoprocessorSpec`s. `sources` maps each program to its source file.
+  the given `CoprocessorSpec`s. `sources` maps each program to its source file. A source holding
+  several programs, batch or nested, lowers to a unit per program, and linking it links them
+  all, so the image and the manifest's `programs` list each of them.
 - The programs in `link`, in that order, are linked into one image with red-dragon's
   `link_units`. `link` may be a subset of `programs`; a name in `link` that is not in `programs`
   raises `PackageError` (`<out_dir>/<name>.zip: link names <P>, which programs does not list`)

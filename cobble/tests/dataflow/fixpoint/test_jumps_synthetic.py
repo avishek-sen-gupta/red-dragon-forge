@@ -1,6 +1,5 @@
 """jumps.jsonl, compiled by the real bridge: one row per jump, exit, RETRIEVE and entry."""
 
-import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -13,7 +12,7 @@ from cobble.dataflow.jumps.fact import Fact
 from cobble.dataflow.jumps.jump import Jump
 from cobble.dataflow.jumps.jump_kind import JumpKind
 from cobble.dataflow.jumps.rows import jump_from_row
-from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 BASELINE = Path(__file__).parent / "data" / "jumps_baseline"
 
@@ -171,9 +170,7 @@ def test_an_unsettled_walk_keeps_every_jump_and_marks_its_facts_incomplete(
     out: Path,
 ) -> None:
     with cached_asg_dialect_parsers_registered():
-        asg = CobolASG.from_dict(
-            json.loads((out.parent / "parsed" / "PROGA.json").read_text("utf-8"))
-        )
+        asg = first_program_at(out.parent / "parsed" / "PROGA.json")
     flow, _ = analysed(asg, AnalysisOptions(factor=0))
     by_kind = {jump.kind: jump for jump in flow.jumps}
     incomplete = (UnresolvedReason.INCOMPLETE_WALK,)

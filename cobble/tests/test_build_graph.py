@@ -359,7 +359,9 @@ def _run_file_control(
     """The stage as it runs: one cached ASG on disk, no JVM anywhere near it."""
     asg_dir = tmp_path / "parsed"
     asg_dir.mkdir()
-    (asg_dir / "SOMEPROG.json").write_text(json.dumps(asg), encoding="utf-8")
+    (asg_dir / "SOMEPROG.json").write_text(
+        json.dumps({"programs": [asg]}), encoding="utf-8"
+    )
     failures, edges, _nodes = _file_control_written(
         tmp_path, tmp_path / "cbl" / "SOMEPROG.cbl", asg_dir
     )
@@ -414,6 +416,33 @@ def test_file_control_reads_a_member_containing_exec_sql(tmp_path: Path) -> None
     assert [(edge.source, edge.target) for edge in edges] == [("SOMEPROG", "CUSTDD")]
 
 
+def test_file_control_reads_every_program_a_member_holds(tmp_path: Path) -> None:
+    """A member holding a contained program is two programs, and each OPENs its
+    own files: the stage writes both programs' access edges, in pre-order."""
+    inner = {
+        **_asg_with({"type": "GOBACK"}),
+        "program_id": "INNERPROG",
+        "file_control": [{"file_name": "CUST-FILE", "assign_to": "INNERDD"}],
+    }
+    asg_dir = tmp_path / "parsed"
+    asg_dir.mkdir()
+    (asg_dir / "SOMEPROG.json").write_text(
+        json.dumps(
+            {"programs": [{**_asg_with({"type": "GOBACK"}), "programs": [inner]}]}
+        ),
+        encoding="utf-8",
+    )
+
+    failures, edges, _nodes = _file_control_written(
+        tmp_path, tmp_path / "cbl" / "SOMEPROG.cbl", asg_dir
+    )
+
+    assert (failures, [(edge.source, edge.target) for edge in edges]) == (
+        (),
+        [("SOMEPROG", "CUSTDD"), ("INNERPROG", "INNERDD")],
+    )
+
+
 def test_the_graph_goes_where_output_says_and_output_is_required() -> None:
     args = _parse_args(["--config", "c.toml", "--output", "out/corpus.jsonl"])
     assert (args.config, args.output) == (Path("c.toml"), Path("out/corpus.jsonl"))
@@ -462,7 +491,7 @@ def _batch_member(config: CorpusConfig, program: str, dd_name: str) -> None:
             }
         ],
     }
-    _touch(config.asg_dir / f"{program}.json", json.dumps(asg))
+    _touch(config.asg_dir / f"{program}.json", json.dumps({"programs": [asg]}))
 
 
 def test_file_control_across_worker_processes_writes_what_one_process_writes(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -15,6 +14,7 @@ from cobble.dataflow.fields.values import UnresolvedReason
 from cobble.dataflow.fixpoint.fixpoint import analysed
 from cobble.dataflow.fixpoint.options import AnalysisOptions
 from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 CACHE = Path(__file__).resolve().parents[3] / "out-parsed"
 
@@ -37,9 +37,7 @@ def _asg(member: str) -> CobolASG:
     if not (CACHE / f"{member}.json").is_file():
         pytest.skip(f"no parsed cache for {member}; run cobble-parse-corpus")
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(
-            json.loads((CACHE / f"{member}.json").read_text(encoding="utf-8"))
-        )
+        return first_program_at(CACHE / f"{member}.json")
 
 
 def _targets(member: str, **options):

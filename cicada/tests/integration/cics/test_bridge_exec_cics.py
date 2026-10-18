@@ -32,8 +32,8 @@ def test_bridge_emits_exec_cics_text(bridge_jar):
         cwd=str(REPO_ROOT),
     )
     assert result.returncode == 0, result.stderr
-    asg = json.loads(result.stdout)
-    stmts = asg.get("statements", [])
+    (program,) = json.loads(result.stdout)["programs"]
+    stmts = program.get("statements", [])
     exec_cics = next((s for s in stmts if s.get("type") == "EXEC_CICS"), None)
     assert exec_cics is not None, f"No EXEC_CICS in statements: {stmts}"
     assert "exec_cics_text" in exec_cics, f"Missing exec_cics_text: {exec_cics}"

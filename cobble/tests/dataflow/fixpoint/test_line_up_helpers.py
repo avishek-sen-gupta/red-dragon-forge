@@ -1,6 +1,5 @@
 """The callee and caller sides of a line-up, read the way the alias table reads them."""
 
-import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -14,6 +13,7 @@ from cobble.dataflow.fields.aliases import (
 from cobble.dataflow.fields.extent_text import extent_text
 from cobble.dataflow.fixpoint.fixpoint import analysed
 from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 CICS = """\
        IDENTIFICATION DIVISION.
@@ -45,7 +45,7 @@ SUBP = """\
 
 def _asg(cache: Path, name: str) -> CobolASG:
     with cached_asg_dialect_parsers_registered():
-        return CobolASG.from_dict(json.loads((cache / f"{name}.json").read_text()))
+        return first_program_at(cache / f"{name}.json")
 
 
 def test_both_sides_of_a_line_up_are_found(

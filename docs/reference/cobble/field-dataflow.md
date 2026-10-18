@@ -1,6 +1,9 @@
 # cobble: field dataflow
 
-Byte-level dataflow over every field, from the ASG cache, with no JVM. The stages:
+Byte-level dataflow over every field, from the ASG cache, with no JVM. Every stage below that
+reads the cache, except `cobble-depgraph`, reads only a member's first program, the one the
+member is named for; a batch or contained program after it is not analysed
+(red-dragon-forge-1yoa). The stages:
 
 1. `cobble-extents` writes every member's declared field layout.
 2. `cobble-dataflow-fixpoint` settles each program alone: which writes reach each read, the
@@ -350,12 +353,13 @@ The access sites for a field, by name and by overlapping bytes.
 cobble-depgraph --config CONFIG [--limit N]
 ```
 
-Which variables feed which, by name, over the whole ASG cache. Reads a depgraph config (see
-[config](config.md)). `--limit` stops after N programs. Writes to `graph_dir`:
+Which variables feed which, by name, over every program of every member in the ASG cache.
+Reads a depgraph config (see [config](config.md)). `--limit` stops after N members. Writes to
+`graph_dir`:
 
 | File | Holds |
 |---|---|
-| `edges.jsonl` | one row per edge: `src`, `dst`, `program`, `seq` (the statement ordinal), `verb` |
+| `edges.jsonl` | one row per edge: `src`, `dst`, `program` (the member), `seq` (the statement ordinal), `verb` |
 | `nodes.jsonl` | one row per name: where it is declared, whether it is pass-through, the programs it appears in |
 | `pairs.json` | `edges.jsonl` deduplicated: `src`, `dst`, `count`, per-verb `verbs` |
 

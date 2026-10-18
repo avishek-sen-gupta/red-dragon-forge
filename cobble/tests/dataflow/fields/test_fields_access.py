@@ -123,7 +123,9 @@ def test_accesses_emits_row_for_assign_read(tmp_path: Path) -> None:
     )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
-    (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
+    (asg_dir / "PROG.json").write_text(
+        json.dumps({"programs": [asg]}), encoding="utf-8"
+    )
     cfg_path = _write_cfgs(tmp_path / "cfg.jsonl", _program("PROG", _assign("WS-A")))
 
     rows = accesses(cfg_path, asg_dir)
@@ -142,7 +144,9 @@ def test_accesses_emits_row_for_test_condition(tmp_path: Path) -> None:
     )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
-    (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
+    (asg_dir / "PROG.json").write_text(
+        json.dumps({"programs": [asg]}), encoding="utf-8"
+    )
     cfg_path = _write_cfgs(
         tmp_path / "cfg.jsonl",
         _program("PROG", _condition("WS-STATUS", "'Y'", "MAIN/1#test")),
@@ -161,7 +165,9 @@ def test_accesses_dedupes_same_site_field(tmp_path: Path) -> None:
     )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
-    (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
+    (asg_dir / "PROG.json").write_text(
+        json.dumps({"programs": [asg]}), encoding="utf-8"
+    )
     cfg_path = _write_cfgs(
         tmp_path / "cfg.jsonl", _program("PROG", _assign("WS-A", "WS-A"))
     )
@@ -178,7 +184,9 @@ def _one_assign_program(tmp_path: Path) -> tuple[Path, Cfg]:
     )
     asg_dir = tmp_path / "asg"
     asg_dir.mkdir()
-    (asg_dir / "PROG.json").write_text(json.dumps(asg), encoding="utf-8")
+    (asg_dir / "PROG.json").write_text(
+        json.dumps({"programs": [asg]}), encoding="utf-8"
+    )
     return asg_dir, _program("PROG", _assign("WS-A"))
 
 

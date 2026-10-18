@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import multiprocessing
 import sys
@@ -42,7 +41,7 @@ from cobble.dataflow.fixpoint.rows import Row
 from cobble.dataflow.fixpoint.shared_count import SharedCount
 from cobble.dataflow.fixpoint.site_row import SiteRow
 from cobble.dataflow.fixpoint.target_site import Sites, resolved_sites
-from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ def _loaded(
     position, member, block, path = job
     try:
         with cached_asg_dialect_parsers_registered():
-            asg = CobolASG.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            asg = first_program_at(path)
             logger.info("area need: loading [%d/%d] %s", done.next(), total, member)
             layout = member_layout(member, block).layout
             program, rows = prepared(member, asg, layout, programs)
@@ -515,14 +514,17 @@ def _report(
 
 
 def _written(rows: Iterator[ExplainRow], out: TextIO) -> None:
-    written = 0
-    for row in rows:
-        out.write(f"{row.model_dump_json()}\n")
-        out.flush()
-        written += 1
-        if written % 100 == 0:
-            logger.info("area need: %d members explained", written)
+    written = sum(_row_written(out, count, row) for count, row in enumerate(rows, 1))
     logger.info("area need: %d members explained (done)", written)
+
+
+def _row_written(out: TextIO, count: int, row: ExplainRow) -> int:
+    """One row written and flushed, the progress logged every hundredth; one row."""
+    out.write(f"{row.model_dump_json()}\n")
+    out.flush()
+    if count % 100 == 0:
+        logger.info("area need: %d members explained", count)
+    return 1
 
 
 def _parsed(argv: Sequence[str]) -> argparse.Namespace:

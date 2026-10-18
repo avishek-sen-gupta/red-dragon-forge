@@ -72,7 +72,7 @@ from cobble.knowledge_graph.graph_writer import GraphWriter, graph_writer
 from cobble.knowledge_graph.merge import merge_graph
 from cobble.matching_files import matching_files
 from cobble.ordered_work import consumed_in_order
-from cobble.parsing.asg_cache import asg_of, cached_asg
+from cobble.parsing.asg_cache import cached_first_program, programs_of
 from cobble.path_utils import ensure_parent
 from cobol_asg.cobol_imports import extract_cobol_imports
 from cobol_asg.import_types import ImportKind, ImportRef
@@ -826,7 +826,7 @@ def _flow_extraction_attempt(
             csd_source=_csd_source(config),
             bms_mapsets={},
             members=dict(found.paths),
-            read_asg=partial(cached_asg, config.asg_dir),
+            read_asg=partial(cached_first_program, config.asg_dir),
             sink=sink,
             corpus_index=corpus_index,
             max_workers=max_workers,
@@ -880,23 +880,22 @@ def _cics_flow_or_skip(
 
 # ── extractor 4: batch FILE-CONTROL ──────────────────────────────
 
-_NO_ACCESSES = FileAccesses("")
-
 
 @dataclass(frozen=True)
 class _FileControlRead:
-    """One batch member as a worker read it: what it OPENs, or why it could not
-    be read. Locations are resolved by the process that writes the graph."""
+    """One batch member as a worker read it: what each of its programs OPENs, or
+    why it could not be read. Locations are resolved by the process that writes
+    the graph."""
 
-    found: FileAccesses = _NO_ACCESSES
+    found: tuple[FileAccesses, ...] = ()
     failures: tuple[str, ...] = ()
 
 
 def _file_control_read(path: Path, asg_dir: Path) -> _FileControlRead:
     try:
         with asg_dialect_parsers_registered():
-            asg = asg_of(asg_dir, path)
-        return _FileControlRead(found=file_accesses(asg))
+            asgs = programs_of(asg_dir, path)
+        return _FileControlRead(found=tuple(file_accesses(asg) for asg in asgs))
     except Exception as exc:
         logger.warning("FILE-CONTROL %s failed: %s", path.name, exc, exc_info=True)
         return _FileControlRead(failures=(f"FILE-CONTROL {path.name}: {exc}",))
@@ -907,7 +906,8 @@ def _file_control_written(
 ) -> tuple[str, ...]:
     if read.failures:
         return read.failures
-    writer.add_all(*file_graph(read.found, corpus_index))
+    for found in read.found:
+        writer.add_all(*file_graph(found, corpus_index))
     return ()
 
 

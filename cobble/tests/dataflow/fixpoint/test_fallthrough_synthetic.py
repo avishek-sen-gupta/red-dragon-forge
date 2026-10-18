@@ -1,6 +1,5 @@
 """Which paragraph-end fall-throughs the fixpoint keeps, compiled by the real bridge."""
 
-import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from cobble.dataflow.srccfg.build import paragraph_order
 from cobble.dataflow.srccfg.cfg import Cfg, EdgeKind
 from cobble.dataflow.srccfg.program import program_cfg
 from cobble.dataflow.srccfg.statements import statement_index
-from cobol_asg.asg_types import CobolASG
+from cobble.parsing.asg_cache import first_program_at
 
 HEADER = """\
        IDENTIFICATION DIVISION.
@@ -241,9 +240,8 @@ def _fallthroughs(cfg: Cfg) -> Pairs:
 
 
 def _before_and_after(out: Path, member: str) -> tuple[Pairs, Pairs]:
-    text = (out.parent / "parsed" / f"{member}.json").read_text(encoding="utf-8")
     with cached_asg_dialect_parsers_registered():
-        asg = CobolASG.from_dict(json.loads(text))
+        asg = first_program_at(out.parent / "parsed" / f"{member}.json")
     cfg = program_cfg(asg)
     return _fallthroughs(cfg), _fallthroughs(
         fallthroughs_pruned(cfg, paragraph_order(asg), statement_index(asg))
