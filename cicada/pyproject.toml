@@ -42,7 +42,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-n 6 --dist=worksteal"
+addopts = "-n auto --dist=worksteal"
 markers = [
     "carddemo_e2e: CardDemo e2e CICS tests; mandatory wherever the toolchain is present, CI included — a missing toolchain fails rather than skips (see tests/integration/cics/conftest.py)",
     "tn3270_e2e: TN3270 wire tests driven by s3270; fail when s3270 is not installed",
