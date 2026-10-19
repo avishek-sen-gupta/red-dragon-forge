@@ -66,3 +66,6 @@ class ProgramFilesIOProvider(CobolIOProvider):
 
     def _delete_record(self, filename: str, key: str, program: str) -> IOResult:
         return self._providers[program]._delete_record(filename, key, program)
+
+    def _key_of_reference(self, filename: str, number: int, program: str) -> IOResult:
+        return self._providers[program]._key_of_reference(filename, number, program)

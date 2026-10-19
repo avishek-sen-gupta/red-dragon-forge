@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import NO_COPYBOOK_SEARCH, CopybookSearch
 from cobol_asg.subprocess_runner import SubprocessRunner
 
 _MINIMAL_ASG = '{"programs": [{"data_fields": [], "sections": [], "paragraphs": []}]}'
@@ -28,14 +29,14 @@ class RecordingRunner(SubprocessRunner):
         return _MINIMAL_ASG
 
 
-def _command_for(**kwargs: object) -> list[str]:
+def _command_for(copybooks: CopybookSearch = NO_COPYBOOK_SEARCH) -> list[str]:
     runner = RecordingRunner()
-    ProLeapCobolParser(runner, "bridge.jar", **kwargs).parse(b"")  # type: ignore[arg-type]
+    ProLeapCobolParser(runner, "bridge.jar", copybooks).parse(b"")
     return runner.command
 
 
 def test_parse_passes_each_copybook_extension_as_a_repeated_flag() -> None:
-    command = _command_for(copybook_exts=["cpy", "txt"])
+    command = _command_for(CopybookSearch(exts=("cpy", "txt")))
     assert command == [
         "java",
         "-jar",
@@ -71,7 +72,7 @@ def test_parse_to_file_accepts_a_member_that_is_not_valid_utf_8(
 
 
 def test_parse_emits_copybook_dirs_before_extensions() -> None:
-    command = _command_for(copybook_dirs=[Path("sym")], copybook_exts=["cpy"])
+    command = _command_for(CopybookSearch(dirs=(Path("sym"),), exts=("cpy",)))
     assert command == [
         "java",
         "-jar",

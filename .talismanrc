@@ -84,7 +84,7 @@ fileignoreconfig:
 - filename: docs/records/design/2026-10-12-jackal-idcams-repro-labels.md
   checksum: ec1641e126ec15bb059c34b6f276cc4f74bf6292c3882de04c57c2ac4afb42d0
 - filename: jackal/jackal/concatenated_records.py
-  checksum: 02f23cc65fb53ad234d5fa1f7c5ee944763fc0e9245a7de868fb1082b28cd87a
+  checksum: cdc9cb73c0c9a8a793fb334f2866af80666bf443d6b650aae354372ac94f0a0e
 - filename: jackal/jackal/variable_records.py
   checksum: f9116c5c676e6840f7e14c62c397e19edd4613892c627f7534efe0f86642f124
 - filename: docs/records/design/2026-10-12-jackal-if-then-else.md
@@ -332,7 +332,7 @@ fileignoreconfig:
 - filename: tests/integration/test_carddemo_data_install.py
   checksum: d6e023498d56fc9dcbbff2c33f61b5469af57efaef8b09c6ab66b7d8114e6a51
 - filename: cicada/cics/vsam/dump.py
-  checksum: 6d1beea8365bcfea4c39a4ed99a742267be1ae71d856e3cafcc7f5a65de22fd1
+  checksum: 346a62a707a8b52466ef7ffdbbf364ccdf792b9f5879686e4d12a6a65b058e48
 - filename: cicada/tests/integration/cics/test_carddemo_user_list.py
   checksum: e9da1e433e65aa8f210e0cc263f93fdbff1f874c23c88029afe941b47c15a7dc
 - filename: cicada/cics/vsam/engine.py
@@ -380,7 +380,7 @@ fileignoreconfig:
 - filename: docs/superpowers/plans/2026-10-15-file-definitions-as-ir-data.md
   checksum: 73db18b0b575c4b47d1cf1af21c4b28e5e759d9de7ef135d585358b3867aac04
 - filename: jackal/tests/unit/test_file_definitions.py
-  checksum: 8a34632037896d0ddcfba6681547c053fa1e153f76beb03747a99c6ca0e860ef
+  checksum: b8e23f6d53c4dc58f2982bc6d70d8b4731fb95e8dc43954030d0fd1e1b783f3e
 - filename: jackal/jackal/file_definitions.py
   checksum: d92e01d090c0e1e3fc3d8394d8c36e2b0b923b88d09ae6dc06e2d1fbff278edf
 - filename: cicada/tests/integration/cics/test_sign_on_flow.py
@@ -410,7 +410,7 @@ fileignoreconfig:
 - filename: docs/reference/forge/run.md
   checksum: 01ed2eadaf16585f4ada62a6cfc4df6cb9c4d6cdd63b03e8087e528362b18492
 - filename: jackal/jackal/program_files_provider.py
-  checksum: e0047117501662b3dacf9efe38cfcc66d27dc761ba66ac0a418c7888a2293803
+  checksum: ae3289b0f0d53a854c6619bd050e72e9bb5aa3563b45965c769629db37c7730f
 - filename: tests/integration/test_run_command.py
   checksum: 781a5a77e8af231e91bdb20de8e9e1ed9314163188682963c7e64cae0ee1ee12
 - filename: docs/reference/forge/build.md
@@ -432,13 +432,15 @@ fileignoreconfig:
 - filename: catnip/catnip/dataset.py
   checksum: 1edf837a2e54909956e83ce12a921118460803be66bc64900ede23fb7ac21538
 - filename: catnip/catnip/variable_records.py
-  checksum: 6c6debc16cdcca0e90cf04dbceb5d3204a1469da5c00dc6a1dfc9bc2977f1699
+  checksum: d4333d4163e684496f1278ed0303654946096351c6a6fad87bc6fe1d0a53d605
 - filename: jackal/tests/unit/test_program_files_provider.py
-  checksum: ecbed5f1854a6c9cab3b8d75b0b967bc9af171110c560b5e4c7e4946f6c6a850
+  checksum: 980029c640be898164dfe242cab1824a3d110b09cdae4fe4b2d7d73787eb307b
 - filename: squall/testbed/db2-samples
   checksum: bb42ec8c655ac46b32f0e07aed4307ff02f2fd37f7235b4add20fa9f6e48a545
 - filename: .pre-commit-config.yaml
   checksum: aeb309019df22f1de0e39dfe60d93a52e5da9d0ed969569d0c2f4334b2d7207d
 - filename: cobble/cobble/dataflow/depgraph/build.py
   checksum: e9392afe496d57931a660ef013b5b919f63f8caec9ec630f99689a6fa303e3ec
+- filename: catnip/tests/unit/test_variable_records.py
+  checksum: acd9171a3f6ba7be7b790e3facd0156b630c364c14c4e7de66e010929c9f0e4e
 version: "1.0"

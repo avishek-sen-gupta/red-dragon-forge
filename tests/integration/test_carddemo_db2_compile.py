@@ -35,6 +35,7 @@ import pytest
 from cics.coprocessor import build_cics_spec
 from cics.runtime import install_cics_runtime
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.layout_data import field_positions
 from interpreter.instructions import Const
@@ -94,8 +95,9 @@ def _make_parser(bridge_jar: str) -> ProLeapCobolParser:
     return ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=_copybook_dirs(),
-        copybook_exts=COPYBOOK_EXTS,
+        copybooks=CopybookSearch(
+            dirs=tuple(_copybook_dirs()), exts=tuple(COPYBOOK_EXTS)
+        ),
     )
 
 

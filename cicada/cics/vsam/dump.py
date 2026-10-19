@@ -32,6 +32,7 @@ from cics.vsam.decoded_record import Decoded, DecodedRecord, Leaf
 from cics.vsam.format import read_flat_file
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.cobol_types import CobolDataCategory
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.binary import decode_binary
 from interpreter.cobol.comp3 import decode_comp3
@@ -218,7 +219,9 @@ def load_record_layout(
     """Parse a copybook (wrapped in a minimal program) into the selected layout."""
     source = (_SKELETON_HEAD + f"       COPY {copybook.stem}.\n").encode("utf-8")
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), jar, copybook_dirs=[copybook.parent, *extra_dirs]
+        RealSubprocessRunner(),
+        jar,
+        copybooks=CopybookSearch(dirs=(copybook.parent, *extra_dirs)),
     )
     root = build_data_layout(parser.parse(source).first_program.data_fields)
     return select_record_layout(root, record_name)

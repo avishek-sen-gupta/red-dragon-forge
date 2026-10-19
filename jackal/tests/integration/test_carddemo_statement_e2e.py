@@ -121,11 +121,6 @@ def test_each_statement_program_declares_its_own_files(
     ]
 
 
-@pytest.mark.xfail(
-    reason="CBSTM03A reopens TRNX-FILE through CBSTM03B until its step budget"
-    " runs out (red-dragon-forge-rqnc)",
-    strict=True,
-)
 @pytest.mark.carddemo_e2e
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_the_statement_step_writes_the_statements(

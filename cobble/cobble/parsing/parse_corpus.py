@@ -56,6 +56,7 @@ from cobble.parsing.copybook_dir import unscannable
 from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_parser import ProLeapCobolParser
 from cobol_asg.compilation_unit import CobolCompilationUnit
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import CobolParseError, RealSubprocessRunner
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,9 @@ def _parser_for(
     return ProLeapCobolParser(
         RealSubprocessRunner(),
         jar,
-        copybook_dirs=[Path(d) for d in copybook_dirs],
-        copybook_exts=list(exts),
+        copybooks=CopybookSearch(
+            dirs=tuple(Path(d) for d in copybook_dirs), exts=tuple(exts)
+        ),
     )
 
 

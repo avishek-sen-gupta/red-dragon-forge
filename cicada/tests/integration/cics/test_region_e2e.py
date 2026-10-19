@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import run_carddemo_region
@@ -44,7 +45,9 @@ def _require_bridge_jar(bridge_jar):
 @pytest.fixture
 def cobol_parser(bridge_jar):
     runner = RealSubprocessRunner()
-    return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
+    return ProLeapCobolParser(
+        runner, bridge_jar, copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,))
+    )
 
 
 # Sign-on program: MOVE 'WELCOME!' into the SGNMAP symbolic output field MSGO,

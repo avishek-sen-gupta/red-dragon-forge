@@ -23,7 +23,7 @@ def _drained(path, area):
 def test_records_are_framed_by_an_rdw_and_read_back_at_their_own_length(tmp_path):
     path = tmp_path / "v.dat"
     out = VariableRecordDriver(path, OpenMode.OUTPUT, 0)
-    written = (out.write(b"ABC"), out.write(b"LONGER"))
+    written = (out.write(b"ABC"), out.key_of_reference(1), out.write(b"LONGER"))
     out.close()
     extend = VariableRecordDriver(path, OpenMode.EXTEND, 0)
     extend.write(b"Z")
@@ -35,7 +35,7 @@ def test_records_are_framed_by_an_rdw_and_read_back_at_their_own_length(tmp_path
         _drained(path, 0),
         _drained(path, 6)[0],
     ) == (
-        (ok, ok),
+        (ok, ok, ok),
         b"\x00\x07\x00\x00ABC\x00\x0a\x00\x00LONGER\x00\x05\x00\x00Z",
         ((ok, b"ABC"), (ok, b"LONGER"), (ok, b"Z"), (eof, None)),
         (ok, b"ABC   "),

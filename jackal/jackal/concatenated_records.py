@@ -63,6 +63,9 @@ class ConcatenatedDriver(FileOrganizationDriver):
     def start(self, key: bytes, relop: str) -> AccessResult:
         return AccessResult(AccessCondition.OK)
 
+    def key_of_reference(self, number: int) -> AccessResult:
+        return AccessResult(AccessCondition.OK)
+
     def write(self, data: bytes, key: bytes = b"") -> AccessResult:
         return _READ_ONLY
 

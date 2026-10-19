@@ -21,6 +21,7 @@ from cics.screen.terminal_screen import TerminalScreen
 from cics.tn3270.region import CICS_COPYBOOKS, ServedRegion, assemble_region
 from cics.types import DispatchKind, DispatchResult
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from litter.build import build
@@ -116,7 +117,9 @@ def _region(
         link=programs,
         sources=sources,
         parser=ProLeapCobolParser(
-            RealSubprocessRunner(), bridge_jar, copybook_dirs=list(copybook_dirs)
+            RealSubprocessRunner(),
+            bridge_jar,
+            copybooks=CopybookSearch(dirs=tuple(copybook_dirs)),
         ),
         specs=(build_cics_spec(),),
         copybook_dirs=copybook_dirs,
@@ -247,7 +250,9 @@ def test_a_dispatcher_abend_without_an_on_abend_ends_the_task_quietly(
                 link=("XCTLA",),
                 sources=_written(tmp_path, {"XCTLA": _XCTLA}),
                 parser=ProLeapCobolParser(
-                    RealSubprocessRunner(), bridge_jar, copybook_dirs=[CICS_COPYBOOKS]
+                    RealSubprocessRunner(),
+                    bridge_jar,
+                    copybooks=CopybookSearch(dirs=(CICS_COPYBOOKS,)),
                 ),
                 specs=(build_cics_spec(),),
                 copybook_dirs=(CICS_COPYBOOKS,),

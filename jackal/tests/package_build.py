@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.cobol_compile import link_units
 from interpreter.project.program_entry import ProgramEntry
@@ -51,7 +52,7 @@ def built(
         parser=ProLeapCobolParser(
             runner=RealSubprocessRunner(),
             bridge_jar=bridge_jar,
-            copybook_dirs=list(copybook_dirs),
+            copybooks=CopybookSearch(dirs=tuple(copybook_dirs)),
         ),
         specs=(),
         copybook_dirs=copybook_dirs,

@@ -10,6 +10,7 @@ from catnip.install import install
 from catnip.labels import KsdsLabel, PathView, SequentialLabel
 from catnip.system_catalog import SystemCatalog
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.data_layout import record_length
 from interpreter.project.cobol_compile import link_units
@@ -74,7 +75,9 @@ def test_every_declared_carddemo_dataset_agrees_with_its_copybook_and_its_file(
     tmp_path: Path, carddemo_home: Path, bridge_jar: str
 ) -> None:
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=[carddemo_home / "cpy"]
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(dirs=(carddemo_home / "cpy",)),
     )
     declaration = _declaration()
     data = carddemo_home / "data" / "EBCDIC"

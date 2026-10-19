@@ -199,6 +199,7 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     result_holder)``.
     """
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
@@ -231,7 +232,9 @@ def _drive_through_turn4(tmp_path, bridge_jar):
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
+        copybooks=CopybookSearch(
+            dirs=(sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS)
+        ),
     )
 
     screen_q: queue.Queue = queue.Queue()
@@ -466,6 +469,7 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
     point the shared VsamEngine's backing files at a durable directory.
     """
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
@@ -483,7 +487,9 @@ def _compile_update_programs(tmp_path, bridge_jar, root=None):
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
+        copybooks=CopybookSearch(
+            dirs=(sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS)
+        ),
     )
 
     screen_q: queue.Queue = queue.Queue()
@@ -879,6 +885,7 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
     shared VsamEngine write the WRITE through to durable storage.
     """
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
@@ -896,7 +903,9 @@ def _drive_to_cotrn02c(tmp_path, bridge_jar, root=None):
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
+        copybooks=CopybookSearch(
+            dirs=(sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS)
+        ),
     )
 
     screen_q: queue.Queue = queue.Queue()

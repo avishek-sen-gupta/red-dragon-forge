@@ -12,6 +12,7 @@ from cics.bms.export import exported_mapsets, fresh_symbolic_copybooks
 from cics.csd_parse import parse_csd, parse_csd_files
 from cics.tn3270.region import CICS_COPYBOOKS
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.duplicate_program_in_image import DuplicateProgramInImage
 from litter.build import build
@@ -107,8 +108,9 @@ def _built(path: Path, environ: Mapping[str, str]) -> Path:
         parser=ProLeapCobolParser(
             RealSubprocessRunner(),
             bridge_jar,
-            copybook_dirs=list(copybook_dirs),
-            copybook_exts=list(config.paths.copybook_exts),
+            copybooks=CopybookSearch(
+                dirs=tuple(copybook_dirs), exts=tuple(config.paths.copybook_exts)
+            ),
         ),
         specs=tuple(COPROCESSORS[c].spec() for c in config.build.coprocessors),
         copybook_dirs=copybook_dirs,

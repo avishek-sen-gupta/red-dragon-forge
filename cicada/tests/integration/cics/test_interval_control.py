@@ -29,6 +29,7 @@ from cics.statements import CicsDialectParser
 from cics.strategy import CicsLoweringStrategy
 from cics.types import CicsContext, DispatchKind
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.cobol_frontend import CobolFrontend
 from interpreter.cobol.features import CobolFeature
@@ -49,7 +50,9 @@ def _require_bridge_jar(bridge_jar):  # noqa: F811
 @pytest.fixture
 def cobol_parser(bridge_jar):  # noqa: F811
     runner = RealSubprocessRunner()
-    return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
+    return ProLeapCobolParser(
+        runner, bridge_jar, copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,))
+    )
 
 
 COBOL_EIBTRMID = """\
@@ -186,28 +189,22 @@ def test_start_lowering_emits_no_return(cobol_parser):
     ]
     assert len(start_calls) == 1, f"expected one __cics_start call, got {start_calls}"
 
-    # Everything from the START call onwards: COBOL_START_A has exactly one
-    # EXEC CICS statement there that ends a task — the trailing RETURN — so
-    # exactly one Return_ may follow. A second one would mean START itself
-    # ended the task. The window opens at the START rather than covering the
-    # whole program because the condition dispatcher emitted at procedure entry
-    # ends in its own Return_; it still catches any Return_ emitted further
-    # down as the program grows.
-    #
-    # Implicit returns are excluded: red-dragon emits one at the end of every
-    # PROCEDURE DIVISION so a program that runs off the end returns to its
-    # caller instead of hanging (red-dragon-i0jd). It is the compiler's, not a
-    # statement's, and counting it would make this assertion fire for a reason
-    # it is not about. Filtering on the flag is also stricter than a count: an
-    # implicit return can never stand in for the one START must not emit.
-    return_instructions = [
-        i
-        for i in instructions[start_calls[0] :]
-        if isinstance(i, Return_) and not i.implicit
+    task_end = next(
+        n
+        for n, inst in enumerate(instructions)
+        if n > start_calls[0]
+        and getattr(inst, "func_name", None) == FuncName("__cics_task_end_hook")
+    )
+    returns_through_task_end = [
+        n
+        for n, inst in enumerate(instructions)
+        if start_calls[0] <= n <= task_end + 1
+        and isinstance(inst, Return_)
+        and not inst.implicit
     ]
-    assert len(return_instructions) == 1, (
-        f"expected exactly one Return_ (from the trailing RETURN), got "
-        f"{len(return_instructions)} — START must not emit its own"
+    assert returns_through_task_end == [task_end + 1], (
+        f"expected the only Return_ from START to the trailing RETURN to be the "
+        f"RETURN's own, got {returns_through_task_end} — START must not emit its own"
     )
 
 

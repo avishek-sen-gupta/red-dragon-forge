@@ -51,6 +51,7 @@ Runs a CardDemo batch job through jackal. Flags are in
    from pathlib import Path
 
    from cobol_asg.cobol_parser import ProLeapCobolParser
+   from cobol_asg.copybook_search import CopybookSearch
    from cobol_asg.subprocess_runner import RealSubprocessRunner
    from litter.build import build
 
@@ -64,7 +65,7 @@ Runs a CardDemo batch job through jackal. Flags are in
        parser=ProLeapCobolParser(
            runner=RealSubprocessRunner(),
            bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
-           copybook_dirs=[app / "cpy"],
+           copybooks=CopybookSearch(dirs=(app / "cpy",)),
        ),
        specs=(),
        copybook_dirs=(app / "cpy",),
@@ -192,6 +193,7 @@ import os, sqlite3, tempfile
 from pathlib import Path
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from jackal.cobol_step import DEFAULT_PROGRAM_STEP_BUDGET
 from jackal.jcl.parser import parse_jcl
@@ -216,7 +218,7 @@ package = build(
     parser=ProLeapCobolParser(
         runner=RealSubprocessRunner(),
         bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
-        copybook_dirs=[Path("cpy")],
+        copybooks=CopybookSearch(dirs=(Path("cpy"),)),
     ),
     specs=(build_sql_spec(),),
     copybook_dirs=(Path("cpy"),),

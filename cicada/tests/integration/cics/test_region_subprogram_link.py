@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.bootstrap import run_carddemo_region
@@ -83,7 +84,9 @@ def test_region_program_links_called_subprogram(tmp_path, bridge_jar):
     (cbl_dir / "SETVAL.cbl").write_text(SETVAL_SRC)
 
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,)),
     )
 
     screen_q: queue.Queue = queue.Queue()

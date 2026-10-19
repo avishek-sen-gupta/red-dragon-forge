@@ -99,6 +99,7 @@ def _drive_to_user_update(tmp_path: Path, bridge_jar):
     Returns (region, screen_q, engine).
     """
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(_CARDDEMO_HOME)
@@ -116,7 +117,9 @@ def _drive_to_user_update(tmp_path: Path, bridge_jar):
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=[sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
+        copybooks=CopybookSearch(
+            dirs=(sym_dir, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS)
+        ),
     )
 
     engine = _make_engine(tmp_path)

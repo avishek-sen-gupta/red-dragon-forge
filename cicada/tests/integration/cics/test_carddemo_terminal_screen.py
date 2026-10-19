@@ -37,6 +37,7 @@ def _driver(
     min_commarea_len: int = 400,
 ):
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     app = Path(os.environ["CARDDEMO_HOME"])
@@ -47,7 +48,9 @@ def _driver(
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
         jar,
-        copybook_dirs=[sym, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS],
+        copybooks=CopybookSearch(
+            dirs=(sym, app / "cpy", app / "cpy-bms", _CICS_COPYBOOKS)
+        ),
     )
     screens: queue.Queue = queue.Queue()
     inputs: queue.Queue = queue.Queue()
