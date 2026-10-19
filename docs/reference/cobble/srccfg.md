@@ -62,7 +62,7 @@ field, with an empty `entry`.
   whose range the program does not declare, and one whose range end nothing reaches.
 - Lowered constructs: `PERFORM` with resume and range end, `GO TO`, `EXIT PARAGRAPH`/`SECTION`/
   `PERFORM [CYCLE]`, `NEXT SENTENCE`, `EVALUATE` with stacked `WHEN`s, the end-of-file, I-O
-  error, size error, `CALL` exception and `STRING`/`UNSTRING` overflow arms, CICS raise arms
+  error, size error, `CALL` exception, `STRING`/`UNSTRING` overflow and `WRITE` end-of-page arms, CICS raise arms
   and `HANDLE CONDITION` dispatch, and `EXEC SQL WHENEVER` guards.
 - `EXEC CICS XCTL` and `RETURN` continue only on the failure path: to the armed handler, or
   under `RESP`/`NOHANDLE` to the next statement. `ABEND` ends the path.

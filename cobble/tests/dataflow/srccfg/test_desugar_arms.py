@@ -1,4 +1,4 @@
-"""AT END, INVALID KEY, ON SIZE ERROR, and SEARCH.
+"""AT END, INVALID KEY, ON SIZE ERROR, END-OF-PAGE, and SEARCH.
 
 These are guards written as clauses of another statement. An assignment in an AT END
 arm runs only when the read failed; treating the arm as unconditional reports it as
@@ -117,6 +117,38 @@ def test_an_invalid_key_arm_is_guarded_the_same_way(program_of) -> None:
 
     test_node = next(n for n in cfg.nodes if n.kind == NodeKind.TEST)
     assert test_node.atom.right == "INVALID KEY"
+
+
+def test_an_end_of_page_arm_is_guarded_and_not_at_end_of_page_takes_the_false_edge(
+    program_of,
+) -> None:
+    cfg = _cfg(
+        program_of,
+        [
+            {
+                "type": "WRITE",
+                "record_name": "RPT-REC",
+                "at_end_of_page": [_move("'Y'", "WS-NEW-PAGE")],
+                "not_at_end_of_page": [_move("'N'", "WS-NEW-PAGE")],
+            }
+        ],
+    )
+
+    test_node = next(n for n in cfg.nodes if n.kind == NodeKind.TEST)
+    assert (
+        test_node.atom.right,
+        {(e.target, e.kind) for e in cfg.successors(test_node.id)},
+        cfg.node("MAIN/0.at_end_of_page.0").writes,
+        cfg.node("MAIN/0.not_at_end_of_page.0").writes,
+    ) == (
+        "END-OF-PAGE",
+        {
+            ("MAIN/0.at_end_of_page.0", EdgeKind.TRUE),
+            ("MAIN/0.not_at_end_of_page.0", EdgeKind.FALSE),
+        },
+        ("WS-NEW-PAGE",),
+        ("WS-NEW-PAGE",),
+    )
 
 
 def test_an_on_size_error_arm_is_guarded_by_the_targets_own_status(program_of) -> None:
