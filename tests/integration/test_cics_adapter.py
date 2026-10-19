@@ -62,6 +62,7 @@ _CICS_CEEDAYS_PROGRAM = b"""\
 
 def test_cics_only_spec_compiles_and_returns(bridge_jar):
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     context_holder = [None]
@@ -74,7 +75,9 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
     )
     spec = build_cics_spec()
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,)),
     )
 
     linked = compile_program(_CICS_ONLY_PROGRAM, parser, [spec])
@@ -98,6 +101,7 @@ def test_cics_only_spec_compiles_and_returns(bridge_jar):
 
 def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     context_holder = [None]
@@ -110,7 +114,9 @@ def test_cics_program_calling_le_service_stub_resolves(bridge_jar):
     )
     spec = build_cics_spec()
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,)),
     )
 
     linked = compile_program(_CICS_CEEDAYS_PROGRAM, parser, [spec])

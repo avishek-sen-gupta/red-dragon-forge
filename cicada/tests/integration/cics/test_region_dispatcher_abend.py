@@ -30,10 +30,13 @@ _UNKNOWN_NEXT_SRC = """\
 @pytest.fixture
 def cobol_parser(bridge_jar):
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     return ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=[_CICS_COPYBOOKS]
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,)),
     )
 
 

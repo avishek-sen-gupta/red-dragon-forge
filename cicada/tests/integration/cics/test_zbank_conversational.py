@@ -72,6 +72,7 @@ def _make_engine(tmp_path: Path) -> VsamEngine:
 
 def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     prog_path = _FIXTURES / "ZBANK.cbl"
@@ -86,7 +87,7 @@ def _build_region(tmp_path: Path, bridge_jar, *, receive_timeout: float = 30.0):
     parser = ProLeapCobolParser(
         RealSubprocessRunner(),
         bridge_jar,
-        copybook_dirs=[sym_dir, _CICS_COPYBOOKS],
+        copybooks=CopybookSearch(dirs=(sym_dir, _CICS_COPYBOOKS)),
     )
 
     engine = _make_engine(tmp_path)
@@ -128,6 +129,7 @@ def _build_conversational(tmp_path: Path, bridge_jar):
     built with conversational=True (RECEIVE MAP -> SUSPEND), and the region drives
     via run_linked_resumable/resume_linked."""
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
     from cobol_asg.subprocess_runner import RealSubprocessRunner
 
     sym_dir = tmp_path / "sym"
@@ -135,7 +137,9 @@ def _build_conversational(tmp_path: Path, bridge_jar):
         bms_dir=_FIXTURES, out_dir=sym_dir, hlasm_export_bin=HLASM_EXPORT_BIN
     )
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar, copybook_dirs=[sym_dir, _CICS_COPYBOOKS]
+        RealSubprocessRunner(),
+        bridge_jar,
+        copybooks=CopybookSearch(dirs=(sym_dir, _CICS_COPYBOOKS)),
     )
     engine = _make_engine(tmp_path)
     screen_q: queue.Queue = queue.Queue()

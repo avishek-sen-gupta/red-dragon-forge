@@ -77,7 +77,7 @@ def build_record(
     linked = compile_cobol(
         src.encode(), parser=parser, copybook_dirs=list(copybook_dirs), tolerant=True
     )
-    entry_point = EntryPoint.function(lambda f: "init_params" not in str(f.name))
+    entry_point = EntryPoint.function(lambda ref: ref.label == linked.entry_func_label)
     vm = run_linked(
         linked,
         entry_point,

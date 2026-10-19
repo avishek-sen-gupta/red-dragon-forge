@@ -65,6 +65,7 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         provider._open_file("INDD", "INPUT", "DECLARER"),
         provider._open_file("INDD", "INPUT", "BARE"),
         provider._read_record("INDD", "", "BARE"),
+        provider._key_of_reference("INDD", 1, "BARE"),
         provider._close_file("INDD", "DECLARER"),
         provider._close_file("INDD", "BARE"),
     ) == (
@@ -73,6 +74,7 @@ def test_an_undeclared_select_takes_the_dataset_its_dd_names_as_labelled(
         IOResult(AccessCondition.ATTRIBUTE_CONFLICT, None),
         IOResult(AccessCondition.OK, None),
         IOResult(AccessCondition.OK, _RECORD),
+        IOResult(AccessCondition.OK, None),
         IOResult(AccessCondition.NOT_OPEN, None),
         IOResult(AccessCondition.OK, None),
     )

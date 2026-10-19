@@ -22,6 +22,7 @@ from cics.types import CicsContext, DispatchKind
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 
@@ -42,7 +43,9 @@ def _require_bridge_jar(bridge_jar):  # noqa: F811
 @pytest.fixture
 def cobol_parser(bridge_jar):  # noqa: F811
     runner = RealSubprocessRunner()
-    return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
+    return ProLeapCobolParser(
+        runner, bridge_jar, copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,))
+    )
 
 
 @pytest.fixture

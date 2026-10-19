@@ -46,6 +46,7 @@ from interpreter.project.types import LinkedProgram
 
 if TYPE_CHECKING:
     from cobol_asg.cobol_parser import ProLeapCobolParser
+    from cobol_asg.copybook_search import CopybookSearch
 
 logger = logging.getLogger(__name__)
 
@@ -342,12 +343,10 @@ def cobol_parser(sym_dir: Path) -> ProLeapCobolParser:
     return ProLeapCobolParser(
         RealSubprocessRunner(),
         BRIDGE_JAR,
-        copybook_dirs=[
-            sym_dir,
+        copybooks=CopybookSearch(dirs=(sym_dir,
             APP / "cpy",
             APP / "cpy-bms",
-            REPO / "cicada" / "cics" / "copybooks",
-        ],
+            REPO / "cicada" / "cics" / "copybooks")),
     )
 
 

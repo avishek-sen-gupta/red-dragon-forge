@@ -27,6 +27,7 @@ from cics.tn3270.region import CICS_COPYBOOKS, ServedRegion, assemble_region
 from cics.tn3270.session import run_session
 from cics.tn3270.wire import bind, serve_forever
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from litter.build import build
 from litter.cics_file import CicsFile
@@ -83,7 +84,9 @@ def carddemo_package(
         link=programs,
         sources={name: _source(app, name) for name in programs},
         parser=ProLeapCobolParser(
-            RealSubprocessRunner(), bridge_jar, copybook_dirs=list(copybook_dirs)
+            RealSubprocessRunner(),
+            bridge_jar,
+            copybooks=CopybookSearch(dirs=tuple(copybook_dirs)),
         ),
         specs=(build_cics_spec(),),
         copybook_dirs=copybook_dirs,

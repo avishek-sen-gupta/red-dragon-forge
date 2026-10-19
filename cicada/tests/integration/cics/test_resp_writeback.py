@@ -19,6 +19,7 @@ import pytest
 from interpreter.project.cobol_compile import compile_cobol
 from cics.statements import CicsDialectParser
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.cobol.features import CobolFeature
 from cics.preprocessor import apply_cics_prepass
@@ -42,7 +43,9 @@ def _require_bridge_jar(bridge_jar):
 @pytest.fixture
 def cobol_parser(bridge_jar):
     runner = RealSubprocessRunner()
-    return ProLeapCobolParser(runner, bridge_jar, copybook_dirs=[_CICS_COPYBOOKS])
+    return ProLeapCobolParser(
+        runner, bridge_jar, copybooks=CopybookSearch(dirs=(_CICS_COPYBOOKS,))
+    )
 
 
 COBOL_RESP = """\

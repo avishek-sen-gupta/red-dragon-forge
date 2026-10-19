@@ -12,5 +12,4 @@ def parser() -> ProLeapCobolParser:
     return ProLeapCobolParser(
         runner=RealSubprocessRunner(),
         bridge_jar=os.environ["PROLEAP_BRIDGE_JAR"],
-        copybook_dirs=[],
     )

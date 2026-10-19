@@ -34,7 +34,7 @@ def _package(tmp_path: Path, bridge_jar: str) -> Package:
             link=("SQLRPT",),
             sources={"SQLRPT": CBL / "SQLRPT.cbl"},
             parser=ProLeapCobolParser(
-                runner=RealSubprocessRunner(), bridge_jar=bridge_jar, copybook_dirs=[]
+                runner=RealSubprocessRunner(), bridge_jar=bridge_jar
             ),
             specs=(build_sql_spec(),),
             copybook_dirs=(),

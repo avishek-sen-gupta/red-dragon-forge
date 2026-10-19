@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import RealSubprocessRunner
 from interpreter.project.types import LinkedProgram
 from interpreter.project.entry_point import EntryPoint
@@ -60,7 +61,9 @@ def make_cobol_parser(
     if copybook_dirs:
         dirs.extend(copybook_dirs)
     return ProLeapCobolParser(
-        RealSubprocessRunner(), bridge_jar_path, copybook_dirs=dirs
+        RealSubprocessRunner(),
+        bridge_jar_path,
+        copybooks=CopybookSearch(dirs=tuple(dirs)),
     )
 
 

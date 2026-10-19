@@ -49,6 +49,7 @@ from cobble.parsing.parse_corpus import (
 )
 from cobble.path_utils import ensure_dir
 from cobol_asg.cobol_parser import ProLeapCobolParser
+from cobol_asg.copybook_search import CopybookSearch
 from cobol_asg.subprocess_runner import CobolParseError, RealSubprocessRunner
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,9 @@ def expand_one(
 ) -> Result:
     """One member, one JVM. Runs in a worker process."""
     parser = ProLeapCobolParser(
-        RealSubprocessRunner(), jar, copybook_dirs=copybook_dirs, copybook_exts=exts
+        RealSubprocessRunner(),
+        jar,
+        copybooks=CopybookSearch(dirs=tuple(copybook_dirs), exts=tuple(exts)),
     )
     return expand_with(parser, job)
 
