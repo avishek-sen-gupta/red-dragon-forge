@@ -116,6 +116,9 @@ back edge too.
 The human report goes to stderr; a JSON summary goes to stdout. The summary carries
 `analysed`, `writes`, `covered`, `coverage`, `unhandled`, `unmodelled`, `skipped`,
 `unsettled`, `collisions`, `aliased` (sites) and `alias_dead_ends` (by reason).
+A write to a name with no memory definition, such as a record whose copybook was never
+delivered, is not tracked: it counts in `writes` but not `covered`, and the analysis logs a
+warning naming the program, the statement's node and the name.
 
 An edge names the smallest declared field covering the bytes it moved, so a group write leaves
 its children out of the graph. Join on byte ranges, not ids; the query does.
