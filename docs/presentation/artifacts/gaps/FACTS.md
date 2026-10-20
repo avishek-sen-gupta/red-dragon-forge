@@ -39,7 +39,7 @@ Unsupported verbs now **abend loudly** and are recorded
 | Temporary storage `READQ/WRITEQ/DELETEQ TS` | 98 / 88 / 144 | `forge-o94` P1 |
 | `SEND MAP`/`RECEIVE MAP` drop MAPSET, CURSOR, ERASE, FREEKB | — | `forge-qh5` P1 |
 | `ASKTIME`/`FORMATTIME` ABSTIME operand ignored, date formats missing | — | `forge-4of` P1 |
-| CALLed subprograms using HANDLE CONDITION cannot compile (copybook prepass reaches main source only) | — | `forge-43l` P1 |
+| CALLed subprograms using HANDLE CONDITION cannot compile (copybook prepass reaches main source only) | — | `forge-43l` fixed 2026-10-20 |
 | `SYNCPOINT` / `SYNCPOINT ROLLBACK` | 20 | `forge-urh`, `forge-s10` |
 | `RESETBR` | 8 | `forge-t12` |
 | `SEND` (terminal control, no map) | — | `forge-34j`, `cicada-0du` |

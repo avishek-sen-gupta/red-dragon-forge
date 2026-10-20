@@ -169,8 +169,9 @@ Findings the diagnosis did not predict:
   caller's count still included.
 * **The copybook prepass reaches the main source only**, so a `CALL`ed
   subprogram that registers a handler gets neither `DFHHANDLE` nor `DFHEIBLK`
-  and cannot compile. Filed as `forge-43l`; the runtime now raises naming it
-  rather than silently emitting no dispatcher.
+  and cannot compile. Filed as `forge-43l`; the runtime now raises rather than
+  silently emitting no dispatcher. Fixed since (closed 2026-10-20): red-dragon
+  runs the prepass on every compiled program, callees included.
 * **Turning raising on broke three tests, none of them runtime bugs.** One was a
   program the runtime had been protecting: a task started with no `TERMID`
   issued `SEND MAP` unchecked, and the test asserted on a commarea built by the

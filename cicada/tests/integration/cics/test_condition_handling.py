@@ -396,19 +396,13 @@ HNDLINKA_SRC = """\
            EXEC CICS RETURN END-EXEC.
 """
 
-# Not prepassed by build_cics_spec's source_prepass -- only the main source
-# passed to compile_cics_program gets that (interpreter.project.coprocessor_compile.
-# compile_program folds source_prepass over the main source only); a disk-resolved
-# CALL callee must bring its own COPY DFHHANDLE and COPY DFHEIBLK -- the strategy's
-# dispatcher needs both DFH-HANDLER (from DFHHANDLE) and EIBRESP (from DFHEIBLK)
-# and raises if a module registers handlers without them (forge-43l).
+# No COPY DFHEIBLK or COPY DFHHANDLE: the source_prepass injects both into a
+# disk-resolved CALL callee as it does into the main program.
 HNDLINKB_SRC = """\
        IDENTIFICATION DIVISION.
        PROGRAM-ID. HNDLINKB.
        DATA DIVISION.
        WORKING-STORAGE SECTION.
-       COPY DFHEIBLK.
-       COPY DFHHANDLE.
        LINKAGE SECTION.
        01  LS-ERROR PIC S9(4) COMP.
        PROCEDURE DIVISION USING LS-ERROR.

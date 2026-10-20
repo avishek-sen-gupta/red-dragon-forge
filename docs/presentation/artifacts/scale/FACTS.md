@@ -33,7 +33,7 @@ estate, and the spec flags it as stale.
 | C4 | `SEARCH ALL` indistinguishable from `SEARCH` (linear scan) | low | open, `forge-39r` (P3) |
 | D | `SET x TO <data-item>` wrote the item's name | wrong answer, silent | fixed [ONLINE Status] |
 | E | Unimplemented `EXEC CICS` verbs emitted no IR, only a warning | missing behaviour, silent | START/RETRIEVE implemented [ONLINE Step 6]. Loudness policy **closed** as `forge-p9t`: unsupported verbs now record the verb and abend (`cicada/cics/strategy.py:1304`) |
-| F | `HANDLE CONDITION` no-op, no condition ever raised | wrong control flow, silent | fixed [ONLINE Step 8]. Follow-ups open: `forge-43l` (P1, subprogram copybook pre-scan), `forge-bxh` (NOTOPEN never produced), `forge-3ie`, `forge-9eg` |
+| F | `HANDLE CONDITION` no-op, no condition ever raised | wrong control flow, silent | fixed [ONLINE Step 8]. `forge-43l` (subprogram copybook prepass) fixed 2026-10-20. Follow-ups open: `forge-bxh` (NOTOPEN never produced), `forge-3ie`, `forge-9eg` |
 
 Suggested slide message: *"Running one real program found six silent-wrong-answer defects;
 all six are closed except the low-severity SEARCH ALL one."*

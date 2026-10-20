@@ -445,4 +445,10 @@ fileignoreconfig:
   checksum: acd9171a3f6ba7be7b790e3facd0156b630c364c14c4e7de66e010929c9f0e4e
 - filename: cobble/tests/dataflow/srccfg/test_desugar_arms.py
   checksum: d0dda50d085a3e42022f4fe027a5d4bec27250966af69a8a5a98c1d24fddf519
+- filename: docs/presentation/artifacts/scale/FACTS.md
+  checksum: d7c51ccd450352ce3a7175014c7fb49e15684636b805c8f97baf3c25537612d1
+- filename: cicada/cics/strategy.py
+  checksum: 94988c473b76a0903a950609c17b3487c088ce7b760dafa591ac47908d2b1232
+- filename: docs/records/analysis/2026-09-01-index-items-search-and-cics-verb-gaps.md
+  checksum: 5aa2e413c049919431f5e87e80c3795a9e708b247c331732d074e7936a34c8d4
 version: "1.0"
