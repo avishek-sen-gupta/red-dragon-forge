@@ -7,7 +7,7 @@ from pathlib import Path
 from tests.covers import covers, NotLanguageFeature
 from cics.vsam.engine import VsamEngine
 from cics.vsam.eibresp import RESP_NORMAL, RESP_NOTFND, RESP_ENDFILE
-from cics.vsam.browse import BrowseStart
+from cics.vsam.key_match import KeyMatch
 from cics.vsam.file_table import cics_files
 from tests.vsam_system import SeedCluster, build_test_system
 from cics.builtins.vsam import (
@@ -73,7 +73,7 @@ def test_write_then_read_round_trip_fills_buffer(tmp_path: Path):
     # INTO field lives at offset 4, length REC_LEN within a 32-byte WS region.
     into_off, into_len = 4, REC_LEN
     vm, addr = _make_vm_with_ws_region(bytearray(32))
-    rresult = read(_args("TESTDS", b"AA01", KEY_LEN, into_off, into_len), vm)
+    rresult = read(_args("TESTDS", b"AA01", "EQUAL", into_off, into_len), vm)
     assert isinstance(rresult, BuiltinResult)
     assert rresult.value == RESP_NORMAL
     region = vm.region_get(addr)
@@ -86,7 +86,7 @@ def test_read_not_found_returns_notfnd_and_does_not_write_buffer(tmp_path: Path)
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
     read = make_vsam_read_builtin(engine)
     vm, addr = _make_vm_with_ws_region(bytearray(32))
-    rresult = read(_args("TESTDS", b"ZZ99", KEY_LEN, 4, REC_LEN), vm)
+    rresult = read(_args("TESTDS", b"ZZ99", "EQUAL", 4, REC_LEN), vm)
     assert rresult.value == RESP_NOTFND
     region = vm.region_get(addr)
     assert region is not None
@@ -99,10 +99,10 @@ def test_delete_removes_record(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
     delete = make_vsam_delete_builtin(engine)
     read = make_vsam_read_builtin(engine)
-    dresult = delete(_args("TESTDS", b"AA01", KEY_LEN), VMState())
+    dresult = delete(_args("TESTDS", b"AA01"), VMState())
     assert dresult.value == RESP_NORMAL
     vm, _ = _make_vm_with_ws_region(bytearray(32))
-    rresult = read(_args("TESTDS", b"AA01", KEY_LEN, 4, REC_LEN), vm)
+    rresult = read(_args("TESTDS", b"AA01", "EQUAL", 4, REC_LEN), vm)
     assert rresult.value == RESP_NOTFND
 
 
@@ -116,7 +116,7 @@ def test_rewrite_updates_record(tmp_path: Path):
     )
     assert rwresult.value == RESP_NORMAL
     vm, addr = _make_vm_with_ws_region(bytearray(32))
-    read(_args("TESTDS", b"AA01", KEY_LEN, 0, REC_LEN), vm)
+    read(_args("TESTDS", b"AA01", "EQUAL", 0, REC_LEN), vm)
     region = vm.region_get(addr)
     assert region is not None
     assert b"NEW" in bytes(region[0:REC_LEN])
@@ -127,7 +127,7 @@ def test_read_no_ws_region_still_returns_resp(tmp_path: Path):
     """No __ws_region in VM: buffer write is skipped but resp still returned."""
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
     read = make_vsam_read_builtin(engine)
-    rresult = read(_args("TESTDS", b"AA01", KEY_LEN, 4, REC_LEN), VMState())
+    rresult = read(_args("TESTDS", b"AA01", "EQUAL", 4, REC_LEN), VMState())
     assert rresult.value == RESP_NORMAL
 
 
@@ -143,7 +143,7 @@ def test_browse_forward_fills_buffer_in_key_order(tmp_path: Path):
     startbr = make_vsam_startbr_builtin(engine)
     readnext = make_vsam_readnext_builtin(engine)
 
-    sresult = startbr(_args("TESTDS", b"\x00" * KEY_LEN, KEY_LEN), VMState())
+    sresult = startbr(_args("TESTDS", b"\x00" * KEY_LEN, "GTEQ"), VMState())
     assert isinstance(sresult, BuiltinResult)
     assert sresult.value == RESP_NORMAL
 
@@ -167,7 +167,7 @@ def test_readnext_past_end_returns_endfile(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "ONE")])
     startbr = make_vsam_startbr_builtin(engine)
     readnext = make_vsam_readnext_builtin(engine)
-    startbr(_args("TESTDS", b"\x00" * KEY_LEN, KEY_LEN), VMState())
+    startbr(_args("TESTDS", b"\x00" * KEY_LEN, "GTEQ"), VMState())
     vm, _ = _make_vm_with_ws_region(bytearray(32))
     first = readnext(_args("TESTDS", 4, REC_LEN), vm)
     assert first.value == RESP_NORMAL
@@ -185,7 +185,7 @@ def test_readprev_after_stepping_forward_returns_prior_record(tmp_path: Path):
     startbr = make_vsam_startbr_builtin(engine)
     readnext = make_vsam_readnext_builtin(engine)
     readprev = make_vsam_readprev_builtin(engine)
-    startbr(_args("TESTDS", b"\x00" * KEY_LEN, KEY_LEN), VMState())
+    startbr(_args("TESTDS", b"\x00" * KEY_LEN, "GTEQ"), VMState())
     vm, addr = _make_vm_with_ws_region(bytearray(32))
     readnext(_args("TESTDS", 4, REC_LEN), vm)  # rec_a
     readnext(_args("TESTDS", 4, REC_LEN), vm)  # rec_b
@@ -206,7 +206,7 @@ def test_endbr_returns_normal(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "ONE")])
     startbr = make_vsam_startbr_builtin(engine)
     endbr = make_vsam_endbr_builtin(engine)
-    startbr(_args("TESTDS", b"\x00" * KEY_LEN, KEY_LEN), VMState())
+    startbr(_args("TESTDS", b"\x00" * KEY_LEN, "GTEQ"), VMState())
     eresult = endbr(_args("TESTDS"), VMState())
     assert isinstance(eresult, BuiltinResult)
     assert eresult.value == RESP_NORMAL
@@ -322,7 +322,7 @@ def test_lower_read_emits_call_and_resp_writeback():
     )
     calls = _calls_to(ctx, "__cics_read")
     assert len(calls) == 1
-    # 5 args: file, key, key_len, into_off, into_len
+    # 5 args: file, key, key_match, into_off, into_len
     assert len(calls[0].args) == 5
     # EIBRESP write-back happened.
     assert any(fl.name == "EIBRESP" for (_, fl, _, _) in ctx.encode_writes)
@@ -370,7 +370,7 @@ def test_lower_rewrite_emits_call():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_lower_delete_emits_call_with_three_args():
+def test_lower_delete_emits_call_with_file_and_key():
     ctx = FakeCtx({"WS-KEY": (0, 4), "EIBRESP": (20, 4)})
     strategy = _make_strategy()
     strategy.lower(
@@ -386,7 +386,7 @@ def test_lower_delete_emits_call_with_three_args():
     )
     calls = _calls_to(ctx, "__cics_delete")
     assert len(calls) == 1
-    assert len(calls[0].args) == 3  # file, key, key_len
+    assert len(calls[0].args) == 2  # file, key
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -407,7 +407,7 @@ def test_lower_startbr_emits_call_and_resp_writeback():
     )
     calls = _calls_to(ctx, "__cics_startbr")
     assert len(calls) == 1
-    assert len(calls[0].args) == 4  # file, key, key_len, browse_start
+    assert len(calls[0].args) == 3  # file, key, key_match
     assert any(fl.name == "EIBRESP" for (_, fl, _, _) in ctx.encode_writes)
 
 
@@ -464,27 +464,15 @@ def test_startbr_equal_on_absent_key_returns_notfnd(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
     startbr = make_vsam_startbr_builtin(engine)
 
-    result = startbr(
-        _args("TESTDS", b"BB02", KEY_LEN, BrowseStart.EQUAL.name), VMState()
-    )
+    result = startbr(_args("TESTDS", b"BB02", KeyMatch.EQUAL.name), VMState())
 
     assert result.value == RESP_NOTFND
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_startbr_without_a_mode_argument_browses_gteq(tmp_path: Path):
-    engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
-    startbr = make_vsam_startbr_builtin(engine)
-
-    result = startbr(_args("TESTDS", b"BB02", KEY_LEN), VMState())
-
-    assert result.value == RESP_NORMAL
 
 
 def _lowered_browse_start(options) -> str:
     ctx = FakeCtx({"EIBRESP": (20, 4)})
     _make_strategy().lower(ctx, FakeStmt("STARTBR", options), MATERIALISED)
-    start_reg = _calls_to(ctx, "__cics_startbr")[0].args[3]
+    start_reg = _calls_to(ctx, "__cics_startbr")[0].args[2]
     return next(
         i.value
         for i in ctx.emitted
@@ -496,21 +484,21 @@ def _lowered_browse_start(options) -> str:
 def test_lower_startbr_equal_selects_an_exact_match_browse():
     options = {"FILE": CicsOperand("TESTDS", True), "EQUAL": None}
 
-    assert _lowered_browse_start(options) == BrowseStart.EQUAL.name
+    assert _lowered_browse_start(options) == KeyMatch.EQUAL.name
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_lower_startbr_gteq_selects_a_gteq_browse():
     options = {"FILE": CicsOperand("TESTDS", True), "GTEQ": None}
 
-    assert _lowered_browse_start(options) == BrowseStart.GTEQ.name
+    assert _lowered_browse_start(options) == KeyMatch.GTEQ.name
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_lower_startbr_without_a_positioning_option_defaults_to_gteq():
     options = {"FILE": CicsOperand("TESTDS", True)}
 
-    assert _lowered_browse_start(options) == BrowseStart.GTEQ.name
+    assert _lowered_browse_start(options) == KeyMatch.GTEQ.name
 
 
 def _formattime_calls(options):

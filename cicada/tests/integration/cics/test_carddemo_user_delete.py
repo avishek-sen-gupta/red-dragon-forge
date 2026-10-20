@@ -193,7 +193,7 @@ def test_real_carddemo_user_delete_removes_record(tmp_path, bridge_jar):
     region, screen_q, engine = _drive_to_user_delete(tmp_path, bridge_jar)
 
     # Pre-condition: the target exists.
-    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
+    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "target user missing before delete"
     rec = rec_read.record
 
@@ -225,9 +225,9 @@ def test_real_carddemo_user_delete_removes_record(tmp_path, bridge_jar):
     assert (r6.transid or "").strip() == "CU03"
 
     # Verify the DELETE: the key is gone; a neighbouring user is untouched.
-    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
+    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"))
     assert isinstance(rec_read, NoRecord), "target user still present after delete"
-    other_read = engine.read("USRSEC", "USER0001".encode("cp037"), 8)
+    other_read = engine.read("USRSEC", "USER0001".encode("cp037"))
     assert isinstance(other_read, RecordRead), "delete removed the wrong record"
     other = other_read.record
 

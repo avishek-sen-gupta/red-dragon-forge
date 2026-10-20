@@ -257,7 +257,7 @@ def _last(screens, mapname):
 
 
 def _cust_first_name(engine) -> str:
-    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
+    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "customer vanished"
     rec = rec_read.record
     return bytes(rec[9:34]).decode("cp037").strip()

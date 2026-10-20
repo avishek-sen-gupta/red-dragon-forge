@@ -190,6 +190,7 @@ def _vsam_builtins(engine: VsamEngine) -> Mapping[FuncName, Builtin]:
     from cics.builtins.vsam import (
         make_vsam_delete_builtin,
         make_vsam_endbr_builtin,
+        make_vsam_key_length_builtin,
         make_vsam_read_builtin,
         make_vsam_readnext_builtin,
         make_vsam_readprev_builtin,
@@ -204,6 +205,7 @@ def _vsam_builtins(engine: VsamEngine) -> Mapping[FuncName, Builtin]:
             "__cics_write": make_vsam_write_builtin(engine),
             "__cics_rewrite": make_vsam_rewrite_builtin(engine),
             "__cics_delete": make_vsam_delete_builtin(engine),
+            "__cics_key_length": make_vsam_key_length_builtin(engine),
             "__cics_startbr": make_vsam_startbr_builtin(engine),
             "__cics_readnext": make_vsam_readnext_builtin(engine),
             "__cics_readprev": make_vsam_readprev_builtin(engine),

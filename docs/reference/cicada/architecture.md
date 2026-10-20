@@ -74,7 +74,7 @@ All paths are under `cicada/`.
 | `cics/copybooks/` | `DFHAID`, `DFHBMSCA`, `DFHEIBLK`, `DFHHANDLE` |
 | `cics/builtins/` | service builtins: `flow`, `screen`, `system`, `vsam`, `interval`, `cells`. They find working-storage fields through the program's layout `Data` (`field_positions(vm.declarations)`); `LINK` gives the inner VM the callee's declarations. |
 | `cics/screen/` | `TerminalScreen` (24x80 field model), turn driver, cursor, screen payloads |
-| `cics/vsam/` | `file_table`, `engine`, `browse`, `eibresp`, `format`, `dump` |
+| `cics/vsam/` | `file_table`, `engine`, `key_match`, `eibresp`, `format`, `dump` |
 | `cics/bms/` | `generate` (symbolic copybooks), `catalog` (parsed mapsets), `attributes`, `macros/` |
 | `cics/tn3270/` | the TN3270 server: `region`, `session`, `negotiation`, `encoder`, `decoder`, `codes`, `wire` |
 | `bms_copybook_gen/` | BMS macro invocations → COBOL symbolic copybook |
@@ -137,7 +137,7 @@ never changed. No table is process-global, so two regions run side by side in on
 | Unit of work | `SYNCPOINT`, `SYNCPOINT ROLLBACK` | act on a composed SQL runtime's unit of work; VSAM writes are not undone |
 | Conditions | `HANDLE CONDITION`, `IGNORE CONDITION`, `HANDLE ABEND LABEL`, `HANDLE ABEND CANCEL` | `RESP` and `NOHANDLE` suppress handler dispatch. An abend the program raises (the `ABEND` verb, an unhandled condition, an unsupported verb, an unhandled abend in a program it LINKs to) transfers to the active `HANDLE ABEND LABEL` paragraph or section, and the exit is deactivated on entry; a handled abend does not run `on_abend`. `ABEND CANCEL` ignores the exit. `HANDLE ABEND RESET` and `PROGRAM` are logged no-ops. A handler target resolves as a COBOL procedure reference does: its case folds, and a paragraph name declared in several sections means the copy in the `HANDLE` statement's section |
 | BMS | `SEND MAP`, `RECEIVE MAP`, `SEND TEXT`, `SEND` | A bare `SEND FROM` (terminal control) writes its data unformatted, as `SEND TEXT` does; the screen is always erased |
-| File control | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | |
+| File control | `READ`, `WRITE`, `REWRITE`, `DELETE`, `STARTBR`, `READNEXT`, `READPREV`, `ENDBR` | `GENERIC` keys, `KEYLENGTH` (literal or data-name), `READ GTEQ`, and `DELETE GENERIC NUMREC` are lowered to IR: the lowering cuts a generic key to `KEYLENGTH` bytes, raises `INVREQ` for a `KEYLENGTH` without `GENERIC` that is not the file's key length, and deletes generically in a loop over `READ` and `DELETE` |
 | System | `ASSIGN`, `ASKTIME`, `FORMATTIME`, `INQUIRE`, `WRITEQ TD` | |
 | Built-in functions | `BIF DEEDIT` | |
 | No-ops | `UNLOCK`, `HANDLE AID` | `UNLOCK` has nothing to release with one task; `HANDLE AID` is not dispatched |
@@ -199,7 +199,9 @@ The package's file table comes from CSD files, not datasets ([server](tn3270-con
   unique AIX returns `DUPREC`. A file not in the table returns `DISABLED`. `READ`, `READNEXT`
   and `READPREV` return a `ReadOutcome`: `RecordRead(record, resp)` when a record came back,
   `NoRecord(resp)` when none did; the builtins fill the `INTO` area only from a `RecordRead`.
-  Browses keep one open driver per task, file and cursor. The adapter owns the held
+  A keyed `READ` or `STARTBR` positions on the first record whose key equals, or with `GTEQ`
+  is at least, the key it is given, compared over that key's length, so a generic key matches
+  its prefix. Browses keep one open driver per task, file and cursor. The adapter owns the held
   read-for-update key and the browse cursors.
 - A failure the declared shape causes is logged, not raised, since the program may handle the
   condition: a `NOTFND` whose program key length differs from the declared one (on `READ`,

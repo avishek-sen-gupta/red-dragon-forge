@@ -36,10 +36,10 @@ from cics.dispatcher import CicsRegion, InputEvent
 from cics.interval import StartQueue
 from cics.runtime import install_cics_runtime
 from cics.types import DispatchKind, DispatchResult
-from cics.vsam.browse import BrowseStart
 from cics.vsam.engine import VsamEngine
 from cics.vsam.file_table import cics_files
 from cics.vsam.format import read_flat_file
+from cics.vsam.key_match import KeyMatch
 from cics.vsam.read_outcome import ReadOutcome
 from interpreter.project.coprocessor_compile import CoprocessorSpec
 from interpreter.project.types import LinkedProgram
@@ -207,11 +207,11 @@ class RecordingVsamEngine(VsamEngine):
         super().__init__(files)
         self._journal = journal
 
-    def read(self, file_name: str, rid: bytes, rid_len: int) -> ReadOutcome:
-        outcome = super().read(file_name, rid, rid_len)
-        self._journal.put(
-            rid_entry("READ", file_name, outcome.resp, rid[: rid_len or len(rid)])
-        )
+    def read(
+        self, file_name: str, rid: bytes, by: KeyMatch = KeyMatch.EQUAL
+    ) -> ReadOutcome:
+        outcome = super().read(file_name, rid, by)
+        self._journal.put(rid_entry("READ", file_name, outcome.resp, rid))
         return outcome
 
     def write(self, file_name: str, rid: bytes, rid_len: int, record: bytes) -> int:
@@ -223,14 +223,11 @@ class RecordingVsamEngine(VsamEngine):
         self,
         file_name: str,
         rid: bytes,
-        rid_len: int,
         cursor: tuple[str, str, str],
-        start: BrowseStart = BrowseStart.GTEQ,
+        start: KeyMatch = KeyMatch.GTEQ,
     ) -> int:
-        resp = super().startbr(file_name, rid, rid_len, cursor, start)
-        self._journal.put(
-            rid_entry("STARTBR", file_name, resp, rid[: rid_len or len(rid)])
-        )
+        resp = super().startbr(file_name, rid, cursor, start)
+        self._journal.put(rid_entry("STARTBR", file_name, resp, rid))
         return resp
 
     def readnext(self, file_name: str, cursor: tuple[str, str, str]) -> ReadOutcome:

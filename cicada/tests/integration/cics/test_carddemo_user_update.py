@@ -237,7 +237,7 @@ def test_real_carddemo_user_update_rewrites_record(tmp_path, bridge_jar):
 
     # Verify the REWRITE: the stored record now carries the new first name, with
     # the key and other fields intact.
-    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"), 8)
+    rec_read = engine.read("USRSEC", _TGT_ID.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "target user vanished after update"
     rec = rec_read.record
     assert rec[0:8].decode("cp037").strip() == _TGT_ID

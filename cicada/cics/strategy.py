@@ -27,7 +27,7 @@ from cics.handler_labels import (
 )
 from cics.statements import CicsOperand, ExecCicsStatement
 from cics.strategy_stores import drain, note_unsupported
-from cics.vsam.browse import BrowseStart
+from cics.vsam.key_match import KeyMatch
 from cobol_asg.cobol_expression import BinOpNode, FieldRefNode, LiteralNode
 from cobol_asg.ref_mod import (
     RefModBinOp,
@@ -36,6 +36,7 @@ from cobol_asg.ref_mod import (
     RefModReference,
 )
 from interpreter.cobol.cobol_constants import BuiltinName
+from interpreter.cobol.ir_emitter import IrEmitter
 from interpreter.func_name import FuncName
 from interpreter.instructions import (
     Binop,
@@ -611,6 +612,27 @@ def _resolve_keylen(
     return _field_byte_length(ctx, opts.get("RIDFLD"), materialised)
 
 
+def _emit_keylen(
+    ctx: EmitContext, opts: Options, materialised: MaterialisedSectionedLayout
+) -> Register:
+    operand = opts.get("KEYLENGTH")
+    if _names_field(operand, ctx, materialised):
+        return _emit_field_value(ctx, operand, materialised)
+    return _emit_int(ctx, _resolve_keylen(ctx, opts, materialised))
+
+
+def _emit_vsam_key(
+    ctx: EmitContext,
+    opts: Options,
+    r_klen: Register,
+    materialised: MaterialisedSectionedLayout,
+) -> Register:
+    r_key = _copy_in_or_empty(ctx, opts.get("RIDFLD"), materialised)
+    if "GENERIC" not in opts:
+        return r_key
+    return _emit_call(ctx, BuiltinName.LIST_SLICE, r_key, _emit_int(ctx, 0), r_klen)
+
+
 _FORMATTIME_OUTPUTS = ("YYYYMMDD", "DATE", "DDMMYYYY", "DDMMYY", "YEAR", "TIME")
 _DEFAULT_DATE_SEPARATOR = "/"
 
@@ -622,8 +644,8 @@ def _date_separator(opts: Options) -> str:
     return _operand_text(opts.get("DATESEP"), _DEFAULT_DATE_SEPARATOR)
 
 
-def _browse_start(opts: Options) -> BrowseStart:
-    return BrowseStart.EQUAL if "EQUAL" in opts else BrowseStart.GTEQ
+def _browse_start(opts: Options) -> KeyMatch:
+    return KeyMatch.EQUAL if "EQUAL" in opts else KeyMatch.GTEQ
 
 
 def _resolve_into(
@@ -686,6 +708,25 @@ class _RecordKey:
     key_length: Register
 
 
+def _emit_keylength_checked(
+    ctx: EmitContext,
+    record: _RecordKey,
+    opts: Options,
+    command: Callable[[], Register],
+) -> Register:
+    if "GENERIC" in opts or "KEYLENGTH" not in opts:
+        return command()
+    e = IrEmitter(ctx, None)
+    declared = e.call("__cics_key_length", record.file)
+    defined = e.binop("!=", declared, e.int_(0))
+    mismatch = e.binop("and", defined, e.binop("!=", record.key_length, declared))
+    return e.choose("keylength_resp", e.int_(code_for("INVREQ")), mismatch, command)
+
+
+def _read_match(opts: Options) -> KeyMatch:
+    return KeyMatch.GTEQ if "GTEQ" in opts else KeyMatch.EQUAL
+
+
 _PointEmitter: TypeAlias = (
     "Callable[[EmitContext, _RecordKey, Options, MaterialisedSectionedLayout], Register]"
 )
@@ -698,8 +739,14 @@ def _emit_vsam_read(
     materialised: MaterialisedSectionedLayout,
 ) -> Register:
     r_off, r_len = _emit_into_window(ctx, opts, materialised)
-    return _emit_call(
-        ctx, "__cics_read", record.file, record.key, record.key_length, r_off, r_len
+    r_match = _emit_string(ctx, _read_match(opts).name)
+    return _emit_keylength_checked(
+        ctx,
+        record,
+        opts,
+        lambda: _emit_call(
+            ctx, "__cics_read", record.file, record.key, r_match, r_off, r_len
+        ),
     )
 
 
@@ -724,7 +771,56 @@ def _emit_vsam_delete(
     opts: Options,
     materialised: MaterialisedSectionedLayout,
 ) -> Register:
-    return _emit_call(ctx, "__cics_delete", record.file, record.key, record.key_length)
+    if "GENERIC" in opts:
+        return _emit_generic_delete(ctx, record, opts, materialised)
+    return _emit_keylength_checked(
+        ctx,
+        record,
+        opts,
+        lambda: _emit_call(ctx, "__cics_delete", record.file, record.key),
+    )
+
+
+def _emit_generic_delete(
+    ctx: EmitContext,
+    record: _RecordKey,
+    opts: Options,
+    materialised: MaterialisedSectionedLayout,
+) -> Register:
+    e = IrEmitter(ctx, None)
+    r_count = _emit_delete_matching(e, record)
+    emit_copy_back_str(
+        ctx, opts.get("NUMREC"), ctx.emit_to_string(r_count), materialised
+    )
+    none = e.binop("==", r_count, e.int_(0))
+    return e.choose(
+        "generic_delete_resp",
+        e.int_(code_for("NOTFND")),
+        none,
+        lambda: e.int_(code_for("NORMAL")),
+    )
+
+
+def _emit_delete_matching(e: IrEmitter, record: _RecordKey) -> Register:
+    normal = e.int_(code_for("NORMAL"))
+    count = e.var("numrec", e.int_(0))
+
+    def delete_next(_head: CodeLabel, done: CodeLabel) -> None:
+        r_read = e.call(
+            "__cics_read",
+            record.file,
+            record.key,
+            e.text(KeyMatch.EQUAL.name),
+            e.int_(0),
+            e.int_(0),
+        )
+        e.skip_if(e.binop("!=", r_read, normal), done)
+        r_deleted = e.call("__cics_delete", record.file, _emit_empty_bytes(e.ctx))
+        e.skip_if(e.binop("!=", r_deleted, normal), done)
+        e.store(count, e.binop("+", e.load(count), e.int_(1)))
+
+    e.loop("generic_delete", delete_next)
+    return e.load(count)
 
 
 _VSAM_POINT_EMITTERS: Mapping[str, _PointEmitter] = MappingProxyType(
@@ -748,10 +844,15 @@ def _emit_vsam_startbr(
     opts: Options,
     materialised: MaterialisedSectionedLayout,
 ) -> Register:
-    r_key = _copy_in_or_empty(ctx, opts.get("RIDFLD"), materialised)
-    r_klen = _emit_int(ctx, _resolve_keylen(ctx, opts, materialised))
+    r_klen = _emit_keylen(ctx, opts, materialised)
+    r_key = _emit_vsam_key(ctx, opts, r_klen, materialised)
     r_start = _emit_string(ctx, _browse_start(opts).name)
-    return _emit_call(ctx, "__cics_startbr", r_file, r_key, r_klen, r_start)
+    return _emit_keylength_checked(
+        ctx,
+        _RecordKey(r_file, r_key, r_klen),
+        opts,
+        lambda: _emit_call(ctx, "__cics_startbr", r_file, r_key, r_start),
+    )
 
 
 def _vsam_read_browse(builtin: str) -> _BrowseEmitter:
@@ -1356,8 +1457,8 @@ class CicsLoweringStrategy:
         materialised: MaterialisedSectionedLayout,
     ) -> None:
         r_file = _emit_file_name(ctx, opts, materialised)
-        r_key = _copy_in_or_empty(ctx, opts.get("RIDFLD"), materialised)
-        r_klen = _emit_int(ctx, _resolve_keylen(ctx, opts, materialised))
+        r_klen = _emit_keylen(ctx, opts, materialised)
+        r_key = _emit_vsam_key(ctx, opts, r_klen, materialised)
         record = _RecordKey(r_file, r_key, r_klen)
         r_res = _VSAM_POINT_EMITTERS[verb](ctx, record, opts, materialised)
         _emit_resp_and_raise(ctx, r_res, opts, materialised)

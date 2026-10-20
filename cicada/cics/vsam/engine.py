@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from catnip.catalog_stores import Table
 from catnip.dataset import Dataset
 from catnip.labels import KsdsLabel, PathView
-from cics.vsam.browse import BrowseStart
 from cics.vsam.eibresp import RESP_DISABLED, RESP_NORMAL, RESP_NOTFND, to_eibresp
+from cics.vsam.key_match import KeyMatch
 from cics.vsam.no_record import NoRecord
 from cics.vsam.read_outcome import ReadOutcome
 from cics.vsam.record_read import RecordRead
@@ -68,10 +68,10 @@ def _outcome(result: AccessResult) -> ReadOutcome:
 
 
 def _missed(
-    name: str, dataset: Dataset, key_length: int, condition: AccessCondition
+    name: str, dataset: Dataset, key: bytes, condition: AccessCondition
 ) -> None:
     shape = _shape(dataset)
-    if condition is not AccessCondition.NOT_FOUND or key_length == shape.key_length:
+    if condition is not AccessCondition.NOT_FOUND or len(key) == shape.key_length:
         return
     logger.warning(
         "%s (%s): NOTFND; declared key %d bytes at offset %d, program key %d bytes",
@@ -79,7 +79,7 @@ def _missed(
         dataset.dsn,
         shape.key_length,
         shape.key_offset,
-        key_length,
+        len(key),
     )
 
 
@@ -94,6 +94,27 @@ def _sized(name: str, dataset: Dataset, record: bytes) -> None:
         shape.lrecl,
         len(record),
     )
+
+
+def _record_key(dataset: Dataset, record: bytes) -> bytes:
+    shape = _shape(dataset)
+    return record[shape.key_offset : shape.key_offset + shape.key_length]
+
+
+def _located(drv: FileOrganizationDriver, key: bytes, by: KeyMatch) -> AccessResult:
+    positioned = drv.start(key, by.value)
+    if positioned.condition is not AccessCondition.OK:
+        return positioned
+    return drv.read_seq()
+
+
+def _keyed(
+    dataset: Dataset, drv: FileOrganizationDriver, key: bytes, by: KeyMatch
+) -> AccessResult:
+    full = len(key) == _shape(dataset).key_length
+    if full and by is KeyMatch.EQUAL:
+        return drv.read_key(key)
+    return _located(drv, key, by)
 
 
 def _written(name: str, dataset: Dataset, record: bytes) -> int:
@@ -124,29 +145,38 @@ class VsamEngine:
         name = _canonical(file_name)
         return self._files[name] if name in self._files else _NoFile()
 
-    def read(self, file_name: str, key: bytes, key_length: int) -> ReadOutcome:
+    def key_length(self, file_name: str) -> int:
         match self._file(file_name):
             case Dataset() as dataset:
-                return self._read(_canonical(file_name), dataset, key, key_length)
+                return _shape(dataset).key_length
+            case _NoFile():
+                return 0
+
+    def read(
+        self, file_name: str, key: bytes, by: KeyMatch = KeyMatch.EQUAL
+    ) -> ReadOutcome:
+        match self._file(file_name):
+            case Dataset() as dataset:
+                return self._read(_canonical(file_name), dataset, key, by)
             case _NoFile():
                 return NoRecord(RESP_DISABLED)
 
     def _read(
-        self, name: str, dataset: Dataset, key: bytes, key_length: int
+        self, name: str, dataset: Dataset, key: bytes, by: KeyMatch
     ) -> ReadOutcome:
         search = _key(dataset, key)
         drv = dataset.opened(OpenMode.INPUT)
-        result = drv.read_key(search)
+        result = _keyed(dataset, drv, search, by)
         drv.close()
-        _missed(name, dataset, key_length, result.condition)
+        _missed(name, dataset, search, result.condition)
         outcome = _outcome(result)
-        self._hold(name, search, outcome)
+        self._hold(name, dataset, outcome)
         return outcome
 
-    def _hold(self, name: str, key: bytes, outcome: ReadOutcome) -> None:
+    def _hold(self, name: str, dataset: Dataset, outcome: ReadOutcome) -> None:
         match outcome:
-            case RecordRead():
-                self._held.put(name, key)
+            case RecordRead(record=record):
+                self._held.put(name, _record_key(dataset, record))
             case NoRecord():
                 return
 
@@ -166,24 +196,24 @@ class VsamEngine:
             case _NoFile():
                 return RESP_DISABLED
 
-    def delete(self, file_name: str, key: bytes, key_length: int) -> int:
+    def delete(self, file_name: str, key: bytes) -> int:
         match self._file(file_name):
             case Dataset() as dataset:
-                return self._delete(_canonical(file_name), dataset, key, key_length)
+                return self._delete(_canonical(file_name), dataset, key)
             case _NoFile():
                 return RESP_DISABLED
 
     def _held_key(self, name: str) -> bytes:
         return self._held.get(name) if self._held.has(name) else b""
 
-    def _delete(self, name: str, dataset: Dataset, key: bytes, key_length: int) -> int:
+    def _delete(self, name: str, dataset: Dataset, key: bytes) -> int:
         match_key = _key(dataset, key) or self._held_key(name)
         if not match_key:
             return RESP_NOTFND
         drv = dataset.opened(OpenMode.IO)
         result = drv.delete(match_key)
         drv.close()
-        _missed(name, dataset, key_length, result.condition)
+        _missed(name, dataset, match_key, result.condition)
         self._released(name, result.condition)
         return to_eibresp(result.condition)
 
@@ -195,14 +225,13 @@ class VsamEngine:
         self,
         file_name: str,
         key: bytes,
-        key_length: int,
         cursor_key: _CursorKey,
-        start: BrowseStart = BrowseStart.GTEQ,
+        start: KeyMatch = KeyMatch.GTEQ,
     ) -> int:
         match self._file(file_name):
             case Dataset() as dataset:
                 return self._startbr(
-                    _canonical(file_name), dataset, key, key_length, cursor_key, start
+                    _canonical(file_name), dataset, key, cursor_key, start
                 )
             case _NoFile():
                 return RESP_DISABLED
@@ -212,15 +241,15 @@ class VsamEngine:
         name: str,
         dataset: Dataset,
         key: bytes,
-        key_length: int,
         cursor_key: _CursorKey,
-        start: BrowseStart,
+        start: KeyMatch,
     ) -> int:
+        search = _key(dataset, key)
         drv = dataset.opened(OpenMode.INPUT)
-        result = drv.start(_key(dataset, key), start.value)
+        result = drv.start(search, start.value)
         missed = result.condition is not AccessCondition.OK
-        if missed and start is BrowseStart.EQUAL:
-            _missed(name, dataset, key_length, result.condition)
+        if missed and start is KeyMatch.EQUAL:
+            _missed(name, dataset, search, result.condition)
             return RESP_NOTFND
         self._browse.put(cursor_key, drv)
         return RESP_NORMAL

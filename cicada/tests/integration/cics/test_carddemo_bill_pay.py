@@ -293,7 +293,7 @@ def _curbal_on_screen(region, screen_q, acct_id: str) -> str:
 def _acct_balance(engine, acct_id: str) -> float:
     """Internal cross-check: decode ACCT-CURR-BAL straight from the stored VSAM
     record via the canonical zoned-decimal decoder (the same one the VM uses)."""
-    rec_read = engine.read("ACCTDAT", acct_id.encode("cp037"), 11)
+    rec_read = engine.read("ACCTDAT", acct_id.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "account vanished"
     rec = rec_read.record
     return decode_zoned(rec[12:24], decimal_digits=2)
@@ -346,7 +346,7 @@ def test_real_carddemo_bill_pay_confirm_pays_in_full(tmp_path, bridge_jar):
     # and the payment transaction was WRITTEN with the account's card number
     # (TRAN-CARD-NUM X(16) @262, read from CXACAIX).
     assert _acct_balance(engine, _ACCT_ID) == 0.0
-    tran_read = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
+    tran_read = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"))
     assert isinstance(tran_read, RecordRead), "payment transaction was not written"
     tran = tran_read.record
     assert bytes(tran[0:16]).decode("cp037") == _NEW_TRAN_ID

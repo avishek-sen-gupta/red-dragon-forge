@@ -207,7 +207,7 @@ _EDIT_FIELDS = {
 
 
 def _embossed_in_carddat(engine) -> str:
-    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
+    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "card vanished"
     rec = rec_read.record
     return bytes(rec[30:80]).decode("cp037").strip()

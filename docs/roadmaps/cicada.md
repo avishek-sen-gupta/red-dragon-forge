@@ -12,7 +12,7 @@ are listed in [the cicada architecture page](../reference/cicada/architecture.md
 | cobble graph: `START TERMID` and `FROM` on `START_TRANSID` edges | `red-dragon-forge-dbk.3` | partial |
 | cobble graph: spool output linked to the program that writes it | `red-dragon-forge-dbk.4` | not started |
 | `FORMATTIME` honours its `ABSTIME` operand; `YYMMDD` and other date formats | `forge-4of` | partial |
-| Partial-key access: `GENERIC` `READ`/`STARTBR`/`DELETE` use `KEYLENGTH`, not the FCT key length | `red-dragon-forge-dbk.5` | partial |
+| Partial-key access: `GENERIC` and `KEYLENGTH` on `READ`/`STARTBR`/`DELETE`, `READ GTEQ`, `DELETE GENERIC NUMREC` | `red-dragon-forge-dbk.5` | supported |
 | Conditions outside the raisable set (`ENDFILE`, `ENDDATA`, `QIDERR`, `ITEMERR`) are raised | `forge-3ie` | partial |
 | `EIBRESP2` set per command and condition | `red-dragon-forge-dbk.8` | not started |
 | More than one terminal per region: `START TERMID` to another terminal | `red-dragon-forge-dbk.6` | partial |

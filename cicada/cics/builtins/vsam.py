@@ -23,8 +23,8 @@ from collections.abc import Sequence
 from cics.builtins.cells import commit_region, write_at
 from cics.builtins.screen import CicsBuiltin
 from cics.builtins.system import _get_ws_region_addr
-from cics.vsam.browse import BrowseStart
 from cics.vsam.engine import VsamEngine
+from cics.vsam.key_match import KeyMatch
 from cics.vsam.read_outcome import ReadOutcome
 from cics.vsam.record_read import RecordRead
 from interpreter.address import Address
@@ -85,27 +85,19 @@ def _int(args: Sequence[TypedValue], i: int) -> int:
     return int(args[i].value) if len(args) > i else 0
 
 
-def _browse_start(args: Sequence[TypedValue], i: int) -> BrowseStart:
-    name = str(args[i].value).strip() if len(args) > i else ""
-    return BrowseStart[name] if name in BrowseStart.__members__ else BrowseStart.GTEQ
+def _key_match(args: Sequence[TypedValue], i: int) -> KeyMatch:
+    return KeyMatch[str(args[i].value).strip()]
 
 
 def make_vsam_read_builtin(engine: VsamEngine) -> CicsBuiltin:
     """READ: returns the resp code; on success writes the record into INTO buffer.
 
-    args: (file_str, key_bytes, key_len_int, into_offset_int, into_length_int)
+    args: (file_str, key_bytes, key_match_name, into_offset_int, into_length_int)
     """
 
     def __cics_read(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
-        file_name = _file(args, 0)
-        key = _bytes(args, 1)
-        key_len = _int(args, 2)
-        into_off = _int(args, 3)
-        into_len = _int(args, 4)
-
-        return BuiltinResult(
-            value=_filled(vm, engine.read(file_name, key, key_len), into_off, into_len)
-        )
+        outcome = engine.read(_file(args, 0), _bytes(args, 1), _key_match(args, 2))
+        return BuiltinResult(value=_filled(vm, outcome, _int(args, 3), _int(args, 4)))
 
     return __cics_read
 
@@ -137,30 +129,33 @@ def make_vsam_rewrite_builtin(engine: VsamEngine) -> CicsBuiltin:
 
 
 def make_vsam_delete_builtin(engine: VsamEngine) -> CicsBuiltin:
-    """DELETE: args (file, key_bytes, key_len); returns resp."""
+    """DELETE: args (file, key_bytes); an empty key deletes the record last read. Returns resp."""
 
     def __cics_delete(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
-        return BuiltinResult(
-            value=engine.delete(_file(args, 0), _bytes(args, 1), _int(args, 2))
-        )
+        return BuiltinResult(value=engine.delete(_file(args, 0), _bytes(args, 1)))
 
     return __cics_delete
 
 
-def make_vsam_startbr_builtin(engine: VsamEngine) -> CicsBuiltin:
-    """STARTBR: args (file, key_bytes, key_len, browse_start_name); returns resp.
+def make_vsam_key_length_builtin(engine: VsamEngine) -> CicsBuiltin:
+    """The file's declared key length: args (file,); 0 for a file the table does not define."""
 
-    Positions the file's implicit cursor per the BrowseStart mode, GTEQ by default.
+    def __cics_key_length(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
+        return BuiltinResult(value=engine.key_length(_file(args, 0)))
+
+    return __cics_key_length
+
+
+def make_vsam_startbr_builtin(engine: VsamEngine) -> CicsBuiltin:
+    """STARTBR: args (file, key_bytes, key_match_name); returns resp.
+
+    Positions the file's implicit cursor on the first record the key matches.
     """
 
     def __cics_startbr(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
         fname = _file(args, 0)
         resp = engine.startbr(
-            fname,
-            _bytes(args, 1),
-            _int(args, 2),
-            (_TASK_ID, fname, "0"),
-            start=_browse_start(args, 3),
+            fname, _bytes(args, 1), (_TASK_ID, fname, "0"), start=_key_match(args, 2)
         )
         return BuiltinResult(value=resp)
 

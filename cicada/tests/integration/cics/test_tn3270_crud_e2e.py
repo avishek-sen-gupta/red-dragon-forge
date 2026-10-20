@@ -141,7 +141,7 @@ _NEW_FIRST_NAME = "JANE"
 
 
 def _custdat_first_name(engine) -> str:
-    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
+    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "customer vanished"
     rec = rec_read.record
     return bytes(rec[9:34]).decode("cp037").strip()
@@ -151,7 +151,7 @@ def _custdat_untouched(engine) -> tuple[str, str]:
     """CUST-SSN 9(9)@279 and CUST-FICO-CREDIT-SCORE 9(3)@329 (CVCUS01Y) --
     fields this flow's edit never touches, to prove the REWRITE didn't
     corrupt the rest of the 500-byte record."""
-    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"), 9)
+    rec_read = engine.read("CUSTDAT", _CUST_ID.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "customer vanished"
     rec = rec_read.record
     b = bytes(rec)
@@ -241,7 +241,7 @@ _NEW_EMBOSSED_NAME = "JANE VON"
 
 
 def _carddat_embossed_name(engine) -> str:
-    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
+    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "card vanished"
     rec = rec_read.record
     return bytes(rec[30:80]).decode("cp037").strip()
@@ -257,7 +257,7 @@ def _carddat_acct_id(engine) -> str:
     field on this screen), so every card update genuinely zeroes CARD-CVV-CD
     and blanks FILLER in VSAM -- confirmed live (747 -> 000); that is real
     COCRDUPC behaviour, not a cicada REWRITE-offset bug."""
-    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"), 16)
+    rec_read = engine.read("CARDDAT", _CARD_NUM.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "card vanished"
     rec = rec_read.record
     return bytes(rec[16:27]).decode("cp037")
@@ -367,7 +367,7 @@ def _transact_fields(engine, tran_id: str) -> dict[str, str]:
     """CVTRA05Y TRAN-RECORD field slices (matches the headless regression
     test's own offsets: id, type, category, source, description, merchant id,
     merchant name, card number)."""
-    rec_read = engine.read("TRANSACT", tran_id.encode("cp037"), 16)
+    rec_read = engine.read("TRANSACT", tran_id.encode("cp037"))
     assert isinstance(rec_read, RecordRead), f"transaction {tran_id} was not written"
     rec = rec_read.record
     b = bytes(rec)
@@ -397,7 +397,7 @@ def test_add_transaction_writes_transact(tmp_path, bridge_jar, carddemo_system):
     with served_session(package, carddemo_system) as served:
         # Pre-condition: the id STARTBR/READPREV will mint does not exist yet.
         assert isinstance(
-            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16),
+            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037")),
             NoRecord,
         )
 
@@ -443,9 +443,7 @@ def test_add_transaction_writes_transact(tmp_path, bridge_jar, carddemo_system):
             # The confirm prompt only validates and re-displays; the WRITE
             # must not have happened until CONFIRM='Y' actually commits.
             assert isinstance(
-                served.region.vsam_engine.read(
-                    "TRANSACT", new_tran_id.encode("cp037"), 16
-                ),
+                served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037")),
                 NoRecord,
             )
 
@@ -485,7 +483,7 @@ def test_add_transaction_writes_transact(tmp_path, bridge_jar, carddemo_system):
 
 
 def _acctdat_balance(engine, acct_id: str) -> float:
-    rec_read = engine.read("ACCTDAT", acct_id.encode("cp037"), 11)
+    rec_read = engine.read("ACCTDAT", acct_id.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "account vanished"
     rec = rec_read.record
     return decode_zoned(bytes(rec[12:24]), decimal_digits=2)
@@ -524,7 +522,7 @@ def test_bill_pay_rewrites_acctdat_and_writes_transact(
 
     with served_session(package, carddemo_system) as served:
         assert isinstance(
-            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037"), 16),
+            served.region.vsam_engine.read("TRANSACT", new_tran_id.encode("cp037")),
             NoRecord,
         )
 
@@ -595,7 +593,7 @@ def _next_admin_id() -> str:
 
 
 def _usrsec_fields(engine, user_id: str) -> dict[str, str]:
-    rec_read = engine.read("USRSEC", user_id.encode("cp037"), 8)
+    rec_read = engine.read("USRSEC", user_id.encode("cp037"))
     assert isinstance(rec_read, RecordRead), f"user {user_id} vanished"
     rec = rec_read.record
     b = bytes(rec)
@@ -628,7 +626,7 @@ def test_admin_add_user_writes_usrsec(tmp_path, bridge_jar, carddemo_system):
 
     with served_session(package, carddemo_system) as served:
         assert isinstance(
-            served.region.vsam_engine.read("USRSEC", new_id.encode("cp037"), 8),
+            served.region.vsam_engine.read("USRSEC", new_id.encode("cp037")),
             NoRecord,
         )
 
@@ -787,7 +785,7 @@ def test_admin_delete_user_removes_usrsec(tmp_path, bridge_jar, carddemo_system)
             # The find turn only READs and displays; the record must still
             # exist in VSAM until PF5 actually DELETEs it.
             assert isinstance(
-                served.region.vsam_engine.read("USRSEC", delete_id.encode("cp037"), 8),
+                served.region.vsam_engine.read("USRSEC", delete_id.encode("cp037")),
                 RecordRead,
             )
 
@@ -797,11 +795,11 @@ def test_admin_delete_user_removes_usrsec(tmp_path, bridge_jar, carddemo_system)
 
             engine = served.region.vsam_engine
             assert isinstance(
-                engine.read("USRSEC", delete_id.encode("cp037"), 8), NoRecord
+                engine.read("USRSEC", delete_id.encode("cp037")), NoRecord
             )
             for neighbour in neighbour_ids:
                 assert isinstance(
-                    engine.read("USRSEC", neighbour.encode("cp037"), 8), RecordRead
+                    engine.read("USRSEC", neighbour.encode("cp037")), RecordRead
                 )
 
             # Turn 3: INITIALIZE-ALL-FIELDS cleared USRIDIN on success, so

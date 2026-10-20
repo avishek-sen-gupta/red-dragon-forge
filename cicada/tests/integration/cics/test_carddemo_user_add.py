@@ -200,7 +200,7 @@ def test_real_carddemo_user_add_writes_record(tmp_path, bridge_jar):
     region, screen_q, engine = _drive_to_user_add(tmp_path, bridge_jar)
 
     # Pre-condition: the new key does not yet exist.
-    rec_read = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)
+    rec_read = engine.read("USRSEC", _NEW_ID.encode("cp037"))
     assert isinstance(
         rec_read, NoRecord
     ), "new user unexpectedly present before the add"
@@ -230,7 +230,7 @@ def test_real_carddemo_user_add_writes_record(tmp_path, bridge_jar):
 
     # Verify the WRITE against the engine: the new key is now present with the
     # fields we supplied.
-    rec_read = engine.read("USRSEC", _NEW_ID.encode("cp037"), 8)
+    rec_read = engine.read("USRSEC", _NEW_ID.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "new user was not written to USRSEC"
     rec = rec_read.record
     resp = rec_read.resp
