@@ -1,10 +1,12 @@
 """Unit tests for CICS system service builtins."""
 
+from datetime import datetime, timedelta, timezone
+
 from tests.covers import covers, NotLanguageFeature
 from cics.builtins.system import (
     make_assign_builtin,
     make_asktime_builtin,
-    make_formattime_builtin,
+    make_datform_builtin,
     make_writeq_td_builtin,
     make_handle_abend_builtin,
     make_handle_noop_builtin,
@@ -15,6 +17,7 @@ from cics.builtins.system import (
     _get_ws_region_addr,
 )
 from interpreter.address import NO_ADDRESS
+from cics.dat_form import DatForm
 from cics.types import DispatchKind, DispatchResult
 from interpreter.vm.vm_types import VMState, BuiltinResult
 from interpreter.types.typed_value import typed
@@ -55,47 +58,14 @@ def test_assign_builtin_returns_empty_for_unknown_key():
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_asktime_builtin_returns_positive_integer():
-    builtin = make_asktime_builtin()
-    result = builtin([], _vm())
-    assert isinstance(result, BuiltinResult)
-    assert isinstance(result.value, int)
-    assert result.value > 0
+def test_asktime_is_local_milliseconds_since_1900_and_datform_is_the_regions():
+    ist = timezone(timedelta(hours=5, minutes=30))
+    instant = datetime(2026, 10, 21, 9, 5, 7, 250000, tzinfo=ist)
 
+    asked = make_asktime_builtin(lambda: instant)([], _vm())
+    datform = make_datform_builtin(DatForm.YYMMDD)([], _vm())
 
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_builtin_returns_yyyymmdd():
-    import re
-
-    builtin = make_formattime_builtin()
-    result = builtin([], _vm())
-    assert isinstance(result, BuiltinResult)
-    assert re.fullmatch(
-        r"\d{8}", str(result.value)
-    ), f"Expected YYYYMMDD, got {result.value!r}"
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_builtin_returns_yyyymmdd_for_key():
-    import re
-
-    builtin = make_formattime_builtin()
-    result = builtin([typed("YYYYMMDD", UNKNOWN)], _vm())
-    assert isinstance(result, BuiltinResult)
-    assert re.fullmatch(
-        r"\d{8}", str(result.value)
-    ), f"Expected YYYYMMDD, got {result.value!r}"
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_builtin_returns_time_for_time_key():
-    import re
-
-    builtin = make_formattime_builtin()
-    result = builtin([typed("TIME", UNKNOWN)], _vm())
-    assert re.fullmatch(
-        r"\d{6}", str(result.value)
-    ), f"Expected HHMMSS, got {result.value!r}"
+    assert (asked.value, datform.value) == (4001562307250, "YYMMDD")
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -255,53 +225,6 @@ def test_inquire_program_not_found():
     args = [typed("MISSING", UNKNOWN)]
     result = builtin(args, _vm())
     assert result.value == 27  # PGMIDERR
-
-
-def _formatted(*args: str) -> str:
-    return str(
-        make_formattime_builtin()([typed(a, UNKNOWN) for a in args], _vm()).value
-    )
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_ddmmyyyy_puts_the_day_first():
-    import re
-
-    assert re.fullmatch(r"\d{8}", _formatted("DDMMYYYY"))
-    assert _formatted("DDMMYYYY")[4:] == _formatted("YYYYMMDD")[:4]
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_ddmmyy_uses_a_two_digit_year():
-    import re
-
-    assert re.fullmatch(r"\d{6}", _formatted("DDMMYY"))
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_year_returns_four_digits():
-    assert _formatted("YEAR") == _formatted("YYYYMMDD")[:4]
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_datesep_separates_the_date_parts():
-    import re
-
-    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", _formatted("YYYYMMDD", "-"))
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_datesep_does_not_reach_the_time():
-    import re
-
-    assert re.fullmatch(r"\d{6}", _formatted("TIME", "-"))
-
-
-@covers(NotLanguageFeature.INFRASTRUCTURE)
-def test_formattime_warns_on_an_unimplemented_suboption(caplog):
-    _formatted("MILLISECONDS")
-
-    assert "MILLISECONDS" in caplog.text
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)

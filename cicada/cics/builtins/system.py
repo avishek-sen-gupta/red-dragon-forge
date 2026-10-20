@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 import struct
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime, timedelta
 
 from cics.builtins.cells import FieldWrite, commit_region, write_fields
 from cics.builtins.screen import CicsBuiltin, ws_region
 from cics.cell import Holder, hold
 from cics.conditions import UNHANDLED_ABCODE, UNSUPPORTED_VERB_ABCODE
+from cics.dat_form import DatForm
 from cics.types import CicsContext, DispatchKind, DispatchResult
 from interpreter.address import NO_ADDRESS, Address
 from interpreter.cobol.ebcdic_table import EbcdicTable
@@ -109,55 +110,27 @@ def make_assign_builtin(
     return __cics_assign
 
 
-def make_asktime_builtin() -> CicsBuiltin:
+_ABSTIME_EPOCH = datetime(1900, 1, 1)
+_MILLISECOND = timedelta(milliseconds=1)
+
+
+def make_asktime_builtin(now: Callable[[], datetime]) -> CicsBuiltin:
+    """ASKTIME: milliseconds since 00:00 on 1 January 1900, in the region's local time."""
+
     def __cics_asktime(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
-        epoch_1900 = datetime(1900, 1, 1, tzinfo=UTC)
-        now = datetime.now(UTC)
-        abstime = int((now - epoch_1900).total_seconds() * 1_000_000)
-        return BuiltinResult(value=abstime)
+        local = now().replace(tzinfo=None)
+        return BuiltinResult(value=(local - _ABSTIME_EPOCH) // _MILLISECOND)
 
     return __cics_asktime
 
 
-_DATE_PARTS = {
-    "YYYYMMDD": ("%Y", "%m", "%d"),
-    "DATE": ("%Y", "%m", "%d"),
-    "DDMMYYYY": ("%d", "%m", "%Y"),
-    "DDMMYY": ("%d", "%m", "%y"),
-    "YEAR": ("%Y",),
-}
-_TIME_FORMAT = "%H%M%S"
-_DEFAULT_SUBOPTION = "YYYYMMDD"
+def make_datform_builtin(datform: DatForm) -> CicsBuiltin:
+    """The region's DATFORM, which orders a FORMATTIME DATE."""
 
+    def __cics_datform(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
+        return BuiltinResult(value=datform.value)
 
-def _formattime_format(suboption: str, date_separator: str) -> str:
-    """DATESEP separates date parts only — TIME is governed by TIMESEP."""
-    if suboption == "TIME":
-        return _TIME_FORMAT
-    if suboption not in _DATE_PARTS:
-        logger.warning(
-            "FORMATTIME %s is not implemented — formatting as %s",
-            suboption,
-            _DEFAULT_SUBOPTION,
-        )
-        return date_separator.join(_DATE_PARTS[_DEFAULT_SUBOPTION])
-    return date_separator.join(_DATE_PARTS[suboption])
-
-
-def make_formattime_builtin() -> CicsBuiltin:
-    """Return a builtin that formats the current time per a FORMATTIME sub-option.
-
-    Called once per output sub-option with args (sub-option, date_separator).
-    """
-
-    def __cics_formattime(args: Sequence[TypedValue], vm: VMState) -> BuiltinResult:
-        suboption = str(args[0].value).strip().upper() if args else _DEFAULT_SUBOPTION
-        separator = str(args[1].value) if len(args) > 1 else ""
-        return BuiltinResult(
-            value=datetime.now(UTC).strftime(_formattime_format(suboption, separator))
-        )
-
-    return __cics_formattime
+    return __cics_datform
 
 
 def make_writeq_td_builtin(write_line: Callable[[str], None]) -> CicsBuiltin:

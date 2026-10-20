@@ -19,6 +19,7 @@ from cics.builtins.system import (
 )
 from cics.cell import Cell
 from cics.conditions import RAISABLE, code_for
+from cics.formattime_ir import FORMATTIME_OUTPUTS, emit_formatted_time
 from cics.handler_labels import (
     HandlerLabels,
     collect_handler_labels,
@@ -89,8 +90,6 @@ Options: TypeAlias = "Mapping[str, Operand]"
 _SYS_VERBS: Mapping[str, str] = MappingProxyType(
     {
         "ASSIGN": "__cics_assign",
-        "ASKTIME": "__cics_asktime",
-        "FORMATTIME": "__cics_formattime",
         "INQUIRE": "__cics_inquire",
         "HANDLE ABEND": "__cics_handle_abend",
         # HANDLE AID is still an explicit no-op — AID dispatch is out of scope for
@@ -633,15 +632,29 @@ def _emit_vsam_key(
     return _emit_call(ctx, BuiltinName.LIST_SLICE, r_key, _emit_int(ctx, 0), r_klen)
 
 
-_FORMATTIME_OUTPUTS = ("YYYYMMDD", "DATE", "DDMMYYYY", "DDMMYY", "YEAR", "TIME")
-_DEFAULT_DATE_SEPARATOR = "/"
+_FORMATTIME_INPUTS = frozenset({"ABSTIME", "DATESEP", "TIMESEP"})
+_DEFAULT_SEPARATORS: Mapping[str, str] = MappingProxyType(
+    {"DATESEP": "/", "TIMESEP": ":"}
+)
 
 
-def _date_separator(opts: Options) -> str:
-    """DATESEP present but bare means the CICS default separator."""
-    if "DATESEP" not in opts:
+def _warn_unformatted(opts: Options) -> None:
+    unformatted = (
+        option
+        for option in opts
+        if option not in FORMATTIME_OUTPUTS and option not in _FORMATTIME_INPUTS
+    )
+    for option in unformatted:
+        logger.warning(
+            "FORMATTIME %s is not implemented; its field is left unchanged", option
+        )
+
+
+def _separator(opts: Options, option: str) -> str:
+    """Absent means no separator; present but bare means the CICS default."""
+    if option not in opts:
         return ""
-    return _operand_text(opts.get("DATESEP"), _DEFAULT_DATE_SEPARATOR)
+    return _operand_text(opts.get(option), _DEFAULT_SEPARATORS[option])
 
 
 def _browse_start(opts: Options) -> KeyMatch:
@@ -972,17 +985,6 @@ def _emit_assign_output(
     emit_copy_back_str(ctx, target, ctx.emit_to_string(r_res), materialised)
 
 
-def _emit_formattime_output(
-    ctx: EmitContext,
-    subopt: str,
-    r_sep: Register,
-    target: Operand,
-    materialised: MaterialisedSectionedLayout,
-) -> None:
-    r_res = _emit_call(ctx, "__cics_formattime", _emit_string(ctx, subopt), r_sep)
-    emit_copy_back_str(ctx, target, ctx.emit_to_string(r_res), materialised)
-
-
 @dataclass(frozen=True)
 class _Commarea:
     register: Register
@@ -1074,6 +1076,7 @@ class CicsLoweringStrategy:
                 "RETRIEVE": self._lower_retrieve,
                 "ASSIGN": self._lower_assign,
                 "FORMATTIME": self._lower_formattime,
+                "ASKTIME": self._lower_asktime,
                 "WRITEQ TD": self._lower_writeq_td,
                 "LINK": self._lower_link,
                 "BIF DEEDIT": self._lower_bif_deedit,
@@ -1443,9 +1446,26 @@ class CicsLoweringStrategy:
         opts: Options,
         materialised: MaterialisedSectionedLayout,
     ) -> None:
-        r_sep = _emit_string(ctx, _date_separator(opts))
-        for subopt in (s for s in _FORMATTIME_OUTPUTS if _is_present(opts, s)):
-            _emit_formattime_output(ctx, subopt, r_sep, opts.get(subopt), materialised)
+        separators = (
+            _emit_string(ctx, _separator(opts, "DATESEP")),
+            _emit_string(ctx, _separator(opts, "TIMESEP")),
+        )
+        _warn_unformatted(opts)
+        r_abstime = emit_operand_value(ctx, opts.get("ABSTIME"), materialised)
+        formatted = emit_formatted_time(IrEmitter(ctx, None), r_abstime, separators)
+        for subopt in (s for s in FORMATTIME_OUTPUTS if _is_present(opts, s)):
+            r_out = ctx.emit_to_string(formatted.output(subopt))
+            emit_copy_back_str(ctx, opts.get(subopt), r_out, materialised)
+
+    def _lower_asktime(
+        self,
+        ctx: EmitContext,
+        verb: str,
+        opts: Options,
+        materialised: MaterialisedSectionedLayout,
+    ) -> None:
+        r_abstime = ctx.emit_to_string(_emit_call(ctx, "__cics_asktime"))
+        emit_copy_back_str(ctx, opts.get("ABSTIME"), r_abstime, materialised)
 
     # ── VSAM ──────────────────────────────────────────────────────────────
 
