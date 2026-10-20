@@ -232,7 +232,7 @@ def _last(screens, mapname):
 
 def _added_transaction(engine):
     """Read back the freshly-WRITTEN TRANSACT record (CVTRA05Y, by tran id)."""
-    rec_read = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16)
+    rec_read = engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"))
     assert isinstance(
         rec_read, RecordRead
     ), f"new transaction {_NEW_TRAN_ID} was not written"
@@ -261,9 +261,7 @@ def test_real_carddemo_add_transaction_writes(tmp_path, bridge_jar):
     record's key fields are cross-checked in the engine."""
     region, screen_q, engine = _drive_to_add_transaction(tmp_path, bridge_jar)
     # Pre-condition: the next id does not exist yet.
-    assert isinstance(
-        engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037"), 16), NoRecord
-    )
+    assert isinstance(engine.read("TRANSACT", _NEW_TRAN_ID.encode("cp037")), NoRecord)
 
     # Turn 4: first display (empty form).
     drain(screen_q)

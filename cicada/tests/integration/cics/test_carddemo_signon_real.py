@@ -788,7 +788,7 @@ def test_real_carddemo_account_update_rewrite(tmp_path, bridge_jar):
 
     # Verify the REWRITE persisted: read ACCTDAT back from the engine and check
     # the active-status byte (offset 11, X(1)) is now 'N'.
-    record_read = engine.read("ACCTDAT", _ACCT_ID.encode("cp037"), 11)
+    record_read = engine.read("ACCTDAT", _ACCT_ID.encode("cp037"))
     assert isinstance(
         record_read, RecordRead
     ), f"ACCTDAT record vanished after REWRITE (resp={record_read.resp})"
@@ -1071,9 +1071,7 @@ def test_real_carddemo_transaction_add_write(tmp_path, bridge_jar):
     rB, viewB, engine = _drive_transaction_add(tmp_path, bridge_jar)
 
     # The created record must exist in TRANSACT under the generated key.
-    record_read = engine.read(
-        "TRANSACT", _EXPECTED_NEW_TRAN_ID.encode("cp037"), _TRAN_KEYLEN
-    )
+    record_read = engine.read("TRANSACT", _EXPECTED_NEW_TRAN_ID.encode("cp037"))
     assert isinstance(record_read, RecordRead), (
         f"new TRANSACT record not written (resp={record_read.resp}); "
         f"screen err={viewB.get('ERRMSG')!r}"

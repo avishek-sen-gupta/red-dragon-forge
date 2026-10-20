@@ -30,9 +30,9 @@ def test_a_record_written_through_the_cluster_is_read_through_its_path(tmp_path)
     engine = VsamEngine(cics_files(system, dsnames))
 
     wrote = engine.write("CCXREF", b"000", 3, b"000AAAzz")
-    first = engine.read("CXACAIX", b"AAA", 3)
+    first = engine.read("CXACAIX", b"AAA")
     restarted = VsamEngine(cics_files(SystemCatalog(tmp_path / "system"), dsnames))
-    after_restart = restarted.read("CCXREF", b"000", 3)
+    after_restart = restarted.read("CCXREF", b"000")
 
     assert wrote == RESP_NORMAL
     assert first == RecordRead(b"000AAAzz", RESP_DUPKEY)
@@ -55,7 +55,7 @@ def test_a_key_shorter_than_declared_logs_both_lengths(tmp_path, caplog):
     engine = VsamEngine(cics_files(system, dsnames))
 
     with caplog.at_level(logging.WARNING, logger="cics.vsam.engine"):
-        engine.read("CXACAIX", b"AA", 2)
+        engine.read("CXACAIX", b"AA")
 
     assert caplog.messages == [
         "CXACAIX (TEST.CCXREF.PATH): NOTFND; declared key 3 bytes at offset 3, program key 2 bytes"
@@ -72,6 +72,6 @@ def test_duplicate_alternate_keys_come_back_in_the_order_they_were_written(tmp_p
     engine = VsamEngine(cics_files(system, dsnames))
 
     engine.write("CCXREF", b"000", 3, b"000AAAzz")
-    first = engine.read("CXACAIX", b"AAA", 3)
+    first = engine.read("CXACAIX", b"AAA")
 
     assert first == RecordRead(b"001AAAxx", RESP_DUPKEY)

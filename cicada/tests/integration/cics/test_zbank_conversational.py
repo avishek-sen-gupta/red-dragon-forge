@@ -188,7 +188,7 @@ def _field(screens, mapname, field):
 
 
 def _balance(engine) -> str:
-    rec_read = engine.read("VSAMZBNK", _ACCT.encode("cp037"), 10)
+    rec_read = engine.read("VSAMZBNK", _ACCT.encode("cp037"))
     assert isinstance(rec_read, RecordRead), "account vanished"
     rec = rec_read.record
     return bytes(rec[20:30]).decode("cp037")  # WS-BALANCE 9(10) @20

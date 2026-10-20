@@ -32,6 +32,7 @@ _CONSTRUCTOR_BUILTINS = frozenset(
         "__cics_assign",
         "__cics_bif_deedit",
         "__cics_delete",
+        "__cics_key_length",
         "__cics_endbr",
         "__cics_formattime",
         "__cics_handle_abend",

@@ -18,7 +18,7 @@ from cics.vsam.eibresp import (
     RESP_DUPREC,
     RESP_ENDFILE,
 )
-from cics.vsam.browse import BrowseStart
+from cics.vsam.key_match import KeyMatch
 from cics.vsam.file_table import cics_files
 from catnip.dataset import Dataset
 from tests.vsam_system import SeedAix, SeedCluster, build_test_system
@@ -42,7 +42,7 @@ def _engine_with_records(
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_a_read_on_an_empty_cluster_is_notfnd(tmp_path: Path) -> None:
     engine = _engine_with_records(tmp_path, [])
-    assert engine.read("TESTDS", b"AA01", KEY_LEN) == NoRecord(RESP_NOTFND)
+    assert engine.read("TESTDS", b"AA01") == NoRecord(RESP_NOTFND)
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
@@ -53,11 +53,11 @@ def test_a_cics_file_the_table_does_not_define_is_disabled_for_every_operation(
     record = _rec("BB02", "NEW")
 
     assert (
-        engine.read("NOFILE", b"AA01", KEY_LEN),
+        engine.read("NOFILE", b"AA01"),
         engine.write("NOFILE", b"BB02", KEY_LEN, record),
         engine.rewrite("NOFILE", b"AA01", KEY_LEN, record),
-        engine.delete("NOFILE", b"AA01", KEY_LEN),
-        engine.startbr("NOFILE", b"AA01", KEY_LEN, ("T", "NOFILE", "0")),
+        engine.delete("NOFILE", b"AA01"),
+        engine.startbr("NOFILE", b"AA01", ("T", "NOFILE", "0")),
     ) == (
         NoRecord(RESP_DISABLED),
         RESP_DISABLED,
@@ -70,7 +70,7 @@ def test_a_cics_file_the_table_does_not_define_is_disabled_for_every_operation(
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_read_existing_record(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
-    record_read = engine.read("TESTDS", b"AA01", KEY_LEN)
+    record_read = engine.read("TESTDS", b"AA01")
     assert isinstance(record_read, RecordRead)
     record, resp = record_read.record, record_read.resp
     assert resp == RESP_NORMAL
@@ -80,7 +80,7 @@ def test_read_existing_record(tmp_path: Path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_read_not_found(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
-    resp = engine.read("TESTDS", b"ZZ99", KEY_LEN).resp
+    resp = engine.read("TESTDS", b"ZZ99").resp
     assert resp == RESP_NOTFND
 
 
@@ -88,7 +88,7 @@ def test_read_not_found(tmp_path: Path):
 def test_write_new_record(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [])
     assert engine.write("TESTDS", b"AA01", KEY_LEN, _rec("AA01", "NEW")) == RESP_NORMAL
-    resp2 = engine.read("TESTDS", b"AA01", KEY_LEN).resp
+    resp2 = engine.read("TESTDS", b"AA01").resp
     assert resp2 == RESP_NORMAL
 
 
@@ -104,7 +104,7 @@ def test_rewrite_updates_record(tmp_path: Path):
     assert (
         engine.rewrite("TESTDS", b"AA01", KEY_LEN, _rec("AA01", "UPD")) == RESP_NORMAL
     )
-    record_read = engine.read("TESTDS", b"AA01", KEY_LEN)
+    record_read = engine.read("TESTDS", b"AA01")
     assert isinstance(record_read, RecordRead)
     record = record_read.record
     assert b"UPD" in record
@@ -117,7 +117,7 @@ def test_rewrite_without_key_extracts_key_from_record(tmp_path: Path):
     (which the lowering leaves empty). (CardDemo COACTUPC 9600-WRITE-PROCESSING.)"""
     engine = _engine_with_records(tmp_path, [_rec("AA01", "OLD")])
     assert engine.rewrite("TESTDS", b"", KEY_LEN, _rec("AA01", "UPD")) == RESP_NORMAL
-    record_read = engine.read("TESTDS", b"AA01", KEY_LEN)
+    record_read = engine.read("TESTDS", b"AA01")
     assert isinstance(record_read, RecordRead)
     record = record_read.record
     assert b"UPD" in record
@@ -126,8 +126,8 @@ def test_rewrite_without_key_extracts_key_from_record(tmp_path: Path):
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_delete_removes_record(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
-    assert engine.delete("TESTDS", b"AA01", KEY_LEN) == RESP_NORMAL
-    resp2 = engine.read("TESTDS", b"AA01", KEY_LEN).resp
+    assert engine.delete("TESTDS", b"AA01") == RESP_NORMAL
+    resp2 = engine.read("TESTDS", b"AA01").resp
     assert resp2 == RESP_NOTFND
 
 
@@ -139,29 +139,29 @@ def test_keyless_delete_uses_last_read_record(tmp_path: Path):
         tmp_path, [_rec("AA01", "AAAA"), _rec("BB02", "BBBB")]
     )
     # Read BB02 for update, then a keyless DELETE removes exactly that record.
-    rec_read = engine.read("TESTDS", b"BB02", KEY_LEN)
+    rec_read = engine.read("TESTDS", b"BB02")
     assert isinstance(rec_read, RecordRead)
     rec, resp = rec_read.record, rec_read.resp
     assert resp == RESP_NORMAL and rec is not None
-    assert engine.delete("TESTDS", b"", KEY_LEN) == RESP_NORMAL
-    gone = engine.read("TESTDS", b"BB02", KEY_LEN).resp
+    assert engine.delete("TESTDS", b"") == RESP_NORMAL
+    gone = engine.read("TESTDS", b"BB02").resp
     assert gone == RESP_NOTFND
     # The other record is untouched.
-    other = engine.read("TESTDS", b"AA01", KEY_LEN).resp
+    other = engine.read("TESTDS", b"AA01").resp
     assert other == RESP_NORMAL
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_keyless_delete_without_prior_read_is_notfnd(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "AAAA")])
-    assert engine.delete("TESTDS", b"", KEY_LEN) == RESP_NOTFND
+    assert engine.delete("TESTDS", b"") == RESP_NOTFND
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_browse_forward(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02"), _rec("CC03")])
     cursor = ("task0", "TESTDS", "cur0")
-    engine.startbr("TESTDS", b"AA01", KEY_LEN, cursor)
+    engine.startbr("TESTDS", b"AA01", cursor)
     rec1_read = engine.readnext("TESTDS", cursor)
     assert isinstance(rec1_read, RecordRead)
     rec1, r1 = rec1_read.record, rec1_read.resp
@@ -183,7 +183,7 @@ def test_browse_reverse(tmp_path: Path):
     (CICS semantics), then a further READPREV walks back to the prior record."""
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02")])
     cursor = ("task0", "TESTDS", "cur0")
-    engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor)
+    engine.startbr("TESTDS", b"BB02", cursor)
     nxt_read = engine.readnext("TESTDS", cursor)
     assert isinstance(nxt_read, RecordRead)
     nxt = nxt_read.record
@@ -209,7 +209,7 @@ def test_startbr_high_values_then_readprev_returns_last_record(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02"), _rec("CC03")])
     cursor = ("task0", "TESTDS", "cur0")
     high = b"\xff" * KEY_LEN
-    assert engine.startbr("TESTDS", high, KEY_LEN, cursor) == RESP_NORMAL
+    assert engine.startbr("TESTDS", high, cursor) == RESP_NORMAL
     rec_read = engine.readprev("TESTDS", cursor)
     assert isinstance(rec_read, RecordRead)
     rec, resp = rec_read.record, rec_read.resp
@@ -223,7 +223,7 @@ def test_startbr_then_readprev_walks_backwards_to_first(tmp_path: Path):
     descending key order, ending at ENDFILE past the first record."""
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02"), _rec("CC03")])
     cursor = ("task0", "TESTDS", "cur0")
-    engine.startbr("TESTDS", b"\xff" * KEY_LEN, KEY_LEN, cursor)
+    engine.startbr("TESTDS", b"\xff" * KEY_LEN, cursor)
     r1_read = engine.readprev("TESTDS", cursor)
     assert isinstance(r1_read, RecordRead)
     r1, p1 = r1_read.record, r1_read.resp
@@ -259,7 +259,7 @@ def _engine_offset(
 def test_read_matches_key_at_nonzero_offset(tmp_path: Path):
     rec = b"C" * 16 + b"000000001" + b"00000000011" + b"\x00" * 4
     engine = _engine_offset(tmp_path, [rec], len(rec), key_offset=25, key_length=11)
-    record_read = engine.read("OFFDS", b"00000000011", 11)
+    record_read = engine.read("OFFDS", b"00000000011")
     assert isinstance(record_read, RecordRead)
     record, resp = record_read.record, record_read.resp
     assert resp == RESP_NORMAL
@@ -272,14 +272,14 @@ def test_read_matches_key_at_nonzero_offset(tmp_path: Path):
 def test_read_offset_nonmatching_key_notfnd(tmp_path: Path):
     rec = b"C" * 16 + b"000000001" + b"00000000011" + b"\x00" * 4
     engine = _engine_offset(tmp_path, [rec], len(rec), key_offset=25, key_length=11)
-    resp = engine.read("OFFDS", b"99999999999", 11).resp
+    resp = engine.read("OFFDS", b"99999999999").resp
     assert resp == RESP_NOTFND
 
 
 @covers(NotLanguageFeature.INFRASTRUCTURE)
 def test_read_default_offset_zero_unchanged(tmp_path: Path):
     engine = _engine_with_records(tmp_path, [_rec("AA01", "DATA")])
-    record_read = engine.read("TESTDS", b"AA01", KEY_LEN)
+    record_read = engine.read("TESTDS", b"AA01")
     assert isinstance(record_read, RecordRead)
     record, resp = record_read.record, record_read.resp
     assert resp == RESP_NORMAL
@@ -303,7 +303,7 @@ def test_write_lands_on_backing_file_and_survives_new_engine(tmp_path: Path) -> 
     assert read_flat_file(cluster.path, 4) == [b"AAAA", b"ZZZZ"]
 
     eng2 = VsamEngine(cics_files(system, dsnames))
-    rec_read = eng2.read("DS", b"ZZZZ", 4)
+    rec_read = eng2.read("DS", b"ZZZZ")
     assert isinstance(rec_read, RecordRead)
     rec, resp = rec_read.record, rec_read.resp
     assert resp == RESP_NORMAL and rec == b"ZZZZ"
@@ -313,7 +313,7 @@ def test_write_lands_on_backing_file_and_survives_new_engine(tmp_path: Path) -> 
 def test_startbr_equal_on_absent_key_is_notfnd(tmp_path: Path) -> None:
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
     cursor = ("task0", "TESTDS", "cur0")
-    resp = engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor, start=BrowseStart.EQUAL)
+    resp = engine.startbr("TESTDS", b"BB02", cursor, start=KeyMatch.EQUAL)
     assert resp == RESP_NOTFND
 
 
@@ -321,7 +321,7 @@ def test_startbr_equal_on_absent_key_is_notfnd(tmp_path: Path) -> None:
 def test_startbr_equal_positions_on_the_matching_record(tmp_path: Path) -> None:
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("BB02")])
     cursor = ("task0", "TESTDS", "cur0")
-    engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor, start=BrowseStart.EQUAL)
+    engine.startbr("TESTDS", b"BB02", cursor, start=KeyMatch.EQUAL)
     rec_read = engine.readnext("TESTDS", cursor)
     assert isinstance(rec_read, RecordRead)
     rec, resp = rec_read.record, rec_read.resp
@@ -332,7 +332,7 @@ def test_startbr_equal_positions_on_the_matching_record(tmp_path: Path) -> None:
 def test_startbr_defaults_to_gteq(tmp_path: Path) -> None:
     engine = _engine_with_records(tmp_path, [_rec("AA01"), _rec("CC03")])
     cursor = ("task0", "TESTDS", "cur0")
-    assert engine.startbr("TESTDS", b"BB02", KEY_LEN, cursor) == RESP_NORMAL
+    assert engine.startbr("TESTDS", b"BB02", cursor) == RESP_NORMAL
     rec_read = engine.readnext("TESTDS", cursor)
     assert isinstance(rec_read, RecordRead)
     rec = rec_read.record

@@ -179,7 +179,7 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
     acct_key = _ACCT_ID.encode("cp037")
 
     engine_before = _usrsec_engine(tmp_path / "vsam")
-    record_before_read = engine_before.read("ACCTDAT", acct_key, 11)
+    record_before_read = engine_before.read("ACCTDAT", acct_key)
     assert isinstance(
         record_before_read, RecordRead
     ), "seeded ACCTDAT record not found before update"
@@ -211,7 +211,7 @@ def test_account_update_dump_before_after(tmp_path, bridge_jar):
         RISMON=_NEW_REISSUE_MON,
         RISDAY=_NEW_REISSUE_DAY,
     )
-    record_after_read = engine_after.read("ACCTDAT", acct_key, 11)
+    record_after_read = engine_after.read("ACCTDAT", acct_key)
     assert isinstance(
         record_after_read, RecordRead
     ), "ACCTDAT record missing from engine after update"
