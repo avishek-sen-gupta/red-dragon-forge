@@ -904,3 +904,83 @@ def test_a_conversational_receive_with_input_runs_on(cobol_parser):
     region.send(InputEvent(fields={"FLD1": "ABC"}, eibaid="\x7d"))
 
     assert region.result.commarea == "RECEIVED".encode("cp037")
+
+
+COBOL_HANDLER_NAMED_IN_LOWER_CASE = """\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDCASE.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+           EXEC CICS HANDLE CONDITION NOTFND(para-missing) END-EXEC.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC.
+           MOVE 'NOTTAKEN' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       Para-Missing.
+           MOVE 'HANDLED0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+def _duplicated_handler_target(registers_and_raises: str) -> str:
+    return f"""\
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HNDDUP.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-REC        PIC X(80).
+       01  WS-KEY        PIC X(11) VALUE '99999999999'.
+       01  WS-CA         PIC X(8) VALUE SPACES.
+       PROCEDURE DIVISION.
+       SEC-A SECTION.
+       A-START.
+           GO TO SEC-B.
+       ERR-PARA.
+           MOVE 'WRONGSEC' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       SEC-B SECTION.
+       B-START.
+{registers_and_raises}
+           MOVE 'NOTTAKEN' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+       ERR-PARA.
+           MOVE 'HANDLED0' TO WS-CA.
+           EXEC CICS RETURN COMMAREA(WS-CA) END-EXEC.
+"""
+
+
+_NOTFND_TO_ERR_PARA = """\
+           EXEC CICS HANDLE CONDITION NOTFND(ERR-PARA) END-EXEC.
+           EXEC CICS READ FILE('ACCTFILE') INTO(WS-REC) RIDFLD(WS-KEY)
+           END-EXEC."""
+_ABEND_TO_ERR_PARA = """\
+           EXEC CICS HANDLE ABEND LABEL(ERR-PARA) END-EXEC.
+           EXEC CICS ABEND ABCODE('AAAA') END-EXEC."""
+
+
+@covers(CobolFeature.EXEC_CICS)
+@pytest.mark.parametrize(
+    "source",
+    [
+        COBOL_HANDLER_NAMED_IN_LOWER_CASE,
+        _duplicated_handler_target(_NOTFND_TO_ERR_PARA),
+        _duplicated_handler_target(_ABEND_TO_ERR_PARA),
+    ],
+    ids=["lower-case-name", "handle-condition-duplicated", "handle-abend-duplicated"],
+)
+def test_a_handler_target_resolves_as_a_cobol_procedure_reference_does(
+    source, cobol_parser, vsam_engine_with_acctfile
+):
+    """A handler names a procedure the way PERFORM or GO TO does: case folds,
+    and a paragraph name declared in two sections means the one in the section
+    of the HANDLE statement. WRONGSEC is the other section's paragraph."""
+    result = _run_source(source, "HND9", cobol_parser, vsam_engine_with_acctfile)
+
+    assert (result.kind, result.commarea) == (
+        DispatchKind.RETURN,
+        "HANDLED0".encode("cp037"),
+    )
